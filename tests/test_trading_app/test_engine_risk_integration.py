@@ -880,7 +880,7 @@ class TestCalendarOverlay:
         risk_points=13, risk_dollars=130, available=2000, base_contracts=int(15.38)=15
         After HALF_SIZE: max(1, int(15 * 0.5)) = 7
         """
-        strategy = _make_strategy(entry_model="E1", confirm_bars=1)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, max_contracts=100)
         engine = ExecutionEngine(
             _make_portfolio([strategy], account_equity=100_000.0),
             _cost(),
@@ -904,7 +904,7 @@ class TestCalendarOverlay:
 
     def test_neutral_contracts_unchanged(self):
         """NEUTRAL multiplier does not reduce contracts — baseline comparison."""
-        strategy = _make_strategy(entry_model="E1", confirm_bars=1)
+        strategy = _make_strategy(entry_model="E1", confirm_bars=1, max_contracts=100)
         engine = ExecutionEngine(
             _make_portfolio([strategy], account_equity=100_000.0),
             _cost(),

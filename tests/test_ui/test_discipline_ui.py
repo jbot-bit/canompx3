@@ -4,6 +4,10 @@ import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import pytest
+
+pytest.importorskip("streamlit", reason="streamlit not installed")
+
 
 def test_render_pending_debriefs_no_exits(tmp_path):
     """No exit signals -> no debrief cards rendered."""

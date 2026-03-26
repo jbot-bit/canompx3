@@ -585,7 +585,12 @@ def collect_worktrees(canonical: Path) -> list[PulseItem]:
         return items
 
     worktrees: list[dict] = []
-    for meta_file in wt_base.rglob(".canompx3-worktree.json"):
+    try:
+        meta_files = list(wt_base.rglob(".canompx3-worktree.json"))
+    except OSError:
+        # rglob can fail on Windows with broken symlinks/junctions in worktrees
+        return items
+    for meta_file in meta_files:
         try:
             data = json.loads(meta_file.read_text(encoding="utf-8"))
             worktrees.append(data)
@@ -787,7 +792,11 @@ def collect_worktree_conflicts(canonical: Path) -> list[PulseItem]:
 
     # Collect modified files per worktree branch
     worktree_files: dict[str, set[str]] = {}
-    for meta_file in wt_base.rglob(".canompx3-worktree.json"):
+    try:
+        _meta_files = list(wt_base.rglob(".canompx3-worktree.json"))
+    except OSError:
+        return items
+    for meta_file in _meta_files:
         try:
             data = json.loads(meta_file.read_text(encoding="utf-8"))
             branch = data.get("branch", "")

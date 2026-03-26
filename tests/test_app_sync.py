@@ -610,13 +610,13 @@ class TestSchemaSync:
 class TestImportSync:
     """Verify that modules import the same constants."""
 
-    def test_outcome_builder_uses_init_db_orb_labels(self):
-        """outcome_builder imports ORB_LABELS from init_db (not hardcoded)."""
+    def test_outcome_builder_uses_canonical_session_source(self):
+        """outcome_builder gets sessions from asset_configs (not hardcoded)."""
         import trading_app.outcome_builder as ob
         import inspect
 
         source = inspect.getsource(ob)
-        assert "from pipeline.init_db import ORB_LABELS" in source
+        assert "from pipeline.asset_configs import get_enabled_sessions" in source
 
     def test_strategy_discovery_uses_shared_constants(self):
         """strategy_discovery imports RR_TARGETS/CONFIRM_BARS from outcome_builder."""

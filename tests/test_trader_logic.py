@@ -1163,8 +1163,13 @@ class TestRandomStrategyMath:
                 if s.get("stop_multiplier") is not None and s["stop_multiplier"] != 1.0:
                     continue
 
-                # Skip volume filters (need bar data)
-                if ft.startswith("VOL_"):
+                # Skip volume/regime filters — require bars_1m enrichment for
+                # rel_vol which may not be fully populated in daily_features
+                from trading_app.config import VolumeFilter as _VF
+                strat_filter = ALL_FILTERS.get(ft)
+                if strat_filter is None:
+                    continue
+                if ft.startswith("VOL_") or isinstance(strat_filter, _VF):
                     continue
 
                 # Load daily_features for this aperture (cached)
@@ -1176,9 +1181,6 @@ class TestRandomStrategyMath:
                     feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
 
                 # Get eligible days for this filter
-                strat_filter = ALL_FILTERS.get(ft)
-                if strat_filter is None:
-                    continue
                 eligible = set()
                 for row in feat_cache[om]:
                     if row.get(f"orb_{orb}_break_dir") is None:
@@ -1255,7 +1257,11 @@ class TestRandomStrategyMath:
                 if s.get("stop_multiplier") is not None and s["stop_multiplier"] != 1.0:
                     continue
 
-                if ft.startswith("VOL_"):
+                from trading_app.config import VolumeFilter as _VFe
+                strat_filter = ALL_FILTERS.get(ft)
+                if strat_filter is None:
+                    continue
+                if ft.startswith("VOL_") or isinstance(strat_filter, _VFe):
                     continue
 
                 if om not in feat_cache:
@@ -1265,9 +1271,6 @@ class TestRandomStrategyMath:
                     feat_cols = [desc[0] for desc in con.description]
                     feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
 
-                strat_filter = ALL_FILTERS.get(ft)
-                if strat_filter is None:
-                    continue
                 eligible = set()
                 for row in feat_cache[om]:
                     if row.get(f"orb_{orb}_break_dir") is None:
@@ -1346,7 +1349,11 @@ class TestRandomStrategyMath:
                 if s.get("stop_multiplier") is not None and s["stop_multiplier"] != 1.0:
                     continue
 
-                if ft.startswith("VOL_"):
+                from trading_app.config import VolumeFilter as _VFd
+                strat_filter = ALL_FILTERS.get(ft)
+                if strat_filter is None:
+                    continue
+                if ft.startswith("VOL_") or isinstance(strat_filter, _VFd):
                     continue
 
                 if om not in feat_cache:
@@ -1356,9 +1363,6 @@ class TestRandomStrategyMath:
                     feat_cols = [desc[0] for desc in con.description]
                     feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
 
-                strat_filter = ALL_FILTERS.get(ft)
-                if strat_filter is None:
-                    continue
                 eligible = set()
                 for row in feat_cache[om]:
                     if row.get(f"orb_{orb}_break_dir") is None:

@@ -26,6 +26,12 @@ _429_BACKOFF_MAX = 30.0
 _429_JITTER_FACTOR = 0.2  # ±20%
 
 
+class RateLimitExhausted(Exception):
+    """Raised when 429 retries are exhausted on any ProjectX API call."""
+
+    pass
+
+
 def _backoff_wait(attempt: int) -> float:
     """Exponential backoff with jitter for 429 retries."""
     base_wait = min(_429_BACKOFF_BASE * (2**attempt), _429_BACKOFF_MAX)
@@ -33,23 +39,26 @@ def _backoff_wait(attempt: int) -> float:
     return max(0.1, base_wait + jitter)
 
 
-def _submit_with_429_retry(
+def _request_with_429_retry(
+    method: str,
     url: str,
     auth_headers: dict,
-    json_body: dict,
+    json_body: dict | None = None,
     timeout: float = 5,
 ) -> requests.Response:
-    """HTTP POST with 429 rate-limit detection and exponential backoff.
+    """HTTP request with 429 rate-limit detection and exponential backoff.
 
     On non-429 errors, raises immediately (no retry).
-    On 429 after max retries, raises with clear error message.
+    On 429 after max retries, raises RateLimitExhausted.
     """
-    last_resp = None
+    func = requests.post if method == "POST" else requests.get
+    kwargs: dict = {"headers": auth_headers, "timeout": timeout}
+    if json_body is not None:
+        kwargs["json"] = json_body
     for attempt in range(_429_MAX_RETRIES + 1):
-        resp = requests.post(url, json=json_body, headers=auth_headers, timeout=timeout)
+        resp = func(url, **kwargs)
         if resp.status_code != 429:
             return resp
-        last_resp = resp
         if attempt < _429_MAX_RETRIES:
             wait = _backoff_wait(attempt)
             log.warning(
@@ -65,9 +74,19 @@ def _submit_with_429_retry(
         _429_MAX_RETRIES + 1,
         url.split("/")[-1],
     )
-    assert last_resp is not None
-    last_resp.raise_for_status()
-    return last_resp  # unreachable, satisfies type checker
+    raise RateLimitExhausted(
+        f"429 rate limit exhausted after {_429_MAX_RETRIES + 1} attempts on {url.split('/')[-1]}"
+    )
+
+
+def _submit_with_429_retry(
+    url: str,
+    auth_headers: dict,
+    json_body: dict,
+    timeout: float = 5,
+) -> requests.Response:
+    """HTTP POST with 429 retry. Legacy wrapper."""
+    return _request_with_429_retry("POST", url, auth_headers, json_body, timeout)
 
 
 class ProjectXOrderRouter(BrokerRouter):
@@ -195,11 +214,11 @@ class ProjectXOrderRouter(BrokerRouter):
     def cancel(self, order_id: int) -> None:
         if self.auth is None:
             raise RuntimeError(f"Cannot cancel order {order_id} — no auth configured")
-        resp = requests.post(
+        resp = _request_with_429_retry(
+            "POST",
             f"{BASE_URL}/api/Order/cancel",
-            json={"accountId": self.account_id, "orderId": order_id},
-            headers=self.auth.headers(),
-            timeout=5,
+            self.auth.headers(),
+            json_body={"accountId": self.account_id, "orderId": order_id},
         )
         resp.raise_for_status()
         data = resp.json()
@@ -265,10 +284,10 @@ class ProjectXOrderRouter(BrokerRouter):
         """
         if self.auth is None:
             raise RuntimeError("No auth — cannot query order status")
-        resp = requests.get(
+        resp = _request_with_429_retry(
+            "GET",
             f"{BASE_URL}/api/Order/{order_id}",
-            headers=self.auth.headers(),
-            timeout=5,
+            self.auth.headers(),
         )
         resp.raise_for_status()
         data = resp.json()
@@ -299,10 +318,11 @@ class ProjectXOrderRouter(BrokerRouter):
         """
         if self.auth is None:
             return []
-        resp = requests.post(
+        resp = _request_with_429_retry(
+            "POST",
             f"{BASE_URL}/api/Order/searchOpen",
-            json={"accountId": self.account_id},
-            headers=self.auth.headers(),
+            self.auth.headers(),
+            json_body={"accountId": self.account_id},
             timeout=10,
         )
         resp.raise_for_status()
@@ -330,6 +350,8 @@ class ProjectXOrderRouter(BrokerRouter):
         """
         try:
             orders = self.query_open_orders()
+        except RateLimitExhausted:
+            raise  # 429 exhaustion must propagate — silent (None, None) hides rate-limit failure
         except Exception as e:
             log.error("Bracket verification failed (cannot query open orders): %s", e)
             return None, None
@@ -383,6 +405,8 @@ class ProjectXOrderRouter(BrokerRouter):
         """
         try:
             orders = self.query_open_orders()
+        except RateLimitExhausted:
+            raise  # 429 exhaustion must propagate — silent 0 hides rate-limit failure
         except Exception as e:
             log.error("Cannot query open orders for bracket cleanup: %s", e)
             return 0

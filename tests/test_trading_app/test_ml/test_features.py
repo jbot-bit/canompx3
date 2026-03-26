@@ -62,10 +62,8 @@ class TestExtractSessionFeatures:
 
     def test_output_has_generic_columns(self, mock_df):
         result = _extract_session_features(mock_df)
-        # Pre-break features only: size, volume, rel_vol
-        # break_delay_min, break_bar_volume, break_bar_continues, break_dir
-        # removed Mar 4 2026 (pre-break ML architecture + theory audit)
-        expected_cols = {"orb_size", "orb_volume", "rel_vol"}
+        # Pre-break features: size, volume, vwap, pre_velocity + rel_vol
+        expected_cols = {"orb_size", "orb_volume", "orb_vwap", "orb_pre_velocity", "rel_vol"}
         assert expected_cols == set(result.columns)
 
 
