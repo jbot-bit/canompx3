@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 import pytest
 
+pytest.importorskip("readchar", reason="readchar not installed")
+
 from scripts.infra import windows_agent_launch
 
 

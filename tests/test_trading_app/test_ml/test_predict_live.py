@@ -29,6 +29,8 @@ def _make_mock_bundle(
     # Add one-hot columns to test alignment
     feature_names.extend(["orb_label_CME_REOPEN", "entry_model_E2"])
 
+    from trading_app.ml.config import ML_METHODOLOGY_VERSION
+
     return {
         "model": model,
         "feature_names": feature_names,
@@ -40,6 +42,7 @@ def _make_mock_bundle(
         "trained_at": trained_at or datetime.now(timezone.utc).isoformat(),
         "data_date_range": ("2020-01-01", "2025-12-31"),
         "config_hash": config_hash or _compute_config_hash(),
+        "methodology_version": ML_METHODOLOGY_VERSION,
     }
 
 

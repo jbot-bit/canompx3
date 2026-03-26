@@ -69,14 +69,19 @@ def check_dd_circuit_breaker() -> tuple[bool, str]:
     if hwm_files:
         for f in hwm_files:
             try:
-                data = json.loads(f.read_text())
+                text = f.read_text()
+                if not text.strip():
+                    return False, f"BLOCKED: HWM file unreadable ({f.name} is empty)"
+                data = json.loads(text)
                 if data.get("halt_triggered"):
                     return (
                         False,
                         f"DD HALT ACTIVE: account {data.get('account_id', '?')} — DD ${data.get('dd_used_dollars', 0):.0f} >= limit ${data.get('dd_limit_dollars', 0):.0f}",
                     )
+            except (json.JSONDecodeError, ValueError):
+                return False, f"BLOCKED: HWM file unreadable ({f.name} is corrupt)"
             except Exception:
-                pass
+                return False, f"BLOCKED: HWM file unreadable ({f.name})"
         return True, "DD circuit breaker: clear (HWM tracker)"
     return True, "No DD tracker state (first session — will init from broker)"
 

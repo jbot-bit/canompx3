@@ -325,7 +325,7 @@ def _encode_categoricals(df: pd.DataFrame) -> pd.DataFrame:
 
     # Convert to string to handle NaN gracefully
     for c in cats_present:
-        df[c] = df[c].astype(str).replace({"nan": "UNKNOWN", "None": "UNKNOWN"})
+        df[c] = df[c].fillna("UNKNOWN").astype(str).replace({"None": "UNKNOWN"})
 
     df = pd.get_dummies(df, columns=cats_present, drop_first=False, dtype=float)
     return df

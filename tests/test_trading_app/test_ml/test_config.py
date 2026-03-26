@@ -168,11 +168,11 @@ class TestThresholdConfig:
 class TestActiveInstruments:
     """Active instruments match pipeline canonical source."""
 
-    def test_four_active_instruments(self):
-        assert len(ACTIVE_INSTRUMENTS) == 4
+    def test_active_instrument_count(self):
+        assert len(ACTIVE_INSTRUMENTS) == 3
 
     def test_canonical_instruments_present(self):
-        expected = {"MGC", "MNQ", "MES", "M2K"}
+        expected = {"MGC", "MNQ", "MES"}
         assert set(ACTIVE_INSTRUMENTS) == expected
 
     def test_subset_of_pipeline_source(self):

@@ -19,7 +19,7 @@ class TestHelpers:
 
     def test_worktree_path(self) -> None:
         path = worktree_manager.build_worktree_path("claude", "Feature A")
-        assert str(path).endswith(".worktrees/tasks/feature-a")
+        assert path.parts[-3:] == (".worktrees", "tasks", "feature-a")
 
 
 class TestParseWorktreeList:
