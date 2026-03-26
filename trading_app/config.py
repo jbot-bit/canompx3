@@ -102,33 +102,24 @@ NOISE_EXPR_FLOOR: dict[str, float] = {
     "E2": 0,
 }
 
-# Per-instrument noise floors — METHODOLOGY NOTE (Mar 25 2026):
-#
-# These values used the WRONG methodology: global max ExpR across all
-# filter/RR/aperture combos per session. This inflates the floor because
-# the max of 486 noise draws will be high. The correct comparison is
-# PER-STRATEGY null: noise ExpR for the SPECIFIC filter × session × RR
-# × aperture the deployed strategy uses.
+# NOISE_FLOOR DISABLED (2026-03-26): per-strategy null
+# (scripts/tools/noise_floor_bootstrap.py) is the correct method.
+# The pooled global-max floor was replaced 2026-03-24.
+# Summary flag removed to prevent false alarm fatigue (55/56 false positives).
 #
 # Per-strategy null results (100 MNQ seeds, Mar 25 2026):
 #   NYSE_CLOSE VOL_RV12_N20 RR1.0 O15: noise mean=0.055, P95=0.106, real=0.208 → p=0.011 SIGNAL
 #   COMEX_SETTLE ORB_G8 RR1.0 O5:      noise mean=0.083, P95=0.125, real=0.130 → p=0.024 SIGNAL
 #   SINGAPORE_OPEN ORB_G8 RR4.0 O15:   noise mean=0.089, P95=0.162, real=0.163 → p=0.053 MARGINAL
 #   NYSE_OPEN X_MES_ATR60: untestable (cross-instrument filter absent in single-inst null)
+#   US_DATA_1000 X_MES_ATR60: untestable (same reason)
 #
-# The pooled values below are STALE and should NOT be used for deployment
-# decisions. Use per-strategy null (above) or forward test evidence instead.
 # @research-source noise_floor_methodology.md (Mar 25 2026)
 # @revalidated-for stratified-K event-based (2026-03-25)
-#
-# Known bugs in current null test:
-#   1. K mismatch: null DB has K=788-1872/session, real has K=3254-14760
-#   2. Single-instrument: cross-instrument filters (X_MES_ATR60) untestable
-#   3. Global max: takes max across grid, not per-strategy distribution
 NOISE_FLOOR_BY_INSTRUMENT: dict[str, dict[str, float]] = {
-    "MGC": {"E1": 0.18, "E2": 0.21},  # STALE — pooled global max, not per-strategy
-    "MES": {"E1": 0.30, "E2": 0.29},  # STALE
-    "MNQ": {"E1": 0.30, "E2": 0.21},  # STALE — per-strategy floors are 0.05-0.09
+    "MGC": {"E1": 0, "E2": 0},  # Disabled — use per-strategy null instead
+    "MES": {"E1": 0, "E2": 0},  # Disabled
+    "MNQ": {"E1": 0, "E2": 0},  # Disabled
 }
 
 # Walk-forward start-date override per instrument.
@@ -345,6 +336,64 @@ class CrossAssetATRFilter(StrategyFilter):
         if col not in df.columns:
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] >= self.min_pct)
+
+
+@dataclass(frozen=True)
+class OwnATRPercentileFilter(StrategyFilter):
+    """Filter by the instrument's own ATR(20) rolling percentile.
+
+    Reads atr_20_pct from daily_features (rolling 252d percentile, pre-computed).
+    Fail-closed: missing data means day is ineligible.
+
+    April 2026 hypothesis H4: MNQ_ATR_P60 as simpler alternative to X_MES_ATR60
+    (CORR(MES_ATR20, MNQ_ATR20) = 0.93 — cross-asset filter is 93% redundant).
+    """
+
+    min_pct: float = 60.0
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        val = row.get("atr_20_pct")
+        if val is None:
+            return False
+        return val >= self.min_pct
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        if "atr_20_pct" not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df["atr_20_pct"].notna() & (df["atr_20_pct"] >= self.min_pct)
+
+
+@dataclass(frozen=True)
+class OvernightRangeFilter(StrategyFilter):
+    """Filter by overnight range rolling percentile.
+
+    Reads overnight_range_pct from daily_features (rolling 60d percentile, pre-computed).
+    Selects days where overnight range is above a rolling threshold — high overnight
+    activity predicts stronger breakout follow-through.
+    Fail-closed: missing data means day is ineligible.
+
+    April 2026 hypothesis H3: overnight_range as a session filter.
+    NOTE: Prior claim of US-session specificity was WRONG — signal is Asian sessions.
+    Prior WR spread claim (Q1=36.1%, Q5=62.6%) was pooled artifact (actual spread ~4.5%).
+    @research-source calibration audit 2026-03-26, corrected 2026-03-27
+    """
+
+    min_pct: float = 60.0
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        val = row.get("overnight_range_pct")
+        if val is None:
+            return False
+        return val >= self.min_pct
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        if "overnight_range_pct" not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df["overnight_range_pct"].notna() & (df["overnight_range_pct"] >= self.min_pct)
 
 
 @dataclass(frozen=True)

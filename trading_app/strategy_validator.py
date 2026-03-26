@@ -424,9 +424,13 @@ def validate_strategy(
     regime_waivers = []
 
     if neg_years:
-        # NOTE: When regime waivers are active, they supersede min_years_positive_pct.
-        # Waiver path requires ALL negative years to be DORMANT-waivable (or reject).
-        # The pct threshold only applies in strict mode (waivers disabled/no ATR data).
+        # Regime waiver logic: DORMANT years (ATR < 20, <= 5 trades) can be waived.
+        # Waived years count as passing for the % threshold calculation.
+        # FIX (2026-03-26): Previously, ANY unwaived negative year caused immediate
+        # rejection, bypassing min_years_positive_pct. This made the threshold
+        # effectively 100% for instruments without DORMANT years (MNQ, MES).
+        # Now: waived years are excluded from the failure count, then the standard
+        # min_years_positive_pct threshold applies to the remaining set.
         if enable_regime_waivers and atr_by_year:
             waived = []
             for y, d in neg_years.items():
@@ -441,20 +445,28 @@ def validate_strategy(
 
             unwaived_neg = [y for y in neg_years if int(y) not in waived]
 
-            if unwaived_neg:
-                return (
-                    "REJECTED",
-                    (
-                        f"Phase 3: {len(unwaived_neg)} year(s) negative and not waivable: "
-                        f"{', '.join(sorted(unwaived_neg))}"
-                    ),
-                    [],
-                )
-
             if pos_count == 0:
                 return (
                     "REJECTED",
-                    ("Phase 3: All years require DORMANT waiver, need at least 1 clean positive year"),
+                    "Phase 3: All years require DORMANT waiver, need at least 1 clean positive year",
+                    [],
+                )
+
+            # Count waived years as passing, then apply pct threshold
+            effective_pos = pos_count + len(waived)
+            effective_total = len(included_years)
+            pct_positive = effective_pos / effective_total if effective_total > 0 else 0
+
+            if pct_positive < min_years_positive_pct:
+                neg_list = sorted(unwaived_neg)
+                return (
+                    "REJECTED",
+                    (
+                        f"Phase 3: {effective_pos}/{effective_total} years positive "
+                        f"({pct_positive:.0%} < {min_years_positive_pct:.0%}), "
+                        f"unwaived negative: {', '.join(neg_list)}"
+                        + (f", waived: {sorted(waived)}" if waived else "")
+                    ),
                     [],
                 )
 
@@ -465,8 +477,13 @@ def validate_strategy(
                 notes.append(
                     f"Year {yr} waived: DORMANT regime (mean_atr={atr_by_year[yr]:.1f}, trades={d.get('trades', 0)})"
                 )
+            if unwaived_neg:
+                notes.append(
+                    f"Phase 3: {len(unwaived_neg)} non-waivable negative year(s) "
+                    f"({', '.join(sorted(unwaived_neg))}), within {min_years_positive_pct:.0%} threshold"
+                )
         else:
-            # Original strict logic
+            # Strict mode (no waiver data available)
             pct_positive = pos_count / len(included_years)
             if pct_positive < min_years_positive_pct:
                 neg_list = sorted(neg_years.keys())
@@ -1053,6 +1070,15 @@ def run_validation(
                     all_positive = all(d.get("avg_r", 0) > 0 for d in included.values())
                     regime_waivers = sr["regime_waivers"]
 
+                    # Concentration check: max single year's % of total R
+                    year_totals = {y: d.get("total_r", d.get("avg_r", 0) * d.get("trades", 0)) for y, d in included.items()}
+                    total_r_sum = sum(year_totals.values())
+                    if total_r_sum > 0:
+                        max_year_pct_val = max(yr / total_r_sum for yr in year_totals.values())
+                    else:
+                        max_year_pct_val = None
+                    era_dependent_val = max_year_pct_val is not None and max_year_pct_val > 0.50
+
                     wf_result_dict = sr.get("wf_result_dict")
                     wf_tested = wf_result_dict is not None
                     wf_passed = (wf_result_dict or {}).get("passed", False) if wf_tested else None
@@ -1089,8 +1115,9 @@ def run_validation(
                             dst_verdict,
                             wf_tested, wf_passed, wf_windows, wfe,
                             sharpe_haircut, skewness, kurtosis_excess,
-                            oos_exp_r, noise_risk)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            oos_exp_r, noise_risk,
+                            era_dependent, max_year_pct)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             sid,
                             sid,
@@ -1135,6 +1162,8 @@ def run_validation(
                             rd.get("kurtosis_excess"),
                             oos_exp_r,
                             noise_risk_val,
+                            era_dependent_val,
+                            round(max_year_pct_val, 4) if max_year_pct_val is not None else None,
                         ],
                     )
 
