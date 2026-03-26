@@ -1,13 +1,13 @@
 ---
 mode: IMPLEMENTATION
-task: Commit triage -- schema fix + stash cleanup + test recovery
+task: Fix DD budget bypass in daily_lanes path (build_profile_portfolio)
 scope_lock:
-  - pipeline/init_db.py
-  - tests/test_pipeline/test_build_daily_features.py
+  - trading_app/portfolio.py
   - docs/runtime/STAGE_STATE.md
 acceptance:
-  - overnight_range_pct column added to schema
-  - Market profile tests pass
-  - Stashes cleaned up
-  - Remote branch cleaned up
+  - build_profile_portfolio() validates DD budget before returning Portfolio
+  - Apex 50K profile (5 lanes × $935 = $4,675) fails-closed against $2K limit
+  - No circular imports introduced
+  - check_drift.py passes
+  - pytest passes
 ---
