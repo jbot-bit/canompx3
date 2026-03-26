@@ -545,6 +545,42 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             except duckdb.CatalogException:
                 pass  # column already exists
 
+        # Migration: era_dependent + max_year_pct (2026-03-26 — concentration check)
+        # Phase 3 checks sign (75% positive years) but not concentration.
+        # max_year_pct = max single year's contribution to total R.
+        # era_dependent = TRUE if max_year_pct > 0.50 (one year dominates).
+        # Informational flag, NOT a gate — strategies are not killed.
+        for col, typedef in [
+            ("era_dependent", "BOOLEAN"),
+            ("max_year_pct", "DOUBLE"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        # Migration: WFE investigation fields (2026-03-26 — audit trail)
+        # Records human verdict for WFE outliers (>1.50 or <0.50).
+        # Values: NULL (not investigated), ACCEPT, REGIME_BET,
+        #         LEAKAGE_SUSPECT, UNDERFIT, LUCKY_FOLD
+        for col, typedef in [
+            ("wfe_verdict", "VARCHAR"),
+            ("wfe_investigation_date", "DATE"),
+            ("wfe_investigation_notes", "TEXT"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        # Migration: slippage_validation_status (2026-03-26 — COMEX fragility)
+        # Tracks whether the backtest slippage model has been validated with
+        # field data (tbbo pilot). Values: ROBUST, PENDING, FRAGILE, VALIDATED.
+        try:
+            con.execute("ALTER TABLE validated_setups ADD COLUMN slippage_validation_status VARCHAR")
+        except duckdb.CatalogException:
+            pass  # column already exists
+
         # Table 7: validation_run_log (Mar 2026 — Bloomey FIX 8)
         # Tracks rejection rate per phase per validation run for auditability.
         con.execute("""

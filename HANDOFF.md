@@ -7,6 +7,68 @@
 ---
 
 ## Current Session
+- **Tool:** Claude Code (Multi-Terminal Recovery + MAE SL Analysis)
+- **Date:** 2026-03-27
+- **Branch:** `main`
+- **Status:** Recovery session after computer restart. 8 memory files created, 4 tagged RE-VERIFY. MAE analysis ran but superseded by friction confound finding.
+
+### What was done (Mar 27 — this session)
+
+#### 1. Multi-Terminal Recovery
+Computer restarted with 5+ terminals running. Recovered all workstreams:
+- Verified 7 findings against gold.db (V1-V7)
+- V1 CRITICAL: overnight_range code comment claims Q1=36.1%/Q5=62.6% — VERIFIED WRONG (pooled spread 4.5%, signal is Asian not US)
+- V2: ATR correlation 0.93 CONFIRMED
+- V3: Noise floor 474/488 false positives (not "55/56" — that was old total)
+- V4: Waiver fix 38→470 MNQ validated (488 total). 5 Bloomberg audit Qs still open.
+- V5: FDR K frozen per strategy (discovery_k populated)
+- V6: US_DATA_1000 forward +66R at RR1.0 (N=504)
+- V7: 5/488 era-dependent (max: MNQ NYSE_OPEN X_MES_ATR70 at 69%)
+
+#### 2. MAE SL Validation (Sweeney)
+Ran full Sweeney analysis — then learned from prior terminal that mae_r is FRICTION-CONFOUNDED. My scatter results are INVALID. Corrected analysis (from prior terminal) shows:
+- All 3 instruments identical when friction removed
+- Tighter stops (0.60-0.80R raw) improve ExpR across all instruments
+- Classification: ARITHMETIC_ONLY (loss-size reduction)
+- T6 null bootstrap NOT YET RUN — next step
+
+#### 3. Round Number Research — CONFIRMED DEAD
+T0-T8 audit (63K trades) killed it. Prior p=0.031 was sign-test artifact (n=6). WR flat at ~32%, null p>0.35. Anti-clustering also dead.
+
+#### 4. Memory Files Created/Updated
+8 new files, 4 tagged "RE-VERIFY" (from pasted terminal output, not independently verified).
+Updated: noise_floor_methodology.md, MEMORY.md index.
+
+### Uncommitted Working Tree (from Mar 26 sessions)
+6 files modified, 3 untracked — all from the fairness audit / waiver fix:
+- `trading_app/config.py` — noise floor disabled, 2 new filter classes (OwnATRPercentile, OvernightRange)
+- `trading_app/strategy_validator.py` — waiver bug fix + era_dependent concentration check
+- `trading_app/db_manager.py` — 6 new column migrations
+- `pipeline/build_daily_features.py` — overnight_range_pct feature
+- `tests/test_trading_app/test_strategy_validator.py` — updated waiver tests
+- `scripts/tools/migrate_fairness_audit.py` (untracked)
+- `scripts/databento_backfill.py` (untracked)
+- `scripts/databento_daily.py` (untracked)
+
+**WARNING:** overnight_range code comment in config.py is WRONG (says US-session, actual signal is Asian). Fix before committing.
+
+### What's Running
+Nothing (session complete)
+
+### What's Broken
+- Tradovate auth — password rejected (unchanged from prior sessions)
+- STAGE_STATE.md points at Databento code review but working tree contains fairness audit changes
+
+### Next Actions (Priority Order)
+1. **T6 null bootstrap for SL** — use raw MAE (not mae_r). Must beat P95 at p<0.05.
+2. **5 Bloomberg rescue audit questions** — gates whether 488 count is trustworthy
+3. **Fix overnight_range code comment** — wrong session regime claim
+4. **Commit fairness audit** — after fixing comment, commit the 6-file diff
+5. **Databento code review** — finish review of backfill/daily scripts
+6. **ML stale docs** — update ml_exhaustive_sweep.md ("5/7 PASS" → "1/7 PASS at 5K")
+7. **Confluence scan** — per todo_queue_mar27.md
+
+### Prior Session
 - **Tool:** Claude Code (Adversarial Audit Round 2 + ProjectX API Compliance)
 - **Date:** 2026-03-25
 - **Branch:** `main`

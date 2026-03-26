@@ -899,6 +899,7 @@ def build_features_for_day(
     row["atr_vel_ratio"] = None
     row["atr_vel_regime"] = None
     row["atr_20_pct"] = None
+    row["overnight_range_pct"] = None
     row["garch_forecast_vol"] = None
     row["garch_atr_ratio"] = None
     for _sl in COMPRESSION_SESSIONS:
@@ -1193,6 +1194,22 @@ def build_daily_features(
                 sorted_prior = sorted(prior_atrs_pct)
                 rank = bisect_left(sorted_prior, atr_today)
                 rows[i]["atr_20_pct"] = round(rank / len(sorted_prior) * 100, 2)
+
+        # Overnight range percentile: rank of today's overnight_range among prior 60 trading days.
+        # Used by OvernightRangeFilter for April 2026 research hypothesis.
+        # Prior-only window [i-60:i], no look-ahead. Min 20 prior days for stable ranking.
+        orn_today = rows[i].get("overnight_range")
+        if orn_today is not None:
+            orn_lookback = 60
+            prior_orns = [
+                rows[j]["overnight_range"]
+                for j in range(max(0, i - orn_lookback), i)
+                if rows[j].get("overnight_range") is not None
+            ]
+            if len(prior_orns) >= 20:
+                sorted_orn = sorted(prior_orns)
+                orn_rank = bisect_left(sorted_orn, orn_today)
+                rows[i]["overnight_range_pct"] = round(orn_rank / len(sorted_orn) * 100, 2)
 
         # Per-session ORB compression z-score (prior 20 days, no look-ahead).
         # Compression = rolling z-score of (orb_size / atr_20).

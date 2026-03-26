@@ -485,14 +485,18 @@ class TestRegimeWaivers:
         assert "mean_atr=12.0" in notes
         assert "mean_atr=14.0" in notes
 
-    def test_mixed_years_some_waived(self):
-        """Mix of DORMANT-waivable and ACTIVE-negative -> REJECTED."""
+    def test_mixed_years_some_waived_passes_at_threshold(self):
+        """2 positive + 1 waived + 1 unwaived neg = 3/4 (75%) -> PASSED.
+
+        FIX (2026-03-26): Previously ANY unwaived negative year caused immediate
+        rejection. Now waived years count as passing and the 75% threshold applies.
+        """
         yearly = _yearly(
             {
                 2022: (50, 0.2),
                 2023: (50, 0.1),
                 2017: (2, -0.02),  # DORMANT, waivable
-                2020: (30, -0.05),  # ACTIVE, not waivable
+                2020: (30, -0.05),  # ACTIVE, not waivable — but within 75% tolerance
             }
         )
         atr = {2022: 25.0, 2023: 28.0, 2017: 12.0, 2020: 30.6}
@@ -502,8 +506,31 @@ class TestRegimeWaivers:
             atr_by_year=atr,
             enable_regime_waivers=True,
         )
+        assert status == "PASSED"
+        assert 2017 in waivers  # DORMANT year waived
+        assert "2020" in notes  # unwaived negative noted
+
+    def test_mixed_years_too_many_unwaived_fails(self):
+        """2 positive + 1 waived + 2 unwaived neg = 3/5 (60%) -> REJECTED."""
+        yearly = _yearly(
+            {
+                2022: (50, 0.2),
+                2023: (50, 0.1),
+                2017: (2, -0.02),  # DORMANT, waivable
+                2020: (30, -0.05),  # ACTIVE, not waivable
+                2021: (40, -0.03),  # ACTIVE, not waivable
+            }
+        )
+        atr = {2022: 25.0, 2023: 28.0, 2017: 12.0, 2020: 30.6, 2021: 29.0}
+        status, notes, waivers = validate_strategy(
+            _make_row(yearly_results=yearly),
+            _cost(),
+            atr_by_year=atr,
+            enable_regime_waivers=True,
+        )
         assert status == "REJECTED"
-        assert "2020" in notes
+        assert "Phase 3" in notes
+        assert "60%" in notes or "3/5" in notes
         assert waivers == []
 
 
