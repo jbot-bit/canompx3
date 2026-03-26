@@ -1,14 +1,15 @@
 ---
 mode: IMPLEMENTATION
-task: FDR K correction — count stop multiplier in K, freeze K at validation time
+task: Commit triage -- fairness audit + overnight range + waiver fix from Mar 26
 scope_lock:
-  - trading_app/strategy_discovery.py
+  - trading_app/config.py
   - trading_app/strategy_validator.py
   - trading_app/db_manager.py
-  - pipeline/init_db.py
+  - pipeline/build_daily_features.py
+  - tests/test_trading_app/test_strategy_validator.py
+  - HANDOFF.md
 acceptance:
-  - stop multiplier counted in total_combos (K *= len(STOP_MULTIPLIERS))
-  - validated_setups has discovery_k and discovery_date columns
-  - 4 Apex lanes still pass BH FDR at corrected K
-  - 75/75 drift, 0 regressions
+  - OvernightRangeFilter docstring corrected (US→Asian, WR spread claim removed)
+  - All 6 diffs reviewed and verified
+  - Tests pass
 ---
