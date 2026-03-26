@@ -854,8 +854,9 @@ def build_profile_portfolio(
             )
 
     # --- DD budget pre-flight check (fail-closed) ---
-    # DD per contract estimates (mirrors prop_portfolio.py constants to avoid circular import)
-    _DD_075X, _DD_10X, _INTRADAY_FACTOR = 935.0, 1350.0, 1.4
+    # Deferred import: prop_portfolio imports PortfolioStrategy from this module at top level,
+    # but portfolio.py is already loaded when this function runs, so no circular import.
+    from trading_app.prop_portfolio import _compute_dd_per_contract
     from trading_app.prop_profiles import get_firm_spec
 
     firm_spec = get_firm_spec(profile.firm)
@@ -864,8 +865,7 @@ def build_profile_portfolio(
     dd_breakdown: list[str] = []
     total_dd = 0.0
     for s in strategies:
-        base = _DD_075X if s.stop_multiplier <= 0.75 else _DD_10X
-        lane_dd = base * _INTRADAY_FACTOR if dd_type == "intraday_trailing" else base
+        lane_dd = _compute_dd_per_contract(s.stop_multiplier, dd_type)
         total_dd += lane_dd
         dd_breakdown.append(f"  {s.strategy_id}: stop={s.stop_multiplier:.2f}x -> ${lane_dd:,.0f}")
 
