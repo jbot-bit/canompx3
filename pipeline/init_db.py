@@ -299,6 +299,7 @@ CREATE TABLE IF NOT EXISTS daily_features (
     overnight_high           DOUBLE,
     overnight_low            DOUBLE,
     overnight_range          DOUBLE,
+    overnight_range_pct      DOUBLE,
     pre_1000_high            DOUBLE,
     pre_1000_low             DOUBLE,
 
@@ -439,6 +440,7 @@ def init_db(db_path: Path, force: bool = False):
             ("overnight_high", "DOUBLE"),
             ("overnight_low", "DOUBLE"),
             ("overnight_range", "DOUBLE"),
+            ("overnight_range_pct", "DOUBLE"),
             ("pre_1000_high", "DOUBLE"),
             ("pre_1000_low", "DOUBLE"),
             ("took_pdh_before_1000", "BOOLEAN"),
