@@ -101,11 +101,16 @@ For any audit, debugging, or research task:
 
 ### Local Academic / Project-Source Grounding Rule
 For methodological, statistical, validation, monitoring, execution-realism, or prop-rule claims:
-- Prefer local project sources and local academic PDFs/books in the project directory (including `resources/` if present) over generic model memory
-- Use local sources to test rigor, detect drift, and challenge weak assumptions
+- Prefer local project sources and local academic PDFs/books in `resources/` over training memory
 - For nontrivial methodological claims, name the local source(s) consulted when relevant
 - If project canon and an academic source differ, project canon governs implementation; academic source is used as adversarial reference material
 - If no local source supports a claim, say UNSUPPORTED rather than improvising
+
+**PDF grounding protocol (MANDATORY — do not silently fake this):**
+- When grounding a claim in a `resources/` PDF: **EXTRACT text from the file first.** Do not cite from training memory as if you read it.
+- If extraction fails (tool error, reader not installed, garbled output): say **"PDF read failed for [filename]. Cannot ground this claim in local copy."**
+- You MAY still use training knowledge, but you MUST label it explicitly: "From training memory — not verified against local PDF."
+- **NEVER** silently substitute training memory for a failed PDF read. The user has caught this multiple times. If you can't read the file, say so.
 
 ### Audit-First Default for Research Layers
 For research pipeline layers (data integrity, outcomes, discovery, validation, noise/significance, portfolio construction, execution realism, monitoring): default workflow is **audit → adversarial audit → fix → rerun → freeze layer → move on**. Do not skip to implementation when truth-state is unverified. Do not advance to the next layer until the current layer is explicitly frozen or blocked upstream.
@@ -118,6 +123,12 @@ Every non-trivial code change follows two passes:
 
 One task at a time. Implement → verify → review → next. Never batch without verification.
 
+**Completion evidence ("done" means PROVEN, not CLAIMED):**
+- **Tests:** Run affected tests. Show actual output. "Tests should pass" is not evidence.
+- **Dead code:** `grep -r` for functions, imports, config entries orphaned by this change. Remove them. Do not leave dead code for future discovery.
+- **Drift:** `python pipeline/check_drift.py` must pass.
+- Do not close the stage or claim completion without all three.
+
 ### Design Proposal Gate (MANDATORY)
 Before writing ANY code on a non-trivial change, present a brief proposal:
 
@@ -125,6 +136,13 @@ Before writing ANY code on a non-trivial change, present a brief proposal:
 2. **Files:** Which files you'll touch (create/modify/delete)
 3. **Blast radius:** What else could break (callers, tests, drift checks)
 4. **Approach:** Key design choice if there are alternatives
+5. **Self-check (DO NOT SKIP):** Before presenting the proposal, simulate it through 3 scenarios internally:
+   - **Happy path:** does the change work as intended end-to-end?
+   - **Edge case:** what if inputs are NULL/empty/missing? What about first-time runs, concurrent access, or instruments with sparse data?
+   - **Failure mode:** what if a dependency changed, a downstream consumer expects the old interface, or a test mock doesn't cover the new behavior?
+   Fix everything that breaks in simulation. Then present. **Do NOT present your first draft — it has flaws you haven't found yet. Your first draft is always wrong; iterate internally until you can't find more problems.** If you present and the user has to push back with obvious flaws, you skipped this step.
+
+   **Anti-performative rule:** Do not just SAY "I simulated three scenarios and they all passed." SHOW what you tested and what you found. State the specific edge case and how your plan handles it. If all three scenarios found zero issues, you didn't look hard enough — go deeper. Performative self-review (claiming you checked without showing evidence) is worse than no self-review because it creates false confidence.
 
 Wait for user confirmation ("go", "yes", "do it", "looks good") before writing code. If the user says "no" or redirects, update the proposal. Do NOT silently proceed.
 
@@ -134,7 +152,9 @@ Wait for user confirmation ("go", "yes", "do it", "looks good") before writing c
 - Git operations (commit, push, merge) — covered by Git Operations rule
 - Running queries or read-only exploration
 
-**Why this exists:** 38+ sessions hit "wrong approach" because Claude dove into code without confirming intent. A 10-second checkpoint prevents 30-minute reversals.
+**Entry-point invariance:** This gate applies regardless of how work is initiated — direct request, `/stage-gate`, `/plan`, `/4t`, or any other entry point. The quality bar is the same.
+
+**Why this exists:** 38+ sessions hit "wrong approach" because Claude dove into code without confirming intent, or presented a flawed first-draft plan that the user had to catch and correct. A 30-second self-check prevents 30-minute reversals.
 
 ---
 

@@ -105,6 +105,49 @@ def parse_field(content, field):
     return None
 
 
+def parse_blast_radius(content):
+    """Parse blast_radius from single-line YAML, multi-line YAML list, or markdown section.
+
+    Accepted formats:
+      blast_radius: entry_rules.py, config.py; tests: test_entry_rules.py
+      blast_radius:\n  - entry_rules.py\n  - config.py
+      ## Blast Radius\n- entry_rules.py\n- config.py
+    """
+    # Format 1: Markdown section (## Blast Radius)
+    if "## Blast Radius" in content:
+        section = content.split("## Blast Radius")[1].split("##")[0].split("---")[0]
+        text = section.strip()
+        if text:
+            return text
+
+    # Format 2: YAML (single-line or multi-line list)
+    found_key = False
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("blast_radius:"):
+            value = stripped.split(":", 1)[1].strip()
+            if value:
+                return value  # Single-line: blast_radius: some text here
+            found_key = True
+            continue
+        if found_key:
+            if stripped.startswith("- "):
+                # Multi-line YAML list — collect all items
+                items = [stripped[2:].strip()]
+                remaining = content.split(line, 1)[1] if line in content else ""
+                for next_line in remaining.splitlines():
+                    ns = next_line.strip()
+                    if ns.startswith("- "):
+                        items.append(ns[2:].strip())
+                    elif ns and not ns.startswith("#"):
+                        break
+                return "; ".join(items)
+            elif stripped and not stripped.startswith("#"):
+                break  # Next YAML key, no list found
+
+    return None
+
+
 def parse_scope_lock(content):
     """Parse scope_lock from either markdown or YAML format.
 
@@ -277,6 +320,18 @@ def main():
             "  STAGE_STATE.md must list allowed files in a ## Scope Lock section.\n"
             "  → Add scope_lock to docs/runtime/STAGE_STATE.md\n"
             "  → Or reclassify: /stage-gate (which writes scope automatically)",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    # ── IMPLEMENTATION mode — check blast_radius ─────────────────────
+    blast_radius = parse_blast_radius(content)
+    if not blast_radius or len(blast_radius.strip()) < 30:
+        print(
+            f"STAGE-GATE BLOCK: IMPLEMENTATION mode but blast_radius is missing or too brief (<30 chars).\n"
+            f"  STAGE_STATE.md must include blast_radius listing affected files, tests, and downstream consumers.\n"
+            f"  Example: blast_radius: entry_rules.py, config.py; tests: test_entry_rules.py; downstream: strategy_discovery calls entry_rules\n"
+            f"  → Add blast_radius to docs/runtime/STAGE_STATE.md",
             file=sys.stderr,
         )
         sys.exit(2)
