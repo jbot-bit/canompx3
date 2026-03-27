@@ -108,7 +108,7 @@ def main():
     print("\nF4: Recording WFE verdicts...")
 
     # Load WF fold data for analysis
-    wf_path = Path("data/walkforward_results.jsonl")
+    wf_path = Path(__file__).resolve().parent.parent.parent / "data" / "walkforward_results.jsonl"
     wf_data = {}
     if wf_path.exists():
         with open(wf_path) as f:

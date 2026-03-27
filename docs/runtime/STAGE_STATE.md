@@ -1,18 +1,14 @@
 ---
 mode: IMPLEMENTATION
-task: Fix all 39 test failures for clean ship + DD budget DRY fix
+task: Fix 3 vanilla Claude compat issues (PyYAML dep, hardcoded instruments, relative path)
 scope_lock:
-  - tests/
-  - trading_app/ml/features.py
-  - trading_app/pre_session_check.py
-  - trading_app/live/projectx/order_router.py
-  - trading_app/portfolio.py
-  - scripts/tools/project_pulse.py
-  - scripts/infra/windows_agent_launch.py
+  - pyproject.toml
+  - scripts/databento_daily.py
+  - scripts/tools/migrate_fairness_audit.py
   - docs/runtime/STAGE_STATE.md
 acceptance:
-  - 0 test failures, 0 errors
-  - check_drift.py passes
-  - All production fixes are minimal (no refactoring)
-  - DD constants imported from canonical source (no DRY violation)
+  - pyyaml in pyproject.toml deps
+  - databento_daily.py uses ACTIVE_ORB_INSTRUMENTS guard
+  - migrate_fairness_audit.py uses absolute path
+  - scripts still import cleanly
 ---
