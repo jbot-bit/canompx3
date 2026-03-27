@@ -128,7 +128,8 @@ def bootstrap_one(
 
     # Get session-appropriate features
     X_session = _get_session_features(X_e6, session)
-    session_data = X_session.iloc[session_indices]
+    # Fix C sync: detect constants on train split only (matches meta_label.py)
+    session_data = X_session.iloc[train_idx]
     const_cols = [c for c in X_session.columns if session_data[c].nunique() <= 1]
     if const_cols:
         X_session = X_session.drop(columns=const_cols)
