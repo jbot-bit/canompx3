@@ -4,9 +4,10 @@ Tests for E3 soft retirement migration.
 Tests use in-memory DuckDB with minimal validated_setups schema.
 """
 
+from pathlib import Path
+
 import duckdb
 import pytest
-from pathlib import Path
 
 from scripts.migrations.retire_e3_strategies import retire_e3
 
@@ -50,7 +51,7 @@ class TestRetireE3:
                 "FROM validated_setups WHERE entry_model = 'E3' ORDER BY strategy_id"
             ).fetchall()
             assert len(rows) == 3
-            for sid, status, reason, retired_at in rows:
+            for _sid, status, reason, retired_at in rows:
                 assert status == "RETIRED"
                 assert reason == "PASS2: 0/50 FDR-sig, no timeout mechanism"
                 assert retired_at is not None
@@ -68,7 +69,7 @@ class TestRetireE3:
                 "FROM validated_setups WHERE entry_model != 'E3' ORDER BY strategy_id"
             ).fetchall()
             assert len(rows) == 2
-            for sid, status, retired_at, reason in rows:
+            for _sid, status, retired_at, reason in rows:
                 assert status == "active"
                 assert retired_at is None
                 assert reason is None

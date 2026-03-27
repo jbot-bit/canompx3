@@ -1,19 +1,19 @@
 """Tests for MarketState, scoring, and cascade_table (all DB-free)."""
 
-import pytest
-from datetime import date, datetime, timezone
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 
+import pytest
+
+from trading_app.cascade_table import lookup_cascade
 from trading_app.market_state import (
+    ORB_LABELS,
     MarketState,
     OrbSnapshot,
-    SessionSignals,
     RegimeContext,
-    ORB_LABELS,
+    SessionSignals,
 )
-from trading_app.scoring import score_strategy, ScoringWeights, MIN_SCORE_THRESHOLD
-from trading_app.cascade_table import lookup_cascade
-
+from trading_app.scoring import MIN_SCORE_THRESHOLD, ScoringWeights, score_strategy
 
 # =========================================================================
 # Fixtures
@@ -324,7 +324,7 @@ class TestCascadeLookup:
 
 class TestRiskManagerChopWarning:
     def test_chop_warning_recorded(self):
-        from trading_app.risk_manager import RiskManager, RiskLimits
+        from trading_app.risk_manager import RiskLimits, RiskManager
 
         rm = RiskManager(RiskLimits())
         rm.daily_reset(date(2025, 6, 15))
@@ -337,7 +337,7 @@ class TestRiskManagerChopWarning:
         assert any("chop_warning" in w for w in rm.warnings)
 
     def test_no_warning_without_chop(self):
-        from trading_app.risk_manager import RiskManager, RiskLimits
+        from trading_app.risk_manager import RiskLimits, RiskManager
 
         rm = RiskManager(RiskLimits())
         rm.daily_reset(date(2025, 6, 15))

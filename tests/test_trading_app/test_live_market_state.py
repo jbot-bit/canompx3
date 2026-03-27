@@ -8,7 +8,7 @@ CME_REOPEN for trading_day 2026-03-03 (March, winter/CST):
 Bars must be at 2026-03-02 23:xx UTC to fall inside this window.
 """
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime, timezone
 
 import pytest
 
@@ -18,7 +18,7 @@ from trading_app.live.live_market_state import LiveORBBuilder
 
 def _bar(cal_day: int, hour_utc: int, minute_utc: int, high: float, low: float, symbol="MGC") -> Bar:
     """Create a Bar. cal_day = day of month in March 2026."""
-    ts = datetime(2026, 3, cal_day, hour_utc, minute_utc, 0, tzinfo=timezone.utc)
+    ts = datetime(2026, 3, cal_day, hour_utc, minute_utc, 0, tzinfo=UTC)
     mid = (high + low) / 2
     return Bar(ts_utc=ts, open=mid, high=high, low=low, close=mid, volume=10, symbol=symbol)
 

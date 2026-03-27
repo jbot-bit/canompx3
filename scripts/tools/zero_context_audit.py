@@ -8,9 +8,9 @@ import sys
 
 import duckdb
 import numpy as np
+from scipy import stats
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
-from scipy import stats
 
 sys.path.insert(0, ".")
 from pipeline.paths import GOLD_DB_PATH

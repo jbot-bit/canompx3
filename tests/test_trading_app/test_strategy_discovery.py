@@ -2,25 +2,25 @@
 Tests for trading_app.strategy_discovery module.
 """
 
-import sys
 import json
+import sys
+from datetime import UTC, date, datetime, timezone
 from pathlib import Path
-from datetime import date, datetime, timezone
 
-import pytest
 import duckdb
+import pytest
 
+from trading_app.config import (
+    ALL_FILTERS,
+    ENTRY_MODELS,
+    VolumeFilter,
+)
 from trading_app.strategy_discovery import (
+    _compute_haircut_sharpe,
+    _compute_relative_volumes,
     compute_metrics,
     make_strategy_id,
     run_discovery,
-    _compute_relative_volumes,
-    _compute_haircut_sharpe,
-)
-from trading_app.config import (
-    ENTRY_MODELS,
-    ALL_FILTERS,
-    VolumeFilter,
 )
 
 # ============================================================================
@@ -529,8 +529,8 @@ class TestComputeRelativeVolumes:
         # Insert 20 prior days of volume at 23:05 UTC (break minute)
         # and different volumes at 23:10 UTC (different minute)
         for i in range(1, 22):  # days 1-21
-            ts_05 = datetime(2024, 1, i, 23, 5, tzinfo=timezone.utc)
-            ts_10 = datetime(2024, 1, i, 23, 10, tzinfo=timezone.utc)
+            ts_05 = datetime(2024, 1, i, 23, 5, tzinfo=UTC)
+            ts_10 = datetime(2024, 1, i, 23, 10, tzinfo=UTC)
             vol_05 = 200 if i == 21 else 100  # day 21 = break bar with 200
             con.execute(
                 "INSERT INTO bars_1m VALUES (?::TIMESTAMPTZ, 'MGC', 'GCG4', 100, 101, 99, 100, ?)",
@@ -545,7 +545,7 @@ class TestComputeRelativeVolumes:
         features = [
             {
                 "trading_day": date(2024, 1, 21),
-                "orb_CME_REOPEN_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=timezone.utc),
+                "orb_CME_REOPEN_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=UTC),
             }
         ]
 
@@ -564,13 +564,13 @@ class TestComputeRelativeVolumes:
         # Only insert the break bar itself, no prior history
         con.execute(
             "INSERT INTO bars_1m VALUES (?::TIMESTAMPTZ, 'MGC', 'GCG4', 100, 101, 99, 100, 200)",
-            [datetime(2024, 6, 15, 23, 5, tzinfo=timezone.utc).isoformat()],
+            [datetime(2024, 6, 15, 23, 5, tzinfo=UTC).isoformat()],
         )
 
         features = [
             {
                 "trading_day": date(2024, 6, 15),
-                "orb_CME_REOPEN_break_ts": datetime(2024, 6, 15, 23, 5, tzinfo=timezone.utc),
+                "orb_CME_REOPEN_break_ts": datetime(2024, 6, 15, 23, 5, tzinfo=UTC),
             }
         ]
 
@@ -588,18 +588,18 @@ class TestComputeRelativeVolumes:
         for i in range(1, 21):
             con.execute(
                 "INSERT INTO bars_1m VALUES (?::TIMESTAMPTZ, 'MGC', 'GCG4', 100, 101, 99, 100, 100)",
-                [datetime(2024, 3, i, 23, 5, tzinfo=timezone.utc).isoformat()],
+                [datetime(2024, 3, i, 23, 5, tzinfo=UTC).isoformat()],
             )
         # Break bar with volume=0
         con.execute(
             "INSERT INTO bars_1m VALUES (?::TIMESTAMPTZ, 'MGC', 'GCG4', 100, 101, 99, 100, 0)",
-            [datetime(2024, 3, 21, 23, 5, tzinfo=timezone.utc).isoformat()],
+            [datetime(2024, 3, 21, 23, 5, tzinfo=UTC).isoformat()],
         )
 
         features = [
             {
                 "trading_day": date(2024, 3, 21),
-                "orb_CME_REOPEN_break_ts": datetime(2024, 3, 21, 23, 5, tzinfo=timezone.utc),
+                "orb_CME_REOPEN_break_ts": datetime(2024, 3, 21, 23, 5, tzinfo=UTC),
             }
         ]
 
@@ -618,7 +618,7 @@ class TestComputeRelativeVolumes:
         features = [
             {
                 "trading_day": date(2024, 1, 21),
-                "orb_CME_REOPEN_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=timezone.utc),
+                "orb_CME_REOPEN_break_ts": datetime(2024, 1, 21, 23, 5, tzinfo=UTC),
             }
         ]
 
@@ -642,7 +642,7 @@ class TestComputeRelativeVolumes:
                 vol = 150 if i % 2 == 1 else 50
             con.execute(
                 "INSERT INTO bars_1m VALUES (?::TIMESTAMPTZ, 'MGC', 'GCG4', 100, 101, 99, 100, ?)",
-                [datetime(2024, 3, i, 23, 5, tzinfo=timezone.utc).isoformat(), vol],
+                [datetime(2024, 3, i, 23, 5, tzinfo=UTC).isoformat(), vol],
             )
 
         # Features: days 21-30 all have breaks
@@ -651,7 +651,7 @@ class TestComputeRelativeVolumes:
             features.append(
                 {
                     "trading_day": date(2024, 3, i),
-                    "orb_CME_REOPEN_break_ts": datetime(2024, 3, i, 23, 5, tzinfo=timezone.utc),
+                    "orb_CME_REOPEN_break_ts": datetime(2024, 3, i, 23, 5, tzinfo=UTC),
                     "orb_CME_REOPEN_break_dir": "long",
                     "orb_CME_REOPEN_size": 5.0,
                 }
@@ -808,7 +808,7 @@ class TestZeroSampleNotWritten:
         con.close()
 
         # Run discovery
-        count = run_discovery(
+        _count = run_discovery(
             db_path=db_path,
             instrument="MGC",
             start_date=date(2024, 1, 1),
@@ -832,8 +832,8 @@ class TestDedup:
 
     def test_dedup_identifies_identical_trade_sets(self):
         """3 strategies with same trade days -> 1 canonical + 2 aliases."""
-        from trading_app.strategy_discovery import _mark_canonical
         from trading_app.db_manager import compute_trade_day_hash as _compute_trade_day_hash
+        from trading_app.strategy_discovery import _mark_canonical
 
         days = [date(2024, 1, i) for i in range(1, 11)]
         day_hash = _compute_trade_day_hash(days)
@@ -867,8 +867,8 @@ class TestDedup:
 
     def test_dedup_preserves_different_trade_sets(self):
         """2 strategies with different trade days -> both canonical."""
-        from trading_app.strategy_discovery import _mark_canonical
         from trading_app.db_manager import compute_trade_day_hash as _compute_trade_day_hash
+        from trading_app.strategy_discovery import _mark_canonical
 
         days1 = [date(2024, 1, i) for i in range(1, 6)]
         days2 = [date(2024, 1, i) for i in range(6, 11)]

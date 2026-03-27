@@ -1,9 +1,10 @@
 """Tests for price collar on order routers."""
 
-import pytest
 from unittest.mock import MagicMock, patch
 
-from trading_app.live.tradovate.order_router import TradovateOrderRouter, OrderSpec
+import pytest
+
+from trading_app.live.tradovate.order_router import OrderSpec, TradovateOrderRouter
 
 
 class TestTradovatePriceCollar:

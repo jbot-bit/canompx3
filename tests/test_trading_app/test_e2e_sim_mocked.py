@@ -15,15 +15,14 @@ import json
 import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 import requests
 
-from trading_app.live.bar_aggregator import Bar
-from trading_app.live.position_tracker import PositionTracker, PositionState
 from trading_app.account_hwm_tracker import AccountHWMTracker
-
+from trading_app.live.bar_aggregator import Bar
+from trading_app.live.position_tracker import PositionState, PositionTracker
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -58,7 +57,7 @@ def _mock_response(status_code=200, json_data=None):
 class Test429OnEntrySubmit:
     def test_429_exhausts_retries_then_raises(self):
         """submit() gets 429 on all attempts -> raises after 3 retries."""
-        from trading_app.live.tradovate.order_router import TradovateOrderRouter, OrderSpec
+        from trading_app.live.tradovate.order_router import OrderSpec, TradovateOrderRouter
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
         spec = OrderSpec(action="Buy", order_type="Stop", symbol="MNQM6",
@@ -75,7 +74,7 @@ class Test429OnEntrySubmit:
 
     def test_429_succeeds_on_second_attempt(self):
         """submit() gets 429 once, then 200 -> order placed."""
-        from trading_app.live.tradovate.order_router import TradovateOrderRouter, OrderSpec
+        from trading_app.live.tradovate.order_router import OrderSpec, TradovateOrderRouter
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
         spec = OrderSpec(action="Buy", order_type="Market", symbol="MNQM6",
@@ -95,7 +94,7 @@ class Test429OnEntrySubmit:
 class Test429OnExitSubmit:
     def test_exit_429_raises_promptly(self):
         """Exit order 429 exhausts retries — caller handles as UNMANAGED."""
-        from trading_app.live.tradovate.order_router import TradovateOrderRouter, OrderSpec
+        from trading_app.live.tradovate.order_router import OrderSpec, TradovateOrderRouter
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
         spec = OrderSpec(action="Sell", order_type="Market", symbol="MNQM6",
@@ -129,8 +128,9 @@ class Test429OnAuthRefresh:
 
     def test_auth_succeeds_after_retry(self):
         """Auth refresh fails once then succeeds."""
-        from trading_app.live.tradovate.auth import TradovateAuth
         import os
+
+        from trading_app.live.tradovate.auth import TradovateAuth
 
         auth = TradovateAuth(demo=True)
         mock_fail = _mock_response(503)
@@ -205,7 +205,7 @@ class TestHWMPollFailureAccumulation:
 
 class TestPriceCollarRejectsBadEntry:
     def test_entry_beyond_collar_rejected(self):
-        from trading_app.live.tradovate.order_router import TradovateOrderRouter, OrderSpec
+        from trading_app.live.tradovate.order_router import OrderSpec, TradovateOrderRouter
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
         router.update_market_price(20000.0)
@@ -216,7 +216,7 @@ class TestPriceCollarRejectsBadEntry:
             router.submit(spec)
 
     def test_entry_within_collar_proceeds(self):
-        from trading_app.live.tradovate.order_router import TradovateOrderRouter, OrderSpec
+        from trading_app.live.tradovate.order_router import OrderSpec, TradovateOrderRouter
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
         router.update_market_price(20000.0)
@@ -232,7 +232,7 @@ class TestPriceCollarRejectsBadEntry:
 class TestPriceCollarIgnoresStopLeg:
     def test_market_exit_not_collared(self):
         """Exit market orders have no stop_price -> collar skipped."""
-        from trading_app.live.tradovate.order_router import TradovateOrderRouter, OrderSpec
+        from trading_app.live.tradovate.order_router import OrderSpec, TradovateOrderRouter
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
         router.update_market_price(20000.0)
@@ -419,8 +419,9 @@ class TestCorruptHWMStateOnStartup:
 def _build_orch_with_orb_cap():
     """Build a minimal SessionOrchestrator with NYSE_OPEN ORB cap at 150pts."""
     from dataclasses import dataclass, field
-    from trading_app.live.session_orchestrator import SessionOrchestrator, SessionStats
+
     from trading_app.live.circuit_breaker import CircuitBreaker
+    from trading_app.live.session_orchestrator import SessionOrchestrator, SessionStats
     from trading_app.portfolio import Portfolio, PortfolioStrategy
 
     strategy = PortfolioStrategy(

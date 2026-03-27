@@ -7,32 +7,32 @@ class-scoped fixtures share expensive DB + replay across tests.
 
 import os
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
-from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
 from pipeline.cost_model import get_cost_spec
+from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
 from trading_app.db_manager import init_trading_app_schema
-from trading_app.portfolio import Portfolio, PortfolioStrategy
-from trading_app.risk_manager import RiskLimits
 from trading_app.paper_trader import (
-    replay_historical,
-    ReplayResult,
     DaySummary,
     JournalEntry,
-    _orb_from_strategy,
+    ReplayResult,
     _entry_model_from_strategy,
-    _print_header,
-    _print_drawdown,
-    _print_strategy_summary,
-    _print_session_summary,
-    _print_risk_rejections,
-    _print_daily_equity,
     _export_csv,
+    _orb_from_strategy,
+    _print_daily_equity,
+    _print_drawdown,
+    _print_header,
+    _print_risk_rejections,
+    _print_session_summary,
+    _print_strategy_summary,
+    replay_historical,
 )
+from trading_app.portfolio import Portfolio, PortfolioStrategy
+from trading_app.risk_manager import RiskLimits
 
 
 def _cost():
@@ -97,7 +97,7 @@ def _setup_replay_db(tmp_path, n_days=5):
 
         # 0900 Brisbane = 23:00 UTC prev day = trading day start
         prev_day = trading_day - timedelta(days=1)
-        td_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
+        td_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)
 
         base_price = 2700.0 + days_created * 2.0
         bars = []
@@ -110,20 +110,20 @@ def _setup_replay_db(tmp_path, n_days=5):
                 # ORB window: 23:00-23:05 UTC
                 o = base_price + 1.0
                 h = base_price + 2.0
-                l = base_price - 0.5
+                low = base_price - 0.5
                 c = base_price + 1.5
             elif i == 5:
                 # Break bar: close > orb_high -> long break
                 o = base_price + 2.5
                 h = base_price + 4.0
-                l = base_price + 2.0
+                low = base_price + 2.0
                 c = base_price + 3.5
             else:
                 # Post-break: strong uptrend (resolves RR2.0 within ~50 bars)
                 trend = (i - 5) * 0.1
                 o = base_price + 3.5 + trend
                 h = o + 1.0
-                l = o - 0.3
+                low = o - 0.3
                 c = o + 0.5
 
             bars.append(
@@ -133,7 +133,7 @@ def _setup_replay_db(tmp_path, n_days=5):
                     "GCG4",
                     round(o, 2),
                     round(h, 2),
-                    round(l, 2),
+                    round(low, 2),
                     round(c, 2),
                     100,
                 )
@@ -365,12 +365,12 @@ def _make_test_result():
             strategy_id="MGC_TOKYO_OPEN_E1_RR2.5_CB4_ORB_G5",
             entry_model="E1",
             direction="long",
-            entry_ts=datetime(2024, 1, 7, 23, 10, tzinfo=timezone.utc),
+            entry_ts=datetime(2024, 1, 7, 23, 10, tzinfo=UTC),
             entry_price=2705.0,
             stop_price=2700.0,
             target_price=2712.5,
             contracts=2,
-            exit_ts=datetime(2024, 1, 7, 23, 45, tzinfo=timezone.utc),
+            exit_ts=datetime(2024, 1, 7, 23, 45, tzinfo=UTC),
             exit_price=2712.5,
             outcome="win",
             pnl_r=2.5,
@@ -381,12 +381,12 @@ def _make_test_result():
             strategy_id="MGC_CME_REOPEN_E2_RR1.0_CB1_ORB_G5",
             entry_model="E2",
             direction="short",
-            entry_ts=datetime(2024, 1, 9, 14, 35, tzinfo=timezone.utc),
+            entry_ts=datetime(2024, 1, 9, 14, 35, tzinfo=UTC),
             entry_price=2710.0,
             stop_price=2715.0,
             target_price=2705.0,
             contracts=3,
-            exit_ts=datetime(2024, 1, 9, 15, 10, tzinfo=timezone.utc),
+            exit_ts=datetime(2024, 1, 9, 15, 10, tzinfo=UTC),
             exit_price=2715.0,
             outcome="loss",
             pnl_r=-1.0,

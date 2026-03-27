@@ -2,9 +2,10 @@
 Tests for trading_app.db_manager schema management.
 """
 
-import pytest
-import duckdb
 from pathlib import Path
+
+import duckdb
+import pytest
 
 from trading_app.db_manager import (
     init_trading_app_schema,

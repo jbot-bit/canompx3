@@ -3,14 +3,14 @@ Tests for trading_app.setup_detector module.
 """
 
 import sys
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
-from trading_app.setup_detector import detect_setups
 from trading_app.config import NoFilter, OrbSizeFilter
+from trading_app.setup_detector import detect_setups
 
 
 def _setup_db(tmp_path, days_data):

@@ -18,7 +18,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -112,7 +112,7 @@ def run_single_seed(instrument: str, seed: int) -> dict:
             "survivors": survivors,
             "max_oos_expr": max_oos,
             "elapsed_s": round(elapsed, 1),
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": datetime.now(UTC).isoformat(),
             "date_range": "2016-02-01 to 2025-12-31",
             "output_path": str(SEED_DIR / instrument.lower() / f"seed_{seed:04d}"),
         }
@@ -122,14 +122,14 @@ def run_single_seed(instrument: str, seed: int) -> dict:
             "seed": seed,
             "status": "TIMEOUT",
             "elapsed_s": 3600,
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": datetime.now(UTC).isoformat(),
         }
     except Exception as e:
         return {
             "seed": seed,
             "status": "EXCEPTION",
             "error": str(e),
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": datetime.now(UTC).isoformat(),
         }
 
 
@@ -183,7 +183,7 @@ def main():
     else:
         instruments = ["MNQ"]  # Default to primary instrument
 
-    print(f"Overnight null seed runner")
+    print("Overnight null seed runner")
     print(f"Instruments: {instruments}")
     print(f"Workers: {args.max_workers}/{CPU_COUNT} cores")
     print(f"Started: {datetime.now()}")

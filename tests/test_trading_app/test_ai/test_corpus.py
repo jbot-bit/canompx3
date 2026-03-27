@@ -1,13 +1,14 @@
 """Tests for trading_app.ai.corpus."""
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 from trading_app.ai.corpus import (
-    load_corpus,
-    get_corpus_file_paths,
     CORPUS_FILES,
     PROJECT_ROOT,
+    get_corpus_file_paths,
+    load_corpus,
 )
 
 

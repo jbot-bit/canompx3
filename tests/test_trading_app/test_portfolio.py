@@ -2,33 +2,33 @@
 Tests for trading_app.portfolio module.
 """
 
-import sys
 import json
+import sys
 from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import numpy as np
 
+from pipeline.cost_model import get_cost_spec
 from trading_app.portfolio import (
-    PortfolioStrategy,
+    MIN_OVERLAP_DAYS,
     Portfolio,
+    PortfolioStrategy,
+    build_portfolio,
+    build_strategy_daily_series,
     compute_position_size,
     compute_position_size_prop,
-    compute_vol_scalar,
     compute_position_size_vol_scaled,
-    load_validated_strategies,
-    diversify_strategies,
-    build_portfolio,
-    estimate_daily_capital,
-    build_strategy_daily_series,
+    compute_vol_scalar,
     correlation_matrix,
-    MIN_OVERLAP_DAYS,
+    diversify_strategies,
+    estimate_daily_capital,
+    load_validated_strategies,
 )
-from pipeline.cost_model import get_cost_spec
 
 
 def _cost():
@@ -294,9 +294,9 @@ class TestDiversification:
 class TestBuildPortfolio:
     def test_builds_from_db(self, tmp_path):
         strategies = [
-            _make_strategy(strategy_id=f"MGC_US_DATA_830_E1_RR2.0_CB5_NO_FILTER"),
+            _make_strategy(strategy_id="MGC_US_DATA_830_E1_RR2.0_CB5_NO_FILTER"),
             _make_strategy(
-                strategy_id=f"MGC_LONDON_METALS_E3_RR1.5_CB4_ORB_G4",
+                strategy_id="MGC_LONDON_METALS_E3_RR1.5_CB4_ORB_G4",
                 orb_label="LONDON_METALS",
                 entry_model="E3",
                 expectancy_r=0.25,
@@ -1452,7 +1452,7 @@ class TestNestedIntegration:
 
         sources = {s.source for s in loaded.strategies}
         assert sources == {"baseline", "nested"}
-        for orig, loaded_s in zip(portfolio.strategies, loaded.strategies):
+        for orig, loaded_s in zip(portfolio.strategies, loaded.strategies, strict=True):
             assert orig.source == loaded_s.source
 
 

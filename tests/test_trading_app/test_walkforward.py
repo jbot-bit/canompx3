@@ -10,10 +10,9 @@ import pytest
 from trading_app.walkforward import (
     WalkForwardResult,
     _add_months,
-    run_walkforward,
     append_walkforward_result,
+    run_walkforward,
 )
-
 
 # ========================================================================
 # Helpers

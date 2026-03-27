@@ -576,7 +576,7 @@ def main() -> int:
     print(f"  Date range:  {start_dt} to {end_dt}")
     print(f"  Apertures:   {args.apertures}")
     if sigma_by_year:
-        print(f"  Sigma mode:  C1 time-varying (per-year trimmed_std, 2026 excluded)")
+        print("  Sigma mode:  C1 time-varying (per-year trimmed_std, 2026 excluded)")
         for yr in sorted(sigma_by_year):
             print(f"    {yr}: {sigma_by_year[yr]}")
     else:
@@ -665,7 +665,7 @@ def main() -> int:
                 continue
 
             # Step 2: Generate and insert synthetic bars
-            sigma_label = f"C1 time-varying" if sigma_by_year else f"flat sigma={args.sigma}"
+            sigma_label = "C1 time-varying" if sigma_by_year else f"flat sigma={args.sigma}"
             print(f"\n--- Generate synthetic bars (seed={seed}, {sigma_label}) ---")
             t0 = time.time()
             # Per-instrument calibration for realistic price/tick scale

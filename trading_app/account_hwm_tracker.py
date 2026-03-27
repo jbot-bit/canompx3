@@ -15,7 +15,7 @@ This module:
 import json
 import logging
 import shutil
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 

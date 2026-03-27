@@ -41,7 +41,6 @@ from trading_app.live.session_orchestrator import SessionOrchestrator
 
 def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=None) -> bool:
     """Pre-flight validation. Returns True if all checks pass."""
-    from datetime import date
 
     from pipeline.paths import GOLD_DB_PATH
     from trading_app.live.broker_factory import create_broker_components, get_broker_name

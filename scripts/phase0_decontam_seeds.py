@@ -1,11 +1,16 @@
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
 """Phase 0: Decontaminated seed stability (10 seeds) + bootstrap permutation (20 reps)."""
 import statistics
+
 import numpy as np
 
 import trading_app.ml.config as ml_config
-from trading_app.ml.meta_label import train_per_session_meta_label
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.ml import features as _feat_mod
+from trading_app.ml.meta_label import train_per_session_meta_label
 
 INSTRUMENTS = [
     ("MGC", {"rr_target": 2.5}),
@@ -19,7 +24,7 @@ def extract_deltas(r):
     honest = 0.0
     full = 0.0
     n_models = 0
-    for session, data in r.items():
+    for _session, data in r.items():
         if not isinstance(data, dict):
             continue
         # Check if flat (has model_type directly) or nested (per-aperture)
@@ -32,7 +37,7 @@ def extract_deltas(r):
                 n_models += 1
         else:
             # Per-aperture: nested dict {session: {O5: {...}, O15: {...}}}
-            for ap, apdata in data.items():
+            for _ap, apdata in data.items():
                 if not isinstance(apdata, dict):
                     continue
                 if apdata.get("test_auc") is not None:
@@ -138,8 +143,6 @@ print("the aggregate has genuine skill.\n")
 
 # We need to patch the training to shuffle labels.
 # Monkey-patch load_single_config_feature_matrix to shuffle y after loading.
-from trading_app.ml import features as _feat_mod
-
 _original_load = _feat_mod.load_single_config_feature_matrix
 
 def _shuffled_load(*args, **kwargs):

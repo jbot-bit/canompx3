@@ -5,13 +5,13 @@ Covers all 10 checks. Each test creates a temp DuckDB with injected data
 and passes the connection directly (checks take `con` parameter).
 """
 
-import pytest
-import duckdb
 from contextlib import contextmanager
 from pathlib import Path
 
-from scripts.tools import audit_integrity
+import duckdb
+import pytest
 
+from scripts.tools import audit_integrity
 
 # ── Shared schemas ───────────────────────────────────────────────────
 

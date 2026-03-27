@@ -1,13 +1,15 @@
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
 """Phase 0 Step 2: Seed stability — 10 seeds x 4 instruments.
 Patches RF_PARAMS.random_state at import time."""
-import re, json, statistics
+import statistics
 
 # Patch RF_PARAMS before importing meta_label
 import trading_app.ml.config as ml_config
-
-from trading_app.ml.meta_label import train_per_session_meta_label
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.ml.meta_label import train_per_session_meta_label
 
 INSTRUMENTS = [
     ("MGC", {"rr_target": 2.5}),
@@ -38,7 +40,7 @@ for seed in range(10):
             honest = 0.0
             full = 0.0
             n_models = 0
-            for session, data in r.items():
+            for _session, data in r.items():
                 if isinstance(data, dict) and "model_type" in data:
                     if data.get("test_auc") is not None:
                         full += data.get("honest_delta_r", 0)
@@ -47,7 +49,7 @@ for seed in range(10):
                         n_models += 1
                 elif isinstance(data, dict):
                     # per-aperture: nested dict
-                    for ap, apdata in data.items():
+                    for _ap, apdata in data.items():
                         if isinstance(apdata, dict):
                             if apdata.get("test_auc") is not None:
                                 full += apdata.get("honest_delta_r", 0)

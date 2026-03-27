@@ -4,14 +4,15 @@ Tests the VolumeFilter class and the overlay eligibility logic directly
 without requiring a database connection.
 """
 
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
+
 from trading_app.config import (
-    VolumeFilter,
-    OrbSizeFilter,
-    NoFilter,
     ALL_FILTERS,
+    NoFilter,
+    OrbSizeFilter,
+    VolumeFilter,
 )
 
 

@@ -190,16 +190,16 @@ def print_summary(results: list[tuple[str, int, float]]) -> None:
 
     log.info(f"\n  All logs in: {LOG_DIR}")
     log.info(f"  Master log: {LOG_DIR / 'ml_sweep_master.log'}")
-    log.info(f"\n  NEXT: Review results, then implement bootstrap for any survivors.")
+    log.info("\n  NEXT: Review results, then implement bootstrap for any survivors.")
     log.info(f"{'=' * 60}")
 
 
 def main():
     started = datetime.now()
     log.info(f"ML Exhaustive Sweep — started {started.isoformat()}")
-    log.info(f"Instrument: MNQ, Entry: E2, Aperture: O5")
-    log.info(f"RR targets: 2.0, 1.5, 1.0 (+ per-aperture at RR2.0)")
-    log.info(f"Mode: bypass_validated=False, skip_filter=True, config_selection=max_samples")
+    log.info("Instrument: MNQ, Entry: E2, Aperture: O5")
+    log.info("RR targets: 2.0, 1.5, 1.0 (+ per-aperture at RR2.0)")
+    log.info("Mode: bypass_validated=False, skip_filter=True, config_selection=max_samples")
 
     # Phase 0.5: Univariate audit
     run_univariate_audit()

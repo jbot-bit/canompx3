@@ -2,9 +2,16 @@
 Single pre-specified feature. ATR-independent. 3-way split verified.
 
 7 verification tests. Kill criteria enforced. No bias."""
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
-import duckdb, numpy as np, pandas as pd, statistics
-from scipy.stats import ttest_ind
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
+import statistics
+
+import duckdb
+import numpy as np
+import pandas as pd
+
 from pipeline.paths import GOLD_DB_PATH
 
 # ================================================================
@@ -245,10 +252,14 @@ dd = (cumr - peak).min()
 risk_pts = filt_sorted["risk_pts"].values if "risk_pts" in filt_sorted.columns else np.abs(pd.to_numeric(filt_sorted["entry_price"], errors="coerce") - pd.to_numeric(filt_sorted["stop_price"], errors="coerce")).values
 avg_risk_pts = np.nanmean(risk_pts)
 
-max_streak = 0; streak = 0
+max_streak = 0
+streak = 0
 for p in pnl_seq:
-    if p < 0: streak += 1; max_streak = max(max_streak, streak)
-    else: streak = 0
+    if p < 0:
+        streak += 1
+        max_streak = max(max_streak, streak)
+    else:
+        streak = 0
 
 print(f"  Total R: {cumr[-1]:+.1f}")
 print(f"  Max DD: {dd:+.1f}R")
@@ -294,8 +305,8 @@ for name, result in checks:
 
 print(f"\n  {passed}/{total} kill criteria passed")
 if passed == total:
-    print(f"  STRATEGY VERIFIED. Ready for paper trading.")
-    print(f"\n  ECONOMICS:")
+    print("  STRATEGY VERIFIED. Ready for paper trading.")
+    print("\n  ECONOMICS:")
     trades_per_year = len(filtered_test) * (252 / len(test["trading_day"].unique()))
     annual_r = real_mean * trades_per_year
     annual_dollar = annual_r * avg_risk_pts * 2

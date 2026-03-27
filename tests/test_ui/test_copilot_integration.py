@@ -1,6 +1,6 @@
 """Integration tests for the co-pilot state machine + briefing cards."""
 
-from datetime import datetime, date
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 BRISBANE = ZoneInfo("Australia/Brisbane")
@@ -67,15 +67,15 @@ class TestFullCopilotFlow:
 
         now = datetime(2026, 3, 6, 8, 0, tzinfo=BRISBANE)
         upcoming = get_upcoming_sessions(now)
-        for name, dt in upcoming:
+        for _name, dt in upcoming:
             assert dt.tzinfo is not None
             assert dt > now
             assert (dt - now).total_seconds() < 36 * 3600
 
     def test_filter_translator_covers_all_live_filters(self):
         """Every filter in LIVE_PORTFOLIO should translate to non-empty English."""
-        from ui.session_helpers import filter_to_english
         from trading_app.live_config import LIVE_PORTFOLIO
+        from ui.session_helpers import filter_to_english
 
         all_filters = set(s.filter_type for s in LIVE_PORTFOLIO)
         for f in all_filters:

@@ -409,7 +409,7 @@ class ProjectXOrderRouter(BrokerRouter):
             raise  # 429 exhaustion must propagate — silent 0 hides rate-limit failure
         except Exception as e:
             log.error("Cannot query open orders for bracket cleanup: %s", e)
-            return 0
+            raise  # fail-closed: caller must know orphan cleanup was not performed
 
         cancelled = 0
         for o in orders:

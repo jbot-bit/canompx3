@@ -11,34 +11,34 @@ Tests organized by module:
   7. Orchestrator integration
 """
 
-import pytest
-import duckdb
-import pandas as pd
-import numpy as np
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
+import duckdb
+import numpy as np
+import pandas as pd
+import pytest
+
 from pipeline.build_daily_features import (
-    compute_trading_day,
-    compute_trading_day_utc_range,
-    compute_orb_range,
-    detect_break,
-    compute_session_stats,
-    compute_overnight_stats,
-    classify_day_type,
-    compute_garch_forecast,
-    _wilders_rsi,
-    compute_outcome,
-    build_features_for_day,
-    build_daily_features,
-    verify_daily_features,
+    BRISBANE_TZ,
+    ORB_LABELS,
+    UTC_TZ,
     _orb_utc_window,
     _session_utc_window,
-    ORB_LABELS,
-    BRISBANE_TZ,
-    UTC_TZ,
+    _wilders_rsi,
+    build_daily_features,
+    build_features_for_day,
+    classify_day_type,
+    compute_garch_forecast,
+    compute_orb_range,
+    compute_outcome,
+    compute_overnight_stats,
+    compute_session_stats,
+    compute_trading_day,
+    compute_trading_day_utc_range,
+    detect_break,
+    verify_daily_features,
 )
-
 
 # =============================================================================
 # HELPERS
@@ -543,7 +543,7 @@ class TestOutcome:
             opens=[h - 1 for h in highs],
             highs=highs,
             lows=lows,
-            closes=[(h + l) / 2 for h, l in zip(highs, lows)],
+            closes=[(h + lo) / 2 for h, lo in zip(highs, lows, strict=True)],
         )
 
     def test_long_win(self):
@@ -903,7 +903,7 @@ class TestBuildIntegration:
 
         # Day 1: 2024-01-05 — trading day starts 2024-01-04 23:00 UTC
         # Day 2: 2024-01-08 — trading day starts 2024-01-07 23:00 UTC (skip weekend)
-        for day_offset, td_start_date, td_start_day in [
+        for day_offset, td_start_date, _td_start_day in [
             (0, datetime(2024, 1, 4, 23, 0, 0, tzinfo=UTC_TZ), 5),   # Jan 5
             (1, datetime(2024, 1, 7, 23, 0, 0, tzinfo=UTC_TZ), 8),   # Jan 8
         ]:

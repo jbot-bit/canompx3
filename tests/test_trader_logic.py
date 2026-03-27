@@ -14,17 +14,17 @@ unrealistic backtesting assumptions.
 """
 
 import sys
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
-from datetime import date, datetime, timezone, timedelta
 
-import pytest
-import pandas as pd
 import duckdb
+import pandas as pd
+import pytest
 
-from trading_app.outcome_builder import compute_single_outcome
-from trading_app.entry_rules import detect_confirm, resolve_entry
+from pipeline.cost_model import get_cost_spec, pnl_points_to_r, risk_in_dollars, to_r_multiple
 from trading_app.config import ENTRY_MODELS
-from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple, risk_in_dollars
+from trading_app.entry_rules import detect_confirm, resolve_entry
+from trading_app.outcome_builder import compute_single_outcome
 
 
 def _cost():
@@ -35,13 +35,13 @@ def _make_bars(start_ts, prices, interval_minutes=1):
     """Create bars_df from (open, high, low, close, volume) tuples."""
     rows = []
     ts = start_ts
-    for o, h, l, c, v in prices:
+    for o, h, low, c, v in prices:
         rows.append(
             {
                 "ts_utc": ts,
                 "open": float(o),
                 "high": float(h),
-                "low": float(l),
+                "low": float(low),
                 "close": float(c),
                 "volume": int(v),
             }
@@ -53,8 +53,8 @@ def _make_bars(start_ts, prices, interval_minutes=1):
 # Standard test scenario: long break, ORB 2690-2700
 ORB_HIGH = 2700.0
 ORB_LOW = 2690.0
-BREAK_TS = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-TD_END = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+BREAK_TS = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+TD_END = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
 # Bars: confirm, then next bar open at 2703, then rally, then retrace
 STANDARD_BARS = _make_bars(
@@ -492,7 +492,7 @@ class TestAmbiguousBarConservativeLoss:
                 # If both target and stop could be hit, should be loss
                 # (only check if the bar actually spans both)
                 entry = result["entry_price"]
-                stop = result["stop_price"]
+                _stop = result["stop_price"]
                 target = result["target_price"]
                 if entry is not None and target is not None:
                     pass  # specific check depends on bar range vs targets
@@ -866,7 +866,7 @@ def _sample_outcomes(con, n=SAMPLE_SIZE, where_extra=""):
         "target_price",
         "exit_price",
     ]
-    return [dict(zip(cols, r)) for r in rows]
+    return [dict(zip(cols, r, strict=True)) for r in rows]
 
 
 class TestRandomOutcomeMath:
@@ -996,7 +996,7 @@ class TestRandomOutcomeMath:
                 "orb_US_DATA_830_high",
                 "orb_US_DATA_830_low",
             ]
-            for r in [dict(zip(cols, row)) for row in rows]:
+            for r in [dict(zip(cols, row, strict=True)) for row in rows]:
                 orb = r["orb_label"]
                 orb_high = r[f"orb_{orb}_high"]
                 orb_low = r[f"orb_{orb}_low"]
@@ -1048,10 +1048,10 @@ class TestRandomOutcomeMath:
                 "orb_US_DATA_830_high",
                 "orb_US_DATA_830_low",
             ]
-            for r in [dict(zip(cols, row)) for row in rows]:
+            for r in [dict(zip(cols, row, strict=True)) for row in rows]:
                 orb = r["orb_label"]
-                orb_high = r[f"orb_{orb}_high"]
-                orb_low = r[f"orb_{orb}_low"]
+                _orb_high = r[f"orb_{orb}_high"]
+                _orb_low = r[f"orb_{orb}_low"]
                 entry = r["entry_price"]
                 stop = r["stop_price"]
                 is_long = entry > stop
@@ -1097,7 +1097,7 @@ class TestRandomOutcomeMath:
                 "orb_US_DATA_830_high",
                 "orb_US_DATA_830_low",
             ]
-            for r in [dict(zip(cols, row)) for row in rows]:
+            for r in [dict(zip(cols, row, strict=True)) for row in rows]:
                 orb = r["orb_label"]
                 orb_high = r[f"orb_{orb}_high"]
                 orb_low = r[f"orb_{orb}_low"]
@@ -1150,7 +1150,7 @@ class TestRandomStrategyMath:
             # Cache daily_features per orb_minutes to avoid re-loading
             feat_cache = {}
 
-            for s in [dict(zip(strat_cols, r)) for r in strats]:
+            for s in [dict(zip(strat_cols, r, strict=True)) for r in strats]:
                 orb = s["orb_label"]
                 em = s["entry_model"]
                 rr = s["rr_target"]
@@ -1178,7 +1178,7 @@ class TestRandomStrategyMath:
                         "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?", [om]
                     ).fetchall()
                     feat_cols = [desc[0] for desc in con.description]
-                    feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
+                    feat_cache[om] = [dict(zip(feat_cols, r, strict=True)) for r in features]
 
                 # Get eligible days for this filter
                 eligible = set()
@@ -1244,7 +1244,7 @@ class TestRandomStrategyMath:
 
             feat_cache = {}
 
-            for s in [dict(zip(strat_cols, r)) for r in strats]:
+            for s in [dict(zip(strat_cols, r, strict=True)) for r in strats]:
                 orb = s["orb_label"]
                 em = s["entry_model"]
                 rr = s["rr_target"]
@@ -1269,7 +1269,7 @@ class TestRandomStrategyMath:
                         "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?", [om]
                     ).fetchall()
                     feat_cols = [desc[0] for desc in con.description]
-                    feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
+                    feat_cache[om] = [dict(zip(feat_cols, r, strict=True)) for r in features]
 
                 eligible = set()
                 for row in feat_cache[om]:
@@ -1336,7 +1336,7 @@ class TestRandomStrategyMath:
 
             feat_cache = {}
 
-            for s in [dict(zip(strat_cols, r)) for r in strats]:
+            for s in [dict(zip(strat_cols, r, strict=True)) for r in strats]:
                 orb = s["orb_label"]
                 em = s["entry_model"]
                 rr = s["rr_target"]
@@ -1361,7 +1361,7 @@ class TestRandomStrategyMath:
                         "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?", [om]
                     ).fetchall()
                     feat_cols = [desc[0] for desc in con.description]
-                    feat_cache[om] = [dict(zip(feat_cols, r)) for r in features]
+                    feat_cache[om] = [dict(zip(feat_cols, r, strict=True)) for r in features]
 
                 eligible = set()
                 for row in feat_cache[om]:

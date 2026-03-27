@@ -93,6 +93,7 @@ class TestQualityGateContracts:
         # These are checked inline in meta_label.py. We verify by
         # importing the function and checking the docstring + source.
         import inspect
+
         from trading_app.ml.meta_label import train_per_session_meta_label
 
         source = inspect.getsource(train_per_session_meta_label)
@@ -109,6 +110,7 @@ class TestQualityGateContracts:
     def test_four_gates_exist(self):
         """All 4 quality gates are present in the training function."""
         import inspect
+
         from trading_app.ml.meta_label import train_per_session_meta_label
 
         source = inspect.getsource(train_per_session_meta_label)
@@ -128,6 +130,7 @@ class TestQualityGateContracts:
     def test_min_test_trades(self):
         """Threshold rejection requires n_kept_test < 10."""
         import inspect
+
         from trading_app.ml.meta_label import train_per_session_meta_label
 
         source = inspect.getsource(train_per_session_meta_label)
@@ -136,8 +139,9 @@ class TestQualityGateContracts:
 
     def test_three_way_split(self):
         """60/20/20 split is encoded in the config hash."""
-        from trading_app.ml.config import compute_config_hash
         import inspect
+
+        from trading_app.ml.config import compute_config_hash
 
         source = inspect.getsource(compute_config_hash)
         assert "split=60/20/20" in source
@@ -145,6 +149,7 @@ class TestQualityGateContracts:
     def test_positive_baseline_gate_exists(self):
         """Fix E: negative baseline sessions must be skipped."""
         import inspect
+
         from trading_app.ml.meta_label import train_per_session_meta_label
 
         source = inspect.getsource(train_per_session_meta_label)
@@ -154,6 +159,7 @@ class TestQualityGateContracts:
     def test_ef_lm_cross_session_guard(self):
         """Fix B: EUROPE_FLOW and LONDON_METALS drop cross-session features."""
         import pandas as pd
+
         from trading_app.ml.meta_label import _get_session_features
 
         X = pd.DataFrame({
@@ -169,6 +175,7 @@ class TestQualityGateContracts:
     def test_core_feature_selection(self):
         """Fix F: training uses only ML_CORE_FEATURES."""
         import inspect
+
         from trading_app.ml.meta_label import train_per_session_meta_label
 
         source = inspect.getsource(train_per_session_meta_label)

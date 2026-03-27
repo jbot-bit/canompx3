@@ -5,8 +5,8 @@ Tests for trading_app.regime.schema -- table creation and column verification.
 import sys
 from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
 from trading_app.regime.schema import init_regime_schema, verify_regime_schema
 

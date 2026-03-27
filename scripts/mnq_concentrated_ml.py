@@ -2,19 +2,26 @@
 At-break features (break_bar_volume, break_delay, break_bar_continues) ARE
 legitimate for E2 stop-market because the break IS the entry.
 Only cross-session outcomes/double_break are blacklisted."""
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
-import duckdb, numpy as np, pandas as pd, statistics
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
+import statistics
+
+import duckdb
+import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
-from scipy.stats import ttest_1samp, ttest_ind
+
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.ml.config import RF_PARAMS, SESSION_CHRONOLOGICAL_ORDER
+from trading_app.ml.config import LOOKAHEAD_BLACKLIST, RF_PARAMS, SESSION_CHRONOLOGICAL_ORDER
 
 SESSION_ORDER = list(SESSION_CHRONOLOGICAL_ORDER)
 KEEP_SESSIONS = ["CME_PRECLOSE", "EUROPE_FLOW", "SINGAPORE_OPEN", "LONDON_METALS"]
 
 # Import canonical blacklist — NEVER maintain separate lists
-from trading_app.ml.config import LOOKAHEAD_BLACKLIST
+
 # At-break features (break_bar_volume, break_delay, break_bar_continues) are in the
 # canonical blacklist because they're unknown at ORB close. For E2 stop-market,
 # break_bar_volume is also unknown at entry (only known at bar CLOSE, 1 bar after fill).
@@ -111,7 +118,7 @@ for session in KEEP_SESSIONS:
                 vals = pd.to_numeric(df[c], errors="coerce")
                 if vals.notna().sum() > len(df) * 0.1:
                     X[c] = vals.astype(float)
-            except:
+            except Exception:
                 pass
         X = X.fillna(-999.0)
 
@@ -152,7 +159,7 @@ for session in KEEP_SESSIONS:
         test_pnl = pnl_r[test_idx]
         try:
             auc = roc_auc_score(y.iloc[test_idx], test_prob)
-        except:
+        except Exception:
             auc = 0.5
 
         if best_t is not None:
@@ -179,7 +186,7 @@ ml_only = np.array(ml_kept) if ml_kept else np.array([0])
 baseline_test = pnl_r[n_val:]
 
 print(f"\n{'='*70}")
-print(f"RESULTS")
+print("RESULTS")
 print(f"{'='*70}")
 print(f"  Models: {len(results)}")
 print(f"  ML-kept:    N={len(ml_kept):>5} ExpR={np.mean(ml_kept):+.4f}" if ml_kept else "  No ML models")
@@ -190,7 +197,7 @@ print(f"  Baseline:   N={len(baseline_test):>5} ExpR={baseline_test.mean():+.4f}
 
 # ML-ONLY portfolio (no fail-open — ONLY trade what ML approves)
 if ml_kept:
-    print(f"\n  ML-ONLY (aggressive — only trade ML-approved):")
+    print("\n  ML-ONLY (aggressive — only trade ML-approved):")
     print(f"    N={len(ml_kept)} ExpR={np.mean(ml_kept):+.4f} Total={sum(ml_kept):+.1f}R")
 
 # Bootstrap

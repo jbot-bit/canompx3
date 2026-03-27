@@ -32,7 +32,6 @@ reject the null — at least one strategy has statistically significant edge.
 from __future__ import annotations
 
 import logging
-import sys
 import time
 from pathlib import Path
 
@@ -108,7 +107,7 @@ def build_daily_pnl_matrix(
             entry_model = strat[2]
             rr_target = strat[3]
             confirm_bars = strat[4]
-            filter_type = strat[5]
+            _filter_type = strat[5]  # noqa: F841 — extracted but filter applied via daily_features JOIN
             orb_minutes = strat[6]
             strategy_ids.append(sid)
 
@@ -244,10 +243,10 @@ def main():
     print("HANSEN'S SUPERIOR PREDICTIVE ABILITY (SPA) TEST")
     print("=" * 70)
     print(f"  Replications: {args.reps}")
-    print(f"  Bootstrap:    stationary (Politis-Romano)")
+    print("  Bootstrap:    stationary (Politis-Romano)")
     print(f"  Block size:   {args.block_size or 'sqrt(T) (auto)'}")
-    print(f"  Benchmark:    zero (no trading)")
-    print(f"  H0:           No strategy is superior to not trading")
+    print("  Benchmark:    zero (no trading)")
+    print("  H0:           No strategy is superior to not trading")
     print(f"  DB:           {db_path}")
     print()
 

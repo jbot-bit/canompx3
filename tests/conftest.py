@@ -7,14 +7,15 @@ Provides:
 - sample_bars_1m_bad: DataFrame with deliberate violations
 """
 
-import pytest
-import duckdb
-import pandas as pd
-import numpy as np
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from pathlib import Path
 import sys
+from datetime import datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import duckdb
+import numpy as np
+import pandas as pd
+import pytest
 
 # Ensure pipeline is importable
 

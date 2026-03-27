@@ -1,12 +1,14 @@
 """Tests for resample_to_5m with timezone edge cases (T3)."""
 
-import pytest
+from datetime import UTC, datetime, timedelta, timezone
+
 import pandas as pd
-from datetime import datetime, timezone, timedelta
+import pytest
+
 from trading_app.nested.builder import resample_to_5m
 
 
-def _ts(hour, minute, tz=timezone.utc):
+def _ts(hour, minute, tz=UTC):
     return datetime(2025, 6, 15, hour, minute, tzinfo=tz)
 
 
@@ -92,7 +94,7 @@ class TestResampleTimezoneEdges:
                 datetime(2025, 6, 16, 9, 5, tzinfo=brisbane),
             ]
         )
-        after = datetime(2025, 6, 15, 23, 0, tzinfo=timezone.utc)
+        after = datetime(2025, 6, 15, 23, 0, tzinfo=UTC)
         result = resample_to_5m(bars, after)
         # Should get 1 or 2 buckets depending on how floor works with TZ
         assert len(result) >= 1
@@ -104,9 +106,9 @@ class TestResampleTimezoneEdges:
             [
                 _ts(23, 58),
                 _ts(23, 59),
-                datetime(2025, 6, 16, 0, 0, tzinfo=timezone.utc),
-                datetime(2025, 6, 16, 0, 1, tzinfo=timezone.utc),
-                datetime(2025, 6, 16, 0, 2, tzinfo=timezone.utc),
+                datetime(2025, 6, 16, 0, 0, tzinfo=UTC),
+                datetime(2025, 6, 16, 0, 1, tzinfo=UTC),
+                datetime(2025, 6, 16, 0, 2, tzinfo=UTC),
             ]
         )
         result = resample_to_5m(bars, _ts(23, 55))

@@ -1,7 +1,15 @@
 """Full audit of the +0.177R portfolio. 4 tests. No trust."""
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
-import duckdb, numpy as np, pandas as pd, statistics
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
+import statistics
+
+import duckdb
+import numpy as np
+import pandas as pd
 from scipy.stats import ttest_ind
+
 from pipeline.paths import GOLD_DB_PATH
 
 feats = ["orb_CME_REOPEN_size","orb_SINGAPORE_OPEN_break_bar_volume","atr_20","orb_TOKYO_OPEN_size"]
@@ -113,7 +121,8 @@ for feat in feats:
     p = sel_df["pnl_r"][valid].values
     try:
         q = pd.qcut(v, 5, labels=False, duplicates="drop")
-        q1p = p[q == 0]; q5p = p[q == max(set(q))]
+        q1p = p[q == 0]
+        q5p = p[q == max(set(q))]
         spread = q5p.mean() - q1p.mean()
         _, pv = ttest_ind(q5p, q1p)
         sig = "***" if pv < 0.01 else "**" if pv < 0.05 else ""
@@ -177,4 +186,4 @@ else:
 baseline_expr = baseline_pnl.mean()
 if baseline_expr > 0:
     print(f"  BUT baseline (KEEP sessions + risk cap, no quintile) = {baseline_expr:+.4f}R")
-    print(f"  The SESSIONS + RISK CAP alone may be the real edge, not the quintile filter")
+    print("  The SESSIONS + RISK CAP alone may be the real edge, not the quintile filter")

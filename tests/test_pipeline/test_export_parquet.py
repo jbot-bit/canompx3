@@ -1,10 +1,11 @@
 """Tests for pipeline/export_parquet.py."""
 
-import duckdb
-import pytest
 from pathlib import Path
 
-from pipeline.export_parquet import export_table, export_all, EXPORT_CONFIG
+import duckdb
+import pytest
+
+from pipeline.export_parquet import EXPORT_CONFIG, export_all, export_table
 
 
 @pytest.fixture

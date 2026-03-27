@@ -17,7 +17,7 @@ import json
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
@@ -89,7 +89,7 @@ def revalidate_seed(instrument: str, seed_num: int) -> dict:
             json.dump(PRODUCTION_SESSION_K, kf)
 
         # Re-run validator with current code (stratified K + production K override)
-        result = subprocess.run(
+        subprocess.run(
             [
                 PYTHON,
                 "-m",
@@ -129,7 +129,7 @@ def revalidate_seed(instrument: str, seed_num: int) -> dict:
             "survivors": val_count,
             "max_oos_expr": max_expr,
             "elapsed_s": round(elapsed, 1),
-            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": datetime.now(UTC).isoformat(),
             "fdr_method": "stratified-K-by-session",
             "output_path": str(seed_dir),
         }
@@ -211,7 +211,7 @@ def main():
     else:
         instruments = ["MNQ"]
 
-    print(f"Null seed re-validation (stratified-K)")
+    print("Null seed re-validation (stratified-K)")
     print(f"Instruments: {instruments}")
     print(f"Started: {datetime.now()}")
 

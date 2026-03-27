@@ -29,7 +29,6 @@ ALREADY completed before the target session.
 from __future__ import annotations
 
 import re
-from datetime import date
 
 import pandas as pd
 
@@ -61,7 +60,6 @@ _ALWAYS_SAFE: set[str] = {
     "daily_open",  # known at 09:00
     "rsi_14_at_CME_REOPEN",  # computed from prior-day 5m bars, known before any session
     "confirm_bars",  # trade config, not market data
-    "orb_minutes",  # trade config
     "entry_model",  # trade config
     "stop_multiplier",  # trade config
 }

@@ -2,13 +2,13 @@
 Tests for trading_app.regime.validator -- regime strategy validation.
 """
 
-import sys
 import json
-from pathlib import Path
+import sys
 from datetime import date
+from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
 from trading_app.regime.schema import init_regime_schema
 from trading_app.regime.validator import run_regime_validation
@@ -85,7 +85,7 @@ class TestRegimeValidation:
         con = duckdb.connect(str(validated_db), read_only=True)
         try:
             rows = con.execute("SELECT run_label, strategy_id, status FROM regime_validated").fetchall()
-            for run_label, sid, status in rows:
+            for run_label, _sid, status in rows:
                 assert run_label == "test"
                 assert status == "active"
         finally:
@@ -108,7 +108,7 @@ class TestRegimeValidation:
             ).fetchall()
             statuses = {sid: status for sid, status in rows}
             # All should have a status set
-            for sid, status in statuses.items():
+            for _sid, status in statuses.items():
                 assert status is not None
                 assert status != ""
         finally:

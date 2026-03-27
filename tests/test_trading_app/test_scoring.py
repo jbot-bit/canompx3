@@ -1,9 +1,10 @@
 """Tests for trading_app.scoring — strategy context scoring engine."""
 
-import pytest
 from types import SimpleNamespace
 
-from trading_app.scoring import score_strategy, ScoringWeights, MIN_SCORE_THRESHOLD
+import pytest
+
+from trading_app.scoring import MIN_SCORE_THRESHOLD, ScoringWeights, score_strategy
 
 
 def _make_strategy(expectancy_r=0.3, orb_label="TOKYO_OPEN", strategy_id="test_strat", win_rate=0.50):

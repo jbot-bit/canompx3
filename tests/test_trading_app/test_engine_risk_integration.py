@@ -6,11 +6,12 @@ lifecycle (entry, exit, scratch, reject).
 """
 
 import sys
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
-from datetime import date, datetime, timezone, timedelta
 
 import pytest
 
+from pipeline.cost_model import get_cost_spec
 from trading_app.execution_engine import (
     ExecutionEngine,
     TradeEvent,
@@ -18,7 +19,6 @@ from trading_app.execution_engine import (
 )
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from trading_app.risk_manager import RiskLimits, RiskManager
-from pipeline.cost_model import get_cost_spec
 
 # ============================================================================
 # Helpers — mirrors existing test_execution_engine patterns
@@ -65,12 +65,12 @@ def _make_portfolio(strategies=None, **overrides):
     return Portfolio(**defaults)
 
 
-def _bar(ts, o, h, l, c, v=100):
-    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(l), "close": float(c), "volume": int(v)}
+def _bar(ts, o, h, low, c, v=100):
+    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(low), "close": float(c), "volume": int(v)}
 
 
 # US_DATA_830 ORB window: 8:30 AM ET = 13:30 UTC in winter (EST).
-_ORB_BASE = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+_ORB_BASE = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
 _TRADING_DAY = date(2024, 1, 5)
 
 
@@ -86,10 +86,10 @@ def _break_long(engine, break_ts, close=2706.0):
     return engine.on_bar(_bar(break_ts, 2704, 2710, 2703, close))
 
 
-def _fill_e1(engine, break_ts, o=2708, h=2715, l=2707, c=2712):
+def _fill_e1(engine, break_ts, o=2708, h=2715, low=2707, c=2712):
     """Feed the E1 fill bar (next bar after confirm). Returns events."""
     fill_ts = break_ts + timedelta(minutes=1)
-    return engine.on_bar(_bar(fill_ts, o, h, l, c))
+    return engine.on_bar(_bar(fill_ts, o, h, low, c))
 
 
 # ============================================================================
@@ -731,7 +731,7 @@ class TestLiveSessionCosts:
         engine_live = ExecutionEngine(portfolio, _cost(), live_session_costs=True)
 
         # Use CME_REOPEN ORB window: 09:00 Brisbane = 23:00 UTC (prev day)
-        orb_base = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        orb_base = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
         td = date(2024, 1, 5)
 
         for eng in (engine_flat, engine_live):
@@ -771,7 +771,7 @@ class TestLiveSessionCosts:
         engine_flat = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
         engine_live = ExecutionEngine(portfolio, _cost(), live_session_costs=True)
 
-        orb_base = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        orb_base = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
         td = date(2024, 1, 5)
 
         for eng in (engine_flat, engine_live):

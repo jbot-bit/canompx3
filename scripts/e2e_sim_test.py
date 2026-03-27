@@ -74,7 +74,7 @@ def test_2_data_feed():
 
     try:
         asyncio.run(quick_feed())
-    except (asyncio.TimeoutError, TimeoutError):
+    except TimeoutError:
         pass
 
     connected = getattr(feed, "_last_data_at", None) is not None or quote_count[0] > 0

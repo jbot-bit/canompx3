@@ -179,7 +179,7 @@ class TestSessionLog:
 
     def test_session_log_capped_at_30(self, tracker):
         tracker.update_equity(50000.0)
-        for i in range(35):
+        for _i in range(35):
             tracker.record_session_start(50000.0)
             tracker.record_session_end(50000.0)
         assert len(tracker._session_log) == 30

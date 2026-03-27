@@ -2,19 +2,20 @@
 Tests for trading_app.entry_rules confirm bars detection and entry models.
 """
 
-import pytest
+from datetime import UTC, datetime, timedelta, timezone
+
 import pandas as pd
-from datetime import datetime, timedelta, timezone
+import pytest
 
 from trading_app.entry_rules import (
-    detect_entry_with_confirm_bars,
-    detect_confirm,
-    resolve_entry,
-    detect_break_touch,
-    _resolve_e2,
-    EntrySignal,
-    ConfirmResult,
     BreakTouchResult,
+    ConfirmResult,
+    EntrySignal,
+    _resolve_e2,
+    detect_break_touch,
+    detect_confirm,
+    detect_entry_with_confirm_bars,
+    resolve_entry,
 )
 
 
@@ -41,8 +42,8 @@ def _make_bars(closes: list[float], start_ts: datetime, freq_seconds: int = 60) 
 # ORB range: 2340 (low) to 2350 (high)
 ORB_HIGH = 2350.0
 ORB_LOW = 2340.0
-BREAK_TS = datetime(2024, 1, 15, 14, 5, tzinfo=timezone.utc)
-WINDOW_END = datetime(2024, 1, 15, 23, 0, tzinfo=timezone.utc)
+BREAK_TS = datetime(2024, 1, 15, 14, 5, tzinfo=UTC)
+WINDOW_END = datetime(2024, 1, 15, 23, 0, tzinfo=UTC)
 
 
 class TestConfirmBars1:
@@ -129,7 +130,7 @@ class TestEdgeCases:
 
     def test_window_boundary(self):
         """Bars exactly at window end should be excluded."""
-        window_end = datetime(2024, 1, 15, 14, 7, tzinfo=timezone.utc)
+        window_end = datetime(2024, 1, 15, 14, 7, tzinfo=UTC)
         bars = _make_bars([2351.0, 2352.0, 2353.0], BREAK_TS)
         signal = detect_entry_with_confirm_bars(bars, BREAK_TS, ORB_HIGH, ORB_LOW, "long", 3, window_end)
         assert signal.triggered is False
@@ -863,8 +864,8 @@ def _make_touch_bars(
 
 
 # Window for break-touch tests
-TOUCH_WINDOW_START = datetime(2024, 1, 1, 14, 0, tzinfo=timezone.utc)
-TOUCH_WINDOW_END = datetime(2024, 1, 1, 23, 0, tzinfo=timezone.utc)
+TOUCH_WINDOW_START = datetime(2024, 1, 1, 14, 0, tzinfo=UTC)
+TOUCH_WINDOW_END = datetime(2024, 1, 1, 23, 0, tzinfo=UTC)
 
 
 class TestDetectBreakTouch:

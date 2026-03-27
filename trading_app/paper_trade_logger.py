@@ -120,8 +120,8 @@ LANES: tuple[LaneDef, ...] = (
 def _validate_lanes() -> None:
     """Assert LANES match canonical apex_50k_manual profile in prop_profiles.py."""
     from trading_app.prop_profiles import ACCOUNT_PROFILES
-    expected = {l.strategy_id for l in ACCOUNT_PROFILES["apex_50k_manual"].daily_lanes}
-    actual = {l.strategy_id for l in LANES}
+    expected = {lane.strategy_id for lane in ACCOUNT_PROFILES["apex_50k_manual"].daily_lanes}
+    actual = {lane.strategy_id for lane in LANES}
     if actual != expected:
         diff = actual.symmetric_difference(expected)
         raise RuntimeError(f"Lane mismatch vs prop_profiles.py apex_50k_manual: {diff}")

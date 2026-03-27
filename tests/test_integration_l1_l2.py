@@ -16,17 +16,17 @@ This file fills gaps:
   D. Idempotency across full L1+L2 pipeline
 """
 
-import sys
 import json
+import sys
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
-from datetime import date, datetime, timezone, timedelta
 
-import pytest
 import duckdb
+import pytest
 
-from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
 from pipeline.build_bars_5m import build_5m_bars
 from pipeline.build_daily_features import build_daily_features
+from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
 from trading_app.db_manager import init_trading_app_schema
 from trading_app.outcome_builder import build_outcomes
 from trading_app.strategy_discovery import run_discovery
@@ -78,7 +78,7 @@ def _insert_bars_1m(
             trading_day.year,
             trading_day.month,
             trading_day.day,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ) - timedelta(hours=1)  # 23:00 UTC prev day
 
         price = base_price + days_created * 0.5
@@ -91,13 +91,13 @@ def _insert_bars_1m(
                 # ORB formation: flat range
                 o = price
                 h = price + 1.5
-                l = price - 0.5
+                low = price - 0.5
                 c = price + 0.3
             else:
                 # Post-ORB: uptrend to create long break and allow target hit
                 o = price + 1.5 + (i - 5) * 0.10
                 h = o + 1.5
-                l = o - 0.3
+                low = o - 0.3
                 c = o + 1.0
 
             bars.append(
@@ -107,7 +107,7 @@ def _insert_bars_1m(
                     source_sym,
                     round(o, 2),
                     round(h, 2),
-                    round(l, 2),
+                    round(low, 2),
                     round(c, 2),
                     100,
                 )
@@ -440,7 +440,7 @@ class TestFullL1L2:
         for (yearly_json,) in rows:
             data = json.loads(yearly_json)
             assert isinstance(data, dict)
-            for year_key, year_data in data.items():
+            for _year_key, year_data in data.items():
                 assert "trades" in year_data
                 assert "wins" in year_data
                 assert "total_r" in year_data

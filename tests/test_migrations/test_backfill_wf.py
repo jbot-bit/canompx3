@@ -5,9 +5,10 @@ Tests use file-based DuckDB + temp JSONL to validate the backfill logic.
 """
 
 import json
+from pathlib import Path
+
 import duckdb
 import pytest
-from pathlib import Path
 
 from scripts.migrations.backfill_wf_columns import backfill_wf
 

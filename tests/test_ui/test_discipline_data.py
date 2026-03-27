@@ -1,6 +1,8 @@
 """Tests for discipline data layer — JSONL I/O, enums, pattern computation."""
 
 import json
+from datetime import UTC
+
 import pytest
 
 
@@ -56,7 +58,7 @@ def test_load_debriefs_empty(tmp_path):
 
 
 def test_load_debriefs_returns_records(tmp_path):
-    from ui.discipline_data import load_debriefs, append_debrief
+    from ui.discipline_data import append_debrief, load_debriefs
 
     f = tmp_path / "debriefs.jsonl"
     append_debrief({"ts": "2026-03-06T00:00:00Z", "strategy_id": "X"}, path=f)
@@ -96,7 +98,7 @@ def test_get_pending_debriefs_finds_unmatched(tmp_path):
 
 
 def test_get_pending_debriefs_excludes_debriefed(tmp_path):
-    from ui.discipline_data import get_pending_debriefs, append_debrief
+    from ui.discipline_data import append_debrief, get_pending_debriefs
 
     signals_file = tmp_path / "signals.jsonl"
     debriefs_file = tmp_path / "debriefs.jsonl"
@@ -122,7 +124,7 @@ def test_get_pending_debriefs_excludes_debriefed(tmp_path):
 
 
 def test_compute_adherence_stats(tmp_path):
-    from ui.discipline_data import compute_adherence_stats, append_debrief
+    from ui.discipline_data import append_debrief, compute_adherence_stats
 
     f = tmp_path / "debriefs.jsonl"
     for adh in ["followed", "followed", "overrode"]:
@@ -144,7 +146,7 @@ def test_compute_adherence_stats(tmp_path):
 
 
 def test_get_latest_letter(tmp_path):
-    from ui.discipline_data import get_latest_letter, append_debrief
+    from ui.discipline_data import append_debrief, get_latest_letter
 
     f = tmp_path / "debriefs.jsonl"
     append_debrief(
@@ -196,7 +198,7 @@ def test_is_cooling_active_handles_corrupt_timestamp():
 
 
 def test_trigger_cooling_sets_until(tmp_path):
-    from ui.discipline_data import trigger_cooling, is_cooling_active
+    from ui.discipline_data import is_cooling_active, trigger_cooling
 
     state = {}
     trigger_cooling(state, pnl_r=-1.0, consecutive_losses=2, session_pnl_r=-2.0, state_path=tmp_path / "state.jsonl")
@@ -205,16 +207,18 @@ def test_trigger_cooling_sets_until(tmp_path):
 
 
 def test_cooling_expires():
-    from ui.discipline_data import is_cooling_active
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timedelta, timezone
 
-    state = {"cooling_until": (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()}
+    from ui.discipline_data import is_cooling_active
+
+    state = {"cooling_until": (datetime.now(UTC) - timedelta(seconds=1)).isoformat()}
     assert not is_cooling_active(state)
 
 
 def test_override_cooling_logs_event(tmp_path):
-    from ui.discipline_data import trigger_cooling, override_cooling
     import json
+
+    from ui.discipline_data import override_cooling, trigger_cooling
 
     state_path = tmp_path / "state.jsonl"
     state = {}

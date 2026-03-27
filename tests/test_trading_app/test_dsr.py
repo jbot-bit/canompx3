@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from trading_app.dsr import compute_dsr, compute_sr0, _norm_cdf, _norm_ppf
+from trading_app.dsr import _norm_cdf, _norm_ppf, compute_dsr, compute_sr0
 
 
 class TestSR0:

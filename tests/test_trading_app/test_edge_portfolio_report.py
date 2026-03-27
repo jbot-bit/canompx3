@@ -3,11 +3,11 @@ Tests for scripts/report_edge_portfolio.py.
 """
 
 import sys
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
 from trading_app.db_manager import init_trading_app_schema
 

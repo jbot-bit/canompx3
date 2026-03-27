@@ -1,8 +1,9 @@
 """Tests for trading_app.cascade_table — cross-session probability lookup."""
 
-import pytest
-import duckdb
 from pathlib import Path
+
+import duckdb
+import pytest
 
 from trading_app.cascade_table import build_cascade_table, lookup_cascade
 

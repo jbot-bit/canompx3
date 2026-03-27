@@ -1,8 +1,13 @@
 """Mining escalation Parts 3-5. Run once, delete after."""
-import duckdb, sys, io
+import io
+import sys
+
+import duckdb
 import numpy as np
+
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 from pipeline.db_config import configure_connection
+
 con = duckdb.connect("gold.db", read_only=True)
 configure_connection(con)
 

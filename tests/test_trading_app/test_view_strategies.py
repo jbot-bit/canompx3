@@ -2,19 +2,19 @@
 Tests for trading_app.view_strategies module.
 """
 
-import sys
 import math
+import sys
 from pathlib import Path
 
-import pytest
 import pandas as pd
+import pytest
 
 from trading_app.view_strategies import (
-    _safe_float,
     _fmt_signed,
-    format_table,
+    _safe_float,
     format_families,
     format_summary,
+    format_table,
 )
 
 # ============================================================================

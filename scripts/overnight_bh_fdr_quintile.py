@@ -1,11 +1,17 @@
 """Overnight job: BH FDR correction on all quintile feature tests.
 Tests cross-session features on all 3 instruments with proper multiple testing correction.
 Also runs per-session breakdown for features that survive FDR."""
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
+from collections import defaultdict
+
 import duckdb
 import numpy as np
 import pandas as pd
 from scipy import stats
+
 from pipeline.paths import GOLD_DB_PATH
 
 LEGIT_PATTERNS = [
@@ -25,8 +31,8 @@ def is_legit(col):
     for b in BLACKLIST_PATTERNS:
         if b in col.lower():
             return False
-    for l in LEGIT_PATTERNS:
-        if l in col.lower():
+    for pat in LEGIT_PATTERNS:
+        if pat in col.lower():
             return True
     return False
 
@@ -36,7 +42,7 @@ all_tests = []  # (instrument, feature, spread, q1_avg, q5_avg, p_val, direction
 
 for instrument, rr in [("MNQ", None), ("MGC", 2.5), ("MES", 2.5)]:
     rr_clause = f"AND o.rr_target = {rr}" if rr else ""
-    
+
     if instrument == "MNQ":
         configs = con.execute("""
             SELECT DISTINCT orb_label, entry_model, rr_target, confirm_bars, orb_minutes
@@ -51,26 +57,26 @@ for instrument, rr in [("MNQ", None), ("MGC", 2.5), ("MES", 2.5)]:
         where = f"o.symbol = '{instrument}' AND o.pnl_r IS NOT NULL AND ({config_conditions})"
     else:
         where = f"o.symbol = '{instrument}' AND o.pnl_r IS NOT NULL AND o.entry_model = 'E2' AND o.confirm_bars = 1 {rr_clause}"
-    
+
     df = con.execute(f"""
         SELECT o.pnl_r, o.orb_label, o.orb_minutes, o.trading_day, d.*
         FROM orb_outcomes o
-        JOIN daily_features d ON o.trading_day = d.trading_day 
+        JOIN daily_features d ON o.trading_day = d.trading_day
             AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
         WHERE {where}
         ORDER BY o.trading_day
     """).fetchdf()
-    
+
     if df.empty:
         continue
-    
+
     # Use last 20% as test
     n = len(df)
     test_df = df.iloc[int(n * 0.8):]
     pnl = test_df["pnl_r"].values
-    
+
     print(f"\n{instrument}: {len(test_df)} test trades, baseline={pnl.mean():+.4f}", flush=True)
-    
+
     # POOLED test (all sessions combined)
     for col in test_df.columns:
         if not is_legit(col):
@@ -98,7 +104,7 @@ for instrument, rr in [("MNQ", None), ("MGC", 2.5), ("MES", 2.5)]:
         anti = all(q_means[i] >= q_means[i+1] for i in range(len(q_means)-1))
         direction = "MONO+" if mono else ("MONO-" if anti else "mixed")
         all_tests.append((instrument, col, spread, q1.mean(), q5.mean(), p_val, direction, len(q1), len(q5), "POOLED"))
-    
+
     # PER-SESSION test for top features
     for session in test_df["orb_label"].unique():
         sess_mask = test_df["orb_label"] == session
@@ -155,19 +161,18 @@ print(f"BH FDR survivors (q=0.10): {len(survivors)}")
 if survivors:
     print(f"\n{'Inst':<5} {'Feature':<40} {'Spread':>7} {'Q1':>7} {'Q5':>7} {'p_raw':>8} {'Dir':>7} {'Scope':>12}")
     print("-" * 95)
-    for inst, col, spread, q1, q5, pv, d, n1, n5, scope in survivors:
+    for inst, col, spread, q1, q5, pv, d, _n1, _n5, scope in survivors:
         print(f"{inst:<5} {col:<40} {spread:>+7.3f} {q1:>+7.3f} {q5:>+7.3f} {pv:>8.5f} {d:>7} {scope:>12}")
-    
+
     # Group by feature across instruments
     print(f"\n{'='*90}")
     print("FEATURES THAT SURVIVE BH FDR ACROSS INSTRUMENTS:")
     print(f"{'='*90}")
-    from collections import defaultdict
     feat_instruments = defaultdict(list)
-    for inst, col, spread, q1, q5, pv, d, n1, n5, scope in survivors:
+    for inst, col, spread, _q1, _q5, pv, _d, _n1, _n5, scope in survivors:
         if scope == "POOLED":
             feat_instruments[col].append((inst, spread, pv))
-    
+
     for feat, entries in sorted(feat_instruments.items(), key=lambda x: -len(x[1])):
         if len(entries) >= 2:
             insts = ", ".join(f"{e[0]}({e[1]:+.3f})" for e in entries)

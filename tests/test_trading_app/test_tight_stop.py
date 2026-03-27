@@ -8,9 +8,9 @@ Tests cover:
 """
 
 import pytest
-from trading_app.config import apply_tight_stop, STOP_MULTIPLIERS
-from trading_app.strategy_discovery import make_strategy_id, parse_dst_regime, parse_stop_multiplier
 
+from trading_app.config import STOP_MULTIPLIERS, apply_tight_stop
+from trading_app.strategy_discovery import make_strategy_id, parse_dst_regime, parse_stop_multiplier
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -201,4 +201,4 @@ class TestConfigSanity:
         assert 0.75 in STOP_MULTIPLIERS
 
     def test_stop_multipliers_sorted_descending(self):
-        assert STOP_MULTIPLIERS == sorted(STOP_MULTIPLIERS, reverse=True)
+        assert sorted(STOP_MULTIPLIERS, reverse=True) == STOP_MULTIPLIERS

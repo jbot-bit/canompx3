@@ -1,8 +1,15 @@
 """Test: LOW ATR + HIGH conviction = independent edge (anti-vol-filter).
 3-way split. Calibration medians. Bootstrap verified."""
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
-import duckdb, numpy as np, pandas as pd, statistics
-from scipy.stats import ttest_ind
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
+import statistics
+
+import duckdb
+import numpy as np
+import pandas as pd
+
 from pipeline.paths import GOLD_DB_PATH
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -33,7 +40,9 @@ for label, sub in [("PRE-2023 (selection)", sel), ("2023-2024 (calibration)", ca
     rv = pd.to_numeric(sub["rel_vol_TOKYO_OPEN"], errors="coerce")
     pnl = sub["pnl_r"].values
     valid = atr.notna() & rv.notna()
-    a = atr[valid].values; r = rv[valid].values; p = pnl[valid.values]
+    a = atr[valid].values
+    r = rv[valid].values
+    p = pnl[valid.values]
 
     print(f"\n{'='*60}")
     print(f"  {label} (N={len(p)})")
@@ -59,7 +68,9 @@ atr_t = pd.to_numeric(test["atr_20"], errors="coerce")
 rv_t = pd.to_numeric(test["rel_vol_TOKYO_OPEN"], errors="coerce")
 pnl_t = test["pnl_r"].values
 valid_t = atr_t.notna() & rv_t.notna()
-a_t = atr_t[valid_t].values; r_t = rv_t[valid_t].values; p_t = pnl_t[valid_t.values]
+a_t = atr_t[valid_t].values
+r_t = rv_t[valid_t].values
+p_t = pnl_t[valid_t.values]
 
 target = (a_t < cal_atr_med) & (r_t >= cal_rv_med)
 target_pnl = p_t[target]

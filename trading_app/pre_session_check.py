@@ -13,7 +13,7 @@ Usage:
 import argparse
 import json
 import sys
-from datetime import date, datetime, UTC
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import duckdb
@@ -80,7 +80,7 @@ def check_dd_circuit_breaker() -> tuple[bool, str]:
                     )
             except (json.JSONDecodeError, ValueError):
                 return False, f"BLOCKED: HWM file unreadable ({f.name} is corrupt)"
-            except Exception:
+            except OSError:
                 return False, f"BLOCKED: HWM file unreadable ({f.name})"
         return True, "DD circuit breaker: clear (HWM tracker)"
     return True, "No DD tracker state (first session — will init from broker)"
@@ -171,7 +171,7 @@ def check_consistency_rule() -> tuple[bool, str]:
             f"= {result.windfall_pct:.1f}% of ${result.total_profit:.0f} total — {result.status}"
         )
     except Exception as e:
-        return True, f"Consistency check unavailable: {e}"
+        return False, f"BLOCKED: Consistency check failed: {e}"
 
 
 def check_forward_monitor_freshness() -> tuple[bool, str]:
@@ -183,7 +183,7 @@ def check_forward_monitor_freshness() -> tuple[bool, str]:
         data = json.loads(fm_file.read_text())
         ts = data.get("timestamp", "")
         return True, f"Forward monitor last run: {ts}"
-    except Exception:
+    except (json.JSONDecodeError, OSError):
         return True, "WARN: forward_monitor output unreadable"
 
 

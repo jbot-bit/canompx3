@@ -4,27 +4,27 @@ Tests for trading_app.strategy_fitness module.
 Uses in-memory DuckDB with synthetic data (same pattern as test_strategy_validator.py).
 """
 
-import sys
 import json
-from pathlib import Path
+import sys
 from datetime import date
+from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
+from trading_app.strategy_discovery import compute_metrics
 from trading_app.strategy_fitness import (
-    classify_fitness,
     DecayDiagnosis,
-    FitnessScore,
     FitnessReport,
+    FitnessScore,
+    _load_strategy_outcomes,
+    _recent_trade_sharpe,
+    _rolling_window_start,
+    classify_fitness,
     compute_fitness,
     compute_portfolio_fitness,
     diagnose_decay,
-    _recent_trade_sharpe,
-    _rolling_window_start,
-    _load_strategy_outcomes,
 )
-from trading_app.strategy_discovery import compute_metrics
 
 
 def _setup_fitness_db(tmp_path, strategies=None, outcomes=None, features=None):

@@ -5,11 +5,11 @@ Covers checks 4-8, 13-22, 24-27, 30-34, 37, 44-49.
 Each check gets at minimum: one violation test, one clean/pass test.
 """
 
-import pytest
 from pathlib import Path
 
-from pipeline import check_drift
+import pytest
 
+from pipeline import check_drift
 
 # ── Helpers ────────────────────────────────────────────────────────────
 

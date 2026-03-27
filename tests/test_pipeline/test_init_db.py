@@ -1,8 +1,9 @@
 """Tests for pipeline.init_db — database schema initialization."""
 
-import pytest
-import duckdb
 from pathlib import Path
+
+import duckdb
+import pytest
 
 from pipeline.init_db import (
     BARS_1M_SCHEMA,

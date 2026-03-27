@@ -27,13 +27,13 @@ def test_step_functions_are_callable():
     """Every step in the registry must be a callable."""
     from pipeline.run_full_pipeline import FULL_PIPELINE_STEPS
 
-    for name, desc, func in FULL_PIPELINE_STEPS:
+    for name, _desc, func in FULL_PIPELINE_STEPS:
         assert callable(func), f"Step {name} is not callable"
 
 
 def test_dry_run_does_not_execute(capsys):
     """--dry-run should print plan without executing."""
-    from pipeline.run_full_pipeline import print_dry_run, FULL_PIPELINE_STEPS
+    from pipeline.run_full_pipeline import FULL_PIPELINE_STEPS, print_dry_run
 
     print_dry_run(FULL_PIPELINE_STEPS, "MGC")
     captured = capsys.readouterr()
@@ -44,7 +44,7 @@ def test_dry_run_does_not_execute(capsys):
 
 def test_skip_to_works():
     """--skip-to should skip steps before the named step."""
-    from pipeline.run_full_pipeline import get_steps_from, FULL_PIPELINE_STEPS
+    from pipeline.run_full_pipeline import FULL_PIPELINE_STEPS, get_steps_from
 
     steps = get_steps_from(FULL_PIPELINE_STEPS, "build_outcomes")
     names = [s[0] for s in steps]
@@ -54,7 +54,7 @@ def test_skip_to_works():
 
 def test_skip_to_invalid_raises():
     """--skip-to with invalid step name should raise ValueError."""
-    from pipeline.run_full_pipeline import get_steps_from, FULL_PIPELINE_STEPS
+    from pipeline.run_full_pipeline import FULL_PIPELINE_STEPS, get_steps_from
 
     with pytest.raises(ValueError, match="Unknown step"):
         get_steps_from(FULL_PIPELINE_STEPS, "nonexistent_step")
@@ -62,7 +62,7 @@ def test_skip_to_invalid_raises():
 
 def test_skip_to_first_step_returns_all():
     """--skip-to with first step should return all steps."""
-    from pipeline.run_full_pipeline import get_steps_from, FULL_PIPELINE_STEPS
+    from pipeline.run_full_pipeline import FULL_PIPELINE_STEPS, get_steps_from
 
     steps = get_steps_from(FULL_PIPELINE_STEPS, "ingest")
     assert len(steps) == len(FULL_PIPELINE_STEPS)

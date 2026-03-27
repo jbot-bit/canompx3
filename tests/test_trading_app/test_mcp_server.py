@@ -1,16 +1,16 @@
 """Tests for trading_app.mcp_server (no DB required)."""
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pandas as pd
+import pytest
 
 from trading_app.mcp_server import (
+    _ALLOWED_PARAMS,
+    MAX_MCP_ROWS,
+    _generate_warnings,
     _list_available_queries,
     _query_trading_db,
-    _generate_warnings,
-    MAX_MCP_ROWS,
-    _ALLOWED_PARAMS,
 )
 
 
@@ -134,7 +134,7 @@ class TestGuardrails:
 
     def test_allowed_params_whitelist(self):
         """Only known parameter keys are in the allowlist."""
-        assert _ALLOWED_PARAMS == {
+        assert {
             "orb_label",
             "entry_model",
             "filter_type",
@@ -143,7 +143,7 @@ class TestGuardrails:
             "instrument",
             "rr_target",
             "confirm_bars",
-        }
+        } == _ALLOWED_PARAMS
 
 
 class TestGenerateWarnings:

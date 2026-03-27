@@ -6,19 +6,19 @@ Tests file discovery, MGC filtering, and checkpoint round-trip logic.
 
 import json
 import re
-import pytest
-from pathlib import Path
-from datetime import date
-
 import sys
+from datetime import date
+from pathlib import Path
+
+import pytest
 
 from pipeline.ingest_dbn_daily import (
-    discover_daily_files,
     DAILY_FILE_PATTERN,
+    discover_daily_files,
 )
 from pipeline.ingest_dbn_mgc import (
-    CheckpointManager,
     GC_OUTRIGHT_PATTERN,
+    CheckpointManager,
 )
 
 

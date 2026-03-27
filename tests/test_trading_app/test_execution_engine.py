@@ -3,7 +3,7 @@ Tests for trading_app.execution_engine module.
 """
 
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -59,8 +59,8 @@ def _make_portfolio(strategies=None, **overrides):
     return Portfolio(**defaults)
 
 
-def _bar(ts, o, h, l, c, v=100):
-    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(l), "close": float(c), "volume": int(v)}
+def _bar(ts, o, h, low, c, v=100):
+    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(low), "close": float(c), "volume": int(v)}
 
 
 # ============================================================================
@@ -75,7 +75,7 @@ class TestORBDetection:
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # US_DATA_830 ORB window: 13:30-13:35 UTC (winter) on trading day
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         engine.on_bar(_bar(ts_base, 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=1), 2702, 2710, 2698, 2708))
 
@@ -89,7 +89,7 @@ class TestORBDetection:
         engine = ExecutionEngine(_make_portfolio(), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -103,7 +103,7 @@ class TestORBDetection:
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # Build ORB
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -116,7 +116,7 @@ class TestORBDetection:
         engine = ExecutionEngine(_make_portfolio(), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -132,7 +132,7 @@ class TestORBDetection:
 class TestEntry:
     def _run_to_break(self, engine, orb_high=2705.0):
         """Helper: build ORB and trigger a long break."""
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         # Break bar
@@ -196,7 +196,7 @@ class TestEntry:
         )
         engine = ExecutionEngine(_make_portfolio([e2_strat]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         # Break bar with high > ORB high (2705) — E2 stop-market fills here
@@ -232,7 +232,7 @@ class TestExit:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         # Build ORB: high=2705, low=2695
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
@@ -255,7 +255,7 @@ class TestExit:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -277,7 +277,7 @@ class TestExit:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
@@ -297,7 +297,7 @@ class TestExit:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
@@ -322,7 +322,7 @@ class TestPnL:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         # Break bar
@@ -342,7 +342,7 @@ class TestPnL:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         # Break bar
@@ -362,7 +362,7 @@ class TestPnL:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
@@ -418,7 +418,7 @@ class TestFilters:
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # ORB with small range: high=2702, low=2700 = 2pt < 4pt threshold
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2702, 2700, 2701))
 
@@ -459,7 +459,7 @@ class TestConfirmCountDirection:
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # Build ORB: high=2705, low=2695
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -489,7 +489,7 @@ class TestConfirmCountDirection:
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # Build ORB: high=2705, low=2695
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -514,7 +514,7 @@ class TestConfirmCountDirection:
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # Build ORB: high=2705, low=2695
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -565,7 +565,7 @@ class TestArmedAtBarGuard:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         break_ts, break_events = self._build_orb_and_break(engine, ts_base)
 
         # --- Bar N (break bar) assertions ---
@@ -593,7 +593,7 @@ class TestArmedAtBarGuard:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         _break_ts, break_events = self._build_orb_and_break(engine, ts_base)
 
         # Confirm ARMED, no ENTRY on bar N
@@ -633,7 +633,7 @@ class TestFillBarExitEngine:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         self._build_orb(engine, ts_base)
 
         # Break bar (long): close > 2705
@@ -660,7 +660,7 @@ class TestFillBarExitEngine:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         self._build_orb(engine, ts_base)
 
         # Break bar (long): close > 2705
@@ -685,7 +685,7 @@ class TestFillBarExitEngine:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         self._build_orb(engine, ts_base)
 
         # Break bar (long)
@@ -709,7 +709,7 @@ class TestFillBarExitEngine:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         self._build_orb(engine, ts_base)
 
         # Break bar (long)
@@ -755,16 +755,16 @@ class TestMLIntegration:
         # Simulate completed ORB with a break
         orb = LiveORB(
             label="US_DATA_830",
-            window_start_utc=datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc),
-            window_end_utc=datetime(2024, 1, 5, 13, 35, tzinfo=timezone.utc),
+            window_start_utc=datetime(2024, 1, 5, 13, 30, tzinfo=UTC),
+            window_end_utc=datetime(2024, 1, 5, 13, 35, tzinfo=UTC),
             high=2710.0,
             low=2695.0,
             complete=True,
             break_dir="long",
-            break_ts=datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc),
+            break_ts=datetime(2024, 1, 5, 13, 40, tzinfo=UTC),
         )
 
-        bar = _bar(datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc), 2712, 2715, 2710, 2714)
+        bar = _bar(datetime(2024, 1, 5, 13, 40, tzinfo=UTC), 2712, 2715, 2710, 2714)
         events = engine._arm_strategies(orb, bar)
 
         # Should get ML_SKIP event, no ENTRY
@@ -795,16 +795,16 @@ class TestMLIntegration:
 
         orb = LiveORB(
             label="US_DATA_830",
-            window_start_utc=datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc),
-            window_end_utc=datetime(2024, 1, 5, 13, 35, tzinfo=timezone.utc),
+            window_start_utc=datetime(2024, 1, 5, 13, 30, tzinfo=UTC),
+            window_end_utc=datetime(2024, 1, 5, 13, 35, tzinfo=UTC),
             high=2710.0,
             low=2695.0,
             complete=True,
             break_dir="long",
-            break_ts=datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc),
+            break_ts=datetime(2024, 1, 5, 13, 40, tzinfo=UTC),
         )
 
-        bar = _bar(datetime(2024, 1, 5, 13, 40, tzinfo=timezone.utc), 2712, 2715, 2710, 2714)
+        bar = _bar(datetime(2024, 1, 5, 13, 40, tzinfo=UTC), 2712, 2715, 2710, 2714)
         events = engine._arm_strategies(orb, bar)
 
         ml_skips = [e for e in events if e.event_type == "ML_SKIP"]
@@ -888,7 +888,7 @@ class TestTightStop:
 
     def _run_to_break(self, engine, orb_high=2705.0):
         """Helper: build ORB and trigger a long break."""
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         # Break bar
@@ -969,7 +969,7 @@ class TestUnknownEntryModel:
 
     def _run_to_break(self, engine):
         """Helper: build ORB and trigger a long break."""
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
         events = engine.on_bar(_bar(ts_base + timedelta(minutes=5), 2704, 2710, 2703, 2706))
@@ -1012,7 +1012,7 @@ class TestUnknownFilterType:
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # Build ORB
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))
 
@@ -1043,7 +1043,7 @@ class TestZeroRiskRejections:
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         # Zero-range ORB: high == low == 2705
         # entry_price = orb.high + 0 slippage = 2705; stop_price = orb.low = 2705 → risk = 0
         for i in range(5):
@@ -1069,7 +1069,7 @@ class TestZeroRiskRejections:
         )
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
-        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=timezone.utc)
+        ts_base = datetime(2024, 1, 5, 13, 30, tzinfo=UTC)
         # Standard ORB: low=2695, high=2705
         for i in range(5):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2700, 2705, 2695, 2702))

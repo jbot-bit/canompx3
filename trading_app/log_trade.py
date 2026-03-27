@@ -14,9 +14,8 @@ Usage:
 """
 
 import argparse
-import json
 import sys
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import duckdb
@@ -104,7 +103,7 @@ def log_trade(args):
     risk_dollars = abs(entry_price - stop_price) * cost.point_value
     pnl_dollar = pnl_r * risk_dollars
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Write to DB (separate connection — read connection already closed above)
     with duckdb.connect(str(GOLD_DB_PATH)) as con_w:

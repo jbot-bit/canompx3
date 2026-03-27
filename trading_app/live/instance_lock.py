@@ -78,7 +78,7 @@ def acquire_instance_lock(instrument: str) -> None:
         _locks[instrument] = (lock_fd, lock_path)
         log.info("Instance lock acquired: %s (PID %d)", lock_path, os.getpid())
 
-    except (OSError, IOError) as e:
+    except OSError as e:
         if lock_fd is not None:
             os.close(lock_fd)
         log.critical("Failed to acquire instance lock for %s: %s", instrument, e)

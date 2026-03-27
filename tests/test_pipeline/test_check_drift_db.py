@@ -5,9 +5,10 @@ Covers checks 29, 35, 42, 43, 50, 54-58.
 Each test creates a temp DuckDB, injects data, and verifies the check.
 """
 
-import pytest
-import duckdb
 from pathlib import Path
+
+import duckdb
+import pytest
 
 from pipeline import check_drift
 

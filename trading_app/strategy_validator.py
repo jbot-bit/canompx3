@@ -35,13 +35,13 @@ logger = get_logger(__name__)
 
 import duckdb
 
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.cost_model import get_cost_spec, stress_test_costs
 from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
     classify_dst_verdict,
     is_winter_for_session,
 )
-from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
     CORE_MIN_SAMPLES,

@@ -10,18 +10,19 @@ Tests:
 """
 
 import pytest
+
 from pipeline.cost_model import (
+    SESSION_SLIPPAGE_MULT,
     CostSpec,
     get_cost_spec,
     get_session_cost_spec,
-    SESSION_SLIPPAGE_MULT,
     list_validated_instruments,
-    risk_in_dollars,
-    reward_in_dollars,
-    realized_rr,
-    to_r_multiple,
     pnl_points_to_r,
+    realized_rr,
+    reward_in_dollars,
+    risk_in_dollars,
     stress_test_costs,
+    to_r_multiple,
 )
 
 

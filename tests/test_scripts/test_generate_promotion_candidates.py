@@ -2,6 +2,7 @@
 
 import pytest
 
+from pipeline.paths import GOLD_DB_PATH
 from scripts.tools.generate_promotion_candidates import (
     build_day_sets,
     enrich_candidate,
@@ -10,7 +11,6 @@ from scripts.tools.generate_promotion_candidates import (
     generate_html,
     generate_spec_code,
 )
-from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS, OrbSizeFilter
 from trading_app.live_config import LIVE_PORTFOLIO
 

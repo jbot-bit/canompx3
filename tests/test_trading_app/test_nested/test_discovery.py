@@ -4,15 +4,15 @@ and nested table isolation.
 """
 
 import sys
-from pathlib import Path
 from datetime import date
+from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
 from trading_app.nested.discovery import (
-    make_nested_strategy_id,
     ENTRY_RESOLUTION,
+    make_nested_strategy_id,
 )
 from trading_app.nested.schema import init_nested_schema
 

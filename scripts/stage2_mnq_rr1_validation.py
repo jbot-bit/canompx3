@@ -24,9 +24,15 @@ Pre-registration (written BEFORE running):
   - Fewer than 2/4 survive -> insufficient diversification
   - Total annual R < 50R -> not worth the operational complexity
 """
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
-import duckdb, numpy as np, pandas as pd, statistics
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
+import duckdb
+import numpy as np
+import pandas as pd
 from scipy.stats import ttest_1samp
+
 from pipeline.paths import GOLD_DB_PATH
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -72,10 +78,14 @@ for session, rr in SETUPS:
     dd = (cumr - peak).min()
 
     # Consecutive losses
-    streak = 0; max_streak = 0
+    streak = 0
+    max_streak = 0
     for pv in pnl_h:
-        if pv < 0: streak += 1; max_streak = max(max_streak, streak)
-        else: streak = 0
+        if pv < 0:
+            streak += 1
+            max_streak = max(max_streak, streak)
+        else:
+            streak = 0
 
     # Slippage stress (3 ticks extra)
     extra_cost = 3 * 0.25 * 2 / avg_risk_d if avg_risk_d > 0 else 0
@@ -116,7 +126,7 @@ for rank, r in enumerate(results, 1):
 
 # Portfolio summary
 print(f"\n{'='*70}")
-print(f"PORTFOLIO SUMMARY (BH FDR survivors)")
+print("PORTFOLIO SUMMARY (BH FDR survivors)")
 print(f"{'='*70}")
 
 portfolio_pnl = []

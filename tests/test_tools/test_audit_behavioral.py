@@ -4,9 +4,10 @@ WS2: Tests for behavioral anti-pattern scanner (scripts/tools/audit_behavioral.p
 Covers all 6 checks. Each test creates temp files with violations and verifies detection.
 """
 
-import pytest
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 # We need to import the module to monkeypatch its globals
 from scripts.tools import audit_behavioral

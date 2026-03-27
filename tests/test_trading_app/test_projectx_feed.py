@@ -9,9 +9,9 @@ import pytest
 from trading_app.live.bar_aggregator import Bar
 from trading_app.live.broker_base import BrokerFeed
 from trading_app.live.projectx.data_feed import (
-    ProjectXDataFeed,
     _MAX_STALE_BEFORE_RECONNECT,
     _STALE_TIMEOUT,
+    ProjectXDataFeed,
 )
 
 
@@ -173,7 +173,7 @@ class TestPysignalrStop:
             stop_setter = asyncio.create_task(set_stop())
             try:
                 await asyncio.wait_for(feed._run_pysignalr("12345"), timeout=2.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pytest.fail("_run_pysignalr did not exit within 2s — stop flag was ignored")
             finally:
                 stop_setter.cancel()
@@ -245,6 +245,7 @@ class TestLivenessMonitor:
     async def test_watcher_triggers_reconnect_on_stale(self):
         """Stop-file watcher must set _force_reconnect after consecutive stale periods."""
         from unittest.mock import patch
+
         from trading_app.live.projectx.data_feed import _STOP_FILE
 
         auth = MagicMock()
@@ -257,7 +258,7 @@ class TestLivenessMonitor:
         with patch.object(type(_STOP_FILE), "exists", return_value=False):
             try:
                 await asyncio.wait_for(feed._stop_file_watcher(), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 pytest.fail("Watcher did not exit on stale feed within 5s")
 
         assert feed._force_reconnect is True

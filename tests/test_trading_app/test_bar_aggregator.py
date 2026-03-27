@@ -1,12 +1,12 @@
 import math
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 from trading_app.live.bar_aggregator import Bar, BarAggregator
 
 
 def _ts(minute: int, second: int = 0) -> datetime:
-    return datetime(2026, 3, 3, 10, minute, second, tzinfo=timezone.utc)
+    return datetime(2026, 3, 3, 10, minute, second, tzinfo=UTC)
 
 
 def test_first_tick_opens_bar_returns_none():

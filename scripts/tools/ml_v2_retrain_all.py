@@ -205,15 +205,15 @@ def write_selection_doc(selected: list[dict]) -> Path:
         "",
         f"**Generated:** {datetime.now(UTC).isoformat()}",
         f"**Instrument:** {INSTRUMENT}",
-        f"**Pre-registration:** `docs/pre-registrations/ml-v2-preregistration.md`",
+        "**Pre-registration:** `docs/pre-registrations/ml-v2-preregistration.md`",
         "",
         "Committed BEFORE bootstrap. Selection uses CPCV AUC on train split only.",
         "Test set is never consulted for selection (honest OOS is reported but not used).",
         "",
         "## Selected Configs for Bootstrap",
         "",
-        f"| # | Session | Mode | Aperture | RR | CPCV AUC | Test AUC | OOS dR | Skip% |",
-        f"|---|---------|------|----------|----|----------|----------|--------|-------|",
+        "| # | Session | Mode | Aperture | RR | CPCV AUC | Test AUC | OOS dR | Skip% |",
+        "|---|---------|------|----------|----|----------|----------|--------|-------|",
     ]
 
     if not selected:
@@ -259,7 +259,7 @@ def main():
     log.info(f"  Instrument: {INSTRUMENT}")
     log.info(f"  DB: {GOLD_DB_PATH}")
     log.info(f"  Combos: {len(RR_TARGETS)} RR x 2 modes = 6")
-    log.info(f"  Pre-reg: docs/pre-registrations/ml-v2-preregistration.md")
+    log.info("  Pre-reg: docs/pre-registrations/ml-v2-preregistration.md")
 
     t_start = time.time()
 
@@ -315,9 +315,9 @@ def main():
         log.info("  >>> Decision: ML DEAD (per pre-registration: 0 = add to NO-GO)")
     else:
         log.info(f"\n  NEXT STEP: commit {doc_path.name}, then run bootstrap:")
-        log.info(f"    PYTHONPATH=. python scripts/tools/ml_bootstrap_test.py")
+        log.info("    PYTHONPATH=. python scripts/tools/ml_bootstrap_test.py")
 
-    log.info(f"\n  Artifacts:")
+    log.info("\n  Artifacts:")
     log.info(f"    {json_path}")
     log.info(f"    {doc_path}")
 

@@ -80,10 +80,10 @@ def section_0b_consistency():
 
     try:
         from trading_app.consistency_tracker import (
-            check_consistency,
-            check_payout_eligibility,
             check_account_idle,
+            check_consistency,
             check_microscalp_compliance,
+            check_payout_eligibility,
         )
 
         # Consistency
@@ -159,7 +159,7 @@ def section_2_slippage(con):
     live_n = row[0] if row else 0
     if live_n == 0:
         print("  No live trades with slippage data yet. Model assumes 1 tick.")
-        print(f"  MNQ slippage pilot: 0/30 live trades recorded.")
+        print("  MNQ slippage pilot: 0/30 live trades recorded.")
         return
     print(f"  Live trades with slippage: {live_n}")
     print(f"  Mean actual slippage: {row[1]} ticks (model: 1 tick)")

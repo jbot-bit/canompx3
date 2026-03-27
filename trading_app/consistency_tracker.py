@@ -8,7 +8,7 @@ Integrates into weekly_review and pre_session_check.
 
 import logging
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 import duckdb

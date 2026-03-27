@@ -4,8 +4,8 @@ import inspect
 import threading
 from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
 
 def test_merge_does_not_drop_trading_tables(tmp_path):

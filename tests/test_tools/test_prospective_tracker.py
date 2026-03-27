@@ -8,14 +8,15 @@ Uses an in-memory DuckDB with synthetic data to verify:
 """
 
 import datetime
+
 import duckdb
 import pytest
 
 from scripts.tools.prospective_tracker import (
+    SIGNALS,
+    compute_stats,
     fetch_qualifying_days,
     populate_signal,
-    compute_stats,
-    SIGNALS,
 )
 
 
@@ -147,7 +148,7 @@ class TestPopulateSignal:
         rows = tracker_db.execute(
             "SELECT is_prospective FROM prospective_signals WHERE signal_id = 'MGC_CME_REOPEN_PREV_LOSS'"
         ).fetchall()
-        assert all(r[0] == False for r in rows)
+        assert all(not r[0] for r in rows)
 
     def test_prospective_tag(self, tracker_db):
         sig = SIGNALS["MGC_CME_REOPEN_PREV_LOSS"]
@@ -157,7 +158,7 @@ class TestPopulateSignal:
         rows = tracker_db.execute(
             "SELECT is_prospective FROM prospective_signals WHERE signal_id = 'MGC_CME_REOPEN_PREV_LOSS'"
         ).fetchall()
-        assert all(r[0] == True for r in rows)
+        assert all(r[0] for r in rows)
 
     def test_idempotent(self, tracker_db):
         sig = SIGNALS["MGC_CME_REOPEN_PREV_LOSS"]
