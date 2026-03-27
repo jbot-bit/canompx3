@@ -300,14 +300,25 @@ def check_daily_lanes_dd_budget(
 ) -> tuple[float, float, float, bool]:
     """Check DD budget for manually pinned daily lanes.
 
-    Returns (dd_per_lane, total_dd_exposure, dd_limit, is_over_budget).
+    Returns (max_dd_per_lane, total_dd_exposure, dd_limit, is_over_budget).
+
+    Uses each lane's resolved planned_stop (which may differ from
+    profile.stop_multiplier when DailyLaneSpec.planned_stop_multiplier
+    is set). Only TRADE-status lanes count toward DD exposure.
     """
     firm_spec = get_firm_spec(profile.firm)
     tier = get_account_tier(profile.firm, profile.account_size)
-    dd_per_lane = _compute_dd_per_contract(profile.stop_multiplier, firm_spec.dd_type)
     tradeable = [la for la in lanes if la.status == "TRADE"]
-    total_dd = dd_per_lane * len(tradeable)
-    return dd_per_lane, total_dd, tier.max_dd, total_dd > tier.max_dd
+    if not tradeable:
+        return 0.0, 0.0, tier.max_dd, False
+    # Per-lane DD using each lane's actual stop multiplier
+    lane_dds = []
+    for la in tradeable:
+        stop = la.planned_stop if la.planned_stop is not None else profile.stop_multiplier
+        lane_dds.append(_compute_dd_per_contract(stop, firm_spec.dd_type))
+    total_dd = sum(lane_dds)
+    max_dd_per_lane = max(lane_dds)
+    return max_dd_per_lane, total_dd, tier.max_dd, total_dd > tier.max_dd
 
 
 def resolve_daily_lanes(profile: AccountProfile, db_path: Path, trading_day: date) -> list[DailyExecutionLane]:
@@ -355,18 +366,25 @@ def print_daily_lanes(profile: AccountProfile, lanes: list[DailyExecutionLane], 
         if la.execution_notes:
             print(f"    note: {la.execution_notes}")
 
-    # DD budget summary
-    dd_per_lane, total_dd, dd_limit, over_budget = check_daily_lanes_dd_budget(profile, lanes)
-    tradeable_count = sum(1 for la in lanes if la.status == "TRADE")
+    # DD budget summary (per-lane breakdown)
+    _, total_dd, dd_limit, over_budget = check_daily_lanes_dd_budget(profile, lanes)
+    tradeable = [la for la in lanes if la.status == "TRADE"]
     print(f"\n  {'─' * 60}")
-    print(f"  DD BUDGET: {tradeable_count} tradeable × ${dd_per_lane:,.0f}/lane = ${total_dd:,.0f} exposure")
-    print(f"  DD LIMIT:  ${dd_limit:,.0f} ({firm_spec.display_name} {profile.account_size // 1000}K)")
-    if over_budget:
+    print(f"  DD BUDGET BREAKDOWN ({len(tradeable)} tradeable lanes)")
+    for la in tradeable:
+        stop = la.planned_stop if la.planned_stop is not None else profile.stop_multiplier
+        lane_dd = _compute_dd_per_contract(stop, firm_spec.dd_type)
+        print(f"    {la.orb_label:<20} {stop:.2f}x stop  ${lane_dd:,.0f} DD")
+    print(f"  {'─' * 40}")
+    print(f"  TOTAL EXPOSURE: ${total_dd:,.0f}")
+    print(f"  DD LIMIT:       ${dd_limit:,.0f} ({firm_spec.display_name} {profile.account_size // 1000}K)")
+    if dd_limit > 0:
         pct = total_dd / dd_limit * 100
-        print(f"  ⚠ OVER-COMMITTED: {pct:.0f}% of DD limit. Max simultaneous losses can breach account.")
-        print("    Mitigations: intraday DD halt, reduced sizing, skip marginal lanes.")
-    else:
-        print(f"  ✓ Within DD budget ({total_dd / dd_limit * 100:.0f}%)")
+        if over_budget:
+            print(f"  *** OVER-COMMITTED: {pct:.0f}% of DD limit. Max simultaneous losses WILL breach account. ***")
+            print("    Mitigations: intraday DD halt, reduced sizing, skip marginal lanes.")
+        else:
+            print(f"  Within DD budget ({pct:.0f}%)")
     print()
 
 

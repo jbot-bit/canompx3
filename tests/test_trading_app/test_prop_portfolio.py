@@ -478,7 +478,7 @@ class TestCheckDailyLanesDDBudget:
     """DD budget check for manually pinned daily lanes."""
 
     @staticmethod
-    def _make_lane(status: str = "TRADE") -> DailyExecutionLane:
+    def _make_lane(status: str = "TRADE", planned_stop: float | None = None) -> DailyExecutionLane:
         return DailyExecutionLane(
             strategy_id="TEST_STRAT",
             instrument="MNQ",
@@ -486,23 +486,23 @@ class TestCheckDailyLanesDDBudget:
             session_time_brisbane="06:00",
             status=status,
             reason="Ready.",
+            planned_stop=planned_stop,
         )
 
     def test_under_budget(self):
-        """2 lanes at $935/lane = $1,870 < $2,000 Apex DD."""
+        """2 lanes at 0.75x = $935/lane = $1,870 < $2,000 Apex DD."""
         profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
-        lanes = [self._make_lane() for _ in range(2)]
-        dd_per, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
-        assert dd_per == 935.0
+        lanes = [self._make_lane(planned_stop=0.75) for _ in range(2)]
+        _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
         assert total == 1870.0
         assert limit == 2000.0
         assert not over
 
     def test_over_budget(self):
-        """5 lanes at $935/lane = $4,675 > $2,000 Apex DD."""
+        """5 lanes at 0.75x = $935/lane = $4,675 > $2,000 Apex DD."""
         profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
-        lanes = [self._make_lane() for _ in range(5)]
-        dd_per, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
+        lanes = [self._make_lane(planned_stop=0.75) for _ in range(5)]
+        _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
         assert total == 4675.0
         assert limit == 2000.0
         assert over
@@ -510,8 +510,12 @@ class TestCheckDailyLanesDDBudget:
     def test_hold_lanes_excluded(self):
         """Non-TRADE lanes don't count toward DD budget."""
         profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
-        lanes = [self._make_lane("TRADE"), self._make_lane("HOLD"), self._make_lane("SKIP")]
-        _dd_per, total, _limit, over = check_daily_lanes_dd_budget(profile, lanes)
+        lanes = [
+            self._make_lane("TRADE", planned_stop=0.75),
+            self._make_lane("HOLD", planned_stop=0.75),
+            self._make_lane("SKIP", planned_stop=0.75),
+        ]
+        _max_dd, total, _limit, over = check_daily_lanes_dd_budget(profile, lanes)
         assert total == 935.0  # Only 1 TRADE lane
         assert not over
 
@@ -520,7 +524,33 @@ class TestCheckDailyLanesDDBudget:
         from trading_app.prop_profiles import ACCOUNT_PROFILES
 
         profile = ACCOUNT_PROFILES["apex_50k_manual"]
-        # All 5 lanes as TRADE
-        lanes = [self._make_lane() for _ in range(len(profile.daily_lanes))]
-        _dd_per, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
+        # All 5 lanes as TRADE with profile default stop
+        lanes = [self._make_lane(planned_stop=profile.stop_multiplier) for _ in range(len(profile.daily_lanes))]
+        _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
         assert over, f"5 lanes should exceed DD: ${total} > ${limit}"
+
+    def test_mixed_stop_multipliers(self):
+        """Lanes with different stop multipliers get different DD contributions."""
+        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        lanes = [
+            self._make_lane(planned_stop=0.75),  # $935
+            self._make_lane(planned_stop=1.0),    # $1,350
+        ]
+        _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
+        assert total == 935.0 + 1350.0  # $2,285
+        assert over  # > $2,000
+
+    def test_no_tradeable_lanes(self):
+        """All lanes HOLD/SKIP = zero DD exposure."""
+        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        lanes = [self._make_lane("HOLD"), self._make_lane("SKIP")]
+        _max_dd, total, _limit, over = check_daily_lanes_dd_budget(profile, lanes)
+        assert total == 0.0
+        assert not over
+
+    def test_fallback_to_profile_stop_when_planned_none(self):
+        """Lane with planned_stop=None uses profile.stop_multiplier."""
+        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        lanes = [self._make_lane(planned_stop=None)]  # Should use 0.75 from profile
+        _max_dd, total, _limit, _over = check_daily_lanes_dd_budget(profile, lanes)
+        assert total == 935.0  # 0.75x = $935
