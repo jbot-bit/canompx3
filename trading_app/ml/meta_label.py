@@ -193,6 +193,11 @@ def _get_session_features(
     because they have near-constant values (0 or 1 prior sessions).
     TOKYO_OPEN keeps level proximity features (1 prior session provides
     meaningful level data).
+
+    EUROPE_FLOW and LONDON_METALS drop cross-session + level proximity
+    features because they swap chronological order by season (winter:
+    EF 17:00 before LM 18:00, summer: LM 17:00 before EF 18:00).
+    Cross-session features from one contaminate the other ~42% of the time.
     """
     session_idx = SESSION_CHRONOLOGICAL_ORDER.index(session) if session in SESSION_CHRONOLOGICAL_ORDER else -1
 
@@ -202,6 +207,12 @@ def _get_session_features(
         if session_idx == 0:
             # CME_REOPEN: also drop level proximity (no prior sessions)
             drop_cols += [c for c in LEVEL_PROXIMITY_FEATURES if c in X_e6.columns]
+        X_session = X_e6.drop(columns=drop_cols, errors="ignore")
+    elif session in ("EUROPE_FLOW", "LONDON_METALS"):
+        # EF/LM swap chronological order by season — cross-session features
+        # from one leak future data into the other ~42% of the time.
+        drop_cols = [c for c in CROSS_SESSION_FEATURES if c in X_e6.columns]
+        drop_cols += [c for c in LEVEL_PROXIMITY_FEATURES if c in X_e6.columns]
         X_session = X_e6.drop(columns=drop_cols, errors="ignore")
     else:
         X_session = X_e6
@@ -273,7 +284,18 @@ def train_per_session_meta_label(
         X_all, y_all, meta_all = load_validated_feature_matrix(db_path, instrument)
     X_e6 = apply_e6_filter(X_all)
 
-    logger.info(f"Total: {len(X_e6):,d} samples, {X_e6.shape[1]} E6 features")
+    # V2 methodology: select only expert-prior features (EPV fix).
+    # E6 filter runs first as defense-in-depth (none of the 5 core features
+    # match E6 noise patterns, so it drops 0 of them in practice).
+    from trading_app.ml.config import ML_CORE_FEATURES
+
+    available_core = [f for f in ML_CORE_FEATURES if f in X_e6.columns]
+    if len(available_core) < len(ML_CORE_FEATURES):
+        missing = set(ML_CORE_FEATURES) - set(available_core)
+        logger.warning(f"Missing core features (dropped for some sessions): {missing}")
+    X_e6 = X_e6[available_core]
+
+    logger.info(f"Total: {len(X_e6):,d} samples, {X_e6.shape[1]} core features (of {len(ML_CORE_FEATURES)})")
 
     # --- 3-way time split: 60% train / 20% val / 20% test ---
     n_total = len(X_e6)
@@ -353,12 +375,24 @@ def train_per_session_meta_label(
                 _store({"model_type": "NONE", "reason": reason})
                 continue
 
+            # Fix E: Positive baseline gate (de Prado AIFML Ch 3.6).
+            # Meta-labeling assumes primary model has positive edge.
+            # Training on negative baselines produces threshold artifacts
+            # (confirmed: portfolio-level negative baselines gave p=0.35).
+            train_pnl = pnl_r[train_idx]
+            train_expr = float(train_pnl.mean()) if len(train_pnl) > 0 else 0.0
+            if train_expr <= 0:
+                logger.info(f"{log_prefix} >> NO_MODEL (negative baseline ExpR={train_expr:+.4f} on train)")
+                _store({"model_type": "NONE", "reason": f"negative_baseline_expr={train_expr:+.4f}"})
+                continue
+
             # Get session-appropriate features
             X_session = _get_session_features(X_e6, session)
 
-            # Drop constant columns within this session (e.g., entry_model one-hots
-            # are constant per session — they waste a feature slot with zero info gain)
-            session_data = X_session.iloc[session_indices]
+            # Drop constant columns within this session's TRAIN split only.
+            # Using full session_indices would leak test-set column structure into
+            # the train-only decision of which columns to keep.
+            session_data = X_session.iloc[train_idx]
             const_cols = [c for c in X_session.columns if session_data[c].nunique() <= 1]
             if const_cols:
                 X_session = X_session.drop(columns=const_cols)

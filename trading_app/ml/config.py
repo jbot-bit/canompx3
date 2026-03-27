@@ -113,6 +113,25 @@ TRADE_CONFIG_FEATURES: list[str] = [
     "orb_minutes",
 ]
 
+# ---------------------------------------------------------------------------
+# V2 Methodology: Expert-prior features (EPV fix)
+# ---------------------------------------------------------------------------
+# 5 features selected by structural mechanism, NOT data-driven scan.
+# Avoids scan-on-train bias (Hastie/Tibshirani ESL §7.10).
+# Verified present in E6-filtered matrix (25 cols → 5 selected).
+# EPV at O5 RR1.0 MNQ: ~1300 × 55% WR / 5 = ~143 (well above 10).
+# EPV at O30 RR2.0 MNQ: ~430 × 34% WR / 5 = ~29 (above 10).
+#
+# @research-source: expert prior selection (not data-driven)
+# @revalidated-for: E2
+ML_CORE_FEATURES: list[str] = [
+    "orb_size_norm",           # ORB size IS the edge (Blueprint §2, cost mechanism)
+    "atr_20_pct",              # Vol regime rank (confirmed ATR70_VOL filter)
+    "gap_open_points_norm",    # Overnight institutional repositioning (ATR-normalized)
+    "orb_pre_velocity_norm",   # Pre-session momentum slope (ATR-normalized)
+    "prior_sessions_broken",   # Cross-session flow (#1 importance in prior experiments)
+]
+
 # LOOK-AHEAD BLACKLIST — NEVER use as ML features
 # These depend on information not available at trade-entry time.
 # Architecture: ML predicts PRE-BREAK (before placing stop). Features must be
@@ -319,5 +338,6 @@ def compute_config_hash() -> str:
         f"|{CROSS_SESSION_FEATURES}|{LEVEL_PROXIMITY_FEATURES}"
         f"|{SESSION_CHRONOLOGICAL_ORDER}|{MIN_SESSION_SAMPLES}|{MAX_EARLY_SESSION_INDEX}"
         f"|split=60/20/20"  # 3-way split: train/val/test
+        f"|core={ML_CORE_FEATURES}"  # V2: expert-prior feature selection
     )
     return hashlib.sha256(config_str.encode()).hexdigest()[:12]

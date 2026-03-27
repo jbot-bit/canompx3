@@ -141,3 +141,35 @@ class TestQualityGateContracts:
 
         source = inspect.getsource(compute_config_hash)
         assert "split=60/20/20" in source
+
+    def test_positive_baseline_gate_exists(self):
+        """Fix E: negative baseline sessions must be skipped."""
+        import inspect
+        from trading_app.ml.meta_label import train_per_session_meta_label
+
+        source = inspect.getsource(train_per_session_meta_label)
+        assert "train_expr <= 0" in source
+        assert "negative_baseline" in source
+
+    def test_ef_lm_cross_session_guard(self):
+        """Fix B: EUROPE_FLOW and LONDON_METALS drop cross-session features."""
+        import pandas as pd
+        from trading_app.ml.meta_label import _get_session_features
+
+        X = pd.DataFrame({
+            "orb_size_norm": [0.5],
+            "prior_sessions_broken": [2],
+            "nearest_level_to_high_R": [0.5],
+        })
+        X_ef = _get_session_features(X, "EUROPE_FLOW")
+        assert "prior_sessions_broken" not in X_ef.columns
+        assert "nearest_level_to_high_R" not in X_ef.columns
+        assert "orb_size_norm" in X_ef.columns
+
+    def test_core_feature_selection(self):
+        """Fix F: training uses only ML_CORE_FEATURES."""
+        import inspect
+        from trading_app.ml.meta_label import train_per_session_meta_label
+
+        source = inspect.getsource(train_per_session_meta_label)
+        assert "ML_CORE_FEATURES" in source

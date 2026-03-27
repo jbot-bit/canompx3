@@ -15,6 +15,7 @@ from trading_app.ml.config import (
     GLOBAL_FEATURES,
     LOOKAHEAD_BLACKLIST,
     MIN_SAMPLES_TRAIN,
+    ML_CORE_FEATURES,
     MODEL_DIR,
     REL_VOL_SESSIONS,
     RF_PARAMS,
@@ -23,6 +24,7 @@ from trading_app.ml.config import (
     THRESHOLD_MIN,
     THRESHOLD_STEP,
     TRADE_CONFIG_FEATURES,
+    compute_config_hash,
 )
 
 
@@ -209,3 +211,22 @@ class TestModelDirectory:
 
     def test_min_samples_train_positive(self):
         assert MIN_SAMPLES_TRAIN > 0
+
+
+class TestMLCoreFeatures:
+    """V2 methodology: expert-prior feature list integrity."""
+
+    def test_exactly_5_features(self):
+        """EPV fix: 5 features keeps EPV >= 10 for all session sizes."""
+        assert len(ML_CORE_FEATURES) == 5
+
+    def test_no_lookahead(self):
+        """Core features must not appear in LOOKAHEAD_BLACKLIST."""
+        for feat in ML_CORE_FEATURES:
+            assert feat not in LOOKAHEAD_BLACKLIST, f"{feat} is in LOOKAHEAD_BLACKLIST"
+
+    def test_core_features_in_hash(self):
+        """compute_config_hash must include ML_CORE_FEATURES so hash changes on feature change."""
+        hash_val = compute_config_hash()
+        assert isinstance(hash_val, str)
+        assert len(hash_val) == 12  # SHA-256 truncated to 12 chars

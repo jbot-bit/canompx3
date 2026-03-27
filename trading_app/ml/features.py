@@ -906,7 +906,7 @@ def load_single_config_feature_matrix(
                         v.cnt AS sample_size,
                         ROW_NUMBER() OVER (
                             {_fb_partition_v}
-                            ORDER BY v.cnt DESC
+                            ORDER BY v.cnt DESC, v.rr_target ASC, v.entry_model ASC, v.orb_minutes ASC
                         ) AS rn
                     FROM (
                         SELECT orb_label, entry_model, rr_target, confirm_bars,
@@ -978,7 +978,7 @@ def load_single_config_feature_matrix(
                         v.cnt AS sample_size,
                         ROW_NUMBER() OVER (
                             {_fb_partition_v}
-                            ORDER BY v.cnt DESC
+                            ORDER BY v.cnt DESC, v.rr_target ASC, v.entry_model ASC, v.orb_minutes ASC
                         ) AS rn
                     FROM (
                         SELECT orb_label, entry_model, rr_target, confirm_bars,
