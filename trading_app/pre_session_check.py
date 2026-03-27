@@ -13,7 +13,7 @@ Usage:
 import argparse
 import json
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, UTC
 from pathlib import Path
 
 import duckdb
@@ -37,7 +37,7 @@ def check_data_freshness(con, instrument: str) -> tuple[bool, str]:
     if not row or not row[0]:
         return False, f"No bars_1m data for {instrument}"
     latest = row[0]
-    now_utc = datetime.now(timezone.utc)
+    now_utc = datetime.now(UTC)
     if hasattr(latest, "timestamp"):
         gap_hours = (now_utc.timestamp() - latest.timestamp()) / 3600
     else:
@@ -266,7 +266,6 @@ def run_checks(session: str) -> bool:
     print(f"{'=' * 70}")
 
     for name, ok, msg in results:
-        status = "PASS" if ok else "FAIL"
         if not ok:
             all_pass = False
         indicator = "[+]" if ok else "[X]"
@@ -290,7 +289,7 @@ def run_checks(session: str) -> bool:
         "session": session,
         "gate": gate,
         "checks": [{"name": n, "pass": o, "detail": m} for n, o, m in results],
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
     log_file = STATE_DIR / f"session_checklist_{today}_{session}.json"
     log_file.write_text(json.dumps(log_data, indent=2))

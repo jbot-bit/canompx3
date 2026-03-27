@@ -26,7 +26,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent

@@ -31,9 +31,9 @@ def main():
 
     # ── F2: Reset noise_risk ─────────────────────────────────────────
     print("F2: Resetting noise_risk = FALSE for all validated strategies...")
-    n = con.execute(
+    con.execute(
         "UPDATE validated_setups SET noise_risk = FALSE WHERE noise_risk IS NOT FALSE"
-    ).fetchone()
+    )
     updated = con.execute("SELECT COUNT(*) FROM validated_setups WHERE noise_risk = FALSE").fetchone()[0]
     print(f"  {updated} strategies now have noise_risk = FALSE")
 
@@ -129,7 +129,7 @@ def main():
         ORDER BY wfe DESC
     """).fetchall()
 
-    for sid, session, wfe, instrument in outliers:
+    for sid, _session, wfe, _instrument in outliers:
         folds = wf_data.get(sid, {}).get("windows", [])
 
         if wfe < 0.50:
@@ -218,10 +218,10 @@ def main():
     }
 
     for session, status in session_status.items():
-        n = con.execute(
+        con.execute(
             "UPDATE validated_setups SET slippage_validation_status = ? WHERE orb_label = ?",
             [status, session],
-        ).fetchone()
+        )
     # MGC sessions: different instrument, set PENDING
     con.execute(
         "UPDATE validated_setups SET slippage_validation_status = 'PENDING' WHERE instrument = 'MGC'"
