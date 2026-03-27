@@ -7,11 +7,11 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (Deep Audit + DD Budget Fix)
+- **Tool:** Claude Code (ML V2 completion + DD budget fix + stress test)
 - **Date:** 2026-03-27
 - **Branch:** `main`
-- **Commit:** `ecb869e`
-- **Status:** ALL tests pass (3263 passed, 20 skipped, 0 failures). 75/75 drift checks pass. Clean ship.
+- **Commit:** `2b2eff5`
+- **Status:** 3269+ passed, 75/75 drift checks. ML DEAD. DD budget fixed. Pushed to remote.
 
 ### What was done (Mar 27 — this session)
 
@@ -44,6 +44,24 @@ Comprehensive audit of all test failures. The audit prompt estimated 56 failures
 #### 2. Prior commits this session (before test audit)
 - `064d0f8` — DD budget constants imported from canonical source (DRY)
 - `2c286fb` — DD budget pre-flight check + stage state cleanup
+
+### What was done (this terminal — ML + DD + cleanup)
+
+#### ML V2 Phase 1 COMPLETE — ML DEAD
+- Fix A-F methodology rehabilitation (commit `e7f5512`) — already done prior
+- 3 stress-test fixes: CPCV fail-closed, legacy gate, unknown session (`1023deb`)
+- Retrain wrapper: 6 combos × 12 sessions, 108 configs tested (`df19eae`)
+- Config selection: 2/12 survivors (US_DATA_1000 O30, NYSE_CLOSE O5) committed before bootstrap
+- Bootstrap: 5000 perms, Phipson-Smyth p-values (`562c947`)
+- BH FDR at K=12: 0 survivors. NYSE_CLOSE raw p=0.039, adjusted p=0.473
+- **VERDICT: ML DEAD.** Blueprint NO-GO updated. Phase 2 cancelled.
+
+#### DD Budget Fix
+- `check_daily_lanes_dd_budget()` now uses per-lane `planned_stop` instead of uniform profile default (`6d24176`)
+- Per-lane DD breakdown in daily sheet output
+- `_lane_stop()` helper extracted (`2b2eff5`)
+- 7 tests (3 new: mixed stops, no tradeable, fallback)
+- Blast radius verified: `pre_session_check.py:258` unpack safe (first element unused)
 
 ### What's Running
 Nothing (session complete)
