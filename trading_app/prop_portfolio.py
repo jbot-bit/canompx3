@@ -317,20 +317,51 @@ def check_daily_lanes_dd_budget(
     if not tradeable:
         return 0.0, 0.0, tier.max_dd, False
     # Per-lane DD using each lane's actual stop multiplier
-    lane_dds = [
-        _compute_dd_per_contract(
-            _lane_stop(la, profile), firm_spec.dd_type
-        )
-        for la in tradeable
-    ]
+    lane_dds = [_compute_dd_per_contract(_lane_stop(la, profile), firm_spec.dd_type) for la in tradeable]
     total_dd = sum(lane_dds)
     max_dd_per_lane = max(lane_dds)
     return max_dd_per_lane, total_dd, tier.max_dd, total_dd > tier.max_dd
 
 
 def resolve_daily_lanes(profile: AccountProfile, db_path: Path, trading_day: date) -> list[DailyExecutionLane]:
-    """Resolve all pinned daily lanes for a profile, sorted by time."""
+    """Resolve all pinned daily lanes for a profile, sorted by time.
+
+    Applies lane overrides (pause/resume) from data/state/ if present.
+    """
     lanes = [_resolve_daily_lane(profile, lane, db_path, trading_day) for lane in profile.daily_lanes]
+
+    # Apply lane overrides (pause/resume state file)
+    try:
+        from trading_app.lane_ctl import get_lane_override
+
+        for i, la in enumerate(lanes):
+            override = get_lane_override(profile.profile_id, la.strategy_id)
+            if override is not None and la.status == "TRADE":
+                reason = override.get("reason", "paused")
+                since = override.get("since", "?")
+                lanes[i] = DailyExecutionLane(
+                    strategy_id=la.strategy_id,
+                    instrument=la.instrument,
+                    orb_label=la.orb_label,
+                    session_time_brisbane=la.session_time_brisbane,
+                    status="PAUSED",
+                    reason=f"Paused since {since}: {reason}",
+                    entry_model=la.entry_model,
+                    rr_target=la.rr_target,
+                    confirm_bars=la.confirm_bars,
+                    filter_type=la.filter_type,
+                    orb_minutes=la.orb_minutes,
+                    strategy_stop=la.strategy_stop,
+                    planned_stop=la.planned_stop,
+                    fitness_status=la.fitness_status,
+                    expectancy_r=la.expectancy_r,
+                    exp_dollars=la.exp_dollars,
+                    sample_size=la.sample_size,
+                    execution_notes=la.execution_notes,
+                )
+    except ImportError:
+        pass  # lane_ctl not available — no overrides
+
     return sorted(lanes, key=lambda la: _time_sort_key(la.session_time_brisbane))
 
 
@@ -403,10 +434,7 @@ def print_daily_lanes(
             if pnl is not None:
                 last = pnl["last_trade"]
                 last_str = str(last) if last else "?"
-                print(
-                    f"    paper 30d: {pnl['wins']}W {pnl['losses']}L | "
-                    f"cumR: {pnl['cum_r']:+.2f} | last: {last_str}"
-                )
+                print(f"    paper 30d: {pnl['wins']}W {pnl['losses']}L | cumR: {pnl['cum_r']:+.2f} | last: {last_str}")
             else:
                 print("    paper 30d: no data (run: python -m trading_app.paper_trade_logger --sync)")
         print(f"    -> {la.reason}")
