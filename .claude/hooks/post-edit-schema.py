@@ -16,10 +16,10 @@ def main():
 
     # Run schema tests
     result = subprocess.run(
-        [sys.executable, "-m", "pytest",
-         "tests/test_pipeline/test_schema.py", "tests/test_app_sync.py",
-         "-x", "-q"],
-        capture_output=True, text=True, timeout=30
+        [sys.executable, "-m", "pytest", "tests/test_pipeline/test_schema.py", "tests/test_app_sync.py", "-x", "-q"],
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     if result.returncode != 0:
         print(f"SCHEMA TESTS FAILED after editing {file_path}", file=sys.stderr)

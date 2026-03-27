@@ -23,7 +23,7 @@ def parse_field(content, field):
 def main():
     # Read user's message from stdin (hook receives it)
     try:
-        event = json.load(sys.stdin)
+        json.load(sys.stdin)  # consume stdin (hook protocol)
     except (json.JSONDecodeError, Exception):
         sys.exit(0)
 

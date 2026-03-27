@@ -4,7 +4,6 @@
 import json
 import sys
 
-
 BLOCKED_PATTERNS = [
     "gold.db",
     "gold.db.wal",
