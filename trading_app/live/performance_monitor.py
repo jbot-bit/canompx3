@@ -47,8 +47,11 @@ class PerformanceMonitor:
     Tracks live P&L per strategy and triggers CUSUM alarms on drift.
 
     Usage:
-        portfolio, notes = build_live_portfolio(...)
-        monitor = PerformanceMonitor(portfolio.strategies)
+        # From prop_profiles (preferred):
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+        profile = ACCOUNT_PROFILES["apex_50k_manual"]
+        # strategies from select_for_profile() or daily_lanes resolution
+        monitor = PerformanceMonitor(strategies)
         ...
         alert = monitor.record_trade(record)
         if alert:
