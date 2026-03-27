@@ -183,11 +183,7 @@ class TradovateOrderRouter(BrokerRouter):
             raise RuntimeError("No auth -- cannot submit live orders without TradovateAuth")
 
         # Price collar — entry orders only (Stop type)
-        if (
-            spec.stop_price is not None
-            and self._last_known_price is not None
-            and self._last_known_price > 0
-        ):
+        if spec.stop_price is not None and self._last_known_price is not None and self._last_known_price > 0:
             deviation = abs(spec.stop_price - self._last_known_price) / self._last_known_price
             if deviation > self._price_collar_pct:
                 msg = (

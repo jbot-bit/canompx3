@@ -110,10 +110,7 @@ def summary(*, today_only: bool = False) -> None:
     print("-" * 65)
     for lane in lanes:
         wr_str = f"{lane[3]:5.1f}" if lane[3] is not None else "  N/A"
-        print(
-            f"  {lane[0]:<20s}  {lane[1]:>3d}  {lane[2]:>+7.2f}  {wr_str}  "
-            f"{str(lane[4]):>12s}  {str(lane[5]):>12s}"
-        )
+        print(f"  {lane[0]:<20s}  {lane[1]:>3d}  {lane[2]:>+7.2f}  {wr_str}  {str(lane[4]):>12s}  {str(lane[5]):>12s}")
     print("-" * 65)
     p_wr = f"{portfolio[2]:5.1f}" if portfolio[2] is not None else "  N/A"
     print(f"  {'PORTFOLIO':<20s}  {portfolio[0]:>3d}  {portfolio[1]:>+7.2f}  {p_wr}")

@@ -24,6 +24,7 @@ Pre-registration (written BEFORE running):
   - Fewer than 2/4 survive -> insufficient diversification
   - Total annual R < 50R -> not worth the operational complexity
 """
+
 import sys
 
 sys.path.insert(0, r"C:\Users\joshd\canompx3")
@@ -44,10 +45,10 @@ SETUPS = [
     ("US_DATA_1000", 1.0),
 ]
 
-print("="*70)
+print("=" * 70)
 print("STAGE 2: PRE-REGISTERED VALIDATION")
 print("4 candidates, BH FDR q=0.05, 2025 holdout")
-print("="*70)
+print("=" * 70)
 
 results = []
 for session, rr in SETUPS:
@@ -68,8 +69,9 @@ for session, rr in SETUPS:
     wr = (pnl_h > 0).mean()
 
     # Risk
-    risk_pts = np.abs(pd.to_numeric(holdout["entry_price"], errors="coerce") -
-                      pd.to_numeric(holdout["stop_price"], errors="coerce")).values
+    risk_pts = np.abs(
+        pd.to_numeric(holdout["entry_price"], errors="coerce") - pd.to_numeric(holdout["stop_price"], errors="coerce")
+    ).values
     avg_risk_d = np.nanmean(risk_pts) * 2  # $2/pt MNQ
 
     # DD
@@ -98,20 +100,30 @@ for session, rr in SETUPS:
         yp = pnl_h[yr.values == y]
         yr_data[y] = yp.mean()
 
-    results.append({
-        "session": session, "rr": rr, "expr": pnl_h.mean(), "p": p,
-        "wr": wr, "n": len(pnl_h), "dd": dd, "max_streak": max_streak,
-        "avg_risk_d": avg_risk_d, "stress_expr": stress_expr,
-        "train_expr": train["pnl_r"].mean(), "train_n": len(train),
-        "yr_data": yr_data,
-    })
+    results.append(
+        {
+            "session": session,
+            "rr": rr,
+            "expr": pnl_h.mean(),
+            "p": p,
+            "wr": wr,
+            "n": len(pnl_h),
+            "dd": dd,
+            "max_streak": max_streak,
+            "avg_risk_d": avg_risk_d,
+            "stress_expr": stress_expr,
+            "train_expr": train["pnl_r"].mean(),
+            "train_n": len(train),
+            "yr_data": yr_data,
+        }
+    )
 
 # Sort by p-value for BH FDR
 results.sort(key=lambda x: x["p"])
 
 # BH FDR at q=0.05
 print(f"\n{'Session':<20} {'ExpR':>7} {'WR':>5} {'N':>5} {'p':>10} {'BH_thresh':>10} {'BH':>5} {'DD':>6} {'3tick':>7}")
-print("-"*80)
+print("-" * 80)
 
 n_tests = len(results)
 survivors = 0
@@ -122,12 +134,14 @@ for rank, r in enumerate(results, 1):
         survivors += 1
 
     status = "PASS" if passes_bh and r["expr"] > 0 else "FAIL"
-    print(f"  {r['session']:<18} {r['expr']:>+7.4f} {r['wr']:>5.0%} {r['n']:>5} {r['p']:>10.6f} {bh_thresh:>10.4f} {status:>5} {r['dd']:>+6.1f} {r['stress_expr']:>+7.4f}")
+    print(
+        f"  {r['session']:<18} {r['expr']:>+7.4f} {r['wr']:>5.0%} {r['n']:>5} {r['p']:>10.6f} {bh_thresh:>10.4f} {status:>5} {r['dd']:>+6.1f} {r['stress_expr']:>+7.4f}"
+    )
 
 # Portfolio summary
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("PORTFOLIO SUMMARY (BH FDR survivors)")
-print(f"{'='*70}")
+print(f"{'=' * 70}")
 
 portfolio_pnl = []
 portfolio_trades = 0
@@ -142,7 +156,9 @@ for r in results:
         portfolio_trades += annual_trades
 
         print(f"  {r['session']:<18} {r['expr']:+.4f}R x {annual_trades:.0f}/yr = {annual_r:+.0f}R = ${annual_d:+,.0f}")
-        print(f"    Train: {r['train_expr']:+.4f}R (N={r['train_n']}) | OOS degradation: {(1 - r['expr']/r['train_expr'])*100:.0f}%")
+        print(
+            f"    Train: {r['train_expr']:+.4f}R (N={r['train_n']}) | OOS degradation: {(1 - r['expr'] / r['train_expr']) * 100:.0f}%"
+        )
         for y, yexpr in r["yr_data"].items():
             print(f"    {y}: {yexpr:+.4f}R")
 
@@ -152,11 +168,13 @@ print(f"  At 50% live degradation: ${portfolio_annual_d * 0.5:+,.0f}/yr (1 micro
 print(f"  At 50% degradation, 5 accounts: ${portfolio_annual_d * 0.5 * 5:+,.0f}/yr")
 
 # Kill criteria check
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("KILL CRITERIA")
-print("="*70)
+print("=" * 70)
 print(f"  Survivors: {survivors}/4 (need >= 2): {'PASS' if survivors >= 2 else 'FAIL'}")
-total_annual_r = sum(r["expr"] * r["n"] * (252/len(pd.date_range("2025-01-01","2026-03-20"))) for r in results if r["expr"] > 0)
+total_annual_r = sum(
+    r["expr"] * r["n"] * (252 / len(pd.date_range("2025-01-01", "2026-03-20"))) for r in results if r["expr"] > 0
+)
 print(f"  Total annual R: {total_annual_r:.0f} (need >= 50): {'PASS' if total_annual_r >= 50 else 'FAIL'}")
 all_survive_stress = all(r["stress_expr"] > 0 for r in results if r["expr"] > 0)
 print(f"  All survive 3-tick stress: {'PASS' if all_survive_stress else 'FAIL'}")

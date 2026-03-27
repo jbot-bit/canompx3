@@ -1,6 +1,7 @@
 """ML on VERIFIED sessions only (NYSE_OPEN + COMEX_SETTLE RR1.0).
 Positive baseline. New features (VWAP, velocity). Canonical blacklist.
 Bootstrap verified. No 2026 data (sacred holdout)."""
+
 import sys
 
 sys.path.insert(0, r"C:\Users\joshd\canompx3")
@@ -15,12 +16,33 @@ from pipeline.paths import GOLD_DB_PATH
 from trading_app.ml.config import LOOKAHEAD_BLACKLIST, RF_PARAMS, SESSION_CHRONOLOGICAL_ORDER
 
 BLACKLIST = list(LOOKAHEAD_BLACKLIST) + ["garch", "break_ts"]
-SKIP = {"pnl_r","trading_day","symbol","orb_minutes","orb_label","entry_price","stop_price",
-        "trading_day_1","entry_model","rr_target","confirm_bars","instrument",
-        "entry_ts","exit_ts","exit_price","target_price","risk_dollars","pnl_dollars",
-        "ambiguous_bar","ts_outcome","ts_pnl_r","ts_exit_ts"}
+SKIP = {
+    "pnl_r",
+    "trading_day",
+    "symbol",
+    "orb_minutes",
+    "orb_label",
+    "entry_price",
+    "stop_price",
+    "trading_day_1",
+    "entry_model",
+    "rr_target",
+    "confirm_bars",
+    "instrument",
+    "entry_ts",
+    "exit_ts",
+    "exit_price",
+    "target_price",
+    "risk_dollars",
+    "pnl_dollars",
+    "ambiguous_bar",
+    "ts_outcome",
+    "ts_pnl_r",
+    "ts_exit_ts",
+}
 
 SESSION_ORDER = list(SESSION_CHRONOLOGICAL_ORDER)
+
 
 def get_eligible(session, all_feats):
     """Only features from sessions that completed BEFORE target."""
@@ -41,6 +63,7 @@ def get_eligible(session, all_feats):
         elif SESSION_ORDER.index(source) < target_idx:
             eligible.append(feat)
     return eligible
+
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 
@@ -85,12 +108,12 @@ for session, rr in VERIFIED:
     X = X.drop(columns=const)
 
     # Check which new features made it in
-    new_feats = [c for c in X.columns if 'vwap' in c.lower() or 'velocity' in c.lower()]
-    print(f"\n{'='*65}")
+    new_feats = [c for c in X.columns if "vwap" in c.lower() or "velocity" in c.lower()]
+    print(f"\n{'=' * 65}")
     print(f"  {session} RR{rr} | N={n} | Features={X.shape[1]} | New={len(new_feats)}")
     print(f"  New features: {new_feats[:5]}{'...' if len(new_feats) > 5 else ''}")
     print(f"  Baseline: {pnl.mean():+.4f}R | Test baseline: {pnl[n_val:].mean():+.4f}R")
-    print(f"{'='*65}")
+    print(f"{'=' * 65}")
 
     if X.shape[1] < 5:
         print(f"  Too few features ({X.shape[1]})")
@@ -106,7 +129,7 @@ for session, rr in VERIFIED:
     top10 = [(X.columns[i], imp[i]) for i in np.argsort(imp)[::-1][:10]]
     print("  Top 10 features:")
     for fname, fimp in top10:
-        is_new = " [NEW]" if 'vwap' in fname.lower() or 'velocity' in fname.lower() else ""
+        is_new = " [NEW]" if "vwap" in fname.lower() or "velocity" in fname.lower() else ""
         print(f"    {fname:<45} {fimp:.1%}{is_new}")
 
     # Threshold on val
@@ -141,10 +164,10 @@ for session, rr in VERIFIED:
     s_pnl = test_pnl[~kept]
 
     print("\n  Results:")
-    print(f"    Baseline:  {test_pnl.mean():+.4f}R  N={len(test_pnl)}  WR={(test_pnl>0).mean():.0%}")
-    print(f"    ML kept:   {k_pnl.mean():+.4f}R  N={nk}  WR={(k_pnl>0).mean():.0%}")
+    print(f"    Baseline:  {test_pnl.mean():+.4f}R  N={len(test_pnl)}  WR={(test_pnl > 0).mean():.0%}")
+    print(f"    ML kept:   {k_pnl.mean():+.4f}R  N={nk}  WR={(k_pnl > 0).mean():.0%}")
     print(f"    ML skip:   {s_pnl.mean():+.4f}R  N={len(s_pnl)}")
-    print(f"    AUC={auc:.3f}  threshold={best_t:.2f}  skip={1-nk/len(test_pnl):.0%}")
+    print(f"    AUC={auc:.3f}  threshold={best_t:.2f}  skip={1 - nk / len(test_pnl):.0%}")
 
     # Bootstrap
     null_means = []
@@ -160,7 +183,7 @@ for session, rr in VERIFIED:
 
     if bp < 0.05:
         # Economics
-        annual_trades = nk * (252 / (len(test_pnl) / (6900/5/12)))  # rough
+        annual_trades = nk * (252 / (len(test_pnl) / (6900 / 5 / 12)))  # rough
         print(f"\n  ML IMPROVES {session}:")
         print(f"    From {test_pnl.mean():+.4f}R to {k_pnl.mean():+.4f}R")
         print(f"    Lift: {k_pnl.mean() - test_pnl.mean():+.4f}R per trade")

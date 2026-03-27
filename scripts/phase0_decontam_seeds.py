@@ -19,6 +19,7 @@ INSTRUMENTS = [
     ("M2K", {"rr_target": 1.0}),
 ]
 
+
 def extract_deltas(r):
     """Extract honest and full delta from per-aperture results dict."""
     honest = 0.0
@@ -63,7 +64,8 @@ for seed in range(10):
     for inst, kwargs in INSTRUMENTS:
         try:
             r = train_per_session_meta_label(
-                inst, str(GOLD_DB_PATH),
+                inst,
+                str(GOLD_DB_PATH),
                 save_model=False,
                 run_cpcv=False,
                 single_config=True,
@@ -108,7 +110,7 @@ mean_h = statistics.mean(totals_h)
 std_h = statistics.stdev(totals_h)
 mean_f = statistics.mean(totals_f)
 std_f = statistics.stdev(totals_f)
-cv = std_h / abs(mean_h) * 100 if mean_h != 0 else float('inf')
+cv = std_h / abs(mean_h) * 100 if mean_h != 0 else float("inf")
 
 print(f"{'MEAN':>4} {mean_h:>+10.1f} {mean_f:>+10.1f}")
 print(f"{'STD':>4} {std_h:>10.1f} {std_f:>10.1f}")
@@ -129,7 +131,7 @@ for inst, _ in INSTRUMENTS:
     if any(v != 0 for v in vals) and len(vals) > 1:
         m = statistics.mean(vals)
         sd = statistics.stdev(vals)
-        cv_i = sd / abs(m) * 100 if m != 0 else float('inf')
+        cv_i = sd / abs(m) * 100 if m != 0 else float("inf")
         print(f"  {inst}: mean={m:+.1f}  std={sd:.1f}  CV={cv_i:.1f}%  [{min(vals):+.1f}, {max(vals):+.1f}]")
 
 # ============================================================
@@ -145,6 +147,7 @@ print("the aggregate has genuine skill.\n")
 # Monkey-patch load_single_config_feature_matrix to shuffle y after loading.
 _original_load = _feat_mod.load_single_config_feature_matrix
 
+
 def _shuffled_load(*args, **kwargs):
     X, y, meta = _original_load(*args, **kwargs)
     # Shuffle y (break the relationship between features and outcomes)
@@ -152,6 +155,7 @@ def _shuffled_load(*args, **kwargs):
     y_shuffled = y.copy()
     y_shuffled[:] = rng.permutation(y.values)
     return X, y_shuffled, meta
+
 
 null_deltas = []
 for rep in range(20):
@@ -162,7 +166,8 @@ for rep in range(20):
     for inst, kwargs in INSTRUMENTS:
         try:
             r = train_per_session_meta_label(
-                inst, str(GOLD_DB_PATH),
+                inst,
+                str(GOLD_DB_PATH),
                 save_model=False,
                 run_cpcv=False,
                 single_config=True,
@@ -193,9 +198,9 @@ print(f"Real model (mean):   {mean_h:+.1f}R")
 n_above = sum(1 for d in null_deltas if d >= mean_h)
 print(f"Null reps >= real mean: {n_above}/{len(null_deltas)}")
 if n_above == 0:
-    print(f"p-value: < {1/len(null_deltas):.3f} (0/{len(null_deltas)} null reps beat real)")
+    print(f"p-value: < {1 / len(null_deltas):.3f} (0/{len(null_deltas)} null reps beat real)")
 else:
-    print(f"p-value: {n_above/len(null_deltas):.3f}")
+    print(f"p-value: {n_above / len(null_deltas):.3f}")
 
 if n_above == 0:
     print("VERDICT: REAL SKILL (no null rep reached real performance)")

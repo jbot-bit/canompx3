@@ -2,6 +2,7 @@
 Single pre-specified feature. ATR-independent. 3-way split verified.
 
 7 verification tests. Kill criteria enforced. No bias."""
+
 import sys
 
 sys.path.insert(0, r"C:\Users\joshd\canompx3")
@@ -33,9 +34,9 @@ df = con.execute("""
 con.close()
 
 td = pd.to_datetime(df["trading_day"])
-sel = df[td < pd.Timestamp("2023-01-01")]      # feature selection validation
+sel = df[td < pd.Timestamp("2023-01-01")]  # feature selection validation
 cal = df[(td >= pd.Timestamp("2023-01-01")) & (td < pd.Timestamp("2025-01-01"))]  # threshold calibration
-test = df[td >= pd.Timestamp("2025-01-01")]     # blind test
+test = df[td >= pd.Timestamp("2025-01-01")]  # blind test
 
 print(f"MNQ E2 CB1 RR2.0: sel={len(sel)}, cal={len(cal)}, test={len(test)}")
 print(f"Test baseline: {test['pnl_r'].mean():+.4f}R")
@@ -43,9 +44,9 @@ print(f"Test baseline: {test['pnl_r'].mean():+.4f}R")
 # ================================================================
 # SESSION SELECTION (from calibration, NOT test)
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("SESSION SELECTION (calibration 2023-2024)")
-print("="*70)
+print("=" * 70)
 
 # Check per-session performance on calibration
 DROP_SESSIONS = []
@@ -67,9 +68,18 @@ feat = "orb_SINGAPORE_OPEN_break_bar_volume"
 
 # SESSION ELIGIBILITY: SINGAPORE features only valid for sessions AFTER Singapore (idx>=3)
 SESSION_ORDER = [
-    "CME_REOPEN", "TOKYO_OPEN", "BRISBANE_1025", "SINGAPORE_OPEN",
-    "LONDON_METALS", "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN",
-    "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE"
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "BRISBANE_1025",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "EUROPE_FLOW",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 SING_IDX = SESSION_ORDER.index("SINGAPORE_OPEN")  # 3
 ELIGIBLE_SESSIONS = [s for s in SESSION_ORDER if SESSION_ORDER.index(s) > SING_IDX]
@@ -81,15 +91,20 @@ threshold = cal_vals.quantile(0.80)
 print(f"Threshold (80th pct from cal): {threshold:.0f}")
 
 # Risk cap from calibration
-cal_risk = np.abs(pd.to_numeric(cal["entry_price"], errors="coerce") - pd.to_numeric(cal["stop_price"], errors="coerce")).dropna()
+cal_risk = np.abs(
+    pd.to_numeric(cal["entry_price"], errors="coerce") - pd.to_numeric(cal["stop_price"], errors="coerce")
+).dropna()
 q1r, q3r = cal_risk.quantile(0.25), cal_risk.quantile(0.75)
 risk_cap = q3r + 1.5 * (q3r - q1r)
 print(f"Risk cap: {risk_cap:.1f} pts")
 
+
 def apply_strategy(data, threshold, risk_cap, drop_sessions, eligible_sessions, feat):
     """Apply the full strategy filter."""
     data = data.copy()
-    data["risk_pts"] = np.abs(pd.to_numeric(data["entry_price"], errors="coerce") - pd.to_numeric(data["stop_price"], errors="coerce"))
+    data["risk_pts"] = np.abs(
+        pd.to_numeric(data["entry_price"], errors="coerce") - pd.to_numeric(data["stop_price"], errors="coerce")
+    )
 
     # Drop bad sessions
     mask = ~data["orb_label"].isin(drop_sessions)
@@ -103,32 +118,46 @@ def apply_strategy(data, threshold, risk_cap, drop_sessions, eligible_sessions, 
 
     return data[mask]
 
+
 # ================================================================
 # TEST 1: 3-WAY TEMPORAL SPLIT
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 1: 3-WAY TEMPORAL SPLIT")
-print("="*70)
+print("=" * 70)
 
 for label, sub in [("Pre-2023", sel), ("Cal 2023-24", cal), ("Test 2025+", test)]:
     filtered = apply_strategy(sub, threshold, risk_cap, DROP_SESSIONS, ELIGIBLE_SESSIONS, feat)
     baseline = sub[~sub["orb_label"].isin(DROP_SESSIONS)]
-    baseline = baseline[baseline.apply(lambda r: np.abs(float(r["entry_price"]) - float(r["stop_price"])) <= risk_cap if pd.notna(r["entry_price"]) else True, axis=1)]
+    baseline = baseline[
+        baseline.apply(
+            lambda r: (
+                np.abs(float(r["entry_price"]) - float(r["stop_price"])) <= risk_cap
+                if pd.notna(r["entry_price"])
+                else True
+            ),
+            axis=1,
+        )
+    ]
 
     if len(filtered) > 20 and len(baseline) > 50:
-        print(f"  {label:<15} Base: {baseline['pnl_r'].mean():+.4f} (N={len(baseline)})  Filtered: {filtered['pnl_r'].mean():+.4f} (N={len(filtered)})  Lift: {filtered['pnl_r'].mean() - baseline['pnl_r'].mean():+.4f}")
+        print(
+            f"  {label:<15} Base: {baseline['pnl_r'].mean():+.4f} (N={len(baseline)})  Filtered: {filtered['pnl_r'].mean():+.4f} (N={len(filtered)})  Lift: {filtered['pnl_r'].mean() - baseline['pnl_r'].mean():+.4f}"
+        )
 
 # ================================================================
 # TEST 2: BOOTSTRAP (1000 reps)
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 2: BOOTSTRAP (1000 reps)")
-print("="*70)
+print("=" * 70)
 
 filtered_test = apply_strategy(test, threshold, risk_cap, DROP_SESSIONS, ELIGIBLE_SESSIONS, feat)
 # Baseline: same drop + risk cap, no feature filter
 base_test = test[~test["orb_label"].isin(DROP_SESSIONS)].copy()
-base_test["risk_pts"] = np.abs(pd.to_numeric(base_test["entry_price"], errors="coerce") - pd.to_numeric(base_test["stop_price"], errors="coerce"))
+base_test["risk_pts"] = np.abs(
+    pd.to_numeric(base_test["entry_price"], errors="coerce") - pd.to_numeric(base_test["stop_price"], errors="coerce")
+)
 base_test = base_test[base_test["risk_pts"] <= risk_cap]
 
 real_pnl = filtered_test["pnl_r"].values
@@ -153,9 +182,9 @@ print(f"  {'PASS' if boot_p < 0.05 else 'FAIL'}")
 # ================================================================
 # TEST 3: FEATURE SHUFFLE (200 reps)
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 3: FEATURE SHUFFLE (200 reps)")
-print("="*70)
+print("=" * 70)
 
 null_shuffle = []
 for rep in range(200):
@@ -178,9 +207,9 @@ print(f"  {'PASS' if shuffle_p < 0.05 else 'FAIL'}")
 # ================================================================
 # TEST 4: WALK-FORWARD (5 windows)
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 4: WALK-FORWARD (5 windows)")
-print("="*70)
+print("=" * 70)
 
 windows = [
     ("train<2022, test=2022", "2022-01-01", "2023-01-01"),
@@ -201,7 +230,9 @@ for name, ts, te in windows:
 
     # Calibrate on train
     w_thresh = pd.to_numeric(train[feat], errors="coerce").dropna().quantile(0.80)
-    w_risk = np.abs(pd.to_numeric(train["entry_price"], errors="coerce") - pd.to_numeric(train["stop_price"], errors="coerce")).dropna()
+    w_risk = np.abs(
+        pd.to_numeric(train["entry_price"], errors="coerce") - pd.to_numeric(train["stop_price"], errors="coerce")
+    ).dropna()
     wq1, wq3 = w_risk.quantile(0.25), w_risk.quantile(0.75)
     w_rc = wq3 + 1.5 * (wq3 - wq1)
 
@@ -220,7 +251,9 @@ for name, ts, te in windows:
         wf_total += 1
         if spread > 0:
             wf_pos += 1
-        print(f"  {name}: base={base['pnl_r'].mean():+.4f} filt={filt['pnl_r'].mean():+.4f} spread={spread:+.4f} N={len(filt)}")
+        print(
+            f"  {name}: base={base['pnl_r'].mean():+.4f} filt={filt['pnl_r'].mean():+.4f} spread={spread:+.4f} N={len(filt)}"
+        )
 
 print(f"\n  Walk-forward: {wf_pos}/{wf_total} positive")
 print(f"  {'PASS' if wf_pos >= 3 else 'FAIL'}")
@@ -228,28 +261,35 @@ print(f"  {'PASS' if wf_pos >= 3 else 'FAIL'}")
 # ================================================================
 # TEST 5: PER-SESSION BREAKDOWN (2025+)
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 5: PER-SESSION (2025+)")
-print("="*70)
+print("=" * 70)
 
 for session in sorted(filtered_test["orb_label"].unique()):
     s = filtered_test[filtered_test["orb_label"] == session]
     if len(s) > 10:
-        print(f"  {session:<22} N={len(s):>4} ExpR={s['pnl_r'].mean():+.4f} WR={(s['pnl_r']>0).mean():.1%}")
+        print(f"  {session:<22} N={len(s):>4} ExpR={s['pnl_r'].mean():+.4f} WR={(s['pnl_r'] > 0).mean():.1%}")
 
 # ================================================================
 # TEST 6: DRAWDOWN
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 6: DRAWDOWN (2025+)")
-print("="*70)
+print("=" * 70)
 
 filt_sorted = filtered_test.sort_values("trading_day")
 pnl_seq = filt_sorted["pnl_r"].values
 cumr = np.cumsum(pnl_seq)
 peak = np.maximum.accumulate(cumr)
 dd = (cumr - peak).min()
-risk_pts = filt_sorted["risk_pts"].values if "risk_pts" in filt_sorted.columns else np.abs(pd.to_numeric(filt_sorted["entry_price"], errors="coerce") - pd.to_numeric(filt_sorted["stop_price"], errors="coerce")).values
+risk_pts = (
+    filt_sorted["risk_pts"].values
+    if "risk_pts" in filt_sorted.columns
+    else np.abs(
+        pd.to_numeric(filt_sorted["entry_price"], errors="coerce")
+        - pd.to_numeric(filt_sorted["stop_price"], errors="coerce")
+    ).values
+)
 avg_risk_pts = np.nanmean(risk_pts)
 
 max_streak = 0
@@ -270,9 +310,9 @@ print(f"  Max consecutive losses: {max_streak}")
 # ================================================================
 # TEST 7: ATR INDEPENDENCE
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 7: ATR INDEPENDENCE")
-print("="*70)
+print("=" * 70)
 
 feat_vals = pd.to_numeric(filtered_test[feat], errors="coerce")
 atr_vals = pd.to_numeric(filtered_test["atr_20"], errors="coerce")
@@ -285,9 +325,9 @@ if valid.sum() > 50:
 # ================================================================
 # FINAL VERDICT
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("FINAL VERDICT")
-print("="*70)
+print("=" * 70)
 
 passed = 0
 total = 0

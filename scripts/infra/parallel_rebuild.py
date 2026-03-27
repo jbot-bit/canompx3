@@ -505,7 +505,9 @@ Examples:
         default=DEFAULT_APERTURES,
         help=f"ORB apertures to rebuild (default: {DEFAULT_APERTURES})",
     )
-    parser.add_argument("--min-sample", type=int, default=30, help="Min sample for validator (canon: REGIME_MIN_SAMPLES=30)")
+    parser.add_argument(
+        "--min-sample", type=int, default=30, help="Min sample for validator (canon: REGIME_MIN_SAMPLES=30)"
+    )
     parser.add_argument("--dry-run", action="store_true", help="Show plan, don't execute")
 
     args = parser.parse_args()
@@ -597,7 +599,9 @@ Examples:
 
         print(f"\n{'=' * 60}")
         print(f"PHASE 2: Running {len(instruments)} instrument(s) in parallel")
-        print(f"  {n_apertures} apertures x {n_aperture_steps} steps + {len(global_steps)} global = {total_sub_steps} sub-steps per instrument")
+        print(
+            f"  {n_apertures} apertures x {n_aperture_steps} steps + {len(global_steps)} global = {total_sub_steps} sub-steps per instrument"
+        )
         print(f"{'=' * 60}")
 
         from concurrent.futures import ThreadPoolExecutor, as_completed

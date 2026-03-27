@@ -48,11 +48,7 @@ def save_manifest(instrument: str, manifest: dict):
 
 def get_remaining_seeds(manifest: dict) -> list[int]:
     """Return seeds not yet completed (PASS or FAIL)."""
-    done = {
-        int(k)
-        for k, v in manifest.get("seeds", {}).items()
-        if v.get("status") in ("PASS", "FAIL")
-    }
+    done = {int(k) for k, v in manifest.get("seeds", {}).items() if v.get("status") in ("PASS", "FAIL")}
     return sorted(set(range(TARGET_SEEDS)) - done)
 
 
@@ -60,11 +56,17 @@ def run_single_seed(instrument: str, seed: int) -> dict:
     """Run one null seed and return the result dict."""
     start = time.time()
     cmd = [
-        PYTHON, "-m", "scripts.tests.test_synthetic_null",
-        "--instrument", instrument,
-        "--seeds", "1",
-        "--start-seed", str(seed),
-        "--output-dir", str(SEED_DIR / instrument.lower()),
+        PYTHON,
+        "-m",
+        "scripts.tests.test_synthetic_null",
+        "--instrument",
+        instrument,
+        "--seeds",
+        "1",
+        "--start-seed",
+        str(seed),
+        "--output-dir",
+        str(SEED_DIR / instrument.lower()),
     ]
 
     try:
@@ -93,6 +95,7 @@ def run_single_seed(instrument: str, seed: int) -> dict:
         for line in output.split("\n"):
             if "validated_count" in line or "validated=" in line:
                 import re
+
                 m = re.search(r"validated[=_](\d+)", line)
                 if m:
                     survivors = int(m.group(1))
@@ -102,6 +105,7 @@ def run_single_seed(instrument: str, seed: int) -> dict:
         for line in output.split("\n"):
             if "noise_positive_expr" in line or "max_oos" in line:
                 import re
+
                 m = re.search(r"noise_positive_expr=([\d.]+)", line)
                 if m:
                     max_oos = float(m.group(1))
@@ -139,17 +143,17 @@ def run_instrument(instrument: str, max_workers: int):
     remaining = get_remaining_seeds(manifest)
 
     done = TARGET_SEEDS - len(remaining)
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"{instrument}: {done}/{TARGET_SEEDS} done, {len(remaining)} remaining")
-    print(f"Workers: {max_workers} (~{max_workers/CPU_COUNT*100:.0f}% of {CPU_COUNT} cores)")
-    print(f"{'='*60}\n")
+    print(f"Workers: {max_workers} (~{max_workers / CPU_COUNT * 100:.0f}% of {CPU_COUNT} cores)")
+    print(f"{'=' * 60}\n")
 
     if not remaining:
         print(f"{instrument}: All {TARGET_SEEDS} seeds complete.")
         return
 
     for i, seed in enumerate(remaining):
-        print(f"[{instrument}] Seed {seed} ({i+1}/{len(remaining)})...", flush=True)
+        print(f"[{instrument}] Seed {seed} ({i + 1}/{len(remaining)})...", flush=True)
 
         result = run_single_seed(instrument, seed)
 
@@ -172,8 +176,12 @@ def main():
     parser = argparse.ArgumentParser(description="Overnight null seed runner with checkpointing")
     parser.add_argument("--instrument", type=str, default=None, help="Single instrument (MNQ, MGC, MES)")
     parser.add_argument("--all", action="store_true", help="Run all instruments: MNQ → MES → MGC")
-    parser.add_argument("--max-workers", type=int, default=DEFAULT_WORKERS,
-                        help=f"Max parallel workers (default: {DEFAULT_WORKERS}, ~70%% of {CPU_COUNT} cores)")
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=DEFAULT_WORKERS,
+        help=f"Max parallel workers (default: {DEFAULT_WORKERS}, ~70%% of {CPU_COUNT} cores)",
+    )
     args = parser.parse_args()
 
     if args.all:

@@ -581,7 +581,9 @@ def _handoff_workstream(workstreams: list[dict[str, Any]], cursor: int = 0) -> i
     else:
         return None
 
-    success, output = handoff_workstream(name, current_tool=current_tool, target_tool=target_tool, purpose=purpose, note=note)
+    success, output = handoff_workstream(
+        name, current_tool=current_tool, target_tool=target_tool, purpose=purpose, note=note
+    )
     if not success:
         console.print(f"  [red]Failed:[/] {output}")
         wait_for_key()
@@ -671,7 +673,9 @@ def main() -> int:
             raise RuntimeError(f"Unable to find workstream {args.task}.")
         current_tool = str(current.get("tool") or "")
         purpose = str(current.get("purpose") or "")
-        success, output = handoff_workstream(args.task, current_tool=current_tool, target_tool=args.tool, purpose=purpose)
+        success, output = handoff_workstream(
+            args.task, current_tool=current_tool, target_tool=args.tool, purpose=purpose
+        )
         if not success:
             raise RuntimeError(output)
         if args.tool == "claude":

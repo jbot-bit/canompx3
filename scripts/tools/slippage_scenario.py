@@ -29,16 +29,18 @@ def _build_lanes() -> list[dict]:
     for label, lane in sorted(registry.items()):
         if lane["instrument"] != "MNQ":
             continue  # slippage scenario is MNQ-specific
-        lanes.append({
-            "name": f"{label} {lane['filter_type']} RR{lane['rr_target']} O{lane['orb_minutes']}",
-            "symbol": lane["instrument"],
-            "orb_label": label,
-            "entry_model": lane["entry_model"],
-            "rr_target": lane["rr_target"],
-            "confirm_bars": lane["confirm_bars"],
-            "orb_minutes": lane["orb_minutes"],
-            "filter_type": lane["filter_type"],
-        })
+        lanes.append(
+            {
+                "name": f"{label} {lane['filter_type']} RR{lane['rr_target']} O{lane['orb_minutes']}",
+                "symbol": lane["instrument"],
+                "orb_label": label,
+                "entry_model": lane["entry_model"],
+                "rr_target": lane["rr_target"],
+                "confirm_bars": lane["confirm_bars"],
+                "orb_minutes": lane["orb_minutes"],
+                "filter_type": lane["filter_type"],
+            }
+        )
     return lanes
 
 

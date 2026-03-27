@@ -57,7 +57,10 @@ class ProjectXAuth(BrokerAuth):
                 wait = _BACKOFF_BASE * (2**attempt)
                 log.warning(
                     "Auth login attempt %d/%d failed: %s — retrying in %.0fs",
-                    attempt + 1, _MAX_RETRIES, e, wait,
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    e,
+                    wait,
                 )
                 if attempt < _MAX_RETRIES - 1:
                     time.sleep(wait)
@@ -65,11 +68,10 @@ class ProjectXAuth(BrokerAuth):
         self._auth_healthy = False
         log.critical(
             "Auth login FAILED after %d attempts: %s — orders will fail until resolved",
-            _MAX_RETRIES, last_error,
+            _MAX_RETRIES,
+            last_error,
         )
-        raise RuntimeError(
-            f"Auth login failed after {_MAX_RETRIES} attempts: {last_error}"
-        ) from last_error
+        raise RuntimeError(f"Auth login failed after {_MAX_RETRIES} attempts: {last_error}") from last_error
 
     def headers(self) -> dict:
         return {"Authorization": f"Bearer {self.get_token()}"}

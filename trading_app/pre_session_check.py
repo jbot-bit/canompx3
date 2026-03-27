@@ -111,8 +111,8 @@ def check_slippage_pilot_progress(con) -> str:
         ).fetchone()
         n = row[0] if row else 0
         return f"MNQ slippage pilot: {n}/30 live trades with slippage recorded"
-    except Exception:
-        return "MNQ slippage pilot: cannot query"
+    except (OSError, RuntimeError) as e:
+        return f"MNQ slippage pilot: cannot query ({e})"
 
 
 def check_hwm_tracker() -> tuple[bool, str]:

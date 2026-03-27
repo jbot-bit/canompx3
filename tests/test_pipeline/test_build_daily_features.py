@@ -897,6 +897,7 @@ class TestBuildIntegration:
         con = duckdb.connect(str(db_path))
 
         from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
         con.execute(BARS_1M_SCHEMA)
         con.execute(BARS_5M_SCHEMA)
         con.execute(DAILY_FEATURES_SCHEMA)
@@ -904,8 +905,8 @@ class TestBuildIntegration:
         # Day 1: 2024-01-05 — trading day starts 2024-01-04 23:00 UTC
         # Day 2: 2024-01-08 — trading day starts 2024-01-07 23:00 UTC (skip weekend)
         for day_offset, td_start_date, _td_start_day in [
-            (0, datetime(2024, 1, 4, 23, 0, 0, tzinfo=UTC_TZ), 5),   # Jan 5
-            (1, datetime(2024, 1, 7, 23, 0, 0, tzinfo=UTC_TZ), 8),   # Jan 8
+            (0, datetime(2024, 1, 4, 23, 0, 0, tzinfo=UTC_TZ), 5),  # Jan 5
+            (1, datetime(2024, 1, 7, 23, 0, 0, tzinfo=UTC_TZ), 8),  # Jan 8
         ]:
             base_price = 2350.0 + day_offset * 20  # Day 2 opens higher
             for i in range(120):  # 2 hours of 1m bars per day
@@ -913,9 +914,7 @@ class TestBuildIntegration:
                 price = base_price + i * 0.15
                 con.execute(
                     "INSERT INTO bars_1m VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    [ts.isoformat(), 'MGC', 'MGCM4',
-                     price, price + 3.0, price - 1.5, price + 0.5,
-                     100 + i],
+                    [ts.isoformat(), "MGC", "MGCM4", price, price + 3.0, price - 1.5, price + 0.5, 100 + i],
                 )
 
             # 5m bars for RSI (need 15+ prior to trading day)
@@ -925,8 +924,7 @@ class TestBuildIntegration:
                 price = base_price - 10 + i * 0.3
                 con.execute(
                     "INSERT INTO bars_5m VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    [ts.isoformat(), 'MGC', 'MGCM4',
-                     price, price + 1.0, price - 1.0, price + 0.2, 500],
+                    [ts.isoformat(), "MGC", "MGCM4", price, price + 1.0, price - 1.0, price + 0.2, 500],
                 )
 
         yield con
@@ -934,9 +932,7 @@ class TestBuildIntegration:
 
     def test_market_profile_columns_populated(self, multi_day_db):
         """After multi-day build, market profile columns are populated on day 2."""
-        count = build_daily_features(
-            multi_day_db, 'MGC', date(2024, 1, 5), date(2024, 1, 8), 5, False
-        )
+        count = build_daily_features(multi_day_db, "MGC", date(2024, 1, 5), date(2024, 1, 8), 5, False)
         assert count == 2
 
         # Day 2 should have prev_day_* from day 1
@@ -962,9 +958,7 @@ class TestBuildIntegration:
 
     def test_market_profile_day1_has_null_prev(self, multi_day_db):
         """First day in range should have NULL prev_day_* columns."""
-        build_daily_features(
-            multi_day_db, 'MGC', date(2024, 1, 5), date(2024, 1, 8), 5, False
-        )
+        build_daily_features(multi_day_db, "MGC", date(2024, 1, 5), date(2024, 1, 8), 5, False)
         row = multi_day_db.execute("""
             SELECT prev_day_high, prev_day_low, prev_day_close
             FROM daily_features

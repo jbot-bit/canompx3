@@ -76,10 +76,20 @@ async def api_trades():
                 """
             ).fetchall()
             cols = [
-                "trading_day", "strategy_id", "direction", "entry_model",
-                "engine_entry", "fill_entry", "fill_exit", "pnl_r", "pnl_dollars",
-                "exit_reason", "contracts", "session_mode",
-                "created_at", "exited_at",
+                "trading_day",
+                "strategy_id",
+                "direction",
+                "entry_model",
+                "engine_entry",
+                "fill_entry",
+                "fill_exit",
+                "pnl_r",
+                "pnl_dollars",
+                "exit_reason",
+                "contracts",
+                "session_mode",
+                "created_at",
+                "exited_at",
             ]
             trades = [dict(zip(cols, r, strict=False)) for r in rows]
             return {"trades": trades}
@@ -109,7 +119,10 @@ async def action_preflight():
             profile = portfolio_name.removeprefix("profile_")
         result = subprocess.run(
             [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"],
-            capture_output=True, text=True, timeout=30, cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(PROJECT_ROOT),
         )
         return {
             "status": "pass" if result.returncode == 0 else "fail",

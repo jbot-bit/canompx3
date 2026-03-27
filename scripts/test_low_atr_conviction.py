@@ -1,5 +1,6 @@
 """Test: LOW ATR + HIGH conviction = independent edge (anti-vol-filter).
 3-way split. Calibration medians. Bootstrap verified."""
+
 import sys
 
 sys.path.insert(0, r"C:\Users\joshd\canompx3")
@@ -44,25 +45,25 @@ for label, sub in [("PRE-2023 (selection)", sel), ("2023-2024 (calibration)", ca
     r = rv[valid].values
     p = pnl[valid.values]
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {label} (N={len(p)})")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     combos = {
         "Low ATR + High conv": (a < cal_atr_med) & (r >= cal_rv_med),
-        "Low ATR + Low conv":  (a < cal_atr_med) & (r < cal_rv_med),
+        "Low ATR + Low conv": (a < cal_atr_med) & (r < cal_rv_med),
         "High ATR + High conv": (a >= cal_atr_med) & (r >= cal_rv_med),
-        "High ATR + Low conv":  (a >= cal_atr_med) & (r < cal_rv_med),
+        "High ATR + Low conv": (a >= cal_atr_med) & (r < cal_rv_med),
     }
     for name, mask in combos.items():
         s = p[mask]
         if len(s) > 10:
-            print(f"  {name:<28} N={len(s):>5} ExpR={s.mean():+.4f} WR={(s>0).mean():.1%}")
+            print(f"  {name:<28} N={len(s):>5} ExpR={s.mean():+.4f} WR={(s > 0).mean():.1%}")
 
 # Bootstrap on test
-print(f"\n{'='*60}")
+print(f"\n{'=' * 60}")
 print("BOOTSTRAP: Low ATR + High conviction (2025+, 500 reps)")
-print("="*60)
+print("=" * 60)
 
 atr_t = pd.to_numeric(test["atr_20"], errors="coerce")
 rv_t = pd.to_numeric(test["rel_vol_TOKYO_OPEN"], errors="coerce")
@@ -86,12 +87,12 @@ for rep in range(500):
 n_above = sum(1 for n in null_means if n >= target_mean)
 print(f"  Real: {target_mean:+.4f}R (N={n_target})")
 print(f"  Random: {statistics.mean(null_means):+.4f}R")
-print(f"  p-value: {n_above/500:.4f}")
+print(f"  p-value: {n_above / 500:.4f}")
 
 # Per-session
-print(f"\n{'='*60}")
+print(f"\n{'=' * 60}")
 print("PER-SESSION: Low ATR + High conv (2025+)")
-print("="*60)
+print("=" * 60)
 test_v = test[valid_t.values].copy()
 test_v["target"] = target
 for session in sorted(test_v["orb_label"].unique()):

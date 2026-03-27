@@ -156,13 +156,15 @@ def compute_sigma_per_year(db_path: Path, instrument: str) -> list[dict]:
         mask = (arr >= p005) & (arr <= p995)
         trimmed = arr[mask]
         trimmed_std = float(np.std(trimmed, ddof=1))
-        results.append({
-            "year": int(yr),
-            "total_n": len(arr),
-            "trimmed_n": len(trimmed),
-            "trimmed_std": trimmed_std,
-            "proposed_sigma": round(trimmed_std, 2),
-        })
+        results.append(
+            {
+                "year": int(yr),
+                "total_n": len(arr),
+                "trimmed_n": len(trimmed),
+                "trimmed_std": trimmed_std,
+                "proposed_sigma": round(trimmed_std, 2),
+            }
+        )
 
     return results
 

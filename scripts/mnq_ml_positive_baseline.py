@@ -1,6 +1,7 @@
 """MNQ ML on POSITIVE BASELINE — the full picture.
 ALL sessions (35K trades), all honest features, session eligibility, bootstrap verified.
 RR2.0 (proven positive baseline +0.044R p<0.000001)."""
+
 import sys
 
 sys.path.insert(0, r"C:\Users\joshd\canompx3")
@@ -20,6 +21,7 @@ from trading_app.ml.config import LOOKAHEAD_BLACKLIST, RF_PARAMS, SESSION_CHRONO
 SESSION_ORDER = list(SESSION_CHRONOLOGICAL_ORDER)
 SING_IDX = SESSION_ORDER.index("SINGAPORE_OPEN")
 
+
 def get_eligible_features(session, all_features):
     """Return features available BEFORE the target session."""
     target_idx = SESSION_ORDER.index(session) if session in SESSION_ORDER else 99
@@ -38,6 +40,7 @@ def get_eligible_features(session, all_features):
         elif SESSION_ORDER.index(source) < target_idx:
             eligible.append(feat)  # source completed before target
     return eligible
+
 
 # Load ALL MNQ E2 RR2.0 with features
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -61,10 +64,33 @@ df = df[df["orb_label"] != "NYSE_CLOSE"]
 print(f"After NYSE_CLOSE drop: {len(df)} trades, baseline={df['pnl_r'].mean():+.4f}R")
 
 # Identify feature columns (exclude outcomes, timestamps, identifiers, lookahead)
-SKIP = {"pnl_r","trading_day","symbol","orb_minutes","orb_label","entry_price","stop_price",
-        "trading_day_1","outcome","entry_ts","exit_ts","exit_price","target_price",
-        "risk_dollars","pnl_dollars","mae_r","mfe_r","ambiguous_bar","ts_outcome","ts_pnl_r","ts_exit_ts",
-        "entry_model","rr_target","confirm_bars","instrument"}
+SKIP = {
+    "pnl_r",
+    "trading_day",
+    "symbol",
+    "orb_minutes",
+    "orb_label",
+    "entry_price",
+    "stop_price",
+    "trading_day_1",
+    "outcome",
+    "entry_ts",
+    "exit_ts",
+    "exit_price",
+    "target_price",
+    "risk_dollars",
+    "pnl_dollars",
+    "mae_r",
+    "mfe_r",
+    "ambiguous_bar",
+    "ts_outcome",
+    "ts_pnl_r",
+    "ts_exit_ts",
+    "entry_model",
+    "rr_target",
+    "confirm_bars",
+    "instrument",
+}
 # Import canonical blacklist — NEVER maintain a separate list
 BLACKLIST = list(LOOKAHEAD_BLACKLIST) + ["garch", "break_ts"]  # garch/break_ts not in canonical but still noise
 
@@ -167,8 +193,18 @@ for session in sessions:
             # Quality gates
             if auc >= 0.52 and delta >= 0 and kept_mask.sum() >= 10:
                 all_kept_pnl.extend(kept_pnl.tolist())
-                results.append((session, aperture, auc, delta, len(test_idx), kept_mask.sum(),
-                               kept_pnl.mean(), skip_pnl.mean() if len(skip_pnl) > 0 else 0))
+                results.append(
+                    (
+                        session,
+                        aperture,
+                        auc,
+                        delta,
+                        len(test_idx),
+                        kept_mask.sum(),
+                        kept_pnl.mean(),
+                        skip_pnl.mean() if len(skip_pnl) > 0 else 0,
+                    )
+                )
             else:
                 # Model rejected — take all trades (fail-open)
                 all_test_pnl.extend(test_pnl.tolist())
@@ -178,10 +214,14 @@ for session in sessions:
 # Combine: ML-filtered trades + fail-open trades
 total_pnl = np.array(all_kept_pnl + all_test_pnl)
 
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("MNQ ML RESULTS (positive baseline, session eligibility)")
-print("="*70)
-print(f"  ML-filtered trades: {len(all_kept_pnl)} (mean={np.mean(all_kept_pnl):+.4f}R)" if all_kept_pnl else "  No ML models")
+print("=" * 70)
+print(
+    f"  ML-filtered trades: {len(all_kept_pnl)} (mean={np.mean(all_kept_pnl):+.4f}R)"
+    if all_kept_pnl
+    else "  No ML models"
+)
 print(f"  Fail-open trades:   {len(all_test_pnl)} (mean={np.mean(all_test_pnl):+.4f}R)" if all_test_pnl else "")
 print(f"  Total test trades:  {len(total_pnl)} (mean={total_pnl.mean():+.4f}R)")
 print(f"  Models: {len(results)}")
@@ -189,12 +229,14 @@ print(f"  Models: {len(results)}")
 if results:
     print("\n  Per-model:")
     for session, ap, auc, delta, nt, nk, kept_mean, skip_mean in results:
-        print(f"    {session:<22} O{ap} AUC={auc:.3f} delta={delta:+.1f}R kept={kept_mean:+.3f} skip={skip_mean:+.3f} N={nk}/{nt}")
+        print(
+            f"    {session:<22} O{ap} AUC={auc:.3f} delta={delta:+.1f}R kept={kept_mean:+.3f} skip={skip_mean:+.3f} N={nk}/{nt}"
+        )
 
 # BOOTSTRAP: does ML improve over baseline on positive data?
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("BOOTSTRAP: ML vs random on POSITIVE baseline (500 reps)")
-print("="*70)
+print("=" * 70)
 
 # Baseline: all test trades without ML
 all_raw_test = pnl_r[n_val_end:]
@@ -211,8 +253,8 @@ n_above = sum(1 for n in null_means if n >= ml_mean)
 print(f"  ML portfolio: {ml_mean:+.4f}R (N={n_ml})")
 print(f"  Raw baseline: {all_raw_test.mean():+.4f}R (N={len(all_raw_test)})")
 print(f"  Random: {statistics.mean(null_means):+.4f}R")
-print(f"  p-value: {n_above/500:.4f}")
-print(f"  {'ML ADDS VALUE' if n_above/500 < 0.05 else 'ML DOES NOT ADD VALUE over baseline'}")
+print(f"  p-value: {n_above / 500:.4f}")
+print(f"  {'ML ADDS VALUE' if n_above / 500 < 0.05 else 'ML DOES NOT ADD VALUE over baseline'}")
 
 # Key: does ML HURT the positive baseline?
 if ml_mean < all_raw_test.mean():

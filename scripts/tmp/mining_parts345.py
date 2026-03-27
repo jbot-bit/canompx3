@@ -1,4 +1,5 @@
 """Mining escalation Parts 3-5. Run once, delete after."""
+
 import io
 import sys
 
@@ -11,11 +12,14 @@ from pipeline.db_config import configure_connection
 con = duckdb.connect("gold.db", read_only=True)
 configure_connection(con)
 
+
 def qr(sql):
     return con.execute(sql).fetchall()
 
+
 def q1(sql):
     return con.execute(sql).fetchone()
+
 
 print("PART 3: INTERACTION TESTS")
 print("=" * 70)
@@ -83,13 +87,18 @@ print("=" * 70)
 
 print("  Kill review 1: Friday NYSE_CLOSE win size")
 for name, filt in [("Friday", "EXTRACT(DOW FROM o.trading_day)=5"), ("Non-Fri", "EXTRACT(DOW FROM o.trading_day)!=5")]:
-    wins = [float(r[0]) for r in qr(f"""
+    wins = [
+        float(r[0])
+        for r in qr(f"""
         SELECT o.pnl_r FROM orb_outcomes o
         WHERE o.symbol='MNQ' AND o.orb_label='NYSE_CLOSE' AND o.orb_minutes=5
           AND o.entry_model='E2' AND o.confirm_bars=1 AND o.rr_target=1.0
           AND {filt} AND o.pnl_r > 0 AND o.trading_day<'2026-01-01'
-    """)]
-    print(f"    {name}: N_wins={len(wins)}, mean={np.mean(wins):.4f}, median={np.median(wins):.4f}, P90={np.percentile(wins,90):.4f}")
+    """)
+    ]
+    print(
+        f"    {name}: N_wins={len(wins)}, mean={np.mean(wins):.4f}, median={np.median(wins):.4f}, P90={np.percentile(wins, 90):.4f}"
+    )
 
 print("\n  Kill review 2: Top month x session per-year")
 for mo, sess in [(4, "COMEX_SETTLE"), (8, "US_DATA_1000"), (1, "US_DATA_1000")]:
@@ -177,6 +186,8 @@ for sess in ["NYSE_OPEN", "COMEX_SETTLE"]:
     if len(rows) == 2:
         gap = float(rows[1][2]) - float(rows[0][2])
         tag = "EXTENDS" if gap > 0.03 else "WEAK"
-        print(f"  overnight_took_pdh x {sess:<18} F:ExpR={rows[0][2]:+.4f} T:ExpR={rows[1][2]:+.4f} gap={gap:+.4f} [{tag}]")
+        print(
+            f"  overnight_took_pdh x {sess:<18} F:ExpR={rows[0][2]:+.4f} T:ExpR={rows[1][2]:+.4f} gap={gap:+.4f} [{tag}]"
+        )
 
 con.close()

@@ -79,9 +79,7 @@ def revalidate_seed(instrument: str, seed_num: int) -> dict:
         # Clear old validation
         con = duckdb.connect(str(db_path))
         con.execute("DELETE FROM validated_setups")
-        con.execute(
-            "UPDATE experimental_strategies SET validation_status = NULL, validation_notes = NULL"
-        )
+        con.execute("UPDATE experimental_strategies SET validation_status = NULL, validation_notes = NULL")
         con.close()
 
         # Write K override file (production K values, not null DB K)
@@ -116,9 +114,7 @@ def revalidate_seed(instrument: str, seed_num: int) -> dict:
         # Get max ExpR from survivors (for noise floor calculation)
         max_expr = None
         if val_count > 0:
-            r = con.execute(
-                "SELECT MAX(expectancy_r) FROM validated_setups"
-            ).fetchone()
+            r = con.execute("SELECT MAX(expectancy_r) FROM validated_setups").fetchone()
             max_expr = r[0] if r else None
 
         con.close()
@@ -157,16 +153,16 @@ def run_instrument(instrument: str):
 
         needs_revalidation.append(seed_num)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"{instrument}: {len(needs_revalidation)} seeds need re-validation")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     if not needs_revalidation:
         print("All seeds already validated with stratified-K.")
         return
 
     for i, seed_num in enumerate(needs_revalidation):
-        print(f"[{instrument}] Seed {seed_num} ({i+1}/{len(needs_revalidation)})...", end=" ", flush=True)
+        print(f"[{instrument}] Seed {seed_num} ({i + 1}/{len(needs_revalidation)})...", end=" ", flush=True)
 
         result = revalidate_seed(instrument, seed_num)
 
@@ -182,11 +178,7 @@ def run_instrument(instrument: str):
         print(f"{status} (survivors={survivors}{expr_str}, {elapsed:.0f}s)", flush=True)
 
         if (i + 1) % 10 == 0:
-            done_strat = sum(
-                1
-                for v in manifest["seeds"].values()
-                if v.get("fdr_method") == "stratified-K-by-session"
-            )
+            done_strat = sum(1 for v in manifest["seeds"].values() if v.get("fdr_method") == "stratified-K-by-session")
             print(f"  --- {instrument}: {done_strat} re-validated ---", flush=True)
 
     # Final summary

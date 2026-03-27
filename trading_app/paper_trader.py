@@ -161,9 +161,7 @@ def _get_daily_features_row(con, instrument: str, trading_day: date) -> dict | N
     return dict(zip(columns, row, strict=False))
 
 
-def _inject_cross_asset_atrs_for_replay(
-    con, row: dict, instrument: str, trading_day: date
-) -> None:
+def _inject_cross_asset_atrs_for_replay(con, row: dict, instrument: str, trading_day: date) -> None:
     """Inject cross-asset ATR percentiles into daily features row for replay.
 
     Mirrors session_orchestrator._build_daily_features_row() lines 330-348.
@@ -172,9 +170,7 @@ def _inject_cross_asset_atrs_for_replay(
     """
     from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
 
-    cross_sources = {
-        f.source_instrument for f in ALL_FILTERS.values() if isinstance(f, CrossAssetATRFilter)
-    }
+    cross_sources = {f.source_instrument for f in ALL_FILTERS.values() if isinstance(f, CrossAssetATRFilter)}
     for source in cross_sources:
         if source == instrument:
             continue

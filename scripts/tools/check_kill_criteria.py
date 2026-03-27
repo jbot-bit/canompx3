@@ -36,19 +36,21 @@ import duckdb
 # Pre-registered kill thresholds (FROZEN -- from pre-registration doc)
 # =========================================================================
 
-SESSION_EXPR_THRESHOLD = 0.03      # ExpR per session after N trades
-SESSION_TRADE_THRESHOLD = 100      # Min trades before session kill fires
-SLIPPAGE_TICK_THRESHOLD = 3.0      # Max avg slippage (ticks) before STOP
-SLIPPAGE_TRADE_THRESHOLD = 100     # Min trades before slippage kill fires
-PORTFOLIO_EXPR_THRESHOLD = 0.05    # Portfolio-wide ExpR after N trades
-PORTFOLIO_TRADE_THRESHOLD = 200    # Min trades before portfolio kill fires
+SESSION_EXPR_THRESHOLD = 0.03  # ExpR per session after N trades
+SESSION_TRADE_THRESHOLD = 100  # Min trades before session kill fires
+SLIPPAGE_TICK_THRESHOLD = 3.0  # Max avg slippage (ticks) before STOP
+SLIPPAGE_TRADE_THRESHOLD = 100  # Min trades before slippage kill fires
+PORTFOLIO_EXPR_THRESHOLD = 0.05  # Portfolio-wide ExpR after N trades
+PORTFOLIO_TRADE_THRESHOLD = 200  # Min trades before portfolio kill fires
 
 # Pre-registered sessions (from docs/pre-registrations/2026-03-20-mnq-rr1-verified-sessions.md)
-PRE_REGISTERED_SESSIONS = frozenset({
-    "NYSE_OPEN",       # BH FDR PASS
-    "COMEX_SETTLE",    # BH FDR PASS
-    "CME_PRECLOSE",    # Pre-registered for single-test 2026
-})
+PRE_REGISTERED_SESSIONS = frozenset(
+    {
+        "NYSE_OPEN",  # BH FDR PASS
+        "COMEX_SETTLE",  # BH FDR PASS
+        "CME_PRECLOSE",  # Pre-registered for single-test 2026
+    }
+)
 
 # MNQ tick size for slippage conversion
 MNQ_TICK_SIZE = 0.25
@@ -90,9 +92,7 @@ def _default_journal_path() -> Path:
     return Path(__file__).parent.parent.parent / "live_journal.db"
 
 
-def load_journal(
-    journal_path: Path, instrument: str = "MNQ"
-) -> list[dict]:
+def load_journal(journal_path: Path, instrument: str = "MNQ") -> list[dict]:
     """Load completed trades from live_journal.db for the given instrument."""
     if not journal_path.exists():
         return []
@@ -180,16 +180,18 @@ def load_from_outcomes(
             continue
         # Synthesize strategy_id matching the format used by build_raw_baseline_portfolio
         sid = f"{instrument}_{r['orb_label']}_{entry_model}_RR{rr_target}_CB{confirm_bars}_NO_FILTER"
-        trades.append({
-            "trade_id": f"batch_{r['trading_day']}_{r['orb_label']}",
-            "trading_day": r["trading_day"],
-            "instrument": instrument,
-            "strategy_id": sid,
-            "actual_r": float(r["pnl_r"]),
-            "slippage_pts": None,  # E2 slippage baked into entry_price
-            "pnl_dollars": None,
-            "session_mode": "batch",
-        })
+        trades.append(
+            {
+                "trade_id": f"batch_{r['trading_day']}_{r['orb_label']}",
+                "trading_day": r["trading_day"],
+                "instrument": instrument,
+                "strategy_id": sid,
+                "actual_r": float(r["pnl_r"]),
+                "slippage_pts": None,  # E2 slippage baked into entry_price
+                "pnl_dollars": None,
+                "session_mode": "batch",
+            }
+        )
 
     return trades
 
@@ -226,16 +228,18 @@ def check_session_expr(trades: list[dict]) -> list[dict]:
         active = n >= SESSION_TRADE_THRESHOLD
         killed = active and expr < SESSION_EXPR_THRESHOLD
 
-        results.append({
-            "session": sess,
-            "trades": n,
-            "expr": expr,
-            "threshold": SESSION_EXPR_THRESHOLD,
-            "min_trades": SESSION_TRADE_THRESHOLD,
-            "active": active,
-            "verdict": "KILL" if killed else ("PASS" if active else "WAITING"),
-            "pre_registered": sess in PRE_REGISTERED_SESSIONS,
-        })
+        results.append(
+            {
+                "session": sess,
+                "trades": n,
+                "expr": expr,
+                "threshold": SESSION_EXPR_THRESHOLD,
+                "min_trades": SESSION_TRADE_THRESHOLD,
+                "active": active,
+                "verdict": "KILL" if killed else ("PASS" if active else "WAITING"),
+                "pre_registered": sess in PRE_REGISTERED_SESSIONS,
+            }
+        )
     return results
 
 
@@ -287,9 +291,7 @@ def check_portfolio_expr(trades: list[dict]) -> dict:
     }
 
 
-def check_obf_sequential(
-    trades: list[dict], target_trades_per_session: int = 100
-) -> list[dict]:
+def check_obf_sequential(trades: list[dict], target_trades_per_session: int = 100) -> list[dict]:
     """O'Brien-Fleming sequential monitoring per session.
 
     Checks at current information fraction whether the session's cumulative
@@ -305,12 +307,14 @@ def check_obf_sequential(
     for sess, rs in sorted(sessions.items()):
         n = len(rs)
         if n < 10:  # too few for meaningful sequential test
-            results.append({
-                "session": sess,
-                "trades": n,
-                "fraction": n / target_trades_per_session,
-                "verdict": "TOO_EARLY",
-            })
+            results.append(
+                {
+                    "session": sess,
+                    "trades": n,
+                    "fraction": n / target_trades_per_session,
+                    "verdict": "TOO_EARLY",
+                }
+            )
             continue
 
         # Under H0 (no edge): ExpR = 0. Under H1 (edge exists): ExpR > 0.
@@ -329,18 +333,20 @@ def check_obf_sequential(
         # Kill if z is significantly negative (underperformance)
         early_kill = z_stat < -boundary
 
-        results.append({
-            "session": sess,
-            "trades": n,
-            "fraction": round(fraction, 3),
-            "expr": round(mean_r, 4),
-            "z_stat": round(z_stat, 3),
-            "boundary": round(boundary, 3),
-            "kill_boundary": round(-boundary, 3),
-            "p_equiv": round(compute_obf_p_equivalent(boundary), 4),
-            "verdict": "EARLY_KILL" if early_kill else "CONTINUE",
-            "pre_registered": sess in PRE_REGISTERED_SESSIONS,
-        })
+        results.append(
+            {
+                "session": sess,
+                "trades": n,
+                "fraction": round(fraction, 3),
+                "expr": round(mean_r, 4),
+                "z_stat": round(z_stat, 3),
+                "boundary": round(boundary, 3),
+                "kill_boundary": round(-boundary, 3),
+                "p_equiv": round(compute_obf_p_equivalent(boundary), 4),
+                "verdict": "EARLY_KILL" if early_kill else "CONTINUE",
+                "pre_registered": sess in PRE_REGISTERED_SESSIONS,
+            }
+        )
     return results
 
 
@@ -368,8 +374,10 @@ def print_report(
         if batch_mode:
             print(f"  Refresh data first: python scripts/tools/forward_test.py --instrument {instrument}")
         else:
-            print(f"  Start paper trading: python scripts/run_live_session.py "
-                  f"--instrument {instrument} --signal-only --raw-baseline")
+            print(
+                f"  Start paper trading: python scripts/run_live_session.py "
+                f"--instrument {instrument} --signal-only --raw-baseline"
+            )
         print(f"{'=' * 72}\n")
         return True
 
@@ -429,7 +437,9 @@ def print_report(
     print(f"  {'-' * 68}")
     for r in obf:
         if r["verdict"] == "TOO_EARLY":
-            print(f"  {r['session']:<20} {r['trades']:>5} {r['fraction']:>6.3f} {'--':>8} {'--':>7} {'--':>7} {'TOO_EARLY':>12}")
+            print(
+                f"  {r['session']:<20} {r['trades']:>5} {r['fraction']:>6.3f} {'--':>8} {'--':>7} {'--':>7} {'TOO_EARLY':>12}"
+            )
         else:
             marker = " ***" if r["verdict"] == "EARLY_KILL" else ""
             print(

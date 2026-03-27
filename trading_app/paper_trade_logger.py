@@ -30,7 +30,6 @@ logger = get_logger(__name__)
 OOS_START = datetime.date(2026, 1, 1)
 
 
-
 @dataclass(frozen=True)
 class LaneDef:
     """Definition of one paper-trade lane.
@@ -120,6 +119,7 @@ LANES: tuple[LaneDef, ...] = (
 def _validate_lanes() -> None:
     """Assert LANES match canonical apex_50k_manual profile in prop_profiles.py."""
     from trading_app.prop_profiles import ACCOUNT_PROFILES
+
     expected = {lane.strategy_id for lane in ACCOUNT_PROFILES["apex_50k_manual"].daily_lanes}
     actual = {lane.strategy_id for lane in LANES}
     if actual != expected:
@@ -160,8 +160,13 @@ def _build_query(lane: LaneDef, *, since: datetime.date | None = None) -> tuple[
             ORDER BY o.trading_day
         """
         params = [
-            lane.instrument, lane.orb_label, lane.orb_minutes,
-            lane.rr_target, lane.entry_model, lane.confirm_bars, start,
+            lane.instrument,
+            lane.orb_label,
+            lane.orb_minutes,
+            lane.rr_target,
+            lane.entry_model,
+            lane.confirm_bars,
+            start,
         ]
     else:
         # Same-instrument filter: join own daily_features at matching aperture
@@ -189,8 +194,13 @@ def _build_query(lane: LaneDef, *, since: datetime.date | None = None) -> tuple[
         """
         params = [
             lane.orb_minutes,  # daily_features JOIN
-            lane.instrument, lane.orb_label, lane.orb_minutes,
-            lane.rr_target, lane.entry_model, lane.confirm_bars, start,
+            lane.instrument,
+            lane.orb_label,
+            lane.orb_minutes,
+            lane.rr_target,
+            lane.entry_model,
+            lane.confirm_bars,
+            start,
         ]
 
     return sql, params
@@ -211,6 +221,7 @@ def backfill(
 
     # Ensure table exists BEFORE opening backfill connection (no dual writes)
     from trading_app.db_manager import init_trading_app_schema
+
     init_trading_app_schema(db_path=Path(path))
 
     with duckdb.connect(path) as con:
@@ -242,10 +253,7 @@ def backfill(
 
             if dry_run:
                 total_r = sum(r[10] for r in rows if r[10] is not None)
-                logger.info(
-                    f"[DRY RUN] {lane.lane_name}: {len(rows)} trades, "
-                    f"cumulative R={total_r:+.2f}"
-                )
+                logger.info(f"[DRY RUN] {lane.lane_name}: {len(rows)} trades, cumulative R={total_r:+.2f}")
                 results[lane.lane_name] = {
                     "count": len(rows),
                     "cumulative_r": round(total_r, 4),
@@ -269,9 +277,24 @@ def backfill(
             if rows:
                 insert_data = [
                     (
-                        r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10],
-                        lane.strategy_id, lane.lane_name, lane.instrument,
-                        lane.orb_minutes, lane.rr_target, lane.filter_type, lane.entry_model,
+                        r[0],
+                        r[1],
+                        r[2],
+                        r[3],
+                        r[4],
+                        r[5],
+                        r[6],
+                        r[7],
+                        r[8],
+                        r[9],
+                        r[10],
+                        lane.strategy_id,
+                        lane.lane_name,
+                        lane.instrument,
+                        lane.orb_minutes,
+                        lane.rr_target,
+                        lane.filter_type,
+                        lane.entry_model,
                     )
                     for r in rows
                 ]
@@ -307,10 +330,7 @@ def backfill(
             }
 
             action = "synced" if sync else "backfilled"
-            logger.info(
-                f"{lane.lane_name}: {action} {len(rows)} new rows "
-                f"(total {summary[0]}, cumR={summary[1]:+.2f})"
-            )
+            logger.info(f"{lane.lane_name}: {action} {len(rows)} new rows (total {summary[0]}, cumR={summary[1]:+.2f})")
 
     return results
 

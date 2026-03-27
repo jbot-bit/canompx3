@@ -1166,6 +1166,7 @@ class TestRandomStrategyMath:
                 # Skip volume/regime filters — require bars_1m enrichment for
                 # rel_vol which may not be fully populated in daily_features
                 from trading_app.config import VolumeFilter as _VF
+
                 strat_filter = ALL_FILTERS.get(ft)
                 if strat_filter is None:
                     continue
@@ -1258,6 +1259,7 @@ class TestRandomStrategyMath:
                     continue
 
                 from trading_app.config import VolumeFilter as _VFe
+
                 strat_filter = ALL_FILTERS.get(ft)
                 if strat_filter is None:
                     continue
@@ -1350,6 +1352,7 @@ class TestRandomStrategyMath:
                     continue
 
                 from trading_app.config import VolumeFilter as _VFd
+
                 strat_filter = ALL_FILTERS.get(ft)
                 if strat_filter is None:
                     continue

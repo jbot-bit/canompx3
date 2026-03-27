@@ -293,9 +293,7 @@ def section_8_orb_monitor(con):
         return
 
     registry = get_lane_registry()
-    print(
-        f"  {'Lane':<25} {'Cap':>8} {'20d Med':>8} {'5d Med':>8} {'Trend':>10} {'Alert':>20}"
-    )
+    print(f"  {'Lane':<25} {'Cap':>8} {'20d Med':>8} {'5d Med':>8} {'Trend':>10} {'Alert':>20}")
     print("  " + "-" * 90)
 
     for label, info in sorted(registry.items()):
@@ -382,9 +380,7 @@ def section_8_orb_monitor(con):
                 elif med_20 >= cap_orb * 0.80:
                     alert = "APPROACHING CAP"
 
-            print(
-                f"  {label:<25} {cap_str:>8} {med_20:>7.1f}p {med_5:>7.1f}p {trend:>10} {alert:>20}"
-            )
+            print(f"  {label:<25} {cap_str:>8} {med_20:>7.1f}p {med_5:>7.1f}p {trend:>10} {alert:>20}")
         except Exception as e:
             print(f"  {label:<25} {cap_str:>8} {'ERROR':>8}  {str(e)[:40]}")
 

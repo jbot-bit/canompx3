@@ -36,27 +36,37 @@ import pandas as pd
 # Source of truth: trading_app/ml/config.py SESSION_CHRONOLOGICAL_ORDER
 # Duplicated here to avoid circular imports (pipeline/ cannot import trading_app/).
 _SESSION_ORDER: list[str] = [
-    "CME_REOPEN",      # 08:00-09:00 Brisbane
-    "TOKYO_OPEN",      # 10:00
-    "BRISBANE_1025",   # 10:25
+    "CME_REOPEN",  # 08:00-09:00 Brisbane
+    "TOKYO_OPEN",  # 10:00
+    "BRISBANE_1025",  # 10:25
     "SINGAPORE_OPEN",  # 11:00
-    "LONDON_METALS",   # 17:00 winter / 18:00 summer
-    "EUROPE_FLOW",     # 17:00 summer / 18:00 winter (swaps with LM)
-    "US_DATA_830",     # ~23:30-00:30 Brisbane (8:30 AM ET)
-    "NYSE_OPEN",       # ~00:30 Brisbane (9:30 AM ET)
-    "US_DATA_1000",    # ~01:00 Brisbane (10:00 AM ET)
-    "COMEX_SETTLE",    # ~04:30 Brisbane (1:30 PM ET)
-    "CME_PRECLOSE",    # ~05:45 Brisbane (2:45 PM CT)
-    "NYSE_CLOSE",      # ~07:00 Brisbane (4:00 PM ET)
+    "LONDON_METALS",  # 17:00 winter / 18:00 summer
+    "EUROPE_FLOW",  # 17:00 summer / 18:00 winter (swaps with LM)
+    "US_DATA_830",  # ~23:30-00:30 Brisbane (8:30 AM ET)
+    "NYSE_OPEN",  # ~00:30 Brisbane (9:30 AM ET)
+    "US_DATA_1000",  # ~01:00 Brisbane (10:00 AM ET)
+    "COMEX_SETTLE",  # ~04:30 Brisbane (1:30 PM ET)
+    "CME_PRECLOSE",  # ~05:45 Brisbane (2:45 PM CT)
+    "NYSE_CLOSE",  # ~07:00 Brisbane (4:00 PM ET)
 ]
 
 # Features that are ALWAYS safe (computed from prior day or trading day start)
 _ALWAYS_SAFE: set[str] = {
-    "trading_day", "symbol", "orb_minutes", "bar_count_1m",
-    "atr_20", "atr_20_pct", "atr_vel_ratio", "atr_vel_regime",
-    "gap_open_points", "gap_type",
-    "prev_day_high", "prev_day_low", "prev_day_close",
-    "prev_day_range", "prev_day_direction",
+    "trading_day",
+    "symbol",
+    "orb_minutes",
+    "bar_count_1m",
+    "atr_20",
+    "atr_20_pct",
+    "atr_vel_ratio",
+    "atr_vel_regime",
+    "gap_open_points",
+    "gap_type",
+    "prev_day_high",
+    "prev_day_low",
+    "prev_day_close",
+    "prev_day_range",
+    "prev_day_direction",
     "daily_open",  # known at 09:00
     "rsi_14_at_CME_REOPEN",  # computed from prior-day 5m bars, known before any session
     "confirm_bars",  # trade config, not market data
@@ -66,7 +76,10 @@ _ALWAYS_SAFE: set[str] = {
 
 # Features that are NEVER safe for ANY session (computed from full trading day)
 _NEVER_SAFE: set[str] = {
-    "daily_high", "daily_low", "daily_close", "day_type",
+    "daily_high",
+    "daily_low",
+    "daily_close",
+    "day_type",
 }
 
 # Overnight/pre-session features with their safe-after session
@@ -94,11 +107,7 @@ _WINDOW_FEATURES: dict[str, str] = {
 }
 
 # Regex to extract session name from column like "orb_TOKYO_OPEN_size"
-_SESSION_COL_RE = re.compile(
-    r"^(?:orb|rel_vol)_("
-    + "|".join(re.escape(s) for s in _SESSION_ORDER)
-    + r")_?"
-)
+_SESSION_COL_RE = re.compile(r"^(?:orb|rel_vol)_(" + "|".join(re.escape(s) for s in _SESSION_ORDER) + r")_?")
 
 
 def _session_index(session: str) -> int:
@@ -106,9 +115,7 @@ def _session_index(session: str) -> int:
     try:
         return _SESSION_ORDER.index(session)
     except ValueError:
-        raise ValueError(
-            f"Unknown session '{session}'. Valid: {_SESSION_ORDER}"
-        ) from None
+        raise ValueError(f"Unknown session '{session}'. Valid: {_SESSION_ORDER}") from None
 
 
 def get_prior_sessions(target_session: str) -> list[str]:

@@ -162,11 +162,13 @@ class TestQualityGateContracts:
 
         from trading_app.ml.meta_label import _get_session_features
 
-        X = pd.DataFrame({
-            "orb_size_norm": [0.5],
-            "prior_sessions_broken": [2],
-            "nearest_level_to_high_R": [0.5],
-        })
+        X = pd.DataFrame(
+            {
+                "orb_size_norm": [0.5],
+                "prior_sessions_broken": [2],
+                "nearest_level_to_high_R": [0.5],
+            }
+        )
         X_ef = _get_session_features(X, "EUROPE_FLOW")
         assert "prior_sessions_broken" not in X_ef.columns
         assert "nearest_level_to_high_R" not in X_ef.columns

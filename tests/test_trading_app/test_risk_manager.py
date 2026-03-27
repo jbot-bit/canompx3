@@ -491,9 +491,7 @@ class TestApertureAware:
         rm.daily_reset(date(2024, 1, 5))
 
         active = [_CorrTrade("s_existing", "NYSE_OPEN", 5)]
-        allowed, _, factor = rm.can_enter(
-            "s_new", "NYSE_OPEN", active, 0.0, orb_minutes=30
-        )
+        allowed, _, factor = rm.can_enter("s_new", "NYSE_OPEN", active, 0.0, orb_minutes=30)
         assert allowed
         # Correlation gives some factor, aperture caps at 0.5
         assert factor <= 0.5

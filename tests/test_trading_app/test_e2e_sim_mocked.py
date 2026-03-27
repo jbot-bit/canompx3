@@ -28,6 +28,7 @@ from trading_app.live.position_tracker import PositionState, PositionTracker
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _bar(close: float = 20000.0, minute: int = 30) -> Bar:
     return Bar(
         ts_utc=datetime(2026, 3, 25, 0, minute, 0, tzinfo=UTC),
@@ -60,8 +61,7 @@ class Test429OnEntrySubmit:
         from trading_app.live.tradovate.order_router import OrderSpec, TradovateOrderRouter
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
-        spec = OrderSpec(action="Buy", order_type="Stop", symbol="MNQM6",
-                         qty=1, account_id=123, stop_price=20000.0)
+        spec = OrderSpec(action="Buy", order_type="Stop", symbol="MNQM6", qty=1, account_id=123, stop_price=20000.0)
 
         mock_429 = _mock_response(429)
         with patch("trading_app.live.tradovate.order_router.requests.post", return_value=mock_429):
@@ -77,8 +77,7 @@ class Test429OnEntrySubmit:
         from trading_app.live.tradovate.order_router import OrderSpec, TradovateOrderRouter
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
-        spec = OrderSpec(action="Buy", order_type="Market", symbol="MNQM6",
-                         qty=1, account_id=123)
+        spec = OrderSpec(action="Buy", order_type="Market", symbol="MNQM6", qty=1, account_id=123)
 
         mock_429 = _mock_response(429)
         mock_ok = _mock_response(200, {"orderId": 42, "status": "Working"})
@@ -97,8 +96,7 @@ class Test429OnExitSubmit:
         from trading_app.live.tradovate.order_router import OrderSpec, TradovateOrderRouter
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
-        spec = OrderSpec(action="Sell", order_type="Market", symbol="MNQM6",
-                         qty=1, account_id=123)
+        spec = OrderSpec(action="Sell", order_type="Market", symbol="MNQM6", qty=1, account_id=123)
 
         mock_429 = _mock_response(429)
         with patch("trading_app.live.tradovate.order_router.requests.post", return_value=mock_429):
@@ -134,14 +132,20 @@ class Test429OnAuthRefresh:
 
         auth = TradovateAuth(demo=True)
         mock_fail = _mock_response(503)
-        mock_ok = _mock_response(200, {
-            "accessToken": "test_token",
-            "expirationTime": "2026-03-26T00:00:00Z",
-        })
+        mock_ok = _mock_response(
+            200,
+            {
+                "accessToken": "test_token",
+                "expirationTime": "2026-03-26T00:00:00Z",
+            },
+        )
 
         env = {
-            "TRADOVATE_USER": "test", "TRADOVATE_PASS": "test",
-            "TRADOVATE_APP_ID": "test", "TRADOVATE_CID": "1", "TRADOVATE_SEC": "test",
+            "TRADOVATE_USER": "test",
+            "TRADOVATE_PASS": "test",
+            "TRADOVATE_APP_ID": "test",
+            "TRADOVATE_CID": "1",
+            "TRADOVATE_SEC": "test",
         }
         with patch.dict(os.environ, env):
             with patch("trading_app.live.tradovate.auth.requests.post", side_effect=[mock_fail, mock_ok]):
@@ -209,8 +213,9 @@ class TestPriceCollarRejectsBadEntry:
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
         router.update_market_price(20000.0)
-        spec = OrderSpec(action="Buy", order_type="Stop", symbol="MNQM6",
-                         qty=1, account_id=123, stop_price=20200.0)  # 1% away
+        spec = OrderSpec(
+            action="Buy", order_type="Stop", symbol="MNQM6", qty=1, account_id=123, stop_price=20200.0
+        )  # 1% away
 
         with pytest.raises(ValueError, match="PRICE_COLLAR_REJECTED"):
             router.submit(spec)
@@ -220,8 +225,9 @@ class TestPriceCollarRejectsBadEntry:
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
         router.update_market_price(20000.0)
-        spec = OrderSpec(action="Buy", order_type="Stop", symbol="MNQM6",
-                         qty=1, account_id=123, stop_price=20050.0)  # 0.25%
+        spec = OrderSpec(
+            action="Buy", order_type="Stop", symbol="MNQM6", qty=1, account_id=123, stop_price=20050.0
+        )  # 0.25%
 
         mock_ok = _mock_response(200, {"orderId": 42})
         with patch("trading_app.live.tradovate.order_router.requests.post", return_value=mock_ok):
@@ -236,8 +242,7 @@ class TestPriceCollarIgnoresStopLeg:
 
         router = TradovateOrderRouter(account_id=123, auth=MagicMock(), demo=True)
         router.update_market_price(20000.0)
-        spec = OrderSpec(action="Sell", order_type="Market", symbol="MNQM6",
-                         qty=1, account_id=123, stop_price=None)
+        spec = OrderSpec(action="Sell", order_type="Market", symbol="MNQM6", qty=1, account_id=123, stop_price=None)
 
         mock_ok = _mock_response(200, {"orderId": 43})
         with patch("trading_app.live.tradovate.order_router.requests.post", return_value=mock_ok):
@@ -251,8 +256,7 @@ class TestPriceCollarProjectX:
 
         router = ProjectXOrderRouter(account_id=123, auth=MagicMock(), tick_size=0.25)
         router.update_market_price(20000.0)
-        spec = {"accountId": 123, "contractId": "X", "type": 4, "side": 0,
-                "size": 1, "stopPrice": 20300.0}  # 1.5%
+        spec = {"accountId": 123, "contractId": "X", "type": 4, "side": 0, "size": 1, "stopPrice": 20300.0}  # 1.5%
         with pytest.raises(ValueError, match="PRICE_COLLAR_REJECTED"):
             router.submit(spec)
 
@@ -318,9 +322,9 @@ class TestOrphanDetectionProjectX:
         auth.headers.return_value = {"Authorization": "Bearer test"}
         pos = ProjectXPositions(auth=auth)
 
-        mock_resp = _mock_response(200, [
-            {"contractId": "CON.F.US.MGC.M26", "type": 1, "size": 1, "averagePrice": 2950.0}
-        ])
+        mock_resp = _mock_response(
+            200, [{"contractId": "CON.F.US.MGC.M26", "type": 1, "size": 1, "averagePrice": 2950.0}]
+        )
         with patch("trading_app.live.projectx.positions.requests.post", return_value=mock_resp):
             orphans = pos.query_open(12345)
 

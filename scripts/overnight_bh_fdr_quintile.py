@@ -1,6 +1,7 @@
 """Overnight job: BH FDR correction on all quintile feature tests.
 Tests cross-session features on all 3 instruments with proper multiple testing correction.
 Also runs per-session breakdown for features that survive FDR."""
+
 import sys
 
 sys.path.insert(0, r"C:\Users\joshd\canompx3")
@@ -15,17 +16,41 @@ from scipy import stats
 from pipeline.paths import GOLD_DB_PATH
 
 LEGIT_PATTERNS = [
-    "break_bar_volume", "break_delay_min", "rel_vol_",
-    "atr_20", "atr_vel", "gap_open", "prev_day_range",
-    "orb_size", "_size", "compression_z", "volume",
-    "prior_sessions", "levels_within", "nearest_level",
-    "orb_nested", "prior_orb_size",
+    "break_bar_volume",
+    "break_delay_min",
+    "rel_vol_",
+    "atr_20",
+    "atr_vel",
+    "gap_open",
+    "prev_day_range",
+    "orb_size",
+    "_size",
+    "compression_z",
+    "volume",
+    "prior_sessions",
+    "levels_within",
+    "nearest_level",
+    "orb_nested",
+    "prior_orb_size",
 ]
 BLACKLIST_PATTERNS = [
-    "mfe_r", "mae_r", "overnight_range", "overnight_high", "overnight_low",
-    "break_ts", "prev_day_high", "prev_day_low", "pre_1000_high", "pre_1000_low",
-    "session_asia", "took_pdh", "took_pdl", "garch", "day_type",
+    "mfe_r",
+    "mae_r",
+    "overnight_range",
+    "overnight_high",
+    "overnight_low",
+    "break_ts",
+    "prev_day_high",
+    "prev_day_low",
+    "pre_1000_high",
+    "pre_1000_low",
+    "session_asia",
+    "took_pdh",
+    "took_pdl",
+    "garch",
+    "day_type",
 ]
+
 
 def is_legit(col):
     for b in BLACKLIST_PATTERNS:
@@ -35,6 +60,7 @@ def is_legit(col):
         if pat in col.lower():
             return True
     return False
+
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 
@@ -50,10 +76,12 @@ for instrument, rr in [("MNQ", None), ("MGC", 2.5), ("MES", 2.5)]:
         """).fetchall()
         if not configs:
             continue
-        config_conditions = " OR ".join([
-            f"(o.orb_label='{c[0]}' AND o.entry_model='{c[1]}' AND o.rr_target={c[2]} AND o.confirm_bars={c[3]} AND o.orb_minutes={c[4]})"
-            for c in configs
-        ])
+        config_conditions = " OR ".join(
+            [
+                f"(o.orb_label='{c[0]}' AND o.entry_model='{c[1]}' AND o.rr_target={c[2]} AND o.confirm_bars={c[3]} AND o.orb_minutes={c[4]})"
+                for c in configs
+            ]
+        )
         where = f"o.symbol = '{instrument}' AND o.pnl_r IS NOT NULL AND ({config_conditions})"
     else:
         where = f"o.symbol = '{instrument}' AND o.pnl_r IS NOT NULL AND o.entry_model = 'E2' AND o.confirm_bars = 1 {rr_clause}"
@@ -72,7 +100,7 @@ for instrument, rr in [("MNQ", None), ("MGC", 2.5), ("MES", 2.5)]:
 
     # Use last 20% as test
     n = len(df)
-    test_df = df.iloc[int(n * 0.8):]
+    test_df = df.iloc[int(n * 0.8) :]
     pnl = test_df["pnl_r"].values
 
     print(f"\n{instrument}: {len(test_df)} test trades, baseline={pnl.mean():+.4f}", flush=True)
@@ -100,8 +128,8 @@ for instrument, rr in [("MNQ", None), ("MGC", 2.5), ("MES", 2.5)]:
         spread = q5.mean() - q1.mean()
         t_stat, p_val = stats.ttest_ind(q5, q1)
         q_means = [p[quintiles == q].mean() for q in sorted(set(quintiles))]
-        mono = all(q_means[i] <= q_means[i+1] for i in range(len(q_means)-1))
-        anti = all(q_means[i] >= q_means[i+1] for i in range(len(q_means)-1))
+        mono = all(q_means[i] <= q_means[i + 1] for i in range(len(q_means) - 1))
+        anti = all(q_means[i] >= q_means[i + 1] for i in range(len(q_means) - 1))
         direction = "MONO+" if mono else ("MONO-" if anti else "mixed")
         all_tests.append((instrument, col, spread, q1.mean(), q5.mean(), p_val, direction, len(q1), len(q5), "POOLED"))
 
@@ -133,14 +161,16 @@ for instrument, rr in [("MNQ", None), ("MGC", 2.5), ("MES", 2.5)]:
                 continue
             spread = q3.mean() - q1.mean()
             t_stat, p_val = stats.ttest_ind(q3, q1)
-            all_tests.append((instrument, col, spread, q1.mean(), q3.mean(), p_val, "tercile", len(q1), len(q3), session))
+            all_tests.append(
+                (instrument, col, spread, q1.mean(), q3.mean(), p_val, "tercile", len(q1), len(q3), session)
+            )
 
 con.close()
 
 # BH FDR correction
-print(f"\n{'='*90}")
+print(f"\n{'=' * 90}")
 print(f"BH FDR CORRECTION — {len(all_tests)} total tests")
-print(f"{'='*90}")
+print(f"{'=' * 90}")
 
 # Sort by p-value
 all_tests.sort(key=lambda x: x[5])
@@ -165,9 +195,9 @@ if survivors:
         print(f"{inst:<5} {col:<40} {spread:>+7.3f} {q1:>+7.3f} {q5:>+7.3f} {pv:>8.5f} {d:>7} {scope:>12}")
 
     # Group by feature across instruments
-    print(f"\n{'='*90}")
+    print(f"\n{'=' * 90}")
     print("FEATURES THAT SURVIVE BH FDR ACROSS INSTRUMENTS:")
-    print(f"{'='*90}")
+    print(f"{'=' * 90}")
     feat_instruments = defaultdict(list)
     for inst, col, spread, _q1, _q5, pv, _d, _n1, _n5, scope in survivors:
         if scope == "POOLED":

@@ -229,26 +229,28 @@ class TradeJournal:
 
         Used on startup to seed the execution engine's deduplication state,
         preventing re-entry after crash-restart mid-session.
+
+        FAIL-CLOSED: raises on error — returning empty set would allow re-entry
+        into already-traded strategies, doubling positions.
         """
         if self._con is None:
-            return set()
-        try:
-            rows = self._con.execute(
-                "SELECT DISTINCT strategy_id FROM live_trades WHERE trading_day = ?",
-                [trading_day],
-            ).fetchall()
-            result = {r[0] for r in rows}
-            if result:
-                log.info(
-                    "Journal recovery: %d strategies already traded on %s: %s",
-                    len(result),
-                    trading_day,
-                    sorted(result),
-                )
-            return result
-        except Exception:
-            log.critical("TradeJournal.get_strategy_ids_for_day FAILED", exc_info=True)
-            return set()
+            raise RuntimeError(
+                "TradeJournal unavailable — cannot determine already-traded strategies. "
+                "Risk of re-entry. Refusing to start."
+            )
+        rows = self._con.execute(
+            "SELECT DISTINCT strategy_id FROM live_trades WHERE trading_day = ?",
+            [trading_day],
+        ).fetchall()
+        result = {r[0] for r in rows}
+        if result:
+            log.info(
+                "Journal recovery: %d strategies already traded on %s: %s",
+                len(result),
+                trading_day,
+                sorted(result),
+            )
+        return result
 
     def incomplete_trades(self, trading_day=None) -> list[dict]:
         """Return trades with entry but no exit (crash detection).
@@ -256,43 +258,45 @@ class TradeJournal:
         If trading_day is specified, only returns incomplete trades from that day.
         Without a filter, stale incomplete records from previous days would be
         incorrectly restored as active positions.
+
+        FAIL-CLOSED: raises on error — returning empty list would hide open
+        positions, preventing exit management on crash-restart.
         """
         if self._con is None:
-            return []
-        try:
-            if trading_day is not None:
-                rows = self._con.execute(
-                    """
-                    SELECT trade_id, strategy_id, instrument, direction, engine_entry, fill_entry
-                    FROM live_trades
-                    WHERE exited_at IS NULL AND trading_day = ?
-                    ORDER BY created_at
-                    """,
-                    [trading_day],
-                ).fetchall()
-            else:
-                rows = self._con.execute(
-                    """
-                    SELECT trade_id, strategy_id, instrument, direction, engine_entry, fill_entry
-                    FROM live_trades
-                    WHERE exited_at IS NULL
-                    ORDER BY created_at
-                    """
-                ).fetchall()
-            return [
-                {
-                    "trade_id": r[0],
-                    "strategy_id": r[1],
-                    "instrument": r[2],
-                    "direction": r[3],
-                    "engine_entry": r[4],
-                    "fill_entry": r[5],
-                }
-                for r in rows
-            ]
-        except Exception:
-            log.critical("TradeJournal.incomplete_trades FAILED", exc_info=True)
-            return []
+            raise RuntimeError(
+                "TradeJournal unavailable — cannot determine incomplete trades. "
+                "Risk of unmanaged open positions. Refusing to start."
+            )
+        if trading_day is not None:
+            rows = self._con.execute(
+                """
+                SELECT trade_id, strategy_id, instrument, direction, engine_entry, fill_entry
+                FROM live_trades
+                WHERE exited_at IS NULL AND trading_day = ?
+                ORDER BY created_at
+                """,
+                [trading_day],
+            ).fetchall()
+        else:
+            rows = self._con.execute(
+                """
+                SELECT trade_id, strategy_id, instrument, direction, engine_entry, fill_entry
+                FROM live_trades
+                WHERE exited_at IS NULL
+                ORDER BY created_at
+                """
+            ).fetchall()
+        return [
+            {
+                "trade_id": r[0],
+                "strategy_id": r[1],
+                "instrument": r[2],
+                "direction": r[3],
+                "engine_entry": r[4],
+                "fill_entry": r[5],
+            }
+            for r in rows
+        ]
 
     def close(self) -> None:
         """Close the DB connection."""

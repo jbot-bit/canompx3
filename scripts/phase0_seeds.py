@@ -27,9 +27,10 @@ for seed in range(10):
     for inst, kwargs in INSTRUMENTS:
         try:
             r = train_per_session_meta_label(
-                inst, str(GOLD_DB_PATH),
+                inst,
+                str(GOLD_DB_PATH),
                 save_model=False,  # don't overwrite saved models
-                run_cpcv=False,    # skip CPCV for speed (not needed for seed stability)
+                run_cpcv=False,  # skip CPCV for speed (not needed for seed stability)
                 single_config=True,
                 config_selection="max_samples",
                 skip_filter=True,
@@ -68,15 +69,19 @@ for seed in range(10):
     print(f"  === Seed {seed} TOTAL: full={total_full:+.1f}R honest={total_honest:+.1f}R ===", flush=True)
 
 # Summary
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("SEED STABILITY SUMMARY (10 seeds)")
-print("="*60)
+print("=" * 60)
 
 totals_full = [sum(v["full"] for v in results[s].values() if v["full"]) for s in results]
 totals_honest = [sum(v["honest"] for v in results[s].values() if v["honest"]) for s in results]
 
-print(f"Full:   mean={statistics.mean(totals_full):+.1f}  std={statistics.stdev(totals_full):.1f}  min={min(totals_full):+.1f}  max={max(totals_full):+.1f}")
-print(f"Honest: mean={statistics.mean(totals_honest):+.1f}  std={statistics.stdev(totals_honest):.1f}  min={min(totals_honest):+.1f}  max={max(totals_honest):+.1f}")
+print(
+    f"Full:   mean={statistics.mean(totals_full):+.1f}  std={statistics.stdev(totals_full):.1f}  min={min(totals_full):+.1f}  max={max(totals_full):+.1f}"
+)
+print(
+    f"Honest: mean={statistics.mean(totals_honest):+.1f}  std={statistics.stdev(totals_honest):.1f}  min={min(totals_honest):+.1f}  max={max(totals_honest):+.1f}"
+)
 cv = statistics.stdev(totals_honest) / abs(statistics.mean(totals_honest)) * 100
 print(f"CV (std/mean): {cv:.1f}%")
 print(f"VERDICT: {'STABLE' if cv < 30 else 'MARGINAL' if cv < 50 else 'UNSTABLE'}")
@@ -84,4 +89,6 @@ print(f"VERDICT: {'STABLE' if cv < 30 else 'MARGINAL' if cv < 50 else 'UNSTABLE'
 for inst, _ in INSTRUMENTS:
     vals = [results[s][inst]["honest"] for s in results if results[s][inst].get("honest")]
     if len(vals) > 1:
-        print(f"  {inst}: mean={statistics.mean(vals):+.1f}  std={statistics.stdev(vals):.1f}  [{min(vals):+.1f}, {max(vals):+.1f}]")
+        print(
+            f"  {inst}: mean={statistics.mean(vals):+.1f}  std={statistics.stdev(vals):.1f}  [{min(vals):+.1f}, {max(vals):+.1f}]"
+        )
