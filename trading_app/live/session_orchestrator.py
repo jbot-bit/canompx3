@@ -93,11 +93,15 @@ class SessionOrchestrator:
         contracts_cls = components["contracts_class"]
         self._positions_cls = components["positions_class"]
 
-        # Use injected portfolio or build from live_config
+        # Use injected portfolio — build_live_portfolio is DEPRECATED (resolves to 0 strategies)
         if portfolio is not None:
             self.portfolio = portfolio
             log.info("Using injected portfolio: %d strategies", len(portfolio.strategies))
         else:
+            log.warning(
+                "No portfolio injected — build_live_portfolio is DEPRECATED and resolves to 0 strategies. "
+                "Pass a portfolio from prop_profiles.ACCOUNT_PROFILES via select_for_profile()."
+            )
             self.portfolio, notes = build_live_portfolio(db_path=GOLD_DB_PATH, instrument=instrument)
             for note in notes:
                 log.info("live_config note: %s", note)

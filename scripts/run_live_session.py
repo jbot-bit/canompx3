@@ -44,7 +44,6 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
 
     from pipeline.paths import GOLD_DB_PATH
     from trading_app.live.broker_factory import create_broker_components, get_broker_name
-    from trading_app.live_config import build_live_portfolio
 
     checks_passed = 0
     checks_total = 5  # NOTE: must match number of check blocks (1-5) below — update if adding/removing checks
@@ -68,7 +67,11 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
             pf = portfolio
             notes = [f"Using injected portfolio ({len(pf.strategies)} strategies)"]
         else:
+            # build_live_portfolio is DEPRECATED — warn but don't block preflight
+            from trading_app.live_config import build_live_portfolio
+
             pf, notes = build_live_portfolio(db_path=GOLD_DB_PATH, instrument=instrument)
+            notes.append("WARNING: using deprecated build_live_portfolio — inject portfolio from prop_profiles")
         print(f"OK ({len(pf.strategies)} strategies)")
         for s in pf.strategies:
             print(

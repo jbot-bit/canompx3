@@ -194,20 +194,50 @@ def build_session_briefings() -> list[SessionBriefing]:
     """
     from datetime import date as date_type
 
+    import duckdb
+
     from pipeline.asset_configs import get_active_instruments
-    from trading_app.live_config import build_live_portfolio
+    from pipeline.db_config import configure_connection
+    from pipeline.paths import GOLD_DB_PATH
+    from trading_app.portfolio import PortfolioStrategy
 
     today = date_type.today()
 
-    # Collect all strategies across all instruments
+    # Load active validated strategies directly (build_live_portfolio is DEPRECATED)
     all_strategies: list = []
-    for instrument in get_active_instruments():
-        try:
-            portfolio, _ = build_live_portfolio(instrument=instrument)
-            all_strategies.extend(portfolio.strategies)
-        except Exception:
-            logging.warning("Failed to build briefings for %s", instrument, exc_info=True)
-            continue
+    try:
+        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+        configure_connection(con)
+        active_instruments = list(get_active_instruments())
+        rows = con.execute(
+            "SELECT * FROM validated_setups WHERE status = 'active' AND instrument = ANY($1)",
+            [active_instruments],
+        ).fetchall()
+        columns = [desc[0] for desc in con.description]
+        con.close()
+        for row in rows:
+            r = dict(zip(columns, row, strict=False))
+            all_strategies.append(
+                PortfolioStrategy(
+                    strategy_id=r["strategy_id"],
+                    instrument=r["instrument"],
+                    orb_label=r["orb_label"],
+                    entry_model=r["entry_model"],
+                    rr_target=r["rr_target"],
+                    confirm_bars=r["confirm_bars"],
+                    filter_type=r["filter_type"],
+                    orb_minutes=r.get("orb_minutes", 5),
+                    expectancy_r=r["expectancy_r"],
+                    win_rate=r["win_rate"],
+                    sample_size=r["sample_size"],
+                    sharpe_ratio=r.get("sharpe_ratio"),
+                    max_drawdown_r=r.get("max_drawdown_r"),
+                    median_risk_points=r.get("median_risk_points"),
+                    stop_multiplier=r.get("stop_multiplier", 1.0),
+                )
+            )
+    except Exception:
+        logging.warning("Failed to load strategies for briefings", exc_info=True)
 
     # Group by (session, instrument)
     groups: dict[tuple[str, str], list] = {}
