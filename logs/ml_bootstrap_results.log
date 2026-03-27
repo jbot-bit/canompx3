@@ -1,0 +1,321 @@
+18:56:56 [INFO] ML Bootstrap Permutation Test
+18:56:56 [INFO] Testing 7 survivors from exhaustive sweep
+18:56:56 [INFO] Permutations per test: 200
+18:56:56 [INFO] 
+============================================================
+18:56:56 [INFO]   BOOTSTRAP: NYSE_OPEN O30 RR2.0 (real delta=+33.5R)
+18:56:56 [INFO]   Permutations: 200
+18:56:56 [INFO] ============================================================
+18:56:56 [INFO] HYBRID config: 2 sessions from validated_setups, 10 from orb_outcomes fallback: ['LONDON_METALS', 'NYSE_OPEN', 'SINGAPORE_OPEN', 'US_DATA_830', 'BRISBANE_1025', 'EUROPE_FLOW', 'CME_REOPEN', 'US_DATA_1000', 'NYSE_CLOSE', 'TOKYO_OPEN']
+18:56:57 [INFO] Backfilling global features: 1,418/33,046 rows missing (orb_minutes\u22605)
+18:56:57 [WARNING]   1,418 rows still missing global features after backfill (no orb_minutes=5 row for those days)
+18:56:57 [INFO] Single-config (MAX_SAMPLES RR=2.0 UNFILTERED PER-APERTURE): 32 configs, 33,046 raw outcomes for MNQ
+18:56:57 [INFO]   BRISBANE_1025          E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1313
+18:56:57 [INFO]   BRISBANE_1025          E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:56:57 [INFO]   BRISBANE_1025          E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1305
+18:56:57 [INFO]   CME_PRECLOSE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.249 N=129
+18:56:57 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=413
+18:56:57 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=276
+18:56:57 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=593
+18:56:57 [INFO]   COMEX_SETTLE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.247 N=199
+18:56:57 [INFO]   EUROPE_FLOW            E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1310
+18:56:57 [INFO]   EUROPE_FLOW            E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1298
+18:56:57 [INFO]   EUROPE_FLOW            E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:56:57 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1304
+18:56:57 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1312
+18:56:57 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1275
+18:56:57 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=65
+18:56:57 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=153
+18:56:57 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=375
+18:56:57 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=950
+18:56:57 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1219
+18:56:57 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=644
+18:56:57 [INFO]   SINGAPORE_OPEN         E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:56:57 [INFO]   SINGAPORE_OPEN         E1 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1302
+18:56:57 [INFO]   SINGAPORE_OPEN         E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1312
+18:56:57 [INFO]   TOKYO_OPEN             E1 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1312
+18:56:57 [INFO]   TOKYO_OPEN             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1314
+18:56:57 [INFO]   TOKYO_OPEN             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1296
+18:56:57 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1021
+18:56:57 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+18:56:57 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=740
+18:56:57 [INFO]   US_DATA_830            E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1223
+18:56:57 [INFO]   US_DATA_830            E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1197
+18:56:57 [INFO]   US_DATA_830            E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+18:56:57 [INFO] Filter SKIPPED: ML trains on all 33,046 break days
+18:56:57 [INFO] Single-config feature matrix: 33,046 rows x 45 features (win rate: 37.2%)
+18:56:57 [INFO] E6 filter: dropping 20 noise columns
+18:56:57 [INFO]   Data: 644 total, train=384 val=146 test=114
+18:56:58 [INFO]   Verified real delta: +30.5R (sweep reported: +33.5R)
+18:57:11 [INFO]     50/200 permutations (14s, ETA 41s)
+18:57:24 [INFO]     100/200 permutations (27s, ETA 27s)
+18:57:37 [INFO]     150/200 permutations (40s, ETA 13s)
+18:57:50 [INFO]     200/200 permutations (52s, ETA 0s)
+18:57:50 [INFO] 
+  RESULT: NYSE_OPEN O30 RR2.0
+18:57:50 [INFO]   Real delta:   +30.5R
+18:57:50 [INFO]   Null mean:    +5.5R
+18:57:50 [INFO]   Null median:  +1.0R
+18:57:50 [INFO]   Null std:     7.8R
+18:57:50 [INFO]   Null max:     +30.5R
+18:57:50 [INFO]   p-value:      0.0050
+18:57:50 [INFO]   Elapsed:      52s
+18:57:50 [INFO]   >>> PASS — ML has genuine skill (p=0.0050 < 0.05)
+18:57:50 [INFO] 
+============================================================
+18:57:50 [INFO]   BOOTSTRAP: US_DATA_1000 O30 RR2.0 (real delta=+38.5R)
+18:57:50 [INFO]   Permutations: 200
+18:57:50 [INFO] ============================================================
+18:57:50 [INFO] HYBRID config: 2 sessions from validated_setups, 10 from orb_outcomes fallback: ['NYSE_OPEN', 'LONDON_METALS', 'SINGAPORE_OPEN', 'US_DATA_830', 'EUROPE_FLOW', 'BRISBANE_1025', 'TOKYO_OPEN', 'CME_REOPEN', 'US_DATA_1000', 'NYSE_CLOSE']
+18:57:51 [INFO] Backfilling global features: 1,418/33,046 rows missing (orb_minutes\u22605)
+18:57:51 [WARNING]   1,418 rows still missing global features after backfill (no orb_minutes=5 row for those days)
+18:57:51 [INFO] Single-config (MAX_SAMPLES RR=2.0 UNFILTERED PER-APERTURE): 32 configs, 33,046 raw outcomes for MNQ
+18:57:51 [INFO]   BRISBANE_1025          E1 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1313
+18:57:51 [INFO]   BRISBANE_1025          E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:57:51 [INFO]   BRISBANE_1025          E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1305
+18:57:51 [INFO]   CME_PRECLOSE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.249 N=129
+18:57:51 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=413
+18:57:51 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=276
+18:57:51 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=593
+18:57:51 [INFO]   COMEX_SETTLE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.247 N=199
+18:57:51 [INFO]   EUROPE_FLOW            E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1298
+18:57:51 [INFO]   EUROPE_FLOW            E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:57:51 [INFO]   EUROPE_FLOW            E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1310
+18:57:51 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1312
+18:57:51 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1275
+18:57:51 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1304
+18:57:51 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=65
+18:57:51 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=153
+18:57:51 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=375
+18:57:51 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=950
+18:57:51 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1219
+18:57:51 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=644
+18:57:51 [INFO]   SINGAPORE_OPEN         E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1312
+18:57:51 [INFO]   SINGAPORE_OPEN         E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:57:51 [INFO]   SINGAPORE_OPEN         E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1302
+18:57:51 [INFO]   TOKYO_OPEN             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1296
+18:57:51 [INFO]   TOKYO_OPEN             E1 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1312
+18:57:51 [INFO]   TOKYO_OPEN             E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1314
+18:57:51 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1021
+18:57:51 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=740
+18:57:51 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+18:57:51 [INFO]   US_DATA_830            E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1197
+18:57:51 [INFO]   US_DATA_830            E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1223
+18:57:51 [INFO]   US_DATA_830            E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+18:57:51 [INFO] Filter SKIPPED: ML trains on all 33,046 break days
+18:57:51 [INFO] Single-config feature matrix: 33,046 rows x 45 features (win rate: 37.0%)
+18:57:51 [INFO] E6 filter: dropping 20 noise columns
+18:57:51 [INFO]   Data: 740 total, train=450 val=147 test=143
+18:57:51 [INFO]   Verified real delta: +38.6R (sweep reported: +38.5R)
+18:58:06 [INFO]     50/200 permutations (15s, ETA 45s)
+18:58:20 [INFO]     100/200 permutations (28s, ETA 28s)
+18:58:34 [INFO]     150/200 permutations (43s, ETA 14s)
+18:58:48 [INFO]     200/200 permutations (57s, ETA 0s)
+18:58:48 [INFO] 
+  RESULT: US_DATA_1000 O30 RR2.0
+18:58:48 [INFO]   Real delta:   +38.6R
+18:58:48 [INFO]   Null mean:    +14.7R
+18:58:48 [INFO]   Null median:  +15.4R
+18:58:48 [INFO]   Null std:     11.1R
+18:58:48 [INFO]   Null max:     +38.8R
+18:58:48 [INFO]   p-value:      0.0050
+18:58:48 [INFO]   Elapsed:      57s
+18:58:48 [INFO]   >>> PASS — ML has genuine skill (p=0.0050 < 0.05)
+18:58:48 [INFO] 
+============================================================
+18:58:48 [INFO]   BOOTSTRAP: US_DATA_1000 O15 RR2.0 (real delta=+10.6R)
+18:58:48 [INFO]   Permutations: 200
+18:58:48 [INFO] ============================================================
+18:58:48 [INFO] HYBRID config: 2 sessions from validated_setups, 10 from orb_outcomes fallback: ['US_DATA_1000', 'NYSE_CLOSE', 'SINGAPORE_OPEN', 'US_DATA_830', 'TOKYO_OPEN', 'CME_REOPEN', 'NYSE_OPEN', 'LONDON_METALS', 'EUROPE_FLOW', 'BRISBANE_1025']
+18:58:49 [INFO] Backfilling global features: 1,418/33,046 rows missing (orb_minutes\u22605)
+18:58:49 [WARNING]   1,418 rows still missing global features after backfill (no orb_minutes=5 row for those days)
+18:58:49 [INFO] Single-config (MAX_SAMPLES RR=2.0 UNFILTERED PER-APERTURE): 32 configs, 33,046 raw outcomes for MNQ
+18:58:49 [INFO]   BRISBANE_1025          E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1305
+18:58:49 [INFO]   BRISBANE_1025          E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:58:49 [INFO]   BRISBANE_1025          E1 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1313
+18:58:49 [INFO]   CME_PRECLOSE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.249 N=129
+18:58:49 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=413
+18:58:49 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=276
+18:58:49 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=593
+18:58:49 [INFO]   COMEX_SETTLE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.247 N=199
+18:58:49 [INFO]   EUROPE_FLOW            E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1310
+18:58:49 [INFO]   EUROPE_FLOW            E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:58:49 [INFO]   EUROPE_FLOW            E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1298
+18:58:49 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1304
+18:58:49 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1312
+18:58:49 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1275
+18:58:49 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=153
+18:58:49 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=375
+18:58:49 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=65
+18:58:49 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=644
+18:58:49 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1219
+18:58:49 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=950
+18:58:49 [INFO]   SINGAPORE_OPEN         E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1312
+18:58:49 [INFO]   SINGAPORE_OPEN         E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1302
+18:58:49 [INFO]   SINGAPORE_OPEN         E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:58:49 [INFO]   TOKYO_OPEN             E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1314
+18:58:49 [INFO]   TOKYO_OPEN             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1296
+18:58:49 [INFO]   TOKYO_OPEN             E1 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1312
+18:58:49 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+18:58:49 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1021
+18:58:49 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=740
+18:58:49 [INFO]   US_DATA_830            E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+18:58:49 [INFO]   US_DATA_830            E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1223
+18:58:49 [INFO]   US_DATA_830            E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1197
+18:58:49 [INFO] Filter SKIPPED: ML trains on all 33,046 break days
+18:58:49 [INFO] Single-config feature matrix: 33,046 rows x 45 features (win rate: 37.0%)
+18:58:49 [INFO] E6 filter: dropping 20 noise columns
+18:58:49 [INFO]   Data: 1021 total, train=617 val=199 test=205
+18:58:49 [INFO]   Verified real delta: +18.6R (sweep reported: +10.6R)
+18:59:05 [INFO]     50/200 permutations (16s, ETA 47s)
+18:59:21 [INFO]     100/200 permutations (31s, ETA 31s)
+18:59:37 [INFO]     150/200 permutations (47s, ETA 16s)
+18:59:52 [INFO]     200/200 permutations (63s, ETA 0s)
+18:59:52 [INFO] 
+  RESULT: US_DATA_1000 O15 RR2.0
+18:59:52 [INFO]   Real delta:   +18.6R
+18:59:52 [INFO]   Null mean:    +0.3R
+18:59:52 [INFO]   Null median:  +0.0R
+18:59:52 [INFO]   Null std:     7.1R
+18:59:52 [INFO]   Null max:     +23.8R
+18:59:52 [INFO]   p-value:      0.0200
+18:59:52 [INFO]   Elapsed:      63s
+18:59:52 [INFO]   >>> PASS — ML has genuine skill (p=0.0200 < 0.05)
+18:59:52 [INFO] 
+============================================================
+18:59:52 [INFO]   BOOTSTRAP: US_DATA_830 O30 RR2.0 (real delta=+12.5R)
+18:59:52 [INFO]   Permutations: 200
+18:59:52 [INFO] ============================================================
+18:59:52 [INFO] HYBRID config: 2 sessions from validated_setups, 10 from orb_outcomes fallback: ['LONDON_METALS', 'NYSE_OPEN', 'CME_REOPEN', 'US_DATA_1000', 'NYSE_CLOSE', 'SINGAPORE_OPEN', 'US_DATA_830', 'BRISBANE_1025', 'EUROPE_FLOW', 'TOKYO_OPEN']
+18:59:53 [INFO] Backfilling global features: 1,418/33,046 rows missing (orb_minutes\u22605)
+18:59:53 [WARNING]   1,418 rows still missing global features after backfill (no orb_minutes=5 row for those days)
+18:59:53 [INFO] Single-config (MAX_SAMPLES RR=2.0 UNFILTERED PER-APERTURE): 32 configs, 33,046 raw outcomes for MNQ
+18:59:53 [INFO]   BRISBANE_1025          E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1313
+18:59:53 [INFO]   BRISBANE_1025          E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1305
+18:59:53 [INFO]   BRISBANE_1025          E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:59:53 [INFO]   CME_PRECLOSE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.249 N=129
+18:59:53 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=593
+18:59:53 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=413
+18:59:53 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=276
+18:59:53 [INFO]   COMEX_SETTLE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.247 N=199
+18:59:53 [INFO]   EUROPE_FLOW            E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1310
+18:59:53 [INFO]   EUROPE_FLOW            E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:59:53 [INFO]   EUROPE_FLOW            E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1298
+18:59:53 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1304
+18:59:53 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1312
+18:59:53 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1275
+18:59:53 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=65
+18:59:53 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=375
+18:59:53 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=153
+18:59:53 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=950
+18:59:53 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=644
+18:59:53 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1219
+18:59:53 [INFO]   SINGAPORE_OPEN         E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1312
+18:59:53 [INFO]   SINGAPORE_OPEN         E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+18:59:53 [INFO]   SINGAPORE_OPEN         E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1302
+18:59:53 [INFO]   TOKYO_OPEN             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1314
+18:59:53 [INFO]   TOKYO_OPEN             E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1296
+18:59:53 [INFO]   TOKYO_OPEN             E1 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1312
+18:59:53 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+18:59:53 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=740
+18:59:53 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1021
+18:59:53 [INFO]   US_DATA_830            E2 RR2.0 CB1 O30 NO_FILTER            Sharpe=nan N=1197
+18:59:53 [INFO]   US_DATA_830            E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+18:59:53 [INFO]   US_DATA_830            E2 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1223
+18:59:53 [INFO] Filter SKIPPED: ML trains on all 33,046 break days
+18:59:53 [INFO] Single-config feature matrix: 33,046 rows x 45 features (win rate: 36.6%)
+18:59:53 [INFO] E6 filter: dropping 20 noise columns
+18:59:53 [INFO]   Data: 1197 total, train=715 val=237 test=245
+18:59:53 [INFO]   Verified real delta: +20.6R (sweep reported: +12.5R)
+19:00:10 [INFO]     50/200 permutations (16s, ETA 49s)
+19:00:27 [INFO]     100/200 permutations (33s, ETA 33s)
+19:00:43 [INFO]     150/200 permutations (50s, ETA 17s)
+19:01:00 [INFO]     200/200 permutations (66s, ETA 0s)
+19:01:00 [INFO] 
+  RESULT: US_DATA_830 O30 RR2.0
+19:01:00 [INFO]   Real delta:   +20.6R
+19:01:00 [INFO]   Null mean:    -0.3R
+19:01:00 [INFO]   Null median:  +0.0R
+19:01:00 [INFO]   Null std:     8.6R
+19:01:00 [INFO]   Null max:     +34.8R
+19:01:00 [INFO]   p-value:      0.0200
+19:01:00 [INFO]   Elapsed:      66s
+19:01:00 [INFO]   >>> PASS — ML has genuine skill (p=0.0200 < 0.05)
+19:01:00 [INFO] 
+============================================================
+19:01:00 [INFO]   BOOTSTRAP: NYSE_OPEN RR2.0 (real delta=+3.3R)
+19:01:00 [INFO]   Permutations: 200
+19:01:00 [INFO] ============================================================
+19:01:00 [INFO] HYBRID config: 2 sessions from validated_setups, 10 from orb_outcomes fallback: ['EUROPE_FLOW', 'BRISBANE_1025', 'SINGAPORE_OPEN', 'US_DATA_830', 'CME_REOPEN', 'US_DATA_1000', 'NYSE_CLOSE', 'NYSE_OPEN', 'LONDON_METALS', 'TOKYO_OPEN']
+19:01:00 [INFO] Backfilling global features: 559/13,337 rows missing (orb_minutes\u22605)
+19:01:00 [WARNING]   559 rows still missing global features after backfill (no orb_minutes=5 row for those days)
+19:01:00 [INFO] Single-config (MAX_SAMPLES RR=2.0 UNFILTERED): 12 configs, 13,337 raw outcomes for MNQ
+19:01:00 [INFO]   BRISBANE_1025          E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+19:01:00 [INFO]   CME_PRECLOSE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.249 N=129
+19:01:00 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=593
+19:01:00 [INFO]   COMEX_SETTLE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.247 N=199
+19:01:00 [INFO]   EUROPE_FLOW            E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+19:01:00 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1312
+19:01:00 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=375
+19:01:00 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1219
+19:01:00 [INFO]   SINGAPORE_OPEN         E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+19:01:00 [INFO]   TOKYO_OPEN             E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1314
+19:01:00 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+19:01:00 [INFO]   US_DATA_830            E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+19:01:00 [INFO] Filter SKIPPED: ML trains on all 13,337 break days
+19:01:01 [INFO] Single-config feature matrix: 13,337 rows x 45 features (win rate: 37.0%)
+19:01:01 [INFO] E6 filter: dropping 20 noise columns
+19:01:01 [INFO]   Data: 1219 total, train=738 val=252 test=229
+19:01:01 [INFO]   Verified real delta: +8.8R (sweep reported: +3.3R)
+19:01:18 [INFO]     50/200 permutations (17s, ETA 52s)
+19:01:34 [INFO]     100/200 permutations (33s, ETA 33s)
+19:01:49 [INFO]     150/200 permutations (48s, ETA 16s)
+19:02:04 [INFO]     200/200 permutations (63s, ETA 0s)
+19:02:04 [INFO] 
+  RESULT: NYSE_OPEN RR2.0
+19:02:04 [INFO]   Real delta:   +8.8R
+19:02:04 [INFO]   Null mean:    -0.7R
+19:02:04 [INFO]   Null median:  +0.0R
+19:02:04 [INFO]   Null std:     3.6R
+19:02:04 [INFO]   Null max:     +11.0R
+19:02:04 [INFO]   p-value:      0.0050
+19:02:04 [INFO]   Elapsed:      63s
+19:02:04 [INFO]   >>> PASS — ML has genuine skill (p=0.0050 < 0.05)
+19:02:04 [INFO] 
+============================================================
+19:02:04 [INFO]   BOOTSTRAP: CME_PRECLOSE RR2.0 (real delta=+2.2R)
+19:02:04 [INFO]   Permutations: 200
+19:02:04 [INFO] ============================================================
+19:02:04 [INFO] HYBRID config: 2 sessions from validated_setups, 10 from orb_outcomes fallback: ['SINGAPORE_OPEN', 'US_DATA_830', 'TOKYO_OPEN', 'CME_REOPEN', 'LONDON_METALS', 'NYSE_OPEN', 'US_DATA_1000', 'NYSE_CLOSE', 'BRISBANE_1025', 'EUROPE_FLOW']
+19:02:05 [INFO] Backfilling global features: 559/13,337 rows missing (orb_minutes\u22605)
+19:02:05 [WARNING]   559 rows still missing global features after backfill (no orb_minutes=5 row for those days)
+19:02:05 [INFO] Single-config (MAX_SAMPLES RR=2.0 UNFILTERED): 12 configs, 13,337 raw outcomes for MNQ
+19:02:05 [INFO]   BRISBANE_1025          E1 RR2.0 CB1 O15 NO_FILTER            Sharpe=nan N=1313
+19:02:05 [INFO]   CME_PRECLOSE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.249 N=129
+19:02:05 [INFO]   CME_REOPEN             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=593
+19:02:05 [INFO]   COMEX_SETTLE           E2 RR2.0 CB1 O5 ATR70_VOL            Sharpe=0.247 N=199
+19:02:05 [INFO]   EUROPE_FLOW            E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+19:02:05 [INFO]   LONDON_METALS          E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1312
+19:02:05 [INFO]   NYSE_CLOSE             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=375
+19:02:05 [INFO]   NYSE_OPEN              E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1219
+19:02:05 [INFO]   SINGAPORE_OPEN         E1 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1313
+19:02:05 [INFO]   TOKYO_OPEN             E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1314
+19:02:05 [INFO]   US_DATA_1000           E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+19:02:05 [INFO]   US_DATA_830            E2 RR2.0 CB1 O5 NO_FILTER            Sharpe=nan N=1246
+19:02:05 [INFO] Filter SKIPPED: ML trains on all 13,337 break days
+19:02:05 [INFO] Single-config feature matrix: 13,337 rows x 45 features (win rate: 37.0%)
+19:02:05 [INFO] E6 filter: dropping 20 noise columns
+19:02:05 [INFO]   Data: 863 total, train=472 val=191 test=200
+19:02:05 [INFO]   Verified real delta: +0.0R (sweep reported: +2.2R)
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "C:\Users\joshd\canompx3\scripts\tools\ml_bootstrap_test.py", line 265, in <module>
+    main()
+  File "C:\Users\joshd\canompx3\scripts\tools\ml_bootstrap_test.py", line 227, in main
+    result = bootstrap_one(session, aperture, rr, delta)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\joshd\canompx3\scripts\tools\ml_bootstrap_test.py", line 174, in bootstrap_one
+    null_delta = float(test_pnl[null_kept].sum()) - float(test_pnl.sum())
+                       ^^^^^^^^
+UnboundLocalError: cannot access local variable 'test_pnl' where it is not associated with a value
