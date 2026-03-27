@@ -1,10 +1,11 @@
-"""Tests for pre_session_check — CRITICAL-1: corrupt HWM file must FAIL, not pass."""
+"""Tests for pre_session_check — HWM fail-closed + manual halt."""
 
 import json
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from trading_app.pre_session_check import check_dd_circuit_breaker
+from trading_app.pre_session_check import check_dd_circuit_breaker, check_manual_halt
 
 
 def _make_hwm_file(tmp_path: Path, data: dict, filename: str = "account_hwm_TEST123.json") -> Path:
@@ -104,3 +105,72 @@ def test_corrupt_file_skipped_returns_pass(tmp_path):
 
     # CORRUPT file ignored, no other files → first session path
     assert ok is True
+
+
+# ── Manual halt tests ────────────────────────────────────────────────────
+
+
+class TestManualHalt:
+    """Manual trading halt via state file."""
+
+    def test_no_halt_file(self, tmp_path):
+        """No halt file → pass."""
+        halt = tmp_path / "halt_trading.json"
+        with patch("trading_app.pre_session_check.HALT_FILE", halt):
+            ok, msg = check_manual_halt()
+        assert ok is True
+        assert "No manual halt" in msg
+
+    def test_active_halt(self, tmp_path):
+        """Active halt file → NO-GO with reason."""
+        halt = tmp_path / "halt_trading.json"
+        halt.write_text(json.dumps({
+            "active": True,
+            "reason": "Down $900, sitting out",
+            "expires": (date.today() + timedelta(days=1)).isoformat(),
+        }))
+        with patch("trading_app.pre_session_check.HALT_FILE", halt):
+            ok, msg = check_manual_halt()
+        assert ok is False
+        assert "MANUAL HALT" in msg
+        assert "Down $900" in msg
+
+    def test_inactive_halt(self, tmp_path):
+        """Halt file with active=false → pass."""
+        halt = tmp_path / "halt_trading.json"
+        halt.write_text(json.dumps({"active": False, "reason": "cleared"}))
+        with patch("trading_app.pre_session_check.HALT_FILE", halt):
+            ok, msg = check_manual_halt()
+        assert ok is True
+        assert "inactive" in msg
+
+    def test_expired_halt(self, tmp_path):
+        """Halt file with past expiry → auto-resume (pass)."""
+        halt = tmp_path / "halt_trading.json"
+        halt.write_text(json.dumps({
+            "active": True,
+            "reason": "yesterday",
+            "expires": (date.today() - timedelta(days=1)).isoformat(),
+        }))
+        with patch("trading_app.pre_session_check.HALT_FILE", halt):
+            ok, msg = check_manual_halt()
+        assert ok is True
+        assert "expired" in msg.lower()
+
+    def test_corrupt_halt_file(self, tmp_path):
+        """Corrupt halt file → pass with warning (can't verify halt)."""
+        halt = tmp_path / "halt_trading.json"
+        halt.write_text("{{{invalid json")
+        with patch("trading_app.pre_session_check.HALT_FILE", halt):
+            ok, msg = check_manual_halt()
+        assert ok is True
+        assert "unreadable" in msg.lower()
+
+    def test_halt_no_expiry(self, tmp_path):
+        """Halt with no expiry field → blocks indefinitely."""
+        halt = tmp_path / "halt_trading.json"
+        halt.write_text(json.dumps({"active": True, "reason": "indefinite"}))
+        with patch("trading_app.pre_session_check.HALT_FILE", halt):
+            ok, msg = check_manual_halt()
+        assert ok is False
+        assert "indefinite" in msg
