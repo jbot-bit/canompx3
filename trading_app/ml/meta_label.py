@@ -199,7 +199,17 @@ def _get_session_features(
     EF 17:00 before LM 18:00, summer: LM 17:00 before EF 18:00).
     Cross-session features from one contaminate the other ~42% of the time.
     """
-    session_idx = SESSION_CHRONOLOGICAL_ORDER.index(session) if session in SESSION_CHRONOLOGICAL_ORDER else -1
+    if session not in SESSION_CHRONOLOGICAL_ORDER:
+        logger.warning(
+            "Unknown session '%s' not in SESSION_CHRONOLOGICAL_ORDER — "
+            "dropping cross-session features as safety default (fail-closed)",
+            session,
+        )
+        drop_cols = [c for c in CROSS_SESSION_FEATURES if c in X_e6.columns]
+        drop_cols += [c for c in LEVEL_PROXIMITY_FEATURES if c in X_e6.columns]
+        return X_e6.drop(columns=drop_cols, errors="ignore")
+
+    session_idx = SESSION_CHRONOLOGICAL_ORDER.index(session)
 
     if session_idx <= MAX_EARLY_SESSION_INDEX:
         # Early session: drop cross-session counts
@@ -421,7 +431,8 @@ def train_per_session_meta_label(
                     )
                     cpcv_auc = cpcv_results["auc_mean"]
                 except Exception:
-                    logger.warning(f"  {session}: CPCV failed, continuing without CPCV validation", exc_info=True)
+                    logger.warning(f"  {session}: CPCV failed — Gate 2 will enforce fail-closed", exc_info=True)
+                    cpcv_auc = -1.0  # Sentinel: forces Gate 2 to reject (fail-closed)
 
             # --- Train RF on training data (first 60%) ---
             rf = RandomForestClassifier(**rf_base_params, min_samples_leaf=leaf_size)
@@ -854,6 +865,7 @@ def train_meta_label(
     run_cpcv: bool = True,
     max_cpcv_splits: int | None = 20,
     save_model: bool = True,
+    _allow_legacy: bool = False,
     validated_only: bool = False,
 ) -> dict:
     """Train a meta-label classifier for one instrument.
@@ -874,6 +886,12 @@ def train_meta_label(
     Returns:
         dict with cpcv_results, threshold_results, honest_oos, model_path
     """
+    if not _allow_legacy:
+        raise RuntimeError(
+            "train_meta_label() is V1 methodology (no Fix B/E/F). "
+            "Use train_per_session_meta_label() with --single-config instead. "
+            "Pass _allow_legacy=True only for historical comparison."
+        )
     mode = "VALIDATED-ONLY" if validated_only else "ALL OUTCOMES"
     logger.info(f"{'=' * 60}")
     logger.info(f"  META-LABEL TRAINING: {instrument} ({mode})")
@@ -1133,6 +1151,11 @@ def main():
         action="store_true",
         help="Train separate model per (session, aperture). Fixes aperture covariate shift. Requires --single-config.",
     )
+    parser.add_argument(
+        "--legacy",
+        action="store_true",
+        help="Allow V1 per-instrument training (no Fix B/E/F). For historical comparison only.",
+    )
     args = parser.parse_args()
 
     if args.per_aperture and not args.single_config:
@@ -1229,6 +1252,7 @@ def main():
                 run_cpcv=not args.no_cpcv,
                 max_cpcv_splits=args.max_cpcv_splits,
                 validated_only=args.validated_only,
+                _allow_legacy=args.legacy,
             )
             print_results(results)
 
