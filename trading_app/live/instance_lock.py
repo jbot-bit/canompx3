@@ -41,8 +41,7 @@ def acquire_instance_lock(instrument: str) -> None:
                 old_pid = int(content)
                 if _is_pid_alive(old_pid):
                     log.critical(
-                        "Another bot instance is running (PID %d). "
-                        "If stale, delete %s and retry.",
+                        "Another bot instance is running (PID %d). If stale, delete %s and retry.",
                         old_pid,
                         lock_path,
                     )
@@ -83,8 +82,7 @@ def acquire_instance_lock(instrument: str) -> None:
             os.close(lock_fd)
         log.critical("Failed to acquire instance lock for %s: %s", instrument, e)
         print(
-            f"\n!!! CRITICAL: Cannot acquire lock for {instrument}.\n"
-            f"    Another instance may be running. Error: {e}\n"
+            f"\n!!! CRITICAL: Cannot acquire lock for {instrument}.\n    Another instance may be running. Error: {e}\n"
         )
         sys.exit(1)
 

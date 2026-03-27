@@ -258,14 +258,18 @@ class TestRegimeDiscovery:
 
         # Run MGC discovery
         mgc_count = run_regime_discovery(
-            db_path=regime_db, instrument="MGC",
-            start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
+            db_path=regime_db,
+            instrument="MGC",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31),
             run_label="shared_label",
         )
         # Run MES discovery with SAME run_label
         mes_count = run_regime_discovery(
-            db_path=regime_db, instrument="MES",
-            start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
+            db_path=regime_db,
+            instrument="MES",
+            start_date=date(2025, 1, 1),
+            end_date=date(2025, 12, 31),
             run_label="shared_label",
         )
 

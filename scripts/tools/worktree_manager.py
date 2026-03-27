@@ -409,7 +409,9 @@ def close_worktree(path: Path, force: bool = False, drop_branch: bool = False) -
         shutil.rmtree(path, ignore_errors=True)
 
 
-def handoff_worktree(path: Path, target_tool: str, purpose: str | None = None, note: str | None = None) -> dict[str, str]:
+def handoff_worktree(
+    path: Path, target_tool: str, purpose: str | None = None, note: str | None = None
+) -> dict[str, str]:
     meta = read_metadata(path)
     if meta is None:
         raise RuntimeError(f"Missing metadata for managed worktree: {path}")
@@ -590,7 +592,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_handoff = sub.add_parser("handoff", help="Reassign a managed workstream to another tool")
     p_handoff.add_argument("--path", default=None, help="Explicit worktree path")
-    p_handoff.add_argument("--tool", choices=["claude", "codex"], default=None, help="Current tool namespace for --name")
+    p_handoff.add_argument(
+        "--tool", choices=["claude", "codex"], default=None, help="Current tool namespace for --name"
+    )
     p_handoff.add_argument("--name", default=None, help="Managed workstream name")
     p_handoff.add_argument("--target-tool", required=True, choices=["claude", "codex"], help="New owning tool")
     p_handoff.add_argument("--purpose", default=None, help="Optional updated purpose")

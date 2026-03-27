@@ -1,5 +1,6 @@
 """STRESS TEST: Is +0.17R × 1,671 trades real?
 Tests for: feature selection bias, bootstrap, yearly consistency, drawdown, per-session."""
+
 import sys
 
 sys.path.insert(0, r"C:\Users\joshd\canompx3")
@@ -27,7 +28,7 @@ df = con.execute("""
 con.close()
 
 td = pd.to_datetime(df["trading_day"])
-feats = ["orb_CME_REOPEN_size","orb_SINGAPORE_OPEN_break_bar_volume","atr_20","orb_TOKYO_OPEN_size"]
+feats = ["orb_CME_REOPEN_size", "orb_SINGAPORE_OPEN_break_bar_volume", "atr_20", "orb_TOKYO_OPEN_size"]
 
 # ================================================================
 # TEST 1: FEATURE SELECTION BIAS
@@ -38,14 +39,14 @@ feats = ["orb_CME_REOPEN_size","orb_SINGAPORE_OPEN_break_bar_volume","atr_20","o
 #   Threshold calibration: 2023-2024
 #   Test: 2025+
 # ================================================================
-print("="*70)
+print("=" * 70)
 print("TEST 1: FEATURE SELECTION BIAS (3-way temporal split)")
-print("="*70)
+print("=" * 70)
 
 split1 = pd.Timestamp("2023-01-01")  # feature selection ends
 split2 = pd.Timestamp("2025-01-01")  # calibration ends, test begins
 
-sel_df = df[td < split1]    # feature selection
+sel_df = df[td < split1]  # feature selection
 cal_df = df[(td >= split1) & (td < split2)]  # calibration
 test_df = df[td >= split2]  # truly blind test
 
@@ -69,7 +70,7 @@ for feat in feats:
         q5 = p[q == max(set(q))]
         spread = q5.mean() - q1.mean()
         _, pv = stats.ttest_ind(q5, q1)
-        print(f"    {feat}: spread={spread:+.3f} p={pv:.4f} {'***' if pv<0.01 else '**' if pv<0.05 else ''}")
+        print(f"    {feat}: spread={spread:+.3f} p={pv:.4f} {'***' if pv < 0.01 else '**' if pv < 0.05 else ''}")
     except Exception:
         print(f"    {feat}: can't compute")
 
@@ -93,9 +94,9 @@ print(f"    p-value: {p3way:.4f}")
 # ================================================================
 # TEST 2: BOOTSTRAP — quintile selection vs random (200 reps)
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 2: BOOTSTRAP (quintile vs random selection)")
-print("="*70)
+print("=" * 70)
 
 real_mean = top["pnl_r"].mean()
 n_top = int(top_test.sum())
@@ -109,14 +110,14 @@ n_above = sum(1 for n in null_means if n >= real_mean)
 print(f"  Real quintile ExpR: {real_mean:+.4f}")
 print(f"  Random selection:   {statistics.mean(null_means):+.4f} (500 reps)")
 print(f"  Null >= real: {n_above}/500")
-print(f"  p-value: {n_above/500:.4f}")
+print(f"  p-value: {n_above / 500:.4f}")
 
 # ================================================================
 # TEST 3: YEARLY CONSISTENCY
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 3: YEARLY CONSISTENCY (top quintile)")
-print("="*70)
+print("=" * 70)
 
 # Use full pre-2025 for thresholds, then year-by-year
 pre25 = df[td < pd.Timestamp("2025-01-01")]
@@ -133,27 +134,31 @@ for year in sorted(td.dt.year.unique()):
     yr_top = yr_df[mask]
     yr_bot = yr_df[~mask]
     if len(yr_top) > 5:
-        print(f"  {year}: ALL={yr_df['pnl_r'].mean():+.4f} TOP={yr_top['pnl_r'].mean():+.4f} N_top={len(yr_top)} WR={(yr_top['pnl_r']>0).mean():.1%}")
+        print(
+            f"  {year}: ALL={yr_df['pnl_r'].mean():+.4f} TOP={yr_top['pnl_r'].mean():+.4f} N_top={len(yr_top)} WR={(yr_top['pnl_r'] > 0).mean():.1%}"
+        )
 
 # ================================================================
 # TEST 4: PER-SESSION BREAKDOWN (is it concentrated?)
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 4: PER-SESSION (2025 holdout)")
-print("="*70)
+print("=" * 70)
 
 for session in sorted(test_df["orb_label"].unique()):
     sess = test_df[test_df["orb_label"] == session]
     sess_top = top[top["orb_label"] == session] if "orb_label" in top.columns else pd.DataFrame()
     if len(sess) > 20 and len(sess_top) > 5:
-        print(f"  {session:<22} ALL: {sess['pnl_r'].mean():+.4f} (N={len(sess)})  TOP: {sess_top['pnl_r'].mean():+.4f} (N={len(sess_top)})")
+        print(
+            f"  {session:<22} ALL: {sess['pnl_r'].mean():+.4f} (N={len(sess)})  TOP: {sess_top['pnl_r'].mean():+.4f} (N={len(sess_top)})"
+        )
 
 # ================================================================
 # TEST 5: MAX DRAWDOWN SIMULATION
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 5: DRAWDOWN SIMULATION (top quintile, 2025)")
-print("="*70)
+print("=" * 70)
 
 cumr = top["pnl_r"].cumsum().values
 peak = np.maximum.accumulate(cumr)
@@ -172,17 +177,17 @@ for p in pnl_arr:
 
 print(f"  Total R: {cumr[-1]:+.1f}")
 print(f"  Max drawdown: {max_dd:+.1f}R")
-print(f"  At ~$137/R: max DD = ${abs(max_dd)*137:.0f}")
+print(f"  At ~$137/R: max DD = ${abs(max_dd) * 137:.0f}")
 print(f"  Max consecutive losses: {max_consec_loss}")
 print(f"  At $137/trade: worst streak = ${max_consec_loss * 137:.0f}")
 
 # ================================================================
 # TEST 6: COST MODEL CHECK
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 6: COST MODEL")
-print("="*70)
+print("=" * 70)
 print("  MGC E2 cost model: $5.74 per trade (from pipeline)")
 print("  Average risk: ~$137/trade (ORB size ~13.7pts × $10/pt)")
-print(f"  Cost as fraction of risk: {5.74/137*100:.1f}%")
+print(f"  Cost as fraction of risk: {5.74 / 137 * 100:.1f}%")
 print("  ExpR already includes costs? Check outcome_builder.")

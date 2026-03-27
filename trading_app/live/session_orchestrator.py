@@ -362,12 +362,17 @@ class SessionOrchestrator:
                                         "HWM tracker: broker equity unavailable at startup — will init on first poll"
                                     )
                             break
-                except ImportError:
-                    log.warning("HWM tracker: account_hwm_tracker not available — DD tracking DISABLED")
+                except ImportError as e:
+                    raise RuntimeError(
+                        "HWM tracker: account_hwm_tracker module not available — "
+                        "cannot trade prop account without DD tracking"
+                    ) from e
                 except RuntimeError:
                     raise  # Re-raise halt and other fail-closed errors — NEVER swallow these
                 except Exception as e:
-                    log.warning("HWM tracker init failed: %s — DD tracking DISABLED", e)
+                    raise RuntimeError(
+                        f"HWM tracker init failed: {e} — cannot trade prop account without DD tracking"
+                    ) from e
 
         # Prop firm close time (ET) — used for post-market buffer and force-flatten
         self._close_hour_et: int | None = None

@@ -251,10 +251,7 @@ def run_instrument_test(
     # Resolve ts_pnl_r (COALESCE)
     for o in eligible:
         o["ts_pnl_r_resolved"] = o["ts_pnl_r"] if o["ts_pnl_r"] is not None else o["pnl_r"]
-        o["is_time_stop"] = (
-            o["ts_outcome"] is not None
-            and o["ts_outcome"] != o["outcome"]
-        )
+        o["is_time_stop"] = o["ts_outcome"] is not None and o["ts_outcome"] != o["outcome"]
 
     result.n_total_trades = len(eligible)
     result.n_time_stop_trades = sum(1 for o in eligible if o["is_time_stop"])
@@ -370,18 +367,20 @@ def run_instrument_test(
         else:
             verdict = "INCONCLUSIVE"
 
-        session_results.append(SessionResult(
-            session=session,
-            n_trades_raw=len(raw_rs),
-            n_trades_ts=len(ts_rs),
-            raw_total_r=round(raw_total, 2),
-            ts_total_r=round(ts_total, 2),
-            delta_r=round(delta_total, 2),
-            delta_per_trade=round(delta_per, 4),
-            p_value=round(p_val, 4),
-            n_time_stop=n_ts,
-            verdict=verdict,
-        ))
+        session_results.append(
+            SessionResult(
+                session=session,
+                n_trades_raw=len(raw_rs),
+                n_trades_ts=len(ts_rs),
+                raw_total_r=round(raw_total, 2),
+                ts_total_r=round(ts_total, 2),
+                delta_r=round(delta_total, 2),
+                delta_per_trade=round(delta_per, 4),
+                p_value=round(p_val, 4),
+                n_time_stop=n_ts,
+                verdict=verdict,
+            )
+        )
 
     result.sessions = session_results
 
@@ -422,7 +421,11 @@ def print_result(r: InstrumentResult) -> None:
     print(f"{'=' * 70}")
     print(f"  Strategies: {r.n_strategies}")
     print(f"  Total trades: {r.n_total_trades}")
-    print(f"  Time-stop trades: {r.n_time_stop_trades} ({r.n_time_stop_trades / r.n_total_trades * 100:.1f}%)" if r.n_total_trades > 0 else "")
+    print(
+        f"  Time-stop trades: {r.n_time_stop_trades} ({r.n_time_stop_trades / r.n_total_trades * 100:.1f}%)"
+        if r.n_total_trades > 0
+        else ""
+    )
     print(f"  WF windows: {r.n_windows_total}")
     print()
 
@@ -453,7 +456,9 @@ def print_result(r: InstrumentResult) -> None:
 
     # Per-session
     if r.sessions:
-        print(f"  {'Session':<20} {'N':>6} {'T80#':>5} {'Raw R':>8} {'T80 R':>8} {'Δ/trade':>8} {'p':>8} {'Verdict':<20}")
+        print(
+            f"  {'Session':<20} {'N':>6} {'T80#':>5} {'Raw R':>8} {'T80 R':>8} {'Δ/trade':>8} {'p':>8} {'Verdict':<20}"
+        )
         print(f"  {'-' * 95}")
         for s in r.sessions:
             print(

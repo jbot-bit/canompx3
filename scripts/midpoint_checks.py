@@ -1,4 +1,5 @@
 """5 verification checks for midpoint entry strategy."""
+
 import sys
 
 sys.path.insert(0, r"C:\Users\joshd\canompx3")
@@ -31,7 +32,7 @@ td = pd.to_datetime(df["trading_day"])
 train_df = df[td < holdout]
 test_df = df[td >= holdout]
 
-feats = ["orb_CME_REOPEN_size","orb_SINGAPORE_OPEN_break_bar_volume","atr_20","orb_TOKYO_OPEN_size"]
+feats = ["orb_CME_REOPEN_size", "orb_SINGAPORE_OPEN_break_bar_volume", "atr_20", "orb_TOKYO_OPEN_size"]
 thresholds = {f: pd.to_numeric(train_df[f], errors="coerce").dropna().quantile(0.80) for f in feats}
 top_mask = pd.Series(True, index=test_df.index)
 for f, t in thresholds.items():
@@ -56,19 +57,27 @@ print("CHECK 2: SELECTION BIAS")
 print("=" * 70)
 retrace = top[fills]
 no_retrace = top[~fills]
-print(f"  RETRACE (fills):    N={len(retrace)} E2 ExpR={retrace['pnl_r'].mean():+.4f} MFE={pd.to_numeric(retrace['mfe_r'],errors='coerce').mean():.3f} WR={(retrace['pnl_r']>0).mean():.1%}")
-print(f"  NO RETRACE (miss):  N={len(no_retrace)} E2 ExpR={no_retrace['pnl_r'].mean():+.4f} MFE={pd.to_numeric(no_retrace['mfe_r'],errors='coerce').mean():.3f} WR={(no_retrace['pnl_r']>0).mean():.1%}")
-bias = "YES - missed are better" if no_retrace['pnl_r'].mean() > retrace['pnl_r'].mean() else "NO - filled are comparable or better"
+print(
+    f"  RETRACE (fills):    N={len(retrace)} E2 ExpR={retrace['pnl_r'].mean():+.4f} MFE={pd.to_numeric(retrace['mfe_r'], errors='coerce').mean():.3f} WR={(retrace['pnl_r'] > 0).mean():.1%}"
+)
+print(
+    f"  NO RETRACE (miss):  N={len(no_retrace)} E2 ExpR={no_retrace['pnl_r'].mean():+.4f} MFE={pd.to_numeric(no_retrace['mfe_r'], errors='coerce').mean():.3f} WR={(no_retrace['pnl_r'] > 0).mean():.1%}"
+)
+bias = (
+    "YES - missed are better"
+    if no_retrace["pnl_r"].mean() > retrace["pnl_r"].mean()
+    else "NO - filled are comparable or better"
+)
 print(f"  Selection bias: {bias}")
 
 # CHECK 3: STOP/RISK
-print(f"\n{'='*70}\nCHECK 3: RISK CLARIFICATION\n{'='*70}")
-print(f"  E2 risk: {risk_orig.mean():.2f} pts (${risk_orig.mean()*10:.0f}/micro)")
-print(f"  Midpoint risk: {risk_mid.mean():.2f} pts (${risk_mid.mean()*10:.0f}/micro)")
+print(f"\n{'=' * 70}\nCHECK 3: RISK CLARIFICATION\n{'=' * 70}")
+print(f"  E2 risk: {risk_orig.mean():.2f} pts (${risk_orig.mean() * 10:.0f}/micro)")
+print(f"  Midpoint risk: {risk_mid.mean():.2f} pts (${risk_mid.mean() * 10:.0f}/micro)")
 print("  Stop = opposite ORB boundary (same for both)")
 
 # CHECK 4: STRESS TEST
-print(f"\n{'='*70}\nCHECK 4: STRESS TEST (degraded fills)\n{'='*70}")
+print(f"\n{'=' * 70}\nCHECK 4: STRESS TEST (degraded fills)\n{'=' * 70}")
 mfe_from_mid = mfe_r + 0.5
 for fill_pct in [0.74, 0.60, 0.50, 0.40]:
     n_take = int(len(top) * fill_pct)
@@ -79,10 +88,12 @@ for fill_pct in [0.74, 0.60, 0.50, 0.40]:
     pnl_r_mid = pnl_pts_mid / risk_mid
     hit_tgt = mfe_from_mid[fill_mask] >= 1.25
     pnl_clip = np.where(hit_tgt, 2.5, np.maximum(pnl_r_mid[fill_mask], -1.0))
-    print(f"  {fill_pct:.0%} fill: N={n_take} ExpR={pnl_clip.mean():+.4f}R Total={pnl_clip.sum():+.1f}R WR={(pnl_clip>0).mean():.1%}")
+    print(
+        f"  {fill_pct:.0%} fill: N={n_take} ExpR={pnl_clip.mean():+.4f}R Total={pnl_clip.sum():+.1f}R WR={(pnl_clip > 0).mean():.1%}"
+    )
 
 # CHECK 5: BOOTSTRAP — is quintile selection real?
-print(f"\n{'='*70}\nCHECK 5: BOOTSTRAP (quintile selection vs random)\n{'='*70}")
+print(f"\n{'=' * 70}\nCHECK 5: BOOTSTRAP (quintile selection vs random)\n{'=' * 70}")
 all_mae = pd.to_numeric(test_df["mae_r"], errors="coerce").values
 all_fills = all_mae >= 0.5
 all_entry = pd.to_numeric(test_df["entry_price"], errors="coerce").values
@@ -95,8 +106,9 @@ all_rmid = all_risk / 2
 all_mfe = pd.to_numeric(test_df["mfe_r"], errors="coerce").values
 all_mfe_mid = all_mfe + 0.5
 all_hit = all_mfe_mid >= 1.25
-all_pnl_mid = np.where(all_hit, 2.5, np.maximum(
-    np.where(all_long, all_exit - all_mid, all_mid - all_exit) / all_rmid, -1.0))
+all_pnl_mid = np.where(
+    all_hit, 2.5, np.maximum(np.where(all_long, all_exit - all_mid, all_mid - all_exit) / all_rmid, -1.0)
+)
 
 # Real selection
 real_filled = all_pnl_mid[top_mask.values & all_fills]

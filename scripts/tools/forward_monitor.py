@@ -45,17 +45,19 @@ def _build_lanes() -> list[dict]:
     lanes = []
     for i, (label, lane) in enumerate(sorted(registry.items()), 1):
         bt = _BACKTEST_STATS.get(label, {"backtest_expr": 0.10, "backtest_std": 1.0})
-        lanes.append({
-            "name": f"L{i} {label} {lane['filter_type']} RR{lane['rr_target']} O{lane['orb_minutes']}",
-            "symbol": lane["instrument"],
-            "orb_label": label,
-            "entry_model": lane["entry_model"],
-            "rr_target": lane["rr_target"],
-            "confirm_bars": lane["confirm_bars"],
-            "orb_minutes": lane["orb_minutes"],
-            "filter_type": lane["filter_type"],
-            **bt,
-        })
+        lanes.append(
+            {
+                "name": f"L{i} {label} {lane['filter_type']} RR{lane['rr_target']} O{lane['orb_minutes']}",
+                "symbol": lane["instrument"],
+                "orb_label": label,
+                "entry_model": lane["entry_model"],
+                "rr_target": lane["rr_target"],
+                "confirm_bars": lane["confirm_bars"],
+                "orb_minutes": lane["orb_minutes"],
+                "filter_type": lane["filter_type"],
+                **bt,
+            }
+        )
     return lanes
 
 

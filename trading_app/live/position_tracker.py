@@ -140,8 +140,7 @@ class PositionTracker:
         # A late fill arriving after on_exit_sent must NOT resurrect the position.
         if record.state in (PositionState.PENDING_EXIT, PositionState.FLAT):
             log.critical(
-                "LATE FILL REJECTED for %s: state=%s, fill=%.2f — "
-                "position is already exiting, cannot resurrect",
+                "LATE FILL REJECTED for %s: state=%s, fill=%.2f — position is already exiting, cannot resurrect",
                 strategy_id,
                 record.state.value,
                 fill_price,
@@ -173,8 +172,7 @@ class PositionTracker:
         # it should be cancelled instead. Also reject from FLAT (should not happen).
         if record.state == PositionState.PENDING_ENTRY:
             log.critical(
-                "EXIT SENT REJECTED for %s: state=PENDING_ENTRY — "
-                "entry not yet filled, cancel the entry order instead",
+                "EXIT SENT REJECTED for %s: state=PENDING_ENTRY — entry not yet filled, cancel the entry order instead",
                 strategy_id,
             )
             return None

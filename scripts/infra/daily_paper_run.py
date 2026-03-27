@@ -73,12 +73,11 @@ def run_step(step_num: int, description: str, cmd: list[str], allow_fail: bool =
 
 def main():
     parser = argparse.ArgumentParser(description="Daily paper-trade pipeline runner")
-    parser.add_argument("--date", type=date.fromisoformat, default=None,
-                        help="Trading date to process (default: yesterday)")
-    parser.add_argument("--skip-ingest", action="store_true",
-                        help="Skip bar ingestion (if bars already current)")
-    parser.add_argument("--monitor-only", action="store_true",
-                        help="Skip pipeline steps, just run monitor")
+    parser.add_argument(
+        "--date", type=date.fromisoformat, default=None, help="Trading date to process (default: yesterday)"
+    )
+    parser.add_argument("--skip-ingest", action="store_true", help="Skip bar ingestion (if bars already current)")
+    parser.add_argument("--monitor-only", action="store_true", help="Skip pipeline steps, just run monitor")
     args = parser.parse_args()
 
     trading_date = args.date or (date.today() - timedelta(days=1))
@@ -90,7 +89,9 @@ def main():
     print(f"Paper sessions: {', '.join(_PAPER_SESSIONS)}")
     print(f"Instruments: {', '.join(sorted(_ALL_INSTRUMENTS))}")
     if _TOPSTEP:
-        print(f"TopStep: {', '.join(sorted(_TOPSTEP.allowed_sessions))} {', '.join(sorted(_TOPSTEP_INSTRUMENTS))} (conditional)")
+        print(
+            f"TopStep: {', '.join(sorted(_TOPSTEP.allowed_sessions))} {', '.join(sorted(_TOPSTEP_INSTRUMENTS))} (conditional)"
+        )
 
     py = sys.executable
 
@@ -102,55 +103,127 @@ def main():
         # Step 1: Refresh bars
         if not args.skip_ingest:
             for inst in primary:
-                ok = run_step(1, f"Refresh {inst} bars", [
-                    py, "-m", "pipeline.ingest_dbn", "--instrument", inst, "--resume",
-                ])
+                ok = run_step(
+                    1,
+                    f"Refresh {inst} bars",
+                    [
+                        py,
+                        "-m",
+                        "pipeline.ingest_dbn",
+                        "--instrument",
+                        inst,
+                        "--resume",
+                    ],
+                )
                 if not ok:
                     return 1
             for inst in secondary:
-                run_step(1, f"Refresh {inst} bars (secondary)", [
-                    py, "-m", "pipeline.ingest_dbn", "--instrument", inst, "--resume",
-                ], allow_fail=True)
+                run_step(
+                    1,
+                    f"Refresh {inst} bars (secondary)",
+                    [
+                        py,
+                        "-m",
+                        "pipeline.ingest_dbn",
+                        "--instrument",
+                        inst,
+                        "--resume",
+                    ],
+                    allow_fail=True,
+                )
         else:
             print("\n[1/6] Skipped (--skip-ingest)")
 
         # Step 2: Build features
         for inst in primary:
-            ok = run_step(2, f"Build daily_features {inst} {date_str}", [
-                py, "-m", "pipeline.build_daily_features",
-                "--instrument", inst, "--start", date_str, "--end", date_str,
-            ])
+            ok = run_step(
+                2,
+                f"Build daily_features {inst} {date_str}",
+                [
+                    py,
+                    "-m",
+                    "pipeline.build_daily_features",
+                    "--instrument",
+                    inst,
+                    "--start",
+                    date_str,
+                    "--end",
+                    date_str,
+                ],
+            )
             if not ok:
                 return 1
         for inst in secondary:
-            run_step(2, f"Build daily_features {inst} {date_str}", [
-                py, "-m", "pipeline.build_daily_features",
-                "--instrument", inst, "--start", date_str, "--end", date_str,
-            ], allow_fail=True)
+            run_step(
+                2,
+                f"Build daily_features {inst} {date_str}",
+                [
+                    py,
+                    "-m",
+                    "pipeline.build_daily_features",
+                    "--instrument",
+                    inst,
+                    "--start",
+                    date_str,
+                    "--end",
+                    date_str,
+                ],
+                allow_fail=True,
+            )
 
         # Step 3: Build outcomes
         for inst in primary:
-            ok = run_step(3, f"Build orb_outcomes {inst} {date_str}", [
-                py, "-m", "trading_app.outcome_builder",
-                "--instrument", inst, "--start", date_str, "--end", date_str,
-            ])
+            ok = run_step(
+                3,
+                f"Build orb_outcomes {inst} {date_str}",
+                [
+                    py,
+                    "-m",
+                    "trading_app.outcome_builder",
+                    "--instrument",
+                    inst,
+                    "--start",
+                    date_str,
+                    "--end",
+                    date_str,
+                ],
+            )
             if not ok:
                 return 1
         for inst in secondary:
-            run_step(3, f"Build orb_outcomes {inst} {date_str}", [
-                py, "-m", "trading_app.outcome_builder",
-                "--instrument", inst, "--start", date_str, "--end", date_str,
-            ], allow_fail=True)
+            run_step(
+                3,
+                f"Build orb_outcomes {inst} {date_str}",
+                [
+                    py,
+                    "-m",
+                    "trading_app.outcome_builder",
+                    "--instrument",
+                    inst,
+                    "--start",
+                    date_str,
+                    "--end",
+                    date_str,
+                ],
+                allow_fail=True,
+            )
 
     # Step 4: Run paper monitor
     data_dir = PROJECT_ROOT / "data"
     data_dir.mkdir(exist_ok=True)
     csv_path = data_dir / "paper_mnq_core5_replay.csv"
 
-    ok = run_step(4, "Run paper-trade monitor", [
-        py, "-m", "scripts.reports.monitor_paper_forward",
-        "--output", str(csv_path),
-    ])
+    ok = run_step(
+        4,
+        "Run paper-trade monitor",
+        [
+            py,
+            "-m",
+            "scripts.reports.monitor_paper_forward",
+            "--output",
+            str(csv_path),
+        ],
+    )
     if not ok:
         return 1
 

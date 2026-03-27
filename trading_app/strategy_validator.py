@@ -464,8 +464,7 @@ def validate_strategy(
                     (
                         f"Phase 3: {effective_pos}/{effective_total} years positive "
                         f"({pct_positive:.0%} < {min_years_positive_pct:.0%}), "
-                        f"unwaived negative: {', '.join(neg_list)}"
-                        + (f", waived: {sorted(waived)}" if waived else "")
+                        f"unwaived negative: {', '.join(neg_list)}" + (f", waived: {sorted(waived)}" if waived else "")
                     ),
                     [],
                 )
@@ -1071,7 +1070,9 @@ def run_validation(
                     regime_waivers = sr["regime_waivers"]
 
                     # Concentration check: max single year's % of total R
-                    year_totals = {y: d.get("total_r", d.get("avg_r", 0) * d.get("trades", 0)) for y, d in included.items()}
+                    year_totals = {
+                        y: d.get("total_r", d.get("avg_r", 0) * d.get("trades", 0)) for y, d in included.items()
+                    }
                     total_r_sum = sum(year_totals.values())
                     if total_r_sum > 0:
                         max_year_pct_val = max(yr / total_r_sum for yr in year_totals.values())
@@ -1507,7 +1508,7 @@ def main():
         type=str,
         default=None,
         help="JSON file with per-session K overrides for BH FDR. "
-        "Format: {\"CME_PRECLOSE\": 3254, ...}. Use for null seed testing "
+        'Format: {"CME_PRECLOSE": 3254, ...}. Use for null seed testing '
         "where the DB has fewer strategies than the real pipeline.",
     )
     args = parser.parse_args()

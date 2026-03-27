@@ -62,7 +62,7 @@ DATASET = "GLBX.MDP3"
 # Databento API symbol mapping (vendor-specific format, not in ASSET_CONFIGS).
 # Keys must be a superset of ACTIVE_ORB_INSTRUMENTS.
 _DATABENTO_SYMBOLS: dict[str, str] = {
-    "MGC": "GC.FUT",   # Full-size gold -> micro gold pipeline
+    "MGC": "GC.FUT",  # Full-size gold -> micro gold pipeline
     "MNQ": "MNQ.FUT",  # Native micro Nasdaq
     "MES": "MES.FUT",  # Native micro S&P (post-2024; pre-2024 used ES)
 }
@@ -73,8 +73,7 @@ from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS  # noqa: E402
 _missing = set(ACTIVE_ORB_INSTRUMENTS) - set(_DATABENTO_SYMBOLS)
 if _missing:
     raise RuntimeError(
-        f"DATABENTO_SYMBOLS missing active instruments: {_missing}. "
-        f"Update _DATABENTO_SYMBOLS in {__file__}."
+        f"DATABENTO_SYMBOLS missing active instruments: {_missing}. Update _DATABENTO_SYMBOLS in {__file__}."
     )
 
 # Additional schemas to refresh daily (beyond ohlcv-1m which refresh_data.py handles)
@@ -116,9 +115,7 @@ def refresh_ohlcv_1m(dry_run: bool = False) -> dict[str, str]:
         cmd.append("--dry-run")
 
     env = {**os.environ, "PYTHONPATH": str(PROJECT_ROOT)}
-    result = subprocess.run(
-        cmd, capture_output=True, text=True, cwd=str(PROJECT_ROOT), env=env
-    )
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=str(PROJECT_ROOT), env=env)
 
     for line in result.stdout.strip().splitlines():
         log.info(f"  {line}")

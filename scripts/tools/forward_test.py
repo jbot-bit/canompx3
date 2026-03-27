@@ -79,9 +79,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Daily batch forward test -- refresh data + check kill criteria",
     )
-    parser.add_argument(
-        "--instrument", default="MNQ", help="Instrument (default: MNQ)"
-    )
+    parser.add_argument("--instrument", default="MNQ", help="Instrument (default: MNQ)")
     parser.add_argument(
         "--check-only",
         action="store_true",
@@ -136,10 +134,14 @@ def main():
             gap_end = features_last
 
             outcome_cmd = [
-                py, "trading_app/outcome_builder.py",
-                "--instrument", instrument,
-                "--start", str(gap_start),
-                "--end", str(gap_end),
+                py,
+                "trading_app/outcome_builder.py",
+                "--instrument",
+                instrument,
+                "--start",
+                str(gap_start),
+                "--end",
+                str(gap_end),
             ]
             if not _run(outcome_cmd, f"Step 2: Build outcomes ({gap_start} to {gap_end})"):
                 print("\nFATAL: Outcome builder failed. Fix errors above.")
@@ -149,10 +151,13 @@ def main():
 
     # Step 3: Check kill criteria
     check_cmd = [
-        py, "scripts/tools/check_kill_criteria.py",
+        py,
+        "scripts/tools/check_kill_criteria.py",
         "--from-outcomes",
-        "--instrument", instrument,
-        "--since", str(since),
+        "--instrument",
+        instrument,
+        "--since",
+        str(since),
     ]
     # check_kill_criteria exits non-zero if any kill fires
     print()

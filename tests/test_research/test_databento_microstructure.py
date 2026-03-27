@@ -59,12 +59,14 @@ class TestRepriceE2Entry:
 
     def test_clean_long_fill_1_tick(self):
         """Long break: trade at ORB high, ask is 1 tick above → 1 tick slippage."""
-        tbbo = _make_tbbo_df([
-            {"ts_event": "2024-06-05T22:08:00", "price": 2349.5, "bid_px_00": 2349.4, "ask_px_00": 2349.6},
-            {"ts_event": "2024-06-05T22:09:00", "price": 2349.8, "bid_px_00": 2349.7, "ask_px_00": 2349.9},
-            {"ts_event": "2024-06-05T22:10:00", "price": 2350.0, "bid_px_00": 2349.9, "ask_px_00": 2350.1},
-            {"ts_event": "2024-06-05T22:10:01", "price": 2350.2, "bid_px_00": 2350.1, "ask_px_00": 2350.3},
-        ])
+        tbbo = _make_tbbo_df(
+            [
+                {"ts_event": "2024-06-05T22:08:00", "price": 2349.5, "bid_px_00": 2349.4, "ask_px_00": 2349.6},
+                {"ts_event": "2024-06-05T22:09:00", "price": 2349.8, "bid_px_00": 2349.7, "ask_px_00": 2349.9},
+                {"ts_event": "2024-06-05T22:10:00", "price": 2350.0, "bid_px_00": 2349.9, "ask_px_00": 2350.1},
+                {"ts_event": "2024-06-05T22:10:01", "price": 2350.2, "bid_px_00": 2350.1, "ask_px_00": 2350.3},
+            ]
+        )
         result = reprice_e2_entry(tbbo_df=tbbo, break_dir="long", **self._base_kwargs())
 
         assert result.error is None
@@ -75,10 +77,12 @@ class TestRepriceE2Entry:
 
     def test_gapped_long_fill(self):
         """Long break: trade gaps through ORB high, ask is 3 ticks above."""
-        tbbo = _make_tbbo_df([
-            {"ts_event": "2024-06-05T22:09:00", "price": 2349.5, "bid_px_00": 2349.4, "ask_px_00": 2349.6},
-            {"ts_event": "2024-06-05T22:10:00", "price": 2350.3, "bid_px_00": 2350.2, "ask_px_00": 2350.3},
-        ])
+        tbbo = _make_tbbo_df(
+            [
+                {"ts_event": "2024-06-05T22:09:00", "price": 2349.5, "bid_px_00": 2349.4, "ask_px_00": 2349.6},
+                {"ts_event": "2024-06-05T22:10:00", "price": 2350.3, "bid_px_00": 2350.2, "ask_px_00": 2350.3},
+            ]
+        )
         result = reprice_e2_entry(tbbo_df=tbbo, break_dir="long", **self._base_kwargs())
 
         assert result.error is None
@@ -88,9 +92,11 @@ class TestRepriceE2Entry:
 
     def test_wide_spread_long(self):
         """Long break with wide spread at trigger — worse fill."""
-        tbbo = _make_tbbo_df([
-            {"ts_event": "2024-06-05T22:10:00", "price": 2350.0, "bid_px_00": 2349.7, "ask_px_00": 2350.5},
-        ])
+        tbbo = _make_tbbo_df(
+            [
+                {"ts_event": "2024-06-05T22:10:00", "price": 2350.0, "bid_px_00": 2349.7, "ask_px_00": 2350.5},
+            ]
+        )
         result = reprice_e2_entry(tbbo_df=tbbo, break_dir="long", **self._base_kwargs())
 
         assert result.error is None
@@ -100,10 +106,12 @@ class TestRepriceE2Entry:
 
     def test_clean_short_fill_1_tick(self):
         """Short break: trade at ORB low, bid is 1 tick below → 1 tick slippage."""
-        tbbo = _make_tbbo_df([
-            {"ts_event": "2024-06-05T22:09:00", "price": 2340.5, "bid_px_00": 2340.4, "ask_px_00": 2340.6},
-            {"ts_event": "2024-06-05T22:10:00", "price": 2340.0, "bid_px_00": 2339.9, "ask_px_00": 2340.1},
-        ])
+        tbbo = _make_tbbo_df(
+            [
+                {"ts_event": "2024-06-05T22:09:00", "price": 2340.5, "bid_px_00": 2340.4, "ask_px_00": 2340.6},
+                {"ts_event": "2024-06-05T22:10:00", "price": 2340.0, "bid_px_00": 2339.9, "ask_px_00": 2340.1},
+            ]
+        )
         result = reprice_e2_entry(
             tbbo_df=tbbo,
             break_dir="short",
@@ -117,10 +125,12 @@ class TestRepriceE2Entry:
 
     def test_gapped_short_fill(self):
         """Short break: trade gaps below ORB low, bid is 4 ticks below."""
-        tbbo = _make_tbbo_df([
-            {"ts_event": "2024-06-05T22:09:00", "price": 2340.5, "bid_px_00": 2340.4, "ask_px_00": 2340.6},
-            {"ts_event": "2024-06-05T22:10:00", "price": 2339.5, "bid_px_00": 2339.6, "ask_px_00": 2339.8},
-        ])
+        tbbo = _make_tbbo_df(
+            [
+                {"ts_event": "2024-06-05T22:09:00", "price": 2340.5, "bid_px_00": 2340.4, "ask_px_00": 2340.6},
+                {"ts_event": "2024-06-05T22:10:00", "price": 2339.5, "bid_px_00": 2339.6, "ask_px_00": 2339.8},
+            ]
+        )
         result = reprice_e2_entry(
             tbbo_df=tbbo,
             break_dir="short",
@@ -134,10 +144,12 @@ class TestRepriceE2Entry:
 
     def test_no_trigger_trade(self):
         """No trade crosses the ORB level → no repricing possible."""
-        tbbo = _make_tbbo_df([
-            {"ts_event": "2024-06-05T22:08:00", "price": 2349.0, "bid_px_00": 2348.9, "ask_px_00": 2349.1},
-            {"ts_event": "2024-06-05T22:09:00", "price": 2349.5, "bid_px_00": 2349.4, "ask_px_00": 2349.6},
-        ])
+        tbbo = _make_tbbo_df(
+            [
+                {"ts_event": "2024-06-05T22:08:00", "price": 2349.0, "bid_px_00": 2348.9, "ask_px_00": 2349.1},
+                {"ts_event": "2024-06-05T22:09:00", "price": 2349.5, "bid_px_00": 2349.4, "ask_px_00": 2349.6},
+            ]
+        )
         result = reprice_e2_entry(tbbo_df=tbbo, break_dir="long", **self._base_kwargs())
 
         assert result.error == "no_trigger_trade_found"
@@ -154,9 +166,11 @@ class TestRepriceE2Entry:
 
     def test_negative_slippage_long(self):
         """Edge case: ask is AT orb_high (zero slippage) — should work."""
-        tbbo = _make_tbbo_df([
-            {"ts_event": "2024-06-05T22:10:00", "price": 2350.0, "bid_px_00": 2349.9, "ask_px_00": 2350.0},
-        ])
+        tbbo = _make_tbbo_df(
+            [
+                {"ts_event": "2024-06-05T22:10:00", "price": 2350.0, "bid_px_00": 2349.9, "ask_px_00": 2350.0},
+            ]
+        )
         result = reprice_e2_entry(tbbo_df=tbbo, break_dir="long", **self._base_kwargs())
 
         assert result.error is None
@@ -165,25 +179,29 @@ class TestRepriceE2Entry:
 
     def test_tbbo_records_counted(self):
         """tbbo_records_in_window should reflect full window, not just trigger."""
-        tbbo = _make_tbbo_df([
-            {"ts_event": "2024-06-05T22:08:00", "price": 2349.0, "bid_px_00": 2348.9, "ask_px_00": 2349.1},
-            {"ts_event": "2024-06-05T22:09:00", "price": 2349.5, "bid_px_00": 2349.4, "ask_px_00": 2349.6},
-            {"ts_event": "2024-06-05T22:10:00", "price": 2350.0, "bid_px_00": 2349.9, "ask_px_00": 2350.1},
-            {"ts_event": "2024-06-05T22:10:01", "price": 2350.2, "bid_px_00": 2350.1, "ask_px_00": 2350.3},
-            {"ts_event": "2024-06-05T22:11:00", "price": 2350.5, "bid_px_00": 2350.4, "ask_px_00": 2350.6},
-        ])
+        tbbo = _make_tbbo_df(
+            [
+                {"ts_event": "2024-06-05T22:08:00", "price": 2349.0, "bid_px_00": 2348.9, "ask_px_00": 2349.1},
+                {"ts_event": "2024-06-05T22:09:00", "price": 2349.5, "bid_px_00": 2349.4, "ask_px_00": 2349.6},
+                {"ts_event": "2024-06-05T22:10:00", "price": 2350.0, "bid_px_00": 2349.9, "ask_px_00": 2350.1},
+                {"ts_event": "2024-06-05T22:10:01", "price": 2350.2, "bid_px_00": 2350.1, "ask_px_00": 2350.3},
+                {"ts_event": "2024-06-05T22:11:00", "price": 2350.5, "bid_px_00": 2350.4, "ask_px_00": 2350.6},
+            ]
+        )
         result = reprice_e2_entry(tbbo_df=tbbo, break_dir="long", **self._base_kwargs())
         assert result.tbbo_records_in_window == 5
 
     def test_pre_orb_trades_filtered_out(self):
         """Trades before orb_end_utc must not trigger — ORB not formed yet."""
-        tbbo = _make_tbbo_df([
-            # Pre-ORB: price crosses level but should be ignored
-            {"ts_event": "2024-06-05T22:03:00", "price": 2351.0, "bid_px_00": 2350.9, "ask_px_00": 2351.1},
-            # Post-ORB: this is the real trigger
-            {"ts_event": "2024-06-05T22:06:00", "price": 2349.5, "bid_px_00": 2349.4, "ask_px_00": 2349.6},
-            {"ts_event": "2024-06-05T22:10:00", "price": 2350.0, "bid_px_00": 2349.9, "ask_px_00": 2350.1},
-        ])
+        tbbo = _make_tbbo_df(
+            [
+                # Pre-ORB: price crosses level but should be ignored
+                {"ts_event": "2024-06-05T22:03:00", "price": 2351.0, "bid_px_00": 2350.9, "ask_px_00": 2351.1},
+                # Post-ORB: this is the real trigger
+                {"ts_event": "2024-06-05T22:06:00", "price": 2349.5, "bid_px_00": 2349.4, "ask_px_00": 2349.6},
+                {"ts_event": "2024-06-05T22:10:00", "price": 2350.0, "bid_px_00": 2349.9, "ask_px_00": 2350.1},
+            ]
+        )
         # ORB ends at 22:05 (5 min aperture from 22:00)
         result = reprice_e2_entry(
             tbbo_df=tbbo,
@@ -198,10 +216,12 @@ class TestRepriceE2Entry:
 
     def test_all_trades_pre_orb_returns_error(self):
         """If all trades are before orb_end, return error."""
-        tbbo = _make_tbbo_df([
-            {"ts_event": "2024-06-05T22:03:00", "price": 2351.0, "bid_px_00": 2350.9, "ask_px_00": 2351.1},
-            {"ts_event": "2024-06-05T22:04:00", "price": 2350.5, "bid_px_00": 2350.4, "ask_px_00": 2350.6},
-        ])
+        tbbo = _make_tbbo_df(
+            [
+                {"ts_event": "2024-06-05T22:03:00", "price": 2351.0, "bid_px_00": 2350.9, "ask_px_00": 2351.1},
+                {"ts_event": "2024-06-05T22:04:00", "price": 2350.5, "bid_px_00": 2350.4, "ask_px_00": 2350.6},
+            ]
+        )
         result = reprice_e2_entry(
             tbbo_df=tbbo,
             break_dir="long",
@@ -239,11 +259,13 @@ class TestAnalyzeSlippage:
         return pd.DataFrame([{**defaults, **r} for r in records])
 
     def test_basic_analysis(self):
-        df = self._make_repriced_df([
-            {"break_dir": "long", "actual_slippage_ticks": 1.0},
-            {"break_dir": "long", "actual_slippage_ticks": 2.0},
-            {"break_dir": "short", "actual_slippage_ticks": 1.5},
-        ])
+        df = self._make_repriced_df(
+            [
+                {"break_dir": "long", "actual_slippage_ticks": 1.0},
+                {"break_dir": "long", "actual_slippage_ticks": 2.0},
+                {"break_dir": "short", "actual_slippage_ticks": 1.5},
+            ]
+        )
         analysis = analyze_slippage(df)
         mgc = analysis["MGC.FUT"]
         assert mgc["n"] == 3
@@ -252,18 +274,22 @@ class TestAnalyzeSlippage:
         assert mgc["by_direction"]["short"]["n"] == 1
 
     def test_skips_null_slippage(self):
-        df = self._make_repriced_df([
-            {"break_dir": "long", "actual_slippage_ticks": 1.0},
-            {"break_dir": "long", "actual_slippage_ticks": None, "error": "no_trigger"},
-        ])
+        df = self._make_repriced_df(
+            [
+                {"break_dir": "long", "actual_slippage_ticks": 1.0},
+                {"break_dir": "long", "actual_slippage_ticks": None, "error": "no_trigger"},
+            ]
+        )
         analysis = analyze_slippage(df)
         assert analysis["MGC.FUT"]["n"] == 1
 
     def test_multi_symbol(self):
-        df = self._make_repriced_df([
-            {"symbol_pulled": "MGC.FUT", "break_dir": "long", "actual_slippage_ticks": 1.0},
-            {"symbol_pulled": "GC.FUT", "break_dir": "long", "actual_slippage_ticks": 0.5},
-        ])
+        df = self._make_repriced_df(
+            [
+                {"symbol_pulled": "MGC.FUT", "break_dir": "long", "actual_slippage_ticks": 1.0},
+                {"symbol_pulled": "GC.FUT", "break_dir": "long", "actual_slippage_ticks": 0.5},
+            ]
+        )
         analysis = analyze_slippage(df)
         assert "MGC.FUT" in analysis
         assert "GC.FUT" in analysis

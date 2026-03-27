@@ -442,7 +442,13 @@ def _parse_strategy_id(strategy_id: str) -> dict:
     Returns dict with: entry_model, rr_target, confirm_bars, filter_type, orb_minutes.
     """
     parts = strategy_id.split("_")
-    result: dict = {"entry_model": "E2", "rr_target": 1.0, "confirm_bars": 1, "filter_type": "NO_FILTER", "orb_minutes": 5}
+    result: dict = {
+        "entry_model": "E2",
+        "rr_target": 1.0,
+        "confirm_bars": 1,
+        "filter_type": "NO_FILTER",
+        "orb_minutes": 5,
+    }
     for p in parts:
         if p in ("E1", "E2", "E3"):
             result["entry_model"] = p

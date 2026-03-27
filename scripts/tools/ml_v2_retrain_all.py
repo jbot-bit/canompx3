@@ -73,19 +73,21 @@ def run_all_combos() -> list[dict]:
         print_per_session_results(result)
         log.info(f"  Combo {i}/6 done in {elapsed:.1f}s")
 
-        all_results.append({
-            "rr": combo["rr"],
-            "per_aperture": combo["per_aperture"],
-            "mode": "per_aperture" if combo["per_aperture"] else "flat",
-            "elapsed_s": round(elapsed, 1),
-            "n_ml": result["n_ml_sessions"],
-            "n_none": result["n_none_sessions"],
-            "n_samples": result["n_samples"],
-            "total_val_delta_r": result["total_val_delta_r"],
-            "total_honest_delta_r": result["total_honest_delta_r"],
-            "total_full_delta_r": result["total_full_delta_r"],
-            "sessions": result["sessions"],
-        })
+        all_results.append(
+            {
+                "rr": combo["rr"],
+                "per_aperture": combo["per_aperture"],
+                "mode": "per_aperture" if combo["per_aperture"] else "flat",
+                "elapsed_s": round(elapsed, 1),
+                "n_ml": result["n_ml_sessions"],
+                "n_none": result["n_none_sessions"],
+                "n_samples": result["n_samples"],
+                "total_val_delta_r": result["total_val_delta_r"],
+                "total_honest_delta_r": result["total_honest_delta_r"],
+                "total_full_delta_r": result["total_full_delta_r"],
+                "sessions": result["sessions"],
+            }
+        )
 
     return all_results
 
@@ -114,30 +116,34 @@ def select_best_per_session(all_results: list[dict]) -> list[dict]:
                     if info.get("model_type") != "SESSION":
                         continue
                     aperture_int = int(ak.replace("O", ""))
-                    candidates[session_name].append({
-                        "session": session_name,
-                        "mode": mode,
-                        "aperture": aperture_int,
-                        "rr": rr,
-                        "cpcv_auc": info.get("cpcv_auc") or 0,
-                        "test_auc": info.get("test_auc") or 0,
-                        "honest_delta_r": info.get("honest_delta_r", 0),
-                        "skip_pct": info.get("skip_pct", 0),
-                    })
+                    candidates[session_name].append(
+                        {
+                            "session": session_name,
+                            "mode": mode,
+                            "aperture": aperture_int,
+                            "rr": rr,
+                            "cpcv_auc": info.get("cpcv_auc") or 0,
+                            "test_auc": info.get("test_auc") or 0,
+                            "honest_delta_r": info.get("honest_delta_r", 0),
+                            "skip_pct": info.get("skip_pct", 0),
+                        }
+                    )
             else:
                 # Flat: session_data is info_dict directly
                 if session_data.get("model_type") != "SESSION":
                     continue
-                candidates[session_name].append({
-                    "session": session_name,
-                    "mode": mode,
-                    "aperture": None,
-                    "rr": rr,
-                    "cpcv_auc": session_data.get("cpcv_auc") or 0,
-                    "test_auc": session_data.get("test_auc") or 0,
-                    "honest_delta_r": session_data.get("honest_delta_r", 0),
-                    "skip_pct": session_data.get("skip_pct", 0),
-                })
+                candidates[session_name].append(
+                    {
+                        "session": session_name,
+                        "mode": mode,
+                        "aperture": None,
+                        "rr": rr,
+                        "cpcv_auc": session_data.get("cpcv_auc") or 0,
+                        "test_auc": session_data.get("test_auc") or 0,
+                        "honest_delta_r": session_data.get("honest_delta_r", 0),
+                        "skip_pct": session_data.get("skip_pct", 0),
+                    }
+                )
 
     # Select best per session
     selected = []
@@ -150,9 +156,7 @@ def select_best_per_session(all_results: list[dict]) -> list[dict]:
         best = pool[0]
         # Pre-registration gate: CPCV must be >= 0.50
         if best["cpcv_auc"] < 0.50:
-            log.info(
-                f"  {session}: best CPCV={best['cpcv_auc']:.3f} < 0.50 — skipped"
-            )
+            log.info(f"  {session}: best CPCV={best['cpcv_auc']:.3f} < 0.50 — skipped")
             continue
         selected.append(best)
         ap_str = f" O{best['aperture']}" if best["aperture"] else " FLAT"
@@ -165,9 +169,7 @@ def select_best_per_session(all_results: list[dict]) -> list[dict]:
     return selected
 
 
-def save_results(
-    all_results: list[dict], selected: list[dict], total_elapsed: float
-) -> Path:
+def save_results(all_results: list[dict], selected: list[dict], total_elapsed: float) -> Path:
     """Save full results + selected configs to JSON."""
 
     # Strip non-serializable content (numpy types, etc.)
@@ -227,23 +229,25 @@ def write_selection_doc(selected: list[dict]) -> Path:
                 f"{c['honest_delta_r']:+.1f} | {c['skip_pct']:.1%} |"
             )
 
-    lines.extend([
-        "",
-        f"**Total selected:** {len(selected)}/12 sessions",
-        "",
-        "## Bootstrap Parameters (from pre-registration)",
-        "",
-        "- Permutations: 5000 (Phipson & Smyth 2010)",
-        "- Family unit: session (K=12)",
-        "- BH FDR: q=0.05 at K=12 (promotion), K=108 reported as footnote",
-        "- Kill gate: 0=DEAD, 1=CONDITIONAL, >=2=ALIVE",
-        "",
-        "## Configs NOT Selected (for audit trail)",
-        "",
-        "Sessions with no ML model across all 6 combos are omitted (negative baseline,",
-        "insufficient data, or CPCV below random in ALL configs).",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            f"**Total selected:** {len(selected)}/12 sessions",
+            "",
+            "## Bootstrap Parameters (from pre-registration)",
+            "",
+            "- Permutations: 5000 (Phipson & Smyth 2010)",
+            "- Family unit: session (K=12)",
+            "- BH FDR: q=0.05 at K=12 (promotion), K=108 reported as footnote",
+            "- Kill gate: 0=DEAD, 1=CONDITIONAL, >=2=ALIVE",
+            "",
+            "## Configs NOT Selected (for audit trail)",
+            "",
+            "Sessions with no ML model across all 6 combos are omitted (negative baseline,",
+            "insufficient data, or CPCV below random in ALL configs).",
+            "",
+        ]
+    )
 
     doc_path = DOCS_DIR / "ml-v2-config-selection.md"
     with open(doc_path, "w") as f:
@@ -304,8 +308,7 @@ def main():
     for c in selected:
         ap = f"O{c['aperture']}" if c["aperture"] else "FLAT"
         log.info(
-            f"    {c['session']:<22} {ap:<5} RR{c['rr']:.1f} "
-            f"CPCV={c['cpcv_auc']:.3f} dR={c['honest_delta_r']:+.1f}"
+            f"    {c['session']:<22} {ap:<5} RR{c['rr']:.1f} CPCV={c['cpcv_auc']:.3f} dR={c['honest_delta_r']:+.1f}"
         )
 
     if not selected:

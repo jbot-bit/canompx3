@@ -414,7 +414,11 @@ class TestJKFallbackRR:
         con.close()
 
         result, fallback_note = _load_best_regime_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G4",
+            live_config_db,
+            "MGC",
+            "TOKYO_OPEN",
+            "E2",
+            "ORB_G4",
         )
         assert result is not None
         assert result["rr_target"] == 1.0  # locked RR used directly
@@ -436,7 +440,11 @@ class TestJKFallbackRR:
         con.close()
 
         result, fallback_note = _load_best_regime_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G4",
+            live_config_db,
+            "MGC",
+            "TOKYO_OPEN",
+            "E2",
+            "ORB_G4",
         )
         assert result is not None
         assert result["rr_target"] == 1.5  # highest Sharpe among JK-equal gate-passers
@@ -460,7 +468,11 @@ class TestJKFallbackRR:
         con.close()
 
         result, fallback_note = _load_best_regime_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G4",
+            live_config_db,
+            "MGC",
+            "TOKYO_OPEN",
+            "E2",
+            "ORB_G4",
         )
         assert result is None
         assert fallback_note is None
@@ -482,7 +494,11 @@ class TestJKFallbackRR:
         con.close()
 
         result, fallback_note = _load_best_regime_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G4",
+            live_config_db,
+            "MGC",
+            "TOKYO_OPEN",
+            "E2",
+            "ORB_G4",
         )
         # JK should reject this alt — significantly worse Sharpe
         assert result is None
@@ -503,7 +519,11 @@ class TestJKFallbackRR:
         con.close()
 
         _, fallback_note = _load_best_regime_variant(
-            live_config_db, "MGC", "TOKYO_OPEN", "E2", "ORB_G4",
+            live_config_db,
+            "MGC",
+            "TOKYO_OPEN",
+            "E2",
+            "ORB_G4",
         )
         assert fallback_note is not None
         # Required audit fields
@@ -693,8 +713,10 @@ class TestSeasonalGate:
     def test_out_of_season_skips_strategy(self, live_config_db):
         """June with active_months={11,12,1,2} -> 0 strategies, SEASONAL in notes."""
         _seed_seasonal_gate_data(live_config_db)
-        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_SEASONAL_SPEC]), \
-             patch("trading_app.live_config.INSTRUMENT_ATR_GATE", {}):
+        with (
+            patch("trading_app.live_config.LIVE_PORTFOLIO", [_SEASONAL_SPEC]),
+            patch("trading_app.live_config.INSTRUMENT_ATR_GATE", {}),
+        ):
             portfolio, notes = build_live_portfolio(
                 db_path=live_config_db,
                 instrument="MGC",
@@ -708,8 +730,10 @@ class TestSeasonalGate:
     def test_in_season_loads_strategy(self, live_config_db):
         """January with active_months={11,12,1,2} -> 1 strategy, weight=1.0."""
         _seed_seasonal_gate_data(live_config_db)
-        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_SEASONAL_SPEC]), \
-             patch("trading_app.live_config.INSTRUMENT_ATR_GATE", {}):
+        with (
+            patch("trading_app.live_config.LIVE_PORTFOLIO", [_SEASONAL_SPEC]),
+            patch("trading_app.live_config.INSTRUMENT_ATR_GATE", {}),
+        ):
             portfolio, notes = build_live_portfolio(
                 db_path=live_config_db,
                 instrument="MGC",
@@ -721,8 +745,10 @@ class TestSeasonalGate:
     def test_as_of_date_defaults_to_today(self, live_config_db):
         """No active_months constraint, no as_of_date -> loads normally."""
         _seed_seasonal_gate_data(live_config_db)
-        with patch("trading_app.live_config.LIVE_PORTFOLIO", [_UNCONSTRAINED_SPEC]), \
-             patch("trading_app.live_config.INSTRUMENT_ATR_GATE", {}):
+        with (
+            patch("trading_app.live_config.LIVE_PORTFOLIO", [_UNCONSTRAINED_SPEC]),
+            patch("trading_app.live_config.INSTRUMENT_ATR_GATE", {}),
+        ):
             portfolio, notes = build_live_portfolio(
                 db_path=live_config_db,
                 instrument="MGC",

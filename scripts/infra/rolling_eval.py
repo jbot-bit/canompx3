@@ -135,7 +135,7 @@ def compute_double_break_pct(
                     COUNT(*) FILTER (WHERE orb_{label}_double_break = TRUE) as double_ct,
                     COUNT(*) as break_ct
                 FROM daily_features
-                WHERE {' AND '.join(where)}
+                WHERE {" AND ".join(where)}
             """,
                 params,
             ).fetchone()
@@ -244,14 +244,18 @@ def run_rolling_evaluation(
             print(f"  Test:  {w['test_start']} to {w['test_end']}")
 
             # Step 1: Compute double-break frequency (per-instrument)
-            db_pct = compute_double_break_pct(db_path, w["train_start"], w["train_end"], orb_minutes, instrument=instrument)
+            db_pct = compute_double_break_pct(
+                db_path, w["train_start"], w["train_end"], orb_minutes, instrument=instrument
+            )
             degraded_sessions = {label for label, pct in db_pct.items() if pct >= DOUBLE_BREAK_THRESHOLD}
 
             # Advisory: warn on sessions approaching threshold
             for label, pct in db_pct.items():
                 margin = DOUBLE_BREAK_THRESHOLD - pct
                 if 0 < margin <= DOUBLE_BREAK_PROXIMITY_WARN:
-                    print(f"  WARNING: {label} double-break {pct:.1%} is within {margin:.1%} of threshold {DOUBLE_BREAK_THRESHOLD:.0%}")
+                    print(
+                        f"  WARNING: {label} double-break {pct:.1%} is within {margin:.1%} of threshold {DOUBLE_BREAK_THRESHOLD:.0%}"
+                    )
 
             if degraded_sessions:
                 print(f"  Double-break degraded sessions: {degraded_sessions}")

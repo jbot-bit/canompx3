@@ -173,11 +173,13 @@ def estimate_costs(client, cfg: dict, downloads: list[dict]) -> list[dict]:
                 start=dl["start"],
                 end=dl["end"],
             )
-            results.append({
-                **dl,
-                "est_cost": cost,
-                "est_size_mb": size / (1024 * 1024) if size else 0,
-            })
+            results.append(
+                {
+                    **dl,
+                    "est_cost": cost,
+                    "est_size_mb": size / (1024 * 1024) if size else 0,
+                }
+            )
         except Exception as e:
             results.append({**dl, "est_cost": -1, "est_size_mb": 0, "error": str(e)})
     return results
@@ -321,9 +323,7 @@ def run_download(
         total_size_mb += size
         rng = f"{est['start']} -> {est['end']}"
         cost_str = "FREE" if cost == 0 else f"${cost:.2f}"
-        print(
-            f"  {est['name']:<30} {est['schema']:<12} {rng:<25} {size:>8.1f}MB {cost_str:>10}"
-        )
+        print(f"  {est['name']:<30} {est['schema']:<12} {rng:<25} {size:>8.1f}MB {cost_str:>10}")
 
     print("  " + "-" * 90)
     cost_str = "FREE" if total_cost == 0 else f"${total_cost:.2f}"
@@ -398,8 +398,14 @@ def run_download(
             print(f"  [{i}/{len(chunks)}] {cs} -> {ce}")
 
             out_file = download_chunk(
-                client, cfg, dl, cs, ce, output_dir,
-                max_retries=max_retries, base_delay=base_delay,
+                client,
+                cfg,
+                dl,
+                cs,
+                ce,
+                output_dir,
+                max_retries=max_retries,
+                base_delay=base_delay,
             )
 
             if out_file is None:
@@ -431,9 +437,7 @@ def run_download(
             manifest["completed"] = True
             manifest["completed_at"] = datetime.now(UTC).isoformat()
             manifest["total_files"] = len(chunk_files)
-            manifest["total_rows"] = sum(
-                manifest["chunks"][k].get("rows", 0) for k in manifest["chunks"]
-            )
+            manifest["total_rows"] = sum(manifest["chunks"][k].get("rows", 0) for k in manifest["chunks"])
             save_manifest(manifest_dir, name, manifest)
             results[name] = f"OK ({len(chunk_files)} files)"
         elif chunk_files:
@@ -451,8 +455,7 @@ def run_download(
 
     # Note any ohlcv-1m downloads that need pipeline ingestion
     ohlcv_1m_ok = [
-        dl for dl in estimates
-        if dl["schema"] == "ohlcv-1m" and results.get(dl["name"], "").startswith("OK")
+        dl for dl in estimates if dl["schema"] == "ohlcv-1m" and results.get(dl["name"], "").startswith("OK")
     ]
     if ohlcv_1m_ok:
         print(f"\n  NOTE: {len(ohlcv_1m_ok)} ohlcv-1m download(s) completed.")
@@ -489,8 +492,9 @@ Examples:
         """,
     )
     parser.add_argument("--dry-run", action="store_true", help="Show cost estimate only")
-    parser.add_argument("--priority", choices=["must_have", "high", "nice_to_have"],
-                        help="Download up to this priority tier")
+    parser.add_argument(
+        "--priority", choices=["must_have", "high", "nice_to_have"], help="Download up to this priority tier"
+    )
     parser.add_argument("--name", help="Download a specific item by name")
     parser.add_argument("--schema", help="Download all items of a specific schema")
     parser.add_argument("--from", dest="date_from", help="Override start date (YYYY-MM-DD)")

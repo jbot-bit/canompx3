@@ -290,7 +290,12 @@ def main() -> None:
                 f"{raw_portfolio.instrument}. Using profile instrument."
             )
             args.instrument = raw_portfolio.instrument
-        log.info("Profile '%s': %d strategies loaded for %s", args.profile, len(raw_portfolio.strategies), raw_portfolio.instrument)
+        log.info(
+            "Profile '%s': %d strategies loaded for %s",
+            args.profile,
+            len(raw_portfolio.strategies),
+            raw_portfolio.instrument,
+        )
     elif args.raw_baseline:
         if args.all:
             print("--raw-baseline + --all not supported. Use --instrument X.")

@@ -44,9 +44,7 @@ class TestInstanceLock:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_path.write_text("99999999")
 
-        with patch(
-            "trading_app.live.instance_lock._is_pid_alive", return_value=False
-        ):
+        with patch("trading_app.live.instance_lock._is_pid_alive", return_value=False):
             acquire_instance_lock("TEST_STALE")
 
         assert "TEST_STALE" in mod._locks
@@ -59,9 +57,7 @@ class TestInstanceLock:
         lock_path.write_text(str(os.getpid()))
 
         with pytest.raises(SystemExit) as exc_info:
-            with patch(
-                "trading_app.live.instance_lock._is_pid_alive", return_value=True
-            ):
+            with patch("trading_app.live.instance_lock._is_pid_alive", return_value=True):
                 acquire_instance_lock("TEST_BLOCK")
 
         assert exc_info.value.code == 1

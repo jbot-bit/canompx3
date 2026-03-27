@@ -162,13 +162,9 @@ def estimate_n_eff_from_db(db_path) -> dict:
     import duckdb
 
     with duckdb.connect(str(db_path), read_only=True) as con:
-        n_raw = con.execute(
-            "SELECT COUNT(*) FROM experimental_strategies WHERE is_canonical = TRUE"
-        ).fetchone()[0]
+        n_raw = con.execute("SELECT COUNT(*) FROM experimental_strategies WHERE is_canonical = TRUE").fetchone()[0]
 
-        n_fam_all = con.execute(
-            "SELECT COUNT(DISTINCT family_hash) FROM edge_families"
-        ).fetchone()[0]
+        n_fam_all = con.execute("SELECT COUNT(DISTINCT family_hash) FROM edge_families").fetchone()[0]
 
         n_fam_active = con.execute(
             "SELECT COUNT(DISTINCT family_hash) FROM edge_families WHERE robustness_status NOT IN ('PURGED')"

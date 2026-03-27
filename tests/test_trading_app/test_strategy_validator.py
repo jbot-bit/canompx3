@@ -93,17 +93,13 @@ class TestValidateStrategy:
         post-validation as a flag, not a pre-validation gate.
         """
         # ExpR=0.28 previously rejected by noise floor; now reaches Phase 3+
-        status, notes, _ = validate_strategy(
-            _make_row(entry_model="E2", expectancy_r=0.28), _cost()
-        )
+        status, notes, _ = validate_strategy(_make_row(entry_model="E2", expectancy_r=0.28), _cost())
         # Should pass (yearly data is positive in _make_row defaults)
         assert status == "PASSED"
 
     def test_e1_low_expr_reaches_phase3(self):
         """E1 strategy with low but positive ExpR proceeds past removed Phase 2b."""
-        status, notes, _ = validate_strategy(
-            _make_row(entry_model="E1", expectancy_r=0.10), _cost()
-        )
+        status, notes, _ = validate_strategy(_make_row(entry_model="E1", expectancy_r=0.10), _cost())
         assert status == "PASSED"
 
     def test_reject_one_year_negative(self):

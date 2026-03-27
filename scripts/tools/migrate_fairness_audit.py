@@ -31,17 +31,13 @@ def main():
 
     # ── F2: Reset noise_risk ─────────────────────────────────────────
     print("F2: Resetting noise_risk = FALSE for all validated strategies...")
-    con.execute(
-        "UPDATE validated_setups SET noise_risk = FALSE WHERE noise_risk IS NOT FALSE"
-    )
+    con.execute("UPDATE validated_setups SET noise_risk = FALSE WHERE noise_risk IS NOT FALSE")
     updated = con.execute("SELECT COUNT(*) FROM validated_setups WHERE noise_risk = FALSE").fetchone()[0]
     print(f"  {updated} strategies now have noise_risk = FALSE")
 
     # ── F3: Populate era_dependent + max_year_pct ────────────────────
     print("\nF3: Computing era_dependent + max_year_pct from yearly_results...")
-    rows = con.execute(
-        "SELECT strategy_id, yearly_results FROM validated_setups WHERE status = 'active'"
-    ).fetchall()
+    rows = con.execute("SELECT strategy_id, yearly_results FROM validated_setups WHERE status = 'active'").fetchall()
 
     era_dep_count = 0
     for sid, yr_json in rows:
@@ -170,13 +166,13 @@ def main():
                             verdict = "LUCKY_FOLD"
                             notes = (
                                 f"Single outlier fold (max ratio {max(fold_ratios):.2f}, "
-                                f"mean {sum(fold_ratios)/len(fold_ratios):.2f}). "
+                                f"mean {sum(fold_ratios) / len(fold_ratios):.2f}). "
                                 "WFE inflated by one window. Strategy otherwise normal."
                             )
                         else:
                             verdict = "REGIME_BET"
                             notes = (
-                                f"Consistently elevated OOS/IS ratios across folds (mean {sum(fold_ratios)/len(fold_ratios):.2f}). "
+                                f"Consistently elevated OOS/IS ratios across folds (mean {sum(fold_ratios) / len(fold_ratios):.2f}). "
                                 "Likely regime-driven improvement. Monitor for reversion."
                             )
                 else:
@@ -223,13 +219,9 @@ def main():
             [status, session],
         )
     # MGC sessions: different instrument, set PENDING
-    con.execute(
-        "UPDATE validated_setups SET slippage_validation_status = 'PENDING' WHERE instrument = 'MGC'"
-    )
+    con.execute("UPDATE validated_setups SET slippage_validation_status = 'PENDING' WHERE instrument = 'MGC'")
     # MES sessions: PENDING (no tbbo pilot for MES either)
-    con.execute(
-        "UPDATE validated_setups SET slippage_validation_status = 'PENDING' WHERE instrument = 'MES'"
-    )
+    con.execute("UPDATE validated_setups SET slippage_validation_status = 'PENDING' WHERE instrument = 'MES'")
 
     # Show final status
     rows = con.execute("""

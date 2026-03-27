@@ -100,7 +100,7 @@ def generate_synthetic_bars(
         bar_idx = 0
         for d in bdays:
             yr_sigma = sigma_by_year.get(d.year, sigma)  # fallback to flat sigma
-            sigma_arr[bar_idx:bar_idx + n_bars_per_day] = yr_sigma
+            sigma_arr[bar_idx : bar_idx + n_bars_per_day] = yr_sigma
             bar_idx += n_bars_per_day
         # Log sigma schedule
         unique_years = sorted(set(d.year for d in bdays))
@@ -416,9 +416,9 @@ def query_results(db_path: Path) -> dict:
 
 def print_report(seed: int, bar_stats: dict, results: dict) -> None:
     """Print formatted report for one seed."""
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"RESULTS — Seed {seed}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     # Bar generation stats
     print(f"\n  Bars generated:     {bar_stats['row_count']:,} ({bar_stats['n_days']} days)")
@@ -435,7 +435,14 @@ def print_report(seed: int, bar_stats: dict, results: dict) -> None:
 
     # Table row counts
     print("\n  Table rows:")
-    for table in ["bars_1m", "bars_5m", "daily_features", "orb_outcomes", "experimental_strategies", "validated_setups"]:
+    for table in [
+        "bars_1m",
+        "bars_5m",
+        "daily_features",
+        "orb_outcomes",
+        "experimental_strategies",
+        "validated_setups",
+    ]:
         key = f"{table}_rows"
         print(f"    {table:30s} {results.get(key, '?'):>10,}")
 
@@ -476,7 +483,7 @@ def print_report(seed: int, bar_stats: dict, results: dict) -> None:
         ed = results["expr_distribution"].iloc[0]
         print("\n  ExpR distribution (experimental strategies with trades):")
         print(f"    Total:     {int(ed['total']):,}")
-        print(f"    Positive:  {int(ed['positive']):,} ({int(ed['positive'])/max(int(ed['total']),1)*100:.1f}%)")
+        print(f"    Positive:  {int(ed['positive']):,} ({int(ed['positive']) / max(int(ed['total']), 1) * 100:.1f}%)")
         print(f"    ExpR>0.1:  {int(ed['gt_0_1']):,}")
         print(f"    ExpR>0.2:  {int(ed['gt_0_2']):,}")
         print(f"    Mean ExpR: {ed['mean_expr']}")
@@ -502,7 +509,7 @@ def print_report(seed: int, bar_stats: dict, results: dict) -> None:
     validated = results.get("validated_count", -1)
     promoted = results.get("validated_promoted", 0)
 
-    print(f"\n  {'='*50}")
+    print(f"\n  {'=' * 50}")
     if validated == 0:
         print("  PASS: Zero strategies in validated_setups from noise")
     elif validated > 0:
@@ -514,7 +521,7 @@ def print_report(seed: int, bar_stats: dict, results: dict) -> None:
             print(results["survivors"].head(20).to_string(index=False))
     else:
         print("  ERROR: Could not determine validation count")
-    print(f"  {'='*50}")
+    print(f"  {'=' * 50}")
 
 
 # ---------------------------------------------------------------------------
@@ -547,13 +554,15 @@ def main() -> int:
         "--sigma-by-year",
         type=str,
         default=None,
-        help="JSON dict of year->sigma for C1 time-varying null (e.g. '{\"2020\":0.53,\"2025\":0.99}'). "
-             "Overrides --sigma. Each year uses that year's real trimmed_std. 2026 excluded.",
+        help='JSON dict of year->sigma for C1 time-varying null (e.g. \'{"2020":0.53,"2025":0.99}\'). '
+        "Overrides --sigma. Each year uses that year's real trimmed_std. 2026 excluded.",
     )
     parser.add_argument("--start-date", type=str, default="2020-01-01", help="Start date YYYY-MM-DD")
     parser.add_argument("--end-date", type=str, default="2025-12-31", help="End date YYYY-MM-DD")
     parser.add_argument("--keep-db", action="store_true", help="Keep temp database after test for inspection")
-    parser.add_argument("--output-dir", type=str, default=None, help="Write DB to this directory instead of temp (implies --keep-db)")
+    parser.add_argument(
+        "--output-dir", type=str, default=None, help="Write DB to this directory instead of temp (implies --keep-db)"
+    )
     parser.add_argument("--instrument", type=str, default="MGC", help="Instrument symbol (default: MGC)")
 
     args = parser.parse_args()
@@ -563,6 +572,7 @@ def main() -> int:
 
     # Parse sigma_by_year if provided
     import json as _json
+
     sigma_by_year = None
     if args.sigma_by_year:
         raw = _json.loads(args.sigma_by_year)
@@ -593,9 +603,9 @@ def main() -> int:
         seed = args.start_seed + i
         t_seed_start = time.time()
 
-        print(f"\n{'#'*60}")
-        print(f"# SEED {seed} ({i+1}/{args.seeds})")
-        print(f"{'#'*60}")
+        print(f"\n{'#' * 60}")
+        print(f"# SEED {seed} ({i + 1}/{args.seeds})")
+        print(f"{'#' * 60}")
 
         # Create output directory: --output-dir (permanent) or temp
         if args.output_dir:
@@ -700,7 +710,16 @@ def main() -> int:
             # Build 5m bars
             ok = run_step(
                 "build_bars_5m",
-                [python, "pipeline/build_bars_5m.py", "--instrument", args.instrument, "--start", start_str, "--end", end_str],
+                [
+                    python,
+                    "pipeline/build_bars_5m.py",
+                    "--instrument",
+                    args.instrument,
+                    "--start",
+                    start_str,
+                    "--end",
+                    end_str,
+                ],
                 env_check,
             )
             if not ok:
@@ -807,7 +826,7 @@ def main() -> int:
             all_results.append(results)
 
             seed_time = time.time() - t_seed_start
-            print(f"\n  Seed {seed} total time: {seed_time:.0f}s ({seed_time/60:.1f}min)")
+            print(f"\n  Seed {seed} total time: {seed_time:.0f}s ({seed_time / 60:.1f}min)")
 
         except Exception as exc:
             print(f"\n  EXCEPTION during seed {seed}: {exc}")
@@ -826,9 +845,9 @@ def main() -> int:
     # -----------------------------------------------------------------------
     # Final summary
     # -----------------------------------------------------------------------
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("FINAL SUMMARY")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     for r in all_results:
         status = r.get("status", "UNKNOWN")

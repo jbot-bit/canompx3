@@ -1142,12 +1142,20 @@ class TestTradingDayRollover:
         orch._handle_event = partial_fail
 
         exit_a = FakeTradeEvent(
-            event_type="EXIT", strategy_id=STRATEGY_ID,
-            timestamp=datetime.now(UTC), price=2355.0, direction="long", contracts=1,
+            event_type="EXIT",
+            strategy_id=STRATEGY_ID,
+            timestamp=datetime.now(UTC),
+            price=2355.0,
+            direction="long",
+            contracts=1,
         )
         exit_b = FakeTradeEvent(
-            event_type="EXIT", strategy_id=STRAT_B,
-            timestamp=datetime.now(UTC), price=18050.0, direction="long", contracts=1,
+            event_type="EXIT",
+            strategy_id=STRAT_B,
+            timestamp=datetime.now(UTC),
+            price=18050.0,
+            direction="long",
+            contracts=1,
         )
         orch.engine.on_trading_day_end.return_value = [exit_a, exit_b]
 

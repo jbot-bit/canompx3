@@ -721,9 +721,7 @@ def build_profile_portfolio(
     from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier
 
     if profile_id not in ACCOUNT_PROFILES:
-        raise ValueError(
-            f"Unknown profile '{profile_id}'. Valid: {sorted(ACCOUNT_PROFILES.keys())}"
-        )
+        raise ValueError(f"Unknown profile '{profile_id}'. Valid: {sorted(ACCOUNT_PROFILES.keys())}")
 
     profile = ACCOUNT_PROFILES[profile_id]
     if not profile.daily_lanes:
@@ -776,11 +774,26 @@ def build_profile_portfolio(
                 )
 
             (
-                sid, inst, orb_label, entry_model, rr_target, confirm_bars,
-                filter_type, orb_minutes, sample_size, win_rate, expectancy_r,
-                sharpe_ratio, max_drawdown_r, median_risk_dollars,
-                avg_risk_dollars, avg_win_dollars, avg_loss_dollars,
-                stop_mult, status, fdr_sig,
+                sid,
+                inst,
+                orb_label,
+                entry_model,
+                rr_target,
+                confirm_bars,
+                filter_type,
+                orb_minutes,
+                sample_size,
+                win_rate,
+                expectancy_r,
+                sharpe_ratio,
+                max_drawdown_r,
+                median_risk_dollars,
+                avg_risk_dollars,
+                avg_win_dollars,
+                avg_loss_dollars,
+                stop_mult,
+                status,
+                fdr_sig,
             ) = row
 
             if status == "RETIRED":
@@ -796,14 +809,12 @@ def build_profile_portfolio(
                     sid,
                 )
 
-            med_risk_pts = (
-                float(median_risk_dollars / cost_spec.point_value)
-                if median_risk_dollars
-                else None
-            )
+            med_risk_pts = float(median_risk_dollars / cost_spec.point_value) if median_risk_dollars else None
 
             # Use profile's stop multiplier if lane doesn't override
-            effective_stop_mult = lane.planned_stop_multiplier if lane.planned_stop_multiplier is not None else profile.stop_multiplier
+            effective_stop_mult = (
+                lane.planned_stop_multiplier if lane.planned_stop_multiplier is not None else profile.stop_multiplier
+            )
 
             strategies.append(
                 PortfolioStrategy(
@@ -833,8 +844,15 @@ def build_profile_portfolio(
             )
             logger.info(
                 "Profile lane: %s | %s %s RR%.1f O%d | N=%d WR=%.0f%% ExpR=%.3f | stop=%.2fx",
-                sid, orb_label, filter_type, rr_target, orb_minutes,
-                sample_size, win_rate * 100, expectancy_r, effective_stop_mult,
+                sid,
+                orb_label,
+                filter_type,
+                rr_target,
+                orb_minutes,
+                sample_size,
+                win_rate * 100,
+                expectancy_r,
+                effective_stop_mult,
             )
 
     if not strategies:
@@ -880,12 +898,19 @@ def build_profile_portfolio(
         )
     logger.info(
         "DD budget: $%.0f / $%.0f (%.0f%%) — %d lanes for %s",
-        total_dd, tier.max_dd, dd_pct, len(strategies), profile_id,
+        total_dd,
+        tier.max_dd,
+        dd_pct,
+        len(strategies),
+        profile_id,
     )
 
     logger.info(
         "Profile portfolio '%s': %d strategies for %s (stop=%.2fx)",
-        profile_id, len(strategies), instrument, profile.stop_multiplier,
+        profile_id,
+        len(strategies),
+        instrument,
+        profile.stop_multiplier,
     )
     return Portfolio(
         name=f"profile_{profile_id}",

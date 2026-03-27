@@ -60,10 +60,7 @@ def load_selected_configs() -> list[tuple[str, int | None, float, float]]:
 
     json_path = Path(__file__).resolve().parent.parent.parent / "logs" / "ml_v2_retrain_results.json"
     if not json_path.exists():
-        raise FileNotFoundError(
-            f"V2 retrain results not found at {json_path}. "
-            f"Run ml_v2_retrain_all.py first."
-        )
+        raise FileNotFoundError(f"V2 retrain results not found at {json_path}. Run ml_v2_retrain_all.py first.")
     with open(json_path) as f:
         data = json.load(f)
 
@@ -72,10 +69,7 @@ def load_selected_configs() -> list[tuple[str, int | None, float, float]]:
         log.warning("V2 retrain produced 0 selected configs — ML DEAD before bootstrap")
         return []
 
-    return [
-        (c["session"], c["aperture"], c["rr"], c["honest_delta_r"])
-        for c in configs
-    ]
+    return [(c["session"], c["aperture"], c["rr"], c["honest_delta_r"]) for c in configs]
 
 
 # Active survivors: loaded from V2 retrain results at runtime

@@ -74,9 +74,7 @@ def _request_with_429_retry(
         _429_MAX_RETRIES + 1,
         url.split("/")[-1],
     )
-    raise RateLimitExhausted(
-        f"429 rate limit exhausted after {_429_MAX_RETRIES + 1} attempts on {url.split('/')[-1]}"
-    )
+    raise RateLimitExhausted(f"429 rate limit exhausted after {_429_MAX_RETRIES + 1} attempts on {url.split('/')[-1]}")
 
 
 def _submit_with_429_retry(

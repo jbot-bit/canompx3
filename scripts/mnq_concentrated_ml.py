@@ -2,6 +2,7 @@
 At-break features (break_bar_volume, break_delay, break_bar_continues) ARE
 legitimate for E2 stop-market because the break IS the entry.
 Only cross-session outcomes/double_break are blacklisted."""
+
 import sys
 
 sys.path.insert(0, r"C:\Users\joshd\canompx3")
@@ -34,6 +35,7 @@ HARD_BLACKLIST = list(LOOKAHEAD_BLACKLIST) + ["garch", "break_ts"]
 # At-break features from EARLIER sessions are ALLOWED (they've already happened)
 # At-break features from LATER sessions are BLACKLISTED (haven't happened)
 
+
 def get_eligible_features(session, all_features):
     target_idx = SESSION_ORDER.index(session) if session in SESSION_ORDER else 99
     eligible = []
@@ -56,6 +58,7 @@ def get_eligible_features(session, all_features):
         # Later session: blocked
     return eligible
 
+
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 df = con.execute("""
     SELECT o.pnl_r, o.trading_day, o.orb_label, o.orb_minutes,
@@ -76,10 +79,30 @@ print(f"MNQ 4 best sessions: {len(df)} trades")
 print(f"Baseline: {df['pnl_r'].mean():+.4f}R")
 
 # All available feature columns
-SKIP_COLS = {"pnl_r","trading_day","symbol","orb_minutes","orb_label","entry_price","stop_price",
-             "trading_day_1","entry_model","rr_target","confirm_bars","instrument",
-             "entry_ts","exit_ts","exit_price","target_price","risk_dollars","pnl_dollars",
-             "ambiguous_bar","ts_outcome","ts_pnl_r","ts_exit_ts"}
+SKIP_COLS = {
+    "pnl_r",
+    "trading_day",
+    "symbol",
+    "orb_minutes",
+    "orb_label",
+    "entry_price",
+    "stop_price",
+    "trading_day_1",
+    "entry_model",
+    "rr_target",
+    "confirm_bars",
+    "instrument",
+    "entry_ts",
+    "exit_ts",
+    "exit_price",
+    "target_price",
+    "risk_dollars",
+    "pnl_dollars",
+    "ambiguous_bar",
+    "ts_outcome",
+    "ts_pnl_r",
+    "ts_exit_ts",
+}
 all_features = [c for c in df.columns if c not in SKIP_COLS]
 
 # 60/20/20 split
@@ -89,7 +112,7 @@ n_val = int(n * 0.8)
 y = (df["pnl_r"] > 0).astype(int)
 pnl_r = df["pnl_r"].values
 
-print(f"Split: train={n_train}, val={n_val-n_train}, test={n-n_val}")
+print(f"Split: train={n_train}, val={n_val - n_train}, test={n - n_val}")
 
 # Per-session ML with at-break features
 results = []
@@ -175,7 +198,9 @@ for session in KEEP_SESSIONS:
                     ml_skip.extend(test_pnl[~kept_mask].tolist())
                     results.append((session, aperture, auc, delta, len(test_idx), nk, k_mean, s_mean, n_elig))
                     feat_str = ", ".join(f"{n}={v:.1%}" for n, v in top5[:3])
-                    print(f"  {session:<18} O{aperture} AUC={auc:.3f} kept={k_mean:+.3f} skip={s_mean:+.3f} N={nk}/{len(test_idx)} top3=[{feat_str}]")
+                    print(
+                        f"  {session:<18} O{aperture} AUC={auc:.3f} kept={k_mean:+.3f} skip={s_mean:+.3f} N={nk}/{len(test_idx)} top3=[{feat_str}]"
+                    )
                     continue
 
         failopen.extend(test_pnl.tolist())
@@ -185,9 +210,9 @@ total_pnl = np.array(ml_kept + failopen)
 ml_only = np.array(ml_kept) if ml_kept else np.array([0])
 baseline_test = pnl_r[n_val:]
 
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("RESULTS")
-print(f"{'='*70}")
+print(f"{'=' * 70}")
 print(f"  Models: {len(results)}")
 print(f"  ML-kept:    N={len(ml_kept):>5} ExpR={np.mean(ml_kept):+.4f}" if ml_kept else "  No ML models")
 print(f"  ML-skipped: N={len(ml_skip):>5} ExpR={np.mean(ml_skip):+.4f}" if ml_skip else "")
@@ -201,9 +226,9 @@ if ml_kept:
     print(f"    N={len(ml_kept)} ExpR={np.mean(ml_kept):+.4f} Total={sum(ml_kept):+.1f}R")
 
 # Bootstrap
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("BOOTSTRAP (500 reps)")
-print("="*70)
+print("=" * 70)
 
 null_means = []
 for rep in range(500):
@@ -214,12 +239,12 @@ for rep in range(500):
 n_above = sum(1 for n in null_means if n >= total_pnl.mean())
 print(f"  ML portfolio: {total_pnl.mean():+.4f}R")
 print(f"  Random: {statistics.mean(null_means):+.4f}R")
-print(f"  p-value: {n_above/500:.4f}")
+print(f"  p-value: {n_above / 500:.4f}")
 
 # Economics at 1.5x slippage
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("ECONOMICS (1.5x slippage)")
-print("="*70)
+print("=" * 70)
 
 cost_extra = 3.74 * 0.5 / 67.5  # extra cost in R
 adj_pnl = total_pnl - cost_extra
@@ -232,4 +257,6 @@ if ml_kept:
     ml_adj = np.array(ml_kept) - cost_extra
     ml_annual_trades = len(ml_kept) / 5
     ml_annual_r = ml_adj.mean() * ml_annual_trades
-    print(f"\n  ML-ONLY (1.5x slip): {ml_adj.mean():+.4f}R x {ml_annual_trades:.0f} = {ml_annual_r:+.0f}R = ${ml_annual_r * 67.5:+,.0f}/micro")
+    print(
+        f"\n  ML-ONLY (1.5x slip): {ml_adj.mean():+.4f}R x {ml_annual_trades:.0f} = {ml_annual_r:+.0f}R = ${ml_annual_r * 67.5:+,.0f}/micro"
+    )

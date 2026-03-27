@@ -52,9 +52,16 @@ INSTRUMENT_NULL_PARAMS: dict[str, dict] = {
 # Default null range is 2020-2025. Years 2016-2019 included for --start-date override.
 SIGMA_BY_YEAR: dict[str, dict[int, float]] = {
     "MGC": {
-        2016: 0.29, 2017: 0.20, 2018: 0.20, 2019: 0.24,
-        2020: 0.53, 2021: 0.37, 2022: 0.41, 2023: 0.36,
-        2024: 0.51, 2025: 0.99,
+        2016: 0.29,
+        2017: 0.20,
+        2018: 0.20,
+        2019: 0.24,
+        2020: 0.53,
+        2021: 0.37,
+        2022: 0.41,
+        2023: 0.36,
+        2024: 0.51,
+        2025: 0.99,
     },
 }
 
@@ -85,6 +92,7 @@ def check_prerequisites() -> list[str]:
     # Check noise floor is disabled (or will be)
     try:
         from trading_app.config import NOISE_EXPR_FLOOR
+
         for em, floor in NOISE_EXPR_FLOOR.items():
             if floor > 0.01:
                 issues.append(
@@ -97,6 +105,7 @@ def check_prerequisites() -> list[str]:
     # Check T80/early exit status
     try:
         from trading_app.config import EARLY_EXIT_MINUTES
+
         active_exits = {k: v for k, v in EARLY_EXIT_MINUTES.items() if v is not None}
         if active_exits:
             issues.append(
@@ -133,12 +142,11 @@ def run_seed(
     # Skip if already completed
     if db_path.exists():
         import duckdb
+
         try:
             con = duckdb.connect(str(db_path), read_only=True)
             n = con.execute("SELECT COUNT(*) FROM validated_setups").fetchone()[0]
-            dr = con.execute(
-                "SELECT min(trading_day)::VARCHAR, max(trading_day)::VARCHAR FROM orb_outcomes"
-            ).fetchone()
+            dr = con.execute("SELECT min(trading_day)::VARCHAR, max(trading_day)::VARCHAR FROM orb_outcomes").fetchone()
             cached_range = f"{dr[0]} to {dr[1]}" if dr[0] else None
             cached_max_expr = None
             if n > 0:
@@ -147,8 +155,11 @@ def run_seed(
             con.close()
             print(f"  Seed {seed}: ALREADY DONE ({n} survivors, range={cached_range})")
             return {
-                "seed": seed, "status": "CACHED", "survivors": n,
-                "max_oos_expr": cached_max_expr, "date_range": cached_range,
+                "seed": seed,
+                "status": "CACHED",
+                "survivors": n,
+                "max_oos_expr": cached_max_expr,
+                "date_range": cached_range,
                 "output_path": str(db_dir),
             }
         except Exception:
@@ -157,9 +168,9 @@ def run_seed(
             db_dir.mkdir(parents=True, exist_ok=True)
 
     t0 = time.time()
-    print(f"\n{'#'*60}")
+    print(f"\n{'#' * 60}")
     print(f"# SEED {seed} ({instrument})")
-    print(f"{'#'*60}")
+    print(f"{'#' * 60}")
 
     # Run the null test with --output-dir for direct permanent storage
     env = os.environ.copy()
@@ -168,13 +179,18 @@ def run_seed(
     cmd = [
         sys.executable,
         str(PROJECT_ROOT / "scripts" / "tests" / "test_synthetic_null.py"),
-        "--seeds", "1",
-        "--start-seed", str(seed),
-        "--output-dir", str(output_dir),
-        "--instrument", instrument,
+        "--seeds",
+        "1",
+        "--start-seed",
+        str(seed),
+        "--output-dir",
+        str(output_dir),
+        "--instrument",
+        instrument,
     ]
     if sigma_by_year:
         import json as _json
+
         cmd += ["--sigma-by-year", _json.dumps({str(k): v for k, v in sigma_by_year.items()})]
     elif sigma is not None:
         cmd += ["--sigma", str(sigma)]
@@ -196,19 +212,16 @@ def run_seed(
     max_oos_expr = None
     if db_path.exists():
         import duckdb
+
         try:
             con = duckdb.connect(str(db_path), read_only=True)
             survivors = con.execute("SELECT COUNT(*) FROM validated_setups").fetchone()[0]
             # Date range from orb_outcomes (the binding constraint)
-            dr = con.execute(
-                "SELECT min(trading_day)::VARCHAR, max(trading_day)::VARCHAR FROM orb_outcomes"
-            ).fetchone()
+            dr = con.execute("SELECT min(trading_day)::VARCHAR, max(trading_day)::VARCHAR FROM orb_outcomes").fetchone()
             date_range = f"{dr[0]} to {dr[1]}" if dr[0] else None
             # Max OOS ExpR from survivors
             if survivors > 0:
-                row = con.execute(
-                    "SELECT MAX(expectancy_r) FROM validated_setups"
-                ).fetchone()
+                row = con.execute("SELECT MAX(expectancy_r) FROM validated_setups").fetchone()
                 max_oos_expr = round(float(row[0]), 4) if row[0] is not None else None
             con.close()
         except Exception:
@@ -290,9 +303,9 @@ def analyze_seeds(seed_dir: Path) -> None:
     n_seeds = len(results)
     total = sum(len(r["survivors"]) for r in results)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"NULL ENVELOPE — {n_seeds} SEEDS, {total} TOTAL SURVIVORS")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     for em in ["E1", "E2"]:
         subs = all_survivors[em]
@@ -315,8 +328,10 @@ def analyze_seeds(seed_dir: Path) -> None:
         # Per-seed maxima stats
         if len(maxima) >= 5:
             mx = np.array(maxima)
-            print(f"    Per-seed max: mean={np.mean(mx):.4f}, std={np.std(mx, ddof=1):.4f}, "
-                  f"min={np.min(mx):.4f}, max={np.max(mx):.4f}")
+            print(
+                f"    Per-seed max: mean={np.mean(mx):.4f}, std={np.std(mx, ddof=1):.4f}, "
+                f"min={np.min(mx):.4f}, max={np.max(mx):.4f}"
+            )
             # Parametric 95% CI on the true max (mean + 2*std)
             conservative = float(np.mean(mx) + 2 * np.std(mx, ddof=1))
             print(f"    Conservative (mean+2std of maxima): {conservative:.4f}")
@@ -332,8 +347,12 @@ def main() -> int:
     parser.add_argument("--parallel", type=int, default=8, help="Max parallel seeds (default: 8, safe for 32GB RAM)")
     parser.add_argument("--batch", type=int, default=1, help="Which batch (for parallel terminals)")
     parser.add_argument("--of", type=int, default=1, help="Total batches (for parallel terminals)")
-    parser.add_argument("--instrument", type=str, default="MGC", help="Instrument (default: MGC). Calibrates sigma/price/tick.")
-    parser.add_argument("--sigma", type=float, default=None, help="Override flat sigma (default: auto from INSTRUMENT_NULL_PARAMS)")
+    parser.add_argument(
+        "--instrument", type=str, default="MGC", help="Instrument (default: MGC). Calibrates sigma/price/tick."
+    )
+    parser.add_argument(
+        "--sigma", type=float, default=None, help="Override flat sigma (default: auto from INSTRUMENT_NULL_PARAMS)"
+    )
     parser.add_argument(
         "--time-varying",
         action="store_true",
@@ -393,16 +412,16 @@ def main() -> int:
 
     n_parallel = min(args.parallel, len(seed_range))
 
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"NULL TEST BATCH RUNNER — {instrument}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Instrument:   {instrument}")
     if sigma_by_year_dict:
         print("  Sigma:        C1 time-varying (per-year trimmed_std)")
     else:
         print(f"  Sigma:        {sigma} (calibrated {'auto' if args.sigma is None else 'manual'})")
     print(f"  Total seeds:  {args.seeds}")
-    print(f"  This batch:   {args.batch} of {args.of} (seeds {start}-{end-1})")
+    print(f"  This batch:   {args.batch} of {args.of} (seeds {start}-{end - 1})")
     print(f"  Parallel:     {n_parallel} workers")
     print(f"  Output dir:   {SEED_DIR}")
     print(f"  Seeds to run: {len(seed_range)}")
@@ -418,6 +437,7 @@ def main() -> int:
         manifest["config_snapshot"]["sigma_by_year"] = {str(k): v for k, v in sigma_by_year_dict.items()}
     try:
         from trading_app.config import NOISE_EXPR_FLOOR
+
         manifest["config_snapshot"]["noise_floors"] = dict(NOISE_EXPR_FLOOR)
     except ImportError:
         pass
@@ -427,7 +447,7 @@ def main() -> int:
     if n_parallel <= 1:
         # Sequential fallback
         for i, seed in enumerate(seed_range):
-            print(f"\n[{i+1}/{len(seed_range)}] Running seed {seed}...")
+            print(f"\n[{i + 1}/{len(seed_range)}] Running seed {seed}...")
             result = run_seed(seed, SEED_DIR, instrument=instrument, sigma=sigma, sigma_by_year=sigma_by_year_dict)
             manifest["seeds"][str(seed)] = result
             save_manifest(manifest, SEED_DIR)
@@ -460,7 +480,7 @@ def main() -> int:
         save_manifest(manifest, SEED_DIR)
 
     batch_time = time.time() - t_batch_start
-    print(f"\nBatch complete: {len(seed_range)} seeds in {batch_time:.0f}s ({batch_time/3600:.1f}h)")
+    print(f"\nBatch complete: {len(seed_range)} seeds in {batch_time:.0f}s ({batch_time / 3600:.1f}h)")
 
     # Auto-analyze
     analyze_seeds(SEED_DIR)

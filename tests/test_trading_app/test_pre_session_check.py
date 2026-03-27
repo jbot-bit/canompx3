@@ -45,12 +45,15 @@ def test_empty_hwm_file_returns_fail(tmp_path):
 
 def test_valid_hwm_clear_returns_pass(tmp_path):
     """Valid HWM with no halt → pass."""
-    state_dir = _make_hwm_file(tmp_path, {
-        "account_id": "TEST123",
-        "halt_triggered": False,
-        "dd_used_dollars": 500,
-        "dd_limit_dollars": 2000,
-    })
+    state_dir = _make_hwm_file(
+        tmp_path,
+        {
+            "account_id": "TEST123",
+            "halt_triggered": False,
+            "dd_used_dollars": 500,
+            "dd_limit_dollars": 2000,
+        },
+    )
 
     with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
         ok, msg = check_dd_circuit_breaker()
@@ -61,12 +64,15 @@ def test_valid_hwm_clear_returns_pass(tmp_path):
 
 def test_valid_hwm_halted_returns_fail(tmp_path):
     """Valid HWM with halt_triggered=True → FAIL."""
-    state_dir = _make_hwm_file(tmp_path, {
-        "account_id": "TEST123",
-        "halt_triggered": True,
-        "dd_used_dollars": 2100,
-        "dd_limit_dollars": 2000,
-    })
+    state_dir = _make_hwm_file(
+        tmp_path,
+        {
+            "account_id": "TEST123",
+            "halt_triggered": True,
+            "dd_used_dollars": 2100,
+            "dd_limit_dollars": 2000,
+        },
+    )
 
     with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
         ok, msg = check_dd_circuit_breaker()

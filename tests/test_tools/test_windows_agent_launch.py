@@ -129,7 +129,9 @@ class TestWorkflowCommands:
 
     def test_ship_workstream_invokes_manager(self) -> None:
         with patch.object(windows_agent_launch, "invoke_manager", return_value=(True, "ok")) as invoke_mock:
-            success, output = windows_agent_launch.ship_workstream("task-a", tool="codex", commit_message="workstream: task-a")
+            success, output = windows_agent_launch.ship_workstream(
+                "task-a", tool="codex", commit_message="workstream: task-a"
+            )
 
         assert success is True
         assert output == "ok"

@@ -1,4 +1,5 @@
 """Full audit of the +0.177R portfolio. 4 tests. No trust."""
+
 import sys
 
 sys.path.insert(0, r"C:\Users\joshd\canompx3")
@@ -12,7 +13,7 @@ from scipy.stats import ttest_ind
 
 from pipeline.paths import GOLD_DB_PATH
 
-feats = ["orb_CME_REOPEN_size","orb_SINGAPORE_OPEN_break_bar_volume","atr_20","orb_TOKYO_OPEN_size"]
+feats = ["orb_CME_REOPEN_size", "orb_SINGAPORE_OPEN_break_bar_volume", "atr_20", "orb_TOKYO_OPEN_size"]
 
 # Load ALL data (both instruments, all sessions)
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -36,21 +37,26 @@ all_df = pd.concat(frames).sort_values("trading_day")
 td = pd.to_datetime(all_df["trading_day"])
 
 KEEP = {
-    "MGC": ["SINGAPORE_OPEN","TOKYO_OPEN","US_DATA_1000","US_DATA_830"],
-    "MES": ["EUROPE_FLOW","SINGAPORE_OPEN","TOKYO_OPEN"],
+    "MGC": ["SINGAPORE_OPEN", "TOKYO_OPEN", "US_DATA_1000", "US_DATA_830"],
+    "MES": ["EUROPE_FLOW", "SINGAPORE_OPEN", "TOKYO_OPEN"],
 }
 
 # Calibration thresholds
 cal_df = all_df[(td >= pd.Timestamp("2023-01-01")) & (td < pd.Timestamp("2025-01-01"))]
 thresh = {f: pd.to_numeric(cal_df[f], errors="coerce").dropna().quantile(0.80) for f in feats}
-cal_risk = np.abs(pd.to_numeric(cal_df["entry_price"], errors="coerce") - pd.to_numeric(cal_df["stop_price"], errors="coerce")).dropna()
+cal_risk = np.abs(
+    pd.to_numeric(cal_df["entry_price"], errors="coerce") - pd.to_numeric(cal_df["stop_price"], errors="coerce")
+).dropna()
 q1r, q3r = cal_risk.quantile(0.25), cal_risk.quantile(0.75)
 risk_cap = q3r + 1.5 * (q3r - q1r)
+
 
 def apply_filters(df, thresh, risk_cap, keep_sessions=None):
     """Apply quintile + risk cap + optional session filter."""
     df = df.copy()
-    df["risk_pts"] = np.abs(pd.to_numeric(df["entry_price"], errors="coerce") - pd.to_numeric(df["stop_price"], errors="coerce"))
+    df["risk_pts"] = np.abs(
+        pd.to_numeric(df["entry_price"], errors="coerce") - pd.to_numeric(df["stop_price"], errors="coerce")
+    )
     mask = pd.Series(True, index=df.index)
     for f, t in thresh.items():
         v = pd.to_numeric(df[f], errors="coerce")
@@ -63,18 +69,21 @@ def apply_filters(df, thresh, risk_cap, keep_sessions=None):
         mask &= sess_mask
     return df[mask]
 
+
 # Test set
 test_df = all_df[td >= pd.Timestamp("2025-01-01")]
 real = apply_filters(test_df, thresh, risk_cap, KEEP)
 real_pnl = real["pnl_r"].values
 
-print("="*70)
+print("=" * 70)
 print("AUDIT 1: BOOTSTRAP — quintile selection vs random (1000 reps)")
-print("="*70)
+print("=" * 70)
 
 # Baseline: same sessions, risk capped, but NO quintile filter
 base_df = test_df.copy()
-base_df["risk_pts"] = np.abs(pd.to_numeric(base_df["entry_price"], errors="coerce") - pd.to_numeric(base_df["stop_price"], errors="coerce"))
+base_df["risk_pts"] = np.abs(
+    pd.to_numeric(base_df["entry_price"], errors="coerce") - pd.to_numeric(base_df["stop_price"], errors="coerce")
+)
 sess_mask = pd.Series(False, index=base_df.index)
 for inst, sessions in KEEP.items():
     sess_mask |= (base_df["instrument"] == inst) & (base_df["orb_label"].isin(sessions))
@@ -94,11 +103,11 @@ n_above = sum(1 for n in null_exprs if n >= real_expr)
 print(f"  Real: N={n_real} ExpR={real_expr:+.4f}")
 print(f"  Baseline (same sessions, no quintile): N={len(baseline_pnl)} ExpR={baseline_pnl.mean():+.4f}")
 print(f"  Random selection mean: {statistics.mean(null_exprs):+.4f}")
-print(f"  p-value: {n_above/1000:.4f} ({n_above}/1000)")
+print(f"  p-value: {n_above / 1000:.4f} ({n_above}/1000)")
 
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("AUDIT 2: SESSION SELECTION — does it help?")
-print("="*70)
+print("=" * 70)
 
 all_filtered = apply_filters(test_df, thresh, risk_cap)  # all sessions
 keep_filtered = real  # keep sessions only
@@ -107,9 +116,9 @@ print(f"  ALL sessions: N={len(all_filtered)} ExpR={all_filtered['pnl_r'].mean()
 print(f"  KEEP sessions: N={len(keep_filtered)} ExpR={keep_filtered['pnl_r'].mean():+.4f}")
 print(f"  Session selection: {keep_filtered['pnl_r'].mean() - all_filtered['pnl_r'].mean():+.4f}R improvement")
 
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("AUDIT 3: FEATURES ON PRE-2023 (no peeking)")
-print("="*70)
+print("=" * 70)
 
 sel_df = all_df[td < pd.Timestamp("2023-01-01")]
 for feat in feats:
@@ -130,9 +139,9 @@ for feat in feats:
     except Exception as e:
         print(f"  {feat}: {e}")
 
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("AUDIT 4: WALK-FORWARD (5 temporal windows)")
-print("="*70)
+print("=" * 70)
 
 windows = [
     ("train<2022, test=2022", "2022-01-01", "2023-01-01"),
@@ -151,7 +160,9 @@ for name, ts, te in windows:
         continue
 
     w_thresh = {f: pd.to_numeric(train[f], errors="coerce").dropna().quantile(0.80) for f in feats}
-    w_risk = np.abs(pd.to_numeric(train["entry_price"], errors="coerce") - pd.to_numeric(train["stop_price"], errors="coerce")).dropna()
+    w_risk = np.abs(
+        pd.to_numeric(train["entry_price"], errors="coerce") - pd.to_numeric(train["stop_price"], errors="coerce")
+    ).dropna()
     wq1, wq3 = w_risk.quantile(0.25), w_risk.quantile(0.75)
     w_rc = wq3 + 1.5 * (wq3 - wq1)
 
@@ -160,7 +171,9 @@ for name, ts, te in windows:
 
     if len(top) > 10:
         spread = top["pnl_r"].mean() - base["pnl_r"].mean()
-        print(f"  {name}: base={base['pnl_r'].mean():+.4f} top={top['pnl_r'].mean():+.4f} spread={spread:+.4f} N={len(top)}")
+        print(
+            f"  {name}: base={base['pnl_r'].mean():+.4f} top={top['pnl_r'].mean():+.4f} spread={spread:+.4f} N={len(top)}"
+        )
         wf_results.append(spread)
     else:
         print(f"  {name}: N_top={len(top)} (too few)")
@@ -170,9 +183,9 @@ if wf_results:
     print(f"\n  Walk-forward: {pos_windows}/{len(wf_results)} windows positive")
     print(f"  Mean spread: {statistics.mean(wf_results):+.4f}")
 
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("FINAL VERDICT")
-print("="*70)
+print("=" * 70)
 pval = n_above / 1000
 if pval < 0.01:
     print(f"  Bootstrap p={pval:.4f}: HIGHLY SIGNIFICANT — quintile adds real value")

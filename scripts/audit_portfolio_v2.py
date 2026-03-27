@@ -6,6 +6,7 @@ Tests we haven't run:
 4. Holdout with SHUFFLED features (destroy feature signal, keep everything else)
 5. Cost model verification (is pnl_r actually after costs?)
 """
+
 import sys
 
 sys.path.insert(0, r"C:\Users\joshd\canompx3")
@@ -18,10 +19,10 @@ import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
 
-feats = ["orb_CME_REOPEN_size","orb_SINGAPORE_OPEN_break_bar_volume","atr_20","orb_TOKYO_OPEN_size"]
+feats = ["orb_CME_REOPEN_size", "orb_SINGAPORE_OPEN_break_bar_volume", "atr_20", "orb_TOKYO_OPEN_size"]
 KEEP = {
-    "MGC": ["SINGAPORE_OPEN","TOKYO_OPEN","US_DATA_1000","US_DATA_830"],
-    "MES": ["EUROPE_FLOW","SINGAPORE_OPEN","TOKYO_OPEN"],
+    "MGC": ["SINGAPORE_OPEN", "TOKYO_OPEN", "US_DATA_1000", "US_DATA_830"],
+    "MES": ["EUROPE_FLOW", "SINGAPORE_OPEN", "TOKYO_OPEN"],
 }
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -49,11 +50,16 @@ cal_df = all_df[(td >= pd.Timestamp("2023-01-01")) & (td < pd.Timestamp("2025-01
 test_df = all_df[td >= pd.Timestamp("2025-01-01")].copy()
 
 thresh = {f: pd.to_numeric(cal_df[f], errors="coerce").dropna().quantile(0.80) for f in feats}
-cal_risk = np.abs(pd.to_numeric(cal_df["entry_price"], errors="coerce") - pd.to_numeric(cal_df["stop_price"], errors="coerce")).dropna()
+cal_risk = np.abs(
+    pd.to_numeric(cal_df["entry_price"], errors="coerce") - pd.to_numeric(cal_df["stop_price"], errors="coerce")
+).dropna()
 q1r, q3r = cal_risk.quantile(0.25), cal_risk.quantile(0.75)
 risk_cap = q3r + 1.5 * (q3r - q1r)
 
-test_df["risk_pts"] = np.abs(pd.to_numeric(test_df["entry_price"], errors="coerce") - pd.to_numeric(test_df["stop_price"], errors="coerce"))
+test_df["risk_pts"] = np.abs(
+    pd.to_numeric(test_df["entry_price"], errors="coerce") - pd.to_numeric(test_df["stop_price"], errors="coerce")
+)
+
 
 def get_portfolio(df, thresh, risk_cap, keep):
     mask = pd.Series(True, index=df.index)
@@ -66,14 +72,15 @@ def get_portfolio(df, thresh, risk_cap, keep):
         sess_mask |= (df["instrument"] == inst) & (df["orb_label"].isin(sessions))
     return df[mask & sess_mask]
 
+
 real = get_portfolio(test_df, thresh, risk_cap, KEEP)
 
 # ================================================================
 # TEST 1: PER-INSTRUMENT BOOTSTRAP
 # ================================================================
-print("="*70)
+print("=" * 70)
 print("TEST 1: PER-INSTRUMENT BOOTSTRAP (is it both or just one?)")
-print("="*70)
+print("=" * 70)
 
 for inst in ["MGC", "MES"]:
     inst_real = real[real["instrument"] == inst]["pnl_r"].values
@@ -81,7 +88,9 @@ for inst in ["MGC", "MES"]:
     sess_mask = test_df["instrument"] == inst
     for _s in KEEP[inst]:
         sess_mask |= False  # reset
-    sess_mask = (test_df["instrument"] == inst) & (test_df["orb_label"].isin(KEEP[inst])) & (test_df["risk_pts"] <= risk_cap)
+    sess_mask = (
+        (test_df["instrument"] == inst) & (test_df["orb_label"].isin(KEEP[inst])) & (test_df["risk_pts"] <= risk_cap)
+    )
     inst_base = test_df[sess_mask]["pnl_r"].values
 
     null_means = []
@@ -91,14 +100,16 @@ for inst in ["MGC", "MES"]:
         null_means.append(inst_base[idx].mean())
 
     n_above = sum(1 for n in null_means if n >= inst_real.mean())
-    print(f"  {inst}: real={inst_real.mean():+.4f}R (N={len(inst_real)}) baseline={inst_base.mean():+.4f}R p={n_above/500:.4f}")
+    print(
+        f"  {inst}: real={inst_real.mean():+.4f}R (N={len(inst_real)}) baseline={inst_base.mean():+.4f}R p={n_above / 500:.4f}"
+    )
 
 # ================================================================
 # TEST 2: SHUFFLED FEATURES (destroy signal, keep everything else)
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 2: SHUFFLED FEATURES (if features don't matter, random filter works)")
-print("="*70)
+print("=" * 70)
 
 null_exprs = []
 for rep in range(200):
@@ -116,7 +127,7 @@ real_expr = real["pnl_r"].mean()
 n_above = sum(1 for n in null_exprs if n >= real_expr)
 print(f"  Real: {real_expr:+.4f}R")
 print(f"  Shuffled features mean: {statistics.mean(null_exprs):+.4f}R")
-print(f"  p-value: {n_above/len(null_exprs):.4f} ({n_above}/{len(null_exprs)})")
+print(f"  p-value: {n_above / len(null_exprs):.4f} ({n_above}/{len(null_exprs)})")
 print(f"  Shuffled features baseline: {statistics.mean(null_exprs):+.4f}")
 print("  If shuffled ~ real: features don't matter, it's just session+risk cap")
 print("  If shuffled << real: features genuinely predict")
@@ -124,15 +135,17 @@ print("  If shuffled << real: features genuinely predict")
 # ================================================================
 # TEST 3: COST MODEL CHECK
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 3: COST MODEL (is pnl_r after costs?)")
-print("="*70)
+print("=" * 70)
 
 risk_d = pd.to_numeric(real["risk_dollars"], errors="coerce").dropna()
 pnl_d = pd.to_numeric(real["pnl_dollars"], errors="coerce").dropna()
 pnl_r_check = real["pnl_r"].dropna()
 
-print(f"  Sample trade: risk_dollars={risk_d.iloc[0]:.2f}, pnl_dollars={pnl_d.iloc[0]:.2f}, pnl_r={pnl_r_check.iloc[0]:.4f}")
+print(
+    f"  Sample trade: risk_dollars={risk_d.iloc[0]:.2f}, pnl_dollars={pnl_d.iloc[0]:.2f}, pnl_r={pnl_r_check.iloc[0]:.4f}"
+)
 print(f"  pnl_r = pnl_dollars / risk_dollars? {abs(pnl_d.iloc[0] / risk_d.iloc[0] - pnl_r_check.iloc[0]) < 0.01}")
 print(f"  Avg risk_dollars: ${risk_d.mean():.2f}")
 print(f"  Avg pnl_dollars: ${pnl_d.mean():.2f}")
@@ -146,9 +159,9 @@ print("  pnl_r includes costs: YES (outcome_builder subtracts cost_model)")
 # ================================================================
 # TEST 4: TEMPORAL AUTOCORRELATION (are good days clustered?)
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("TEST 4: TEMPORAL AUTOCORRELATION")
-print("="*70)
+print("=" * 70)
 
 # If quintile features are autocorrelated, top quintile selects CLUSTERS of days
 # which might just be trending periods that look good in backtest
@@ -171,9 +184,9 @@ print(f"  {'Multiple trades same day — correlated' if trades_per_day > 2 else 
 # ================================================================
 # VERDICT
 # ================================================================
-print(f"\n{'='*70}")
+print(f"\n{'=' * 70}")
 print("FINAL AUDIT VERDICT")
-print("="*70)
+print("=" * 70)
 
 shuffle_p = n_above / len(null_exprs)
 print("  Portfolio bootstrap: p=0.000 (from v1 audit)")

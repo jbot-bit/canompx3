@@ -131,7 +131,10 @@ class BarAggregator:
                 self._bad_tick_count += 1
                 log.warning(
                     "BAD TICK: price spike %s vs last good %s (ratio %.2f, total bad: %d)",
-                    price, self._last_good_price, ratio, self._bad_tick_count,
+                    price,
+                    self._last_good_price,
+                    ratio,
+                    self._bad_tick_count,
                 )
                 return False
 
@@ -146,14 +149,17 @@ class BarAggregator:
         self._consecutive_bad_bars += 1
         log.critical(
             "BAD BAR REJECTED: %s O=%.2f H=%.2f L=%.2f C=%.2f V=%d (consecutive: %d)",
-            bar.ts_utc, bar.open, bar.high, bar.low, bar.close, bar.volume,
+            bar.ts_utc,
+            bar.open,
+            bar.high,
+            bar.low,
+            bar.close,
+            bar.volume,
             self._consecutive_bad_bars,
         )
 
         if self._consecutive_bad_bars >= _BAD_BAR_ALERT_THRESHOLD and self._on_bad_bar_alert:
-            self._on_bad_bar_alert(
-                f"Data quality warning: {self._consecutive_bad_bars} consecutive bad bars rejected"
-            )
+            self._on_bad_bar_alert(f"Data quality warning: {self._consecutive_bad_bars} consecutive bad bars rejected")
 
         return None
 
