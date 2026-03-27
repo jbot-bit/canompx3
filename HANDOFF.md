@@ -7,7 +7,7 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (Test Failure Audit + Ship Block Fix)
+- **Tool:** Claude Code (Deep Audit + DD Budget Fix)
 - **Date:** 2026-03-27
 - **Branch:** `main`
 - **Commit:** `ecb869e`
@@ -60,13 +60,16 @@ Nothing (session complete)
 ```
 
 ### Next Actions (Priority Order)
-1. **T6 null bootstrap for SL** — use raw MAE (not mae_r). Must beat P95 at p<0.05.
-2. **5 Bloomberg rescue audit questions** — gates whether 488 count is trustworthy
-3. **Commit fairness audit** — overnight_range comment fix + 6-file diff from Mar 26
-4. **Deprecate build_live_portfolio** — replace 22 callers with prop_profiles
-5. **ML AUDIT** — 3 open FAILs remain
-6. **Confluence scan** — per todo_queue_mar27.md
-7. **Databento backfill** — NQ zip + historical extensions
+1. ~~T6 null bootstrap for SL~~ DONE (commit `b43a1a0`)
+2. ~~5 Bloomberg rescue audit questions~~ DONE (see `portfolio_reconstruction_audit.md`)
+3. ~~Commit fairness audit~~ DONE (commit `b76905c`)
+4. ~~DD budget bypass~~ DONE this session (commit `dc9d680`)
+5. ~~628 lint errors + 4 fail-open bugs~~ DONE this session (commit `3a1f17a`)
+6. ~~Trade journal fail-closed + HWM tracker~~ DONE this session (commit `69bcb87`)
+7. ~~ML AUDIT~~ ML is DEAD (V2 verdict: 0/12 survivors)
+8. **Deprecate build_live_portfolio** — 5 runtime callers remain (staged refactor)
+9. **Confluence scan** — per todo_queue_mar27.md
+10. **Databento backfill** — NQ zip + historical extensions
 
 ### Files Changed This Session
 ```
