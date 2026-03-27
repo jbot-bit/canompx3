@@ -294,6 +294,11 @@ def _resolve_daily_lane(
     )
 
 
+def _lane_stop(lane: DailyExecutionLane, profile: AccountProfile) -> float:
+    """Resolved stop multiplier for a lane (lane override or profile default)."""
+    return lane.planned_stop if lane.planned_stop is not None else profile.stop_multiplier
+
+
 def check_daily_lanes_dd_budget(
     profile: AccountProfile,
     lanes: list[DailyExecutionLane],
@@ -312,10 +317,12 @@ def check_daily_lanes_dd_budget(
     if not tradeable:
         return 0.0, 0.0, tier.max_dd, False
     # Per-lane DD using each lane's actual stop multiplier
-    lane_dds = []
-    for la in tradeable:
-        stop = la.planned_stop if la.planned_stop is not None else profile.stop_multiplier
-        lane_dds.append(_compute_dd_per_contract(stop, firm_spec.dd_type))
+    lane_dds = [
+        _compute_dd_per_contract(
+            _lane_stop(la, profile), firm_spec.dd_type
+        )
+        for la in tradeable
+    ]
     total_dd = sum(lane_dds)
     max_dd_per_lane = max(lane_dds)
     return max_dd_per_lane, total_dd, tier.max_dd, total_dd > tier.max_dd
@@ -372,7 +379,7 @@ def print_daily_lanes(profile: AccountProfile, lanes: list[DailyExecutionLane], 
     print(f"\n  {'─' * 60}")
     print(f"  DD BUDGET BREAKDOWN ({len(tradeable)} tradeable lanes)")
     for la in tradeable:
-        stop = la.planned_stop if la.planned_stop is not None else profile.stop_multiplier
+        stop = _lane_stop(la, profile)
         lane_dd = _compute_dd_per_contract(stop, firm_spec.dd_type)
         print(f"    {la.orb_label:<20} {stop:.2f}x stop  ${lane_dd:,.0f} DD")
     print(f"  {'─' * 40}")
