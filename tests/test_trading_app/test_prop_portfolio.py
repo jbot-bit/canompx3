@@ -534,7 +534,7 @@ class TestCheckDailyLanesDDBudget:
         profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
         lanes = [
             self._make_lane(planned_stop=0.75),  # $935
-            self._make_lane(planned_stop=1.0),    # $1,350
+            self._make_lane(planned_stop=1.0),  # $1,350
         ]
         _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
         assert total == 935.0 + 1350.0  # $2,285

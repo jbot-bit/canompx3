@@ -124,11 +124,15 @@ class TestManualHalt:
     def test_active_halt(self, tmp_path):
         """Active halt file → NO-GO with reason."""
         halt = tmp_path / "halt_trading.json"
-        halt.write_text(json.dumps({
-            "active": True,
-            "reason": "Down $900, sitting out",
-            "expires": (date.today() + timedelta(days=1)).isoformat(),
-        }))
+        halt.write_text(
+            json.dumps(
+                {
+                    "active": True,
+                    "reason": "Down $900, sitting out",
+                    "expires": (date.today() + timedelta(days=1)).isoformat(),
+                }
+            )
+        )
         with patch("trading_app.pre_session_check.HALT_FILE", halt):
             ok, msg = check_manual_halt()
         assert ok is False
@@ -147,11 +151,15 @@ class TestManualHalt:
     def test_expired_halt(self, tmp_path):
         """Halt file with past expiry → auto-resume (pass)."""
         halt = tmp_path / "halt_trading.json"
-        halt.write_text(json.dumps({
-            "active": True,
-            "reason": "yesterday",
-            "expires": (date.today() - timedelta(days=1)).isoformat(),
-        }))
+        halt.write_text(
+            json.dumps(
+                {
+                    "active": True,
+                    "reason": "yesterday",
+                    "expires": (date.today() - timedelta(days=1)).isoformat(),
+                }
+            )
+        )
         with patch("trading_app.pre_session_check.HALT_FILE", halt):
             ok, msg = check_manual_halt()
         assert ok is True

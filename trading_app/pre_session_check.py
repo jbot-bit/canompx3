@@ -310,12 +310,14 @@ def run_checks(session: str) -> bool:
             _dd_per, total_dd, dd_limit, over = check_daily_lanes_dd_budget(profile, resolved)
             if over:
                 pct = total_dd / dd_limit * 100
-                results.append((
-                    "DD budget",
-                    True,  # Warning, not blocking — user chose these lanes
-                    f"⚠ OVER-COMMITTED: ${total_dd:,.0f} / ${dd_limit:,.0f} ({pct:.0f}%). "
-                    f"Intraday DD halt is your safety net.",
-                ))
+                results.append(
+                    (
+                        "DD budget",
+                        True,  # Warning, not blocking — user chose these lanes
+                        f"⚠ OVER-COMMITTED: ${total_dd:,.0f} / ${dd_limit:,.0f} ({pct:.0f}%). "
+                        f"Intraday DD halt is your safety net.",
+                    )
+                )
             else:
                 results.append(("DD budget", True, f"${total_dd:,.0f} / ${dd_limit:,.0f} — within budget"))
     except Exception as e:
