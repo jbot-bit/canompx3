@@ -5,9 +5,10 @@ Optimized: uses 0900 ORB (150 bars/day vs 900 bars/day for 2300 ORB),
 class-scoped fixtures share expensive DB + replay across tests.
 """
 
+import os
 import sys
-from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 import duckdb
@@ -285,18 +286,20 @@ class TestCLI:
     def test_help(self):
         import subprocess
 
+        project_root = str(Path(__file__).parent.parent.parent)
+        env = {**os.environ, "PYTHONPATH": project_root}
         r = subprocess.run(
             [sys.executable, "trading_app/paper_trader.py", "--help"],
             capture_output=True,
             text=True,
-            cwd=str(Path(__file__).parent.parent.parent),
+            cwd=project_root,
+            env=env,
         )
         assert r.returncode == 0
         assert "instrument" in r.stdout
 
     def test_calendar_filter_cli_arg_removed(self, tmp_path):
         """--calendar-filter CLI arg was removed; calendar overlay is now automatic."""
-        import os
         import subprocess
 
         # Run paper_trader with the old --calendar-filter flag — should be rejected
@@ -334,11 +337,14 @@ class TestCLI:
         """New --output and --quiet flags are recognized."""
         import subprocess
 
+        project_root = str(Path(__file__).parent.parent.parent)
+        env = {**os.environ, "PYTHONPATH": project_root}
         r = subprocess.run(
             [sys.executable, "trading_app/paper_trader.py", "--help"],
             capture_output=True,
             text=True,
-            cwd=str(Path(__file__).parent.parent.parent),
+            cwd=project_root,
+            env=env,
         )
         assert r.returncode == 0
         assert "--output" in r.stdout
