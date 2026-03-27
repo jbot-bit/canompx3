@@ -1,22 +1,21 @@
 ---
 mode: IMPLEMENTATION
-task: "Deep audit: lint, type errors, code smells, deprecations"
-stage_purpose: "Fix all ruff errors, pyright errors, deprecation warnings, bare excepts, and code smells across entire codebase"
+task: "Lane management: halt file, paper PnL, lane toggle"
+stage_purpose: "Add 3 operational features to daily sheet: manual halt, paper PnL display, lane pause/resume"
 scope_lock:
-  - pipeline/
-  - trading_app/
-  - ui/
-  - scripts/
-  - tests/
+  - trading_app/prop_portfolio.py
+  - trading_app/pre_session_check.py
+  - trading_app/lane_ctl.py
+  - tests/test_trading_app/test_prop_portfolio.py
+  - tests/test_trading_app/test_pre_session_check.py
+  - tests/test_trading_app/test_lane_ctl.py
   - docs/runtime/STAGE_STATE.md
 acceptance:
-  - "ruff check returns 0 errors across pipeline/ trading_app/ ui/ scripts/ tests/"
-  - "All tests pass (batched to avoid OOM)"
-  - "75/75 drift checks pass"
-  - "Zero bare except (E722) in production code"
-  - "Zero fail-open patterns in production code"
-  - "build_live_portfolio deprecation warnings eliminated"
-updated: 2026-03-27T22:30:00+10:00
-prior_stage: "ML Phase 1 (stashed: git stash list)"
+  - "Manual halt: --halt writes file, pre_session_check blocks, --resume clears"
+  - "Paper PnL: daily sheet shows 30d W/L and cumR per lane from paper_trades"
+  - "Lane toggle: lane_ctl pause/resume/list, resolve_daily_lanes reads overrides"
+  - "PAUSED lanes excluded from DD budget (existing filter covers this)"
+  - "All tests pass, 75/75 drift, ruff clean"
+updated: 2026-03-27T23:30:00+10:00
 terminal: main
 ---

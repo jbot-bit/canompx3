@@ -31,6 +31,50 @@ from trading_app.prop_profiles import get_lane_registry
 LANE_DEFS = get_lane_registry()
 
 
+HALT_FILE = STATE_DIR / "halt_trading.json"
+
+
+def check_manual_halt() -> tuple[bool, str]:
+    """Check if the user has manually halted trading for today."""
+    if not HALT_FILE.exists():
+        return True, "No manual halt active"
+    try:
+        data = json.loads(HALT_FILE.read_text())
+        if not data.get("active", False):
+            return True, "Manual halt: inactive"
+        expires = data.get("expires")
+        if expires and date.fromisoformat(expires) < date.today():
+            return True, "Manual halt: expired (auto-resumed)"
+        reason = data.get("reason", "no reason given")
+        return False, f"MANUAL HALT: {reason}"
+    except (json.JSONDecodeError, OSError):
+        return True, "WARN: halt file unreadable — treating as no halt"
+
+
+def write_halt(reason: str) -> None:
+    """Write a manual halt file. Expires tomorrow by default."""
+    from datetime import timedelta
+
+    tomorrow = (date.today() + timedelta(days=1)).isoformat()
+    data = {
+        "active": True,
+        "reason": reason,
+        "created": datetime.now(UTC).isoformat(),
+        "expires": tomorrow,
+    }
+    HALT_FILE.write_text(json.dumps(data, indent=2))
+    print(f"HALT ACTIVE until {tomorrow}: {reason}")
+
+
+def clear_halt() -> None:
+    """Remove the manual halt file."""
+    if HALT_FILE.exists():
+        HALT_FILE.unlink()
+        print("Manual halt CLEARED. Trading resumed.")
+    else:
+        print("No halt was active.")
+
+
 def check_data_freshness(con, instrument: str) -> tuple[bool, str]:
     """Check gold.db has recent data for this instrument."""
     row = con.execute("SELECT MAX(ts_utc) FROM bars_1m WHERE symbol = ?", [instrument]).fetchone()
@@ -204,7 +248,11 @@ def check_signal_exists(con, session: str, lane: dict, today: date) -> tuple[boo
 
 
 def run_checks(session: str) -> bool:
-    """Run all checks for a session. Returns True if GO."""
+    """Run all checks for a session. Returns True if GO.
+
+    Checks run in order: manual halt → data freshness → account state →
+    signal → DD budget → lane-specific.
+    """
     if session not in LANE_DEFS:
         print(f"ERROR: Unknown session '{session}'. Valid: {', '.join(LANE_DEFS.keys())}")
         return False
@@ -212,6 +260,10 @@ def run_checks(session: str) -> bool:
     lane = LANE_DEFS[session]
     today = date.today()
     results = []
+
+    # Manual halt (check first — overrides everything)
+    ok, msg = check_manual_halt()
+    results.append(("Manual halt", ok, msg))
 
     with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
         configure_connection(con)
@@ -321,8 +373,20 @@ def run_checks(session: str) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description="Pre-session health check (hard gate)")
-    parser.add_argument("--session", required=True, choices=list(LANE_DEFS.keys()), help="Session to check")
+    parser.add_argument("--session", choices=list(LANE_DEFS.keys()), help="Session to check")
+    parser.add_argument("--halt", metavar="REASON", help="Halt all trading until tomorrow")
+    parser.add_argument("--resume", action="store_true", help="Clear manual halt")
     args = parser.parse_args()
+
+    if args.halt:
+        write_halt(args.halt)
+        sys.exit(0)
+    if args.resume:
+        clear_halt()
+        sys.exit(0)
+    if not args.session:
+        parser.error("--session is required (or use --halt/--resume)")
+
     ok = run_checks(args.session)
     sys.exit(0 if ok else 1)
 
