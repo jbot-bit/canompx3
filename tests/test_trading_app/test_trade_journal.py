@@ -337,6 +337,26 @@ class TestFailOpen:
         assert result["n_trades"] == 0
         assert "error" in result
 
+    def test_get_strategy_ids_raises_after_close(self, journal_path):
+        """Fail-closed: get_strategy_ids_for_day raises when journal unavailable.
+
+        Returning empty set would allow re-entry into already-traded strategies.
+        """
+        j = TradeJournal(journal_path, mode="test")
+        j.close()
+        with pytest.raises(RuntimeError, match="cannot determine already-traded"):
+            j.get_strategy_ids_for_day(date(2026, 3, 14))
+
+    def test_incomplete_trades_raises_after_close(self, journal_path):
+        """Fail-closed: incomplete_trades raises when journal unavailable.
+
+        Returning empty list would hide open positions from exit management.
+        """
+        j = TradeJournal(journal_path, mode="test")
+        j.close()
+        with pytest.raises(RuntimeError, match="cannot determine incomplete"):
+            j.incomplete_trades()
+
     def test_double_close_safe(self, journal_path):
         j = TradeJournal(journal_path, mode="test")
         j.close()
