@@ -2,16 +2,16 @@
 Tests for trading_app.strategy_validator module.
 """
 
-import sys
 import json
-from pathlib import Path
+import sys
 from datetime import date
+from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
-from trading_app.strategy_validator import validate_strategy, classify_regime, run_validation, _parse_orb_size_bounds
 from pipeline.cost_model import get_cost_spec
+from trading_app.strategy_validator import _parse_orb_size_bounds, classify_regime, run_validation, validate_strategy
 
 
 def _cost():
@@ -369,8 +369,9 @@ class TestBenjaminiHochberg:
 
     def test_total_tests_less_than_n_raises(self):
         """total_tests < len(valid) violates BH assumptions -> must raise."""
-        from trading_app.strategy_validator import benjamini_hochberg
         import pytest
+
+        from trading_app.strategy_validator import benjamini_hochberg
 
         pvals = [("a", 0.01), ("b", 0.03), ("c", 0.05)]
         with pytest.raises(ValueError, match="BH requires m >= n"):
