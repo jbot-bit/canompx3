@@ -6,6 +6,7 @@ import pytest
 
 from trading_app.portfolio import PortfolioStrategy
 from trading_app.prop_portfolio import (
+    DailyExecutionLane,
     _apply_instrument_bans,
     _calendar_gate_reason,
     _compute_dd_per_contract,
@@ -13,6 +14,7 @@ from trading_app.prop_portfolio import (
     _format_time_ampm,
     _rank_strategies,
     _time_sort_key,
+    check_daily_lanes_dd_budget,
     select_for_profile,
 )
 from trading_app.prop_profiles import (
@@ -470,3 +472,55 @@ class TestResolveDailyLane:
         result = _resolve_daily_lane(profile, lane, lane_db, date(2026, 3, 17))
         assert result.status == "HOLD"
         assert "retired" in result.reason.lower()
+
+
+class TestCheckDailyLanesDDBudget:
+    """DD budget check for manually pinned daily lanes."""
+
+    @staticmethod
+    def _make_lane(status: str = "TRADE") -> DailyExecutionLane:
+        return DailyExecutionLane(
+            strategy_id="TEST_STRAT",
+            instrument="MNQ",
+            orb_label="NYSE_CLOSE",
+            session_time_brisbane="06:00",
+            status=status,
+            reason="Ready.",
+        )
+
+    def test_under_budget(self):
+        """2 lanes at $935/lane = $1,870 < $2,000 Apex DD."""
+        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        lanes = [self._make_lane() for _ in range(2)]
+        dd_per, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
+        assert dd_per == 935.0
+        assert total == 1870.0
+        assert limit == 2000.0
+        assert not over
+
+    def test_over_budget(self):
+        """5 lanes at $935/lane = $4,675 > $2,000 Apex DD."""
+        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        lanes = [self._make_lane() for _ in range(5)]
+        dd_per, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
+        assert total == 4675.0
+        assert limit == 2000.0
+        assert over
+
+    def test_hold_lanes_excluded(self):
+        """Non-TRADE lanes don't count toward DD budget."""
+        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        lanes = [self._make_lane("TRADE"), self._make_lane("HOLD"), self._make_lane("SKIP")]
+        _dd_per, total, _limit, over = check_daily_lanes_dd_budget(profile, lanes)
+        assert total == 935.0  # Only 1 TRADE lane
+        assert not over
+
+    def test_real_apex_profile_is_over(self):
+        """The actual apex_50k_manual profile with 5 lanes IS over-committed."""
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        profile = ACCOUNT_PROFILES["apex_50k_manual"]
+        # All 5 lanes as TRADE
+        lanes = [self._make_lane() for _ in range(len(profile.daily_lanes))]
+        _dd_per, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
+        assert over, f"5 lanes should exceed DD: ${total} > ${limit}"
