@@ -875,8 +875,8 @@ def build_profile_portfolio(
             f"DD BUDGET EXCEEDED: ${total_dd:,.0f} / ${tier.max_dd:,.0f} ({dd_pct:.0f}%) "
             f"for profile '{profile_id}' ({profile.firm} ${profile.account_size:,}).\n"
             + "\n".join(dd_breakdown)
-            + f"\nReduce lanes or increase account tier. "
-            f"select_for_profile() would reject lanes 3+."
+            + "\nReduce lanes or increase account tier. "
+            "select_for_profile() would reject lanes 3+."
         )
     logger.info(
         "DD budget: $%.0f / $%.0f (%.0f%%) — %d lanes for %s",

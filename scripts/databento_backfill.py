@@ -26,7 +26,7 @@ import json
 import os
 import sys
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, UTC
 from pathlib import Path
 
 # Ensure project root on path
@@ -372,7 +372,7 @@ def run_download(
         # Load manifest for resume
         manifest = load_manifest(manifest_dir, name)
         if manifest.get("completed"):
-            print(f"  SKIP (already completed per manifest)")
+            print("  SKIP (already completed per manifest)")
             results[name] = "SKIP (completed)"
             continue
 
@@ -416,7 +416,7 @@ def run_download(
                 "rows": report["rows"],
                 "first_ts": report.get("first_ts"),
                 "last_ts": report.get("last_ts"),
-                "downloaded_at": datetime.now(timezone.utc).isoformat(),
+                "downloaded_at": datetime.now(UTC).isoformat(),
             }
             save_manifest(manifest_dir, name, manifest)
 
@@ -429,7 +429,7 @@ def run_download(
 
         if all_ok and chunk_files:
             manifest["completed"] = True
-            manifest["completed_at"] = datetime.now(timezone.utc).isoformat()
+            manifest["completed_at"] = datetime.now(UTC).isoformat()
             manifest["total_files"] = len(chunk_files)
             manifest["total_rows"] = sum(
                 manifest["chunks"][k].get("rows", 0) for k in manifest["chunks"]
