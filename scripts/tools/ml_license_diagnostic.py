@@ -54,13 +54,21 @@ logger = logging.getLogger(__name__)
 
 
 def _get_session_features(X_e6: pd.DataFrame, session: str) -> list[str]:
-    """Get feature list appropriate for this session (drop cross-session for early sessions)."""
+    """Get feature list appropriate for this session.
+
+    Must stay in sync with trading_app.ml.meta_label._get_session_features.
+    """
     session_idx = SESSION_CHRONOLOGICAL_ORDER.index(session) if session in SESSION_CHRONOLOGICAL_ORDER else 99
     drop_cols = set()
     if session_idx <= MAX_EARLY_SESSION_INDEX:
         drop_cols.update(CROSS_SESSION_FEATURES)
         if session_idx == 0:
             drop_cols.update(LEVEL_PROXIMITY_FEATURES)
+    elif session in ("EUROPE_FLOW", "LONDON_METALS"):
+        # EF/LM swap chronological order by season — cross-session features
+        # from one leak future data into the other ~42% of the time.
+        drop_cols.update(CROSS_SESSION_FEATURES)
+        drop_cols.update(LEVEL_PROXIMITY_FEATURES)
     return [c for c in X_e6.columns if c not in drop_cols]
 
 

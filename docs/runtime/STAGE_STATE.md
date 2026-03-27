@@ -8,6 +8,7 @@ scope_lock:
   - trading_app/ml/config.py
   - scripts/tools/ml_bootstrap_test.py
   - scripts/tools/ml_v2_retrain_all.py
+  - scripts/tools/ml_license_diagnostic.py
   - docs/pre-registrations/ml-v2-preregistration.md
   - tests/test_trading_app/test_ml/test_config.py
   - tests/test_trading_app/test_ml/test_meta_label.py
