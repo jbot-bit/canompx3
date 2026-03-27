@@ -294,6 +294,22 @@ def _resolve_daily_lane(
     )
 
 
+def check_daily_lanes_dd_budget(
+    profile: AccountProfile,
+    lanes: list[DailyExecutionLane],
+) -> tuple[float, float, float, bool]:
+    """Check DD budget for manually pinned daily lanes.
+
+    Returns (dd_per_lane, total_dd_exposure, dd_limit, is_over_budget).
+    """
+    firm_spec = get_firm_spec(profile.firm)
+    tier = get_account_tier(profile.firm, profile.account_size)
+    dd_per_lane = _compute_dd_per_contract(profile.stop_multiplier, firm_spec.dd_type)
+    tradeable = [la for la in lanes if la.status == "TRADE"]
+    total_dd = dd_per_lane * len(tradeable)
+    return dd_per_lane, total_dd, tier.max_dd, total_dd > tier.max_dd
+
+
 def resolve_daily_lanes(profile: AccountProfile, db_path: Path, trading_day: date) -> list[DailyExecutionLane]:
     """Resolve all pinned daily lanes for a profile, sorted by time."""
     lanes = [_resolve_daily_lane(profile, lane, db_path, trading_day) for lane in profile.daily_lanes]
@@ -338,6 +354,19 @@ def print_daily_lanes(profile: AccountProfile, lanes: list[DailyExecutionLane], 
         print(f"    -> {la.reason}")
         if la.execution_notes:
             print(f"    note: {la.execution_notes}")
+
+    # DD budget summary
+    dd_per_lane, total_dd, dd_limit, over_budget = check_daily_lanes_dd_budget(profile, lanes)
+    tradeable_count = sum(1 for la in lanes if la.status == "TRADE")
+    print(f"\n  {'─' * 60}")
+    print(f"  DD BUDGET: {tradeable_count} tradeable × ${dd_per_lane:,.0f}/lane = ${total_dd:,.0f} exposure")
+    print(f"  DD LIMIT:  ${dd_limit:,.0f} ({firm_spec.display_name} {profile.account_size // 1000}K)")
+    if over_budget:
+        pct = total_dd / dd_limit * 100
+        print(f"  ⚠ OVER-COMMITTED: {pct:.0f}% of DD limit. Max simultaneous losses can breach account.")
+        print("    Mitigations: intraday DD halt, reduced sizing, skip marginal lanes.")
+    else:
+        print(f"  ✓ Within DD budget ({total_dd / dd_limit * 100:.0f}%)")
     print()
 
 

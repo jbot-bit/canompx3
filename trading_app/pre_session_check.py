@@ -247,6 +247,28 @@ def run_checks(session: str) -> bool:
         slip_msg = check_slippage_pilot_progress(con)
         results.append(("Slippage pilot", True, slip_msg))
 
+    # DD budget check (from daily_lanes)
+    try:
+        from trading_app.prop_portfolio import check_daily_lanes_dd_budget, resolve_daily_lanes
+        from trading_app.prop_profiles import get_profile
+
+        profile = get_profile("apex_50k_manual")
+        if profile.daily_lanes:
+            resolved = resolve_daily_lanes(profile, db_path=GOLD_DB_PATH, trading_day=today)
+            _dd_per, total_dd, dd_limit, over = check_daily_lanes_dd_budget(profile, resolved)
+            if over:
+                pct = total_dd / dd_limit * 100
+                results.append((
+                    "DD budget",
+                    True,  # Warning, not blocking — user chose these lanes
+                    f"⚠ OVER-COMMITTED: ${total_dd:,.0f} / ${dd_limit:,.0f} ({pct:.0f}%). "
+                    f"Intraday DD halt is your safety net.",
+                ))
+            else:
+                results.append(("DD budget", True, f"${total_dd:,.0f} / ${dd_limit:,.0f} — within budget"))
+    except Exception as e:
+        results.append(("DD budget", True, f"Cannot check: {e}"))
+
     # Lane 2 enforcement
     if lane.get("is_half_size"):
         results.append(("Lane 2 sizing", True, "0.5x MANDATORY — 1 micro lot max"))
