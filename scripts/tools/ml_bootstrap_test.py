@@ -89,6 +89,14 @@ def bootstrap_one(
         bypass_validated=True,  # V2: match training data source (full universe)
     )
     X_e6 = apply_e6_filter(X_all)
+
+    # V2 methodology: select only expert-prior features (same as training)
+    from trading_app.ml.config import ML_CORE_FEATURES
+
+    available_core = [f for f in ML_CORE_FEATURES if f in X_e6.columns]
+    X_e6 = X_e6[available_core]
+    log.info(f"  V2 core features: {len(available_core)} ({available_core})")
+
     pnl_r = meta_all["pnl_r"].values
 
     # Filter to this session (and aperture if per-aperture)
@@ -254,14 +262,52 @@ def main():
 
     n_pass = sum(1 for r in all_results if r.get("p_value", 1) < 0.05)
     n_total = len([r for r in all_results if "error" not in r])
-    log.info(f"\n  {n_pass}/{n_total} passed bootstrap (p < 0.05)")
+    log.info(f"\n  {n_pass}/{n_total} passed bootstrap (p < 0.05, unadjusted)")
 
-    if n_pass == 0:
-        log.info("  VERDICT: ML has no genuine skill. Trade raw baselines.")
-    elif n_pass <= 2:
-        log.info("  VERDICT: Marginal ML signal. Compare to simple regime filter before deploying.")
-    else:
-        log.info("  VERDICT: ML has genuine skill in multiple session-apertures. Proceed to replay validation.")
+    # --- BH FDR correction (V2 methodology) ---
+    # Session is the discovery unit. K=12 for promotion, K=108 as footnote.
+    # Reuses the canonical BH implementation from strategy_validator.py.
+    from trading_app.strategy_validator import benjamini_hochberg
+
+    valid_results = [r for r in all_results if "error" not in r and "p_value" in r]
+    session_pvalues = [(r["session"], r["p_value"]) for r in valid_results]
+
+    if session_pvalues:
+        log.info(f"\n{'=' * 70}")
+        log.info("  BH FDR CORRECTION")
+        log.info(f"{'=' * 70}")
+
+        # K=12: session-level family (promotion decision)
+        fdr_k12 = benjamini_hochberg(session_pvalues, alpha=0.05, total_tests=12)
+        # K=108: global grid (conservative footnote per RESEARCH_RULES.md)
+        fdr_k108 = benjamini_hochberg(session_pvalues, alpha=0.05, total_tests=108)
+
+        log.info(f"  {'Session':<22} {'raw_p':>7} {'BH_K12':>8} {'K12':>5} {'BH_K108':>8} {'K108':>5}")
+        log.info(f"  {'-' * 22} {'-' * 7} {'-' * 8} {'-' * 5} {'-' * 8} {'-' * 5}")
+
+        for sid, _ in sorted(session_pvalues, key=lambda x: x[1]):
+            k12 = fdr_k12.get(sid, {})
+            k108 = fdr_k108.get(sid, {})
+            sig12 = "SIG" if k12.get("fdr_significant") else "n.s."
+            sig108 = "SIG" if k108.get("fdr_significant") else "n.s."
+            log.info(
+                f"  {sid:<22} {k12.get('raw_p', 0):>7.4f} "
+                f"{k12.get('adjusted_p', 1):>8.4f} {sig12:>5} "
+                f"{k108.get('adjusted_p', 1):>8.4f} {sig108:>5}"
+            )
+
+        n_survivors_k12 = sum(1 for v in fdr_k12.values() if v["fdr_significant"])
+        n_survivors_k108 = sum(1 for v in fdr_k108.values() if v["fdr_significant"])
+        log.info(f"\n  BH FDR SURVIVORS:")
+        log.info(f"    K=12  (promotion):   {n_survivors_k12}/12")
+        log.info(f"    K=108 (conservative): {n_survivors_k108}/12")
+
+        if n_survivors_k12 >= 2:
+            log.info("  VERDICT: ML ALIVE — proceed to Phase 2")
+        elif n_survivors_k12 == 1:
+            log.info("  VERDICT: ML CONDITIONAL — 1 survivor, investigate only, no Phase 2")
+        else:
+            log.info("  VERDICT: ML DEAD — 0 BH survivors at K=12. Add to NO-GO registry.")
 
     log.info(f"\n  Full results: {LOG_DIR / 'ml_bootstrap_results.log'}")
 
