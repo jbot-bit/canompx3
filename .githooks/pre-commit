@@ -29,6 +29,13 @@ export PATH="$PATH:$_SAVED_PATH"
 echo "=== PRE-COMMIT CHECKS ==="
 echo ""
 
+# Quick venv health — catches dev deps wiped by interrupted uv sync
+if ! "$SCRIPT_DIR/.venv/Scripts/python.exe" -c "import pytest, httpx" 2>/dev/null && \
+   ! "$SCRIPT_DIR/.venv/bin/python" -c "import pytest, httpx" 2>/dev/null; then
+    echo "BLOCKED: Dev deps missing (pytest/httpx). Run: uv pip install pytest pytest-asyncio pytest-cov httpx ruff pyright pip-audit"
+    exit 1
+fi
+
 # Resolve python — prefer .venv/ (uv-managed), fall back to venv/ (legacy)
 PYTHON="python"
 if [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then

@@ -18,17 +18,30 @@ PROJECT_ROOT = Path(__file__).parent.parent
 
 
 def check_python_deps() -> tuple[bool, str]:
-    """Check Python version and key dependencies."""
+    """Check Python version and key dependencies (production + dev)."""
     version = f"Python {sys.version.split()[0]}"
-    missing = []
-    for pkg in ["duckdb", "databento", "pandas", "numpy", "pyarrow", "zstandard", "pytest"]:
+    missing_prod = []
+    missing_dev = []
+    prod_pkgs = ["duckdb", "databento", "pandas", "numpy", "pyarrow", "zstandard"]
+    dev_pkgs = ["pytest", "httpx", "ruff", "pyright"]
+    for pkg in prod_pkgs:
         try:
             __import__(pkg)
         except ImportError:
-            missing.append(pkg)
-    if missing:
-        return False, f"{version}, missing: {', '.join(missing)}"
-    return True, f"{version}, all deps installed"
+            missing_prod.append(pkg)
+    for pkg in dev_pkgs:
+        try:
+            __import__(pkg)
+        except ImportError:
+            missing_dev.append(pkg)
+    if missing_prod:
+        return False, f"{version}, MISSING production deps: {', '.join(missing_prod)}"
+    if missing_dev:
+        return False, (
+            f"{version}, MISSING dev deps: {', '.join(missing_dev)}. "
+            "Run: uv pip install pytest pytest-asyncio pytest-cov httpx ruff pyright pip-audit"
+        )
+    return True, f"{version}, all deps installed ({len(prod_pkgs)} prod + {len(dev_pkgs)} dev)"
 
 
 def check_database() -> tuple[bool, str]:

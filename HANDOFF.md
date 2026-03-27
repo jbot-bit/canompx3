@@ -7,13 +7,29 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (ML V2 completion + DD budget fix + stress test)
-- **Date:** 2026-03-27
+- **Tool:** Claude Code (2 terminals — deprecation + cleanup)
+- **Date:** 2026-03-28
 - **Branch:** `main`
-- **Commit:** `2b2eff5`
-- **Status:** 3269+ passed, 75/75 drift checks. ML DEAD. DD budget fixed. Pushed to remote.
+- **Commit:** `769fd77` (pushed to remote)
+- **Status:** 3320 passed, 75/75 drift. ML stash dropped (dead). 5 commits pushed.
 
-### What was done (Mar 27 — this session)
+### What was done (Mar 28 — this session)
+
+#### Terminal 1 (this terminal): Cleanup + blast-radius
+- Pushed 5 unpushed commits to remote (lane toggle, paper PnL, manual halt, TEST_MAP)
+- Dropped ML Phase 1 stash (ML is DEAD — doc was pre-kill design)
+- Ran blast-radius analysis on `build_live_portfolio` deprecation
+- Found 4 hard breaks not in original scope: `generate_trade_sheet.py`, `daily_paper_run.py`, `ui_v2/server.py`, check #54
+- Blast-radius report at `docs/runtime/blast-radius-deprecation.md`
+- Updated HANDOFF.md
+
+#### Terminal 2 (other terminal): Deprecation + venv solidification
+- Recovering from venv crash (dev deps wiped by interrupted `uv sync`)
+- Updated `health_check.py` to detect missing dev deps
+- Mid-implementation of `build_live_portfolio` deprecation (5 files modified)
+- STAGE_STATE.md active: IMPLEMENTATION mode
+
+### What was done (Mar 27 — prior session)
 
 #### 1. Fixed 39 Test Failures (commit `ecb869e`)
 Comprehensive audit of all test failures. The audit prompt estimated 56 failures but actual count was 39 (some categories were already fixed). All 39 resolved:
@@ -64,7 +80,7 @@ Comprehensive audit of all test failures. The audit prompt estimated 56 failures
 - Blast radius verified: `pre_session_check.py:258` unpack safe (first element unused)
 
 ### What's Running
-Nothing (session complete)
+- Terminal 2: deprecation implementation (5 files modified, tests running)
 
 ### What's Broken
 - Tradovate auth — password rejected (unchanged from prior sessions)
@@ -78,16 +94,10 @@ Nothing (session complete)
 ```
 
 ### Next Actions (Priority Order)
-1. ~~T6 null bootstrap for SL~~ DONE (commit `b43a1a0`)
-2. ~~5 Bloomberg rescue audit questions~~ DONE (see `portfolio_reconstruction_audit.md`)
-3. ~~Commit fairness audit~~ DONE (commit `b76905c`)
-4. ~~DD budget bypass~~ DONE this session (commit `dc9d680`)
-5. ~~628 lint errors + 4 fail-open bugs~~ DONE this session (commit `3a1f17a`)
-6. ~~Trade journal fail-closed + HWM tracker~~ DONE this session (commit `69bcb87`)
-7. ~~ML AUDIT~~ ML is DEAD (V2 verdict: 0/12 survivors)
-8. **Deprecate build_live_portfolio** — 5 runtime callers remain (staged refactor)
-9. **Confluence scan** — per todo_queue_mar27.md
-10. **Databento backfill** — NQ zip + historical extensions
+1. ~~Deprecate build_live_portfolio~~ IN PROGRESS (Terminal 2). Blast-radius at `docs/runtime/blast-radius-deprecation.md`
+2. **Paper trade the 5 Apex lanes** — highest ROI action, forward data is the binding constraint
+3. **Confluence scan** — per todo_queue_mar27.md
+4. **Databento backfill** — NQ zip + historical extensions
 
 ### Files Changed This Session
 ```
