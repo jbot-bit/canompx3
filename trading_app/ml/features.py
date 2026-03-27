@@ -432,17 +432,30 @@ def transform_to_features(df: pd.DataFrame) -> pd.DataFrame:
     # The guard here catches any RAW daily_features columns that leaked through
     # without going through extraction (e.g. from df[feature_cols].copy() above).
     _GENERIC_SAFE = {
-        "orb_size", "orb_volume", "rel_vol", "break_dir",
-        "orb_break_bar_continues", "orb_size_norm",
-        "orb_vwap", "orb_vwap_norm", "orb_pre_velocity", "orb_pre_velocity_norm",
-        "prior_sessions_broken", "prior_sessions_long", "prior_sessions_short",
-        "nearest_level_to_high_R", "nearest_level_to_low_R",
-        "levels_within_1R", "levels_within_2R",
-        "orb_nested_in_prior", "prior_orb_size_ratio_max",
+        "orb_size",
+        "orb_volume",
+        "rel_vol",
+        "break_dir",
+        "orb_break_bar_continues",
+        "orb_size_norm",
+        "orb_vwap",
+        "orb_vwap_norm",
+        "orb_pre_velocity",
+        "orb_pre_velocity_norm",
+        "prior_sessions_broken",
+        "prior_sessions_long",
+        "prior_sessions_short",
+        "nearest_level_to_high_R",
+        "nearest_level_to_low_R",
+        "levels_within_1R",
+        "levels_within_2R",
+        "orb_nested_in_prior",
+        "prior_orb_size_ratio_max",
     }
     if "orb_label" in df.columns:
         try:
             from pipeline.session_guard import is_feature_safe
+
             numeric_cols = X.select_dtypes(include=[np.number]).columns
             for session in df["orb_label"].unique():
                 session_mask = df["orb_label"] == session
@@ -825,10 +838,7 @@ def load_single_config_feature_matrix(
         # If not, fall back to orb_outcomes directly — ML needs trade
         # mechanics (entry/exit structure), not validated edge.
         _check_params = dict(params)
-        _check_query = (
-            "SELECT COUNT(*) FROM validated_setups "
-            "WHERE instrument = $instrument AND status = 'active'"
-        )
+        _check_query = "SELECT COUNT(*) FROM validated_setups WHERE instrument = $instrument AND status = 'active'"
         if rr_target is not None:
             _check_query += " AND rr_target = $rr_target"
         _n_validated = con.execute(_check_query, _check_params).fetchone()[0]
@@ -840,14 +850,8 @@ def load_single_config_feature_matrix(
             )
 
         # Pre-compute fallback partition clauses (hybrid + full fallback paths)
-        _fb_partition_v = (
-            "PARTITION BY v.orb_label, v.orb_minutes" if per_aperture
-            else "PARTITION BY v.orb_label"
-        )
-        _fb_partition_bare = (
-            "PARTITION BY orb_label, orb_minutes" if per_aperture
-            else "PARTITION BY orb_label"
-        )
+        _fb_partition_v = "PARTITION BY v.orb_label, v.orb_minutes" if per_aperture else "PARTITION BY v.orb_label"
+        _fb_partition_bare = "PARTITION BY orb_label, orb_minutes" if per_aperture else "PARTITION BY orb_label"
         _missing_sessions: list[str] = []
 
         if _n_validated > 0 and not bypass_validated:
@@ -865,18 +869,12 @@ def load_single_config_feature_matrix(
 
             # Find sessions in orb_outcomes NOT covered by validated_setups
             _oo_sessions_query = (
-                "SELECT DISTINCT orb_label FROM orb_outcomes "
-                "WHERE symbol = $instrument AND pnl_r IS NOT NULL"
+                "SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol = $instrument AND pnl_r IS NOT NULL"
             )
             if rr_target is not None:
                 _oo_sessions_query += " AND rr_target = $rr_target"
-            _all_outcome_sessions = con.execute(
-                _oo_sessions_query, params
-            ).fetchdf()["orb_label"].tolist()
-            _missing_sessions = [
-                s for s in _all_outcome_sessions
-                if s not in set(_validated_sessions)
-            ]
+            _all_outcome_sessions = con.execute(_oo_sessions_query, params).fetchdf()["orb_label"].tolist()
+            _missing_sessions = [s for s in _all_outcome_sessions if s not in set(_validated_sessions)]
 
             # Validated CTE inner query (reused in hybrid and non-hybrid paths)
             _validated_inner = f"""

@@ -20,10 +20,6 @@ from sklearn.ensemble import RandomForestClassifier
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.ml.config import (
     RF_PARAMS,
-    SESSION_CHRONOLOGICAL_ORDER,
-    THRESHOLD_MAX,
-    THRESHOLD_MIN,
-    THRESHOLD_STEP,
 )
 from trading_app.ml.features import apply_e6_filter, load_single_config_feature_matrix
 from trading_app.ml.meta_label import _get_session_features, _optimize_threshold_profit
@@ -45,15 +41,15 @@ log = logging.getLogger(__name__)
 # Survivors from the exhaustive sweep — (session, aperture_or_None, RR, honest_delta)
 SURVIVORS = [
     # RR2.0 per-aperture — ALL PASSED bootstrap (p=0.005 to 0.020)
-    ("NYSE_OPEN", 30, 2.0, 33.5),       # p=0.005 PASS
-    ("US_DATA_1000", 30, 2.0, 38.5),    # p=0.005 PASS
-    ("US_DATA_1000", 15, 2.0, 10.6),    # p=0.020 PASS
-    ("US_DATA_830", 30, 2.0, 12.5),     # p=0.020 PASS
+    ("NYSE_OPEN", 30, 2.0, 33.5),  # p=0.005 PASS
+    ("US_DATA_1000", 30, 2.0, 38.5),  # p=0.005 PASS
+    ("US_DATA_1000", 15, 2.0, 10.6),  # p=0.020 PASS
+    ("US_DATA_830", 30, 2.0, 12.5),  # p=0.020 PASS
     # RR2.0 flat
-    ("NYSE_OPEN", None, 2.0, 3.3),      # p=0.005 PASS
-    ("CME_PRECLOSE", None, 2.0, 2.2),   # verified_delta=0.0 (seed variance)
+    ("NYSE_OPEN", None, 2.0, 3.3),  # p=0.005 PASS
+    ("CME_PRECLOSE", None, 2.0, 2.2),  # verified_delta=0.0 (seed variance)
     # RR1.5 flat
-    ("CME_PRECLOSE", None, 1.5, 5.4),   # NOT YET TESTED
+    ("CME_PRECLOSE", None, 1.5, 5.4),  # NOT YET TESTED
 ]
 
 N_PERMUTATIONS = 5000  # 5000 per Phipson & Smyth 2010: reliable p-values need 1000+ perms
@@ -299,7 +295,7 @@ def main():
 
         n_survivors_k12 = sum(1 for v in fdr_k12.values() if v["fdr_significant"])
         n_survivors_k108 = sum(1 for v in fdr_k108.values() if v["fdr_significant"])
-        log.info(f"\n  BH FDR SURVIVORS:")
+        log.info("\n  BH FDR SURVIVORS:")
         log.info(f"    K=12  (promotion):   {n_survivors_k12}/12")
         log.info(f"    K=108 (conservative): {n_survivors_k108}/12")
 
