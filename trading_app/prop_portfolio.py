@@ -804,17 +804,52 @@ def print_daily(
 
 
 def _load_strategies_and_build_books(db_path: Path) -> tuple[dict[str, TradingBook], list[PortfolioStrategy]]:
-    """Load strategies from DB and build books for all active profiles."""
+    """Load active validated strategies from DB and build books for all profiles."""
+    import duckdb
+
     from pipeline.asset_configs import get_active_instruments
-    from trading_app.live_config import build_live_portfolio
+    from pipeline.db_config import configure_connection
 
     print("Loading validated strategies...")
+    con = duckdb.connect(str(db_path), read_only=True)
+    configure_connection(con)
+    try:
+        active_instruments = get_active_instruments()
+        rows = con.execute(
+            "SELECT * FROM validated_setups WHERE status = 'active' AND instrument = ANY($1)",
+            [list(active_instruments)],
+        ).fetchall()
+        columns = [desc[0] for desc in con.description]
+    finally:
+        con.close()
+
     all_strategies: list[PortfolioStrategy] = []
-    for instrument in get_active_instruments():
-        portfolio, _notes = build_live_portfolio(db_path=db_path, instrument=instrument)
-        print(f"  {instrument}: {len(portfolio.strategies)} eligible")
-        all_strategies.extend(portfolio.strategies)
-    print(f"  Total pool: {len(all_strategies)} strategies across all instruments\n")
+    counts: dict[str, int] = {}
+    for row in rows:
+        r = dict(zip(columns, row, strict=False))
+        s = PortfolioStrategy(
+            strategy_id=r["strategy_id"],
+            instrument=r["instrument"],
+            orb_label=r["orb_label"],
+            entry_model=r["entry_model"],
+            rr_target=r["rr_target"],
+            confirm_bars=r["confirm_bars"],
+            filter_type=r["filter_type"],
+            orb_minutes=r.get("orb_minutes", 5),
+            expectancy_r=r["expectancy_r"],
+            win_rate=r["win_rate"],
+            sample_size=r["sample_size"],
+            sharpe_ratio=r.get("sharpe_ratio"),
+            max_drawdown_r=r.get("max_drawdown_r"),
+            median_risk_points=r.get("median_risk_points"),
+            stop_multiplier=r.get("stop_multiplier", 1.0),
+        )
+        all_strategies.append(s)
+        counts[s.instrument] = counts.get(s.instrument, 0) + 1
+
+    for inst in sorted(counts):
+        print(f"  {inst}: {counts[inst]} active")
+    print(f"  Total pool: {len(all_strategies)} strategies across {len(counts)} instruments\n")
 
     strategies_by_instrument: dict[str, list[PortfolioStrategy]] = {}
     for s in all_strategies:

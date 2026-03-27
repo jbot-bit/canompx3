@@ -15,7 +15,7 @@ v2.3 fixes (from simulation):
 
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 STAGE_STATE = Path("docs/runtime/STAGE_STATE.md")
@@ -212,7 +212,7 @@ def main():
         is_core = any(marker in file_path for marker in NEVER_TRIVIAL)
         if not is_core:
             STAGE_STATE.parent.mkdir(parents=True, exist_ok=True)
-            now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
             STAGE_STATE.write_text(
                 f"---\ntask: auto-trivial edit of {file_path}\n"
                 f"mode: TRIVIAL\nscope: [{file_path}]\n"
@@ -239,8 +239,7 @@ def main():
 
     if not mode:
         print(
-            "STAGE-GATE BLOCK: STAGE_STATE.md has no mode field.\n"
-            "  Run /stage-gate to reclassify.",
+            "STAGE-GATE BLOCK: STAGE_STATE.md has no mode field.\n  Run /stage-gate to reclassify.",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -274,10 +273,10 @@ def main():
     if not scope_lock:
         # F2 fix: No scope_lock = no contract. Block to prevent wide-open edits.
         print(
-            f"STAGE-GATE BLOCK: IMPLEMENTATION mode but no scope_lock defined.\n"
-            f"  STAGE_STATE.md must list allowed files in a ## Scope Lock section.\n"
-            f"  → Add scope_lock to docs/runtime/STAGE_STATE.md\n"
-            f"  → Or reclassify: /stage-gate (which writes scope automatically)",
+            "STAGE-GATE BLOCK: IMPLEMENTATION mode but no scope_lock defined.\n"
+            "  STAGE_STATE.md must list allowed files in a ## Scope Lock section.\n"
+            "  → Add scope_lock to docs/runtime/STAGE_STATE.md\n"
+            "  → Or reclassify: /stage-gate (which writes scope automatically)",
             file=sys.stderr,
         )
         sys.exit(2)

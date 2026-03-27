@@ -29,6 +29,13 @@ TEST_MAP = {
     "trading_app/entry_rules.py": "tests/test_trading_app/test_entry_rules.py",
     "trading_app/paper_trader.py": "tests/test_trading_app/test_paper_trader.py",
     "trading_app/config.py": "tests/test_trading_app/test_config.py",
+    "trading_app/prop_portfolio.py": "tests/test_trading_app/test_prop_portfolio.py",
+    "trading_app/prop_profiles.py": "tests/test_trading_app/test_prop_profiles.py",
+    "trading_app/pre_session_check.py": "tests/test_trading_app/test_pre_session_check.py",
+    "trading_app/lane_ctl.py": "tests/test_trading_app/test_lane_ctl.py",
+    "trading_app/live/trade_journal.py": "tests/test_trading_app/test_trade_journal.py",
+    "trading_app/live/session_orchestrator.py": "tests/test_trading_app/test_session_orchestrator.py",
+    "trading_app/live/projectx/order_router.py": "tests/test_trading_app/test_projectx_429_retry.py",
 }
 
 
@@ -59,8 +66,11 @@ def main():
     if not _skip_drift:
         result = subprocess.run(
             [sys.executable, str(_PROJECT_ROOT / "pipeline" / "check_drift.py")],
-            capture_output=True, text=True, timeout=30,
-            cwd=str(_PROJECT_ROOT), env=_SUBPROCESS_ENV,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(_PROJECT_ROOT),
+            env=_SUBPROCESS_ENV,
         )
         if result.returncode != 0:
             # Invalidate debounce on failure
@@ -79,10 +89,23 @@ def main():
     if test_file and os.path.exists(test_file):
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "pytest", test_file, "-x", "-q", "--no-header", "--tb=short",
-                 "-k", "not Integration and not integration and not Idempotent"],
-                capture_output=True, text=True, timeout=45,
-                cwd=str(_PROJECT_ROOT), env=_SUBPROCESS_ENV,
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    test_file,
+                    "-x",
+                    "-q",
+                    "--no-header",
+                    "--tb=short",
+                    "-k",
+                    "not Integration and not integration and not Idempotent",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=45,
+                cwd=str(_PROJECT_ROOT),
+                env=_SUBPROCESS_ENV,
             )
             if result.returncode != 0:
                 print(f"TESTS FAILED after editing {file_path}", file=sys.stderr)
@@ -100,8 +123,11 @@ def main():
         try:
             result = subprocess.run(
                 [sys.executable, str(_PROJECT_ROOT / "scripts" / "tools" / "audit_behavioral.py")],
-                capture_output=True, text=True, timeout=15,
-                cwd=str(_PROJECT_ROOT), env=_SUBPROCESS_ENV,
+                capture_output=True,
+                text=True,
+                timeout=15,
+                cwd=str(_PROJECT_ROOT),
+                env=_SUBPROCESS_ENV,
             )
             if result.returncode != 0:
                 print(f"BEHAVIORAL AUDIT FAILED after editing {file_path}", file=sys.stderr)
