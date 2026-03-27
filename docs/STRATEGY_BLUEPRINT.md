@@ -260,7 +260,8 @@ Everything confirmed dead. Do NOT re-test without a fundamentally new approach.
 | E3 entry model | RETIRED | Adverse selection. 19/20 both negative. | At-break architecture (not pre-break) |
 | RR4.0 (any instrument) | DEAD | Negative even on MNQ E2 | Nothing at current cost structure |
 | ML on PORTFOLIO-LEVEL negative baselines | DEAD | Threshold artifact, bootstrap p=0.35 | Nothing — mathematical trap |
-| ML on PER-SESSION negative baselines | **ALIVE** | Bootstrap p=0.005 on NYSE_OPEN O30 RR2.0 | Requires bootstrap verification (mandatory) |
+| ML on PER-SESSION negative baselines | DEAD | V1 was p=0.005 on NYSE_OPEN but EPV=2.4. V2 fixed all 3 FAILs → 0/12 BH survivors | Fundamentally new features or 2x more data |
+| ML V2 meta-labeling (5 features) | DEAD | 10/12 neg baseline, 2 bootstrapped, 0 BH survivors at K=12. NYSE_CLOSE p=0.039 raw, p=0.473 adjusted | 2x data growth or new feature discovery |
 | Calendar blanket skip | DEAD | Mixed results (some days BETTER) | Per-combo only, never blanket |
 | Non-ORB strategies | DEAD | 6 archetypes, 540 tests, 0 survivors | Fundamentally different market model |
 | MCL, SIL, M6E, MBT, M2K ORB | DEAD | 0 validated per instrument | New data source or contract change |
@@ -283,27 +284,26 @@ Separate decision tree for ML meta-labeling. ML is OPTIONAL — raw baselines ar
 - **ML on negative-baseline sessions: WEAK.** NYSE_OPEN O30 RR2.0 survived 5K bootstrap (p=0.019) but with EPV=2.4 (needs ≥10) and is the ONLY survivor out of 7 tested. Three marginal (p=0.05-0.09), three dead. Treat with extreme caution.
 - ML is NOT a replacement for having SOME positive population in the variable space. If the entire instrument × entry model space is negative at every point, ML can't help.
 
-### ML Methodology Blockers (3 open FAILs — MUST FIX before production)
+### ML Methodology — RESOLVED (V2, Mar 27 2026)
 
-| # | FAIL | Detail | Fix |
-|---|------|--------|-----|
-| 1 | **EPV = 2.4** (need ≥10) | 55 positives / 23 features. Overfit by definition. (Peduzzi 1996, van Smeden 2019) | Reduce features to ≤5 or pool sessions to ≥230 positives |
-| 2 | **Negative baselines** | ML trained on sessions where raw ExpR is NEGATIVE. De Prado (AIFML Ch 3.6) assumes positive-edge primary model. | Retrain on positive-baseline sessions ONLY |
-| 3 | **Selection bias** | 7/12 sessions selected with quality gates, THEN bootstrapped on same data. (White 2000) | Pre-register session list BEFORE testing |
+All 3 original FAILs fixed in V2 methodology (commit `e7f5512`):
+1. EPV=2.4 → **FIXED** (5 expert-prior features, EPV=1755)
+2. Negative baselines → **FIXED** (Fix E positive baseline gate, de Prado Ch 3.6)
+3. Selection bias → **FIXED** (pre-registration committed before retrain/bootstrap)
 
-**Bootstrap resolution: FIXED.** 5K perms with Phipson & Smyth (2010) correction. Results from `logs/ml_bootstrap_5k_overnight.log`:
+**V2 Result: ML DEAD.** 108 configs tested, 10/12 sessions blocked by negative baseline,
+2 bootstrapped (5000 perms, Phipson & Smyth), 0 BH FDR survivors at K=12.
 
-| Session | Aperture | RR | Delta | Null Mean | p-value | Verdict |
-|---------|----------|-----|-------|-----------|---------|---------|
-| NYSE_OPEN | O30 | 2.0 | +33.5R | +4.9R | 0.0016 | PASS |
-| US_DATA_1000 | O30 | 2.0 | +38.5R | +14.7R | 0.0176 | PASS |
-| CME_PRECLOSE | -- | 1.5 | +4.4R | -2.4R | 0.0376 | PASS |
-| US_DATA_830 | O30 | 2.0 | +12.5R | -1.3R | 0.0512 | MARGINAL |
-| NYSE_OPEN | -- | 2.0 | +3.2R | -0.9R | 0.0546 | MARGINAL |
-| US_DATA_1000 | O15 | 2.0 | +10.6R | +0.8R | 0.0930 | MARGINAL |
-| CME_PRECLOSE | -- | 2.0 | +1.2R | -2.8R | 0.1190 | FAIL |
+| Session | Aperture | RR | Delta | p-value (raw) | BH K=12 | Verdict |
+|---------|----------|-----|-------|---------------|---------|---------|
+| US_DATA_1000 | O30 | 1.0 | +0.0R | 0.2150 | n.s. | FAIL |
+| NYSE_CLOSE | O5 | 1.0 | +3.9R | 0.0394 | 0.4728 (n.s.) | FAIL |
 
-**Until the 3 FAILs above are resolved, ML is RESEARCH-ONLY, not production.**
+Pre-registration: `docs/pre-registrations/ml-v2-preregistration.md`
+Config selection: `docs/plans/ml-v2-config-selection.md`
+Bootstrap log: `logs/ml_bootstrap_results.log`
+
+**ML is permanently closed for MNQ ORB breakouts. Raw baselines are the portfolio.**
 
 ### ML Test Sequence
 ```
