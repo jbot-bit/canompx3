@@ -334,7 +334,35 @@ def resolve_daily_lanes(profile: AccountProfile, db_path: Path, trading_day: dat
     return sorted(lanes, key=lambda la: _time_sort_key(la.session_time_brisbane))
 
 
-def print_daily_lanes(profile: AccountProfile, lanes: list[DailyExecutionLane], trading_day: date) -> None:
+def _query_paper_pnl(db_path: Path, strategy_id: str, lookback_days: int = 30) -> dict | None:
+    """Query recent paper trade performance for a strategy. Returns None if no data."""
+    try:
+        with duckdb.connect(str(db_path), read_only=True) as con:
+            configure_connection(con)
+            row = con.execute(
+                """SELECT
+                    COUNT(*) FILTER (WHERE pnl_r > 0) as wins,
+                    COUNT(*) FILTER (WHERE pnl_r <= 0) as losses,
+                    COALESCE(SUM(pnl_r), 0.0) as cum_r,
+                    MAX(trading_day) as last_trade
+                FROM paper_trades
+                WHERE strategy_id = ?
+                  AND trading_day >= CURRENT_DATE - INTERVAL ? DAY""",
+                [strategy_id, lookback_days],
+            ).fetchone()
+            if row is None or row[0] + row[1] == 0:
+                return None
+            return {"wins": row[0], "losses": row[1], "cum_r": row[2], "last_trade": row[3]}
+    except Exception:
+        return None
+
+
+def print_daily_lanes(
+    profile: AccountProfile,
+    lanes: list[DailyExecutionLane],
+    trading_day: date,
+    db_path: Path | None = None,
+) -> None:
     """Print manual daily execution sheet for one profile."""
     firm_spec = get_firm_spec(profile.firm)
     day_str = trading_day.strftime("%A %d %b %Y")
@@ -369,6 +397,18 @@ def print_daily_lanes(profile: AccountProfile, lanes: list[DailyExecutionLane], 
             details.append(f"{la.entry_model} CB{la.confirm_bars}")
         if details:
             print(f"    {' | '.join(details)}")
+        # Paper PnL (if db_path available)
+        if db_path is not None:
+            pnl = _query_paper_pnl(db_path, la.strategy_id)
+            if pnl is not None:
+                last = pnl["last_trade"]
+                last_str = str(last) if last else "?"
+                print(
+                    f"    paper 30d: {pnl['wins']}W {pnl['losses']}L | "
+                    f"cumR: {pnl['cum_r']:+.2f} | last: {last_str}"
+                )
+            else:
+                print("    paper 30d: no data (run: python -m trading_app.paper_trade_logger --sync)")
         print(f"    -> {la.reason}")
         if la.execution_notes:
             print(f"    note: {la.execution_notes}")
@@ -799,7 +839,7 @@ def main() -> None:
             profile = get_profile(args.profile)
             if profile.daily_lanes:
                 lanes = resolve_daily_lanes(profile, db_path=db_path, trading_day=trading_day)
-                print_daily_lanes(profile, lanes, trading_day)
+                print_daily_lanes(profile, lanes, trading_day, db_path=db_path)
                 return
             # Fallback: profile has no pinned lanes, use dynamic
         # Cross-account daily view (all firms, sorted by time)
