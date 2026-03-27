@@ -6,8 +6,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
 from trading_app.nested.schema import init_nested_schema, verify_nested_schema
 

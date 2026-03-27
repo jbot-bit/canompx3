@@ -1,19 +1,19 @@
 """Tests for pipeline.health_check — pipeline health check CLI."""
 
 import subprocess
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from pipeline.health_check import (
-    check_python_deps,
     check_database,
     check_dbn_files,
     check_drift,
-    check_integrity,
-    check_tests,
     check_git_hooks,
+    check_integrity,
+    check_python_deps,
+    check_tests,
 )
 
 

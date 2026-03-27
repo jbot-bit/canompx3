@@ -10,8 +10,7 @@ import pytest
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
 from pipeline.cost_model import COST_SPECS, CostSpec, get_cost_spec
-from pipeline.dst import SESSION_CATALOG, DYNAMIC_ORB_RESOLVERS
-
+from pipeline.dst import DYNAMIC_ORB_RESOLVERS, SESSION_CATALOG
 
 # ── Tripwire 1: Cost model internal consistency ────────────────────────
 

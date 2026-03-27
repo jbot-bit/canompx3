@@ -5,18 +5,18 @@ from datetime import date
 import pytest
 
 from trading_app.portfolio import PortfolioStrategy
-from trading_app.prop_profiles import (
-    AccountProfile,
-)
 from trading_app.prop_portfolio import (
+    _apply_instrument_bans,
     _calendar_gate_reason,
     _compute_dd_per_contract,
-    _apply_instrument_bans,
     _deduplicate_sessions,
     _format_time_ampm,
     _rank_strategies,
     _time_sort_key,
     select_for_profile,
+)
+from trading_app.prop_profiles import (
+    AccountProfile,
 )
 
 

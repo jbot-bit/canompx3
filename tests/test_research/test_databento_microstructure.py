@@ -11,8 +11,8 @@ import pytest
 from research.databento_microstructure import (
     RepricedEntry,
     _cache_path,
-    reprice_e2_entry,
     analyze_slippage,
+    reprice_e2_entry,
 )
 
 TICK_SIZE = 0.10  # MGC tick size

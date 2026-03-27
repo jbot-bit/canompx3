@@ -4,10 +4,11 @@ Tests for pipeline.paths path constants.
 Verifies paths resolve correctly relative to project root.
 """
 
-import pytest
 from pathlib import Path
 
-from pipeline.paths import PROJECT_ROOT, GOLD_DB_PATH, DBN_DIR, OHLCV_DIR
+import pytest
+
+from pipeline.paths import DBN_DIR, GOLD_DB_PATH, OHLCV_DIR, PROJECT_ROOT
 
 
 class TestPaths:

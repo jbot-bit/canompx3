@@ -6,9 +6,9 @@ import pytest
 
 # Import generators — these read from the live gold.db
 from scripts.tools.pinecone_snapshots import (
-    generate_portfolio_state_snapshot,
     generate_fitness_report_snapshot,
     generate_live_config_snapshot,
+    generate_portfolio_state_snapshot,
     generate_research_index_snapshot,
 )
 

@@ -3,12 +3,13 @@
 These test pure logic without requiring a database.
 """
 
-import pytest
-from trading_app.strategy_validator import validate_strategy
-from trading_app.nested.compare import _make_comparison_key, _load_strategies
-from pipeline.cost_model import get_cost_spec
 import json
 
+import pytest
+
+from pipeline.cost_model import get_cost_spec
+from trading_app.nested.compare import _load_strategies, _make_comparison_key
+from trading_app.strategy_validator import validate_strategy
 
 COST_SPEC = get_cost_spec("MGC")
 

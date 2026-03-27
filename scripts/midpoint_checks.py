@@ -1,6 +1,14 @@
 """5 verification checks for midpoint entry strategy."""
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
-import duckdb, numpy as np, pandas as pd, statistics
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
+import statistics
+
+import duckdb
+import numpy as np
+import pandas as pd
+
 from pipeline.paths import GOLD_DB_PATH
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -20,13 +28,15 @@ con.close()
 
 holdout = pd.Timestamp("2025-01-01")
 td = pd.to_datetime(df["trading_day"])
-train_df = df[td < holdout]; test_df = df[td >= holdout]
+train_df = df[td < holdout]
+test_df = df[td >= holdout]
 
 feats = ["orb_CME_REOPEN_size","orb_SINGAPORE_OPEN_break_bar_volume","atr_20","orb_TOKYO_OPEN_size"]
 thresholds = {f: pd.to_numeric(train_df[f], errors="coerce").dropna().quantile(0.80) for f in feats}
 top_mask = pd.Series(True, index=test_df.index)
 for f, t in thresholds.items():
-    vals = pd.to_numeric(test_df[f], errors="coerce"); top_mask &= (vals >= t) | vals.isna()
+    vals = pd.to_numeric(test_df[f], errors="coerce")
+    top_mask &= (vals >= t) | vals.isna()
 top = test_df[top_mask].copy()
 
 entry = pd.to_numeric(top["entry_price"], errors="coerce").values
@@ -44,7 +54,8 @@ fills = mae_r >= 0.5
 print("=" * 70)
 print("CHECK 2: SELECTION BIAS")
 print("=" * 70)
-retrace = top[fills]; no_retrace = top[~fills]
+retrace = top[fills]
+no_retrace = top[~fills]
 print(f"  RETRACE (fills):    N={len(retrace)} E2 ExpR={retrace['pnl_r'].mean():+.4f} MFE={pd.to_numeric(retrace['mfe_r'],errors='coerce').mean():.3f} WR={(retrace['pnl_r']>0).mean():.1%}")
 print(f"  NO RETRACE (miss):  N={len(no_retrace)} E2 ExpR={no_retrace['pnl_r'].mean():+.4f} MFE={pd.to_numeric(no_retrace['mfe_r'],errors='coerce').mean():.3f} WR={(no_retrace['pnl_r']>0).mean():.1%}")
 bias = "YES - missed are better" if no_retrace['pnl_r'].mean() > retrace['pnl_r'].mean() else "NO - filled are comparable or better"
@@ -54,7 +65,7 @@ print(f"  Selection bias: {bias}")
 print(f"\n{'='*70}\nCHECK 3: RISK CLARIFICATION\n{'='*70}")
 print(f"  E2 risk: {risk_orig.mean():.2f} pts (${risk_orig.mean()*10:.0f}/micro)")
 print(f"  Midpoint risk: {risk_mid.mean():.2f} pts (${risk_mid.mean()*10:.0f}/micro)")
-print(f"  Stop = opposite ORB boundary (same for both)")
+print("  Stop = opposite ORB boundary (same for both)")
 
 # CHECK 4: STRESS TEST
 print(f"\n{'='*70}\nCHECK 4: STRESS TEST (degraded fills)\n{'='*70}")
@@ -62,7 +73,8 @@ mfe_from_mid = mfe_r + 0.5
 for fill_pct in [0.74, 0.60, 0.50, 0.40]:
     n_take = int(len(top) * fill_pct)
     sort_idx = np.argsort(-mae_r)[:n_take]
-    fill_mask = np.zeros(len(top), dtype=bool); fill_mask[sort_idx] = True
+    fill_mask = np.zeros(len(top), dtype=bool)
+    fill_mask[sort_idx] = True
     pnl_pts_mid = np.where(is_long, exit_p - midpoint, midpoint - exit_p)
     pnl_r_mid = pnl_pts_mid / risk_mid
     hit_tgt = mfe_from_mid[fill_mask] >= 1.25
@@ -96,9 +108,11 @@ null_means = []
 for rep in range(200):
     rng = np.random.RandomState(rep)
     idx = rng.choice(len(test_df), size=n_top, replace=False)
-    rmask = np.zeros(len(test_df), dtype=bool); rmask[idx] = True
+    rmask = np.zeros(len(test_df), dtype=bool)
+    rmask[idx] = True
     rf = all_pnl_mid[rmask & all_fills]
-    if len(rf) > 0: null_means.append(rf.mean())
+    if len(rf) > 0:
+        null_means.append(rf.mean())
 
 n_above = sum(1 for n in null_means if n >= real_mean)
 print(f"  Real quintile midpoint ExpR: {real_mean:+.4f}R (N={len(real_filled)})")
@@ -106,6 +120,9 @@ print(f"  Random selection ExpR:       {statistics.mean(null_means):+.4f}R (200 
 print(f"  Null >= real: {n_above}/{len(null_means)}")
 pval = n_above / len(null_means) if null_means else 1
 print(f"  p-value: {pval:.4f}")
-if pval < 0.01: print("  VERDICT: HIGHLY SIGNIFICANT")
-elif pval < 0.05: print("  VERDICT: SIGNIFICANT")
-else: print("  VERDICT: NOT SIGNIFICANT")
+if pval < 0.01:
+    print("  VERDICT: HIGHLY SIGNIFICANT")
+elif pval < 0.05:
+    print("  VERDICT: SIGNIFICANT")
+else:
+    print("  VERDICT: NOT SIGNIFICANT")

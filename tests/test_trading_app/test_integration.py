@@ -7,13 +7,13 @@ Uses synthetic data in a temp DB.
 Optimized: class-scoped fixtures share expensive pipeline runs across tests.
 """
 
-import sys
 import json
+import sys
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
-from datetime import date, datetime, timezone, timedelta
 
-import pytest
 import duckdb
+import pytest
 
 from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
 from trading_app.db_manager import init_trading_app_schema
@@ -49,10 +49,10 @@ def _create_test_db(tmp_path, n_days=20, start_year=2024):
             trading_day += timedelta(days=1)
             continue
 
-        td_start = datetime(trading_day.year, trading_day.month, trading_day.day, tzinfo=timezone.utc) - timedelta(
+        td_start = datetime(trading_day.year, trading_day.month, trading_day.day, tzinfo=UTC) - timedelta(
             hours=1
         )  # 23:00 UTC prev day
-        td_end = td_start + timedelta(hours=24)
+        _td_end = td_start + timedelta(hours=24)
 
         base_price = 2700.0 + days_created * 0.5
         bars = []
@@ -60,7 +60,7 @@ def _create_test_db(tmp_path, n_days=20, start_year=2024):
             ts = td_start + timedelta(minutes=i)
             o = base_price + i * 0.05
             h = o + 1.5
-            l = o - 0.5
+            low = o - 0.5
             c = o + 1.0
             bars.append(
                 (
@@ -69,7 +69,7 @@ def _create_test_db(tmp_path, n_days=20, start_year=2024):
                     "GCG4",
                     round(o, 2),
                     round(h, 2),
-                    round(l, 2),
+                    round(low, 2),
                     round(c, 2),
                     100,
                 )
@@ -186,7 +186,7 @@ class TestPipelineFull:
             pytest.skip("No strategies passed validation with test data")
 
         for row in rows:
-            row_dict = dict(zip(col_names, row))
+            row_dict = dict(zip(col_names, row, strict=True))
             assert row_dict["strategy_id"] is not None
             assert row_dict["instrument"] is not None
             assert row_dict["orb_label"] is not None
@@ -207,7 +207,7 @@ class TestPipelineFull:
         for (yearly_json,) in rows:
             data = json.loads(yearly_json)
             assert isinstance(data, dict)
-            for year_key, year_data in data.items():
+            for _year_key, year_data in data.items():
                 assert "trades" in year_data
                 assert "wins" in year_data
                 assert "total_r" in year_data

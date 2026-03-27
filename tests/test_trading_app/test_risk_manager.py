@@ -3,10 +3,10 @@ Tests for trading_app.risk_manager module.
 """
 
 import sys
-from pathlib import Path
-from datetime import date
 from dataclasses import dataclass
+from datetime import date
 from enum import Enum
+from pathlib import Path
 
 import pytest
 
@@ -53,7 +53,7 @@ class TestRiskLimits:
 
     def test_frozen(self):
         limits = RiskLimits()
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             limits.max_daily_loss_r = -10.0
 
     def test_custom_values(self):

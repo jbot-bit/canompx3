@@ -15,7 +15,6 @@ from trading_app.rolling_correlation import (
     summarize_correlation_risk,
 )
 
-
 # =========================================================================
 # Helpers
 # =========================================================================
@@ -278,7 +277,6 @@ class TestDrawdownCorrelation:
     def test_drawdown_corr_simultaneous(self, tmp_path):
         """Two strategies that draw down at the same time -> high co_drawdown_pct."""
         # Both have a big losing streak in the same period
-        n = 100
         pnl = [0.5] * 20 + [-1.0] * 30 + [0.5] * 50  # heavy drawdown in middle
         db_path, sid_a, sid_b = _populate_two_strategies(tmp_path, pnl, pnl)
 
@@ -297,7 +295,6 @@ class TestDrawdownCorrelation:
 
     def test_drawdown_corr_offset(self, tmp_path):
         """Two strategies that draw down at different times -> low co_drawdown_pct."""
-        n = 100
         # A draws down early, B draws down late
         pnl_a = [-1.0] * 30 + [0.5] * 70
         pnl_b = [0.5] * 70 + [-1.0] * 30

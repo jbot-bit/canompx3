@@ -4,9 +4,11 @@ Tests for pipeline.ingest_dbn_mgc contract selection functions.
 Tests choose_front_contract() and parse_expiry() — pure functions, no DB needed.
 """
 
-import pytest
 import re
-from pipeline.ingest_dbn_mgc import choose_front_contract, parse_expiry, GC_OUTRIGHT_PATTERN
+
+import pytest
+
+from pipeline.ingest_dbn_mgc import GC_OUTRIGHT_PATTERN, choose_front_contract, parse_expiry
 
 
 class TestParseExpiry:

@@ -6,9 +6,16 @@ Tests we haven't run:
 4. Holdout with SHUFFLED features (destroy feature signal, keep everything else)
 5. Cost model verification (is pnl_r actually after costs?)
 """
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
-import duckdb, numpy as np, pandas as pd, statistics
-from scipy.stats import ttest_ind
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
+import statistics
+
+import duckdb
+import numpy as np
+import pandas as pd
+
 from pipeline.paths import GOLD_DB_PATH
 
 feats = ["orb_CME_REOPEN_size","orb_SINGAPORE_OPEN_break_bar_volume","atr_20","orb_TOKYO_OPEN_size"]
@@ -51,7 +58,8 @@ test_df["risk_pts"] = np.abs(pd.to_numeric(test_df["entry_price"], errors="coerc
 def get_portfolio(df, thresh, risk_cap, keep):
     mask = pd.Series(True, index=df.index)
     for f, t in thresh.items():
-        v = pd.to_numeric(df[f], errors="coerce"); mask &= (v >= t) | v.isna()
+        v = pd.to_numeric(df[f], errors="coerce")
+        mask &= (v >= t) | v.isna()
     mask &= df["risk_pts"] <= risk_cap
     sess_mask = pd.Series(False, index=df.index)
     for inst, sessions in keep.items():
@@ -71,7 +79,7 @@ for inst in ["MGC", "MES"]:
     inst_real = real[real["instrument"] == inst]["pnl_r"].values
     # Baseline: same instrument, same KEEP sessions, risk capped, no quintile
     sess_mask = test_df["instrument"] == inst
-    for s in KEEP[inst]:
+    for _s in KEEP[inst]:
         sess_mask |= False  # reset
     sess_mask = (test_df["instrument"] == inst) & (test_df["orb_label"].isin(KEEP[inst])) & (test_df["risk_pts"] <= risk_cap)
     inst_base = test_df[sess_mask]["pnl_r"].values
@@ -110,8 +118,8 @@ print(f"  Real: {real_expr:+.4f}R")
 print(f"  Shuffled features mean: {statistics.mean(null_exprs):+.4f}R")
 print(f"  p-value: {n_above/len(null_exprs):.4f} ({n_above}/{len(null_exprs)})")
 print(f"  Shuffled features baseline: {statistics.mean(null_exprs):+.4f}")
-print(f"  If shuffled ~ real: features don't matter, it's just session+risk cap")
-print(f"  If shuffled << real: features genuinely predict")
+print("  If shuffled ~ real: features don't matter, it's just session+risk cap")
+print("  If shuffled << real: features genuinely predict")
 
 # ================================================================
 # TEST 3: COST MODEL CHECK
@@ -128,12 +136,12 @@ print(f"  Sample trade: risk_dollars={risk_d.iloc[0]:.2f}, pnl_dollars={pnl_d.il
 print(f"  pnl_r = pnl_dollars / risk_dollars? {abs(pnl_d.iloc[0] / risk_d.iloc[0] - pnl_r_check.iloc[0]) < 0.01}")
 print(f"  Avg risk_dollars: ${risk_d.mean():.2f}")
 print(f"  Avg pnl_dollars: ${pnl_d.mean():.2f}")
-print(f"  Implied cost per trade: check if pnl_dollars includes costs")
+print("  Implied cost per trade: check if pnl_dollars includes costs")
 
 # Check: does pnl_dollars = (exit - entry) * multiplier - costs?
 # If pnl_r already includes costs, then pnl_dollars already includes costs
 # The cost model should be baked in at outcome_builder level
-print(f"  pnl_r includes costs: YES (outcome_builder subtracts cost_model)")
+print("  pnl_r includes costs: YES (outcome_builder subtracts cost_model)")
 
 # ================================================================
 # TEST 4: TEMPORAL AUTOCORRELATION (are good days clustered?)
@@ -168,10 +176,10 @@ print("FINAL AUDIT VERDICT")
 print("="*70)
 
 shuffle_p = n_above / len(null_exprs)
-print(f"  Portfolio bootstrap: p=0.000 (from v1 audit)")
+print("  Portfolio bootstrap: p=0.000 (from v1 audit)")
 print(f"  Feature shuffle: p={shuffle_p:.4f}")
 if shuffle_p < 0.05:
-    print(f"  FEATURES MATTER — shuffled features produce worse results")
+    print("  FEATURES MATTER — shuffled features produce worse results")
 else:
-    print(f"  WARNING: Features may not matter — shuffled produces similar results")
-    print(f"  The edge might be SESSION SELECTION + RISK CAP, not the quintile features")
+    print("  WARNING: Features may not matter — shuffled produces similar results")
+    print("  The edge might be SESSION SELECTION + RISK CAP, not the quintile features")

@@ -1521,8 +1521,8 @@ def check_stale_scratch_db() -> list[str]:
     scratch_db = Path("C:/db/gold.db")
     if scratch_db.exists():
         violations.append(
-            f"  DEPRECATED scratch DB still exists at C:/db/gold.db. "
-            f"Delete it to prevent stale-data bugs: del C:\\db\\gold.db"
+            "  DEPRECATED scratch DB still exists at C:/db/gold.db. "
+            "Delete it to prevent stale-data bugs: del C:\\db\\gold.db"
         )
     return violations
 
@@ -3352,7 +3352,7 @@ def check_holdout_contamination(con=None) -> list[str]:
 
     Fail-closed: if DB unavailable, returns a violation (not a silent pass).
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     violations = []
     _own_con = False
@@ -3368,7 +3368,7 @@ def check_holdout_contamination(con=None) -> list[str]:
 
         # Pre-registration dates by instrument (extend when new holdouts declared)
         HOLDOUT_DECLARATIONS = {
-            "MNQ": datetime(2026, 3, 20, 0, 0, 0, tzinfo=timezone.utc),
+            "MNQ": datetime(2026, 3, 20, 0, 0, 0, tzinfo=UTC),
         }
 
         for instrument, declaration_date in HOLDOUT_DECLARATIONS.items():

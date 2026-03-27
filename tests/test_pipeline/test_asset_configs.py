@@ -1,8 +1,8 @@
 """Tests for pipeline.asset_configs — canonical instrument source."""
 
 from pipeline.asset_configs import (
-    ASSET_CONFIGS,
     ACTIVE_ORB_INSTRUMENTS,
+    ASSET_CONFIGS,
     get_active_instruments,
     list_instruments,
 )

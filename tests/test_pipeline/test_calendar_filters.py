@@ -6,14 +6,13 @@ from datetime import date
 
 import pytest
 
-from pipeline.calendar_filters import is_nfp_day, is_opex_day, is_friday, is_monday, is_tuesday, day_of_week
+from pipeline.calendar_filters import day_of_week, is_friday, is_monday, is_nfp_day, is_opex_day, is_tuesday
 from trading_app.config import (
     CalendarSkipFilter,
     CompositeFilter,
-    OrbSizeFilter,
     NoFilter,
+    OrbSizeFilter,
 )
-
 
 # =============================================================================
 # NFP: First Friday of month

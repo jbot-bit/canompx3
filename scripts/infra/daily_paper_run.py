@@ -50,11 +50,11 @@ def run_step(step_num: int, description: str, cmd: list[str], allow_fail: bool =
             timeout=600,
         )
     except subprocess.TimeoutExpired:
-        print(f"  TIMEOUT after 600s")
+        print("  TIMEOUT after 600s")
         if not allow_fail:
-            print(f"  ABORT — fix before continuing")
+            print("  ABORT — fix before continuing")
             return False
-        print(f"  (allow_fail=True, continuing)")
+        print("  (allow_fail=True, continuing)")
         return True
     if result.returncode != 0:
         print(f"  FAILED (exit {result.returncode})")
@@ -62,9 +62,9 @@ def run_step(step_num: int, description: str, cmd: list[str], allow_fail: bool =
             for line in result.stderr.strip().split("\n")[-5:]:
                 print(f"    {line}")
         if not allow_fail:
-            print(f"  ABORT — fix before continuing")
+            print("  ABORT — fix before continuing")
             return False
-        print(f"  (allow_fail=True, continuing)")
+        print("  (allow_fail=True, continuing)")
     else:
         last = result.stdout.strip().split("\n")[-1] if result.stdout.strip() else "OK"
         print(f"  OK: {last[:120]}")
@@ -112,7 +112,7 @@ def main():
                     py, "-m", "pipeline.ingest_dbn", "--instrument", inst, "--resume",
                 ], allow_fail=True)
         else:
-            print(f"\n[1/6] Skipped (--skip-ingest)")
+            print("\n[1/6] Skipped (--skip-ingest)")
 
         # Step 2: Build features
         for inst in primary:
@@ -155,20 +155,20 @@ def main():
         return 1
 
     # Step 5: Kill trigger check (already in monitor output, but explicit)
-    print(f"\n[5/6] Kill trigger check")
-    print(f"  Review monitor output above for:")
-    print(f"    - 3 consecutive negative months?")
-    print(f"    - Cumulative R <= -10?")
-    print(f"    - Any session anomaly?")
-    print(f"  If any trigger fires: STOP and log in incident log.")
+    print("\n[5/6] Kill trigger check")
+    print("  Review monitor output above for:")
+    print("    - 3 consecutive negative months?")
+    print("    - Cumulative R <= -10?")
+    print("    - Any session anomaly?")
+    print("  If any trigger fires: STOP and log in incident log.")
 
     # Step 6: Summary
-    print(f"\n[6/6] Summary")
+    print("\n[6/6] Summary")
     print(f"  Date processed: {date_str}")
     print(f"  CSV output: {csv_path}")
-    print(f"  Next: if Friday, complete weekly risk memo")
+    print("  Next: if Friday, complete weekly risk memo")
     print(f"\n{'=' * 70}")
-    print(f"DAILY RUN COMPLETE")
+    print("DAILY RUN COMPLETE")
     print(f"{'=' * 70}")
     return 0
 

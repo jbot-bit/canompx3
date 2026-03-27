@@ -8,13 +8,11 @@ Usage:
     Auto-launch: started as daemon thread by run_live_session.py
 """
 
-import asyncio
-import json
 import logging
 import os
 import subprocess
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -23,8 +21,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from pipeline.db_config import configure_connection
-
-from trading_app.live.bot_state import STATE_FILE, read_state
+from trading_app.live.bot_state import read_state
 
 log = logging.getLogger(__name__)
 
@@ -84,7 +81,7 @@ async def api_trades():
                 "exit_reason", "contracts", "session_mode",
                 "created_at", "exited_at",
             ]
-            trades = [dict(zip(cols, r)) for r in rows]
+            trades = [dict(zip(cols, r, strict=False)) for r in rows]
             return {"trades": trades}
     except Exception as e:
         return {"trades": [], "error": str(e)}

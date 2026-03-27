@@ -1,8 +1,16 @@
 """STRESS TEST: Is +0.17R × 1,671 trades real?
 Tests for: feature selection bias, bootstrap, yearly consistency, drawdown, per-session."""
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
-import duckdb, numpy as np, pandas as pd, statistics
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
+import statistics
+
+import duckdb
+import numpy as np
+import pandas as pd
 from scipy import stats
+
 from pipeline.paths import GOLD_DB_PATH
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -46,7 +54,7 @@ print(f"  Calibration: {len(cal_df)} trades (2023-2024)")
 print(f"  Test: {len(test_df)} trades (2025+)")
 
 # Do the features show quintile spread on SELECTION data (pre-2023)?
-print(f"\n  Feature validation on pre-2023 data:")
+print("\n  Feature validation on pre-2023 data:")
 for feat in feats:
     vals = pd.to_numeric(sel_df[feat], errors="coerce")
     valid = vals.notna() & np.isfinite(vals)
@@ -57,11 +65,12 @@ for feat in feats:
     p = sel_df["pnl_r"][valid].values
     try:
         q = pd.qcut(v, 5, labels=False, duplicates="drop")
-        q1 = p[q == 0]; q5 = p[q == max(set(q))]
+        q1 = p[q == 0]
+        q5 = p[q == max(set(q))]
         spread = q5.mean() - q1.mean()
         _, pv = stats.ttest_ind(q5, q1)
         print(f"    {feat}: spread={spread:+.3f} p={pv:.4f} {'***' if pv<0.01 else '**' if pv<0.05 else ''}")
-    except:
+    except Exception:
         print(f"    {feat}: can't compute")
 
 # Calibrate thresholds on 2023-2024
@@ -70,10 +79,11 @@ thresh_cal = {f: pd.to_numeric(cal_df[f], errors="coerce").dropna().quantile(0.8
 # Test on 2025 (truly blind)
 top_test = pd.Series(True, index=test_df.index)
 for f, t in thresh_cal.items():
-    v = pd.to_numeric(test_df[f], errors="coerce"); top_test &= (v >= t) | v.isna()
+    v = pd.to_numeric(test_df[f], errors="coerce")
+    top_test &= (v >= t) | v.isna()
 top = test_df[top_test]
 
-print(f"\n  3-WAY SPLIT RESULT (2025, thresholds from 2023-2024):")
+print("\n  3-WAY SPLIT RESULT (2025, thresholds from 2023-2024):")
 print(f"    ALL:         N={len(test_df)} ExpR={test_df['pnl_r'].mean():+.4f}")
 print(f"    TOP QUINTILE: N={len(top)} ExpR={top['pnl_r'].mean():+.4f}")
 print(f"    Spread: {top['pnl_r'].mean() - test_df['pnl_r'].mean():+.4f}")
@@ -118,7 +128,8 @@ for year in sorted(td.dt.year.unique()):
         continue
     mask = pd.Series(True, index=yr_df.index)
     for f, t in thresh_full.items():
-        v = pd.to_numeric(yr_df[f], errors="coerce"); mask &= (v >= t) | v.isna()
+        v = pd.to_numeric(yr_df[f], errors="coerce")
+        mask &= (v >= t) | v.isna()
     yr_top = yr_df[mask]
     yr_bot = yr_df[~mask]
     if len(yr_top) > 5:
@@ -171,7 +182,7 @@ print(f"  At $137/trade: worst streak = ${max_consec_loss * 137:.0f}")
 print(f"\n{'='*70}")
 print("TEST 6: COST MODEL")
 print("="*70)
-print(f"  MGC E2 cost model: $5.74 per trade (from pipeline)")
-print(f"  Average risk: ~$137/trade (ORB size ~13.7pts × $10/pt)")
+print("  MGC E2 cost model: $5.74 per trade (from pipeline)")
+print("  Average risk: ~$137/trade (ORB size ~13.7pts × $10/pt)")
 print(f"  Cost as fraction of risk: {5.74/137*100:.1f}%")
-print(f"  ExpR already includes costs? Check outcome_builder.")
+print("  ExpR already includes costs? Check outcome_builder.")

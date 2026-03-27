@@ -2,16 +2,16 @@
 Tests for trading_app.regime.discovery -- regime strategy discovery.
 """
 
-import sys
 import json
-from pathlib import Path
+import sys
 from datetime import date
+from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
-from trading_app.regime.schema import init_regime_schema
 from trading_app.regime.discovery import run_regime_discovery
+from trading_app.regime.schema import init_regime_schema
 
 
 @pytest.fixture
@@ -116,7 +116,7 @@ class TestRegimeDiscovery:
             ).fetchall()
             assert len(rows) > 0
             # All rows should have correct run_label and date bounds
-            for run_label, sid, start, end, n in rows:
+            for run_label, _sid, start, end, n in rows:
                 assert run_label == "test_2025"
                 assert start == date(2025, 1, 1)
                 assert end == date(2025, 12, 31)

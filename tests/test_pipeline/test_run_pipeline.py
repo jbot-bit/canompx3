@@ -5,19 +5,18 @@ All tests mock subprocess.run. No real subprocesses, no database access.
 
 import argparse
 import sys
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from pipeline.run_pipeline import (
     PIPELINE_STEPS,
     main,
-    step_ingest,
+    step_audit,
     step_build_5m,
     step_build_features,
-    step_audit,
+    step_ingest,
 )
-
 
 # =============================================================================
 # HELPERS
@@ -86,9 +85,9 @@ class TestStepIngest:
         step_ingest("MGC", args)
 
         cmd = mock_run.call_args[0][0]
-        assert f"--instrument=MGC" in cmd
-        assert f"--start=2024-01-01" in cmd
-        assert f"--end=2024-12-31" in cmd
+        assert "--instrument=MGC" in cmd
+        assert "--start=2024-01-01" in cmd
+        assert "--end=2024-12-31" in cmd
 
     @patch("pipeline.run_pipeline.subprocess.run")
     def test_step_ingest_resume_flag(self, mock_run):

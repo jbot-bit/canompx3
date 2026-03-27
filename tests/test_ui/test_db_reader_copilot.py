@@ -1,9 +1,10 @@
 # tests/test_ui/test_db_reader_copilot.py
 """Tests for new db_reader functions used by the co-pilot dashboard."""
 
-import pytest
-from unittest.mock import patch, MagicMock
 from datetime import date
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestGetPriorDayAtr:

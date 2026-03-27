@@ -5,22 +5,23 @@ These tests verify that trading day boundaries and UTC conversions
 are correct across US DST transitions.
 """
 
-import pytest
-from datetime import datetime, date, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from pipeline.dst import (
-    cme_open_brisbane,
-    us_equity_open_brisbane,
-    us_data_open_brisbane,
-    london_open_brisbane,
-    us_post_equity_brisbane,
-    cme_close_brisbane,
-)
+import pytest
+
 from pipeline.build_daily_features import compute_trading_day_utc_range
+from pipeline.dst import (
+    cme_close_brisbane,
+    cme_open_brisbane,
+    london_open_brisbane,
+    us_data_open_brisbane,
+    us_equity_open_brisbane,
+    us_post_equity_brisbane,
+)
 
 BRISBANE = ZoneInfo("Australia/Brisbane")
-UTC = timezone.utc
+UTC = UTC
 
 
 class TestBrisbaneNoDST:

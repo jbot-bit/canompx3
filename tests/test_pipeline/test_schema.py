@@ -4,11 +4,12 @@ Tests for pipeline.init_db schema initialization.
 Requires tmp_db fixture (creates temp DuckDB).
 """
 
-import pytest
-import duckdb
 from pathlib import Path
 
-from pipeline.init_db import init_db, ORB_LABELS
+import duckdb
+import pytest
+
+from pipeline.init_db import ORB_LABELS, init_db
 
 
 class TestInitDb:

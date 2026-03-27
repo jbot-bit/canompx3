@@ -5,24 +5,23 @@ Tests compute_single_outcome() and build_outcomes() with synthetic data.
 """
 
 import sys
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
-from datetime import date, datetime, timezone, timedelta
-
 from unittest.mock import patch
 
-import pytest
-import pandas as pd
 import duckdb
+import pandas as pd
+import pytest
 
-from trading_app.outcome_builder import (
-    compute_single_outcome,
-    build_outcomes,
-    RR_TARGETS,
-    CONFIRM_BARS_OPTIONS,
-)
+from pipeline.cost_model import get_cost_spec
 from trading_app.config import ENTRY_MODELS, SKIP_ENTRY_MODELS
 from trading_app.entry_rules import EntrySignal
-from pipeline.cost_model import get_cost_spec
+from trading_app.outcome_builder import (
+    CONFIRM_BARS_OPTIONS,
+    RR_TARGETS,
+    build_outcomes,
+    compute_single_outcome,
+)
 
 # ============================================================================
 # HELPERS
@@ -40,13 +39,13 @@ def _make_bars(start_ts, prices, interval_minutes=1):
     """
     rows = []
     ts = start_ts
-    for o, h, l, c, v in prices:
+    for o, h, low, c, v in prices:
         rows.append(
             {
                 "ts_utc": ts,
                 "open": float(o),
                 "high": float(h),
-                "low": float(l),
+                "low": float(low),
                 "close": float(c),
                 "volume": int(v),
             }
@@ -66,14 +65,14 @@ class TestComputeSingleOutcome:
     def test_long_win_rr2(self):
         """Long trade hits target at RR=2.0 with E1 entry."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         # Bar 0: confirm (close=2701 > orb_high=2700).
         # Bar 1: E1 entry at open=2703. Risk = 2703 - 2690 = 13. Target = 2703 + 26 = 2729
         # Bar 2-3: price rises to hit target
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2701, 2695, 2701, 100),
                 (2703, 2710, 2700, 2710, 100),
@@ -105,14 +104,14 @@ class TestComputeSingleOutcome:
     def test_short_loss(self):
         """Short trade hits stop with E1 entry."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         # Bar 0: short confirm (close=2689 < orb_low=2690).
         # Bar 1: E1 entry at open=2688. Stop = 2700. Risk = 12.
         # Bar 2: price reverses and hits stop
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2692, 2695, 2688, 2689, 100),
                 (2688, 2691, 2687, 2688, 100),
@@ -140,11 +139,11 @@ class TestComputeSingleOutcome:
     def test_no_confirm_returns_nulls(self):
         """When confirm_bars=3 but only 1 bar closes outside, no entry."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2701, 2695, 2701, 100),
                 (2701, 2702, 2694, 2695, 100),
@@ -172,14 +171,14 @@ class TestComputeSingleOutcome:
     def test_scratch_when_no_exit(self):
         """Trade that never hits target or stop = scratch."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 0, 5, tzinfo=UTC)
 
         # Bar 0: confirm (close=2701).
         # Bar 1: E1 entry at open=2703. Narrow range, doesn't hit target or stop.
         # trading_day_end is very close, so scratch
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2701, 2695, 2701, 100),
                 (2703, 2705, 2698, 2702, 100),
@@ -204,14 +203,14 @@ class TestComputeSingleOutcome:
     def test_ambiguous_bar_conservative_loss(self):
         """Bar that hits both target and stop -> conservative loss."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         # Bar 0: confirm (close=2701).
         # Bar 1: E1 entry at open=2703. Risk=13, target=2703+26=2729, stop=2690.
         # Bar 1 also huge range — hits both target and stop on fill bar
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2701, 2695, 2701, 100),
                 (2703, 2735, 2685, 2710, 200),
@@ -237,14 +236,14 @@ class TestComputeSingleOutcome:
     def test_mae_mfe_tracked(self):
         """MAE and MFE are computed even for losses."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         # Bar 0: confirm (close=2701).
         # Bar 1: E1 entry at open=2703. Favorable excursion (high=2710).
         # Bar 2: adverse excursion — stop hit (low=2689 < 2690)
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2701, 2695, 2701, 100),
                 (2703, 2710, 2698, 2705, 100),
@@ -276,13 +275,13 @@ class TestComputeSingleOutcome:
         # With E3, entry_price = orb_high and stop_price = orb_low.
         # When orb_high == orb_low, risk = 0 -> null result.
         orb_high, orb_low = 2700.0, 2700.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         # Need a bar that closes outside ORB (> 2700) to confirm,
         # then a retrace bar that touches 2700
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2700, 2702, 2699, 2701, 100),  # confirm: close > 2700
                 (2701, 2702, 2699, 2700, 100),  # retrace: low <= 2700
@@ -309,14 +308,14 @@ class TestComputeSingleOutcome:
     def test_rr_targets_grid(self):
         """Different RR targets produce different target prices with E1."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         # Bar 0: confirm (close=2701).
         # Bar 1: E1 entry at open=2703. Risk = 2703-2690 = 13.
         # Bar 2: massive range to ensure all RR targets hit
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2701, 2695, 2701, 100),
                 (2703, 2706, 2700, 2705, 100),
@@ -347,11 +346,11 @@ class TestComputeSingleOutcome:
     def test_confirm_bars_2(self):
         """confirm_bars=2 needs 2 consecutive closes outside ORB."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2701, 2695, 2701, 100),
                 (2701, 2705, 2700, 2703, 100),
@@ -399,11 +398,11 @@ class TestEntryModelE1:
 
     def test_e1_entry_is_next_bar_open(self):
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2701, 2695, 2701, 100),  # confirm: close > orb_high
                 (2703, 2730, 2702, 2725, 100),  # E1 entry: open=2703
@@ -435,11 +434,11 @@ class TestEntryModelE3:
 
     def test_e3_entry_at_orb_level_on_retrace(self):
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2701, 2695, 2701, 100),  # confirm bar: close > orb_high
                 (2701, 2705, 2699, 2703, 100),  # low=2699 <= orb_high=2700, retrace!
@@ -467,11 +466,11 @@ class TestEntryModelE3:
 
     def test_e3_no_retrace_no_fill(self):
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2701, 2695, 2701, 100),  # confirm
                 (2701, 2710, 2701, 2708, 100),  # low=2701 > orb_high=2700, NO retrace
@@ -522,16 +521,16 @@ class TestBuildOutcomes:
 
         con = duckdb.connect(str(db_path))
 
-        base_ts = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        base_ts = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
         bars = []
         price = 2700.0
         for i in range(300):
             ts = base_ts + timedelta(minutes=i)
             o = price + i * 0.1
             h = o + 2
-            l = o - 1
+            low = o - 1
             c = o + 1
-            bars.append((ts.isoformat(), "MGC", "GCG4", o, h, l, c, 100))
+            bars.append((ts.isoformat(), "MGC", "GCG4", o, h, low, c, 100))
 
         con.executemany(
             """INSERT INTO bars_1m (ts_utc, symbol, source_symbol, open, high, low, close, volume)
@@ -619,7 +618,7 @@ class TestBuildOutcomes:
             start_date=date(2024, 1, 1),
             end_date=date(2024, 12, 31),
         )
-        count2 = build_outcomes(
+        _count2 = build_outcomes(
             db_path=db_path,
             instrument="MGC",
             start_date=date(2024, 1, 1),
@@ -704,16 +703,16 @@ class TestCheckpointResume:
 
         con = duckdb.connect(str(db_path))
 
-        base_ts = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        base_ts = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
         bars = []
         price = 2700.0
         for i in range(300):
             ts = base_ts + timedelta(minutes=i)
             o = price + i * 0.1
             h = o + 2
-            l = o - 1
+            low = o - 1
             c = o + 1
-            bars.append((ts.isoformat(), "MGC", "GCG4", o, h, l, c, 100))
+            bars.append((ts.isoformat(), "MGC", "GCG4", o, h, low, c, 100))
 
         con.executemany(
             """INSERT INTO bars_1m (ts_utc, symbol, source_symbol, open, high, low, close, volume)
@@ -790,16 +789,16 @@ class TestCheckpointResume:
 
         for day_offset in range(num_days):
             td = date(2024, 1, 5 + day_offset)
-            base_ts = datetime(2024, 1, 4 + day_offset, 23, 0, tzinfo=timezone.utc)
+            base_ts = datetime(2024, 1, 4 + day_offset, 23, 0, tzinfo=UTC)
             bars = []
             price = 2700.0
             for i in range(60):
                 ts = base_ts + timedelta(minutes=i)
                 o = price + i * 0.1
                 h = o + 2
-                l = o - 1
+                low = o - 1
                 c = o + 1
-                bars.append((ts.isoformat(), "MGC", "GCG4", o, h, l, c, 100))
+                bars.append((ts.isoformat(), "MGC", "GCG4", o, h, low, c, 100))
 
             con.executemany(
                 """INSERT INTO bars_1m (ts_utc, symbol, source_symbol, open, high, low, close, volume)
@@ -869,10 +868,10 @@ class TestTimeStop:
     def test_keys_present_with_threshold_session(self):
         """compute_single_outcome returns ts_* keys for session with time-stop."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [(2698, 2701, 2695, 2701, 100), (2703, 2710, 2700, 2710, 100), (2718, 2735, 2717, 2730, 100)],
         )
         result = compute_single_outcome(
@@ -895,10 +894,10 @@ class TestTimeStop:
     def test_no_threshold_session_leaves_ts_null(self):
         """Session not in EARLY_EXIT_MINUTES -> ts_* = None."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [(2698, 2701, 2695, 2701, 100), (2703, 2710, 2700, 2710, 100), (2718, 2735, 2717, 2730, 100)],
         )
         result = compute_single_outcome(
@@ -922,8 +921,8 @@ class TestTimeStop:
     def test_loss_after_threshold_gets_time_stopped(self):
         """Trade that loses after 30+ min at 1000 gets ts_outcome=time_stop."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 8, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 8, 0, tzinfo=UTC)
 
         # Bar 0: confirm close above ORB high
         # Bar 1: E1 entry at open=2703, stop=2690, risk=13
@@ -938,7 +937,7 @@ class TestTimeStop:
             bar_data.append((price, price + 1, price - 1, price, 100))
         bar_data.append((2691, 2692, 2688, 2689, 100))  # hits stop
 
-        bars = _make_bars(datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc), bar_data)
+        bars = _make_bars(datetime(2024, 1, 5, 0, 0, tzinfo=UTC), bar_data)
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=break_ts,
@@ -964,12 +963,12 @@ class TestTimeStop:
     def test_win_before_threshold_ts_matches_baseline(self):
         """Trade that wins before T80 -> ts_* matches baseline."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 8, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 8, 0, tzinfo=UTC)
 
         # Quick win: target hit on bar 2 (2 min after entry, well before 30m)
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2701, 2695, 2701, 100),  # confirm
                 (2703, 2710, 2700, 2710, 100),  # entry bar
@@ -998,8 +997,8 @@ class TestTimeStop:
     def test_positive_at_threshold_keeps_running(self):
         """Trade above entry at threshold bar but not at target -> keeps running."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 8, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 8, 0, tzinfo=UTC)
 
         # Bar 0: confirm. Bar 1: entry at 2703, stop=2690, risk=13
         # Bars 2-40: price above entry (positive MTM) but below target (2729 for RR2)
@@ -1011,7 +1010,7 @@ class TestTimeStop:
         for _ in range(58):
             bar_data.append((2706, 2710, 2704, 2707, 100))  # positive but below target
 
-        bars = _make_bars(datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc), bar_data)
+        bars = _make_bars(datetime(2024, 1, 5, 0, 0, tzinfo=UTC), bar_data)
         result = compute_single_outcome(
             bars_df=bars,
             break_ts=break_ts,

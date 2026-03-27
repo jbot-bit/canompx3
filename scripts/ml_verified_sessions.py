@@ -1,12 +1,18 @@
 """ML on VERIFIED sessions only (NYSE_OPEN + COMEX_SETTLE RR1.0).
 Positive baseline. New features (VWAP, velocity). Canonical blacklist.
 Bootstrap verified. No 2026 data (sacred holdout)."""
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
-import duckdb, numpy as np, pandas as pd, statistics
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
+import duckdb
+import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
+
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.ml.config import RF_PARAMS, LOOKAHEAD_BLACKLIST, SESSION_CHRONOLOGICAL_ORDER
+from trading_app.ml.config import LOOKAHEAD_BLACKLIST, RF_PARAMS, SESSION_CHRONOLOGICAL_ORDER
 
 BLACKLIST = list(LOOKAHEAD_BLACKLIST) + ["garch", "break_ts"]
 SKIP = {"pnl_r","trading_day","symbol","orb_minutes","orb_label","entry_price","stop_price",
@@ -62,7 +68,7 @@ for session, rr in VERIFIED:
             v = pd.to_numeric(df[c], errors="coerce")
             if v.notna().sum() > len(df) * 0.1:
                 X[c] = v.astype(float)
-        except:
+        except Exception:
             pass
     X = X.fillna(-999.0)
 
@@ -98,7 +104,7 @@ for session, rr in VERIFIED:
     # Feature importance
     imp = rf.feature_importances_
     top10 = [(X.columns[i], imp[i]) for i in np.argsort(imp)[::-1][:10]]
-    print(f"  Top 10 features:")
+    print("  Top 10 features:")
     for fname, fimp in top10:
         is_new = " [NEW]" if 'vwap' in fname.lower() or 'velocity' in fname.lower() else ""
         print(f"    {fname:<45} {fimp:.1%}{is_new}")
@@ -121,7 +127,7 @@ for session, rr in VERIFIED:
     test_pnl = pnl[n_val:]
     try:
         auc = roc_auc_score(y.iloc[n_val:], test_prob)
-    except:
+    except Exception:
         auc = 0.5
 
     if best_t is None:
@@ -134,7 +140,7 @@ for session, rr in VERIFIED:
     k_pnl = test_pnl[kept]
     s_pnl = test_pnl[~kept]
 
-    print(f"\n  Results:")
+    print("\n  Results:")
     print(f"    Baseline:  {test_pnl.mean():+.4f}R  N={len(test_pnl)}  WR={(test_pnl>0).mean():.0%}")
     print(f"    ML kept:   {k_pnl.mean():+.4f}R  N={nk}  WR={(k_pnl>0).mean():.0%}")
     print(f"    ML skip:   {s_pnl.mean():+.4f}R  N={len(s_pnl)}")

@@ -348,7 +348,7 @@ class SessionOrchestrator:
                                     self.order_router.account_id if self.order_router else 0
                                 )
                                 if initial_equity is not None:
-                                    state = self._hwm_tracker.update_equity(initial_equity)
+                                    self._hwm_tracker.update_equity(initial_equity)
                                     self._hwm_tracker.record_session_start(initial_equity)
                                     halted, reason = self._hwm_tracker.check_halt()
                                     if halted:

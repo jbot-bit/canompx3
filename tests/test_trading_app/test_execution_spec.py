@@ -3,6 +3,7 @@ Tests for trading_app.execution_spec.
 """
 
 import json
+
 import pytest
 
 from trading_app.execution_spec import ExecutionSpec

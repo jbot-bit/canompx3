@@ -3,9 +3,10 @@ Tests for edge family hash computation, median head election, and robustness fil
 """
 
 import hashlib
-import pytest
-import duckdb
 from datetime import date
+
+import duckdb
+import pytest
 
 from trading_app.db_manager import init_trading_app_schema
 

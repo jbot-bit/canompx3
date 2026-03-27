@@ -5,10 +5,11 @@ Verifies that running build_5m_bars twice on the same data produces
 identical results (same rows, same values, same count).
 """
 
-import pytest
-import duckdb
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
+
+import duckdb
+import pytest
 
 
 def _insert_sample_1m_bars(con, symbol="MGC", source_symbol="GCM4", base_date=date(2024, 6, 3), n_bars=60):
@@ -105,7 +106,7 @@ class TestIdempotency:
         assert count1 == count2, "Row counts must match"
         assert len(snapshot1) == len(snapshot2), "Snapshot lengths must match"
 
-        for i, (row1, row2) in enumerate(zip(snapshot1, snapshot2)):
+        for i, (row1, row2) in enumerate(zip(snapshot1, snapshot2, strict=True)):
             assert row1 == row2, f"Row {i} differs: {row1} vs {row2}"
 
     def test_no_duplicate_rows(self, tmp_db_with_1m):

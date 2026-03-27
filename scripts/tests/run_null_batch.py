@@ -32,7 +32,7 @@ import shutil
 import subprocess
 import sys
 import time
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -322,7 +322,7 @@ def analyze_seeds(seed_dir: Path) -> None:
             print(f"    Conservative (mean+2std of maxima): {conservative:.4f}")
             print(f"    -> CONSERVATIVE FLOOR: {float(np.ceil(conservative * 100) / 100)}")
 
-    print(f"\n  RECOMMENDED: Update NOISE_EXPR_FLOOR in trading_app/config.py")
+    print("\n  RECOMMENDED: Update NOISE_EXPR_FLOOR in trading_app/config.py")
     print(f"  Then run: python scripts/tools/null_envelope.py --analyze {seed_dir} --update-config")
 
 
@@ -398,7 +398,7 @@ def main() -> int:
     print(f"{'='*60}")
     print(f"  Instrument:   {instrument}")
     if sigma_by_year_dict:
-        print(f"  Sigma:        C1 time-varying (per-year trimmed_std)")
+        print("  Sigma:        C1 time-varying (per-year trimmed_std)")
     else:
         print(f"  Sigma:        {sigma} (calibrated {'auto' if args.sigma is None else 'manual'})")
     print(f"  Total seeds:  {args.seeds}")

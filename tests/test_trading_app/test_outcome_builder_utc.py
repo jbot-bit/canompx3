@@ -1,11 +1,12 @@
 """Tests for outcome_builder UTC normalization of break_ts (T7)."""
 
-import pytest
+from datetime import UTC, date, datetime, timedelta, timezone
+
 import pandas as pd
-from datetime import datetime, timezone, timedelta, date
+import pytest
+
 from pipeline.cost_model import get_cost_spec
 from trading_app.outcome_builder import compute_single_outcome
-
 
 COST_SPEC = get_cost_spec("MGC")
 
@@ -30,9 +31,9 @@ def _make_bars(timestamps, base_price=2700.0):
 
 class TestBreakTsUtcNormalization:
     def test_utc_break_ts_works(self):
-        break_ts = datetime(2025, 6, 15, 23, 10, tzinfo=timezone.utc)
-        td_end = datetime(2025, 6, 16, 22, 59, tzinfo=timezone.utc)
-        timestamps = [datetime(2025, 6, 15, 23, 10 + i, tzinfo=timezone.utc) for i in range(30)]
+        break_ts = datetime(2025, 6, 15, 23, 10, tzinfo=UTC)
+        td_end = datetime(2025, 6, 16, 22, 59, tzinfo=UTC)
+        timestamps = [datetime(2025, 6, 15, 23, 10 + i, tzinfo=UTC) for i in range(30)]
         bars = _make_bars(timestamps)
         result = compute_single_outcome(
             bars_df=bars,
@@ -55,7 +56,7 @@ class TestBreakTsUtcNormalization:
         # 09:10 Brisbane = 23:10 UTC
         break_ts = datetime(2025, 6, 16, 9, 10, tzinfo=brisbane)
         td_end = datetime(2025, 6, 17, 8, 59, tzinfo=brisbane)
-        timestamps = [datetime(2025, 6, 15, 23, 10 + i, tzinfo=timezone.utc) for i in range(30)]
+        timestamps = [datetime(2025, 6, 15, 23, 10 + i, tzinfo=UTC) for i in range(30)]
         bars = _make_bars(timestamps)
         result = compute_single_outcome(
             bars_df=bars,
@@ -93,9 +94,9 @@ class TestBreakTsUtcNormalization:
 
     def test_break_ts_after_all_bars_returns_empty(self):
         """If break_ts is after all bars, no entry should be found."""
-        break_ts = datetime(2025, 6, 16, 23, 0, tzinfo=timezone.utc)
-        td_end = datetime(2025, 6, 17, 22, 59, tzinfo=timezone.utc)
-        timestamps = [datetime(2025, 6, 15, 23, i, tzinfo=timezone.utc) for i in range(30)]
+        break_ts = datetime(2025, 6, 16, 23, 0, tzinfo=UTC)
+        td_end = datetime(2025, 6, 17, 22, 59, tzinfo=UTC)
+        timestamps = [datetime(2025, 6, 15, 23, i, tzinfo=UTC) for i in range(30)]
         bars = _make_bars(timestamps)
         result = compute_single_outcome(
             bars_df=bars,

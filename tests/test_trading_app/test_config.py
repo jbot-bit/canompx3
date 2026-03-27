@@ -3,20 +3,21 @@ Tests for trading_app.config filter definitions.
 """
 
 import json
+
 import pytest
 
 from trading_app.config import (
-    StrategyFilter,
-    NoFilter,
-    OrbSizeFilter,
-    VolumeFilter,
-    DayOfWeekSkipFilter,
-    BreakSpeedFilter,
-    BreakBarContinuesFilter,
-    CompositeFilter,
     ALL_FILTERS,
     MGC_ORB_SIZE_FILTERS,
     MGC_VOLUME_FILTERS,
+    BreakBarContinuesFilter,
+    BreakSpeedFilter,
+    CompositeFilter,
+    DayOfWeekSkipFilter,
+    NoFilter,
+    OrbSizeFilter,
+    StrategyFilter,
+    VolumeFilter,
     get_filters_for_grid,
 )
 

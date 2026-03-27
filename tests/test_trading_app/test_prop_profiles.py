@@ -4,21 +4,21 @@
 import pytest
 
 from trading_app.prop_profiles import (
-    PropFirmSpec,
-    PropFirmAccount,
+    ACCOUNT_PROFILES,
+    ACCOUNT_TIERS,
+    PROP_FIRM_SPECS,
     AccountProfile,
     DailyLaneSpec,
-    TradingBookEntry,
     ExcludedEntry,
+    PropFirmAccount,
+    PropFirmSpec,
     TradingBook,
-    PROP_FIRM_SPECS,
-    ACCOUNT_TIERS,
-    ACCOUNT_PROFILES,
-    get_firm_spec,
-    get_account_tier,
-    get_profile,
-    get_lane_registry,
+    TradingBookEntry,
     compute_profit_split_factor,
+    get_account_tier,
+    get_firm_spec,
+    get_lane_registry,
+    get_profile,
 )
 
 
@@ -173,7 +173,7 @@ class TestDailyLaneSpecOrbCap:
     def test_nyse_open_has_cap(self):
         """NYSE_OPEN lane must have max_orb_size_pts=150.0 in the apex manual profile."""
         p = get_profile("apex_50k_manual")
-        nyse_open_lanes = [l for l in p.daily_lanes if l.orb_label == "NYSE_OPEN"]
+        nyse_open_lanes = [lane for lane in p.daily_lanes if lane.orb_label == "NYSE_OPEN"]
         assert len(nyse_open_lanes) == 1
         assert nyse_open_lanes[0].max_orb_size_pts == 150.0
 

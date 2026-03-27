@@ -30,7 +30,7 @@ Coverage:
 """
 
 import random
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -45,23 +45,23 @@ from pipeline.dst import (
     is_uk_dst,
     is_us_dst,
     is_winter_for_session,
-    validate_dow_filter_alignment,
-    us_equity_open_brisbane,
     us_data_open_brisbane,
+    us_equity_open_brisbane,
+    validate_dow_filter_alignment,
 )
 from trading_app.entry_rules import (
     ConfirmResult,
     detect_confirm,
+    detect_entry_with_confirm_bars,
 )
 from trading_app.outcome_builder import (
     CONFIRM_BARS_OPTIONS,
     RR_TARGETS,
-    compute_single_outcome,
     _compute_outcomes_all_rr,
+    compute_single_outcome,
 )
-from trading_app.entry_rules import detect_entry_with_confirm_bars
 
-UTC = timezone.utc
+UTC = UTC
 
 # =============================================================================
 # HELPERS
@@ -72,13 +72,13 @@ def _bars(start_ts, ohlcv_list, interval_minutes=1):
     """Build a minimal bars_df from a list of (o, h, l, c, v) tuples."""
     rows = []
     ts = start_ts
-    for o, h, l, c, v in ohlcv_list:
+    for o, h, low, c, v in ohlcv_list:
         rows.append(
             {
                 "ts_utc": ts,
                 "open": float(o),
                 "high": float(h),
-                "low": float(l),
+                "low": float(low),
                 "close": float(c),
                 "volume": int(v),
             }
@@ -537,7 +537,7 @@ class TestC3SlowBreakFilter:
 
     def test_c3_skips_slow_break_at_1000(self):
         bars, break_ts, orb_high, orb_low = self._make_signal_for_c3()
-        result = compute_single_outcome(
+        _result = compute_single_outcome(
             bars_df=bars,
             break_ts=break_ts,
             orb_high=orb_high,
@@ -633,13 +633,13 @@ class TestPnlRBoundsInvariant:
         o = base_price + rng.uniform(-spread / 2, spread / 2)
         c = base_price + rng.uniform(-spread / 2, spread / 2)
         h = max(o, c) + rng.uniform(0, spread / 2)
-        l = min(o, c) - rng.uniform(0, spread / 2)
-        return (round(o, 1), round(h, 1), round(l, 1), round(c, 1), rng.randint(10, 500))
+        low = min(o, c) - rng.uniform(0, spread / 2)
+        return (round(o, 1), round(h, 1), round(low, 1), round(c, 1), rng.randint(10, 500))
 
     @pytest.mark.parametrize("seed", range(50))
     def test_pnl_r_within_bounds(self, seed):
         rng = random.Random(seed)
-        np_rng = np.random.default_rng(seed)
+        _np_rng = np.random.default_rng(seed)
 
         orb_high = 2700.0 + rng.uniform(-10, 10)
         orb_high = round(orb_high, 1)
@@ -814,7 +814,7 @@ class TestTradingDayBoundary:
     def test_boundary_computation(self):
         from pipeline.build_daily_features import compute_trading_day
 
-        BRISBANE = ZoneInfo("Australia/Brisbane")
+        _BRISBANE = ZoneInfo("Australia/Brisbane")
         UTC = ZoneInfo("UTC")
 
         # 2024-01-05 23:00:00 UTC = 2024-01-06 09:00:00 Brisbane = start of 2024-01-06 trading day

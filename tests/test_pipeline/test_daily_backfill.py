@@ -1,15 +1,15 @@
-import duckdb
 import os
 import tempfile
 from datetime import date
 from unittest.mock import patch
 
+import duckdb
 import pytest
 
 
 def _make_db(rows=None):
-    f = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-    f.close()
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        pass
     os.unlink(f.name)  # DuckDB must create the file itself; 0-byte file causes IOException
     con = duckdb.connect(f.name)
     con.execute("CREATE TABLE bars_1m (ts_event TIMESTAMPTZ, symbol VARCHAR)")

@@ -257,7 +257,7 @@ class TestFindDoubleBreakEntry:
 
     def test_gate_b_risk_floor(self):
         """Gate B: If fakeout extreme too close to entry, return None."""
-        spec = get_cost_spec("MGC")
+        _spec = get_cost_spec("MGC")
         break_ts = pd.Timestamp("2025-01-01 00:00:00", tz="UTC")
         # Fakeout extreme very close to ORB level -> tiny risk
         bars = self._make_bars_with_ts(

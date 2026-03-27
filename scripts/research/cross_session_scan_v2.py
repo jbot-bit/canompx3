@@ -346,7 +346,7 @@ for pred_s, (c5, c15, c30) in apt_map.items():
 
     aligned = np.array([
         (a is not None and a == b and b == c)
-        for a, b, c in zip(d5, d15, d30)
+        for a, b, c in zip(d5, d15, d30, strict=False)
     ])
 
     for target in US_SESSIONS:
@@ -518,7 +518,7 @@ for h_prefix, h_name in hypothesis_groups.items():
                if all_results[i]['label'].startswith(h_prefix)]
     if not h_tests:
         print(f"\n{h_prefix}: {h_name}")
-        print(f"  No valid tests produced")
+        print("  No valid tests produced")
         continue
 
     best_idx, best_r = min(h_tests, key=lambda x: x[1]['p_value'])
@@ -529,12 +529,12 @@ for h_prefix, h_name in hypothesis_groups.items():
     print(f"  Tests: {len(h_tests)}")
     print(f"  Best: {best_r['label']}  spread={best_r['spread']:.4f}  p={best_r['p_value']:.4f}  p_BH={adj_pvals[best_idx]:.4f}")
     if fdr_any:
-        print(f"  VERDICT: FDR SURVIVOR (alpha=0.05)")
+        print("  VERDICT: FDR SURVIVOR (alpha=0.05)")
     elif fdr10_any:
-        print(f"  VERDICT: MARGINAL (FDR alpha=0.10 but not 0.05)")
+        print("  VERDICT: MARGINAL (FDR alpha=0.10 but not 0.05)")
     elif best_r['p_value'] < 0.05:
-        print(f"  VERDICT: NOMINALLY SIGNIFICANT but DEAD after FDR")
+        print("  VERDICT: NOMINALLY SIGNIFICANT but DEAD after FDR")
     else:
-        print(f"  VERDICT: DEAD. No signal.")
+        print("  VERDICT: DEAD. No signal.")
 
 print("\n\nDONE.")

@@ -31,9 +31,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS, NOISE_FLOOR_BY_INSTRUMENT, apply_tight_stop
-from pipeline.cost_model import get_cost_spec
 
 
 def load_filtered_pnl_r(
@@ -73,7 +73,7 @@ def load_filtered_pnl_r(
         feat_cols = [desc[0] for desc in feat_result.description]
         eligible_days = set()
         for row in feat_result.fetchall():
-            row_dict = dict(zip(feat_cols, row))
+            row_dict = dict(zip(feat_cols, row, strict=False))
             if filt.matches_row(row_dict, orb_label):
                 eligible_days.add(row_dict["trading_day"])
         outcomes_raw = [o for o in outcomes_raw if o[0] in eligible_days]
@@ -234,7 +234,7 @@ def main():
     instruments = list(ACTIVE_ORB_INSTRUMENTS)
     entry_models = ["E1", "E2"]
 
-    print(f"Bootstrap noise floor calibration")
+    print("Bootstrap noise floor calibration")
     print(f"  Instruments: {instruments}")
     print(f"  Entry models: {entry_models}")
     print(f"  Reps: {args.reps}, Quantile: {args.quantile}")
@@ -262,8 +262,6 @@ def main():
         for em in entry_models:
             floors = check_stability(GOLD_DB_PATH, inst, em, args.reps, args.quantile, args.stability_runs)
             spread = max(floors) - min(floors)
-            mean_f = np.mean(floors)
-            cv = (np.std(floors) / abs(mean_f) * 100) if mean_f != 0 else 0
             stable = spread < 0.02
             stable_all = stable_all and stable
             print(

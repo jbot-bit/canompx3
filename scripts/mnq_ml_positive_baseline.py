@@ -1,13 +1,20 @@
 """MNQ ML on POSITIVE BASELINE — the full picture.
 ALL sessions (35K trades), all honest features, session eligibility, bootstrap verified.
 RR2.0 (proven positive baseline +0.044R p<0.000001)."""
-import sys; sys.path.insert(0, r"C:\Users\joshd\canompx3")
-import duckdb, numpy as np, pandas as pd, statistics
+import sys
+
+sys.path.insert(0, r"C:\Users\joshd\canompx3")
+
+import statistics
+
+import duckdb
+import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import roc_auc_score
-from scipy.stats import ttest_ind
+
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.ml.config import RF_PARAMS, SESSION_CHRONOLOGICAL_ORDER
+from trading_app.ml.config import LOOKAHEAD_BLACKLIST, RF_PARAMS, SESSION_CHRONOLOGICAL_ORDER
 
 # Session eligibility: which features are available for each target session
 SESSION_ORDER = list(SESSION_CHRONOLOGICAL_ORDER)
@@ -59,7 +66,6 @@ SKIP = {"pnl_r","trading_day","symbol","orb_minutes","orb_label","entry_price","
         "risk_dollars","pnl_dollars","mae_r","mfe_r","ambiguous_bar","ts_outcome","ts_pnl_r","ts_exit_ts",
         "entry_model","rr_target","confirm_bars","instrument"}
 # Import canonical blacklist — NEVER maintain a separate list
-from trading_app.ml.config import LOOKAHEAD_BLACKLIST
 BLACKLIST = list(LOOKAHEAD_BLACKLIST) + ["garch", "break_ts"]  # garch/break_ts not in canonical but still noise
 
 all_features = [c for c in df.columns if c not in SKIP and not any(b in c for b in BLACKLIST)]
@@ -149,7 +155,7 @@ for session in sessions:
 
         try:
             auc = roc_auc_score(y_test, test_prob)
-        except:
+        except Exception:
             auc = 0.5
 
         if best_t is not None:
@@ -181,7 +187,7 @@ print(f"  Total test trades:  {len(total_pnl)} (mean={total_pnl.mean():+.4f}R)")
 print(f"  Models: {len(results)}")
 
 if results:
-    print(f"\n  Per-model:")
+    print("\n  Per-model:")
     for session, ap, auc, delta, nt, nk, kept_mean, skip_mean in results:
         print(f"    {session:<22} O{ap} AUC={auc:.3f} delta={delta:+.1f}R kept={kept_mean:+.3f} skip={skip_mean:+.3f} N={nk}/{nt}")
 

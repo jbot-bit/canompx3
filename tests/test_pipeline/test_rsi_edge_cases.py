@@ -1,7 +1,8 @@
 """Tests for RSI edge cases — avg_loss near zero after smoothing (T6)."""
 
-import pytest
 import numpy as np
+import pytest
+
 from pipeline.build_daily_features import _wilders_rsi
 
 

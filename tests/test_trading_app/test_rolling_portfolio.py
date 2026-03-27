@@ -5,32 +5,32 @@ double-break detection, day-of-week concentration, and portfolio integration.
 Uses in-memory DuckDB with synthetic data.
 """
 
-import sys
 import json
-from pathlib import Path
+import sys
 from datetime import date
+from pathlib import Path
 
-import pytest
 import duckdb
 import numpy as np
 import pandas as pd
+import pytest
 
-from scripts.infra.rolling_eval import generate_rolling_windows, DOUBLE_BREAK_THRESHOLD
+from pipeline.build_daily_features import detect_double_break
+from scripts.infra.rolling_eval import DOUBLE_BREAK_THRESHOLD, generate_rolling_windows
 from trading_app.rolling_portfolio import (
-    make_family_id,
-    _window_weight,
-    classify_stability,
-    aggregate_rolling_performance,
-    FamilyResult,
+    FULL_WEIGHT_SAMPLE,
     STABLE_THRESHOLD,
     TRANSITIONING_THRESHOLD,
-    FULL_WEIGHT_SAMPLE,
-    load_rolling_results,
+    FamilyResult,
+    _window_weight,
+    aggregate_rolling_performance,
+    classify_stability,
     load_all_rolling_run_labels,
     load_rolling_degraded_counts,
+    load_rolling_results,
     load_rolling_validated_strategies,
+    make_family_id,
 )
-from pipeline.build_daily_features import detect_double_break
 
 # =========================================================================
 # Window generation tests
@@ -165,7 +165,7 @@ class TestAggregatePerformance:
     def test_all_windows_pass_high_sample(self):
         """Strategy passing all windows with 50+ trades = STABLE."""
         labels = [f"rolling_12m_2025_{m:02d}" for m in range(1, 7)]
-        validated = [self._make_validated(l, sample=60) for l in labels]
+        validated = [self._make_validated(label, sample=60) for label in labels]
 
         results = aggregate_rolling_performance(validated, labels, {})
         assert len(results) == 1
@@ -176,7 +176,7 @@ class TestAggregatePerformance:
         """Windows with 20 trades get 0.4 weight, not 1.0."""
         labels = [f"rolling_12m_2025_{m:02d}" for m in range(1, 7)]
         # Pass 3 of 6 windows, but all with only 20 trades
-        validated = [self._make_validated(l, sample=20) for l in labels[:3]]
+        validated = [self._make_validated(label, sample=20) for label in labels[:3]]
 
         results = aggregate_rolling_performance(validated, labels, {})
         assert len(results) == 1
@@ -409,7 +409,7 @@ class TestPortfolioIntegration:
         db_path = _setup_rolling_db(tmp_path)
         labels = load_all_rolling_run_labels(db_path, train_months=12)
         assert len(labels) == 3
-        assert all(l.startswith("rolling_12m_") for l in labels)
+        assert all(label.startswith("rolling_12m_") for label in labels)
 
     def test_load_rolling_validated_for_portfolio(self, tmp_path):
         db_path = _setup_rolling_db(tmp_path)

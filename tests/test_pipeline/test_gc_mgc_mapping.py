@@ -10,12 +10,13 @@ The multi-instrument asset_configs.py uses the GC pattern (matching source data)
 """
 
 import re
-import pytest
 from datetime import date
 
+import pytest
+
 from pipeline.ingest_dbn_mgc import (
-    choose_front_contract,
     GC_OUTRIGHT_PATTERN,
+    choose_front_contract,
 )
 
 

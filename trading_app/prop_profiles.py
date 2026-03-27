@@ -443,7 +443,7 @@ def _parse_strategy_id(strategy_id: str) -> dict:
     """
     parts = strategy_id.split("_")
     result: dict = {"entry_model": "E2", "rr_target": 1.0, "confirm_bars": 1, "filter_type": "NO_FILTER", "orb_minutes": 5}
-    for i, p in enumerate(parts):
+    for p in parts:
         if p in ("E1", "E2", "E3"):
             result["entry_model"] = p
         elif p.startswith("RR"):

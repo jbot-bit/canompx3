@@ -4,10 +4,11 @@ Tests for pipeline.ingest_dbn_mgc trading day computation.
 Tests compute_trading_days() boundary cases — pure function, no DB needed.
 """
 
-import pytest
-import pandas as pd
-from datetime import datetime, date
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
+
+import pandas as pd
+import pytest
 
 from pipeline.ingest_dbn_mgc import compute_trading_days
 

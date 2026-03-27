@@ -9,27 +9,27 @@ Covers:
 """
 
 import sys
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
-from datetime import date, datetime, timezone, timedelta
 
 import pytest
 
+from pipeline.cost_model import get_cost_spec
+from trading_app.config import (
+    HOLD_HOURS,
+    IB_DURATION_MINUTES,
+    ORB_DURATION_MINUTES,
+    SESSION_EXIT_MODE,
+)
 from trading_app.execution_engine import (
+    ActiveTrade,
     ExecutionEngine,
     LiveIB,
     LiveORB,
-    ActiveTrade,
     TradeEvent,
     TradeState,
 )
-from trading_app.config import (
-    SESSION_EXIT_MODE,
-    IB_DURATION_MINUTES,
-    HOLD_HOURS,
-    ORB_DURATION_MINUTES,
-)
 from trading_app.portfolio import Portfolio, PortfolioStrategy
-from pipeline.cost_model import get_cost_spec
 
 
 def _cost():
@@ -72,8 +72,8 @@ def _make_portfolio(strategies=None, **overrides):
     return Portfolio(**defaults)
 
 
-def _bar(ts, o, h, l, c, v=100):
-    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(l), "close": float(c), "volume": int(v)}
+def _bar(ts, o, h, low, c, v=100):
+    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(low), "close": float(c), "volume": int(v)}
 
 
 # ============================================================================
@@ -84,7 +84,7 @@ def _bar(ts, o, h, l, c, v=100):
 class TestLiveIB:
     def test_ib_formation(self):
         """IB high/low computed from bars within 120-min window."""
-        start = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
         end = start + timedelta(minutes=120)
         ib = LiveIB(window_start_utc=start, window_end_utc=end)
 
@@ -97,7 +97,7 @@ class TestLiveIB:
 
     def test_ib_completes_after_window(self):
         """IB marked complete when bar ts >= window end."""
-        start = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
         end = start + timedelta(minutes=120)
         ib = LiveIB(window_start_utc=start, window_end_utc=end)
 
@@ -113,7 +113,7 @@ class TestLiveIB:
 
     def test_ib_break_long(self):
         """Close above IB high after completion = long break."""
-        start = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
         end = start + timedelta(minutes=120)
         ib = LiveIB(window_start_utc=start, window_end_utc=end)
 
@@ -131,7 +131,7 @@ class TestLiveIB:
 
     def test_ib_break_short(self):
         """Close below IB low after completion = short break."""
-        start = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
         end = start + timedelta(minutes=120)
         ib = LiveIB(window_start_utc=start, window_end_utc=end)
 
@@ -144,7 +144,7 @@ class TestLiveIB:
 
     def test_ib_no_break_inside_range(self):
         """Close within IB range = no break."""
-        start = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
         end = start + timedelta(minutes=120)
         ib = LiveIB(window_start_utc=start, window_end_utc=end)
 
@@ -157,7 +157,7 @@ class TestLiveIB:
 
     def test_ib_break_only_once(self):
         """IB break direction is set once, subsequent bars don't change it."""
-        start = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
         end = start + timedelta(minutes=120)
         ib = LiveIB(window_start_utc=start, window_end_utc=end)
 
@@ -174,7 +174,7 @@ class TestLiveIB:
 
     def test_ib_no_break_before_complete(self):
         """Break check returns None if IB not yet complete."""
-        start = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
         end = start + timedelta(minutes=120)
         ib = LiveIB(window_start_utc=start, window_end_utc=end)
 
@@ -228,11 +228,11 @@ class TestIBConditionalExits:
         Returns the timestamp base for further bar generation.
         """
         orb_dur = ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5)
-        ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=timezone.utc)
+        ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=UTC)
 
         # Feed IB bars before the TOKYO_OPEN window (23:00-00:00 UTC)
         prev_day = td - timedelta(days=1)
-        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
+        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)
         for i in range(60):
             engine.on_bar(_bar(ib_ts + timedelta(minutes=i), 2700, 2720, 2680, 2705))
 
@@ -259,7 +259,7 @@ class TestIBConditionalExits:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = self._build_tokyo_open_orb_and_enter(engine)
+        _ts_base = self._build_tokyo_open_orb_and_enter(engine)
 
         # Trade should be entered in ib_pending mode
         entered = [t for t in engine.active_trades if t.state == TradeState.ENTERED]
@@ -277,7 +277,7 @@ class TestIBConditionalExits:
 
         # IB completes at 01:00 UTC (23:00 + 120 min)
         # Feed bars to complete IB
-        ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
+        ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=UTC)
         t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
@@ -290,7 +290,7 @@ class TestIBConditionalExits:
         assert engine.ib.complete
 
         # Bar that breaks IB high (aligned with long trade)
-        events = engine.on_bar(_bar(ib_end + timedelta(minutes=1), 2720, 2725, 2718, 2722))
+        _events = engine.on_bar(_bar(ib_end + timedelta(minutes=1), 2720, 2725, 2718, 2722))
 
         entered = [t for t in engine.active_trades if t.state == TradeState.ENTERED]
         assert len(entered) == 1
@@ -307,7 +307,7 @@ class TestIBConditionalExits:
         ts_base = self._build_tokyo_open_orb_and_enter(engine)
 
         # Feed bars to complete IB
-        ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
+        ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=UTC)
         t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
@@ -333,7 +333,7 @@ class TestIBConditionalExits:
         engine = ExecutionEngine(_make_portfolio([strategy]), _cost())
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        ts_base = self._build_tokyo_open_orb_and_enter(engine)
+        _ts_base = self._build_tokyo_open_orb_and_enter(engine)
 
         entered = [t for t in engine.active_trades if t.state == TradeState.ENTERED]
         assert len(entered) == 1
@@ -350,7 +350,7 @@ class TestIBConditionalExits:
         ts_base = self._build_tokyo_open_orb_and_enter(engine)
 
         # Complete IB and break aligned
-        ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
+        ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=UTC)
         t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
@@ -389,7 +389,7 @@ class TestIBConditionalExits:
         ts_base = self._build_tokyo_open_orb_and_enter(engine)
 
         # Complete IB and break aligned
-        ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
+        ib_end = datetime(2024, 1, 5, 1, 0, tzinfo=UTC)
         t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
@@ -425,12 +425,12 @@ class TestEarlyExitSkipInHold7h:
         # Build and enter TOKYO_OPEN trade
         td = date(2024, 1, 5)
         prev_day = td - timedelta(days=1)
-        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
+        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)
         # Feed IB bars
         for i in range(60):
             engine.on_bar(_bar(ib_ts + timedelta(minutes=i), 2700, 2720, 2680, 2705))
 
-        ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=timezone.utc)
+        ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=UTC)
         orb_dur = ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5)
         # Build TOKYO_OPEN ORB (00:00 to 00:00+orb_dur)
         for i in range(orb_dur):
@@ -445,7 +445,7 @@ class TestEarlyExitSkipInHold7h:
         assert entered[0].exit_mode == "ib_pending"
 
         # Complete IB and break aligned (long)
-        ib_end = datetime(td.year, td.month, td.day, 1, 0, tzinfo=timezone.utc)
+        ib_end = datetime(td.year, td.month, td.day, 1, 0, tzinfo=UTC)
         t = ts_base + timedelta(minutes=ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5) + 2)
         while t < ib_end:
             engine.on_bar(_bar(t, 2710, 2715, 2705, 2712))
@@ -495,11 +495,11 @@ class TestIBAlreadyOpposed:
         prev_day = td - timedelta(days=1)
 
         # Build TOKYO_OPEN ORB normally
-        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
+        ib_ts = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)
         for i in range(60):
             engine.on_bar(_bar(ib_ts + timedelta(minutes=i), 2705, 2710, 2702, 2706))
 
-        ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=timezone.utc)
+        ts_base = datetime(td.year, td.month, td.day, 0, 0, tzinfo=UTC)
         orb_dur = ORB_DURATION_MINUTES.get("TOKYO_OPEN", 5)
         for i in range(orb_dur):
             engine.on_bar(_bar(ts_base + timedelta(minutes=i), 2702, 2710, 2700, 2705))
@@ -512,7 +512,7 @@ class TestIBAlreadyOpposed:
         engine.ib.break_ts = ts_base + timedelta(minutes=50)
 
         # Trigger ORB LONG break (close > 2710)
-        events = engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur), 2709, 2715, 2708, 2711))
+        _events = engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur), 2709, 2715, 2708, 2711))
 
         # E1 armed on break bar — fills on next bar
         next_events = engine.on_bar(_bar(ts_base + timedelta(minutes=orb_dur + 1), 2712, 2715, 2711, 2713))
@@ -542,7 +542,7 @@ class TestCmeReopenFixedTarget:
 
         # CME_REOPEN ORB window: 23:00-23:05 UTC prev day (winter)
         prev_day = date(2024, 1, 4)
-        ts_base = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
+        ts_base = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=UTC)
 
         # Build ORB
         for i in range(5):
@@ -572,8 +572,8 @@ class TestIBInitialization:
         engine.on_trading_day_start(date(2024, 1, 5))
 
         assert engine.ib is not None
-        assert engine.ib.window_start_utc == datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
-        assert engine.ib.window_end_utc == datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
+        assert engine.ib.window_start_utc == datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
+        assert engine.ib.window_end_utc == datetime(2024, 1, 5, 1, 0, tzinfo=UTC)
 
     def test_ib_resets_on_new_day(self):
         """IB resets on new trading day."""
@@ -585,4 +585,4 @@ class TestIBInitialization:
         engine.on_trading_day_start(date(2024, 1, 6))
         assert engine.ib.high is None
         assert not engine.ib.complete
-        assert engine.ib.window_start_utc == datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        assert engine.ib.window_start_utc == datetime(2024, 1, 5, 23, 0, tzinfo=UTC)

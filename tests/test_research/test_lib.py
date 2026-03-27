@@ -400,7 +400,7 @@ class TestTopLevelImports:
     """research.lib re-exports commonly used functions."""
 
     def test_stats_available(self):
-        from research.lib import ttest_1s, bh_fdr, compute_metrics
+        from research.lib import bh_fdr, compute_metrics, ttest_1s
 
         assert callable(ttest_1s)
         assert callable(bh_fdr)
@@ -413,7 +413,7 @@ class TestTopLevelImports:
         assert callable(query_df)
 
     def test_query_available(self):
-        from research.lib import outcomes_query, session_col, SAFE_JOIN
+        from research.lib import SAFE_JOIN, outcomes_query, session_col
 
         assert callable(outcomes_query)
         assert callable(session_col)
@@ -425,7 +425,7 @@ class TestTopLevelImports:
         assert callable(assert_no_inflation)
 
     def test_io_available(self):
-        from research.lib import output_dir, write_csv, write_markdown, format_stats_table
+        from research.lib import format_stats_table, output_dir, write_csv, write_markdown
 
         assert callable(output_dir)
         assert callable(write_csv)

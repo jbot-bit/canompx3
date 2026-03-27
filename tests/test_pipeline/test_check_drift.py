@@ -4,21 +4,22 @@ Tests for pipeline.check_drift drift detection rules.
 Tests each drift check catches violations and passes clean code.
 """
 
-import pytest
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from pipeline.check_drift import (
-    check_hardcoded_mgc_sql,
     check_apply_iterrows,
+    check_config_filter_sync,
+    check_hardcoded_mgc_sql,
     check_non_bars1m_writes,
     check_pipeline_never_imports_trading_app,
+    check_pyright_config_exists,
+    check_python_version_file,
+    check_ruff_rules_minimum,
     check_trading_app_connection_leaks,
     check_trading_app_hardcoded_paths,
-    check_config_filter_sync,
-    check_pyright_config_exists,
-    check_ruff_rules_minimum,
-    check_python_version_file,
     check_uv_lock_exists,
 )
 
@@ -358,6 +359,7 @@ class TestWfCoverage:
     def test_warns_on_untested_mgc(self, tmp_path, monkeypatch, capsys):
         """MGC with 1 NULL + 1 TRUE -> warning printed, but no blocking violation."""
         import duckdb
+
         from pipeline import check_drift
         from pipeline.check_drift import check_wf_coverage
 
@@ -389,6 +391,7 @@ class TestWfCoverage:
     def test_passes_all_tested(self, tmp_path, monkeypatch):
         """MGC with 1 TRUE -> no violation."""
         import duckdb
+
         from pipeline import check_drift
         from pipeline.check_drift import check_wf_coverage
 
@@ -415,6 +418,7 @@ class TestWfCoverage:
     def test_ignores_mnq_m2k(self, tmp_path, monkeypatch):
         """MNQ with NULL -> no violation (not in required set)."""
         import duckdb
+
         from pipeline import check_drift
         from pipeline.check_drift import check_wf_coverage
 
@@ -446,6 +450,7 @@ class TestNoActiveE3:
     def test_catches_active_e3(self, tmp_path, monkeypatch):
         """Active E3 row triggers violation."""
         import duckdb
+
         from pipeline import check_drift
         from pipeline.check_drift import check_no_active_e3
 
@@ -476,6 +481,7 @@ class TestNoActiveE3:
     def test_passes_retired_e3(self, tmp_path, monkeypatch):
         """Retired E3 row does not trigger violation."""
         import duckdb
+
         from pipeline import check_drift
         from pipeline.check_drift import check_no_active_e3
 
@@ -509,6 +515,7 @@ class TestDataYearsDisclosure:
     def test_warns_on_short_history(self, tmp_path, monkeypatch, capsys):
         """MNQ with years_tested=5 -> warning printed, no blocking violation."""
         import duckdb
+
         from pipeline import check_drift
         from pipeline.check_drift import check_data_years_disclosure
 
@@ -537,6 +544,7 @@ class TestDataYearsDisclosure:
     def test_passes_long_history(self, tmp_path, monkeypatch, capsys):
         """MGC with years_tested=10 -> no warning."""
         import duckdb
+
         from pipeline import check_drift
         from pipeline.check_drift import check_data_years_disclosure
 

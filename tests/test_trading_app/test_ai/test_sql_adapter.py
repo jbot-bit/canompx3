@@ -1,26 +1,26 @@
 """Tests for trading_app.ai.sql_adapter."""
 
-import pytest
 import pandas as pd
+import pytest
 
 from trading_app.ai.sql_adapter import (
-    QueryTemplate,
-    QueryIntent,
-    SQLAdapter,
-    MAX_RESULT_ROWS,
-    VALID_ORB_LABELS,
-    VALID_ENTRY_MODELS,
-    VALID_RR_TARGETS,
-    VALID_CONFIRM_BARS,
-    _validate_orb_label,
-    _validate_entry_model,
-    _validate_filter_type,
-    _validate_rr_target,
-    _validate_confirm_bars,
-    _orb_size_filter_sql,
-    _compute_group_stats,
     _DST_SESSION_MAP,
     _TEMPLATES,
+    MAX_RESULT_ROWS,
+    VALID_CONFIRM_BARS,
+    VALID_ENTRY_MODELS,
+    VALID_ORB_LABELS,
+    VALID_RR_TARGETS,
+    QueryIntent,
+    QueryTemplate,
+    SQLAdapter,
+    _compute_group_stats,
+    _orb_size_filter_sql,
+    _validate_confirm_bars,
+    _validate_entry_model,
+    _validate_filter_type,
+    _validate_orb_label,
+    _validate_rr_target,
 )
 
 

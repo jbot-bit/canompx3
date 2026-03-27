@@ -4,16 +4,16 @@ and outcome computation with 5m bars.
 """
 
 import sys
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
-from datetime import datetime, timedelta, timezone
 
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
 
-from trading_app.nested.builder import resample_to_5m, _verify_e3_sub_bar_fill
-from trading_app.outcome_builder import compute_single_outcome
 from pipeline.cost_model import get_cost_spec
+from trading_app.nested.builder import _verify_e3_sub_bar_fill, resample_to_5m
+from trading_app.outcome_builder import compute_single_outcome
 
 # ============================================================================
 # HELPERS
@@ -28,13 +28,13 @@ def _make_bars(start_ts, prices, interval_minutes=1):
     """Create bars_df from list of (open, high, low, close, volume) tuples."""
     rows = []
     ts = start_ts
-    for o, h, l, c, v in prices:
+    for o, h, low, c, v in prices:
         rows.append(
             {
                 "ts_utc": ts,
                 "open": float(o),
                 "high": float(h),
-                "low": float(l),
+                "low": float(low),
                 "close": float(c),
                 "volume": int(v),
             }
@@ -54,7 +54,7 @@ class TestResampleTo5m:
     def test_five_bars_to_one(self):
         """5 consecutive 1m bars should produce exactly 1 5m bar."""
         # All bars at :00, :01, :02, :03, :04 -> bucket at :00
-        start = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
         bars = _make_bars(
             start,
             [
@@ -67,7 +67,7 @@ class TestResampleTo5m:
         )
 
         # after_ts before all bars
-        before = datetime(2023, 12, 31, 23, 59, tzinfo=timezone.utc)
+        before = datetime(2023, 12, 31, 23, 59, tzinfo=UTC)
         result = resample_to_5m(bars, before)
 
         assert len(result) == 1
@@ -80,11 +80,11 @@ class TestResampleTo5m:
 
     def test_ten_bars_to_two(self):
         """10 consecutive 1m bars across 2 buckets."""
-        start = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
         prices = [(100 + i, 105 + i, 98 + i, 101 + i, 10) for i in range(10)]
         bars = _make_bars(start, prices)
 
-        before = datetime(2023, 12, 31, 23, 59, tzinfo=timezone.utc)
+        before = datetime(2023, 12, 31, 23, 59, tzinfo=UTC)
         result = resample_to_5m(bars, before)
 
         assert len(result) == 2
@@ -92,11 +92,11 @@ class TestResampleTo5m:
     def test_preserves_timestamps_alignment(self):
         """Output timestamps should be floored to 5-minute boundaries."""
         # Bars at 00:03, 00:04, 00:05, 00:06, 00:07, 00:08
-        start = datetime(2024, 1, 5, 0, 3, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 5, 0, 3, tzinfo=UTC)
         prices = [(100, 105, 99, 102, 10) for _ in range(6)]
         bars = _make_bars(start, prices)
 
-        before = datetime(2024, 1, 5, 0, 2, tzinfo=timezone.utc)
+        before = datetime(2024, 1, 5, 0, 2, tzinfo=UTC)
         result = resample_to_5m(bars, before)
 
         # :03 and :04 -> bucket :00, :05-:08 -> bucket :05
@@ -108,32 +108,32 @@ class TestResampleTo5m:
 
     def test_after_ts_filters_correctly(self):
         """Bars at or before after_ts should be excluded."""
-        start = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
         prices = [(100, 105, 99, 102, 10) for _ in range(10)]
         bars = _make_bars(start, prices)
 
         # after_ts = :04 -> bars :05 through :09 included (5 bars, 1 bucket)
-        after = datetime(2024, 1, 5, 0, 4, tzinfo=timezone.utc)
+        after = datetime(2024, 1, 5, 0, 4, tzinfo=UTC)
         result = resample_to_5m(bars, after)
 
         assert len(result) == 1  # :05-:09 -> single bucket at :05
 
     def test_empty_when_no_bars_after(self):
         """Returns empty DataFrame if no bars after after_ts."""
-        start = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
         bars = _make_bars(start, [(100, 105, 99, 102, 10)])
 
-        after = datetime(2024, 1, 5, 1, 0, tzinfo=timezone.utc)
+        after = datetime(2024, 1, 5, 1, 0, tzinfo=UTC)
         result = resample_to_5m(bars, after)
 
         assert result.empty
 
     def test_single_bar_produces_single_5m(self):
         """A single 1m bar after after_ts should produce one 5m bar."""
-        start = datetime(2024, 1, 5, 0, 7, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 5, 0, 7, tzinfo=UTC)
         bars = _make_bars(start, [(100, 105, 99, 102, 50)])
 
-        after = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
+        after = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
         result = resample_to_5m(bars, after)
 
         assert len(result) == 1
@@ -151,10 +151,10 @@ class TestE3SubBarFillVerification:
 
     def test_long_fill_confirmed_by_1m_low(self):
         """1m bar low touches the limit price -> fill confirmed."""
-        entry_ts = datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc)
+        entry_ts = datetime(2024, 1, 5, 0, 5, tzinfo=UTC)
         # 1m bars within the 5m candle [0:05, 0:10)
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 5, tzinfo=UTC),
             [
                 (2700, 2705, 2698, 2702, 10),  # low=2698 <= 2700 -> fill
                 (2702, 2710, 2701, 2708, 20),
@@ -164,10 +164,10 @@ class TestE3SubBarFillVerification:
 
     def test_long_fill_rejected_by_1m_data(self):
         """1m bars don't actually reach the limit price -> fill rejected."""
-        entry_ts = datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc)
+        entry_ts = datetime(2024, 1, 5, 0, 5, tzinfo=UTC)
         # 1m bars within the 5m candle -- low never touches 2700
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 5, tzinfo=UTC),
             [
                 (2702, 2705, 2701, 2704, 10),  # low=2701 > 2700
                 (2704, 2710, 2703, 2708, 20),  # low=2703 > 2700
@@ -177,9 +177,9 @@ class TestE3SubBarFillVerification:
 
     def test_short_fill_confirmed_by_1m_high(self):
         """Short E3: 1m bar high reaches the limit price."""
-        entry_ts = datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc)
+        entry_ts = datetime(2024, 1, 5, 0, 5, tzinfo=UTC)
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 5, tzinfo=UTC),
             [
                 (2690, 2692, 2685, 2688, 10),  # high=2692 >= 2690
             ],
@@ -188,9 +188,9 @@ class TestE3SubBarFillVerification:
 
     def test_short_fill_rejected_by_1m_data(self):
         """Short E3: 1m bars don't reach the limit price."""
-        entry_ts = datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc)
+        entry_ts = datetime(2024, 1, 5, 0, 5, tzinfo=UTC)
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 5, tzinfo=UTC),
             [
                 (2685, 2689, 2682, 2686, 10),  # high=2689 < 2690
             ],
@@ -199,10 +199,10 @@ class TestE3SubBarFillVerification:
 
     def test_no_bars_in_candle(self):
         """No 1m bars in the 5m candle window -> fill rejected."""
-        entry_ts = datetime(2024, 1, 5, 0, 5, tzinfo=timezone.utc)
+        entry_ts = datetime(2024, 1, 5, 0, 5, tzinfo=UTC)
         # Bars are at 0:00, outside the 5m candle [0:05, 0:10)
         bars = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [(2700, 2705, 2698, 2702, 10)],
         )
         assert _verify_e3_sub_bar_fill(bars, entry_ts, 2700.0, "long") is False
@@ -225,15 +225,15 @@ class TestOutcomeResolutionDifference:
         target+stop -> ambiguous -> loss.
         """
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         # 15 bars = 3 x 5m candles after resample
         # E1 entry = 2701 (bar :01 open). Risk=11. Target=2723.
         # Key: 5m candle 1 high must be < 2723 so fill-bar exit doesn't trigger.
         # 1m bars :05-:09 highs kept <= 2722.
         bars_1m = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 # 5m candle 0 (:00-:04): confirm bar
                 (2698, 2702, 2695, 2701, 100),  # :00 close=2701 > 2700 -> confirm
@@ -280,7 +280,7 @@ class TestOutcomeResolutionDifference:
         #   high=2724 >= 2723 -> target hit
         #   low=2681 <= 2690 -> stop hit
         #   BOTH on same bar -> ambiguous -> conservative LOSS
-        bars_5m = resample_to_5m(bars_1m, datetime(2024, 1, 4, 23, 59, tzinfo=timezone.utc))
+        bars_5m = resample_to_5m(bars_1m, datetime(2024, 1, 4, 23, 59, tzinfo=UTC))
         assert len(bars_5m) == 3  # verify 3 candles
 
         result_5m = compute_single_outcome(
@@ -312,12 +312,12 @@ class TestConfirmBarsOn5m:
     def test_cb1_on_5m_is_structural_hold(self):
         """CB1 on 5m = single 5-minute close outside ORB (structural acceptance)."""
         orb_high, orb_low = 2700.0, 2690.0
-        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc)
-        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=timezone.utc)
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
 
         # 5m bar that closes above ORB high
         bars_5m = _make_bars(
-            datetime(2024, 1, 5, 0, 0, tzinfo=timezone.utc),
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
             [
                 (2698, 2705, 2695, 2702, 500),  # close 2702 > 2700 -> confirm
                 (2702, 2730, 2701, 2725, 600),  # E1 entry at open = 2702

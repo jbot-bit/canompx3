@@ -4,9 +4,10 @@ Tests for pipeline.build_bars_5m aggregation and integrity checks.
 Requires tmp_db fixture (creates temp DuckDB with schema).
 """
 
-import pytest
-import duckdb
 from datetime import date, datetime
+
+import duckdb
+import pytest
 
 from pipeline.build_bars_5m import build_5m_bars, verify_5m_integrity
 
@@ -41,11 +42,11 @@ class TestBuild5mBars:
         assert row is not None
 
         # OHLCV checks
-        ts, symbol, source, o, h, l, c, vol = row
+        ts, symbol, source, o, h, low, c, vol = row
         assert symbol == "MGC"
         assert o == 2350.0  # first open
         assert h == 2358.0  # max high
-        assert l == 2349.0  # min low
+        assert low == 2349.0  # min low
         assert c == 2357.0  # last close
         assert vol == 650  # sum volume
 

@@ -7,22 +7,22 @@ Rule: At N minutes after fill, if bar close vs entry is negative, exit at bar cl
 """
 
 import sys
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
-from datetime import date, datetime, timezone, timedelta
 
-import pytest
 import numpy as np
 import pandas as pd
+import pytest
 
+from pipeline.cost_model import get_cost_spec
 from trading_app.config import EARLY_EXIT_MINUTES
-from trading_app.outcome_builder import compute_single_outcome
 from trading_app.execution_engine import (
-    ExecutionEngine,
     ActiveTrade,
+    ExecutionEngine,
     TradeState,
 )
+from trading_app.outcome_builder import compute_single_outcome
 from trading_app.portfolio import Portfolio, PortfolioStrategy
-from pipeline.cost_model import get_cost_spec
 
 # ============================================================================
 # Helpers
@@ -66,8 +66,8 @@ def _make_bars_ohlc(ohlc_rows, start_ts, freq_seconds=60):
 
 ORB_HIGH = 2350.0
 ORB_LOW = 2340.0
-BREAK_TS = datetime(2024, 1, 15, 23, 5, tzinfo=timezone.utc)  # CME_REOPEN session
-DAY_END = datetime(2024, 1, 16, 23, 0, tzinfo=timezone.utc)
+BREAK_TS = datetime(2024, 1, 15, 23, 5, tzinfo=UTC)  # CME_REOPEN session
+DAY_END = datetime(2024, 1, 16, 23, 0, tzinfo=UTC)
 
 # ============================================================================
 # Config Tests
@@ -163,7 +163,7 @@ class TestOutcomeBuilderEarlyExit:
 
     def test_tokyo_open_losing_at_30min_no_early_exit(self):
         """TOKYO_OPEN long trade, losing at 30 min -> resolves normally (no early_exit)."""
-        break_ts_tokyo = datetime(2024, 1, 16, 0, 5, tzinfo=timezone.utc)
+        break_ts_tokyo = datetime(2024, 1, 16, 0, 5, tzinfo=UTC)
         bars = []
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
@@ -193,7 +193,7 @@ class TestOutcomeBuilderEarlyExit:
 
     def test_london_metals_no_early_exit(self):
         """LONDON_METALS session: outcome_builder does not apply early exit."""
-        break_ts_london = datetime(2024, 1, 16, 8, 5, tzinfo=timezone.utc)
+        break_ts_london = datetime(2024, 1, 16, 8, 5, tzinfo=UTC)
         bars = []
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
         bars.append((2351.0, 2351.5, 2350.5, 2351.0))
@@ -350,8 +350,8 @@ def _make_portfolio(strategies=None, **overrides):
     return Portfolio(**defaults)
 
 
-def _bar(ts, o, h, l, c, v=100):
-    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(l), "close": float(c), "volume": int(v)}
+def _bar(ts, o, h, low, c, v=100):
+    return {"ts_utc": ts, "open": float(o), "high": float(h), "low": float(low), "close": float(c), "volume": int(v)}
 
 
 class TestExecutionEngineEarlyExit:
@@ -362,7 +362,7 @@ class TestExecutionEngineEarlyExit:
         engine = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        base = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        base = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
 
         for i in range(5):
             ts = base + timedelta(minutes=i)
@@ -391,7 +391,7 @@ class TestExecutionEngineEarlyExit:
         engine = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        base = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        base = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
 
         # Build ORB
         for i in range(5):
@@ -427,7 +427,7 @@ class TestExecutionEngineEarlyExit:
         engine.on_trading_day_start(date(2024, 1, 5))
 
         # LONDON_METALS = 18:00 Brisbane = 08:00 UTC (winter). ORB window 08:00-08:05
-        base = datetime(2024, 1, 5, 8, 0, tzinfo=timezone.utc)
+        base = datetime(2024, 1, 5, 8, 0, tzinfo=UTC)
 
         for i in range(5):
             ts = base + timedelta(minutes=i)
@@ -456,7 +456,7 @@ class TestExecutionEngineEarlyExit:
         engine = ExecutionEngine(portfolio, _cost(), live_session_costs=False)
         engine.on_trading_day_start(date(2024, 1, 5))
 
-        base = datetime(2024, 1, 4, 23, 0, tzinfo=timezone.utc)
+        base = datetime(2024, 1, 4, 23, 0, tzinfo=UTC)
 
         for i in range(5):
             ts = base + timedelta(minutes=i)
