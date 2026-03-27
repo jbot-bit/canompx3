@@ -59,16 +59,34 @@ log = logging.getLogger("databento_daily")
 
 DATASET = "GLBX.MDP3"
 
+# Databento API symbol mapping (vendor-specific format, not in ASSET_CONFIGS).
+# Keys must be a superset of ACTIVE_ORB_INSTRUMENTS.
+_DATABENTO_SYMBOLS: dict[str, str] = {
+    "MGC": "GC.FUT",   # Full-size gold -> micro gold pipeline
+    "MNQ": "MNQ.FUT",  # Native micro Nasdaq
+    "MES": "MES.FUT",  # Native micro S&P (post-2024; pre-2024 used ES)
+}
+
+# Fail-closed guard: crash if active instruments not covered
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS  # noqa: E402
+
+_missing = set(ACTIVE_ORB_INSTRUMENTS) - set(_DATABENTO_SYMBOLS)
+if _missing:
+    raise RuntimeError(
+        f"DATABENTO_SYMBOLS missing active instruments: {_missing}. "
+        f"Update _DATABENTO_SYMBOLS in {__file__}."
+    )
+
 # Additional schemas to refresh daily (beyond ohlcv-1m which refresh_data.py handles)
 DAILY_SCHEMAS = [
     {
         "schema": "ohlcv-1s",
-        "instruments": {"MGC": "GC.FUT", "MNQ": "MNQ.FUT", "MES": "MES.FUT"},
+        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
         "description": "1-second OHLCV bars",
     },
     {
         "schema": "statistics",
-        "instruments": {"MGC": "GC.FUT"},
+        "instruments": {"MGC": _DATABENTO_SYMBOLS["MGC"]},
         "description": "Settlement prices, OI, volume stats",
     },
     # Uncomment when budget allows daily tick data:
