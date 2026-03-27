@@ -125,11 +125,11 @@ TRADE_CONFIG_FEATURES: list[str] = [
 # @research-source: expert prior selection (not data-driven)
 # @revalidated-for: E2
 ML_CORE_FEATURES: list[str] = [
-    "orb_size_norm",           # ORB size IS the edge (Blueprint §2, cost mechanism)
-    "atr_20_pct",              # Vol regime rank (confirmed ATR70_VOL filter)
-    "gap_open_points_norm",    # Overnight institutional repositioning (ATR-normalized)
-    "orb_pre_velocity_norm",   # Pre-session momentum slope (ATR-normalized)
-    "prior_sessions_broken",   # Cross-session flow (#1 importance in prior experiments)
+    "orb_size_norm",  # ORB size IS the edge (Blueprint §2, cost mechanism)
+    "atr_20_pct",  # Vol regime rank (confirmed ATR70_VOL filter)
+    "gap_open_points_norm",  # Overnight institutional repositioning (ATR-normalized)
+    "orb_pre_velocity_norm",  # Pre-session momentum slope (ATR-normalized)
+    "prior_sessions_broken",  # Cross-session flow (#1 importance in prior experiments)
 ]
 
 # LOOK-AHEAD BLACKLIST — NEVER use as ML features
