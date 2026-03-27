@@ -3,9 +3,12 @@
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+import pytest
+
 BRISBANE = ZoneInfo("Australia/Brisbane")
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestFullCopilotFlow:
     """End-to-end tests that don't require Streamlit runtime."""
 

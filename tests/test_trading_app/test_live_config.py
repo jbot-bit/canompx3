@@ -686,6 +686,7 @@ _UNCONSTRAINED_SPEC = LiveStrategySpec(
 )
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestSeasonalGate:
     """Seasonal gate: active_months + as_of_date parameter on build_live_portfolio."""
 
@@ -781,6 +782,7 @@ def _mock_rolling_result(rolling_avg_expr: float) -> list[dict]:
     ]
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestWeightOverrideAndRecovery:
     """Weight override + auto-recovery using rolling_avg_expectancy_r (family avg)."""
 

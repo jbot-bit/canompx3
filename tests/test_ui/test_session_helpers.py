@@ -204,6 +204,7 @@ class TestFilterToEnglish:
 # ── build_session_briefings ──────────────────────────────────────────────────
 
 
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
 class TestBuildSessionBriefings:
     """Merge multiple strategies per session+instrument into one briefing."""
 
