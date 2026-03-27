@@ -38,19 +38,48 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# Survivors from the exhaustive sweep — (session, aperture_or_None, RR, honest_delta)
-SURVIVORS = [
-    # RR2.0 per-aperture — ALL PASSED bootstrap (p=0.005 to 0.020)
-    ("NYSE_OPEN", 30, 2.0, 33.5),  # p=0.005 PASS
-    ("US_DATA_1000", 30, 2.0, 38.5),  # p=0.005 PASS
-    ("US_DATA_1000", 15, 2.0, 10.6),  # p=0.020 PASS
-    ("US_DATA_830", 30, 2.0, 12.5),  # p=0.020 PASS
-    # RR2.0 flat
-    ("NYSE_OPEN", None, 2.0, 3.3),  # p=0.005 PASS
-    ("CME_PRECLOSE", None, 2.0, 2.2),  # verified_delta=0.0 (seed variance)
-    # RR1.5 flat
-    ("CME_PRECLOSE", None, 1.5, 5.4),  # NOT YET TESTED
+# V1 survivors (historical reference only — replaced by V2 config selection)
+_V1_SURVIVORS = [
+    ("NYSE_OPEN", 30, 2.0, 33.5),
+    ("US_DATA_1000", 30, 2.0, 38.5),
+    ("US_DATA_1000", 15, 2.0, 10.6),
+    ("US_DATA_830", 30, 2.0, 12.5),
+    ("NYSE_OPEN", None, 2.0, 3.3),
+    ("CME_PRECLOSE", None, 2.0, 2.2),
+    ("CME_PRECLOSE", None, 1.5, 5.4),
 ]
+
+
+def load_selected_configs() -> list[tuple[str, int | None, float, float]]:
+    """Load V2 selected configs from retrain results JSON.
+
+    Returns list of (session, aperture_or_None, rr_target, honest_delta_r).
+    Raises FileNotFoundError if retrain hasn't been run yet.
+    """
+    import json
+
+    json_path = Path(__file__).resolve().parent.parent.parent / "logs" / "ml_v2_retrain_results.json"
+    if not json_path.exists():
+        raise FileNotFoundError(
+            f"V2 retrain results not found at {json_path}. "
+            f"Run ml_v2_retrain_all.py first."
+        )
+    with open(json_path) as f:
+        data = json.load(f)
+
+    configs = data.get("selected_configs", [])
+    if not configs:
+        log.warning("V2 retrain produced 0 selected configs — ML DEAD before bootstrap")
+        return []
+
+    return [
+        (c["session"], c["aperture"], c["rr"], c["honest_delta_r"])
+        for c in configs
+    ]
+
+
+# Active survivors: loaded from V2 retrain results at runtime
+SURVIVORS: list[tuple[str, int | None, float, float]] = []
 
 N_PERMUTATIONS = 5000  # 5000 per Phipson & Smyth 2010: reliable p-values need 1000+ perms
 
@@ -224,12 +253,24 @@ def bootstrap_one(
 
 
 def main():
-    log.info("ML Bootstrap Permutation Test")
-    log.info(f"Testing {len(SURVIVORS)} survivors from exhaustive sweep")
+    log.info("ML Bootstrap Permutation Test (V2)")
+
+    # Load selected configs from V2 retrain
+    try:
+        survivors = load_selected_configs()
+    except FileNotFoundError as e:
+        log.error(str(e))
+        return
+
+    if not survivors:
+        log.info("0 configs to bootstrap — ML DEAD (pre-registration: 0 = NO-GO)")
+        return
+
+    log.info(f"Testing {len(survivors)} V2 selected configs")
     log.info(f"Permutations per test: {N_PERMUTATIONS}")
 
     all_results = []
-    for session, aperture, rr, delta in SURVIVORS:
+    for session, aperture, rr, delta in survivors:
         try:
             result = bootstrap_one(session, aperture, rr, delta)
         except Exception as exc:
