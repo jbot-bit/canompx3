@@ -1,6 +1,6 @@
 """Tests for trading_app.ml.predict_live — live ML prediction module."""
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -8,7 +8,6 @@ import pandas as pd
 import pytest
 
 from trading_app.ml.predict_live import LiveMLPredictor, MLPrediction, _compute_config_hash
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -39,7 +38,7 @@ def _make_mock_bundle(
         "oos_auc": 0.65,
         "optimal_threshold": threshold,
         "cpcv_auc": 0.64,
-        "trained_at": trained_at or datetime.now(timezone.utc).isoformat(),
+        "trained_at": trained_at or datetime.now(UTC).isoformat(),
         "data_date_range": ("2020-01-01", "2025-12-31"),
         "config_hash": config_hash or _compute_config_hash(),
         "methodology_version": ML_METHODOLOGY_VERSION,
@@ -354,7 +353,7 @@ def _make_hybrid_bundle(
         "sessions": sessions,
         "rr_target": 2.5,
         "total_honest_delta_r": total_honest_delta_r,
-        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "trained_at": datetime.now(UTC).isoformat(),
         "config_hash": _compute_config_hash(),
         "data_date_range": ("2020-01-01", "2025-12-31"),
     }
@@ -748,7 +747,7 @@ def _make_per_aperture_bundle(
         "sessions": sessions,
         "rr_target": training_rr,
         "total_honest_delta_r": 50.0,
-        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "trained_at": datetime.now(UTC).isoformat(),
         "config_hash": _compute_config_hash(),
         "data_date_range": ("2020-01-01", "2025-12-31"),
     }
@@ -912,7 +911,7 @@ class TestModelStaleness:
         """Model <90 days old remains active."""
         from datetime import timedelta
 
-        recent_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        recent_date = (datetime.now(UTC) - timedelta(days=30)).isoformat()
         bundle = _make_mock_bundle(trained_at=recent_date)
 
         with patch("trading_app.ml.predict_live.LiveMLPredictor._load_models"):

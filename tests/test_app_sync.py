@@ -14,41 +14,41 @@ These tests ensure that:
 8. ENTRY_MODELS is consistent across modules
 """
 
-import sys
 import json
 import re
-from pathlib import Path
+import sys
 from datetime import date
+from pathlib import Path
 
-import pytest
 import duckdb
+import pytest
 
-from pipeline.init_db import ORB_LABELS, DAILY_FEATURES_SCHEMA
+from pipeline.asset_configs import ASSET_CONFIGS, get_enabled_sessions
+from pipeline.init_db import DAILY_FEATURES_SCHEMA, ORB_LABELS
 from trading_app.config import (
     ALL_FILTERS,
     BASE_GRID_FILTERS,
-    ENTRY_MODELS,
     CORE_MIN_SAMPLES,
-    REGIME_MIN_SAMPLES,
-    classify_strategy,
-    NoFilter,
-    OrbSizeFilter,
-    VolumeFilter,
-    DirectionFilter,
-    get_filters_for_grid,
     DIR_LONG,
     DIR_SHORT,
+    ENTRY_MODELS,
     MGC_ORB_SIZE_FILTERS,
     MGC_VOLUME_FILTERS,
+    REGIME_MIN_SAMPLES,
+    DirectionFilter,
+    NoFilter,
+    OrbSizeFilter,
     StrategyFilter,
+    VolumeFilter,
+    classify_strategy,
+    get_filters_for_grid,
 )
-from trading_app.outcome_builder import RR_TARGETS, CONFIRM_BARS_OPTIONS
-from trading_app.strategy_discovery import make_strategy_id
-from pipeline.asset_configs import ASSET_CONFIGS, get_enabled_sessions
 from trading_app.db_manager import (
     init_trading_app_schema,
     verify_trading_app_schema,
 )
+from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
+from trading_app.strategy_discovery import make_strategy_id
 
 # ============================================================================
 # 1. ORB_LABELS consistency
@@ -193,7 +193,7 @@ class TestAllFiltersSync:
 
     def test_filters_are_frozen(self):
         """All filters are frozen (hashable, immutable)."""
-        for key, filt in ALL_FILTERS.items():
+        for _key, filt in ALL_FILTERS.items():
             hash(filt)
 
     def test_size_filters_have_thresholds(self):
@@ -307,7 +307,7 @@ class TestGridParamsSync:
     """Grid parameters must be consistent and valid."""
 
     def test_rr_targets_sorted(self):
-        assert RR_TARGETS == sorted(RR_TARGETS)
+        assert sorted(RR_TARGETS) == RR_TARGETS
 
     def test_rr_targets_positive(self):
         assert all(rr > 0 for rr in RR_TARGETS)
@@ -316,7 +316,7 @@ class TestGridParamsSync:
         assert len(RR_TARGETS) == len(set(RR_TARGETS))
 
     def test_confirm_bars_sorted(self):
-        assert CONFIRM_BARS_OPTIONS == sorted(CONFIRM_BARS_OPTIONS)
+        assert sorted(CONFIRM_BARS_OPTIONS) == CONFIRM_BARS_OPTIONS
 
     def test_confirm_bars_positive_ints(self):
         assert all(isinstance(cb, int) and cb > 0 for cb in CONFIRM_BARS_OPTIONS)
@@ -612,8 +612,9 @@ class TestImportSync:
 
     def test_outcome_builder_uses_canonical_session_source(self):
         """outcome_builder gets sessions from asset_configs (not hardcoded)."""
-        import trading_app.outcome_builder as ob
         import inspect
+
+        import trading_app.outcome_builder as ob
 
         source = inspect.getsource(ob)
         assert "from pipeline.asset_configs import get_enabled_sessions" in source
@@ -621,6 +622,7 @@ class TestImportSync:
     def test_strategy_discovery_uses_shared_constants(self):
         """strategy_discovery imports RR_TARGETS/CONFIRM_BARS from outcome_builder."""
         import inspect
+
         import trading_app.strategy_discovery as sd
 
         source = inspect.getsource(sd)
@@ -631,6 +633,7 @@ class TestImportSync:
     def test_outcome_builder_imports_entry_models(self):
         """outcome_builder imports ENTRY_MODELS from config."""
         import inspect
+
         import trading_app.outcome_builder as ob
 
         source = inspect.getsource(ob)
@@ -640,6 +643,7 @@ class TestImportSync:
     def test_strategy_discovery_imports_entry_models(self):
         """strategy_discovery imports ENTRY_MODELS from config."""
         import inspect
+
         import trading_app.strategy_discovery as sd
 
         source = inspect.getsource(sd)
@@ -648,6 +652,7 @@ class TestImportSync:
     def test_market_state_imports_orb_labels(self):
         """market_state imports ORB_LABELS from init_db (not hardcoded)."""
         import inspect
+
         import trading_app.market_state as ms
 
         source = inspect.getsource(ms)
@@ -656,6 +661,7 @@ class TestImportSync:
     def test_sql_adapter_imports_orb_labels(self):
         """sql_adapter derives VALID_ORB_LABELS from init_db (not hardcoded)."""
         import inspect
+
         import trading_app.ai.sql_adapter as sa
 
         source = inspect.getsource(sa)
@@ -664,6 +670,7 @@ class TestImportSync:
     def test_grounding_imports_orb_labels(self):
         """grounding.py derives session list from init_db (not hardcoded)."""
         import inspect
+
         import trading_app.ai.grounding as gr
 
         source = inspect.getsource(gr)

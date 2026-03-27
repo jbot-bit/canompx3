@@ -7,22 +7,21 @@ from pathlib import Path
 import pytest
 
 from scripts.tools.sync_pinecone import (
-    load_manifest,
-    load_state,
-    save_state,
-    hash_file,
-    collect_files,
-    detect_changes,
-    check_basename_conflicts,
-    bundle_research_output,
-    prepare_living_as_md,
-    ensure_utf8,
-    _classify_research_file,
     MANIFEST_PATH,
     STATE_PATH,
     TOOLS_DIR,
+    _classify_research_file,
+    bundle_research_output,
+    check_basename_conflicts,
+    collect_files,
+    detect_changes,
+    ensure_utf8,
+    hash_file,
+    load_manifest,
+    load_state,
+    prepare_living_as_md,
+    save_state,
 )
-
 
 # ---------------------------------------------------------------------------
 # 1. Manifest loading
@@ -224,7 +223,7 @@ def test_collect_files_from_manifest():
     assert "memory/MEMORY.md" in memory_keys
 
     # All paths should be absolute and exist
-    for tier, files in collected.items():
+    for _tier, files in collected.items():
         for abs_path, rel_key in files:
             assert abs_path.is_absolute(), f"Not absolute: {abs_path}"
             assert abs_path.exists(), f"Does not exist: {abs_path} (key={rel_key})"
@@ -293,7 +292,7 @@ def test_bundle_research_output(tmp_path, monkeypatch):
     assert "_bundle_misc_research.md" in bundle_names
 
     # Verify bundle content
-    for abs_path, rel_key in result:
+    for abs_path, _rel_key in result:
         assert abs_path.exists()
         content = abs_path.read_text(encoding="utf-8")
         assert "# Research Bundle:" in content

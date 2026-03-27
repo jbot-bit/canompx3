@@ -1,8 +1,9 @@
 """Tests for discipline UI components — debrief card, cooling screen, priming."""
 
 import json
+from datetime import UTC
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -54,11 +55,12 @@ def test_check_cooling_returns_false_when_not_active():
 
 
 def test_check_cooling_returns_true_when_active():
+    from datetime import datetime, timedelta, timezone
+
     from ui.discipline import check_cooling
-    from datetime import datetime, timezone, timedelta
 
     with patch("ui.discipline.st") as mock_st:
-        until = (datetime.now(timezone.utc) + timedelta(seconds=60)).isoformat()
+        until = (datetime.now(UTC) + timedelta(seconds=60)).isoformat()
         mock_st.session_state = {"cooling_until": until, "cooling_mode": "hard"}
         assert check_cooling() is True
 
@@ -112,8 +114,9 @@ def test_winning_exit_does_not_trigger_cooling(tmp_path):
 
 def test_losing_exit_triggers_cooling(tmp_path):
     """A negative pnl exit signal should activate cooling."""
-    from ui.discipline import render_pending_debriefs
     import json
+
+    from ui.discipline import render_pending_debriefs
 
     signals_path = tmp_path / "signals.jsonl"
     debriefs_path = tmp_path / "debriefs.jsonl"
