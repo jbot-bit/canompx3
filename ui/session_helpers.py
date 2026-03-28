@@ -207,14 +207,16 @@ def build_session_briefings() -> list[SessionBriefing]:
     all_strategies: list = []
     try:
         con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-        configure_connection(con)
-        active_instruments = list(get_active_instruments())
-        rows = con.execute(
-            "SELECT * FROM validated_setups WHERE status = 'active' AND instrument = ANY($1)",
-            [active_instruments],
-        ).fetchall()
-        columns = [desc[0] for desc in con.description]
-        con.close()
+        try:
+            configure_connection(con)
+            active_instruments = list(get_active_instruments())
+            rows = con.execute(
+                "SELECT * FROM validated_setups WHERE status = 'active' AND instrument = ANY($1)",
+                [active_instruments],
+            ).fetchall()
+            columns = [desc[0] for desc in con.description]
+        finally:
+            con.close()
         for row in rows:
             r = dict(zip(columns, row, strict=False))
             all_strategies.append(

@@ -32,7 +32,6 @@ from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
 from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live.trade_journal import TradeJournal, generate_trade_id
-from trading_app.live_config import build_live_portfolio  # DEPRECATED — kept for backward compat
 from trading_app.ml.predict_live import LiveMLPredictor
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from trading_app.risk_manager import RiskLimits, RiskManager
@@ -102,6 +101,8 @@ class SessionOrchestrator:
                 "No portfolio injected — build_live_portfolio is DEPRECATED and resolves to 0 strategies. "
                 "Pass a portfolio from prop_profiles.ACCOUNT_PROFILES via select_for_profile()."
             )
+            from trading_app.live_config import build_live_portfolio  # noqa: F811 — lazy import, deprecated
+
             self.portfolio, notes = build_live_portfolio(db_path=GOLD_DB_PATH, instrument=instrument)
             for note in notes:
                 log.info("live_config note: %s", note)
