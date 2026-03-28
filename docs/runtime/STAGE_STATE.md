@@ -2,6 +2,7 @@
 mode: IMPLEMENTATION
 task: "Solidify project — venv resilience + complete build_live_portfolio deprecation"
 stage_purpose: "1) Fix venv crash vulnerability (dev deps lost on interrupted sync), 2) Complete deprecation of build_live_portfolio from all runtime callers"
+blast_radius: "session_orchestrator.py (top-level import breaks if function removed), run_live_session.py (preflight fallback), generate_trade_sheet.py (imports _load_best_regime_variant), daily_paper_run.py (imports PAPER_TRADE_CANDIDATES), ui_v2/server.py (len(LIVE_PORTFOLIO) checks), check_drift.py checks #43+#54 (import LIVE_PORTFOLIO). LIVE_MIN_EXPECTANCY_DOLLARS_MULT must be rehomed not deleted. Full report: docs/runtime/blast-radius-deprecation.md"
 scope_lock:
   - trading_app/prop_portfolio.py
   - trading_app/live/session_orchestrator.py

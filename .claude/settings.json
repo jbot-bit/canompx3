@@ -1,6 +1,8 @@
 {
   "env": {
-    "GRAPHITI_ENABLED": "true"
+    "GRAPHITI_ENABLED": "true",
+    "PATH": ".venv/Scripts:${env:PATH}",
+    "VIRTUAL_ENV": ".venv"
   },
   "effortLevel": "high",
   "alwaysThinkingEnabled": true,
