@@ -28,7 +28,6 @@ from trading_app.ml.config import (
     CROSS_SESSION_FEATURES,
     LEVEL_PROXIMITY_FEATURES,
     MAX_EARLY_SESSION_INDEX,
-    MIN_SAMPLES_TRAIN,
     MIN_SESSION_SAMPLES,
     ML_METHODOLOGY_VERSION,
     MODEL_DIR,
@@ -42,9 +41,7 @@ from trading_app.ml.config import (
 from trading_app.ml.cpcv import cpcv_score
 from trading_app.ml.features import (
     apply_e6_filter,
-    load_feature_matrix,
     load_single_config_feature_matrix,
-    load_validated_feature_matrix,
 )
 
 logging.basicConfig(
@@ -55,82 +52,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _optimize_threshold(
-    y_prob: np.ndarray,
-    y_true: np.ndarray,
-    pnl_r: np.ndarray,
-) -> dict:
-    """Find P(win) threshold that maximizes Sharpe improvement.
-
-    Optimizes on PROFIT (total R), not accuracy.
-    Returns dict with optimal threshold and performance at that threshold.
-
-    Called on the VALIDATION set (middle 20% of 3-way split).
-    Honest OOS evaluation happens separately on the frozen test set.
-    """
-    # Filter out NaN pnl_r before computing metrics
-    valid = ~np.isnan(pnl_r)
-    y_prob = y_prob[valid]
-    y_true = y_true[valid]
-    pnl_r = pnl_r[valid]
-
-    baseline_total_r = float(pnl_r.sum())
-    baseline_avg_r = float(pnl_r.mean())
-    baseline_n = len(pnl_r)
-    # Per-trade Sharpe (no annualization — data is per-trade, not per-day)
-    baseline_sharpe = float(pnl_r.mean() / pnl_r.std()) if pnl_r.std() > 0 else 0.0
-    baseline_wr = float((pnl_r > 0).mean())
-
-    # Minimum kept trades: at least 10% of baseline or 200, whichever is larger
-    min_kept = max(200, int(baseline_n * 0.10))
-
-    best = {"threshold": 0.5, "sharpe_improvement": -999.0}
-    results = []
-
-    for t in np.arange(THRESHOLD_MIN, THRESHOLD_MAX + THRESHOLD_STEP, THRESHOLD_STEP):
-        mask = y_prob >= t
-        n_kept = mask.sum()
-        if n_kept < min_kept:
-            continue
-
-        kept_pnl = pnl_r[mask]
-        avg_r = kept_pnl.mean()
-        total_r = kept_pnl.sum()
-        sharpe = kept_pnl.mean() / kept_pnl.std() if kept_pnl.std() > 0 else 0
-        skip_pct = 1 - n_kept / baseline_n
-        wr = (kept_pnl > 0).mean()
-
-        improvement = sharpe - baseline_sharpe
-
-        row = {
-            "threshold": round(t, 2),
-            "n_kept": n_kept,
-            "skip_pct": round(skip_pct, 3),
-            "avg_r": round(avg_r, 4),
-            "total_r": round(total_r, 2),
-            "sharpe": round(sharpe, 3),
-            "wr": round(wr, 3),
-            "sharpe_improvement": round(improvement, 3),
-            "avg_r_improvement": round(avg_r - baseline_avg_r, 4),
-        }
-        results.append(row)
-
-        if improvement > best["sharpe_improvement"]:
-            best = row
-
-    return {
-        "optimal": best,
-        "baseline": {
-            "n": baseline_n,
-            "avg_r": round(baseline_avg_r, 4),
-            "total_r": round(baseline_total_r, 2),
-            "sharpe": round(baseline_sharpe, 3),
-            "wr": round(baseline_wr, 3),
-        },
-        "sweep": results,
-    }
-
-
 def _optimize_threshold_profit(
     y_prob: np.ndarray,
     pnl_r: np.ndarray,
@@ -139,7 +60,7 @@ def _optimize_threshold_profit(
 ) -> tuple[float | None, float]:
     """Find threshold that maximizes total R improvement over baseline.
 
-    Simpler than _optimize_threshold — used for per-session models where
+    Used for per-session models where
     sample sizes are smaller and Sharpe is too noisy.
 
     Called on the VALIDATION set (middle 20%) — never on the test set.
@@ -269,9 +190,9 @@ def train_per_session_meta_label(
     @research-source: ml_hybrid_experiment.py (Mar 4 2026)
     @revalidated-for: E1, E2
     """
-    mode_str = "SINGLE-CONFIG" if single_config else "MULTI-CONFIG"
+    mode_str = "SINGLE-CONFIG"
     rr_str = f" RR={rr_target}" if rr_target is not None else ""
-    sel_str = f" sel={config_selection}" if single_config else ""
+    sel_str = f" sel={config_selection}"
     filt_str = " UNFILTERED" if skip_filter else ""
     aperture_str = " PER-APERTURE" if per_aperture else ""
     logger.info(f"{'=' * 60}")
@@ -279,19 +200,16 @@ def train_per_session_meta_label(
     logger.info(f"{'=' * 60}")
 
     # --- Load data + E6 filter ---
-    if single_config:
-        X_all, y_all, meta_all = load_single_config_feature_matrix(
-            db_path,
-            instrument,
-            rr_target=rr_target,
-            config_selection=config_selection,
-            skip_filter=skip_filter,
-            per_aperture=per_aperture,
-            apply_rr_lock=False,
-            bypass_validated=bypass_validated,
-        )
-    else:
-        X_all, y_all, meta_all = load_validated_feature_matrix(db_path, instrument)
+    X_all, y_all, meta_all = load_single_config_feature_matrix(
+        db_path,
+        instrument,
+        rr_target=rr_target,
+        config_selection=config_selection,
+        skip_filter=skip_filter,
+        per_aperture=per_aperture,
+        apply_rr_lock=False,
+        bypass_validated=bypass_validated,
+    )
     X_e6 = apply_e6_filter(X_all)
 
     # V2 methodology: select only expert-prior features (EPV fix).
@@ -667,7 +585,7 @@ def train_per_session_meta_label(
                 str(meta_all["trading_day"].max()),
             ),
             "single_config": single_config,
-            "rr_target_lock": rr_target,
+            "training_rr_target": rr_target,
             "split_ratios": "60/20/20",
             "n_total_samples": n_total,
             "n_ml_sessions": n_ml,
@@ -858,265 +776,12 @@ def print_per_session_results(results: dict) -> None:
     print(f"{'=' * 70}\n")
 
 
-def train_meta_label(
-    instrument: str,
-    db_path: str,
-    *,
-    run_cpcv: bool = True,
-    max_cpcv_splits: int | None = 20,
-    save_model: bool = True,
-    _allow_legacy: bool = False,
-    validated_only: bool = False,
-) -> dict:
-    """Train a meta-label classifier for one instrument.
-
-    Steps:
-      1. Load feature matrix (all outcomes OR validated-only)
-      2. CPCV validation on training data (45 splits or capped)
-      3. 3-way time split: train (60%) / val (20%) / test (20%)
-      4. Train final model on 60% training data
-      5. Threshold optimization on 20% validation set
-      6. Honest OOS evaluation on 20% test set (frozen)
-      7. Save model + report results
-
-    Args:
-        validated_only: If True, train only on outcomes matching validated
-            strategy combos with filter_type eligibility applied.
-
-    Returns:
-        dict with cpcv_results, threshold_results, honest_oos, model_path
-    """
-    if not _allow_legacy:
-        raise RuntimeError(
-            "train_meta_label() is V1 methodology (no Fix B/E/F). "
-            "Use train_per_session_meta_label() with --single-config instead. "
-            "Pass _allow_legacy=True only for historical comparison."
-        )
-    mode = "VALIDATED-ONLY" if validated_only else "ALL OUTCOMES"
-    logger.info(f"{'=' * 60}")
-    logger.info(f"  META-LABEL TRAINING: {instrument} ({mode})")
-    logger.info(f"{'=' * 60}")
-
-    # --- Load data ---
-    if validated_only:
-        X, y, meta = load_validated_feature_matrix(db_path, instrument)
-    else:
-        X, y, meta = load_feature_matrix(db_path, instrument)
-
-    if len(X) < MIN_SAMPLES_TRAIN:
-        logger.warning(f"Insufficient samples for {instrument}: {len(X)} < {MIN_SAMPLES_TRAIN}")
-        return {"status": "insufficient_data", "n_samples": len(X)}
-
-    logger.info(f"Samples: {len(X):,d} | Features: {X.shape[1]} | Win rate: {y.mean():.1%}")
-
-    # --- 3-way time split: 60% train / 20% val / 20% test ---
-    n_total = len(X)
-    n_train_end = int(n_total * 0.60)
-    n_val_end = int(n_total * 0.80)
-
-    X_train, y_train = X.iloc[:n_train_end], y.iloc[:n_train_end]
-    X_val, y_val = X.iloc[n_train_end:n_val_end], y.iloc[n_train_end:n_val_end]
-    X_test, y_test = X.iloc[n_val_end:], y.iloc[n_val_end:]
-    pnl_val = meta["pnl_r"].iloc[n_train_end:n_val_end].values
-    pnl_test = meta["pnl_r"].iloc[n_val_end:].values
-    meta_test = meta.iloc[n_val_end:].copy()
-
-    logger.info(f"Split: train={n_train_end:,d} / val={n_val_end - n_train_end:,d} / test={n_total - n_val_end:,d}")
-
-    # --- CPCV Validation (on training data only) ---
-    cpcv_results = None
-    if run_cpcv:
-        logger.info("Running CPCV validation on training data...")
-        cpcv_results = cpcv_score(
-            RandomForestClassifier,
-            RF_PARAMS,
-            X_train,
-            y_train,
-            meta["trading_day"].iloc[:n_train_end],
-            max_splits=max_cpcv_splits,
-        )
-        logger.info(
-            f"CPCV AUC: {cpcv_results['auc_mean']:.4f} +/- {cpcv_results['auc_std']:.4f} "
-            f"({cpcv_results['n_splits']} splits)"
-        )
-
-        if cpcv_results["auc_mean"] < 0.505:
-            logger.warning(
-                f"CPCV AUC {cpcv_results['auc_mean']:.4f} is barely above random. "
-                f"Meta-label may not add value for {instrument}."
-            )
-
-    # --- Train final model on training data (first 60%) ---
-    logger.info(f"Training final model: {n_train_end:,d} train")
-
-    rf = RandomForestClassifier(**RF_PARAMS)
-    rf.fit(X_train, y_train)
-
-    # --- Threshold optimization on VALIDATION set (middle 20%) ---
-    logger.info("Optimizing threshold on validation set...")
-    val_prob = rf.predict_proba(X_val)[:, 1]
-    threshold_results = _optimize_threshold(val_prob, y_val.values, pnl_val)
-
-    opt = threshold_results["optimal"]
-    base = threshold_results["baseline"]
-    logger.info(f"Val baseline: avgR={base['avg_r']:.4f} | Sharpe={base['sharpe']:.3f} | N={base['n']:,d}")
-    logger.info(
-        f"Val optimal:  t={opt['threshold']:.2f} | avgR={opt['avg_r']:.4f} | "
-        f"Sharpe={opt['sharpe']:.3f} | skip={opt['skip_pct']:.1%} | N={opt['n_kept']:,d}"
-    )
-
-    # --- Honest OOS evaluation on TEST set (final 20%) ---
-    test_prob = rf.predict_proba(X_test)[:, 1]
-    test_auc = roc_auc_score(y_test, test_prob)
-
-    # Apply val-optimized threshold to frozen test set
-    test_kept = test_prob >= opt["threshold"]
-    test_base_r = float(pnl_test.sum())
-    test_filt_r = float(pnl_test[test_kept].sum()) if test_kept.sum() > 0 else 0.0
-    test_delta_r = test_filt_r - test_base_r
-    test_skip_pct = 1 - test_kept.sum() / len(pnl_test) if len(pnl_test) > 0 else 0.0
-
-    logger.info(
-        f"Honest OOS: AUC={test_auc:.4f} | BaseR={test_base_r:+.1f} | "
-        f"Delta={test_delta_r:+.1f} | Skip={test_skip_pct:.1%}"
-    )
-
-    # --- Save model ---
-    model_path = None
-    if save_model:
-        MODEL_DIR.mkdir(parents=True, exist_ok=True)
-        model_path = MODEL_DIR / f"meta_label_{instrument}.joblib"
-        config_hash = compute_config_hash()
-
-        joblib.dump(
-            {
-                "model": rf,
-                "feature_names": list(X.columns),
-                "instrument": instrument,
-                "n_train": n_train_end,
-                "split_ratios": "60/20/20",
-                "oos_auc": test_auc,
-                "optimal_threshold": opt["threshold"],
-                "cpcv_auc": cpcv_results["auc_mean"] if cpcv_results else None,
-                "honest_delta_r": round(test_delta_r, 2),
-                "trained_at": datetime.now(UTC).isoformat(),
-                "data_date_range": (
-                    str(meta["trading_day"].min()),
-                    str(meta["trading_day"].max()),
-                ),
-                "config_hash": config_hash,
-                "validated_only": validated_only,
-                "n_total_samples": n_total,
-            },
-            model_path,
-        )
-        logger.info(f"Model saved: {model_path}")
-
-    # --- Per-session breakdown (on honest test set) ---
-    meta_test["y_prob"] = test_prob
-    meta_test["y_true"] = y_test.values
-    meta_test["pnl_r"] = pnl_test
-
-    session_breakdown = []
-    for session in sorted(meta_test["orb_label"].unique()):
-        smask = meta_test["orb_label"] == session
-        if smask.sum() < 30:
-            continue
-        s_pnl = meta_test.loc[smask, "pnl_r"]
-        s_prob = meta_test.loc[smask, "y_prob"]
-
-        # Apply optimal threshold
-        kept = s_prob >= opt["threshold"]
-        if kept.sum() < 10:
-            continue
-
-        base_avg = s_pnl.mean()
-        filt_avg = s_pnl[kept].mean()
-        session_breakdown.append(
-            {
-                "session": session,
-                "n_total": smask.sum(),
-                "n_kept": kept.sum(),
-                "skip_pct": round(1 - kept.sum() / smask.sum(), 3),
-                "base_avgR": round(base_avg, 4),
-                "filt_avgR": round(filt_avg, 4),
-                "lift": round(filt_avg - base_avg, 4),
-            }
-        )
-
-    return {
-        "status": "trained",
-        "instrument": instrument,
-        "n_samples": n_total,
-        "n_features": X.shape[1],
-        "oos_auc": test_auc,
-        "honest_delta_r": round(test_delta_r, 2),
-        "cpcv": cpcv_results,
-        "threshold": threshold_results,
-        "session_breakdown": session_breakdown,
-        "model_path": str(model_path) if model_path else None,
-    }
-
-
-def print_results(results: dict) -> None:
-    """Print formatted training results."""
-    if results["status"] != "trained":
-        print(f"  {results.get('instrument', '?')}: {results['status']}")
-        return
-
-    inst = results["instrument"]
-    print(f"\n{'=' * 70}")
-    print(f"  META-LABEL RESULTS — {inst} (3-way split: 60/20/20)")
-    print(f"{'=' * 70}")
-
-    # Summary
-    base = results["threshold"]["baseline"]
-    opt = results["threshold"]["optimal"]
-    print(f"  Samples: {results['n_samples']:,d} | Features: {results['n_features']}")
-    if results["cpcv"]:
-        c = results["cpcv"]
-        print(f"  CPCV AUC (train): {c['auc_mean']:.4f} +/- {c['auc_std']:.4f} ({c['n_splits']} splits)")
-    print(f"  Honest OOS AUC:   {results['oos_auc']:.4f}")
-    print(f"  Honest OOS delta: {results['honest_delta_r']:+.1f}R")
-    print()
-
-    # Before/After (validation set — used for threshold optimization)
-    print("  VALIDATION SET (threshold optimization):")
-    print(f"  {'METRIC':<20} {'BASELINE':>12} {'FILTERED':>12} {'CHANGE':>12}")
-    print(f"  {'-' * 20} {'-' * 12} {'-' * 12} {'-' * 12}")
-    print(f"  {'Trades':<20} {base['n']:>12,d} {opt['n_kept']:>12,d} {opt['n_kept'] - base['n']:>+12,d}")
-    print(f"  {'Skip %':<20} {'0.0%':>12} {opt['skip_pct']:>11.1%}")
-    print(f"  {'Avg R':<20} {base['avg_r']:>12.4f} {opt['avg_r']:>12.4f} {opt['avg_r_improvement']:>+12.4f}")
-    print(f"  {'Sharpe':<20} {base['sharpe']:>12.3f} {opt['sharpe']:>12.3f} {opt['sharpe_improvement']:>+12.3f}")
-    print(f"  {'Win Rate':<20} {'':>12} {opt['wr']:>11.1%}")
-    print(f"  {'Threshold':<20} {'':>12} {opt['threshold']:>12.2f}")
-    print()
-
-    # Per-session breakdown (honest test set)
-    if results["session_breakdown"]:
-        print("  HONEST OOS (test set — never touched by optimization):")
-        print(f"  {'SESSION':<20} {'N':>6} {'KEPT':>6} {'SKIP%':>7} {'BASE':>8} {'FILT':>8} {'LIFT':>8}")
-        print(f"  {'-' * 20} {'-' * 6} {'-' * 6} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8}")
-        for s in sorted(results["session_breakdown"], key=lambda x: -x["lift"]):
-            print(
-                f"  {s['session']:<20} {s['n_total']:>6d} {s['n_kept']:>6d} "
-                f"{s['skip_pct']:>6.1%} {s['base_avgR']:>+8.4f} {s['filt_avgR']:>+8.4f} "
-                f"{s['lift']:>+8.4f}"
-            )
-
-    print(f"{'=' * 70}\n")
-
-
 def main():
     parser = argparse.ArgumentParser(description="Meta-Label Classifier Training")
     parser.add_argument("--instrument", type=str, help="Single instrument")
     parser.add_argument("--all", action="store_true", help="All active instruments")
     parser.add_argument("--no-cpcv", action="store_true", help="Skip CPCV (faster)")
-    parser.add_argument("--max-cpcv-splits", type=int, default=20, help="Max CPCV splits (default 20 of 45)")
     parser.add_argument("--db-path", type=str, default=str(GOLD_DB_PATH))
-    parser.add_argument(
-        "--validated-only", action="store_true", help="Train only on validated strategy outcomes (recommended)"
-    )
     parser.add_argument(
         "--per-session",
         action="store_true",
@@ -1149,17 +814,12 @@ def main():
     parser.add_argument(
         "--per-aperture",
         action="store_true",
-        help="Train separate model per (session, aperture). Fixes aperture covariate shift. Requires --single-config.",
-    )
-    parser.add_argument(
-        "--legacy",
-        action="store_true",
-        help="Allow V1 per-instrument training (no Fix B/E/F). For historical comparison only.",
+        help="Train separate model per (session, aperture). Fixes aperture covariate shift.",
     )
     args = parser.parse_args()
 
-    if args.per_aperture and not args.single_config:
-        parser.error("--per-aperture requires --single-config")
+    if args.per_session:
+        args.single_config = True
 
     instruments = ACTIVE_INSTRUMENTS if args.all else [args.instrument or "MGC"]
 
@@ -1246,15 +906,7 @@ def main():
             )
             print_per_session_results(results)
         else:
-            results = train_meta_label(
-                inst,
-                args.db_path,
-                run_cpcv=not args.no_cpcv,
-                max_cpcv_splits=args.max_cpcv_splits,
-                validated_only=args.validated_only,
-                _allow_legacy=args.legacy,
-            )
-            print_results(results)
+            parser.error("Use --single-config or --per-session (V1 per-instrument training removed)")
 
 
 if __name__ == "__main__":

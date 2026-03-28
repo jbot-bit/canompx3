@@ -324,20 +324,22 @@ ML_METHODOLOGY_VERSION: int = 2
 
 
 def compute_config_hash() -> str:
-    """Compute SHA-256 hash of ML config for drift detection.
+    """Compute SHA-256 hash of V2 ML config for drift detection.
 
     Used by BOTH training (meta_label.py) and prediction (predict_live.py)
     to detect when models were trained with different config. Must be called
     from a single source to prevent hash formula divergence.
+
+    V2: Only includes elements that affect V2 training output.
+    V1-only elements (CATEGORICAL_FEATURES, TRADE_CONFIG_FEATURES, etc.)
+    removed to prevent false-positive hash mismatches.
     """
     config_str = (
-        f"{RF_PARAMS}|{THRESHOLD_MIN}|{THRESHOLD_MAX}|{THRESHOLD_STEP}"
-        f"|{GLOBAL_FEATURES}|{SESSION_FEATURE_SUFFIXES}|{ATR_NORMALIZE}"
-        f"|{CATEGORICAL_FEATURES}|{sorted(LOOKAHEAD_BLACKLIST)}"
-        f"|{TRADE_CONFIG_FEATURES}|{E6_NOISE_PREFIXES}|{E6_NOISE_EXACT}"
-        f"|{CROSS_SESSION_FEATURES}|{LEVEL_PROXIMITY_FEATURES}"
-        f"|{SESSION_CHRONOLOGICAL_ORDER}|{MIN_SESSION_SAMPLES}|{MAX_EARLY_SESSION_INDEX}"
-        f"|split=60/20/20"  # 3-way split: train/val/test
-        f"|core={ML_CORE_FEATURES}"  # V2: expert-prior feature selection
+        f"v2|{ML_CORE_FEATURES}"
+        f"|{RF_PARAMS}|{THRESHOLD_MIN}|{THRESHOLD_MAX}|{THRESHOLD_STEP}"
+        f"|{CPCV_N_GROUPS}|{CPCV_K_TEST}|{CPCV_PURGE_DAYS}|{CPCV_EMBARGO_DAYS}"
+        f"|{MIN_SESSION_SAMPLES}|{MAX_EARLY_SESSION_INDEX}"
+        f"|{ML_METHODOLOGY_VERSION}"
+        f"|split=60/20/20"
     )
     return hashlib.sha256(config_str.encode()).hexdigest()[:12]

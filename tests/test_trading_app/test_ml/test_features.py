@@ -308,35 +308,6 @@ class TestBackfillGlobalFeatures:
         assert pd.isna(result[GLOBAL_FEATURES[0]].iloc[0])
 
 
-class TestFillMissingFeatures:
-    """_fill_missing_features uses correct fill values per column type."""
-
-    def test_onehot_filled_with_zero(self):
-        from trading_app.ml.evaluate import _fill_missing_features
-
-        X = pd.DataFrame({"existing": [1.0, 2.0]})
-        feature_names = ["existing", "orb_label_CME_REOPEN", "entry_model_E2"]
-        result = _fill_missing_features(X, feature_names)
-        assert result["orb_label_CME_REOPEN"].tolist() == [0.0, 0.0]
-        assert result["entry_model_E2"].tolist() == [0.0, 0.0]
-
-    def test_numeric_filled_with_negative_999(self):
-        from trading_app.ml.evaluate import _fill_missing_features
-
-        X = pd.DataFrame({"existing": [1.0, 2.0]})
-        feature_names = ["existing", "some_numeric_feature"]
-        result = _fill_missing_features(X, feature_names)
-        assert result["some_numeric_feature"].tolist() == [-999.0, -999.0]
-
-    def test_column_order_matches_feature_names(self):
-        from trading_app.ml.evaluate import _fill_missing_features
-
-        X = pd.DataFrame({"b": [1.0], "a": [2.0]})
-        feature_names = ["a", "b", "orb_label_X"]
-        result = _fill_missing_features(X, feature_names)
-        assert list(result.columns) == ["a", "b", "orb_label_X"]
-
-
 class TestLookaheadSafety:
     """Verify no look-ahead features can leak into the feature matrix."""
 
@@ -359,60 +330,45 @@ class TestLookaheadSafety:
         assert len(caught) == 3
 
 
-class TestLoadFeatureMatrixIntegration:
-    """Integration test for load_feature_matrix against real DB."""
+class TestCoreFeaturesPresent:
+    """V2 core features must survive transform_to_features()."""
 
-    @pytest.fixture
-    def db_path(self):
-        """Path to gold.db — skips if not available."""
-        import os
+    def test_core_features_in_output(self):
+        """All ML_CORE_FEATURES columns are present after transform."""
+        from trading_app.ml.config import ML_CORE_FEATURES, SESSION_CHRONOLOGICAL_ORDER
 
-        path = os.environ.get("DUCKDB_PATH", "gold.db")
-        if not os.path.exists(path):
-            pytest.skip("gold.db not available")
-        return path
+        # Build minimal DataFrame that transform_to_features expects
+        session = SESSION_CHRONOLOGICAL_ORDER[5]  # mid-day session
+        df = pd.DataFrame(
+            {
+                "orb_label": [session],
+                "entry_model": ["E2"],
+                "rr_target": [2.0],
+                "confirm_bars": [1],
+                "orb_minutes": [5],
+                "atr_20": [50.0],
+                "atr_20_pct": [65.0],
+                "atr_vel_ratio": [1.02],
+                "gap_open_points": [5.0],
+                "prev_day_range": [40.0],
+                f"orb_{session}_size": [10.0],
+                f"orb_{session}_volume": [5000],
+                f"orb_{session}_vwap": [100.0],
+                f"orb_{session}_pre_velocity": [0.5],
+                f"rel_vol_{session}": [1.3],
+                f"orb_{session}_break_dir": ["long"],
+            }
+        )
+        # Add prior session break dirs for cross-session features
+        for ps in SESSION_CHRONOLOGICAL_ORDER[:5]:
+            df[f"orb_{ps}_break_dir"] = "long"
+            df[f"orb_{ps}_high"] = 101.0
+            df[f"orb_{ps}_low"] = 99.0
+            df[f"orb_{ps}_size"] = 8.0
 
-    def test_returns_correct_shapes(self, db_path):
-        """X, y, meta have consistent row counts and expected structure."""
-        from trading_app.ml.features import load_feature_matrix
+        from trading_app.ml.features import transform_to_features
 
-        X, y, meta = load_feature_matrix(db_path, "MGC", min_date="2024-06-01", max_date="2024-12-31")
+        X = transform_to_features(df)
 
-        assert len(X) == len(y) == len(meta)
-        assert len(X) > 0
-
-    def test_x_is_all_numeric(self, db_path):
-        """Feature matrix must be all-numeric after processing."""
-        from trading_app.ml.features import load_feature_matrix
-
-        X, _, _ = load_feature_matrix(db_path, "MGC", min_date="2024-06-01", max_date="2024-12-31")
-
-        non_numeric = X.select_dtypes(exclude=[np.number]).columns.tolist()
-        assert non_numeric == [], f"Non-numeric columns in X: {non_numeric}"
-
-    def test_no_lookahead_columns(self, db_path):
-        """No blacklisted column names or substrings should survive."""
-        from trading_app.ml.features import load_feature_matrix
-
-        X, _, _ = load_feature_matrix(db_path, "MGC", min_date="2024-06-01", max_date="2024-12-31")
-
-        for col in X.columns:
-            for bl in LOOKAHEAD_BLACKLIST:
-                assert bl not in col, f"Lookahead column leaked: {col} (contains {bl})"
-
-    def test_meta_has_required_columns(self, db_path):
-        """Meta should have trading_day, pnl_r, orb_label at minimum."""
-        from trading_app.ml.features import load_feature_matrix
-
-        _, _, meta = load_feature_matrix(db_path, "MGC", min_date="2024-06-01", max_date="2024-12-31")
-
-        required = {"trading_day", "pnl_r", "orb_label", "symbol"}
-        assert required.issubset(set(meta.columns)), f"Missing meta columns: {required - set(meta.columns)}"
-
-    def test_y_is_binary(self, db_path):
-        """Target must be 0/1 only."""
-        from trading_app.ml.features import load_feature_matrix
-
-        _, y, _ = load_feature_matrix(db_path, "MGC", min_date="2024-06-01", max_date="2024-12-31")
-
-        assert set(y.unique()).issubset({0, 1})
+        missing = [f for f in ML_CORE_FEATURES if f not in X.columns]
+        assert missing == [], f"ML_CORE_FEATURES missing from transform output: {missing}"

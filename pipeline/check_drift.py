@@ -3165,22 +3165,8 @@ def check_dead_instruments_doc_sync() -> list[str]:
 
 
 def check_ml_evaluate_hybrid_support() -> list[str]:
-    """Evaluate scripts must support hybrid model format (_hybrid.joblib)."""
-    violations = []
-    eval_files = [
-        PROJECT_ROOT / "trading_app" / "ml" / "evaluate.py",
-        PROJECT_ROOT / "trading_app" / "ml" / "evaluate_validated.py",
-    ]
-    for fpath in eval_files:
-        if not fpath.exists():
-            violations.append(f"  {fpath.name}: file not found")
-            continue
-        text = fpath.read_text(encoding="utf-8")
-        if "_hybrid.joblib" not in text and "_load_model_bundle" not in text:
-            violations.append(
-                f"  {fpath.name}: no hybrid model detection (missing _hybrid.joblib or _load_model_bundle)"
-            )
-    return violations
+    """V1 evaluate scripts removed in V2 cleanup (Mar 2026). No-op."""
+    return []
 
 
 def check_ml_bundle_full_delta() -> list[str]:

@@ -170,16 +170,17 @@ class LiveMLPredictor:
                     del self._models[inst]
                     continue
 
-                # Config hash check
+                # Config hash check — fail-closed: reject stale models
                 model_hash = bundle.get("config_hash")
                 if model_hash and model_hash != current_hash:
                     logger.warning(
-                        "ML config hash MISMATCH for %s: model=%s, current=%s. "
-                        "Model may be stale — consider retraining.",
+                        "REJECTING ML model for %s: config hash MISMATCH (model=%s, current=%s). Retrain required.",
                         inst,
                         model_hash,
                         current_hash,
                     )
+                    del self._models[inst]
+                    continue
 
                 # Freshness check: warn at >60 days, fail-closed at >90 days
                 trained_at_str = bundle.get("trained_at")
@@ -466,9 +467,10 @@ class LiveMLPredictor:
             row_dict = dict(zip(columns, row, strict=False))
 
             # Backfill global features from orb_minutes=5 if needed.
-            # Check multiple features — atr_20 may exist at O15 while
-            # prev_day_range/atr_vel_ratio are NULL.
-            if orb_minutes != 5 and any(row_dict.get(c) is None for c in ("prev_day_range", "atr_vel_ratio")):
+            # Check ALL global features — pipeline stores them only at O5.
+            from trading_app.ml.config import GLOBAL_FEATURES as _GF
+
+            if orb_minutes != 5 and any(row_dict.get(c) is None for c in _GF):
                 g5_result = con.execute(
                     """SELECT * FROM daily_features
                        WHERE symbol = ? AND orb_minutes = 5 AND trading_day = ?

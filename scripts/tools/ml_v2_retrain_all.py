@@ -15,6 +15,7 @@ Design doc: docs/plans/ml-improvement-3phase.md
 
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import time
@@ -22,7 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.ml.config import SESSION_CHRONOLOGICAL_ORDER
+from trading_app.ml.config import ACTIVE_INSTRUMENTS, SESSION_CHRONOLOGICAL_ORDER
 from trading_app.ml.meta_label import print_per_session_results, train_per_session_meta_label
 
 LOG_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
@@ -37,7 +38,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 RR_TARGETS = [1.0, 1.5, 2.0]
-INSTRUMENT = "MNQ"
+INSTRUMENT = ACTIVE_INSTRUMENTS[0]  # Default; overridden by --instrument CLI
 
 
 def run_all_combos() -> list[dict]:
@@ -257,6 +258,12 @@ def write_selection_doc(selected: list[dict]) -> Path:
 
 
 def main():
+    global INSTRUMENT
+    parser = argparse.ArgumentParser(description="ML V2 retrain all configs")
+    parser.add_argument("--instrument", type=str, default=INSTRUMENT, help=f"Instrument (default: {INSTRUMENT})")
+    args = parser.parse_args()
+    INSTRUMENT = args.instrument
+
     log.info("=" * 70)
     log.info("  ML V2 PHASE 1: RETRAIN ALL CONFIGS + CONFIG SELECTION")
     log.info("=" * 70)
