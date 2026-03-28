@@ -15,7 +15,6 @@ scope_lock:
   - tests/test_trading_app/test_live_config.py
   - tests/test_trading_app/test_prop_portfolio.py
   - pipeline/health_check.py
-  - scripts/tools/verify_dev_deps.py
   - docs/runtime/STAGE_STATE.md
 acceptance:
   - "Zero DeprecationWarning from build_live_portfolio in test suite"
