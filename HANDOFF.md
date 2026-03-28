@@ -21,11 +21,28 @@
 - `CLAUDE.md`: self-check step 5, anti-performative rule, PDF grounding protocol, completion evidence
 - `stage-gate-protocol.md`: scope discipline, stage completion requirements
 
-#### Terminal 2: Deprecation + venv + ML cleanup
+#### Terminal 2: Deprecation + venv + ML V2 cleanup + ML V3 research
 - `build_live_portfolio` deprecated in 5 runtime callers (commit `ade4d48`)
 - Venv resilience: pyproject.toml test groups, health_check dev deps (commit `f2e0a34`)
-- ML V2 cleanup: deleted 3 dead modules (~1300 lines), hardened predict_live (commit `18a958a`)
-- STAGE_STATE active: ML V2 cleanup
+- **ML V2 cleanup (commit `18a958a`):**
+  - Deleted 3 V1 modules (evaluate.py, evaluate_validated.py, importance.py)
+  - Removed 5 V1 functions (~1300 lines total)
+  - predict_live.py: config hash mismatch → REJECT (was warn-only)
+  - predict_live.py: backfill checks all 5 GLOBAL_FEATURES (was 2)
+  - Config hash rebuilt for V2-only elements
+  - Retrain + bootstrap now accept --instrument (was hardcoded MNQ)
+  - Bundle field renamed rr_target_lock → training_rr_target
+  - 8 stale tests deleted, 1 integration test added (TestCoreFeaturesPresent)
+  - Drift check #74 updated for deleted modules
+  - 114 ML tests pass, 75 drift checks clean
+- **ML V3 research design (docs/plans/ml-v3-research-design.md):**
+  - Grounded in 7 academic PDFs from /resources
+  - Ran Spike 1A on 1.25M rows: rel_vol is SIGNAL (WR +6.6% at fixed ORB size, p=0.001)
+  - RF regression on MAE/MFE: test R² negative — framing C DEAD
+  - ML (5-feature RF) hurts MNQ, helps MGC/MES — mixed
+  - Simple rel_vol Q20 filter beats ML on strongest instrument
+  - **Next action:** Add rel_vol as production filter in discovery grid (separate task)
+- STAGE_STATE: ML V2 cleanup COMPLETE
 
 #### Terminal 1 (this terminal): Audit + fixes
 - Blast-radius analysis for deprecation (4 hard breaks found)
