@@ -23,7 +23,7 @@ def check_python_deps() -> tuple[bool, str]:
     missing_prod = []
     missing_dev = []
     prod_pkgs = ["duckdb", "databento", "pandas", "numpy", "pyarrow", "zstandard"]
-    dev_pkgs = ["pytest", "httpx", "ruff", "pyright"]
+    dev_pkgs = ["pytest", "httpx", "ruff"]
     for pkg in prod_pkgs:
         try:
             __import__(pkg)
@@ -34,6 +34,10 @@ def check_python_deps() -> tuple[bool, str]:
             __import__(pkg)
         except ImportError:
             missing_dev.append(pkg)
+    # pyright is a CLI tool, not importable — check via venv Scripts dir
+    venv_scripts = Path(sys.executable).parent
+    if not (venv_scripts / "pyright.exe").exists() and not (venv_scripts / "pyright").exists():
+        missing_dev.append("pyright")
     if missing_prod:
         return False, f"{version}, MISSING production deps: {', '.join(missing_prod)}"
     if missing_dev:
