@@ -7,27 +7,33 @@
 ---
 
 ## Current Session
-- **Tool:** Claude Code (2 terminals — deprecation + cleanup)
+- **Tool:** Claude Code (2 terminals) + Cowork (enforcement upgrades)
 - **Date:** 2026-03-28
 - **Branch:** `main`
-- **Commit:** `769fd77` (pushed to remote)
-- **Status:** 3320 passed, 75/75 drift. ML stash dropped (dead). 5 commits pushed.
+- **Commit:** `18a958a` (pushed to remote)
+- **Status:** All pre-commit checks pass. 75/75 drift.
 
 ### What was done (Mar 28 — this session)
 
-#### Terminal 1 (this terminal): Cleanup + blast-radius
-- Pushed 5 unpushed commits to remote (lane toggle, paper PnL, manual halt, TEST_MAP)
-- Dropped ML Phase 1 stash (ML is DEAD — doc was pre-kill design)
-- Ran blast-radius analysis on `build_live_portfolio` deprecation
-- Found 4 hard breaks not in original scope: `generate_trade_sheet.py`, `daily_paper_run.py`, `ui_v2/server.py`, check #54
-- Blast-radius report at `docs/runtime/blast-radius-deprecation.md`
-- Updated HANDOFF.md
+#### Cowork: Stage-gate enforcement upgrades
+- `stage-awareness.py` v3: rotating directives, stale detection, PDF grounding reminder
+- `stage-gate-guard.py`: blast_radius enforcement (min 30 chars, IMPLEMENTATION mode)
+- `CLAUDE.md`: self-check step 5, anti-performative rule, PDF grounding protocol, completion evidence
+- `stage-gate-protocol.md`: scope discipline, stage completion requirements
 
-#### Terminal 2 (other terminal): Deprecation + venv solidification
-- Recovering from venv crash (dev deps wiped by interrupted `uv sync`)
-- Updated `health_check.py` to detect missing dev deps
-- Mid-implementation of `build_live_portfolio` deprecation (5 files modified)
-- STAGE_STATE.md active: IMPLEMENTATION mode
+#### Terminal 2: Deprecation + venv + ML cleanup
+- `build_live_portfolio` deprecated in 5 runtime callers (commit `ade4d48`)
+- Venv resilience: pyproject.toml test groups, health_check dev deps (commit `f2e0a34`)
+- ML V2 cleanup: deleted 3 dead modules (~1300 lines), hardened predict_live (commit `18a958a`)
+- STAGE_STATE active: ML V2 cleanup
+
+#### Terminal 1 (this terminal): Audit + fixes
+- Blast-radius analysis for deprecation (4 hard breaks found)
+- Fixed STAGE_STATE blast_radius (unblocked stage-gate-guard)
+- Fixed health_check pyright CLI detection
+- Fixed venv PATH in settings.json (python → venv 3.13.9)
+- Code review: fixed DuckDB connection leak, lazy import, phantom scope
+- Committed + pushed ML V2 cleanup from other terminal
 
 ### What was done (Mar 27 — prior session)
 
@@ -80,7 +86,7 @@ Comprehensive audit of all test failures. The audit prompt estimated 56 failures
 - Blast radius verified: `pre_session_check.py:258` unpack safe (first element unused)
 
 ### What's Running
-- Terminal 2: deprecation implementation (5 files modified, tests running)
+Nothing (both terminals idle)
 
 ### What's Broken
 - Tradovate auth — password rejected (unchanged from prior sessions)
@@ -94,10 +100,11 @@ Comprehensive audit of all test failures. The audit prompt estimated 56 failures
 ```
 
 ### Next Actions (Priority Order)
-1. ~~Deprecate build_live_portfolio~~ IN PROGRESS (Terminal 2). Blast-radius at `docs/runtime/blast-radius-deprecation.md`
-2. **Paper trade the 5 Apex lanes** — highest ROI action, forward data is the binding constraint
-3. **Confluence scan** — per todo_queue_mar27.md
-4. **Databento backfill** — NQ zip + historical extensions
+1. ~~Deprecate build_live_portfolio~~ PARTIAL — 5 callers migrated, function still exists. Full removal blocked by 4 hard breaks (see `docs/runtime/blast-radius-deprecation.md`)
+2. ~~ML V2 cleanup~~ DONE — 3 dead modules deleted, predict_live hardened, V1 paths removed
+3. **Paper trade the 5 Apex lanes** — highest ROI action, forward data is the binding constraint
+4. **Confluence scan** — per todo_queue_mar27.md
+5. **Databento backfill** — NQ zip + historical extensions
 
 ### Files Changed This Session
 ```
