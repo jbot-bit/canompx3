@@ -8,4 +8,4 @@ Per de Prado (AIFML): "The decision regarding the direction of a trade
 (the sign) and the size of the position are made by independent algorithms."
 """
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"

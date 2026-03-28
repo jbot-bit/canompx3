@@ -42,7 +42,7 @@ from trading_app.ml.config import (
 )
 from trading_app.ml.features import (
     apply_e6_filter,
-    load_validated_feature_matrix,
+    load_single_config_feature_matrix,
 )
 
 logging.basicConfig(
@@ -403,7 +403,7 @@ def main():
         print(f"  ML LICENSE DIAGNOSTIC: {instrument}")
         print(f"{'#' * 80}")
 
-        X_all, y_all, meta_all = load_validated_feature_matrix(args.db_path, instrument)
+        X_all, y_all, meta_all = load_single_config_feature_matrix(args.db_path, instrument, bypass_validated=True)
         X_e6 = apply_e6_filter(X_all)
 
         logger.info(f"{instrument}: {len(X_e6):,d} samples, {X_e6.shape[1]} features, win_rate={y_all.mean():.1%}")

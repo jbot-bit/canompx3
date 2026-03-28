@@ -1,6 +1,6 @@
 """ML discrimination audit: bulk analysis of model predictions vs outcomes.
 
-Uses load_feature_matrix for fast bulk analysis rather than per-trade prediction.
+Uses load_single_config_feature_matrix for fast bulk analysis.
 Run: python scripts/tools/ml_audit.py [--instrument MNQ] [--all]
 """
 
@@ -10,7 +10,7 @@ import joblib
 import numpy as np
 
 from trading_app.ml.config import ACTIVE_INSTRUMENTS, MODEL_DIR
-from trading_app.ml.features import load_feature_matrix
+from trading_app.ml.features import load_single_config_feature_matrix
 from trading_app.ml.predict_live import LiveMLPredictor
 
 
@@ -85,7 +85,7 @@ def audit_instrument(instrument: str, db_path: str) -> dict:
     # --- Load 2025 OOS data ---
     # Load ALL outcomes (training used <= 2025-02-03, so 2025 data is partially IS)
     # Use the last 20% holdout logic from training to get true OOS
-    X, y, meta = load_feature_matrix(db_path, instrument)
+    X, y, meta = load_single_config_feature_matrix(db_path, instrument, bypass_validated=True)
 
     # Split same as training: last 20% is OOS
     n_train = int(len(X) * 0.8)

@@ -5,7 +5,7 @@ No redundant code — add a feature in config.py, it propagates everywhere.
 
 Key function:
   transform_to_features(df) — shared transformation used by BOTH:
-    1. load_feature_matrix() for bulk training data
+    1. load_single_config_feature_matrix() for bulk training data
     2. LiveMLPredictor.predict() for single-row live prediction
   This guarantees training/serving parity. Any feature change in config.py
   propagates to both paths automatically.
@@ -98,40 +98,22 @@ def _extract_session_features(df: pd.DataFrame) -> pd.DataFrame:
 
     Instead of carrying all 12 sessions' columns, we extract only the
     traded session's features into generic columns: orb_size, orb_volume,
-    rel_vol, break_delay_min, break_bar_continues, break_dir.
+    orb_vwap, orb_pre_velocity.
     """
     result = pd.DataFrame(index=df.index)
 
     for suffix in SESSION_FEATURE_SUFFIXES:
-        generic_col = f"orb_{suffix}" if suffix != "break_dir" else "break_dir"
-        is_bool_feat = suffix == "break_bar_continues"
-        is_str_feat = suffix == "break_dir"
-        if is_str_feat:
-            values = pd.Series(np.nan, index=df.index, dtype="object")
-        elif is_bool_feat:
-            values = pd.Series(np.nan, index=df.index, dtype="float64")
-        else:
-            values = pd.Series(np.nan, index=df.index, dtype="float64")
+        generic_col = f"orb_{suffix}"
+        values = pd.Series(np.nan, index=df.index, dtype="float64")
 
         for session in df["orb_label"].unique():
             mask = df["orb_label"] == session
-            col_name = f"orb_{session}_{suffix}" if suffix != "break_dir" else f"orb_{session}_break_dir"
-            # rel_vol has different naming pattern
-            if suffix == "volume":
-                col_name = f"orb_{session}_volume"
-            elif suffix == "break_bar_volume":
-                col_name = f"orb_{session}_break_bar_volume"
+            col_name = f"orb_{session}_{suffix}"
 
             if col_name not in df.columns:
-                # Compression_z and some features only exist for certain sessions
+                # Some features only exist for certain sessions
                 continue
-            raw = df.loc[mask, col_name]
-            if is_bool_feat:
-                # Convert boolean/nullable boolean to float (True=1, False=0, NA=NaN)
-                raw = pd.to_numeric(raw, errors="coerce").astype("float64")
-            elif not is_str_feat:
-                raw = raw.astype("float64", errors="ignore")
-            values.loc[mask] = raw
+            values.loc[mask] = df.loc[mask, col_name].astype("float64", errors="ignore")
 
         result[generic_col] = values
 
@@ -356,9 +338,9 @@ def apply_e6_filter(X: pd.DataFrame) -> pd.DataFrame:
 def transform_to_features(df: pd.DataFrame) -> pd.DataFrame:
     """Transform a DataFrame into an ML feature matrix.
 
-    Shared between training (load_feature_matrix) and live prediction
-    (LiveMLPredictor). This is the SINGLE feature pipeline — any feature
-    change in config.py propagates to both callers automatically.
+    Shared between training (load_single_config_feature_matrix) and live
+    prediction (LiveMLPredictor). This is the SINGLE feature pipeline —
+    any feature change in config.py propagates to both callers automatically.
 
     Input DataFrame must have:
       - orb_label column (for session feature extraction)
@@ -493,247 +475,6 @@ def transform_to_features(df: pd.DataFrame) -> pd.DataFrame:
         X.drop(columns=non_numeric, inplace=True)
 
     return X
-
-
-def load_feature_matrix(
-    db_path: str,
-    instrument: str,
-    *,
-    orb_minutes: int | None = None,
-    entry_model: str | None = None,
-    orb_label: str | None = None,
-    min_date: str | None = None,
-    max_date: str | None = None,
-) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
-    """Load and prepare the full ML feature matrix for an instrument.
-
-    Returns:
-        X: Feature matrix (float, ready for sklearn)
-        y: Binary target (1=win, 0=loss)
-        meta: DataFrame with trading_day, pnl_r, orb_label, etc. for evaluation
-    """
-    con = duckdb.connect(db_path, read_only=True)
-    configure_connection(con)
-    try:
-        # Build WHERE clause
-        where_parts = ["o.symbol = $instrument", "o.pnl_r IS NOT NULL"]
-        params: dict = {"instrument": instrument}
-
-        if orb_minutes is not None:
-            where_parts.append("o.orb_minutes = $orb_minutes")
-            params["orb_minutes"] = orb_minutes
-        if entry_model is not None:
-            where_parts.append("o.entry_model = $entry_model")
-            params["entry_model"] = entry_model
-        if orb_label is not None:
-            where_parts.append("o.orb_label = $orb_label")
-            params["orb_label"] = orb_label
-        if min_date is not None:
-            where_parts.append("o.trading_day >= $min_date")
-            params["min_date"] = min_date
-        if max_date is not None:
-            where_parts.append("o.trading_day <= $max_date")
-            params["max_date"] = max_date
-
-        where_clause = " AND ".join(where_parts)
-
-        query = f"""
-            SELECT
-                o.trading_day,
-                o.symbol,
-                o.orb_label,
-                o.orb_minutes,
-                o.entry_model,
-                o.rr_target,
-                o.confirm_bars,
-                o.pnl_r,
-                o.outcome,
-                d.*
-            FROM orb_outcomes o
-            JOIN daily_features d
-                ON o.trading_day = d.trading_day
-                AND o.symbol = d.symbol
-                AND o.orb_minutes = d.orb_minutes
-            WHERE {where_clause}
-            ORDER BY o.trading_day
-        """
-
-        df = con.execute(query, params).fetchdf()
-
-        # Backfill global features for orb_minutes != 5 (pipeline gap)
-        df = _backfill_global_features(df, con, instrument)
-    finally:
-        con.close()
-
-    if df.empty:
-        raise ValueError(f"No data for {instrument} with filters: {params}")
-
-    logger.info(f"Loaded {len(df):,d} outcomes for {instrument}")
-
-    # --- Target ---
-    y = (df["pnl_r"] > 0).astype(int)
-
-    # --- Meta (for evaluation, not features) ---
-    meta = df[
-        [
-            "trading_day",
-            "symbol",
-            "orb_label",
-            "orb_minutes",
-            "entry_model",
-            "rr_target",
-            "confirm_bars",
-            "pnl_r",
-            "outcome",
-        ]
-    ].copy()
-
-    # --- Transform to features (shared with live prediction) ---
-    X = transform_to_features(df)
-
-    logger.info(f"Feature matrix: {X.shape[0]:,d} rows x {X.shape[1]} features")
-    return X, y, meta
-
-
-def load_validated_feature_matrix(
-    db_path: str,
-    instrument: str,
-) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame]:
-    """Load ML feature matrix filtered to ONLY validated strategy outcomes.
-
-    Per de Prado meta-labeling methodology: the meta-model must train only
-    on outcomes where the primary model (validated ORB rules) would trigger.
-    This means:
-      1. Only (orb_label, entry_model, rr_target, confirm_bars, orb_minutes) combos
-         that appear in validated_setups
-      2. Only trading days where the strategy's filter_type condition passes
-
-    This eliminates population mismatch: training distribution matches
-    deployment distribution (paper_trader / live engine).
-
-    Returns:
-        X: Feature matrix (float, ready for sklearn)
-        y: Binary target (1=win, 0=loss)
-        meta: DataFrame with trading_day, pnl_r, orb_label, filter_type, etc.
-    """
-    from trading_app.config import ALL_FILTERS
-
-    con = duckdb.connect(db_path, read_only=True)
-    configure_connection(con)
-    try:
-        # Join orb_outcomes to validated_setups to get only validated combos,
-        # and to daily_features for market-condition features + filter columns.
-        query = """
-            SELECT
-                o.trading_day,
-                o.symbol,
-                o.orb_label,
-                o.orb_minutes,
-                o.entry_model,
-                o.rr_target,
-                o.confirm_bars,
-                o.pnl_r,
-                o.outcome,
-                v.filter_type,
-                d.*
-            FROM orb_outcomes o
-            JOIN validated_setups v
-                ON o.symbol = v.instrument
-                AND o.orb_label = v.orb_label
-                AND o.entry_model = v.entry_model
-                AND o.rr_target = v.rr_target
-                AND o.confirm_bars = v.confirm_bars
-                AND o.orb_minutes = v.orb_minutes
-            LEFT JOIN family_rr_locks frl
-                ON v.instrument = frl.instrument
-                AND v.orb_label = frl.orb_label
-                AND v.filter_type = frl.filter_type
-                AND v.entry_model = frl.entry_model
-                AND v.orb_minutes = frl.orb_minutes
-                AND v.confirm_bars = frl.confirm_bars
-            JOIN daily_features d
-                ON o.trading_day = d.trading_day
-                AND o.symbol = d.symbol
-                AND o.orb_minutes = d.orb_minutes
-            WHERE o.symbol = $instrument
-                AND o.pnl_r IS NOT NULL
-                AND v.status = 'active'
-                AND (frl.locked_rr IS NULL OR v.rr_target = frl.locked_rr)
-            ORDER BY o.trading_day
-        """
-
-        df = con.execute(query, {"instrument": instrument}).fetchdf()
-
-        # Backfill global features for orb_minutes != 5 (pipeline gap)
-        df = _backfill_global_features(df, con, instrument)
-    finally:
-        con.close()
-
-    if df.empty:
-        raise ValueError(f"No validated outcomes for {instrument}")
-
-    n_before_filter = len(df)
-    logger.info(f"Loaded {n_before_filter:,d} validated-combo outcomes for {instrument}")
-
-    # Apply filter_type eligibility conditions per group (vectorized).
-    # Group by (filter_type, orb_label) to apply each filter's matches_df
-    # to its session's data in bulk — O(groups) pandas ops vs O(N) Python loop.
-    keep_mask = pd.Series(False, index=df.index)
-    filter_cache: dict[str, object] = {}
-
-    for (ft_name, orb_label), group_idx in df.groupby(["filter_type", "orb_label"]).groups.items():
-        if ft_name not in filter_cache:
-            filter_cache[ft_name] = ALL_FILTERS.get(ft_name)
-
-        filt = filter_cache[ft_name]
-        if filt is None:
-            logger.warning(f"Unknown filter_type '{ft_name}' — skipping")
-            continue
-
-        keep_mask.loc[group_idx] = filt.matches_df(df.loc[group_idx], orb_label)
-
-    df = df[keep_mask].reset_index(drop=True)
-    n_after_filter = len(df)
-    logger.info(
-        f"After filter eligibility: {n_after_filter:,d} rows "
-        f"({n_before_filter - n_after_filter:,d} filtered out, "
-        f"{n_after_filter / max(n_before_filter, 1):.1%} kept)"
-    )
-
-    # Deduplicate: same (trading_day, orb_label, entry_model, rr_target,
-    # confirm_bars, orb_minutes) outcome may appear multiple times if
-    # multiple validated strategies share those params but differ in filter_type.
-    # Keep only unique outcomes (the outcome itself is identical).
-    dedup_cols = ["trading_day", "orb_label", "entry_model", "rr_target", "confirm_bars", "orb_minutes"]
-    n_before_dedup = len(df)
-    df = df.drop_duplicates(subset=dedup_cols, keep="first").reset_index(drop=True)
-    if len(df) < n_before_dedup:
-        logger.info(f"Deduped: {n_before_dedup:,d} → {len(df):,d} unique outcomes")
-
-    # --- Target ---
-    y = (df["pnl_r"] > 0).astype(int)
-
-    # --- Meta (for evaluation, not features) ---
-    meta = df[
-        [
-            "trading_day",
-            "symbol",
-            "orb_label",
-            "orb_minutes",
-            "entry_model",
-            "rr_target",
-            "confirm_bars",
-            "pnl_r",
-            "outcome",
-            "filter_type",
-        ]
-    ].copy()
-
-    # --- Transform to features (shared with live prediction) ---
-    X = transform_to_features(df)
-
-    logger.info(f"Validated feature matrix: {X.shape[0]:,d} rows x {X.shape[1]} features (win rate: {y.mean():.1%})")
-    return X, y, meta
 
 
 def load_single_config_feature_matrix(
@@ -1141,7 +882,7 @@ def load_single_config_feature_matrix(
         # (orb_size, atr_20, etc.) instead of being pre-filtered
         logger.info(f"Filter SKIPPED: ML trains on all {len(df):,d} break days")
     else:
-        # Apply filter eligibility (vectorized — same logic as load_validated_feature_matrix)
+        # Apply filter eligibility (vectorized)
         n_before_filter = len(df)
         keep_mask = pd.Series(False, index=df.index)
         filter_cache: dict[str, object] = {}

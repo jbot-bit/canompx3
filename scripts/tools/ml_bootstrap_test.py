@@ -38,22 +38,12 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-# V1 survivors (historical reference only — replaced by V2 config selection)
-_V1_SURVIVORS = [
-    ("NYSE_OPEN", 30, 2.0, 33.5),
-    ("US_DATA_1000", 30, 2.0, 38.5),
-    ("US_DATA_1000", 15, 2.0, 10.6),
-    ("US_DATA_830", 30, 2.0, 12.5),
-    ("NYSE_OPEN", None, 2.0, 3.3),
-    ("CME_PRECLOSE", None, 2.0, 2.2),
-    ("CME_PRECLOSE", None, 1.5, 5.4),
-]
 
-
-def load_selected_configs() -> list[tuple[str, int | None, float, float]]:
+def load_selected_configs() -> tuple[str, list[tuple[str, int | None, float, float]]]:
     """Load V2 selected configs from retrain results JSON.
 
-    Returns list of (session, aperture_or_None, rr_target, honest_delta_r).
+    Returns (instrument, configs) where configs is list of
+    (session, aperture_or_None, rr_target, honest_delta_r).
     Raises FileNotFoundError if retrain hasn't been run yet.
     """
     import json
@@ -64,12 +54,13 @@ def load_selected_configs() -> list[tuple[str, int | None, float, float]]:
     with open(json_path) as f:
         data = json.load(f)
 
+    instrument = data.get("instrument", "MNQ")
     configs = data.get("selected_configs", [])
     if not configs:
         log.warning("V2 retrain produced 0 selected configs — ML DEAD before bootstrap")
-        return []
+        return instrument, []
 
-    return [(c["session"], c["aperture"], c["rr"], c["honest_delta_r"]) for c in configs]
+    return instrument, [(c["session"], c["aperture"], c["rr"], c["honest_delta_r"]) for c in configs]
 
 
 # Active survivors: loaded from V2 retrain results at runtime
@@ -84,6 +75,7 @@ def bootstrap_one(
     rr_target: float,
     real_delta: float,
     n_perms: int = N_PERMUTATIONS,
+    instrument: str = "MNQ",
 ) -> dict:
     """Run bootstrap permutation test for one (session, aperture, RR) combo.
 
@@ -99,7 +91,7 @@ def bootstrap_one(
     # Load data — same pipeline as training
     X_all, y_all, meta_all = load_single_config_feature_matrix(
         str(GOLD_DB_PATH),
-        "MNQ",
+        instrument,
         rr_target=rr_target,
         config_selection="max_samples",
         skip_filter=True,
@@ -251,7 +243,7 @@ def main():
 
     # Load selected configs from V2 retrain
     try:
-        survivors = load_selected_configs()
+        instrument, survivors = load_selected_configs()
     except FileNotFoundError as e:
         log.error(str(e))
         return
@@ -260,13 +252,13 @@ def main():
         log.info("0 configs to bootstrap — ML DEAD (pre-registration: 0 = NO-GO)")
         return
 
-    log.info(f"Testing {len(survivors)} V2 selected configs")
+    log.info(f"Testing {len(survivors)} V2 selected configs for {instrument}")
     log.info(f"Permutations per test: {N_PERMUTATIONS}")
 
     all_results = []
     for session, aperture, rr, delta in survivors:
         try:
-            result = bootstrap_one(session, aperture, rr, delta)
+            result = bootstrap_one(session, aperture, rr, delta, instrument=instrument)
         except Exception as exc:
             log.error(f"  bootstrap_one({session}, {aperture}, {rr}) CRASHED: {exc}", exc_info=True)
             result = {"session": session, "aperture": aperture, "rr": rr, "error": str(exc)}
