@@ -1,3 +1,6 @@
+# Hook runtime state
+.claude/hooks/.data-first-state.json
+
 # Database
 gold.db
 gold.db.wal
