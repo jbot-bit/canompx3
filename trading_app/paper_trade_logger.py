@@ -50,7 +50,11 @@ class LaneDef:
     filter_sql: str  # WHERE clause fragment referencing daily_features alias
 
 
-# ── 5 Apex MNQ lanes (source: prop_profiles.py apex_50k_manual.daily_lanes) ──
+# ── 5 Apex MNQ lanes ──
+# SYNC GUARD: strategy_ids MUST match prop_profiles.py apex_50k_manual.daily_lanes.
+# filter_sql is unique to paper_trade_logger (backtest replay) and cannot be derived
+# from prop_profiles. When lanes change in prop_profiles, update here too.
+# Drift check verifies sync at runtime (check_drift.py).
 LANES: tuple[LaneDef, ...] = (
     LaneDef(
         strategy_id="MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20",
