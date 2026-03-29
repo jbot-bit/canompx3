@@ -45,10 +45,10 @@ CATEGORIES = ("broken", "decaying", "ready", "unactioned", "paused")
 SKILL_SUGGESTIONS: dict[str, str] = {
     "staleness": "/rebuild-outcomes {inst}",
     "fitness": "/regime-check",
-    "drift": "/health-check",
-    "tests": "/quant-verify",
+    "drift": "/verify",
+    "tests": "/verify quick",
     "handoff": "/orient --full",
-    "ralph": "/audit-quick",
+    "ralph": "/audit quick",
 }
 
 

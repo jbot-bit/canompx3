@@ -15,8 +15,7 @@ Codex should reach into the shared `.claude/rules/` set directly.
 - Trading and quant identity: `.claude/rules/quant-agent-identity.md`
 - MCP usage: `.claude/rules/mcp-usage.md`
 - Integrity work: `.claude/rules/integrity-guardian.md`
-- NotebookLM integration: `.claude/rules/notebooklm.md`
-- Pinecone helper flow: `.claude/skills/pinecone-assistant/SKILL.md`
+- Pinecone + PDF routing: `.claude/skills/pinecone-assistant/SKILL.md`
 - M25 audit triage rules: `.claude/rules/m25-audit.md` (script: `python scripts/tools/m25_auto_audit.py`)
 
 ## Load Guidance
@@ -25,4 +24,4 @@ Codex should reach into the shared `.claude/rules/` set directly.
 - For pipeline or trading-app edits, start with workflow and validation rules.
 - For statistical claims or strategy conclusions, load quant identity and research rules before writing conclusions.
 - For feature work, always check `docs/specs/` first.
-- For methodology work, respect that NotebookLM is retired here; use local PDFs via `.claude/rules/notebooklm.md`.
+- For methodology work, use local PDFs in `resources/` (BH FDR, walk-forward, deflated Sharpe).
