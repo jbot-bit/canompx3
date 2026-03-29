@@ -59,7 +59,7 @@ For non-trivial work, `/stage-gate` is the canonical entry point. It classifies,
 | User intent | Route |
 |-------------|-------|
 | "orient" / session start | `/orient` → checks STAGE_STATE → routes |
-| "plan" / "design" / "4t" | `/stage-gate` → DESIGN → `/4t` or `/brainstorm` |
+| "plan" / "design" / "4t" | `/stage-gate` → DESIGN → `/design` |
 | "build" / "go" / "implement" | `/stage-gate` → IMPLEMENTATION → preflight → execute |
 | "verify" / "done?" | `/verify done` (reads acceptance from STAGE_STATE if available) |
 | "review" | `/code-review` (reads scope from STAGE_STATE if available) |

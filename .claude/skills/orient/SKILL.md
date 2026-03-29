@@ -105,5 +105,5 @@ Based on the briefing, suggest the appropriate next skill:
 - Strategy research needed? → `/discover [instrument]` or `/research [topic]`
 - Portfolio health? → `/regime-check`
 - Want to know what to trade? → `/trade-book`
-- Planning a change? → `/brainstorm [topic]` (stage-gate will route)
+- Planning a change? → `/design [topic]` (or `/design explore` for open-ended)
 - ML question? → ML is dormant (V2 dead). Check `trading_app/ml/` if reviving.
