@@ -13,10 +13,7 @@ This skill is a Codex wrapper around the canonical Claude audit workflows. It do
 
 Read the smallest relevant set:
 
-- `.claude/skills/audit-quick/SKILL.md`
-- `.claude/skills/audit/SKILL.md`
-- `.claude/skills/audit-phase/SKILL.md`
-- `.claude/skills/health-check/SKILL.md`
+- `.claude/skills/audit/SKILL.md` (modes: full, quick, phase N, hypothesis)
 - `CLAUDE.md`
 
 ## What This Skill Does

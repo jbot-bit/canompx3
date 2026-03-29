@@ -61,15 +61,15 @@ For non-trivial work, `/stage-gate` is the canonical entry point. It classifies,
 | "orient" / session start | `/orient` → checks STAGE_STATE → routes |
 | "plan" / "design" / "4t" | `/stage-gate` → DESIGN → `/4t` or `/brainstorm` |
 | "build" / "go" / "implement" | `/stage-gate` → IMPLEMENTATION → preflight → execute |
-| "verify" / "done?" | `/verify-done` (reads acceptance from STAGE_STATE if available) |
+| "verify" / "done?" | `/verify done` (reads acceptance from STAGE_STATE if available) |
 | "review" | `/code-review` (reads scope from STAGE_STATE if available) |
 | "where was I" / "resume" | `/resume-rebase` → drift check → continue or reclassify |
 | Quick fix / typo | `/stage-gate trivial [file]` → minimal STAGE_STATE → edit |
 
 **Verification skill routing (which one when):**
-- Pre-commit quick check → `/quant-verify`
-- "Is this stage done?" → `/verify-done` (reads STAGE_STATE acceptance criteria)
-- Post-major-milestone deep audit → `/integrity-guardian`
+- Pre-commit quick check → `/verify` (or `/verify quick`)
+- "Is this stage done?" → `/verify done` (reads STAGE_STATE acceptance criteria)
+- Post-major-milestone deep audit → `/verify full` (impact map + gates)
 - Institutional code review → `/bloomey-review` or `/code-review`
 
 The stage-gate-guard hook hard-blocks production edits without an active STAGE_STATE.md.

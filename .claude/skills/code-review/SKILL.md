@@ -105,6 +105,6 @@ The reviewer MUST check these in addition to standard code quality:
 
 ## Next → After Review
 
-- All clean? → `/verify-done` for evidence-based completion, then commit
+- All clean? → `/verify done` for evidence-based completion, then commit
 - Critical findings? → fix, then re-review
 - ML code reviewed? → ML is dormant (0/12 BH survivors). Check `trading_app/ml/` if reviving.

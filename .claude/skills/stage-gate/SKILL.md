@@ -86,9 +86,9 @@ If 2+ domains but tightly coupled with clear joint acceptance → proceed. Note 
 | DESIGN (quick, ≤2 stages) | → dispatch planner agent → present plan → **wait for approval** |
 | DESIGN (full architecture) | → /4t or /brainstorm (they write STAGE_STATE on approval) |
 | IMPLEMENTATION | → preflight-auditor → if CLEAR → Step 6 |
-| VERIFICATION (stage checkpoint) | → /verify-done (reads acceptance from STAGE_STATE) |
-| VERIFICATION (pre-commit) | → /quant-verify |
-| VERIFICATION (deep audit) | → /integrity-guardian |
+| VERIFICATION (stage checkpoint) | → /verify done (reads acceptance from STAGE_STATE) |
+| VERIFICATION (pre-commit) | → /verify quick |
+| VERIFICATION (deep audit) | → /verify full |
 | TOO BROAD | → /task-splitter → present Stage 1 → **wait for approval** |
 
 ### DESIGN → APPROVAL → STATE WRITE
