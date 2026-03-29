@@ -10,132 +10,61 @@ effort: high
 
 Research this topic and produce actionable findings: $ARGUMENTS
 
-Use when: "research", "investigate", "test this hypothesis", "is X real", "does Y work", "analyze", "deep dive on"
+Use when: "research", "investigate", "test this hypothesis", "is X real", "does Y work", "deep dive"
 
-## Philosophy
+**Research is adversarial by default.** Disprove the hypothesis. If it survives, it might be real.
 
-**Research is adversarial by default.** Your job is to DISPROVE the hypothesis, not confirm it. If it survives your best attempts to kill it, it might be real. RESEARCH_RULES.md is the governing document.
+## Step 0: Pre-Research (MANDATORY)
 
-**System is not proven right — just not-yet-wrong.** Every finding is provisional until forward-tested.
-
-## Step 0: Pre-Research Checks (MANDATORY)
-
-Before doing ANY analysis:
-
-1. **Blueprint NO-GO check (§5):** Is this topic already dead?
-   - Read `docs/STRATEGY_BLUEPRINT.md` §5 NO-GO Registry
-   - If the path is dead, tell the user immediately with the evidence pointer
-   - If the user insists, note the NO-GO and proceed with extra adversarial scrutiny
-
-2. **Blueprint "What We Might Be Wrong About" (§10):** Does this research depend on an assumption that could be wrong?
-
-3. **Previous research check:** Search memory files and `TRADING_RULES.md` for prior findings on this topic. Don't re-run dead-end research.
-
-4. **Variable space scoping:** What variables will you search? List them explicitly.
-   - **CRITICAL RULE:** Before declaring ANY dimension dead, test ≥3 values (Blueprint §3 Gate 2)
+1. **Blueprint NO-GO (SS5):** Already dead? Tell user, STOP.
+2. **Assumptions (SS10):** Does this depend on a flagged assumption?
+3. **Previous research:** Check memory + TRADING_RULES.md. Don't re-run dead ends.
+4. **Variable scoping:** List variables to test. Before declaring ANY dimension dead, test >=3 values (Gate 2).
 
 ## Step 1: Frame the Hypothesis
 
-State explicitly:
-- **H0 (null):** There is no effect. (This is what you're trying to fail to reject.)
-- **H1 (alternative):** [specific, testable claim]
+- **H0:** No effect (trying to fail to reject)
+- **H1:** Specific, testable claim
 - **Mechanism:** WHY should H1 be true? Structural market reason?
-- **Kill criterion:** What result would make you abandon this?
-- **Variables to test:** [list with ranges]
+- **Kill criterion:** What result kills this?
 
-If no mechanism exists → flag as "extra scrutiny required" and proceed with adversarial mindset.
+## Step 2: Multi-Take Deliberation (min 3 takes)
 
-## Step 2: Multi-Take Deliberation
+1. What biases could fake this? (lookahead, survivorship, threshold artifact)
+2. What went wrong before? (check hard_lessons.md, Blueprint SS11)
+3. Is this the right test? Could a confound produce the same result?
 
-Before running any queries, do at least 3 takes:
+## Step 3: Run Analysis (Blueprint Gates)
 
-1. **What could go wrong?** What biases could fake this result? (lookahead, survivorship, threshold artifact, fill assumptions)
-2. **What went wrong before?** Check `hard_lessons.md` and Blueprint §11 Failure Patterns for relevant precedents.
-3. **Is this the right test?** Am I testing what I think I'm testing? Could the same result arise from a confound?
+**Gate 1 — Mechanism:** Stated in Step 1.
+**Gate 2 — Baseline:** Query with >=3 values per dimension.
+**Gate 3 — Statistics:** Run ACTUAL test. Report N, time span, exact p-value, K.
+**Gate 4 — OOS:** Time split + year-by-year.
+**Gate 5 — Adversarial:** Sensitivity +-20%. Bootstrap if ML.
 
-## Step 3: Run the Analysis
-
-Follow Blueprint §3 test sequence:
-
-**Gate 1 — Mechanism:** Already stated in Step 1. If missing, flag it.
-
-**Gate 2 — Baseline viability:**
-```bash
-python -c "
-import duckdb
-from pipeline.paths import GOLD_DB_PATH
-con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-# [WRITE QUERY SPECIFIC TO YOUR HYPOTHESIS]
-# Always test ≥3 values per dimension
-con.close()
-"
-```
-
-**Gate 3 — Statistical significance:**
-- Run the ACTUAL test (t-test, permutation, BH FDR). NEVER eyeball.
-- Report: N, time span, exact p-value, number of variations tested.
-
-**Gate 4 — OOS if applicable:**
-- Time split: check if effect persists across train/val/test periods
-- Year-by-year: does it hold every year or just 1-2?
-
-**Gate 5 — Adversarial:**
-- Sensitivity: change parameter ±20%. Does it survive?
-- If ML: bootstrap permutation (200 perms minimum)
-- If novel: consider fresh agent audit
-
-## Step 4: Report Findings
-
-Use the RESEARCH_RULES.md honest summary format:
+## Step 4: Report
 
 ```
-HYPOTHESIS: [H1 statement]
-MECHANISM: [structural reason, or "none identified"]
+HYPOTHESIS: [H1]
+MECHANISM: [reason or "none"]
 
-SURVIVED SCRUTINY:
-- [Finding 1]: N=X, p=Y, time span Z
-- [Finding 2]: ...
-
-DID NOT SURVIVE:
-- [Finding A]: killed by [reason]
-- [Finding B]: ...
-
-VARIABLE COVERAGE:
-- RR tested: [list] — missing: [list]
-- Apertures: [list] — missing: [list]
-- Sessions: [list] — missing: [list]
-- Entry models: [list] — missing: [list]
-
-CAVEATS:
-- [What could still be wrong]
-- [What assumptions are untested]
-
-NEXT STEPS:
-- [What would validate or invalidate]
-- [Which Blueprint gate is next]
-
-LABEL: [validated finding / promising hypothesis / statistical observation / NO-GO]
+SURVIVED: [findings with N, p, time span]
+DID NOT SURVIVE: [findings with kill reason]
+VARIABLE COVERAGE: [tested vs missing per dimension]
+CAVEATS: [what could still be wrong]
+NEXT STEPS: [which Gate is next]
+LABEL: [validated / promising / observation / NO-GO]
 ```
 
 ## Step 5: Update Records
 
-- If NO-GO: suggest updating Blueprint §5 NO-GO Registry
-- If finding: save to appropriate memory file with `@research-source` annotation
-- If promising: suggest next Blueprint gate
+- NO-GO → update Blueprint SS5
+- Finding → save to memory with @research-source
+- Promising → suggest next Gate
 
 ## Rules
 
-- NEVER say "significant" without exact p-value
-- NEVER present counts or eyeball comparisons as analysis — RUN THE TEST
-- NEVER trust metadata — read the code, run the query, check the output
-- NEVER skip the NO-GO check — it exists because we wasted months on dead paths
-- Every claim needs evidence: line numbers, row counts, test output
-- Honesty over outcome. If the hypothesis is dead, say so directly.
-- The user prefers STATISTICS FIRST — p-value from actual test, not rule-of-thumb
-
-## Next → After Research
-
-- Finding survived? → `/bloomey-review` for code/methodology review, then `/design` for implementation
-- ML-related finding? → ML is dormant (V2 dead). Check `trading_app/ml/` if reviving.
-- Ready to build? → `/design auto [feature]` to plan and implement
-- Finding is NO-GO? → update Blueprint §5 NO-GO Registry
+- NEVER "significant" without p-value. NEVER "edge" without BH FDR.
+- NEVER skip NO-GO check. NEVER trust metadata — run the query.
+- Honesty over outcome. Dead hypothesis = say so directly.
+- STATISTICS FIRST — p-value from actual test, not rule-of-thumb.

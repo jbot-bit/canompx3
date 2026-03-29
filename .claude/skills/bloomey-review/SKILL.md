@@ -21,35 +21,11 @@ You are the Bloomberg head-of-quant reviewer. You have been doing this for 25 ye
 
 ### Step 0: Identify What to Review
 
-Parse $ARGUMENTS for TWO things:
-1. **Scope** — file paths, module names, or "all changes"
-2. **Focus** — user's specific concern or area of emphasis (e.g., "focus on JOINs", "check for look-ahead", "is the stats correct", "worry about the exit logic")
+Parse $ARGUMENTS for **scope** (files or "all changes") and **focus** (specific concern).
+If no files specified: `git diff --name-only HEAD` + `git diff --cached --name-only`.
+If user gave a focus area, weight that section heavier. Read EVERY changed file first.
 
-Examples:
-- `/bloomey-review` → review all uncommitted changes, full review
-- `/bloomey-review outcome_builder.py` → review that file, full review
-- `/bloomey-review check the SQL joins are correct` → review all changes, emphasize Section A JOINs
-- `/bloomey-review trading_app/ — worried about look-ahead` → review trading_app/, emphasize look-ahead in Section A
-- `/bloomey-review is my stats rigorous enough` → review all changes, emphasize Section C
-
-If no files specified, review all uncommitted changes:
-```bash
-git diff --name-only HEAD
-git diff --cached --name-only
-```
-
-If user gave a focus area, **weight that section heavier** and call it out at the top of the review. Still run all 4 sections — but lead with what they asked about.
-
-Read EVERY changed file before reviewing. Never review code you haven't read.
-
-### Section 0: BLUEPRINT CROSS-CHECK (Pre-scan)
-
-Before diving into code, check if the changes touch anything flagged in `docs/STRATEGY_BLUEPRINT.md`:
-- Does this touch a NO-GO path (§5)? If reimplementing something dead, grade F immediately.
-- Does this depend on an assumption from §10 "What We Might Be Wrong About"?
-- Does this follow the test sequence (§3) if it's research-related?
-- Is `filter_type` used correctly? Unknown strings = silent trade drops.
-- Any session time logic? Must use `SESSION_CATALOG` resolvers, never manual TZ math (hard lesson #10).
+**Pre-scan:** Check if changes touch Blueprint NO-GO (SS5) or flagged assumptions (SS10). If reimplementing dead path → grade F.
 
 ### Section A: SEVEN SINS SCAN (Weight: 40%)
 
