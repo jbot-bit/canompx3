@@ -152,7 +152,7 @@ Wait for user confirmation ("go", "yes", "do it", "looks good") before writing c
 - Git operations (commit, push, merge) — covered by Git Operations rule
 - Running queries or read-only exploration
 
-**Entry-point invariance:** This gate applies regardless of how work is initiated — direct request, `/stage-gate`, `/plan`, `/4t`, or any other entry point. The quality bar is the same.
+**Entry-point invariance:** This gate applies regardless of how work is initiated — direct request, `/stage-gate`, `/plan`, `/design`, or any other entry point. The quality bar is the same.
 
 **Why this exists:** 38+ sessions hit "wrong approach" because Claude dove into code without confirming intent, or presented a flawed first-draft plan that the user had to catch and correct. A 30-second self-check prevents 30-minute reversals.
 

@@ -79,7 +79,7 @@ pip-audit --desc on                                       # Security scan
 ```
 
 For outcome rebuild, validation, and edge family workflows, use slash commands:
-`/validate-instrument MGC`, `/rebuild-outcomes MGC`, `/health-check`
+`/validate-instrument MGC`, `/rebuild-outcomes MGC`, `/verify`
 
 ## Configuration (.env)
 

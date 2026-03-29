@@ -4,7 +4,7 @@
 
 **When to run:** Before any major release, after any multi-day refactor, monthly maintenance, or whenever something feels "off."
 
-**Activation:** This prompt is referenced in `.claude/skills/audit-prompts/SKILL.md`. Claude Code should suggest running it when:
+**Activation:** This prompt is referenced in `.claude/skills/audit/SKILL.md` (mode: prompts). Claude Code should suggest running it when:
 - The user asks for a "health check," "system audit," or "full check"
 - More than 2 weeks have passed since the last audit
 - A multi-file refactor or schema change just completed
