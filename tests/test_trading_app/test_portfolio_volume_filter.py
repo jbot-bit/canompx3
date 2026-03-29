@@ -10,6 +10,7 @@ import pytest
 
 from trading_app.config import (
     ALL_FILTERS,
+    CostRatioFilter,
     NoFilter,
     OrbSizeFilter,
     VolumeFilter,
@@ -60,6 +61,29 @@ class TestOrbSizeFilterMatchesRow:
         filt = ALL_FILTERS["NO_FILTER"]
         assert filt.matches_row({}, "CME_REOPEN") is True
         assert filt.matches_row({"orb_CME_REOPEN_size": None}, "CME_REOPEN") is True
+
+
+class TestCostRatioFilterMatchesRow:
+    def _cf(self):
+        return CostRatioFilter(
+            filter_type="COST_LT10",
+            description="RT friction < 10% of raw ORB risk",
+            max_cost_ratio_pct=10.0,
+        )
+
+    def test_passes_when_cost_share_below_threshold(self):
+        row = {"symbol": "MNQ", "orb_CME_REOPEN_size": 20.0}
+        assert self._cf().matches_row(row, "CME_REOPEN") is True
+
+    def test_fails_when_cost_share_above_threshold(self):
+        row = {"symbol": "MGC", "orb_CME_REOPEN_size": 2.0}
+        assert self._cf().matches_row(row, "CME_REOPEN") is False
+
+    def test_missing_symbol_fail_closed(self):
+        assert self._cf().matches_row({"orb_CME_REOPEN_size": 20.0}, "CME_REOPEN") is False
+
+    def test_missing_size_fail_closed(self):
+        assert self._cf().matches_row({"symbol": "MNQ"}, "CME_REOPEN") is False
 
 
 class TestOverlayEligibilityLogic:

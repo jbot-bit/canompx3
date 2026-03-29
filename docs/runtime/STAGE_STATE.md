@@ -1,23 +1,18 @@
 ---
 mode: IMPLEMENTATION
 stage: IMPLEMENTATION
-task: Fix 3 CRITICALs from adversarial audit (HWM freeze, EOD-only ratchet, DD budget validation)
+task: Sync audit — fix TRADING_RULES.md session statuses with DB truth
 pass: 2
 scope_lock:
-  - trading_app/account_hwm_tracker.py
-  - trading_app/prop_profiles.py
-  - tests/test_trading_app/test_account_hwm_tracker.py
-  - tests/test_trading_app/test_prop_profiles.py
+  - TRADING_RULES.md
+  - docs/plans/sync_audit_2026-03-30.md
 blast_radius:
-  - account_hwm_tracker.py — used by session_orchestrator, pre_session_check, weekly_review
-  - prop_profiles.py — imported by pre_session_check, run_live_session, paper_trade_logger
-  - Both are runtime-critical for live trading. Must not break existing API contracts.
+  - TRADING_RULES.md is a governing doc (wins for trading logic decisions)
+  - Only changing status labels, not trading logic
 acceptance:
-  - C-1: HWM freezes when equity reaches safety_net_balance (configurable per firm)
-  - C-2: For eod_trailing firms, HWM only updates on record_session_end(), not every poll
-  - C-3: prop_profiles.py validates sum(P90 stops) < max_dd at import time
-  - All existing tests pass
-  - Drift checks pass
-  - New tests cover freeze logic, EOD-only ratchet, and budget validation
-updated: 2026-03-29T18:00:00Z
+  - BRISBANE_1025 no longer marked "noise-gated, currently inactive"
+  - No other contradictions (ARCHITECTURE.md clean)
+  - RR4.0 NO-GO contradiction flagged for user review (not auto-fixed)
+  - python pipeline/check_drift.py passes
+updated: 2026-03-30T06:00:00Z
 ---

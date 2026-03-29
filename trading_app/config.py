@@ -66,11 +66,11 @@ ORB SIZE FILTERS:
     MNQ: POSITIVE unfiltered at 5 CORE sessions after BH FDR (K=105,627) and WF.
     See TRADING_RULES.md ORB Size Filters table for details (audit 2026-03-24).
 
-GRID (3,024 strategy combinations, full grid before ENABLED_SESSIONS filtering):
-  E1: 12 ORBs x 6 RRs x 5 CBs x 6 filters = 2,160
-  E2: 12 ORBs x 6 RRs x 1 CB x 6 filters = 432 (E2 always CB1)
-  E3: 12 ORBs x 6 RRs x 1 CB x 6 filters = 432 (E3 always CB1)
-  Total = 3,024 (base grid; session-specific composites expand per-session)
+GRID (5,544 strategy combinations, full grid before ENABLED_SESSIONS filtering):
+  E1: 12 ORBs x 6 RRs x 5 CBs x 11 filters = 3,960
+  E2: 12 ORBs x 6 RRs x 1 CB x 11 filters = 792 (E2 always CB1)
+  E3: 12 ORBs x 6 RRs x 1 CB x 11 filters = 792 (E3 always CB1)
+  Total = 5,544 (base grid; session-specific composites expand per-session)
 
 ==========================================================================
 """
@@ -81,6 +81,8 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import date
 from typing import TYPE_CHECKING
+
+from pipeline.cost_model import COST_SPECS, get_cost_spec
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -229,6 +231,47 @@ class OrbSizeFilter(StrategyFilter):
         if self.max_size is not None:
             mask = mask & (df[col] < self.max_size)
         return mask
+
+
+@dataclass(frozen=True)
+class CostRatioFilter(StrategyFilter):
+    """Filter on round-trip friction share of raw ORB risk.
+
+    Honest framing: normalized minimum-viable-trade-size screen using the
+    canonical cost model. This is not a new predictive signal.
+    """
+
+    max_cost_ratio_pct: float
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        size = row.get(f"orb_{orb_label}_size")
+        symbol = row.get("symbol")
+        if size is None or symbol is None or size <= 0:
+            return False
+        try:
+            cost_spec = get_cost_spec(symbol)
+        except ValueError:
+            return False
+        raw_risk = size * cost_spec.point_value
+        cost_ratio_pct = 100.0 * cost_spec.total_friction / (raw_risk + cost_spec.total_friction)
+        return cost_ratio_pct < self.max_cost_ratio_pct
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        col = f"orb_{orb_label}_size"
+        if col not in df.columns or "symbol" not in df.columns:
+            return pd.Series(False, index=df.index)
+        result = pd.Series(False, index=df.index)
+        base_mask = df[col].notna() & df["symbol"].notna() & (df[col] > 0)
+        for symbol, cost_spec in COST_SPECS.items():
+            inst_mask = base_mask & (df["symbol"] == symbol)
+            if not inst_mask.any():
+                continue
+            raw_risk = df.loc[inst_mask, col] * cost_spec.point_value
+            cost_ratio_pct = 100.0 * cost_spec.total_friction / (raw_risk + cost_spec.total_friction)
+            result.loc[inst_mask] = cost_ratio_pct < self.max_cost_ratio_pct
+        return result
 
 
 @dataclass(frozen=True)
@@ -680,6 +723,31 @@ MGC_VOLUME_FILTERS = {
     ),
 }
 
+# Cost-ratio filters (Mar 2026): normalized cost screens derived from the
+# canonical friction model. These are trade-size gates, not new signals.
+COST_RATIO_FILTERS = {
+    "COST_LT08": CostRatioFilter(
+        filter_type="COST_LT08",
+        description="Round-trip friction < 8% of raw ORB risk",
+        max_cost_ratio_pct=8.0,
+    ),
+    "COST_LT10": CostRatioFilter(
+        filter_type="COST_LT10",
+        description="Round-trip friction < 10% of raw ORB risk",
+        max_cost_ratio_pct=10.0,
+    ),
+    "COST_LT12": CostRatioFilter(
+        filter_type="COST_LT12",
+        description="Round-trip friction < 12% of raw ORB risk",
+        max_cost_ratio_pct=12.0,
+    ),
+    "COST_LT15": CostRatioFilter(
+        filter_type="COST_LT15",
+        description="Round-trip friction < 15% of raw ORB risk",
+        max_cost_ratio_pct=15.0,
+    ),
+}
+
 # Break quality filters (research: break_quality_deep, Feb 2026)
 # Break speed: fast breaks (<= N min from ORB end) select momentum days
 _BREAK_SPEED_FAST5 = BreakSpeedFilter(
@@ -836,6 +904,7 @@ def _make_break_quality_composites(
 BASE_GRID_FILTERS: dict[str, StrategyFilter] = {
     "NO_FILTER": NoFilter(),
     **{f"ORB_{k}": v for k, v in _GRID_SIZE_FILTERS.items()},
+    **COST_RATIO_FILTERS,
     **MGC_VOLUME_FILTERS,
 }
 
@@ -939,6 +1008,7 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         filters: dict[str, StrategyFilter] = {
             "NO_FILTER": NoFilter(),
             **size_filters_orb,
+            **COST_RATIO_FILTERS,
             **MGC_VOLUME_FILTERS,
         }
     else:

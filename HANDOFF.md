@@ -8,6 +8,28 @@
 
 ## Update (Mar 29 — COMEX lane swap + multi-agent stage-gate)
 
+## Update (Mar 30 — Cost-ratio filter Option A)
+
+### Continuous cost-ratio filter implemented as normalized cost screen
+- **What:** Added `CostRatioFilter` with `COST_LT08`, `COST_LT10`, `COST_LT12`, `COST_LT15` to the discovery/base filter registry in `trading_app/config.py`
+- **Scope:** Implemented only as a **pre-stop normalized cost screen** based on raw ORB risk (`orb_size * point_value + friction` denominator). This was the explicitly chosen Option A.
+- **Why this framing:** Repo canon and fresh DB checks both say raw cost/risk is **ARITHMETIC_ONLY**, not a new breakout-quality signal. The filter exists to normalize minimum viable trade size across instruments, not to claim new predictive power.
+- **Architecture constraint preserved:** Did **not** make the filter stop-multiplier aware. Discovery and fitness both evaluate filters before `S075` tight-stop simulation; wiring exact stop-aware cost/risk would require a larger refactor.
+
+### Compatibility updates
+- `trading_app/strategy_validator.py`: added cost-cap parsing and DST split SQL support for `COST_LTxx`
+- `trading_app/ai/sql_adapter.py`: raw outcomes SQL path now accepts `COST_LTxx` filters instead of failing closed
+- Tests updated:
+  - `tests/test_app_sync.py`
+  - `tests/test_trading_app/test_strategy_validator.py`
+  - `tests/test_trading_app/test_ai/test_sql_adapter.py`
+  - `tests/test_trading_app/test_portfolio_volume_filter.py`
+
+### Verification
+- Targeted tests: `183 passed`
+- Drift: `NO DRIFT DETECTED: 77 checks passed [OK], 7 advisory`
+- Advisories were existing non-blocking repo advisories, not regressions from this change
+
 ### COMEX_SETTLE lane swap: ORB_G8 -> ATR70_VOL
 - **What:** Replaced `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8` with `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL` in prop_profiles.py and paper_trade_logger.py
 - **Same operating point:** O5, RR1.0, CB1, E2, S1.0 — pure filter swap

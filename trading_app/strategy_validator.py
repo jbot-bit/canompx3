@@ -180,6 +180,31 @@ def _parse_orb_size_bounds(filter_type: str | None, filter_params: str | None) -
     return (None, None)
 
 
+def _parse_cost_ratio_cap_pct(filter_type: str | None, filter_params: str | None) -> float | None:
+    """Extract max_cost_ratio_pct from filter_type or filter_params JSON."""
+    if filter_params:
+        try:
+            params = json.loads(filter_params) if isinstance(filter_params, str) else filter_params
+            max_pct = params.get("max_cost_ratio_pct")
+            if max_pct is not None:
+                return float(max_pct)
+            base = params.get("base")
+            if isinstance(base, dict):
+                max_pct = base.get("max_cost_ratio_pct")
+                if max_pct is not None:
+                    return float(max_pct)
+        except (json.JSONDecodeError, TypeError, ValueError):
+            logger.warning("Corrupt filter_params in _parse_cost_ratio_cap_pct: %s", filter_params)
+
+    if filter_type and filter_type.startswith("COST_LT"):
+        try:
+            return float(int(filter_type[7:]))
+        except ValueError:
+            return None
+
+    return None
+
+
 def _parse_skip_days(filter_params: str | None) -> list[int] | None:
     """Extract skip_days from filter_params JSON (DayOfWeekSkipFilter or CompositeFilter overlay).
 
@@ -239,6 +264,7 @@ def compute_dst_split(
 
     # Build ORB size filter clause from strategy's filter
     min_size, max_size = _parse_orb_size_bounds(filter_type, filter_params)
+    max_cost_ratio_pct = _parse_cost_ratio_cap_pct(filter_type, filter_params)
     size_col = f"orb_{orb_label}_size"
 
     # NOTE: Double-break exclusion removed (Feb 2026). Double-break days
@@ -251,6 +277,17 @@ def compute_dst_split(
     if max_size is not None:
         size_clauses.append(f"df.{size_col} < ?")
         size_params.append(max_size)
+    if max_cost_ratio_pct is not None:
+        cost_spec = get_cost_spec(instrument)
+        size_clauses.append(f"(100.0 * ? / NULLIF((df.{size_col} * ?) + ?, 0)) < ?")
+        size_params.extend(
+            [
+                cost_spec.total_friction,
+                cost_spec.point_value,
+                cost_spec.total_friction,
+                max_cost_ratio_pct,
+            ]
+        )
 
     # DOW skip filter (CompositeFilter with DayOfWeekSkipFilter overlay)
     skip_days = _parse_skip_days(filter_params)
