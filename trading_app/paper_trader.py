@@ -142,17 +142,17 @@ def _get_median_atr_20(con, instrument: str, trading_day: date, lookback_days: i
     return float(result[0]) if result[0] is not None else 0.0
 
 
-def _get_daily_features_row(con, instrument: str, trading_day: date) -> dict | None:
-    """Fetch all daily_features columns for one day (orb_minutes=5).
+def _get_daily_features_row(con, instrument: str, trading_day: date, orb_minutes: int = 5) -> dict | None:
+    """Fetch all daily_features columns for one day at a specific orb_minutes.
 
     Returns a full dict so composite filters (DOW, break speed, break bar
     continues) get the columns they need without manual SELECT maintenance.
     """
     result = con.execute(
         """SELECT * FROM daily_features
-           WHERE symbol = ? AND orb_minutes = 5 AND trading_day = ?
+           WHERE symbol = ? AND orb_minutes = ? AND trading_day = ?
            LIMIT 1""",
-        [instrument, trading_day],
+        [instrument, orb_minutes, trading_day],
     )
     row = result.fetchone()
     if row is None:
@@ -322,11 +322,18 @@ def replay_historical(
             else:
                 engine.market_state = None
 
-            df_row = _get_daily_features_row(con, instrument, td)
-            if df_row is not None:
-                df_row["median_atr_20"] = _get_median_atr_20(con, instrument, td)
-                _inject_cross_asset_atrs_for_replay(con, df_row, instrument, td)
-            engine.on_trading_day_start(td, daily_features_row=df_row)
+            # Load daily_features for each unique orb_minutes in the portfolio
+            # so filters evaluate against the correct aperture's ORB columns.
+            unique_om = {s.orb_minutes for s in portfolio.strategies}
+            df_rows: dict[int, dict] = {}
+            median_atr = _get_median_atr_20(con, instrument, td)
+            for om in sorted(unique_om):
+                r = _get_daily_features_row(con, instrument, td, orb_minutes=om)
+                if r is not None:
+                    r["median_atr_20"] = median_atr
+                    _inject_cross_asset_atrs_for_replay(con, r, instrument, td)
+                    df_rows[om] = r
+            engine.on_trading_day_start(td, daily_features_rows=df_rows)
             risk_mgr.daily_reset(td)
 
             day_summary = DaySummary(trading_day=td)

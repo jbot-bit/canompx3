@@ -878,7 +878,7 @@ class TestVolAdjustedSizing:
         """When daily_features_row is None, uses vol_scalar=1.0 (no crash)."""
         portfolio = _make_portfolio(account_equity=25000.0)
         engine = ExecutionEngine(portfolio, _cost())
-        engine._daily_features_row = None
+        engine._daily_features_rows = {}
         contracts = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         assert contracts == 5  # Same as baseline
 
