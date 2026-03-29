@@ -282,8 +282,11 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         daily_lanes=(
             # ORB caps from adversarial audit P90 data (2026-03-29). Caps at ~P95 to avoid
             # outsized single-trade risk while not filtering normal ORBs.
+            # Switched O15→O5 (2026-03-29): O15 proven ARITHMETIC_ONLY
+            # (friction artifact, not signal). O5 has 2x sample size (N=659 vs 300),
+            # better WFE (1.41 vs 1.08), and better gross R per matched-day paired test.
             DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15",
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20",
                 "MNQ",
                 "NYSE_CLOSE",
                 max_orb_size_pts=100.0,  # P90=66, P95=96. Cap at 100.
@@ -307,8 +310,10 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             # At 0.75x stops, 150pt risk ~ 200pt raw ORB. $300 max loss per trade ($2/pt).
             # Derived from DD math: $3K limit * 10% / $2 = 150pt risk. Not data snooped.
             # Data: Lane 4 ExpR flat across ORB quintiles (r=+0.03, p=0.143, not significant).
+            # Switched O15→O5 (2026-03-29): O15 proven ARITHMETIC_ONLY.
+            # O5 IS: N=773 ExpR=+0.122 WFE=2.57. Better gross R per aperture audit.
             DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
                 "MNQ",
                 "NYSE_OPEN",
                 max_orb_size_pts=150.0,
@@ -322,6 +327,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
         notes=(
             "Phase 1 manual. 5 validated MNQ lanes (stratified-K, holdout-clean, all gates). "
+            "Lanes 1,4 switched O15→O5 (2026-03-29): O15 proven ARITHMETIC_ONLY. "
             "NYSE_CLOSE highest ExpR. "
             "RISK: Historical combined DD = -$3,409 (breaches $2K limit). "
             "Lane 2 (SINGAPORE_OPEN RR4.0) hist DD = -$3,540 alone. "
@@ -343,8 +349,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         active=False,  # Activate when upgrading from 50K
         allowed_sessions=frozenset({"NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN", "US_DATA_1000"}),
         daily_lanes=(
+            # Lanes 1,4 switched O15→O5 (2026-03-29): O15 ARITHMETIC_ONLY
             DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15",
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20",
                 "MNQ",
                 "NYSE_CLOSE",
                 max_orb_size_pts=100.0,
@@ -364,7 +371,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
                 "MNQ",
                 "NYSE_OPEN",
                 max_orb_size_pts=150.0,
