@@ -105,7 +105,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 ## Phase 7: Audit & Analysis — DONE (2026-02-08)
 
 ### 7a. Codebase Audit — DONE
-- Full codebase audit completed. See `AUDIT_FINDINGS.md` for details.
+- Full codebase audit completed. See `AUDIT_FINDINGS.md` (archived) for details.
 - 5 critical bugs fixed (C1-C5), 6 important fixes (I1-I4, I6-I7)
 - 97 new tests across 10 coverage gaps (T1-T10)
 - 3 new drift checks (17-19)
@@ -119,7 +119,7 @@ Do not schedule active delivery work against SIL until explicitly re-opened.
 - No modifications to existing pipeline code
 
 ### 7c. Strategy Analysis — DONE
-- `STRATEGY_ANALYSIS_ASIA_OPEN.md` with live recommendations
+- `STRATEGY_ANALYSIS_ASIA_OPEN.md` (archived) with live recommendations
 - CME_REOPEN: E1 CB2 RR2.5 G6+ = +0.40 ExpR (TOP)
 - LONDON_METALS: E3 CB4-5 RR2.0 G6+ = +0.43 ExpR, best Sharpe
 - 3-leg core portfolio: +0.55 combined ExpR, 6.5R max drawdown
@@ -148,7 +148,7 @@ Wider ORB apertures (15m/30m) validated and integrated into production portfolio
 
 ## Rolling Window Evaluation — DONE (2026-02-11)
 
-- `scripts/rolling_eval.py` — 38-window rolling evaluation (12m + 18m training)
+- `scripts/infra/rolling_eval.py` — 38-window rolling evaluation (12m + 18m training)
 - `trading_app/rolling_portfolio.py` — stability scoring + family aggregation
 - `tests/test_trading_app/test_rolling_portfolio.py` — unit tests
 - Results in `docs/strategy/rolling_eval_results.json`, `rolling_families_12m.json`, `rolling_families_18m.json`
@@ -169,7 +169,7 @@ Wider ORB apertures (15m/30m) validated and integrated into production portfolio
 - Ambiguous fill bar (both stop+target hit): conservative loss
 - 9 new tests in TestFillBarExits, 670 tests pass, 19/19 drift checks
 - **NOTE:** orb_outcomes rebuilt Feb 2026 with fill-bar logic applied. Row count changes with rebuilds.
-- See `AUDIT_FINDINGS.md` for original finding
+- See `AUDIT_FINDINGS.md` (archived) for original finding
 
 ### 8b. Multi-Instrument Discovery Grid Update — DONE (Feb 2026)
 

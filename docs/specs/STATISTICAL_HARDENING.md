@@ -1,5 +1,7 @@
 # Statistical Hardening Spec — Phase 1-3
 
+**ARCHIVED:** This spec is no longer active. Phase 1A targeted ML wrong-fit fixes; ML was declared DEAD 2026-03-27 (0/12 BH FDR survivors at K=12). Phase 1B/2/3 statistical fixes were either completed or superseded by later pipeline work. See memory ml_v2_final_verdict.md.
+
 ## Context
 Audit of 15 papers (nb resources/) + ML module wrong-fit review against futures ORB trading.
 Date: 2026-03-03. Detailed gap analysis: memory/paper_audit_gaps.md.

@@ -430,10 +430,15 @@ class SessionOrchestrator:
         # Build partial daily_features_row from what's available pre-session.
         # Without this, fail-closed filters (VOL_RV12_N20, DOW, calendar) silently
         # reject ALL trades because their required columns are missing.
-        daily_row = self._build_daily_features_row(self.trading_day, instrument)
+        # Build per-orb_minutes daily_features rows so filters evaluate
+        # against the correct aperture's ORB columns.
+        unique_om = {s.orb_minutes for s in self.engine.portfolio.strategies}
+        df_rows = {}
+        for om in sorted(unique_om):
+            df_rows[om] = self._build_daily_features_row(self.trading_day, instrument, orb_minutes=om)
 
         # Signal engine that a new trading day is starting
-        self.engine.on_trading_day_start(self.trading_day, daily_features_row=daily_row)
+        self.engine.on_trading_day_start(self.trading_day, daily_features_rows=df_rows)
 
         # Crash recovery: seed engine with strategies that already traded today.
         # Prevents duplicate entries after restart mid-session.
@@ -493,7 +498,7 @@ class SessionOrchestrator:
         self._notify(f"Session started: {instrument} ({mode})")
 
     @staticmethod
-    def _build_daily_features_row(trading_day: date, instrument: str) -> dict:
+    def _build_daily_features_row(trading_day: date, instrument: str, orb_minutes: int = 5) -> dict:
         """Build a daily_features_row from DB + calendar for live execution.
 
         Without this, fail-closed filters (VOL_RV12_N20, DOW, break speed, calendar)
@@ -527,13 +532,13 @@ class SessionOrchestrator:
                 df = con.execute(
                     """
                     SELECT * FROM daily_features
-                    WHERE symbol = ? AND orb_minutes = 5
+                    WHERE symbol = ? AND orb_minutes = ?
                       AND trading_day = (
                           SELECT MAX(trading_day) FROM daily_features
-                          WHERE symbol = ? AND orb_minutes = 5
+                          WHERE symbol = ? AND orb_minutes = ?
                       )
                 """,
-                    [instrument, instrument],
+                    [instrument, orb_minutes, instrument, orb_minutes],
                 ).fetchdf()
                 if not df.empty:
                     latest = df.iloc[0].to_dict()
@@ -877,8 +882,11 @@ class SessionOrchestrator:
 
         # Start new trading day
         self.trading_day = bar_trading_day
-        daily_row = self._build_daily_features_row(self.trading_day, self.instrument)
-        self.engine.on_trading_day_start(self.trading_day, daily_features_row=daily_row)
+        unique_om = {s.orb_minutes for s in self.engine.portfolio.strategies}
+        df_rows = {}
+        for om in sorted(unique_om):
+            df_rows[om] = self._build_daily_features_row(self.trading_day, self.instrument, orb_minutes=om)
+        self.engine.on_trading_day_start(self.trading_day, daily_features_rows=df_rows)
 
         # R2-C7: Re-seed engine dedup for orphaned strategies so they cannot re-arm.
         # on_trading_day_start() cleared active_trades, so without this the engine

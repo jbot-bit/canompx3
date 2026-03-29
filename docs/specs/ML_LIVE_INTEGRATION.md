@@ -1,7 +1,9 @@
 # ML Meta-Label Live Integration Spec
 
+**ARCHIVED:** This spec is no longer active. ML meta-labeling was killed after V2 Phase 1 found 0/12 BH survivors at K=12.
+
 ## Date: 2026-03-03
-## Status: IN PROGRESS
+## Status: ARCHIVED — ML declared DEAD 2026-03-27 (0/12 BH FDR survivors). See memory ml_v2_final_verdict.md.
 
 ## Goal
 Wire ML meta-label P(win) predictions into the paper trader and execution engine so trades are automatically skipped when the model says P(win) < threshold.

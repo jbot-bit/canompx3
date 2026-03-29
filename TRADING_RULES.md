@@ -24,6 +24,8 @@ All sessions are now dynamic/event-based. Times are resolved per-day from `pipel
 | CME_PRECLOSE | CME equity pre-close | 2:45 PM CT | was CME_CLOSE |
 | COMEX_SETTLE | COMEX gold settlement | 1:30 PM ET | NEW |
 | NYSE_CLOSE | NYSE equity close | 4:00 PM ET | NEW |
+| EUROPE_FLOW | European flow adjacent to London metals | 7:00 AM UK (winter) / 9:00 AM UK (summer) | NEW |
+| BRISBANE_1025 | Fixed 10:25 AM Brisbane (no event anchor) | 10:25 AM AEST | NEW |
 
 **Module:** `pipeline/dst.py` (SESSION_CATALOG + resolvers)
 **Per-asset enabled sessions:** `pipeline/asset_configs.py`
@@ -464,39 +466,35 @@ Many filter variants produce the SAME trade set.
 
 ## Live Portfolio Configuration
 
-*Source: `trading_app/live_config.py`*
+*Source: `trading_app/prop_profiles.py` (ACCOUNT_PROFILES)*
 
-### Tier 1: CORE (always on)
-| Family | Session | EM | Filter | Exit Mode | Gate |
-|--------|---------|-----|--------|-----------|------|
-| CME_REOPEN_E2_ORB_G5 | CME_REOPEN | E2 | G5+ | Fixed target | None |
-| CME_REOPEN_E2_ORB_G4 | CME_REOPEN | E2 | G4+ | Fixed target | None |
-| CME_REOPEN_E1_ORB_G5 | CME_REOPEN | E1 | G5+ | Fixed target | None |
-| TOKYO_OPEN_E2_ORB_G5 | TOKYO_OPEN | E2 | G5+ | Fixed target | None |
-| TOKYO_OPEN_E2_ORB_G4 | TOKYO_OPEN | E2 | G4+ | Fixed target | None |
-| TOKYO_OPEN_E1_ORB_G5 | TOKYO_OPEN | E1 | G5+ | Fixed target | None |
-| LONDON_METALS_E2_ORB_G4_NOMON | LONDON_METALS | E2 | G4_NOMON | Fixed target | None |
+### Active Lanes (Apex 50K Manual — Phase 1)
 
-### Tier 2: HOT (rolling-eval gated)
-| Family | Session | EM | Filter | Gate |
-|--------|---------|-----|--------|------|
-| TOKYO_OPEN_E2_ORB_G5_L12 | TOKYO_OPEN | E2 | G5_L12 | Rolling stability >= 0.6 |
+5 MNQ lanes on Apex + 1 MGC shadow lane on TopStep. All E2 entry model, CB1 confirm bars.
+Stop multiplier: 0.75x (prop survival sizing). Strategies passed stratified-K BH FDR, walk-forward, and stress tests.
 
-### Tier 3: REGIME (fitness-gated)
-*Currently empty. Pending portfolio re-assembly with current validated strategies.*
+| # | Session | Instrument | Filter | ORB Min | RR | Status | Notes |
+|---|---------|------------|--------|---------|-----|--------|-------|
+| 1 | NYSE_CLOSE | MNQ | VOL_RV12_N20 | O15 | 1.0 | TRADE | Highest ExpR lane |
+| 2 | SINGAPORE_OPEN | MNQ | ORB_G8 | O15 | 4.0 | TRADE | 0.5x sizing (RR4.0 = long loss streaks). Hist max DD -$3,540 |
+| 3 | COMEX_SETTLE | MNQ | ATR70_VOL | O5 | 1.0 | TRADE | Alarm required (03:30/04:30 Brisbane) |
+| 4 | NYSE_OPEN | MNQ | X_MES_ATR60 | O15 | 1.0 | TRADE | 150pt max risk_points cap |
+| 5 | US_DATA_1000 | MNQ | X_MES_ATR60 | O5 | 1.0 | TRADE | S0.75 stop multiplier embedded in strategy ID |
+| 6 | TOKYO_OPEN | MGC | ORB_G4_CONT | O5 | 2.0 | REVIEW | TopStep shadow — 1 contract only until N=250. CONDITIONAL (per-session P95 cleared, P99 not) |
 
-### Portfolio Parameters
-- Max concurrent positions: 3
-- Max daily loss: 5.0R
-- Position sizing: 2% of equity per trade
-- Account equity: $25,000 default
+### Account Routing
+| Account | Firm | Instrument | Sessions | Phase |
+|---------|------|------------|----------|-------|
+| apex_50k_manual | Apex | MNQ | Lanes 1-5 | Phase 1 (manual proof) |
+| topstep_50k | TopStep | MGC | Lane 6 only | Phase 1 (shadow trade) |
+| tradeify_50k | Tradeify | MNQ | CME_PRECLOSE, COMEX_SETTLE, NYSE_CLOSE, NYSE_OPEN | Phase 2 (automation, 5 copies) |
+| self_funded_50k | Self-Funded | All | All sessions | Phase 3 (inactive) |
 
-### Correlation
-| Pair | Correlation | Interpretation |
-|------|------------|---------------|
-| CME_REOPEN vs TOKYO_OPEN | -0.04 | Near zero |
-| CME_REOPEN vs LONDON_METALS | -0.12 | Mild hedging |
-| TOKYO_OPEN vs LONDON_METALS | **-0.39** | Strong hedging |
+### Portfolio Risk
+- Apex DD limit: $2,000 (50K account). Historical combined DD: -$3,409 (breaches limit)
+- Mitigations: Lane 2 at 0.5x sizing, intraday DD halt at -$1,000
+- Apex prohibits automation AND copy trading — manual only
+- MGC lane is shadow-only (TopStep) — do not size up until N=250 with temporal diversity
 
 ---
 
@@ -663,5 +661,5 @@ Manual execution of all 5 active sessions by one person is not viable (03:30–1
 | `python -m trading_app.prop_portfolio --daily` | Daily execution card with firm routing |
 | `artifacts/TRADE_MANAGEMENT_RULES.md` | LONDON_METALS E3 management rules with full data |
 | `artifacts/EARLY_EXIT_RULES.md` | Early exit research per-session |
-| `trading_app/live_config.py` | Declarative live portfolio (code) |
+| `trading_app/prop_profiles.py` | Account profiles and lane definitions (code) |
 | `trading_app/config.py` | Filter definitions, entry models (code) |
