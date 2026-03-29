@@ -13,14 +13,15 @@
 BH FDR is the primary multiple testing correction for strategy validation.
 
 **Grounding (local PDFs in `resources/`):**
-- BH 1995 (p.6): Proven FDR control for independent test statistics. Power advantage over Bonferroni grows with m and fraction of true signals.
+- BH 1995 (Theorem 1, journal p.293 / PDF p.6): Proven FDR control for independent test statistics.
+- BH 1995 (journal p.297-298 / PDF p.10-11, Fig. 1): Power advantage over Bonferroni grows with m and fraction of true signals.
 - Two Million Trading Strategies (p.4-5): "FDR-BH and FDP-StepM methods do not lead to a mechanical increase in statistical thresholds" as N grows. BH has best power properties among tested MHT methods.
-- Two Million (p.33): "Thresholds are not very dependent on N for FDR and FDP methods."
-- Harvey & Liu Backtesting (p.11): BHY with 300 tests raises hurdle from 4.4%/yr to 7.4%/yr — substantial but manageable.
+- Two Million (p.31-32): "The thresholds are not very dependent on N for FDR and FDP methods."
+- Harvey & Liu Backtesting (journal p.22 / PDF p.11): BHY with 300 tests at 240 monthly observations and 10% annual vol raises hurdle from 4.4%/yr to 7.4%/yr.
 
 **Why not Bonferroni:** Threshold scales linearly with K. At K=5000+, kills everything.
-**Why not BHY:** More conservative than BH under dependency. Our strategies satisfy PRDS (positive regression dependency — same instrument, same direction). BH controls FDR under PRDS (Benjamini-Yekutieli 2001). BHY is unnecessarily strict.
-**Why not FDP-StepM:** Accounts for actual cross-correlations (Two Million p.6-7). More rigorous but requires bootstrap implementation we don't have. BH is sufficient given our PRDS structure and conservative K inflation.
+**Why not BHY:** More conservative than BH under dependency. BH controls FDR under PRDS (positive regression dependency on each subset) per Benjamini-Yekutieli 2001 — from training memory, not verified against local PDF (BY 2001 is not in `resources/`). We assume PRDS holds because strategies within a session share the same underlying price path and directional exposure, but this has not been formally demonstrated. The conservative K inflation (2-3x) provides an additional safety margin regardless.
+**Why not FDP-StepM:** Two Million paper (p.5-6) actually prefers FDP-StepM over BH for correlated strategies. We accept BH's weaker guarantees under correlation because: (a) K inflation provides a conservative buffer, (b) FDP-StepM requires bootstrap implementation we don't have, (c) BH is adaptive to fraction of true rejections (Two Million p.33).
 
 ### Why Session-Stratified K
 
@@ -60,7 +61,7 @@ False Strategy Theorem (Bailey & de Prado 2014): computes SR0 = expected maximum
 - FST SR0 at K=3634 (per-session): 3.648
 - FST SR0 at K=480 (reduced): 3.092
 - **0/488 pass FST at ANY per-session K**
-- Even at K=228, SR0=2.93 — still fails.
+- At K=228, SR0=2.93. Best SR=2.954 barely exceeds SR0 in point estimate, but DSR probability (which accounts for sampling variance via skewness/kurtosis) remains below 0.95 — the strategy does not pass DSR even at this K.
 
 ### Why We Don't Gate On It
 
@@ -68,7 +69,7 @@ False Strategy Theorem (Bailey & de Prado 2014): computes SR0 = expected maximum
 
 2. **Different null hypothesis:** BH tests H0: mean(pnl_r) = 0 via t-test. FST tests H0: SR is consistent with max-SR-of-K-noise-trials. These are different questions. The t-test asks "is the mean nonzero?" FST asks "could the BEST Sharpe among K be this high by luck?" BH handles selection bias via FDR adjustment; FST handles it by inflating the benchmark.
 
-3. **Return structure:** Our fixed-RR binary returns produce platykurtic distributions (kurtosis_excess ≈ -1.7). Sharpe ratio is a poor discriminator for bimodal {-1, +RR} outcomes. The t-test on mean return is more appropriate. Empirically verified: Lo (2002) Sharpe-based p-value agrees with t-test p-value on all 488 strategies (0 divergent, correlation of delta with kurtosis = -0.26).
+3. **Return structure:** Our fixed-RR binary returns produce platykurtic distributions (kurtosis_excess ≈ -1.7). Sharpe ratio is a poor discriminator for bimodal {-1, +RR} outcomes. The t-test on mean return is more appropriate. Empirically verified (2026-03-30 query): Sharpe-based p-value using Lo (2002) standard error formula (from training memory — Lo 2002 "The Statistics of Sharpe Ratios" not in `resources/`) agrees with t-test p-value on all 488 strategies (0 divergent at α=0.05, max |delta| = 0.035, corr(delta, kurtosis) = -0.26).
 
 ### What DSR Scores Mean
 

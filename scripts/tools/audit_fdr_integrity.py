@@ -82,7 +82,7 @@ def bh_fdr_reference(
     if not valid:
         return {}
     valid.sort(key=lambda x: x[1])
-    m = total_tests if total_tests else len(valid)
+    m = total_tests if total_tests is not None else len(valid)
     if m < len(valid):
         raise ValueError(f"total_tests ({m}) < n valid ({len(valid)})")
 
@@ -98,10 +98,11 @@ def bh_fdr_reference(
 
     result = {}
     for i, (sid, raw_p) in enumerate(valid):
+        adj_rounded = round(adjusted[i], 6)  # match production rounding (strategy_validator.py:129)
         result[sid] = {
             "raw_p": raw_p,
-            "adjusted_p": adjusted[i],
-            "fdr_significant": adjusted[i] < alpha,
+            "adjusted_p": adj_rounded,
+            "fdr_significant": adj_rounded < alpha,
             "fdr_rank": i + 1,
         }
     return result
@@ -628,27 +629,45 @@ def check_9_session_k_vs_global(con, verbose, audit: AuditResult):
         lines.append(f"  {orb}: K={k} ({k / total_global * 100:.1f}%)")
 
     # How many strategies would FAIL under global K but pass under session K?
-    # Use p_values from experimental_strategies
+    # Must use FULL canonical pool (not just survivors) for correct BH ranking.
+    # Then check which validated strategies survive under each K.
     casualties = []
     for orb, k_session in session_k_map.items():
-        strats = con.execute(
-            """
-            SELECT v.strategy_id, e.p_value
-            FROM validated_setups v
-            JOIN experimental_strategies e ON v.strategy_id = e.strategy_id
-            WHERE v.status = 'active' AND v.orb_label = ? AND e.p_value IS NOT NULL
+        # Full canonical pool for this session (matches validator at strategy_validator.py:1250-1257)
+        full_pool = con.execute(
+            f"""
+            SELECT strategy_id, p_value
+            FROM experimental_strategies
+            WHERE is_canonical = TRUE AND orb_label = ? AND p_value IS NOT NULL
+            AND instrument IN ({_ACTIVE_IN})
         """,
             [orb],
         ).fetchall()
-        if not strats:
+        if not full_pool:
             continue
-        p_pairs = [(s[0], s[1]) for s in strats]
+
+        # Get validated strategy IDs in this session
+        validated_ids = set(
+            r[0]
+            for r in con.execute(
+                """
+            SELECT strategy_id FROM validated_setups
+            WHERE status = 'active' AND orb_label = ?
+        """,
+                [orb],
+            ).fetchall()
+        )
+        if not validated_ids:
+            continue
+
+        p_pairs = [(s[0], s[1]) for s in full_pool]
         try:
             ref_session = bh_fdr_reference(p_pairs, alpha=0.05, total_tests=k_session)
             ref_global = bh_fdr_reference(p_pairs, alpha=0.05, total_tests=total_global)
 
-            session_sig = sum(1 for v in ref_session.values() if v["fdr_significant"])
-            global_sig = sum(1 for v in ref_global.values() if v["fdr_significant"])
+            # Count only validated strategies that pass/fail under each K
+            session_sig = sum(1 for sid in validated_ids if sid in ref_session and ref_session[sid]["fdr_significant"])
+            global_sig = sum(1 for sid in validated_ids if sid in ref_global and ref_global[sid]["fdr_significant"])
             if session_sig != global_sig:
                 casualties.append(
                     f"{orb}: {session_sig} pass session K={k_session}, "
