@@ -14,14 +14,18 @@ This file exists in parallel with `CLAUDE.md`. It does not replace it. The Claud
 
 ## Session Boot
 
-1. Read `AGENTS.md`
-2. Read `SOUL.md`
-3. Read `USER.md`
-4. Read `memory/YYYY-MM-DD.md` for today and yesterday
-5. In the main session, read `MEMORY.md`
-6. Read `CLAUDE.md`
-7. Read this file
-8. Load the specific `.claude/` or `.codex/` docs needed for the task
+1. If the session was not opened via `scripts/infra/codex-project.sh`, `scripts/infra/codex-project-search.sh`, or `scripts/infra/codex-worktree.sh`, run `.venv-wsl/bin/python scripts/tools/session_preflight.py --context codex-wsl` from the repo root before substantial work. Use `python3` only as a fallback when `.venv-wsl` does not exist yet.
+2. Read `HANDOFF.md`.
+3. Read `AGENTS.md`.
+4. Read `SOUL.md`.
+5. Read `USER.md`.
+6. Read `memory/YYYY-MM-DD.md` for today and yesterday.
+7. In the main session, read `MEMORY.md`.
+8. Read `CLAUDE.md`.
+9. Read this file.
+10. Load the specific `.claude/` or `.codex/` docs needed for the task.
+
+Project-scoped Codex config in `.codex/config.toml` reinforces this startup contract across Codex surfaces. It does not replace `AGENTS.md`.
 
 ## Authority
 
@@ -117,10 +121,11 @@ Open:
 
 ## Local Runtime
 
-- Codex CLI installed locally: `0.114.0`
+- Codex CLI installed locally: `0.117.0`
 - Default Codex model on this machine: `gpt-5.4`
 - This repo is already marked as a trusted Codex project
 - This repo also has project-scoped Codex config in `.codex/config.toml`
+- Project-scoped Codex config injects additive startup instructions so direct Codex entry still gets the repo's preflight and handoff contract
 
 ## Codex Responsibilities
 
@@ -129,4 +134,5 @@ Open:
 - Use the same repo and files as Claude Code rather than creating parallel project state.
 - It is fine to build rich Codex-facing docs and skills that reference the Claude layer directly.
 - Persist durable context in `memory/YYYY-MM-DD.md` and `MEMORY.md`.
+- Do not skip preflight or `HANDOFF.md` just because Codex was opened from a different surface.
 - Keep Codex's layer useful, opinionated, and complete without mutating Claude unless explicitly asked.

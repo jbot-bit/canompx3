@@ -40,7 +40,8 @@ Use this as the fast navigation layer for the repo.
 
 - `trading_app/live/`
 - `trading_app/execution_engine.py`
-- `trading_app/live_config.py`
+- `trading_app/prop_profiles.py`
+- `trading_app/live_config.py` for deprecated compatibility surfaces only
 - `TRADING_RULES.md`
 
 ### Research and validation

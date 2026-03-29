@@ -9,7 +9,7 @@ Safe to re-run (idempotent — overwrites previous WF values).
 Usage:
     python scripts/migrations/backfill_wf_columns.py
     python scripts/migrations/backfill_wf_columns.py --dry-run
-    python scripts/migrations/backfill_wf_columns.py --db C:/db/gold.db
+    python scripts/migrations/backfill_wf_columns.py
 """
 
 import json

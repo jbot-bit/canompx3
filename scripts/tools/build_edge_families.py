@@ -10,8 +10,8 @@ Curse). Applies robustness filter: N>=5 = ROBUST, N in [3,4] whitelisted
 if ShANN>=0.8 AND CV<=0.5 AND min_trades>=50. Trade tier: CORE/REGIME/INVALID.
 
 Usage:
-    python scripts/tools/build_edge_families.py --instrument MGC --db-path C:/db/gold.db
-    python scripts/tools/build_edge_families.py --all --db-path C:/db/gold.db
+    python scripts/tools/build_edge_families.py --instrument MGC
+    python scripts/tools/build_edge_families.py --all
 """
 
 import statistics

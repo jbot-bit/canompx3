@@ -40,7 +40,7 @@ def main():
 
     # ── 1A: Test Suite ──
     print("\n--- 1A. Test Suite (pytest) ---")
-    rc, out, err = _run_tool(["python", "-m", "pytest", "tests/", "-x", "-q"], timeout=120)
+    rc, out, err = _run_tool([sys.executable, "-m", "pytest", "tests/", "-x", "-q"], timeout=120)
     # Parse test count from pytest output
     combined = out + err
     match = re.search(r"(\d+) passed", combined)
@@ -66,7 +66,7 @@ def main():
 
     # ── 1B: Drift Detection ──
     print("\n--- 1B. Drift Detection (check_drift.py) ---")
-    rc, out, err = _run_tool(["python", "pipeline/check_drift.py"], timeout=120)
+    rc, out, err = _run_tool([sys.executable, "pipeline/check_drift.py"], timeout=120)
     combined = out + err
     # Parse summary line: "DRIFT CHECK SUMMARY: N passed, M failed"
     match = re.search(r"(\d+)\s+passed,\s+(\d+)\s+failed", combined)
@@ -89,13 +89,13 @@ def main():
             "CONFIG_DRIFT",
             claimed="All drift checks pass",
             actual=f"{d_failed} drift check(s) failed",
-            evidence=f"python pipeline/check_drift.py → exit {rc}",
+            evidence=f"{sys.executable} pipeline/check_drift.py → exit {rc}",
             fix_type="CODE_FIX",
         )
 
     # ── 1C: Health Check ──
     print("\n--- 1C. Health Check (health_check.py) ---")
-    rc, out, err = _run_tool(["python", "pipeline/health_check.py"], timeout=300)
+    rc, out, err = _run_tool([sys.executable, "pipeline/health_check.py"], timeout=300)
     combined = out + err
     ok_count = combined.count("[OK]")
     fail_count = combined.count("[FAIL]")
@@ -118,7 +118,7 @@ def main():
 
     # ── 1D: Data Integrity ──
     print("\n--- 1D. Data Integrity (audit_integrity.py) ---")
-    rc, out, err = _run_tool(["python", "scripts/tools/audit_integrity.py"], timeout=120)
+    rc, out, err = _run_tool([sys.executable, "scripts/tools/audit_integrity.py"], timeout=120)
     combined = out + err
     if rc == 0:
         # Parse check count from summary line
@@ -153,7 +153,7 @@ def main():
 
     # ── 1E: Behavioral Audit ──
     print("\n--- 1E. Behavioral Audit (audit_behavioral.py) ---")
-    rc, out, err = _run_tool(["python", "scripts/tools/audit_behavioral.py"], timeout=120)
+    rc, out, err = _run_tool([sys.executable, "scripts/tools/audit_behavioral.py"], timeout=120)
     combined = out + err
     if rc == 0:
         match = re.search(r"all (\d+) checks clean", combined)

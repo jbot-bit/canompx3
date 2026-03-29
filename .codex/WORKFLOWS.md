@@ -11,10 +11,11 @@ Claude remains the authority for project workflow and guardrails.
 
 When starting a fresh session or switching into a new repo area, load:
 
-1. `.codex/PROJECT_BRIEF.md`
-2. `.codex/CURRENT_STATE.md`
-3. `.codex/NEXT_STEPS.md` if the task is about priorities, planning, or "where are we up to?"
-4. `.codex/OPENAI_CODEX_STANDARDS.md` if the task is about Codex setup quality or repo-wide Codex improvements
+1. `HANDOFF.md`
+2. `.codex/PROJECT_BRIEF.md`
+3. `.codex/CURRENT_STATE.md`
+4. `.codex/NEXT_STEPS.md` if the task is about priorities, planning, or "where are we up to?"
+5. `.codex/OPENAI_CODEX_STANDARDS.md` if the task is about Codex setup quality or repo-wide Codex improvements
 
 Then load the smallest relevant canonical docs for the task itself.
 
@@ -43,6 +44,9 @@ Route to the correct source:
 - Live data, strategy counts, fitness, schema, trade history:
   - Use the repo's canonical sources first
   - If the shared MCP path is intentionally enabled, follow `.claude/rules/mcp-usage.md`
+- Live deployment profiles and what is actually routed to accounts:
+  - Use `trading_app/prop_profiles.py`
+  - Treat `trading_app/live_config.py` as compatibility or deprecated surface unless current code says otherwise
 - Project memory, design history, prior findings:
   - Use `.claude/skills/pinecone-assistant/SKILL.md`
 - Academic methodology:

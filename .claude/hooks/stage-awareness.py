@@ -23,6 +23,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 STAGE_STATE = Path("docs/runtime/STAGE_STATE.md")
+STAGES_DIR = Path("docs/runtime/stages")
 
 # Rotating directives for "stage: none" — prevents habituation.
 # Picked by minute % len(NONE_DIRECTIVES) so they vary across interactions.
@@ -97,8 +98,16 @@ def main():
     except (json.JSONDecodeError, Exception):
         sys.exit(0)
 
-    if not STAGE_STATE.exists():
-        # No active stage — inject workflow reminder with rotating directive
+    # ── Collect all stage files (multi-agent) ────────────────────────
+    stage_files = []
+    if STAGE_STATE.exists():
+        stage_files.append(("claude", STAGE_STATE))
+    if STAGES_DIR.is_dir():
+        for f in sorted(STAGES_DIR.glob("*.md")):
+            agent_name = f.stem  # e.g., "codex", "auto_trivial"
+            stage_files.append((agent_name, f))
+
+    if not stage_files:
         variant = datetime.now().minute % len(NONE_DIRECTIVES)
         print(
             "stage: none\n"
@@ -108,45 +117,57 @@ def main():
         )
         sys.exit(0)
 
-    content = STAGE_STATE.read_text(encoding="utf-8")
-    mode = parse_field(content, "mode")
-    task = parse_field(content, "task")
-    stage = parse_field(content, "stage")
-    stage_of = parse_field(content, "stage_of")
-    blast_radius = parse_blast_radius(content)
-    is_stale = check_stale(content)
+    # Report ALL active stages (multi-agent awareness)
+    output_lines = []
+    for agent_name, fpath in stage_files:
+        try:
+            content = fpath.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        mode = parse_field(content, "mode")
+        task = parse_field(content, "task")
+        stage = parse_field(content, "stage")
+        stage_of = parse_field(content, "stage_of")
+        blast_radius = parse_blast_radius(content)
+        is_stale = check_stale(content)
 
-    if not mode:
+        if not mode:
+            continue
+
+        parts = [f"stage: {mode}"]
+        if len(stage_files) > 1:
+            parts.append(f"[{agent_name}]")
+        if task:
+            parts.append(task)
+        if stage and stage_of:
+            parts.append(f"({stage}/{stage_of})")
+        elif stage:
+            parts.append(f"(stage {stage})")
+        if is_stale:
+            parts.append("STALE(>4h)")
+        if mode == "IMPLEMENTATION" and (not blast_radius or len(blast_radius.strip()) < 30):
+            parts.append("MISSING blast_radius")
+
+        output_lines.append(" | ".join(parts))
+
+    if not output_lines:
         sys.exit(0)
 
-    parts = [f"stage: {mode}"]
-    if task:
-        parts.append(task)
-    if stage and stage_of:
-        parts.append(f"({stage}/{stage_of})")
-    elif stage:
-        parts.append(f"(stage {stage})")
+    # Print all stages, then a directive for the primary (first) stage
+    primary_content = stage_files[0][1].read_text(encoding="utf-8")
+    primary_mode = parse_field(primary_content, "mode")
 
-    # Stale warning — applies to all modes
-    if is_stale:
-        parts.append("⚠ STALE (>4h) — re-read STAGE_STATE or reclassify")
+    print("\n".join(output_lines), file=sys.stderr)
 
-    # Mode-specific directives
-    if mode == "DESIGN":
+    if primary_mode == "DESIGN":
         variant = datetime.now().minute % len(DESIGN_DIRECTIVES)
+        print(DESIGN_DIRECTIVES[variant], file=sys.stderr)
+
+    if len(stage_files) > 1:
         print(
-            " | ".join(parts) + "\n"
-            f"{DESIGN_DIRECTIVES[variant]}",
+            "MULTI-AGENT: Multiple stage files active. Your edits go through if ANY stage permits them.",
             file=sys.stderr,
         )
-    elif mode == "IMPLEMENTATION":
-        if not blast_radius or len(blast_radius.strip()) < 30:
-            parts.append("⚠ MISSING/WEAK blast_radius — required before edits")
-        print(" | ".join(parts), file=sys.stderr)
-    elif mode == "TRIVIAL":
-        print(" | ".join(parts), file=sys.stderr)
-    else:
-        print(" | ".join(parts), file=sys.stderr)
 
     sys.exit(0)
 

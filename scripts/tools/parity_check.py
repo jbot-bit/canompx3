@@ -15,7 +15,7 @@ Tests:
 Usage:
     python scripts/tools/parity_check.py
     python scripts/tools/parity_check.py --instrument MGC --sample 100
-    python scripts/tools/parity_check.py --db C:/db/gold.db
+    python scripts/tools/parity_check.py
 """
 
 import argparse

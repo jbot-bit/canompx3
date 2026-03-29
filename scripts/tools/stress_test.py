@@ -4,7 +4,7 @@ Tries to BREAK your best-looking strategies with honesty tests.
 
 Usage:
     python scripts/tools/stress_test.py
-    python scripts/tools/stress_test.py --db C:/db/gold.db
+    python scripts/tools/stress_test.py
 
 Tests run:
   1. Size filter survival   - does the edge exist WITHOUT the ORB size filter?

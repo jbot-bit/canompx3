@@ -20,6 +20,12 @@ Claude remains the canonical authority for this repo. This file exists to keep t
   - https://developers.openai.com/codex/config-advanced/
 - Config reference:
   - https://developers.openai.com/codex/config-reference/
+- Agent approvals and security:
+  - https://developers.openai.com/codex/agent-approvals-security/
+- Multi-agent:
+  - https://developers.openai.com/codex/multi-agent/
+- IDE settings:
+  - https://developers.openai.com/codex/ide/settings/
 
 ## OpenAI's Core Model
 
@@ -103,7 +109,20 @@ For this repo, project config should stay focused on:
 
 It should not become a second instruction system.
 
-### 7. Plan and verify, especially in large repos
+### 7. Use project config to harden startup across surfaces
+
+Official docs now explicitly say configuration is how to make Codex behave consistently across sessions and surfaces, and that the IDE extension shares the same CLI config stack.
+
+For this repo:
+
+- keep repo-wide durable rules in `AGENTS.md`
+- keep Codex-only startup reinforcement in `.codex/config.toml`
+- use additive `developer_instructions` for the startup contract when necessary
+- do not replace `AGENTS.md` with `model_instructions_file`
+
+This is the right place to harden "run preflight and read handoff first" behavior for direct Codex entry without touching the Claude layer.
+
+### 8. Plan and verify, especially in large repos
 
 OpenAI's best-practices guidance emphasizes:
 
@@ -120,6 +139,19 @@ And then:
 - confirmation of final behavior
 
 This aligns with the existing Claude workflow and should remain the default Codex operating style.
+
+### 9. Keep worktree and thread discipline
+
+OpenAI's current best-practices page explicitly calls out two failure modes:
+
+- running live threads on the same files without using git worktrees
+- using one thread per project instead of one thread per task
+
+For this repo, that means:
+
+- use `scripts/infra/codex-worktree.sh open <task>` for parallel Codex work
+- keep each Codex thread scoped to a task, not a long-lived project omnibus thread
+- treat `HANDOFF.md` as the shared baton before editing on mutable branches
 
 ## Practical Standards For "Superbrain" Behavior
 

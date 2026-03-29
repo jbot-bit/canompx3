@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -187,6 +188,15 @@ def build_warnings(
 
     if "wsl" in context and not (root / ".venv-wsl" / "bin" / "python").exists():
         warnings.append("WSL context but .venv-wsl/bin/python is missing.")
+    elif "wsl" in context:
+        expected_python = (root / ".venv-wsl" / "bin" / "python").resolve()
+        current_python = Path(sys.executable).resolve()
+        if current_python != expected_python:
+            warnings.append(
+                "WSL context is using the wrong interpreter. "
+                f"current={current_python} expected={expected_python}. "
+                "Use the repo launcher, 'uv run python ...', or '.venv-wsl/bin/python ...'."
+            )
 
     if active_tool:
         claim = read_claim(claim_path)
@@ -247,6 +257,13 @@ def print_report(
     windows_env = (root / ".venv" / "Scripts" / "python.exe").exists()
     wsl_env = (root / ".venv-wsl" / "bin" / "python").exists()
     print(f"Env: .venv={'yes' if windows_env else 'no'} | .venv-wsl={'yes' if wsl_env else 'no'}")
+    print(f"Interpreter: {Path(sys.executable).resolve()}")
+    python3_path = shutil.which("python3")
+    if python3_path:
+        print(f"python3 -> {Path(python3_path).resolve()}")
+    python_path = shutil.which("python")
+    if python_path:
+        print(f"python  -> {Path(python_path).resolve()}")
 
     if warnings:
         print("Warnings:")

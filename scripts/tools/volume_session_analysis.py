@@ -13,7 +13,7 @@ Maps viable times to SESSION_CATALOG sessions and recommends enabled_sessions.
 Usage:
     python scripts/tools/volume_session_analysis.py --instrument SIL
     python scripts/tools/volume_session_analysis.py --instrument SIL --reference MGC
-    python scripts/tools/volume_session_analysis.py --instrument SIL --db-path C:/db/gold.db
+    python scripts/tools/volume_session_analysis.py --instrument SIL
 """
 
 import argparse

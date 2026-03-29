@@ -16,6 +16,7 @@ Use this as the fast orientation layer for the repo. It is a summary only. Claud
 - Project workflow and guardrails: `CLAUDE.md`
 - Trading truth: `TRADING_RULES.md`
 - Research and statistical discipline: `RESEARCH_RULES.md`
+- Current shared session state and near-term decisions: `HANDOFF.md`
 - Architecture and command reference: `docs/ARCHITECTURE.md`
 - Planned but not yet built work: `ROADMAP.md`
 
@@ -24,15 +25,9 @@ Use this as the fast orientation layer for the repo. It is a summary only. Claud
 - ORB breakout is the confirmed edge family.
 - ORB size is the primary edge across instruments.
 - Sessions are event-based and resolved per day from `pipeline/dst.py`.
-- E1 is the honest conservative entry.
-- E2 is the honest aggressive production entry and is now dominant in the declared live portfolio config.
-- E0 is purged.
-- E3 is soft-retired and should not be treated as the default direction.
-
-## Active Instruments
-
-- Active ORB instruments: MGC, MNQ, MES, M2K.
-- Dead for ORB breakout: MCL, SIL, M6E, MBT.
+- E1 and E2 are the live entry models worth caring about for most current work.
+- E0 is purged. E3 is not the default path and should be treated as specialist or retired unless current canonical docs say otherwise.
+- Do not memorize active instruments from this file. Confirm the current universe from canonical docs and current code, and if they disagree, report the contradiction instead of normalizing it inside `.codex/`.
 
 ## Core Systems
 
@@ -41,7 +36,7 @@ Use this as the fast orientation layer for the repo. It is a summary only. Claud
 - `orb_outcomes` -> `experimental_strategies`
 - `experimental_strategies` -> `validated_setups`
 - `validated_setups` -> `edge_families`
-- `validated_setups` + fitness logic -> declared live portfolio in `trading_app/live_config.py`
+- live deployment profiles -> `trading_app/prop_profiles.py`
 - Rolling/HOT real-time activation is not fully wired yet and should not be described as finished live trading.
 
 ## Current Operating Philosophy

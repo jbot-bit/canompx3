@@ -10,7 +10,7 @@ Shows two stat layers:
 Usage:
     python scripts/reports/report_edge_portfolio.py --instrument MGC
     python scripts/reports/report_edge_portfolio.py --all
-    python scripts/reports/report_edge_portfolio.py --all --db-path C:/db/gold.db
+    python scripts/reports/report_edge_portfolio.py --all
     python scripts/reports/report_edge_portfolio.py --all --include-purged
     python scripts/reports/report_edge_portfolio.py --all --slots
 """

@@ -7,7 +7,7 @@ Uses DUCKDB_PATH env var or --db-path for database location.
 
 Usage:
     python pipeline/run_full_pipeline.py --instrument MGC --start 2024-01-01 --end 2026-02-14
-    python pipeline/run_full_pipeline.py --instrument MGC --skip-to build_outcomes --db-path C:/db/gold.db
+    python pipeline/run_full_pipeline.py --instrument MGC --skip-to build_outcomes
     python pipeline/run_full_pipeline.py --instrument MGC --dry-run
 """
 

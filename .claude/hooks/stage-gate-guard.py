@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
-"""Stage-gate guard v2.3: hard-blocks production edits outside approved scope.
+"""Stage-gate guard v3.0: multi-agent safe, hard-blocks production edits outside approved scope.
 
 Enforcement layers:
 1. Explicitly safe files → pass
 2. Non-production files → pass
-3. Production code → requires STAGE_STATE.md with correct mode + scope
+3. Production code → requires active stage with correct mode + scope
 4. NEVER_TRIVIAL files → cannot use TRIVIAL mode
+
+v3.0 changes (multi-agent):
+- Reads ALL stage files: docs/runtime/STAGE_STATE.md + docs/runtime/stages/*.md
+- Edit allowed if ANY active stage permits it (union of scope_locks)
+- Auto-trivial writes to stages/auto_trivial.md (not the shared file)
+- Codex writes to stages/codex.md, Claude uses STAGE_STATE.md — no conflicts
+- Blast-radius required per-stage (unchanged)
 
 v2.3 fixes (from simulation):
 - F1: Auto-creates TRIVIAL STAGE_STATE for non-core files when no state exists
@@ -18,7 +25,10 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
+# Primary stage file (Claude Code convention)
 STAGE_STATE = Path("docs/runtime/STAGE_STATE.md")
+# Directory for additional agent stage files (Codex, worktrees, etc.)
+STAGES_DIR = Path("docs/runtime/stages")
 
 # ── Explicitly safe DIRECTORIES (path substring match) ────────────────
 SAFE_DIRS = (
@@ -235,6 +245,49 @@ def matches_scope(file_path, scope_paths):
     return False
 
 
+def load_all_stages():
+    """Load all stage files: primary STAGE_STATE.md + stages/*.md.
+
+    Returns list of (path, content, mode, scope_lock, blast_radius) tuples.
+    """
+    stages = []
+
+    # Primary file (Claude Code convention)
+    if STAGE_STATE.exists():
+        try:
+            content = STAGE_STATE.read_text(encoding="utf-8")
+            mode = parse_field(content, "mode")
+            if mode:
+                stages.append((
+                    str(STAGE_STATE),
+                    content,
+                    mode,
+                    parse_scope_lock(content),
+                    parse_blast_radius(content),
+                ))
+        except (OSError, UnicodeDecodeError):
+            pass
+
+    # Additional stage files (Codex, worktrees, auto-trivial, etc.)
+    if STAGES_DIR.is_dir():
+        for f in sorted(STAGES_DIR.glob("*.md")):
+            try:
+                content = f.read_text(encoding="utf-8")
+                mode = parse_field(content, "mode")
+                if mode:
+                    stages.append((
+                        str(f),
+                        content,
+                        mode,
+                        parse_scope_lock(content),
+                        parse_blast_radius(content),
+                    ))
+            except (OSError, UnicodeDecodeError):
+                pass
+
+    return stages
+
+
 def main():
     event = json.load(sys.stdin)
     file_path = normalize(event.get("tool_input", {}).get("file_path", ""))
@@ -247,24 +300,26 @@ def main():
     if not any(marker in file_path for marker in PROD_PATHS):
         sys.exit(0)
 
-    # ── Layer 3: Production code — enforce stage gate ─────────────────
+    # ── Layer 3: Production code — enforce stage gate (multi-agent) ───
 
-    if not STAGE_STATE.exists():
-        # F1 fix: Auto-create TRIVIAL state for non-core files
-        # This eliminates the 2-step friction for quick fixes
+    stages = load_all_stages()
+
+    if not stages:
+        # No stage files at all — auto-create TRIVIAL for non-core
         is_core = any(marker in file_path for marker in NEVER_TRIVIAL)
         if not is_core:
-            STAGE_STATE.parent.mkdir(parents=True, exist_ok=True)
+            STAGES_DIR.mkdir(parents=True, exist_ok=True)
             now = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-            STAGE_STATE.write_text(
+            auto_file = STAGES_DIR / "auto_trivial.md"
+            auto_file.write_text(
                 f"---\ntask: auto-trivial edit of {file_path}\n"
                 f"mode: TRIVIAL\nscope: [{file_path}]\n"
-                f"updated: {now}\nterminal: auto\n---\n",
+                f"updated: {now}\nagent: auto\n---\n",
                 encoding="utf-8",
             )
             print(
                 f"STAGE-GATE: Auto-created TRIVIAL state for {file_path}.\n"
-                f"  Non-core file — proceeding. Delete docs/runtime/STAGE_STATE.md when done.",
+                f"  Non-core file — proceeding. Delete docs/runtime/stages/auto_trivial.md when done.",
                 file=sys.stderr,
             )
             sys.exit(0)
@@ -277,76 +332,82 @@ def main():
         )
         sys.exit(2)
 
-    content = STAGE_STATE.read_text(encoding="utf-8")
-    mode = parse_field(content, "mode")
+    # ── Check if ANY active stage permits this edit ───────────────────
 
-    if not mode:
+    # Pass 1: TRIVIAL stages allow any non-core file
+    for path, content, mode, scope, blast in stages:
+        if mode == "TRIVIAL":
+            if any(marker in file_path for marker in NEVER_TRIVIAL):
+                continue  # This TRIVIAL stage can't help with core files
+            sys.exit(0)  # Non-core + any TRIVIAL stage → allowed
+
+    # Pass 2: IMPLEMENTATION stages — check scope_lock
+    impl_stages = [(p, c, m, s, b) for p, c, m, s, b in stages if m == "IMPLEMENTATION"]
+
+    for path, content, mode, scope, blast in impl_stages:
+        if not scope:
+            continue  # No scope_lock = this stage can't help
+        if not blast or len(blast.strip()) < 30:
+            continue  # No blast_radius = this stage is incomplete
+        if matches_scope(file_path, scope):
+            sys.exit(0)  # File is in this stage's scope — allowed
+
+    # Pass 3: No stage permits this edit — explain why
+
+    # Check if it's a core file blocked by TRIVIAL
+    is_core = any(marker in file_path for marker in NEVER_TRIVIAL)
+    has_trivial = any(m == "TRIVIAL" for _, _, m, _, _ in stages)
+    if is_core and has_trivial:
         print(
-            "STAGE-GATE BLOCK: STAGE_STATE.md has no mode field.\n  Run /stage-gate to reclassify.",
+            f"STAGE-GATE BLOCK: {file_path} is a core file and cannot use TRIVIAL mode.\n"
+            f"  → Run /stage-gate with full staging for core files.",
             file=sys.stderr,
         )
         sys.exit(2)
 
-    # ── TRIVIAL mode — hardened ───────────────────────────────────────
-    if mode == "TRIVIAL":
-        if any(marker in file_path for marker in NEVER_TRIVIAL):
+    # Check for non-IMPLEMENTATION modes blocking
+    non_impl = [m for _, _, m, _, _ in stages if m not in ("TRIVIAL", "IMPLEMENTATION")]
+    if non_impl:
+        print(
+            f"STAGE-GATE BLOCK: Active stage(s) in {', '.join(non_impl)} mode, not IMPLEMENTATION.\n"
+            f"  Cannot edit production code ({file_path}) during {non_impl[0]}.\n"
+            f"  → Finish the current stage, then /stage-gate to IMPLEMENTATION",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
+    # IMPLEMENTATION stages exist but file not in any scope_lock
+    if impl_stages:
+        all_scope = []
+        for _, _, _, scope, _ in impl_stages:
+            if scope:
+                all_scope.extend(scope)
+        # Check for missing blast_radius specifically
+        stages_no_blast = [p for p, _, m, s, b in impl_stages if s and (not b or len(b.strip()) < 30)]
+        if stages_no_blast:
             print(
-                f"STAGE-GATE BLOCK: {file_path} cannot use TRIVIAL mode.\n"
-                f"  This file touches pipeline logic, config, schema, or validation.\n"
-                f"  Reclassify via /stage-gate with full staging.",
+                f"STAGE-GATE BLOCK: blast_radius missing or too brief (<30 chars) in: {', '.join(stages_no_blast)}\n"
+                f"  Every IMPLEMENTATION stage needs blast_radius listing affected files, tests, and downstream consumers.\n"
+                f"  → Add blast_radius to the stage file before editing production code.",
                 file=sys.stderr,
             )
             sys.exit(2)
-        sys.exit(0)
-
-    # ── Non-IMPLEMENTATION mode → block ───────────────────────────────
-    if mode != "IMPLEMENTATION":
-        print(
-            f"STAGE-GATE BLOCK: Mode is {mode}, not IMPLEMENTATION.\n"
-            f"  Cannot edit production code ({file_path}) during {mode}.\n"
-            f"  → Finish {mode} first, then /stage-gate to IMPLEMENTATION\n"
-            f"  → /stage-gate reclassify (abandons current stage)\n"
-            f"  → /stage-gate trivial (only if non-core mechanical fix)",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    # ── IMPLEMENTATION mode — check scope lock ────────────────────────
-    scope_lock = parse_scope_lock(content)
-    if not scope_lock:
-        # F2 fix: No scope_lock = no contract. Block to prevent wide-open edits.
-        print(
-            "STAGE-GATE BLOCK: IMPLEMENTATION mode but no scope_lock defined.\n"
-            "  STAGE_STATE.md must list allowed files in a ## Scope Lock section.\n"
-            "  → Add scope_lock to docs/runtime/STAGE_STATE.md\n"
-            "  → Or reclassify: /stage-gate (which writes scope automatically)",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    # ── IMPLEMENTATION mode — check blast_radius ─────────────────────
-    blast_radius = parse_blast_radius(content)
-    if not blast_radius or len(blast_radius.strip()) < 30:
-        print(
-            f"STAGE-GATE BLOCK: IMPLEMENTATION mode but blast_radius is missing or too brief (<30 chars).\n"
-            f"  STAGE_STATE.md must include blast_radius listing affected files, tests, and downstream consumers.\n"
-            f"  Example: blast_radius: entry_rules.py, config.py; tests: test_entry_rules.py; downstream: strategy_discovery calls entry_rules\n"
-            f"  → Add blast_radius to docs/runtime/STAGE_STATE.md",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    if not matches_scope(file_path, scope_lock):
         print(
             f"STAGE-GATE BLOCK: {file_path} not in scope_lock.\n"
-            f"  Allowed: {', '.join(scope_lock)}\n"
-            f"  → Edit docs/runtime/STAGE_STATE.md to add this file if genuinely needed\n"
+            f"  Allowed: {', '.join(all_scope) if all_scope else '(no scope defined)'}\n"
+            f"  → Edit your stage file to add this file if genuinely needed\n"
             f"  → Otherwise defer to a later stage (scope creep)",
             file=sys.stderr,
         )
         sys.exit(2)
 
-    sys.exit(0)
+    # Shouldn't reach here, but safety net
+    print(
+        f"STAGE-GATE BLOCK: No stage permits editing {file_path}.\n"
+        f"  → Run /stage-gate to create an approved stage.",
+        file=sys.stderr,
+    )
+    sys.exit(2)
 
 
 if __name__ == "__main__":

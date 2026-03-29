@@ -10,7 +10,7 @@ Safe to re-run (idempotent — only updates WHERE status='active').
 Usage:
     python scripts/migrations/retire_e3_strategies.py
     python scripts/migrations/retire_e3_strategies.py --dry-run
-    python scripts/migrations/retire_e3_strategies.py --db C:/db/gold.db
+    python scripts/migrations/retire_e3_strategies.py
 """
 
 import sys

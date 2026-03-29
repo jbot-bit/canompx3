@@ -186,7 +186,7 @@ Sample 5 random outcomes. For each:
 - Verdict: `FULL_COVERAGE` / `GAPS_FOUND` (list uncovered risks)
 
 **Charge 2: Drift Check Accuracy**
-- Run `python pipeline/check_drift.py` and capture output
+- Run `uv run python pipeline/check_drift.py` and capture output
 - For each check that PASSES: independently verify the claim with a direct query
 - For each check that FAILS: is the failure real or is the check buggy?
 - Verdict per check: `ACCURATE` / `FALSE_POSITIVE` / `FALSE_NEGATIVE`

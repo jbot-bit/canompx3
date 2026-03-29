@@ -6,6 +6,32 @@
 
 ---
 
+## Update (Mar 29 — COMEX lane swap + multi-agent stage-gate)
+
+### COMEX_SETTLE lane swap: ORB_G8 -> ATR70_VOL
+- **What:** Replaced `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8` with `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL` in prop_profiles.py and paper_trade_logger.py
+- **Same operating point:** O5, RR1.0, CB1, E2, S1.0 — pure filter swap
+- **Evidence:** Backtest ExpR +0.130 -> +0.215 (+0.085 delta). 2026 forward: +7.22R vs +2.59R (ATR70 2.8x better). N=469, WFE 2.11, 8/10 years positive. FDR adj_p=0.000.
+- **Why only COMEX:** Same-params ATR70 FAILED validation for NYSE_CLOSE (N=97) and NYSE_OPEN (ExpR +0.027). SINGAPORE_OPEN ATR70 is 2026-NEGATIVE (-1.60R). COMEX is the only lane where ATR70 passes all gates.
+- **NYSE_OPEN status:** MONITOR/DECAY — 2026 forward is -0.26R regardless of filter
+- **CME_PRECLOSE ATR70:** PAPER_TRACK — N=129, LEAKAGE_SUSPECT (3 WF windows), highest ExpR (+0.284) but insufficient evidence
+
+### Multi-agent stage-gate fix
+- **Problem:** Codex and Claude Code both wrote to `docs/runtime/STAGE_STATE.md`, causing mutual blocking
+- **Fix:** Guard hook v3.0 reads ALL stage files: `STAGE_STATE.md` (Claude) + `docs/runtime/stages/*.md` (other agents). Edit allowed if ANY stage permits it.
+- **Codex convention:** Write to `docs/runtime/stages/codex.md` (documented in `.codex/STARTUP.md`)
+- **Auto-trivial:** Now writes to `stages/auto_trivial.md` instead of the shared file
+
+## Update (Mar 29 — Codex adapter hardening)
+- `.codex/config.toml`: added additive `developer_instructions` so direct Codex entry still gets the startup contract
+- `CODEX.md` and `.codex/STARTUP.md`: startup now explicitly requires preflight plus `HANDOFF.md`, even outside the launcher scripts
+- `.codex/OPENAI_CODEX_STANDARDS.md`: refreshed against current OpenAI Codex docs for config consistency, worktree/thread discipline, and current reference links
+- `.codex/PROJECT_BRIEF.md`, `.codex/CURRENT_STATE.md`, `.codex/NEXT_STEPS.md`, `.codex/WORKFLOWS.md`, `.codex/WORKSPACE_MAP.md`: thinned volatile summaries so Codex points to canonical sources and `HANDOFF.md` instead of carrying a second stale project snapshot
+- Follow-up audit corrected the M2K note: this is a documented trap, not a standalone contradiction. `docs/STRATEGY_BLUEPRINT.md` explicitly says `M2K` remains `orb_active=True` in `ASSET_CONFIGS` but is excluded by `DEAD_ORB_INSTRUMENTS`; the real bug class is code that reads raw `orb_active` directly.
+- Codex-only sweep doc added: `.codex/CANONICAL_DRIFT_SWEEP.md` consolidates current contradictions, compatibility traps, and the grep battery for future audits.
+- Confirmed local Codex CLI version: `0.117.0`
+- No `.claude/` or `CLAUDE.md` changes
+
 ## Current Session
 - **Tool:** Claude Code (2 terminals) + Cowork (enforcement upgrades)
 - **Date:** 2026-03-28
@@ -43,6 +69,16 @@
   - Simple rel_vol Q20 filter beats ML on strongest instrument
   - **Next action:** Add rel_vol as production filter in discovery grid (separate task)
 - STAGE_STATE: ML V2 cleanup COMPLETE
+
+#### rel_vol alignment (commit `25c155c` — mixed with hardening)
+- **Phase 1 DONE:** daily_features `rel_vol` aligned to discovery (minute-of-day median)
+  - `build_daily_features.py`: switched from session-break median to minute-of-day median
+  - `init_db.py`: added `rel_vol DOUBLE` column to daily_features schema
+  - `scripts/tools/update_rel_vol.py`: backfill script for existing data
+  - Gate 6 verified: trade count within 3% of validated_setups on 3 sessions
+- **Phase 2 TODO:** remove redundant `_compute_relative_volumes` from discovery/fitness
+- **Phase 3 TODO:** break-time rel_vol in execution_engine for live trading
+- **Next decision:** portfolio comparison — do any of the 67 MNQ VOL_RV12_N20 strategies beat current Apex lanes?
 
 #### Terminal 1 (this terminal): Audit + fixes
 - Blast-radius analysis for deprecation (4 hard breaks found)

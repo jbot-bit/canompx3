@@ -213,7 +213,10 @@ class ExecutionEngine:
         self.daily_trade_count: int = 0
         self._bar_count: int = 0
         self._last_bar: dict | None = None  # Track last bar for scratch mark-to-market
-        self._daily_features_row: dict | None = None  # Calendar filter data
+        # Per-orb_minutes daily_features rows. Keyed by orb_minutes (5, 15, 30).
+        # Paper trader / session orchestrator load one row per unique aperture
+        # in the portfolio, so _arm_strategies can pick the correct ORB columns.
+        self._daily_features_rows: dict[int, dict] = {}
 
     def _compute_contracts(self, risk_points: float, cost: CostSpec, max_contracts: int = 1) -> int:
         """Compute position size using vol-adjusted sizing from portfolio params.
@@ -228,7 +231,8 @@ class ExecutionEngine:
         if equity <= 0 or risk_points <= 0:
             return 0  # Fail-closed: invalid equity/risk → reject entry
 
-        row = self._daily_features_row or {}
+        # Vol sizing uses 5m row — ATR is instrument-level, not aperture-specific
+        row = self._daily_features_rows.get(5) or {}
         atr_20 = row.get("atr_20") or 0.0
         median_atr_20 = row.get("median_atr_20") or 0.0
         if atr_20 > 0 and median_atr_20 > 0:
@@ -327,8 +331,19 @@ class ExecutionEngine:
         logger.debug("cancel_trade: %s not found in active_trades", strategy_id)
         return False
 
-    def on_trading_day_start(self, trading_day: date, daily_features_row: dict | None = None) -> None:
-        """Reset state for a new trading day."""
+    def on_trading_day_start(
+        self,
+        trading_day: date,
+        daily_features_row: dict | None = None,
+        daily_features_rows: dict[int, dict] | None = None,
+    ) -> None:
+        """Reset state for a new trading day.
+
+        Args:
+            daily_features_row: Legacy single-row interface (assumed orb_minutes=5).
+            daily_features_rows: Per-orb_minutes rows keyed by int (5, 15, 30).
+                If both provided, daily_features_rows wins.
+        """
         self.trading_day = trading_day
         self.orbs = {}
         self.active_trades = []
@@ -338,7 +353,12 @@ class ExecutionEngine:
         self.ml_skips = 0
         self._bar_count = 0
         self._last_bar = None
-        self._daily_features_row = daily_features_row
+        if daily_features_rows is not None:
+            self._daily_features_rows = daily_features_rows
+        elif daily_features_row is not None:
+            self._daily_features_rows = {5: daily_features_row}
+        else:
+            self._daily_features_rows = {}
 
         # Initialize IB tracker (23:00 UTC to 01:00 UTC = 09:00-11:00 Brisbane)
         # 23 = Brisbane UTC+10 offset: 09:00 local - 10h = 23:00 UTC previous day.
@@ -551,10 +571,11 @@ class ExecutionEngine:
                     strategy.strategy_id,
                 )
                 continue
-            # Build full row: daily_features + ORB runtime data
+            # Build full row: daily_features (correct orb_minutes) + ORB runtime data
+            om_row = self._daily_features_rows.get(strategy.orb_minutes, self._daily_features_rows.get(5))
             row = {}
-            if self._daily_features_row is not None:
-                row.update(self._daily_features_row)
+            if om_row is not None:
+                row.update(om_row)
             row[f"orb_{orb.label}_size"] = orb.size
             if not filt.matches_row(row, orb.label):
                 continue
@@ -576,8 +597,8 @@ class ExecutionEngine:
             # Check ATR velocity overlay (Contracting×Neutral/Compressed skip)
             if (
                 self.atr_velocity_overlay is not None
-                and self._daily_features_row is not None
-                and not self.atr_velocity_overlay.matches_row(self._daily_features_row, orb.label)
+                and om_row is not None
+                and not self.atr_velocity_overlay.matches_row(om_row, orb.label)
             ):
                 continue
 

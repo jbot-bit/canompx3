@@ -19,7 +19,7 @@ HONESTY NOTES:
 
 Usage:
     python scripts/backtest_atr_regime.py
-    python scripts/backtest_atr_regime.py --db C:/db/gold.db
+    python scripts/backtest_atr_regime.py
 """
 
 import math

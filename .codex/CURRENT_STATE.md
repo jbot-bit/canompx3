@@ -2,13 +2,15 @@
 
 Snapshot for fast project awareness. Confirm changing numbers from code or DB before citing them externally.
 
+Operationally volatile state belongs in `HANDOFF.md`, live code, and canonical docs. This file should stay stable enough to survive across sessions without becoming a second handoff.
+
 ## Core Reality
 
 - The repo is beyond basic research scaffolding. Pipeline, discovery, validation, portfolio construction, execution engine, risk manager, paper trading, and broker adapters all exist.
 - The live trading stack is partially built, not fully finished. Core runtime pieces exist, but `ROADMAP.md` still leaves monitoring and alerting as TODO, and `trading_app/live_config.py` marks HOT real-time wiring as dormant/not yet production-ready.
 - The system uses one canonical `gold.db` at the repo root unless `DUCKDB_PATH` overrides it.
 - Event-based sessions and DST cleanup are complete. Session logic lives in `pipeline/dst.py`.
-- Live portfolio selection is declarative in `trading_app/live_config.py`, but that should not be read as "live setup complete."
+- `trading_app/live_config.py` contains deprecated compatibility surfaces. Current live deployment authority is `trading_app/prop_profiles.py`.
 
 ## What Is Established
 
@@ -22,12 +24,12 @@ Snapshot for fast project awareness. Confirm changing numbers from code or DB be
 
 - Finishing the live trading setup/coding remains active work; do not describe the repo as fully live-ready yet.
 - Monitoring and alerting remains an explicit TODO in `ROADMAP.md`.
-- Re-running rolling evaluation over the longer validation window remains a follow-up task after the 2016-2020 outcomes backfill work.
-- Some research findings are still trigger-based, not action-ready. Example: overlap-day revalidation when MES and MNQ overlap days reach 800.
+- Near-term priorities and research follow-ups can move quickly. Read `HANDOFF.md` before treating any open item as current.
 
 ## Live / Runtime Surfaces
 
-- Live portfolio: `trading_app/live_config.py`
+- Live profile authority: `trading_app/prop_profiles.py`
+- Deprecated compatibility layer: `trading_app/live_config.py`
 - Live orchestration: `trading_app/live/session_orchestrator.py`
 - Execution engine: `trading_app/execution_engine.py`
 - Broker implementations: `trading_app/live/projectx/`, `trading_app/live/tradovate/`

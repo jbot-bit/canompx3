@@ -1,23 +1,13 @@
 # Codex Next Steps
 
-This file captures the highest-signal open work implied by the canonical roadmap and current live setup.
+This file captures stable priority categories only. For changing session-level priorities, use `HANDOFF.md`.
 
-## Highest-Leverage Open Work
+## Default Priority Order
 
-- Finish the remaining live-trading setup/coding rather than talking about the stack as if it is already complete.
-- Implement minimal monitoring and alerting for live trading:
-  - drawdown vs historical
-  - win-rate divergence
-  - ORB size regime shift
-  - live strategy status surface
-- Keep HOT/rolling real-time logic out of any "done" narrative until the dormant wiring in `trading_app/live_config.py` is actually reactivated and verified.
-- Re-run rolling evaluation using the longer post-backfill range and update stability scoring inputs if the data window is now sufficient.
-
-## Research Follow-Ups Worth Respecting
-
-- Test the MES NYSE_OPEN summer signal-stacking result at E1 before treating it as actionable.
-- Only revisit overlap-dependent cross-instrument findings when the overlap-day trigger is actually met.
-- Treat aperture expansion as targeted research with explicit comparison against the 5m baseline, not as a default migration path.
+- Current shared baton first: `HANDOFF.md`
+- Canonical roadmap and unfinished platform work: `ROADMAP.md`
+- Trading truth and what is actually deployable: `TRADING_RULES.md`
+- Research discipline for any new claim or analysis: `RESEARCH_RULES.md`
 
 ## Good Default Priorities
 
@@ -25,10 +15,12 @@ This file captures the highest-signal open work implied by the canonical roadmap
 - Backtest/live parity checks
 - Robustness of currently traded families
 - Audits of live execution paths and webhook safety
+- Codex adapter maintenance only when it removes real friction
 
 ## Things To Avoid
 
 - Building a second rule system in `.codex/`
-- Repeating or restating `TRADING_RULES.md` and `RESEARCH_RULES.md` in detail
+- Repeating or restating `TRADING_RULES.md`, `RESEARCH_RULES.md`, or `HANDOFF.md` in detail
+- Freezing volatile project state into Codex summaries
 - Optimizing for sample size instead of robustness
 - Treating in-sample observations as validated edges

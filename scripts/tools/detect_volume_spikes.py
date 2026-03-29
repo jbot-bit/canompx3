@@ -13,7 +13,7 @@ Usage:
     python scripts/detect_volume_spikes.py --instrument MGC
     python scripts/detect_volume_spikes.py --all
     python scripts/detect_volume_spikes.py --instrument MGC --min-z 2.5 --min-distance 10
-    python scripts/detect_volume_spikes.py --instrument MGC --db-path C:\\db\\gold.db
+    python scripts/detect_volume_spikes.py --instrument MGC  # uses canonical gold.db
 """
 
 import argparse

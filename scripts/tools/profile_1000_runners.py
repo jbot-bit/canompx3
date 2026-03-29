@@ -15,7 +15,7 @@ This script profiles EVERY 1000 E1 G4+ trade to find:
 Read-only. No DB writes.
 
 Usage:
-    python scripts/profile_1000_runners.py --db-path C:/db/gold.db
+    python scripts/profile_1000_runners.py
 """
 
 import argparse
