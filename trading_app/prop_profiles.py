@@ -330,34 +330,54 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
     ),
     # =========================================================================
-    # UPGRADE PATH: When moving to $100K Apex, activate this profile.
-    # DD limit $3,000 (vs $2K on $50K). Same 5 lanes, same 1 contract.
-    # Purpose: more DD headroom for current ORB sizes, not more contracts.
+    # UPGRADE PATH: $100K Apex EOD PA. DD limit $3,000 (vs $2K on $50K).
+    # Same 5 lanes + ORB caps from adversarial audit. Activate when ready.
     # =========================================================================
-    # "apex_100k_manual": AccountProfile(
-    #     profile_id="apex_100k_manual",
-    #     firm="apex",
-    #     account_size=100_000,  # dd_limit_dollars=3000, max_contracts_micro=60
-    #     copies=1,
-    #     stop_multiplier=0.75,
-    #     max_slots=5,
-    #     allowed_sessions=frozenset({"NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN", "US_DATA_1000"}),
-    #     daily_lanes=(
-    #         DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15", "MNQ", "NYSE_CLOSE"),
-    #         DailyLaneSpec(
-    #             "MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15", "MNQ", "SINGAPORE_OPEN",
-    #             execution_notes="0.5x sizing. RR4.0 long loss streaks structural.",
-    #             planned_stop_multiplier=0.75,
-    #         ),
-    #         DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8", "MNQ", "COMEX_SETTLE"),
-    #         DailyLaneSpec(
-    #             "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15", "MNQ", "NYSE_OPEN",
-    #             max_orb_size_pts=150.0,
-    #         ),
-    #         DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075", "MNQ", "US_DATA_1000"),
-    #     ),
-    #     notes="$100K upgrade. Same 5 strategies, more DD headroom ($3K vs $2K).",
-    # ),
+    "apex_100k_manual": AccountProfile(
+        profile_id="apex_100k_manual",
+        firm="apex",
+        account_size=100_000,
+        copies=1,
+        stop_multiplier=0.75,
+        max_slots=5,
+        active=False,  # Activate when upgrading from 50K
+        allowed_sessions=frozenset({"NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN", "US_DATA_1000"}),
+        daily_lanes=(
+            DailyLaneSpec(
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15",
+                "MNQ",
+                "NYSE_CLOSE",
+                max_orb_size_pts=100.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15",
+                "MNQ",
+                "SINGAPORE_OPEN",
+                execution_notes="0.5x sizing. RR4.0 long loss streaks structural.",
+                planned_stop_multiplier=0.75,
+                max_orb_size_pts=80.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=80.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+                "MNQ",
+                "NYSE_OPEN",
+                max_orb_size_pts=150.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
+                "MNQ",
+                "US_DATA_1000",
+                max_orb_size_pts=120.0,
+            ),
+        ),
+        notes="$100K upgrade. Same 5 strategies, $3K DD headroom (vs $2K). ORB caps from audit.",
+    ),
     # =========================================================================
     # Phase 2: Automation scaling (Tradeify MNQ + TopStep MGC)
     # =========================================================================
