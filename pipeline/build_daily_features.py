@@ -19,6 +19,7 @@ Usage:
 """
 
 import argparse
+import statistics
 import sys
 from bisect import bisect_left
 from datetime import date, datetime, timedelta
@@ -1316,32 +1317,89 @@ def build_daily_features(
 
     # Post-pass: relative volume per session.
     #
-    # rel_vol_{label} = break_bar_volume / median(break_bar_volume, last 20 break-days
-    #                   for the same session label).
+    # rel_vol_{label} = break_bar_volume / median(prior 20 bars_1m at same
+    #                   UTC minute-of-day).
     #
-    # Only defined on days where a break occurred (break_bar_volume is not None).
-    # Compared against the same session's own prior breaks — controls for the
-    # fact that CME_REOPEN gold is structurally thinner than US_DATA_830 gold without needing
-    # same-minute cross-day lookups.
+    # MUST match strategy_discovery._compute_relative_volumes() — the
+    # VolumeFilter contract (config.py L242) requires this.  Paper trader
+    # and live orchestrator read these values directly; discovery and
+    # fitness also enrich from bars_1m (produces identical values after
+    # this alignment — verified 257/257 rows, zero diff).
     #
-    # Minimum lookback: 5 break-days (returns None during warm-up).
-    # No look-ahead: only rows[0..i-1] are used when computing rows[i].
+    # Lookback = 20 (must match VolumeFilter.lookback_days in config.py).
+    # Minimum 5 prior entries at that minute (else None, fail-closed).
+    # No look-ahead: history[start:idx] uses only bars before today.
+    _UTC = ZoneInfo("UTC")
+    _REL_VOL_LOOKBACK = 20
+
+    def _minute_key(ts):
+        utc = ts.astimezone(_UTC) if ts.tzinfo is not None else ts
+        return (utc.year, utc.month, utc.day, utc.hour, utc.minute)
+
     for label in ORB_LABELS:
+        bts_col = f"orb_{label}_break_ts"
         bvol_col = f"orb_{label}_break_bar_volume"
         rel_col = f"rel_vol_{label}"
-        prior_break_vols: list[int] = []
 
-        for i in range(len(rows)):
-            bvol = rows[i].get(bvol_col)
-            if bvol is not None:
-                # Compute rel_vol BEFORE appending today (no look-ahead)
-                if len(prior_break_vols) >= 5:
-                    window = prior_break_vols[-20:]
-                    median_vol = float(sorted(window)[len(window) // 2])
-                    if median_vol > 0:
-                        rows[i][rel_col] = round(bvol / median_vol, 4)
-                # Append today's break volume for future rows
-                prior_break_vols.append(bvol)
+        # Step 1: collect unique UTC minute-of-day values from break timestamps.
+        unique_minutes: set[int] = set()
+        for row in rows:
+            ts = row.get(bts_col)
+            if ts is not None and hasattr(ts, "hour"):
+                utc = ts.astimezone(_UTC) if ts.tzinfo is not None else ts
+                unique_minutes.add(utc.hour * 60 + utc.minute)
+
+        if not unique_minutes:
+            continue
+
+        # Step 2: load full volume history from bars_1m for each minute.
+        # No date filter — full history is needed for lookback.
+        minute_history: dict[int, list[tuple]] = {}
+        for mod in sorted(unique_minutes):
+            h, m = divmod(mod, 60)
+            bar_rows = con.execute(
+                """SELECT ts_utc, volume FROM bars_1m
+                   WHERE symbol = ?
+                   AND EXTRACT(HOUR FROM (ts_utc AT TIME ZONE 'UTC')) = ?
+                   AND EXTRACT(MINUTE FROM (ts_utc AT TIME ZONE 'UTC')) = ?
+                   ORDER BY ts_utc""",
+                [symbol, h, m],
+            ).fetchall()
+            minute_history[mod] = [(_minute_key(ts), vol) for ts, vol in bar_rows]
+
+        # Step 3: for each row with a break, compute rel_vol.
+        for row in rows:
+            ts = row.get(bts_col)
+            bvol = row.get(bvol_col)
+            if ts is None or bvol is None or bvol == 0:
+                continue
+
+            utc = ts.astimezone(_UTC) if ts.tzinfo is not None else ts
+            mod = utc.hour * 60 + utc.minute
+            history = minute_history.get(mod, [])
+            if not history:
+                continue  # fail-closed
+
+            break_key = _minute_key(ts)
+            idx = None
+            for j, (k, _) in enumerate(history):
+                if k == break_key:
+                    idx = j
+                    break
+            if idx is None:
+                continue  # fail-closed: break bar not found in bars_1m
+
+            start = max(0, idx - _REL_VOL_LOOKBACK)
+            prior_vols = [v for _, v in history[start:idx] if v > 0]
+
+            if len(prior_vols) < 5:
+                continue  # fail-closed: insufficient warm-up
+
+            baseline = statistics.median(prior_vols)
+            if baseline <= 0:
+                continue  # fail-closed
+
+            row[rel_col] = round(bvol / baseline, 4)
 
     # Convert to DataFrame for bulk insert
     features_df = pd.DataFrame(rows)

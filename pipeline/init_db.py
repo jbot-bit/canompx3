@@ -186,8 +186,9 @@ def _build_daily_features_ddl() -> str:
       orb_{label}_mae_r             - max adverse excursion in R (NULL until cost model)
       orb_{label}_mfe_r             - max favorable excursion in R (NULL until cost model)
       orb_{label}_double_break      - True if BOTH ORB high and low were breached
-      rel_vol_{label}               - break_bar_volume / rolling 20-session median (NULL if no break
-                                      or < 5 prior break-days). Relative volume signal.
+      rel_vol_{label}               - break_bar_volume / median(prior 20 bars_1m at same UTC
+                                      minute-of-day). Matches strategy_discovery._compute_relative_volumes().
+                                      NULL if no break or < 5 prior bars at that minute.
     """
     orb_cols = []
     for label in ORB_LABELS:

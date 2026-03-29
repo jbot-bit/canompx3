@@ -34,11 +34,63 @@ INVESTIGATION_KEYWORDS = re.compile(
     re.IGNORECASE,
 )
 
+# Keywords for trading queries — must use build_live_portfolio(), not validated_setups
+TRADING_QUERY_KEYWORDS = re.compile(
+    r"\b("
+    r"what do i trade|what.s live|my trades|my playbook|my portfolio|"
+    r"trade tonight|trading tonight|what.s on tonight|"
+    r"morning trades|evening trades|active strategies|"
+    r"what am i trading|current positions"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Keywords for session time queries — must run generate_trade_sheet.py, not mental math
+SESSION_TIME_KEYWORDS = re.compile(
+    r"\b("
+    r"what time|when does|when is|session time|trade time|"
+    r"tonight.s session|what.s on at|schedule tonight|"
+    r"session start|when.*open|when.*close"
+    r")\b",
+    re.IGNORECASE,
+)
+
+TRADING_QUERY_DIRECTIVE = (
+    "TRADING QUERY DETECTED: Use build_live_portfolio() from trading_app.live_config — "
+    "NOT validated_setups. Run: python -c \"from trading_app.live_config import LIVE_PORTFOLIO; "
+    "print([s.strategy_id for s in LIVE_PORTFOLIO])\" "
+    "Lesson 1: validated_setups ≠ live portfolio. Different tables, different purpose."
+)
+
+SESSION_TIME_DIRECTIVE = (
+    "SESSION TIME QUERY DETECTED: Do NOT compute timezone math manually. Run: "
+    "python scripts/tools/generate_trade_sheet.py — it resolves all times correctly via dst.py. "
+    "Lesson 10: Manual timezone math has been wrong EVERY time. Brisbane=UTC+10 + EDT=UTC-4 + mental math = WRONG."
+)
+
 # Bash commands that count as "querying data" (resets the read counter)
 QUERY_PATTERNS = re.compile(
     r"python\s+-c|python\s+.*\.py|duckdb|sqlite|SELECT\s|"
     r"pipeline[./]|trading_app[./]|scripts[./]",
     re.IGNORECASE,
+)
+
+# Pipeline rebuild commands — need FK constraint and ordering reminder
+REBUILD_PATTERNS = re.compile(
+    r"build_daily_features|build_bars_5m|ingest_dbn|"
+    r"outcome_builder|strategy_discovery|strategy_validator|"
+    r"run_pipeline|rebuild",
+    re.IGNORECASE,
+)
+
+REBUILD_DIRECTIVE = (
+    "PIPELINE REBUILD DETECTED. Before running, verify:\n"
+    "1. FK constraints: orb_outcomes → daily_features → bars_5m → bars_1m. "
+    "Cannot DELETE upstream while downstream references it.\n"
+    "2. Rebuild order: ingest → bars_5m → daily_features → outcomes → discovery → validator → edge_families\n"
+    "3. For daily_features column changes: USE UPDATE (not DELETE+INSERT) to avoid FK violations.\n"
+    "4. For full rebuilds: delete DOWNSTREAM first (outcomes), then rebuild upstream → downstream.\n"
+    "5. Lesson 15: init_db BEFORE daily_features when adding sessions."
 )
 
 WARN_THRESHOLD = 4    # After N consecutive Reads, warn
@@ -86,16 +138,22 @@ def handle_user_prompt(event):
     prompt = event.get("prompt", "")
     state = load_state()
 
+    directives = []
+
     if INVESTIGATION_KEYWORDS.search(prompt):
         state["investigation_mode"] = True
         state["consecutive_reads"] = 0
+        directives.append(INVESTIGATION_DIRECTIVE)
+
+    if TRADING_QUERY_KEYWORDS.search(prompt):
+        directives.append(TRADING_QUERY_DIRECTIVE)
+
+    if SESSION_TIME_KEYWORDS.search(prompt):
+        directives.append(SESSION_TIME_DIRECTIVE)
+
+    if directives:
         save_state(state)
-        # Inject directive via stderr (Claude sees this)
-        print(INVESTIGATION_DIRECTIVE, file=sys.stderr)
-    else:
-        # Don't clear investigation mode on every message —
-        # only clear when a query is run (via PreToolUse Bash handler)
-        pass
+        print("\n".join(directives), file=sys.stderr)
 
     sys.exit(0)
 
@@ -122,6 +180,9 @@ def handle_pre_tool_use(event):
             # Query detected — reset counter, clear investigation urgency
             state["consecutive_reads"] = 0
             save_state(state)
+        # Pipeline rebuild warning — inject ordering reminder
+        if REBUILD_PATTERNS.search(command):
+            print(REBUILD_DIRECTIVE, file=sys.stderr)
         # Don't block Bash calls
         sys.exit(0)
 
