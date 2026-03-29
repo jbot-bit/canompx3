@@ -7,7 +7,8 @@ The user does NOT type `/skill` commands. Claude should invoke skills proactivel
 | Context | Action | Detection |
 |---------|--------|-----------|
 | Session start / first message | Run `/orient` | No prior messages |
-| "commit" / "push" / "done" | Run `/verify quick` FIRST, then commit | Trigger words |
+| "commit" / "push" | Just execute (per workflow-preferences.md — no blocking) | Git operations |
+| "done" / "complete" (for a stage) | Run `/verify done` before closing stage | Active STAGE_STATE |
 | After editing 2+ production files | Run drift + targeted tests before responding | File count tracking |
 | Before editing NEVER_TRIVIAL files | Run `/blast-radius` on the target | File in core list |
 | Strategy/portfolio/fitness question | Run `/trade-book` or `/regime-check` | "trade", "portfolio", "fitness" |

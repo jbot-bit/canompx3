@@ -49,11 +49,7 @@ Route to the correct source:
   - Treat `trading_app/live_config.py` as compatibility or deprecated surface unless current code says otherwise
 - Project memory, design history, prior findings:
   - Use `.claude/skills/pinecone-assistant/SKILL.md`
-- Academic methodology:
-  - Use local PDFs in `resources/`
-  - Follow `.claude/rules/notebooklm.md`
-
-NotebookLM is retired in this repo. Do not route methodology work there.
+- Academic methodology: use local PDFs in `resources/` (BH FDR, walk-forward, deflated Sharpe).
 
 ## Verification Defaults
 

@@ -16,7 +16,7 @@ The `orb-research` Pinecone Assistant is the project knowledge base — 51 files
 |--------|--------------|------|
 | **Pinecone** | Research findings, architecture, memory, config, plans, NO-GOs, design decisions | "What did we find?", "Why did we do Y?", "History of Z" |
 | **gold-db MCP** | Live data — strategy counts, performance, fitness, trade history | "How many?", "Is X FIT?", "Show performance" |
-| **Local PDFs** | Academic methodology (BH FDR, walk-forward, deflated Sharpe) | See `notebooklm.md` for topic-PDF mapping |
+| **Local PDFs** | Academic methodology (BH FDR, walk-forward, deflated Sharpe) | `resources/` directory |
 
 ## Keyword Routing
 
