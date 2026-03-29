@@ -107,4 +107,4 @@ The reviewer MUST check these in addition to standard code quality:
 
 - All clean? → `/verify-done` for evidence-based completion, then commit
 - Critical findings? → fix, then re-review
-- ML code reviewed? → `/ml-verify` for ML-specific gates
+- ML code reviewed? → ML is dormant (0/12 BH survivors). Check `trading_app/ml/` if reviving.
