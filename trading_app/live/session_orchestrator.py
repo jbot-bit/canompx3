@@ -331,16 +331,23 @@ class SessionOrchestrator:
             if first.source == "profile":
                 try:
                     from trading_app.account_hwm_tracker import AccountHWMTracker
-                    from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier
+                    from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier, get_firm_spec
 
                     for pid, prof in ACCOUNT_PROFILES.items():
                         if portfolio.name == f"profile_{pid}":
                             tier = get_account_tier(prof.firm, prof.account_size)
+                            firm_spec = get_firm_spec(prof.firm)
                             acct_id = str(account_id) if account_id else pid
+                            # Apex 50K EOD: freeze at $52,100 (safety net)
+                            freeze = None
+                            if firm_spec.dd_type == "eod_trailing":
+                                freeze = prof.account_size + tier.max_dd + 100
                             self._hwm_tracker = AccountHWMTracker(
                                 account_id=acct_id,
                                 firm=prof.firm,
                                 dd_limit_dollars=float(tier.max_dd),
+                                dd_type=firm_spec.dd_type,
+                                freeze_at_balance=freeze,
                             )
                             # Query initial equity from broker
                             if self.positions is not None:

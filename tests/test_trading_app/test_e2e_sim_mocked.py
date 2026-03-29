@@ -164,7 +164,9 @@ class Test429OnAuthRefresh:
 class TestHWMHaltBlocksOrder:
     def test_halted_tracker_blocks_entry(self, tmp_path):
         """When HWM halt is active, no order should be submitted."""
-        tracker = AccountHWMTracker("TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path)
+        tracker = AccountHWMTracker(
+            "TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path, dd_type="intraday_trailing"
+        )
         tracker.update_equity(52000.0)
         tracker.update_equity(49000.0)  # DD = $3000 > $2000 limit
         assert tracker._halt
@@ -175,7 +177,9 @@ class TestHWMHaltBlocksOrder:
 
     def test_warning_allows_order(self, tmp_path):
         """At 76% DD, warning logged but order proceeds."""
-        tracker = AccountHWMTracker("TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path)
+        tracker = AccountHWMTracker(
+            "TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path, dd_type="intraday_trailing"
+        )
         tracker.update_equity(50000.0)
         tracker.update_equity(51520.0)  # HWM
         tracker.update_equity(50000.0)  # DD = 1520 = 76%
@@ -186,7 +190,9 @@ class TestHWMHaltBlocksOrder:
 
 class TestHWMPollFailureAccumulation:
     def test_three_failures_halt(self, tmp_path):
-        tracker = AccountHWMTracker("TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path)
+        tracker = AccountHWMTracker(
+            "TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path, dd_type="intraday_trailing"
+        )
         tracker.update_equity(50000.0)
         tracker.update_equity(None)
         tracker.update_equity(None)
@@ -197,7 +203,9 @@ class TestHWMPollFailureAccumulation:
         assert halted
 
         # Halt persists on restart
-        t2 = AccountHWMTracker("TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path)
+        t2 = AccountHWMTracker(
+            "TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path, dd_type="intraday_trailing"
+        )
         halted2, _ = t2.check_halt()
         assert halted2
 
@@ -287,7 +295,9 @@ class TestFullTopStepLifecycleClean:
 class TestFullTopStepLifecycleDDBreach:
     def test_hwm_halts_after_losing_trade(self, tmp_path):
         """Trade loses -> equity drops -> HWM halt blocks second signal."""
-        tracker = AccountHWMTracker("TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path)
+        tracker = AccountHWMTracker(
+            "TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path, dd_type="intraday_trailing"
+        )
         tracker.update_equity(49900.0)  # HWM = 49900
         # DD already at $1300 of $2000 (HWM was higher before)
         # Simulate: HWM was set at $51200 in a previous session
@@ -341,7 +351,9 @@ class TestOrphanDetectionProjectX:
 class TestSimultaneousSignalAndPollFailure:
     def test_poll_failure_does_not_block_signal(self, tmp_path):
         """Poll failure increments counter but doesn't immediately halt."""
-        tracker = AccountHWMTracker("TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path)
+        tracker = AccountHWMTracker(
+            "TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path, dd_type="intraday_trailing"
+        )
         tracker.update_equity(50000.0)
 
         # Simulate: poll fails once
@@ -361,13 +373,17 @@ class TestSimultaneousSignalAndPollFailure:
 class TestSessionRestartPersistence:
     def test_hwm_persists_across_restart(self, tmp_path):
         """HWM value survives process restart."""
-        t1 = AccountHWMTracker("TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path)
+        t1 = AccountHWMTracker(
+            "TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path, dd_type="intraday_trailing"
+        )
         t1.update_equity(50000.0)
         t1.update_equity(51500.0)  # HWM = 51500
         t1.update_equity(50800.0)  # DD = 700
 
         # "Restart"
-        t2 = AccountHWMTracker("TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path)
+        t2 = AccountHWMTracker(
+            "TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path, dd_type="intraday_trailing"
+        )
         assert t2._hwm == 51500.0
         assert t2._last_equity == 50800.0
 
@@ -384,7 +400,9 @@ class TestSessionRestartPersistence:
 class TestBackToBack429ThenHWMHalt:
     def test_429_then_hwm_halt_no_deadlock(self, tmp_path):
         """429 on entry -> then HWM breaches -> both handled independently."""
-        tracker = AccountHWMTracker("TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path)
+        tracker = AccountHWMTracker(
+            "TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path, dd_type="intraday_trailing"
+        )
         tracker.update_equity(52000.0)
 
         # 429 happens (simulated by catching the error)
@@ -403,7 +421,9 @@ class TestCorruptHWMStateOnStartup:
         state_file = tmp_path / "account_hwm_CORRUPT_TEST.json"
         state_file.write_text("{not valid json!!!}")
 
-        t = AccountHWMTracker("CORRUPT_TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path)
+        t = AccountHWMTracker(
+            "CORRUPT_TEST", "topstep", dd_limit_dollars=2000.0, state_dir=tmp_path, dd_type="intraday_trailing"
+        )
         assert t._hwm == 0.0  # Fresh init
 
         # Backup exists
