@@ -64,7 +64,17 @@ _MAX_CONSECUTIVE_POLL_FAILURES = 3
 
 
 class AccountHWMTracker:
-    """Persistent dollar-based HWM tracker for prop firm trailing DD."""
+    """Persistent dollar-based HWM tracker for prop firm trailing DD.
+
+    Supports two trailing modes via dd_type:
+    - "eod_trailing" (default): HWM only advances at session close via record_session_end().
+      Intraday update_equity() tracks equity for halt detection but does NOT ratchet HWM.
+      This matches Apex/TopStep/Tradeify EOD trailing mechanics.
+    - "intraday_trailing": HWM advances on every update_equity() call (legacy behavior).
+
+    Supports freeze_at_balance: when HWM reaches this level, it locks permanently.
+    For Apex 50K EOD PA: freeze_at_balance = 52100 (threshold locks at $50,100).
+    """
 
     def __init__(
         self,
@@ -72,13 +82,21 @@ class AccountHWMTracker:
         firm: str,
         dd_limit_dollars: float,
         state_dir: Path | None = None,
+        *,
+        dd_type: str = "eod_trailing",
+        freeze_at_balance: float | None = None,
     ):
         if dd_limit_dollars <= 0:
             raise ValueError(f"dd_limit_dollars must be positive, got {dd_limit_dollars}")
+        if dd_type not in ("eod_trailing", "intraday_trailing", "none"):
+            raise ValueError(f"dd_type must be eod_trailing/intraday_trailing/none, got {dd_type}")
 
         self._account_id = str(account_id)
         self._firm = firm
         self._dd_limit = dd_limit_dollars
+        self._dd_type = dd_type
+        self._freeze_at = freeze_at_balance
+        self._hwm_frozen = False
         self._state_dir = state_dir or _DEFAULT_STATE_DIR
         self._state_dir.mkdir(parents=True, exist_ok=True)
         self._state_file = self._state_dir / f"account_hwm_{self._account_id}.json"
@@ -112,6 +130,7 @@ class AccountHWMTracker:
             self._last_equity_ts = data.get("last_equity_timestamp", "")
             self._halt = bool(data.get("halt_triggered", False))
             self._halt_ts = data.get("halt_timestamp")
+            self._hwm_frozen = bool(data.get("hwm_frozen", False))
             self._session_log = data.get("session_log", [])[-_MAX_SESSION_LOG:]
             log.info(
                 "HWM tracker loaded: account=%s firm=%s HWM=$%.2f last=$%.2f halt=%s",
@@ -135,6 +154,26 @@ class AccountHWMTracker:
             self._hwm = 0.0
             self._hwm_ts = ""
 
+    def _advance_hwm(self, equity: float, timestamp: str) -> None:
+        """Advance HWM if equity exceeds it. Respects freeze logic."""
+        if self._hwm_frozen:
+            return
+        if equity <= self._hwm:
+            return
+        old_hwm = self._hwm
+        self._hwm = equity
+        self._hwm_ts = timestamp
+        log.info("NEW_HWM: $%.2f -> $%.2f (+$%.2f)", old_hwm, equity, equity - old_hwm)
+        # Check freeze condition
+        if self._freeze_at is not None and self._hwm >= self._freeze_at:
+            self._hwm_frozen = True
+            log.info(
+                "HWM FROZEN at $%.2f (freeze_at=$%.2f). Threshold locked at $%.2f permanently.",
+                self._hwm,
+                self._freeze_at,
+                self._hwm - self._dd_limit,
+            )
+
     def _save_state(self) -> None:
         data = {
             "account_id": self._account_id,
@@ -148,6 +187,8 @@ class AccountHWMTracker:
             "dd_pct_used": round(self._dd_pct(), 4),
             "halt_triggered": self._halt,
             "halt_timestamp": self._halt_ts,
+            "hwm_frozen": self._hwm_frozen,
+            "dd_type": self._dd_type,
             "session_log": self._session_log[-_MAX_SESSION_LOG:],
         }
         tmp = self._state_file.with_suffix(".tmp")
@@ -194,12 +235,11 @@ class AccountHWMTracker:
             self._hwm_ts = now
             log.info("HWM initialised from broker: $%.2f", current_equity)
 
-        # New high water mark
-        if current_equity > self._hwm:
-            old_hwm = self._hwm
-            self._hwm = current_equity
-            self._hwm_ts = now
-            log.info("NEW_HWM: $%.2f -> $%.2f (+$%.2f)", old_hwm, current_equity, current_equity - old_hwm)
+        # Advance HWM based on dd_type:
+        # - eod_trailing: HWM only advances at session close (record_session_end)
+        # - intraday_trailing / none: HWM advances on every equity update
+        if self._dd_type != "eod_trailing":
+            self._advance_hwm(current_equity, now)
 
         # Track intraday peak for session log
         if current_equity > self._session_peak:
@@ -251,8 +291,16 @@ class AccountHWMTracker:
         log.info("HWM session start: equity=$%.2f, HWM=$%.2f, DD=$%.2f", equity, self._hwm, self._dd_used())
 
     def record_session_end(self, equity: float) -> None:
-        """Called at session close. Appends to rolling session log."""
+        """Called at session close. Appends to rolling session log.
+
+        For eod_trailing firms, this is where HWM advances — NOT during
+        intraday update_equity() calls. This matches the firm mechanic:
+        threshold recalculated from highest EOD close, not intraday peaks.
+        """
         self._last_equity = equity
+        # EOD commit: advance HWM now (suppressed during intraday polls)
+        if self._dd_type == "eod_trailing":
+            self._advance_hwm(equity, datetime.now(UTC).isoformat())
         entry = {
             "date": datetime.now(UTC).isoformat(),
             "start_equity": round(self._session_start_equity or equity, 2),
@@ -298,6 +346,8 @@ class AccountHWMTracker:
             "dd_limit_dollars": self._dd_limit,
             "dd_pct_used": round(self._dd_pct() * 100, 1),
             "dd_remaining_dollars": round(self._dd_limit - self._dd_used(), 2),
+            "hwm_frozen": self._hwm_frozen,
+            "dd_type": self._dd_type,
             "halt_triggered": self._halt,
             "halt_timestamp": self._halt_ts,
             "sessions_tracked": len(self._session_log),

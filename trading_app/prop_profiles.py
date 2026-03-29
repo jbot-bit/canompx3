@@ -564,3 +564,89 @@ def compute_profit_split_factor(firm_spec: PropFirmSpec, cumulative_profit: floa
             return pct
     # Fallback: last tier
     return firm_spec.profit_split_tiers[-1][1]
+
+
+# =========================================================================
+# DD Budget Validation (CRITICAL-3 from adversarial audit 2026-03-29)
+#
+# Validates that worst-case simultaneous stop losses across all daily_lanes
+# do not exceed the firm's max_dd. Uses a FIXED P90 ORB estimate per
+# instrument (not DB-dependent — must be updated when ORB regimes shift).
+# =========================================================================
+
+# P90 ORB sizes in points (from adversarial audit 2026-03-29, gold.db, last 6 months).
+# These are empirical — update when ORB regime shifts materially.
+_P90_ORB_PTS: dict[str, float] = {
+    "MNQ": 120.0,  # Across sessions: NYSE_CLOSE=66, SING=59, COMEX=52, NYSE_OPEN=212, US_DATA=101
+    "MGC": 20.0,  # TOKYO_OPEN=20.4
+    "MES": 30.0,  # Estimated (not in active lanes)
+}
+
+# Point values (must match pipeline.cost_model but inlined to avoid circular import)
+_PV: dict[str, float] = {"MNQ": 2.0, "MGC": 10.0, "MES": 5.0}
+
+
+def validate_dd_budget(profile_id: str | None = None) -> list[str]:
+    """Validate DD budget for one or all active profiles.
+
+    Returns list of violation strings. Empty = all clear.
+    Does NOT raise — caller decides severity (pre_session_check gates on this).
+    """
+    violations: list[str] = []
+    profiles = (
+        {profile_id: ACCOUNT_PROFILES[profile_id]}
+        if profile_id
+        else {pid: p for pid, p in ACCOUNT_PROFILES.items() if p.active}
+    )
+
+    for pid, prof in profiles.items():
+        if not prof.daily_lanes:
+            continue
+        tier = ACCOUNT_TIERS.get((prof.firm, prof.account_size))
+        if tier is None:
+            violations.append(f"{pid}: no ACCOUNT_TIER for ({prof.firm}, {prof.account_size})")
+            continue
+
+        max_dd = tier.max_dd
+        total_worst_case = 0.0
+        lane_risks: list[tuple[str, float]] = []
+
+        for lane in prof.daily_lanes:
+            inst = lane.instrument
+            p90_orb = _P90_ORB_PTS.get(inst, 100.0)
+            pv = _PV.get(inst, 2.0)
+            sm = lane.planned_stop_multiplier or prof.stop_multiplier
+
+            # If lane has max_orb_size_pts cap, use the lower of cap and P90
+            if lane.max_orb_size_pts is not None:
+                effective_orb = min(p90_orb, lane.max_orb_size_pts)
+            else:
+                effective_orb = p90_orb
+
+            worst_stop = effective_orb * sm * pv
+            total_worst_case += worst_stop
+            lane_risks.append((lane.orb_label, worst_stop))
+
+        if total_worst_case > max_dd:
+            detail = ", ".join(f"{s}=${v:.0f}" for s, v in lane_risks)
+            violations.append(
+                f"{pid}: worst-case total ${total_worst_case:.0f} > DD limit ${max_dd:.0f} "
+                f"({total_worst_case / max_dd:.0%}). Lanes: {detail}"
+            )
+
+    return violations
+
+
+# Import-time check: warn (do not crash) if any profile is over budget.
+import logging as _logging
+import sys as _sys
+
+_budget_violations = validate_dd_budget()
+if _budget_violations:
+    _log = _logging.getLogger(__name__)
+    for _v in _budget_violations:
+        _log.warning("DD BUDGET VIOLATION: %s", _v)
+    # Also print to stderr for scripts that don't configure logging
+    if not _logging.root.handlers:
+        for _v in _budget_violations:
+            print(f"[DD_BUDGET WARNING] {_v}", file=_sys.stderr)

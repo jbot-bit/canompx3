@@ -15,7 +15,26 @@ def state_dir(tmp_path):
 
 @pytest.fixture
 def tracker(state_dir):
-    return AccountHWMTracker("ACC001", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+    """Intraday-trailing tracker (legacy behavior — HWM advances on every update)."""
+    return AccountHWMTracker(
+        "ACC001",
+        "topstep",
+        dd_limit_dollars=2000.0,
+        state_dir=state_dir,
+        dd_type="intraday_trailing",
+    )
+
+
+@pytest.fixture
+def eod_tracker(state_dir):
+    """EOD-trailing tracker — HWM only advances on record_session_end."""
+    return AccountHWMTracker(
+        "ACC001",
+        "topstep",
+        dd_limit_dollars=2000.0,
+        state_dir=state_dir,
+        dd_type="eod_trailing",
+    )
 
 
 class TestInitialisation:
@@ -34,10 +53,22 @@ class TestInitialisation:
         assert state.is_safe
 
     def test_state_persists_across_instances(self, state_dir):
-        t1 = AccountHWMTracker("ACC001", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        t1 = AccountHWMTracker(
+            "ACC001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            dd_type="intraday_trailing",
+        )
         t1.update_equity(51000.0)
 
-        t2 = AccountHWMTracker("ACC001", "topstep", dd_limit_dollars=2000.0, state_dir=state_dir)
+        t2 = AccountHWMTracker(
+            "ACC001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            dd_type="intraday_trailing",
+        )
         assert t2._hwm == 51000.0
         assert t2._last_equity == 51000.0
 
@@ -225,3 +256,173 @@ class TestStatusSummary:
         assert s["dd_remaining_dollars"] == 1500.0
         assert s["dd_pct_used"] == 25.0
         assert not s["halt_triggered"]
+
+
+class TestEODTrailing:
+    """EOD trailing: HWM only advances at session close, not intraday."""
+
+    def test_intraday_does_not_advance_hwm(self, eod_tracker):
+        eod_tracker.update_equity(50000.0)
+        eod_tracker.update_equity(51500.0)  # intraday peak
+        eod_tracker.update_equity(50800.0)  # drops back
+        # HWM should still be at initialisation value (50000), not intraday peak
+        assert eod_tracker._hwm == 50000.0
+
+    def test_session_end_advances_hwm(self, eod_tracker):
+        eod_tracker.update_equity(50000.0)
+        eod_tracker.update_equity(51500.0)
+        eod_tracker.record_session_end(51200.0)  # EOD close at 51200
+        # HWM should advance to 51200 (the EOD close), not 51500 (intraday peak)
+        assert eod_tracker._hwm == 51200.0
+
+    def test_halt_still_works_intraday(self, eod_tracker):
+        eod_tracker.update_equity(50000.0)
+        eod_tracker.update_equity(47500.0)  # DD = $2500 > $2000 limit
+        halted, reason = eod_tracker.check_halt()
+        assert halted
+        assert "HALT" in reason
+
+    def test_dd_computed_from_frozen_hwm(self, eod_tracker):
+        eod_tracker.update_equity(50000.0)
+        eod_tracker.record_session_end(51000.0)  # HWM -> 51000
+        eod_tracker.update_equity(50500.0)  # intraday drop
+        state = eod_tracker.update_equity(50200.0)  # DD = 51000 - 50200 = 800
+        assert state.dd_used_dollars == 800.0
+        assert state.hwm_dollars == 51000.0  # not moved by intraday
+
+
+class TestHWMFreeze:
+    """Freeze: HWM stops trailing when it reaches freeze_at_balance."""
+
+    def test_freeze_at_balance(self, state_dir):
+        t = AccountHWMTracker(
+            "ACC001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            dd_type="intraday_trailing",
+            freeze_at_balance=52100.0,
+        )
+        t.update_equity(50000.0)
+        t.update_equity(52200.0)  # past freeze point
+        assert t._hwm_frozen is True
+        assert t._hwm == 52200.0
+
+        # Further equity increases should NOT advance HWM
+        t.update_equity(53000.0)
+        assert t._hwm == 52200.0  # frozen
+
+    def test_freeze_persists_across_restart(self, state_dir):
+        t1 = AccountHWMTracker(
+            "ACC001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            dd_type="intraday_trailing",
+            freeze_at_balance=52100.0,
+        )
+        t1.update_equity(50000.0)
+        t1.update_equity(52500.0)
+        assert t1._hwm_frozen is True
+
+        t2 = AccountHWMTracker(
+            "ACC001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            dd_type="intraday_trailing",
+            freeze_at_balance=52100.0,
+        )
+        assert t2._hwm_frozen is True
+        assert t2._hwm == 52500.0
+
+    def test_eod_freeze_on_session_end(self, state_dir):
+        t = AccountHWMTracker(
+            "ACC001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            dd_type="eod_trailing",
+            freeze_at_balance=52100.0,
+        )
+        t.update_equity(50000.0)
+        t.update_equity(52500.0)  # intraday peak — does NOT advance HWM (EOD mode)
+        assert t._hwm == 50000.0
+        assert t._hwm_frozen is False
+
+        t.record_session_end(52300.0)  # EOD close above freeze point
+        assert t._hwm == 52300.0
+        assert t._hwm_frozen is True
+
+        # Next session: HWM should NOT advance
+        t.record_session_end(53000.0)
+        assert t._hwm == 52300.0  # frozen
+
+    def test_no_freeze_when_none(self, state_dir):
+        t = AccountHWMTracker(
+            "ACC001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            dd_type="intraday_trailing",  # no freeze_at_balance
+        )
+        t.update_equity(50000.0)
+        t.update_equity(55000.0)
+        assert t._hwm_frozen is False
+        assert t._hwm == 55000.0
+
+
+class TestDDBudgetValidation:
+    """prop_profiles.validate_dd_budget()"""
+
+    def test_validation_runs_without_error(self):
+        from trading_app.prop_profiles import validate_dd_budget
+
+        violations = validate_dd_budget()
+        # Should return a list (may be empty if all profiles pass)
+        assert isinstance(violations, list)
+
+    def test_validation_for_topstep_under_budget(self):
+        from trading_app.prop_profiles import validate_dd_budget
+
+        violations = validate_dd_budget("topstep_50k")
+        # TopStep has 1 MGC lane — well under budget
+        assert len(violations) == 0
+
+    def test_validation_catches_overcommit(self):
+        """Synthetic profile that is deliberately over budget."""
+        from trading_app.prop_profiles import (
+            ACCOUNT_PROFILES,
+            ACCOUNT_TIERS,
+            AccountProfile,
+            DailyLaneSpec,
+            validate_dd_budget,
+        )
+
+        # Temporarily inject a bad profile with tiny DD limit (MFFU Core 50K = $1500)
+        bad = AccountProfile(
+            profile_id="_test_overcommit",
+            firm="mffu",
+            account_size=50_000,
+            active=True,
+            daily_lanes=(
+                # 10 MNQ lanes with no cap = 10 * 120 * 0.75 * 2 = $1800 per lane
+                DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_NO_FILTER_O15", "MNQ", "NYSE_OPEN"),
+                DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_NO_FILTER_O15", "MNQ", "NYSE_CLOSE"),
+                DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER", "MNQ", "COMEX_SETTLE"),
+                DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.0_CB1_NO_FILTER_O15", "MNQ", "SINGAPORE_OPEN"),
+                DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.0_CB1_NO_FILTER", "MNQ", "US_DATA_1000"),
+                DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.0_CB1_NO_FILTER", "MNQ", "TOKYO_OPEN"),
+                DailyLaneSpec("MNQ_CME_PRECLOSE_E2_RR1.0_CB1_NO_FILTER", "MNQ", "CME_PRECLOSE"),
+                DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.0_CB1_NO_FILTER", "MNQ", "EUROPE_FLOW"),
+                DailyLaneSpec("MNQ_LONDON_METALS_E2_RR1.0_CB1_NO_FILTER", "MNQ", "LONDON_METALS"),
+                DailyLaneSpec("MNQ_US_DATA_830_E2_RR1.0_CB1_NO_FILTER", "MNQ", "US_DATA_830"),
+            ),
+        )
+        ACCOUNT_PROFILES["_test_overcommit"] = bad
+        try:
+            violations = validate_dd_budget("_test_overcommit")
+            assert len(violations) == 1
+            assert "worst-case" in violations[0]
+        finally:
+            del ACCOUNT_PROFILES["_test_overcommit"]
