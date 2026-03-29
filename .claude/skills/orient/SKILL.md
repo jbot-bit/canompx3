@@ -106,4 +106,4 @@ Based on the briefing, suggest the appropriate next skill:
 - Portfolio health? → `/regime-check`
 - Want to know what to trade? → `/trade-book`
 - Planning a change? → `/brainstorm [topic]` (stage-gate will route)
-- ML question? → `/ml-verify`
+- ML question? → ML is dormant (V2 dead). Check `trading_app/ml/` if reviving.
