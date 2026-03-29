@@ -89,7 +89,7 @@ class TestAccountProfile:
         p = get_profile("tradeify_50k")
         assert p.firm == "tradeify"
         assert p.copies == 5  # PRIMARY MNQ scaling lane
-        assert p.active is True
+        assert p.active is False  # No daily_lanes configured yet (ground audit 2026-03-30)
 
     def test_self_funded_profile(self):
         p = get_profile("self_funded_50k")

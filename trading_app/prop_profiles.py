@@ -405,7 +405,8 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ"}),
-        notes="MNQ overnight auto. Tradovate API. Bot exclusive (no cross-firm).",
+        active=False,  # No daily_lanes configured yet. Activate when CME_PRECLOSE lanes added.
+        notes="MNQ overnight auto. Tradovate API. Bot exclusive (no cross-firm). Lanes TBD (CME_PRECLOSE priority).",
     ),
     "topstep_50k": AccountProfile(
         profile_id="topstep_50k",
@@ -428,7 +429,8 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G4_CONT_S075",
                 "MGC",
                 "TOKYO_OPEN",
-                execution_notes="1 contract only until N=250. Skip if ORB > 26 pts.",
+                execution_notes="1 contract only until N=250.",
+                max_orb_size_pts=26.0,  # P90=20.4, was execution_notes only. Now code-enforced.
             ),
         ),
         notes=(
