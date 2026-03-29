@@ -1,19 +1,19 @@
 ---
 mode: IMPLEMENTATION
 stage: IMPLEMENTATION
-task: Ground truth audit + fix all issues — tradebook, caps, DLL, paper_trade_logger
+task: FDR audit script + methodology spec — fix 3 critical bugs + 3 grounding errors
 pass: 1
 scope_lock:
-  - scripts/tmp_ground_audit.py
-  - trading_app/prop_profiles.py
-  - trading_app/paper_trade_logger.py
-  - tests/test_trading_app/test_prop_profiles.py
+  - scripts/tools/audit_fdr_integrity.py
+  - docs/specs/fdr_methodology.md
 blast_radius:
-  - prop_profiles.py — ORB cap for TOKYO_OPEN, tradeify cleanup
-  - paper_trade_logger.py — potential hardcoded lane sync
+  - audit script: reference BH function, check_9 pool query, rounding
+  - methodology spec: page citations, PRDS claim, FST K=228 math
 acceptance:
-  - All audit checks produce honest numbers
-  - Every fixable issue resolved
+  - audit_fdr_integrity.py runs 13/13 clean
+  - bh_fdr_reference matches production benjamini_hochberg exactly
+  - check_9 uses full canonical pool (not just survivors)
+  - All spec citations verified against local PDFs
   - Drift checks pass
-updated: 2026-03-30T10:00:00Z
+updated: 2026-03-30T18:00:00Z
 ---
