@@ -84,10 +84,10 @@ def main():
     # Show Apex lane status
     print("\n  Apex lanes concentration:")
     apex_sids = [
-        "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15",
+        "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20",  # O15→O5 2026-03-29
         "MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15",
         "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8",
-        "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+        "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",  # O15→O5 2026-03-29
         "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
     ]
     for sid in apex_sids:

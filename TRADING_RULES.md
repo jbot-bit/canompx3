@@ -475,10 +475,10 @@ Stop multiplier: 0.75x (prop survival sizing). Strategies passed stratified-K BH
 
 | # | Session | Instrument | Filter | ORB Min | RR | Status | Notes |
 |---|---------|------------|--------|---------|-----|--------|-------|
-| 1 | NYSE_CLOSE | MNQ | VOL_RV12_N20 | O15 | 1.0 | TRADE | Highest ExpR lane |
+| 1 | NYSE_CLOSE | MNQ | VOL_RV12_N20 | O5 | 1.0 | TRADE | Highest ExpR lane. Switched O15→O5 (2026-03-29, aperture ARITHMETIC_ONLY) |
 | 2 | SINGAPORE_OPEN | MNQ | ORB_G8 | O15 | 4.0 | TRADE | 0.5x sizing (RR4.0 = long loss streaks). Hist max DD -$3,540 |
 | 3 | COMEX_SETTLE | MNQ | ATR70_VOL | O5 | 1.0 | TRADE | Alarm required (03:30/04:30 Brisbane) |
-| 4 | NYSE_OPEN | MNQ | X_MES_ATR60 | O15 | 1.0 | TRADE | 150pt max risk_points cap |
+| 4 | NYSE_OPEN | MNQ | X_MES_ATR60 | O5 | 1.0 | TRADE | 150pt max risk_points cap. Switched O15→O5 (2026-03-29, aperture ARITHMETIC_ONLY) |
 | 5 | US_DATA_1000 | MNQ | X_MES_ATR60 | O5 | 1.0 | TRADE | S0.75 stop multiplier embedded in strategy ID |
 | 6 | TOKYO_OPEN | MGC | ORB_G4_CONT | O5 | 2.0 | REVIEW | TopStep shadow — 1 contract only until N=250. CONDITIONAL (per-session P95 cleared, P99 not) |
 

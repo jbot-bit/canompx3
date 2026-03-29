@@ -269,6 +269,7 @@ Everything confirmed dead. Do NOT re-test without a fundamentally new approach.
 | RSI, MACD, Bollinger, MA cross | GUILTY | RESEARCH_RULES.md: guilty until proven | Sensitivity + OOS + mechanism required |
 | Pyramiding | DEAD | Correlated intraday = tail risk | — |
 | Breakeven trail stops | DEAD | −0.12 to −0.17 Sharpe | — |
+| O15/O30 ORB aperture (as portfolio) | ARITHMETIC_ONLY | Friction artifact — O5 gross R > O15 by 0.031R/trade on 24K matched pairs. Same family as G-filters. Mar 2026 | New mechanism hypothesis (not friction/size related) |
 
 Full NO-GO table with details: TRADING_RULES.md "What Doesn't Work"
 
