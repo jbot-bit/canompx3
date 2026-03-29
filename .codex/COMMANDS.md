@@ -12,8 +12,8 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 - `quant-tdd/SKILL.md`: test-driven implementation workflow
 - `quant-verify/SKILL.md`: verification workflow for quant changes
 - `blast-radius/SKILL.md`: change impact analysis
-- `verify-complete/SKILL.md`: done-definition enforcement
-- `audit/SKILL.md`, `audit-quick/SKILL.md`, `audit-phase/SKILL.md`: audit flows
+- `verify-done/SKILL.md`: done-definition enforcement (or dispatch `.claude/agents/verify-complete.md`)
+- `audit/SKILL.md`: audit flows (full, quick, phase)
 - `ralph/SKILL.md`: autonomous Ralph loop entrypoint
 
 ## Codex-Native CLI Shortcuts
@@ -35,7 +35,7 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 
 - Start with `discover/SKILL.md` when the repo area is unclear.
 - Use `blast-radius/SKILL.md` before edits that touch shared interfaces.
-- Use `quant-verify/SKILL.md` or `verify-complete/SKILL.md` before closing any material implementation task.
+- Use `quant-verify/SKILL.md` or `verify-done/SKILL.md` before closing any material implementation task.
 - Use `health-check/SKILL.md` when the right validation command is unclear.
 
 ## Codex Note
