@@ -1,33 +1,34 @@
 # Auto-Skill Routing — Proactive Invocation
 
-The user does NOT type `/skill` commands. Claude MUST invoke skills automatically based on context.
+The user does NOT type `/skill` commands. Claude should invoke skills proactively based on context.
 
-## Mandatory Auto-Triggers (no user action needed)
+## Auto-Triggers
 
-| Context | Skill to invoke | How to detect |
-|---------|----------------|---------------|
-| Session start / first message | `/orient` | No prior messages in conversation |
-| User says "commit" / "push" / "done" | `/verify quick` FIRST, then commit | Trigger words in message |
-| After editing 2+ production files | `/verify quick` before responding | PostToolUse tracking |
-| Before editing pipeline/ or trading_app/ core files | `/blast-radius` | File in NEVER_TRIVIAL list |
-| User asks about strategy/portfolio/fitness | `/trade-book` or `/regime-check` | "trade", "portfolio", "fitness", "what do I trade" |
-| User asks about project state/status | `/orient` | "status", "where are we", "what's broken" |
-| User describes a bug | `/quant-debug` | "bug", "broken", "wrong", "error in" |
-| User wants to plan/design | `/design` | "plan", "design", "how should we", "think through" |
-| User asks about past research | `/pinecone-assistant` routing | "what did we find", "why did we", "history of" |
-| Research claim needs validation | `/audit hypothesis` | "is this real", "validate", "stress test" |
+| Context | Action | Detection |
+|---------|--------|-----------|
+| Session start / first message | Run `/orient` | No prior messages |
+| "commit" / "push" / "done" | Run `/verify quick` FIRST, then commit | Trigger words |
+| After editing 2+ production files | Run drift + targeted tests before responding | File count tracking |
+| Before editing NEVER_TRIVIAL files | Run `/blast-radius` on the target | File in core list |
+| Strategy/portfolio/fitness question | Run `/trade-book` or `/regime-check` | "trade", "portfolio", "fitness" |
+| Project state question | Run `/orient` | "status", "where are we", "what's broken" |
+| Bug description | Run `/quant-debug` | "bug", "broken", "wrong", "error" |
+| Plan/design request | Run `/design` | "plan", "design", "how should we" |
+| Past research question | Route via `/pinecone-assistant` | "what did we find", "why did we" |
+| Hypothesis validation | Run `/audit hypothesis` | "is this real", "validate", "stress test" |
+| Schema/init_db edit | Require full stage-gate (complex change) | File is init_db.py or cost_model.py |
+| config.py entry model edit | Require full stage-gate (breaking change) | File is trading_app/config.py |
+| User says "done"/"complete" for a stage | Run `/verify done` before closing | Trigger words + active STAGE_STATE |
 
 ## Post-Work Auto-Checks
 
-After completing any non-trivial code change, Claude MUST:
-1. Run drift check: `python pipeline/check_drift.py`
-2. Run targeted tests for changed files (check TEST_MAP)
+After any non-trivial code change:
+1. `python pipeline/check_drift.py`
+2. Targeted tests for changed files (check TEST_MAP in `.claude/hooks/post-edit-pipeline.py`)
 3. Report results — do NOT claim "done" without evidence
-
-This replaces the need for the user to remember `/verify`.
 
 ## Rules
 
-- NEVER wait for the user to type a slash command if the context clearly matches
-- Skills with `disable-model-invocation: true` (audit, rebuild-outcomes, post-rebuild, validate-instrument, ralph) still require explicit `/name` — they are destructive operations
-- When in doubt, invoke the skill — false positives (unnecessary invocation) are cheaper than false negatives (missing a check)
+- Proactively invoke when context clearly matches — don't wait for slash commands
+- Destructive skills (audit full, rebuild-outcomes, post-rebuild, validate-instrument, ralph) require explicit `/name`
+- When in doubt, invoke — false positives are cheaper than missed checks

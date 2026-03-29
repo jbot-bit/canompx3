@@ -8,7 +8,7 @@ Before any strategy, research, or trading work:
 
 Key state (re-verify if stale):
 - MNQ E2 = only positive unfiltered baseline. MGC/MES need size filters.
-- ML works at RR2.0 O30 (bootstrap p≤0.02). Portfolio-level negative ML = DEAD (p=0.35).
+- ML is DEAD. V2 Phase 1: 0/12 BH survivors at K=12. Phase 2 cancelled. Do not add ML.
 - `filter_type` must match `ALL_FILTERS` exactly. Unknown strings = silent trade drops.
 - 2026 holdout is SACRED. 3 pre-registered strategies only.
 

@@ -1,3 +1,10 @@
+---
+paths:
+  - "trading_app/strategy_*"
+  - "trading_app/outcome_*"
+  - "research/**"
+  - "scripts/tools/backtest*"
+---
 # Quant Audit Protocol — Claude Code Edition
 
 **Role:** Institutional hypothesis validator (prop desk / Bloomberg standard)

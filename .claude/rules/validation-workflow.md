@@ -16,7 +16,7 @@ python -m trading_app.strategy_validator --instrument MGC --min-sample 30 \
 ```
 
 ## Critical Notes
-- **All instruments use WF testing** (Mar 2026). MGC (10yr), MES (7yr), MNQ (5yr), M2K (5yr) all have sufficient data. `--no-walkforward` is only for debugging/one-off analysis.
+- **All instruments use WF testing** (Mar 2026). MGC (10yr), MES (7yr), MNQ (5yr) all have sufficient data. M2K is dead (Mar 2026). `--no-walkforward` is only for debugging.
 - **MGC WF_START_OVERRIDE=2022-01-01** in config.py — skips pre-2022 low-ATR regime for WF windows only.
 - **`--min-years-positive-pct` is dead code** when regime waivers are enabled (default). It lives in an `else` branch only reached with `--no-regime-waivers`. Always pair them.
 - **PowerShell breaks `--` flags** — always run validators from bash
