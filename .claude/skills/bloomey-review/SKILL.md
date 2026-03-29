@@ -130,7 +130,7 @@ Action items: [numbered list of required changes]
 
 ### Optional: M2.5 Second Opinion
 
-If the review is for a significant change (schema, entry model, pipeline logic), offer to run `/m25-audit` for a second opinion. Triage any M2.5 findings per `.claude/rules/m25-audit.md`.
+For significant changes (schema, entry model, pipeline logic), run `python scripts/tools/m25_auto_audit.py --advisory` for an M2.5 second opinion. Triage findings per `.claude/rules/m25-audit.md` (40-70% FP rate expected).
 
 ### Rules
 

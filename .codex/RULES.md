@@ -17,7 +17,7 @@ Codex should reach into the shared `.claude/rules/` set directly.
 - Integrity work: `.claude/rules/integrity-guardian.md`
 - NotebookLM integration: `.claude/rules/notebooklm.md`
 - Pinecone helper flow: `.claude/skills/pinecone-assistant/SKILL.md`
-- M25-specific audit flow: `.claude/rules/m25-audit.md`
+- M25 audit triage rules: `.claude/rules/m25-audit.md` (script: `python scripts/tools/m25_auto_audit.py`)
 
 ## Load Guidance
 
