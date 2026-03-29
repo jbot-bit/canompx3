@@ -1,5 +1,15 @@
 # Workflow Preferences
 
+## Data First — MANDATORY
+When investigating ANY question about data, behavior, counts, mismatches, or pipeline correctness:
+1. **QUERY THE DATA FIRST.** Write and run the SQL/Python query immediately.
+2. Look at the actual numbers.
+3. THEN read code only if the numbers don't explain themselves.
+
+Do NOT theorize about what the code "probably does." Do NOT read 10 files to build a mental model before checking the data. 10 minutes of querying beats hours of code reading. The data shows WHAT is happening and HOW BAD it is. Code reading only tells you WHY — and you don't need WHY until you know WHAT.
+
+Trigger words: "check", "investigate", "why is X", "what's happening", "real data", "actual numbers", "empirical" → QUERY FIRST, no exceptions.
+
 ## Implementation Gating — MANDATORY
 Do NOT start writing code, editing files, or running implementation commands until the user explicitly says to implement.
 Words that mean DESIGN MODE (no code): "plan", "design", "think about", "what if", "how would", "explore", "iterate", "4t", "brainstorm".

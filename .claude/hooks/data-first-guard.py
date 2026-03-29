@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Data-First Guard: enforces querying data before theorizing.
+
+Two modes based on hook event:
+
+1. UserPromptSubmit: detects investigation keywords in user message,
+   sets investigation flag, injects DATA FIRST directive.
+
+2. PreToolUse (Read): tracks consecutive Read calls without a Bash/query call.
+   After threshold, warns via stderr. After hard limit, BLOCKS the Read.
+
+3. PreToolUse (Bash): resets the consecutive-read counter (query happened).
+
+State persisted to .claude/hooks/.data-first-state.json between invocations.
+"""
+
+import json
+import re
+import sys
+from pathlib import Path
+from datetime import datetime, timezone
+
+STATE_FILE = Path(__file__).parent / ".data-first-state.json"
+
+# Keywords that signal an investigation (user wants data, not code reading)
+INVESTIGATION_KEYWORDS = re.compile(
+    r"\b("
+    r"check|investigate|why is|why are|why does|why did|what.s happening|"
+    r"what happened|how many|mismatch|diverge|divergence|wrong|bug|"
+    r"real data|actual number|empirical|verify|count|trade count|"
+    r"sample size|performance|how bad|magnitude|compare.*actual|"
+    r"query first|data first"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Bash commands that count as "querying data" (resets the read counter)
+QUERY_PATTERNS = re.compile(
+    r"python\s+-c|python\s+.*\.py|duckdb|sqlite|SELECT\s|"
+    r"pipeline[./]|trading_app[./]|scripts[./]",
+    re.IGNORECASE,
+)
+
+WARN_THRESHOLD = 4    # After N consecutive Reads, warn
+BLOCK_THRESHOLD = 7   # After N consecutive Reads, BLOCK
+
+INVESTIGATION_DIRECTIVE = (
+    "DATA FIRST (ENFORCED): You are investigating a data question. "
+    "QUERY the database or run a computation BEFORE reading more code files. "
+    "10 minutes of data beats hours of code reading. "
+    "Write a python -c query NOW — do not read another file until you have numbers."
+)
+
+WARN_MESSAGE = (
+    "DATA FIRST WARNING: You have read {count} files without running a single query. "
+    "If you are investigating a data question, STOP reading code and RUN A QUERY. "
+    "The data shows WHAT and HOW BAD. Code only shows WHY."
+)
+
+BLOCK_MESSAGE = (
+    "DATA FIRST BLOCK: {count} consecutive file reads with zero queries. "
+    "This Read is BLOCKED. Run a python -c query or Bash command to check the data first. "
+    "If this is purely a code task (not a data question), "
+    "run: python -c \"print('not a data investigation')\" to reset the counter."
+)
+
+
+def load_state():
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {
+            "investigation_mode": False,
+            "consecutive_reads": 0,
+            "last_updated": None,
+        }
+
+
+def save_state(state):
+    state["last_updated"] = datetime.now(timezone.utc).isoformat()
+    STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
+def handle_user_prompt(event):
+    """Detect investigation keywords and inject DATA FIRST directive."""
+    prompt = event.get("prompt", "")
+    state = load_state()
+
+    if INVESTIGATION_KEYWORDS.search(prompt):
+        state["investigation_mode"] = True
+        state["consecutive_reads"] = 0
+        save_state(state)
+        # Inject directive via stderr (Claude sees this)
+        print(INVESTIGATION_DIRECTIVE, file=sys.stderr)
+    else:
+        # Don't clear investigation mode on every message —
+        # only clear when a query is run (via PreToolUse Bash handler)
+        pass
+
+    sys.exit(0)
+
+
+def handle_pre_tool_use(event):
+    """Track Read vs Bash calls. Warn or block on too many consecutive Reads."""
+    tool_name = event.get("tool_name", "")
+    state = load_state()
+
+    # Auto-expire investigation mode after 30 minutes of no updates
+    if state.get("last_updated"):
+        try:
+            last = datetime.fromisoformat(state["last_updated"])
+            age_min = (datetime.now(timezone.utc) - last).total_seconds() / 60
+            if age_min > 30:
+                state["investigation_mode"] = False
+                state["consecutive_reads"] = 0
+        except (ValueError, TypeError):
+            pass
+
+    if tool_name == "Bash":
+        command = event.get("tool_input", {}).get("command", "")
+        if QUERY_PATTERNS.search(command):
+            # Query detected — reset counter, clear investigation urgency
+            state["consecutive_reads"] = 0
+            save_state(state)
+        # Don't block Bash calls
+        sys.exit(0)
+
+    elif tool_name == "Read":
+        state["consecutive_reads"] = state.get("consecutive_reads", 0) + 1
+        count = state["consecutive_reads"]
+        save_state(state)
+
+        if state.get("investigation_mode"):
+            # In investigation mode — stricter thresholds
+            if count >= BLOCK_THRESHOLD:
+                print(
+                    BLOCK_MESSAGE.format(count=count),
+                    file=sys.stderr,
+                )
+                sys.exit(2)  # BLOCK the Read
+            elif count >= WARN_THRESHOLD:
+                print(
+                    WARN_MESSAGE.format(count=count),
+                    file=sys.stderr,
+                )
+                sys.exit(0)  # Warn but allow
+        else:
+            # Not in investigation mode — just track, don't block
+            # But still warn at higher threshold (catches unmarked investigations)
+            if count >= BLOCK_THRESHOLD + 3:  # 10 reads without any query
+                print(
+                    f"REMINDER: {count} consecutive file reads without a query. "
+                    f"If this is a data investigation, run a query.",
+                    file=sys.stderr,
+                )
+                sys.exit(0)  # Warn only, don't block outside investigation mode
+
+        sys.exit(0)
+
+    else:
+        # Other tools (Grep, Glob, etc.) — don't count, don't reset
+        sys.exit(0)
+
+
+def main():
+    try:
+        event = json.load(sys.stdin)
+    except (json.JSONDecodeError, Exception):
+        sys.exit(0)
+
+    hook_event = event.get("hook_event_name", "")
+
+    if hook_event == "UserPromptSubmit":
+        handle_user_prompt(event)
+    elif hook_event == "PreToolUse":
+        handle_pre_tool_use(event)
+    else:
+        sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()
