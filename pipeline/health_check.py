@@ -204,7 +204,7 @@ def check_staleness() -> tuple[bool, str]:
             con.close()
 
         if stale:
-            return True, f"STALENESS WARNING: {'; '.join(stale)}"
+            return False, f"STALENESS DETECTED: {'; '.join(stale)}"
         return True, "All instruments up to date"
     except (ImportError, OSError, duckdb.Error) as e:
         return True, f"Staleness check skipped: {e}"

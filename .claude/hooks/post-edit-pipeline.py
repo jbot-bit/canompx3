@@ -36,12 +36,32 @@ TEST_MAP = {
     "trading_app/live/trade_journal.py": "tests/test_trading_app/test_trade_journal.py",
     "trading_app/live/session_orchestrator.py": "tests/test_trading_app/test_session_orchestrator.py",
     "trading_app/live/projectx/order_router.py": "tests/test_trading_app/test_projectx_429_retry.py",
+    "trading_app/execution_engine.py": "tests/test_trading_app/test_execution_engine.py",
+    "trading_app/strategy_fitness.py": "tests/test_trading_app/test_strategy_fitness.py",
+    "trading_app/live_config.py": "tests/test_trading_app/test_live_config.py",
+    "trading_app/walkforward.py": "tests/test_trading_app/test_walkforward.py",
+    "trading_app/risk_manager.py": "tests/test_trading_app/test_risk_manager.py",
+    "trading_app/setup_detector.py": "tests/test_trading_app/test_setup_detector.py",
+    "trading_app/mcp_server.py": "tests/test_trading_app/test_mcp_server.py",
+    "pipeline/cost_model.py": "tests/test_pipeline/test_cost_model.py",
+    "pipeline/health_check.py": "tests/test_pipeline/test_health_check.py",
+    "scripts/tools/audit_behavioral.py": "tests/test_tools/test_audit_behavioral.py",
 }
 
 
 def normalize_path(p):
     """Normalize to forward-slash relative path for matching."""
-    return p.replace("\\", "/").split("canompx3/")[-1] if "canompx3" in p.replace("\\", "/") else p.replace("\\", "/")
+    fwd = p.replace("\\", "/")
+    # Strip project root prefix to get relative path
+    project_root = str(_PROJECT_ROOT).replace("\\", "/")
+    if fwd.startswith(project_root):
+        return fwd[len(project_root) :].lstrip("/")
+    # Fallback: split on last known directory marker
+    for marker in ("pipeline/", "trading_app/", "scripts/"):
+        idx = fwd.rfind(marker)
+        if idx >= 0:
+            return fwd[idx:]
+    return fwd
 
 
 def main():

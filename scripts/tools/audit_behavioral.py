@@ -413,6 +413,54 @@ def check_double_break_lookahead() -> list[str]:
     return violations
 
 
+def check_lag_without_orb_minutes() -> list[str]:
+    """Detect LAG()/LEAD() window functions on daily_features without orb_minutes filter.
+
+    daily_features has 3 rows per (trading_day, symbol) — one per orb_minutes (5, 15, 30).
+    LAG() without WHERE orb_minutes = N causes cross-aperture contamination.
+    Same class of bug as the triple-join trap but in CTEs/subqueries.
+    """
+    violations = []
+    lag_pattern = re.compile(r"\b(LAG|LEAD)\s*\(", re.IGNORECASE)
+    orb_filter = re.compile(r"orb_minutes\s*=", re.IGNORECASE)
+
+    for scan_dir in PIPELINE_DIRS:
+        if not scan_dir.exists():
+            continue
+        for fpath in scan_dir.rglob("*.py"):
+            try:
+                content = fpath.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+            if "daily_features" not in content:
+                continue
+
+            # Find triple-quoted SQL blocks containing LAG/LEAD.
+            # Use greedy match to capture full SQL strings, skip docstrings.
+            for match in re.finditer(r'(?:f|r|b)?("""|\'\'\')\s*(.*?)\1', content, re.DOTALL):
+                sql_block = match.group(2)
+                # Skip docstrings — they start right after def/class or at module top
+                pre = content[max(0, match.start() - 30) : match.start()].strip()
+                if pre.endswith(":") or match.start() < 5:
+                    continue  # likely a docstring
+                if not lag_pattern.search(sql_block):
+                    continue
+                if "daily_features" not in sql_block:
+                    continue
+                if orb_filter.search(sql_block):
+                    continue
+                # LAG on daily_features without orb_minutes filter
+                line_num = content[: match.start()].count("\n") + 1
+                rel_path = fpath.relative_to(PROJECT_ROOT)
+                violations.append(
+                    f"  {rel_path}:{line_num}: LAG/LEAD on daily_features without "
+                    f"orb_minutes filter (cross-aperture contamination risk)"
+                )
+
+    return violations
+
+
 # ── Check registry ───────────────────────────────────────────────────
 
 CHECKS = [
@@ -422,6 +470,7 @@ CHECKS = [
     ("4. CLI arg drift (warning only)", check_cli_arg_drift, True),  # warning_only
     ("5. Triple-join guard (orb_minutes in daily_features JOIN)", check_triple_join_guard, False),
     ("6. Double-break look-ahead scanner (resolved AFTER trade entry)", check_double_break_lookahead, False),
+    ("7. LAG/LEAD without orb_minutes on daily_features", check_lag_without_orb_minutes, False),
 ]
 
 

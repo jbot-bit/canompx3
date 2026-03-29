@@ -36,6 +36,7 @@ NONE_DIRECTIVES = (
 DESIGN_DIRECTIVES = (
     "BEFORE PRESENTING PLAN: Simulate happy/edge/failure paths. Fix what breaks. Show simulation results. Do NOT present first draft.",
     "SELF-CHECK: Walk through your plan step by step. At each step: what if NULL? What if missing? What if the interface changed? Fix first, present second.",
+    "EXECUTION PLAN: Every plan MUST include HOW to deploy, not just WHAT to change. FK constraints, rebuild ordering, data migration steps. Code without deployment = half a plan.",
 )
 
 
