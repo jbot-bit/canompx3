@@ -82,7 +82,7 @@ pytest tests/ -x -q 2>&1 | tail -5
 
 ### 1B. Drift Detection
 ```bash
-python pipeline/check_drift.py 2>&1
+uv run python pipeline/check_drift.py 2>&1
 ```
 - [ ] Record: total checks, passed, failed
 - [ ] For each failure: `REAL_VIOLATION` / `STALE_CHECK` / `FALSE_POSITIVE`
@@ -96,7 +96,7 @@ python pipeline/health_check.py 2>&1
 
 ### 1D. Data Integrity Audit
 ```bash
-python scripts/tools/audit_integrity.py 2>&1
+uv run python scripts/tools/audit_integrity.py 2>&1
 ```
 - [ ] Record: enforcing checks (1-6, 11-12, 15-16) pass/fail
 - [ ] Note informational output (7-10, 13-14, 17) for use in later phases
@@ -149,7 +149,7 @@ For EACH instrument in ASSET_CONFIGS:
 ### 2D. Environment / Paths
 - [ ] `.env` file exists with `DUCKDB_PATH`, `DATABENTO_API_KEY`, `SYMBOL`, `TZ_LOCAL`
 - [ ] `pipeline/paths.py` correctly reads `DUCKDB_PATH` from `.env` / environment
-- [ ] No duplicate gold.db at project root → canonical DB is `C:/db/gold.db`, drift check 37 should catch but verify
+- [ ] Canonical DB is `<project>/gold.db`. `C:/db/gold.db` is DEPRECATED scratch (blocked by `pipeline/paths.py` since Mar 2026). Drift check 37 copies canonical → scratch when stale.
 - [ ] `GOLD_DB_PATH` resolves to a file that exists and is readable
 
 ---
@@ -172,7 +172,7 @@ Documentation rots faster than code. No automated check verifies docs.
 - [ ] **Session table (10 sessions):** Compare every row against `dst.py:SESSION_CATALOG`. Flag mismatches.
 - [ ] **Entry model table (E1/E2/E3):** Compare trigger logic against `entry_rules.py`. Line by line.
 - [ ] **Cost model ($5.74/RT):** Match `cost_model.py`?
-- [ ] **Live portfolio tiers 1/2/3:** Match `live_config.py`? Every family, every gate.
+- [ ] **Live portfolio lanes:** Match `prop_profiles.py` ACCOUNT_PROFILES? Every lane, every gate. (`live_config.py` is DEPRECATED.)
 - [ ] **Confirmed edges table:** For each "DEPLOYED" edge, grep execution_engine.py + portfolio.py. Code path exists?
 - [ ] **NO-GO table:** For each NO-GO, grep `pipeline/` and `trading_app/` for the feature name. Found in production → `NO_GO_ZOMBIE`.
 - [ ] **Calendar filters status:** Doc says "not yet wired into portfolio.py/paper_trader.py." Still true?
@@ -316,7 +316,7 @@ Build the table:
 ## PHASE 7 — Live Trading Readiness
 
 ### 7A. Live Config Coherence
-- [ ] Every family in `live_config.py` Tier 1/2/3 exists in validated_setups AND edge_families
+- [ ] Every lane in `prop_profiles.py` ACCOUNT_PROFILES exists in validated_setups AND edge_families (`live_config.py` is DEPRECATED — resolves to 0 strategies)
 - [ ] Tier 2: families with `rolling_stability >= 0.6` — currently above? (Use `get_strategy_fitness`)
 - [ ] Tier 3: regime-gated families currently FIT?
 - [ ] SINGAPORE_OPEN excluded from MGC tiers only (MNQ SINGAPORE_OPEN strategies ARE valid)
@@ -328,7 +328,7 @@ Build the table:
 - [ ] SINGAPORE_OPEN exclusion is instrument-aware in execution_engine.py (MGC only, not blanket)
 
 ### 7C. Risk Manager
-- [ ] max concurrent, daily loss, max per ORB match `live_config.py` parameters
+- [ ] max concurrent, daily loss, max per ORB match `prop_profiles.py` ACCOUNT_PROFILES parameters
 - [ ] Circuit breaker prevents new entries after limit hit (trace code path)
 
 ### 7D. Feature Parity — Backtest vs Live Entry Mechanics

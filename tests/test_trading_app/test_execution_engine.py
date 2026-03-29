@@ -820,7 +820,7 @@ class TestVolAdjustedSizing:
         # $25K equity, 2% risk = $500 budget. 10pt risk × $10/pt = $100/contract → 5 contracts
         portfolio = _make_portfolio(account_equity=25000.0, risk_per_trade_pct=2.0)
         engine = ExecutionEngine(portfolio, _cost())
-        engine._daily_features_row = {}  # No ATR data → vol_scalar=1.0
+        engine._daily_features_rows = {5: {}}  # No ATR data → vol_scalar=1.0
         # max_contracts=10 to test sizing math without hitting the clamp
         contracts = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         assert contracts == 5
@@ -829,7 +829,7 @@ class TestVolAdjustedSizing:
         """_compute_contracts clamps result to max_contracts."""
         portfolio = _make_portfolio(account_equity=25000.0, risk_per_trade_pct=2.0)
         engine = ExecutionEngine(portfolio, _cost())
-        engine._daily_features_row = {}
+        engine._daily_features_rows = {5: {}}
         # Without clamp: would be 5. With max_contracts=1: returns 1.
         contracts = engine._compute_contracts(10.0, _cost(), max_contracts=1)
         assert contracts == 1
@@ -838,7 +838,7 @@ class TestVolAdjustedSizing:
         """account_equity=0 → fail-closed, return 0 (reject entry)."""
         portfolio = _make_portfolio(account_equity=0.0)
         engine = ExecutionEngine(portfolio, _cost())
-        engine._daily_features_row = {}
+        engine._daily_features_rows = {5: {}}
         contracts = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         assert contracts == 0
 
@@ -847,10 +847,10 @@ class TestVolAdjustedSizing:
         portfolio = _make_portfolio(account_equity=25000.0, risk_per_trade_pct=2.0)
         engine = ExecutionEngine(portfolio, _cost())
         # ATR_20 = 60 (high), median = 30 → scalar = 30/60 = 0.5
-        engine._daily_features_row = {"atr_20": 60.0, "median_atr_20": 30.0}
+        engine._daily_features_rows = {5: {"atr_20": 60.0, "median_atr_20": 30.0}}
         contracts_high_vol = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         # Without vol scaling: 5 contracts. With 0.5 scalar: 2 contracts
-        engine._daily_features_row = {"atr_20": 30.0, "median_atr_20": 30.0}
+        engine._daily_features_rows = {5: {"atr_20": 30.0, "median_atr_20": 30.0}}
         contracts_normal = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         assert contracts_high_vol < contracts_normal
 
@@ -859,9 +859,9 @@ class TestVolAdjustedSizing:
         portfolio = _make_portfolio(account_equity=25000.0, risk_per_trade_pct=2.0)
         engine = ExecutionEngine(portfolio, _cost())
         # ATR_20 = 20 (low), median = 30 → scalar = 30/20 = 1.5
-        engine._daily_features_row = {"atr_20": 20.0, "median_atr_20": 30.0}
+        engine._daily_features_rows = {5: {"atr_20": 20.0, "median_atr_20": 30.0}}
         contracts_low_vol = engine._compute_contracts(10.0, _cost(), max_contracts=10)
-        engine._daily_features_row = {"atr_20": 30.0, "median_atr_20": 30.0}
+        engine._daily_features_rows = {5: {"atr_20": 30.0, "median_atr_20": 30.0}}
         contracts_normal = engine._compute_contracts(10.0, _cost(), max_contracts=10)
         assert contracts_low_vol > contracts_normal
 
@@ -870,7 +870,7 @@ class TestVolAdjustedSizing:
         # $1K equity, 1% risk = $10 budget. 100pt risk × $10/pt = $1000. Can't trade.
         portfolio = _make_portfolio(account_equity=1000.0, risk_per_trade_pct=1.0)
         engine = ExecutionEngine(portfolio, _cost())
-        engine._daily_features_row = {}
+        engine._daily_features_rows = {5: {}}
         contracts = engine._compute_contracts(100.0, _cost())
         assert contracts == 0
 

@@ -225,10 +225,9 @@ def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
     if not run_ingest(instrument):
         return False
 
-    cfg = ASSET_CONFIGS[instrument]
-
     # Step 3: Build downstream artifacts
-    if cfg.get("orb_active", True):
+    # Use canonical ACTIVE_ORB_INSTRUMENTS (not raw orb_active flag — M2K trap)
+    if instrument in ACTIVE_ORB_INSTRUMENTS:
         ok = run_build_steps(instrument, fetch_start, today)
     else:
         ok = run_research_build_steps(instrument, fetch_start, today)

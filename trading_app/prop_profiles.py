@@ -288,7 +288,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "Hist max DD -$3,540 on this lane alone. Remediation audit 2026-03-25.",
                 planned_stop_multiplier=0.75,
             ),
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8", "MNQ", "COMEX_SETTLE"),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL", "MNQ", "COMEX_SETTLE"),
             # Risk cap: 150pt max risk_points (stop distance, not raw ORB size).
             # At 0.75x stops, 150pt risk ~ 200pt raw ORB. $300 max loss per trade ($2/pt).
             # Derived from DD math: $3K limit * 10% / $2 = 150pt risk. Not data snooped.

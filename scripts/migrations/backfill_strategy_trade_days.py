@@ -5,8 +5,8 @@ Reuses EXACT functions from strategy_discovery to ensure zero divergence
 from how discovery computes trade days during grid search.
 
 Usage:
-    python scripts/backfill_strategy_trade_days.py --instrument MGC --db-path C:/db/gold.db
-    python scripts/backfill_strategy_trade_days.py --all --db-path C:/db/gold.db
+    python scripts/backfill_strategy_trade_days.py --instrument MGC
+    python scripts/backfill_strategy_trade_days.py --all
 """
 
 import sys

@@ -6,7 +6,7 @@ Each worker gets its own copy of gold.db to avoid DuckDB write locks.
 Results are merged into the main DB at the end.
 
 Usage:
-    python scripts/rolling_eval_parallel.py --db-path C:/db/gold.db --workers 16
+    python scripts/rolling_eval_parallel.py --workers 16
 """
 
 import json

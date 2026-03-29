@@ -9,8 +9,8 @@ Defines exactly what to trade based on rolling evaluation results:
 - REGIME tier: conditionally-gated strategies (fitness-checked before trading)
 
 Usage:
-    python -m trading_app.live_config --db-path C:/db/gold.db
-    python -m trading_app.live_config --db-path C:/db/gold.db --output live_portfolio.json
+    python -m trading_app.live_config
+    python -m trading_app.live_config --output live_portfolio.json
 """
 
 import logging

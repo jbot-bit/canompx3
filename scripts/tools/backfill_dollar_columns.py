@@ -8,7 +8,7 @@ to strategy tables, without requiring a full rebuild.
 
 Usage:
     python scripts/tools/backfill_dollar_columns.py
-    python scripts/tools/backfill_dollar_columns.py --db-path C:/db/gold.db
+    python scripts/tools/backfill_dollar_columns.py     # uses canonical gold.db
     python scripts/tools/backfill_dollar_columns.py --dry-run
 """
 

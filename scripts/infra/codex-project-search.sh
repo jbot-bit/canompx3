@@ -6,14 +6,6 @@ ROOT="${CANOMPX3_ROOT:-$DEFAULT_ROOT}"
 VENV="$ROOT/.venv-wsl"
 PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
 
-if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
-  if command -v python3 >/dev/null 2>&1; then
-    python3 "$PREFLIGHT" --quiet --context codex-wsl --claim codex-search || true
-  elif command -v python >/dev/null 2>&1; then
-    python "$PREFLIGHT" --quiet --context codex-wsl --claim codex-search || true
-  fi
-fi
-
 if [[ ! -f "$VENV/bin/python" ]]; then
   echo "ERROR: .venv-wsl/bin/python not found." >&2
   echo "Run 'uv sync --frozen' inside WSL to create the venv." >&2
@@ -25,6 +17,10 @@ cd "$ROOT"
 export JOBLIB_MULTIPROCESSING=0
 export VIRTUAL_ENV="$VENV"
 export PATH="$VENV/bin:$PATH"
+
+if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
+  "$VENV/bin/python" "$PREFLIGHT" --quiet --context codex-wsl --claim codex-search || true
+fi
 
 exec codex \
   -C "$ROOT" \

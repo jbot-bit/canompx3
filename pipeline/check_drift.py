@@ -30,6 +30,25 @@ RESEARCH_DIR = PROJECT_ROOT / "research"
 GOLD_DB_PATH_FOR_CHECKS = None  # Set by tests; production uses GOLD_DB_PATH
 
 
+def _import_duckdb_or_exit():
+    """Import duckdb with a fail-closed environment hint."""
+    try:
+        import duckdb  # type: ignore
+    except ModuleNotFoundError:
+        print("FATAL: duckdb is not installed for the current interpreter.", file=sys.stderr)
+        print(f"Interpreter: {Path(sys.executable).resolve()}", file=sys.stderr)
+        venv_python = PROJECT_ROOT / ".venv-wsl" / "bin" / "python"
+        if venv_python.exists():
+            print("Use the repo-managed WSL environment instead:", file=sys.stderr)
+            print(f"  {venv_python} pipeline/check_drift.py", file=sys.stderr)
+            print("  uv run python pipeline/check_drift.py", file=sys.stderr)
+            print("  scripts/infra/codex-project.sh", file=sys.stderr)
+        else:
+            print("Create the WSL environment first with: uv sync --frozen", file=sys.stderr)
+        sys.exit(2)
+    return duckdb
+
+
 def _get_db_path() -> Path:
     """Resolve DB path: test override > pipeline.paths default."""
     if GOLD_DB_PATH_FOR_CHECKS is not None:
@@ -3382,6 +3401,85 @@ def check_holdout_contamination(con=None) -> list[str]:
     return violations
 
 
+def check_no_raw_orb_active_reads() -> list[str]:
+    """No direct orb_active flag reads outside pipeline/asset_configs.py.
+
+    The raw orb_active flag in ASSET_CONFIGS is dangerous because
+    DEAD_ORB_INSTRUMENTS can override it (e.g. M2K has orb_active=True
+    but is dead). All code must use ACTIVE_ORB_INSTRUMENTS or
+    get_active_instruments() instead of reading the flag directly.
+
+    Allowed: pipeline/asset_configs.py (defines the flag and derives the canonical list),
+    tests (may test the flag directly), docs/prompts (documentation).
+    """
+    violations = []
+    # Match cfg.get("orb_active" or ["orb_active"] or .orb_active patterns
+    pattern = re.compile(r"""(?:\.get\s*\(\s*["']orb_active["']|\["orb_active"\]|\.orb_active)""")
+    scan_dirs = [PIPELINE_DIR, SCRIPTS_DIR, PROJECT_ROOT / "trading_app"]
+    allowed_files = {"asset_configs.py", "check_drift.py"}
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            if py_file.name in allowed_files:
+                continue
+            if "archive" in py_file.parts or "test" in py_file.name.lower():
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for match in pattern.finditer(content):
+                line_no = content[: match.start()].count("\n") + 1
+                rel = py_file.relative_to(PROJECT_ROOT)
+                violations.append(
+                    f"  {rel}:{line_no} — raw orb_active read. "
+                    "Use ACTIVE_ORB_INSTRUMENTS or get_active_instruments() instead."
+                )
+    return violations
+
+
+def check_no_scratch_db_in_docstrings() -> list[str]:
+    """No C:/db/gold.db in docstring usage examples (stale since Mar 2026).
+
+    Scratch DB at C:/db/gold.db is deprecated. Usage examples in docstrings
+    that suggest it as a --db or --db-path argument will mislead users.
+    Intentional scratch tooling (scratch_run.py, scratch_ingest.py) is excluded.
+    """
+    violations = []
+    scratch_re = re.compile(r"C:[/\\]{1,2}db[/\\]{1,2}gold\.db")
+    scan_dirs = [PIPELINE_DIR, SCRIPTS_DIR, PROJECT_ROOT / "trading_app"]
+    # These files intentionally reference scratch DB (tooling, deprecation docs, scratch workflows)
+    scratch_tooling = {"scratch_run.py", "scratch_ingest.py", "check_drift.py", "paths.py", "ingest_mnq.py"}
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            if py_file.name in scratch_tooling:
+                continue
+            if "archive" in py_file.parts:
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            # Only flag matches inside docstrings (triple-quoted strings)
+            in_docstring = False
+            for i, line in enumerate(content.splitlines(), 1):
+                stripped = line.strip()
+                if '"""' in stripped or "'''" in stripped:
+                    # Toggle docstring state (simplified — handles most cases)
+                    count = stripped.count('"""') + stripped.count("'''")
+                    if count % 2 == 1:
+                        in_docstring = not in_docstring
+                if in_docstring and scratch_re.search(line):
+                    rel = py_file.relative_to(PROJECT_ROOT)
+                    violations.append(
+                        f"  {rel}:{i} — C:/db/gold.db in docstring. Remove or replace with canonical gold.db reference."
+                    )
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -3593,6 +3691,8 @@ CHECKS = [
         False,
         True,
     ),  # requires_db
+    ("No raw orb_active reads outside asset_configs.py", check_no_raw_orb_active_reads, False, False),
+    ("No deprecated C:/db/gold.db in docstring usage examples", check_no_scratch_db_in_docstrings, False, False),
 ]  # end CHECKS
 
 
@@ -3608,7 +3708,7 @@ def main():
     skip_count = 0
 
     # Open shared read-only DB connection for all requires_db checks
-    import duckdb
+    duckdb = _import_duckdb_or_exit()
 
     _shared_con = None
     db_path = _get_db_path()

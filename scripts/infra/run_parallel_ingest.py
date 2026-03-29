@@ -14,7 +14,7 @@ Use --force-rebuild for full schema reset (requires explicit confirmation).
 
 Usage:
     python scripts/infra/run_parallel_ingest.py --instrument MGC --start 2021-01-01 --end 2026-12-31
-    python scripts/infra/run_parallel_ingest.py --instrument MGC --start 2021-01-01 --end 2026-12-31 --db-path C:/db/gold.db
+    python scripts/infra/run_parallel_ingest.py --instrument MGC --start 2021-01-01 --end 2026-12-31
     python scripts/infra/run_parallel_ingest.py --instrument MGC --force-rebuild
 """
 

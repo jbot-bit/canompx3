@@ -14,7 +14,7 @@ decision with ONLY information available at that moment.
 Read-only. No DB writes.
 
 Usage:
-    python scripts/audit_ib_single_break.py --db-path C:/db/gold.db
+    python scripts/audit_ib_single_break.py
 """
 
 import argparse

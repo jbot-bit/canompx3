@@ -224,7 +224,7 @@ def _check_repo_map(audit: AuditPhase):
 
     # Run gen_repo_map.py and compare
     r = subprocess.run(
-        ["python", str(gen_script)],
+        [sys.executable, str(gen_script)],
         capture_output=True,
         text=True,
         cwd=str(PROJECT_ROOT),

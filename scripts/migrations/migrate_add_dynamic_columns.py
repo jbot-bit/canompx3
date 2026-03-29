@@ -5,8 +5,8 @@ One-time schema migration. Idempotent (safe to re-run).
 Does NOT populate data — run build_daily_features after this.
 
 Usage:
-    python scripts/migrate_add_dynamic_columns.py --db-path C:\\db\\gold.db
-    python scripts/migrate_add_dynamic_columns.py --db-path C:\\db\\gold.db --dry-run
+    python scripts/migrate_add_dynamic_columns.py
+    python scripts/migrate_add_dynamic_columns.py --dry-run
 """
 
 import argparse

@@ -3,7 +3,7 @@ Live trading session orchestrator.
 DataFeed → BarAggregator → ExecutionEngine → OrderRouter → PerformanceMonitor.
 
 VERIFIED API NOTES:
-- build_live_portfolio() returns (Portfolio, notes) — unpack the tuple
+- Portfolio must be injected via __init__(portfolio=...) from prop_profiles.ACCOUNT_PROFILES
 - engine.on_bar(bar_dict) — bar_dict must have 'ts_utc' key, not 'ts_event'
 - engine.on_trading_day_start(date) — call before first bar of day
 - engine.on_trading_day_end() -> list[TradeEvent] — closes open positions at EOD
@@ -92,20 +92,15 @@ class SessionOrchestrator:
         contracts_cls = components["contracts_class"]
         self._positions_cls = components["positions_class"]
 
-        # Use injected portfolio — build_live_portfolio is DEPRECATED (resolves to 0 strategies)
-        if portfolio is not None:
-            self.portfolio = portfolio
-            log.info("Using injected portfolio: %d strategies", len(portfolio.strategies))
-        else:
-            log.warning(
-                "No portfolio injected — build_live_portfolio is DEPRECATED and resolves to 0 strategies. "
-                "Pass a portfolio from prop_profiles.ACCOUNT_PROFILES via select_for_profile()."
+        # Portfolio MUST be injected — build_live_portfolio is DEPRECATED (resolves to 0 strategies)
+        if portfolio is None:
+            raise RuntimeError(
+                f"No portfolio injected for {instrument}. "
+                "Pass a portfolio from prop_profiles.ACCOUNT_PROFILES via select_for_profile(). "
+                "build_live_portfolio() is DEPRECATED and resolves to 0 strategies."
             )
-            from trading_app.live_config import build_live_portfolio  # noqa: F811 — lazy import, deprecated
-
-            self.portfolio, notes = build_live_portfolio(db_path=GOLD_DB_PATH, instrument=instrument)
-            for note in notes:
-                log.info("live_config note: %s", note)
+        self.portfolio = portfolio
+        log.info("Using injected portfolio: %d strategies", len(portfolio.strategies))
 
         if not self.portfolio.strategies:
             raise RuntimeError(f"No active strategies for {instrument}")

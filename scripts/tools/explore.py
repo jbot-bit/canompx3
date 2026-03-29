@@ -4,7 +4,7 @@ No SQL knowledge required. Just run it and pick from the menu.
 
 Usage:
     python scripts/tools/explore.py
-    python scripts/tools/explore.py --db C:/db/gold.db
+    python scripts/tools/explore.py                    # uses canonical gold.db
 """
 
 import sys

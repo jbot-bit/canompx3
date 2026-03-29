@@ -6,7 +6,7 @@ restricted to structural liquidity sessions (CME_REOPEN, TOKYO_OPEN, LONDON_META
 
 Usage:
     python scripts/find_pf_strategy.py
-    python scripts/find_pf_strategy.py --db C:/db/gold.db
+    python scripts/find_pf_strategy.py
     python scripts/find_pf_strategy.py --min-pf 1.3 --max-pf 2.5
 """
 

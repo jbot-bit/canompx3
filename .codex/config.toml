@@ -1,8 +1,24 @@
+#:schema https://developers.openai.com/codex/config-schema.json
+
 profile = "canompx3"
 project_doc_max_bytes = 98304
+developer_instructions = """
+Repo-specific Codex startup contract for canompx3:
+- Preferred entrypoints are `scripts/infra/codex-project.sh`, `scripts/infra/codex-project-search.sh`, and `scripts/infra/codex-worktree.sh`; they already run session preflight.
+- If this session started any other way, run `python3 scripts/tools/session_preflight.py --context codex-wsl` from the repo root before substantial work. Use `python` only if `python3` is unavailable.
+- Read `HANDOFF.md` before planning or editing.
+- Follow `AGENTS.md`, `CLAUDE.md`, and `CODEX.md`; the Claude layer remains canonical and `.codex/` is additive only.
+- Do not mutate `.claude/` or `CLAUDE.md` unless the user explicitly asks.
+"""
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
+
+[mcp_servers.openaiDeveloperDocs.tools.list_api_endpoints]
+approval_mode = "approve"
+
+[mcp_servers.openaiDeveloperDocs.tools.fetch_openai_doc]
+approval_mode = "approve"
 
 [profiles.canompx3]
 model = "gpt-5.4"

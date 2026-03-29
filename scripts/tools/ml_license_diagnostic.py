@@ -8,8 +8,8 @@ Three-phase analysis:
 Output: structured findings that tell us WHERE signal lives and WHERE it's noise.
 
 Usage:
-    python scripts/tools/ml_license_diagnostic.py --db-path C:/db/gold.db
-    python scripts/tools/ml_license_diagnostic.py --db-path C:/db/gold.db --instrument MNQ
+    python scripts/tools/ml_license_diagnostic.py
+    python scripts/tools/ml_license_diagnostic.py --instrument MNQ
 """
 
 from __future__ import annotations

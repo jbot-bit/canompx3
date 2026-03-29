@@ -42,7 +42,6 @@ from trading_app.live.session_orchestrator import SessionOrchestrator
 def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=None) -> bool:
     """Pre-flight validation. Returns True if all checks pass."""
 
-    from pipeline.paths import GOLD_DB_PATH
     from trading_app.live.broker_factory import create_broker_components, get_broker_name
 
     checks_passed = 0
@@ -67,11 +66,11 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
             pf = portfolio
             notes = [f"Using injected portfolio ({len(pf.strategies)} strategies)"]
         else:
-            # build_live_portfolio is DEPRECATED — warn but don't block preflight
-            from trading_app.live_config import build_live_portfolio
-
-            pf, notes = build_live_portfolio(db_path=GOLD_DB_PATH, instrument=instrument)
-            notes.append("WARNING: using deprecated build_live_portfolio — inject portfolio from prop_profiles")
+            raise RuntimeError(
+                f"No portfolio injected for {instrument}. "
+                "Pass --profile or --raw-baseline to build a portfolio from "
+                "prop_profiles.ACCOUNT_PROFILES. build_live_portfolio() is DEPRECATED."
+            )
         print(f"OK ({len(pf.strategies)} strategies)")
         for s in pf.strategies:
             print(

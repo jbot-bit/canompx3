@@ -77,6 +77,31 @@ class TestBuildWarnings:
             warnings = session_preflight.build_warnings(tmp_path, context="generic", active_tool="codex")
         assert any("Concurrent session risk" in warning for warning in warnings)
 
+    def test_warns_when_wsl_uses_wrong_interpreter(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
+        _mkfile(tmp_path / ".venv-wsl" / "bin" / "python", "")
+
+        with (
+            patch.object(session_preflight, "dirty_files", return_value=[]),
+            patch.object(session_preflight.sys, "executable", "/usr/bin/python3"),
+        ):
+            warnings = session_preflight.build_warnings(tmp_path, context="codex-wsl")
+
+        assert any("wrong interpreter" in warning for warning in warnings)
+
+    def test_no_wrong_interpreter_warning_when_wsl_uses_repo_python(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
+        venv_python = tmp_path / ".venv-wsl" / "bin" / "python"
+        _mkfile(venv_python, "")
+
+        with (
+            patch.object(session_preflight, "dirty_files", return_value=[]),
+            patch.object(session_preflight.sys, "executable", str(venv_python)),
+        ):
+            warnings = session_preflight.build_warnings(tmp_path, context="codex-wsl")
+
+        assert not any("wrong interpreter" in warning for warning in warnings)
+
 
 class TestSessionClaims:
     def test_write_and_read_claim_roundtrip(self, tmp_path: Path) -> None:

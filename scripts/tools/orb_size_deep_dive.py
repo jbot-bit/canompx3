@@ -10,7 +10,7 @@ We know ORB size IS the edge. This script figures out:
 
 Usage:
     python scripts/tools/orb_size_deep_dive.py
-    python scripts/tools/orb_size_deep_dive.py --db C:/db/gold.db
+    python scripts/tools/orb_size_deep_dive.py          # uses canonical gold.db
 """
 
 import sys

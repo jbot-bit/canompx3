@@ -9,7 +9,7 @@ Safe to re-run (idempotent).
 
 Usage:
     python scripts/backfill_atr20.py
-    python scripts/backfill_atr20.py --db C:/db/gold.db
+    python scripts/backfill_atr20.py
     python scripts/backfill_atr20.py --dry-run
 """
 

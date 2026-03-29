@@ -6,8 +6,8 @@ this reads yearly_results JSON + sharpe_ratio already in the table and computes
 the two new columns directly.
 
 Usage:
-    python scripts/backfill_sharpe_ann.py --db C:/db/gold.db
-    python scripts/backfill_sharpe_ann.py --db C:/db/gold.db --dry-run
+    python scripts/backfill_sharpe_ann.py
+    python scripts/backfill_sharpe_ann.py --dry-run
 """
 
 import argparse
