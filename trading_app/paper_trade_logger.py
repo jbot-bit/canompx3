@@ -53,11 +53,11 @@ class LaneDef:
 # ── 5 Apex MNQ lanes (source: prop_profiles.py apex_50k_manual.daily_lanes) ──
 LANES: tuple[LaneDef, ...] = (
     LaneDef(
-        strategy_id="MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15",
+        strategy_id="MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20",
         lane_name="NYSE_CLOSE_VOL",
         instrument="MNQ",
         orb_label="NYSE_CLOSE",
-        orb_minutes=15,
+        orb_minutes=5,
         rr_target=1.0,
         entry_model="E2",
         confirm_bars=1,
@@ -89,11 +89,11 @@ LANES: tuple[LaneDef, ...] = (
         filter_sql="d.atr_20_pct >= 70 AND d.rel_vol_COMEX_SETTLE >= 1.2",
     ),
     LaneDef(
-        strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15",
+        strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
         lane_name="NYSE_OPEN_XMES",
         instrument="MNQ",
         orb_label="NYSE_OPEN",
-        orb_minutes=15,
+        orb_minutes=5,
         rr_target=1.0,
         entry_model="E2",
         confirm_bars=1,
