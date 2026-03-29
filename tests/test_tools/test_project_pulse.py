@@ -403,7 +403,7 @@ def _sample_report() -> PulseReport:
         handoff_summary="Did work",
         handoff_next_steps=["Phase 1: build", "Phase 2: test"],
         fitness_summary={"MGC": {"active_strategies": 573}},
-        recommendation="Fix: Drift FAILED → /health-check",
+        recommendation="Fix: Drift FAILED → /verify",
     )
 
 
@@ -497,14 +497,14 @@ class TestRecommendation:
             git_head="abc",
             git_branch="main",
             items=[
-                PulseItem("broken", "high", "drift", "Drift FAILED", action="/health-check"),
+                PulseItem("broken", "high", "drift", "Drift FAILED", action="/verify"),
                 PulseItem("ready", "low", "action_queue", "CUSUM fitness"),
             ],
             recommendation="",
         )
         rec = _compute_recommendation(report)
         assert rec.startswith("Fix:")
-        assert "/health-check" in rec
+        assert "/verify" in rec
 
     def test_upcoming_session_before_decay(self) -> None:
         from scripts.tools.project_pulse import _compute_recommendation
@@ -542,7 +542,7 @@ class TestSkillSuggestions:
 
         items = [PulseItem("broken", "high", "drift", "Drift FAILED")]
         _attach_skill_suggestions(items)
-        assert items[0].action == "/health-check"
+        assert items[0].action == "/verify"
 
     def test_preserves_existing_action(self) -> None:
         from scripts.tools.project_pulse import _attach_skill_suggestions
