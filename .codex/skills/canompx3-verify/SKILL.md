@@ -13,8 +13,7 @@ This skill is a Codex wrapper around the canonical Claude verification workflow.
 
 Read these first:
 
-- `.claude/skills/quant-verify/SKILL.md`
-- `.claude/skills/health-check/SKILL.md`
+- `.claude/skills/verify/SKILL.md` (modes: quick, full, done)
 - `.claude/agents/verify-complete.md`
 - `CLAUDE.md`
 

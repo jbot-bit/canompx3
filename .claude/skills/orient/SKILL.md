@@ -68,7 +68,7 @@ Also check `docs/STRATEGY_BLUEPRINT.md §9` (Active Research Threads) — but tr
 Present a concise briefing. Include these sections IN ORDER, skip empty ones:
 
 1. **Session delta** (if present): "Since your last session: [commits]" — critical for multi-tool awareness
-2. **BROKEN (fix now):** Name each broken item + its `action` field (e.g., "Drift failed -> /health-check")
+2. **BROKEN (fix now):** Name each broken item + its `action` field (e.g., "Drift failed -> /verify")
 3. **DECAYING (act soon):** Stale pipelines, WATCH/DECAY strategies, stale handoff
 4. **Strategic state:** Active instruments, validated setup count, ML model status, edge families status. One-liner per item.
 5. **Upcoming sessions:** Trading sessions in the next 6h with per-instrument strategy counts
@@ -100,7 +100,7 @@ Format recommendation: `>>> [recommendation] <<<`
 
 Based on the briefing, suggest the appropriate next skill:
 - Active stage mid-flight? → `/resume-rebase` to continue safely
-- Something broken? → `/health-check` or `/quant-debug`
+- Something broken? → `/verify` or `/quant-debug`
 - Starting new work? → `/stage-gate [task]` to classify first
 - Strategy research needed? → `/discover [instrument]` or `/research [topic]`
 - Portfolio health? → `/regime-check`
