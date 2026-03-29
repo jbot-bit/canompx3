@@ -1,16 +1,20 @@
 ---
 mode: IMPLEMENTATION
 stage: IMPLEMENTATION
-task: RR4.0 quant audit — verify or kill NO-GO claim with real data
-pass: 1
+task: FDR methodology — correctness + honesty fixes (3 phases)
+pass: 2
 scope_lock:
-  - scripts/tmp_rr4_audit.py
-  - docs/plans/sync_audit_2026-03-30.md
+  - trading_app/strategy_validator.py
+  - scripts/tools/audit_fdr_integrity.py
+  - docs/specs/fdr_methodology.md
 blast_radius:
-  - Read-only audit script. No production code changes.
+  - discovery_k freeze (behavioral change to UPDATE — first write same, subsequent guarded)
+  - Re-validation kills >=1 MNQ strategy (MNQ_LONDON_METALS_E2_RR3.0_CB1_ORB_G8_NOMON_S075, 6 siblings survive)
+  - edge_families rebuild needed after re-validation
 acceptance:
-  - T0-T7 run with real numbers
-  - Verdict per session with evidence
-  - NO-GO entry updated or confirmed based on results
-updated: 2026-03-30T06:30:00Z
+  - Phase 1: discovery_k freeze verified (existing values preserved after validator run)
+  - Phase 2: audit_fdr_integrity.py runs 13/13 clean (no exceptions)
+  - Phase 3: methodology spec exists at docs/specs/fdr_methodology.md
+  - Phase 4: drift check passes
+updated: 2026-03-30T16:00:00Z
 ---
