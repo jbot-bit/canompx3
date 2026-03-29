@@ -135,7 +135,7 @@ LABEL: [validated finding / promising hypothesis / statistical observation / NO-
 
 ## Next → After Research
 
-- Finding survived? → `/bloomey-review` for code/methodology review, then `/brainstorm` for implementation
+- Finding survived? → `/bloomey-review` for code/methodology review, then `/design` for implementation
 - ML-related finding? → ML is dormant (V2 dead). Check `trading_app/ml/` if reviving.
-- Ready to build? → `/4tp [feature]` to plan and implement
+- Ready to build? → `/design auto [feature]` to plan and implement
 - Finding is NO-GO? → update Blueprint §5 NO-GO Registry

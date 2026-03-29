@@ -157,6 +157,6 @@ For each finding:
 ## Next → After Discovery
 
 - BH-significant findings? → `/research [finding]` for deeper hypothesis testing
-- Ready to implement? → `/brainstorm [feature]` then `/4tp`
+- Ready to implement? → `/design [feature]` (or `/design auto` to proceed immediately)
 - Want review? → `/bloomey-review`
 - Everything NO-GO? → Update Blueprint §5, move on
