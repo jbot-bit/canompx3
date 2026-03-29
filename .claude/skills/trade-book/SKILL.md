@@ -26,7 +26,7 @@ Optional flags:
 
 Use the terminal output from the generator to answer. The generator already:
 - Resolves DST-correct Brisbane times via `pipeline.dst.SESSION_CATALOG` resolvers
-- Filters to live portfolio specs from `trading_app.live_config.LIVE_PORTFOLIO`
+- Filters to live portfolio from `trading_app.prop_profiles.ACCOUNT_PROFILES`
 - Applies ExpR gate (`LIVE_MIN_EXPECTANCY_R`) and dollar gate
 - Checks fitness per strategy via `trading_app.strategy_fitness` module
 - Shows only cost-positive, gate-passing trades
@@ -85,4 +85,4 @@ See `docs/STRATEGY_BLUEPRINT.md §7` for full paper trading checklist.
 - NEVER show PURGED or DECAY strategies — trade book = tradeable only
 - NEVER reference strategy_fitness table — it does not exist. Use edge_families
 - Correct column names: instrument, orb_label, expectancy_r, sharpe_ann (not symbol, session_name, avg_r, sharpe)
-- For "what do I trade" → query `build_live_portfolio()`, NOT validated_setups (hard lesson #1)
+- For "what do I trade" → run `generate_trade_sheet.py` (Step 1), NOT raw validated_setups queries

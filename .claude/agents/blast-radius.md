@@ -135,7 +135,7 @@ RECOMMENDATION:
 <!-- VOLATILE: Update this section when instruments, entry models, or sessions change. Last updated: 2026-03-07 -->
 
 ### Architecture
-- 4 active instruments: MGC, MNQ, MES, M2K. Dead: MCL, SIL, M6E, MBT.
+- 3 active instruments: MGC, MNQ, MES. Dead: M2K (Mar 2026), MCL, SIL, M6E, MBT.
 - Entry models: E1 + E2 active. E0 purged. E3 soft-retired.
 - Data flow: Databento .dbn.zst → ingest → bars_1m → bars_5m → daily_features → orb_outcomes → experimental_strategies → validated_setups → edge_families
 - All DB timestamps UTC. Local timezone Australia/Brisbane (UTC+10, no DST).
