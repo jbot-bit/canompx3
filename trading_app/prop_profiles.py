@@ -227,9 +227,10 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
 
 ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     # TopStep
-    ("topstep", 50_000): PropFirmAccount("topstep", 50_000, 2_000, 5, 50),
-    ("topstep", 100_000): PropFirmAccount("topstep", 100_000, 3_000, 10, 100),
-    ("topstep", 150_000): PropFirmAccount("topstep", 150_000, 4_500, 15, 150),
+    # TopStep: DLL applies on non-TopstepX platforms. Source: topstep.com/express-funded-account-rules (Jun 2025)
+    ("topstep", 50_000): PropFirmAccount("topstep", 50_000, 2_000, 5, 50, daily_loss_limit=1_000),
+    ("topstep", 100_000): PropFirmAccount("topstep", 100_000, 3_000, 10, 100, daily_loss_limit=2_000),
+    ("topstep", 150_000): PropFirmAccount("topstep", 150_000, 4_500, 15, 150, daily_loss_limit=3_000),
     # MFFU Core (EOD, 3% DD, 80/20)
     ("mffu", 50_000): PropFirmAccount("mffu", 50_000, 1_500, 5, 50),
     ("mffu", 100_000): PropFirmAccount("mffu", 100_000, 3_000, 8, 80),
@@ -279,7 +280,14 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         daily_lanes=(
-            DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15", "MNQ", "NYSE_CLOSE"),
+            # ORB caps from adversarial audit P90 data (2026-03-29). Caps at ~P95 to avoid
+            # outsized single-trade risk while not filtering normal ORBs.
+            DailyLaneSpec(
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20_O15",
+                "MNQ",
+                "NYSE_CLOSE",
+                max_orb_size_pts=100.0,  # P90=66, P95=96. Cap at 100.
+            ),
             DailyLaneSpec(
                 "MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15",
                 "MNQ",
@@ -287,8 +295,14 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 execution_notes="0.5x sizing (1 micro lot max). RR4.0 at 25% WR = long loss streaks structural. "
                 "Hist max DD -$3,540 on this lane alone. Remediation audit 2026-03-25.",
                 planned_stop_multiplier=0.75,
+                max_orb_size_pts=80.0,  # P90=59, P95=75. Cap at 80.
             ),
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL", "MNQ", "COMEX_SETTLE"),
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=80.0,  # P90=52, P95=74. Cap at 80.
+            ),
             # Risk cap: 150pt max risk_points (stop distance, not raw ORB size).
             # At 0.75x stops, 150pt risk ~ 200pt raw ORB. $300 max loss per trade ($2/pt).
             # Derived from DD math: $3K limit * 10% / $2 = 150pt risk. Not data snooped.
@@ -303,6 +317,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
                 "MNQ",
                 "US_DATA_1000",
+                max_orb_size_pts=120.0,  # P90=101, P95=115. Cap at 120.
             ),
         ),
         notes=(

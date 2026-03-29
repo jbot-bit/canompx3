@@ -177,12 +177,12 @@ class TestDailyLaneSpecOrbCap:
         assert len(nyse_open_lanes) == 1
         assert nyse_open_lanes[0].max_orb_size_pts == 150.0
 
-    def test_other_lanes_no_cap(self):
-        """Lanes 1-3 must have max_orb_size_pts=None (no cap)."""
+    def test_all_lanes_have_caps(self):
+        """All Apex lanes must have max_orb_size_pts set (adversarial audit 2026-03-29)."""
         p = get_profile("apex_50k_manual")
         for lane in p.daily_lanes:
-            if lane.orb_label != "NYSE_OPEN":
-                assert lane.max_orb_size_pts is None, f"{lane.orb_label} should have no cap"
+            assert lane.max_orb_size_pts is not None, f"{lane.orb_label} missing ORB cap"
+            assert lane.max_orb_size_pts > 0, f"{lane.orb_label} cap must be positive"
 
 
 class TestLaneRegistryOrbCap:
@@ -197,17 +197,19 @@ class TestLaneRegistryOrbCap:
         registry = get_lane_registry()
         assert registry["NYSE_OPEN"]["max_orb_size_pts"] == 150.0
 
-    def test_nyse_close_no_cap_in_registry(self):
+    def test_all_registry_lanes_have_caps(self):
+        """All lanes should have ORB caps after adversarial audit 2026-03-29."""
         registry = get_lane_registry()
-        assert registry["NYSE_CLOSE"]["max_orb_size_pts"] is None
-
-    def test_singapore_open_no_cap_in_registry(self):
-        registry = get_lane_registry()
-        assert registry["SINGAPORE_OPEN"]["max_orb_size_pts"] is None
-
-    def test_comex_settle_no_cap_in_registry(self):
-        registry = get_lane_registry()
-        assert registry["COMEX_SETTLE"]["max_orb_size_pts"] is None
+        expected_caps = {
+            "NYSE_CLOSE": 100.0,
+            "SINGAPORE_OPEN": 80.0,
+            "COMEX_SETTLE": 80.0,
+            "NYSE_OPEN": 150.0,
+            "US_DATA_1000": 120.0,
+        }
+        for label, expected in expected_caps.items():
+            if label in registry:
+                assert registry[label]["max_orb_size_pts"] == expected, f"{label} cap mismatch"
 
 
 class TestOrbCapLogic:
