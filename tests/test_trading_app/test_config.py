@@ -144,8 +144,9 @@ class TestAllFilters:
         # + 2 direction filters (DIR_LONG, DIR_SHORT)
         # + 2 MES 1000 band filters (ORB_G4_L12, ORB_G5_L12)
         # + 3 cross-asset ATR filters (X_MES_ATR70, X_MES_ATR60, X_MGC_ATR70)
-        # = 41
-        assert len(ALL_FILTERS) == 41
+        # + 4 cost-ratio filters (COST_LT08/10/12/15 — ARITHMETIC_ONLY research screens)
+        # = 45
+        assert len(ALL_FILTERS) == 45
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS

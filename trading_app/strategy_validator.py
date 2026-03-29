@@ -1290,12 +1290,23 @@ def run_validation(
                             [sid],
                         ).fetchone()
                         _sess_k = effective_k_by_session.get(_sid_session[0], total_k) if _sid_session else total_k
+                        # Freeze discovery_k: only set on first write.
+                        # Subsequent rebuilds update fdr_significant/adjusted_p
+                        # (which may change as the canonical pool grows) but
+                        # preserve the K under which the strategy was originally
+                        # promoted. This maintains audit trail integrity.
                         con.execute(
                             """UPDATE validated_setups
                                SET fdr_significant = ?,
                                    fdr_adjusted_p = ?,
-                                   discovery_k = ?,
-                                   discovery_date = ?
+                                   discovery_k = CASE
+                                       WHEN discovery_k IS NULL THEN ?
+                                       ELSE discovery_k
+                                   END,
+                                   discovery_date = CASE
+                                       WHEN discovery_date IS NULL THEN ?
+                                       ELSE discovery_date
+                                   END
                                WHERE strategy_id = ?""",
                             [fdr["fdr_significant"], fdr["adjusted_p"], _sess_k, _today, sid],
                         )
