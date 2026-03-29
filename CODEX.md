@@ -87,7 +87,7 @@ Open:
 
 - `RESEARCH_RULES.md`
 - `.claude/rules/quant-agent-identity.md`
-- `.claude/skills/audit-prompts/SKILL.md`
+- `.claude/skills/audit/SKILL.md` (mode: prompts for guardian routing)
 - `.codex/AGENTS.md` if a shared agent pattern fits
 
 ### DB, schema, or canonical data questions

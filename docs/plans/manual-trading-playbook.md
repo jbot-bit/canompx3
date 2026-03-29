@@ -166,7 +166,7 @@ This playbook is a living document. But changes must follow a process:
 If ANY of these happen, stop ALL trading immediately. Do not resume until resolved.
 
 1. **Rule violation notice from a prop firm** — you may have misunderstood a rule. Stop, read, clarify with support before placing another trade.
-2. **Two accounts blown in the same week** — possible regime shift or execution error. Run full `/health-check` and `/regime-check`.
+2. **Two accounts blown in the same week** — possible regime shift or execution error. Run full `/verify` and `/regime-check`.
 3. **You override a filter** — even once. Stop for the day. Journal why. Recommit to the system.
 4. **Copy trading error** — follower account takes wrong trade, double entry, or missed entry. Stop all followers, debug the copy setup.
 5. **Platform outage during open position** — if you can't manage the trade, flatten everything via phone/mobile app. Don't hope.
@@ -918,7 +918,7 @@ At 40-55% win rate (our strategies), losing streaks are **mathematically guarant
 
 **After 10 consecutive losses:**
 1. Full stop. Take a week off.
-2. Run full `/health-check`. Review backtest-to-live comparison.
+2. Run full `/verify`. Review backtest-to-live comparison.
 3. Do NOT resume until you understand whether this is variance or edge decay.
 
 **NEVER DO:**
