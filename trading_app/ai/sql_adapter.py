@@ -12,6 +12,7 @@ import duckdb
 import pandas as pd
 
 from pipeline.asset_configs import get_active_instruments
+from pipeline.cost_model import COST_SPECS
 from pipeline.init_db import ORB_LABELS
 
 
@@ -57,7 +58,7 @@ VALID_ORB_LABELS = set(ORB_LABELS)
 VALID_ENTRY_MODELS = {"E1", "E2", "E3"}
 
 # Valid filter types (subset for validation)
-VALID_FILTER_PREFIXES = {"NO_FILTER", "ORB_G", "ORB_L", "VOL_", "DIR_", "DOW_", "M6E_"}
+VALID_FILTER_PREFIXES = {"NO_FILTER", "ORB_G", "ORB_L", "VOL_", "DIR_", "DOW_", "M6E_", "COST_"}
 
 # Valid instruments (from canonical source — pipeline.asset_configs)
 VALID_INSTRUMENTS = set(get_active_instruments())
@@ -115,11 +116,21 @@ def _validate_confirm_bars(cb) -> int:
 # DST split analysis is no longer applicable since sessions self-adjust.
 _DST_SESSION_MAP = {}
 
+_SQL_POINT_VALUE_CASE = (
+    "CASE d.symbol " + " ".join(f"WHEN '{inst}' THEN {spec.point_value}" for inst, spec in COST_SPECS.items()) + " END"
+)
+_SQL_FRICTION_CASE = (
+    "CASE d.symbol "
+    + " ".join(f"WHEN '{inst}' THEN {spec.total_friction}" for inst, spec in COST_SPECS.items())
+    + " END"
+)
+
 
 def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
-    """Convert ORB size filter_type to SQL WHERE clause on daily_features.
+    """Convert pre-trade filter_type to SQL WHERE clause on daily_features.
 
-    Handles simple filters (ORB_G4, ORB_L12) and band filters (ORB_G4_L12).
+    Handles simple filters (ORB_G4, ORB_L12), band filters (ORB_G4_L12),
+    and normalized cost-ratio filters (COST_LT10).
     Returns None for NO_FILTER/None (no filtering needed).
     Raises ValueError for non-ORB filters (VOL_, DIR_, DOW_, composites)
     that require Python-side evaluation and cannot be applied in SQL.
@@ -130,6 +141,22 @@ def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
     # orb_label validated against allowlist -- safe for f-string
     # [1,20] is a security guard, not a business rule. Current grid uses G4-G8 (max 8pt).
     col = f"d.orb_{orb_label}_size"
+
+    if filter_type.startswith("COST_LT"):
+        try:
+            threshold = int(filter_type[7:])
+        except ValueError:
+            raise ValueError(
+                f"Filter '{filter_type}' contains a non-cost component that cannot "
+                f"be applied in SQL. Only pure ORB size filters and cost-ratio "
+                f"filters (COST_LT10) are supported in raw outcomes queries."
+            ) from None
+        if not (1 <= threshold <= 99):
+            raise ValueError(f"Cost-ratio filter threshold {threshold} out of range [1, 99]")
+        return (
+            f"(100.0 * ({_SQL_FRICTION_CASE}) / NULLIF((({col} * ({_SQL_POINT_VALUE_CASE})) + "
+            f"({_SQL_FRICTION_CASE})), 0)) < {threshold}"
+        )
 
     if filter_type.startswith("ORB_G"):
         rest = filter_type[5:]  # after "ORB_G"
@@ -147,7 +174,8 @@ def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
             raise ValueError(
                 f"Filter '{filter_type}' contains a non-ORB component that cannot "
                 f"be applied in SQL. Only pure ORB size filters (ORB_G4, ORB_L8, "
-                f"ORB_G4_L12) are supported in raw outcomes queries."
+                f"ORB_G4_L12) and cost-ratio filters (COST_LT10) are supported "
+                f"in raw outcomes queries."
             ) from None
         if not (1 <= threshold <= 20):
             raise ValueError(f"ORB filter threshold {threshold} out of range [1, 20]")
@@ -159,7 +187,8 @@ def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
             raise ValueError(
                 f"Filter '{filter_type}' contains a non-ORB component that cannot "
                 f"be applied in SQL. Only pure ORB size filters (ORB_G4, ORB_L8, "
-                f"ORB_G4_L12) are supported in raw outcomes queries."
+                f"ORB_G4_L12) and cost-ratio filters (COST_LT10) are supported "
+                f"in raw outcomes queries."
             ) from None
         if not (1 <= threshold <= 20):
             raise ValueError(f"ORB filter threshold {threshold} out of range [1, 20]")
@@ -167,8 +196,9 @@ def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
     # Non-ORB filter (VOL_, DIR_, DOW_) — fail-closed
     raise ValueError(
         f"Filter '{filter_type}' requires Python-side evaluation and cannot be "
-        f"applied in raw SQL outcomes queries. Only ORB size filters "
-        f"(ORB_G4, ORB_L8, ORB_G4_L12, NO_FILTER) are supported here."
+        f"applied in raw SQL outcomes queries. Only ORB size filters and "
+        f"cost-ratio filters (ORB_G4, ORB_L8, ORB_G4_L12, COST_LT10, NO_FILTER) "
+        f"are supported here."
     )
 
 

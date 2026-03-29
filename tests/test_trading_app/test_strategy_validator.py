@@ -11,7 +11,13 @@ import duckdb
 import pytest
 
 from pipeline.cost_model import get_cost_spec
-from trading_app.strategy_validator import _parse_orb_size_bounds, classify_regime, run_validation, validate_strategy
+from trading_app.strategy_validator import (
+    _parse_cost_ratio_cap_pct,
+    _parse_orb_size_bounds,
+    classify_regime,
+    run_validation,
+    validate_strategy,
+)
 
 
 def _cost():
@@ -633,6 +639,25 @@ class TestParseOrbSizeBounds:
 
     def test_none_filter_type(self):
         assert _parse_orb_size_bounds(None, None) == (None, None)
+
+
+class TestParseCostRatioCap:
+    """Tests for _parse_cost_ratio_cap_pct pure function."""
+
+    def test_json_params_cap(self):
+        assert _parse_cost_ratio_cap_pct("COST_LT10", '{"max_cost_ratio_pct": 10}') == 10.0
+
+    def test_composite_base_cap(self):
+        assert _parse_cost_ratio_cap_pct("ANY", '{"base": {"max_cost_ratio_pct": 12}}') == 12.0
+
+    def test_fallback_cost_filter(self):
+        assert _parse_cost_ratio_cap_pct("COST_LT08", None) == 8.0
+
+    def test_non_cost_filter(self):
+        assert _parse_cost_ratio_cap_pct("ORB_G4", None) is None
+
+    def test_none_filter_type(self):
+        assert _parse_cost_ratio_cap_pct(None, None) is None
 
 
 class TestComputeDstSplit:

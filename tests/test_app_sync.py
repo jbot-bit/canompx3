@@ -29,12 +29,14 @@ from trading_app.config import (
     ALL_FILTERS,
     BASE_GRID_FILTERS,
     CORE_MIN_SAMPLES,
+    COST_RATIO_FILTERS,
     DIR_LONG,
     DIR_SHORT,
     ENTRY_MODELS,
     MGC_ORB_SIZE_FILTERS,
     MGC_VOLUME_FILTERS,
     REGIME_MIN_SAMPLES,
+    CostRatioFilter,
     DirectionFilter,
     NoFilter,
     OrbSizeFilter,
@@ -104,7 +106,7 @@ class TestOrbLabelsSync:
 class TestAllFiltersSync:
     """ALL_FILTERS keys must match filter_type inside each filter."""
 
-    # Base: NO_FILTER + 4 G-filters + 2 VOL-filters (VOL_RV12_N20 + ATR70_VOL) = 7
+    # Base: NO_FILTER + 4 G-filters + 4 COST-filters + 2 VOL-filters = 11
     # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
     #   (NOFRI/NOTUE removed from grid Mar 2026 but retained in ALL_FILTERS for DB compat)
     # Break quality composites: 3 variants (FAST5, FAST10, CONT) x 4 G-filters = 12
@@ -112,13 +114,17 @@ class TestAllFiltersSync:
     # Direction filters: DIR_LONG/DIR_SHORT = 2
     # MES 1000 band filters: ORB_G4_L12/ORB_G5_L12 = 2
     # Cross-asset ATR filters: X_MES_ATR70/X_MES_ATR60/X_MGC_ATR70 = 3
-    # Total: 7 + 12 + 12 + 3 + 2 + 2 + 3 = 41
+    # Total: 11 + 12 + 12 + 3 + 2 + 2 + 3 = 45
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4",
         "ORB_G5",
         "ORB_G6",
         "ORB_G8",
+        "COST_LT08",
+        "COST_LT10",
+        "COST_LT12",
+        "COST_LT15",
         "VOL_RV12_N20",
         # Combined ATR+VOL filter (Mar 2026 vol-regime research)
         "ATR70_VOL",
@@ -201,7 +207,9 @@ class TestAllFiltersSync:
         from trading_app.config import CompositeFilter, CrossAssetATRFilter, DirectionFilter
 
         for key, filt in ALL_FILTERS.items():
-            if key == "NO_FILTER" or isinstance(filt, (VolumeFilter, DirectionFilter, CrossAssetATRFilter)):
+            if key == "NO_FILTER" or isinstance(
+                filt, (VolumeFilter, DirectionFilter, CrossAssetATRFilter, CostRatioFilter)
+            ):
                 continue
             if isinstance(filt, CompositeFilter):
                 # Composite: base should be OrbSizeFilter with thresholds
@@ -222,6 +230,12 @@ class TestAllFiltersSync:
                 continue
             assert filt.min_rel_vol > 0, f"{key} min_rel_vol must be positive"
             assert filt.lookback_days > 0, f"{key} lookback_days must be positive"
+
+    def test_cost_ratio_filters_have_thresholds(self):
+        """Every cost-ratio filter has a positive cap."""
+        for key, filt in COST_RATIO_FILTERS.items():
+            assert isinstance(filt, CostRatioFilter)
+            assert filt.max_cost_ratio_pct > 0, f"{key} max_cost_ratio_pct must be positive"
 
 
 # ============================================================================
@@ -327,20 +341,20 @@ class TestGridParamsSync:
     def test_grid_size(self):
         """Total base grid size matches expected formula (E2+E3 use CB1 only).
 
-        Base grid uses 7 core filters (NO_FILTER + G4/G5/G6/G8 + VOL + ATR70_VOL).
+        Base grid uses 11 core filters (NO_FILTER + G4/G5/G6/G8 + 4 COST + VOL + ATR70_VOL).
         Session-specific DOW composites are added by get_filters_for_grid()
         per-session, expanding the grid contextually.
 
-        12 ORBs x 6 RRs x 5 CBs x 7 base filters = 2520 (E1, all CB options)
-        12 ORBs x 6 RRs x 1 CB x 7 base filters = 504  (E2, always CB1)
-        12 ORBs x 6 RRs x 1 CB x 7 base filters = 504  (E3, always CB1)
-        Total base: 3528
+        12 ORBs x 6 RRs x 5 CBs x 11 base filters = 3960 (E1, all CB options)
+        12 ORBs x 6 RRs x 1 CB x 11 base filters = 792  (E2, always CB1)
+        12 ORBs x 6 RRs x 1 CB x 11 base filters = 792  (E3, always CB1)
+        Total base: 5544
         """
-        BASE_FILTER_COUNT = 7  # NO_FILTER + ORB_G4/G5/G6/G8 + VOL_RV12_N20 + ATR70_VOL
+        BASE_FILTER_COUNT = 11  # NO_FILTER + ORB_G4/G5/G6/G8 + COST filters + VOL_RV12_N20 + ATR70_VOL
         e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
         e2_e3 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * 1 * BASE_FILTER_COUNT
         expected = e1 + e2_e3
-        assert expected == 3528
+        assert expected == 5544
 
 
 class TestEntryModelsSync:
@@ -417,7 +431,7 @@ class TestStrategyIdSync:
     def test_all_grid_ids_unique(self):
         """Every combination in the base grid produces a unique ID (E2+E3 CB1 only).
 
-        Uses BASE_GRID_FILTERS (7 entries) not ALL_FILTERS.
+        Uses BASE_GRID_FILTERS (11 entries) not ALL_FILTERS.
         Session-specific DOW composites expand the grid per-session via
         get_filters_for_grid(); the base grid is the common denominator.
         """
@@ -432,7 +446,7 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 3528
+        assert len(ids) == 5544
 
 
 # ============================================================================

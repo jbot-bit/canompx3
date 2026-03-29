@@ -206,6 +206,12 @@ class TestOrbSizeFilterSQL:
         assert "d.orb_CME_REOPEN_size >= 5" in result
         assert "d.orb_CME_REOPEN_size < 12" in result
 
+    def test_cost_filter_lt10(self):
+        result = _orb_size_filter_sql("COST_LT10", "TOKYO_OPEN")
+        assert "100.0 * (CASE d.symbol" in result
+        assert "d.orb_TOKYO_OPEN_size" in result
+        assert "< 10" in result
+
     def test_vol_filter_raises(self):
         """VOL_ filters can't be applied in SQL — must fail-closed."""
         with pytest.raises(ValueError, match="requires Python-side evaluation"):

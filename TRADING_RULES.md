@@ -643,7 +643,7 @@ The 11-strategy portfolio spans 5 active sessions (6 with spec coverage). All US
 | CME_PRECLOSE | 05:45 | 06:45 |
 | NYSE_CLOSE | 06:00 | 07:00 |
 | CME_REOPEN | 08:00 | 09:00 |
-| BRISBANE_1025 | 10:25 | 10:25 (no DST, noise-gated — currently inactive) |
+| BRISBANE_1025 | 10:25 | 10:25 (no DST) |
 | SINGAPORE_OPEN | 11:00 | 11:00 (no DST) |
 
 Manual execution of all 5 active sessions by one person is not viable (03:30–11:00 summer, 04:30–11:00 winter). **Select session focus based on account constraints.** Recommended manual focus: CME_PRECLOSE + NYSE_CLOSE (adjacent, 8 strategies). Full coverage requires automation (Tradeify/TopStep allow; Apex prohibits).
