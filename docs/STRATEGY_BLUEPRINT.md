@@ -258,7 +258,7 @@ Everything confirmed dead. Do NOT re-test without a fundamentally new approach.
 | MGC/MES unfiltered ORB | DEAD | All negative. 0 survivors. | New instrument economics (lower friction) |
 | E0 entry model | PURGED | 3 compounding biases | Nothing — structurally flawed |
 | E3 entry model | RETIRED | Adverse selection. 19/20 both negative. | At-break architecture (not pre-break) |
-| RR4.0 (any instrument) | DEAD | Negative even on MNQ E2 | Nothing at current cost structure |
+| RR4.0 unfiltered baseline | DEAD | 0/12 sessions positive (T5), IS negative (T2), null p>0.87 (T6), 4/11 years positive (T7). Audit 2026-03-30. Filter-carried variants (G8, ATR70) exist on SINGAPORE_OPEN but ride a negative baseline — filters do all the work. | New session with structural low-WR tolerance |
 | ML on PORTFOLIO-LEVEL negative baselines | DEAD | Threshold artifact, bootstrap p=0.35 | Nothing — mathematical trap |
 | ML on PER-SESSION negative baselines | DEAD | V1 was p=0.005 on NYSE_OPEN but EPV=2.4. V2 fixed all 3 FAILs → 0/12 BH survivors | Fundamentally new features or 2x more data |
 | ML V2 meta-labeling (5 features) | DEAD | 10/12 neg baseline, 2 bootstrapped, 0 BH survivors at K=12. NYSE_CLOSE p=0.039 raw, p=0.473 adjusted | 2x data growth or new feature discovery |
