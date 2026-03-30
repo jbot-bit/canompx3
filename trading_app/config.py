@@ -477,6 +477,47 @@ class OvernightRangeFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class OvernightRangeAbsFilter(StrategyFilter):
+    """Filter by absolute overnight range (points).
+
+    Gates on the Asia-session range (09:00-17:00 Brisbane) in raw points.
+    Higher overnight activity predicts stronger breakout follow-through on
+    US sessions. Values from daily_features.overnight_range (pre-computed).
+
+    WARNING — LOOK-AHEAD FOR ASIAN SESSIONS:
+    overnight_range is computed from 09:00-17:00 Brisbane. Sessions starting
+    INSIDE this window (CME_REOPEN, TOKYO_OPEN, BRISBANE_1025, SINGAPORE_OPEN)
+    would use future price data. This filter MUST ONLY be routed to sessions
+    starting AFTER 17:00 Brisbane (LONDON_METALS through NYSE_CLOSE) via
+    get_filters_for_grid(). DO NOT add to BASE_GRID_FILTERS.
+
+    Thresholds are absolute (not normalized by ATR). Different instruments
+    have different overnight ranges — discovery handles the mismatch.
+
+    Fail-closed: missing data = ineligible day.
+
+    @research-source research/output/confluence_program/phase1_run.py
+    @entry-models E2
+    @revalidated-for E2
+    """
+
+    min_range: float
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        val = row.get("overnight_range")
+        if val is None:
+            return False  # fail-closed
+        return val >= self.min_range
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        if "overnight_range" not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df["overnight_range"].notna() & (df["overnight_range"] >= self.min_range)
+
+
+@dataclass(frozen=True)
 class DirectionFilter(StrategyFilter):
     """Filter by breakout direction (long/short only)."""
 
@@ -1045,6 +1086,34 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
     ),
     # MES TOKYO_OPEN band filters (H2: ORBs >= 12pt are toxic)
     **_MES_1000_BAND_FILTERS,
+    # Overnight range absolute filters (Mar 2026 confluence research program).
+    # LOOK-AHEAD WARNING: NOT in BASE_GRID_FILTERS. Routed to US sessions only
+    # via get_filters_for_grid(). See OvernightRangeAbsFilter docstring.
+    # Phase 1: 11 BH FDR survivors (q=0.05), ALL MNQ, US sessions.
+    # Phase 3: 3 deployable (WFE 1.21-16.39), thresholds 23.5-66.8.
+    # @research-source research/output/confluence_program/phase1_run.py
+    # @entry-models E2
+    # @revalidated-for E2
+    "OVNRNG_10": OvernightRangeAbsFilter(
+        filter_type="OVNRNG_10",
+        description="Overnight range >= 10 points",
+        min_range=10.0,
+    ),
+    "OVNRNG_25": OvernightRangeAbsFilter(
+        filter_type="OVNRNG_25",
+        description="Overnight range >= 25 points",
+        min_range=25.0,
+    ),
+    "OVNRNG_50": OvernightRangeAbsFilter(
+        filter_type="OVNRNG_50",
+        description="Overnight range >= 50 points",
+        min_range=50.0,
+    ),
+    "OVNRNG_100": OvernightRangeAbsFilter(
+        filter_type="OVNRNG_100",
+        description="Overnight range >= 100 points",
+        min_range=100.0,
+    ),
 }
 
 # Calendar skip overlays (NOT in discovery grid — applied at portfolio/paper_trader level)
@@ -1152,6 +1221,23 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
             filters["X_MES_ATR70"] = ALL_FILTERS["X_MES_ATR70"]
             filters["X_MES_ATR60"] = ALL_FILTERS["X_MES_ATR60"]
             filters["X_MGC_ATR70"] = ALL_FILTERS["X_MGC_ATR70"]
+
+    # Overnight range absolute filters for US sessions (Mar 2026 confluence research).
+    # LOOK-AHEAD for Asian sessions — route ONLY to sessions starting after 17:00 Brisbane.
+    # @research-source research/output/confluence_program/phase1_run.py
+    _overnight_clean_sessions = {
+        "LONDON_METALS",
+        "EUROPE_FLOW",
+        "US_DATA_830",
+        "NYSE_OPEN",
+        "US_DATA_1000",
+        "COMEX_SETTLE",
+        "CME_PRECLOSE",
+        "NYSE_CLOSE",
+    }
+    if session in _overnight_clean_sessions:
+        for ovn_key in ("OVNRNG_10", "OVNRNG_25", "OVNRNG_50", "OVNRNG_100"):
+            filters[ovn_key] = ALL_FILTERS[ovn_key]
 
     # REMOVED (Feb 2026): NO_DBL_BREAK / NODBL composites for SINGAPORE_OPEN.
     # double_break column is LOOK-AHEAD — computed over full session AFTER
