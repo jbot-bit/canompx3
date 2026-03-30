@@ -29,16 +29,15 @@ Decision rules (PRE-COMMITTED before running):
 @revalidated-for E2 event-based (2026-03-30)
 """
 
-import sys
-
-sys.path.insert(0, r"C:\Users\joshd\canompx3")
-
 import duckdb
 import numpy as np
 import pandas as pd
+from pathlib import Path
+
+# Run from project root: python research/output/confluence_program/phase4_oos_lift.py
 from pipeline.paths import GOLD_DB_PATH
 
-OUT = r"C:\Users\joshd\canompx3\research\output\confluence_program"
+OUT = str(Path(__file__).parent)
 IS_CUTOFF = "2024-01-01"
 OOS_CUTOFF = "2026-01-01"
 N_BOOT = 1000
