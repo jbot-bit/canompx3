@@ -6,6 +6,55 @@
 
 ---
 
+## Update (Mar 31 — First Automated Trade: Profile + Scoring + Routing)
+
+### Completed
+- **TopStep MNQ auto profile** (`topstep_50k_mnq_auto`): Single COMEX_SETTLE lane via ProjectX API
+  - ROBUST family (7 members, PBO=0, FDR adj_p=0). 2025 fwd: +25.7R (N=63)
+  - Risk $29/trade = 1.5% DD, 2.9% DLL on TopStep 50K ($2K DD, $1K DLL)
+  - DD budget: $935/$2000 (47%) — Monte Carlo worst-case per contract
+  - Commit `7fbf8b2`
+
+- **Lane scoring tool** (`scripts/tools/score_lanes.py`): 7-factor composite scorer
+  - Factors: ExpR, sharpe_adj, ayp, n_confidence, fitness, rr_adj, prop_sm
+  - Auto/manual slot routing by Brisbane session time
+  - Code-reviewed: 4 bugs fixed (S075 risk overstatement, NULL FDR fail-open, DB leak, unknown firm)
+  - Usage: `python scripts/tools/score_lanes.py --firm topstep --current`
+
+- **Lane routing guide** (`docs/plans/lane-routing-guide.md`): Decision framework
+  - Manual vs auto allocation, session timing map, cross-firm filter diversity
+  - 20% switching threshold (Carver Ch 12), kill criteria, paper-to-live gateway
+
+### Key Findings
+- **CME_PRECLOSE dominates raw scores** (8 of top 12) but already on Apex manual. COMEX_SETTLE adds marginal portfolio value as a bot-only session (03:30 AM Brisbane).
+- **ATR70_VOL filter will fail on stale daily_features** — `atr_20_pct` and `rel_vol` are NULL for last 4 days. MUST refresh before first run: `python pipeline/build_daily_features.py --instrument MNQ`
+- **ORB caps loaded from Apex registry** (not portfolio) — works now (same cap=80 on both), structural fix needed when caps diverge.
+- **Tradovate auth still broken** — TopStep/ProjectX is the only viable auto path.
+
+### Next: Automation Prompt Execution
+The `prompt_first_automated_trade.md` is NOT yet executed — this session did Step 0 (pre-flight read) plus the profile/tooling setup that the prompt assumed existed. Remaining steps:
+
+1. **Step 1** — DONE (strategy selected: COMEX_SETTLE ATR70_VOL via scorer)
+2. **Step 2** — Broker API connectivity test (ProjectX auth, contract resolution, data feed)
+3. **Step 3** — Dashboard smoke test (standalone launch, fake state rendering)
+4. **Step 4** — Signal-only test run during COMEX_SETTLE session (03:30 AM Brisbane)
+5. **Step 5** — Demo account live test (real orders on TopStep demo)
+6. **Step 6** — Live single-lane execution (real money)
+7. **Step 7** — Wire up Discord notifications + CUSUM drift alerting
+8. **Step 8** — Write runbook doc
+
+**Blocker for Steps 4+:** Daily features must be refreshed. Bars end Mar 24.
+**Blocker for Steps 2+:** Must be during market hours for data feed test.
+
+### What's Running
+Nothing (session idle)
+
+### What's Broken
+- Tradovate auth — password rejected (unchanged)
+- Daily features stale (last computed Mar 20-24, need refresh)
+
+---
+
 ## Update (Mar 30 — System audit + break delay research + DB ops)
 
 ### Completed (this terminal)
