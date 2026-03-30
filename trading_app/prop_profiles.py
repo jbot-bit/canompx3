@@ -279,76 +279,70 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         max_slots=5,
         active=False,  # Superseded by apex_100k_manual ($3K DD vs $2K)
         # Phase 1 manual: 5 validated MNQ lanes.
-        # All strategies pass: stratified-K BH FDR (holdout-clean), walk-forward,
-        # stress test, yearly robustness. Verified on canonical gold.db.
-        # @research-source stratified-K validation 2026-03-24
-        # @revalidated-for E2 event-based sessions (2026-03-24)
-        # Dropped: CME_PRECLOSE (0/360 MNQ survivors), TOKYO_OPEN (0 MNQ),
-        #   EUROPE_FLOW (dead 10yr), LONDON_METALS (dead last).
+        # Score-driven rebuild 2026-03-31: composite score = ExpR * sharpe_adj * ayp *
+        # n_confidence * fitness * rr_adj * prop_sm. 20% switching threshold (Carver Ch 12).
+        # @research-source score-driven lane selection 2026-03-31
+        # @revalidated-for E2 event-based sessions, post-confluence filters (2026-03-31)
         allowed_sessions=frozenset(
             {
-                "NYSE_CLOSE",  # 6:00/7:00 AM Brisbane
-                "SINGAPORE_OPEN",  # 11:00 AM Brisbane
-                "COMEX_SETTLE",  # 3:30/4:30 AM Brisbane — alarm required
-                "NYSE_OPEN",  # 11:30 PM Brisbane
-                "US_DATA_1000",  # 00:00/01:00 AM Brisbane (30 min after NYSE_OPEN)
+                "CME_PRECLOSE",  # 5:45 AM Brisbane — score #1 (1.396)
+                "NYSE_CLOSE",  # 6:00 AM Brisbane — score #2 (0.833)
+                "COMEX_SETTLE",  # 3:30/4:30 AM Brisbane — score #3 (0.753)
+                "US_DATA_1000",  # 00:00/01:00 AM Brisbane — score #4 (0.625)
+                "TOKYO_OPEN",  # 10:00 AM Brisbane — score #5 (0.587)
             }
         ),
         daily_lanes=(
-            # ORB caps from adversarial audit P90 data (2026-03-29). Caps at ~P95 to avoid
-            # outsized single-trade risk while not filtering normal ORBs.
-            # Upgraded VOL_RV12→VOL_RV20 (2026-03-30): RV20 is strict subset of RV12
-            # (100% overlap). Removes 348 low-volume days. ExpR +0.263 vs +0.174 (+51%).
-            # All 10 years positive (vs 9/10 for RV12). WFE 1.09 (above 0.50 threshold).
-            # N=311 (vs 659) — fewer trades but higher edge per trade.
+            # Lane selection via composite score applied uniformly to all 586 MNQ
+            # candidates (non-PURGED, N>=100, E2 CB1 O5). Switching threshold 20%.
+            # ORB caps from adversarial audit P90 data (2026-03-29).
+            # L1: CME_PRECLOSE — NEW. Score 1.396 (#1). AYP=True, Sharpe 2.41.
+            # Was 0 survivors in old validation; confluence filters unlocked 73 strategies.
+            DailyLaneSpec(
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+                "MNQ",
+                "CME_PRECLOSE",
+                max_orb_size_pts=120.0,
+            ),
+            # L2: NYSE_CLOSE — UPGRADED from VOL_RV12_N20 (+67.7% score).
+            # VOL_RV20_N20 is strict superset filter (fewer, higher-edge trades).
             DailyLaneSpec(
                 "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
                 "MNQ",
                 "NYSE_CLOSE",
-                max_orb_size_pts=100.0,  # P90=66, P95=96. Cap at 100.
+                max_orb_size_pts=100.0,
             ),
-            DailyLaneSpec(
-                "MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15",
-                "MNQ",
-                "SINGAPORE_OPEN",
-                execution_notes="0.5x sizing (1 micro lot max). RR4.0 at 25% WR = long loss streaks structural. "
-                "Hist max DD -$3,540 on this lane alone. Remediation audit 2026-03-25.",
-                planned_stop_multiplier=0.75,
-                max_orb_size_pts=80.0,  # P90=59, P95=75. Cap at 80.
-            ),
+            # L3: COMEX_SETTLE — KEPT (ATR70_VOL tied with OVNRNG_100 at +0.4%).
             DailyLaneSpec(
                 "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
                 "MNQ",
                 "COMEX_SETTLE",
-                max_orb_size_pts=80.0,  # P90=52, P95=74. Cap at 80.
+                max_orb_size_pts=80.0,
             ),
-            # Risk cap: 150pt max risk_points (stop distance, not raw ORB size).
-            # At 0.75x stops, 150pt risk ~ 200pt raw ORB. $300 max loss per trade ($2/pt).
-            # Derived from DD math: $3K limit * 10% / $2 = 150pt risk. Not data snooped.
-            # Data: Lane 4 ExpR flat across ORB quintiles (r=+0.03, p=0.143, not significant).
-            # Switched O15→O5 (2026-03-29): O15 proven ARITHMETIC_ONLY.
-            # O5 IS: N=773 ExpR=+0.122 WFE=2.57. Better gross R per aperture audit.
-            DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
-                "MNQ",
-                "NYSE_OPEN",
-                max_orb_size_pts=150.0,
-            ),
+            # L4: US_DATA_1000 — KEPT (already score-optimal). AYP=True, Sharpe 1.80.
             DailyLaneSpec(
                 "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
                 "MNQ",
                 "US_DATA_1000",
-                max_orb_size_pts=120.0,  # P90=101, P95=115. Cap at 120.
+                max_orb_size_pts=120.0,
+            ),
+            # L5: TOKYO_OPEN MNQ — NEW. Score 0.587 (#5). WHITELISTED fitness.
+            # Replaces NYSE_OPEN (score 0.530, #8). RR2.5 = wider target.
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20",
+                "MNQ",
+                "TOKYO_OPEN",
+                max_orb_size_pts=80.0,
             ),
         ),
         notes=(
-            "Phase 1 manual. 5 validated MNQ lanes (stratified-K, holdout-clean, all gates). "
-            "Lanes 1,4 switched O15→O5 (2026-03-29): O15 proven ARITHMETIC_ONLY. "
-            "NYSE_CLOSE highest ExpR. "
-            "RISK: Historical combined DD = -$3,409 (breaches $2K limit). "
-            "Lane 2 (SINGAPORE_OPEN RR4.0) hist DD = -$3,540 alone. "
-            "MITIGATIONS: Lane 2 at 0.5x sizing. Intraday DD halt at -$1,000. "
-            "Remediation audit 2026-03-25."
+            "Phase 1 manual. 5 MNQ lanes rebuilt 2026-03-31 via composite score. "
+            "IN: CME_PRECLOSE (#1, AYP, Sharpe 2.41), TOKYO_OPEN MNQ (#5, WHITELISTED). "
+            "UPGRADED: NYSE_CLOSE (RV12->RV20, +67.7%). "
+            "KEPT: COMEX_SETTLE (tied), US_DATA_1000 (optimal). "
+            "OUT: NYSE_OPEN (#8), SINGAPORE (O15 dead). "
+            "DD budget: $750 / $2K = 37.5%. "
+            "Filter diversity: 4 filter families across 5 lanes."
         ),
     ),
     # =========================================================================
@@ -362,23 +356,21 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=1,
         stop_multiplier=0.75,
         max_slots=5,
-        active=True,  # Upgraded from 50K — $3K DD gives $1,251 margin vs $251
-        allowed_sessions=frozenset({"NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN", "US_DATA_1000"}),
+        active=True,  # Upgraded from 50K — $3K DD gives $2,250 margin
+        allowed_sessions=frozenset({"CME_PRECLOSE", "NYSE_CLOSE", "COMEX_SETTLE", "US_DATA_1000", "TOKYO_OPEN"}),
         daily_lanes=(
-            # L1 upgraded VOL_RV12→VOL_RV20 (2026-03-30)
+            # Score-driven rebuild 2026-03-31 — mirrors apex_50k_manual lanes.
+            DailyLaneSpec(
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+                "MNQ",
+                "CME_PRECLOSE",
+                max_orb_size_pts=120.0,
+            ),
             DailyLaneSpec(
                 "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
                 "MNQ",
                 "NYSE_CLOSE",
                 max_orb_size_pts=100.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15",
-                "MNQ",
-                "SINGAPORE_OPEN",
-                execution_notes="0.5x sizing. RR4.0 long loss streaks structural.",
-                planned_stop_multiplier=0.75,
-                max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
                 "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
@@ -387,19 +379,19 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
-                "MNQ",
-                "NYSE_OPEN",
-                max_orb_size_pts=150.0,
-            ),
-            DailyLaneSpec(
                 "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
                 "MNQ",
                 "US_DATA_1000",
                 max_orb_size_pts=120.0,
             ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20",
+                "MNQ",
+                "TOKYO_OPEN",
+                max_orb_size_pts=80.0,
+            ),
         ),
-        notes="$100K upgrade. Same 5 strategies, $3K DD headroom (vs $2K). ORB caps from audit.",
+        notes=("$100K upgrade. Same 5 score-driven lanes as 50K. $3K DD, budget $750 (25%). Rebuilt 2026-03-31."),
     ),
     # =========================================================================
     # Phase 2: Automation scaling (Tradeify MNQ + TopStep MGC)
@@ -411,59 +403,51 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=5,  # 5 identical accounts — PRIMARY MNQ scaling lane
         stop_multiplier=0.75,
         max_slots=6,
-        allowed_sessions=frozenset({"CME_PRECLOSE", "COMEX_SETTLE", "NYSE_CLOSE", "NYSE_OPEN", "US_DATA_1000"}),
+        allowed_sessions=frozenset({"CME_PRECLOSE", "NYSE_CLOSE", "COMEX_SETTLE", "US_DATA_1000", "TOKYO_OPEN"}),
         allowed_instruments=frozenset({"MNQ"}),
         active=False,  # Activate when Tradovate API bot is ready for per-account execution
-        # Same 5 lanes as Apex but CME_PRECLOSE added (Apex doesn't trade it due to timing).
+        # Score-driven rebuild 2026-03-31 — mirrors Apex sessions.
+        # CME_PRECLOSE uses ATR70_VOL (not VOL_RV20_N20 like Apex) = cross-firm filter diversity.
         # Execution: Tradovate API per-account (Group Trading broken for brackets).
         # Bot must be exclusive to Tradeify (official rule — no cross-firm sharing).
         # 10s microscalp rule: no issue for ORB trades (hold 27-100+ minutes).
-        # DD $2K with $1,749 historical max DD = $251 margin. Expect ~15% blowout/yr/copy.
-        # Budget $150/eval replacement. 5 copies dilutes risk.
         daily_lanes=(
-            # L6: CME_PRECLOSE — upgraded ATR70→VOL_RV20 (2026-03-30)
-            # Different population (J=0.22, only 40% overlap). VOL_RV20: all 10 yrs positive
-            # (vs 8/10 for ATR70). ExpR +0.340 vs +0.277 (+23%). WFE 1.46 vs 1.44.
+            # CME_PRECLOSE — ATR70_VOL (different filter from Apex = diversification)
             DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ATR70_VOL",
                 "MNQ",
                 "CME_PRECLOSE",
                 max_orb_size_pts=120.0,
             ),
-            # L1 mirror: NYSE_CLOSE — upgraded VOL_RV12→VOL_RV20 (2026-03-30)
             DailyLaneSpec(
                 "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
                 "MNQ",
                 "NYSE_CLOSE",
                 max_orb_size_pts=100.0,
             ),
-            # L3 mirror: COMEX_SETTLE
             DailyLaneSpec(
                 "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
                 "MNQ",
                 "COMEX_SETTLE",
                 max_orb_size_pts=80.0,
             ),
-            # L4 mirror: NYSE_OPEN
-            DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
-                "MNQ",
-                "NYSE_OPEN",
-                max_orb_size_pts=150.0,
-            ),
-            # L5 mirror: US_DATA_1000
             DailyLaneSpec(
                 "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
                 "MNQ",
                 "US_DATA_1000",
                 max_orb_size_pts=120.0,
             ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20",
+                "MNQ",
+                "TOKYO_OPEN",
+                max_orb_size_pts=80.0,
+            ),
         ),
         notes=(
-            "Phase 2 MNQ auto. 5 copies x 5 lanes via Tradovate API (per-account, not Group Trading). "
-            "Bot exclusive to Tradeify. CME_PRECLOSE added (best $/trade, not on Apex). "
-            "DD $2K tight — budget $750/yr for eval replacements (~1 blown copy/yr). "
-            "Activate when API bot tested on sim for 1 week."
+            "Phase 2 MNQ auto. 5 copies x 5 lanes via Tradovate API. "
+            "CME_PRECLOSE uses ATR70_VOL (Apex uses VOL_RV20_N20 = filter diversification). "
+            "DD $2K, budget $750 (37.5%). Rebuilt 2026-03-31."
         ),
     ),
     "topstep_50k": AccountProfile(
@@ -585,10 +569,12 @@ def _parse_strategy_id(strategy_id: str) -> dict:
 _LANE_NAMES: dict[str, str] = {
     "NYSE_CLOSE": "NYSE_CLOSE_VOL",
     "SINGAPORE_OPEN": "SING_G8",
+    "CME_PRECLOSE": "CME_PRE",
     "COMEX_SETTLE": "COMEX_G8",
-    "NYSE_OPEN": "NYSE_OPEN_XMES",
     "US_DATA_1000": "US_DATA_XMES",
-    "TOKYO_OPEN": "MGC_TOKYO",
+    # TOKYO_OPEN: MNQ lane (Apex primary) takes priority over MGC shadow (TopStep).
+    # MGC shadow is suppressed in get_lane_registry when MNQ TOKYO_OPEN is present.
+    "TOKYO_OPEN": "TOKYO_VOL",
 }
 
 
@@ -644,7 +630,10 @@ def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
             "max_orb_size_pts": lane.max_orb_size_pts,
         }
 
-    # Also include TopStep shadow lanes for any Apex manual profile
+    # Also include TopStep shadow lanes for any Apex manual profile.
+    # Note: if Apex has an MNQ lane at the same session (e.g. TOKYO_OPEN),
+    # the Apex lane takes priority and the MGC shadow is suppressed.
+    # This is intentional — MNQ TOKYO_OPEN is the primary trade.
     if profile.firm == "apex":
         ts_profile = ACCOUNT_PROFILES.get("topstep_50k")
         if ts_profile:

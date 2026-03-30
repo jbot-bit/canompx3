@@ -57,6 +57,18 @@ class LaneDef:
 # Drift check verifies sync at runtime (check_drift.py).
 LANES: tuple[LaneDef, ...] = (
     LaneDef(
+        strategy_id="MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+        lane_name="CME_PRE_VOL",
+        instrument="MNQ",
+        orb_label="CME_PRECLOSE",
+        orb_minutes=5,
+        rr_target=1.0,
+        entry_model="E2",
+        confirm_bars=1,
+        filter_type="VOL_RV20_N20",
+        filter_sql="d.rel_vol_CME_PRECLOSE >= 2.0",
+    ),
+    LaneDef(
         strategy_id="MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
         lane_name="NYSE_CLOSE_VOL",
         instrument="MNQ",
@@ -67,18 +79,6 @@ LANES: tuple[LaneDef, ...] = (
         confirm_bars=1,
         filter_type="VOL_RV20_N20",
         filter_sql="d.rel_vol_NYSE_CLOSE >= 2.0",
-    ),
-    LaneDef(
-        strategy_id="MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15",
-        lane_name="SING_G8",
-        instrument="MNQ",
-        orb_label="SINGAPORE_OPEN",
-        orb_minutes=15,
-        rr_target=4.0,
-        entry_model="E2",
-        confirm_bars=1,
-        filter_type="ORB_G8",
-        filter_sql="d.orb_SINGAPORE_OPEN_size >= 8.0",
     ),
     LaneDef(
         strategy_id="MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
@@ -93,19 +93,6 @@ LANES: tuple[LaneDef, ...] = (
         filter_sql="d.atr_20_pct >= 70 AND d.rel_vol_COMEX_SETTLE >= 1.2",
     ),
     LaneDef(
-        strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
-        lane_name="NYSE_OPEN_XMES",
-        instrument="MNQ",
-        orb_label="NYSE_OPEN",
-        orb_minutes=5,
-        rr_target=1.0,
-        entry_model="E2",
-        confirm_bars=1,
-        filter_type="X_MES_ATR60",
-        # Cross-asset: MES atr_20_pct from a separate daily_features row
-        filter_sql="d_mes.atr_20_pct >= 60.0",
-    ),
-    LaneDef(
         strategy_id="MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
         lane_name="US_DATA_XMES",
         instrument="MNQ",
@@ -116,6 +103,18 @@ LANES: tuple[LaneDef, ...] = (
         confirm_bars=1,
         filter_type="X_MES_ATR60",
         filter_sql="d_mes.atr_20_pct >= 60.0",
+    ),
+    LaneDef(
+        strategy_id="MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20",
+        lane_name="TOKYO_VOL",
+        instrument="MNQ",
+        orb_label="TOKYO_OPEN",
+        orb_minutes=5,
+        rr_target=2.5,
+        entry_model="E2",
+        confirm_bars=1,
+        filter_type="VOL_RV30_N20",
+        filter_sql="d.rel_vol_TOKYO_OPEN >= 3.0",
     ),
 )
 
