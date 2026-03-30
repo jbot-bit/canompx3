@@ -106,7 +106,7 @@ class TestOrbLabelsSync:
 class TestAllFiltersSync:
     """ALL_FILTERS keys must match filter_type inside each filter."""
 
-    # Base: NO_FILTER + 4 G-filters + 4 COST-filters + 6 VOL-filters = 15
+    # Base: NO_FILTER + 4 G-filters + 4 COST-filters + 6 VOL-filters + 4 ORB_VOL-filters = 19
     # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
     #   (NOFRI/NOTUE removed from grid Mar 2026 but retained in ALL_FILTERS for DB compat)
     # Break quality composites: 3 variants (FAST5, FAST10, CONT) x 4 G-filters = 12
@@ -114,7 +114,7 @@ class TestAllFiltersSync:
     # Direction filters: DIR_LONG/DIR_SHORT = 2
     # MES 1000 band filters: ORB_G4_L12/ORB_G5_L12 = 2
     # Cross-asset ATR filters: X_MES_ATR70/X_MES_ATR60/X_MGC_ATR70 = 3
-    # Total: 15 + 12 + 12 + 3 + 2 + 2 + 3 = 49
+    # Total: 19 + 12 + 12 + 3 + 2 + 2 + 3 = 53
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4",
@@ -132,6 +132,11 @@ class TestAllFiltersSync:
         "VOL_RV30_N20",
         # Combined ATR+VOL filter (Mar 2026 vol-regime research)
         "ATR70_VOL",
+        # ORB window volume gates (Mar 2026 confluence research program)
+        "ORB_VOL_2K",
+        "ORB_VOL_4K",
+        "ORB_VOL_8K",
+        "ORB_VOL_16K",
         # DOW composites (registered globally for portfolio.py lookups / DB compat)
         "ORB_G4_NOFRI",
         "ORB_G5_NOFRI",
@@ -208,11 +213,11 @@ class TestAllFiltersSync:
 
     def test_size_filters_have_thresholds(self):
         """Every ORB size filter (or composite with size base) has thresholds."""
-        from trading_app.config import CompositeFilter, CrossAssetATRFilter, DirectionFilter
+        from trading_app.config import CompositeFilter, CrossAssetATRFilter, DirectionFilter, OrbVolumeFilter
 
         for key, filt in ALL_FILTERS.items():
             if key == "NO_FILTER" or isinstance(
-                filt, (VolumeFilter, DirectionFilter, CrossAssetATRFilter, CostRatioFilter)
+                filt, (VolumeFilter, DirectionFilter, CrossAssetATRFilter, CostRatioFilter, OrbVolumeFilter)
             ):
                 continue
             if isinstance(filt, CompositeFilter):
@@ -345,7 +350,7 @@ class TestGridParamsSync:
     def test_grid_size(self):
         """Total base grid size matches expected formula (E2+E3 use CB1 only).
 
-        Base grid uses 15 core filters (NO_FILTER + G4/G5/G6/G8 + 4 COST + 5 VOL + ATR70_VOL).
+        Base grid uses 19 core filters (NO_FILTER + G4/G5/G6/G8 + 4 COST + 5 VOL + ATR70_VOL + 4 ORB_VOL).
         Session-specific DOW composites are added by get_filters_for_grid()
         per-session, expanding the grid contextually.
 
