@@ -61,26 +61,36 @@
 <!-- 4 LANE CARDS -->
 <div id="lanes-grid" class="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-6"></div>
 
+<!-- DATA FRESHNESS BAR -->
+<div id="data-bar" class="flex flex-wrap items-center gap-3 mb-4 p-3 rounded-xl bg-[#111922] border border-[#1e2d3d]">
+  <span class="text-xs text-gray-500 font-bold">DATA</span>
+  <span id="data-status" class="text-xs text-gray-400">Checking...</span>
+  <div class="flex-1"></div>
+  <button id="btn-refresh" class="btn-control px-4 py-2 rounded-lg font-bold text-xs bg-cyan-700 hover:bg-cyan-600 text-white">
+    REFRESH DATA
+  </button>
+</div>
+
 <!-- CONTROL BUTTONS -->
-<div class="flex flex-wrap gap-3 mb-6">
+<div class="flex flex-wrap gap-3 mb-4">
   <button id="btn-preflight" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-gray-700 hover:bg-gray-600 text-white">
     PREFLIGHT CHECK
   </button>
-  <button id="btn-paper" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-green-700 hover:bg-green-600 text-white">
-    START PAPER
+  <button id="btn-start" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-green-700 hover:bg-green-600 text-white">
+    START SIGNAL-ONLY
   </button>
   <button id="btn-live" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-yellow-700 hover:bg-yellow-600 text-black">
     START LIVE
   </button>
 </div>
 
-<!-- PREFLIGHT OUTPUT -->
-<div id="preflight-panel" class="hidden mb-6 p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]">
+<!-- ACTIVITY LOG (preflight, refresh, session output) -->
+<div id="activity-panel" class="hidden mb-6 p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]">
   <div class="flex justify-between items-center mb-2">
-    <span class="text-sm font-bold text-gray-400">PREFLIGHT OUTPUT</span>
-    <button id="btn-close-preflight" class="text-gray-500 hover:text-white text-xs cursor-pointer">CLOSE</button>
+    <span id="activity-title" class="text-sm font-bold text-gray-400">OUTPUT</span>
+    <button id="btn-close-activity" class="text-gray-500 hover:text-white text-xs cursor-pointer">CLOSE</button>
   </div>
-  <pre id="preflight-output" class="text-xs text-green-400 whitespace-pre-wrap">Running...</pre>
+  <pre id="activity-output" class="text-xs text-green-400 whitespace-pre-wrap max-h-[300px] overflow-y-auto">Ready</pre>
 </div>
 
 <!-- TRADE LOG -->
@@ -385,48 +395,139 @@ function fmtP(v) { return v != null ? v.toFixed(2) : "\u2014"; }
 function fmtR(r) { return r != null ? ((r >= 0 ? "+" : "") + r.toFixed(2) + "R") : "\u2014"; }
 function rCol(r) { return r == null ? "" : (r >= 0 ? "text-green-400" : "text-red-400"); }
 
-// Controls
-document.getElementById("btn-preflight").addEventListener("click", async function() {
-  const panel = document.getElementById("preflight-panel");
-  const output = document.getElementById("preflight-output");
+// Activity panel helpers
+function showActivity(title, text, color) {
+  const panel = document.getElementById("activity-panel");
   panel.classList.remove("hidden");
-  output.textContent = "Running preflight checks...";
-  output.className = "text-xs text-yellow-400 whitespace-pre-wrap";
+  setText("activity-title", title);
+  const output = document.getElementById("activity-output");
+  output.textContent = text;
+  output.className = "text-xs whitespace-pre-wrap max-h-[300px] overflow-y-auto " + (color || "text-yellow-400");
+}
+function appendActivity(text) {
+  const output = document.getElementById("activity-output");
+  output.textContent += "\n" + text;
+  output.scrollTop = output.scrollHeight;
+}
+
+// Data freshness
+async function fetchDataStatus() {
+  try {
+    const r = await fetch("/api/data-status");
+    const d = await r.json();
+    const el = document.getElementById("data-status");
+    const btn = document.getElementById("btn-refresh");
+    if (d.error) { el.textContent = "Error: " + d.error; return; }
+    const parts = [];
+    for (const [inst, info] of Object.entries(d.instruments || {})) {
+      const gap = info.gap_days;
+      const color = gap <= 1 ? "text-green-400" : gap <= 3 ? "text-yellow-400" : "text-red-400";
+      parts.push(inst + ": " + (info.last_bar_date || "?") + " (" + gap + "d)");
+    }
+    el.textContent = parts.join(" | ");
+    el.className = "text-xs " + (d.any_stale ? "text-red-400" : "text-green-400");
+    // Highlight refresh button if stale
+    if (d.any_stale) {
+      btn.className = "btn-control px-4 py-2 rounded-lg font-bold text-xs bg-red-600 hover:bg-red-500 text-white pulse";
+    } else {
+      btn.className = "btn-control px-4 py-2 rounded-lg font-bold text-xs bg-cyan-700 hover:bg-cyan-600 text-white";
+    }
+  } catch (_e) {}
+}
+
+// Refresh data
+let refreshPolling = false;
+document.getElementById("btn-refresh").addEventListener("click", async function() {
+  showActivity("DATA REFRESH", "Starting data refresh (Databento download + pipeline rebuild)...", "text-cyan-400");
+  try {
+    const r = await fetch("/api/action/refresh", { method: "POST" });
+    const d = await r.json();
+    appendActivity(d.message || d.status);
+    if (d.status === "started" || d.status === "running") {
+      // Poll for completion
+      if (!refreshPolling) {
+        refreshPolling = true;
+        const poll = setInterval(async () => {
+          try {
+            const sr = await fetch("/api/action/refresh-status");
+            const sd = await sr.json();
+            if (sd.status === "done") {
+              appendActivity("\nDONE: Data refresh complete.");
+              document.getElementById("activity-output").className = "text-xs whitespace-pre-wrap max-h-[300px] overflow-y-auto text-green-400";
+              clearInterval(poll);
+              refreshPolling = false;
+              fetchDataStatus();
+            } else if (sd.status === "failed") {
+              appendActivity("\nFAILED:\n" + (sd.output || "Unknown error"));
+              document.getElementById("activity-output").className = "text-xs whitespace-pre-wrap max-h-[300px] overflow-y-auto text-red-400";
+              clearInterval(poll);
+              refreshPolling = false;
+            }
+          } catch (_e) {}
+        }, 3000);
+      }
+    }
+  } catch (e) { appendActivity("Error: " + e.message); }
+});
+
+// Preflight
+document.getElementById("btn-preflight").addEventListener("click", async function() {
+  showActivity("PREFLIGHT CHECK", "Running preflight checks...", "text-yellow-400");
   try {
     const r = await fetch("/api/action/preflight", { method: "POST" });
     const d = await r.json();
+    const output = document.getElementById("activity-output");
     output.textContent = d.output || "No output";
-    output.className = "text-xs whitespace-pre-wrap " + (d.status === "pass" ? "text-green-400" : "text-red-400");
-  } catch (e) { output.textContent = "Error: " + e.message; output.className = "text-xs text-red-400 whitespace-pre-wrap"; }
+    output.className = "text-xs whitespace-pre-wrap max-h-[300px] overflow-y-auto " + (d.status === "pass" ? "text-green-400" : "text-red-400");
+    setText("activity-title", "PREFLIGHT: " + (d.status === "pass" ? "PASS" : "FAIL"));
+  } catch (e) { appendActivity("Error: " + e.message); }
 });
-document.getElementById("btn-close-preflight").addEventListener("click", function() {
-  document.getElementById("preflight-panel").classList.add("hidden");
+
+// Start signal-only session
+document.getElementById("btn-start").addEventListener("click", async function() {
+  if (!confirm("Start SIGNAL-ONLY session?\n\nNo real orders will be placed.\nDashboard will show live ORB detection and trade signals.")) return;
+  showActivity("SESSION START", "Launching signal-only session...", "text-green-400");
+  try {
+    const r = await fetch("/api/action/start", { method: "POST" });
+    const d = await r.json();
+    appendActivity(d.message || d.status);
+    if (d.status === "started") {
+      appendActivity("PID: " + d.pid + "\nDashboard will update automatically as bars arrive.");
+    }
+  } catch (e) { appendActivity("Error: " + e.message); }
 });
-document.getElementById("btn-paper").addEventListener("click", function() {
-  alert("Start paper mode from terminal:\n\npython -m scripts.run_live_session --profile apex_50k_manual --signal-only\n\n(Dashboard auto-launches with the bot)");
-});
+
+// Start live (requires confirmation)
 document.getElementById("btn-live").addEventListener("click", function() {
   const code = prompt("Type CONFIRM to start LIVE trading with real money:");
-  if (code === "CONFIRM") {
-    alert("Start live mode from terminal:\n\npython -m scripts.run_live_session --profile apex_50k_manual --live --account-id <FUNDED_ID>\n\n(Dashboard auto-launches with the bot)");
-  }
+  if (code !== "CONFIRM") return;
+  alert("Live mode launch from dashboard not yet enabled.\n\nUse terminal for live trading:\npython -m scripts.run_live_session --profile topstep_50k_mnq_auto --live");
 });
+
+// Kill
 document.getElementById("btn-kill").addEventListener("click", async function() {
   if (!confirm("KILL ALL TRADES?\n\nThis writes the stop file and shuts down the bot.\nOpen positions will be closed at market.")) return;
   if (!confirm("SECOND CONFIRMATION:\nAre you sure? This stops all trading immediately.")) return;
   try {
     const r = await fetch("/api/action/kill", { method: "POST" });
     const d = await r.json();
-    alert(d.message || "Kill signal sent");
-  } catch (e) { alert("Kill failed: " + e.message); }
+    showActivity("KILL", d.message || "Kill signal sent", "text-red-400");
+  } catch (e) { showActivity("KILL", "Kill failed: " + e.message, "text-red-400"); }
+});
+
+// Close activity panel
+document.getElementById("btn-close-activity").addEventListener("click", function() {
+  document.getElementById("activity-panel").classList.add("hidden");
 });
 
 // Init
 buildLaneCards();
 fetchStatus();
 fetchTrades();
+fetchDataStatus();
 setInterval(fetchStatus, 5000);
 setInterval(fetchTrades, 10000);
+setInterval(fetchDataStatus, 30000);
 </script>
 </body>
 </html>

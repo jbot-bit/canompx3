@@ -235,6 +235,15 @@ def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
     if not ok:
         return False
 
+    # Step 4: Patch atr_20_pct NULLs (rolling percentile needs full history)
+    try:
+        from pipeline.daily_backfill import _patch_atr_percentiles
+
+        _patch_atr_percentiles(str(GOLD_DB_PATH), instrument)
+    except Exception as e:
+        print(f"  WARNING: atr_20_pct patch failed: {e}")
+        # Non-fatal — filter will fail-closed on NULL (safe direction)
+
     print(f"  DONE: {instrument} refreshed to {today}")
     return True
 

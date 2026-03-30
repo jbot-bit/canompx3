@@ -127,18 +127,14 @@ async def action_kill():
 async def action_preflight():
     """Run preflight checks and return output."""
     try:
-        # Read profile from bot state if available, default to apex_50k_manual
-        state = read_state()
-        profile = "apex_50k_manual"
-        portfolio_name = state.get("account_name", "")
-        if portfolio_name.startswith("profile_"):
-            profile = portfolio_name.removeprefix("profile_")
+        profile = _resolve_profile()
         result = subprocess.run(
             [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"],
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=60,
             cwd=str(PROJECT_ROOT),
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
         return {
             "status": "pass" if result.returncode == 0 else "fail",
@@ -146,9 +142,110 @@ async def action_preflight():
             "returncode": result.returncode,
         }
     except subprocess.TimeoutExpired:
-        return {"status": "timeout", "output": "Preflight timed out after 30s"}
+        return {"status": "timeout", "output": "Preflight timed out after 60s"}
     except Exception as e:
         return {"status": "error", "output": str(e)}
+
+
+@app.get("/api/data-status")
+async def api_data_status():
+    """Data freshness for all active instruments."""
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        results = {}
+        with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+            configure_connection(con)
+            for inst in ACTIVE_ORB_INSTRUMENTS:
+                row = con.execute(
+                    "SELECT MAX(ts_utc)::DATE FROM bars_1m WHERE symbol = ?", [inst]
+                ).fetchone()
+                last_date = row[0] if row and row[0] else None
+                gap = (datetime.now(UTC).date() - last_date).days if last_date else 999
+                results[inst] = {
+                    "last_bar_date": str(last_date) if last_date else None,
+                    "gap_days": gap,
+                    "stale": gap > 2,
+                }
+        any_stale = any(r["stale"] for r in results.values())
+        return {"instruments": results, "any_stale": any_stale}
+    except Exception as e:
+        return {"instruments": {}, "any_stale": True, "error": str(e)}
+
+
+@app.post("/api/action/refresh")
+async def action_refresh():
+    """Download fresh data from Databento + rebuild pipeline. Runs in background."""
+    if "refresh" in _bg_processes:
+        proc = _bg_processes["refresh"]
+        if proc.poll() is None:
+            return {"status": "running", "message": "Data refresh already in progress"}
+    try:
+        instrument = "MNQ"  # Default to MNQ for automation profile
+        state = read_state()
+        if state.get("instrument"):
+            instrument = state["instrument"]
+        proc = subprocess.Popen(
+            [sys.executable, "scripts/tools/refresh_data.py", "--instrument", instrument],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=str(PROJECT_ROOT),
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
+        _bg_processes["refresh"] = proc
+        return {"status": "started", "message": f"Refreshing {instrument} data..."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+
+@app.get("/api/action/refresh-status")
+async def action_refresh_status():
+    """Check data refresh progress."""
+    if "refresh" not in _bg_processes:
+        return {"status": "idle", "output": ""}
+    proc = _bg_processes["refresh"]
+    if proc.poll() is None:
+        return {"status": "running", "output": "Refresh in progress..."}
+    output = ""
+    try:
+        output = proc.stdout.read() if proc.stdout else ""
+    except Exception:
+        pass
+    status = "done" if proc.returncode == 0 else "failed"
+    return {"status": status, "returncode": proc.returncode, "output": output}
+
+
+@app.post("/api/action/start")
+async def action_start():
+    """Launch signal-only trading session from the dashboard."""
+    if "session" in _bg_processes:
+        proc = _bg_processes["session"]
+        if proc.poll() is None:
+            return {"status": "running", "message": "Session already running"}
+
+    profile = _resolve_profile()
+    try:
+        proc = subprocess.Popen(
+            [
+                sys.executable, "-m", "scripts.run_live_session",
+                "--profile", profile,
+                "--signal-only",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            cwd=str(PROJECT_ROOT),
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        )
+        _bg_processes["session"] = proc
+        return {
+            "status": "started",
+            "message": f"Signal-only session started: {profile}",
+            "pid": proc.pid,
+        }
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
 # ── HTML Frontend ─────────────────────────────────────────────────────────────
