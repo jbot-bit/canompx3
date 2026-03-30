@@ -297,11 +297,12 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         daily_lanes=(
             # ORB caps from adversarial audit P90 data (2026-03-29). Caps at ~P95 to avoid
             # outsized single-trade risk while not filtering normal ORBs.
-            # Switched O15→O5 (2026-03-29): O15 proven ARITHMETIC_ONLY
-            # (friction artifact, not signal). O5 has 2x sample size (N=659 vs 300),
-            # better WFE (1.41 vs 1.08), and better gross R per matched-day paired test.
+            # Upgraded VOL_RV12→VOL_RV20 (2026-03-30): RV20 is strict subset of RV12
+            # (100% overlap). Removes 348 low-volume days. ExpR +0.263 vs +0.174 (+51%).
+            # All 10 years positive (vs 9/10 for RV12). WFE 1.09 (above 0.50 threshold).
+            # N=311 (vs 659) — fewer trades but higher edge per trade.
             DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20",
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
                 "MNQ",
                 "NYSE_CLOSE",
                 max_orb_size_pts=100.0,  # P90=66, P95=96. Cap at 100.
@@ -364,9 +365,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         active=True,  # Upgraded from 50K — $3K DD gives $1,251 margin vs $251
         allowed_sessions=frozenset({"NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN", "US_DATA_1000"}),
         daily_lanes=(
-            # Lanes 1,4 switched O15→O5 (2026-03-29): O15 ARITHMETIC_ONLY
+            # L1 upgraded VOL_RV12→VOL_RV20 (2026-03-30)
             DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20",
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
                 "MNQ",
                 "NYSE_CLOSE",
                 max_orb_size_pts=100.0,
@@ -420,16 +421,18 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # DD $2K with $1,749 historical max DD = $251 margin. Expect ~15% blowout/yr/copy.
         # Budget $150/eval replacement. 5 copies dilutes risk.
         daily_lanes=(
-            # L6: CME_PRECLOSE — best $/trade, not on Apex (timing overlap)
+            # L6: CME_PRECLOSE — upgraded ATR70→VOL_RV20 (2026-03-30)
+            # Different population (J=0.22, only 40% overlap). VOL_RV20: all 10 yrs positive
+            # (vs 8/10 for ATR70). ExpR +0.340 vs +0.277 (+23%). WFE 1.46 vs 1.44.
             DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
                 "MNQ",
                 "CME_PRECLOSE",
-                max_orb_size_pts=120.0,  # Derived from DD math, not P90 data
+                max_orb_size_pts=120.0,
             ),
-            # L1 mirror: NYSE_CLOSE
+            # L1 mirror: NYSE_CLOSE — upgraded VOL_RV12→VOL_RV20 (2026-03-30)
             DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20",
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
                 "MNQ",
                 "NYSE_CLOSE",
                 max_orb_size_pts=100.0,

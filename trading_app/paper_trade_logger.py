@@ -57,7 +57,7 @@ class LaneDef:
 # Drift check verifies sync at runtime (check_drift.py).
 LANES: tuple[LaneDef, ...] = (
     LaneDef(
-        strategy_id="MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20",
+        strategy_id="MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
         lane_name="NYSE_CLOSE_VOL",
         instrument="MNQ",
         orb_label="NYSE_CLOSE",
@@ -65,8 +65,8 @@ LANES: tuple[LaneDef, ...] = (
         rr_target=1.0,
         entry_model="E2",
         confirm_bars=1,
-        filter_type="VOL_RV12_N20",
-        filter_sql="d.rel_vol_NYSE_CLOSE >= 1.2",
+        filter_type="VOL_RV20_N20",
+        filter_sql="d.rel_vol_NYSE_CLOSE >= 2.0",
     ),
     LaneDef(
         strategy_id="MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15",
