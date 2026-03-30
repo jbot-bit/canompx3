@@ -1,20 +1,18 @@
 ---
 mode: IMPLEMENTATION
 stage: IMPLEMENTATION
-task: Fix prop_profiles firm rules + design Apex 100K + Tradeify 5x config
+task: Fix pre_session_check + get_lane_registry to use active profiles (not hardcoded apex_50k_manual)
 pass: 2
 scope_lock:
   - trading_app/prop_profiles.py
+  - trading_app/pre_session_check.py
   - tests/test_trading_app/test_prop_profiles.py
 blast_radius:
-  - prop_profiles.py imported by pre_session_check, run_live_session, paper_trade_logger
-  - DD budget validation catches misconfigs at import time
+  - get_lane_registry() called by pre_session_check, log_trade, forward_monitor, slippage_scenario, sprt_monitor
+  - pre_session_check is HARD GATE for trading
 acceptance:
-  - Apex rules match official docs (5:1 RR, 30% per-trade, scaling, safety net)
-  - Tradeify notes clarify Group Trading broken + API-per-account required
-  - Apex 100K profile activated with 5 lanes
-  - Tradeify 50K profile has daily_lanes configured (CME_PRECLOSE priority)
-  - validate_dd_budget passes for all active profiles
+  - get_lane_registry() defaults to active Apex profile (not hardcoded apex_50k_manual)
+  - pre_session_check loads lanes from active profile
   - All tests pass, drift clean
-updated: 2026-03-30T17:00:00Z
+updated: 2026-03-30T18:00:00Z
 ---
