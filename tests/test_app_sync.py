@@ -106,7 +106,7 @@ class TestOrbLabelsSync:
 class TestAllFiltersSync:
     """ALL_FILTERS keys must match filter_type inside each filter."""
 
-    # Base: NO_FILTER + 4 G-filters + 4 COST-filters + 6 VOL-filters + 4 ORB_VOL-filters = 19
+    # Base: NO_FILTER + 4 G-filters + 4 COST + 6 VOL + 4 ORB_VOL = 19 (in BASE_GRID_FILTERS)
     # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
     #   (NOFRI/NOTUE removed from grid Mar 2026 but retained in ALL_FILTERS for DB compat)
     # Break quality composites: 3 variants (FAST5, FAST10, CONT) x 4 G-filters = 12
@@ -114,7 +114,8 @@ class TestAllFiltersSync:
     # Direction filters: DIR_LONG/DIR_SHORT = 2
     # MES 1000 band filters: ORB_G4_L12/ORB_G5_L12 = 2
     # Cross-asset ATR filters: X_MES_ATR70/X_MES_ATR60/X_MGC_ATR70 = 3
-    # Total: 19 + 12 + 12 + 3 + 2 + 2 + 3 = 53
+    # + 4 OVNRNG (session-routed, NOT in BASE_GRID_FILTERS)
+    # Total: 19 + 12 + 12 + 3 + 2 + 2 + 3 + 4 = 57
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4",
@@ -177,6 +178,11 @@ class TestAllFiltersSync:
         "X_MES_ATR70",
         "X_MES_ATR60",
         "X_MGC_ATR70",
+        # Overnight range absolute filters (Mar 2026 confluence — US sessions only, NOT in BASE)
+        "OVNRNG_10",
+        "OVNRNG_25",
+        "OVNRNG_50",
+        "OVNRNG_100",
     }
 
     def test_expected_keys(self):
@@ -213,11 +219,25 @@ class TestAllFiltersSync:
 
     def test_size_filters_have_thresholds(self):
         """Every ORB size filter (or composite with size base) has thresholds."""
-        from trading_app.config import CompositeFilter, CrossAssetATRFilter, DirectionFilter, OrbVolumeFilter
+        from trading_app.config import (
+            CompositeFilter,
+            CrossAssetATRFilter,
+            DirectionFilter,
+            OrbVolumeFilter,
+            OvernightRangeAbsFilter,
+        )
 
         for key, filt in ALL_FILTERS.items():
             if key == "NO_FILTER" or isinstance(
-                filt, (VolumeFilter, DirectionFilter, CrossAssetATRFilter, CostRatioFilter, OrbVolumeFilter)
+                filt,
+                (
+                    VolumeFilter,
+                    DirectionFilter,
+                    CrossAssetATRFilter,
+                    CostRatioFilter,
+                    OrbVolumeFilter,
+                    OvernightRangeAbsFilter,
+                ),
             ):
                 continue
             if isinstance(filt, CompositeFilter):

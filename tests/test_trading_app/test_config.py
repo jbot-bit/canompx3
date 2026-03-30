@@ -137,16 +137,17 @@ class TestAllFilters:
             assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 4 G-filters + 6 VOL-filters + 4 ORB_VOL-filters + ATR70_VOL = 16
+        # NO_FILTER + 4 G-filters + 6 VOL + 4 ORB_VOL + ATR70_VOL = 16
         # + 12 DOW composites (3 DOW x 4 G)
         # + 12 break quality composites (3 BRK x 4 G: FAST5, FAST10, CONT)
         # + 3 M6E pip-scaled size filters (M6E_G4/G6/G8)
         # + 2 direction filters (DIR_LONG, DIR_SHORT)
         # + 2 MES 1000 band filters (ORB_G4_L12, ORB_G5_L12)
         # + 3 cross-asset ATR filters (X_MES_ATR70, X_MES_ATR60, X_MGC_ATR70)
-        # + 4 cost-ratio filters (COST_LT08/10/12/15 — ARITHMETIC_ONLY research screens)
-        # = 53
-        assert len(ALL_FILTERS) == 53
+        # + 4 cost-ratio filters (COST_LT08/10/12/15)
+        # + 4 overnight range absolute filters (OVNRNG_10/25/50/100 — US sessions only)
+        # = 57
+        assert len(ALL_FILTERS) == 57
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -308,6 +309,99 @@ class TestOrbVolumeFilter:
         data = json.loads(f.to_json())
         assert data["filter_type"] == "ORB_VOL_4K"
         assert data["min_volume"] == 4000.0
+
+
+class TestOvernightRangeAbsFilter:
+    """OvernightRangeAbsFilter gates on absolute overnight range (US sessions only)."""
+
+    def test_matches_above_threshold(self):
+        from trading_app.config import OvernightRangeAbsFilter
+
+        f = OvernightRangeAbsFilter(filter_type="TEST", description="test", min_range=50.0)
+        assert f.matches_row({"overnight_range": 75.0}, "CME_PRECLOSE") is True
+
+    def test_rejects_below_threshold(self):
+        from trading_app.config import OvernightRangeAbsFilter
+
+        f = OvernightRangeAbsFilter(filter_type="TEST", description="test", min_range=50.0)
+        assert f.matches_row({"overnight_range": 30.0}, "CME_PRECLOSE") is False
+
+    def test_at_boundary_matches(self):
+        from trading_app.config import OvernightRangeAbsFilter
+
+        f = OvernightRangeAbsFilter(filter_type="TEST", description="test", min_range=50.0)
+        assert f.matches_row({"overnight_range": 50.0}, "CME_PRECLOSE") is True
+
+    def test_fail_closed_missing(self):
+        from trading_app.config import OvernightRangeAbsFilter
+
+        f = OvernightRangeAbsFilter(filter_type="TEST", description="test", min_range=50.0)
+        assert f.matches_row({}, "CME_PRECLOSE") is False
+
+    def test_fail_closed_none(self):
+        from trading_app.config import OvernightRangeAbsFilter
+
+        f = OvernightRangeAbsFilter(filter_type="TEST", description="test", min_range=50.0)
+        assert f.matches_row({"overnight_range": None}, "CME_PRECLOSE") is False
+
+    def test_ignores_orb_label(self):
+        """overnight_range is a global column, not session-specific."""
+        from trading_app.config import OvernightRangeAbsFilter
+
+        f = OvernightRangeAbsFilter(filter_type="TEST", description="test", min_range=50.0)
+        row = {"overnight_range": 75.0}
+        # Same value regardless of orb_label
+        assert f.matches_row(row, "CME_PRECLOSE") is True
+        assert f.matches_row(row, "NYSE_CLOSE") is True
+
+    def test_instances_registered(self):
+        from trading_app.config import OvernightRangeAbsFilter
+
+        for key, expected_range in [
+            ("OVNRNG_10", 10.0),
+            ("OVNRNG_25", 25.0),
+            ("OVNRNG_50", 50.0),
+            ("OVNRNG_100", 100.0),
+        ]:
+            assert key in ALL_FILTERS, f"{key} missing from ALL_FILTERS"
+            f = ALL_FILTERS[key]
+            assert isinstance(f, OvernightRangeAbsFilter)
+            assert f.min_range == expected_range
+            assert f.filter_type == key
+
+    def test_not_in_base_grid(self):
+        """OVNRNG filters must NOT be in BASE_GRID_FILTERS (look-ahead for Asian sessions)."""
+        from trading_app.config import BASE_GRID_FILTERS
+
+        for key in ["OVNRNG_10", "OVNRNG_25", "OVNRNG_50", "OVNRNG_100"]:
+            assert key not in BASE_GRID_FILTERS, (
+                f"{key} must NOT be in BASE_GRID_FILTERS — look-ahead contamination for Asian sessions"
+            )
+
+    def test_routed_to_us_sessions(self):
+        """OVNRNG filters must be present in get_filters_for_grid for US sessions."""
+        from trading_app.config import get_filters_for_grid
+
+        # US sessions where overnight_range is CLEAN
+        for sess in ["CME_PRECLOSE", "COMEX_SETTLE", "US_DATA_1000", "NYSE_CLOSE"]:
+            grid = get_filters_for_grid("MNQ", sess)
+            assert "OVNRNG_25" in grid, f"OVNRNG_25 missing from {sess} grid"
+
+    def test_not_routed_to_asian_sessions(self):
+        """OVNRNG filters must NOT be in grid for Asian sessions (contaminated)."""
+        from trading_app.config import get_filters_for_grid
+
+        for sess in ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN"]:
+            grid = get_filters_for_grid("MNQ", sess)
+            assert "OVNRNG_25" not in grid, f"OVNRNG_25 should NOT be in {sess} grid"
+
+    def test_to_json_roundtrip(self):
+        from trading_app.config import OvernightRangeAbsFilter
+
+        f = OvernightRangeAbsFilter(filter_type="OVNRNG_50", description="test", min_range=50.0)
+        data = json.loads(f.to_json())
+        assert data["filter_type"] == "OVNRNG_50"
+        assert data["min_range"] == 50.0
 
 
 class TestCombinedATRVolumeFilter:
