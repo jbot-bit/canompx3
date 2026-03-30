@@ -256,7 +256,7 @@ def load_all_stages():
     if STAGE_STATE.exists():
         try:
             content = STAGE_STATE.read_text(encoding="utf-8")
-            mode = parse_field(content, "mode")
+            mode = parse_field(content, "mode") or parse_field(content, "stage")
             if mode:
                 stages.append((
                     str(STAGE_STATE),

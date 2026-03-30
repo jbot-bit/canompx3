@@ -585,7 +585,7 @@ class TestRegimeWaivers:
             {
                 2022: (50, 0.2),
                 2023: (50, 0.1),
-                2017: (2, -0.02),  # DORMANT, waivable
+                2017: (5, -0.02),  # DORMANT, waivable
                 2020: (30, -0.05),  # ACTIVE, not waivable — but within 75% tolerance
             }
         )
@@ -606,7 +606,7 @@ class TestRegimeWaivers:
             {
                 2022: (50, 0.2),
                 2023: (50, 0.1),
-                2017: (2, -0.02),  # DORMANT, waivable
+                2017: (5, -0.02),  # DORMANT, waivable
                 2020: (30, -0.05),  # ACTIVE, not waivable
                 2021: (40, -0.03),  # ACTIVE, not waivable
             }
