@@ -485,6 +485,45 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
     ),
     # =========================================================================
+    # Phase 2b: TopStep MNQ automation (ProjectX API)
+    # First automated trade — single lane, prove the loop works, then scale.
+    # =========================================================================
+    "topstep_50k_mnq_auto": AccountProfile(
+        profile_id="topstep_50k_mnq_auto",
+        firm="topstep",
+        account_size=50_000,
+        copies=1,  # Start with 1 Express, scale to 5 after proving loop
+        stop_multiplier=0.75,
+        max_slots=1,  # Single lane — prove loop, then add lanes
+        active=True,
+        allowed_sessions=frozenset({"COMEX_SETTLE"}),
+        allowed_instruments=frozenset({"MNQ"}),
+        # COMEX_SETTLE = bot-only session (03:30 AM Brisbane, never manually tradeable).
+        # Adds genuine portfolio diversification vs Apex manual lanes.
+        # Scorer output 2026-03-31: score 0.225, rank #3 of deployed lanes.
+        # Higher marginal value than duplicating CME_PRECLOSE (already on Apex).
+        # ROBUST family (7 members, PBO=0.000, FDR adj_p=0.0000).
+        # 2025 forward: +25.7R (N=63). 50 trades/yr = fastest loop proof.
+        # Risk $29/trade = 1.5% DD, 2.9% DLL. 34 consecutive losers to DLL.
+        # @research-source score_lanes.py composite score 2026-03-31
+        # @revalidated-for E2 event-based sessions, holdout-clean re-discovery (2026-03-31)
+        daily_lanes=(
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=80.0,
+            ),
+        ),
+        notes=(
+            "Phase 2b: First MNQ auto lane via ProjectX API. "
+            "COMEX_SETTLE 03:30 Brisbane (bot-only session). "
+            "ATR70_VOL filter, same as Apex L3. "
+            "2025 fwd: +25.7R (N=63). ROBUST (7 members, PBO=0). "
+            "Risk $29/trade = 1.5% DD. Scale to 5 Express after loop proof."
+        ),
+    ),
+    # =========================================================================
     # Phase 3: Self-funded (after prop proof, $100K/year target)
     # =========================================================================
     "self_funded_50k": AccountProfile(
@@ -634,6 +673,9 @@ def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
     # Note: if Apex has an MNQ lane at the same session (e.g. TOKYO_OPEN),
     # the Apex lane takes priority and the MGC shadow is suppressed.
     # This is intentional — MNQ TOKYO_OPEN is the primary trade.
+    # NOTE: Only merges topstep_50k (MGC shadow). topstep_50k_mnq_auto is
+    # a separate bot-only profile — accessed via its own get_lane_registry() call,
+    # not merged into the Apex manual registry.
     if profile.firm == "apex":
         ts_profile = ACCOUNT_PROFILES.get("topstep_50k")
         if ts_profile:
