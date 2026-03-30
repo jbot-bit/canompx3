@@ -21,6 +21,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from pipeline.db_config import configure_connection
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.live.bot_state import read_state
 
 log = logging.getLogger(__name__)
@@ -157,9 +158,7 @@ async def api_data_status():
         with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
             configure_connection(con)
             for inst in ACTIVE_ORB_INSTRUMENTS:
-                row = con.execute(
-                    "SELECT MAX(ts_utc)::DATE FROM bars_1m WHERE symbol = ?", [inst]
-                ).fetchone()
+                row = con.execute("SELECT MAX(ts_utc)::DATE FROM bars_1m WHERE symbol = ?", [inst]).fetchone()
                 last_date = row[0] if row and row[0] else None
                 gap = (datetime.now(UTC).date() - last_date).days if last_date else 999
                 results[inst] = {
@@ -228,8 +227,11 @@ async def action_start():
     try:
         proc = subprocess.Popen(
             [
-                sys.executable, "-m", "scripts.run_live_session",
-                "--profile", profile,
+                sys.executable,
+                "-m",
+                "scripts.run_live_session",
+                "--profile",
+                profile,
                 "--signal-only",
             ],
             stdout=subprocess.PIPE,
