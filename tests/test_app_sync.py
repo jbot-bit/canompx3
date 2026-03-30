@@ -106,7 +106,7 @@ class TestOrbLabelsSync:
 class TestAllFiltersSync:
     """ALL_FILTERS keys must match filter_type inside each filter."""
 
-    # Base: NO_FILTER + 4 G-filters + 4 COST + 6 VOL + 4 ORB_VOL = 19 (in BASE_GRID_FILTERS)
+    # Base: NO_FILTER + 4 G + 4 COST + 6 VOL + 4 ORB_VOL + 3 ATR_P = 22 (in BASE_GRID_FILTERS)
     # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
     #   (NOFRI/NOTUE removed from grid Mar 2026 but retained in ALL_FILTERS for DB compat)
     # Break quality composites: 3 variants (FAST5, FAST10, CONT) x 4 G-filters = 12
@@ -115,7 +115,7 @@ class TestAllFiltersSync:
     # MES 1000 band filters: ORB_G4_L12/ORB_G5_L12 = 2
     # Cross-asset ATR filters: X_MES_ATR70/X_MES_ATR60/X_MGC_ATR70 = 3
     # + 4 OVNRNG (session-routed, NOT in BASE_GRID_FILTERS)
-    # Total: 19 + 12 + 12 + 3 + 2 + 2 + 3 + 4 = 57
+    # Total: 22 + 12 + 12 + 3 + 2 + 2 + 3 + 4 = 60
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4",
@@ -138,6 +138,10 @@ class TestAllFiltersSync:
         "ORB_VOL_4K",
         "ORB_VOL_8K",
         "ORB_VOL_16K",
+        # Standalone ATR percentile filters (Mar 2026 confluence research)
+        "ATR_P30",
+        "ATR_P50",
+        "ATR_P70",
         # DOW composites (registered globally for portfolio.py lookups / DB compat)
         "ORB_G4_NOFRI",
         "ORB_G5_NOFRI",
@@ -225,6 +229,7 @@ class TestAllFiltersSync:
             DirectionFilter,
             OrbVolumeFilter,
             OvernightRangeAbsFilter,
+            OwnATRPercentileFilter,
         )
 
         for key, filt in ALL_FILTERS.items():
@@ -237,6 +242,7 @@ class TestAllFiltersSync:
                     CostRatioFilter,
                     OrbVolumeFilter,
                     OvernightRangeAbsFilter,
+                    OwnATRPercentileFilter,
                 ),
             ):
                 continue
@@ -370,14 +376,14 @@ class TestGridParamsSync:
     def test_grid_size(self):
         """Total base grid size matches expected formula (E2+E3 use CB1 only).
 
-        Base grid uses 19 core filters (NO_FILTER + G4/G5/G6/G8 + 4 COST + 5 VOL + ATR70_VOL + 4 ORB_VOL).
+        Base grid uses 22 core filters (NO_FILTER + G4/G5/G6/G8 + 4 COST + 5 VOL + ATR70_VOL + 4 ORB_VOL + 3 ATR_P).
         Session-specific DOW composites are added by get_filters_for_grid()
         per-session, expanding the grid contextually.
 
-        12 ORBs x 6 RRs x 5 CBs x 19 base filters = 6840 (E1, all CB options)
-        12 ORBs x 6 RRs x 1 CB x 19 base filters = 1368 (E2, always CB1)
-        12 ORBs x 6 RRs x 1 CB x 19 base filters = 1368 (E3, always CB1)
-        Total base: 9576
+        12 ORBs x 6 RRs x 5 CBs x 22 base filters = 7920 (E1, all CB options)
+        12 ORBs x 6 RRs x 1 CB x 22 base filters = 1584 (E2, always CB1)
+        12 ORBs x 6 RRs x 1 CB x 22 base filters = 1584 (E3, always CB1)
+        Total base: 11088
         """
         n_base = len(BASE_GRID_FILTERS)  # canonical — never hardcode
         e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * n_base

@@ -859,6 +859,28 @@ MGC_VOLUME_FILTERS = {
         description="ORB window volume >= 16,000 contracts",
         min_volume=16000.0,
     ),
+    # Standalone ATR percentile filters (Mar 2026 confluence research program).
+    # Phase 1: atr_20_pct had 2 BH FDR survivors at q=0.05 (weak but additive).
+    # atr_20_pct is already normalized (0-100 percentile rank) — no instrument scaling issues.
+    # Separate from ATR70_VOL (which requires BOTH atr>=70 AND rel_vol>=1.2).
+    # @research-source research/output/confluence_program/phase1_run.py
+    # @entry-models E2
+    # @revalidated-for E2
+    "ATR_P30": OwnATRPercentileFilter(
+        filter_type="ATR_P30",
+        description="Own ATR(20) percentile >= 30",
+        min_pct=30.0,
+    ),
+    "ATR_P50": OwnATRPercentileFilter(
+        filter_type="ATR_P50",
+        description="Own ATR(20) percentile >= 50",
+        min_pct=50.0,
+    ),
+    "ATR_P70": OwnATRPercentileFilter(
+        filter_type="ATR_P70",
+        description="Own ATR(20) percentile >= 70",
+        min_pct=70.0,
+    ),
 }
 
 # Cost-ratio filters (Mar 2026): normalized cost screens derived from the
