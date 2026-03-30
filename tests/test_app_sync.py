@@ -374,10 +374,10 @@ class TestGridParamsSync:
         Session-specific DOW composites are added by get_filters_for_grid()
         per-session, expanding the grid contextually.
 
-        12 ORBs x 6 RRs x 5 CBs x 15 base filters = 5400 (E1, all CB options)
-        12 ORBs x 6 RRs x 1 CB x 15 base filters = 1080 (E2, always CB1)
-        12 ORBs x 6 RRs x 1 CB x 15 base filters = 1080 (E3, always CB1)
-        Total base: 7560
+        12 ORBs x 6 RRs x 5 CBs x 19 base filters = 6840 (E1, all CB options)
+        12 ORBs x 6 RRs x 1 CB x 19 base filters = 1368 (E2, always CB1)
+        12 ORBs x 6 RRs x 1 CB x 19 base filters = 1368 (E3, always CB1)
+        Total base: 9576
         """
         n_base = len(BASE_GRID_FILTERS)  # canonical — never hardcode
         e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * n_base
@@ -460,7 +460,7 @@ class TestStrategyIdSync:
     def test_all_grid_ids_unique(self):
         """Every combination in the base grid produces a unique ID (E2+E3 CB1 only).
 
-        Uses BASE_GRID_FILTERS (15 entries, including rel_vol tiers) not ALL_FILTERS.
+        Uses BASE_GRID_FILTERS (not ALL_FILTERS) — count is dynamic.
         Session-specific DOW composites expand the grid per-session via
         get_filters_for_grid(); the base grid is the common denominator.
         """

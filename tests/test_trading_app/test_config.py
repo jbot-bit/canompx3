@@ -137,16 +137,15 @@ class TestAllFilters:
             assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 4 G-filters + 6 VOL + 4 ORB_VOL + ATR70_VOL = 16
+        # NO_FILTER + 4 G + 4 COST + 5 VOL_RV + ATR70_VOL + 4 ORB_VOL = 19 (BASE_GRID_FILTERS)
         # + 12 DOW composites (3 DOW x 4 G)
         # + 12 break quality composites (3 BRK x 4 G: FAST5, FAST10, CONT)
         # + 3 M6E pip-scaled size filters (M6E_G4/G6/G8)
         # + 2 direction filters (DIR_LONG, DIR_SHORT)
         # + 2 MES 1000 band filters (ORB_G4_L12, ORB_G5_L12)
         # + 3 cross-asset ATR filters (X_MES_ATR70, X_MES_ATR60, X_MGC_ATR70)
-        # + 4 cost-ratio filters (COST_LT08/10/12/15)
-        # + 4 overnight range absolute filters (OVNRNG_10/25/50/100 — US sessions only)
-        # = 57
+        # + 4 overnight range absolute (OVNRNG_10/25/50/100 — US sessions only, NOT in BASE)
+        # = 19 + 12 + 12 + 3 + 2 + 2 + 3 + 4 = 57
         assert len(ALL_FILTERS) == 57
 
     def test_contains_volume_filter(self):
@@ -391,7 +390,7 @@ class TestOvernightRangeAbsFilter:
         """OVNRNG filters must NOT be in grid for Asian sessions (contaminated)."""
         from trading_app.config import get_filters_for_grid
 
-        for sess in ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN"]:
+        for sess in ["CME_REOPEN", "TOKYO_OPEN", "BRISBANE_1025", "SINGAPORE_OPEN"]:
             grid = get_filters_for_grid("MNQ", sess)
             assert "OVNRNG_25" not in grid, f"OVNRNG_25 should NOT be in {sess} grid"
 
