@@ -351,6 +351,43 @@ class CombinedATRVolumeFilter(VolumeFilter):
 
 
 @dataclass(frozen=True)
+class OrbVolumeFilter(StrategyFilter):
+    """Filter by total volume during the ORB formation window.
+
+    Gates on aggregate contract volume across the entire ORB period (not the
+    break bar). Known at ORB close — safe for pre-break decisions.
+    Values from daily_features.orb_{SESSION}_volume (pre-computed in
+    pipeline/build_daily_features.py). No enrichment needed.
+
+    Thresholds are absolute (not normalized). Different sessions have different
+    volume regimes — discovery tests all tiers across all sessions and finds
+    the combinations where volume discriminates.
+
+    Fail-closed: missing volume data = ineligible day.
+
+    @research-source research/output/confluence_program/phase1_run.py
+    @entry-models E2
+    @revalidated-for E2
+    """
+
+    min_volume: float
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        volume = row.get(f"orb_{orb_label}_volume")
+        if volume is None:
+            return False  # fail-closed
+        return volume >= self.min_volume
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        col = f"orb_{orb_label}_volume"
+        if col not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df[col].notna() & (df[col] >= self.min_volume)
+
+
+@dataclass(frozen=True)
 class CrossAssetATRFilter(StrategyFilter):
     """Filter by another instrument's ATR regime.
 
@@ -752,6 +789,34 @@ MGC_VOLUME_FILTERS = {
         min_rel_vol=1.2,
         lookback_days=20,
         min_atr_pct=70.0,
+    ),
+    # ORB window volume gates (Mar 2026 confluence research program).
+    # Phase 1: orb_volume had 15/48 BH FDR survivors at q=0.05 (most hits).
+    # Phase 3: all walk-forward DEPLOYABLE (WFE 1.02-3.24).
+    # Log-spaced tiers cover the 10x volume range across sessions:
+    #   SINGAPORE_OPEN ~2K, COMEX/PRECLOSE/CLOSE ~3-5K, US_DATA ~8K, NYSE_OPEN ~25K
+    # @research-source research/output/confluence_program/phase1_run.py
+    # @entry-models E2
+    # @revalidated-for E2
+    "ORB_VOL_2K": OrbVolumeFilter(
+        filter_type="ORB_VOL_2K",
+        description="ORB window volume >= 2,000 contracts",
+        min_volume=2000.0,
+    ),
+    "ORB_VOL_4K": OrbVolumeFilter(
+        filter_type="ORB_VOL_4K",
+        description="ORB window volume >= 4,000 contracts",
+        min_volume=4000.0,
+    ),
+    "ORB_VOL_8K": OrbVolumeFilter(
+        filter_type="ORB_VOL_8K",
+        description="ORB window volume >= 8,000 contracts",
+        min_volume=8000.0,
+    ),
+    "ORB_VOL_16K": OrbVolumeFilter(
+        filter_type="ORB_VOL_16K",
+        description="ORB window volume >= 16,000 contracts",
+        min_volume=16000.0,
     ),
 }
 

@@ -137,7 +137,7 @@ class TestAllFilters:
             assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 4 G-filters + 6 VOL-filters (VOL_RV12/15/20/25/30_N20 + ATR70_VOL) = 11
+        # NO_FILTER + 4 G-filters + 6 VOL-filters + 4 ORB_VOL-filters + ATR70_VOL = 16
         # + 12 DOW composites (3 DOW x 4 G)
         # + 12 break quality composites (3 BRK x 4 G: FAST5, FAST10, CONT)
         # + 3 M6E pip-scaled size filters (M6E_G4/G6/G8)
@@ -145,8 +145,8 @@ class TestAllFilters:
         # + 2 MES 1000 band filters (ORB_G4_L12, ORB_G5_L12)
         # + 3 cross-asset ATR filters (X_MES_ATR70, X_MES_ATR60, X_MGC_ATR70)
         # + 4 cost-ratio filters (COST_LT08/10/12/15 — ARITHMETIC_ONLY research screens)
-        # = 49
-        assert len(ALL_FILTERS) == 49
+        # = 53
+        assert len(ALL_FILTERS) == 53
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -243,6 +243,71 @@ class TestVolumeFilter:
         assert f25.matches_row({"rel_vol_NYSE_CLOSE": 3.0}, "NYSE_CLOSE") is True
         assert f25.matches_row({"rel_vol_NYSE_CLOSE": 2.0}, "NYSE_CLOSE") is False
         assert f25.matches_row({"rel_vol_NYSE_CLOSE": 2.5}, "NYSE_CLOSE") is True
+
+
+class TestOrbVolumeFilter:
+    """OrbVolumeFilter gates on total ORB window volume."""
+
+    def test_matches_above_threshold(self):
+        from trading_app.config import OrbVolumeFilter
+
+        f = OrbVolumeFilter(filter_type="TEST", description="test", min_volume=4000.0)
+        assert f.matches_row({"orb_NYSE_CLOSE_volume": 5000}, "NYSE_CLOSE") is True
+
+    def test_rejects_below_threshold(self):
+        from trading_app.config import OrbVolumeFilter
+
+        f = OrbVolumeFilter(filter_type="TEST", description="test", min_volume=4000.0)
+        assert f.matches_row({"orb_NYSE_CLOSE_volume": 3000}, "NYSE_CLOSE") is False
+
+    def test_at_boundary_matches(self):
+        from trading_app.config import OrbVolumeFilter
+
+        f = OrbVolumeFilter(filter_type="TEST", description="test", min_volume=4000.0)
+        assert f.matches_row({"orb_NYSE_CLOSE_volume": 4000}, "NYSE_CLOSE") is True
+
+    def test_fail_closed_missing(self):
+        from trading_app.config import OrbVolumeFilter
+
+        f = OrbVolumeFilter(filter_type="TEST", description="test", min_volume=4000.0)
+        assert f.matches_row({}, "NYSE_CLOSE") is False
+
+    def test_fail_closed_none(self):
+        from trading_app.config import OrbVolumeFilter
+
+        f = OrbVolumeFilter(filter_type="TEST", description="test", min_volume=4000.0)
+        assert f.matches_row({"orb_NYSE_CLOSE_volume": None}, "NYSE_CLOSE") is False
+
+    def test_uses_correct_orb_label(self):
+        from trading_app.config import OrbVolumeFilter
+
+        f = OrbVolumeFilter(filter_type="TEST", description="test", min_volume=4000.0)
+        row = {"orb_CME_PRECLOSE_volume": 5000, "orb_NYSE_CLOSE_volume": 2000}
+        assert f.matches_row(row, "CME_PRECLOSE") is True
+        assert f.matches_row(row, "NYSE_CLOSE") is False
+
+    def test_instances_registered(self):
+        for key, expected_vol in [
+            ("ORB_VOL_2K", 2000.0),
+            ("ORB_VOL_4K", 4000.0),
+            ("ORB_VOL_8K", 8000.0),
+            ("ORB_VOL_16K", 16000.0),
+        ]:
+            from trading_app.config import OrbVolumeFilter
+
+            assert key in ALL_FILTERS, f"{key} missing from ALL_FILTERS"
+            f = ALL_FILTERS[key]
+            assert isinstance(f, OrbVolumeFilter)
+            assert f.min_volume == expected_vol
+            assert f.filter_type == key
+
+    def test_to_json_roundtrip(self):
+        from trading_app.config import OrbVolumeFilter
+
+        f = OrbVolumeFilter(filter_type="ORB_VOL_4K", description="test", min_volume=4000.0)
+        data = json.loads(f.to_json())
+        assert data["filter_type"] == "ORB_VOL_4K"
+        assert data["min_volume"] == 4000.0
 
 
 class TestCombinedATRVolumeFilter:
