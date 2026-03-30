@@ -83,7 +83,14 @@ class TestAccountProfile:
         p = get_profile("apex_50k_manual")
         assert p.firm == "apex"
         assert p.copies == 1  # Manual proof only
+        assert p.active is False  # Superseded by apex_100k_manual
+
+    def test_apex_100k_profile(self):
+        p = get_profile("apex_100k_manual")
+        assert p.firm == "apex"
+        assert p.account_size == 100_000
         assert p.active is True
+        assert len(p.daily_lanes) == 5
 
     def test_tradeify_scaling_profile(self):
         p = get_profile("tradeify_50k")

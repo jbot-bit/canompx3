@@ -198,15 +198,29 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         name="apex",
         display_name="Apex Trader Funding",
         dd_type="eod_trailing",
-        profit_split_tiers=((float("inf"), 1.00),),  # 100% split on recent plans
-        consistency_rule=0.30,  # Underwrite to stricter 30% (compliance page) over 50% (EOD payout page) per playbook
+        profit_split_tiers=((float("inf"), 1.00),),  # 100% split on EOD PA plans
+        consistency_rule=0.30,  # 30% windfall rule: no single day > 30% of total profit at payout
         news_restriction=False,
         close_time_et="16:59",
         platform="tradovate",
         min_hold_seconds=None,
         banned_instruments=frozenset({"MGC", "GC", "SI", "SIL", "HG", "PL", "PA"}),
         auto_trading="none",  # PROHIBITED — PA Compliance: no bots, no copy trading, manual only
-        notes="Manual proof only (1 account). Automation AND copy trading PROHIBITED on PA/Live. Metals suspended.",
+        # Official rules (resources/prop-firm-official-rules.md, fetched 2026-03-16):
+        # - Automation/copy trading → immediate account closure + forfeiture
+        # - 5:1 max RR ratio (stop ≤ 5× target) — all our RR1-4 strategies comply
+        # - 30% per-trade loss rule: open unrealized loss ≤ 30% of start-of-day profit
+        # - Stop losses REQUIRED on every trade (mental stops OK unless on Probation)
+        # - Contract scaling: half max until trailing threshold reached
+        # - Safety net: first 3 payouts require balance > DD + $100
+        # - 8 trading day eval period, min $50 profit on 5 different days
+        # - Metals SUSPENDED (not permanent ban — check periodically)
+        notes=(
+            "Manual proof only (1 account). Automation AND copy trading PROHIBITED on PA/Live. "
+            "Metals suspended. 5:1 RR max. 30% per-trade loss rule. 30% windfall consistency. "
+            "Contract scaling: half max until trailing threshold ($52.6K on 50K). "
+            "Safety net first 3 payouts: balance > DD + $100."
+        ),
     ),
     "self_funded": PropFirmSpec(
         name="self_funded",
@@ -263,6 +277,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=1,
         stop_multiplier=0.75,
         max_slots=5,
+        active=False,  # Superseded by apex_100k_manual ($3K DD vs $2K)
         # Phase 1 manual: 5 validated MNQ lanes.
         # All strategies pass: stratified-K BH FDR (holdout-clean), walk-forward,
         # stress test, yearly robustness. Verified on canonical gold.db.
@@ -346,7 +361,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=1,
         stop_multiplier=0.75,
         max_slots=5,
-        active=False,  # Activate when upgrading from 50K
+        active=True,  # Upgraded from 50K — $3K DD gives $1,251 margin vs $251
         allowed_sessions=frozenset({"NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN", "US_DATA_1000"}),
         daily_lanes=(
             # Lanes 1,4 switched O15→O5 (2026-03-29): O15 ARITHMETIC_ONLY
@@ -395,18 +410,58 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=5,  # 5 identical accounts — PRIMARY MNQ scaling lane
         stop_multiplier=0.75,
         max_slots=6,
-        # Overnight sessions from playbook account grid
-        allowed_sessions=frozenset(
-            {
-                "CME_PRECLOSE",
-                "COMEX_SETTLE",
-                "NYSE_CLOSE",
-                "NYSE_OPEN",
-            }
-        ),
+        allowed_sessions=frozenset({"CME_PRECLOSE", "COMEX_SETTLE", "NYSE_CLOSE", "NYSE_OPEN", "US_DATA_1000"}),
         allowed_instruments=frozenset({"MNQ"}),
-        active=False,  # No daily_lanes configured yet. Activate when CME_PRECLOSE lanes added.
-        notes="MNQ overnight auto. Tradovate API. Bot exclusive (no cross-firm). Lanes TBD (CME_PRECLOSE priority).",
+        active=False,  # Activate when Tradovate API bot is ready for per-account execution
+        # Same 5 lanes as Apex but CME_PRECLOSE added (Apex doesn't trade it due to timing).
+        # Execution: Tradovate API per-account (Group Trading broken for brackets).
+        # Bot must be exclusive to Tradeify (official rule — no cross-firm sharing).
+        # 10s microscalp rule: no issue for ORB trades (hold 27-100+ minutes).
+        # DD $2K with $1,749 historical max DD = $251 margin. Expect ~15% blowout/yr/copy.
+        # Budget $150/eval replacement. 5 copies dilutes risk.
+        daily_lanes=(
+            # L6: CME_PRECLOSE — best $/trade, not on Apex (timing overlap)
+            DailyLaneSpec(
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ",
+                "CME_PRECLOSE",
+                max_orb_size_pts=120.0,  # Derived from DD math, not P90 data
+            ),
+            # L1 mirror: NYSE_CLOSE
+            DailyLaneSpec(
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20",
+                "MNQ",
+                "NYSE_CLOSE",
+                max_orb_size_pts=100.0,
+            ),
+            # L3 mirror: COMEX_SETTLE
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=80.0,
+            ),
+            # L4 mirror: NYSE_OPEN
+            DailyLaneSpec(
+                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
+                "MNQ",
+                "NYSE_OPEN",
+                max_orb_size_pts=150.0,
+            ),
+            # L5 mirror: US_DATA_1000
+            DailyLaneSpec(
+                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
+                "MNQ",
+                "US_DATA_1000",
+                max_orb_size_pts=120.0,
+            ),
+        ),
+        notes=(
+            "Phase 2 MNQ auto. 5 copies x 5 lanes via Tradovate API (per-account, not Group Trading). "
+            "Bot exclusive to Tradeify. CME_PRECLOSE added (best $/trade, not on Apex). "
+            "DD $2K tight — budget $750/yr for eval replacements (~1 blown copy/yr). "
+            "Activate when API bot tested on sim for 1 week."
+        ),
     ),
     "topstep_50k": AccountProfile(
         profile_id="topstep_50k",
