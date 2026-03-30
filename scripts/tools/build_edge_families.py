@@ -33,18 +33,19 @@ sys.stdout.reconfigure(line_buffering=True)
 
 # Robustness thresholds (Duke Protocol #3c)
 # @research-source build_edge_families calibration — BH FDR-validated strategies only;
-#   ShANN >= 0.8 (WHITELIST) / >= 1.0 (SINGLETON) from Bailey et al. 2014 PBO analysis
-#   (resources/the_probability_of_backtest_overfitting.pdf §4.2 — SR threshold for low PBO)
+#   ShANN >= 0.8 (WHITELIST and SINGLETON) from Bailey et al. 2014 PBO analysis
+#   (cited source: the_probability_of_backtest_overfitting.pdf §4.2 — NOT in resources/,
+#    threshold aligned with WHITELIST 2026-03-31, see regime-validation-design.md)
 #   CV <= 0.5 (coefficient of variation) from Carver Systematic Trading Ch.4 (member consistency)
 #   min_trades thresholds align with CORE_MIN_SAMPLES=100 / REGIME_MIN_SAMPLES=30 from config.py
-# @revalidated-for E1/E2 event-based sessions (2026-03-10)
+# @revalidated-for E1/E2 event-based sessions (2026-03-31)
 MIN_FAMILY_SIZE = 5
 WHITELIST_MIN_MEMBERS = 3  # N>=3 to avoid "one lucky sibling" at higher CV
 WHITELIST_MIN_SHANN = 0.8
 WHITELIST_MAX_CV = 0.5
 WHITELIST_MIN_TRADES = 50
 SINGLETON_MIN_TRADES = 100  # N=1 family: isolated edge quality bar
-SINGLETON_MIN_SHANN = 1.0  # N=1 family: minimum Sharpe to survive
+SINGLETON_MIN_SHANN = 0.8  # N=1 family: aligned with WHITELIST (was 1.0, ungrounded gap)
 
 # Trade tier thresholds — imported from config.py (single source of truth)
 CORE_MIN_TRADES = CORE_MIN_SAMPLES

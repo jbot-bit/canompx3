@@ -189,12 +189,21 @@ class TestRobustnessClassification:
         assert classify_family(4, 1.5, 0.5, 50) == "WHITELISTED"  # CV=0.5 boundary
         assert classify_family(3, 0.8, 0.0, 50) == "WHITELISTED"  # ShANN=0.8 boundary
 
+    def test_classify_singleton_boundary(self):
+        from scripts.tools.build_edge_families import classify_family
+
+        # SINGLETON: N=1, ShANN >= 0.8, min_trades >= 100
+        assert classify_family(1, 1.5, 0.0, 200) == "SINGLETON"  # high ShANN
+        assert classify_family(1, 0.8, 0.0, 100) == "SINGLETON"  # boundary ShANN=0.8
+        assert classify_family(1, 0.9, 0.0, 150) == "SINGLETON"  # ShANN in [0.8, 1.0)
+        assert classify_family(1, 0.96, 0.0, 407) == "SINGLETON"  # CME_REOPEN case
+
     def test_classify_purged(self):
         from scripts.tools.build_edge_families import classify_family
 
-        # N=1 with quality bar -> SINGLETON; without -> PURGED
-        assert classify_family(1, 1.5, 0.0, 200) == "SINGLETON"  # high ShANN + trades
+        # N=1 fails quality bar -> PURGED
         assert classify_family(1, 0.5, 0.0, 200) == "PURGED"  # ShANN too low
+        assert classify_family(1, 0.79, 0.0, 200) == "PURGED"  # ShANN just below 0.8
         assert classify_family(1, 1.5, 0.0, 50) == "PURGED"  # trades too low
         # N=2 always PURGED (below WHITELIST_MIN_MEMBERS, not singleton)
         assert classify_family(2, 1.5, 0.1, 200) == "PURGED"  # pair

@@ -722,7 +722,7 @@ def run_validation(
     max_drawdown: float | None = None,
     exclude_years: set[int] | None = None,
     min_years_positive_pct: float = 0.75,  # @research-source Fitschen — see validate_strategy()
-    min_trades_per_year: int = 1,
+    min_trades_per_year: int = 5,
     dry_run: bool = False,
     enable_walkforward: bool = True,
     wf_test_months: int = 6,
@@ -1534,8 +1534,8 @@ def main():
     parser.add_argument(
         "--min-trades-per-year",
         type=int,
-        default=1,
-        help="Min trades for a year to count in Phase 3 robustness check (default 1)",
+        default=5,
+        help="Min trades for a year to count in Phase 3 robustness check (default 5)",
     )
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
     parser.add_argument("--db", type=str, default=None, help="Database path (default: gold.db)")
