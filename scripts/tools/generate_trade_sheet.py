@@ -183,11 +183,14 @@ def _sort_key(h: int, m: int) -> int:
 # ── Data collection ───────────────────────────────────────────────────
 
 
-def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
+def collect_trades(trading_day: date, db_path: Path, profile_filter: str | None = None) -> list[dict]:
     """Collect trades from prop_profiles deployed lanes.
 
     For each active profile's daily_lanes, looks up the exact strategy_id
     in validated_setups. Applies dollar gate. Only returns cost-positive trades.
+
+    Args:
+        profile_filter: if set, only show this profile (e.g. "apex_50k_manual").
 
     Source of truth: trading_app.prop_profiles.ACCOUNT_PROFILES (not live_config).
     """
@@ -197,6 +200,8 @@ def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         for pid, profile in ACCOUNT_PROFILES.items():
+            if profile_filter and pid != profile_filter:
+                continue
             if not profile.active or not profile.daily_lanes:
                 continue
 
@@ -302,6 +307,40 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
     date_str = trading_day.strftime("%d %b %Y")
     now_str = datetime.now().strftime("%H:%M")
 
+    # Profile summary bar
+    profiles_used = {}
+    for t in trades:
+        pid = t.get("profile", "unknown")
+        if pid not in profiles_used:
+            prof = ACCOUNT_PROFILES.get(pid)
+            if prof:
+                from trading_app.prop_profiles import PROP_FIRM_SPECS, get_account_tier
+
+                spec = PROP_FIRM_SPECS.get(prof.firm, None)
+                tier = get_account_tier(prof.firm, prof.account_size)
+                auto_label = {"none": "MANUAL", "full": "AUTO", "semi": "SEMI"}.get(
+                    spec.auto_trading if spec else "none", "?"
+                )
+                profiles_used[pid] = {
+                    "firm": prof.firm.upper(),
+                    "size": f"${prof.account_size // 1000}K",
+                    "dd": f"${tier.max_dd:,}",
+                    "stop": f"{prof.stop_multiplier}x",
+                    "lanes": len(prof.daily_lanes),
+                    "mode": auto_label,
+                    "copies": prof.copies,
+                }
+
+    profile_bar_html = ""
+    for _pid, info in profiles_used.items():
+        copies_note = f" x{info['copies']}" if info["copies"] > 1 else ""
+        profile_bar_html += f"""
+        <div class="profile-card profile-{info["mode"].lower()}">
+            <strong>{info["firm"]} {info["size"]}{copies_note}</strong>
+            <span class="profile-mode">{info["mode"]}</span>
+            <div class="profile-detail">DD {info["dd"]} | Stop {info["stop"]} | {info["lanes"]} lanes</div>
+        </div>"""
+
     # Build session cards
     cards_html = ""
     trade_num = 0
@@ -323,6 +362,16 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
 
             exp_r_class = "expr-high" if t["exp_r"] >= 0.20 else ""
 
+            # Execution notes line
+            notes_parts = []
+            if t.get("orb_cap"):
+                notes_parts.append(f"Cap {t['orb_cap']:.0f}pts")
+            if t.get("stop_mult") and t["stop_mult"] != 0.75:
+                notes_parts.append(f"Stop {t['stop_mult']}x")
+            if t.get("notes"):
+                notes_parts.append(t["notes"][:80])
+            notes_html = f'<div class="lane-notes">{" | ".join(notes_parts)}</div>' if notes_parts else ""
+
             rows_html += f"""
             <tr>
                 <td class="instrument-cell">{t["instrument"]}</td>
@@ -335,12 +384,22 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
                 <td class="dollars-cell">{exp_d_str}</td>
                 <td{fitness_title}>{fit_badge if fit_badge else '<span class="fit-ok">FIT</span>'}</td>
             </tr>"""
+            if notes_html:
+                rows_html += f"""
+            <tr class="notes-row"><td colspan="9">{notes_html}</td></tr>"""
+
+        # Session header with firm badge
+        firm_badges = set()
+        for t in session_trades:
+            pi = profiles_used.get(t.get("profile", ""), {})
+            firm_badges.add(f'<span class="badge badge-firm">{pi.get("firm", "?")} {pi.get("mode", "?")}</span>')
+        firm_badges_html = " ".join(firm_badges)
 
         cards_html += f"""
         <div class="session-card">
             <div class="session-header">
                 <div class="session-time">{time_str} BRIS</div>
-                <div class="session-name">{session}</div>
+                <div class="session-name">{session} {firm_badges_html}</div>
                 <div class="session-event">{event}</div>
             </div>
             <table>
@@ -594,6 +653,67 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
         color: #ffd58a;
         border: 1px solid #d29922;
     }}
+    .profile-bar {{
+        display: flex;
+        gap: 12px;
+        margin-bottom: 24px;
+        flex-wrap: wrap;
+    }}
+    .profile-card {{
+        padding: 10px 16px;
+        border-radius: 8px;
+        border: 1px solid #30363d;
+        background: #161b22;
+        flex: 1;
+        min-width: 200px;
+    }}
+    .profile-card strong {{ font-size: 14px; }}
+    .profile-mode {{
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-left: 8px;
+    }}
+    .profile-manual .profile-mode {{
+        background: #1a3a1a;
+        color: #3fb950;
+        border: 1px solid #3fb950;
+    }}
+    .profile-auto .profile-mode {{
+        background: #1a2a3a;
+        color: #58a6ff;
+        border: 1px solid #58a6ff;
+    }}
+    .profile-shadow .profile-mode {{
+        background: #2d2d2d;
+        color: #8b949e;
+        border: 1px solid #8b949e;
+    }}
+    .profile-detail {{
+        font-size: 12px;
+        color: #8b949e;
+        margin-top: 4px;
+    }}
+    .badge-firm {{
+        font-size: 10px;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: #21262d;
+        color: #8b949e;
+        border: 1px solid #30363d;
+        margin-left: 8px;
+    }}
+    .lane-notes {{
+        font-size: 11px;
+        color: #d29922;
+        padding: 2px 8px 6px;
+    }}
+    .notes-row td {{
+        padding: 0 !important;
+        border: none !important;
+    }}
     .warning-box {{
         background: #271b05;
         border: 1px solid #d29922;
@@ -643,6 +763,10 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
         <div class="subtitle">Generated {now_str} &mdash; {trade_num} active trades &mdash; All times Brisbane (AEST UTC+10)</div>
     </div>
 
+    <div class="profile-bar">
+        {profile_bar_html}
+    </div>
+
     <div class="entry-model-note">
         All entries are <strong>E2 (stop-market)</strong> &mdash; place stop orders at ORB high/low.
         They trigger automatically on breakout. ORB = first N minutes after session start.
@@ -674,6 +798,12 @@ def main():
     parser.add_argument("--output", type=str, default=None, help="Output HTML path. Default: trade_sheet.html")
     parser.add_argument("--db-path", type=Path, default=None, help="Path to gold.db")
     parser.add_argument("--no-open", action="store_true", help="Don't open in browser after generating")
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default=None,
+        help="Filter to one profile (e.g. apex_50k_manual). Default: all active.",
+    )
     args = parser.parse_args()
 
     db_path = args.db_path or GOLD_DB_PATH
@@ -695,8 +825,10 @@ def main():
     print()
 
     # Collect trades
+    if args.profile:
+        print(f"Filtering to profile: {args.profile}")
     print("Building resolved portfolios...")
-    trades = collect_trades(trading_day, db_path)
+    trades = collect_trades(trading_day, db_path, profile_filter=args.profile)
     print(f"  {len(trades)} active trades across {len(set(t['instrument'] for t in trades))} instruments")
     print()
 
