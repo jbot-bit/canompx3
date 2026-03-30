@@ -589,8 +589,22 @@ _LANE_NAMES: dict[str, str] = {
 }
 
 
-def get_lane_registry(profile_id: str = "apex_50k_manual") -> dict[str, dict]:
+def _find_active_manual_profile() -> str:
+    """Find the active Apex manual profile (highest account_size wins)."""
+    best = None
+    for pid, p in ACCOUNT_PROFILES.items():
+        if not p.active or not p.daily_lanes or p.firm != "apex":
+            continue
+        if best is None or p.account_size > ACCOUNT_PROFILES[best].account_size:
+            best = pid
+    return best or "apex_50k_manual"  # fallback if none active
+
+
+def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
     """Build a lane registry from a profile's daily_lanes.
+
+    If profile_id is None, auto-selects the active Apex manual profile.
+    Merges TopStep lanes (as shadow) from all active TopStep profiles.
 
     Returns {orb_label: {strategy_id, instrument, orb_label, entry_model,
     rr_target, confirm_bars, filter_type, orb_minutes, lane_name,
@@ -600,6 +614,8 @@ def get_lane_registry(profile_id: str = "apex_50k_manual") -> dict[str, dict]:
     All consumer scripts (pre_session_check, log_trade, forward_monitor,
     slippage_scenario, sprt_monitor) must import from here.
     """
+    if profile_id is None:
+        profile_id = _find_active_manual_profile()
     profile = ACCOUNT_PROFILES[profile_id]
     registry: dict[str, dict] = {}
 
