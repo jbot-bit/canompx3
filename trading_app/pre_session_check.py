@@ -302,9 +302,9 @@ def run_checks(session: str) -> bool:
     # DD budget check (from daily_lanes)
     try:
         from trading_app.prop_portfolio import check_daily_lanes_dd_budget, resolve_daily_lanes
-        from trading_app.prop_profiles import _find_active_manual_profile, get_profile
+        from trading_app.prop_profiles import find_active_manual_profile, get_profile
 
-        profile = get_profile(_find_active_manual_profile())
+        profile = get_profile(find_active_manual_profile())
         if profile.daily_lanes:
             resolved = resolve_daily_lanes(profile, db_path=GOLD_DB_PATH, trading_day=today)
             _dd_per, total_dd, dd_limit, over = check_daily_lanes_dd_budget(profile, resolved)

@@ -589,7 +589,7 @@ _LANE_NAMES: dict[str, str] = {
 }
 
 
-def _find_active_manual_profile() -> str:
+def find_active_manual_profile() -> str:
     """Find the active Apex manual profile (highest account_size wins)."""
     best = None
     for pid, p in ACCOUNT_PROFILES.items():
@@ -615,7 +615,7 @@ def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
     slippage_scenario, sprt_monitor) must import from here.
     """
     if profile_id is None:
-        profile_id = _find_active_manual_profile()
+        profile_id = find_active_manual_profile()
     profile = ACCOUNT_PROFILES[profile_id]
     registry: dict[str, dict] = {}
 
@@ -641,8 +641,8 @@ def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
             "max_orb_size_pts": lane.max_orb_size_pts,
         }
 
-    # Also include TopStep lanes
-    if profile_id == "apex_50k_manual":
+    # Also include TopStep shadow lanes for any Apex manual profile
+    if profile.firm == "apex":
         ts_profile = ACCOUNT_PROFILES.get("topstep_50k")
         if ts_profile:
             for lane in ts_profile.daily_lanes:
