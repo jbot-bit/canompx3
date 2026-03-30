@@ -1154,8 +1154,9 @@ def run_validation(
                             wf_tested, wf_passed, wf_windows, wfe,
                             sharpe_haircut, skewness, kurtosis_excess,
                             oos_exp_r, noise_risk,
-                            era_dependent, max_year_pct)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            era_dependent, max_year_pct,
+                            p_value, n_trials_at_discovery, fst_hurdle)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             sid,
                             sid,
@@ -1202,6 +1203,9 @@ def run_validation(
                             noise_risk_val,
                             era_dependent_val,
                             round(max_year_pct_val, 4) if max_year_pct_val is not None else None,
+                            rd.get("p_value"),
+                            rd.get("n_trials_at_discovery"),
+                            rd.get("fst_hurdle"),
                         ],
                     )
 
@@ -1299,6 +1303,11 @@ def run_validation(
                             """UPDATE validated_setups
                                SET fdr_significant = ?,
                                    fdr_adjusted_p = ?,
+                                   p_value = ?,
+                                   n_trials_at_discovery = CASE
+                                       WHEN n_trials_at_discovery IS NULL THEN ?
+                                       ELSE n_trials_at_discovery
+                                   END,
                                    discovery_k = CASE
                                        WHEN discovery_k IS NULL THEN ?
                                        ELSE discovery_k
@@ -1308,7 +1317,7 @@ def run_validation(
                                        ELSE discovery_date
                                    END
                                WHERE strategy_id = ?""",
-                            [fdr["fdr_significant"], fdr["adjusted_p"], _sess_k, _today, sid],
+                            [fdr["fdr_significant"], fdr["adjusted_p"], fdr["raw_p"], _sess_k, _sess_k, _today, sid],
                         )
                         if fdr["fdr_significant"]:
                             n_fdr_sig += 1
