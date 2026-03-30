@@ -1278,6 +1278,10 @@ def run_discovery(
         # ---- Batch write ----
         if not dry_run:
             # Preserve existing created_at timestamps (INSERT OR REPLACE = DELETE+INSERT)
+            # FIXME(2026-03-30): Preserving old created_at causes silent data loss
+            # when purge scripts use DELETE WHERE created_at < cutoff. Holdout-clean
+            # entries inherit old timestamps and get purged. Workaround: re-run
+            # discovery after any created_at-based purge. See commit 005168c.
             existing_created = {}
             rows = con.execute(
                 "SELECT strategy_id, created_at FROM experimental_strategies WHERE instrument = ?",
