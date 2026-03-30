@@ -1,17 +1,20 @@
 ---
 mode: IMPLEMENTATION
 stage: IMPLEMENTATION
-task: Universal filter test — is MES_ATR60 a replacement for all session filters?
-pass: 1
+task: Fix prop_profiles firm rules + design Apex 100K + Tradeify 5x config
+pass: 2
 scope_lock:
-  - scripts/tmp_universal_filter_test.py
-  - scripts/tmp_golden_scan.py
-  - scripts/tmp_xmes_audit.py
+  - trading_app/prop_profiles.py
+  - tests/test_trading_app/test_prop_profiles.py
 blast_radius:
-  - Read-only. No production changes.
+  - prop_profiles.py imported by pre_session_check, run_live_session, paper_trade_logger
+  - DD budget validation catches misconfigs at import time
 acceptance:
-  - Head-to-head on raw orb_outcomes with filter classes applied
-  - IS and OOS separate
-  - Portfolio-level comparison
-updated: 2026-03-30T16:00:00Z
+  - Apex rules match official docs (5:1 RR, 30% per-trade, scaling, safety net)
+  - Tradeify notes clarify Group Trading broken + API-per-account required
+  - Apex 100K profile activated with 5 lanes
+  - Tradeify 50K profile has daily_lanes configured (CME_PRECLOSE priority)
+  - validate_dd_budget passes for all active profiles
+  - All tests pass, drift clean
+updated: 2026-03-30T17:00:00Z
 ---
