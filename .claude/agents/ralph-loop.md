@@ -7,6 +7,7 @@ description: >
   per iteration. Returns structured report.
 tools: Read, Edit, Write, Bash, Grep, Glob
 model: sonnet
+effort: high
 maxTurns: 50
 ---
 

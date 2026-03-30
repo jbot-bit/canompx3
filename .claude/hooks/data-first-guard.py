@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Data-First Guard: enforces querying data before theorizing.
+"""Data-First Guard + Intent Router: enforces querying data before theorizing
+and routes user intent to the correct workflow mode.
 
-Two modes based on hook event:
+Modes based on hook event:
 
-1. UserPromptSubmit: detects investigation keywords in user message,
-   sets investigation flag, injects DATA FIRST directive.
+1. UserPromptSubmit: detects intent keywords in user message —
+   investigation, trading query, design/implement/commit/research/orient/resume —
+   injects the appropriate workflow directive so Claude routes correctly.
 
 2. PreToolUse (Read): tracks consecutive Read calls without a Bash/query call.
    After threshold, warns via stderr. After hard limit, BLOCKS the Read.
@@ -93,6 +95,91 @@ REBUILD_DIRECTIVE = (
     "5. Lesson 15: init_db BEFORE daily_features when adding sessions."
 )
 
+# ── Intent routing: detect user's MODE from natural language ─────────
+DESIGN_KEYWORDS = re.compile(
+    r"\b("
+    r"plan|design|think about|brainstorm|how would|how should|what if|"
+    r"explore|iterate|4t|approach|architecture|consider|strategy for|"
+    r"pros and cons|trade.?offs|options for"
+    r")\b",
+    re.IGNORECASE,
+)
+
+IMPLEMENT_KEYWORDS = re.compile(
+    r"\b("
+    r"build it|do it|implement|go ahead|ship it|make it happen|just do it|"
+    r"write the code|code it|execute|deploy|wire it up|hook it up|"
+    r"yes|looks good|approved|lgtm"
+    r")\b",
+    re.IGNORECASE,
+)
+
+COMMIT_KEYWORDS = re.compile(
+    r"\b("
+    r"commit|push|comit|pusdh|vcommit|merge|commit all|push it|"
+    r"stage and commit|git push|commit and push"
+    r")\b",
+    re.IGNORECASE,
+)
+
+RESEARCH_KEYWORDS = re.compile(
+    r"\b("
+    r"hypothesis|test.*edge|research|validate.*signal|stress test|"
+    r"is this real|backtest|forward test|null test|significance|"
+    r"p.?value|sharpe|fdr|discover|noise floor"
+    r")\b",
+    re.IGNORECASE,
+)
+
+ORIENT_KEYWORDS = re.compile(
+    r"\b("
+    r"where are we|what.s the status|orient|what.s broken|"
+    r"state of|health check|what needs doing|what.s next"
+    r")\b",
+    re.IGNORECASE,
+)
+
+RESUME_KEYWORDS = re.compile(
+    r"\b("
+    r"resume|pick up|continue|last conversation|closed|crashed|"
+    r"where was i|what were we doing|carry on|last session|"
+    r"it closed|conversation closed|got disconnected"
+    r")\b",
+    re.IGNORECASE,
+)
+
+DESIGN_DIRECTIVE = (
+    "DESIGN MODE: Do NOT write code. Iterate on the plan. "
+    "Present options. Wait for explicit 'go'/'build it'/'implement' before editing files."
+)
+
+IMPLEMENT_DIRECTIVE = (
+    "IMPLEMENT MODE: User wants code NOW. "
+    "If non-trivial, write STAGE_STATE.md first (blast_radius + scope_lock + acceptance). "
+    "Then execute. Show evidence when done."
+)
+
+COMMIT_DIRECTIVE = (
+    "GIT OPERATION: Just execute immediately. No explaining, no asking 'are you sure'. "
+    "Check git status, stage files, commit with descriptive message. Push if asked."
+)
+
+RESEARCH_DIRECTIVE = (
+    "RESEARCH MODE: Open docs/STRATEGY_BLUEPRINT.md. Route through test sequence. "
+    "All claims need: source layer, N, p-value, K for BH FDR, WFE. "
+    "Default to O5 aperture. Per-session, NEVER pooled."
+)
+
+ORIENT_DIRECTIVE = (
+    "ORIENT: Check HANDOFF.md + git log --oneline -10 + STAGE_STATE.md + pipeline_status.py. "
+    "Report current state from commands, not assumptions."
+)
+
+RESUME_DIRECTIVE = (
+    "RESUME: Check HANDOFF.md for last state, git log --oneline -10 for recent changes, "
+    "STAGE_STATE.md for active work. Verify before continuing."
+)
+
 WARN_THRESHOLD = 4    # After N consecutive Reads, warn
 BLOCK_THRESHOLD = 7   # After N consecutive Reads, BLOCK
 
@@ -134,12 +221,13 @@ def save_state(state):
 
 
 def handle_user_prompt(event):
-    """Detect investigation keywords and inject DATA FIRST directive."""
+    """Detect user intent and inject appropriate workflow directive."""
     prompt = event.get("prompt", "")
     state = load_state()
 
     directives = []
 
+    # ── Data investigation detection (existing) ──────────────────────
     if INVESTIGATION_KEYWORDS.search(prompt):
         state["investigation_mode"] = True
         state["consecutive_reads"] = 0
@@ -151,6 +239,26 @@ def handle_user_prompt(event):
     if SESSION_TIME_KEYWORDS.search(prompt):
         directives.append(SESSION_TIME_DIRECTIVE)
 
+    # ── Intent routing (new) ─────────────────────────────────────────
+    # Priority: commit > implement > design > research > resume > orient
+    # (most specific wins — commit is unambiguous, design/implement need priority)
+    if COMMIT_KEYWORDS.search(prompt):
+        directives.append(COMMIT_DIRECTIVE)
+    elif IMPLEMENT_KEYWORDS.search(prompt) and not DESIGN_KEYWORDS.search(prompt):
+        # Only inject implement if NOT also design (avoid false positives)
+        directives.append(IMPLEMENT_DIRECTIVE)
+    elif DESIGN_KEYWORDS.search(prompt):
+        directives.append(DESIGN_DIRECTIVE)
+
+    if RESEARCH_KEYWORDS.search(prompt):
+        directives.append(RESEARCH_DIRECTIVE)
+
+    if RESUME_KEYWORDS.search(prompt):
+        directives.append(RESUME_DIRECTIVE)
+    elif ORIENT_KEYWORDS.search(prompt):
+        directives.append(ORIENT_DIRECTIVE)
+
+    # ── Emit directives ──────────────────────────────────────────────
     if directives:
         save_state(state)
         print("\n".join(directives), file=sys.stderr)

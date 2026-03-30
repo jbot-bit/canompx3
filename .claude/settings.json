@@ -1,7 +1,13 @@
 {
   "env": {
-    "GRAPHITI_ENABLED": "true",
-    "VIRTUAL_ENV": ".venv"
+    "VIRTUAL_ENV": ".venv",
+    "CLAUDE_AUTOCOMPACT_PCT_OVERRIDE": "75",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline.sh",
+    "padding": 2
   },
   "effortLevel": "high",
   "alwaysThinkingEnabled": true,
@@ -98,24 +104,65 @@
           }
         ]
       }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/completion-notify.py",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/completion-notify.py",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/post-compact-reinject.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/session-start.py",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
     "context7@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
-    "superpowers@claude-plugins-official": false,
     "commit-commands@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "pr-review-toolkit@claude-plugins-official": true,
-    "serena@claude-plugins-official": false,
     "feature-dev@claude-plugins-official": true,
     "explanatory-output-style@claude-plugins-official": true,
     "greptile@claude-plugins-official": true,
-    "coderabbit@claude-plugins-official": false,
-    "firecrawl@claude-plugins-official": true,
-    "claude-mem@claude-plugins-official": false,
-    "frontend-design@claude-plugins-official": false,
-    "ralph-loop@claude-plugins-official": false,
-    "superpowers-extended-cc@superpowers-extended-cc-marketplace": false
+    "firecrawl@claude-plugins-official": true
   }
 }

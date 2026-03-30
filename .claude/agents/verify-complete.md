@@ -5,8 +5,9 @@ description: >
   broken or incomplete. Runs drift checks, targeted tests, behavioral audit, and integrity checks.
   Can make minimal fixes (lint, missing imports, broken assertions) but CANNOT refactor or restructure.
   Use after writing or modifying code in pipeline/, trading_app/, or scripts/.
-tools: Read, Grep, Glob, Bash, Edit
+tools: Read, Grep, Glob, Bash, Edit, Write
 model: sonnet
+effort: high
 memory: project
 background: true
 maxTurns: 40
