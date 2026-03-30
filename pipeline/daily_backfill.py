@@ -24,7 +24,7 @@ def get_last_ingested_date(db_path: str, symbol: str):
     con = duckdb.connect(db_path, read_only=True)
     configure_connection(con)
     try:
-        row = con.execute("SELECT MAX(ts_event) FROM bars_1m WHERE symbol = ?", [symbol]).fetchone()
+        row = con.execute("SELECT MAX(ts_utc) FROM bars_1m WHERE symbol = ?", [symbol]).fetchone()
         ts = row[0] if row and row[0] is not None else None
         # Normalize to UTC — DuckDB returns TIMESTAMPTZ in system local timezone
         if ts is not None and hasattr(ts, "astimezone"):

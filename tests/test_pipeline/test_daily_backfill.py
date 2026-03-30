@@ -12,7 +12,7 @@ def _make_db(rows=None):
         pass
     os.unlink(f.name)  # DuckDB must create the file itself; 0-byte file causes IOException
     con = duckdb.connect(f.name)
-    con.execute("CREATE TABLE bars_1m (ts_event TIMESTAMPTZ, symbol VARCHAR)")
+    con.execute("CREATE TABLE bars_1m (ts_utc TIMESTAMPTZ, symbol VARCHAR)")
     if rows:
         for row in rows:
             con.execute("INSERT INTO bars_1m VALUES (?, ?)", row)
