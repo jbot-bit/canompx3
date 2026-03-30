@@ -6,8 +6,9 @@ description: >
   dependencies. Returns a structured impact report so the main agent edits with full understanding.
   Use proactively whenever about to change production logic — especially schema changes, entry model
   modifications, pipeline data flow, or strategy lifecycle logic.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, Write, Edit
 model: sonnet
+effort: high
 memory: project
 ---
 
