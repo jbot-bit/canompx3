@@ -6,6 +6,42 @@
 
 ---
 
+## Update (Mar 30 — System audit + break delay research + DB ops)
+
+### Completed (this terminal)
+- **System audit** (35 days overdue): 3315 tests, 77/77 drift, 10/10 integrity. Score 8/10.
+  - Fixed 10 findings: TRADING_RULES.md live portfolio rewrite, 2 specs ARCHIVED (ML dead), ROADMAP stale refs, MCP docstring M2K, 4 tmp files deleted, session table 10->12
+  - Commit `6434421`
+- **ML verify**: Gate 1-5 clean. No model on disk (correct — ML DEAD).
+- **Break delay research — TRIPLY DEAD (NO-GO)**:
+  - 7.2M trades, 3 instruments x 14 sessions x 3 apertures
+  - Unfiltered: 0 survivors at deployed apertures with |d|>=0.2 (Simpson's paradox in prior pooled results)
+  - **Filtered (correct test)**: 0/5 lanes significant. All p>0.10, all |d|<0.13. Filters create the edge; break speed adds nothing.
+  - O5/O30 direction flip kills "order flow concentration" mechanism
+  - Blueprint NO-GO updated, methodology rules saved (9 rules + O5 default)
+  - Scripts: `research/break_delay_institutional_test.py`, `research/break_delay_filtered.py`
+  - Commits: `c225337`, `d6181b8`
+- **DB backup**: gold.db copied to C:/db/gold.db (5.2GB)
+- **Edge families rebuilt**: 172 families. All 6 deployed lanes now tracked.
+  - NYSE_OPEN is PURGED in edge families (still valid in validated_setups)
+- **Outcomes gap**: Structural (not stale) — bars end Mar 24, outcomes need complete trading day through Mar 25.
+
+### Research methodology rules established (feedback_research_methodology.md)
+1. Per-session, NEVER pooled (Simpson's paradox)
+2. Match deployed parameters EXACTLY (filter, aperture, RR)
+3. Check aperture consistency (O5/O30 flip = kill)
+4. Cohen's d >= 0.2 for economic significance
+5. Default to O5 for research (O15/O30 = ARITHMETIC_ONLY)
+6. Year-by-year stability (< 60% = FRAGILE)
+7. Trace source numbers (no ungrounded claims)
+8. Test collinearity between candidates
+9. ASCII only in Windows scripts
+
+### Synced with parallel session
+- Apex 100K active ($3K DD), 50K deactivated (commit `f072ebd`)
+- Dynamic profile lookup (commit `a8b8cce`)
+- Stop mismatch resolved — lanes use validated defaults, only SINGAPORE S0.75 explicit
+
 ## Update (Mar 30 — Marathon audit + research session)
 
 ### Completed
