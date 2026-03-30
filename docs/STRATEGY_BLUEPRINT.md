@@ -272,6 +272,7 @@ Everything confirmed dead. Do NOT re-test without a fundamentally new approach.
 | O15/O30 ORB aperture (as portfolio) | ARITHMETIC_ONLY | Friction artifact — O5 gross R > O15 by 0.031R/trade on 24K matched pairs. Same family as G-filters. Mar 2026 | New mechanism hypothesis (not friction/size related) |
 | Break speed / break delay filter | DEAD | 7.2M trades, BH K=96. 0 survivors at deployed apertures (O15). Simpson's paradox in pooled data. O5/O30 direction FLIP kills mechanism claim. Per-session d<0.2. `research/break_delay_institutional_test.py`. Mar 2026 | New mechanism that explains aperture direction flip |
 | Late entry timing filter | DEAD | Same test battery. EARLY vs LATE collinear with break speed (not independent). 0 survivors outside CME_PRECLOSE (FRAGILE). Mar 2026 | — |
+| Confluence filter stacking (A AND B) | DEAD | Phase 4 OOS lift validation: 0/8 DEPLOY, 3 MARGINAL, 5 DEAD. IS lift +0.04–0.14 collapsed to +0.01 or negative OOS. Bootstrap 95% CI includes zero for all pairs. Carver 1.5x hurdle: 0/8 pass (max ratio 1.28x). Negative control correctly DEAD. Individual filters capture the signal; interaction is regression to mean. `research/output/confluence_program/phase4_oos_lift.py`. Mar 2026 | Evidence that stacking adds >50% ExpR lift OOS with CI excluding zero |
 
 Full NO-GO table with details: TRADING_RULES.md "What Doesn't Work"
 
