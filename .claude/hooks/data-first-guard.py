@@ -141,9 +141,9 @@ ORIENT_KEYWORDS = re.compile(
 
 RESUME_KEYWORDS = re.compile(
     r"\b("
-    r"resume|pick up|continue|last conversation|closed|crashed|"
-    r"where was i|what were we doing|carry on|last session|"
-    r"it closed|conversation closed|got disconnected"
+    r"resume|pick up where|last conversation|last session|"
+    r"where was i|what were we doing|carry on from|"
+    r"it closed|conversation closed|got disconnected|session crashed"
     r")\b",
     re.IGNORECASE,
 )
