@@ -79,17 +79,20 @@ False Strategy Theorem (Bailey & de Prado 2014): computes SR0 = expected maximum
 
 ---
 
-## Honest Counts (2026-03-30)
+## Honest Counts (2026-03-30, verified empirically)
 
 | Level | Count | What It Measures |
 |-------|-------|-----------------|
 | Validated strategies | 488 | Raw count including all parameter variants (RR × stop × filter) |
 | Unique trade-day-hashes | 171 | Distinct entry patterns (after canonical dedup) |
 | Family hashes | 172 | Validated_setups grouping |
-| Edge families | 88 | After J>0.7 clustering |
+| Edge families (non-purged) | 88 | 84 MNQ + 3 MES + 1 MGC |
+| **Independent bets (J>0.7 clustering)** | **7** | **5 MNQ + 1 MES + 1 MGC** (verified 2026-03-30, replaces prior "14" claim) |
 | Independent clusters (J<0.3) | 1 | All MNQ streams share >46% of trade days — too strict for ORB |
 
-**Use edge families (88) for portfolio sizing and diversification claims. Use 171 unique streams for K honest-reporting. Never cite 488 as "independent edges."**
+**Prior "14 independent bets" claim (portfolio_reconstruction_audit) was FALSE.** Empirical J>0.7 clustering on 84 non-purged MNQ families gives 5 clusters (sizes: 68, 7, 4, 3, 2). The mega-cluster of 68 families shares >70% of trade days — these are parameter variants of one core signal.
+
+**Use 7 independent bets for DD budget and portfolio sizing. Use 88 edge families for diversification reporting. Never cite 488 as "independent edges."**
 
 ---
 

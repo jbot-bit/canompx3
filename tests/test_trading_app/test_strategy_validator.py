@@ -380,6 +380,93 @@ class TestBenjaminiHochberg:
             benjamini_hochberg(pvals, alpha=0.05, total_tests=2)
 
 
+class TestDiscoveryKFreeze:
+    """Tests for discovery_k freeze behavior.
+
+    discovery_k and discovery_date are frozen on first write.
+    Subsequent validator runs update fdr_significant/adjusted_p but
+    preserve the original K for audit trail integrity.
+    """
+
+    def test_discovery_k_freeze_on_second_write(self):
+        """Second UPDATE preserves original discovery_k when not NULL."""
+        con = duckdb.connect(":memory:")
+        # Minimal schema for validated_setups
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                status VARCHAR DEFAULT 'active',
+                fdr_significant BOOLEAN,
+                fdr_adjusted_p DOUBLE,
+                discovery_k INTEGER,
+                discovery_date DATE
+            )
+        """)
+        # First write — sets discovery_k
+        con.execute("""
+            INSERT INTO validated_setups (strategy_id, fdr_significant, fdr_adjusted_p)
+            VALUES ('test_strat', TRUE, 0.01)
+        """)
+        # Simulate first validator FDR update (discovery_k IS NULL → gets set)
+        con.execute("""
+            UPDATE validated_setups
+            SET fdr_significant = TRUE,
+                fdr_adjusted_p = 0.01,
+                discovery_k = CASE WHEN discovery_k IS NULL THEN 5000 ELSE discovery_k END,
+                discovery_date = CASE WHEN discovery_date IS NULL THEN '2026-01-01' ELSE discovery_date END
+            WHERE strategy_id = 'test_strat'
+        """)
+        row = con.execute(
+            "SELECT discovery_k, discovery_date FROM validated_setups WHERE strategy_id = 'test_strat'"
+        ).fetchone()
+        assert row[0] == 5000
+        assert str(row[1]) == "2026-01-01"
+
+        # Second write — discovery_k should be PRESERVED (frozen)
+        con.execute("""
+            UPDATE validated_setups
+            SET fdr_significant = TRUE,
+                fdr_adjusted_p = 0.008,
+                discovery_k = CASE WHEN discovery_k IS NULL THEN 7000 ELSE discovery_k END,
+                discovery_date = CASE WHEN discovery_date IS NULL THEN '2026-03-30' ELSE discovery_date END
+            WHERE strategy_id = 'test_strat'
+        """)
+        row2 = con.execute(
+            "SELECT discovery_k, discovery_date, fdr_adjusted_p FROM validated_setups WHERE strategy_id = 'test_strat'"
+        ).fetchone()
+        # K and date frozen at original values
+        assert row2[0] == 5000, f"discovery_k should be frozen at 5000, got {row2[0]}"
+        assert str(row2[1]) == "2026-01-01", f"discovery_date should be frozen, got {row2[1]}"
+        # But fdr_adjusted_p DID update
+        assert row2[2] == 0.008, f"fdr_adjusted_p should update to 0.008, got {row2[2]}"
+        con.close()
+
+    def test_discovery_k_set_on_first_null(self):
+        """First write when discovery_k IS NULL correctly sets the value."""
+        con = duckdb.connect(":memory:")
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                discovery_k INTEGER,
+                discovery_date DATE
+            )
+        """)
+        con.execute("INSERT INTO validated_setups (strategy_id) VALUES ('s1')")
+        # discovery_k is NULL
+        row = con.execute("SELECT discovery_k FROM validated_setups WHERE strategy_id = 's1'").fetchone()
+        assert row[0] is None
+
+        # CASE WHEN NULL sets it
+        con.execute("""
+            UPDATE validated_setups
+            SET discovery_k = CASE WHEN discovery_k IS NULL THEN 3000 ELSE discovery_k END
+            WHERE strategy_id = 's1'
+        """)
+        row2 = con.execute("SELECT discovery_k FROM validated_setups WHERE strategy_id = 's1'").fetchone()
+        assert row2[0] == 3000
+        con.close()
+
+
 class TestRegimeWaivers:
     """Tests for DORMANT regime waiver logic in Phase 3."""
 
