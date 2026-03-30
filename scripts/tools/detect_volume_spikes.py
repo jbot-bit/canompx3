@@ -455,7 +455,7 @@ def analyze_instrument(
         catalog_coverage[label] = {
             "detected": detected,
             "spike_rank": spike_rank,
-            "z_score": round(best_z, 2) if best_z else None,
+            "z_score": round(best_z, 2) if best_z > 0 else None,
             "note": note,
         }
 
@@ -519,7 +519,8 @@ def print_report(result: dict, min_z: float) -> None:
     coverage = result["catalog_coverage"]
     for label, info in sorted(coverage.items()):
         if info["detected"]:
-            print(f"    {label:<18} MATCHED (rank {info['spike_rank']}, z={info['z_score']})")
+            z_str = f"{info['z_score']:.2f}" if info["z_score"] is not None else "N/A"
+            print(f"    {label:<18} MATCHED (rank {info['spike_rank']}, z={z_str})")
         else:
             note = info.get("note", "not detected")
             print(f"    {label:<18} NOT DETECTED ({note})")

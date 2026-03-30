@@ -171,18 +171,29 @@ def _auto_eligible(
 # ── Main ─────────────────────────────────────────────────────────────────────
 
 
+def _resolve_dd_limit(firm: str, account_size: int, dd_override: float | None) -> float:
+    """Resolve DD limit from canonical ACCOUNT_TIERS, with optional override."""
+    if dd_override is not None:
+        return dd_override
+    tier = ACCOUNT_TIERS.get((firm, account_size))
+    if tier is not None:
+        return tier.max_dd
+    # Fallback: smallest DD across all tiers for this firm (fail-safe)
+    firm_tiers = [v.max_dd for k, v in ACCOUNT_TIERS.items() if k[0] == firm]
+    return min(firm_tiers) if firm_tiers else 2000.0
+
+
 def score_lanes(
     instrument: str = "MNQ",
     firm: str = "topstep",
+    account_size: int = 50000,
     dd_limit: float | None = None,  # from ACCOUNT_TIERS if None
     session_filter: str | None = None,
     top_n: int = 30,
     current_only: bool = False,
 ) -> list[dict]:
     """Score all eligible strategies and return ranked list."""
-    if dd_limit is None:
-        tier = ACCOUNT_TIERS.get((firm, 50000))
-        dd_limit = tier.max_dd if tier else 2000.0
+    dd_limit = _resolve_dd_limit(firm, account_size, dd_limit)
     hours_map = _resolve_brisbane_hours()
     split = _prop_split(firm)
 
@@ -266,8 +277,10 @@ def score_lanes(
 
         sm = sm or 1.0
         # Execution risk: median_risk_dollars uses raw stop distance (1.0x) regardless
-        # of strategy SM. For prop accounts, apply the tighter of strategy SM or 0.75.
-        effective_sm = min(sm, 0.75)
+        # of strategy SM. Apply the tighter of strategy SM or firm's typical SM.
+        # Prop firms use 0.75, self-funded uses 1.0.
+        firm_sm = 1.0 if firm == "self_funded" else 0.75
+        effective_sm = min(sm, firm_sm)
         exec_risk = (med_risk or 0) * effective_sm
         risk_pct_dd = (exec_risk / dd_limit * 100) if dd_limit > 0 else 0
 
@@ -381,15 +394,16 @@ def main() -> None:
     parser.add_argument("--current", action="store_true", help="Score only currently deployed lanes")
     args = parser.parse_args()
 
+    dd = _resolve_dd_limit(args.firm, 50000, args.dd)
     results = score_lanes(
         instrument=args.instrument,
         firm=args.firm,
-        dd_limit=args.dd,
+        dd_limit=dd,
         session_filter=args.session,
         top_n=args.top,
         current_only=args.current,
     )
-    print_table(results, args.firm, args.dd)
+    print_table(results, args.firm, dd)
 
 
 if __name__ == "__main__":

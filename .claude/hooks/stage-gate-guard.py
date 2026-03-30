@@ -232,9 +232,16 @@ def matches_scope(file_path, scope_paths):
     - Exact path match: pipeline/dst.py
     - Relative suffix match: file_path ends with /scope_entry
     - Directory patterns: scope entry ends with / → file must be inside
+    - Glob patterns: scope entry contains * → fnmatch against file_path
     """
+    from fnmatch import fnmatch
+
     for sp in scope_paths:
-        if sp.endswith("/"):
+        if "*" in sp or "?" in sp:
+            # Glob pattern: scripts/tools/*.py, .claude/agents/*.md
+            if fnmatch(file_path, sp):
+                return True
+        elif sp.endswith("/"):
             # Directory pattern: trading_app/live/ matches trading_app/live/broker.py
             if file_path.startswith(sp):
                 return True
