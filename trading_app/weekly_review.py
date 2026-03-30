@@ -14,13 +14,16 @@ from pathlib import Path
 import duckdb
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.db_config import configure_connection
+from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.prop_profiles import PROP_FIRM_SPECS
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 MONITOR_DIR = Path(__file__).resolve().parents[1] / "data" / "forward_monitoring"
 
-SESSIONS = ["NYSE_CLOSE", "SINGAPORE_OPEN", "COMEX_SETTLE", "NYSE_OPEN", "US_DATA_1000", "TOKYO_OPEN"]
+SESSIONS = sorted(SESSION_CATALOG.keys())
 
 
 def section_0_account_health():
@@ -86,41 +89,46 @@ def section_0b_consistency():
             check_payout_eligibility,
         )
 
-        # Consistency
-        for firm in ["apex", "topstep"]:
-            result = check_consistency(firm=firm, instrument="MNQ")
-            if result is not None:
+        # Consistency — check all active firms × instruments
+        active_firms = sorted(PROP_FIRM_SPECS.keys())
+        active_instruments = sorted(ACTIVE_ORB_INSTRUMENTS)
+        for firm in active_firms:
+            for instrument in active_instruments:
+                result = check_consistency(firm=firm, instrument=instrument)
+                if result is not None:
+                    print(
+                        f"  Consistency ({firm} {instrument} {result.limit_pct:.0%}): "
+                        f"best day ${result.best_day_pnl:.0f} ({result.best_day_date}) "
+                        f"= {result.windfall_pct:.1f}% of ${result.total_profit:.0f} — {result.status}"
+                    )
+
+        # Payout eligibility — check all active firms
+        for firm in active_firms:
+            for instrument in active_instruments:
+                pe = check_payout_eligibility(firm=firm, instrument=instrument)
+                if pe is not None:
+                    print(
+                        f"  Payout ({firm} {instrument}): {pe.trading_days}/{pe.min_trading_days} trading days, "
+                        f"{pe.profitable_days_50}/{pe.min_profitable_days} profitable days ($50+) — "
+                        f"{'ELIGIBLE' if pe.eligible else 'NOT YET'}"
+                    )
+                    for note in pe.notes:
+                        print(f"    -> {note}")
+
+        # Idle check (all instruments)
+        for instrument in active_instruments:
+            idle_status, idle_days = check_account_idle(instrument=instrument)
+            if idle_status != "OK":
+                print(f"  Idle ({instrument}): {idle_status} — {idle_days} days since last trade")
+
+        # Microscalp (all instruments)
+        for instrument in active_instruments:
+            ms = check_microscalp_compliance(instrument=instrument)
+            if ms is not None and not ms.compliant:
                 print(
-                    f"  Consistency ({firm} {result.limit_pct:.0%}): "
-                    f"best day ${result.best_day_pnl:.0f} ({result.best_day_date}) "
-                    f"= {result.windfall_pct:.1f}% of ${result.total_profit:.0f} — {result.status}"
+                    f"  Microscalp ({instrument}): {ms.pct_trades_over_10s:.0f}% trades >10s, "
+                    f"{ms.pct_profit_from_over_10s:.0f}% profit >10s — BREACH"
                 )
-
-        # Payout eligibility
-        pe = check_payout_eligibility(firm="apex", instrument="MNQ")
-        print(
-            f"  Payout eligibility: {pe.trading_days}/{pe.min_trading_days} trading days, "
-            f"{pe.profitable_days_50}/{pe.min_profitable_days} profitable days ($50+) — "
-            f"{'ELIGIBLE' if pe.eligible else 'NOT YET'}"
-        )
-        for note in pe.notes:
-            print(f"    -> {note}")
-
-        # Idle check (Tradeify)
-        idle_status, idle_days = check_account_idle(instrument="MNQ")
-        if idle_status != "OK":
-            print(f"  Tradeify idle: {idle_status} — {idle_days} days since last trade")
-        else:
-            print(f"  Tradeify idle: OK ({idle_days} days since last trade)")
-
-        # Microscalp
-        ms = check_microscalp_compliance(instrument="MNQ")
-        if ms is not None:
-            print(
-                f"  Microscalp (Tradeify): {ms.pct_trades_over_10s:.0f}% trades >10s, "
-                f"{ms.pct_profit_from_over_10s:.0f}% profit >10s — "
-                f"{'COMPLIANT' if ms.compliant else 'BREACH'}"
-            )
     except Exception as e:
         print(f"  Compliance monitors unavailable: {e}")
 

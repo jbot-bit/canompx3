@@ -201,19 +201,23 @@ def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
         print(f"  No bars found for {instrument} -- skip (needs manual initial load)")
         return False
 
-    today = date.today()
+    # Use yesterday as end date — today's session may still be in progress
+    # and Databento won't have the full day yet. Exclusive end semantics
+    # means end=yesterday requests data through end-of-day-before-yesterday,
+    # which is the last COMPLETE trading session.
+    yesterday = date.today() - timedelta(days=1)
     fetch_start = last_date + timedelta(days=1)
 
-    gap_days = (today - last_date).days
-    if gap_days <= 1:
+    gap_days = (yesterday - last_date).days
+    if gap_days <= 0:
         print(f"  Already up to date (last bar: {last_date})")
         return True
 
     print(f"  Last bar: {last_date} ({gap_days} days ago)")
-    print(f"  Gap: {fetch_start} to {today}")
+    print(f"  Gap: {fetch_start} to {yesterday}")
 
     # Step 1: Download
-    out_file = download_dbn(instrument, fetch_start, today, dry_run=dry_run)
+    out_file = download_dbn(instrument, fetch_start, yesterday, dry_run=dry_run)
     if dry_run:
         return True
 
@@ -221,16 +225,21 @@ def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
         print("  FAIL: download returned nothing")
         return False
 
-    # Step 2: Ingest
+    # Step 2: Ingest — if this fails, clean up the downloaded file
     if not run_ingest(instrument):
+        print(f"  Cleaning up downloaded file after ingest failure: {out_file.name}")
+        try:
+            out_file.unlink(missing_ok=True)
+        except Exception:
+            pass
         return False
 
     # Step 3: Build downstream artifacts
     # Use canonical ACTIVE_ORB_INSTRUMENTS (not raw orb_active flag — M2K trap)
     if instrument in ACTIVE_ORB_INSTRUMENTS:
-        ok = run_build_steps(instrument, fetch_start, today)
+        ok = run_build_steps(instrument, fetch_start, yesterday)
     else:
-        ok = run_research_build_steps(instrument, fetch_start, today)
+        ok = run_research_build_steps(instrument, fetch_start, yesterday)
 
     if not ok:
         return False
@@ -244,7 +253,7 @@ def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
         print(f"  WARNING: atr_20_pct patch failed: {e}")
         # Non-fatal — filter will fail-closed on NULL (safe direction)
 
-    print(f"  DONE: {instrument} refreshed to {today}")
+    print(f"  DONE: {instrument} refreshed to {yesterday}")
     return True
 
 

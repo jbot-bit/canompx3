@@ -12,6 +12,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -30,6 +31,7 @@ PORT = int(os.environ.get("BOT_DASHBOARD_PORT", "8080"))
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 JOURNAL_PATH = PROJECT_ROOT / "live_journal.db"
 STOP_FILE = PROJECT_ROOT / "live_session.stop"
+LOG_DIR = PROJECT_ROOT / "logs"
 
 app = FastAPI(title="Bot Dashboard")
 
@@ -38,16 +40,57 @@ app = FastAPI(title="Bot Dashboard")
 
 
 def _resolve_profile() -> str:
-    """Read active profile from bot state, fallback to topstep_50k_mnq_auto."""
+    """Read active profile from bot state, fallback to topstep_50k_mnq_auto.
+
+    IMPORTANT: logs a warning when falling back so silent wrong-profile launches
+    are detectable. The returned profile name is also shown in the API response
+    so the UI can display which profile will be started.
+    """
     state = read_state()
     name = state.get("account_name", "")
     if name.startswith("profile_"):
         return name.removeprefix("profile_")
+    log.warning(
+        "No profile in bot_state (account_name=%r) — falling back to topstep_50k_mnq_auto",
+        name,
+    )
     return "topstep_50k_mnq_auto"
 
 
-# Track background processes so dashboard can report status
+# Track background processes. Guarded by _bg_lock to prevent race conditions
+# (e.g., double-click spawning two concurrent DB writers — violates CLAUDE.md
+# "NEVER run two write processes against the same DuckDB file simultaneously").
 _bg_processes: dict[str, subprocess.Popen] = {}
+_bg_lock = threading.Lock()
+
+
+def _ensure_log_dir() -> Path:
+    """Create logs/ directory if it doesn't exist."""
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    return LOG_DIR
+
+
+# ── Shutdown handler — prevent orphaned child processes ──────────────────────
+
+
+@app.on_event("shutdown")
+async def _shutdown_children():
+    """Terminate all background subprocesses on server shutdown.
+
+    Without this, orphaned session or refresh processes continue running
+    after dashboard restart — a live bot with no dashboard monitoring it.
+    """
+    for name, proc in _bg_processes.items():
+        if proc.poll() is None:
+            log.warning("Shutdown: terminating orphaned %s process (PID %d)", name, proc.pid)
+            try:
+                proc.terminate()
+                proc.wait(timeout=10)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
 
 
 # ── API Endpoints ─────────────────────────────────────────────────────────────
@@ -119,6 +162,12 @@ async def action_kill():
     """Write stop file to kill the bot gracefully."""
     try:
         STOP_FILE.write_text("stop", encoding="utf-8")
+        # Also terminate session subprocess if we spawned it
+        with _bg_lock:
+            if "session" in _bg_processes:
+                proc = _bg_processes["session"]
+                if proc.poll() is None:
+                    proc.terminate()
         return {"status": "ok", "message": "Stop file created — bot will shut down within 5 seconds"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -141,6 +190,7 @@ async def action_preflight():
             "status": "pass" if result.returncode == 0 else "fail",
             "output": result.stdout + result.stderr,
             "returncode": result.returncode,
+            "profile": profile,
         }
     except subprocess.TimeoutExpired:
         return {"status": "timeout", "output": "Preflight timed out after 60s"}
@@ -160,7 +210,10 @@ async def api_data_status():
             for inst in ACTIVE_ORB_INSTRUMENTS:
                 row = con.execute("SELECT MAX(ts_utc)::DATE FROM bars_1m WHERE symbol = ?", [inst]).fetchone()
                 last_date = row[0] if row and row[0] else None
-                gap = (datetime.now(UTC).date() - last_date).days if last_date else 999
+                if last_date is None:
+                    gap = 999
+                else:
+                    gap = max(0, (datetime.now(UTC).date() - last_date).days)
                 results[inst] = {
                     "last_bar_date": str(last_date) if last_date else None,
                     "gap_days": gap,
@@ -174,80 +227,113 @@ async def api_data_status():
 
 @app.post("/api/action/refresh")
 async def action_refresh():
-    """Download fresh data from Databento + rebuild pipeline. Runs in background."""
-    if "refresh" in _bg_processes:
-        proc = _bg_processes["refresh"]
-        if proc.poll() is None:
-            return {"status": "running", "message": "Data refresh already in progress"}
-    try:
-        instrument = "MNQ"  # Default to MNQ for automation profile
+    """Download fresh data from Databento + rebuild pipeline. Runs in background.
+
+    Output goes to logs/refresh.log (not a pipe — prevents deadlock on Windows
+    where the 64KB pipe buffer fills and blocks the child process forever).
+    """
+    with _bg_lock:
+        if "refresh" in _bg_processes:
+            proc = _bg_processes["refresh"]
+            if proc.poll() is None:
+                return {"status": "running", "message": "Data refresh already in progress"}
+
+        instrument = "MNQ"
         state = read_state()
         if state.get("instrument"):
             instrument = state["instrument"]
-        proc = subprocess.Popen(
-            [sys.executable, "scripts/tools/refresh_data.py", "--instrument", instrument],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            cwd=str(PROJECT_ROOT),
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-        )
-        _bg_processes["refresh"] = proc
-        return {"status": "started", "message": f"Refreshing {instrument} data..."}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+
+        try:
+            log_path = _ensure_log_dir() / "refresh.log"
+            log_file = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
+            proc = subprocess.Popen(
+                [sys.executable, "scripts/tools/refresh_data.py", "--instrument", instrument],
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=str(PROJECT_ROOT),
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            )
+            _bg_processes["refresh"] = proc
+            _bg_processes["_refresh_log"] = log_path  # type: ignore[assignment]
+            _bg_processes["_refresh_logfile"] = log_file  # type: ignore[assignment]
+            return {"status": "started", "message": f"Refreshing {instrument} data..."}
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
 @app.get("/api/action/refresh-status")
 async def action_refresh_status():
-    """Check data refresh progress."""
+    """Check data refresh progress. Reads from log file (not pipe — avoids deadlock)."""
     if "refresh" not in _bg_processes:
         return {"status": "idle", "output": ""}
     proc = _bg_processes["refresh"]
-    if proc.poll() is None:
-        return {"status": "running", "output": "Refresh in progress..."}
+    log_path = _bg_processes.get("_refresh_log")
+    running = proc.poll() is None
+
+    # Read log file (can be read multiple times, unlike pipe)
     output = ""
-    try:
-        output = proc.stdout.read() if proc.stdout else ""
-    except Exception:
-        pass
+    if log_path and Path(str(log_path)).exists():
+        try:
+            output = Path(str(log_path)).read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            output = "(log read failed)"
+
+    if running:
+        return {"status": "running", "output": output}
+
+    # Process finished — close log file handle
+    log_file = _bg_processes.pop("_refresh_logfile", None)
+    if log_file and hasattr(log_file, "close"):
+        try:
+            log_file.close()
+        except Exception:
+            pass
+
     status = "done" if proc.returncode == 0 else "failed"
     return {"status": status, "returncode": proc.returncode, "output": output}
 
 
 @app.post("/api/action/start")
 async def action_start():
-    """Launch signal-only trading session from the dashboard."""
-    if "session" in _bg_processes:
-        proc = _bg_processes["session"]
-        if proc.poll() is None:
-            return {"status": "running", "message": "Session already running"}
+    """Launch signal-only trading session from the dashboard.
 
-    profile = _resolve_profile()
-    try:
-        proc = subprocess.Popen(
-            [
-                sys.executable,
-                "-m",
-                "scripts.run_live_session",
-                "--profile",
-                profile,
-                "--signal-only",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True,
-            cwd=str(PROJECT_ROOT),
-            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
-        )
-        _bg_processes["session"] = proc
-        return {
-            "status": "started",
-            "message": f"Signal-only session started: {profile}",
-            "pid": proc.pid,
-        }
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
+    Output goes to logs/session.log (not a pipe — live sessions run for hours
+    and would deadlock on a 64KB pipe buffer within minutes).
+    """
+    with _bg_lock:
+        if "session" in _bg_processes:
+            proc = _bg_processes["session"]
+            if proc.poll() is None:
+                return {"status": "running", "message": "Session already running"}
+
+        profile = _resolve_profile()
+        try:
+            log_path = _ensure_log_dir() / "session.log"
+            log_file = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
+            proc = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "scripts.run_live_session",
+                    "--profile",
+                    profile,
+                    "--signal-only",
+                ],
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                cwd=str(PROJECT_ROOT),
+                env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+            )
+            _bg_processes["session"] = proc
+            _bg_processes["_session_logfile"] = log_file  # type: ignore[assignment]
+            return {
+                "status": "started",
+                "message": f"Signal-only session started: {profile}",
+                "pid": proc.pid,
+                "profile": profile,
+            }
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
 # ── HTML Frontend ─────────────────────────────────────────────────────────────

@@ -1,25 +1,25 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Zero-command dashboard automation — data refresh + session launch from UI
+task: Stress test — fix hardcoded values, None crashes, canonical violations across codebase
+updated: 2026-03-31T12:00:00Z
 scope_lock:
-  - trading_app/live/bot_dashboard.py
-  - trading_app/live/bot_dashboard.html
-  - scripts/tools/refresh_data.py
-  - pipeline/daily_backfill.py
-  - tests/test_pipeline/test_daily_backfill.py
+  - scripts/tools/score_lanes.py
+  - .claude/hooks/*.py
+  - .claude/settings.json
+  - .claude/agents/*.md
+  - .claude/rules/*.md
+  - trading_app/prop_profiles.py
+  - trading_app/weekly_review.py
+  - scripts/tools/*.py
+  - trading_app/live/*.py
 blast_radius:
-  - bot_dashboard.py: additive endpoints only, no existing endpoint changes
-  - bot_dashboard.html: new buttons + activity panel, existing UI untouched
-  - refresh_data.py: add atr_20_pct patch call after build steps
-  - No pipeline logic changes, no config changes, no schema changes
+  - score_lanes.py: CLI signature change, no external callers
+  - hooks: Claude Code infra only
+  - prop_profiles: config layer, no DB writes
 acceptance:
-  - Dashboard launches standalone, shows data freshness
-  - REFRESH DATA button downloads + rebuilds pipeline
-  - START SESSION button launches signal-only session
-  - PREFLIGHT and KILL buttons still work
-  - 77/77 drift checks pass
-  - All existing tests pass
+  - python scripts/tools/score_lanes.py runs without crash (default args)
+  - All hooks exit cleanly on valid JSON input
+  - python pipeline/check_drift.py passes
+  - Comprehensive grep for hardcoded patterns returns clean
 ---
-
-Design: Zero-command automation for first automated trade. User opens dashboard, presses buttons, everything runs.
