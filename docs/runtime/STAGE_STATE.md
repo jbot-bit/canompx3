@@ -1,14 +1,25 @@
 ---
+stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Post-re-discovery lane upgrades + timestamp bug fix
-phase: 1/2
+task: Zero-command dashboard automation — data refresh + session launch from UI
 scope_lock:
-  - trading_app/strategy_discovery.py
-  - trading_app/prop_profiles.py
-  - trading_app/paper_trade_logger.py
-blast_radius: strategy_discovery.py _flush_batch_df created_at only; prop_profiles.py DailyLaneSpec L1+L6 swap; paper_trade_logger.py lane ID sync; no schema changes
+  - trading_app/live/bot_dashboard.py
+  - trading_app/live/bot_dashboard.html
+  - scripts/tools/refresh_data.py
+  - pipeline/daily_backfill.py
+  - tests/test_pipeline/test_daily_backfill.py
+blast_radius:
+  - bot_dashboard.py: additive endpoints only, no existing endpoint changes
+  - bot_dashboard.html: new buttons + activity panel, existing UI untouched
+  - refresh_data.py: add atr_20_pct patch call after build steps
+  - No pipeline logic changes, no config changes, no schema changes
 acceptance:
-  - Drift clean
-  - timestamp fix verified
-  - lane strategy_ids exist in validated_setups
+  - Dashboard launches standalone, shows data freshness
+  - REFRESH DATA button downloads + rebuilds pipeline
+  - START SESSION button launches signal-only session
+  - PREFLIGHT and KILL buttons still work
+  - 77/77 drift checks pass
+  - All existing tests pass
 ---
+
+Design: Zero-command automation for first automated trade. User opens dashboard, presses buttons, everything runs.

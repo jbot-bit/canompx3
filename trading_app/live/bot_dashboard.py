@@ -33,6 +33,22 @@ STOP_FILE = PROJECT_ROOT / "live_session.stop"
 app = FastAPI(title="Bot Dashboard")
 
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+def _resolve_profile() -> str:
+    """Read active profile from bot state, fallback to topstep_50k_mnq_auto."""
+    state = read_state()
+    name = state.get("account_name", "")
+    if name.startswith("profile_"):
+        return name.removeprefix("profile_")
+    return "topstep_50k_mnq_auto"
+
+
+# Track background processes so dashboard can report status
+_bg_processes: dict[str, subprocess.Popen] = {}
+
+
 # ── API Endpoints ─────────────────────────────────────────────────────────────
 
 
