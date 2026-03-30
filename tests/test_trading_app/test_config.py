@@ -137,7 +137,7 @@ class TestAllFilters:
             assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 4 G-filters + 2 VOL-filters (VOL_RV12_N20 + ATR70_VOL) = 7
+        # NO_FILTER + 4 G-filters + 6 VOL-filters (VOL_RV12/15/20/25/30_N20 + ATR70_VOL) = 11
         # + 12 DOW composites (3 DOW x 4 G)
         # + 12 break quality composites (3 BRK x 4 G: FAST5, FAST10, CONT)
         # + 3 M6E pip-scaled size filters (M6E_G4/G6/G8)
@@ -145,8 +145,8 @@ class TestAllFilters:
         # + 2 MES 1000 band filters (ORB_G4_L12, ORB_G5_L12)
         # + 3 cross-asset ATR filters (X_MES_ATR70, X_MES_ATR60, X_MGC_ATR70)
         # + 4 cost-ratio filters (COST_LT08/10/12/15 — ARITHMETIC_ONLY research screens)
-        # = 45
-        assert len(ALL_FILTERS) == 45
+        # = 49
+        assert len(ALL_FILTERS) == 49
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -221,6 +221,28 @@ class TestVolumeFilter:
         assert isinstance(f, VolumeFilter)
         assert f.min_rel_vol == 1.2
         assert f.lookback_days == 20
+
+    def test_higher_threshold_filters_registered(self):
+        """Confluence program rel_vol filters (Mar 2026) are all registered."""
+        for key, expected_rv in [
+            ("VOL_RV15_N20", 1.5),
+            ("VOL_RV20_N20", 2.0),
+            ("VOL_RV25_N20", 2.5),
+            ("VOL_RV30_N20", 3.0),
+        ]:
+            assert key in ALL_FILTERS, f"{key} missing from ALL_FILTERS"
+            f = ALL_FILTERS[key]
+            assert isinstance(f, VolumeFilter)
+            assert f.min_rel_vol == expected_rv
+            assert f.lookback_days == 20
+            assert f.filter_type == key
+
+    def test_higher_threshold_discriminates(self):
+        """Higher thresholds correctly reject lower volumes."""
+        f25 = VolumeFilter(filter_type="TEST", description="test", min_rel_vol=2.5)
+        assert f25.matches_row({"rel_vol_NYSE_CLOSE": 3.0}, "NYSE_CLOSE") is True
+        assert f25.matches_row({"rel_vol_NYSE_CLOSE": 2.0}, "NYSE_CLOSE") is False
+        assert f25.matches_row({"rel_vol_NYSE_CLOSE": 2.5}, "NYSE_CLOSE") is True
 
 
 class TestCombinedATRVolumeFilter:

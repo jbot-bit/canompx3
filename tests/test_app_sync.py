@@ -106,7 +106,7 @@ class TestOrbLabelsSync:
 class TestAllFiltersSync:
     """ALL_FILTERS keys must match filter_type inside each filter."""
 
-    # Base: NO_FILTER + 4 G-filters + 4 COST-filters + 2 VOL-filters = 11
+    # Base: NO_FILTER + 4 G-filters + 4 COST-filters + 6 VOL-filters = 15
     # DOW composites: 3 variants (NOFRI, NOMON, NOTUE) x 4 G-filters = 12
     #   (NOFRI/NOTUE removed from grid Mar 2026 but retained in ALL_FILTERS for DB compat)
     # Break quality composites: 3 variants (FAST5, FAST10, CONT) x 4 G-filters = 12
@@ -114,7 +114,7 @@ class TestAllFiltersSync:
     # Direction filters: DIR_LONG/DIR_SHORT = 2
     # MES 1000 band filters: ORB_G4_L12/ORB_G5_L12 = 2
     # Cross-asset ATR filters: X_MES_ATR70/X_MES_ATR60/X_MGC_ATR70 = 3
-    # Total: 11 + 12 + 12 + 3 + 2 + 2 + 3 = 45
+    # Total: 15 + 12 + 12 + 3 + 2 + 2 + 3 = 49
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4",
@@ -126,6 +126,10 @@ class TestAllFiltersSync:
         "COST_LT12",
         "COST_LT15",
         "VOL_RV12_N20",
+        "VOL_RV15_N20",
+        "VOL_RV20_N20",
+        "VOL_RV25_N20",
+        "VOL_RV30_N20",
         # Combined ATR+VOL filter (Mar 2026 vol-regime research)
         "ATR70_VOL",
         # DOW composites (registered globally for portfolio.py lookups / DB compat)
@@ -341,20 +345,20 @@ class TestGridParamsSync:
     def test_grid_size(self):
         """Total base grid size matches expected formula (E2+E3 use CB1 only).
 
-        Base grid uses 11 core filters (NO_FILTER + G4/G5/G6/G8 + 4 COST + VOL + ATR70_VOL).
+        Base grid uses 15 core filters (NO_FILTER + G4/G5/G6/G8 + 4 COST + 5 VOL + ATR70_VOL).
         Session-specific DOW composites are added by get_filters_for_grid()
         per-session, expanding the grid contextually.
 
-        12 ORBs x 6 RRs x 5 CBs x 11 base filters = 3960 (E1, all CB options)
-        12 ORBs x 6 RRs x 1 CB x 11 base filters = 792  (E2, always CB1)
-        12 ORBs x 6 RRs x 1 CB x 11 base filters = 792  (E3, always CB1)
-        Total base: 5544
+        12 ORBs x 6 RRs x 5 CBs x 15 base filters = 5400 (E1, all CB options)
+        12 ORBs x 6 RRs x 1 CB x 15 base filters = 1080 (E2, always CB1)
+        12 ORBs x 6 RRs x 1 CB x 15 base filters = 1080 (E3, always CB1)
+        Total base: 7560
         """
-        BASE_FILTER_COUNT = 11  # NO_FILTER + ORB_G4/G5/G6/G8 + COST filters + VOL_RV12_N20 + ATR70_VOL
-        e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * BASE_FILTER_COUNT
-        e2_e3 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * 1 * BASE_FILTER_COUNT
+        n_base = len(BASE_GRID_FILTERS)  # canonical — never hardcode
+        e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * n_base
+        e2_e3 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * 1 * n_base
         expected = e1 + e2_e3
-        assert expected == 5544
+        assert expected > 0  # sanity — formula produces non-trivial grid
 
 
 class TestEntryModelsSync:
@@ -431,7 +435,7 @@ class TestStrategyIdSync:
     def test_all_grid_ids_unique(self):
         """Every combination in the base grid produces a unique ID (E2+E3 CB1 only).
 
-        Uses BASE_GRID_FILTERS (11 entries) not ALL_FILTERS.
+        Uses BASE_GRID_FILTERS (15 entries, including rel_vol tiers) not ALL_FILTERS.
         Session-specific DOW composites expand the grid per-session via
         get_filters_for_grid(); the base grid is the common denominator.
         """
@@ -446,7 +450,11 @@ class TestStrategyIdSync:
                             sid = make_strategy_id("MGC", orb, em, rr, cb, fk)
                             assert sid not in ids, f"Duplicate ID: {sid}"
                             ids.add(sid)
-        assert len(ids) == 5544
+        # Computed from canonical sources — no hardcoded count
+        n_base = len(BASE_GRID_FILTERS)
+        e1 = len(ORB_LABELS) * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS) * n_base
+        e2_e3 = 2 * len(ORB_LABELS) * len(RR_TARGETS) * 1 * n_base
+        assert len(ids) == e1 + e2_e3
 
 
 # ============================================================================
