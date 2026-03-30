@@ -56,7 +56,7 @@ def main():
         "  - 2026 holdout is SACRED — no discovery on 2026 data",
     ])
 
-    print("\n".join(lines), file=sys.stderr)
+    print("\n".join(lines))
     sys.exit(0)
 
 

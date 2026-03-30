@@ -40,7 +40,7 @@ import duckdb
 
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.prop_profiles import PROP_FIRM_SPECS
+from trading_app.prop_profiles import ACCOUNT_TIERS, PROP_FIRM_SPECS
 
 # ── Session timing (Brisbane hours, for routing) ─────────────────────────────
 
@@ -174,12 +174,15 @@ def _auto_eligible(
 def score_lanes(
     instrument: str = "MNQ",
     firm: str = "topstep",
-    dd_limit: float = 2000.0,
+    dd_limit: float | None = None,  # from ACCOUNT_TIERS if None
     session_filter: str | None = None,
     top_n: int = 30,
     current_only: bool = False,
 ) -> list[dict]:
     """Score all eligible strategies and return ranked list."""
+    if dd_limit is None:
+        tier = ACCOUNT_TIERS.get((firm, 50000))
+        dd_limit = tier.max_dd if tier else 2000.0
     hours_map = _resolve_brisbane_hours()
     split = _prop_split(firm)
 
@@ -372,7 +375,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Lane scoring tool — composite score for strategy routing")
     parser.add_argument("--instrument", default="MNQ", help="Instrument (default: MNQ)")
     parser.add_argument("--firm", default="topstep", help="Firm for profit split (default: topstep)")
-    parser.add_argument("--dd", type=float, default=2000.0, help="DD limit in dollars (default: 2000)")
+    parser.add_argument("--dd", type=float, default=None, help="DD limit in dollars (default: from ACCOUNT_TIERS)")
     parser.add_argument("--session", default=None, help="Filter to one session")
     parser.add_argument("--top", type=int, default=30, help="Show top N (default: 30)")
     parser.add_argument("--current", action="store_true", help="Score only currently deployed lanes")
