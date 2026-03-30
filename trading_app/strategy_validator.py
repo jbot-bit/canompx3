@@ -390,7 +390,7 @@ def validate_strategy(
     max_drawdown: float | None = None,
     exclude_years: set[int] | None = None,
     min_years_positive_pct: float = 0.75,  # @research-source Fitschen "Building Reliable Trading Systems" — 85% of top CTAs have ≥1 losing year
-    min_trades_per_year: int = 1,
+    min_trades_per_year: int = 5,
     atr_by_year: dict[int, float] | None = None,
     enable_regime_waivers: bool = True,
 ) -> tuple[str, str, list[int]]:
@@ -408,7 +408,8 @@ def validate_strategy(
         min_years_positive_pct: Fraction of included years that must be
             positive (0.0-1.0). Default 0.75 per Fitschen (85% of top CTAs have a bad year).
         min_trades_per_year: Minimum trades for a year to count in Phase 3.
-            Years below this are excluded. Default 1 = include all years.
+            Years below this are excluded. Default 5 — years with <5 trades
+            have insufficient power for yearly characterization.
         atr_by_year: Mean ATR(20) per year for regime classification.
             Pre-fetched in run_validation(), None disables waivers.
         enable_regime_waivers: If True (default), grant DORMANT waivers

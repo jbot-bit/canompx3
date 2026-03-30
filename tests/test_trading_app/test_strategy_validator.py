@@ -490,7 +490,7 @@ class TestRegimeWaivers:
 
     def test_dormant_year_waived(self):
         """Negative DORMANT year with <= 5 trades is waived."""
-        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2017: (2, -0.02)})
+        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2017: (5, -0.02)})
         atr = {2022: 25.0, 2023: 28.0, 2017: 12.0}
         status, notes, waivers = validate_strategy(
             _make_row(yearly_results=yearly),
@@ -503,8 +503,8 @@ class TestRegimeWaivers:
         assert "DORMANT" in notes
 
     def test_marginal_year_not_waived(self):
-        """Negative MARGINAL year is NOT waived."""
-        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2021: (2, -0.02)})
+        """Negative MARGINAL year is NOT waived (ATR too high for DORMANT)."""
+        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2021: (5, -0.02)})
         atr = {2022: 25.0, 2023: 28.0, 2021: 25.0}
         status, notes, waivers = validate_strategy(
             _make_row(yearly_results=yearly),
@@ -532,7 +532,7 @@ class TestRegimeWaivers:
 
     def test_all_years_waived_fails(self):
         """All years requiring waiver -> REJECTED (no clean positive year)."""
-        yearly = _yearly({2017: (2, -0.02), 2018: (1, -0.05)})
+        yearly = _yearly({2017: (5, -0.02), 2018: (5, -0.05)})
         atr = {2017: 12.0, 2018: 11.0}
         status, notes, waivers = validate_strategy(
             _make_row(yearly_results=yearly),
@@ -546,7 +546,7 @@ class TestRegimeWaivers:
 
     def test_no_regime_waivers_flag(self):
         """enable_regime_waivers=False uses strict logic (rejects)."""
-        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2017: (2, -0.02)})
+        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2017: (5, -0.02)})
         atr = {2022: 25.0, 2023: 28.0, 2017: 12.0}
         status, notes, waivers = validate_strategy(
             _make_row(yearly_results=yearly),
@@ -560,7 +560,7 @@ class TestRegimeWaivers:
 
     def test_waiver_metadata_recorded(self):
         """Returned waivers list and notes contain waiver details."""
-        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2017: (2, -0.02), 2018: (3, -0.01)})
+        yearly = _yearly({2022: (50, 0.2), 2023: (50, 0.1), 2017: (5, -0.02), 2018: (5, -0.01)})
         atr = {2022: 25.0, 2023: 28.0, 2017: 12.0, 2018: 14.0}
         status, notes, waivers = validate_strategy(
             _make_row(yearly_results=yearly),
