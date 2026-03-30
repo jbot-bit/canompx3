@@ -84,7 +84,10 @@ def test_run_backfill_calls_pipeline_when_stale():
 
     db = _make_db()  # empty
     try:
-        with patch("pipeline.daily_backfill._run") as mock_run:
+        with (
+            patch("pipeline.daily_backfill._run") as mock_run,
+            patch("pipeline.daily_backfill._patch_atr_percentiles"),
+        ):
             run_backfill_for_instrument("MGC", db_path=db, as_of=date(2026, 3, 1))
             assert mock_run.call_count >= 4  # ingest, 5m, daily_features, outcomes
     finally:

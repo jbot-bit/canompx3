@@ -51,6 +51,56 @@ def _run(cmd: list[str], desc: str) -> None:
     print(f"✓ {desc}")
 
 
+def _patch_atr_percentiles(db_path: str, instrument: str) -> None:
+    """Fill atr_20_pct NULLs using row-by-row percentile rank from full history.
+
+    build_daily_features computes atr_20_pct from a rolling 252-day window,
+    but incremental builds often process too few rows for the percentile to
+    compute. This post-pass fills NULLs using the full history via single-row
+    UPDATEs (avoids DuckDB FK constraints that block CTE-based UPDATEs).
+    """
+    con = duckdb.connect(db_path)
+    configure_connection(con)
+    patched = 0
+    try:
+        for om in [5, 15, 30]:
+            nulls = con.execute(
+                """SELECT trading_day, atr_20 FROM daily_features
+                   WHERE symbol = ? AND orb_minutes = ?
+                     AND atr_20_pct IS NULL AND atr_20 IS NOT NULL
+                   ORDER BY trading_day""",
+                [instrument, om],
+            ).fetchall()
+            for td, atr in nulls:
+                td_str = td.isoformat() if hasattr(td, "isoformat") else str(td)
+                rank = con.execute(
+                    """SELECT COUNT(*) FROM daily_features
+                       WHERE symbol=? AND orb_minutes=? AND trading_day < ?
+                         AND atr_20 IS NOT NULL
+                         AND trading_day >= ?::DATE - INTERVAL '504 DAY'
+                         AND atr_20 < ?""",
+                    [instrument, om, td_str, td_str, atr],
+                ).fetchone()[0]
+                total = con.execute(
+                    """SELECT COUNT(*) FROM daily_features
+                       WHERE symbol=? AND orb_minutes=? AND trading_day < ?
+                         AND atr_20 IS NOT NULL
+                         AND trading_day >= ?::DATE - INTERVAL '504 DAY'""",
+                    [instrument, om, td_str, td_str],
+                ).fetchone()[0]
+                if total > 0:
+                    pct = round(rank / total * 100, 2)
+                    con.execute(
+                        "UPDATE daily_features SET atr_20_pct=? WHERE symbol=? AND orb_minutes=? AND trading_day=?",
+                        [pct, instrument, om, td_str],
+                    )
+                    patched += 1
+    finally:
+        con.close()
+    if patched:
+        print(f"  Patched {patched} atr_20_pct NULLs for {instrument}")
+
+
 def run_backfill_for_instrument(
     instrument: str,
     db_path: str | None = None,
@@ -87,6 +137,13 @@ def run_backfill_for_instrument(
         [py, "trading_app/outcome_builder.py", "--instrument", instrument, "--start", start, "--end", end],
         f"outcome_builder {instrument}",
     )
+
+    # Patch atr_20_pct for any NULL rows.
+    # build_daily_features computes atr_20_pct from a rolling 252-day window,
+    # but incremental builds only process the new date range (too few rows).
+    # This post-pass fills in NULLs using the full history via row-by-row UPDATE
+    # (avoids DuckDB FK constraint issues that block CTE-based UPDATE).
+    _patch_atr_percentiles(db, instrument)
 
 
 def main():
