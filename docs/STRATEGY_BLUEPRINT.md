@@ -33,7 +33,7 @@ Sections §4-§5, §7-§9 are **CURRENT STATE** — volatile snapshots. Query ca
 
 ## 2. The One Thing That Matters
 
-**ORB size relative to friction IS the primary edge gate, with break timing as a conviction signal.** 10-year regime audit (Mar 2026) proved: the edge is cost-gated (ARITHMETIC_ONLY — trades where cost/risk < ~10% are profitable, above ~15% they're not). G-filters approximate this gate at current prices. Break delay (<=10m) adds a genuine WIN RATE signal on top of the cost screen. Source: TRADING_RULES.md "ORB Size = The Edge" + `research/output/2026-03-24-combined-gate-stress-test.md`.
+**ORB size relative to friction IS the primary edge gate.** 10-year regime audit (Mar 2026) proved: the edge is cost-gated (ARITHMETIC_ONLY — trades where cost/risk < ~10% are profitable, above ~15% they're not). G-filters approximate this gate at current prices. ~~Break delay was previously claimed as a conviction signal~~ **but institutional test (2026-03-30, 7.2M trades) killed it: per-session d<0.2, O5/O30 direction flip, Simpson's paradox in pooled data. See NO-GO registry §5.** Source: TRADING_RULES.md "ORB Size = The Edge" + `research/break_delay_institutional_test.py`.
 
 **Current reality (from gold.db, verified 2026-03-24, 10-year backfill):**
 - **MNQ E2:** Positive unfiltered at 5yr (2021-2025). At 10yr: CME_PRECLOSE and NYSE_OPEN are structural (positive both halves). COMEX_SETTLE marginal (p=0.060). EUROPE_FLOW dead at 10yr unfiltered. US_DATA_1000 regime-dependent.
@@ -270,6 +270,8 @@ Everything confirmed dead. Do NOT re-test without a fundamentally new approach.
 | Pyramiding | DEAD | Correlated intraday = tail risk | — |
 | Breakeven trail stops | DEAD | −0.12 to −0.17 Sharpe | — |
 | O15/O30 ORB aperture (as portfolio) | ARITHMETIC_ONLY | Friction artifact — O5 gross R > O15 by 0.031R/trade on 24K matched pairs. Same family as G-filters. Mar 2026 | New mechanism hypothesis (not friction/size related) |
+| Break speed / break delay filter | DEAD | 7.2M trades, BH K=96. 0 survivors at deployed apertures (O15). Simpson's paradox in pooled data. O5/O30 direction FLIP kills mechanism claim. Per-session d<0.2. `research/break_delay_institutional_test.py`. Mar 2026 | New mechanism that explains aperture direction flip |
+| Late entry timing filter | DEAD | Same test battery. EARLY vs LATE collinear with break speed (not independent). 0 survivors outside CME_PRECLOSE (FRAGILE). Mar 2026 | — |
 
 Full NO-GO table with details: TRADING_RULES.md "What Doesn't Work"
 
