@@ -137,7 +137,7 @@ class TestAllFilters:
             assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 4 G + 4 COST + 5 VOL_RV + ATR70_VOL + 4 ORB_VOL = 19 (BASE_GRID_FILTERS)
+        # NO_FILTER + 4 G + 4 COST + 5 VOL_RV + ATR70_VOL + 4 ORB_VOL + 3 ATR_P = 22 (BASE_GRID_FILTERS)
         # + 12 DOW composites (3 DOW x 4 G)
         # + 12 break quality composites (3 BRK x 4 G: FAST5, FAST10, CONT)
         # + 3 M6E pip-scaled size filters (M6E_G4/G6/G8)
@@ -145,8 +145,8 @@ class TestAllFilters:
         # + 2 MES 1000 band filters (ORB_G4_L12, ORB_G5_L12)
         # + 3 cross-asset ATR filters (X_MES_ATR70, X_MES_ATR60, X_MGC_ATR70)
         # + 4 overnight range absolute (OVNRNG_10/25/50/100 — US sessions only, NOT in BASE)
-        # = 19 + 12 + 12 + 3 + 2 + 2 + 3 + 4 = 57
-        assert len(ALL_FILTERS) == 57
+        # = 22 + 12 + 12 + 3 + 2 + 2 + 3 + 4 = 60
+        assert len(ALL_FILTERS) == 60
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -401,6 +401,38 @@ class TestOvernightRangeAbsFilter:
         data = json.loads(f.to_json())
         assert data["filter_type"] == "OVNRNG_50"
         assert data["min_range"] == 50.0
+
+
+class TestOwnATRPercentileFilter:
+    """OwnATRPercentileFilter gates on instrument's own ATR(20) percentile."""
+
+    def test_matches_above_threshold(self):
+        from trading_app.config import OwnATRPercentileFilter
+
+        f = OwnATRPercentileFilter(filter_type="TEST", description="test", min_pct=50.0)
+        assert f.matches_row({"atr_20_pct": 75.0}, "CME_PRECLOSE") is True
+
+    def test_rejects_below_threshold(self):
+        from trading_app.config import OwnATRPercentileFilter
+
+        f = OwnATRPercentileFilter(filter_type="TEST", description="test", min_pct=50.0)
+        assert f.matches_row({"atr_20_pct": 30.0}, "CME_PRECLOSE") is False
+
+    def test_fail_closed_missing(self):
+        from trading_app.config import OwnATRPercentileFilter
+
+        f = OwnATRPercentileFilter(filter_type="TEST", description="test", min_pct=50.0)
+        assert f.matches_row({}, "CME_PRECLOSE") is False
+
+    def test_instances_registered(self):
+        from trading_app.config import OwnATRPercentileFilter
+
+        for key, expected_pct in [("ATR_P30", 30.0), ("ATR_P50", 50.0), ("ATR_P70", 70.0)]:
+            assert key in ALL_FILTERS, f"{key} missing from ALL_FILTERS"
+            f = ALL_FILTERS[key]
+            assert isinstance(f, OwnATRPercentileFilter)
+            assert f.min_pct == expected_pct
+            assert f.filter_type == key
 
 
 class TestCombinedATRVolumeFilter:
