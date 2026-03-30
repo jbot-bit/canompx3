@@ -57,6 +57,11 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS  # noqa: E402
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
 
+# Fail-closed: refuse to run if no active instruments (would produce garbled SQL)
+if not ACTIVE_ORB_INSTRUMENTS:
+    print("FATAL: ACTIVE_ORB_INSTRUMENTS is empty — cannot run FDR audit", file=sys.stderr)
+    sys.exit(1)
+
 # SQL fragment for filtering to active instruments only (matches validator behavior)
 _ACTIVE_IN = ", ".join(f"'{i}'" for i in ACTIVE_ORB_INSTRUMENTS)
 
@@ -295,7 +300,11 @@ def check_2_k_drift(con, verbose, audit: AuditResult):
     else:
         has_liberal = any("LIBERAL" in d for d in drifts)
         status = "FAIL" if has_liberal else "WARN"
-        audit.add("2. K Drift", status, f"{len(drifts)} sessions drifted:\n" + "\n".join(drifts))
+        note = (
+            "\n\nNote: discovery_k is frozen on first write (2026-03-30). CONSERVATIVE drift "
+            "is expected as the canonical pool grows. Only LIBERAL drift (old K > current) is dangerous."
+        )
+        audit.add("2. K Drift", status, f"{len(drifts)} sessions drifted:\n" + "\n".join(drifts) + note)
 
 
 def check_3_k_uniformity(con, verbose, audit: AuditResult):
@@ -318,7 +327,12 @@ def check_3_k_uniformity(con, verbose, audit: AuditResult):
         audit.add("3. K Uniformity", "PASS", f"All {total} sessions have uniform discovery_k")
     else:
         detail = "\n".join(f"{r[0]}: {r[1]} distinct K values (range {r[2]}-{r[3]}, {r[4]} strats)" for r in rows)
-        audit.add("3. K Uniformity", "WARN", f"K not uniform in {len(rows)} sessions:\n{detail}")
+        note = (
+            "\n\nNote: Post-freeze (2026-03-30), strategies validated in different runs will "
+            "have different discovery_k. This is expected and correct — each strategy preserves "
+            "the K under which it was originally promoted."
+        )
+        audit.add("3. K Uniformity", "WARN", f"K not uniform in {len(rows)} sessions:\n{detail}" + note)
 
 
 def check_4_ghost_strategies(con, verbose, audit: AuditResult):
@@ -409,13 +423,15 @@ def check_5_fdr_gate_consistency(con, alpha, verbose, audit: AuditResult):
 def check_6_trade_day_hash_accuracy(con, verbose, audit: AuditResult):
     """Verify trade_day_hash properties in experimental_strategies."""
     # Check: same hash should NOT span different (entry_model, orb_label) combos
-    cross_signal = con.execute("""
+    # Active instruments only — matches validator scope
+    cross_signal = con.execute(f"""
         SELECT trade_day_hash,
                COUNT(DISTINCT strategy_id) as n,
                COUNT(DISTINCT entry_model) as n_em,
                COUNT(DISTINCT orb_label) as n_sess
         FROM experimental_strategies
         WHERE is_canonical = TRUE
+        AND instrument IN ({_ACTIVE_IN})
         GROUP BY trade_day_hash
         HAVING COUNT(DISTINCT entry_model) > 1 OR COUNT(DISTINCT orb_label) > 1
     """).fetchall()
@@ -688,7 +704,12 @@ def check_9_session_k_vs_global(con, verbose, audit: AuditResult):
 
 
 def check_10_cross_instrument_k(con, verbose, audit: AuditResult):
-    """Check cross-instrument K composition per session."""
+    """Check cross-instrument K composition per session.
+
+    INTENTIONALLY includes dead instruments to show full K composition.
+    The validator filters on ACTIVE_ORB_INSTRUMENTS (check_1/2/9 match this).
+    This check shows what the pool WOULD be if dead instruments weren't filtered.
+    """
     rows = con.execute("""
         SELECT instrument, orb_label, COUNT(*) as k
         FROM experimental_strategies
