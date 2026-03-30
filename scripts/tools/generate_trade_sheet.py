@@ -25,17 +25,17 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline.asset_configs import get_active_instruments
+import duckdb
+
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.live_config import (
-    LIVE_MIN_EXPECTANCY_DOLLARS_MULT,
-    LIVE_MIN_EXPECTANCY_R,
-    LIVE_PORTFOLIO,
-    _load_best_regime_variant,
-)
+from trading_app.prop_profiles import ACCOUNT_PROFILES
 from trading_app.strategy_fitness import compute_fitness
+
+# Dollar gate: expected $/trade must be >= this multiplier * RT friction.
+# Was LIVE_MIN_EXPECTANCY_DOLLARS_MULT in live_config.py (1.3).
+_DOLLAR_GATE_MULT = 1.3
 
 
 @dataclass(frozen=True)
@@ -111,7 +111,7 @@ def _direction_rule(filter_type: str) -> str:
 
 
 def _passes_dollar_gate(row: dict, instrument: str) -> tuple[bool, float | None]:
-    """Check if expected $/trade >= LIVE_MIN_EXPECTANCY_DOLLARS_MULT * RT cost.
+    """Check if expected $/trade >= _DOLLAR_GATE_MULT * RT cost.
 
     Returns (passes, exp_dollars). Fail-closed: returns (False, None) when
     median_risk_points is missing or cost spec is unavailable.
@@ -126,7 +126,7 @@ def _passes_dollar_gate(row: dict, instrument: str) -> tuple[bool, float | None]
         print(f"  WARNING: cost spec lookup failed for {instrument}: {exc}", flush=True)
         return False, None
     exp_d = exp_r * median_risk_pts * spec.point_value
-    min_dollars = LIVE_MIN_EXPECTANCY_DOLLARS_MULT * spec.total_friction
+    min_dollars = _DOLLAR_GATE_MULT * spec.total_friction
     return exp_d >= min_dollars, exp_d
 
 
@@ -184,60 +184,83 @@ def _sort_key(h: int, m: int) -> int:
 
 
 def collect_trades(trading_day: date, db_path: Path) -> list[dict]:
-    """Resolve best-ExpR variant for each live spec, per instrument.
+    """Collect trades from prop_profiles deployed lanes.
 
-    Queries validated_setups directly, sorted by ExpR (not Sharpe).
-    Applies dollar gate. Only returns cost-positive trades.
+    For each active profile's daily_lanes, looks up the exact strategy_id
+    in validated_setups. Applies dollar gate. Only returns cost-positive trades.
+
+    Source of truth: trading_app.prop_profiles.ACCOUNT_PROFILES (not live_config).
     """
-    instruments = get_active_instruments()
     trades = []
     fitness_cache: dict[str, FitnessCheckResult] = {}
 
-    for instrument in instruments:
-        for spec in LIVE_PORTFOLIO:
-            if spec.exclude_instruments and instrument in spec.exclude_instruments:
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        for pid, profile in ACCOUNT_PROFILES.items():
+            if not profile.active or not profile.daily_lanes:
                 continue
 
-            variant, _fallback_note = _load_best_regime_variant(
-                db_path,
-                instrument,
-                spec.orb_label,
-                spec.entry_model,
-                spec.filter_type,
-                min_expectancy_r=LIVE_MIN_EXPECTANCY_R,
-            )
-            if variant is None:
-                continue
+            for lane in profile.daily_lanes:
+                sid = lane.strategy_id
+                instrument = lane.instrument
 
-            # Dollar gate
-            passes, exp_d = _passes_dollar_gate(variant, instrument)
-            if not passes:
-                continue
+                # Direct lookup — lane specifies exact strategy_id
+                row = con.execute(
+                    """
+                    SELECT vs.strategy_id, vs.orb_label, vs.orb_minutes,
+                           vs.filter_type, vs.rr_target, vs.win_rate,
+                           vs.expectancy_r, vs.sample_size,
+                           es.median_risk_points
+                    FROM validated_setups vs
+                    LEFT JOIN experimental_strategies es
+                      ON vs.strategy_id = es.strategy_id
+                    WHERE vs.strategy_id = ?
+                """,
+                    [sid],
+                ).fetchone()
 
-            # Fitness check (regime gate for REGIME tier)
-            fitness = _check_fitness(variant["strategy_id"], db_path, fitness_cache)
-            if spec.tier == "regime" and spec.regime_gate == "high_vol":
-                if fitness.status != "FIT":
-                    continue  # gated off
+                if row is None:
+                    print(f"  WARNING: {sid} not in validated_setups — skipping", flush=True)
+                    continue
 
-            trades.append(
-                {
-                    "session": variant["orb_label"],
-                    "instrument": instrument,
-                    "strategy_id": variant["strategy_id"],
-                    "aperture": variant.get("orb_minutes", 5),
-                    "direction": _direction_rule(variant["filter_type"]),
-                    "filter_desc": _filter_description(variant["filter_type"]),
-                    "filter_type": variant["filter_type"],
-                    "rr": variant["rr_target"],
-                    "win_rate": variant["win_rate"],
-                    "exp_r": variant["expectancy_r"],
-                    "exp_dollars": exp_d,
-                    "sample_size": variant["sample_size"],
-                    "fitness": fitness.status,
-                    "fitness_error": fitness.error,
-                }
-            )
+                cols = [d[0] for d in con.description]
+                variant = dict(zip(cols, row, strict=False))
+
+                # Dollar gate
+                passes, exp_d = _passes_dollar_gate(variant, instrument)
+                if not passes:
+                    print(f"  WARNING: {sid} failed dollar gate — skipping", flush=True)
+                    continue
+
+                # Fitness check
+                fitness = _check_fitness(sid, db_path, fitness_cache)
+
+                sm = lane.planned_stop_multiplier or profile.stop_multiplier
+
+                trades.append(
+                    {
+                        "session": variant["orb_label"],
+                        "instrument": instrument,
+                        "strategy_id": sid,
+                        "aperture": variant.get("orb_minutes", 5),
+                        "direction": _direction_rule(variant["filter_type"]),
+                        "filter_desc": _filter_description(variant["filter_type"]),
+                        "filter_type": variant["filter_type"],
+                        "rr": variant["rr_target"],
+                        "win_rate": variant["win_rate"],
+                        "exp_r": variant["expectancy_r"],
+                        "exp_dollars": exp_d,
+                        "sample_size": variant["sample_size"],
+                        "fitness": fitness.status,
+                        "fitness_error": fitness.error,
+                        "profile": pid,
+                        "stop_mult": sm,
+                        "orb_cap": lane.max_orb_size_pts,
+                        "notes": lane.execution_notes,
+                    }
+                )
+    finally:
+        con.close()
 
     return trades
 
@@ -634,7 +657,7 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
     {cards_html}
 
     <div class="footer">
-        Source: live_config.py resolved portfolio &mdash; dollar gate applied &mdash;
+        Source: prop_profiles.py deployed lanes &mdash; dollar gate applied &mdash;
         only cost-positive trades shown
     </div>
 </body>
@@ -678,7 +701,7 @@ def main():
     print()
 
     if not trades:
-        print("ERROR: No active trades found. Check DB and live_config.py.")
+        print("ERROR: No active trades found. Check DB and prop_profiles.py.")
         sys.exit(1)
 
     # Generate HTML

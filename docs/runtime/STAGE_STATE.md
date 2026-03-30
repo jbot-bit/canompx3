@@ -1,22 +1,23 @@
 ---
 mode: IMPLEMENTATION
 stage: IMPLEMENTATION
-task: FDR gaps — 5 remaining fixes (test, filter, guard, J clustering, docs)
-pass: 1
+task: Fix 3 code review findings + trade sheet migration to prop_profiles
+pass: 2
 scope_lock:
-  - scripts/tools/audit_fdr_integrity.py
-  - tests/test_trading_app/test_strategy_validator.py
-  - docs/specs/fdr_methodology.md
+  - trading_app/prop_profiles.py
+  - scripts/tools/generate_trade_sheet.py
+  - scripts/tools/gap5_wfe.py
+  - scripts/tools/migrate_fairness_audit.py
+  - tests/test_trading_app/test_prop_profiles.py
 blast_radius:
-  - audit script: check_6 active filter, empty-guard, check_2/3 docs
-  - test file: new test class for discovery_k freeze
-  - methodology spec: update J>0.7 honest count after empirical verification
+  - prop_profiles.py — DD budget calc fix, PV assertion
+  - generate_trade_sheet.py — replace LIVE_PORTFOLIO with prop_profiles
+  - gap5_wfe.py, migrate_fairness_audit.py — stale COMEX ID
 acceptance:
-  - GAP-1: test_discovery_k_freeze_on_second_write passes
-  - GAP-2: check_6 filters on active instruments
-  - GAP-4: empty ACTIVE_ORB_INSTRUMENTS raises at module load
-  - GAP-5: J>0.7 cluster count verified empirically
-  - GAP-6: check_2/3 output explains post-freeze WARN
+  - validate_dd_budget uses cap for worst-case
+  - _PV validated against COST_SPECS
+  - COMEX IDs updated
+  - Trade sheet shows 6 deployed lanes
   - All tests pass, drift clean
-updated: 2026-03-30T19:00:00Z
+updated: 2026-03-30T12:00:00Z
 ---
