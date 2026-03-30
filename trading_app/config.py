@@ -714,6 +714,38 @@ MGC_VOLUME_FILTERS = {
         min_rel_vol=1.2,
         lookback_days=20,
     ),
+    # Higher rel_vol thresholds (Mar 2026 confluence research program).
+    # Phase 1: 12/48 BH FDR survivors at q=0.05 were rel_vol features.
+    # Phase 3: all walk-forward DEPLOYABLE (WFE 0.97-2.30).
+    # Thresholds cover key breakpoints found across sessions:
+    #   CME_PRECLOSE ~1.3, MES ~1.7, NYSE_OPEN ~2.3, NYSE_CLOSE ~2.5, O30 ~4.8
+    # @research-source research/output/confluence_program/phase1_run.py
+    # @entry-models E2
+    # @revalidated-for E2
+    "VOL_RV15_N20": VolumeFilter(
+        filter_type="VOL_RV15_N20",
+        description="Relative volume >= 1.5 (20-day lookback)",
+        min_rel_vol=1.5,
+        lookback_days=20,
+    ),
+    "VOL_RV20_N20": VolumeFilter(
+        filter_type="VOL_RV20_N20",
+        description="Relative volume >= 2.0 (20-day lookback)",
+        min_rel_vol=2.0,
+        lookback_days=20,
+    ),
+    "VOL_RV25_N20": VolumeFilter(
+        filter_type="VOL_RV25_N20",
+        description="Relative volume >= 2.5 (20-day lookback)",
+        min_rel_vol=2.5,
+        lookback_days=20,
+    ),
+    "VOL_RV30_N20": VolumeFilter(
+        filter_type="VOL_RV30_N20",
+        description="Relative volume >= 3.0 (20-day lookback)",
+        min_rel_vol=3.0,
+        lookback_days=20,
+    ),
     "ATR70_VOL": CombinedATRVolumeFilter(
         filter_type="ATR70_VOL",
         description="ATR pct >= 70 AND rel_vol >= 1.2 (combined regime+conviction)",
