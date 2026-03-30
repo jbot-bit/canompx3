@@ -6,6 +6,30 @@
 
 ---
 
+## Update (Mar 30 — Marathon audit + research session)
+
+### Completed
+- Codex drift sweep: 4 bugs fixed, 27 stale refs nuked, 2 drift guards (checks 83+84)
+- Adversarial audit: HWM freeze + EOD ratchet + DD budget validation (3 CRITICALs fixed)
+- TopStep DLL=$1K verified via Firecrawl. ORB caps on all lanes.
+- Trade sheet V2: prop_profiles source, profile bar, firm badges, --profile filter
+- Sync audit: BRISBANE_1025 active, RR4.0 NO-GO confirmed (T0-T7)
+- Edge family rebuild: 172 families, 0 orphans
+- Dynamic profile: get_lane_registry() auto-picks active Apex profile (no more hardcoded apex_50k_manual)
+
+### Research findings (saved in `golden_nuggets_mar30.md`)
+- X_MES_ATR60 is REAL: p=0.001, 12/12 sessions, WFE=1.56, 7/8 years positive
+- MES_ATR60 beats own ATR (MNQ_ATR60) on 11/12 sessions — cross-asset is better
+- Overnight range: DEAD as new filter (tautological with ORB size, corr 0.45-0.74)
+- Stacking MES_ATR60: DEAD for COMEX (ATR70 subsumes), UNPROVEN for NYSE_CLOSE (OOS N=40)
+- CME_PRECLOSE: $519/yr per micro opportunity (now deployed on Tradeify by parallel session)
+- No new filter found in daily_features — existing suite captures knowable regime info
+
+### Open items
+- Data refresh 7 days stale — operational, schedule
+- live_config.py 18 importers — compatibility, nothing breaks
+- paper_trade_logger hardcoded lanes — synced by strategy_id
+
 ## Update (Mar 29 — COMEX lane swap + multi-agent stage-gate)
 
 ## Update (Mar 30 — Cost-ratio filter Option A)
