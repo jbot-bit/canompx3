@@ -177,12 +177,12 @@ class TestDailyLaneSpecOrbCap:
         lane = DailyLaneSpec("TEST_ID", "MNQ", "NYSE_OPEN", max_orb_size_pts=150.0)
         assert lane.max_orb_size_pts == 150.0
 
-    def test_nyse_open_has_cap(self):
-        """NYSE_OPEN lane must have max_orb_size_pts=150.0 in the apex manual profile."""
+    def test_tokyo_open_has_cap(self):
+        """TOKYO_OPEN lane must have max_orb_size_pts set in the apex manual profile."""
         p = get_profile("apex_50k_manual")
-        nyse_open_lanes = [lane for lane in p.daily_lanes if lane.orb_label == "NYSE_OPEN"]
-        assert len(nyse_open_lanes) == 1
-        assert nyse_open_lanes[0].max_orb_size_pts == 150.0
+        tokyo_lanes = [lane for lane in p.daily_lanes if lane.orb_label == "TOKYO_OPEN"]
+        assert len(tokyo_lanes) == 1
+        assert tokyo_lanes[0].max_orb_size_pts == 80.0
 
     def test_all_lanes_have_caps(self):
         """All Apex lanes must have max_orb_size_pts set (adversarial audit 2026-03-29)."""
@@ -200,19 +200,19 @@ class TestLaneRegistryOrbCap:
         for label, info in registry.items():
             assert "max_orb_size_pts" in info, f"{label} missing max_orb_size_pts"
 
-    def test_nyse_open_cap_in_registry(self):
+    def test_tokyo_open_cap_in_registry(self):
         registry = get_lane_registry()
-        assert registry["NYSE_OPEN"]["max_orb_size_pts"] == 150.0
+        assert registry["TOKYO_OPEN"]["max_orb_size_pts"] == 80.0
 
     def test_all_registry_lanes_have_caps(self):
-        """All lanes should have ORB caps after adversarial audit 2026-03-29."""
+        """All lanes should have ORB caps after score-driven rebuild 2026-03-31."""
         registry = get_lane_registry()
         expected_caps = {
+            "CME_PRECLOSE": 120.0,
             "NYSE_CLOSE": 100.0,
-            "SINGAPORE_OPEN": 80.0,
             "COMEX_SETTLE": 80.0,
-            "NYSE_OPEN": 150.0,
             "US_DATA_1000": 120.0,
+            "TOKYO_OPEN": 80.0,
         }
         for label, expected in expected_caps.items():
             if label in registry:
