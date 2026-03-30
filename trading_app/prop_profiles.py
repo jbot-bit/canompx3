@@ -636,6 +636,14 @@ def validate_dd_budget(profile_id: str | None = None) -> list[str]:
     Returns list of violation strings. Empty = all clear.
     Does NOT raise — caller decides severity (pre_session_check gates on this).
     """
+    # Verify inlined _PV matches canonical COST_SPECS (avoid silent drift)
+    from pipeline.cost_model import COST_SPECS
+
+    for inst, pv in _PV.items():
+        if inst in COST_SPECS and COST_SPECS[inst].point_value != pv:
+            raise RuntimeError(
+                f"_PV[{inst}]={pv} != COST_SPECS.point_value={COST_SPECS[inst].point_value} — update _PV"
+            )
     violations: list[str] = []
     profiles = (
         {profile_id: ACCOUNT_PROFILES[profile_id]}
@@ -661,9 +669,9 @@ def validate_dd_budget(profile_id: str | None = None) -> list[str]:
             pv = _PV.get(inst, 2.0)
             sm = lane.planned_stop_multiplier or prof.stop_multiplier
 
-            # If lane has max_orb_size_pts cap, use the lower of cap and P90
+            # Worst case: use cap if set (max ORB we'd actually trade), else P90
             if lane.max_orb_size_pts is not None:
-                effective_orb = min(p90_orb, lane.max_orb_size_pts)
+                effective_orb = lane.max_orb_size_pts
             else:
                 effective_orb = p90_orb
 

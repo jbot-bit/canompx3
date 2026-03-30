@@ -14,7 +14,7 @@ all_ids = [
     # Current lanes (lanes 1,4 switched O15→O5 2026-03-29)
     "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20",
     "MNQ_SINGAPORE_OPEN_E2_RR4.0_CB1_ORB_G8_O15",
-    "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8",
+    "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",  # was ORB_G8, switched to ATR70_VOL
     "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
     "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
     # ATR70 candidates (same-params)
