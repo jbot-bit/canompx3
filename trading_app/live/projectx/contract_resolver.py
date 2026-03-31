@@ -48,6 +48,39 @@ class ProjectXContracts(BrokerContracts):
         log.info("ProjectX account: %s (id=%s)", acct.get("name", "unknown"), acct_id)
         return int(acct_id)
 
+    def resolve_all_account_ids(self) -> list[tuple[int, str]]:
+        """Return ALL active account IDs and names.
+
+        Returns list of (account_id, account_name) tuples, sorted by id.
+        Uses same /api/Account/search endpoint as resolve_account_id().
+        One API key covers all linked accounts per ProjectX docs.
+        """
+        resp = requests.post(
+            f"{BASE_URL}/api/Account/search",
+            json={"onlyActiveAccounts": True},
+            headers=self.auth.headers(),
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        if isinstance(data, dict) and data.get("success") is False:
+            raise RuntimeError(f"ProjectX account search failed: {data.get('errorMessage', data)}")
+        accounts = data if isinstance(data, list) else data.get("accounts", [])
+        if not accounts:
+            raise RuntimeError("No active ProjectX accounts found")
+
+        result = []
+        for acct in accounts:
+            acct_id = acct.get("id") or acct.get("accountId")
+            if acct_id is not None:
+                name = acct.get("name", f"account_{acct_id}")
+                result.append((int(acct_id), name))
+                log.info("ProjectX account discovered: %s (id=%s)", name, acct_id)
+
+        result.sort(key=lambda x: x[0])
+        log.info("ProjectX: %d active accounts discovered", len(result))
+        return result
+
     def resolve_front_month(self, instrument: str) -> str:
         if instrument in self._contract_cache:
             return self._contract_cache[instrument]

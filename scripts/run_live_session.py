@@ -288,6 +288,14 @@ def main() -> None:
         help="Load portfolio from prop_profiles.py account profile (e.g. 'apex_50k_manual'). "
         "Uses exact validated strategies from the profile's daily_lanes.",
     )
+    parser.add_argument(
+        "--copies",
+        type=int,
+        default=0,
+        help="Copy trades to N accounts (0=auto from profile.copies, 1=single account). "
+        "Discovers all account IDs from broker API. Primary gets full tracking, "
+        "shadows get best-effort order replication.",
+    )
     args = parser.parse_args()
 
     # Build custom portfolio if requested (shared by preflight and session)
@@ -414,6 +422,49 @@ def main() -> None:
     except Exception as e:
         log.warning("Dashboard launch failed (non-fatal): %s", e)
 
+    # Multi-account copy trading: discover shadow accounts
+    shadow_account_ids = None
+    n_copies = args.copies
+    if n_copies == 0 and args.profile:
+        # Auto from profile.copies (0 = use profile value)
+        from trading_app.prop_profiles import get_profile
+
+        prof = get_profile(args.profile)
+        n_copies = prof.copies
+
+    if n_copies > 1 and not signal_only:
+        from trading_app.live.broker_factory import create_broker_components, get_broker_name
+
+        broker_name = args.broker or get_broker_name()
+        components = create_broker_components(broker_name, demo=demo)
+        contracts = components["contracts_class"](auth=components["auth"], demo=demo)
+        all_accounts = contracts.resolve_all_account_ids()
+        log.info("Account discovery: %d accounts found, copies=%d", len(all_accounts), n_copies)
+
+        if len(all_accounts) < n_copies:
+            log.warning(
+                "Requested %d copies but only %d accounts found — using all available",
+                n_copies,
+                len(all_accounts),
+            )
+
+        account_ids = [aid for aid, _name in all_accounts[:n_copies]]
+        if args.account_id and args.account_id in account_ids:
+            # User-specified account is primary
+            account_ids.remove(args.account_id)
+            primary_id = args.account_id
+        else:
+            primary_id = account_ids[0]
+            account_ids = account_ids[1:]
+
+        shadow_account_ids = account_ids if account_ids else None
+        args.account_id = primary_id
+        log.info(
+            "Copy trading: primary=%d, shadows=%s",
+            primary_id,
+            shadow_account_ids or "none",
+        )
+
     session = SessionOrchestrator(
         instrument=args.instrument,
         broker=args.broker,
@@ -422,6 +473,7 @@ def main() -> None:
         signal_only=signal_only,
         force_orphans=args.force_orphans,
         portfolio=raw_portfolio,
+        shadow_account_ids=shadow_account_ids,
     )
 
     try:
