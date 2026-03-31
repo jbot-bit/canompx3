@@ -259,7 +259,8 @@ def main() -> None:
         "--auto-confirm",
         action="store_true",
         default=False,
-        help="Skip interactive CONFIRM prompt for --live (used by dashboard subprocess only)",
+        help="Skip interactive CONFIRM prompt for --live. Safety gate is the dashboard UI "
+        "(must type LIVE to unlock). CLI users: you accept full responsibility.",
     )
     parser.add_argument(
         "--raw-baseline",
