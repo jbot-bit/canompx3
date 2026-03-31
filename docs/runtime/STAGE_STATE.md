@@ -1,28 +1,26 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Stress test — fix hardcoded values, None crashes, canonical violations across codebase
-updated: 2026-03-31T12:00:00Z
+task: Remove O15/O30 from active pipeline — add ACTIVE_ORB_MINUTES canonical constant
+updated: 2026-03-31T12:20:00Z
 scope_lock:
-  - scripts/tools/score_lanes.py
-  - .claude/hooks/*.py
-  - .claude/settings.json
-  - .claude/agents/*.md
-  - .claude/rules/*.md
-  - trading_app/prop_profiles.py
-  - trading_app/weekly_review.py
-  - scripts/tools/*.py
-  - trading_app/live/*.py
-  - trading_app/live/*.html
-  - START_BOT.bat
-  - scripts/run_live_session.py
+  - pipeline/build_daily_features.py
+  - scripts/tools/pipeline_status.py
+  - scripts/tools/refresh_data.py
+  - scripts/tools/assert_rebuild.py
+  - scripts/tools/design_max_profiles.py
+  - scripts/tools/max_extraction_model.py
+  - scripts/tools/optimal_lanes.py
+  - scripts/tools/compare_account_sizes.py
 blast_radius:
-  - score_lanes.py: CLI signature change, no external callers
-  - hooks: Claude Code infra only
-  - prop_profiles: config layer, no DB writes
+  - build_daily_features.py: new constant only, no behavior change to existing code
+  - pipeline_status.py: staleness + rebuild steps, no external callers
+  - refresh_data.py: daily_features build loop, no external callers
+  - assert_rebuild.py: post-rebuild assertions, no external callers
+  - check_drift.py: NOT touched — row integrity expects 3 rows/date (DB truth)
 acceptance:
-  - python scripts/tools/score_lanes.py runs without crash (default args)
-  - All hooks exit cleanly on valid JSON input
+  - python scripts/tools/pipeline_status.py --status shows NO O15/O30 staleness
   - python pipeline/check_drift.py passes
-  - Comprehensive grep for hardcoded patterns returns clean
+  - ACTIVE_ORB_MINUTES importable from pipeline.build_daily_features
+  - grep confirms no hardcoded [5, 15, 30] in changed files
 ---

@@ -31,7 +31,7 @@ import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.audit_log import get_previous_counts
-from pipeline.build_daily_features import VALID_ORB_MINUTES
+from pipeline.build_daily_features import ACTIVE_ORB_MINUTES
 from pipeline.dst import SESSION_CATALOG
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
@@ -49,7 +49,7 @@ EXPECTED_DAILY_FEATURES_COLUMNS = _STATIC_COLUMN_COUNT + (len(ORB_LABELS) * _ORB
 # Strategy count drop threshold — WARNING if active count < this fraction of previous
 STRATEGY_DROP_THRESHOLD = 0.70
 
-APERTURES = VALID_ORB_MINUTES  # canonical source — never hardcode
+APERTURES = ACTIVE_ORB_MINUTES  # only assert active apertures (O15/O30 dead)
 
 
 # ---------------------------------------------------------------------------
@@ -243,7 +243,7 @@ def assert_outcome_coverage(
     con: duckdb.DuckDBPyConnection,
     instrument: str,
 ) -> AssertionResult:
-    """A5: Check every enabled session has outcomes for all apertures (5/15/30)."""
+    """A5: Check every enabled session has outcomes for all active apertures."""
     enabled_sessions = list(SESSION_CATALOG.keys())
     missing = []
 

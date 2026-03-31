@@ -436,18 +436,18 @@ class TestManifest:
 
 class TestBuildStepList:
     def test_build_step_list_full(self):
-        """Full step list has all 13 steps."""
+        """Full step list has all 9 steps (O15/O30 removed)."""
         steps = build_step_list("MGC")
-        assert len(steps) == 13
+        assert len(steps) == 9
         assert steps[0]["name"] == "outcome_builder_O5"
         assert "MGC" in steps[0]["cmd"]
         assert steps[-1]["name"] == "pinecone_sync"
 
     def test_build_step_list_resume(self):
         """Resume skips completed steps."""
-        completed = ["outcome_builder_O5", "outcome_builder_O15", "outcome_builder_O30"]
+        completed = ["outcome_builder_O5"]
         steps = build_step_list("MGC", resume_from=completed)
-        assert len(steps) == 10
+        assert len(steps) == 8
         assert steps[0]["name"] == "discovery_O5"
 
     def test_build_step_list_instrument_substitution(self):
@@ -477,11 +477,11 @@ class TestRebuildDryRun:
         con.close()
 
     def test_rebuild_dry_run_shows_all_steps(self, tmp_path, capsys):
-        """Dry run lists all 13 steps."""
+        """Dry run lists all 9 steps (O15/O30 removed)."""
         db_path, con = _create_test_db(tmp_path)
         _, con = run_rebuild(con, "MGC", dry_run=True)
         captured = capsys.readouterr()
-        assert "[13/13]" in captured.out
+        assert "[9/9]" in captured.out
         assert "pinecone_sync" in captured.out
         con.close()
 
@@ -501,11 +501,13 @@ class TestRebuildExecution:
         # Seed prerequisites so preflight checks pass
         _insert_bar_1m(con, sym, "2026-03-06T00:00:00+00:00")
         _insert_bar_1m(con, sym, "2026-03-07T00:00:00+00:00")
-        for ap in [5, 15, 30]:
+        from pipeline.build_daily_features import ACTIVE_ORB_MINUTES, VALID_ORB_MINUTES
+
+        for ap in VALID_ORB_MINUTES:
             _insert_daily_features(con, sym, "2026-03-06", ap)
-        # Seed all session×aperture combos so A5 assertion passes
+        # Seed all session×aperture combos so A5 assertion passes (active apertures only)
         for session in SESSION_CATALOG:
-            for ap in [5, 15, 30]:
+            for ap in ACTIVE_ORB_MINUTES:
                 con.execute(
                     "INSERT INTO orb_outcomes (trading_day, symbol, orb_label, orb_minutes, rr_target, "
                     "confirm_bars, entry_model, outcome, pnl_r) "
@@ -529,7 +531,7 @@ class TestRebuildExecution:
         manifest = read_last_manifest(con, sym)
         assert manifest is not None
         assert manifest["status"] == "COMPLETED"
-        assert len(manifest["steps_completed"]) == 13
+        assert len(manifest["steps_completed"]) == 9
         con.close()
 
     def test_rebuild_step_fails_writes_manifest(self, tmp_path, capsys):
@@ -545,7 +547,7 @@ class TestRebuildExecution:
         def mock_run(*args, **kwargs):
             nonlocal call_count
             call_count += 1
-            # Fail on 2nd step (outcome_builder_O15)
+            # Fail on 2nd step (discovery_O5)
             rc = 1 if call_count == 2 else 0
             return type("Result", (), {"returncode": rc})()
 
@@ -556,7 +558,7 @@ class TestRebuildExecution:
         manifest = read_last_manifest(con, sym)
         assert manifest is not None
         assert manifest["status"] == "FAILED"
-        assert manifest["failed_step"] == "outcome_builder_O15"
+        assert manifest["failed_step"] == "discovery_O5"
         assert manifest["steps_completed"] == ["outcome_builder_O5"]
         con.close()
 
