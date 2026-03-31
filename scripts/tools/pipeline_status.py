@@ -26,7 +26,7 @@ import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.audit_log import get_table_row_count, log_operation
-from pipeline.build_daily_features import VALID_ORB_MINUTES
+from pipeline.build_daily_features import ACTIVE_ORB_MINUTES, VALID_ORB_MINUTES
 from pipeline.db_lock import PipelineLock, PipelineLockError
 from pipeline.init_db import REBUILD_MANIFEST_SCHEMA
 from pipeline.paths import GOLD_DB_PATH
@@ -289,23 +289,7 @@ REBUILD_STEPS: list[tuple[str, list[str]]] = [
         "outcome_builder_O5",
         [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "5"],
     ),
-    (
-        "outcome_builder_O15",
-        [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "15"],
-    ),
-    (
-        "outcome_builder_O30",
-        [_PY, "trading_app/outcome_builder.py", "--instrument", "{instrument}", "--force", "--orb-minutes", "30"],
-    ),
     ("discovery_O5", [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "5"]),
-    (
-        "discovery_O15",
-        [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "15"],
-    ),
-    (
-        "discovery_O30",
-        [_PY, "trading_app/strategy_discovery.py", "--instrument", "{instrument}", "--orb-minutes", "30"],
-    ),
     (
         "validator",
         [
@@ -559,7 +543,8 @@ def run_rebuild(
 # Core engine
 # ---------------------------------------------------------------------------
 
-APERTURES = VALID_ORB_MINUTES  # canonical source — never hardcode
+ALL_APERTURES = VALID_ORB_MINUTES  # all apertures in DB schema (display)
+ACTIVE_APERTURES = ACTIVE_ORB_MINUTES  # apertures actively maintained (staleness/rebuild)
 
 
 def staleness_engine(con: duckdb.DuckDBPyConnection, instrument: str) -> dict:
@@ -596,7 +581,7 @@ def staleness_engine(con: duckdb.DuckDBPyConnection, instrument: str) -> dict:
 
     # --- daily_features per aperture ---
     df_dates: dict[int, date | None] = {}
-    for ap in APERTURES:
+    for ap in ALL_APERTURES:
         row = con.execute(
             "SELECT MAX(trading_day) FROM daily_features WHERE symbol = ? AND orb_minutes = ?",
             [instrument, ap],
@@ -604,13 +589,13 @@ def staleness_engine(con: duckdb.DuckDBPyConnection, instrument: str) -> dict:
         df_dates[ap] = row[0] if row and row[0] is not None else None
     result["daily_features"] = df_dates
 
-    # Bottleneck: the minimum across all aperture max-dates
-    non_null = [d for d in df_dates.values() if d is not None]
-    result["daily_features_min"] = min(non_null) if non_null else None
+    # Bottleneck: the minimum across ACTIVE aperture max-dates
+    df_active = [df_dates[ap] for ap in ACTIVE_APERTURES if df_dates.get(ap) is not None]
+    result["daily_features_min"] = min(df_active) if df_active else None
 
     # --- orb_outcomes per aperture (mirrors daily_features pattern) ---
     oo_dates: dict[int, date | None] = {}
-    for ap in APERTURES:
+    for ap in ALL_APERTURES:
         row = con.execute(
             "SELECT MAX(trading_day) FROM orb_outcomes WHERE symbol = ? AND orb_minutes = ?",
             [instrument, ap],
@@ -618,9 +603,9 @@ def staleness_engine(con: duckdb.DuckDBPyConnection, instrument: str) -> dict:
         oo_dates[ap] = row[0] if row and row[0] is not None else None
     result["orb_outcomes_by_aperture"] = oo_dates
 
-    # Bottleneck: the minimum across all aperture max-dates
-    oo_non_null = [d for d in oo_dates.values() if d is not None]
-    result["orb_outcomes"] = min(oo_non_null) if oo_non_null else None
+    # Bottleneck: the minimum across ACTIVE aperture max-dates
+    oo_active = [oo_dates[ap] for ap in ACTIVE_APERTURES if oo_dates.get(ap) is not None]
+    result["orb_outcomes"] = min(oo_active) if oo_active else None
 
     # --- experimental_strategies (uses 'instrument' column, not 'symbol') ---
     row = con.execute(
@@ -676,13 +661,13 @@ def staleness_engine(con: duckdb.DuckDBPyConnection, instrument: str) -> dict:
     if is_stale(result["bars_5m"], result["bars_1m"]):
         stale_steps.append("bars_5m")
 
-    # daily_features should track bars_5m (per aperture)
-    for ap in APERTURES:
+    # daily_features should track bars_5m (active apertures only)
+    for ap in ACTIVE_APERTURES:
         if is_stale(df_dates.get(ap), result["bars_5m"]):
             stale_steps.append(f"daily_features_O{ap}")
 
-    # orb_outcomes should track daily_features per aperture
-    for ap in APERTURES:
+    # orb_outcomes should track daily_features (active apertures only)
+    for ap in ACTIVE_APERTURES:
         if is_stale(result["orb_outcomes_by_aperture"].get(ap), result["daily_features"].get(ap)):
             stale_steps.append(f"orb_outcomes_O{ap}")
 
@@ -720,12 +705,12 @@ def format_status(instrument: str, status: dict) -> str:
     lines.append(f"  bars_1m           : {_fmt(status['bars_1m'])}")
     lines.append(f"  bars_5m           : {_fmt(status['bars_5m'])}{_stale_tag('bars_5m')}")
 
-    for ap in APERTURES:
+    for ap in ALL_APERTURES:
         d = status["daily_features"].get(ap)
         lines.append(f"  daily_features O{ap:<2} : {_fmt(d)}{_stale_tag(f'daily_features_O{ap}')}")
 
     lines.append(f"  daily_features min: {_fmt(status['daily_features_min'])}")
-    for ap in APERTURES:
+    for ap in ALL_APERTURES:
         d = status["orb_outcomes_by_aperture"].get(ap)
         lines.append(f"  orb_outcomes O{ap:<2}  : {_fmt(d)}{_stale_tag(f'orb_outcomes_O{ap}')}")
     lines.append(f"  orb_outcomes min  : {_fmt(status['orb_outcomes'])}")

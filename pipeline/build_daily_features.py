@@ -83,8 +83,11 @@ SESSION_WINDOWS = {
     "ny": (23, 0, 2, 0),  # crosses midnight
 }
 
-# Valid ORB durations in minutes
+# Valid ORB durations in minutes (all apertures that exist in DB schema)
 VALID_ORB_MINUTES = [5, 15, 30]
+
+# Apertures actively maintained for trading — O15/O30 dead per Mar 2026 pipeline audit
+ACTIVE_ORB_MINUTES = [5]
 
 # Sessions that have compression z-score and tier columns in daily_features.
 # Tied to schema in pipeline/init_db.py (orb_*_compression_z / orb_*_compression_tier).
