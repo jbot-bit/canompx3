@@ -75,20 +75,29 @@ def _ensure_log_dir() -> Path:
 
 @app.on_event("shutdown")
 async def _shutdown_children():
-    """Terminate all background subprocesses on server shutdown.
+    """Terminate all background subprocesses and close file handles on server shutdown.
 
     Without this, orphaned session or refresh processes continue running
     after dashboard restart — a live bot with no dashboard monitoring it.
     """
-    for name, proc in _bg_processes.items():
-        if proc.poll() is None:
-            log.warning("Shutdown: terminating orphaned %s process (PID %d)", name, proc.pid)
+    for name, val in list(_bg_processes.items()):
+        # Skip non-Popen entries (log paths, file handles stored as metadata)
+        if not isinstance(val, subprocess.Popen):
+            # Close any file handles
+            if hasattr(val, "close"):
+                try:
+                    val.close()
+                except Exception:
+                    pass
+            continue
+        if val.poll() is None:
+            log.warning("Shutdown: terminating orphaned %s process (PID %d)", name, val.pid)
             try:
-                proc.terminate()
-                proc.wait(timeout=10)
+                val.terminate()
+                val.wait(timeout=10)
             except Exception:
                 try:
-                    proc.kill()
+                    val.kill()
                 except Exception:
                     pass
 
@@ -162,12 +171,19 @@ async def action_kill():
     """Write stop file to kill the bot gracefully."""
     try:
         STOP_FILE.write_text("stop", encoding="utf-8")
-        # Also terminate session subprocess if we spawned it
+        # Also terminate session subprocess and close log handle
         with _bg_lock:
             if "session" in _bg_processes:
                 proc = _bg_processes["session"]
-                if proc.poll() is None:
+                if isinstance(proc, subprocess.Popen) and proc.poll() is None:
                     proc.terminate()
+            # Close session log file handle to release Windows lock
+            log_file = _bg_processes.pop("_session_logfile", None)
+            if log_file and hasattr(log_file, "close"):
+                try:
+                    log_file.close()
+                except Exception:
+                    pass
         return {"status": "ok", "message": "Stop file created — bot will shut down within 5 seconds"}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
@@ -243,6 +259,7 @@ async def action_refresh():
         if state.get("instrument"):
             instrument = state["instrument"]
 
+        log_file = None
         try:
             log_path = _ensure_log_dir() / "refresh.log"
             log_file = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
@@ -258,39 +275,42 @@ async def action_refresh():
             _bg_processes["_refresh_logfile"] = log_file  # type: ignore[assignment]
             return {"status": "started", "message": f"Refreshing {instrument} data..."}
         except Exception as e:
+            if log_file is not None:
+                log_file.close()
             return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
 @app.get("/api/action/refresh-status")
 async def action_refresh_status():
     """Check data refresh progress. Reads from log file (not pipe — avoids deadlock)."""
-    if "refresh" not in _bg_processes:
-        return {"status": "idle", "output": ""}
-    proc = _bg_processes["refresh"]
-    log_path = _bg_processes.get("_refresh_log")
-    running = proc.poll() is None
+    with _bg_lock:
+        if "refresh" not in _bg_processes:
+            return {"status": "idle", "output": ""}
+        proc = _bg_processes["refresh"]
+        log_path = _bg_processes.get("_refresh_log")
+        running = isinstance(proc, subprocess.Popen) and proc.poll() is None
 
-    # Read log file (can be read multiple times, unlike pipe)
-    output = ""
-    if log_path and Path(str(log_path)).exists():
-        try:
-            output = Path(str(log_path)).read_text(encoding="utf-8", errors="replace")
-        except Exception:
-            output = "(log read failed)"
+        # Read log file (can be read multiple times, unlike pipe)
+        output = ""
+        if log_path and Path(str(log_path)).exists():
+            try:
+                output = Path(str(log_path)).read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                output = "(log read failed)"
 
-    if running:
-        return {"status": "running", "output": output}
+        if running:
+            return {"status": "running", "output": output}
 
-    # Process finished — close log file handle
-    log_file = _bg_processes.pop("_refresh_logfile", None)
-    if log_file and hasattr(log_file, "close"):
-        try:
-            log_file.close()
-        except Exception:
-            pass
+        # Process finished — close log file handle
+        log_file = _bg_processes.pop("_refresh_logfile", None)
+        if log_file and hasattr(log_file, "close"):
+            try:
+                log_file.close()
+            except Exception:
+                pass
 
-    status = "done" if proc.returncode == 0 else "failed"
-    return {"status": status, "returncode": proc.returncode, "output": output}
+        status = "done" if proc.returncode == 0 else "failed"
+        return {"status": status, "returncode": proc.returncode, "output": output}
 
 
 @app.post("/api/action/start")
@@ -307,6 +327,7 @@ async def action_start():
                 return {"status": "running", "message": "Session already running"}
 
         profile = _resolve_profile()
+        log_file = None
         try:
             log_path = _ensure_log_dir() / "session.log"
             log_file = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
@@ -333,6 +354,8 @@ async def action_start():
                 "profile": profile,
             }
         except Exception as e:
+            if log_file is not None:
+                log_file.close()
             return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 
