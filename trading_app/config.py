@@ -1219,8 +1219,12 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         size_filters_orb = _GRID_SIZE_FILTERS_ORB
         filters = dict(BASE_GRID_FILTERS)
 
-    # Break quality composites for momentum sessions (CME_REOPEN, TOKYO_OPEN, LONDON_METALS)
-    if session in ("CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS"):
+    # Break quality composites for sessions with validated break-speed WR signal.
+    # Apr 2026 retest: NYSE_CLOSE (+13.1% WR spread, DSR p<0.001, WFE 106%),
+    # NYSE_OPEN (+8.2%, DSR p=0.013, WFE 92%), CME_REOPEN (+9.6% MGC, DSR p=0.002).
+    # TOKYO_OPEN and LONDON_METALS retained for DB compatibility (existing validated strategies).
+    # @research-source memory/break_speed_signal_retest.md
+    if session in ("CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS", "NYSE_CLOSE", "NYSE_OPEN"):
         filters.update(_make_break_quality_composites(size_filters_orb, _BREAK_SPEED_FAST5, "FAST5"))
         filters.update(_make_break_quality_composites(size_filters_orb, _BREAK_SPEED_FAST10, "FAST10"))
         filters.update(_make_break_quality_composites(size_filters_orb, _BREAK_BAR_CONTINUES, "CONT"))
