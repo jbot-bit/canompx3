@@ -5,9 +5,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from datetime import date
+
 import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -46,21 +49,12 @@ lanes = {
     for r in rows
 }
 
-# Session times (Brisbane min from midnight, Mar 31 2026)
-times = {
-    "US_DATA_830": 22 * 60 + 30,
-    "NYSE_OPEN": 23 * 60 + 30,
-    "US_DATA_1000": 0,
-    "COMEX_SETTLE": 3 * 60 + 30,
-    "CME_PRECLOSE": 5 * 60 + 45,
-    "NYSE_CLOSE": 6 * 60,
-    "CME_REOPEN": 8 * 60,
-    "TOKYO_OPEN": 10 * 60,
-    "BRISBANE_1025": 10 * 60 + 25,
-    "SINGAPORE_OPEN": 11 * 60,
-    "LONDON_METALS": 17 * 60,
-    "EUROPE_FLOW": 18 * 60,
-}
+# Session times from canonical resolver (DST-aware)
+today = date.today()
+times = {}
+for _name, _cfg in SESSION_CATALOG.items():
+    _h, _m = _cfg["resolver"](today)
+    times[_name] = _h * 60 + _m
 
 # ═══════════════════════════════════════════════════════════
 # UNIVERSE: Every tradeable lane
