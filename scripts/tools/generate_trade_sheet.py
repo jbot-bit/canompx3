@@ -53,9 +53,11 @@ def _filter_description(filter_type: str) -> str:
     # Exact matches first
     exact = {
         "NO_FILTER": "Any ORB size",
-        "VOL_RV12_N20": "Volume >= 1.2x median",
         "DIR_LONG": "LONG ONLY",
         "DIR_SHORT": "SHORT ONLY",
+        "ATR70_VOL": "ATR > 70th pct",
+        "ATR_P30": "ATR > 30th pct",
+        "ATR_P50": "ATR > 50th pct",
     }
     if filter_type in exact:
         return exact[filter_type]
@@ -64,6 +66,39 @@ def _filter_description(filter_type: str) -> str:
 
     # Composite filters: parse components
     parts = []
+
+    # Volume/RV filters: VOL_RV{threshold}_N{window}
+    import re
+
+    rv_match = re.match(r"VOL_RV(\d+)_N(\d+)", ft)
+    if rv_match:
+        thresh = int(rv_match.group(1)) / 10
+        return f"Vol >= {thresh:.1f}x median"
+
+    # Cost filters: COST_LT{cents}
+    cost_match = re.match(r"COST_LT(\d+)", ft)
+    if cost_match:
+        cents = int(cost_match.group(1))
+        return f"Cost < {cents}% of ORB"
+
+    # Cross-asset filters: X_MES_ATR{pct}
+    xmatch = re.match(r"X_(\w+)_ATR(\d+)", ft)
+    if xmatch:
+        ref = xmatch.group(1)
+        pct = xmatch.group(2)
+        return f"{ref} ATR > {pct}th pct"
+
+    # Overnight range filters
+    ovn_match = re.match(r"OVNRNG_(\d+)", ft)
+    if ovn_match:
+        pct = ovn_match.group(1)
+        return f"Overnight range > {pct}th pct"
+
+    # ORB volume filters
+    orbvol_match = re.match(r"ORB_VOL_(\d+)K?", ft)
+    if orbvol_match:
+        vol = orbvol_match.group(1)
+        return f"ORB volume > {vol}K"
 
     # ORB size component
     for g in ["G2", "G3", "G4", "G5", "G6", "G8"]:
@@ -87,10 +122,6 @@ def _filter_description(filter_type: str) -> str:
         parts.append("skip Friday")
     if "NOTUE" in ft:
         parts.append("skip Tuesday")
-
-    # Volume composite
-    if "VOL_RV12_N20" in ft:
-        parts.append("vol >= 1.2x")
 
     if parts:
         return " + ".join(parts)
@@ -241,6 +272,12 @@ def collect_trades(trading_day: date, db_path: Path, profile_filter: str | None 
 
                 sm = lane.planned_stop_multiplier or profile.stop_multiplier
 
+                # Deduplicate: if same strategy_id already in trades, merge profiles
+                existing = next((t for t in trades if t["strategy_id"] == sid), None)
+                if existing:
+                    existing["profiles"].append(pid)
+                    continue
+
                 trades.append(
                     {
                         "session": variant["orb_label"],
@@ -258,6 +295,7 @@ def collect_trades(trading_day: date, db_path: Path, profile_filter: str | None 
                         "fitness": fitness.status,
                         "fitness_error": fitness.error,
                         "profile": pid,
+                        "profiles": [pid],
                         "stop_mult": sm,
                         "orb_cap": lane.max_orb_size_pts,
                         "notes": lane.execution_notes,
@@ -396,11 +434,27 @@ def _fitness_badge(fitness: str) -> str:
     return f' <span class="badge {cls}">{fitness}</span>'
 
 
+def _next_session_label(session_times: dict) -> str | None:
+    """Find the next upcoming session based on current Brisbane time."""
+    now = datetime.now()
+    now_minutes = now.hour * 60 + now.minute
+    best_label = None
+    best_delta = float("inf")
+    for label, (h, m) in session_times.items():
+        session_minutes = h * 60 + m
+        delta = (session_minutes - now_minutes) % (24 * 60)
+        if 0 < delta < best_delta:
+            best_delta = delta
+            best_label = label
+    return best_label
+
+
 def _build_session_cards(
     trades: list[dict],
     session_times: dict,
     profiles_used: dict,
     css_class: str = "",
+    next_session: str | None = None,
 ) -> tuple[str, int]:
     """Build session card HTML from a list of trades. Returns (html, trade_count)."""
     sessions_used = sorted(
@@ -428,13 +482,25 @@ def _build_session_cards(
 
             exp_r_class = "expr-high" if t["exp_r"] >= 0.20 else ""
 
+            is_opportunity = t.get("profile") == "opportunity"
+
             notes_parts = []
             if t.get("orb_cap"):
                 notes_parts.append(f"Cap {t['orb_cap']:.0f}pts")
-            if t.get("stop_mult") and t["stop_mult"] != 0.75:
+            # Only show stop_mult note for deployed (not opportunities — user applies own)
+            if not is_opportunity and t.get("stop_mult") and t["stop_mult"] != 0.75:
                 notes_parts.append(f"Stop {t['stop_mult']}x")
             if t.get("notes"):
                 notes_parts.append(t["notes"][:80])
+            # Show profile badge(s) for deployed trades
+            if not is_opportunity:
+                for pid in t.get("profiles", [t.get("profile", "")]):
+                    pi = profiles_used.get(pid, {})
+                    if pi:
+                        notes_parts.append(f"{pi.get('firm', '?')} {pi.get('mode', '?')}")
+            # Show strategy_id for opportunities (needed to deploy them)
+            if is_opportunity:
+                notes_parts.append(t["strategy_id"])
             notes_html = f'<div class="lane-notes">{" | ".join(notes_parts)}</div>' if notes_parts else ""
 
             rows_html += f"""
@@ -447,7 +513,7 @@ def _build_session_cards(
                 <td>{t["win_rate"]:.0%}</td>
                 <td class="{exp_r_class}">{t["exp_r"]:+.3f}</td>
                 <td class="dollars-cell">{exp_d_str}</td>
-                <td>N={t["sample_size"]}</td>
+                <td>{t["sample_size"]}</td>
                 <td{fitness_title}>{fit_badge if fit_badge else '<span class="fit-ok">FIT</span>'}</td>
             </tr>"""
             if notes_html:
@@ -462,12 +528,15 @@ def _build_session_cards(
                 firm_badges.add(f'<span class="badge badge-firm">{pi.get("firm", "?")} {pi.get("mode", "?")}</span>')
         firm_badges_html = " ".join(firm_badges)
 
-        card_class = f"session-card {css_class}" if css_class else "session-card"
+        is_next = session == next_session
+        next_cls = " next-session" if is_next else ""
+        next_badge = ' <span class="badge badge-next">NEXT</span>' if is_next else ""
+        card_class = f"session-card{next_cls} {css_class}".strip()
         cards_html += f"""
         <div class="{card_class}">
             <div class="session-header">
                 <div class="session-time">{time_str} BRIS</div>
-                <div class="session-name">{session} {firm_badges_html}</div>
+                <div class="session-name">{session}{next_badge} {firm_badges_html}</div>
                 <div class="session-event">{event}</div>
             </div>
             <table>
@@ -549,22 +618,32 @@ def generate_html(
         ev_total = ev_1 * copies
         ev_line = f"EV ${ev_1:.0f}/day" if copies == 1 else f"EV ${ev_1:.0f}/day x{copies} = ${ev_total:.0f}"
         dll_line = f" | DLL {info['dll_str']}" if info["dll"] else ""
+        lane_word = "lane" if info["lanes"] == 1 else "lanes"
         profile_bar_html += f"""
         <div class="profile-card profile-{info["mode"].lower()}">
             <strong>{info["firm"]} {info["size"]}{copies_note}</strong>
             <span class="profile-mode">{info["mode"]}</span>
-            <div class="profile-detail">DD {info["dd_str"]}{dll_line} | Stop {info["stop"]} | {info["lanes"]} lanes</div>
+            <div class="profile-detail">DD {info["dd_str"]}{dll_line} | Stop {info["stop"]} | {info["lanes"]} {lane_word}</div>
             <div class="profile-ev">{ev_line}</div>
         </div>"""
 
+    # Find next upcoming session
+    next_session = _next_session_label(session_times)
+
     # Build deployed session cards
-    cards_html, trade_num = _build_session_cards(trades, session_times, profiles_used)
+    cards_html, trade_num = _build_session_cards(trades, session_times, profiles_used, next_session=next_session)
 
     # Build opportunities section
     opps_html = ""
     opps_count = 0
     if opportunities:
-        opps_html, opps_count = _build_session_cards(opportunities, session_times, profiles_used, css_class="opp-card")
+        opps_html, opps_count = _build_session_cards(
+            opportunities,
+            session_times,
+            profiles_used,
+            css_class="opp-card",
+            next_session=next_session,
+        )
 
     # Instrument summary — deployed + opportunities combined
     all_trades = list(trades) + (opportunities or [])
@@ -925,6 +1004,16 @@ def generate_html(
         font-size: 13px;
         color: #484f58;
         margin-top: 4px;
+    }}
+    .next-session {{
+        border-color: #f0883e;
+        box-shadow: 0 0 8px rgba(240, 136, 62, 0.3);
+    }}
+    .badge-next {{
+        background: #3d2e1f;
+        color: #f0883e;
+        border: 1px solid #f0883e;
+        margin-left: 8px;
     }}
     .opp-card {{
         border-color: #2d333b;
