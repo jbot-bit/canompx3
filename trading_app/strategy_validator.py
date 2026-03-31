@@ -394,7 +394,7 @@ def validate_strategy(
     max_drawdown: float | None = None,
     exclude_years: set[int] | None = None,
     min_years_positive_pct: float = 0.75,  # @research-source Fitschen "Building Reliable Trading Systems" — 85% of top CTAs have ≥1 losing year
-    min_trades_per_year: int = 5,
+    min_trades_per_year: int = 1,
     atr_by_year: dict[int, float] | None = None,
     enable_regime_waivers: bool = True,
 ) -> tuple[str, str, list[int]]:
@@ -412,8 +412,8 @@ def validate_strategy(
         min_years_positive_pct: Fraction of included years that must be
             positive (0.0-1.0). Default 0.75 per Fitschen (85% of top CTAs have a bad year).
         min_trades_per_year: Minimum trades for a year to count in Phase 3.
-            Years below this are excluded. Default 5 — years with <5 trades
-            have insufficient power for yearly characterization.
+            Years below this are excluded. Default 1 = include all years.
+            REGIME strategies (N<100) use 5 via run_validation() dispatch.
         atr_by_year: Mean ATR(20) per year for regime classification.
             Pre-fetched in run_validation(), None disables waivers.
         enable_regime_waivers: If True (default), grant DORMANT waivers
@@ -726,7 +726,7 @@ def run_validation(
     max_drawdown: float | None = None,
     exclude_years: set[int] | None = None,
     min_years_positive_pct: float = 0.75,  # @research-source Fitschen — see validate_strategy()
-    min_trades_per_year: int = 5,
+    min_trades_per_year: int = 1,
     dry_run: bool = False,
     enable_walkforward: bool = True,
     wf_test_months: int = 6,
@@ -835,6 +835,12 @@ def run_validation(
             )
             continue
 
+        # REGIME strategies (N<100) use min_trades_per_year=5 — sparse years
+        # have insufficient power for yearly characterization. CORE keeps
+        # the caller-provided value (default 1).
+        sample_n = row_dict.get("sample_size") or 0
+        effective_min_tpy = 5 if sample_n < CORE_MIN_SAMPLES else min_trades_per_year
+
         status, notes, regime_waivers = validate_strategy(
             row_dict,
             cost_spec,
@@ -844,7 +850,7 @@ def run_validation(
             max_drawdown=max_drawdown,
             exclude_years=exclude_years,
             min_years_positive_pct=min_years_positive_pct,
-            min_trades_per_year=min_trades_per_year,
+            min_trades_per_year=effective_min_tpy,
             atr_by_year=atr_by_year if enable_regime_waivers else None,
             enable_regime_waivers=enable_regime_waivers,
         )
@@ -1555,8 +1561,8 @@ def main():
     parser.add_argument(
         "--min-trades-per-year",
         type=int,
-        default=5,
-        help="Min trades for a year to count in Phase 3 robustness check (default 5)",
+        default=1,
+        help="Min trades for a year to count in Phase 3 robustness check (default 1)",
     )
     parser.add_argument("--dry-run", action="store_true", help="No DB writes")
     parser.add_argument("--db", type=str, default=None, help="Database path (default: gold.db)")
