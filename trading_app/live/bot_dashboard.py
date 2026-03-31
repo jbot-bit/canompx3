@@ -272,23 +272,25 @@ async def api_accounts():
                 # Human-readable: "COMEX_SETTLE ATR70_VOL"
                 filter_part = lane.strategy_id.split("CB1_")[1] if "CB1_" in lane.strategy_id else ""
                 lanes_summary.append({"session": lane.orb_label, "filter": filter_part, "instrument": lane.instrument})
-            accounts.append({
-                "profile_id": pid,
-                "firm": firm.display_name,
-                "firm_key": p.firm,
-                "account_size": p.account_size,
-                "copies": p.copies,
-                "max_dd": tier.max_dd,
-                "dll": tier.daily_loss_limit,
-                "active": p.active,
-                "auto_trading": firm.auto_trading,
-                "platform": firm.platform,
-                "lane_count": len(p.daily_lanes),
-                "lanes": lanes_summary,
-                "instruments": sorted(p.allowed_instruments) if p.allowed_instruments else [],
-                "sessions": sorted(p.allowed_sessions) if p.allowed_sessions else [],
-                "stop_multiplier": p.stop_multiplier,
-            })
+            accounts.append(
+                {
+                    "profile_id": pid,
+                    "firm": firm.display_name,
+                    "firm_key": p.firm,
+                    "account_size": p.account_size,
+                    "copies": p.copies,
+                    "max_dd": tier.max_dd,
+                    "dll": tier.daily_loss_limit,
+                    "active": p.active,
+                    "auto_trading": firm.auto_trading,
+                    "platform": firm.platform,
+                    "lane_count": len(p.daily_lanes),
+                    "lanes": lanes_summary,
+                    "instruments": sorted(p.allowed_instruments) if p.allowed_instruments else [],
+                    "sessions": sorted(p.allowed_sessions) if p.allowed_sessions else [],
+                    "stop_multiplier": p.stop_multiplier,
+                }
+            )
         return {"accounts": accounts}
     except Exception as e:
         return {"accounts": [], "error": str(e)}
@@ -318,13 +320,15 @@ async def api_sessions():
             # Wrap to next day if >1hr past
             if diff_min < -60:
                 diff_min += 1440
-            sessions.append({
-                "name": name,
-                "hour": h,
-                "minute": m,
-                "minutes_away": round(diff_min),
-                "status": "PASSED" if diff_min < -5 else ("NOW" if diff_min < 5 else "UPCOMING"),
-            })
+            sessions.append(
+                {
+                    "name": name,
+                    "hour": h,
+                    "minute": m,
+                    "minutes_away": round(diff_min),
+                    "status": "PASSED" if diff_min < -5 else ("NOW" if diff_min < 5 else "UPCOMING"),
+                }
+            )
         # Sort by minutes_away so "next" is first upcoming
         sessions.sort(key=lambda s: s["minutes_away"])
         # Find the next upcoming session
@@ -388,7 +392,7 @@ async def action_refresh():
             log_path = _ensure_log_dir() / "refresh.log"
             log_file = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
             proc = subprocess.Popen(
-                [sys.executable, "scripts/tools/refresh_data.py"],
+                [sys.executable, "-m", "scripts.tools.refresh_data"],
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 cwd=str(PROJECT_ROOT),
