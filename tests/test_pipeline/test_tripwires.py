@@ -121,3 +121,12 @@ class TestAssetSessionSync:
         """Every active instrument must have a 'symbol' field."""
         for inst in ACTIVE_ORB_INSTRUMENTS:
             assert "symbol" in ASSET_CONFIGS[inst], f"{inst}: missing 'symbol'"
+
+    def test_active_orb_minutes_subset_of_valid(self):
+        """ACTIVE_ORB_MINUTES must be a non-empty subset of VALID_ORB_MINUTES."""
+        from pipeline.build_daily_features import ACTIVE_ORB_MINUTES, VALID_ORB_MINUTES
+
+        assert len(ACTIVE_ORB_MINUTES) >= 1, "ACTIVE_ORB_MINUTES must not be empty"
+        assert set(ACTIVE_ORB_MINUTES).issubset(set(VALID_ORB_MINUTES)), (
+            f"ACTIVE_ORB_MINUTES {ACTIVE_ORB_MINUTES} has values not in VALID_ORB_MINUTES {VALID_ORB_MINUTES}"
+        )

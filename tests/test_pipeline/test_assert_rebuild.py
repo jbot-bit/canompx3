@@ -222,11 +222,12 @@ def test_a5_detects_missing_coverage(assert_db):
 
 
 def test_a5_passes_full_coverage(assert_db):
-    """A5 passes when all session × aperture combos have at least one outcome."""
+    """A5 passes when all session × active aperture combos have at least one outcome."""
+    from pipeline.build_daily_features import ACTIVE_ORB_MINUTES
     from pipeline.dst import SESSION_CATALOG
 
     for session in SESSION_CATALOG:
-        for aperture in [5, 15, 30]:
+        for aperture in ACTIVE_ORB_MINUTES:
             assert_db.execute(
                 "INSERT INTO orb_outcomes VALUES ($1, '2024-01-01', $2, $3, 'long')",
                 ["MGC", aperture, session],
