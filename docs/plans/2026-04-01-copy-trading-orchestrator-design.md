@@ -5,18 +5,19 @@
 `AccountProfile.copies = 5` is decorative. Nothing spawns multiple accounts.
 8 gaps block multi-account execution (see ORIENT analysis below).
 
-## Approach: Take 2 — N Independent Processes
+## Approach: Take 2.5 — CopyOrderRouter (evolved from Take 2)
 
-One subprocess per account. Each is a full SessionOrchestrator with its own:
-- DataFeed (WebSocket)
-- OrderRouter (bound to one account_id)
-- PositionTracker
-- HWM DD tracker
+**Original design (Take 2):** N independent processes. Rejected after auth research
+confirmed ONE token works for ALL accounts — N processes would share credentials
+and risk token conflicts. Also causes DuckDB concurrent writer issues on journal.
 
-**Why not shared-signal fan-out (Take 3)?**
-SessionOrchestrator is 2070 lines with signal + order interleaved. Refactoring
-is 10x the work. N feeds for N accounts is cheap (WebSocket connections are ~0).
-Revisit if scaling past 10 accounts.
+**Implemented (Take 2.5):** ONE process, ONE auth, ONE DataFeed, ONE SessionOrchestrator.
+CopyOrderRouter wraps primary + N shadow OrderRouters. submit() fans out to all.
+Primary gets full position tracking. Shadows are best-effort (broker-side DD).
+
+**Why not full Take 3 (refactored signal/order split)?**
+SessionOrchestrator is 2070 lines. Take 2.5 requires zero changes to core signal
+logic — only the order_router construction changes. Minimal blast radius.
 
 ## 5 Blockers to Fix
 
