@@ -259,6 +259,14 @@ async def action_refresh():
         if state.get("instrument"):
             instrument = state["instrument"]
 
+        # Close any stale log handle from a previous run that was never polled
+        old_log = _bg_processes.pop("_refresh_logfile", None)
+        if old_log and hasattr(old_log, "close"):
+            try:
+                old_log.close()
+            except Exception:
+                pass
+
         log_file = None
         try:
             log_path = _ensure_log_dir() / "refresh.log"
@@ -327,6 +335,15 @@ async def action_start():
                 return {"status": "running", "message": "Session already running"}
 
         profile = _resolve_profile()
+
+        # Close any stale log handle from a previous session
+        old_log = _bg_processes.pop("_session_logfile", None)
+        if old_log and hasattr(old_log, "close"):
+            try:
+                old_log.close()
+            except Exception:
+                pass
+
         log_file = None
         try:
             log_path = _ensure_log_dir() / "session.log"
