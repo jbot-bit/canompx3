@@ -443,17 +443,22 @@ async def action_refresh_status():
 
 
 @app.post("/api/action/start")
-async def action_start(profile: str | None = None):
-    """Launch signal-only trading session from the dashboard.
+async def action_start(profile: str | None = None, mode: str = "signal"):
+    """Launch trading session from the dashboard.
 
     Args:
         profile: Profile ID to start (e.g. 'topstep_50k_mnq_auto').
                  Passed explicitly from the account card's START button.
                  Falls back to _resolve_profile() if not provided.
+        mode: Execution mode — "signal" (default), "demo", or "live".
+              Live mode uses --auto-confirm (safety gate is in the UI).
 
     Output goes to logs/session.log (not a pipe — live sessions run for hours
     and would deadlock on a 64KB pipe buffer within minutes).
     """
+    if mode not in ("signal", "demo", "live"):
+        return JSONResponse(status_code=400, content={"status": "error", "message": f"Invalid mode: {mode}"})
+
     with _bg_lock:
         if "session" in _bg_processes:
             proc = _bg_processes["session"]
@@ -472,19 +477,30 @@ async def action_start(profile: str | None = None):
             except Exception:
                 pass
 
+        # Build command based on mode
+        cmd = [
+            sys.executable,
+            "-m",
+            "scripts.run_live_session",
+            "--profile",
+            profile,
+        ]
+        if mode == "signal":
+            cmd.append("--signal-only")
+            mode_label = "SIGNAL-ONLY"
+        elif mode == "demo":
+            cmd.append("--demo")
+            mode_label = "DEMO"
+        else:  # live
+            cmd.extend(["--live", "--auto-confirm"])
+            mode_label = "LIVE"
+
         log_file = None
         try:
             log_path = _ensure_log_dir() / "session.log"
             log_file = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
             proc = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-m",
-                    "scripts.run_live_session",
-                    "--profile",
-                    profile,
-                    "--signal-only",
-                ],
+                cmd,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 cwd=str(PROJECT_ROOT),
@@ -494,9 +510,10 @@ async def action_start(profile: str | None = None):
             _bg_processes["_session_logfile"] = log_file  # type: ignore[assignment]
             return {
                 "status": "started",
-                "message": f"Signal-only session started: {profile}",
+                "message": f"{mode_label} session started: {profile}",
                 "pid": proc.pid,
                 "profile": profile,
+                "mode": mode,
             }
         except Exception as e:
             if log_file is not None:

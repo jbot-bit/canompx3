@@ -496,13 +496,61 @@ async function fetchAccounts() {
       card.appendChild(info);
       card.appendChild(lanesList);
 
-      // START button (only for auto-capable active profiles with lanes)
+      // Mode buttons (only for auto-capable active profiles with lanes)
       if (isAuto && acct.active && acct.lane_count > 0) {
-        const btn = document.createElement("button");
-        btn.className = "btn-control w-full py-2 rounded-lg font-bold text-sm bg-green-700 hover:bg-green-600 text-white";
-        btn.textContent = "START SIGNAL-ONLY";
-        btn.addEventListener("click", () => startProfile(acct.profile_id, acct.firm, instruments));
-        card.appendChild(btn);
+        const btnRow = document.createElement("div");
+        btnRow.className = "flex gap-2 mt-2";
+
+        // Signal button
+        const btnSignal = document.createElement("button");
+        btnSignal.className = "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-green-700 hover:bg-green-600 text-white";
+        btnSignal.textContent = "SIGNAL";
+        btnSignal.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, instruments, "signal"));
+        btnRow.appendChild(btnSignal);
+
+        // Demo button
+        const btnDemo = document.createElement("button");
+        btnDemo.className = "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-blue-700 hover:bg-blue-600 text-white";
+        btnDemo.textContent = "DEMO";
+        btnDemo.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, instruments, "demo"));
+        btnRow.appendChild(btnDemo);
+
+        // Live button (requires safety gate)
+        const btnLive = document.createElement("button");
+        btnLive.className = "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-red-800 text-gray-500 cursor-not-allowed";
+        btnLive.textContent = "LIVE";
+        btnLive.disabled = true;
+        btnLive.dataset.profileId = acct.profile_id;
+        btnLive.dataset.firm = acct.firm;
+        btnLive.dataset.instruments = instruments;
+        btnRow.appendChild(btnLive);
+
+        card.appendChild(btnRow);
+
+        // Live safety gate: text input to unlock
+        const liveGate = document.createElement("div");
+        liveGate.className = "flex gap-2 mt-1";
+        const liveInput = document.createElement("input");
+        liveInput.type = "text";
+        liveInput.placeholder = "Type LIVE to unlock";
+        liveInput.className = "flex-1 px-2 py-1 rounded text-xs bg-gray-800 border border-gray-700 text-white";
+        liveInput.addEventListener("input", () => {
+          const armed = liveInput.value.trim() === "LIVE";
+          btnLive.disabled = !armed;
+          btnLive.className = armed
+            ? "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-red-600 hover:bg-red-500 text-white"
+            : "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-red-800 text-gray-500 cursor-not-allowed";
+        });
+        liveGate.appendChild(liveInput);
+        card.appendChild(liveGate);
+
+        btnLive.addEventListener("click", () => {
+          if (liveInput.value.trim() !== "LIVE") return;
+          launchSession(acct.profile_id, acct.firm, instruments, "live");
+          liveInput.value = "";
+          btnLive.disabled = true;
+          btnLive.className = "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-red-800 text-gray-500 cursor-not-allowed";
+        });
       } else if (!isAuto && acct.active) {
         const label = document.createElement("div");
         label.className = "text-center text-xs text-gray-600 py-2";
@@ -520,11 +568,16 @@ async function fetchAccounts() {
   } catch (_e) {}
 }
 
-async function startProfile(profileId, firmName, instruments) {
-  if (!confirm(`Start SIGNAL-ONLY session?\n\n${firmName} - ${instruments}\nProfile: ${profileId}\n\nNo real orders will be placed.`)) return;
-  showActivity("SESSION START", `Launching ${profileId}...`, "text-green-400");
+async function launchSession(profileId, firmName, instruments, mode) {
+  const modeLabels = { signal: "SIGNAL-ONLY", demo: "DEMO (paper)", live: "LIVE (real money)" };
+  const label = modeLabels[mode] || mode;
+  const warn = mode === "live" ? "\n\nREAL MONEY orders will be placed!" : (mode === "demo" ? "\n\nPaper orders on demo account." : "\n\nNo orders will be placed.");
+  if (!confirm(`Start ${label} session?\n\n${firmName} - ${instruments}\nProfile: ${profileId}${warn}`)) return;
+  const color = mode === "live" ? "text-red-400" : (mode === "demo" ? "text-blue-400" : "text-green-400");
+  showActivity(`${label} START`, `Launching ${profileId}...`, color);
   try {
-    const r = await fetch("/api/action/start?profile=" + encodeURIComponent(profileId), { method: "POST" });
+    const params = new URLSearchParams({ profile: profileId, mode: mode });
+    const r = await fetch("/api/action/start?" + params, { method: "POST" });
     const d = await r.json();
     appendActivity(d.message || d.status);
     if (d.pid) appendActivity("PID: " + d.pid);
