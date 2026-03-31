@@ -788,12 +788,22 @@ class TestBreakQualityComposites:
                     assert key in filters, f"{key} missing from MNQ {session} grid"
                     assert isinstance(filters[key], CompositeFilter)
 
-    def test_non_momentum_sessions_no_break_quality(self):
-        """SINGAPORE_OPEN, US_DATA_830, NYSE_OPEN do NOT get break quality composites."""
-        for session in ("SINGAPORE_OPEN", "US_DATA_830", "NYSE_OPEN"):
+    def test_non_break_speed_sessions_no_break_quality(self):
+        """Sessions without validated break-speed WR signal get no break quality composites."""
+        for session in ("SINGAPORE_OPEN", "US_DATA_830", "COMEX_SETTLE", "EUROPE_FLOW"):
             filters = get_filters_for_grid("MGC", session)
             bq_keys = [k for k in filters if "FAST5" in k or "FAST10" in k or "CONT" in k]
             assert bq_keys == [], f"{session} has break quality filters: {bq_keys}"
+
+    def test_nyse_sessions_have_break_quality(self):
+        """NYSE_CLOSE and NYSE_OPEN get break quality composites (Apr 2026 retest)."""
+        for session in ("NYSE_CLOSE", "NYSE_OPEN"):
+            filters = get_filters_for_grid("MNQ", session)
+            for suffix in ("FAST5", "FAST10", "CONT"):
+                for g in ("G4", "G5", "G6", "G8"):
+                    key = f"ORB_{g}_{suffix}"
+                    assert key in filters, f"{key} missing from MNQ {session} grid"
+                    assert isinstance(filters[key], CompositeFilter)
 
     def test_fast5_composite_matches_row(self):
         """Composite(G6 + FAST5) requires both big ORB and fast break."""
