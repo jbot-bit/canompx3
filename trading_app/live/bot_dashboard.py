@@ -15,6 +15,7 @@ import sys
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import duckdb
 import uvicorn
@@ -256,6 +257,83 @@ async def action_preflight():
         return {"status": "error", "output": str(e)}
 
 
+@app.get("/api/accounts")
+async def api_accounts():
+    """All trading profiles with human-readable names, firm info, and lane summaries."""
+    try:
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier, get_firm_spec
+
+        accounts = []
+        for pid, p in ACCOUNT_PROFILES.items():
+            tier = get_account_tier(p.firm, p.account_size)
+            firm = get_firm_spec(p.firm)
+            lanes_summary = []
+            for lane in p.daily_lanes:
+                # Human-readable: "COMEX_SETTLE ATR70_VOL"
+                filter_part = lane.strategy_id.split("CB1_")[1] if "CB1_" in lane.strategy_id else ""
+                lanes_summary.append({"session": lane.orb_label, "filter": filter_part, "instrument": lane.instrument})
+            accounts.append({
+                "profile_id": pid,
+                "firm": firm.display_name,
+                "firm_key": p.firm,
+                "account_size": p.account_size,
+                "copies": p.copies,
+                "max_dd": tier.max_dd,
+                "dll": tier.daily_loss_limit,
+                "active": p.active,
+                "auto_trading": firm.auto_trading,
+                "platform": firm.platform,
+                "lane_count": len(p.daily_lanes),
+                "lanes": lanes_summary,
+                "instruments": sorted(p.allowed_instruments) if p.allowed_instruments else [],
+                "sessions": sorted(p.allowed_sessions) if p.allowed_sessions else [],
+                "stop_multiplier": p.stop_multiplier,
+            })
+        return {"accounts": accounts}
+    except Exception as e:
+        return {"accounts": [], "error": str(e)}
+
+
+@app.get("/api/sessions")
+async def api_sessions():
+    """Server-side DST-correct session schedule with next-session computation."""
+    try:
+        from datetime import date as date_type
+
+        from pipeline.dst import SESSION_CATALOG
+
+        now_bris = datetime.now(ZoneInfo("Australia/Brisbane"))
+        today = date_type.today()
+        sessions = []
+        for name, info in sorted(SESSION_CATALOG.items()):
+            resolver = info.get("resolver")
+            if not resolver:
+                continue
+            try:
+                h, m = resolver(today)
+            except Exception:
+                continue
+            session_time = now_bris.replace(hour=h, minute=m, second=0, microsecond=0)
+            diff_min = (session_time - now_bris).total_seconds() / 60
+            # Wrap to next day if >1hr past
+            if diff_min < -60:
+                diff_min += 1440
+            sessions.append({
+                "name": name,
+                "hour": h,
+                "minute": m,
+                "minutes_away": round(diff_min),
+                "status": "PASSED" if diff_min < -5 else ("NOW" if diff_min < 5 else "UPCOMING"),
+            })
+        # Sort by minutes_away so "next" is first upcoming
+        sessions.sort(key=lambda s: s["minutes_away"])
+        # Find the next upcoming session
+        next_session = next((s for s in sessions if s["status"] == "UPCOMING"), None)
+        return {"sessions": sessions, "next": next_session}
+    except Exception as e:
+        return {"sessions": [], "next": None, "error": str(e)}
+
+
 @app.get("/api/data-status")
 async def api_data_status():
     """Data freshness for all active instruments."""
@@ -296,11 +374,6 @@ async def action_refresh():
             if proc.poll() is None:
                 return {"status": "running", "message": "Data refresh already in progress"}
 
-        instrument = "MNQ"
-        state = read_state()
-        if state.get("instrument"):
-            instrument = state["instrument"]
-
         # Close any stale log handle from a previous run that was never polled
         old_log = _bg_processes.pop("_refresh_logfile", None)
         if old_log and hasattr(old_log, "close"):
@@ -309,12 +382,13 @@ async def action_refresh():
             except Exception:
                 pass
 
+        # Refresh ALL active instruments (MGC + MNQ + MES) — no --instrument flag
         log_file = None
         try:
             log_path = _ensure_log_dir() / "refresh.log"
             log_file = open(log_path, "w", encoding="utf-8")  # noqa: SIM115
             proc = subprocess.Popen(
-                [sys.executable, "scripts/tools/refresh_data.py", "--instrument", instrument],
+                [sys.executable, "scripts/tools/refresh_data.py"],
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 cwd=str(PROJECT_ROOT),
@@ -323,7 +397,7 @@ async def action_refresh():
             _bg_processes["refresh"] = proc
             _bg_processes["_refresh_log"] = log_path  # type: ignore[assignment]
             _bg_processes["_refresh_logfile"] = log_file  # type: ignore[assignment]
-            return {"status": "started", "message": f"Refreshing {instrument} data..."}
+            return {"status": "started", "message": "Refreshing all instruments..."}
         except Exception as e:
             if log_file is not None:
                 log_file.close()
@@ -364,8 +438,13 @@ async def action_refresh_status():
 
 
 @app.post("/api/action/start")
-async def action_start():
+async def action_start(profile: str | None = None):
     """Launch signal-only trading session from the dashboard.
+
+    Args:
+        profile: Profile ID to start (e.g. 'topstep_50k_mnq_auto').
+                 Passed explicitly from the account card's START button.
+                 Falls back to _resolve_profile() if not provided.
 
     Output goes to logs/session.log (not a pipe — live sessions run for hours
     and would deadlock on a 64KB pipe buffer within minutes).
@@ -376,7 +455,9 @@ async def action_start():
             if proc.poll() is None:
                 return {"status": "running", "message": "Session already running"}
 
-        profile = _resolve_profile()
+        # Use explicit profile from card button, or fallback
+        if not profile:
+            profile = _resolve_profile()
 
         # Close any stale log handle from a previous session
         old_log = _bg_processes.pop("_session_logfile", None)
