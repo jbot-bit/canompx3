@@ -47,6 +47,10 @@ from trading_app.config import (
     CORE_MIN_SAMPLES,
     NOISE_FLOOR_BY_INSTRUMENT,
     REGIME_MIN_SAMPLES,
+    REGIME_WF_MIN_TRADES_PER_WINDOW,
+    REGIME_WF_MIN_TRAIN_TRADES,
+    REGIME_WF_MIN_WINDOWS,
+    REGIME_WF_TRADE_COUNT,
     WF_MIN_TRAIN_TRADES,
     WF_START_OVERRIDE,
     WF_TRADE_COUNT_OVERRIDE,
@@ -903,6 +907,23 @@ def run_validation(
 
         def _build_worker_kwargs(cand):
             rd = cand["row_dict"]
+            sample_n = rd.get("sample_size") or 0
+            is_regime = sample_n < CORE_MIN_SAMPLES
+
+            # REGIME strategies get smaller WF windows (both must be positive)
+            if is_regime:
+                cand_wf_params = {
+                    **wf_params,
+                    "min_windows": REGIME_WF_MIN_WINDOWS,
+                    "min_trades": REGIME_WF_MIN_TRADES_PER_WINDOW,
+                }
+                cand_wf_test_trades = REGIME_WF_TRADE_COUNT.get(instrument) or wf_test_trades
+                cand_wf_min_train = REGIME_WF_MIN_TRAIN_TRADES.get(instrument) or wf_min_train
+            else:
+                cand_wf_params = wf_params
+                cand_wf_test_trades = wf_test_trades
+                cand_wf_min_train = wf_min_train
+
             return dict(
                 strategy_id=rd["strategy_id"],
                 instrument=instrument,
@@ -914,13 +935,13 @@ def run_validation(
                 filter_params=rd.get("filter_params"),
                 orb_minutes=rd.get("orb_minutes", 5),
                 db_path_str=str(db_path),
-                wf_params=wf_params,
+                wf_params=cand_wf_params,
                 dst_regime=cand["strat_dst_regime"],
                 dst_verdict_from_discovery=rd.get("dst_verdict"),
                 wf_start_date=wf_start_date,
                 stop_multiplier=rd.get("stop_multiplier", 1.0),
-                wf_test_trades=wf_test_trades,
-                wf_min_train_trades=wf_min_train,
+                wf_test_trades=cand_wf_test_trades,
+                wf_min_train_trades=cand_wf_min_train,
                 dst_cols_from_discovery={
                     "winter_n": rd.get("dst_winter_n"),
                     "winter_avg_r": rd.get("dst_winter_avg_r"),
