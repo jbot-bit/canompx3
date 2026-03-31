@@ -256,6 +256,12 @@ def main() -> None:
         help="Run pre-flight checks (auth, portfolio, daily_features, contract) then exit — no trading",
     )
     parser.add_argument(
+        "--auto-confirm",
+        action="store_true",
+        default=False,
+        help="Skip interactive CONFIRM prompt for --live (used by dashboard subprocess only)",
+    )
+    parser.add_argument(
         "--raw-baseline",
         action="store_true",
         default=False,
@@ -356,10 +362,13 @@ def main() -> None:
         if args.all:
             print("--all + --live not supported. Use --instrument X for live trading.")
             sys.exit(1)
-        confirm = input("\n⚠  LIVE MODE — real money orders will be placed.\n   Type CONFIRM to proceed: ").strip()
-        if confirm != "CONFIRM":
-            print("Aborted.")
-            sys.exit(0)
+        if not args.auto_confirm:
+            confirm = input("\n⚠  LIVE MODE — real money orders will be placed.\n   Type CONFIRM to proceed: ").strip()
+            if confirm != "CONFIRM":
+                print("Aborted.")
+                sys.exit(0)
+        else:
+            log.warning("LIVE MODE — auto-confirmed (dashboard launch)")
         signal_only = False
         demo = False
 

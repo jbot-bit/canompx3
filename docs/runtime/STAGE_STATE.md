@@ -1,20 +1,23 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Build auto-scaling profiles — TYPE-A/TYPE-B for TopStep + Tradeify at 50K and 100K tiers
-updated: 2026-04-01T10:00:00Z
+task: One-click bot launcher — mode selection in dashboard, auto-confirm for live
+updated: 2026-04-01T11:00:00Z
 scope_lock:
-  - trading_app/prop_profiles.py
-  - scripts/tmp_tier_analysis.py
+  - scripts/run_live_session.py
+  - trading_app/live/bot_dashboard.py
+  - trading_app/live/bot_dashboard.html
+  - START_BOT.bat
 blast_radius:
-  - prop_profiles.py: consumed by prop_portfolio.py, live_config.py, bot dashboard, pre_session_check
-  - DD validation runs at import time — will warn if overbudget
+  - run_live_session.py: entry point for all live trading. --auto-confirm is additive only.
+  - bot_dashboard.py: /api/action/start gains mode param. Existing signal-only flow unchanged.
+  - bot_dashboard.html: UI-only changes to account cards.
+  - START_BOT.bat: launcher behavior change (no more taskkill).
 acceptance:
-  - 4 new profiles: topstep_50k_type_a, topstep_100k_type_a, tradeify_50k_type_b, tradeify_100k_type_b
-  - All lanes from DB-validated best per session x instrument
-  - P90 ORB caps set per session x instrument from actual data
-  - DD budget computed and documented per profile
-  - Import-time DD validation passes or warns (expected for AGGRO profiles)
-  - Existing profiles unchanged
-  - Drift checks pass
+  - Dashboard START shows 3 modes (signal/demo/live)
+  - Live requires typing LIVE in text input
+  - --auto-confirm flag works in run_live_session.py
+  - START_BOT.bat opens browser automatically
+  - Existing signal-only flow unchanged (backward compat)
+  - Preflight passes
 ---

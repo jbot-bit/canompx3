@@ -8,26 +8,24 @@ echo   ORB TRADING BOT - STARTING UP
 echo ============================================
 echo.
 
-:: Step 1: Kill any stale python processes holding DB locks
-echo [1/4] Cleaning up stale processes...
-taskkill /F /IM python.exe >nul 2>&1
-timeout /t 2 /nobreak >nul
-
-:: Step 2: Clean up stale lock files
-echo [2/4] Removing stale lock files...
+:: Step 1: Clean up stale lock files (don't kill python — other terminals may be running)
+echo [1/3] Removing stale lock files...
 del /f /q "%TEMP%\canompx3\bot_*.lock" >nul 2>&1
 
-:: Step 3: Clear stale bot state so dashboard shows clean STOPPED
-echo [3/4] Clearing stale state...
-del /f /q "data\bot_state.json" >nul 2>&1
+:: Step 2: Clear stale bot state so dashboard shows clean STOPPED
+echo [2/3] Clearing stale state...
+del /f /q "bot_state.json" >nul 2>&1
 
-:: Step 4: Launch dashboard (opens browser automatically)
-echo [4/4] Launching dashboard...
+:: Step 3: Launch dashboard + open browser
+echo [3/3] Launching dashboard...
 echo.
 echo ============================================
 echo   Dashboard: http://localhost:8080
 echo   Press Ctrl+C to stop
 echo ============================================
 echo.
+
+:: Open browser after 2 second delay (gives server time to start)
+start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:8080"
 
 .venv\Scripts\python.exe -m trading_app.live.bot_dashboard
