@@ -146,8 +146,8 @@ class TradingBook:
 
 
 # =========================================================================
-# Verified firm specs (March 2026)
-# Sources in docs/plans/2026-03-15-prop-portfolio-design.md
+# Verified firm specs (April 2026)
+# Sources: help.topstep.com, help.tradeify.co, support.apextraderfunding.com
 # =========================================================================
 
 PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
@@ -155,8 +155,8 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         name="topstep",
         display_name="TopStep",
         dd_type="eod_trailing",
-        # UNRESOLVED per playbook — 50/90 tiered believed correct but not re-verified. Conservative for ranking.
-        profit_split_tiers=((5_000, 0.50), (float("inf"), 0.90)),
+        # Flat 90/10 since Jan 12, 2026. First 4 Express payouts capped at 50% of available balance.
+        profit_split_tiers=((float("inf"), 0.90),),
         consistency_rule=0.40,
         news_restriction=False,
         close_time_et="16:00",
@@ -240,23 +240,25 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
 
 
 ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
-    # TopStep
-    # TopStep: DLL applies on non-TopstepX platforms. Source: topstep.com/express-funded-account-rules (Jun 2025)
-    ("topstep", 50_000): PropFirmAccount("topstep", 50_000, 2_000, 5, 50, daily_loss_limit=1_000),
-    ("topstep", 100_000): PropFirmAccount("topstep", 100_000, 3_000, 10, 100, daily_loss_limit=2_000),
-    ("topstep", 150_000): PropFirmAccount("topstep", 150_000, 4_500, 15, 150, daily_loss_limit=3_000),
-    # MFFU Core (EOD, 3% DD, 80/20)
-    ("mffu", 50_000): PropFirmAccount("mffu", 50_000, 1_500, 5, 50),
+    # TopStep — DLL removed on TopStepX since Aug 25, 2024.
+    # DLL only applies on NinjaTrader/Tradovate/TradingView platforms.
+    # We trade TopStepX (ProjectX API) → no DLL.
+    ("topstep", 50_000): PropFirmAccount("topstep", 50_000, 2_000, 5, 50),
+    ("topstep", 100_000): PropFirmAccount("topstep", 100_000, 3_000, 10, 100),
+    ("topstep", 150_000): PropFirmAccount("topstep", 150_000, 4_500, 15, 150),
+    # MFFU Core (EOD, 80/20). 50K DD confirmed $2K (not $1.5K).
+    ("mffu", 50_000): PropFirmAccount("mffu", 50_000, 2_000, 5, 50),
     ("mffu", 100_000): PropFirmAccount("mffu", 100_000, 3_000, 8, 80),
     ("mffu", 150_000): PropFirmAccount("mffu", 150_000, 4_500, 12, 120),
     # Tradeify Select
     ("tradeify", 50_000): PropFirmAccount("tradeify", 50_000, 2_000, 4, 40),
     ("tradeify", 100_000): PropFirmAccount("tradeify", 100_000, 4_000, 8, 80),
     ("tradeify", 150_000): PropFirmAccount("tradeify", 150_000, 6_000, 12, 120),
-    # Apex (metals banned — included for completeness)
-    ("apex", 50_000): PropFirmAccount("apex", 50_000, 2_000, 4, 40),  # Official: $2K DD per rules doc
-    ("apex", 100_000): PropFirmAccount("apex", 100_000, 3_000, 6, 60),
-    ("apex", 150_000): PropFirmAccount("apex", 150_000, 4_000, 10, 100),  # Official: $4K DD, 10 mini
+    # Apex 4.0 EOD PA (March 2026) — metals banned, DLL introduced.
+    # DLL is soft: pauses trading for the day, does NOT fail the account.
+    ("apex", 50_000): PropFirmAccount("apex", 50_000, 2_000, 4, 40, daily_loss_limit=1_000),
+    ("apex", 100_000): PropFirmAccount("apex", 100_000, 3_000, 6, 60, daily_loss_limit=1_500),
+    ("apex", 150_000): PropFirmAccount("apex", 150_000, 4_000, 9, 90, daily_loss_limit=2_000),
     # Self-funded
     ("self_funded", 50_000): PropFirmAccount("self_funded", 50_000, 5_000, 50, 500),
 }
