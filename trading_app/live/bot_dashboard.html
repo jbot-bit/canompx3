@@ -357,20 +357,21 @@ function updateTrades(trades) {
   }
   let totalR = 0;
   for (const t of trades) {
-    if (t.pnl_r != null) totalR += t.pnl_r;
+    const pnl = t.actual_r;
+    if (pnl != null) totalR += pnl;
     const tr = document.createElement("tr");
     tr.className = "border-b border-[#1e2d3d] hover:bg-[#1a2332]";
-    // Extract instrument from strategy_id (first token before CB1)
-    const inst = t.strategy_id ? t.strategy_id.split("_")[0] : "\u2014";
+    const statusText = t.exited_at ? (t.exit_reason || "CLOSED") : "OPEN";
+    const statusCls = t.exited_at ? "text-gray-400" : "text-blue-400";
     const cells = [
       { text: t.created_at ? new Date(t.created_at).toLocaleTimeString() : "\u2014", cls: "p-2" },
-      { text: inst, cls: "p-2 text-gray-400" },
+      { text: t.instrument || "\u2014", cls: "p-2 text-gray-400" },
       { text: extractSession(t.strategy_id), cls: "p-2" },
       { text: (t.direction || "\u2014").toUpperCase(), cls: "p-2 " + (t.direction === "long" ? "text-green-400" : "text-red-400") },
       { text: fmtP(t.fill_entry || t.engine_entry), cls: "p-2 text-right" },
       { text: fmtP(t.fill_exit), cls: "p-2 text-right" },
-      { text: fmtR(t.pnl_r), cls: "p-2 text-right " + rCol(t.pnl_r) },
-      { text: t.exited_at ? "CLOSED" : "OPEN", cls: "p-2 " + (t.exited_at ? "text-gray-400" : "text-blue-400") },
+      { text: fmtR(pnl), cls: "p-2 text-right " + rCol(pnl) },
+      { text: statusText, cls: "p-2 " + statusCls },
     ];
     for (const c of cells) {
       const td = document.createElement("td"); td.className = c.cls; td.textContent = c.text; tr.appendChild(td);

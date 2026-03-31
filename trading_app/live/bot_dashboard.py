@@ -177,8 +177,8 @@ async def api_trades():
             configure_connection(con)
             rows = con.execute(
                 """
-                SELECT trading_day, strategy_id, direction, entry_model,
-                       engine_entry, fill_entry, fill_exit, pnl_r, pnl_dollars,
+                SELECT trading_day, instrument, strategy_id, direction, entry_model,
+                       engine_entry, fill_entry, fill_exit, actual_r, pnl_dollars,
                        exit_reason, contracts, session_mode,
                        created_at, exited_at
                 FROM live_trades
@@ -189,13 +189,14 @@ async def api_trades():
             ).fetchall()
             cols = [
                 "trading_day",
+                "instrument",
                 "strategy_id",
                 "direction",
                 "entry_model",
                 "engine_entry",
                 "fill_entry",
                 "fill_exit",
-                "pnl_r",
+                "actual_r",
                 "pnl_dollars",
                 "exit_reason",
                 "contracts",
