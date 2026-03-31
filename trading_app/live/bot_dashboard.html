@@ -39,6 +39,9 @@
     <span class="text-xs text-gray-500 font-bold">DATA</span>
     <span id="data-status" class="text-xs text-gray-400">Checking...</span>
   </div>
+  <button id="btn-preflight" class="btn-control px-3 py-1.5 rounded-lg font-bold text-xs bg-gray-700 hover:bg-gray-600 text-white">
+    PREFLIGHT
+  </button>
   <button id="btn-refresh" class="btn-control px-3 py-1.5 rounded-lg font-bold text-xs bg-cyan-700 hover:bg-cyan-600 text-white">
     REFRESH ALL
   </button>
@@ -101,6 +104,7 @@
       <thead>
         <tr class="text-gray-500 border-b border-[#1e2d3d]">
           <th class="p-2 text-left">TIME</th>
+          <th class="p-2 text-left">INST</th>
           <th class="p-2 text-left">LANE</th>
           <th class="p-2 text-left">DIR</th>
           <th class="p-2 text-right">ENTRY</th>
@@ -110,7 +114,7 @@
         </tr>
       </thead>
       <tbody id="trade-log">
-        <tr><td colspan="7" class="p-4 text-center text-gray-600">No trades today</td></tr>
+        <tr><td colspan="8" class="p-4 text-center text-gray-600">No trades today</td></tr>
       </tbody>
     </table>
   </div>
@@ -207,37 +211,17 @@ function buildLaneCards() {
   }
 }
 
-// Session times in Brisbane (UTC+10). Approximate — DST shifts handled server-side.
-const SESSION_TIMES_BRIS = {
-  NYSE_CLOSE:      { h: 6, m: 0,  label: "6:00 AM" },   // EST close = 6-7 AM AEST
-  SINGAPORE_OPEN:  { h: 11, m: 0, label: "11:00 AM" },
-  COMEX_SETTLE:    { h: 3, m: 30, label: "3:30 AM" },    // Alarm required
-  NYSE_OPEN:       { h: 23, m: 30, label: "11:30 PM" },  // Previous evening
-  TOKYO_OPEN:      { h: 9, m: 0,  label: "9:00 AM" },
-  CME_PRECLOSE:    { h: 5, m: 45, label: "5:45 AM" },
-  EUROPE_FLOW:     { h: 16, m: 0, label: "4:00 PM" },
-  US_DATA_1000:    { h: 0, m: 0,  label: "12:00 AM" },
-  COMEX_OPEN:      { h: 0, m: 0,  label: "12:00 AM" },
-};
+// Session countdowns from server (DST-correct). Cached from /api/sessions.
+let sessionCountdowns = {};
 
 function getCountdown(sessionName) {
-  const info = SESSION_TIMES_BRIS[sessionName];
-  if (!info) return "";
-  const now = new Date();
-  // Convert to Brisbane time (UTC+10)
-  const brisOffset = 10 * 60;
-  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-  const brisNow = new Date(utcMs + brisOffset * 60000);
-
-  const target = new Date(brisNow);
-  target.setHours(info.h, info.m, 0, 0);
-  let diff = target - brisNow;
-  if (diff < -3600000) diff += 86400000; // Next day if >1hr past
-  if (diff < 0) return "NOW";
-  const hrs = Math.floor(diff / 3600000);
-  const mins = Math.floor((diff % 3600000) / 60000);
-  if (hrs > 0) return "in " + hrs + "h " + mins + "m";
-  return "in " + mins + "m";
+  const mins = sessionCountdowns[sessionName];
+  if (mins == null) return "";
+  if (mins <= 0) return "NOW";
+  const hrs = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (hrs > 0) return "in " + hrs + "h " + m + "m";
+  return "in " + m + "m";
 }
 
 function updateFavicon(mode) {
@@ -368,14 +352,19 @@ function updateTrades(trades) {
   if (!trades.length) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
-    td.colSpan = 7; td.className = "p-4 text-center text-gray-600"; td.textContent = "No trades today";
+    td.colSpan = 8; td.className = "p-4 text-center text-gray-600"; td.textContent = "No trades today";
     tr.appendChild(td); tbody.appendChild(tr); return;
   }
+  let totalR = 0;
   for (const t of trades) {
+    if (t.pnl_r != null) totalR += t.pnl_r;
     const tr = document.createElement("tr");
     tr.className = "border-b border-[#1e2d3d] hover:bg-[#1a2332]";
+    // Extract instrument from strategy_id (first token before CB1)
+    const inst = t.strategy_id ? t.strategy_id.split("_")[0] : "\u2014";
     const cells = [
       { text: t.created_at ? new Date(t.created_at).toLocaleTimeString() : "\u2014", cls: "p-2" },
+      { text: inst, cls: "p-2 text-gray-400" },
       { text: extractSession(t.strategy_id), cls: "p-2" },
       { text: (t.direction || "\u2014").toUpperCase(), cls: "p-2 " + (t.direction === "long" ? "text-green-400" : "text-red-400") },
       { text: fmtP(t.fill_entry || t.engine_entry), cls: "p-2 text-right" },
@@ -388,12 +377,30 @@ function updateTrades(trades) {
     }
     tbody.appendChild(tr);
   }
+  // Total row
+  const totalTr = document.createElement("tr");
+  totalTr.className = "border-t-2 border-[#2a3a4a] font-bold";
+  const totalCells = [
+    { text: "", cls: "p-2" },
+    { text: "", cls: "p-2" },
+    { text: "", cls: "p-2" },
+    { text: "", cls: "p-2" },
+    { text: "", cls: "p-2" },
+    { text: "TOTAL", cls: "p-2 text-right text-gray-400" },
+    { text: fmtR(totalR), cls: "p-2 text-right " + rCol(totalR) },
+    { text: trades.length + " trades", cls: "p-2 text-gray-500" },
+  ];
+  for (const c of totalCells) {
+    const td = document.createElement("td"); td.className = c.cls; td.textContent = c.text; totalTr.appendChild(td);
+  }
+  tbody.appendChild(totalTr);
 }
 
 function extractSession(s) {
   if (!s) return "\u2014";
-  const p = s.split("_");
-  for (let i = 1; i < p.length; i++) { if (/^E[0-9]$/.test(p[i])) return p.slice(1, i).join("_"); }
+  // Strategy IDs: CB1_SESSION_NAME_E2_FILTER... — extract between CB1_ and _E[0-9]
+  const m = s.match(/^CB1_(.+?)_E[0-9]/);
+  if (m) return m[1];
   return s;
 }
 function fmtP(v) { return v != null ? v.toFixed(2) : "\u2014"; }
@@ -429,8 +436,15 @@ async function fetchAccounts() {
     const r = await fetch("/api/accounts");
     const d = await r.json();
     const grid = document.getElementById("accounts-grid");
-    grid.innerHTML = "";
-    for (const acct of (d.accounts || [])) {
+    while (grid.firstChild) grid.removeChild(grid.firstChild);
+    const accounts = (d.accounts || []).sort((a, b) => {
+      if (a.active !== b.active) return b.active - a.active;
+      const aAuto = a.auto_trading === "full" || a.auto_trading === "semi";
+      const bAuto = b.auto_trading === "full" || b.auto_trading === "semi";
+      if (aAuto !== bAuto) return bAuto - aAuto;
+      return b.lane_count - a.lane_count;
+    });
+    for (const acct of accounts) {
       const colors = FIRM_COLORS[acct.firm] || FIRM_COLORS["Self-Funded"];
       const isAuto = acct.auto_trading === "full" || acct.auto_trading === "semi";
       const opacity = acct.active ? "" : "opacity-40";
@@ -442,7 +456,14 @@ async function fetchAccounts() {
       const header = document.createElement("div");
       header.className = "flex items-center justify-between mb-2";
       const title = document.createElement("div");
-      title.innerHTML = `<span class="font-bold ${colors.text}">${acct.firm}</span> <span class="text-gray-400">$${(acct.account_size/1000)}K</span>`;
+      const firmSpan = document.createElement("span");
+      firmSpan.className = "font-bold " + colors.text;
+      firmSpan.textContent = acct.firm;
+      const sizeSpan = document.createElement("span");
+      sizeSpan.className = "text-gray-400 ml-1";
+      sizeSpan.textContent = "$" + (acct.account_size/1000) + "K";
+      title.appendChild(firmSpan);
+      title.appendChild(sizeSpan);
       const badge = document.createElement("span");
       badge.className = `px-2 py-0.5 rounded text-xs font-bold ${isAuto ? "bg-green-800 text-green-300" : "bg-gray-700 text-gray-400"}`;
       badge.textContent = isAuto ? "AUTO" : "MANUAL";
@@ -453,7 +474,7 @@ async function fetchAccounts() {
       const info = document.createElement("div");
       info.className = "text-xs text-gray-500 mb-2";
       const instruments = acct.instruments.length ? acct.instruments.join("+") : "ALL";
-      info.innerHTML = `${instruments} | ${acct.lane_count} lane${acct.lane_count!==1?"s":""} | DD $${acct.max_dd.toLocaleString()}${acct.dll ? " | DLL $"+acct.dll.toLocaleString() : ""}${acct.copies > 1 ? " | x"+acct.copies+" accounts" : ""}`;
+      info.textContent = instruments + " | " + acct.lane_count + " lane" + (acct.lane_count!==1?"s":"") + " | DD $" + acct.max_dd.toLocaleString() + (acct.dll ? " | DLL $"+acct.dll.toLocaleString() : "") + (acct.copies > 1 ? " | x"+acct.copies+" accounts" : "");
 
       // Lanes list
       const lanesList = document.createElement("div");
@@ -513,6 +534,8 @@ async function fetchSessions() {
   try {
     const r = await fetch("/api/sessions");
     const d = await r.json();
+    // Cache countdowns for lane cards (server-side DST-correct)
+    for (const s of (d.sessions || [])) { sessionCountdowns[s.name] = s.minutes_away; }
     const el = document.getElementById("next-session");
     if (d.next) {
       const n = d.next;
@@ -614,6 +637,17 @@ document.getElementById("btn-kill").addEventListener("click", async function() {
   } catch (e) { showActivity("KILL", "Kill failed: " + e.message, "text-red-400"); }
 });
 
+// Preflight
+document.getElementById("btn-preflight").addEventListener("click", async function() {
+  showActivity("PREFLIGHT", "Running pre-flight checks...", "text-cyan-400");
+  try {
+    const r = await fetch("/api/action/preflight", { method: "POST" });
+    const d = await r.json();
+    const color = d.status === "pass" ? "text-green-400" : "text-red-400";
+    showActivity("PREFLIGHT — " + (d.status || "").toUpperCase(), d.output || "No output", color);
+  } catch (e) { appendActivity("Error: " + e.message); }
+});
+
 // Close activity panel
 document.getElementById("btn-close-activity").addEventListener("click", function() {
   document.getElementById("activity-panel").classList.add("hidden");
@@ -629,7 +663,7 @@ fetchDataStatus();
 setInterval(fetchStatus, 5000);
 setInterval(fetchTrades, 10000);
 setInterval(fetchDataStatus, 30000);
-setInterval(fetchSessions, 60000);  // Update session countdown every minute
+setInterval(fetchSessions, 30000);  // Update session countdown from server every 30s
 </script>
 </body>
 </html>

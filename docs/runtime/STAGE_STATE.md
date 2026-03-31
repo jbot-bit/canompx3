@@ -1,16 +1,18 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Add O5 outcome build to refresh_data.py + daily auto-refresh bat
-updated: 2026-03-31T14:20:00Z
+task: Dashboard sim — fix bugs, fill gaps, improve UX
+updated: 2026-03-31T15:00:00Z
 scope_lock:
-  - scripts/tools/refresh_data.py
-  - scripts/daily_refresh.bat
+  - trading_app/live/bot_dashboard.py
+  - trading_app/live/bot_dashboard.html
 blast_radius:
-  - refresh_data.py: standalone CLI, no callers. Adding sequential step after daily_features.
-  - daily_refresh.bat: new file, Windows Task Scheduler entry point.
+  - bot_dashboard.py: FastAPI endpoints, no external callers except HTTP
+  - bot_dashboard.html: Single-page UI, no imports
 acceptance:
-  - python -m scripts.tools.refresh_data --dry-run shows outcome_builder step
-  - scripts/daily_refresh.bat runs end-to-end
-  - python pipeline/check_drift.py passes
+  - Refresh subprocess uses -m module syntax (not file path)
+  - extractSession handles multi-word session names (US_DATA_830)
+  - JS session times removed (use server-side countdown only)
+  - Preflight button visible and functional
+  - Trade table includes instrument column
 ---
