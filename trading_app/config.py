@@ -160,6 +160,22 @@ WF_MIN_TRAIN_TRADES: dict[str, int] = {
     "MGC": 45,  # 1.5x OOS window — stable IS estimation
 }
 
+# ── REGIME WF scaling (N=30-99) ─────────────────────────────────────────
+# Strategies with sample_size < CORE_MIN_SAMPLES use smaller WF windows.
+# 1/3 of CORE params. min_windows=2 → with 60% threshold, BOTH windows
+# must be positive. P(noise passes 2/2) = 0.25 vs P(noise passes 2/3) = 0.50.
+# Net: REGIME WF is MORE selective per-strategy than CORE WF.
+# @research-source regime-validation-design 2026-03-31
+# @revalidated-for E2 event-based sessions (2026-03-31)
+REGIME_WF_TRADE_COUNT: dict[str, int] = {
+    "MGC": 10,  # 1/3 of CORE 30
+}
+REGIME_WF_MIN_TRAIN_TRADES: dict[str, int] = {
+    "MGC": 15,  # 1.5x OOS window (same ratio as CORE 45/30)
+}
+REGIME_WF_MIN_WINDOWS = 2
+REGIME_WF_MIN_TRADES_PER_WINDOW = 5  # Calendar mode: 1/3 of CORE 15
+
 
 @dataclass(frozen=True)
 class StrategyFilter:
