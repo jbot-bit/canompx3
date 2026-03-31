@@ -114,16 +114,16 @@ class TestAccountProfile:
 
 
 class TestProfitSplitFactor:
-    def test_topstep_below_threshold(self):
-        """First $5K at 50% split."""
+    def test_topstep_flat_split(self):
+        """Flat 90/10 since Jan 2026."""
         spec = get_firm_spec("topstep")
         factor = compute_profit_split_factor(spec, cumulative_profit=0)
-        assert factor == pytest.approx(0.50)
+        assert factor == pytest.approx(0.90)
 
-    def test_topstep_above_threshold(self):
-        """After $5K at 90% split."""
+    def test_topstep_flat_split_high_profit(self):
+        """Still 90% at any profit level."""
         spec = get_firm_spec("topstep")
-        factor = compute_profit_split_factor(spec, cumulative_profit=6000)
+        factor = compute_profit_split_factor(spec, cumulative_profit=50000)
         assert factor == pytest.approx(0.90)
 
     def test_tradeify_flat_split(self):
