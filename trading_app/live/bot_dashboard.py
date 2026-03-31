@@ -70,6 +70,48 @@ def _ensure_log_dir() -> Path:
     return LOG_DIR
 
 
+# ── Startup handler — clean up stale state from prior crashes ────────────────
+
+
+@app.on_event("startup")
+async def _startup_cleanup():
+    """Clean up stale lock files and bot state from prior crashes.
+
+    On Windows, crashed python.exe processes leave lock files and DB handles.
+    The .bat launcher kills processes; this handler cleans up any remaining
+    file-level artifacts so the dashboard starts clean every time.
+    """
+    import tempfile
+
+    lock_dir = Path(tempfile.gettempdir()) / "canompx3"
+    if lock_dir.exists():
+        for lock_file in lock_dir.glob("bot_*.lock"):
+            try:
+                lock_file.unlink()
+                log.info("Startup: removed stale lock %s", lock_file.name)
+            except PermissionError:
+                log.warning("Startup: lock %s still held — process may be running", lock_file.name)
+            except Exception:
+                pass
+
+    # Clear stale bot_state.json so dashboard shows STOPPED (not a ghost heartbeat)
+    from trading_app.live.bot_state import STATE_FILE, clear_state
+
+    if STATE_FILE.exists():
+        state = read_state()
+        hb = state.get("heartbeat_utc")
+        if hb:
+            try:
+                from datetime import UTC, datetime
+
+                age = (datetime.now(UTC) - datetime.fromisoformat(hb)).total_seconds()
+                if age > 300:  # 5 minutes stale = definitely dead
+                    clear_state()
+                    log.info("Startup: cleared stale bot_state (heartbeat %ds old)", int(age))
+            except Exception:
+                pass
+
+
 # ── Shutdown handler — prevent orphaned child processes ──────────────────────
 
 

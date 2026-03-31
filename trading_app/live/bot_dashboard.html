@@ -429,6 +429,12 @@ async function fetchDataStatus() {
     // Highlight refresh button if stale
     if (d.any_stale) {
       btn.className = "btn-control px-4 py-2 rounded-lg font-bold text-xs bg-red-600 hover:bg-red-500 text-white pulse";
+      // Auto-refresh on first load if stale (no manual click needed)
+      if (!autoRefreshTriggered && !refreshPolling) {
+        autoRefreshTriggered = true;
+        console.log("Data stale — auto-triggering refresh...");
+        document.getElementById("btn-refresh").click();
+      }
     } else {
       btn.className = "btn-control px-4 py-2 rounded-lg font-bold text-xs bg-cyan-700 hover:bg-cyan-600 text-white";
     }
@@ -437,6 +443,7 @@ async function fetchDataStatus() {
 
 // Refresh data
 let refreshPolling = false;
+let autoRefreshTriggered = false;  // One-shot: auto-refresh on first stale detection
 document.getElementById("btn-refresh").addEventListener("click", async function() {
   showActivity("DATA REFRESH", "Starting data refresh (Databento download + pipeline rebuild)...", "text-cyan-400");
   try {
