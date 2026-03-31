@@ -164,6 +164,21 @@ def run_build_steps(instrument: str, start: date, end: date) -> bool:
         if not _run(cmd, f"daily_features O{orb_min}"):
             return False
 
+    # Step 3: Build O5 outcomes (forward data for validated strategies)
+    print("  Building O5 outcomes ...")
+    cmd = [
+        sys.executable,
+        "-m",
+        "trading_app.outcome_builder",
+        "--instrument",
+        instrument,
+        "--force",
+        "--orb-minutes",
+        "5",
+    ]
+    if not _run(cmd, "outcome_builder_O5"):
+        return False
+
     print(f"    Pipeline complete for {instrument}")
     return True
 
