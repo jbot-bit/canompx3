@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """
-Daily Trade Sheet Generator.
+Daily Trade Sheet Generator V2.
 
-Builds the resolved live portfolio for all active instruments, resolves
-today's session times via dst.py, and generates a self-contained HTML
-file showing exactly what to trade.
-
-ONLY shows strategies that passed the dollar gate. Nothing else.
+Two sections:
+  1. DEPLOYED — lanes from active prop_profiles (what you're committed to)
+  2. OPPORTUNITIES — all other validated strategies that pass gates (manual pickup)
 
 Usage:
-    python scripts/tools/generate_trade_sheet.py
+    python scripts/tools/generate_trade_sheet.py              # both sections
+    python scripts/tools/generate_trade_sheet.py --deployed-only  # deployed only (V1 behavior)
     python scripts/tools/generate_trade_sheet.py --date 2026-03-04
-    python scripts/tools/generate_trade_sheet.py --output my_sheet.html
     python scripts/tools/generate_trade_sheet.py --no-open
 """
 
@@ -27,6 +25,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb
 
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
@@ -270,6 +269,106 @@ def collect_trades(trading_day: date, db_path: Path, profile_filter: str | None 
     return trades
 
 
+def collect_opportunities(
+    db_path: Path,
+    deployed_sids: set[str],
+) -> list[dict]:
+    """Collect all validated strategies that pass gates but aren't deployed.
+
+    Best per session x instrument (highest ExpR). Applies dollar gate.
+    Skips PURGED/DECAY fitness. No look-ahead — uses only validated_setups
+    and experimental_strategies (pre-computed, no future data).
+    """
+    active_instruments = tuple(sorted(ACTIVE_ORB_INSTRUMENTS))
+    opportunities = []
+    fitness_cache: dict[str, FitnessCheckResult] = {}
+
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        # Best strategy per session x instrument, respecting family_rr_locks.
+        # Join locks to pick the locked RR target per family (no RR snooping).
+        rows = con.execute(
+            """
+            WITH locked AS (
+                SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.orb_minutes,
+                       vs.filter_type, vs.rr_target, vs.stop_multiplier,
+                       vs.win_rate, vs.expectancy_r, vs.sample_size,
+                       es.median_risk_points,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY vs.instrument, vs.orb_label
+                           ORDER BY vs.expectancy_r DESC
+                       ) as rn
+                FROM validated_setups vs
+                INNER JOIN family_rr_locks frl
+                  ON vs.instrument = frl.instrument
+                  AND vs.orb_label = frl.orb_label
+                  AND vs.filter_type = frl.filter_type
+                  AND vs.entry_model = frl.entry_model
+                  AND vs.orb_minutes = frl.orb_minutes
+                  AND vs.confirm_bars = frl.confirm_bars
+                  AND vs.rr_target = frl.locked_rr
+                LEFT JOIN experimental_strategies es
+                  ON vs.strategy_id = es.strategy_id
+                WHERE LOWER(vs.status) = 'active'
+                  AND vs.expectancy_r > 0
+                  AND vs.sample_size >= 100
+                  AND vs.instrument IN (SELECT UNNEST(?::VARCHAR[]))
+            )
+            SELECT * FROM locked WHERE rn = 1
+            ORDER BY orb_label, instrument
+        """,
+            [list(active_instruments)],
+        ).fetchall()
+
+        cols = [d[0] for d in con.description]
+
+        for row in rows:
+            variant = dict(zip(cols, row, strict=False))
+            sid = variant["strategy_id"]
+            instrument = variant["instrument"]
+
+            # Skip already-deployed strategies
+            if sid in deployed_sids:
+                continue
+
+            # Dollar gate
+            passes, exp_d = _passes_dollar_gate(variant, instrument)
+            if not passes:
+                continue
+
+            # Fitness check — skip PURGED/DECAY
+            fitness = _check_fitness(sid, db_path, fitness_cache)
+            if fitness.status in ("PURGED", "DECAY"):
+                continue
+
+            opportunities.append(
+                {
+                    "session": variant["orb_label"],
+                    "instrument": instrument,
+                    "strategy_id": sid,
+                    "aperture": variant.get("orb_minutes", 5),
+                    "direction": _direction_rule(variant["filter_type"]),
+                    "filter_desc": _filter_description(variant["filter_type"]),
+                    "filter_type": variant["filter_type"],
+                    "rr": variant["rr_target"],
+                    "win_rate": variant["win_rate"],
+                    "exp_r": variant["expectancy_r"],
+                    "exp_dollars": exp_d,
+                    "sample_size": variant["sample_size"],
+                    "fitness": fitness.status,
+                    "fitness_error": fitness.error,
+                    "profile": "opportunity",
+                    "stop_mult": variant.get("stop_multiplier", 1.0),
+                    "orb_cap": None,
+                    "notes": "",
+                }
+            )
+    finally:
+        con.close()
+
+    return opportunities
+
+
 # ── HTML generation ───────────────────────────────────────────────────
 
 
@@ -297,11 +396,111 @@ def _fitness_badge(fitness: str) -> str:
     return f' <span class="badge {cls}">{fitness}</span>'
 
 
-def generate_html(trades: list[dict], session_times: dict, trading_day: date) -> str:
-    """Generate self-contained HTML trade sheet."""
+def _build_session_cards(
+    trades: list[dict],
+    session_times: dict,
+    profiles_used: dict,
+    css_class: str = "",
+) -> tuple[str, int]:
+    """Build session card HTML from a list of trades. Returns (html, trade_count)."""
+    sessions_used = sorted(
+        set(t["session"] for t in trades),
+        key=lambda s: _sort_key(*session_times.get(s, (0, 0))),
+    )
 
-    # Group trades by session
-    sessions_used = sorted(set(t["session"] for t in trades), key=lambda s: _sort_key(*session_times.get(s, (0, 0))))
+    cards_html = ""
+    trade_num = 0
+    for session in sessions_used:
+        h, m = session_times.get(session, (0, 0))
+        time_str = _format_time(h, m)
+        event = SESSION_CATALOG.get(session, {}).get("event", "")
+        session_trades = [t for t in trades if t["session"] == session]
+
+        rows_html = ""
+        for t in session_trades:
+            trade_num += 1
+            exp_d_str = f"${t['exp_dollars']:+.2f}" if t["exp_dollars"] is not None else "n/a"
+            dir_badge = _direction_badge(t["direction"])
+            fit_badge = _fitness_badge(t["fitness"])
+            fitness_title = ""
+            if t.get("fitness_error"):
+                fitness_title = f' title="{t["fitness_error"]}"'
+
+            exp_r_class = "expr-high" if t["exp_r"] >= 0.20 else ""
+
+            notes_parts = []
+            if t.get("orb_cap"):
+                notes_parts.append(f"Cap {t['orb_cap']:.0f}pts")
+            if t.get("stop_mult") and t["stop_mult"] != 0.75:
+                notes_parts.append(f"Stop {t['stop_mult']}x")
+            if t.get("notes"):
+                notes_parts.append(t["notes"][:80])
+            notes_html = f'<div class="lane-notes">{" | ".join(notes_parts)}</div>' if notes_parts else ""
+
+            rows_html += f"""
+            <tr>
+                <td class="instrument-cell">{t["instrument"]}</td>
+                <td>{t["aperture"]}m</td>
+                <td>{dir_badge if dir_badge else "ANY"}</td>
+                <td class="filter-cell">{t["filter_desc"]}</td>
+                <td>{t["rr"]:.1f} : 1</td>
+                <td>{t["win_rate"]:.0%}</td>
+                <td class="{exp_r_class}">{t["exp_r"]:+.3f}</td>
+                <td class="dollars-cell">{exp_d_str}</td>
+                <td>N={t["sample_size"]}</td>
+                <td{fitness_title}>{fit_badge if fit_badge else '<span class="fit-ok">FIT</span>'}</td>
+            </tr>"""
+            if notes_html:
+                rows_html += f"""
+            <tr class="notes-row"><td colspan="10">{notes_html}</td></tr>"""
+
+        # Session header with firm badge
+        firm_badges = set()
+        for t in session_trades:
+            pi = profiles_used.get(t.get("profile", ""), {})
+            if pi:
+                firm_badges.add(f'<span class="badge badge-firm">{pi.get("firm", "?")} {pi.get("mode", "?")}</span>')
+        firm_badges_html = " ".join(firm_badges)
+
+        card_class = f"session-card {css_class}" if css_class else "session-card"
+        cards_html += f"""
+        <div class="{card_class}">
+            <div class="session-header">
+                <div class="session-time">{time_str} BRIS</div>
+                <div class="session-name">{session} {firm_badges_html}</div>
+                <div class="session-event">{event}</div>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Instrument</th>
+                        <th>ORB</th>
+                        <th>Direction</th>
+                        <th>Filter</th>
+                        <th>RR</th>
+                        <th>WR</th>
+                        <th>ExpR</th>
+                        <th>Exp$/trade</th>
+                        <th>N</th>
+                        <th>Fitness</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html}
+                </tbody>
+            </table>
+        </div>"""
+
+    return cards_html, trade_num
+
+
+def generate_html(
+    trades: list[dict],
+    session_times: dict,
+    trading_day: date,
+    opportunities: list[dict] | None = None,
+) -> str:
+    """Generate self-contained HTML trade sheet with deployed + opportunities."""
 
     day_name = trading_day.strftime("%A")
     date_str = trading_day.strftime("%d %b %Y")
@@ -341,86 +540,14 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
             <div class="profile-detail">DD {info["dd"]} | Stop {info["stop"]} | {info["lanes"]} lanes</div>
         </div>"""
 
-    # Build session cards
-    cards_html = ""
-    trade_num = 0
-    for session in sessions_used:
-        h, m = session_times.get(session, (0, 0))
-        time_str = _format_time(h, m)
-        event = SESSION_CATALOG.get(session, {}).get("event", "")
-        session_trades = [t for t in trades if t["session"] == session]
+    # Build deployed session cards
+    cards_html, trade_num = _build_session_cards(trades, session_times, profiles_used)
 
-        rows_html = ""
-        for t in session_trades:
-            trade_num += 1
-            exp_d_str = f"${t['exp_dollars']:+.2f}" if t["exp_dollars"] is not None else "n/a"
-            dir_badge = _direction_badge(t["direction"])
-            fit_badge = _fitness_badge(t["fitness"])
-            fitness_title = ""
-            if t.get("fitness_error"):
-                fitness_title = f' title="{t["fitness_error"]}"'
-
-            exp_r_class = "expr-high" if t["exp_r"] >= 0.20 else ""
-
-            # Execution notes line
-            notes_parts = []
-            if t.get("orb_cap"):
-                notes_parts.append(f"Cap {t['orb_cap']:.0f}pts")
-            if t.get("stop_mult") and t["stop_mult"] != 0.75:
-                notes_parts.append(f"Stop {t['stop_mult']}x")
-            if t.get("notes"):
-                notes_parts.append(t["notes"][:80])
-            notes_html = f'<div class="lane-notes">{" | ".join(notes_parts)}</div>' if notes_parts else ""
-
-            rows_html += f"""
-            <tr>
-                <td class="instrument-cell">{t["instrument"]}</td>
-                <td>{t["aperture"]}m</td>
-                <td>{dir_badge if dir_badge else "ANY"}</td>
-                <td class="filter-cell">{t["filter_desc"]}</td>
-                <td>{t["rr"]:.1f} : 1</td>
-                <td>{t["win_rate"]:.0%}</td>
-                <td class="{exp_r_class}">{t["exp_r"]:+.3f}</td>
-                <td class="dollars-cell">{exp_d_str}</td>
-                <td{fitness_title}>{fit_badge if fit_badge else '<span class="fit-ok">FIT</span>'}</td>
-            </tr>"""
-            if notes_html:
-                rows_html += f"""
-            <tr class="notes-row"><td colspan="9">{notes_html}</td></tr>"""
-
-        # Session header with firm badge
-        firm_badges = set()
-        for t in session_trades:
-            pi = profiles_used.get(t.get("profile", ""), {})
-            firm_badges.add(f'<span class="badge badge-firm">{pi.get("firm", "?")} {pi.get("mode", "?")}</span>')
-        firm_badges_html = " ".join(firm_badges)
-
-        cards_html += f"""
-        <div class="session-card">
-            <div class="session-header">
-                <div class="session-time">{time_str} BRIS</div>
-                <div class="session-name">{session} {firm_badges_html}</div>
-                <div class="session-event">{event}</div>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Instrument</th>
-                        <th>ORB</th>
-                        <th>Direction</th>
-                        <th>Filter</th>
-                        <th>RR</th>
-                        <th>WR</th>
-                        <th>ExpR</th>
-                        <th>Exp$/trade</th>
-                        <th>Fitness</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows_html}
-                </tbody>
-            </table>
-        </div>"""
+    # Build opportunities section
+    opps_html = ""
+    opps_count = 0
+    if opportunities:
+        opps_html, opps_count = _build_session_cards(opportunities, session_times, profiles_used, css_class="opp-card")
 
     # Instrument summary
     instr_counts = {}
@@ -731,6 +858,32 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
         padding: 1px 4px;
         border-radius: 4px;
     }}
+    .section-divider {{
+        text-align: center;
+        margin: 32px 0 24px;
+        padding: 16px;
+        border-top: 2px solid #30363d;
+    }}
+    .section-divider h2 {{
+        font-size: 20px;
+        font-weight: 700;
+        color: #8b949e;
+    }}
+    .section-divider .section-sub {{
+        font-size: 13px;
+        color: #484f58;
+        margin-top: 4px;
+    }}
+    .opp-card {{
+        border-color: #2d333b;
+        opacity: 0.85;
+    }}
+    .opp-card .session-header {{
+        background: #13171d;
+    }}
+    .opp-card .session-time {{
+        color: #8b949e;
+    }}
     .footer {{
         text-align: center;
         padding: 20px;
@@ -760,7 +913,9 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
     <div class="header">
         <h1>TRADE SHEET</h1>
         <div class="date">{day_name} {date_str}</div>
-        <div class="subtitle">Generated {now_str} &mdash; {trade_num} active trades &mdash; All times Brisbane (AEST UTC+10)</div>
+        <div class="subtitle">Generated {now_str} &mdash; {trade_num} deployed + {
+        opps_count
+    } opportunities &mdash; All times Brisbane (AEST UTC+10)</div>
     </div>
 
     <div class="profile-bar">
@@ -780,9 +935,21 @@ def generate_html(trades: list[dict], session_times: dict, trading_day: date) ->
 
     {cards_html}
 
+    {
+        f'''
+    <div class="section-divider">
+        <h2>OPPORTUNITIES &mdash; {opps_count} additional validated strategies</h2>
+        <div class="section-sub">Best per session x instrument &mdash; not deployed, pass all gates &mdash; manual pickup</div>
+    </div>
+    {opps_html}
+    '''
+        if opps_html
+        else ""
+    }
+
     <div class="footer">
-        Source: prop_profiles.py deployed lanes &mdash; dollar gate applied &mdash;
-        only cost-positive trades shown
+        Source: prop_profiles.py deployed lanes + validated_setups opportunities &mdash;
+        dollar gate applied &mdash; only cost-positive, non-PURGED trades shown
     </div>
 </body>
 </html>"""
@@ -804,6 +971,11 @@ def main():
         default=None,
         help="Filter to one profile (e.g. apex_50k_manual). Default: all active.",
     )
+    parser.add_argument(
+        "--deployed-only",
+        action="store_true",
+        help="Only show deployed lanes (V1 behavior). Skip opportunities section.",
+    )
     args = parser.parse_args()
 
     db_path = args.db_path or GOLD_DB_PATH
@@ -824,20 +996,29 @@ def main():
         print(f"  {_format_time(h, m):>10}  {label}")
     print()
 
-    # Collect trades
+    # Collect deployed trades
     if args.profile:
         print(f"Filtering to profile: {args.profile}")
-    print("Building resolved portfolios...")
+    print("Building deployed lanes...")
     trades = collect_trades(trading_day, db_path, profile_filter=args.profile)
-    print(f"  {len(trades)} active trades across {len(set(t['instrument'] for t in trades))} instruments")
+    print(f"  {len(trades)} deployed trades across {len(set(t['instrument'] for t in trades))} instruments")
+
+    # Collect opportunities (unless --deployed-only)
+    opportunities = []
+    if not args.deployed_only:
+        print("Scanning validated opportunities...")
+        deployed_sids = {t["strategy_id"] for t in trades}
+        opportunities = collect_opportunities(db_path, deployed_sids)
+        opp_instruments = set(t["instrument"] for t in opportunities) if opportunities else set()
+        print(f"  {len(opportunities)} opportunities across {len(opp_instruments)} instruments")
     print()
 
-    if not trades:
-        print("ERROR: No active trades found. Check DB and prop_profiles.py.")
+    if not trades and not opportunities:
+        print("ERROR: No trades or opportunities found. Check DB and prop_profiles.py.")
         sys.exit(1)
 
     # Generate HTML
-    html = generate_html(trades, session_times, trading_day)
+    html = generate_html(trades, session_times, trading_day, opportunities=opportunities or None)
     output_path.write_text(html, encoding="utf-8")
     print(f"Written to {output_path}")
 
