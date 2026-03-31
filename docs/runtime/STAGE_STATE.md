@@ -13,6 +13,8 @@ scope_lock:
   - trading_app/weekly_review.py
   - scripts/tools/*.py
   - trading_app/live/*.py
+  - trading_app/live/*.html
+  - START_BOT.bat
   - scripts/run_live_session.py
 blast_radius:
   - score_lanes.py: CLI signature change, no external callers
