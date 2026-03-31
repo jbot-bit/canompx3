@@ -123,6 +123,7 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
     # 5. Component self-tests (notifications, brackets, fill poller)
     all_pass = True  # default if check 5 fails entirely
     print(f"[5/{checks_total}] Component self-tests...", end=" ", flush=True)
+    orch = None
     try:
         orch = SessionOrchestrator(
             instrument=instrument,
@@ -143,6 +144,15 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
             checks_passed += 1
     except Exception as e:
         print(f"FAILED: {e}")
+    finally:
+        # CRITICAL: close journal DB connection to release Windows file lock.
+        # Without this, live_journal.db stays locked after preflight exits,
+        # blocking the actual trading session from opening it.
+        if orch is not None:
+            try:
+                orch.journal.close()
+            except Exception:
+                pass
 
     print(f"\nPreflight: {checks_passed}/{checks_total} passed")
     if checks_passed == checks_total:
