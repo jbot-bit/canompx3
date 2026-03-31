@@ -28,8 +28,24 @@
   KILL ALL TRADES
 </button>
 
-<!-- TOP STATUS BAR -->
-<div class="flex flex-wrap items-center gap-4 mb-6 p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]">
+<!-- NEXT SESSION BANNER + DATA FRESHNESS -->
+<div class="flex flex-wrap items-center gap-4 mb-4 p-3 rounded-xl bg-[#111922] border border-[#1e2d3d]">
+  <div class="flex items-center gap-2">
+    <span class="text-xs text-gray-500 font-bold">NEXT</span>
+    <span id="next-session" class="text-sm font-bold text-cyan-400">Loading...</span>
+  </div>
+  <div class="flex-1"></div>
+  <div class="flex items-center gap-2">
+    <span class="text-xs text-gray-500 font-bold">DATA</span>
+    <span id="data-status" class="text-xs text-gray-400">Checking...</span>
+  </div>
+  <button id="btn-refresh" class="btn-control px-3 py-1.5 rounded-lg font-bold text-xs bg-cyan-700 hover:bg-cyan-600 text-white">
+    REFRESH ALL
+  </button>
+</div>
+
+<!-- ACTIVE SESSION STATUS (only visible when bot running) -->
+<div id="session-status-bar" class="hidden flex flex-wrap items-center gap-4 mb-4 p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]">
   <div id="mode-badge" class="px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-gray-800 text-gray-400">STOPPED</div>
   <div class="flex-1 min-w-[200px]">
     <div class="text-xs text-gray-500">ACCOUNT</div>
@@ -58,31 +74,13 @@
   </div>
 </div>
 
-<!-- 4 LANE CARDS -->
-<div id="lanes-grid" class="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-6"></div>
-
-<!-- DATA FRESHNESS BAR -->
-<div id="data-bar" class="flex flex-wrap items-center gap-3 mb-4 p-3 rounded-xl bg-[#111922] border border-[#1e2d3d]">
-  <span class="text-xs text-gray-500 font-bold">DATA</span>
-  <span id="data-status" class="text-xs text-gray-400">Checking...</span>
-  <div class="flex-1"></div>
-  <button id="btn-refresh" class="btn-control px-4 py-2 rounded-lg font-bold text-xs bg-cyan-700 hover:bg-cyan-600 text-white">
-    REFRESH DATA
-  </button>
+<!-- ACCOUNT CARDS -->
+<div id="accounts-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
+  <div class="p-4 rounded-xl bg-[#111922] border border-[#1e2d3d] text-center text-gray-600 text-sm">Loading accounts...</div>
 </div>
 
-<!-- CONTROL BUTTONS -->
-<div class="flex flex-wrap gap-3 mb-4">
-  <button id="btn-preflight" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-gray-700 hover:bg-gray-600 text-white">
-    PREFLIGHT CHECK
-  </button>
-  <button id="btn-start" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-green-700 hover:bg-green-600 text-white">
-    START SIGNAL-ONLY
-  </button>
-  <button id="btn-live" class="btn-control px-6 py-3 rounded-lg font-bold text-sm bg-yellow-700 hover:bg-yellow-600 text-black">
-    START LIVE
-  </button>
-</div>
+<!-- LANE CARDS (visible when session running) -->
+<div id="lanes-grid" class="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-4"></div>
 
 <!-- ACTIVITY LOG (preflight, refresh, session output) -->
 <div id="activity-panel" class="hidden mb-6 p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]">
@@ -272,6 +270,13 @@ async function fetchTrades() {
 
 function updateStatus(d) {
   const mode = d.mode || "STOPPED";
+  // Show/hide session status bar based on whether bot is running
+  const statusBar = document.getElementById("session-status-bar");
+  if (mode === "STOPPED") {
+    statusBar.classList.add("hidden");
+  } else {
+    statusBar.classList.remove("hidden");
+  }
   const badge = document.getElementById("mode-badge");
   badge.textContent = mode;
   const colors = {
@@ -410,6 +415,127 @@ function appendActivity(text) {
   output.scrollTop = output.scrollHeight;
 }
 
+// Firm badge colors
+const FIRM_COLORS = {
+  "Apex Trader Funding": { bg: "bg-orange-900", text: "text-orange-300", border: "border-orange-700" },
+  "TopStep": { bg: "bg-blue-900", text: "text-blue-300", border: "border-blue-700" },
+  "Tradeify": { bg: "bg-green-900", text: "text-green-300", border: "border-green-700" },
+  "MyFundedFutures": { bg: "bg-purple-900", text: "text-purple-300", border: "border-purple-700" },
+  "Self-Funded": { bg: "bg-gray-800", text: "text-gray-300", border: "border-gray-600" },
+};
+
+async function fetchAccounts() {
+  try {
+    const r = await fetch("/api/accounts");
+    const d = await r.json();
+    const grid = document.getElementById("accounts-grid");
+    grid.innerHTML = "";
+    for (const acct of (d.accounts || [])) {
+      const colors = FIRM_COLORS[acct.firm] || FIRM_COLORS["Self-Funded"];
+      const isAuto = acct.auto_trading === "full" || acct.auto_trading === "semi";
+      const opacity = acct.active ? "" : "opacity-40";
+
+      const card = document.createElement("div");
+      card.className = `p-4 rounded-xl bg-[#111922] border ${acct.active ? colors.border : "border-[#1e2d3d]"} ${opacity}`;
+
+      // Header: Firm + Size + Mode badge
+      const header = document.createElement("div");
+      header.className = "flex items-center justify-between mb-2";
+      const title = document.createElement("div");
+      title.innerHTML = `<span class="font-bold ${colors.text}">${acct.firm}</span> <span class="text-gray-400">$${(acct.account_size/1000)}K</span>`;
+      const badge = document.createElement("span");
+      badge.className = `px-2 py-0.5 rounded text-xs font-bold ${isAuto ? "bg-green-800 text-green-300" : "bg-gray-700 text-gray-400"}`;
+      badge.textContent = isAuto ? "AUTO" : "MANUAL";
+      header.appendChild(title);
+      header.appendChild(badge);
+
+      // Info: instruments, lanes, DD
+      const info = document.createElement("div");
+      info.className = "text-xs text-gray-500 mb-2";
+      const instruments = acct.instruments.length ? acct.instruments.join("+") : "ALL";
+      info.innerHTML = `${instruments} | ${acct.lane_count} lane${acct.lane_count!==1?"s":""} | DD $${acct.max_dd.toLocaleString()}${acct.dll ? " | DLL $"+acct.dll.toLocaleString() : ""}${acct.copies > 1 ? " | x"+acct.copies+" accounts" : ""}`;
+
+      // Lanes list
+      const lanesList = document.createElement("div");
+      lanesList.className = "text-xs text-gray-400 mb-3";
+      for (const lane of acct.lanes.slice(0, 3)) {
+        const div = document.createElement("div");
+        div.textContent = `${lane.session} ${lane.filter}`;
+        lanesList.appendChild(div);
+      }
+      if (acct.lanes.length > 3) {
+        const more = document.createElement("div");
+        more.className = "text-gray-600";
+        more.textContent = `+ ${acct.lanes.length - 3} more`;
+        lanesList.appendChild(more);
+      }
+
+      card.appendChild(header);
+      card.appendChild(info);
+      card.appendChild(lanesList);
+
+      // START button (only for auto-capable active profiles with lanes)
+      if (isAuto && acct.active && acct.lane_count > 0) {
+        const btn = document.createElement("button");
+        btn.className = "btn-control w-full py-2 rounded-lg font-bold text-sm bg-green-700 hover:bg-green-600 text-white";
+        btn.textContent = "START SIGNAL-ONLY";
+        btn.addEventListener("click", () => startProfile(acct.profile_id, acct.firm, instruments));
+        card.appendChild(btn);
+      } else if (!isAuto && acct.active) {
+        const label = document.createElement("div");
+        label.className = "text-center text-xs text-gray-600 py-2";
+        label.textContent = "Manual trading only";
+        card.appendChild(label);
+      } else if (!acct.active) {
+        const label = document.createElement("div");
+        label.className = "text-center text-xs text-gray-600 py-2";
+        label.textContent = "Inactive";
+        card.appendChild(label);
+      }
+
+      grid.appendChild(card);
+    }
+  } catch (_e) {}
+}
+
+async function startProfile(profileId, firmName, instruments) {
+  if (!confirm(`Start SIGNAL-ONLY session?\n\n${firmName} - ${instruments}\nProfile: ${profileId}\n\nNo real orders will be placed.`)) return;
+  showActivity("SESSION START", `Launching ${profileId}...`, "text-green-400");
+  try {
+    const r = await fetch("/api/action/start?profile=" + encodeURIComponent(profileId), { method: "POST" });
+    const d = await r.json();
+    appendActivity(d.message || d.status);
+    if (d.pid) appendActivity("PID: " + d.pid);
+  } catch (e) { appendActivity("Error: " + e.message); }
+}
+
+async function fetchSessions() {
+  try {
+    const r = await fetch("/api/sessions");
+    const d = await r.json();
+    const el = document.getElementById("next-session");
+    if (d.next) {
+      const n = d.next;
+      const hrs = Math.floor(Math.abs(n.minutes_away) / 60);
+      const mins = Math.abs(n.minutes_away) % 60;
+      const timeStr = `${String(n.hour).padStart(2,"0")}:${String(n.minute).padStart(2,"0")}`;
+      if (n.minutes_away <= 0) {
+        el.textContent = `${n.name} ${timeStr} - NOW`;
+        el.className = "text-sm font-bold text-green-400 pulse";
+      } else if (hrs > 0) {
+        el.textContent = `${n.name} ${timeStr} - in ${hrs}h ${mins}m`;
+        el.className = "text-sm font-bold text-cyan-400";
+      } else {
+        el.textContent = `${n.name} ${timeStr} - in ${mins}m`;
+        el.className = "text-sm font-bold text-yellow-400";
+      }
+    } else {
+      el.textContent = "No upcoming sessions";
+      el.className = "text-sm text-gray-500";
+    }
+  } catch (_e) {}
+}
+
 // Data freshness
 async function fetchDataStatus() {
   try {
@@ -428,7 +554,7 @@ async function fetchDataStatus() {
     el.className = "text-xs " + (d.any_stale ? "text-red-400" : "text-green-400");
     // Highlight refresh button if stale
     if (d.any_stale) {
-      btn.className = "btn-control px-4 py-2 rounded-lg font-bold text-xs bg-red-600 hover:bg-red-500 text-white pulse";
+      btn.className = "btn-control px-3 py-1.5 rounded-lg font-bold text-xs bg-red-600 hover:bg-red-500 text-white pulse";
       // Auto-refresh on first load if stale (no manual click needed)
       if (!autoRefreshTriggered && !refreshPolling) {
         autoRefreshTriggered = true;
@@ -436,7 +562,7 @@ async function fetchDataStatus() {
         document.getElementById("btn-refresh").click();
       }
     } else {
-      btn.className = "btn-control px-4 py-2 rounded-lg font-bold text-xs bg-cyan-700 hover:bg-cyan-600 text-white";
+      btn.className = "btn-control px-3 py-1.5 rounded-lg font-bold text-xs bg-cyan-700 hover:bg-cyan-600 text-white";
     }
   } catch (_e) {}
 }
@@ -477,40 +603,6 @@ document.getElementById("btn-refresh").addEventListener("click", async function(
   } catch (e) { appendActivity("Error: " + e.message); }
 });
 
-// Preflight
-document.getElementById("btn-preflight").addEventListener("click", async function() {
-  showActivity("PREFLIGHT CHECK", "Running preflight checks...", "text-yellow-400");
-  try {
-    const r = await fetch("/api/action/preflight", { method: "POST" });
-    const d = await r.json();
-    const output = document.getElementById("activity-output");
-    output.textContent = d.output || "No output";
-    output.className = "text-xs whitespace-pre-wrap max-h-[300px] overflow-y-auto " + (d.status === "pass" ? "text-green-400" : "text-red-400");
-    setText("activity-title", "PREFLIGHT: " + (d.status === "pass" ? "PASS" : "FAIL"));
-  } catch (e) { appendActivity("Error: " + e.message); }
-});
-
-// Start signal-only session
-document.getElementById("btn-start").addEventListener("click", async function() {
-  if (!confirm("Start SIGNAL-ONLY session?\n\nNo real orders will be placed.\nDashboard will show live ORB detection and trade signals.")) return;
-  showActivity("SESSION START", "Launching signal-only session...", "text-green-400");
-  try {
-    const r = await fetch("/api/action/start", { method: "POST" });
-    const d = await r.json();
-    appendActivity(d.message || d.status);
-    if (d.status === "started") {
-      appendActivity("PID: " + d.pid + "\nDashboard will update automatically as bars arrive.");
-    }
-  } catch (e) { appendActivity("Error: " + e.message); }
-});
-
-// Start live (requires confirmation)
-document.getElementById("btn-live").addEventListener("click", function() {
-  const code = prompt("Type CONFIRM to start LIVE trading with real money:");
-  if (code !== "CONFIRM") return;
-  alert("Live mode launch from dashboard not yet enabled.\n\nUse terminal for live trading:\npython -m scripts.run_live_session --profile topstep_50k_mnq_auto --live");
-});
-
 // Kill
 document.getElementById("btn-kill").addEventListener("click", async function() {
   if (!confirm("KILL ALL TRADES?\n\nThis writes the stop file and shuts down the bot.\nOpen positions will be closed at market.")) return;
@@ -527,14 +619,17 @@ document.getElementById("btn-close-activity").addEventListener("click", function
   document.getElementById("activity-panel").classList.add("hidden");
 });
 
-// Init
+// Init — load everything on page open
 buildLaneCards();
+fetchAccounts();
+fetchSessions();
 fetchStatus();
 fetchTrades();
 fetchDataStatus();
 setInterval(fetchStatus, 5000);
 setInterval(fetchTrades, 10000);
 setInterval(fetchDataStatus, 30000);
+setInterval(fetchSessions, 60000);  // Update session countdown every minute
 </script>
 </body>
 </html>
