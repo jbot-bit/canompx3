@@ -506,38 +506,55 @@ def generate_html(
     date_str = trading_day.strftime("%d %b %Y")
     now_str = datetime.now().strftime("%H:%M")
 
-    # Profile summary bar
+    # Profile summary bar — compute per-profile EV and DD budget
+    from trading_app.prop_profiles import PROP_FIRM_SPECS, get_account_tier
+
     profiles_used = {}
     for t in trades:
         pid = t.get("profile", "unknown")
         if pid not in profiles_used:
             prof = ACCOUNT_PROFILES.get(pid)
             if prof:
-                from trading_app.prop_profiles import PROP_FIRM_SPECS, get_account_tier
-
                 spec = PROP_FIRM_SPECS.get(prof.firm, None)
                 tier = get_account_tier(prof.firm, prof.account_size)
                 auto_label = {"none": "MANUAL", "full": "AUTO", "semi": "SEMI"}.get(
                     spec.auto_trading if spec else "none", "?"
                 )
+                dll = tier.daily_loss_limit
                 profiles_used[pid] = {
                     "firm": prof.firm.upper(),
                     "size": f"${prof.account_size // 1000}K",
-                    "dd": f"${tier.max_dd:,}",
+                    "dd": tier.max_dd,
+                    "dd_str": f"${tier.max_dd:,}",
+                    "dll": dll,
+                    "dll_str": f"${dll:,}" if dll else "none",
                     "stop": f"{prof.stop_multiplier}x",
                     "lanes": len(prof.daily_lanes),
                     "mode": auto_label,
                     "copies": prof.copies,
+                    "ev_per_copy": 0.0,
                 }
+
+    # Sum EV per profile
+    for t in trades:
+        pid = t.get("profile", "unknown")
+        if pid in profiles_used and t["exp_dollars"] is not None:
+            profiles_used[pid]["ev_per_copy"] += t["exp_dollars"]
 
     profile_bar_html = ""
     for _pid, info in profiles_used.items():
-        copies_note = f" x{info['copies']}" if info["copies"] > 1 else ""
+        copies = info["copies"]
+        copies_note = f" x{copies}" if copies > 1 else ""
+        ev_1 = info["ev_per_copy"]
+        ev_total = ev_1 * copies
+        ev_line = f"EV ${ev_1:.0f}/day" if copies == 1 else f"EV ${ev_1:.0f}/day x{copies} = ${ev_total:.0f}"
+        dll_line = f" | DLL {info['dll_str']}" if info["dll"] else ""
         profile_bar_html += f"""
         <div class="profile-card profile-{info["mode"].lower()}">
             <strong>{info["firm"]} {info["size"]}{copies_note}</strong>
             <span class="profile-mode">{info["mode"]}</span>
-            <div class="profile-detail">DD {info["dd"]} | Stop {info["stop"]} | {info["lanes"]} lanes</div>
+            <div class="profile-detail">DD {info["dd_str"]}{dll_line} | Stop {info["stop"]} | {info["lanes"]} lanes</div>
+            <div class="profile-ev">{ev_line}</div>
         </div>"""
 
     # Build deployed session cards
@@ -549,22 +566,46 @@ def generate_html(
     if opportunities:
         opps_html, opps_count = _build_session_cards(opportunities, session_times, profiles_used, css_class="opp-card")
 
-    # Instrument summary
-    instr_counts = {}
-    instr_total_exp = {}
+    # Instrument summary — deployed + opportunities combined
+    all_trades = list(trades) + (opportunities or [])
+    instr_deployed_exp = {}
+    instr_opp_exp = {}
     for t in trades:
-        instr_counts[t["instrument"]] = instr_counts.get(t["instrument"], 0) + 1
         if t["exp_dollars"] is not None:
-            instr_total_exp[t["instrument"]] = instr_total_exp.get(t["instrument"], 0) + t["exp_dollars"]
+            instr_deployed_exp[t["instrument"]] = instr_deployed_exp.get(t["instrument"], 0) + t["exp_dollars"]
+    for t in opportunities or []:
+        if t["exp_dollars"] is not None:
+            instr_opp_exp[t["instrument"]] = instr_opp_exp.get(t["instrument"], 0) + t["exp_dollars"]
+
+    all_instruments = sorted(set(t["instrument"] for t in all_trades))
+    deployed_total = sum(instr_deployed_exp.values())
+    opp_total = sum(instr_opp_exp.values())
+
+    # Total EV across copies
+    total_ev_with_copies = sum(info["ev_per_copy"] * info["copies"] for info in profiles_used.values())
 
     summary_html = ""
-    for instr in sorted(instr_counts.keys()):
-        total = instr_total_exp.get(instr, 0)
+    for instr in all_instruments:
+        dep = instr_deployed_exp.get(instr, 0)
+        opp = instr_opp_exp.get(instr, 0)
+        dep_count = sum(1 for t in trades if t["instrument"] == instr)
+        opp_count = sum(1 for t in (opportunities or []) if t["instrument"] == instr)
+        opp_line = f'<div class="summary-opp">+${opp:.0f} available ({opp_count})</div>' if opp > 0 else ""
         summary_html += f"""
         <div class="summary-card">
             <div class="summary-instrument">{instr}</div>
-            <div class="summary-count">{instr_counts[instr]} trades</div>
-            <div class="summary-dollars">${total:.2f}/day edge</div>
+            <div class="summary-count">{dep_count} deployed{f" + {opp_count} avail" if opp_count else ""}</div>
+            <div class="summary-dollars">${dep:.0f}/day deployed</div>
+            {opp_line}
+        </div>"""
+
+    # Grand total card
+    summary_html += f"""
+        <div class="summary-card" style="border-color: #3fb950;">
+            <div class="summary-instrument">TOTAL</div>
+            <div class="summary-dollars">${deployed_total:.0f}/day deployed</div>
+            <div class="summary-opp">+${opp_total:.0f} available</div>
+            <div class="summary-count" style="margin-top:6px">${total_ev_with_copies:.0f}/day with copies</div>
         </div>"""
 
     fitness_errors = [t for t in trades if t.get("fitness_error")]
@@ -662,6 +703,11 @@ def generate_html(
         font-weight: 600;
         color: #3fb950;
         margin-top: 4px;
+    }}
+    .summary-opp {{
+        font-size: 13px;
+        color: #8b949e;
+        margin-top: 2px;
     }}
     .session-card {{
         background: #161b22;
@@ -821,6 +867,12 @@ def generate_html(
     .profile-detail {{
         font-size: 12px;
         color: #8b949e;
+        margin-top: 4px;
+    }}
+    .profile-ev {{
+        font-size: 13px;
+        font-weight: 600;
+        color: #3fb950;
         margin-top: 4px;
     }}
     .badge-firm {{
