@@ -1,23 +1,25 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: One-click bot launcher — mode selection in dashboard, auto-confirm for live
-updated: 2026-04-01T11:00:00Z
+task: Multi-account copy trading — CopyOrderRouter + account discovery
+updated: 2026-04-01T12:00:00Z
 scope_lock:
+  - trading_app/live/projectx/contract_resolver.py
+  - trading_app/live/copy_order_router.py
+  - trading_app/live/session_orchestrator.py
   - scripts/run_live_session.py
-  - trading_app/live/bot_dashboard.py
-  - trading_app/live/bot_dashboard.html
-  - START_BOT.bat
+  - trading_app/live/broker_base.py
 blast_radius:
-  - run_live_session.py: entry point for all live trading. --auto-confirm is additive only.
-  - bot_dashboard.py: /api/action/start gains mode param. Existing signal-only flow unchanged.
-  - bot_dashboard.html: UI-only changes to account cards.
-  - START_BOT.bat: launcher behavior change (no more taskkill).
+  - contract_resolver.py: additive only (new method)
+  - copy_order_router.py: NEW file
+  - session_orchestrator.py: order_router construction when copies > 1
+  - run_live_session.py: --copies flag
+  - broker_base.py: NOT changing ABC (CopyOrderRouter inherits BrokerRouter directly)
 acceptance:
-  - Dashboard START shows 3 modes (signal/demo/live)
-  - Live requires typing LIVE in text input
-  - --auto-confirm flag works in run_live_session.py
-  - START_BOT.bat opens browser automatically
-  - Existing signal-only flow unchanged (backward compat)
+  - resolve_all_account_ids() returns all TopStep Express accounts
+  - CopyOrderRouter.submit() fans out to N accounts
+  - --copies flag discovers accounts and creates CopyOrderRouter
+  - Existing single-account flow unchanged
   - Preflight passes
+  - No test failures
 ---

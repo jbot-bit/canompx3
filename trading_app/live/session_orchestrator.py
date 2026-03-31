@@ -72,6 +72,7 @@ class SessionOrchestrator:
         signal_only: bool = False,
         force_orphans: bool = False,
         portfolio: Portfolio | None = None,
+        shadow_account_ids: list[int] | None = None,
     ):
         self.instrument = instrument
         self.demo = demo
@@ -228,12 +229,31 @@ class SessionOrchestrator:
             if account_id == 0:
                 account_id = contracts.resolve_account_id()
             router_cls = components["router_class"]
-            self.order_router = router_cls(
+            primary_router = router_cls(
                 account_id=account_id,
                 auth=self.auth,
                 demo=demo,
                 tick_size=self.cost_spec.tick_size,
             )
+
+            # Multi-account copy trading: wrap primary + shadows in CopyOrderRouter
+            if shadow_account_ids:
+                from trading_app.live.copy_order_router import CopyOrderRouter
+
+                shadow_routers = [
+                    router_cls(account_id=sid, auth=self.auth, demo=demo, tick_size=self.cost_spec.tick_size)
+                    for sid in shadow_account_ids
+                ]
+                self.order_router = CopyOrderRouter(primary_router, shadow_routers)
+                log.info(
+                    "Copy trading: primary=%d, shadows=%s (%d total accounts)",
+                    account_id,
+                    shadow_account_ids,
+                    1 + len(shadow_account_ids),
+                )
+            else:
+                self.order_router = primary_router
+
             self.positions = self._positions_cls(auth=self.auth)
             self._notifications_broken = False
 
