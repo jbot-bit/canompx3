@@ -1,18 +1,23 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Code review fixes — stale notes, CopyOrderRouter auth, tier test coverage
-updated: 2026-04-01T17:00:00Z
+task: Pre-live audit fixes — S0.75 stat alignment + stale test fixes
+updated: 2026-04-01T17:30:00Z
 scope_lock:
   - trading_app/prop_profiles.py
-  - trading_app/live/copy_order_router.py
-  - tests/test_trading_app/test_prop_profiles.py
+  - trading_app/paper_trade_logger.py
+  - trading_app/strategy_discovery.py
+  - tests/test_trading_app/test_account_hwm_tracker.py
+  - tests/test_trading_app/test_consistency_tracker.py
+  - tests/test_trading_app/test_lane_ctl.py
+  - tests/test_trading_app/test_paper_trade_logger.py
 blast_radius:
-  - prop_profiles.py: notes string only (no logic change)
-  - copy_order_router.py: add self.auth (Liskov compliance)
-  - test_prop_profiles.py: add tier DD assertions
+  - prop_profiles.py: strategy_id references (_S075 alignment)
+  - paper_trade_logger.py: lane strategy_ids must match prop_profiles
+  - tests: pre-existing failures from stale DD/consistency/session values
 acceptance:
-  - Notes say $3K not $4K for Tradeify 100K
-  - CopyOrderRouter has self.auth set
-  - Test asserts Tradeify 100K=$3K, 150K=$4.5K, Apex consistency=0.50
+  - prop_profiles references _S075 validated strategy_ids
+  - paper_trade_logger LANES match prop_profiles
+  - All tests pass (0 failures)
+  - drift check clean
 ---

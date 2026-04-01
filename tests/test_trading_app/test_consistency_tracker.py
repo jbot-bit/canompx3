@@ -70,7 +70,7 @@ class TestConsistency:
         # Best day = $200 (Mar 2). Total profit = 100+200+50+80+60+90 = $580
         # Windfall = 200/580 = 34.5% > 30% limit
         assert result.best_day_pnl == 200.0
-        assert result.status == "BREACH"  # 34.5% > 30% Apex limit
+        assert result.status == "OK"  # 34.5% < 50% Apex limit (updated Apex 4.0)
 
     def test_consistency_topstep_warn(self, db_with_trades):
         result = check_consistency(firm="topstep", instrument="MNQ", db_path=db_with_trades)
