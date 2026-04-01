@@ -1,8 +1,8 @@
 {
-  "total_iterations": 127,
-  "last_updated": "2026-03-18",
-  "consecutive_low_only": 2,
-  "last_high_finding_iter": 132,
+  "total_iterations": 128,
+  "last_updated": "2026-04-01",
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 135,
   "findings_by_type": {
     "canonical_violation": {
       "found": 47,
@@ -11,8 +11,8 @@
       "fix_rate": 0.77
     },
     "silent_failure": {
-      "found": 20,
-      "fixed": 18,
+      "found": 21,
+      "fixed": 19,
       "deferred": 1,
       "fix_rate": 0.9
     },
@@ -115,12 +115,12 @@
   },
   "findings_by_severity": {
     "CRITICAL": 3,
-    "HIGH": 7,
+    "HIGH": 8,
     "MEDIUM": 26,
     "LOW": 91
   },
   "classifications": {
-    "judgment": 57,
+    "judgment": 58,
     "mechanical": 45,
     "audit-only": 25
   },
@@ -293,6 +293,11 @@
     "stress_test.py": {
       "audit_count": 2,
       "last_iter": 83,
+      "findings": 2
+    },
+    "scripts/tools/refresh_data.py": {
+      "audit_count": 2,
+      "last_iter": 135,
       "findings": 2
     },
     "research/research_edge_structure.py": {
@@ -780,11 +785,6 @@
       "last_iter": 99,
       "findings": 0
     },
-    "scripts/tools/refresh_data.py": {
-      "audit_count": 1,
-      "last_iter": 100,
-      "findings": 1
-    },
     "pipeline/asset_configs.py": {
       "audit_count": 1,
       "last_iter": 100,
@@ -953,6 +953,11 @@
     "pipeline/stats.py": {
       "audit_count": 1,
       "last_iter": 134,
+      "findings": 1
+    },
+    "scripts/databento_backfill.py": {
+      "audit_count": 1,
+      "last_iter": 135,
       "findings": 1
     }
   },
@@ -2353,6 +2358,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "a514218"
+    },
+    {
+      "iter": 135,
+      "date": "2026-04-01",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "scripts/databento_backfill.py:133-139 + scripts/tools/refresh_data.py:248-249",
+      "finding_type": "silent_failure",
+      "severity": "HIGH",
+      "verdict": "FIXED",
+      "commit": "7e70c22"
     }
   ]
 }
