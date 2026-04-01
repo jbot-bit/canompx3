@@ -104,7 +104,11 @@ The allocator respects per-profile constraints:
 - `allowed_instruments`: which instruments this account can trade (firm restrictions)
 - `stop_multiplier`: prop firm stop sizing (0.75x for prop, 1.0x for self-funded)
 
-Manual vs auto uses the SAME ranking — only `allowed_sessions` differs (manual = Brisbane daytime, auto = overnight).
+AUTO is the primary deployment — trades ALL sessions 24/7 via bot.
+MANUAL is a separate practice account for learning — daytime sessions only.
+Both use the SAME ranking. The profile's `allowed_sessions` constraint
+filters the list: auto profiles allow all sessions, manual profiles
+restrict to Brisbane waking hours. No special logic needed.
 
 **SM-aware ranking:** Trailing ExpR is computed at the ACCOUNT's stop_multiplier.
 The same strategy may rank differently for SM=0.75 (prop) vs SM=1.0 (self-funded).
