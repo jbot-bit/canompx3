@@ -1333,7 +1333,7 @@ def run_validation(
                         _wfe_row = con.execute(
                             "SELECT wfe FROM validated_setups WHERE strategy_id = ?", [sid]
                         ).fetchone()
-                        _wfe = _wfe_row[0] if _wfe_row and _wfe_row[0] is not None else 1.0
+                        _wfe = _wfe_row[0] if _wfe_row and _wfe_row[0] is not None else 0.0  # fail-closed
                         _fdr_sig = fdr["fdr_significant"] and _wfe >= MIN_WFE
                         if fdr["fdr_significant"] and not _fdr_sig:
                             logger.info(f"  WFE gate: {sid} demoted (WFE={_wfe:.2f} < {MIN_WFE})")
