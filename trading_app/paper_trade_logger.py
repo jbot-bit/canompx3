@@ -68,7 +68,7 @@ LANES: tuple[LaneDef, ...] = (
         entry_model="E2",
         confirm_bars=1,
         filter_type="COST_LT08",
-        filter_sql="(5.74 / (orb_size * 2.0)) < 0.08",  # friction/risk < 8%
+        filter_sql="(2.74 / (orb_size * 2.0)) < 0.08",  # MNQ friction=$2.74/RT
     ),
     LaneDef(
         strategy_id="MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_8K",
@@ -116,7 +116,7 @@ LANES: tuple[LaneDef, ...] = (
         entry_model="E2",
         confirm_bars=1,
         filter_type="COST_LT08",
-        filter_sql="(5.74 / (orb_size * 2.0)) < 0.08",  # friction/risk < 8%
+        filter_sql="(2.74 / (orb_size * 2.0)) < 0.08",  # MNQ friction=$2.74/RT
     ),
 )
 
