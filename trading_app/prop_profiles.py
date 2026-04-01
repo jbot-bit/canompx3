@@ -357,44 +357,46 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         stop_multiplier=0.75,
         max_slots=5,
         active=True,  # Upgraded from 50K — $3K DD gives $2,250 margin
-        allowed_sessions=frozenset({"CME_PRECLOSE", "NYSE_CLOSE", "COMEX_SETTLE", "US_DATA_1000", "TOKYO_OPEN"}),
+        allowed_sessions=frozenset({"CME_PRECLOSE", "NYSE_CLOSE", "COMEX_SETTLE", "EUROPE_FLOW", "TOKYO_OPEN"}),
         daily_lanes=(
-            # Score-driven rebuild 2026-03-31, S0.75 alignment 2026-04-01.
-            # All strategy_ids reference _S075 validated variants so cited stats
-            # match live execution (account stop_multiplier=0.75).
+            # HONEST REBUILD 2026-04-02: E2 fakeout-inclusive, zero look-ahead filters.
+            # All filters are pre-entry-only (COST_LT, OVNRNG, ORB_VOL, X_MES_ATR).
+            # SM=1.0 (account applies 0.75x at execution; these are SM=1.0 validated stats).
+            # Lane selection: best ExpR per session from 210 honest validated strategies.
             DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
                 "MNQ",
                 "CME_PRECLOSE",
                 max_orb_size_pts=120.0,
             ),
             DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
-                "MNQ",
-                "NYSE_CLOSE",
-                max_orb_size_pts=100.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL_S075",
+                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_8K",
                 "MNQ",
                 "COMEX_SETTLE",
                 max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
-                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
+                "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_OVNRNG_100",
                 "MNQ",
-                "US_DATA_1000",
-                max_orb_size_pts=120.0,
+                "EUROPE_FLOW",
+                max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20_S075",
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_OVNRNG_100",
+                "MNQ",
+                "NYSE_CLOSE",
+                max_orb_size_pts=100.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08",
                 "MNQ",
                 "TOKYO_OPEN",
                 max_orb_size_pts=80.0,
             ),
         ),
         notes=(
-            "$100K upgrade. 5 S0.75 lanes (stats match live stops). $3K DD, budget $750 (25%). S075 aligned 2026-04-01."
+            "$100K Apex. 5 honest lanes (E2 fakeout-inclusive, pre-entry filters only). "
+            "Rebuilt 2026-04-02. All filters trade-time-knowable. $3K DD."
         ),
     ),
     # =========================================================================
