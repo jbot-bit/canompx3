@@ -9,6 +9,14 @@
     "command": "bash ~/.claude/statusline.sh",
     "padding": 2
   },
+  "permissions": {
+    "allow": [
+      "WebFetch",
+      "WebSearch",
+      "mcp__claude_ai_Slack__slack_search_public",
+      "mcp__claude_ai_Slack__slack_read_channel"
+    ]
+  },
   "effortLevel": "high",
   "alwaysThinkingEnabled": true,
   "autoUpdatesChannel": "latest",
