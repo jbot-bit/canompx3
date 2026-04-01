@@ -1371,3 +1371,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 0 production callers affected (docstring-only change)
 - Verification: PASS (13/13 test_rr_selection.py, 72 drift checks, 733 pre-commit suite, ruff clean)
 - Commit: a514218
+
+## Iteration 135 — 2026-04-01
+- Phase: fix
+- Classification: [judgment]
+- Target: scripts/databento_backfill.py:133-139 + scripts/tools/refresh_data.py:248-249
+- Finding: Silent failure — (1) load_manifest() had no JSONDecodeError guard; a corrupt manifest (from crash during save_manifest) would propagate an unhandled exception crashing the entire run_download() call; (2) cleanup unlink exception in refresh_data.py was silently swallowed with `except Exception: pass`, leaving orphaned partial download files with no user visibility.
+- Action: (1) Added json.JSONDecodeError catch in load_manifest() with warning log, falls back to fresh empty manifest. (2) Changed except Exception: pass to log WARNING with file name and exception text. Fail-closed behavior of refresh_instrument (still returns False) unchanged.
+- Blast radius: 0 external callers (both standalone CLI tools); 1 internal caller each within same file
+- Verification: PASS (ruff clean, 67 drift checks pass, pre-commit suite pass)
+- Commit: 7e70c22

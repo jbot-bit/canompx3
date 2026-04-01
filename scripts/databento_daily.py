@@ -78,7 +78,9 @@ if _missing:
 
 # Additional schemas to refresh daily (beyond ohlcv-1m which refresh_data.py handles).
 # Standard plan ($179/mo) includes: L0 (ohlcv, stats) unlimited, L1 (tbbo, trades,
-# bbo-1s) 12mo, L2/L3 (mbp-1, mbp-10) 1mo. Download ALL included schemas daily.
+# bbo-1s) 12mo, L2/L3 (mbp-1, mbp-10) 1mo. Refreshes L0 + L1 + mbp-1 daily.
+# NOTE: mbp-10 (10-level book depth) is NOT refreshed daily — large file, backfill only.
+# See config/databento_config.yaml TIER 2 for one-time mbp-10 backfill specs.
 DAILY_SCHEMAS = [
     {
         "schema": "ohlcv-1s",

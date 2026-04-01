@@ -1,7 +1,10 @@
-## Iteration: 134
-## Target: pipeline/stats.py:4
-## Finding: Module docstring lists meta_label.py as a caller but meta_label.py does not import pipeline.stats (computes Sharpe inline instead). Real callers: evaluate.py, evaluate_validated.py, select_family_rr.py.
-## Classification: [mechanical]
-## Blast Radius: 0 callers affected (docstring-only change)
-## Invariants: [1] No behavior change; [2] All three real callers remain correct; [3] Function signatures and return values unchanged
-## Diff estimate: 1 line
+## Iteration: 135
+## Target: scripts/databento_backfill.py:133-139 + scripts/tools/refresh_data.py:248-249
+## Finding: Silent failure — (1) load_manifest() crashes on corrupt JSON with unhandled JSONDecodeError; (2) cleanup unlink exception is silently swallowed with no log
+## Classification: [judgment]
+## Blast Radius: 0 external callers (both are standalone CLI tools); load_manifest called from 1 place in same file (run_download:373); unlink except called from 1 place in refresh_instrument
+## Invariants:
+##   1. load_manifest must return a valid dict (same interface); corrupt manifest -> fresh empty dict
+##   2. refresh_instrument must still return False after ingest failure (fail-closed not changed)
+##   3. save_manifest path and manifest schema are unchanged
+## Diff estimate: 6 lines production code
