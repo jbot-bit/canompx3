@@ -57,7 +57,7 @@ class LaneDef:
 # Drift check verifies sync at runtime (check_drift.py).
 LANES: tuple[LaneDef, ...] = (
     LaneDef(
-        strategy_id="MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+        strategy_id="MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
         lane_name="CME_PRE_VOL",
         instrument="MNQ",
         orb_label="CME_PRECLOSE",
@@ -69,7 +69,7 @@ LANES: tuple[LaneDef, ...] = (
         filter_sql="d.rel_vol_CME_PRECLOSE >= 2.0",
     ),
     LaneDef(
-        strategy_id="MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+        strategy_id="MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
         lane_name="NYSE_CLOSE_VOL",
         instrument="MNQ",
         orb_label="NYSE_CLOSE",
@@ -81,7 +81,7 @@ LANES: tuple[LaneDef, ...] = (
         filter_sql="d.rel_vol_NYSE_CLOSE >= 2.0",
     ),
     LaneDef(
-        strategy_id="MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
+        strategy_id="MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL_S075",
         lane_name="COMEX_ATR70",
         instrument="MNQ",
         orb_label="COMEX_SETTLE",
@@ -105,7 +105,7 @@ LANES: tuple[LaneDef, ...] = (
         filter_sql="d_mes.atr_20_pct >= 60.0",
     ),
     LaneDef(
-        strategy_id="MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20",
+        strategy_id="MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20_S075",
         lane_name="TOKYO_VOL",
         instrument="MNQ",
         orb_label="TOKYO_OPEN",

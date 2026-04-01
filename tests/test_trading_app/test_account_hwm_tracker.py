@@ -399,14 +399,14 @@ class TestDDBudgetValidation:
             validate_dd_budget,
         )
 
-        # Temporarily inject a bad profile with tiny DD limit (MFFU Core 50K = $1500)
+        # Temporarily inject a bad profile that exceeds MFFU Core 50K DD=$2000.
+        # 12 MNQ lanes with no cap = 12 * 120 * 0.75 * 2 = $2160 > $2000
         bad = AccountProfile(
             profile_id="_test_overcommit",
             firm="mffu",
             account_size=50_000,
             active=True,
             daily_lanes=(
-                # 10 MNQ lanes with no cap = 10 * 120 * 0.75 * 2 = $1800 per lane
                 DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_NO_FILTER_O15", "MNQ", "NYSE_OPEN"),
                 DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_NO_FILTER_O15", "MNQ", "NYSE_CLOSE"),
                 DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.0_CB1_NO_FILTER", "MNQ", "COMEX_SETTLE"),
@@ -417,6 +417,8 @@ class TestDDBudgetValidation:
                 DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.0_CB1_NO_FILTER", "MNQ", "EUROPE_FLOW"),
                 DailyLaneSpec("MNQ_LONDON_METALS_E2_RR1.0_CB1_NO_FILTER", "MNQ", "LONDON_METALS"),
                 DailyLaneSpec("MNQ_US_DATA_830_E2_RR1.0_CB1_NO_FILTER", "MNQ", "US_DATA_830"),
+                DailyLaneSpec("MNQ_CME_REOPEN_E2_RR1.0_CB1_NO_FILTER", "MNQ", "CME_REOPEN"),
+                DailyLaneSpec("MNQ_BRISBANE_1025_E2_RR1.0_CB1_NO_FILTER", "MNQ", "BRISBANE_1025"),
             ),
         )
         ACCOUNT_PROFILES["_test_overcommit"] = bad
