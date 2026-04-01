@@ -1,23 +1,22 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Pre-live audit fixes — S0.75 stat alignment + stale test fixes
-updated: 2026-04-01T17:30:00Z
+task: Fix E2 fakeout exclusion bias — scan from orb_end not break_ts
+updated: 2026-04-01T18:00:00Z
 scope_lock:
-  - trading_app/prop_profiles.py
-  - trading_app/paper_trade_logger.py
-  - trading_app/strategy_discovery.py
-  - tests/test_trading_app/test_account_hwm_tracker.py
-  - tests/test_trading_app/test_consistency_tracker.py
-  - tests/test_trading_app/test_lane_ctl.py
-  - tests/test_trading_app/test_paper_trade_logger.py
+  - trading_app/outcome_builder.py
+  - tests/test_trading_app/test_outcome_builder.py
+  - tests/test_trading_app/test_entry_rules.py
 blast_radius:
-  - prop_profiles.py: strategy_id references (_S075 alignment)
-  - paper_trade_logger.py: lane strategy_ids must match prop_profiles
-  - tests: pre-existing failures from stale DD/consistency/session values
+  - outcome_builder.py: detection_window_start changes from break_ts to orb_end
+  - entry_rules.py: NO CHANGES (function is window-agnostic)
+  - E1 outcomes: UNAFFECTED (separate code path)
+  - All downstream tables: require full rebuild AFTER code change
 acceptance:
-  - prop_profiles references _S075 validated strategy_ids
-  - paper_trade_logger LANES match prop_profiles
-  - All tests pass (0 failures)
+  - detect_break_touch called with orb_end_utc (not break_ts) for E2
+  - Known fakeout day: entry_ts moves earlier than break_ts
+  - No-fakeout day: entry_ts unchanged
+  - E1 outcomes byte-identical before/after
+  - All tests pass
   - drift check clean
 ---
