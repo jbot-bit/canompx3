@@ -245,8 +245,8 @@ def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
         print(f"  Cleaning up downloaded file after ingest failure: {out_file.name}")
         try:
             out_file.unlink(missing_ok=True)
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"  WARNING: could not remove downloaded file {out_file.name}: {exc}")
         return False
 
     # Step 3: Build downstream artifacts
