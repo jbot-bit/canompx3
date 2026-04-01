@@ -70,9 +70,9 @@ GC_OUTRIGHT_PATTERN = re.compile(r"^GC[FGHJKMNQUVXZ]\d{1,2}$")
 # Month codes for expiry parsing
 MONTH_CODES = "FGHJKMNQUVXZ"  # Jan=F, Feb=G, ..., Dec=Z
 
-# MINIMUM DATE: Dataset now covers 2016-02-01 onward (GC data from Databento)
-# Two data directories: gold_db_fullsize_2016-2021 and GOLD_DB_FULLSIZE (2021+)
-MINIMUM_START_DATE = date(2016, 1, 1)
+# MINIMUM DATE: Extended to 2010 via GC.FUT backfill (Apr 2026).
+# DEPRECATED: Use pipeline/ingest_dbn.py --instrument MGC instead.
+MINIMUM_START_DATE = date(2010, 6, 6)
 
 # =============================================================================
 # CHECKPOINT SYSTEM (JSONL, APPEND-ONLY)

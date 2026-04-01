@@ -15,7 +15,7 @@ Usage:
     python scripts/databento_daily.py --days 3         # Catch up last 3 days
 
 Cron (Brisbane UTC+10, run at 9:30 AM local = 23:30 UTC):
-    30 23 * * 1-5 cd /path/to/canompx3 && python scripts/databento_daily.py >> logs/databento_daily.log 2>&1
+    30 23 * * 0-4 cd /path/to/canompx3 && python scripts/databento_daily.py >> logs/databento_daily.log 2>&1
 """
 
 from __future__ import annotations
