@@ -140,6 +140,17 @@ class BrokerContracts(ABC):
         """Return current front-month contract symbol for an instrument."""
         ...
 
+    def resolve_all_account_ids(self) -> list[tuple[int, str]]:
+        """Return ALL active account IDs and names for copy trading.
+
+        Returns list of (account_id, account_name) tuples.
+        Default: raises NotImplementedError. Override in broker-specific subclass.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support multi-account discovery. "
+            "Copy trading requires a broker that implements resolve_all_account_ids()."
+        )
+
 
 class BrokerPositions(ABC):
     """Query broker for open positions (crash recovery + EOD reconciliation)."""

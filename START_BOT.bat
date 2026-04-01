@@ -14,7 +14,7 @@ del /f /q "%TEMP%\canompx3\bot_*.lock" >nul 2>&1
 
 :: Step 2: Clear stale bot state so dashboard shows clean STOPPED
 echo [2/3] Clearing stale state...
-del /f /q "bot_state.json" >nul 2>&1
+del /f /q "data\bot_state.json" >nul 2>&1
 
 :: Step 3: Launch dashboard + open browser
 echo [3/3] Launching dashboard...
