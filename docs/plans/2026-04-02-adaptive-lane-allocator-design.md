@@ -206,9 +206,76 @@ After implementation, run the allocator monthly from 2022-01 to 2025-12:
 
 ---
 
+## Critical Implementation Details (Gap Analysis)
+
+### SM=0.75 Adjustment in Trailing Window
+orb_outcomes stores SM=1.0 base outcomes. For SM=0.75 strategies, the allocator
+MUST apply tight-stop adjustment per trade using mae_r:
+```
+if stop_multiplier != 1.0 and trade.mae_r >= stop_multiplier:
+    adjusted_pnl_r = -stop_multiplier
+else:
+    adjusted_pnl_r = trade.pnl_r
+```
+Without this, SM=0.75 trailing ExpR is computed at SM=1.0 — WRONG.
+
+### Filter Application in Trailing Window
+The allocator MUST join daily_features and apply ALL_FILTERS[filter_type].matches_row()
+to determine eligible days. Unfiltered trailing ExpR may be negative while filtered is
+positive — the filter IS the edge. Same logic as strategy_discovery filter application.
+
+### Minimum Trades Threshold
+Require trailing_n >= 20 to compute a LaneScore. Below 20 → status=STALE,
+fall back to session-level regime gate. Prevents ranking on noise.
+
+### Parameter Source: Literature, NOT Backtest
+Window sizes (12mo deploy, 6mo regime), kill thresholds (2mo negative),
+resume thresholds (3mo positive), hysteresis (20%) are ALL from literature:
+- 12mo: Carver Ch.11 default forecast window
+- 2mo kill: Chan Ch.7 regime half-life 1-3 months
+- 3mo resume: Carver Ch.12 asymmetric switching
+- 20% hysteresis: Carver Ch.12 switching cost threshold
+
+Do NOT adjust these parameters based on the allocator backtest.
+The backtest is VALIDATION, not optimization. Tuning parameters on
+the backtest is overfitting the allocator itself.
+
+### Staleness Enforcement
+lane_allocation.json includes rebalance_date. Pre-session check reads it:
+- > 35 days → WARNING (log, continue trading)
+- > 60 days → BLOCK (refuse to trade until rebalance runs)
+
+### Eliminate Hardcoded Lanes (paper_trade_logger.py)
+paper_trade_logger.py currently has its OWN hardcoded LANES constant that
+must be manually synced with prop_profiles. This is a drift vector.
+
+FIX: paper_trade_logger derives its lanes FROM prop_profiles at runtime:
+```python
+from trading_app.prop_profiles import get_active_profile
+from trading_app.config import ALL_FILTERS
+
+def _build_lanes_from_profile(profile_id: str) -> tuple[LaneDef, ...]:
+    profile = get_active_profile(profile_id)
+    lanes = []
+    for spec in profile.daily_lanes:
+        filt = ALL_FILTERS[spec.filter_type_from_id]  # parse from strategy_id
+        lanes.append(LaneDef(
+            strategy_id=spec.strategy_id,
+            filter_type=filt.filter_type,
+            filter_sql=filt.to_sql(spec.orb_label),  # filter generates its own SQL
+        ))
+    return tuple(lanes)
+```
+This requires adding a `to_sql(orb_label)` method to StrategyFilter.
+One source of truth. Zero hardcoded lanes. Zero drift possible.
+
+---
+
 ## Integration with Existing Systems
 
 - **strategy_fitness.py**: Consumed for FIT/WATCH/DECAY classification per strategy
 - **prop_profiles.py**: Output target. Human reads allocation report → updates daily_lanes
 - **execution_engine.py**: No changes. Reads daily_lanes from prop_profiles as before.
+- **pre_session_check.py**: Add allocation staleness check (>35d warn, >60d block)
+- **paper_trade_logger.py**: Add runtime lane sync verification on import
 - **pipeline/check_drift.py**: Add check #85 verifying allocator imports from canonical sources only
