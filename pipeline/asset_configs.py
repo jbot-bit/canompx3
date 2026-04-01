@@ -66,7 +66,7 @@ ASSET_CONFIGS = {
         "orb_active": True,
         "outright_pattern": re.compile(r"^GC[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
-        "minimum_start_date": date(2019, 1, 1),
+        "minimum_start_date": date(2010, 6, 6),  # Extended via GC.FUT backfill
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN",
@@ -86,7 +86,7 @@ ASSET_CONFIGS = {
         "orb_active": True,
         "outright_pattern": re.compile(r"^MNQ[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
-        "minimum_start_date": date(2024, 2, 4),
+        "minimum_start_date": date(2010, 6, 6),  # Extended via NQ.FUT backfill
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN",
@@ -136,7 +136,7 @@ ASSET_CONFIGS = {
         "orb_active": True,
         "outright_pattern": re.compile(r"^MES[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
-        "minimum_start_date": date(2019, 2, 12),
+        "minimum_start_date": date(2010, 6, 6),  # Extended via ES.FUT backfill
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN",
@@ -161,7 +161,7 @@ ASSET_CONFIGS = {
         "orb_active": False,
         "outright_pattern": re.compile(r"^ES[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
-        "minimum_start_date": date(2019, 2, 12),
+        "minimum_start_date": date(2010, 6, 6),  # Extended via ES.FUT backfill
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN",
@@ -252,7 +252,7 @@ ASSET_CONFIGS = {
         "orb_active": False,
         "outright_pattern": re.compile(r"^NQ[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
-        "minimum_start_date": date(2021, 2, 4),
+        "minimum_start_date": date(2010, 6, 6),  # Extended via NQ.FUT backfill
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN",
