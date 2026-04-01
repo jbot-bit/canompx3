@@ -251,3 +251,44 @@ class TestOrbCapLogic:
             if self._should_skip(risk_pts, 150.0):
                 skips += 1
         assert skips == 3  # 150, 200, 160 all >= 150
+
+
+class TestCorrectedTierValues:
+    """Verify prop firm rule corrections from April 2026 audit.
+
+    Sources: saveonpropfirms.com/blog/tradeify-select-guide,
+    topstep.com/express-funded-account-rules, Apex support articles.
+    """
+
+    def test_tradeify_dd_corrected(self):
+        """Tradeify Select DD: $2K/$3K/$4.5K (was $4K/$6K on 100K/150K)."""
+        from trading_app.prop_profiles import ACCOUNT_TIERS
+
+        assert ACCOUNT_TIERS[("tradeify", 50_000)].max_dd == 2_000
+        assert ACCOUNT_TIERS[("tradeify", 100_000)].max_dd == 3_000
+        assert ACCOUNT_TIERS[("tradeify", 150_000)].max_dd == 4_500
+
+    def test_topstep_dd_unchanged(self):
+        from trading_app.prop_profiles import ACCOUNT_TIERS
+
+        assert ACCOUNT_TIERS[("topstep", 50_000)].max_dd == 2_000
+        assert ACCOUNT_TIERS[("topstep", 100_000)].max_dd == 3_000
+        assert ACCOUNT_TIERS[("topstep", 150_000)].max_dd == 4_500
+
+    def test_apex_consistency_rule(self):
+        """Apex 4.0: 50% consistency (was 30% legacy)."""
+        from trading_app.prop_profiles import PROP_FIRM_SPECS
+
+        assert PROP_FIRM_SPECS["apex"].consistency_rule == 0.50
+
+    def test_topstep_close_time(self):
+        """TopStep: 3:10 PM CT = 4:10 PM ET."""
+        from trading_app.prop_profiles import PROP_FIRM_SPECS
+
+        assert PROP_FIRM_SPECS["topstep"].close_time_et == "16:10"
+
+    def test_tradeify_close_time(self):
+        """Tradeify: 4:59 PM ET."""
+        from trading_app.prop_profiles import PROP_FIRM_SPECS
+
+        assert PROP_FIRM_SPECS["tradeify"].close_time_et == "16:59"

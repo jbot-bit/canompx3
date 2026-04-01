@@ -302,7 +302,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             # L1: CME_PRECLOSE — NEW. Score 1.396 (#1). AYP=True, Sharpe 2.41.
             # Was 0 survivors in old validation; confluence filters unlocked 73 strategies.
             DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
                 "MNQ",
                 "CME_PRECLOSE",
                 max_orb_size_pts=120.0,
@@ -310,14 +310,14 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             # L2: NYSE_CLOSE — UPGRADED from VOL_RV12_N20 (+67.7% score).
             # VOL_RV20_N20 is strict superset filter (fewer, higher-edge trades).
             DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
                 "MNQ",
                 "NYSE_CLOSE",
                 max_orb_size_pts=100.0,
             ),
             # L3: COMEX_SETTLE — KEPT (ATR70_VOL tied with OVNRNG_100 at +0.4%).
             DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL_S075",
                 "MNQ",
                 "COMEX_SETTLE",
                 max_orb_size_pts=80.0,
@@ -332,7 +332,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             # L5: TOKYO_OPEN MNQ — NEW. Score 0.587 (#5). WHITELISTED fitness.
             # Replaces NYSE_OPEN (score 0.530, #8). RR2.5 = wider target.
             DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20",
+                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20_S075",
                 "MNQ",
                 "TOKYO_OPEN",
                 max_orb_size_pts=80.0,
@@ -340,10 +340,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
         notes=(
             "Phase 1 manual. 5 MNQ lanes rebuilt 2026-03-31 via composite score. "
-            "IN: CME_PRECLOSE (#1, AYP, Sharpe 2.41), TOKYO_OPEN MNQ (#5, WHITELISTED). "
-            "UPGRADED: NYSE_CLOSE (RV12->RV20, +67.7%). "
-            "KEPT: COMEX_SETTLE (tied), US_DATA_1000 (optimal). "
-            "OUT: NYSE_OPEN (#8), SINGAPORE (O15 dead). "
+            "S075 aligned 2026-04-01 (strategy_ids reference _S075 validated variants). "
             "DD budget: $750 / $2K = 37.5%. "
             "Filter diversity: 4 filter families across 5 lanes."
         ),
@@ -362,21 +359,23 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         active=True,  # Upgraded from 50K — $3K DD gives $2,250 margin
         allowed_sessions=frozenset({"CME_PRECLOSE", "NYSE_CLOSE", "COMEX_SETTLE", "US_DATA_1000", "TOKYO_OPEN"}),
         daily_lanes=(
-            # Score-driven rebuild 2026-03-31 — mirrors apex_50k_manual lanes.
+            # Score-driven rebuild 2026-03-31, S0.75 alignment 2026-04-01.
+            # All strategy_ids reference _S075 validated variants so cited stats
+            # match live execution (account stop_multiplier=0.75).
             DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
                 "MNQ",
                 "CME_PRECLOSE",
                 max_orb_size_pts=120.0,
             ),
             DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
                 "MNQ",
                 "NYSE_CLOSE",
                 max_orb_size_pts=100.0,
             ),
             DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL_S075",
                 "MNQ",
                 "COMEX_SETTLE",
                 max_orb_size_pts=80.0,
@@ -388,13 +387,15 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=120.0,
             ),
             DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20",
+                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20_S075",
                 "MNQ",
                 "TOKYO_OPEN",
                 max_orb_size_pts=80.0,
             ),
         ),
-        notes=("$100K upgrade. Same 5 score-driven lanes as 50K. $3K DD, budget $750 (25%). Rebuilt 2026-03-31."),
+        notes=(
+            "$100K upgrade. 5 S0.75 lanes (stats match live stops). $3K DD, budget $750 (25%). S075 aligned 2026-04-01."
+        ),
     ),
     # =========================================================================
     # Phase 2: Automation scaling (Tradeify MNQ + TopStep MGC)
@@ -423,13 +424,13 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=120.0,
             ),
             DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
                 "MNQ",
                 "NYSE_CLOSE",
                 max_orb_size_pts=100.0,
             ),
             DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL_S075",
                 "MNQ",
                 "COMEX_SETTLE",
                 max_orb_size_pts=80.0,
@@ -441,7 +442,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=120.0,
             ),
             DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20",
+                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20_S075",
                 "MNQ",
                 "TOKYO_OPEN",
                 max_orb_size_pts=80.0,
@@ -449,8 +450,8 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
         notes=(
             "Phase 2 MNQ auto. 5 copies x 5 lanes via Tradovate API. "
-            "CME_PRECLOSE uses ATR70_VOL (Apex uses VOL_RV20_N20 = filter diversification). "
-            "DD $2K, budget $750 (37.5%). Rebuilt 2026-03-31."
+            "CME_PRECLOSE ATR70_VOL still SM=1.0 ID (S075 variant not yet validated). "
+            "Other 4 lanes S075 aligned 2026-04-01. DD $2K, budget $750 (37.5%)."
         ),
     ),
     "topstep_50k": AccountProfile(
@@ -512,7 +513,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # @revalidated-for E2 event-based sessions, holdout-clean re-discovery (2026-03-31)
         daily_lanes=(
             DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL_S075",
                 "MNQ",
                 "COMEX_SETTLE",
                 max_orb_size_pts=80.0,
@@ -521,8 +522,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         notes=(
             "Phase 2b: First MNQ auto lane via ProjectX API. "
             "COMEX_SETTLE 03:30 Brisbane (bot-only session). "
-            "ATR70_VOL filter, same as Apex L3. "
-            "2025 fwd: +25.7R (N=63). ROBUST (7 members, PBO=0). "
+            "ATR70_VOL_S075 = stats match live 0.75x stops. "
             "Risk $29/trade = 1.5% DD. Scale to 5 Express after loop proof."
         ),
     ),
@@ -808,7 +808,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL", "MNQ", "NYSE_OPEN", max_orb_size_pts=70.0),
         ),
         notes=(
-            "TYPE-B auto 100K. Same 15 lanes as 50K. $4K DD = 35% at 1ct. "
+            "TYPE-B auto 100K. Same 15 lanes as 50K. $3K DD = 46% at 1ct. "
             "No DLL. AGGRO: 1ct. YOLO: 2ct. "
             "Upgrade from 50K when payouts flowing."
         ),
