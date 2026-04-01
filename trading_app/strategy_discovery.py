@@ -32,6 +32,8 @@ from pipeline.dst import (
 )
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
+    E2_EXCLUDED_FILTER_PREFIXES,
+    E2_EXCLUDED_FILTER_SUBSTRINGS,
     ENTRY_MODELS,
     SKIP_ENTRY_MODELS,
     STOP_MULTIPLIERS,
@@ -1149,6 +1151,16 @@ def run_discovery(
 
                 for em in ENTRY_MODELS:
                     if em in SKIP_ENTRY_MODELS:
+                        continue
+                    # E2 look-ahead exclusion: skip filters that reference
+                    # break-bar data (volume, continuation, speed). E2 enters
+                    # on the first touch after ORB end, before the break bar
+                    # closes — these filter values are unknowable at entry time.
+                    # E1 is unaffected (enters after break bar closes).
+                    if em == "E2" and (
+                        filter_key.startswith(E2_EXCLUDED_FILTER_PREFIXES)
+                        or any(sub in filter_key for sub in E2_EXCLUDED_FILTER_SUBSTRINGS)
+                    ):
                         continue
                     for rr_target in RR_TARGETS:
                         for cb in CONFIRM_BARS_OPTIONS:

@@ -1,22 +1,22 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Fix E2 fakeout exclusion bias — scan from orb_end not break_ts
-updated: 2026-04-01T18:00:00Z
+task: E2 honest entry — filter exclusion + execution engine parity + rebuild prep
+updated: 2026-04-01T19:00:00Z
 scope_lock:
-  - trading_app/outcome_builder.py
-  - tests/test_trading_app/test_outcome_builder.py
+  - trading_app/config.py
+  - trading_app/strategy_discovery.py
+  - trading_app/execution_engine.py
+  - trading_app/prop_profiles.py
   - tests/test_trading_app/test_entry_rules.py
 blast_radius:
-  - outcome_builder.py: detection_window_start changes from break_ts to orb_end
-  - entry_rules.py: NO CHANGES (function is window-agnostic)
-  - E1 outcomes: UNAFFECTED (separate code path)
-  - All downstream tables: require full rebuild AFTER code change
+  - config.py: E2_EXCLUDED_FILTERS for break-bar-derived filters
+  - strategy_discovery.py: Skip excluded filters for E2
+  - execution_engine.py: E2 enters on first ORB touch (not post-break)
+  - prop_profiles.py: Deployed lanes switch to clean filters
 acceptance:
-  - detect_break_touch called with orb_end_utc (not break_ts) for E2
-  - Known fakeout day: entry_ts moves earlier than break_ts
-  - No-fakeout day: entry_ts unchanged
-  - E1 outcomes byte-identical before/after
-  - All tests pass
-  - drift check clean
+  - E2 grid excludes CONT/FAST/VOL_RV/ATR70_VOL
+  - execution_engine E2 matches outcome_builder honest entry
+  - All deployed lanes use pre-entry-only filters
+  - Tests pass, drift clean
 ---

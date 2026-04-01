@@ -79,6 +79,7 @@ class LiveORB:
     complete: bool = False
     break_dir: str | None = None
     break_ts: datetime | None = None
+    e2_touched: bool = False  # True once E2 stop-market has triggered on first touch
 
     @property
     def size(self) -> float | None:
@@ -430,7 +431,26 @@ class ExecutionEngine:
             if not orb.complete and ts >= orb.window_end_utc:
                 orb.complete = True
 
-        # Phase 2: Detect breaks for complete ORBs
+        # Phase 1.5: E2 honest entry — first bar touching ORB after window end.
+        # E2 stop-market fills on range touch, not close confirmation.
+        # Must fire BEFORE Phase 2 (close-based break) so E2 enters on fakeout
+        # bars that precede the confirmed break. Per Pardo Ch.4: backtest entry
+        # timing must match live stop-market execution.
+        for (_label, _om), orb in self.orbs.items():
+            if orb.complete and not orb.e2_touched and orb.high is not None:
+                e2_dir = None
+                if bar["high"] > orb.high:
+                    e2_dir = "long"
+                elif bar["low"] < orb.low:
+                    e2_dir = "short"
+                if e2_dir is not None:
+                    orb.e2_touched = True
+                    events.extend(self._arm_strategies(orb, bar, direction=e2_dir, entry_models=frozenset({"E2"})))
+
+        # Phase 2: Detect breaks for complete ORBs (close-based — arms E1/E3).
+        # E2 is already handled by Phase 1.5 (first touch). If E2 was armed
+        # on an earlier bar, the duplicate-trade check in _arm_strategies
+        # (L665-668) prevents double-arming.
         for _label, orb in self.orbs.items():
             if orb.complete and orb.break_dir is None and orb.high is not None:
                 if bar["close"] > orb.high:
@@ -550,15 +570,42 @@ class ExecutionEngine:
     # Internal methods
     # -----------------------------------------------------------------
 
-    def _arm_strategies(self, orb: LiveORB, bar: dict) -> list[TradeEvent]:
-        """When an ORB breaks, arm matching strategies for confirmation."""
-        assert orb.break_dir is not None  # only called on confirmed ORB breaks
+    def _arm_strategies(
+        self,
+        orb: LiveORB,
+        bar: dict,
+        direction: str | None = None,
+        entry_models: frozenset[str] | None = None,
+    ) -> list[TradeEvent]:
+        """Arm matching strategies for confirmation or immediate entry.
+
+        Args:
+            direction: Trade direction. Defaults to orb.break_dir (close-based).
+                       Phase 1.5 passes the touch direction for E2.
+            entry_models: If provided, only arm strategies with these entry models.
+                          Phase 1.5 passes {"E2"}, Phase 2 passes {"E1"}.
+        """
+        resolved_dir = direction or orb.break_dir
+        assert resolved_dir is not None
+        direction = resolved_dir  # narrowed to str
         events = []
         for strategy in self.portfolio.strategies:
             if strategy.orb_label != orb.label:
                 continue
             if strategy.orb_minutes != orb.orb_minutes:
                 continue
+            if entry_models and strategy.entry_model not in entry_models:
+                continue
+
+            # E2 filter exclusion: skip break-bar-derived filters (look-ahead
+            # for stop-market entries that fire before the break bar closes).
+            if strategy.entry_model == "E2":
+                from trading_app.config import E2_EXCLUDED_FILTER_PREFIXES, E2_EXCLUDED_FILTER_SUBSTRINGS
+
+                if strategy.filter_type.startswith(E2_EXCLUDED_FILTER_PREFIXES) or any(
+                    sub in strategy.filter_type for sub in E2_EXCLUDED_FILTER_SUBSTRINGS
+                ):
+                    continue
 
             # Check strategy filter (size, DOW, break speed, etc.)
             filt = ALL_FILTERS.get(strategy.filter_type)
@@ -636,7 +683,7 @@ class ExecutionEngine:
                             strategy_id=strategy.strategy_id,
                             timestamp=bar["ts_utc"],
                             price=bar["close"],
-                            direction=orb.break_dir,
+                            direction=direction,
                             contracts=0,
                             reason=f"P(win)={ml_result.p_win:.3f}<{ml_result.threshold:.3f}",
                         )
@@ -649,21 +696,26 @@ class ExecutionEngine:
             if any(t.strategy_id == strategy.strategy_id for t in self.completed_trades):
                 continue
 
+            # E2 confirms on range touch (stop-market); E1/E3 confirm on close.
+            if strategy.entry_model == "E2":
+                confirmed = (direction == "long" and bar["high"] > orb.high) or (
+                    direction == "short" and bar["low"] < orb.low
+                )
+            else:
+                confirmed = (direction == "long" and bar["close"] > orb.high) or (
+                    direction == "short" and bar["close"] < orb.low
+                )
+
             trade = ActiveTrade(
                 strategy_id=strategy.strategy_id,
                 strategy=strategy,
                 orb_label=orb.label,
                 orb_minutes=orb.orb_minutes,
                 entry_model=strategy.entry_model,
-                direction=orb.break_dir,
+                direction=direction,
                 state=TradeState.CONFIRMING,
                 confirm_needed=strategy.confirm_bars,
-                confirm_count=(
-                    1
-                    if (orb.break_dir == "long" and bar["close"] > orb.high)
-                    or (orb.break_dir == "short" and bar["close"] < orb.low)
-                    else 0
-                ),
+                confirm_count=1 if confirmed else 0,
                 bars_since_break=[bar],
                 size_multiplier=size_multiplier,
             )
