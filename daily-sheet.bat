@@ -2,7 +2,7 @@
 title Daily Execution Sheet
 cd /d "%~dp0"
 call .venv\Scripts\activate.bat
-python -m trading_app.prop_portfolio --daily --profile apex_50k_manual
+python -m trading_app.prop_portfolio --daily --profile apex_100k_manual
 echo.
 echo ---- TopStep MGC ----
 echo.
