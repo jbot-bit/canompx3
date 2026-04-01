@@ -200,15 +200,73 @@ class LaneScore:
 
 ---
 
+## DD Budget Algorithm
+
+Lane selection respects the firm's DD limit. Greedy selection (not knapsack):
+
+```
+candidates = sorted(all_lane_scores, by=annual_r, descending)
+selected = []
+dd_used = 0.0
+
+for lane in candidates:
+    if len(selected) >= max_slots:
+        break
+    if profile.allowed_instruments and lane.instrument not in profile.allowed_instruments:
+        continue
+    if profile.allowed_sessions and lane.orb_label not in profile.allowed_sessions:
+        continue
+    
+    # Worst-case DD contribution = max_orb_pts × SM × point_value
+    lane_dd = lane.max_orb_pts * profile.stop_multiplier * cost_spec.point_value
+    if dd_used + lane_dd > profile.max_dd:
+        continue  # skip, try next (smaller ORB might fit)
+    
+    selected.append(lane)
+    dd_used += lane_dd
+```
+
+This is simple, deterministic, and respects all constraints.
+
+---
+
+## Stateless Design
+
+The allocator computes ALL state from orb_outcomes data. No dependency on prior
+lane_allocation.json for months_negative or pause history.
+
+```
+# Compute months_negative from per-month ExpR series:
+for each of the last 6 calendar months:
+    compute month_expr = AVG(adjusted_pnl_r) for that month
+months_negative = count consecutive negative months from most recent backward
+
+# Compute months_positive_since_pause:
+# Walk backward from most recent month. Find the last negative streak of 2+.
+# Count positive months after that streak ended.
+# If no negative streak exists → months_positive_since_pause = N/A (never paused)
+```
+
+This makes every run reproducible from the same data. No hidden state.
+
+**First run:** No prior allocation file → skip hysteresis check. Select top N
+lanes purely by annual_r. Subsequent runs read the prior file for hysteresis only.
+
+---
+
 ## Files
 
 | File | Action | Lines |
 |------|--------|-------|
-| `trading_app/lane_allocator.py` | NEW | ~200 |
+| `trading_app/lane_allocator.py` | NEW | ~250 |
 | `scripts/tools/rebalance_lanes.py` | NEW | ~80 |
-| `tests/test_trading_app/test_lane_allocator.py` | NEW | ~150 |
+| `tests/test_trading_app/test_lane_allocator.py` | NEW | ~200 |
+| `trading_app/prop_profiles.py` | MODIFY | Migration: allowed_sessions=None for auto, fix Apex instruments |
+| `trading_app/paper_trade_logger.py` | MODIFY | Derive LANES from prop_profiles (eliminate hardcoded constant) |
+| `trading_app/pre_session_check.py` | MODIFY | Add allocation staleness check |
 
-**Zero modifications to existing files.** The allocator is read-only against gold.db. Outputs recommendations only. Human applies to prop_profiles.py after review.
+The allocator is read-only against gold.db. Outputs recommendations to
+lane_allocation.json. Human applies to prop_profiles.py after review.
 
 ---
 
@@ -296,24 +354,29 @@ lane_allocation.json includes rebalance_date. Pre-session check reads it:
 paper_trade_logger.py currently has its OWN hardcoded LANES constant that
 must be manually synced with prop_profiles. This is a drift vector.
 
-FIX: paper_trade_logger derives its lanes FROM prop_profiles at runtime:
+FIX: paper_trade_logger derives its lanes FROM prop_profiles at runtime.
+Uses `matches_row()` (already exists on all filters) instead of filter_sql.
+No new `to_sql()` method needed — matches_row is the canonical filter interface.
+
 ```python
-from trading_app.prop_profiles import get_active_profile
+from trading_app.prop_profiles import ACCOUNT_PROFILES
 from trading_app.config import ALL_FILTERS
+from trading_app.strategy_discovery import parse_strategy_id
 
 def _build_lanes_from_profile(profile_id: str) -> tuple[LaneDef, ...]:
-    profile = get_active_profile(profile_id)
+    profile = ACCOUNT_PROFILES[profile_id]
     lanes = []
     for spec in profile.daily_lanes:
-        filt = ALL_FILTERS[spec.filter_type_from_id]  # parse from strategy_id
+        params = parse_strategy_id(spec.strategy_id)
         lanes.append(LaneDef(
             strategy_id=spec.strategy_id,
-            filter_type=filt.filter_type,
-            filter_sql=filt.to_sql(spec.orb_label),  # filter generates its own SQL
+            instrument=spec.instrument,
+            orb_label=spec.orb_label,
+            filter_type=params["filter_type"],
+            # No filter_sql — use matches_row() at runtime instead
         ))
     return tuple(lanes)
 ```
-This requires adding a `to_sql(orb_label)` method to StrategyFilter.
 One source of truth. Zero hardcoded lanes. Zero drift possible.
 
 ---
