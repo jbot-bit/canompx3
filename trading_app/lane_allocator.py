@@ -91,7 +91,7 @@ def _per_month_expr(
     stop_multiplier: float,
     rebalance_date: date,
     n_months: int = 6,
-) -> list[tuple[str, float, int]]:
+) -> tuple[list[tuple[str, float, int]], int, int]:
     """Compute per-calendar-month ExpR for a strategy.
 
     Returns list of (year_month, avg_pnl_r, n_trades) tuples, most recent first.
@@ -115,7 +115,7 @@ def _per_month_expr(
     ).fetchall()
 
     if not outcomes:
-        return []
+        return [], 0, 0
 
     # Load daily_features for filter application
     features = con.execute(
@@ -129,7 +129,7 @@ def _per_month_expr(
     ).fetchall()
 
     if not features:
-        return []
+        return [], 0, 0
 
     feat_cols = [desc[0] for desc in con.description]
     feat_by_day = {}
@@ -231,7 +231,7 @@ def compute_lane_scores(
         ).fetchall()
 
         scores = []
-        for sid, inst, orb, em, rr, cb, ft, sm, total_n in strategies:
+        for sid, inst, orb, em, rr, cb, ft, sm, _total_n in strategies:
             # Per-month ExpR for trailing window
             monthly, total_wins, total_trades = _per_month_expr(
                 con,
@@ -516,7 +516,11 @@ def build_allocation(
                 if best_prior.annual_r_estimate > 0:
                     improvement = (lane.annual_r_estimate - best_prior.annual_r_estimate) / best_prior.annual_r_estimate
                     if improvement < HYSTERESIS_PCT:
-                        continue  # Not enough improvement to justify the switch
+                        # Keep prior-allocated strategy if still deployable
+                        if best_prior.status in ("DEPLOY", "RESUME", "PROVISIONAL"):
+                            selected.append(best_prior)
+                            dd_used += lane_dd
+                        continue
 
         selected.append(lane)
         dd_used += lane_dd
@@ -615,3 +619,38 @@ def save_allocation(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, default=str))
     return path
+
+
+# ---------------------------------------------------------------------------
+# Staleness check
+# ---------------------------------------------------------------------------
+STALENESS_WARNING_DAYS = 35  # Pre-session check: log warning, continue trading
+STALENESS_BLOCK_DAYS = 60  # Pre-session check: refuse to trade until rebalance
+
+
+def check_allocation_staleness(
+    allocation_path: str | Path | None = None,
+    today: date | None = None,
+) -> tuple[str, int]:
+    """Check if lane allocation is stale.
+
+    Returns (status, days_old):
+      - "OK": allocation is fresh
+      - "WARNING": >35 days, should rebalance soon
+      - "BLOCK": >60 days, must rebalance before trading
+    days_old = -1 if file not found.
+    """
+    path = Path(allocation_path) if allocation_path else Path("docs/runtime/lane_allocation.json")
+    if not path.exists():
+        return "BLOCK", -1
+
+    data = json.loads(path.read_text())
+    rebalance_date = date.fromisoformat(data["rebalance_date"])
+    check_date = today or date.today()
+    days_old = (check_date - rebalance_date).days
+
+    if days_old > STALENESS_BLOCK_DAYS:
+        return "BLOCK", days_old
+    if days_old > STALENESS_WARNING_DAYS:
+        return "WARNING", days_old
+    return "OK", days_old
