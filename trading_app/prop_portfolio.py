@@ -39,24 +39,34 @@ from trading_app.prop_profiles import (
 from trading_app.strategy_fitness import compute_fitness  # noqa: F401
 
 # =========================================================================
-# DD estimation constants (from Monte Carlo sim — trading_plan_sim.md)
+# DD estimation — per-lane from DB, with fallback constants
 # =========================================================================
 
-# Median max DD per contract at 0.75x stop (EOD trailing)
-DD_PER_CONTRACT_075X = 935.0
-# Median max DD per contract at 1.0x stop (EOD trailing)
-DD_PER_CONTRACT_10X = 1350.0
+# Fallback constants when median_risk_points is unavailable.
+# Updated Apr 2026 from actual median_risk_points across validated strategies.
+# Old values (935/1350) were from a stale Monte Carlo — 23x too high.
+DD_PER_CONTRACT_075X = 100.0  # P95 of actual per-lane DD at S0.75
+DD_PER_CONTRACT_10X = 120.0  # P95 of actual per-lane DD at S1.0
 # Intraday trailing is stricter: unrealized PnL moves floor in real-time.
-# Factor applied to EOD estimate. Conservative 1.4x (40% more DD risk).
 INTRADAY_TRAILING_FACTOR = 1.4
 
 
-def _compute_dd_per_contract(stop_multiplier: float, dd_type: str) -> float:
-    """Estimated median max DD contribution per contract.
+def _compute_dd_per_contract(
+    stop_multiplier: float,
+    dd_type: str,
+    median_risk_points: float | None = None,
+    point_value: float | None = None,
+    friction: float | None = None,
+) -> float:
+    """DD contribution per contract per lane.
 
-    Based on Monte Carlo simulation results (see trading_plan_sim.md).
+    If median_risk_points is provided (from experimental_strategies), computes
+    actual risk: median_risk_pts * stop_mult * point_value + friction.
+    Otherwise falls back to conservative P95 estimate.
     """
-    if stop_multiplier <= 0.75:
+    if median_risk_points is not None and point_value is not None:
+        base = median_risk_points * stop_multiplier * point_value + (friction or 0)
+    elif stop_multiplier <= 0.75:
         base = DD_PER_CONTRACT_075X
     else:
         base = DD_PER_CONTRACT_10X
