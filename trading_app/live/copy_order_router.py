@@ -25,8 +25,9 @@ class CopyOrderRouter(BrokerRouter):
     def __init__(self, primary: BrokerRouter, shadows: list[BrokerRouter]):
         self.primary = primary
         self.shadows = shadows
-        # Expose primary's account_id for position tracking and equity polling
+        # Expose primary's fields for Liskov compatibility with BrokerRouter
         self.account_id = primary.account_id
+        self.auth = primary.auth
 
     def build_order_spec(
         self,

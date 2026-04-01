@@ -1,19 +1,18 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Fix 5 dashboard issues from audit
-updated: 2026-04-01T15:00:00Z
+task: Code review fixes — stale notes, CopyOrderRouter auth, tier test coverage
+updated: 2026-04-01T17:00:00Z
 scope_lock:
-  - trading_app/live/bot_dashboard.html
-  - trading_app/live/bot_dashboard.py
-  - trading_app/live/session_orchestrator.py
+  - trading_app/prop_profiles.py
+  - trading_app/live/copy_order_router.py
+  - tests/test_trading_app/test_prop_profiles.py
 blast_radius:
-  - HTML UI only + one backend endpoint change
-  - No trading logic, no pipeline, no profiles
+  - prop_profiles.py: notes string only (no logic change)
+  - copy_order_router.py: add self.auth (Liskov compliance)
+  - test_prop_profiles.py: add tier DD assertions
 acceptance:
-  - fetchAccounts on 60s interval (not just once)
-  - Per-profile STOP button (not just global KILL)
-  - Copies count shown on account cards
-  - Per-account equity display (when copy trading active)
-  - Tailwind bundled or fallback
+  - Notes say $3K not $4K for Tradeify 100K
+  - CopyOrderRouter has self.auth set
+  - Test asserts Tradeify 100K=$3K, 150K=$4.5K, Apex consistency=0.50
 ---
