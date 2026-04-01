@@ -78,6 +78,28 @@ class CopyOrderRouter(BrokerRouter):
         """Cancel on primary. Shadow brackets are broker-managed."""
         self.primary.cancel(order_id)
 
+    def cancel_bracket_orders(self, contract_id: str) -> int:
+        """Cancel orphaned bracket orders on primary + all shadows.
+
+        Primary cleanup fails-closed (raises on failure — same as single-account path).
+        Shadow cleanup is best-effort (logs warning on failure, does not block startup).
+        Returns total count cancelled across all accounts.
+        """
+        cancelled = self.primary.cancel_bracket_orders(contract_id)
+        for shadow in self.shadows:
+            try:
+                n = shadow.cancel_bracket_orders(contract_id)
+                cancelled += n
+                if n > 0:
+                    log.info("Shadow account %s: cancelled %d orphaned bracket orders", shadow.account_id, n)
+            except Exception:
+                log.warning(
+                    "Shadow account %s: bracket orphan cleanup failed — verify no open bracket orders",
+                    shadow.account_id,
+                    exc_info=True,
+                )
+        return cancelled
+
     def supports_native_brackets(self) -> bool:
         """Delegate to primary."""
         return self.primary.supports_native_brackets()
