@@ -6,6 +6,35 @@
 
 ---
 
+## Update (Apr 1 — Automation Infrastructure + Prop Audit + E2 Bug Discovery)
+
+### Completed (this terminal)
+- **4 auto-scaling profiles** (TYPE-A/TYPE-B for TopStep + Tradeify at 50K/100K). 21 strategy IDs DB-validated. P90 ORB caps per session x instrument.
+- **One-click dashboard launcher** — Signal/Demo/Live mode buttons. LIVE requires typing "LIVE" (safety gate). STOP button per profile when running. `START_BOT.bat` auto-opens browser.
+- **CopyOrderRouter** — multi-account copy trading. One auth, one feed, N order routers. Primary gets full tracking, shadows best-effort. `--copies` flag in run_live_session.py. `resolve_all_account_ids()` discovers all TopStep Express accounts.
+- **Prop firm rule corrections** — Tradeify DD was WRONG ($4K/$6K → $3K/$4.5K from old Growth plan). TopStep close 16:00→16:10. Tradeify close 16:00→16:59. Apex consistency 0.30→0.50. All source-verified.
+- **Dashboard fixes** — fetchAccounts on 60s interval, per-profile STOP button, copy status display, Tailwind fallback.
+- **Prop profile audit** (26-point, 3 parallel agents): firm rules verified, lane optimality checked, ORB cap analysis, worst-day simulation, code logic audit.
+- **Min ORB floor research** — OBSERVATION only. Q1 effect real but already captured by VOL/ATR filters. No actionable new filter.
+- **E2 fakeout bug independently confirmed** — 17-45% of entries impossible in live, ALL sessions OPTIMISTIC bias. Other terminal has the fix design (Level 1: change detection_window_start to orb_end).
+
+### Key Findings
+- **Tradeify DD = TopStep DD** at every tier. No DD advantage. Only Tradeify advantages: no consistency rule, no DLL, 90% from $1.
+- **Worst-day all-lose = $1,384/ct** (TYPE-A, 16 lanes with ORB caps). At 100K ($3K DD): 46% at 1ct. AGGRO = 1ct. Only 150K enables 2ct.
+- **Current portfolio = $5,460/yr at 1ct.** TYPE-A+B potential = $112,838/yr. Gap = bot has 0 trades.
+- **TopStep is the only viable auto path.** ProjectX preflight 5/5 passed. Tradovate auth still broken.
+- **E2 detection_window bug is CRITICAL.** Must fix before live. Full rebuild required (~4 hours). Other terminal executing.
+
+### What's Running
+- Other terminal: E2 honest entry fix (outcome_builder.py L456/L778) + full rebuild
+
+### Blockers
+- E2 fakeout fix must complete before any live trading
+- Tradovate auth broken (blocks all Tradeify profiles)
+- Data freshness: outcomes stale at Mar 27-30 (rebuild will refresh)
+
+---
+
 ## Update (Mar 31 — First Automated Trade: Profile + Scoring + Routing)
 
 ### Completed
