@@ -28,9 +28,9 @@ from pathlib import Path
 import duckdb
 
 from pipeline.cost_model import COST_SPECS
+from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS
-from trading_app.strategy_discovery import parse_stop_multiplier
 
 # ---------------------------------------------------------------------------
 # Literature-grounded constants (do NOT tune on backtest — see spec §Parameter Source)
@@ -43,8 +43,6 @@ MAGNITUDE_PAUSE_THRESHOLD = -0.10  # 3-month avg ExpR below this → immediate p
 MIN_TRAILING_N = 20  # Minimum trades for reliable score
 HYSTERESIS_PCT = 0.20  # Carver Ch.12: 20% switching cost
 PROVISIONAL_MONTHS = 6  # Minimum months for full (non-provisional) status
-STALENESS_WARN_DAYS = 35
-STALENESS_BLOCK_DAYS = 60
 
 
 @dataclass
@@ -68,53 +66,6 @@ class LaneScore:
     months_positive_since_last_neg_streak: int
     status: str  # DEPLOY / PROVISIONAL / PAUSE / RESUME / STALE
     status_reason: str
-
-
-def _parse_strategy_params(strategy_id: str) -> dict:
-    """Extract instrument, orb_label, entry_model, rr, cb, filter from strategy_id."""
-    parts = strategy_id.split("_")
-    instrument = parts[0]
-    # Find entry model position (E1 or E2)
-    em_idx = None
-    for i, p in enumerate(parts):
-        if p in ("E1", "E2", "E3"):
-            em_idx = i
-            break
-    if em_idx is None:
-        raise ValueError(f"Cannot parse entry_model from {strategy_id}")
-
-    orb_label = "_".join(parts[1:em_idx])
-    entry_model = parts[em_idx]
-
-    # RR target: next part after EM, format RR1.0
-    rr_str = parts[em_idx + 1]
-    rr_target = float(rr_str.replace("RR", ""))
-
-    # Confirm bars: CB1, CB2, etc.
-    cb_str = parts[em_idx + 2]
-    confirm_bars = int(cb_str.replace("CB", ""))
-
-    # Filter type: everything after CB, excluding _S075, _O15, _O30, _W, _S suffixes
-    remaining = parts[em_idx + 3 :]
-    # Strip known suffixes from the end
-    filter_parts = []
-    for p in remaining:
-        if p in ("S075", "O15", "O30", "W", "S"):
-            continue
-        filter_parts.append(p)
-    filter_type = "_".join(filter_parts) if filter_parts else "NO_FILTER"
-
-    sm = parse_stop_multiplier(strategy_id)
-
-    return {
-        "instrument": instrument,
-        "orb_label": orb_label,
-        "entry_model": entry_model,
-        "rr_target": rr_target,
-        "confirm_bars": confirm_bars,
-        "filter_type": filter_type,
-        "stop_multiplier": sm,
-    }
 
 
 def _month_range(rebalance_date: date, months_back: int) -> tuple[date, date]:
@@ -148,10 +99,11 @@ def _per_month_expr(
     """
     start, end = _month_range(rebalance_date, n_months)
 
-    # Load outcomes
+    # Load outcomes (include entry/stop for canonical SM adjustment)
     outcomes = con.execute(
         """
-        SELECT o.trading_day, o.pnl_r, o.mae_r, o.outcome
+        SELECT o.trading_day, o.pnl_r, o.mae_r, o.outcome,
+               o.entry_price, o.stop_price
         FROM orb_outcomes o
         WHERE o.symbol = ? AND o.orb_label = ? AND o.entry_model = ?
           AND o.rr_target = ? AND o.confirm_bars = ? AND o.orb_minutes = 5
@@ -198,28 +150,48 @@ def _per_month_expr(
         if strat_filter.matches_row(feat_row, orb_label):
             eligible_days.add(td)
 
-    # Filter outcomes to eligible days + apply SM adjustment
-    adjusted = []
-    for td, pnl_r, mae_r, outcome in outcomes:
+    # Filter outcomes to eligible days + apply canonical SM adjustment
+    cost_spec = COST_SPECS.get(instrument)
+    adjusted = []  # (trading_day, adjusted_pnl_r, is_win)
+    for td, pnl_r, mae_r, _outcome, entry_price, stop_price in outcomes:
         if td not in eligible_days:
             continue
-        # SM adjustment
-        if stop_multiplier != 1.0 and mae_r is not None and mae_r >= stop_multiplier:
-            adj_pnl_r = round(-stop_multiplier, 4)
-        else:
-            adj_pnl_r = pnl_r
-        adjusted.append((td, adj_pnl_r))
+        # Canonical SM adjustment (matches apply_tight_stop in config.py):
+        # max_adv_pts = mae_r * risk_d / point_value
+        # killed = max_adv_pts >= stop_multiplier * risk_pts
+        adj_pnl_r = pnl_r
+        if (
+            stop_multiplier != 1.0
+            and mae_r is not None
+            and entry_price is not None
+            and stop_price is not None
+            and cost_spec is not None
+        ):
+            risk_pts = abs(entry_price - stop_price)
+            if risk_pts > 0:
+                raw_risk_d = risk_pts * cost_spec.point_value
+                risk_d = raw_risk_d + cost_spec.total_friction
+                max_adv_pts = mae_r * risk_d / cost_spec.point_value
+                if max_adv_pts >= stop_multiplier * risk_pts:
+                    adj_pnl_r = round(-stop_multiplier, 4)
+        is_win = adj_pnl_r > 0
+        adjusted.append((td, adj_pnl_r, is_win))
 
     if not adjusted:
-        return []
+        return [], 0, 0
 
     # Group by calendar month
     from collections import defaultdict
 
     monthly: dict[str, list[float]] = defaultdict(list)
-    for td, pnl_r in adjusted:
+    total_wins = 0
+    total_trades = 0
+    for td, pnl_r, is_win in adjusted:
         ym = f"{td.year}-{td.month:02d}"
         monthly[ym].append(pnl_r)
+        total_trades += 1
+        if is_win:
+            total_wins += 1
 
     result = []
     for ym in sorted(monthly.keys(), reverse=True):
@@ -227,7 +199,7 @@ def _per_month_expr(
         avg_r = sum(trades) / len(trades)
         result.append((ym, round(avg_r, 4), len(trades)))
 
-    return result
+    return result, total_wins, total_trades
 
 
 def compute_lane_scores(
@@ -243,6 +215,7 @@ def compute_lane_scores(
     """
     db = db_path or GOLD_DB_PATH
     con = duckdb.connect(str(db), read_only=True)
+    configure_connection(con)
 
     try:
         # Load all active validated strategies
@@ -260,7 +233,7 @@ def compute_lane_scores(
         scores = []
         for sid, inst, orb, em, rr, cb, ft, sm, total_n in strategies:
             # Per-month ExpR for trailing window
-            monthly = _per_month_expr(
+            monthly, total_wins, total_trades = _per_month_expr(
                 con,
                 inst,
                 orb,
@@ -309,10 +282,8 @@ def compute_lane_scores(
             # Annual R estimate
             annual_r = round(trailing_expr * all_trades_n / (actual_months / 12.0), 1) if actual_months > 0 else 0.0
 
-            # Win rate from trailing (need to recount — approximate from monthly)
-            # Note: monthly ExpR doesn't give us WR directly. Use trailing_expr sign as proxy.
-            # For proper WR, we'd need to count wins separately. Use trailing_expr > 0 as indicator.
-            trailing_wr = sum(1 for _, e, _ in monthly if e > 0) / len(monthly) if monthly else 0.0
+            # Trade-level win rate (from SM-adjusted outcomes, not monthly averages)
+            trailing_wr = round(total_wins / total_trades, 3) if total_trades > 0 else 0.0
 
             # Consecutive months negative (most recent backward)
             months_neg = 0
@@ -531,12 +502,21 @@ def build_allocation(
         if dd_used + lane_dd > max_dd:
             continue
 
-        # Hysteresis check (only if prior allocation exists)
+        # Hysteresis: only replace a prior lane if new candidate is >20% better
+        # (Carver Ch.12 switching cost — prevents monthly churn)
         if prior_allocation and lane.strategy_id not in prior_allocation:
-            # New lane — check if it beats any existing lane by >20%
-            # Simple: if it made the ranked list, it's good enough
-            # The 20% check is against what it's REPLACING, not the full list
-            pass  # Hysteresis applied at the report level, not hard-block
+            # This is a NEW lane. Check if the session it would fill is already
+            # occupied by a prior-allocated lane with comparable annual_r.
+            session_key = (lane.instrument, lane.orb_label)
+            prior_in_session = [
+                s for s in scores if s.strategy_id in prior_allocation and (s.instrument, s.orb_label) == session_key
+            ]
+            if prior_in_session:
+                best_prior = max(prior_in_session, key=lambda s: s.annual_r_estimate)
+                if best_prior.annual_r_estimate > 0:
+                    improvement = (lane.annual_r_estimate - best_prior.annual_r_estimate) / best_prior.annual_r_estimate
+                    if improvement < HYSTERESIS_PCT:
+                        continue  # Not enough improvement to justify the switch
 
         selected.append(lane)
         dd_used += lane_dd
