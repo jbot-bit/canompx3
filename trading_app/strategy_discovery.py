@@ -1287,8 +1287,16 @@ def run_discovery(
         n_fdr_sig = sum(1 for v in fdr_results.values() if v.get("fdr_significant"))
         logger.info(f"BH FDR at discovery: {n_fdr_sig}/{len(p_pairs)} significant at q=0.05")
 
-        # ---- Batch write ----
+        # ---- Batch write (idempotent: DELETE then INSERT) ----
         if not dry_run:
+            # Remove prior results for this instrument+aperture before writing.
+            # Required because INSERT OR REPLACE only updates written rows —
+            # strategies excluded from the current grid (e.g., E2+CONT after
+            # the look-ahead filter exclusion) would persist as zombies.
+            con.execute(
+                "DELETE FROM experimental_strategies WHERE instrument = ? AND orb_minutes = ?",
+                [instrument, orb_minutes],
+            )
             insert_batch = []
             for s in all_strategies:
                 m = s["metrics"]
