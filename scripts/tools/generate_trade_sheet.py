@@ -1137,8 +1137,10 @@ def main():
             status = "OK" if days_stale <= 2 else f"STALE ({days_stale} days old)"
             print(f"  {table}: {max_date.date() if max_date else 'EMPTY'} [{status}]")
         con_check.close()
-    except Exception:
+    except duckdb.IOException:
         print("  Data freshness: SKIP (DB locked by another process)")
+    except Exception as exc:
+        print(f"  Data freshness: SKIP ({type(exc).__name__}: {exc})")
     print()
 
     # Resolve session times
