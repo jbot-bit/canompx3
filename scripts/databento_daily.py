@@ -76,24 +76,40 @@ if _missing:
         f"DATABENTO_SYMBOLS missing active instruments: {_missing}. Update _DATABENTO_SYMBOLS in {__file__}."
     )
 
-# Additional schemas to refresh daily (beyond ohlcv-1m which refresh_data.py handles)
+# Additional schemas to refresh daily (beyond ohlcv-1m which refresh_data.py handles).
+# Standard plan ($179/mo) includes: L0 (ohlcv, stats) unlimited, L1 (tbbo, trades,
+# bbo-1s) 12mo, L2/L3 (mbp-1, mbp-10) 1mo. Download ALL included schemas daily.
 DAILY_SCHEMAS = [
     {
         "schema": "ohlcv-1s",
         "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
-        "description": "1-second OHLCV bars",
+        "description": "1-second OHLCV bars (L0 FREE)",
     },
     {
         "schema": "statistics",
-        "instruments": {"MGC": _DATABENTO_SYMBOLS["MGC"]},
-        "description": "Settlement prices, OI, volume stats",
+        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
+        "description": "Settlement prices, OI, volume stats (L0 FREE)",
     },
-    # Uncomment when budget allows daily tick data:
-    # {
-    #     "schema": "tbbo",
-    #     "instruments": {"MGC": "GC.FUT"},
-    #     "description": "Trade+quote for slippage monitoring",
-    # },
+    {
+        "schema": "tbbo",
+        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
+        "description": "Trade+quote for slippage monitoring (L1 INCLUDED)",
+    },
+    {
+        "schema": "trades",
+        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
+        "description": "Tick-by-tick trades for order flow (L1 INCLUDED)",
+    },
+    {
+        "schema": "bbo-1s",
+        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
+        "description": "1-second bid/ask for spread tracking (L1 INCLUDED)",
+    },
+    {
+        "schema": "mbp-1",
+        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
+        "description": "Top-of-book for break quality research (L2 INCLUDED 1mo)",
+    },
 ]
 
 
