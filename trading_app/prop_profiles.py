@@ -159,7 +159,7 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         profit_split_tiers=((float("inf"), 0.90),),
         consistency_rule=0.40,
         news_restriction=False,
-        close_time_et="16:00",
+        close_time_et="16:10",  # 3:10 PM CT = 4:10 PM ET. Verified 2026-04-01.
         platform="topstepx",
         min_hold_seconds=None,
         banned_instruments=frozenset(),
@@ -187,7 +187,7 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         profit_split_tiers=((float("inf"), 0.90),),  # Select Flex: flat 90/10
         consistency_rule=None,  # Select Flex: no consistency rule when funded
         news_restriction=False,
-        close_time_et="16:00",
+        close_time_et="16:59",  # 4:59 PM ET. Verified 2026-04-01.
         platform="tradovate",
         min_hold_seconds=10,  # 50% of trades held 10+ seconds
         banned_instruments=frozenset(),
@@ -199,7 +199,7 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         display_name="Apex Trader Funding",
         dd_type="eod_trailing",
         profit_split_tiers=((float("inf"), 1.00),),  # 100% split on EOD PA plans
-        consistency_rule=0.30,  # 30% windfall rule: no single day > 30% of total profit at payout
+        consistency_rule=0.50,  # 50% since Apex 4.0 (Mar 2026). Was 30% legacy. Verified 2026-04-01.
         news_restriction=False,
         close_time_et="16:59",
         platform="tradovate",
@@ -250,10 +250,11 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     ("mffu", 50_000): PropFirmAccount("mffu", 50_000, 2_000, 5, 50),
     ("mffu", 100_000): PropFirmAccount("mffu", 100_000, 3_000, 8, 80),
     ("mffu", 150_000): PropFirmAccount("mffu", 150_000, 4_500, 12, 120),
-    # Tradeify Select
+    # Tradeify Select: verified 2026-04-01 via saveonpropfirms.com/blog/tradeify-select-guide
+    # Prior values ($4K/$6K on 100K/150K) were from old Growth plan. Select = $2K/$3K/$4.5K.
     ("tradeify", 50_000): PropFirmAccount("tradeify", 50_000, 2_000, 4, 40),
-    ("tradeify", 100_000): PropFirmAccount("tradeify", 100_000, 4_000, 8, 80),
-    ("tradeify", 150_000): PropFirmAccount("tradeify", 150_000, 6_000, 12, 120),
+    ("tradeify", 100_000): PropFirmAccount("tradeify", 100_000, 3_000, 8, 80),
+    ("tradeify", 150_000): PropFirmAccount("tradeify", 150_000, 4_500, 12, 120),
     # Apex 4.0 EOD PA (March 2026) — metals banned, DLL introduced.
     # DLL is soft: pauses trading for the day, does NOT fail the account.
     ("apex", 50_000): PropFirmAccount("apex", 50_000, 2_000, 4, 40, daily_loss_limit=1_000),
