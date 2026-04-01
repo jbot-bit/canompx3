@@ -104,11 +104,18 @@ The allocator respects per-profile constraints:
 - `allowed_instruments`: which instruments this account can trade (firm restrictions)
 - `stop_multiplier`: prop firm stop sizing (0.75x for prop, 1.0x for self-funded)
 
-AUTO is the primary deployment — trades ALL sessions 24/7 via bot.
-MANUAL is a separate practice account for learning — daytime sessions only.
-Both use the SAME ranking. The profile's `allowed_sessions` constraint
-filters the list: auto profiles allow all sessions, manual profiles
-restrict to Brisbane waking hours. No special logic needed.
+AUTO is the primary deployment via bot. The allocator selects which
+sessions to trade — only validated, currently HOT, and DD-budget-compliant
+lanes make the cut. Auto profiles set `allowed_sessions = None` (allocator
+decides) with constraints: max_slots, max_dd, allowed_instruments.
+
+MANUAL is a separate practice account for learning. Same allocator output
+but filtered to Brisbane daytime sessions only (allowed_sessions set).
+
+The allocator IS the session selector. Profiles provide constraints, not
+session lists. A session that goes cold gets dropped. A session that gets
+hot gets added. No human decision needed for which sessions — only for
+approving the allocator's monthly recommendation.
 
 **SM-aware ranking:** Trailing ExpR is computed at the ACCOUNT's stop_multiplier.
 The same strategy may rank differently for SM=0.75 (prop) vs SM=1.0 (self-funded).
