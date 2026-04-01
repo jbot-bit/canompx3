@@ -46,18 +46,20 @@ Monthly rebalancer that weights validated strategy lanes by trailing forward per
 
 ## Regime Detection: Two-Level
 
-### CORE strategies (N >= 100)
+### Self-sufficient strategies (trailing_n >= 20 in window)
 - Use OWN trailing ExpR for regime detection
-- 12-month trailing window has 20+ trades per month = robust signal
-- Self-sufficient regime gate
+- Enough trades in the trailing window for a robust signal
+- Applies regardless of CORE/REGIME total-N classification
 
-### REGIME strategies (N = 30-99)
-- Use SESSION-LEVEL trailing ExpR (unfiltered E2 RR1.0)
-- Strategy's own trailing window has too few trades (5-15/year = noise)
-- Session unfiltered has 200-500 trades/year = robust signal
-- If session is HOT → deploy the REGIME strategy
-- If session is COLD → pause the REGIME strategy regardless of own performance
+### Thin-data strategies (trailing_n < 20 in window)
+- Use SESSION-LEVEL trailing ExpR for regime gate
+- Session regime = unfiltered E2 RR1.0 CB1 O5 for the instrument × session
+- Session unfiltered has 200-500 trades/year = robust signal even in short windows
+- If session is HOT (trailing 6mo ExpR > 0) → deploy the strategy
+- If session is COLD (trailing 6mo ExpR < 0) → pause regardless of own sparse performance
 - Grounding: Carver Ch.11 "forecast blending" — use higher-level signal for lower-level bet
+- NOTE: A CORE strategy (N=200 total) with a strict filter may have trailing_n < 20.
+  Total N does not determine regime gate — trailing N does.
 
 ---
 
@@ -77,9 +79,10 @@ annual_r_estimate = trailing_expr * trailing_n / (trailing_months / 12)
 ## Kill/Resume Rules
 
 ### PAUSE (fast kill)
-- Trailing 2-month ExpR < 0 for 2 consecutive months → PAUSE
-- OR: trailing 3-month ExpR < -0.10 → IMMEDIATE PAUSE (magnitude override)
-- REGIME strategies: session-level 2-month ExpR < 0 → PAUSE
+- Compute ExpR for each of the last 2 calendar months INDIVIDUALLY
+- If BOTH individual months are negative → PAUSE
+- OR: trailing 3-month average ExpR < -0.10 → IMMEDIATE PAUSE (magnitude override)
+- Thin-data strategies (trailing_n < 20): session-level 2-month check instead
 
 ### RESUME (slow promote)
 - Must be POSITIVE for 3 consecutive months after pause
@@ -102,6 +105,13 @@ The allocator respects per-profile constraints:
 - `stop_multiplier`: prop firm stop sizing (0.75x for prop, 1.0x for self-funded)
 
 Manual vs auto uses the SAME ranking — only `allowed_sessions` differs (manual = Brisbane daytime, auto = overnight).
+
+**SM-aware ranking:** Trailing ExpR is computed at the ACCOUNT's stop_multiplier.
+The same strategy may rank differently for SM=0.75 (prop) vs SM=1.0 (self-funded).
+
+**Provisional strategies:** Strategies with < 6 months of trailing data get status=PROVISIONAL.
+They can be deployed but rank BELOW strategies with 6+ months data when annual_r is comparable.
+Prevents chasing short hot streaks from recently validated strategies.
 
 ---
 
@@ -140,7 +150,9 @@ class LaneScore:
   "profiles": {
     "apex_100k_manual": {
       "lanes": [
-        {"strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G6", "annual_r": 18.0, "status": "DEPLOY"},
+        {"strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G6", "annual_r": 18.0, "status": "DEPLOY",
+         "trailing_expr": 0.1009, "trailing_n": 178, "trailing_wr": 0.481,
+         "months_negative": 0, "session_regime": "HOT"},
         ...
       ],
       "paused": [...],
@@ -192,6 +204,12 @@ All queries use `trading_day < rebalance_date`. Enforced by:
 8. `test_hysteresis_20pct` — Lane not replaced for <20% improvement
 9. `test_annual_r_ranking` — High-N medium-ExpR beats low-N high-ExpR
 10. `test_report_completeness` — Audit trail has all required fields
+11. `test_sm_adjustment` — SM=0.75 trailing ExpR differs from SM=1.0 for same strategy
+12. `test_filter_applied_in_trailing` — Filtered trailing ExpR differs from unfiltered
+13. `test_provisional_status` — Strategy with <6 months data gets PROVISIONAL
+14. `test_staleness_warning` — Allocation >35 days old triggers warning
+15. `test_staleness_block` — Allocation >60 days old blocks trading
+16. `test_individual_month_negative` — Both individual months negative → PAUSE (not average)
 
 ---
 
