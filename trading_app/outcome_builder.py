@@ -419,6 +419,7 @@ def compute_single_outcome(
     cost_spec,
     entry_model: str = "E1",
     orb_label: str | None = None,
+    orb_end_utc: datetime | None = None,
 ) -> dict:
     """
     Compute outcome for a single (rr_target, confirm_bars, entry_model) combination.
@@ -448,12 +449,16 @@ def compute_single_outcome(
 
     # Detect entry: E2 uses break-touch, E1/E3 use confirm bars
     if entry_model == "E2":
+        # E2 stop-market scans from ORB window close (honest: catches fakeout
+        # bars that touch boundary before the confirmed close-based break).
+        # Falls back to break_ts when orb_end_utc is not provided.
+        e2_scan_start = orb_end_utc if orb_end_utc is not None else break_ts
         touch = detect_break_touch(
             bars_df,
             orb_high=orb_high,
             orb_low=orb_low,
             break_dir=break_dir,
-            detection_window_start=break_ts,
+            detection_window_start=e2_scan_start,
             detection_window_end=trading_day_end,
         )
         signal = _resolve_e2(touch, slippage_ticks=E2_SLIPPAGE_TICKS, tick_size=cost_spec.tick_size)
@@ -683,7 +688,10 @@ def build_outcomes(
         query = f"""
             SELECT trading_day, symbol, orb_minutes,
                    {
-            ", ".join(f"orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts" for lbl in sessions)
+            ", ".join(
+                f"orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts, orb_{lbl}_break_delay_min"
+                for lbl in sessions
+            )
         }
             FROM daily_features
             WHERE symbol = ? AND orb_minutes = ?
@@ -767,20 +775,27 @@ def build_outcomes(
                 if orb_high is None or orb_low is None:
                     continue
 
+                # Compute ORB window end for honest E2 detection.
+                # E2 stop-market scans from ORB close (not from the later
+                # confirmed break bar) so fakeout touches are included.
+                break_delay = row_dict.get(f"orb_{orb_label}_break_delay_min")
+                orb_end_utc = break_ts - timedelta(minutes=break_delay) if break_delay is not None else break_ts
+
                 # Optimized: detect entry ONCE per (session, EM, CB),
                 # then compute all 6 RR targets with shared bar slicing.
                 for em in ENTRY_MODELS:
                     if em in SKIP_ENTRY_MODELS:
                         continue
                     if em == "E2":
-                        # E2: stop-market at ORB level. Uses break-touch detection
-                        # (range crosses ORB, no close requirement) instead of confirm bars.
+                        # E2: stop-market at ORB level. Scans from ORB window
+                        # close (honest — first bar whose range crosses ORB
+                        # boundary, even if close is back inside = fakeout).
                         touch = detect_break_touch(
                             bars_df,
                             orb_high=orb_high,
                             orb_low=orb_low,
                             break_dir=break_dir,
-                            detection_window_start=break_ts,
+                            detection_window_start=orb_end_utc,
                             detection_window_end=td_end,
                         )
                         signal = _resolve_e2(touch, slippage_ticks=E2_SLIPPAGE_TICKS, tick_size=cost_spec.tick_size)
