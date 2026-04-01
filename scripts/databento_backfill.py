@@ -135,7 +135,10 @@ def load_manifest(manifest_dir: Path, download_name: str) -> dict:
     path = manifest_dir / f"{download_name}.json"
     if path.exists():
         with open(path) as f:
-            return json.load(f)
+            try:
+                return json.load(f)
+            except json.JSONDecodeError as exc:
+                print(f"  WARNING: Manifest {path.name} is corrupt ({exc}) -- starting fresh")
     return {"name": download_name, "chunks": {}, "completed": False}
 
 
