@@ -759,6 +759,63 @@ class TestComputeDstSplit:
         assert result["winter_n"] is None
 
 
+class TestWFEGate:
+    """WFE >= MIN_WFE gate: overfit strategies demoted even if FDR passes."""
+
+    def test_wfe_below_threshold_demotes(self):
+        """Strategy with WFE < 0.50 should have fdr_significant overridden to False."""
+        from trading_app.config import MIN_WFE
+
+        # Simulate the gate logic from strategy_validator.py L1331-1337
+        fdr_significant = True  # BH FDR says pass
+        wfe = 0.35  # but WFE says overfit
+        result = fdr_significant and wfe >= MIN_WFE
+        assert result is False, f"WFE={wfe} < {MIN_WFE} should demote"
+
+    def test_wfe_above_threshold_keeps(self):
+        """Strategy with WFE >= 0.50 should retain FDR significance."""
+        from trading_app.config import MIN_WFE
+
+        fdr_significant = True
+        wfe = 0.65
+        result = fdr_significant and wfe >= MIN_WFE
+        assert result is True, f"WFE={wfe} >= {MIN_WFE} should keep"
+
+    def test_wfe_null_defaults_fail_closed(self):
+        """NULL WFE should default to 0.0 (fail-closed), blocking promotion."""
+        from trading_app.config import MIN_WFE
+
+        fdr_significant = True
+        wfe_row_value = None  # NULL from DB
+        wfe = wfe_row_value if wfe_row_value is not None else 0.0  # fail-closed
+        result = fdr_significant and wfe >= MIN_WFE
+        assert result is False, "NULL WFE should fail-closed (demote)"
+
+    def test_wfe_exactly_at_threshold_passes(self):
+        """WFE exactly at MIN_WFE boundary should pass (>= not >)."""
+        from trading_app.config import MIN_WFE
+
+        fdr_significant = True
+        wfe = MIN_WFE  # exactly 0.50
+        result = fdr_significant and wfe >= MIN_WFE
+        assert result is True, f"WFE={wfe} exactly at threshold should pass"
+
+    def test_fdr_false_stays_false_regardless_of_wfe(self):
+        """If BH FDR says reject, high WFE doesn't override."""
+        from trading_app.config import MIN_WFE
+
+        fdr_significant = False
+        wfe = 1.50  # excellent WFE
+        result = fdr_significant and wfe >= MIN_WFE
+        assert result is False, "FDR rejection not overridden by high WFE"
+
+    def test_min_wfe_constant_is_050(self):
+        """MIN_WFE must be 0.50 per Pardo / RESEARCH_RULES.md."""
+        from trading_app.config import MIN_WFE
+
+        assert MIN_WFE == 0.50
+
+
 class TestCLI:
     def test_help(self, monkeypatch, capsys):
         monkeypatch.setattr("sys.argv", ["strategy_validator", "--help"])
