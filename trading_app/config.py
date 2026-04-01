@@ -1531,6 +1531,14 @@ HOLD_HOURS = 7
 CORE_MIN_SAMPLES = 100
 REGIME_MIN_SAMPLES = 30
 
+# Walk-forward efficiency floor. WFE = OOS_performance / IS_performance.
+# WFE < 0.50 = strategy lost >50% of edge out-of-sample → likely overfit.
+# @research-source: Pardo "Design, Testing, Optimization of Trading Systems";
+#   RESEARCH_RULES.md L59: "WFE > 50% = strategy likely real. < 50% = likely overfit."
+#   quant-audit-protocol.md Step 5: "T3: WFE < 0.50 → KILL → OVERFIT"
+# @revalidated-for: E2 event-based (2026-04-02). Impact: 8/210 strategies killed.
+MIN_WFE = 0.50
+
 # Sessions excluded from portfolio fitness monitoring, PER INSTRUMENT.
 # MGC SINGAPORE_OPEN: 74% double-break rate, mean-reverting structure, no edge.
 # MNQ SINGAPORE_OPEN: HAS edge (17 ROBUST strategies, all CORE tier, all WF passed).

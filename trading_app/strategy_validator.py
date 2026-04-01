@@ -45,6 +45,7 @@ from pipeline.dst import (
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
     CORE_MIN_SAMPLES,
+    MIN_WFE,
     NOISE_FLOOR_BY_INSTRUMENT,
     REGIME_MIN_SAMPLES,
     REGIME_WF_MIN_TRADES_PER_WINDOW,
@@ -1327,6 +1328,16 @@ def run_validation(
                         # (which may change as the canonical pool grows) but
                         # preserve the K under which the strategy was originally
                         # promoted. This maintains audit trail integrity.
+                        # WFE gate: WFE < MIN_WFE → overfit, demote regardless of FDR
+                        # Pardo: WFE < 0.50 = lost >50% of edge OOS → likely overfit
+                        _wfe_row = con.execute(
+                            "SELECT wfe FROM validated_setups WHERE strategy_id = ?", [sid]
+                        ).fetchone()
+                        _wfe = _wfe_row[0] if _wfe_row and _wfe_row[0] is not None else 1.0
+                        _fdr_sig = fdr["fdr_significant"] and _wfe >= MIN_WFE
+                        if fdr["fdr_significant"] and not _fdr_sig:
+                            logger.info(f"  WFE gate: {sid} demoted (WFE={_wfe:.2f} < {MIN_WFE})")
+
                         con.execute(
                             """UPDATE validated_setups
                                SET fdr_significant = ?,
@@ -1345,9 +1356,9 @@ def run_validation(
                                        ELSE discovery_date
                                    END
                                WHERE strategy_id = ?""",
-                            [fdr["fdr_significant"], fdr["adjusted_p"], fdr["raw_p"], _sess_k, _sess_k, _today, sid],
+                            [_fdr_sig, fdr["adjusted_p"], fdr["raw_p"], _sess_k, _sess_k, _today, sid],
                         )
-                        if fdr["fdr_significant"]:
+                        if _fdr_sig:
                             n_fdr_sig += 1
                         else:
                             fdr_rejected_ids.append(sid)
