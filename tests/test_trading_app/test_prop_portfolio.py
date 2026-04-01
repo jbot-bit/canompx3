@@ -48,13 +48,18 @@ def _make_strategy(**overrides) -> PortfolioStrategy:
 
 
 class TestDDPerContract:
-    def test_075x_stop(self):
+    def test_075x_stop_fallback(self):
         dd = _compute_dd_per_contract(stop_multiplier=0.75, dd_type="eod_trailing")
-        assert dd == pytest.approx(935.0)
+        assert dd == pytest.approx(100.0)
 
-    def test_10x_stop(self):
+    def test_10x_stop_fallback(self):
         dd = _compute_dd_per_contract(stop_multiplier=1.0, dd_type="eod_trailing")
-        assert dd == pytest.approx(1350.0)
+        assert dd == pytest.approx(120.0)
+
+    def test_with_median_risk_points(self):
+        # MNQ: 20 pts median, S0.75, $2/pt, $2.74 friction
+        dd = _compute_dd_per_contract(0.75, "eod_trailing", median_risk_points=20.0, point_value=2.0, friction=2.74)
+        assert dd == pytest.approx(20.0 * 0.75 * 2.0 + 2.74)
 
     def test_intraday_trailing_adjustment(self):
         dd_eod = _compute_dd_per_contract(0.75, "eod_trailing")
@@ -108,15 +113,17 @@ class TestRankStrategies:
 
 class TestSelectForProfile:
     def test_dd_budget_exhaustion(self):
-        profile = AccountProfile("test", "topstep", 50_000, 1, 0.75, max_slots=10)
-        strats = [_make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}") for i in range(5)]
+        # At $100/slot, 5 slots = $500 < $2K DD — all fit now.
+        # To test exhaustion, need 25 slots to exceed $2K.
+        profile = AccountProfile("test", "topstep", 50_000, 1, 0.75, max_slots=30)
+        strats = [_make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}") for i in range(25)]
         book = select_for_profile(profile, strats)
-        assert book.total_slots == 2
+        assert book.total_slots == 20  # $100 * 20 = $2,000
         assert book.total_dd_used <= 2_000
-        assert len(book.excluded) == 3
+        assert len(book.excluded) == 5
 
     def test_slot_cap(self):
-        # max_slots=3 with 0.75x stop ($935/slot) and $5K budget = DD fits 5 slots
+        # max_slots=3 with 0.75x stop ($100/slot) and $5K budget = DD fits 5 slots
         # so the cognitive cap (3) is the binding constraint, not DD
         profile = AccountProfile("test", "self_funded", 50_000, 1, 0.75, max_slots=3)
         strats = [_make_strategy(strategy_id=f"s{i}", orb_label=f"SESSION_{i}") for i in range(5)]
@@ -490,20 +497,20 @@ class TestCheckDailyLanesDDBudget:
         )
 
     def test_under_budget(self):
-        """2 lanes at 0.75x = $935/lane = $1,870 < $2,000 Apex DD."""
+        """2 lanes at 0.75x = $100/lane = $200 < $2,000 Apex DD."""
         profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
         lanes = [self._make_lane(planned_stop=0.75) for _ in range(2)]
         _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
-        assert total == 1870.0
+        assert total == 200.0
         assert limit == 2000.0
         assert not over
 
     def test_over_budget(self):
-        """5 lanes at 0.75x = $935/lane = $4,675 > $2,000 Apex DD."""
+        """25 lanes at 0.75x = $100/lane = $2,500 > $2,000 Apex DD."""
         profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
-        lanes = [self._make_lane(planned_stop=0.75) for _ in range(5)]
+        lanes = [self._make_lane(planned_stop=0.75) for _ in range(25)]
         _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
-        assert total == 4675.0
+        assert total == 2500.0  # 25 x $100
         assert limit == 2000.0
         assert over
 
@@ -516,29 +523,28 @@ class TestCheckDailyLanesDDBudget:
             self._make_lane("SKIP", planned_stop=0.75),
         ]
         _max_dd, total, _limit, over = check_daily_lanes_dd_budget(profile, lanes)
-        assert total == 935.0  # Only 1 TRADE lane
+        assert total == 100.0  # Only 1 TRADE lane
         assert not over
 
-    def test_real_apex_profile_is_over(self):
-        """The actual apex_50k_manual profile with 5 lanes IS over-committed."""
+    def test_real_apex_profile_fits(self):
+        """The actual apex_50k_manual profile with 5 lanes now fits DD budget."""
         from trading_app.prop_profiles import ACCOUNT_PROFILES
 
         profile = ACCOUNT_PROFILES["apex_50k_manual"]
-        # All 5 lanes as TRADE with profile default stop
         lanes = [self._make_lane(planned_stop=profile.stop_multiplier) for _ in range(len(profile.daily_lanes))]
         _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
-        assert over, f"5 lanes should exceed DD: ${total} > ${limit}"
+        assert not over, f"5 lanes at $100 should fit: ${total} <= ${limit}"
 
     def test_mixed_stop_multipliers(self):
         """Lanes with different stop multipliers get different DD contributions."""
         profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
         lanes = [
-            self._make_lane(planned_stop=0.75),  # $935
-            self._make_lane(planned_stop=1.0),  # $1,350
+            self._make_lane(planned_stop=0.75),  # $100
+            self._make_lane(planned_stop=1.0),  # $120
         ]
         _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
-        assert total == 935.0 + 1350.0  # $2,285
-        assert over  # > $2,000
+        assert total == 100.0 + 120.0  # $220
+        assert not over  # $220 < $2,000
 
     def test_no_tradeable_lanes(self):
         """All lanes HOLD/SKIP = zero DD exposure."""
@@ -553,4 +559,4 @@ class TestCheckDailyLanesDDBudget:
         profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
         lanes = [self._make_lane(planned_stop=None)]  # Should use 0.75 from profile
         _max_dd, total, _limit, _over = check_daily_lanes_dd_budget(profile, lanes)
-        assert total == 935.0  # 0.75x = $935
+        assert total == 100.0  # 0.75x fallback = $100
