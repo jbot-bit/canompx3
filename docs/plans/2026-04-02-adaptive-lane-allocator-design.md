@@ -98,11 +98,29 @@ annual_r_estimate = trailing_expr * trailing_n / (trailing_months / 12)
 
 ## Constraints (from AccountProfile)
 
-The allocator respects per-profile constraints:
-- `max_slots`: maximum lanes per account (cognitive cap for manual, slot cap for auto)
-- `allowed_sessions`: which sessions this account can trade (time-based for manual)
-- `allowed_instruments`: which instruments this account can trade (firm restrictions)
+The allocator respects per-profile constraints. These are FIRM RULES, not
+trading preferences. The allocator selects the best lanes within these walls.
+
+- `max_slots`: maximum lanes per account (firm contract limits / cognitive cap)
+- `allowed_instruments`: FIRM-LEVEL restriction only. Set per firm's actual rules:
+    - Apex: `frozenset({"MNQ", "MES"})` — metals BANNED
+    - TopStep: `frozenset({"MNQ", "MGC"})` — allows gold
+    - Tradeify: `frozenset({"MNQ", "MES", "MGC"})` — allows all
+    - Self-funded IBKR: `None` (no restrictions)
+  Do NOT hardcode instrument preferences here. The allocator picks instruments.
+- `allowed_sessions`: `None` for auto profiles (allocator selects sessions).
+  Only set for manual practice profiles (Brisbane daytime restriction).
+  Do NOT hardcode session lists for auto accounts — that defeats the allocator.
 - `stop_multiplier`: prop firm stop sizing (0.75x for prop, 1.0x for self-funded)
+- `max_dd`: firm's drawdown limit. Allocator sizes lanes to fit within budget.
+
+### Migration Required (prop_profiles.py)
+Current active profiles have hardcoded `allowed_sessions` and `daily_lanes`.
+After allocator is built:
+1. Auto profiles: set `allowed_sessions = None`, `daily_lanes = ()` (empty)
+2. Allocator fills daily_lanes monthly based on what's validated and hot
+3. Manual profile: keep `allowed_sessions` = Brisbane daytime set
+4. Fix Apex `allowed_instruments`: currently None (wrong) → should be `{"MNQ", "MES"}`
 
 AUTO is the primary deployment via bot. The allocator selects which
 sessions to trade — only validated, currently HOT, and DD-budget-compliant
