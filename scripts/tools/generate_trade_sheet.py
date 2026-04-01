@@ -1127,6 +1127,18 @@ def main():
     print(f"  Date:   {trading_day}")
     print(f"  DB:     {db_path}")
     print(f"  Output: {output_path}")
+
+    # Data freshness check
+    try:
+        con_check = duckdb.connect(str(db_path), read_only=True)
+        for table, col in [("daily_features", "trading_day"), ("orb_outcomes", "trading_day")]:
+            max_date = con_check.execute(f"SELECT MAX({col}) FROM {table}").fetchone()[0]
+            days_stale = (trading_day - max_date.date()).days if max_date else 999
+            status = "OK" if days_stale <= 2 else f"STALE ({days_stale} days old)"
+            print(f"  {table}: {max_date.date() if max_date else 'EMPTY'} [{status}]")
+        con_check.close()
+    except Exception:
+        print("  Data freshness: SKIP (DB locked by another process)")
     print()
 
     # Resolve session times
