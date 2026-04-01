@@ -1,21 +1,19 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Fix verified prop firm rule mismatches from audit
-updated: 2026-04-01T13:00:00Z
+task: Fix 5 dashboard issues from audit
+updated: 2026-04-01T15:00:00Z
 scope_lock:
-  - trading_app/prop_profiles.py
-  - docs/plans/2026-04-01-prop-profile-audit-findings.md
+  - trading_app/live/bot_dashboard.html
+  - trading_app/live/bot_dashboard.py
+  - trading_app/live/session_orchestrator.py
 blast_radius:
-  - prop_profiles.py: ACCOUNT_TIERS data values + PROP_FIRM_SPECS close times
-  - DD budget validation runs at import time
-  - TYPE-B profiles use Tradeify tiers (DD budget changes)
+  - HTML UI only + one backend endpoint change
+  - No trading logic, no pipeline, no profiles
 acceptance:
-  - Tradeify 100K DD = $3,000 (was $4,000)
-  - Tradeify 150K DD = $4,500 (was $6,000)
-  - TopStep close_time_et = 16:10 (was 16:00)
-  - Tradeify close_time_et = 16:59 (was 16:00)
-  - Apex consistency_rule = 0.50 (was 0.30)
-  - All sources documented in audit findings
-  - check_drift passes
+  - fetchAccounts on 60s interval (not just once)
+  - Per-profile STOP button (not just global KILL)
+  - Copies count shown on account cards
+  - Per-account equity display (when copy trading active)
+  - Tailwind bundled or fallback
 ---

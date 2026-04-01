@@ -745,6 +745,12 @@ class SessionOrchestrator:
                 active_trades=self.engine.active_trades,
                 completed_trades=self.engine.completed_trades,
             )
+            # Add copy trading info if CopyOrderRouter is active
+            from trading_app.live.copy_order_router import CopyOrderRouter
+
+            if isinstance(self.order_router, CopyOrderRouter):
+                snapshot["copy_accounts"] = self.order_router.all_account_ids
+                snapshot["shadow_count"] = self.order_router.shadow_count
             write_state(snapshot)
         except Exception:
             pass  # Dashboard state is best-effort — never kill the trading loop
