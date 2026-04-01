@@ -1308,6 +1308,35 @@ SKIP_ENTRY_MODELS: frozenset[str] = frozenset({"E3"})
 E2_SLIPPAGE_TICKS = 1
 E2_STRESS_TICKS = 2
 
+# Filters excluded from E2 discovery grid (look-ahead for stop-market entries).
+#
+# E2 enters on the FIRST bar whose range touches the ORB boundary after the
+# ORB window closes. On ~42-49% of break-days, this bar is a fakeout (closes
+# back inside) that precedes the confirmed close-based break. Filters that
+# reference break-bar properties (volume, continuation, delay) are therefore
+# look-ahead for E2 — the values are not knowable at E2 entry time.
+#
+# Grounding: Pardo Ch.4 ("backtest must use only data available at the
+# decision point"), Aronson Ch.6 (look-ahead bias proportional to predictive
+# power of unavailable information).
+#
+# CONT: break_bar_continues (bar close direction — unknown at intra-bar touch)
+# FAST: break delay/speed (break_ts unknown until confirmed close)
+# VOL_RV*: relative volume = break_bar_volume / baseline (break bar not yet closed)
+# ATR70_VOL: combines ATR (safe) + rel_vol (look-ahead) — hybrid contaminated
+#
+# E1 is NOT affected: E1 enters AFTER the break bar closes (next bar open),
+# so all break-bar properties are known at E1 entry time.
+E2_EXCLUDED_FILTER_PREFIXES: tuple[str, ...] = (
+    "VOL_RV",  # break_bar_volume in numerator
+    "ATR70_VOL",  # includes rel_vol component
+)
+E2_EXCLUDED_FILTER_SUBSTRINGS: tuple[str, ...] = (
+    "_CONT",  # break_bar_continues
+    "_FAST",  # break delay/speed
+    "NOMON_CONT",  # continuation variant
+)
+
 # =========================================================================
 # Stop Multipliers: tighter stop placement via MAE profiling
 # =========================================================================
