@@ -359,44 +359,44 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         active=True,  # Upgraded from 50K — $3K DD gives $2,250 margin
         allowed_sessions=frozenset({"CME_PRECLOSE", "NYSE_CLOSE", "COMEX_SETTLE", "EUROPE_FLOW", "TOKYO_OPEN"}),
         daily_lanes=(
-            # HONEST REBUILD 2026-04-02: E2 fakeout-inclusive, zero look-ahead filters.
-            # All filters are pre-entry-only (COST_LT, OVNRNG, ORB_VOL, X_MES_ATR).
-            # SM=1.0 (account applies 0.75x at execution; these are SM=1.0 validated stats).
-            # Lane selection: best ExpR per session from 210 honest validated strategies.
+            # ALLOCATOR REBALANCE 2026-04-02 (post-16yr rebuild).
+            # 117 strategies scored, 47 deployable. Top 5 by annual_r.
+            # First MGC lanes — TOKYO_OPEN and EUROPE_FLOW both HOT regime.
+            # SM=1.0 validated (account applies 0.75x at execution).
             DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
-                "MNQ",
-                "CME_PRECLOSE",
-                max_orb_size_pts=120.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_8K",
+                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12",
                 "MNQ",
                 "COMEX_SETTLE",
                 max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_OVNRNG_100",
+                "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6",
                 "MNQ",
                 "EUROPE_FLOW",
                 max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_OVNRNG_100",
-                "MNQ",
-                "NYSE_CLOSE",
-                max_orb_size_pts=100.0,
+                "MGC_TOKYO_OPEN_E2_RR1.0_CB1_ORB_G5",
+                "MGC",
+                "TOKYO_OPEN",
+                max_orb_size_pts=40.0,
             ),
             DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08",
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075",
                 "MNQ",
-                "TOKYO_OPEN",
-                max_orb_size_pts=80.0,
+                "CME_PRECLOSE",
+                max_orb_size_pts=120.0,
+            ),
+            DailyLaneSpec(
+                "MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G5",
+                "MGC",
+                "EUROPE_FLOW",
+                max_orb_size_pts=40.0,
             ),
         ),
         notes=(
-            "$100K Apex. 5 honest lanes (E2 fakeout-inclusive, pre-entry filters only). "
-            "Rebuilt 2026-04-02. All filters trade-time-knowable. $3K DD."
+            "$100K Apex. 5 lanes (2 MGC + 3 MNQ). Allocator rebalance 2026-04-02 "
+            "post-16yr rebuild. 117 validated, 47 deployable. $3K DD."
         ),
     ),
     # =========================================================================

@@ -202,17 +202,16 @@ class TestLaneRegistryOrbCap:
 
     def test_tokyo_open_cap_in_registry(self):
         registry = get_lane_registry()
-        assert registry["TOKYO_OPEN"]["max_orb_size_pts"] == 80.0
+        assert registry["TOKYO_OPEN"]["max_orb_size_pts"] == 40.0  # MGC lane (smaller ORBs)
 
     def test_all_registry_lanes_have_caps(self):
-        """All lanes should have ORB caps after score-driven rebuild 2026-03-31."""
+        """All lanes should have ORB caps after allocator rebalance 2026-04-02."""
         registry = get_lane_registry()
         expected_caps = {
             "CME_PRECLOSE": 120.0,
-            "NYSE_CLOSE": 100.0,
             "COMEX_SETTLE": 80.0,
-            "US_DATA_1000": 120.0,
-            "TOKYO_OPEN": 80.0,
+            "EUROPE_FLOW": 40.0,  # MGC ORB_G5 lane (overwrites MNQ in registry)
+            "TOKYO_OPEN": 40.0,  # MGC ORB_G5 lane
         }
         for label, expected in expected_caps.items():
             if label in registry:
