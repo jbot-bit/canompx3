@@ -249,6 +249,35 @@ def check_allocation_staleness_gate() -> tuple[bool, str]:
     return True, f"Allocation {days_old}d old — fresh"
 
 
+def check_lane_mismatch(session: str, lane: dict) -> tuple[bool, str]:
+    """Warn if deployed lane differs from allocator recommendation.
+
+    Reads lane_allocation.json and compares the deployed strategy_id
+    for this session to the allocator's recommended strategy_id.
+    Non-blocking (warning only) — user decides whether to follow recommendation.
+    """
+    alloc_path = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+    if not alloc_path.exists():
+        return True, "No allocation file — cannot compare"
+
+    try:
+        import json as _json
+
+        data = _json.loads(alloc_path.read_text())
+        recommended = {entry["orb_label"]: entry["strategy_id"] for entry in data.get("lanes", [])}
+    except (KeyError, _json.JSONDecodeError):
+        return True, "Cannot parse allocation file"
+
+    deployed_sid = lane.get("strategy_id", "")
+    rec_sid = recommended.get(session)
+
+    if rec_sid is None:
+        return True, f"WARN: {session} not in allocator recommendation (paused or excluded)"
+    if deployed_sid == rec_sid:
+        return True, f"Matches recommendation: {rec_sid}"
+    return True, f"MISMATCH: deployed={deployed_sid}, recommended={rec_sid}"
+
+
 def check_signal_exists(con, session: str, lane: dict, today: date) -> tuple[bool, str]:
     """Check if today has outcome data for this session (signal fired)."""
     instrument = lane["instrument"]
@@ -299,6 +328,10 @@ def run_checks(session: str) -> bool:
         # Allocation staleness
         ok, msg = check_allocation_staleness_gate()
         results.append(("Allocation staleness", ok, msg))
+
+        # Lane mismatch: deployed vs allocator recommendation
+        ok, msg = check_lane_mismatch(session, lane)
+        results.append(("Lane vs recommendation", ok, msg))
 
         # Account state
         ok, msg = check_hwm_tracker()
