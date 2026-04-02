@@ -534,7 +534,9 @@ def generate_report(
     rebalance_date: date,
     profile_id: str,
 ) -> str:
-    """Generate human-readable rebalance report."""
+    """Generate human-readable rebalance report with diff and collapsed paused list."""
+    from collections import Counter
+
     lines = [
         f"# Lane Allocation Report — {rebalance_date}",
         f"Profile: {profile_id}",
@@ -554,11 +556,59 @@ def generate_report(
             f"{s.trailing_expr:>8.4f} {s.trailing_n:>5} {s.status:<12}"
         )
 
-    lines.extend(["", "## Paused Lanes"])
-    for s in sorted(scores, key=lambda x: x.annual_r_estimate, reverse=True):
-        if s.status == "PAUSE":
-            lines.append(f"  {s.strategy_id}: {s.status_reason}")
+    # Diff vs current prop_profiles lanes
+    try:
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
 
+        profile = ACCOUNT_PROFILES.get(profile_id)
+        if profile and profile.daily_lanes:
+            current_ids = {spec.strategy_id for spec in profile.daily_lanes}
+            recommended_ids = {s.strategy_id for s in allocation}
+            added = recommended_ids - current_ids
+            removed = current_ids - recommended_ids
+            kept = current_ids & recommended_ids
+
+            lines.extend(["", "## Changes vs Current Lanes"])
+            if not added and not removed:
+                lines.append("  No changes — current lanes match recommendation.")
+            else:
+                for sid in sorted(kept):
+                    lines.append(f"  [KEEP]   {sid}")
+                for sid in sorted(added):
+                    s_obj = next((x for x in allocation if x.strategy_id == sid), None)
+                    ann = f" (annual_r={s_obj.annual_r_estimate:.1f})" if s_obj else ""
+                    lines.append(f"  [NEW]    {sid}{ann}")
+                for sid in sorted(removed):
+                    s_obj = next((x for x in scores if x.strategy_id == sid), None)
+                    reason = f" ({s_obj.status}: {s_obj.status_reason})" if s_obj else ""
+                    lines.append(f"  [DROP]   {sid}{reason}")
+                lines.extend(
+                    [
+                        "",
+                        "  ACTION: Update prop_profiles.py daily_lanes if you accept these changes.",
+                    ]
+                )
+    except ImportError:
+        pass
+
+    # Paused lanes — collapsed by reason category (not 115 individual lines)
+    paused = [s for s in scores if s.status == "PAUSE"]
+    if paused:
+        reason_groups: dict[str, int] = Counter()
+        for s in paused:
+            if "Recovering" in s.status_reason:
+                reason_groups["Recovering (need 3+ positive months)"] += 1
+            elif "Magnitude override" in s.status_reason:
+                reason_groups["Magnitude override (3mo avg < -0.10)"] += 1
+            elif "consecutive months negative" in s.status_reason:
+                reason_groups["Consecutive months negative"] += 1
+            else:
+                reason_groups["Other"] += 1
+        lines.extend(["", f"## Paused ({len(paused)} strategies)"])
+        for reason, count in sorted(reason_groups.items(), key=lambda x: -x[1]):
+            lines.append(f"  {count:3d} x {reason}")
+
+    # Session regimes
     lines.extend(["", "## Session Regimes (6mo trailing, unfiltered E2 RR1.0)"])
     seen_sessions: set[tuple[str, str]] = set()
     for s in scores:

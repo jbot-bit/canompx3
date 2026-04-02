@@ -496,7 +496,7 @@ class TestReport:
 
         # Required sections
         assert "Selected Lanes" in report
-        assert "Paused Lanes" in report
+        assert "Paused" in report
         assert "Session Regimes" in report
 
         # Must include profile and date
@@ -506,8 +506,8 @@ class TestReport:
         # Deployed strategy appears in selected lanes
         assert deployed.strategy_id in report
 
-        # Paused strategy appears with reason
-        assert "2 consecutive months negative" in report
+        # Paused strategies collapsed by category
+        assert "Consecutive months negative" in report
 
 
 # ═══════════════════════════════════════════════════════════════════
