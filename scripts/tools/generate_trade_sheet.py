@@ -14,6 +14,7 @@ Usage:
 """
 
 import argparse
+import re as _re_module
 import sys
 import webbrowser
 from dataclasses import dataclass
@@ -68,34 +69,32 @@ def _filter_description(filter_type: str) -> str:
     parts = []
 
     # Volume/RV filters: VOL_RV{threshold}_N{window}
-    import re
-
-    rv_match = re.match(r"VOL_RV(\d+)_N(\d+)", ft)
+    rv_match = _re_module.match(r"VOL_RV(\d+)_N(\d+)", ft)
     if rv_match:
         thresh = int(rv_match.group(1)) / 10
         return f"Vol >= {thresh:.1f}x median"
 
     # Cost filters: COST_LT{cents}
-    cost_match = re.match(r"COST_LT(\d+)", ft)
+    cost_match = _re_module.match(r"COST_LT(\d+)", ft)
     if cost_match:
         cents = int(cost_match.group(1))
         return f"Cost < {cents}% of ORB"
 
     # Cross-asset filters: X_MES_ATR{pct}
-    xmatch = re.match(r"X_(\w+)_ATR(\d+)", ft)
+    xmatch = _re_module.match(r"X_(\w+)_ATR(\d+)", ft)
     if xmatch:
         ref = xmatch.group(1)
         pct = xmatch.group(2)
         return f"{ref} ATR > {pct}th pct"
 
     # Overnight range filters
-    ovn_match = re.match(r"OVNRNG_(\d+)", ft)
+    ovn_match = _re_module.match(r"OVNRNG_(\d+)", ft)
     if ovn_match:
         pct = ovn_match.group(1)
         return f"Overnight range > {pct}th pct"
 
     # ORB volume filters
-    orbvol_match = re.match(r"ORB_VOL_(\d+)K?", ft)
+    orbvol_match = _re_module.match(r"ORB_VOL_(\d+)K?", ft)
     if orbvol_match:
         vol = orbvol_match.group(1)
         return f"ORB volume > {vol}K"
@@ -178,6 +177,173 @@ def _check_fitness(
     if cache is not None:
         cache[strategy_id] = result
     return result
+
+
+# ── Regime context & filter classification ───────────────────────────
+
+
+def _get_regime_context(db_path: Path) -> dict[str, dict]:
+    """Query latest daily_features per instrument for regime indicators.
+
+    Returns dict keyed by instrument symbol with atr_pct, overnight_range_pct,
+    as_of date, and cross_atrs for cross-asset filter checking.
+    """
+    instruments = list(ACTIVE_ORB_INSTRUMENTS)
+    result: dict[str, dict] = {}
+
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        for instr in instruments:
+            row = con.execute(
+                """
+                SELECT trading_day, atr_20_pct, overnight_range_pct
+                FROM daily_features
+                WHERE symbol = ?
+                  AND atr_20_pct IS NOT NULL
+                ORDER BY trading_day DESC
+                LIMIT 1
+                """,
+                [instr],
+            ).fetchone()
+
+            if row is None:
+                result[instr] = {
+                    "atr_pct": None,
+                    "overnight_range_pct": None,
+                    "as_of": None,
+                    "cross_atrs": {},
+                }
+            else:
+                result[instr] = {
+                    "atr_pct": row[1],
+                    "overnight_range_pct": row[2],
+                    "as_of": row[0].date() if hasattr(row[0], "date") else row[0],
+                    "cross_atrs": {},
+                }
+    finally:
+        con.close()
+
+    # Build cross_atrs: for each instrument, map the OTHER instruments' ATR pct
+    for instr in instruments:
+        result[instr]["cross_atrs"] = {
+            other: result[other]["atr_pct"]
+            for other in instruments
+            if other != instr and result[other]["atr_pct"] is not None
+        }
+
+    return result
+
+
+def _classify_filter_status(
+    filter_type: str,
+    instrument: str,
+    regime_ctx: dict[str, dict],
+) -> str:
+    """Classify whether a filter is ACTIVE, CHECK, or INACTIVE today.
+
+    ACTIVE = pre-checkable and passes today's regime.
+    CHECK = can't pre-check (ORB size, volume, cost determined during session).
+    INACTIVE = pre-checkable and fails today's regime.
+    """
+    ctx = regime_ctx.get(instrument)
+    if ctx is None:
+        return "CHECK"  # fail-open
+
+    ft = filter_type
+
+    # Composites containing ORB-based components → always CHECK
+    if any(tag in ft for tag in ("ORB_G", "ORB_VOL", "COST_LT", "VOL_RV", "FAST", "CONT")):
+        return "CHECK"
+
+    # NO_FILTER / DIR_LONG / DIR_SHORT → always ACTIVE
+    if ft in ("NO_FILTER", "DIR_LONG", "DIR_SHORT"):
+        return "ACTIVE"
+
+    # ATR percentile filters: ATR_P30, ATR_P50, ATR70_VOL
+    atr_pct = ctx.get("atr_pct")
+    atr_match = _re_module.match(r"ATR_P(\d+)", ft)
+    if atr_match:
+        if atr_pct is None:
+            return "CHECK"
+        threshold = float(atr_match.group(1))
+        return "ACTIVE" if atr_pct >= threshold else "INACTIVE"
+    if ft == "ATR70_VOL":
+        if atr_pct is None:
+            return "CHECK"
+        return "ACTIVE" if atr_pct >= 70 else "INACTIVE"
+
+    # Overnight range filters: OVNRNG_10, OVNRNG_25, etc.
+    ovn_match = _re_module.match(r"OVNRNG_(\d+)", ft)
+    if ovn_match:
+        ovn_pct = ctx.get("overnight_range_pct")
+        if ovn_pct is None:
+            return "CHECK"
+        threshold = float(ovn_match.group(1))
+        return "ACTIVE" if ovn_pct >= threshold else "INACTIVE"
+
+    # Cross-asset ATR filters: X_MES_ATR60, X_MGC_ATR70, etc.
+    x_match = _re_module.match(r"X_(\w+)_ATR(\d+)", ft)
+    if x_match:
+        source_instr = x_match.group(1)
+        threshold = float(x_match.group(2))
+        cross_atrs = ctx.get("cross_atrs", {})
+        source_atr = cross_atrs.get(source_instr)
+        if source_atr is None:
+            return "CHECK"
+        return "ACTIVE" if source_atr >= threshold else "INACTIVE"
+
+    # Anything else we can't classify → CHECK (fail-open)
+    return "CHECK"
+
+
+def _enrich_trades_with_regime(
+    all_trades: list[dict],
+    regime_ctx: dict[str, dict],
+    db_path: Path,
+) -> None:
+    """Add filter_status, trades_per_year, and regime_atr_pct to each trade dict."""
+    # Batch-fetch years_tested for all strategy_ids
+    sids = [t["strategy_id"] for t in all_trades]
+    years_map: dict[str, float] = {}
+    tpy_map: dict[str, float] = {}
+
+    if sids:
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            rows = con.execute(
+                """
+                SELECT strategy_id, years_tested, trades_per_year
+                FROM validated_setups
+                WHERE strategy_id IN (SELECT UNNEST(?::VARCHAR[]))
+                """,
+                [sids],
+            ).fetchall()
+            for sid, yt, tpy in rows:
+                if yt is not None:
+                    years_map[sid] = float(yt)
+                if tpy is not None:
+                    tpy_map[sid] = float(tpy)
+        finally:
+            con.close()
+
+    for t in all_trades:
+        # Filter status
+        t["filter_status"] = _classify_filter_status(
+            t["filter_type"], t["instrument"], regime_ctx
+        )
+
+        # Trades per year — prefer DB trades_per_year, fall back to sample/years
+        sid = t["strategy_id"]
+        if sid in tpy_map:
+            t["trades_per_year"] = tpy_map[sid]
+        elif sid in years_map and years_map[sid] > 0:
+            t["trades_per_year"] = t.get("sample_size", 0) / years_map[sid]
+        else:
+            t["trades_per_year"] = None
+
+        # Regime ATR percentile for this instrument
+        ctx = regime_ctx.get(t["instrument"])
+        t["regime_atr_pct"] = ctx.get("atr_pct") if ctx else None
 
 
 # ── Session time resolution ───────────────────────────────────────────
@@ -407,6 +573,98 @@ def collect_opportunities(
     return opportunities
 
 
+def collect_manual_candidates(
+    db_path: Path,
+    exclude_sids: set[str],
+) -> list[dict]:
+    """Collect ALL positive validated strategies for manual trading.
+
+    Includes REGIME tier (N >= 30) and PURGED fitness — everything the trader
+    might want to manually execute. DECAY excluded (actively deteriorating).
+    Strategies already in deployed or opportunities are excluded.
+    Best per session x instrument x tier (highest ExpR).
+    """
+    active_instruments = tuple(sorted(ACTIVE_ORB_INSTRUMENTS))
+    candidates = []
+    fitness_cache: dict[str, FitnessCheckResult] = {}
+
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        rows = con.execute(
+            """
+            SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.orb_minutes,
+                   vs.filter_type, vs.rr_target, vs.stop_multiplier,
+                   vs.win_rate, vs.expectancy_r, vs.sample_size,
+                   vs.entry_model,
+                   es.median_risk_points,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY vs.instrument, vs.orb_label
+                       ORDER BY vs.expectancy_r DESC
+                   ) as rn
+            FROM validated_setups vs
+            LEFT JOIN experimental_strategies es
+              ON vs.strategy_id = es.strategy_id
+            WHERE LOWER(vs.status) = 'active'
+              AND vs.expectancy_r > 0
+              AND vs.sample_size >= 30
+              AND vs.instrument IN (SELECT UNNEST(?::VARCHAR[]))
+        """,
+            [list(active_instruments)],
+        ).fetchall()
+
+        cols = [d[0] for d in con.description]
+
+        for row in rows:
+            variant = dict(zip(cols, row, strict=False))
+            sid = variant["strategy_id"]
+            instrument = variant["instrument"]
+
+            # Skip already-shown strategies
+            if sid in exclude_sids:
+                continue
+
+            # Best 3 per session x instrument
+            if variant["rn"] > 3:
+                continue
+
+            # Dollar gate (soft — still show but mark)
+            passes, exp_d = _passes_dollar_gate(variant, instrument)
+
+            # Fitness check — keep PURGED (labeled), skip DECAY
+            fitness = _check_fitness(sid, db_path, fitness_cache)
+            if fitness.status == "DECAY":
+                continue
+
+            tier = "CORE" if variant["sample_size"] >= 100 else "REGIME"
+
+            candidates.append(
+                {
+                    "session": variant["orb_label"],
+                    "instrument": instrument,
+                    "strategy_id": sid,
+                    "aperture": variant.get("orb_minutes", 5),
+                    "direction": _direction_rule(variant["filter_type"]),
+                    "filter_desc": _filter_description(variant["filter_type"]),
+                    "filter_type": variant["filter_type"],
+                    "rr": variant["rr_target"],
+                    "win_rate": variant["win_rate"],
+                    "exp_r": variant["expectancy_r"],
+                    "exp_dollars": exp_d if passes else None,
+                    "sample_size": variant["sample_size"],
+                    "fitness": fitness.status,
+                    "fitness_error": fitness.error,
+                    "profile": "manual",
+                    "stop_mult": variant.get("stop_multiplier", 1.0),
+                    "orb_cap": None,
+                    "notes": f"{tier}" + (f" | ${exp_d:.0f}/trade" if passes and exp_d else ""),
+                }
+            )
+    finally:
+        con.close()
+
+    return candidates
+
+
 # ── HTML generation ───────────────────────────────────────────────────
 
 
@@ -429,6 +687,7 @@ def _fitness_badge(fitness: str) -> str:
         "WATCH": "badge-watch",
         "DECAY": "badge-decay",
         "STALE": "badge-stale",
+        "PURGED": "badge-purged",
         "UNKNOWN": "badge-unknown",
     }.get(fitness, "badge-unknown")
     return f' <span class="badge {cls}">{fitness}</span>'
@@ -453,26 +712,78 @@ def _build_session_cards(
     trades: list[dict],
     session_times: dict,
     profiles_used: dict,
-    css_class: str = "",
     next_session: str | None = None,
-) -> tuple[str, int]:
-    """Build session card HTML from a list of trades. Returns (html, trade_count)."""
+    regime_ctx: dict[str, dict] | None = None,
+) -> str:
+    """Build unified session card HTML from a merged list of trades.
+
+    Trades must have a 'section' key: 'deployed', 'opportunity', or 'manual'.
+    Within each session card, rows are sorted: deployed first, then opportunity,
+    then manual — and within each group by ExpR descending.
+    """
+    # Section sort priority: deployed=0, opportunity=1, manual=2
+    _section_order = {"deployed": 0, "opportunity": 1, "manual": 2}
+
     sessions_used = sorted(
         set(t["session"] for t in trades),
         key=lambda s: _sort_key(*session_times.get(s, (0, 0))),
     )
 
     cards_html = ""
-    trade_num = 0
     for session in sessions_used:
         h, m = session_times.get(session, (0, 0))
         time_str = _format_time(h, m)
         event = SESSION_CATALOG.get(session, {}).get("event", "")
-        session_trades = [t for t in trades if t["session"] == session]
+        session_trades = sorted(
+            [t for t in trades if t["session"] == session],
+            key=lambda t: (_section_order.get(t.get("section", "manual"), 2), -t["exp_r"]),
+        )
+
+        # Instrument badges for header
+        session_instruments = sorted(set(t["instrument"] for t in session_trades))
+        instr_badges_html = " ".join(
+            f'<span class="badge badge-instr">{instr}</span>' for instr in session_instruments
+        )
+
+        # Count live + avail
+        n_live = sum(1 for t in session_trades if t.get("section") == "deployed")
+        n_avail = sum(1 for t in session_trades if t.get("section") == "opportunity")
+        n_manual = sum(1 for t in session_trades if t.get("section") == "manual")
+        count_parts = []
+        if n_live:
+            count_parts.append(f"{n_live} live")
+        if n_avail:
+            count_parts.append(f"{n_avail} avail")
+        if n_manual:
+            count_parts.append(f"{n_manual} manual")
+        count_str = " + ".join(count_parts) if count_parts else "0 trades"
+
+        # Regime banner for this session's instruments
+        regime_bar_html = ""
+        if regime_ctx:
+            chips = []
+            for instr in session_instruments:
+                ctx = regime_ctx.get(instr)
+                atr = ctx.get("atr_pct") if ctx else None
+                if atr is not None:
+                    if atr >= 70:
+                        chip_cls = "regime-high"
+                    elif atr >= 50:
+                        chip_cls = "regime-normal"
+                    else:
+                        chip_cls = "regime-low"
+                    chips.append(
+                        f'<span class="regime-chip {chip_cls}">'
+                        f"{instr} ATR {atr:.0f}th pct</span>"
+                    )
+            if chips:
+                regime_bar_html = (
+                    '<div class="regime-bar">' + " ".join(chips) + "</div>"
+                )
 
         rows_html = ""
         for t in session_trades:
-            trade_num += 1
+            section = t.get("section", "manual")
             exp_d_str = f"${t['exp_dollars']:+.2f}" if t["exp_dollars"] is not None else "n/a"
             dir_badge = _direction_badge(t["direction"])
             fit_badge = _fitness_badge(t["fitness"])
@@ -482,75 +793,112 @@ def _build_session_cards(
 
             exp_r_class = "expr-high" if t["exp_r"] >= 0.20 else ""
 
-            is_opportunity = t.get("profile") == "opportunity"
+            # Status badge
+            if section == "deployed":
+                status_badge = '<span class="badge badge-deployed">LIVE</span>'
+                row_class = "row-deployed"
+            elif section == "opportunity":
+                status_badge = '<span class="badge badge-opp">AVAIL</span>'
+                row_class = "row-opportunity"
+            else:
+                status_badge = '<span class="badge badge-manual">MANUAL</span>'
+                row_class = "row-manual"
 
-            notes_parts = []
-            if t.get("orb_cap"):
-                notes_parts.append(f"Cap {t['orb_cap']:.0f}pts")
-            # Only show stop_mult note for deployed (not opportunities — user applies own)
-            if not is_opportunity and t.get("stop_mult") and t["stop_mult"] != 0.75:
-                notes_parts.append(f"Stop {t['stop_mult']}x")
-            if t.get("notes"):
-                notes_parts.append(t["notes"][:80])
-            # Show profile badge(s) for deployed trades
-            if not is_opportunity:
+            # Filter status badge
+            filt_status = t.get("filter_status", "CHECK")
+            if filt_status == "ACTIVE":
+                filter_status_badge = '<span class="badge badge-filter-active">&#10003;</span>'
+            elif filt_status == "INACTIVE":
+                filter_status_badge = '<span class="badge badge-filter-check">INACTIVE</span>'
+                row_class += " row-inactive"
+            else:
+                filter_status_badge = '<span class="badge badge-filter-check">&#9201; VERIFY</span>'
+
+            # Frequency column
+            tpy = t.get("trades_per_year")
+            if tpy is not None:
+                if tpy > 50:
+                    freq_str = f"~{tpy / 12:.0f}/mo"
+                else:
+                    freq_str = f"~{tpy:.0f}/yr"
+            else:
+                freq_str = "?"
+
+            # Tier badge
+            sample = t.get("sample_size", 0)
+            if sample >= 100:
+                tier_badge = f'<span class="badge badge-core">CORE</span> {sample}'
+            elif sample >= 30:
+                tier_badge = f'<span class="badge badge-regime">REGIME</span> {sample}'
+            else:
+                tier_badge = str(sample)
+
+            # Stop column
+            sm = t.get("stop_mult", 1.0)
+            stop_str = f"{sm}x" if sm else "1.0x"
+
+            # Tooltip for instrument cell: strategy_id for avail/manual, profile for deployed
+            tooltip_parts = []
+            if section == "deployed":
                 for pid in t.get("profiles", [t.get("profile", "")]):
                     pi = profiles_used.get(pid, {})
                     if pi:
-                        notes_parts.append(f"{pi.get('firm', '?')} {pi.get('mode', '?')}")
-            # Show strategy_id for opportunities (needed to deploy them)
-            if is_opportunity:
-                notes_parts.append(t["strategy_id"])
-            notes_html = f'<div class="lane-notes">{" | ".join(notes_parts)}</div>' if notes_parts else ""
+                        tooltip_parts.append(f"{pi.get('firm', '?')} {pi.get('mode', '?')}")
+                if t.get("orb_cap"):
+                    tooltip_parts.append(f"Cap {t['orb_cap']:.0f}pts")
+                if t.get("notes"):
+                    tooltip_parts.append(t["notes"][:60])
+            else:
+                tooltip_parts.append(t.get("strategy_id", ""))
+            tooltip = " | ".join(tooltip_parts)
+            tooltip_attr = f' title="{tooltip}"' if tooltip else ""
 
             rows_html += f"""
-            <tr>
-                <td class="instrument-cell">{t["instrument"]}</td>
-                <td>{t["aperture"]}m</td>
-                <td>{dir_badge if dir_badge else "ANY"}</td>
+            <tr class="{row_class}">
+                <td>{status_badge}</td>
+                <td>{filter_status_badge}</td>
+                <td class="instrument-cell"{tooltip_attr}>{t["instrument"]}</td>
                 <td class="filter-cell">{t["filter_desc"]}</td>
-                <td>{t["rr"]:.1f} : 1</td>
+                <td>{dir_badge if dir_badge else "ANY"}</td>
+                <td>{t["rr"]:.1f}:1</td>
+                <td>{stop_str}</td>
                 <td>{t["win_rate"]:.0%}</td>
                 <td class="{exp_r_class}">{t["exp_r"]:+.3f}</td>
                 <td class="dollars-cell">{exp_d_str}</td>
-                <td>{t["sample_size"]}</td>
+                <td class="freq-cell">{freq_str}</td>
+                <td>{tier_badge}</td>
                 <td{fitness_title}>{fit_badge if fit_badge else '<span class="fit-ok">FIT</span>'}</td>
             </tr>"""
-            if notes_html:
-                rows_html += f"""
-            <tr class="notes-row"><td colspan="10">{notes_html}</td></tr>"""
-
-        # Session header with firm badge
-        firm_badges = set()
-        for t in session_trades:
-            pi = profiles_used.get(t.get("profile", ""), {})
-            if pi:
-                firm_badges.add(f'<span class="badge badge-firm">{pi.get("firm", "?")} {pi.get("mode", "?")}</span>')
-        firm_badges_html = " ".join(firm_badges)
 
         is_next = session == next_session
         next_cls = " next-session" if is_next else ""
-        next_badge = ' <span class="badge badge-next">NEXT</span>' if is_next else ""
-        card_class = f"session-card{next_cls} {css_class}".strip()
+        next_badge = ' <span class="badge badge-next">UP NEXT</span>' if is_next else ""
+        card_class = f"session-card{next_cls}".strip()
         cards_html += f"""
         <div class="{card_class}">
             <div class="session-header">
-                <div class="session-time">{time_str} BRIS</div>
-                <div class="session-name">{session}{next_badge} {firm_badges_html}</div>
+                <div class="session-time">{time_str}</div>
+                <div class="session-name">{session}{next_badge}</div>
+                <div class="session-instruments">{instr_badges_html}</div>
+                <div class="session-count">{count_str}</div>
                 <div class="session-event">{event}</div>
             </div>
+            {regime_bar_html}
             <table>
                 <thead>
                     <tr>
-                        <th>Instrument</th>
-                        <th>ORB</th>
-                        <th>Direction</th>
+                        <th>Status</th>
+                        <th>Regime</th>
+                        <th>Instr</th>
                         <th>Filter</th>
+                        <th>Dir</th>
                         <th>RR</th>
+                        <th>Stop</th>
                         <th>WR</th>
                         <th>ExpR</th>
-                        <th>Exp$/trade</th>
-                        <th>N</th>
+                        <th>$/trade</th>
+                        <th>Freq</th>
+                        <th>Tier &amp; N</th>
                         <th>Fitness</th>
                     </tr>
                 </thead>
@@ -560,7 +908,7 @@ def _build_session_cards(
             </table>
         </div>"""
 
-    return cards_html, trade_num
+    return cards_html
 
 
 def generate_html(
@@ -568,8 +916,10 @@ def generate_html(
     session_times: dict,
     trading_day: date,
     opportunities: list[dict] | None = None,
+    manual_candidates: list[dict] | None = None,
+    regime_ctx: dict[str, dict] | None = None,
 ) -> str:
-    """Generate self-contained HTML trade sheet with deployed + opportunities."""
+    """Generate self-contained HTML trade sheet with unified timeline."""
 
     day_name = trading_day.strftime("%A")
     date_str = trading_day.strftime("%d %b %Y")
@@ -627,38 +977,47 @@ def generate_html(
             <div class="profile-ev">{ev_line}</div>
         </div>"""
 
+    # Tag each trade with its section (if not already tagged by caller)
+    for t in trades:
+        t.setdefault("section", "deployed")
+    for t in opportunities or []:
+        t.setdefault("section", "opportunity")
+    for t in manual_candidates or []:
+        t.setdefault("section", "manual")
+
+    all_trades = list(trades) + (opportunities or []) + (manual_candidates or [])
+
+    n_deployed = len(trades)
+    n_opp = len(opportunities or [])
+    n_manual = len(manual_candidates or [])
+
     # Find next upcoming session
     next_session = _next_session_label(session_times)
 
-    # Build deployed session cards
-    cards_html, trade_num = _build_session_cards(trades, session_times, profiles_used, next_session=next_session)
+    # Build unified session cards
+    cards_html = _build_session_cards(
+        all_trades, session_times, profiles_used,
+        next_session=next_session, regime_ctx=regime_ctx,
+    )
 
-    # Build opportunities section
-    opps_html = ""
-    opps_count = 0
-    if opportunities:
-        opps_html, opps_count = _build_session_cards(
-            opportunities,
-            session_times,
-            profiles_used,
-            css_class="opp-card",
-            next_session=next_session,
-        )
-
-    # Instrument summary — deployed + opportunities combined
-    all_trades = list(trades) + (opportunities or [])
+    # Instrument summary — all three sections
     instr_deployed_exp = {}
     instr_opp_exp = {}
+    instr_manual_exp = {}
     for t in trades:
         if t["exp_dollars"] is not None:
             instr_deployed_exp[t["instrument"]] = instr_deployed_exp.get(t["instrument"], 0) + t["exp_dollars"]
     for t in opportunities or []:
         if t["exp_dollars"] is not None:
             instr_opp_exp[t["instrument"]] = instr_opp_exp.get(t["instrument"], 0) + t["exp_dollars"]
+    for t in manual_candidates or []:
+        if t["exp_dollars"] is not None:
+            instr_manual_exp[t["instrument"]] = instr_manual_exp.get(t["instrument"], 0) + t["exp_dollars"]
 
     all_instruments = sorted(set(t["instrument"] for t in all_trades))
     deployed_total = sum(instr_deployed_exp.values())
     opp_total = sum(instr_opp_exp.values())
+    manual_total = sum(instr_manual_exp.values())
 
     # Total EV across copies
     total_ev_with_copies = sum(info["ev_per_copy"] * info["copies"] for info in profiles_used.values())
@@ -667,27 +1026,46 @@ def generate_html(
     for instr in all_instruments:
         dep = instr_deployed_exp.get(instr, 0)
         opp = instr_opp_exp.get(instr, 0)
+        man = instr_manual_exp.get(instr, 0)
         dep_count = sum(1 for t in trades if t["instrument"] == instr)
         opp_count = sum(1 for t in (opportunities or []) if t["instrument"] == instr)
-        opp_line = f'<div class="summary-opp">+${opp:.0f} available ({opp_count})</div>' if opp > 0 else ""
+        man_count = sum(1 for t in (manual_candidates or []) if t["instrument"] == instr)
+
+        count_parts = []
+        if dep_count:
+            count_parts.append(f"{dep_count} live")
+        if opp_count:
+            count_parts.append(f"{opp_count} avail")
+        if man_count:
+            count_parts.append(f"{man_count} manual")
+        count_line = " + ".join(count_parts) if count_parts else "0"
+
+        ev_parts = []
+        if dep > 0:
+            ev_parts.append(f"${dep:.0f} live")
+        if opp > 0:
+            ev_parts.append(f"+${opp:.0f} avail")
+        if man > 0:
+            ev_parts.append(f"+${man:.0f} manual")
+        ev_line = " ".join(ev_parts) if ev_parts else "$0"
+
         summary_html += f"""
         <div class="summary-card">
             <div class="summary-instrument">{instr}</div>
-            <div class="summary-count">{dep_count} deployed{f" + {opp_count} avail" if opp_count else ""}</div>
-            <div class="summary-dollars">${dep:.0f}/day deployed</div>
-            {opp_line}
+            <div class="summary-count">{count_line}</div>
+            <div class="summary-dollars">{ev_line}</div>
         </div>"""
 
     # Grand total card
     summary_html += f"""
         <div class="summary-card" style="border-color: #3fb950;">
             <div class="summary-instrument">TOTAL</div>
-            <div class="summary-dollars">${deployed_total:.0f}/day deployed</div>
-            <div class="summary-opp">+${opp_total:.0f} available</div>
+            <div class="summary-dollars">${deployed_total:.0f}/day live</div>
+            <div class="summary-opp">+${opp_total:.0f} avail +${manual_total:.0f} manual</div>
             <div class="summary-count" style="margin-top:6px">${total_ev_with_copies:.0f}/day with copies</div>
         </div>"""
 
-    fitness_errors = [t for t in trades if t.get("fitness_error")]
+    fitness_errors = [t for t in all_trades if t.get("fitness_error")]
     fitness_warning_html = ""
     if fitness_errors:
         error_items = ""
@@ -798,21 +1176,34 @@ def generate_html(
     .session-header {{
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: 12px;
         padding: 12px 16px;
         background: #1c2128;
         border-bottom: 1px solid #30363d;
+        flex-wrap: wrap;
     }}
     .session-time {{
         font-size: 22px;
         font-weight: 700;
         color: #f0883e;
-        min-width: 100px;
+        min-width: 90px;
     }}
     .session-name {{
         font-size: 16px;
         font-weight: 600;
         color: #e6edf3;
+    }}
+    .session-instruments {{
+        display: flex;
+        gap: 4px;
+        align-items: center;
+    }}
+    .session-count {{
+        font-size: 12px;
+        color: #8b949e;
+        padding: 2px 8px;
+        background: #21262d;
+        border-radius: 10px;
     }}
     .session-event {{
         font-size: 12px;
@@ -825,7 +1216,7 @@ def generate_html(
     }}
     thead th {{
         text-align: left;
-        padding: 8px 12px;
+        padding: 8px 10px;
         font-size: 11px;
         text-transform: uppercase;
         color: #8b949e;
@@ -833,8 +1224,8 @@ def generate_html(
         font-weight: 600;
     }}
     tbody td {{
-        padding: 10px 12px;
-        font-size: 14px;
+        padding: 8px 10px;
+        font-size: 13px;
         border-bottom: 1px solid #21262d;
     }}
     tbody tr:last-child td {{
@@ -846,6 +1237,7 @@ def generate_html(
     .instrument-cell {{
         font-weight: 700;
         color: #58a6ff;
+        cursor: help;
     }}
     .filter-cell {{
         color: #e6edf3;
@@ -905,6 +1297,65 @@ def generate_html(
         color: #ffd58a;
         border: 1px solid #d29922;
     }}
+    .badge-purged {{
+        background: #2d2020;
+        color: #8b5e5e;
+        border: 1px solid #6e4444;
+    }}
+    .badge-deployed {{
+        background: #1f3a2a;
+        color: #3fb950;
+        border: 1px solid #3fb950;
+    }}
+    .badge-opp {{
+        background: #1a2a3a;
+        color: #58a6ff;
+        border: 1px solid #58a6ff;
+    }}
+    .badge-manual {{
+        background: #3d2e1f;
+        color: #d29922;
+        border: 1px solid #d29922;
+    }}
+    .badge-core {{
+        background: #1f3a2a;
+        color: #3fb950;
+        border: 1px solid #2ea043;
+        font-size: 10px;
+    }}
+    .badge-regime {{
+        background: #3d2e1f;
+        color: #d29922;
+        border: 1px solid #d29922;
+        font-size: 10px;
+    }}
+    .badge-instr {{
+        background: #1a2a3a;
+        color: #58a6ff;
+        border: 1px solid #388bfd;
+        font-size: 10px;
+        margin-right: 4px;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }}
+    .row-deployed {{
+        border-left: 3px solid #3fb950;
+    }}
+    .row-deployed td:first-child {{
+        padding-left: 8px;
+    }}
+    .row-opportunity {{
+        border-left: 3px solid #58a6ff;
+    }}
+    .row-opportunity td:first-child {{
+        padding-left: 8px;
+    }}
+    .row-manual {{
+        border-left: 3px solid #d29922;
+    }}
+    .row-manual td:first-child {{
+        padding-left: 8px;
+    }}
     .profile-bar {{
         display: flex;
         gap: 12px;
@@ -963,15 +1414,6 @@ def generate_html(
         border: 1px solid #30363d;
         margin-left: 8px;
     }}
-    .lane-notes {{
-        font-size: 11px;
-        color: #d29922;
-        padding: 2px 8px 6px;
-    }}
-    .notes-row td {{
-        padding: 0 !important;
-        border: none !important;
-    }}
     .warning-box {{
         background: #271b05;
         border: 1px solid #d29922;
@@ -989,22 +1431,6 @@ def generate_html(
         padding: 1px 4px;
         border-radius: 4px;
     }}
-    .section-divider {{
-        text-align: center;
-        margin: 32px 0 24px;
-        padding: 16px;
-        border-top: 2px solid #30363d;
-    }}
-    .section-divider h2 {{
-        font-size: 20px;
-        font-weight: 700;
-        color: #8b949e;
-    }}
-    .section-divider .section-sub {{
-        font-size: 13px;
-        color: #484f58;
-        margin-top: 4px;
-    }}
     .next-session {{
         border-color: #f0883e;
         box-shadow: 0 0 8px rgba(240, 136, 62, 0.3);
@@ -1015,16 +1441,6 @@ def generate_html(
         border: 1px solid #f0883e;
         margin-left: 8px;
     }}
-    .opp-card {{
-        border-color: #2d333b;
-        opacity: 0.85;
-    }}
-    .opp-card .session-header {{
-        background: #13171d;
-    }}
-    .opp-card .session-time {{
-        color: #8b949e;
-    }}
     .footer {{
         text-align: center;
         padding: 20px;
@@ -1032,6 +1448,78 @@ def generate_html(
         font-size: 12px;
         border-top: 1px solid #30363d;
         margin-top: 20px;
+    }}
+    .legend {{
+        display: flex;
+        gap: 16px;
+        justify-content: center;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+    }}
+    .legend-item {{
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #8b949e;
+    }}
+    .legend-swatch {{
+        width: 14px;
+        height: 14px;
+        border-radius: 3px;
+    }}
+    .legend-swatch-live {{ background: #3fb950; }}
+    .legend-swatch-avail {{ background: #58a6ff; }}
+    .legend-swatch-manual {{ background: #d29922; }}
+    .regime-bar {{
+        display: flex;
+        gap: 8px;
+        padding: 4px 16px 8px;
+        flex-wrap: wrap;
+    }}
+    .regime-chip {{
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+    }}
+    .regime-high {{
+        background: #1f3a2a;
+        color: #3fb950;
+        border: 1px solid #2ea043;
+    }}
+    .regime-normal {{
+        background: #1a2a3a;
+        color: #58a6ff;
+        border: 1px solid #388bfd;
+    }}
+    .regime-low {{
+        background: #3d1f20;
+        color: #f85149;
+        border: 1px solid #da3633;
+    }}
+    .badge-filter-active {{
+        background: #1f3a2a;
+        color: #3fb950;
+        border: 1px solid #2ea043;
+    }}
+    .badge-filter-check {{
+        background: #3d2e1f;
+        color: #d29922;
+        border: 1px solid #d29922;
+    }}
+    .row-inactive {{
+        opacity: 0.25;
+    }}
+    .row-inactive td {{
+        text-decoration: line-through;
+        color: #484f58 !important;
+    }}
+    .freq-cell {{
+        font-size: 12px;
+        color: #8b949e;
+        white-space: nowrap;
     }}
     @media print {{
         body {{ background: white; color: black; padding: 10px; }}
@@ -1045,8 +1533,8 @@ def generate_html(
     @media (max-width: 768px) {{
         .session-header {{ flex-direction: column; gap: 4px; }}
         .session-event {{ margin-left: 0; }}
-        table {{ font-size: 12px; }}
-        thead th, tbody td {{ padding: 6px 8px; }}
+        table {{ font-size: 11px; }}
+        thead th, tbody td {{ padding: 5px 6px; }}
     }}
 </style>
 </head>
@@ -1054,9 +1542,7 @@ def generate_html(
     <div class="header">
         <h1>TRADE SHEET</h1>
         <div class="date">{day_name} {date_str}</div>
-        <div class="subtitle">Generated {now_str} &mdash; {trade_num} deployed + {
-        opps_count
-    } opportunities &mdash; All times Brisbane (AEST UTC+10)</div>
+        <div class="subtitle">Generated {now_str} &mdash; {n_deployed} live + {n_opp} available + {n_manual} manual &mdash; All times Brisbane (AEST UTC+10)</div>
     </div>
 
     <div class="profile-bar">
@@ -1065,7 +1551,7 @@ def generate_html(
 
     <div class="entry-model-note">
         All entries are <strong>E2 (stop-market)</strong> &mdash; place stop orders at ORB high/low.
-        They trigger automatically on breakout. ORB = first N minutes after session start.
+        They trigger automatically on breakout. ORB = first 5 minutes after session start.
     </div>
 
     {fitness_warning_html}
@@ -1074,23 +1560,17 @@ def generate_html(
         {summary_html}
     </div>
 
+    <div class="legend">
+        <div class="legend-item"><div class="legend-swatch legend-swatch-live"></div> LIVE &mdash; deployed in prop profile</div>
+        <div class="legend-item"><div class="legend-swatch legend-swatch-avail"></div> AVAIL &mdash; validated, passes gates</div>
+        <div class="legend-item"><div class="legend-swatch legend-swatch-manual"></div> MANUAL &mdash; your discretion (incl. REGIME)</div>
+    </div>
+
     {cards_html}
 
-    {
-        f'''
-    <div class="section-divider">
-        <h2>OPPORTUNITIES &mdash; {opps_count} additional validated strategies</h2>
-        <div class="section-sub">Best per session x instrument &mdash; not deployed, pass all gates &mdash; manual pickup</div>
-    </div>
-    {opps_html}
-    '''
-        if opps_html
-        else ""
-    }
-
     <div class="footer">
-        Source: prop_profiles.py deployed lanes + validated_setups opportunities &mdash;
-        dollar gate applied &mdash; only cost-positive, non-PURGED trades shown
+        Unified timeline &mdash; prop_profiles lanes + validated opportunities + manual candidates &mdash;
+        hover instrument for strategy ID or profile &mdash; dollar gate applied where applicable
     </div>
 </body>
 </html>"""
@@ -1160,20 +1640,63 @@ def main():
 
     # Collect opportunities (unless --deployed-only)
     opportunities = []
+    manual_candidates = []
     if not args.deployed_only:
         print("Scanning validated opportunities...")
         deployed_sids = {t["strategy_id"] for t in trades}
         opportunities = collect_opportunities(db_path, deployed_sids)
         opp_instruments = set(t["instrument"] for t in opportunities) if opportunities else set()
         print(f"  {len(opportunities)} opportunities across {len(opp_instruments)} instruments")
+
+        # Collect manual candidates (REGIME tier + PURGED, for manual trading)
+        print("Scanning manual candidates...")
+        shown_sids = deployed_sids | {t["strategy_id"] for t in opportunities}
+        manual_candidates = collect_manual_candidates(db_path, shown_sids)
+        manual_instruments = set(t["instrument"] for t in manual_candidates) if manual_candidates else set()
+        print(f"  {len(manual_candidates)} manual candidates across {len(manual_instruments)} instruments")
     print()
 
-    if not trades and not opportunities:
-        print("ERROR: No trades or opportunities found. Check DB and prop_profiles.py.")
+    if not trades and not opportunities and not manual_candidates:
+        print("ERROR: No trades found. Check DB and prop_profiles.py.")
         sys.exit(1)
 
+    # Regime context
+    print("Loading regime context...")
+    try:
+        regime_ctx = _get_regime_context(db_path)
+        for instr, ctx in sorted(regime_ctx.items()):
+            atr = ctx.get("atr_pct")
+            if atr is not None:
+                label = "HIGH" if atr >= 70 else "NORMAL" if atr >= 50 else "LOW"
+                print(f"  {instr}: ATR {atr:.0f}th pct ({label}), as of {ctx.get('as_of')}")
+            else:
+                print(f"  {instr}: ATR data unavailable")
+    except Exception as exc:
+        print(f"  Regime context failed ({type(exc).__name__}: {exc}) — using CHECK for all")
+        regime_ctx = {}
+
+    # Tag trades with section and enrich with regime data
+    for t in trades:
+        t["section"] = "deployed"
+    for t in opportunities:
+        t["section"] = "opportunity"
+    for t in manual_candidates:
+        t["section"] = "manual"
+
+    all_trades_for_enrichment = list(trades) + list(opportunities) + list(manual_candidates)
+    if regime_ctx:
+        _enrich_trades_with_regime(all_trades_for_enrichment, regime_ctx, db_path)
+    print()
+
     # Generate HTML
-    html = generate_html(trades, session_times, trading_day, opportunities=opportunities or None)
+    html = generate_html(
+        trades,
+        session_times,
+        trading_day,
+        opportunities=opportunities or None,
+        manual_candidates=manual_candidates or None,
+        regime_ctx=regime_ctx or None,
+    )
     output_path.write_text(html, encoding="utf-8")
     print(f"Written to {output_path}")
 
