@@ -17,7 +17,9 @@ class TradovateContracts(BrokerContracts):
 
     def __init__(self, auth: BrokerAuth, **kwargs):
         super().__init__(auth, **kwargs)
-        self._base = getattr(auth, "base_url", "https://live.tradovateapi.com/v1")
+        if not hasattr(auth, "base_url"):
+            raise RuntimeError("Auth object missing base_url — cannot determine API endpoint")
+        self._base: str = auth.base_url  # type: ignore[attr-defined]
 
     def resolve_account_id(self) -> int:
         """Return the first active trading account ID."""

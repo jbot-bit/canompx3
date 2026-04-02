@@ -44,8 +44,9 @@ class TradovateOrderRouter(BrokerRouter):
         """Build full API URL from auth base."""
         if self.auth is None:
             raise RuntimeError("No auth configured")
-        base = getattr(self.auth, "base_url", "https://live.tradovateapi.com/v1")
-        return f"{base}/{path.lstrip('/')}"
+        if not hasattr(self.auth, "base_url"):
+            raise RuntimeError("Auth object missing base_url — cannot determine API endpoint")
+        return f"{self.auth.base_url}/{path.lstrip('/')}"
 
     def update_market_price(self, price: float) -> None:
         if price > 0:

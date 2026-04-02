@@ -6,6 +6,28 @@
 
 ---
 
+## Update (Apr 3 — Session 2: 3-Tier Portfolio Integrity Fix)
+
+### Completed
+- **Tier 1: Honest lane deployment** — 7 lanes, all RR-locked (family_rr_locks), COST_LT preferred. Prior 9-lane deployment had 4 RR snooping violations + 2 vacuous filters. DD $296/$3000 (10%).
+- **Tier 2: PURGED label fix** — 28 families unlocked (MGC 0→5 visible). PURGED was member-count heuristic, not fitness. compute_fitness says FIT for all. Allocator trailing window handles real fitness.
+- **Tier 3: ATR-normalized G-filters CANCELLED** — Mathematical proof: COST_LT08 implies orb>15.76pts (MNQ). All G-filters are strict subsets. BUT ORB size predicts WR AFTER cost control (session-specific): EUROPE_FLOW -10.3% big=bad, COMEX_SETTLE +6.6% big=good. Volume, ATR also predict independently.
+
+### Key Research Finding
+**Per-session signal optimization is the next edge improvement:**
+- EUROPE_FLOW: big ORBs = LOWER WR (-10.3% spread within COST_LT08)
+- COMEX_SETTLE: big ORBs = HIGHER WR (+6.6% spread)
+- Volume: higher = lower WR (-4.7%)
+- ATR pct: higher = higher WR (+4.8%)
+- These are WR signals, not cost arithmetic. COST_LT doesn't capture them.
+
+### Not Done
+- Per-session signal optimization research (next session)
+- Apply lane changes to Tradeify/TopStep profiles
+- ORB_G filters could be removed from future discovery grid (reduce FDR K)
+
+---
+
 ## Update (Apr 3 — Rebuild with 2026 + Golden Nuggets)
 
 ### Completed
