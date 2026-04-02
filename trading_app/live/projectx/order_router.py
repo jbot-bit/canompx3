@@ -157,16 +157,19 @@ class ProjectXOrderRouter(BrokerRouter):
                 log.critical(msg)
                 raise ValueError(msg)
 
+        # Strip internal routing fields before sending to ProjectX API
+        wire_spec = {k: v for k, v in spec.items() if not k.startswith("_")}
+
         # Full payload audit trail — logged BEFORE submission
         import json as _json
 
-        log.info("ORDER SUBMIT PAYLOAD: %s", _json.dumps(spec, default=str))
+        log.info("ORDER SUBMIT PAYLOAD: %s", _json.dumps(wire_spec, default=str))
 
         t0 = time.monotonic()
         resp = _submit_with_429_retry(
             f"{BASE_URL}/api/Order/place",
             {**self.auth.headers(), "Content-Type": "application/json"},
-            json_body=spec,
+            json_body=wire_spec,
             timeout=5,
         )
         elapsed_ms = (time.monotonic() - t0) * 1000

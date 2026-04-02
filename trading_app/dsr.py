@@ -166,9 +166,9 @@ def estimate_n_eff_from_db(db_path) -> dict:
 
         n_fam_all = con.execute("SELECT COUNT(DISTINCT family_hash) FROM edge_families").fetchone()[0]
 
-        n_fam_active = con.execute(
-            "SELECT COUNT(DISTINCT family_hash) FROM edge_families WHERE robustness_status NOT IN ('PURGED')"
-        ).fetchone()[0]
+        # Count all families — PURGED label is member-count heuristic, not fitness.
+        # Allocator trailing window handles actual fitness (2026-04-03).
+        n_fam_active = con.execute("SELECT COUNT(DISTINCT family_hash) FROM edge_families").fetchone()[0]
 
         n_inst_sess = con.execute(
             """SELECT COUNT(DISTINCT instrument || '_' || orb_label)

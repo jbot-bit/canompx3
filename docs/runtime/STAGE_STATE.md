@@ -12,9 +12,12 @@ scope_lock:
   - trading_app/live/broker_dispatcher.py
   - trading_app/live/broker_factory.py
   - trading_app/live/projectx/order_router.py
+  - trading_app/live/tradovate/http.py
+  - trading_app/live/broker_base.py
 blast_radius:
-  - All NEW files except broker_factory.py
+  - All NEW files except broker_factory.py and broker_base.py
   - broker_factory.py: add create_tradovate_components() alongside existing create_broker_components()
+  - broker_base.py: add update_market_price() default no-op to BrokerRouter ABC (both impls already have it)
   - SessionOrchestrator NOT touched (uses BrokerRouter ABC)
 acceptance:
   - TradovateAuth authenticates with demo endpoint

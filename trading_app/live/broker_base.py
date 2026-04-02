@@ -99,6 +99,9 @@ class BrokerRouter(ABC):
         """Whether broker supports stop/target brackets on entry order."""
         ...
 
+    def update_market_price(self, price: float) -> None:  # noqa: B027
+        """Update last known market price for price collar checks. Default: no-op."""
+
     def build_bracket_spec(
         self,
         direction: str,
