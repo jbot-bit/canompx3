@@ -210,7 +210,11 @@ def run_backtest(
     months = _month_seq(start, end)
     profile = ACCOUNT_PROFILES[profile_id]
     max_slots = profile.max_slots
-    max_dd = 2000.0  # Matches rebalance_lanes.py (TODO: read from ACCOUNT_TIERS)
+    # DD limit from canonical ACCOUNT_TIERS (not hardcoded)
+    from trading_app.prop_profiles import ACCOUNT_TIERS
+
+    tier = ACCOUNT_TIERS.get((profile.firm, profile.account_size))
+    max_dd = tier.max_dd if tier else 3000.0
 
     # Persistent connection for batch forward PnL
     con = duckdb.connect(str(db_path), read_only=True)

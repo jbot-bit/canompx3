@@ -140,10 +140,22 @@ def check_daily_equity() -> tuple[bool, str]:
         return True, "Equity file created for today. Record starting equity before first trade."
     data = json.loads(eq_file.read_text())
     dd = data.get("current_dd", 0.0)
-    if dd <= -1000:
-        return False, f"DAILY DD LIMIT BREACHED: ${dd:.0f} (limit -$1,000)"
-    if dd <= -800:
-        return True, f"WARNING: daily DD at ${dd:.0f} (halt at -$1,000)"
+
+    # DLL from canonical ACCOUNT_TIERS (not hardcoded)
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS
+
+    dll = 1000.0  # fallback
+    for _pid, prof in ACCOUNT_PROFILES.items():
+        if prof.active:
+            tier = ACCOUNT_TIERS.get((prof.firm, prof.account_size))
+            if tier and tier.daily_loss_limit:
+                dll = tier.daily_loss_limit
+            break
+
+    if dd <= -dll:
+        return False, f"DAILY DD LIMIT BREACHED: ${dd:.0f} (limit -${dll:,.0f})"
+    if dd <= -dll * 0.8:
+        return True, f"WARNING: daily DD at ${dd:.0f} (halt at -${dll:,.0f})"
     return True, f"Daily DD: ${dd:.0f}"
 
 
