@@ -561,6 +561,8 @@ class PrevDayRangeNormFilter(StrategyFilter):
         return pdr / atr >= self.min_ratio
 
     def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
         if "prev_day_range" not in df.columns or "atr_20" not in df.columns:
             return pd.Series(False, index=df.index)
         valid = df["prev_day_range"].notna() & df["atr_20"].notna() & (df["atr_20"] > 0)
@@ -596,6 +598,8 @@ class GapNormFilter(StrategyFilter):
         return abs(gap) / atr >= self.min_ratio
 
     def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
         if "gap_open_points" not in df.columns or "atr_20" not in df.columns:
             return pd.Series(False, index=df.index)
         valid = df["gap_open_points"].notna() & df["atr_20"].notna() & (df["atr_20"] > 0)
