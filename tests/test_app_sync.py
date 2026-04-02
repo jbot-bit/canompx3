@@ -187,6 +187,12 @@ class TestAllFiltersSync:
         "OVNRNG_25",
         "OVNRNG_50",
         "OVNRNG_100",
+        # Pre-session volatility filters (Apr 2026 research scan)
+        "PDR_R080",
+        "PDR_R105",
+        "PDR_R125",
+        "GAP_R005",
+        "GAP_R015",
     }
 
     def test_expected_keys(self):
@@ -227,9 +233,11 @@ class TestAllFiltersSync:
             CompositeFilter,
             CrossAssetATRFilter,
             DirectionFilter,
+            GapNormFilter,
             OrbVolumeFilter,
             OvernightRangeAbsFilter,
             OwnATRPercentileFilter,
+            PrevDayRangeNormFilter,
         )
 
         for key, filt in ALL_FILTERS.items():
@@ -243,6 +251,8 @@ class TestAllFiltersSync:
                     OrbVolumeFilter,
                     OvernightRangeAbsFilter,
                     OwnATRPercentileFilter,
+                    PrevDayRangeNormFilter,
+                    GapNormFilter,
                 ),
             ):
                 continue
