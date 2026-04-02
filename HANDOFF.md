@@ -6,6 +6,34 @@
 
 ---
 
+## Update (Apr 2 — Session 3: Regime Dependency Audit — Friction is the Kill Mechanism)
+
+### Completed
+- **ORB breakout regime dependency research** — adversarial audit with 3 retractions
+  - Kill mechanism for 16yr vs 10yr discovery is FRICTION DRAG, not market regime change
+  - Gross R (before costs) is positive across ALL eras 2010-2025 (+0.34/+0.25/+0.18R for CME_PRECLOSE)
+  - CME_PRECLOSE with G5 filter: +0.084R in 2010-15, +0.090R in 2016-21, +0.104R in 2022-25
+  - G-filters adapt to PRICE LEVEL (MNQ 3K→17K), not vol regime. ORB as % of price flat (0.14-0.16%)
+  - ATR_P70 80% kill rate is genuine era-dependency (equal era distribution, different microstructure)
+  - US_DATA_1000 partially regime-dependent (G5 early -0.072R N=920, not purely friction)
+  - Architecture verdict: NO CHANGE NEEDED. Filter grid already handles cost gating.
+  - Commit `e3515a8`
+
+### 3 Claims Retracted
+1. d=1.92 "two populations" — tautological (unimodal distribution split at arbitrary cutpoint)
+2. "51.9% regime-specific" — killed pool has FEWER recently-positive than baseline (51.9% vs 62.1%)
+3. "G-filters are implicit regime adapters" — price-level effect, not vol regime
+
+### Files Changed
+- `docs/STRATEGY_BLUEPRINT.md` — §2 updated (16yr audit), §4 corrected (per-era G5 data), §5 added 2 NO-GOs (regime-conditional discovery, vol-regime adaptive params), removed stale strategy count
+- Memory files updated: `discovery_window_analysis.md` (rewritten), `regime_edge_research.md` (rewritten), `MEMORY.md` (index)
+
+### Not Done
+- NYSE_OPEN early era investigation (R≈0, friction <15%, N=365 — may be genuine microstructure change)
+- ATR_P70 early edge-zone is underpowered (N=8-55) — needs more data or pooling approach
+
+---
+
 ## Update (Apr 2 — Session 2: Rebuild Analysis + Lane Swap + CME_PRECLOSE DEAD)
 
 ### Completed
@@ -19,7 +47,7 @@
 ### Key Findings
 - **CME_PRECLOSE = DEAD in forward.** Replace the deployed CME_PRECLOSE lane. Candidates: COMEX_SETTLE (still positive), EUROPE_FLOW, TOKYO_OPEN.
 - **117 strategies survive 16yr** (was 210 pre-rebuild). MNQ 91, MES 21, MGC 5.
-- **Absolute filters (ORB_G*) are regime-dependent** but MNQ eras not significantly different. Safe to use full data.
+- **Absolute filters (ORB_G*) are PRICE-LEVEL dependent** (not regime) — MNQ ORB as % of price is flat (0.14-0.16%). G5+ positive in ALL eras when friction controlled. Session 3 Apr 2 audit confirmed.
 - **RESEARCH_RULES.md:162 confirmed** — "NEVER assume stationarity. G5+ filters become untradeable if gold returns to $1800."
 - **Lane registry limitation** — keyed by session, so two instruments on same session (MGC+MNQ at EUROPE_FLOW) = second overwrites first. Pre-existing design issue.
 
