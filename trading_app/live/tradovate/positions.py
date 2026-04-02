@@ -37,12 +37,14 @@ class TradovatePositions(BrokerPositions):
             net_pos = p.get("netPos", 0)
             if net_pos == 0:
                 continue
-            result.append({
-                "contract_id": p.get("contractId"),
-                "side": "long" if net_pos > 0 else "short",
-                "size": abs(net_pos),
-                "avg_price": p.get("netPrice", 0),
-            })
+            result.append(
+                {
+                    "contract_id": p.get("contractId"),
+                    "side": "long" if net_pos > 0 else "short",
+                    "size": abs(net_pos),
+                    "avg_price": p.get("netPrice", 0),
+                }
+            )
         return result
 
     def query_equity(self, account_id: int) -> float | None:

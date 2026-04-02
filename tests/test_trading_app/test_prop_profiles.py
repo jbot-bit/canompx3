@@ -90,7 +90,7 @@ class TestAccountProfile:
         assert p.firm == "apex"
         assert p.account_size == 100_000
         assert p.active is True
-        assert len(p.daily_lanes) == 9
+        assert len(p.daily_lanes) == 7  # Honest deployment: RR-locked, COST_LT preferred
 
     def test_tradeify_scaling_profile(self):
         p = get_profile("tradeify_50k")
@@ -202,18 +202,19 @@ class TestLaneRegistryOrbCap:
 
     def test_tokyo_open_cap_in_registry(self):
         registry = get_lane_registry()
-        assert registry["TOKYO_OPEN"]["max_orb_size_pts"] == 80.0  # MNQ lane (allocator 2026-04-03)
+        assert registry["TOKYO_OPEN"]["max_orb_size_pts"] == 80.0  # MNQ COST_LT10
 
     def test_all_registry_lanes_have_caps(self):
-        """All lanes should have ORB caps after allocator rebalance 2026-04-03."""
+        """All lanes should have ORB caps after honest deployment 2026-04-03."""
         registry = get_lane_registry()
         expected_caps = {
             "CME_PRECLOSE": 120.0,
+            "EUROPE_FLOW": 100.0,
+            "SINGAPORE_OPEN": 100.0,
             "COMEX_SETTLE": 80.0,
-            "EUROPE_FLOW": 30.0,  # MGC ORB_G6 lane (overwrites MNQ in registry)
-            "TOKYO_OPEN": 80.0,  # MNQ COST_LT10 lane
-            "CME_REOPEN": 30.0,  # MGC ORB_G6 lane
-            "SINGAPORE_OPEN": 90.0,
+            "TOKYO_OPEN": 80.0,
+            "NYSE_CLOSE": 80.0,
+            "NYSE_OPEN": 200.0,
         }
         for label, expected in expected_caps.items():
             if label in registry:

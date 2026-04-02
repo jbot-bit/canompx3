@@ -110,6 +110,14 @@ class ProjectXOrderRouter(BrokerRouter):
     ) -> dict:
         side = 0 if direction == "long" else 1  # 0=Bid(buy), 1=Ask(sell)
 
+        _intent = {
+            "direction": direction,
+            "entry_model": entry_model,
+            "entry_price": entry_price,
+            "symbol": symbol,
+            "qty": qty,
+        }
+
         if entry_model == "E1":
             return {
                 "accountId": self.account_id,
@@ -117,6 +125,7 @@ class ProjectXOrderRouter(BrokerRouter):
                 "type": 2,  # Market
                 "side": side,
                 "size": qty,
+                "_intent": _intent,
             }
         elif entry_model == "E2":
             return {
@@ -126,6 +135,7 @@ class ProjectXOrderRouter(BrokerRouter):
                 "side": side,
                 "size": qty,
                 "stopPrice": entry_price,
+                "_intent": _intent,
             }
         else:
             raise ValueError(f"Entry model '{entry_model}' not supported live. Use E1 or E2.")

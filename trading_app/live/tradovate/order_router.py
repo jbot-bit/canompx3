@@ -119,6 +119,14 @@ class TradovateOrderRouter(BrokerRouter):
         else:
             raise ValueError(f"Entry model '{entry_model}' not supported live. Use E1 or E2.")
 
+        # Attach broker-agnostic intent for cross-broker routing (BrokerDispatcher)
+        base["_intent"] = {
+            "direction": direction,
+            "entry_model": entry_model,
+            "entry_price": entry_price,
+            "symbol": symbol,
+            "qty": qty,
+        }
         return base
 
     def submit(self, spec: dict) -> dict:
@@ -224,22 +232,26 @@ class TradovateOrderRouter(BrokerRouter):
                 "action": "Sell",
                 "orderType": "Limit",
                 "price": target_price,
+                "isAutomated": True,
             }
             stop_spec = {
                 "action": "Sell",
                 "orderType": "Stop",
                 "stopPrice": stop_price,
+                "isAutomated": True,
             }
         else:
             target_spec = {
                 "action": "Buy",
                 "orderType": "Limit",
                 "price": target_price,
+                "isAutomated": True,
             }
             stop_spec = {
                 "action": "Buy",
                 "orderType": "Stop",
                 "stopPrice": stop_price,
+                "isAutomated": True,
             }
 
         return {
