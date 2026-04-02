@@ -38,7 +38,7 @@ from trading_app.config import ALL_FILTERS
 DEPLOY_WINDOW_MONTHS = 12  # Carver Ch.11: forecast weighting window
 REGIME_WINDOW_MONTHS = 6  # Chan Ch.7: regime half-life capture
 PAUSE_MONTHS_NEGATIVE = 2  # Chan Ch.7 + Pardo Ch.9: fast kill
-RESUME_MONTHS_POSITIVE = 3  # Carver Ch.12: asymmetric switching
+RESUME_MONTHS_POSITIVE = 2  # Symmetric with PAUSE_MONTHS_NEGATIVE (was 3 — too slow)
 MAGNITUDE_PAUSE_THRESHOLD = -0.10  # 3-month avg ExpR below this → immediate pause
 MIN_TRAILING_N = 20  # Minimum trades for reliable score
 HYSTERESIS_PCT = 0.20  # Carver Ch.12: 20% switching cost

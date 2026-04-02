@@ -355,9 +355,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         account_size=100_000,
         copies=1,
         stop_multiplier=0.75,
-        max_slots=5,
+        max_slots=9,
         active=True,  # Upgraded from 50K — $3K DD gives $2,250 margin
-        allowed_sessions=frozenset({"CME_PRECLOSE", "NYSE_CLOSE", "COMEX_SETTLE", "EUROPE_FLOW", "TOKYO_OPEN"}),
+        allowed_sessions=None,  # All validated sessions eligible (was 5 — blocked 4 profitable sessions)
         daily_lanes=(
             # ALLOCATOR REBALANCE 2026-04-02 (post-16yr rebuild).
             # 117 strategies scored, 47 deployable. Top 5 by annual_r.
