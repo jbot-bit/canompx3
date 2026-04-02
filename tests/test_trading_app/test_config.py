@@ -145,8 +145,10 @@ class TestAllFilters:
         # + 2 MES 1000 band filters (ORB_G4_L12, ORB_G5_L12)
         # + 3 cross-asset ATR filters (X_MES_ATR70, X_MES_ATR60, X_MGC_ATR70)
         # + 4 overnight range absolute (OVNRNG_10/25/50/100 — US sessions only, NOT in BASE)
-        # = 22 + 12 + 12 + 3 + 2 + 2 + 3 + 4 = 60
-        assert len(ALL_FILTERS) == 60
+        # + 3 PDR prev-day-range/atr filters (PDR_R080/R105/R125)
+        # + 2 GAP gap/atr filters (GAP_R005/R015)
+        # = 22 + 12 + 12 + 3 + 2 + 2 + 3 + 4 + 3 + 2 = 65
+        assert len(ALL_FILTERS) == 65
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
