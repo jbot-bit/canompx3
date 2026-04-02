@@ -253,7 +253,7 @@ def check_lane_mismatch(session: str, lane: dict) -> tuple[bool, str]:
     """Warn if deployed lane differs from allocator recommendation.
 
     Reads lane_allocation.json and compares the deployed strategy_id
-    for this session to the allocator's recommended strategy_id.
+    for this session+instrument to the allocator's recommended strategy_id.
     Non-blocking (warning only) — user decides whether to follow recommendation.
     """
     alloc_path = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
@@ -264,15 +264,23 @@ def check_lane_mismatch(session: str, lane: dict) -> tuple[bool, str]:
         import json as _json
 
         data = _json.loads(alloc_path.read_text())
-        recommended = {entry["orb_label"]: entry["strategy_id"] for entry in data.get("lanes", [])}
+        # Key by (instrument, orb_label) to handle multi-instrument same-session
+        recommended = {
+            (entry["instrument"], entry["orb_label"]): entry["strategy_id"] for entry in data.get("lanes", [])
+        }
+        paused_ids = {entry["strategy_id"] for entry in data.get("paused", [])}
     except (KeyError, _json.JSONDecodeError):
         return True, "Cannot parse allocation file"
 
     deployed_sid = lane.get("strategy_id", "")
-    rec_sid = recommended.get(session)
+    instrument = lane.get("instrument", "")
+    rec_sid = recommended.get((instrument, session))
 
     if rec_sid is None:
-        return True, f"WARN: {session} not in allocator recommendation (paused or excluded)"
+        # Check if this session is actively paused
+        if deployed_sid in paused_ids:
+            return True, f"WARN: {deployed_sid} is PAUSED by allocator"
+        return True, f"WARN: {session} not in allocator recommendation"
     if deployed_sid == rec_sid:
         return True, f"Matches recommendation: {rec_sid}"
     return True, f"MISMATCH: deployed={deployed_sid}, recommended={rec_sid}"
