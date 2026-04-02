@@ -6,6 +6,18 @@
 
 ---
 
+## Update (Apr 3 — Session 2: 3-Tier Portfolio Integrity Fix + Codex Correction)
+
+### Codex Adversarial Review (same session)
+**My claim "G-filters globally redundant with COST_LT" was OVERCLAIMED.**
+- MGC: corr=0.88-0.94 → YES redundant (my proof holds)
+- MNQ: corr=0.44-0.58, 831-3024 G6-only trades → NOT redundant historically
+- MES: corr=0.63-0.76 → partially redundant
+- ATR-ratio was WEAKER than both G6 and COST_LT08 on MGC (negative ExpR)
+- **Correct position:** COST_LT preferred for deployment. G-filters kept in discovery grid. No global NO-GO.
+
+---
+
 ## Update (Apr 3 — Session 2: 3-Tier Portfolio Integrity Fix)
 
 ### Completed
