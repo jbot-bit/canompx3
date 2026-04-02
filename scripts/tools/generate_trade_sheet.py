@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """
-Daily Trade Sheet Generator V2.
+Daily Trade Sheet Generator V3 — Unified Regime-Aware Timeline.
 
-Two sections:
-  1. DEPLOYED — lanes from active prop_profiles (what you're committed to)
-  2. OPPORTUNITIES — all other validated strategies that pass gates (manual pickup)
+Three data sources merged into one timeline:
+  1. DEPLOYED — lanes from active prop_profiles
+  2. OPPORTUNITIES — validated CORE strategies (N >= 100) passing all gates
+  3. MANUAL — all positive strategies including REGIME tier (N >= 30)
+
+Regime awareness:
+  - ATR percentile banner per session (HIGH/NORMAL/LOW)
+  - Filter status per row: ACTIVE (passes today), VERIFY (check at session), INACTIVE (dimmed)
+  - Frequency column (~X/yr or ~X/mo)
 
 Usage:
-    python scripts/tools/generate_trade_sheet.py              # both sections
-    python scripts/tools/generate_trade_sheet.py --deployed-only  # deployed only (V1 behavior)
+    python scripts/tools/generate_trade_sheet.py
+    python scripts/tools/generate_trade_sheet.py --deployed-only
     python scripts/tools/generate_trade_sheet.py --date 2026-03-04
     python scripts/tools/generate_trade_sheet.py --no-open
 """
@@ -976,14 +982,7 @@ def generate_html(
             <div class="profile-ev">{ev_line}</div>
         </div>"""
 
-    # Tag each trade with its section (if not already tagged by caller)
-    for t in trades:
-        t.setdefault("section", "deployed")
-    for t in opportunities or []:
-        t.setdefault("section", "opportunity")
-    for t in manual_candidates or []:
-        t.setdefault("section", "manual")
-
+    # Section tags set by main() before calling generate_html()
     all_trades = list(trades) + (opportunities or []) + (manual_candidates or [])
 
     n_deployed = len(trades)
@@ -1391,11 +1390,6 @@ def generate_html(
         color: #58a6ff;
         border: 1px solid #58a6ff;
     }}
-    .profile-shadow .profile-mode {{
-        background: #2d2d2d;
-        color: #8b949e;
-        border: 1px solid #8b949e;
-    }}
     .profile-detail {{
         font-size: 12px;
         color: #8b949e;
@@ -1406,15 +1400,6 @@ def generate_html(
         font-weight: 600;
         color: #3fb950;
         margin-top: 4px;
-    }}
-    .badge-firm {{
-        font-size: 10px;
-        padding: 2px 6px;
-        border-radius: 4px;
-        background: #21262d;
-        color: #8b949e;
-        border: 1px solid #30363d;
-        margin-left: 8px;
     }}
     .warning-box {{
         background: #271b05;
@@ -1613,15 +1598,17 @@ def main():
     # Data freshness check
     try:
         con_check = duckdb.connect(str(db_path), read_only=True)
-        for table, col in [("daily_features", "trading_day"), ("orb_outcomes", "trading_day")]:
-            max_date = con_check.execute(f"SELECT MAX({col}) FROM {table}").fetchone()[0]
-            days_stale = (trading_day - max_date.date()).days if max_date else 999
-            status = "OK" if days_stale <= 2 else f"STALE ({days_stale} days old)"
-            print(f"  {table}: {max_date.date() if max_date else 'EMPTY'} [{status}]")
-        con_check.close()
+        try:
+            for table, col in [("daily_features", "trading_day"), ("orb_outcomes", "trading_day")]:
+                max_date = con_check.execute(f"SELECT MAX({col}) FROM {table}").fetchone()[0]
+                days_stale = (trading_day - max_date.date()).days if max_date else 999
+                status = "OK" if days_stale <= 2 else f"STALE ({days_stale} days old)"
+                print(f"  {table}: {max_date.date() if max_date else 'EMPTY'} [{status}]")
+        finally:
+            con_check.close()
     except duckdb.IOException:
         print("  Data freshness: SKIP (DB locked by another process)")
-    except Exception as exc:
+    except (AttributeError, TypeError) as exc:
         print(f"  Data freshness: SKIP ({type(exc).__name__}: {exc})")
     print()
 
