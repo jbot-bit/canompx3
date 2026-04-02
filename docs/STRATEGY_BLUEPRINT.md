@@ -11,7 +11,7 @@ Sections §4-§5, §7-§9 are **CURRENT STATE** — volatile snapshots. Query ca
 - Code structure → `CLAUDE.md`
 - Feature specs → `docs/specs/`
 
-**Freshness:** Last structural audit: 2026-03-21. Re-audit after: any NO-GO declaration, new instrument/session/entry model, pipeline rebuild, ML finding, or validated_setups change.
+**Freshness:** Last structural audit: 2026-04-02 (regime/friction audit, NO-GO additions). Re-audit after: any NO-GO declaration, new instrument/session/entry model, pipeline rebuild, ML finding, or validated_setups change.
 
 **Core principle:** Our system is not proven right — it's proven not-yet-wrong. Every finding is provisional until forward-tested. The methodology exists to catch our own mistakes before they cost capital.
 
@@ -33,14 +33,14 @@ Sections §4-§5, §7-§9 are **CURRENT STATE** — volatile snapshots. Query ca
 
 ## 2. The One Thing That Matters
 
-**ORB size relative to friction IS the primary edge gate.** 10-year regime audit (Mar 2026) proved: the edge is cost-gated (ARITHMETIC_ONLY — trades where cost/risk < ~10% are profitable, above ~15% they're not). G-filters approximate this gate at current prices. ~~Break delay was previously claimed as a conviction signal~~ **but institutional test (2026-03-30, 7.2M trades) killed it: per-session d<0.2, O5/O30 direction flip, Simpson's paradox in pooled data. See NO-GO registry §5.** Source: TRADING_RULES.md "ORB Size = The Edge" + `research/break_delay_institutional_test.py`.
+**ORB size relative to friction IS the primary edge gate.** 16-year regime audit (Apr 2026) proved: the edge is cost-gated (ARITHMETIC_ONLY — trades where cost/risk < ~10% are profitable, above ~15% they're not). G-filters approximate this gate at current prices. Gross R (before friction) is positive across ALL eras (2010-2025); early-era negative net R is entirely explained by friction drag from small absolute ORBs. ~~Break delay was previously claimed as a conviction signal~~ **but institutional test (2026-03-30, 7.2M trades) killed it: per-session d<0.2, O5/O30 direction flip, Simpson's paradox in pooled data. See NO-GO registry §5.** Source: TRADING_RULES.md "ORB Size = The Edge" + `research/break_delay_institutional_test.py`.
 
 **Current reality (from gold.db, verified 2026-03-24, 10-year backfill):**
-- **MNQ E2:** Positive unfiltered at 5yr (2021-2025). At 10yr: CME_PRECLOSE and NYSE_OPEN are structural (positive both halves). COMEX_SETTLE marginal (p=0.060). EUROPE_FLOW dead at 10yr unfiltered. US_DATA_1000 regime-dependent.
+- **MNQ E2:** Positive unfiltered at 5yr (2021-2025). At 16yr: CME_PRECLOSE and NYSE_OPEN are structural (positive with G5 in ALL eras including 2010-15). COMEX_SETTLE marginal (p=0.060). EUROPE_FLOW dead at 16yr unfiltered (G5 early N=89, inconclusive). US_DATA_1000 partially regime-dependent (G5 early -0.072R N=920, not purely friction — may reflect pre-2016 US data release dynamics). Most early-era kills are friction drag, not regime change (Apr 2 audit).
 - **MGC E2 unfiltered:** Negative. Positive ONLY under combined gate (friction <10% + timeout <=10m): +0.148R.
 - **MES E2 unfiltered:** Negative. Positive under combined gate: +0.116R.
 - **E1 unfiltered:** Negative everywhere including MNQ.
-- **Validated setups:** 772 total (494 MNQ FDR TRUE, 9 MES, 6 MGC). Query `validated_setups` for current count — do not cite from memory.
+- **Validated setups:** Query `validated_setups` for current count — do not cite from memory. Counts change after every rebuild.
 
 **All tables in §4 below are MNQ E2 unless stated otherwise.** For MGC/MES session-specific performance, see TRADING_RULES.md Session Playbook.
 
@@ -273,6 +273,8 @@ Everything confirmed dead. Do NOT re-test without a fundamentally new approach.
 | Break speed / break delay filter | DEAD | 7.2M trades, BH K=96. 0 survivors at deployed apertures (O15). Simpson's paradox in pooled data. O5/O30 direction FLIP kills mechanism claim. Per-session d<0.2. `research/break_delay_institutional_test.py`. Mar 2026 | New mechanism that explains aperture direction flip |
 | Late entry timing filter | DEAD | Same test battery. EARLY vs LATE collinear with break speed (not independent). 0 survivors outside CME_PRECLOSE (FRAGILE). Mar 2026 | — |
 | New-on-new confluence stacking (Phase 3b pairs) | DEAD | Phase 4 OOS lift: 0/8 DEPLOY. IS lift collapsed 72-100% OOS. CI includes zero for all. Carver 1.5x: 0/8 pass. Tested: 8 pairs of new confluence features AND-combined (rel_vol+orb_size_norm, rel_vol+orb_volume, etc.). NOT tested: existing deployed filter + new confluence, veto-style stacking, cross-session. ATR70_VOL (deployed, working) is a composite — stacking is NOT universally dead. `phase4_oos_lift.py`. Mar 2026 | OOS evidence for the specific untested categories above |
+| Regime-conditional discovery (rolling window) | INVESTIGATED — NO-GO | 16yr→10yr kills 16.2% of strategies. Kill mechanism is friction drag (not regime). Gross R positive all eras. CME_PRECLOSE G5: +0.084R in 2010-15. Filter grid already handles cost gating. Rolling window would admit ~50% FP (Carver). Chi2 p=6e-256 confirms kill rate varies by filter. Apr 2026 | Evidence that microstructure (not cost) changed — currently only US_DATA_1000 shows this (G5 early -0.072R) |
+| Vol-regime adaptive parameter switching | DEAD | `research_vol_regime_switching.py`: H0 not rejected. Best static params indistinguishable from adaptive. Mar 2026 | Fundamentally new regime detection method |
 
 Full NO-GO table with details: TRADING_RULES.md "What Doesn't Work"
 
