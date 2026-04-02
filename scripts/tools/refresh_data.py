@@ -127,7 +127,7 @@ def run_ingest(instrument: str) -> bool:
     return True
 
 
-def run_build_steps(instrument: str, start: date, end: date) -> bool:
+def run_build_steps(instrument: str, start: date, end: date, full_rebuild: bool = False) -> bool:
     """Build 5m bars + daily features (all apertures) for the date range."""
     start_str, end_str = str(start), str(end)
 
@@ -164,18 +164,37 @@ def run_build_steps(instrument: str, start: date, end: date) -> bool:
         if not _run(cmd, f"daily_features O{orb_min}"):
             return False
 
-    # Step 3: Build O5 outcomes (forward data for validated strategies)
-    print("  Building O5 outcomes ...")
-    cmd = [
-        sys.executable,
-        "-m",
-        "trading_app.outcome_builder",
-        "--instrument",
-        instrument,
-        "--force",
-        "--orb-minutes",
-        "5",
-    ]
+    # Step 3: Build O5 outcomes
+    if full_rebuild:
+        print("  Full O5 outcome rebuild ...")
+        cmd = [
+            sys.executable,
+            "-m",
+            "trading_app.outcome_builder",
+            "--instrument",
+            instrument,
+            "--force",
+            "--orb-minutes",
+            "5",
+        ]
+    else:
+        # Incremental: rebuild recent days only (trade resolution window)
+        lookback = start - timedelta(days=14)  # ~10 trading days
+        print(f"  Incremental O5 outcomes from {lookback} ...")
+        cmd = [
+            sys.executable,
+            "-m",
+            "trading_app.outcome_builder",
+            "--instrument",
+            instrument,
+            "--force",
+            "--start",
+            str(lookback),
+            "--end",
+            str(end),
+            "--orb-minutes",
+            "5",
+        ]
     if not _run(cmd, "outcome_builder_O5"):
         return False
 
@@ -205,7 +224,7 @@ def run_research_build_steps(instrument: str, start: date, end: date) -> bool:
     return True
 
 
-def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
+def refresh_instrument(instrument: str, dry_run: bool = False, full_rebuild: bool = False) -> bool:
     """Full refresh for one instrument: download -> ingest -> build."""
     print(f"\n{'=' * 60}")
     print(f"  {instrument}")
@@ -216,11 +235,10 @@ def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
         print(f"  No bars found for {instrument} -- skip (needs manual initial load)")
         return False
 
-    # Use yesterday as end date — today's session may still be in progress
-    # and Databento won't have the full day yet. Exclusive end semantics
-    # means end=yesterday requests data through end-of-day-before-yesterday,
-    # which is the last COMPLETE trading session.
+    # Databento uses EXCLUSIVE end semantics: end=Apr 2 fetches through Apr 1.
+    # Use today as API end to get data through yesterday (last complete session).
     yesterday = date.today() - timedelta(days=1)
+    api_end = date.today()  # exclusive — fetches data through yesterday
     fetch_start = last_date + timedelta(days=1)
 
     gap_days = (yesterday - last_date).days
@@ -231,8 +249,8 @@ def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
     print(f"  Last bar: {last_date} ({gap_days} days ago)")
     print(f"  Gap: {fetch_start} to {yesterday}")
 
-    # Step 1: Download
-    out_file = download_dbn(instrument, fetch_start, yesterday, dry_run=dry_run)
+    # Step 1: Download (api_end is exclusive — fetches through yesterday)
+    out_file = download_dbn(instrument, fetch_start, api_end, dry_run=dry_run)
     if dry_run:
         return True
 
@@ -252,7 +270,7 @@ def refresh_instrument(instrument: str, dry_run: bool = False) -> bool:
     # Step 3: Build downstream artifacts
     # Use canonical ACTIVE_ORB_INSTRUMENTS (not raw orb_active flag — M2K trap)
     if instrument in ACTIVE_ORB_INSTRUMENTS:
-        ok = run_build_steps(instrument, fetch_start, yesterday)
+        ok = run_build_steps(instrument, fetch_start, yesterday, full_rebuild=full_rebuild)
     else:
         ok = run_research_build_steps(instrument, fetch_start, yesterday)
 
@@ -276,6 +294,11 @@ def main():
     parser = argparse.ArgumentParser(description="Refresh market data from Databento")
     parser.add_argument("--instrument", type=str, help="Single instrument (default: all active)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would download")
+    parser.add_argument(
+        "--full-rebuild",
+        action="store_true",
+        help="Full outcome rebuild (default: incremental last 10 trading days)",
+    )
     args = parser.parse_args()
 
     # Fail-closed: require API key before attempting downloads
@@ -295,7 +318,7 @@ def main():
 
     results = {}
     for inst in instruments:
-        ok = refresh_instrument(inst, dry_run=args.dry_run)
+        ok = refresh_instrument(inst, dry_run=args.dry_run, full_rebuild=args.full_rebuild)
         results[inst] = "OK" if ok else "FAIL"
 
     print(f"\n{'=' * 60}")
