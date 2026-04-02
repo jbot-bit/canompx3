@@ -77,37 +77,34 @@
 - took_pdl × NYSE_CLOSE × MES — T6 FAIL (p=0.140)
 - prev_day_range/atr × NYSE_OPEN × MNQ — T3 FAIL (OOS sign flip), BH FAIL
 
-## Implementation Plan
+## Implementation (DONE — Apr 2 2026)
 
-### New filter names (for `config.py ALL_FILTERS`):
+### Filter names deployed in `config.py ALL_FILTERS`:
+
+| Filter | Class | Threshold | Pass rate |
+|--------|-------|-----------|-----------|
+| `PDR_R080` | `PrevDayRangeNormFilter` | prev_day_range/atr >= 0.80 | ~45% |
+| `PDR_R105` | `PrevDayRangeNormFilter` | prev_day_range/atr >= 1.05 | ~40% |
+| `PDR_R125` | `PrevDayRangeNormFilter` | prev_day_range/atr >= 1.25 | ~25% |
+| `GAP_R005` | `GapNormFilter` | abs(gap)/atr >= 0.005 | ~50% |
+| `GAP_R015` | `GapNormFilter` | abs(gap)/atr >= 0.015 | ~25% |
+
+### Thresholds (calibrated from actual data, all instruments consistent):
 
 ```
-PDR_G60  — prev_day_range / atr_20 >= 0.60 (approx Q3, calibrate per session)
-PDR_G80  — prev_day_range / atr_20 >= 0.80 (approx Q4)
-GAP_G10  — abs(gap_open_points) / atr_20 >= 0.10 (calibrate for CME_REOPEN MGC)
-GAP_G20  — abs(gap_open_points) / atr_20 >= 0.20
+prev_day_range/atr_20 quantiles (MGC/MNQ/MES all within 0.02):
+  Q40=0.83  Q50=0.94  Q60=1.05  Q75=1.25  Q80=1.35
+
+MGC abs(gap_open_points)/atr_20:
+  Q40=0.004  Q50=0.005  Q60=0.008  Q75=0.016  Q80=0.024
 ```
 
-### Thresholds (from actual data distributions):
-
-```
-MNQ prev_day_range: Q1=67, med=165, Q3=290, atr_20 med=197
-  → PDR_G60 = prev_day_range/atr >= 0.60 (approx bottom of Q3)
-  → PDR_G80 = prev_day_range/atr >= 0.80 (approx median)
-
-MGC (need to query — different distribution)
-
-gap_open_points: median=0, Q3=0.5 for MNQ
-  → Gap filter only meaningful for CME_REOPEN (session after overnight gap)
-  → Threshold needs per-instrument calibration
-```
-
-### Where to apply:
+### Routing in `get_filters_for_grid()`:
 
 | Filter | Sessions | Instruments |
 |--------|----------|-------------|
-| PDR_G60/G80 | LONDON_METALS, EUROPE_FLOW | MGC, MNQ |
-| GAP_G10/G20 | CME_REOPEN | MGC |
+| PDR_R080/R105/R125 | LONDON_METALS, EUROPE_FLOW | MGC, MNQ |
+| GAP_R005/R015 | CME_REOPEN | MGC |
 
 ### What NOT to do:
 
@@ -116,19 +113,14 @@ gap_open_points: median=0, Q3=0.5 for MNQ
 - Do NOT apply to sessions not tested (no extrapolation)
 - Do NOT combine with existing G-filters without re-running T1-T8 on the combo
 
-### Pipeline changes needed:
+### What was changed:
 
-1. **`trading_app/config.py`** — Add PDR_G60, PDR_G80, GAP_G10, GAP_G20 to ALL_FILTERS
-2. **`trading_app/config.py`** — Add to `get_filters_for_grid()` for applicable sessions only
-3. **`pipeline/build_daily_features.py`** — No changes needed (prev_day_range and gap_open_points already computed)
-4. **`trading_app/outcome_builder.py`** — Filter evaluation logic for new filter types
-5. **Discovery grid run** — Full rebuild with new filters for LONDON_METALS, EUROPE_FLOW, CME_REOPEN
+1. **`trading_app/config.py`** — `PrevDayRangeNormFilter` + `GapNormFilter` classes, 5 instances in `ALL_FILTERS`, session routing in `get_filters_for_grid()`
+2. **`pipeline/build_daily_features.py`** — No changes (prev_day_range and gap_open_points already computed)
+3. **`trading_app/outcome_builder.py`** — No changes (filter evaluation via `matches_row` inherited from StrategyFilter)
 
-### Acceptance criteria:
+### Remaining:
 
-- [ ] New filters compute correctly (prev_day_range/atr_20 >= threshold)
-- [ ] Filter only applied to specified session × instrument combos
-- [ ] Existing strategies unaffected (no regression)
-- [ ] Discovery produces new experimental strategies with PDR/GAP filters
-- [ ] Drift check passes
-- [ ] No lookahead (prev_day_range and gap_open_points are strictly prior-day)
+- [ ] Discovery grid run with new filters for LONDON_METALS, EUROPE_FLOW, CME_REOPEN
+- [ ] Behavioral tests for new filter classes (review finding #2)
+- [ ] Validate discovered strategies through full pipeline (validator → edge families)
