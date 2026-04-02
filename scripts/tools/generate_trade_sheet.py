@@ -20,6 +20,7 @@ Usage:
 """
 
 import argparse
+import json
 import re as _re_module
 import sys
 import webbrowser
@@ -302,12 +303,40 @@ def _classify_filter_status(
     return "CHECK"
 
 
+def _load_trailing_stats() -> dict[str, dict]:
+    """Load trailing stats from lane_allocation.json if it exists.
+
+    Returns dict keyed by strategy_id with trailing_expr, trailing_wr, trailing_n.
+    Fail-open: returns empty dict if file missing or unreadable.
+    """
+    alloc_path = PROJECT_ROOT / "docs" / "runtime" / "lane_allocation.json"
+    if not alloc_path.exists():
+        return {}
+    try:
+        data = json.loads(alloc_path.read_text())
+        result = {}
+        for lane in data.get("lanes", []):
+            sid = lane.get("strategy_id")
+            if sid and lane.get("trailing_expr") is not None:
+                result[sid] = {
+                    "trailing_expr": lane["trailing_expr"],
+                    "trailing_wr": lane.get("trailing_wr"),
+                    "trailing_n": lane.get("trailing_n"),
+                    "trailing_window": data.get("trailing_window_months", 12),
+                    "session_regime": lane.get("session_regime"),
+                    "alloc_status": lane.get("status"),
+                }
+        return result
+    except (json.JSONDecodeError, OSError, KeyError):
+        return {}
+
+
 def _enrich_trades_with_regime(
     all_trades: list[dict],
     regime_ctx: dict[str, dict],
     db_path: Path,
 ) -> None:
-    """Add filter_status, trades_per_year, and regime_atr_pct to each trade dict."""
+    """Add filter_status, trades_per_year, trailing stats, and regime_atr_pct."""
     # Batch-fetch years_tested for all strategy_ids
     sids = [t["strategy_id"] for t in all_trades]
     years_map: dict[str, float] = {}
@@ -332,6 +361,9 @@ def _enrich_trades_with_regime(
         finally:
             con.close()
 
+    # Load trailing stats from lane allocator (12mo window)
+    trailing = _load_trailing_stats()
+
     for t in all_trades:
         # Filter status
         t["filter_status"] = _classify_filter_status(t["filter_type"], t["instrument"], regime_ctx)
@@ -348,6 +380,18 @@ def _enrich_trades_with_regime(
         # Regime ATR percentile for this instrument
         ctx = regime_ctx.get(t["instrument"])
         t["regime_atr_pct"] = ctx.get("atr_pct") if ctx else None
+
+        # Trailing stats overlay — use 12mo trailing when available
+        ts = trailing.get(sid)
+        if ts:
+            t["validated_wr"] = t["win_rate"]
+            t["validated_expr"] = t["exp_r"]
+            t["win_rate"] = ts["trailing_wr"]
+            t["exp_r"] = ts["trailing_expr"]
+            t["stats_source"] = f"{ts['trailing_window']}mo"
+            t["trailing_n"] = ts["trailing_n"]
+        else:
+            t["stats_source"] = "all"
 
 
 # ── Session time resolution ───────────────────────────────────────────
@@ -858,6 +902,21 @@ def _build_session_cards(
             tooltip = " | ".join(tooltip_parts)
             tooltip_attr = f' title="{tooltip}"' if tooltip else ""
 
+            # Stats source label and tooltip
+            src = t.get("stats_source", "all")
+            src_badge = (
+                f'<span class="stats-src stats-src-trailing">{src}</span>'
+                if src != "all"
+                else '<span class="stats-src stats-src-all">all</span>'
+            )
+            # Tooltip: show the OTHER stat for reference
+            val_wr = t.get("validated_wr")
+            val_expr = t.get("validated_expr")
+            if src != "all" and val_wr is not None:
+                wr_title = f' title="All-time: {val_wr:.0%} WR, {val_expr:+.3f} ExpR"'
+            else:
+                wr_title = ""
+
             rows_html += f"""
             <tr class="{row_class}">
                 <td>{status_badge}</td>
@@ -867,8 +926,8 @@ def _build_session_cards(
                 <td>{dir_badge if dir_badge else "ANY"}</td>
                 <td>{t["rr"]:.1f}:1</td>
                 <td>{stop_str}</td>
-                <td>{t["win_rate"]:.0%}</td>
-                <td class="{exp_r_class}">{t["exp_r"]:+.3f}</td>
+                <td{wr_title}>{t["win_rate"]:.0%} {src_badge}</td>
+                <td class="{exp_r_class}"{wr_title}>{t["exp_r"]:+.3f}</td>
                 <td class="dollars-cell">{exp_d_str}</td>
                 <td class="freq-cell">{freq_str}</td>
                 <td>{tier_badge}</td>
@@ -1507,6 +1566,23 @@ def generate_html(
         font-size: 12px;
         color: #8b949e;
         white-space: nowrap;
+    }}
+    .stats-src {{
+        font-size: 9px;
+        padding: 1px 4px;
+        border-radius: 3px;
+        margin-left: 3px;
+        vertical-align: middle;
+    }}
+    .stats-src-trailing {{
+        background: #1f3a2a;
+        color: #3fb950;
+        border: 1px solid #2ea043;
+    }}
+    .stats-src-all {{
+        background: #21262d;
+        color: #484f58;
+        border: 1px solid #30363d;
     }}
     @media print {{
         body {{ background: white; color: black; padding: 10px; }}
