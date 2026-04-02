@@ -76,8 +76,17 @@ STOP_MULTIPLIER = 0.75  # All deployed lanes use S0.75
 PRE_SESSION_FILTERS = {"OVNRNG_100", "NO_FILTER"}
 
 # ORB-dependent filters (need ORB data, evaluate post-ORB)
-ORB_DEPENDENT_FILTERS = {"COST_LT08", "COST_LT10", "COST_LT12", "COST_LT15",
-                         "ORB_VOL_8K", "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8"}
+ORB_DEPENDENT_FILTERS = {
+    "COST_LT08",
+    "COST_LT10",
+    "COST_LT12",
+    "COST_LT15",
+    "ORB_VOL_8K",
+    "ORB_G4",
+    "ORB_G5",
+    "ORB_G6",
+    "ORB_G8",
+}
 
 # Max ORB size per lane (from prop_profiles — execution safety)
 MAX_ORB_SIZE: dict[str, float] = {
@@ -137,8 +146,7 @@ def get_session_time(orb_label: str, trading_day: date) -> tuple[int, int]:
 # ---------------------------------------------------------------------------
 
 
-def compute_live_orb(instrument: str, orb_label: str, orb_minutes: int,
-                     trading_day: date) -> dict | None:
+def compute_live_orb(instrument: str, orb_label: str, orb_minutes: int, trading_day: date) -> dict | None:
     """Compute ORB high/low/size from bars_1m for the current session.
 
     Returns None if insufficient data (ORB window not complete yet).
@@ -208,7 +216,7 @@ def check_overnight_range(instrument: str, trading_day: date) -> tuple[float, bo
             # Use daily_features from the most recent completed trading day
             td = trading_day
             row = con.execute(
-                f"""
+                """
                 SELECT overnight_range
                 FROM daily_features
                 WHERE symbol = ? AND trading_day = ? AND orb_minutes = 5
@@ -247,8 +255,7 @@ def check_overnight_range(instrument: str, trading_day: date) -> tuple[float, bo
 # ---------------------------------------------------------------------------
 
 
-def format_pre_session_alert(lane, session_time_str: str,
-                             filter_result: str) -> str:
+def format_pre_session_alert(lane, session_time_str: str, filter_result: str) -> str:
     """Phase 1: Pre-session reminder."""
     return (
         f"<b>SESSION APPROACHING</b>\n"
@@ -266,8 +273,7 @@ def format_pre_session_alert(lane, session_time_str: str,
     )
 
 
-def format_post_orb_alert(lane, orb: dict, session_time_str: str,
-                          filter_pass: bool) -> str:
+def format_post_orb_alert(lane, orb: dict, session_time_str: str, filter_pass: bool) -> str:
     """Phase 2: ORB formed, trade levels ready."""
     orb_high = orb["orb_high"]
     orb_low = orb["orb_low"]
@@ -417,8 +423,7 @@ def scan_and_alert(alerted: dict[str, set[str]]) -> dict[str, set[str]]:
         post_end = post_start + ALERT_EXPIRE_MINUTES
 
         if post_key not in alerted.get("post", set()) and post_start <= now_min <= post_end:
-            orb = compute_live_orb(lane.instrument, lane.orb_label,
-                                   lane.orb_minutes, trading_day)
+            orb = compute_live_orb(lane.instrument, lane.orb_label, lane.orb_minutes, trading_day)
             if orb is None:
                 log.info(f"  POST-ORB: {lane.lane_name} — ORB data unavailable, will retry")
                 continue  # Don't mark as alerted — retry next cycle
@@ -442,8 +447,7 @@ def scan_and_alert(alerted: dict[str, set[str]]) -> dict[str, set[str]]:
 def main():
     if "--test" in sys.argv:
         ok = send_telegram(
-            "<b>SIGNAL TEST</b>\n\ncanompx3 trade alerter is working.\n"
-            "You will receive alerts before each session."
+            "<b>SIGNAL TEST</b>\n\ncanompx3 trade alerter is working.\nYou will receive alerts before each session."
         )
         print(f"Test alert: {'OK' if ok else 'FAIL'}")
         return
