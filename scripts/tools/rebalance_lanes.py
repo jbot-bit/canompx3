@@ -21,7 +21,7 @@ from trading_app.lane_allocator import (
     generate_report,
     save_allocation,
 )
-from trading_app.prop_profiles import ACCOUNT_PROFILES
+from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS
 
 
 def main() -> None:
@@ -80,10 +80,14 @@ def main() -> None:
         print(f"Profile: {pid} ({profile.firm})")
         print(f"{'=' * 60}")
 
+        # DD limit from canonical ACCOUNT_TIERS (not hardcoded)
+        tier = ACCOUNT_TIERS.get((profile.firm, profile.account_size))
+        max_dd = tier.max_dd if tier else 3000.0
+
         allocation = build_allocation(
             scores,
             max_slots=profile.max_slots,
-            max_dd=2000.0,  # TODO: read from ACCOUNT_TIERS
+            max_dd=max_dd,
             allowed_instruments=profile.allowed_instruments,
             allowed_sessions=profile.allowed_sessions,
             stop_multiplier=profile.stop_multiplier,

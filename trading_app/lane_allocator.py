@@ -690,7 +690,11 @@ def check_allocation_staleness(
       - "BLOCK": >60 days, must rebalance before trading
     days_old = -1 if file not found.
     """
-    path = Path(allocation_path) if allocation_path else Path("docs/runtime/lane_allocation.json")
+    if allocation_path:
+        path = Path(allocation_path)
+    else:
+        # Source-file-relative path (consistent regardless of CWD)
+        path = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
     if not path.exists():
         return "BLOCK", -1
 

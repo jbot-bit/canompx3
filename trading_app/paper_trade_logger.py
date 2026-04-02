@@ -232,10 +232,24 @@ def backfill(
             # 2. Load daily_features for filter application
             features = _load_features(con, lane.instrument, since=since)
 
+            # Idempotent DELETE before filter check (ensures stale rows are cleared
+            # even if the filter_type becomes unknown — audit finding #11)
+            if sync and since is not None:
+                con.execute(
+                    "DELETE FROM paper_trades WHERE strategy_id = ? AND trading_day >= ?",
+                    [lane.strategy_id, since],
+                )
+            elif not sync:
+                con.execute(
+                    "DELETE FROM paper_trades WHERE strategy_id = ?",
+                    [lane.strategy_id],
+                )
+
             # 3. Apply filter via matches_row (canonical filter interface)
             strat_filter = ALL_FILTERS.get(lane.filter_type)
             if strat_filter is None:
                 logger.warning(f"Unknown filter {lane.filter_type} — skipping {lane.strategy_id}")
+                con.commit()
                 results[lane.strategy_id] = {"count": 0, "cumulative_r": 0, "min_day": None, "max_day": None}
                 continue
 
@@ -285,18 +299,6 @@ def backfill(
                     "max_day": str(filtered_rows[-1][0]) if filtered_rows else None,
                 }
                 continue
-
-            # Idempotent DELETE+INSERT
-            if sync and since is not None:
-                con.execute(
-                    "DELETE FROM paper_trades WHERE strategy_id = ? AND trading_day >= ?",
-                    [lane.strategy_id, since],
-                )
-            elif not sync:
-                con.execute(
-                    "DELETE FROM paper_trades WHERE strategy_id = ?",
-                    [lane.strategy_id],
-                )
 
             if filtered_rows:
                 insert_data = [
