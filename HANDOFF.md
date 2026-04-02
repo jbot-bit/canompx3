@@ -6,6 +6,39 @@
 
 ---
 
+## Update (Apr 3 — Rebuild with 2026 + Golden Nuggets)
+
+### Completed
+- **2026 included in discovery** — holdout test was spent (CME_PRECLOSE DEAD recorded). Walk-forward handles OOS. Live trading = new forward test.
+- **124 validated strategies** (was 117 without 2026): MNQ=102, MES=15, MGC=7
+- **57 edge families**, 112 deployable, 12 paused
+- **Allocator re-run** (2026-04-03): 8 recommended lanes, MGC CME_REOPEN RR2.5 = top (64.4 ann_r)
+- **Holdout drift check updated** — HOLDOUT_DECLARATIONS emptied, pre-registration marked COMPLETED
+
+### Golden Nuggets
+- **SINGAPORE_OPEN EXPLODED**: 26 MNQ strategies (was 2). COST_LT08 avg ExpR=0.30, ORB_VOL_4K avg=0.29. Biggest new opportunity.
+- **MGC CME_REOPEN**: 5 strategies emerged (was 0 pre-rebuild). Top: ORB_G6 RR2.5 ExpR=0.44. Gold morning session is LIVE.
+- **MGC EUROPE_FLOW**: 2 strategies. ORB_G6 ExpR=0.23, ORB_G4 ExpR=0.15.
+- **CME_PRECLOSE survived**: 18 strategies (negative 2026 Q1 didn't kill long-term edge). Still valid but WATCH status.
+- **MES SINGAPORE_OPEN**: 6 high-ExpR strategies (0.28-0.46) but all PURGED in edge families. Small N.
+
+### Allocator Top 8 (2026-04-03)
+1. MGC CME_REOPEN ORB_G6 RR2.5 — 64.4 ann_r, trailing ExpR=0.596
+2. MNQ SINGAPORE_OPEN COST_LT12 RR2.0 — 45.8 ann_r
+3. MNQ COMEX_SETTLE OVNRNG_100 RR1.5 — 41.9 ann_r
+4. MNQ EUROPE_FLOW COST_LT10 RR3.0 — 40.5 ann_r
+5. MNQ TOKYO_OPEN COST_LT10 RR2.0 — 30.5 ann_r
+6. MNQ NYSE_OPEN OVNRNG_50 RR1.0 — 27.1 ann_r
+7. MNQ CME_PRECLOSE OVNRNG_50 S075 RR1.0 — 21.7 ann_r
+8. MNQ US_DATA_1000 COST_LT10 RR1.5 — 17.8 ann_r
+
+### Not Done
+- Update prop_profiles.py daily_lanes to match allocator top 5 (currently has old lanes)
+- Investigate SINGAPORE_OPEN depth (26 strategies — is this real or data artifact?)
+- Apply allocator recommendations to Tradeify/TopStep profiles
+
+---
+
 ## Update (Apr 2 — Session 3: Regime Dependency Audit — Friction is the Kill Mechanism)
 
 ### Completed
