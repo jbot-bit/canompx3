@@ -355,73 +355,74 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         account_size=100_000,
         copies=1,
         stop_multiplier=0.75,
-        max_slots=9,
+        max_slots=7,
         active=True,  # Upgraded from 50K — $3K DD gives $2,250 margin
-        allowed_sessions=None,  # All validated sessions eligible (was 5 — blocked 4 profitable sessions)
-        daily_lanes=(
-            # ALLOCATOR REBALANCE 2026-04-03 (post-2026 rebuild + regime-only gating).
-            # 124 validated, 112 deployable, 12 paused. Top 9 by annual_r.
-            # DD: $1560 / $3000 (52%). All sessions HOT.
-            # max_orb_size_pts: ~1.5x per-session P90 from adversarial audit.
-            DailyLaneSpec(
-                "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
-                "MGC",
-                "CME_REOPEN",
-                max_orb_size_pts=30.0,  # MGC P90=20.4
-            ),
-            DailyLaneSpec(
-                "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
-                "MNQ",
-                "SINGAPORE_OPEN",
-                max_orb_size_pts=90.0,  # MNQ SING P90=59
-            ),
-            DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
-                "MNQ",
+        allowed_sessions=frozenset(
+            {
+                "CME_PRECLOSE",
                 "COMEX_SETTLE",
-                max_orb_size_pts=80.0,  # MNQ COMEX P90=52
-            ),
-            DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
-                "MNQ",
                 "EUROPE_FLOW",
-                max_orb_size_pts=120.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
-                "MNQ",
+                "SINGAPORE_OPEN",
                 "TOKYO_OPEN",
-                max_orb_size_pts=80.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50",
-                "MNQ",
                 "NYSE_OPEN",
-                max_orb_size_pts=300.0,  # MNQ NYSE_OPEN P90=212
-            ),
+                "NYSE_CLOSE",
+            }
+        ),
+        daily_lanes=(
+            # HONEST DEPLOYMENT 2026-04-03. Adversarial audit findings:
+            # - All RR targets from family_rr_locks (no RR snooping)
+            # - COST_LT filters preferred (stable across price levels)
+            # - ORB_G8 at NYSE_CLOSE only (88% pass — acceptable with monitoring)
+            # - No vacuous filters (OVNRNG_50=100% pass, ORB_G6=96% for MNQ)
+            # - DD: $296 worst-case / $3000 (10%)
+            # - All 7 verified in validated_setups + family_rr_locks
             DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075",
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
                 "MNQ",
                 "CME_PRECLOSE",
                 max_orb_size_pts=120.0,
             ),
             DailyLaneSpec(
-                "MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10",
+                "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT08",
                 "MNQ",
-                "US_DATA_1000",
-                max_orb_size_pts=150.0,  # MNQ US_DATA P90=101
+                "EUROPE_FLOW",
+                max_orb_size_pts=100.0,
             ),
             DailyLaneSpec(
-                "MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6",
-                "MGC",
-                "EUROPE_FLOW",
-                max_orb_size_pts=30.0,  # MGC P90=20.4
+                "MNQ_SINGAPORE_OPEN_E2_RR1.0_CB1_COST_LT08",
+                "MNQ",
+                "SINGAPORE_OPEN",
+                max_orb_size_pts=100.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=80.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR1.0_CB1_COST_LT10",
+                "MNQ",
+                "TOKYO_OPEN",
+                max_orb_size_pts=80.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT08",
+                "MNQ",
+                "NYSE_OPEN",
+                max_orb_size_pts=200.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8",
+                "MNQ",
+                "NYSE_CLOSE",
+                max_orb_size_pts=80.0,
             ),
         ),
         notes=(
-            "$100K Apex. 9 lanes (2 MGC + 7 MNQ). Allocator rebalance 2026-04-03 "
-            "post-2026 rebuild + regime-only gating. 124 validated, 112 deployable. "
-            "DD $1560/$3000 (52%)."
+            "$100K Apex. 7 lanes (all MNQ). RR-locked, COST_LT preferred. "
+            "Adversarial audit 2026-04-03: vacuous filters removed, RR snoop fixed. "
+            "DD $296/$3000 (10%). MGC CME_REOPEN on trade sheet as MANUAL only."
         ),
     ),
     # =========================================================================

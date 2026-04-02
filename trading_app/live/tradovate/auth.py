@@ -96,7 +96,10 @@ class TradovateAuth(BrokerAuth):
                 wait = _BACKOFF_BASE * (2**attempt)
                 log.warning(
                     "Tradovate auth attempt %d/%d failed: %s — retrying in %.0fs",
-                    attempt + 1, _MAX_RETRIES, e, wait,
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    e,
+                    wait,
                 )
                 if attempt < _MAX_RETRIES - 1:
                     time.sleep(wait)

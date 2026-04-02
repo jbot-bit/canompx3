@@ -11,6 +11,7 @@ scope_lock:
   - trading_app/live/tradovate/positions.py
   - trading_app/live/broker_dispatcher.py
   - trading_app/live/broker_factory.py
+  - trading_app/live/projectx/order_router.py
 blast_radius:
   - All NEW files except broker_factory.py
   - broker_factory.py: add create_tradovate_components() alongside existing create_broker_components()
