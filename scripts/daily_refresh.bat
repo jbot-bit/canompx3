@@ -8,8 +8,15 @@ cd /d C:\Users\joshd\canompx3
 REM Activate venv
 call .venv\Scripts\activate.bat
 
-REM Refresh all active instruments (download + ingest + bars_5m + daily_features + outcomes)
-python -m scripts.tools.refresh_data 2>&1 >> logs\daily_refresh.log
+REM Check if Sunday — full outcome rebuild weekly
+for /f %%d in ('powershell -NoProfile -c "(Get-Date).DayOfWeek"') do set DOW=%%d
+
+if "%DOW%"=="Sunday" (
+    echo [%date% %time%] Sunday — full rebuild >> logs\daily_refresh.log
+    python -m scripts.tools.refresh_data --full-rebuild 2>&1 >> logs\daily_refresh.log
+) else (
+    python -m scripts.tools.refresh_data 2>&1 >> logs\daily_refresh.log
+)
 
 REM Log completion
 echo [%date% %time%] Daily refresh completed >> logs\daily_refresh.log
