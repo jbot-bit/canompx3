@@ -25,11 +25,9 @@ class BrokerDispatcher(BrokerRouter):
     """
 
     def __init__(self, primary: BrokerRouter, secondaries: list[BrokerRouter] | None = None):
+        super().__init__(account_id=primary.account_id, auth=primary.auth)
         self.primary = primary
         self.secondaries = secondaries or []
-        # Expose primary's fields for compatibility
-        self.account_id = primary.account_id
-        self.auth = primary.auth
 
     def build_order_spec(self, direction: str, entry_model: str, entry_price: float, symbol: str, qty: int = 1) -> dict:
         return self.primary.build_order_spec(direction, entry_model, entry_price, symbol, qty)
@@ -85,11 +83,9 @@ class BrokerDispatcher(BrokerRouter):
 
     def update_market_price(self, price: float) -> None:
         """Forward market price to all routers for price collar checks."""
-        if hasattr(self.primary, "update_market_price"):
-            self.primary.update_market_price(price)
+        self.primary.update_market_price(price)
         for router in self.secondaries:
-            if hasattr(router, "update_market_price"):
-                router.update_market_price(price)
+            router.update_market_price(price)
 
     def _adapt_spec(self, primary_spec: dict, router: BrokerRouter) -> dict:
         """Adapt a primary broker's order spec for a secondary broker.

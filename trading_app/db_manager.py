@@ -833,7 +833,7 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
 def get_family_head_ids(
     con: duckdb.DuckDBPyConnection,
     instrument: str,
-    exclude_purged: bool = True,
+    exclude_purged: bool = False,
 ) -> set[str]:
     """Return strategy_ids of family heads from edge_families (source of truth).
 
@@ -841,7 +841,9 @@ def get_family_head_ids(
     to avoid denormalization drift.
 
     Args:
-        exclude_purged: If True (default), excludes PURGED families.
+        exclude_purged: If True, excludes PURGED families. Default False —
+            allocator trailing window handles fitness (PURGED label is member-count
+            heuristic, not performance-based). Changed 2026-04-03.
     """
     purge_filter = " AND robustness_status != 'PURGED'" if exclude_purged else ""
     rows = con.execute(

@@ -51,14 +51,14 @@ class TradovatePositions(BrokerPositions):
     def query_equity(self, account_id: int) -> float | None:
         """Return current account equity (totalCashValue)."""
         try:
-            resp = requests.get(
+            resp = request_with_retry(
+                "GET",
                 f"{self._base}/cashBalance/getCashBalanceSnapshot?accountId={account_id}",
-                headers=self.auth.headers(),
-                timeout=10,
+                self.auth.headers(),
             )
             resp.raise_for_status()
             data = resp.json()
             return data.get("totalCashValue")
-        except Exception as e:
+        except requests.RequestException as e:
             log.warning("Tradovate equity query failed for account %d: %s", account_id, e)
             return None

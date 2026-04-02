@@ -10,7 +10,7 @@ import logging
 import time
 
 from ..broker_base import BrokerAuth, BrokerRouter
-from .http import RateLimitExhausted, request_with_retry
+from .http import request_with_retry
 
 log = logging.getLogger(__name__)
 
@@ -107,14 +107,17 @@ class TradovateOrderRouter(BrokerRouter):
 
         import json as _json
 
-        log.info("TRADOVATE ORDER SUBMIT: %s", _json.dumps(spec, default=str))
+        # Strip internal routing fields before sending to Tradovate API
+        wire_spec = {k: v for k, v in spec.items() if not k.startswith("_")}
+
+        log.info("TRADOVATE ORDER SUBMIT: %s", _json.dumps(wire_spec, default=str))
 
         # Use placeOSO if bracket fields present, otherwise placeorder
-        has_bracket = "bracket1" in spec or "bracket2" in spec
+        has_bracket = "bracket1" in wire_spec or "bracket2" in wire_spec
         endpoint = "order/placeOSO" if has_bracket else "order/placeorder"
 
         t0 = time.monotonic()
-        resp = request_with_retry("POST", self._url(endpoint), self.auth.headers(), json_body=spec)
+        resp = request_with_retry("POST", self._url(endpoint), self.auth.headers(), json_body=wire_spec)
         elapsed_ms = (time.monotonic() - t0) * 1000
         resp.raise_for_status()
         data = resp.json()
@@ -245,4 +248,5 @@ class TradovateOrderRouter(BrokerRouter):
             timeout=10,
         )
         resp.raise_for_status()
-        return resp.json() if isinstance(resp.json(), list) else []
+        data = resp.json()
+        return data if isinstance(data, list) else []

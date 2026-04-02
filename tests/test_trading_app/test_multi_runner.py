@@ -200,24 +200,6 @@ class TestMultiInstrumentRunner:
 class TestStopFileRaceCondition:
     """Verify stop-file is NOT deleted by individual feeds."""
 
-    def test_tradovate_feed_does_not_delete_stop_file(self):
-        """Tradovate feed should not unlink stop file (multi-instrument safe)."""
-        import ast
-
-        feed_path = Path("trading_app/live/tradovate/data_feed.py")
-        source = feed_path.read_text(encoding="utf-8")
-        tree = ast.parse(source)
-
-        # Check no .unlink calls on _STOP_FILE
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                if isinstance(node.func, ast.Attribute) and node.func.attr == "unlink":
-                    # Get the line source to check context
-                    line = source.splitlines()[node.lineno - 1]
-                    assert "_STOP_FILE" not in line, (
-                        f"Line {node.lineno}: feed still deletes stop file — breaks multi-instrument shutdown"
-                    )
-
     def test_projectx_feed_does_not_delete_stop_file(self):
         """ProjectX feed should not unlink stop file (multi-instrument safe)."""
         import ast

@@ -588,9 +588,9 @@ def collect_opportunities(
             if not passes:
                 continue
 
-            # Fitness check — skip PURGED/DECAY
+            # Fitness check — skip DECAY only (PURGED is member-count heuristic, not fitness)
             fitness = _check_fitness(sid, db_path, fitness_cache)
-            if fitness.status in ("PURGED", "DECAY"):
+            if fitness.status == "DECAY":
                 continue
 
             opportunities.append(
