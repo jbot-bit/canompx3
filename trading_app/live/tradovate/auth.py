@@ -145,9 +145,9 @@ class TradovateAuth(BrokerAuth):
         return self._access_token
 
     def _renew_or_login(self) -> None:
-        """Try token renewal; fall back to full login."""
+        """Try token renewal; fall back to full login with retry."""
         if self._access_token is None:
-            self._login()
+            self._login_with_retry()
             return
         try:
             resp = requests.post(
@@ -163,7 +163,7 @@ class TradovateAuth(BrokerAuth):
                 self._acquired_at = time.time()
                 log.info("Tradovate auth: token renewed")
             else:
-                self._login()
+                self._login_with_retry()
         except requests.RequestException:
-            log.warning("Tradovate token renewal failed, falling back to full login")
-            self._login()
+            log.warning("Tradovate token renewal failed, falling back to full login with retry")
+            self._login_with_retry()

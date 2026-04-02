@@ -6,15 +6,10 @@ GET /account/list → [{id, name, active}]
 
 import logging
 
-import requests
-
 from ..broker_base import BrokerAuth, BrokerContracts
+from .http import request_with_retry
 
 log = logging.getLogger(__name__)
-
-# Front-month symbol format: instrument + month_code + last_digit_of_year
-# E.g., MNQM6 = MNQ June 2026
-_MONTH_CODES = {1: "F", 2: "G", 3: "H", 4: "J", 5: "K", 6: "M", 7: "N", 8: "Q", 9: "U", 10: "V", 11: "X", 12: "Z"}
 
 
 class TradovateContracts(BrokerContracts):
@@ -33,10 +28,10 @@ class TradovateContracts(BrokerContracts):
 
     def resolve_all_account_ids(self) -> list[tuple[int, str]]:
         """Return ALL active account IDs and names. For copy trading."""
-        resp = requests.get(
+        resp = request_with_retry(
+            "GET",
             f"{self._base}/account/list",
-            headers=self.auth.headers(),
-            timeout=10,
+            self.auth.headers(),
         )
         resp.raise_for_status()
         accounts = resp.json()
@@ -51,10 +46,10 @@ class TradovateContracts(BrokerContracts):
         We query the API to find the current front month.
         """
         # Try to find by instrument name — Tradovate contract/find accepts name prefix
-        resp = requests.get(
+        resp = request_with_retry(
+            "GET",
             f"{self._base}/contract/suggest?t={instrument}&l=5",
-            headers=self.auth.headers(),
-            timeout=10,
+            self.auth.headers(),
         )
         resp.raise_for_status()
         contracts = resp.json()

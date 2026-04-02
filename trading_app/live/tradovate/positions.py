@@ -9,6 +9,7 @@ import logging
 import requests
 
 from ..broker_base import BrokerAuth, BrokerPositions
+from .http import request_with_retry
 
 log = logging.getLogger(__name__)
 
@@ -22,10 +23,10 @@ class TradovatePositions(BrokerPositions):
 
     def query_open(self, account_id: int) -> list[dict]:
         """Return open positions: [{contract_id, side, size, avg_price}]."""
-        resp = requests.get(
+        resp = request_with_retry(
+            "GET",
             f"{self._base}/position/list",
-            headers=self.auth.headers(),
-            timeout=10,
+            self.auth.headers(),
         )
         resp.raise_for_status()
         positions = resp.json()

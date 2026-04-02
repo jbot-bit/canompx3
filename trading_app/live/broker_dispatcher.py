@@ -41,8 +41,12 @@ class BrokerDispatcher(BrokerRouter):
         # Secondaries: best-effort, don't block on failures
         for router in self.secondaries:
             try:
-                # Each secondary needs its OWN spec (different account_id, possibly different symbol format)
-                sec_spec = self._adapt_spec(spec, router)
+                # Check if this is an exit order
+                exit_intent = spec.get("_exit_intent")
+                if exit_intent is not None:
+                    sec_spec = router.build_exit_spec(**exit_intent)
+                else:
+                    sec_spec = self._adapt_spec(spec, router)
                 sec_result = router.submit(sec_spec)
                 log.info(
                     "BrokerDispatcher: secondary %s submitted orderId=%s",
@@ -59,11 +63,14 @@ class BrokerDispatcher(BrokerRouter):
         return result
 
     def build_exit_spec(self, direction: str, symbol: str, qty: int = 1) -> dict:
-        return self.primary.build_exit_spec(direction, symbol, qty)
+        spec = self.primary.build_exit_spec(direction, symbol, qty)
+        # Attach intent for cross-broker exit routing
+        spec["_exit_intent"] = {"direction": direction, "symbol": symbol, "qty": qty}
+        return spec
 
     def cancel(self, order_id: int) -> None:
         self.primary.cancel(order_id)
-        # Don't cancel secondaries by primary's order_id — they have different IDs
+        # Secondary cancellation handled via exit fan-out, not by order_id
 
     def supports_native_brackets(self) -> bool:
         return self.primary.supports_native_brackets()
@@ -87,22 +94,16 @@ class BrokerDispatcher(BrokerRouter):
     def _adapt_spec(self, primary_spec: dict, router: BrokerRouter) -> dict:
         """Adapt a primary broker's order spec for a secondary broker.
 
-        Different brokers use different field names:
-        - ProjectX: {accountId, contractId, type: 4, side: 0, size}
-        - Tradovate: {accountId, symbol, orderType: "Stop", action: "Buy", orderQty}
+        Uses the _intent dict attached by build_order_spec() to rebuild the spec
+        in the secondary broker's format. This handles cross-broker routing
+        (ProjectX fields → Tradovate fields) correctly.
 
-        Each CopyOrderRouter's inner routers already know how to build their own specs.
-        If the secondary is a CopyOrderRouter, it wraps routers that build their own specs.
-        So we delegate to the secondary's build_order_spec and transfer the intent, not the fields.
+        If no _intent is present (same-broker fan-out), falls back to accountId swap.
         """
-        # Extract intent from primary spec
-        # This is broker-agnostic: direction + entry model + price + symbol + qty
-        # The secondary router's build_order_spec handles the translation
-        # For CopyOrderRouters wrapping N accounts, submit() handles fan-out internally
-
-        # If secondary is a CopyOrderRouter or another dispatcher, it already handles adaptation.
-        # Pass through as-is — the secondary is responsible for its own format.
-        # If field names mismatch, secondary.submit() will use its own build_order_spec.
+        intent = primary_spec.get("_intent")
+        if intent is not None:
+            return router.build_order_spec(**intent)
+        # Same-broker fan-out (e.g., CopyOrderRouter): just swap accountId
         return {**primary_spec, "accountId": router.account_id}
 
     @property
