@@ -74,16 +74,16 @@ def create_broker_components(
 
     elif broker == "tradovate":
         from .tradovate.auth import TradovateAuth
-        from .tradovate.contract_resolver import TradovateContracts
-        from .tradovate.data_feed import TradovateDataFeed
+        from .tradovate.contracts import TradovateContracts
         from .tradovate.order_router import TradovateOrderRouter
         from .tradovate.positions import TradovatePositions
 
-        auth = TradovateAuth(demo=demo)
-        log.info("Broker: Tradovate (%s)", "DEMO" if demo else "LIVE")
+        # Tradovate reads demo mode from TRADOVATE_DEMO env var
+        auth = TradovateAuth()
+        log.info("Broker: Tradovate (Tradeify/MFFU)")
         return {
             "auth": auth,
-            "feed_class": TradovateDataFeed,
+            "feed_class": None,  # No Tradovate feed — use ProjectX master feed
             "router_class": TradovateOrderRouter,
             "contracts_class": TradovateContracts,
             "positions_class": TradovatePositions,
