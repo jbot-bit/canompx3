@@ -3372,9 +3372,9 @@ def check_holdout_contamination(con=None) -> list[str]:
             _own_con = True
 
         # Pre-registration dates by instrument (extend when new holdouts declared)
-        HOLDOUT_DECLARATIONS = {
-            "MNQ": datetime(2026, 3, 20, 0, 0, 0, tzinfo=UTC),
-        }
+        # MNQ holdout COMPLETED 2026-04-02: test ran (CME_PRECLOSE DEAD),
+        # 2026 data now included in discovery. Walk-forward handles OOS.
+        HOLDOUT_DECLARATIONS: dict[str, datetime] = {}
 
         for instrument, declaration_date in HOLDOUT_DECLARATIONS.items():
             contaminated = con.execute(

@@ -1,8 +1,23 @@
 {
-  "rebalance_date": "2026-04-02",
+  "rebalance_date": "2026-04-03",
   "trailing_window_months": 12,
   "profile_id": "apex_100k_manual",
   "lanes": [
+    {
+      "strategy_id": "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
+      "instrument": "MGC",
+      "orb_label": "CME_REOPEN",
+      "rr_target": 2.5,
+      "filter_type": "ORB_G6",
+      "annual_r": 64.4,
+      "trailing_expr": 0.5962,
+      "trailing_n": 63,
+      "trailing_wr": 0.476,
+      "months_negative": 0,
+      "session_regime": "HOT",
+      "status": "DEPLOY",
+      "status_reason": "Session HOT (+0.1344), ExpR=+0.5962, N=63"
+    },
     {
       "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
       "instrument": "MNQ",
@@ -49,34 +64,19 @@
       "status_reason": "Session HOT (+0.1323), ExpR=+0.2107, N=208"
     },
     {
-      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT10_S075",
+      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
       "instrument": "MNQ",
       "orb_label": "TOKYO_OPEN",
-      "rr_target": 1.5,
+      "rr_target": 2.0,
       "filter_type": "COST_LT10",
-      "annual_r": 29.6,
-      "trailing_expr": 0.1563,
+      "annual_r": 30.5,
+      "trailing_expr": 0.1612,
       "trailing_n": 205,
-      "trailing_wr": 0.429,
-      "months_negative": 1,
-      "session_regime": "HOT",
-      "status": "DEPLOY",
-      "status_reason": "Session HOT (+0.1054), ExpR=+0.1563, N=205"
-    },
-    {
-      "strategy_id": "MGC_TOKYO_OPEN_E2_RR1.0_CB1_ORB_G5",
-      "instrument": "MGC",
-      "orb_label": "TOKYO_OPEN",
-      "rr_target": 1.0,
-      "filter_type": "ORB_G5",
-      "annual_r": 27.9,
-      "trailing_expr": 0.2322,
-      "trailing_n": 120,
-      "trailing_wr": 0.658,
+      "trailing_wr": 0.41,
       "months_negative": 0,
       "session_regime": "HOT",
       "status": "DEPLOY",
-      "status_reason": "Session HOT (+0.0605), ExpR=+0.2322, N=120"
+      "status_reason": "Session HOT (+0.1054), ExpR=+0.1612, N=205"
     },
     {
       "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50",
@@ -109,21 +109,6 @@
       "status_reason": "Session HOT (+0.0824), ExpR=+0.1042, N=226"
     },
     {
-      "strategy_id": "MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G5",
-      "instrument": "MGC",
-      "orb_label": "EUROPE_FLOW",
-      "rr_target": 1.0,
-      "filter_type": "ORB_G5",
-      "annual_r": 21.4,
-      "trailing_expr": 0.2381,
-      "trailing_n": 90,
-      "trailing_wr": 0.667,
-      "months_negative": 0,
-      "session_regime": "FLAT",
-      "status": "DEPLOY",
-      "status_reason": "Session HOT (+0.0243), ExpR=+0.2381, N=90"
-    },
-    {
       "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10",
       "instrument": "MNQ",
       "orb_label": "US_DATA_1000",
@@ -137,35 +122,26 @@
       "session_regime": "FLAT",
       "status": "DEPLOY",
       "status_reason": "Session HOT (+0.0158), ExpR=+0.0781, N=247"
+    },
+    {
+      "strategy_id": "MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6",
+      "instrument": "MGC",
+      "orb_label": "EUROPE_FLOW",
+      "rr_target": 1.0,
+      "filter_type": "ORB_G6",
+      "annual_r": 17.3,
+      "trailing_expr": 0.2033,
+      "trailing_n": 64,
+      "trailing_wr": 0.641,
+      "months_negative": 0,
+      "session_regime": "FLAT",
+      "status": "DEPLOY",
+      "status_reason": "Session HOT (+0.0243), ExpR=+0.2033, N=64"
     }
   ],
   "paused": [
     {
-      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
-      "reason": "Session regime COLD (-0.1005)"
-    },
-    {
-      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10",
-      "reason": "Session regime COLD (-0.1005)"
-    },
-    {
-      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT12_S075",
-      "reason": "Session regime COLD (-0.1005)"
-    },
-    {
-      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5",
-      "reason": "Session regime COLD (-0.1005)"
-    },
-    {
-      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5_S075",
-      "reason": "Session regime COLD (-0.1005)"
-    },
-    {
-      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G6",
-      "reason": "Session regime COLD (-0.1005)"
-    },
-    {
-      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G6_S075",
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8_S075",
       "reason": "Session regime COLD (-0.1005)"
     },
     {
@@ -173,27 +149,23 @@
       "reason": "Session regime COLD (-0.1005)"
     },
     {
-      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8_S075",
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G6_S075",
       "reason": "Session regime COLD (-0.1005)"
     },
     {
-      "strategy_id": "MES_SINGAPORE_OPEN_E2_RR4.0_CB1_COST_LT08_S075",
-      "reason": "Session regime COLD (-0.0203)"
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10",
+      "reason": "Session regime COLD (-0.1005)"
     },
     {
-      "strategy_id": "MES_SINGAPORE_OPEN_E1_RR2.5_CB3_ORB_G8_S075",
-      "reason": "Session regime COLD (-0.0203)"
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
+      "reason": "Session regime COLD (-0.1005)"
     },
     {
-      "strategy_id": "MES_SINGAPORE_OPEN_E2_RR1.5_CB1_COST_LT08_S075",
-      "reason": "Session regime COLD (-0.0203)"
+      "strategy_id": "MES_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G6",
+      "reason": "Session regime COLD (-0.0638)"
     },
     {
-      "strategy_id": "MES_SINGAPORE_OPEN_E2_RR1.5_CB1_ORB_G8_S075",
-      "reason": "Session regime COLD (-0.0203)"
-    },
-    {
-      "strategy_id": "MES_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT08_S075",
+      "strategy_id": "MES_SINGAPORE_OPEN_E2_RR2.5_CB1_ORB_G8_S075",
       "reason": "Session regime COLD (-0.0203)"
     },
     {
@@ -201,9 +173,21 @@
       "reason": "Session regime COLD (-0.0203)"
     },
     {
-      "strategy_id": "MES_SINGAPORE_OPEN_E2_RR2.5_CB1_ORB_G8_S075",
+      "strategy_id": "MES_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT08_S075",
+      "reason": "Session regime COLD (-0.0203)"
+    },
+    {
+      "strategy_id": "MES_SINGAPORE_OPEN_E2_RR1.5_CB1_ORB_G8_S075",
+      "reason": "Session regime COLD (-0.0203)"
+    },
+    {
+      "strategy_id": "MES_SINGAPORE_OPEN_E2_RR1.5_CB1_COST_LT08_S075",
+      "reason": "Session regime COLD (-0.0203)"
+    },
+    {
+      "strategy_id": "MES_SINGAPORE_OPEN_E1_RR1.5_CB1_COST_LT08_S075",
       "reason": "Session regime COLD (-0.0203)"
     }
   ],
-  "all_scores_count": 117
+  "all_scores_count": 124
 }

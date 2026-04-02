@@ -1,7 +1,7 @@
 # Pre-Registration: MNQ E2 RR1.0 Verified Sessions
 
 **Date:** 2026-03-20
-**Status:** PRE-REGISTERED (frozen before 2026 holdout test)
+**Status:** COMPLETED (holdout test run 2026-04-02, 2026 data now included in discovery)
 **Author:** Terminal audit, independently verified
 
 ## Strategies
