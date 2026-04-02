@@ -7,55 +7,14 @@ isAutomated: MUST be true for all bot-placed orders (Tradovate requirement).
 """
 
 import logging
-import random
 import time
 
-import requests
-
 from ..broker_base import BrokerAuth, BrokerRouter
+from .http import RateLimitExhausted, request_with_retry
 
 log = logging.getLogger(__name__)
 
 _DEFAULT_PRICE_COLLAR_PCT = 0.005
-_429_MAX_RETRIES = 3
-_429_BACKOFF_BASE = 1.0
-_429_BACKOFF_MAX = 30.0
-_429_JITTER_FACTOR = 0.2
-
-
-class RateLimitExhausted(Exception):
-    """Raised when 429 retries are exhausted."""
-
-    pass
-
-
-def _backoff_wait(attempt: int) -> float:
-    base_wait = min(_429_BACKOFF_BASE * (2**attempt), _429_BACKOFF_MAX)
-    jitter = base_wait * _429_JITTER_FACTOR * (2 * random.random() - 1)
-    return max(0.1, base_wait + jitter)
-
-
-def _request_with_retry(
-    method: str,
-    url: str,
-    headers: dict,
-    json_body: dict | None = None,
-    timeout: float = 5,
-) -> requests.Response:
-    """HTTP request with 429 rate-limit retry and exponential backoff."""
-    func = requests.post if method == "POST" else requests.get
-    kwargs: dict = {"headers": headers, "timeout": timeout}
-    if json_body is not None:
-        kwargs["json"] = json_body
-    for attempt in range(_429_MAX_RETRIES + 1):
-        resp = func(url, **kwargs)
-        if resp.status_code != 429:
-            return resp
-        if attempt < _429_MAX_RETRIES:
-            wait = _backoff_wait(attempt)
-            log.warning("HTTP 429 on %s (attempt %d) — retrying in %.1fs", url.split("/")[-1], attempt + 1, wait)
-            time.sleep(wait)
-    raise RateLimitExhausted(f"429 exhausted after {_429_MAX_RETRIES + 1} attempts on {url.split('/')[-1]}")
 
 
 class TradovateOrderRouter(BrokerRouter):
@@ -155,7 +114,7 @@ class TradovateOrderRouter(BrokerRouter):
         endpoint = "order/placeOSO" if has_bracket else "order/placeorder"
 
         t0 = time.monotonic()
-        resp = _request_with_retry("POST", self._url(endpoint), self.auth.headers(), json_body=spec)
+        resp = request_with_retry("POST", self._url(endpoint), self.auth.headers(), json_body=spec)
         elapsed_ms = (time.monotonic() - t0) * 1000
         resp.raise_for_status()
         data = resp.json()
@@ -201,7 +160,7 @@ class TradovateOrderRouter(BrokerRouter):
     def cancel(self, order_id: int) -> None:
         if self.auth is None:
             raise RuntimeError(f"Cannot cancel order {order_id} — no auth")
-        resp = _request_with_retry(
+        resp = request_with_retry(
             "POST",
             self._url("order/cancelorder"),
             self.auth.headers(),
@@ -265,7 +224,7 @@ class TradovateOrderRouter(BrokerRouter):
     def query_order_status(self, order_id: int) -> dict:
         if self.auth is None:
             raise RuntimeError("No auth — cannot query order status")
-        resp = _request_with_retry("GET", self._url(f"order/item?id={order_id}"), self.auth.headers())
+        resp = request_with_retry("GET", self._url(f"order/item?id={order_id}"), self.auth.headers())
         resp.raise_for_status()
         data = resp.json()
         status = data.get("ordStatus", "Unknown")
@@ -279,7 +238,7 @@ class TradovateOrderRouter(BrokerRouter):
     def query_open_orders(self) -> list[dict]:
         if self.auth is None:
             return []
-        resp = _request_with_retry(
+        resp = request_with_retry(
             "GET",
             self._url(f"order/ldeps?masterid={self.account_id}"),
             self.auth.headers(),

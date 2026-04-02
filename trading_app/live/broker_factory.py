@@ -14,7 +14,7 @@ VALID_BROKERS = ("projectx", "tradovate")
 
 class BrokerComponents(TypedDict):
     auth: BrokerAuth
-    feed_class: type[BrokerFeed]
+    feed_class: type[BrokerFeed] | None  # None for order-only brokers (use master feed)
     router_class: type[BrokerRouter]
     contracts_class: type[BrokerContracts]
     positions_class: type[BrokerPositions]
