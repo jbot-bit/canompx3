@@ -35,7 +35,12 @@ import duckdb
 
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.paper_trade_logger import LANES
+from trading_app.paper_trade_logger import _build_lanes
+from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+# Build lanes from first active profile
+_active_profile = next((pid for pid, p in ACCOUNT_PROFILES.items() if p.active), None)
+LANES = _build_lanes(_active_profile) if _active_profile else ()
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -192,8 +197,11 @@ def compute_live_orb(instrument: str, orb_label: str, orb_minutes: int,
 # ---------------------------------------------------------------------------
 
 
-def check_overnight_range(instrument: str, trading_day: date) -> float | None:
-    """Compute overnight range from bars_1m (prev session close to current)."""
+def check_overnight_range(instrument: str, trading_day: date) -> tuple[float, bool] | None:
+    """Query overnight range from daily_features (batch-built, may be stale).
+
+    Returns (value, is_current) or None. is_current=False means using prev day's data.
+    """
     try:
         con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
         try:
@@ -210,7 +218,7 @@ def check_overnight_range(instrument: str, trading_day: date) -> float | None:
             ).fetchone()
 
             if row and row[0] is not None:
-                return float(row[0])
+                return float(row[0]), True
 
             # Try previous trading day if today's not built yet
             td_prev = td - timedelta(days=1)
@@ -225,7 +233,7 @@ def check_overnight_range(instrument: str, trading_day: date) -> float | None:
             ).fetchone()
 
             if row and row[0] is not None:
-                return float(row[0])
+                return float(row[0]), False  # prev day — stale
 
             return None
         finally:
@@ -313,14 +321,12 @@ def evaluate_filter_post_orb(lane, orb: dict) -> bool:
     if ft == "NO_FILTER":
         return True
 
-    if ft == "COST_LT08":
-        # MNQ friction = $2.74, MGC = $5.74
-        friction = 2.74 if lane.instrument == "MNQ" else 5.74
-        return (friction / (orb_size * 2.0)) < 0.08
+    if ft in ("COST_LT08", "COST_LT10"):
+        from pipeline.cost_model import COST_SPECS
 
-    if ft == "COST_LT10":
-        friction = 2.74 if lane.instrument == "MNQ" else 5.74
-        return (friction / (orb_size * 2.0)) < 0.10
+        friction = COST_SPECS[lane.instrument].total_friction
+        threshold = 0.08 if ft == "COST_LT08" else 0.10
+        return (friction / (orb_size * 2.0)) < threshold
 
     if ft.startswith("ORB_G"):
         # ORB size gate: G4=4pts, G5=5pts, etc.
@@ -381,12 +387,14 @@ def scan_and_alert(alerted: dict[str, set[str]]) -> dict[str, set[str]]:
             if lane.filter_type in PRE_SESSION_FILTERS:
                 if lane.filter_type.startswith("OVNRNG"):
                     threshold = 100  # OVNRNG_100
-                    ovn = check_overnight_range(lane.instrument, trading_day)
-                    if ovn is not None:
+                    result = check_overnight_range(lane.instrument, trading_day)
+                    if result is not None:
+                        ovn, is_current = result
+                        stale = "" if is_current else " (prev day — verify)"
                         if ovn >= threshold:
-                            filter_result = f"Overnight range: {ovn:.0f} pts >= {threshold} PASS"
+                            filter_result = f"Overnight range: {ovn:.0f} pts >= {threshold} PASS{stale}"
                         else:
-                            filter_result = f"Overnight range: {ovn:.0f} pts < {threshold} FAIL — SKIP"
+                            filter_result = f"Overnight range: {ovn:.0f} pts < {threshold} FAIL — SKIP{stale}"
                             alerted.setdefault("post", set()).add(
                                 f"{lane.lane_name}_{today_cal}_post"
                             )  # No need for phase 2
