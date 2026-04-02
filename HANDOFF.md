@@ -6,6 +6,31 @@
 
 ---
 
+## Update (Apr 2 — Session 2: Rebuild Analysis + Lane Swap + CME_PRECLOSE DEAD)
+
+### Completed
+- **16yr rebuild analysis** — literature-grounded (Carver Table 5, Chan p.130, CUSUM paper). Absolute vs self-normalizing filter classification. MNQ eras not significantly different (t=-1.97). MGC already has WF override. No additional rebuild needed.
+- **Trailing stats in trade sheet** — shows 12mo trailing WR/ExpR from lane_allocator (green `12mo` badge) instead of 16yr blended average. All-time stats in tooltip. Grounded: Carver Ch.11-12 (deployment=trailing window).
+- **Allocator lane swap** — 5 old MNQ-only lanes → 2 MGC + 3 MNQ. First MGC deployment (TOKYO_OPEN + EUROPE_FLOW). 117 post-rebuild strategies scored, 47 deployable.
+- **CME_PRECLOSE holdout test** — **CRITICAL: 22 FAIL, 0 PASS.** Strongest validated session (Sharpe 2.0, 25 strategies) is DEAD in 2026 sacred holdout. MES all negative. MNQ RR1.0 flat (-0.01). OVNRNG_50 filter produced zero trades. Pre-registered test = no selection bias.
+- **Ghost strategy cleanup** — all "not in validated_setups" warnings eliminated.
+- **Allocator UX stage** closed (was already complete from prior session).
+
+### Key Findings
+- **CME_PRECLOSE = DEAD in forward.** Replace the deployed CME_PRECLOSE lane. Candidates: COMEX_SETTLE (still positive), EUROPE_FLOW, TOKYO_OPEN.
+- **117 strategies survive 16yr** (was 210 pre-rebuild). MNQ 91, MES 21, MGC 5.
+- **Absolute filters (ORB_G*) are regime-dependent** but MNQ eras not significantly different. Safe to use full data.
+- **RESEARCH_RULES.md:162 confirmed** — "NEVER assume stationarity. G5+ filters become untradeable if gold returns to $1800."
+- **Lane registry limitation** — keyed by session, so two instruments on same session (MGC+MNQ at EUROPE_FLOW) = second overwrites first. Pre-existing design issue.
+
+### Not Done
+- Replace CME_PRECLOSE lane with a session that works in 2026
+- Investigate why OVNRNG_50 produced zero 2026 trades at CME_PRECLOSE
+- Apply lane swap to Tradeify/TopStep profiles (currently only Apex updated)
+- Re-run trade sheet to verify no more ghost warnings
+
+---
+
 ## Update (Apr 2 — Trade Sheet V3: Unified Timeline + Regime Awareness)
 
 ### Completed
