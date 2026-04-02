@@ -6,8 +6,8 @@ POST /v1/auth/accesstokenrequest with {name, password, cid, sec, deviceId}
 Token lifetime: ~24h (expirationTime in response). Refresh via /auth/renewaccesstoken.
 
 Env vars:
-    TRADOVATE_USERNAME  — account username
-    TRADOVATE_PASSWORD  — account password
+    TRADOVATE_USER      — account username (also accepts TRADOVATE_USERNAME)
+    TRADOVATE_PASS      — account password (also accepts TRADOVATE_PASSWORD)
     TRADOVATE_CID       — client app ID (from Tradovate API key page)
     TRADOVATE_SEC       — API secret (from Tradovate API key page)
     TRADOVATE_DEVICE_ID — unique device identifier (generate once, reuse)
@@ -46,7 +46,7 @@ class TradovateAuth(BrokerAuth):
         self._md_token: str | None = None
         self._user_id: int | None = None
         self._acquired_at: float = 0
-        self._token_lifetime: float = 23 * 3600  # refresh after 23h
+        self._token_lifetime: float = 75 * 60  # refresh after 75min (tokens expire at 90min)
         self._auth_healthy = True
         self._base = _base_url()
 
@@ -109,8 +109,8 @@ class TradovateAuth(BrokerAuth):
         raise RuntimeError(f"Tradovate auth failed after {_MAX_RETRIES} attempts: {last_error}") from last_error
 
     def _login(self) -> str:
-        name = os.environ["TRADOVATE_USERNAME"]
-        password = os.environ["TRADOVATE_PASSWORD"]
+        name = os.environ.get("TRADOVATE_USER") or os.environ["TRADOVATE_USERNAME"]
+        password = os.environ.get("TRADOVATE_PASS") or os.environ["TRADOVATE_PASSWORD"]
         cid = int(os.environ["TRADOVATE_CID"])
         sec = os.environ["TRADOVATE_SEC"]
         device_id = os.environ.get("TRADOVATE_DEVICE_ID", str(uuid.uuid4()))
@@ -137,12 +137,13 @@ class TradovateAuth(BrokerAuth):
         if "errorText" in data:
             raise RuntimeError(f"Tradovate auth failed: {data['errorText']}")
 
-        self._access_token = data["accessToken"]
+        token: str = data["accessToken"]
+        self._access_token = token
         self._md_token = data.get("mdAccessToken")
         self._user_id = data.get("userId")
         self._acquired_at = time.time()
         log.info("Tradovate auth: token acquired (userId=%s, demo=%s)", self._user_id, self._base == DEMO_URL)
-        return self._access_token
+        return token
 
     def _renew_or_login(self) -> None:
         """Try token renewal; fall back to full login with retry."""
