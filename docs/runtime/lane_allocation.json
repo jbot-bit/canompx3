@@ -4,6 +4,21 @@
   "profile_id": "apex_100k_manual",
   "lanes": [
     {
+      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
+      "instrument": "MNQ",
+      "orb_label": "SINGAPORE_OPEN",
+      "rr_target": 2.0,
+      "filter_type": "COST_LT12",
+      "annual_r": 45.8,
+      "trailing_expr": 0.2599,
+      "trailing_n": 191,
+      "trailing_wr": 0.45,
+      "months_negative": 1,
+      "session_regime": "HOT",
+      "status": "DEPLOY",
+      "status_reason": "Session HOT (+0.1696), ExpR=+0.2599, N=191"
+    },
+    {
       "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
       "instrument": "MNQ",
       "orb_label": "COMEX_SETTLE",
@@ -15,38 +30,38 @@
       "trailing_wr": 0.54,
       "months_negative": 0,
       "session_regime": "HOT",
-      "status": "RESUME",
-      "status_reason": "Recovery confirmed: 2 positive months, annual_r=41.9"
-    },
-    {
-      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ORB_G6",
-      "instrument": "MNQ",
-      "orb_label": "SINGAPORE_OPEN",
-      "rr_target": 1.5,
-      "filter_type": "ORB_G6",
-      "annual_r": 39.7,
-      "trailing_expr": 0.1748,
-      "trailing_n": 246,
-      "trailing_wr": 0.512,
-      "months_negative": 1,
-      "session_regime": "HOT",
       "status": "DEPLOY",
-      "status_reason": "Trailing ExpR=0.1748, N=246, 13mo"
+      "status_reason": "Session HOT (+0.0759), ExpR=+0.2820, N=161"
     },
     {
-      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6",
+      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
       "instrument": "MNQ",
       "orb_label": "EUROPE_FLOW",
-      "rr_target": 1.0,
-      "filter_type": "ORB_G6",
-      "annual_r": 31.2,
-      "trailing_expr": 0.1332,
-      "trailing_n": 254,
-      "trailing_wr": 0.61,
+      "rr_target": 3.0,
+      "filter_type": "COST_LT10",
+      "annual_r": 40.5,
+      "trailing_expr": 0.2107,
+      "trailing_n": 208,
+      "trailing_wr": 0.322,
       "months_negative": 1,
       "session_regime": "HOT",
       "status": "DEPLOY",
-      "status_reason": "Trailing ExpR=0.1332, N=254, 13mo"
+      "status_reason": "Session HOT (+0.1323), ExpR=+0.2107, N=208"
+    },
+    {
+      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT10_S075",
+      "instrument": "MNQ",
+      "orb_label": "TOKYO_OPEN",
+      "rr_target": 1.5,
+      "filter_type": "COST_LT10",
+      "annual_r": 29.6,
+      "trailing_expr": 0.1563,
+      "trailing_n": 205,
+      "trailing_wr": 0.429,
+      "months_negative": 1,
+      "session_regime": "HOT",
+      "status": "DEPLOY",
+      "status_reason": "Session HOT (+0.1054), ExpR=+0.1563, N=205"
     },
     {
       "strategy_id": "MGC_TOKYO_OPEN_E2_RR1.0_CB1_ORB_G5",
@@ -61,22 +76,22 @@
       "months_negative": 0,
       "session_regime": "HOT",
       "status": "DEPLOY",
-      "status_reason": "Trailing ExpR=0.2322, N=120, 12mo"
+      "status_reason": "Session HOT (+0.0605), ExpR=+0.2322, N=120"
     },
     {
-      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT10",
+      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50",
       "instrument": "MNQ",
-      "orb_label": "TOKYO_OPEN",
-      "rr_target": 1.5,
-      "filter_type": "COST_LT10",
-      "annual_r": 26.5,
-      "trailing_expr": 0.1402,
-      "trailing_n": 205,
-      "trailing_wr": 0.483,
+      "orb_label": "NYSE_OPEN",
+      "rr_target": 1.0,
+      "filter_type": "OVNRNG_50",
+      "annual_r": 27.1,
+      "trailing_expr": 0.1197,
+      "trailing_n": 245,
+      "trailing_wr": 0.571,
       "months_negative": 0,
       "session_regime": "HOT",
-      "status": "RESUME",
-      "status_reason": "Recovery confirmed: 2 positive months, annual_r=26.5"
+      "status": "DEPLOY",
+      "status_reason": "Session HOT (+0.0935), ExpR=+0.1197, N=245"
     },
     {
       "strategy_id": "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075",
@@ -91,7 +106,7 @@
       "months_negative": 0,
       "session_regime": "HOT",
       "status": "DEPLOY",
-      "status_reason": "Trailing ExpR=0.1042, N=226, 13mo"
+      "status_reason": "Session HOT (+0.0824), ExpR=+0.1042, N=226"
     },
     {
       "strategy_id": "MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G5",
@@ -106,7 +121,7 @@
       "months_negative": 0,
       "session_regime": "FLAT",
       "status": "DEPLOY",
-      "status_reason": "Trailing ExpR=0.2381, N=90, 12mo"
+      "status_reason": "Session HOT (+0.0243), ExpR=+0.2381, N=90"
     },
     {
       "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10",
@@ -121,236 +136,73 @@
       "months_negative": 0,
       "session_regime": "FLAT",
       "status": "DEPLOY",
-      "status_reason": "Trailing ExpR=0.0781, N=247, 13mo"
-    },
-    {
-      "strategy_id": "MES_LONDON_METALS_E2_RR2.5_CB1_ORB_VOL_8K_S075",
-      "instrument": "MES",
-      "orb_label": "LONDON_METALS",
-      "rr_target": 2.5,
-      "filter_type": "ORB_VOL_8K",
-      "annual_r": 9.7,
-      "trailing_expr": 0.2703,
-      "trailing_n": 6,
-      "trailing_wr": 0.333,
-      "months_negative": 1,
-      "session_regime": "FLAT",
-      "status": "DEPLOY",
-      "status_reason": "Thin data (N=6), session regime HOT (0.0291)"
+      "status_reason": "Session HOT (+0.0158), ExpR=+0.0781, N=247"
     }
   ],
   "paused": [
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.2487 < -0.1"
+      "reason": "Session regime COLD (-0.1005)"
     },
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT10",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.1940 < -0.1"
+      "reason": "Session regime COLD (-0.1005)"
     },
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT12_S075",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.3524 < -0.1"
+      "reason": "Session regime COLD (-0.1005)"
     },
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.3250 < -0.1"
+      "reason": "Session regime COLD (-0.1005)"
     },
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5_S075",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.3410 < -0.1"
+      "reason": "Session regime COLD (-0.1005)"
     },
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G6",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.3002 < -0.1"
+      "reason": "Session regime COLD (-0.1005)"
     },
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G6_S075",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.3684 < -0.1"
+      "reason": "Session regime COLD (-0.1005)"
     },
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.2560 < -0.1"
+      "reason": "Session regime COLD (-0.1005)"
     },
     {
       "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8_S075",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.1059 < -0.1"
-    },
-    {
-      "strategy_id": "MES_NYSE_OPEN_E2_RR2.0_CB1_ORB_G5",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.1465 < -0.1"
-    },
-    {
-      "strategy_id": "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.1155 < -0.1"
-    },
-    {
-      "strategy_id": "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT10",
-      "reason": "Recovering: 0 positive months < 2 needed"
+      "reason": "Session regime COLD (-0.1005)"
     },
     {
       "strategy_id": "MES_SINGAPORE_OPEN_E2_RR4.0_CB1_COST_LT08_S075",
-      "reason": "Thin data (N=15), session regime COLD (-0.0203)"
+      "reason": "Session regime COLD (-0.0203)"
     },
     {
       "strategy_id": "MES_SINGAPORE_OPEN_E1_RR2.5_CB3_ORB_G8_S075",
-      "reason": "Recovering: 1 positive months < 2 needed"
+      "reason": "Session regime COLD (-0.0203)"
     },
     {
       "strategy_id": "MES_SINGAPORE_OPEN_E2_RR1.5_CB1_COST_LT08_S075",
-      "reason": "Thin data (N=15), session regime COLD (-0.0203)"
+      "reason": "Session regime COLD (-0.0203)"
     },
     {
       "strategy_id": "MES_SINGAPORE_OPEN_E2_RR1.5_CB1_ORB_G8_S075",
-      "reason": "Recovering: 1 positive months < 2 needed"
+      "reason": "Session regime COLD (-0.0203)"
     },
     {
       "strategy_id": "MES_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT08_S075",
-      "reason": "Thin data (N=15), session regime COLD (-0.0203)"
+      "reason": "Session regime COLD (-0.0203)"
     },
     {
       "strategy_id": "MES_SINGAPORE_OPEN_E2_RR2.5_CB1_COST_LT08_S075",
-      "reason": "Thin data (N=15), session regime COLD (-0.0203)"
+      "reason": "Session regime COLD (-0.0203)"
     },
     {
       "strategy_id": "MES_SINGAPORE_OPEN_E2_RR2.5_CB1_ORB_G8_S075",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MGC_EUROPE_FLOW_E2_RR1.0_CB1_COST_LT10",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MGC_LONDON_METALS_E1_RR1.5_CB2_ORB_G6_NOMON_S075",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.1955 < -0.1"
-    },
-    {
-      "strategy_id": "MGC_US_DATA_1000_E2_RR1.0_CB1_ORB_G6",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_CME_PRECLOSE_E2_RR1.5_CB1_COST_LT08",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.2372 < -0.1"
-    },
-    {
-      "strategy_id": "MNQ_CME_PRECLOSE_E2_RR1.5_CB1_COST_LT10",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.2372 < -0.1"
-    },
-    {
-      "strategy_id": "MNQ_CME_PRECLOSE_E2_RR1.5_CB1_COST_LT12_S075",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_CME_PRECLOSE_E2_RR1.5_CB1_OVNRNG_50",
-      "reason": "Magnitude override: 3mo avg ExpR=-0.2590 < -0.1"
-    },
-    {
-      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_COST_LT08",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT08",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_COST_LT08",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_OVNRNG_100_S075",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT08",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT10",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G8",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50_S075",
-      "reason": "2 consecutive months negative"
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT08",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT10",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_G6",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_VOL_16K",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_NYSE_OPEN_E2_RR1.5_CB1_OVNRNG_50",
-      "reason": "Recovering: 1 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ORB_VOL_4K",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_ORB_G6",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_ORB_G6_S075",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR2.5_CB1_ORB_G6",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_SINGAPORE_OPEN_E2_RR2.5_CB1_ORB_G6_S075",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.0_CB1_COST_LT10_S075",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.0_CB1_COST_LT12_S075",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.0_CB1_ORB_G8_S075",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT10_S075",
-      "reason": "Recovering: 0 positive months < 2 needed"
-    },
-    {
-      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.0_CB1_OVNRNG_100",
-      "reason": "Recovering: 1 positive months < 2 needed"
+      "reason": "Session regime COLD (-0.0203)"
     }
   ],
   "all_scores_count": 117

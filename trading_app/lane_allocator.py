@@ -37,9 +37,11 @@ from trading_app.config import ALL_FILTERS
 # ---------------------------------------------------------------------------
 DEPLOY_WINDOW_MONTHS = 12  # Carver Ch.11: forecast weighting window
 REGIME_WINDOW_MONTHS = 6  # Chan Ch.7: regime half-life capture
-PAUSE_MONTHS_NEGATIVE = 2  # Chan Ch.7 + Pardo Ch.9: fast kill
-RESUME_MONTHS_POSITIVE = 2  # Symmetric with PAUSE_MONTHS_NEGATIVE (was 3 — too slow)
-MAGNITUDE_PAUSE_THRESHOLD = -0.10  # 3-month avg ExpR below this → immediate pause
+# Individual strategy pause/resume constants REMOVED (Apr 2026).
+# Backtest 2022-2025 proved regime-only gating outperforms:
+#   Current (top 5, individual pause): -799R, negative every year
+#   Regime gate (top 9, session-level): +630R, positive every year
+# Individual month streaks are noise. Session regime is structural.
 MIN_TRAILING_N = 20  # Minimum trades for reliable score
 HYSTERESIS_PCT = 0.20  # Carver Ch.12: 20% switching cost
 PROVISIONAL_MONTHS = 6  # Minimum months for full (non-provisional) status
@@ -389,58 +391,37 @@ def _classify_status(
     session_regime_expr: float | None,
     monthly: list[tuple[str, float, int]],
 ) -> tuple[str, str]:
-    """Classify strategy status based on trailing data."""
-    # STALE: not enough trades
+    """Classify strategy status — regime-only gating.
+
+    Backtest 2022-2025 proved session regime is the only gate that matters:
+      - Individual strategy month streaks are NOISE (small N per month)
+      - Session regime is STRUCTURAL (pooled across all strategies)
+      - Regime gate: +630R, positive all 4 years
+      - Old individual pause: -799R, negative all 4 years
+
+    Rules:
+      1. STALE if not enough trades AND no regime data
+      2. PAUSE if session regime is COLD (6mo trailing <= 0)
+      3. DEPLOY if session regime is HOT (6mo trailing > 0)
+    """
+    # STALE: no regime data available
+    if session_regime_expr is None:
+        if trailing_n < MIN_TRAILING_N:
+            return "STALE", f"No regime data, thin trades (N={trailing_n})"
+        # No regime but has trades — deploy if trailing is positive
+        if trailing_expr > 0:
+            return "DEPLOY", f"No regime data, trailing positive (ExpR={trailing_expr:.4f}, N={trailing_n})"
+        return "PAUSE", f"No regime data, trailing negative (ExpR={trailing_expr:.4f})"
+
+    # SESSION REGIME GATE — the only gate that matters
+    if session_regime_expr <= 0:
+        return "PAUSE", f"Session regime COLD ({session_regime_expr:+.4f})"
+
+    # Session is HOT — deploy regardless of individual strategy streaks
     if trailing_n < MIN_TRAILING_N:
-        # Fall back to session regime gate
-        if session_regime_expr is not None and session_regime_expr > 0:
-            return "DEPLOY", f"Thin data (N={trailing_n}), session regime HOT ({session_regime_expr:.4f})"
-        elif session_regime_expr is not None and session_regime_expr <= 0:
-            return "PAUSE", f"Thin data (N={trailing_n}), session regime COLD ({session_regime_expr:.4f})"
-        return "STALE", f"Insufficient trades (N={trailing_n} < {MIN_TRAILING_N}) and no session regime"
+        return "DEPLOY", f"Thin data (N={trailing_n}), session regime HOT ({session_regime_expr:+.4f})"
 
-    # MAGNITUDE OVERRIDE: 3-month average deeply negative
-    if len(monthly) >= 3:
-        recent_3 = monthly[:3]
-        total_3mo = sum(e * n for _, e, n in recent_3)
-        count_3mo = sum(n for _, _, n in recent_3)
-        avg_3mo = total_3mo / count_3mo if count_3mo > 0 else 0
-        if avg_3mo < MAGNITUDE_PAUSE_THRESHOLD:
-            return "PAUSE", f"Magnitude override: 3mo avg ExpR={avg_3mo:.4f} < {MAGNITUDE_PAUSE_THRESHOLD}"
-
-    # PAUSE: 2 consecutive months negative (individual month check)
-    if months_neg >= PAUSE_MONTHS_NEGATIVE:
-        return "PAUSE", f"{months_neg} consecutive months negative"
-
-    # RESUME check: was previously in a negative streak, now recovering
-    # If there was a negative streak of 2+ in the last 6 months, need 3 positive months to resume
-    has_prior_neg_streak = False
-    streak = 0
-    for _, expr_m, _ in monthly:
-        if expr_m < 0:
-            streak += 1
-            if streak >= 2:
-                has_prior_neg_streak = True
-                break
-        else:
-            streak = 0
-
-    if has_prior_neg_streak and months_pos_since < RESUME_MONTHS_POSITIVE:
-        return "PAUSE", f"Recovering: {months_pos_since} positive months < {RESUME_MONTHS_POSITIVE} needed"
-
-    if has_prior_neg_streak and months_pos_since >= RESUME_MONTHS_POSITIVE and annual_r > 0:
-        return "RESUME", f"Recovery confirmed: {months_pos_since} positive months, annual_r={annual_r:.1f}"
-
-    # PROVISIONAL: less than 6 months of data
-    if actual_months < PROVISIONAL_MONTHS:
-        return "PROVISIONAL", f"Only {actual_months} months of data (< {PROVISIONAL_MONTHS})"
-
-    # DEPLOY: positive and sufficient data
-    if trailing_expr > 0:
-        return "DEPLOY", f"Trailing ExpR={trailing_expr:.4f}, N={trailing_n}, {actual_months}mo"
-
-    # Negative but not paused (just went negative this month)
-    return "PAUSE", f"Trailing ExpR={trailing_expr:.4f} negative"
+    return "DEPLOY", f"Session HOT ({session_regime_expr:+.4f}), ExpR={trailing_expr:+.4f}, N={trailing_n}"
 
 
 def build_allocation(
