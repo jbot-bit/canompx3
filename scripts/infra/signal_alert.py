@@ -79,12 +79,8 @@ def send_telegram(text: str) -> bool:
         log.warning("Telegram not configured (missing BOT_TOKEN or CHAT_ID)")
         return False
 
-    data = urllib.parse.urlencode(
-        {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
-    ).encode()
-    req = urllib.request.Request(
-        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data=data
-    )
+    data = urllib.parse.urlencode({"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}).encode()
+    req = urllib.request.Request(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data=data)
     try:
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read())
         return resp.get("ok", False)
@@ -100,9 +96,9 @@ def send_telegram(text: str) -> bool:
 
 def get_brisbane_now() -> datetime:
     """Current time in Brisbane (UTC+10, no DST)."""
-    from datetime import timezone
+    from datetime import UTC, timezone
 
-    utc_now = datetime.now(timezone.utc)
+    utc_now = datetime.now(UTC)
     brisbane_offset = timezone(timedelta(hours=10))
     return utc_now.astimezone(brisbane_offset)
 
@@ -287,8 +283,7 @@ def scan_and_alert(already_alerted: set[str]) -> set[str]:
 def main():
     if "--test" in sys.argv:
         ok = send_telegram(
-            "<b>SIGNAL TEST</b>\n\ncanompx3 trade alerter is working.\n"
-            "You will receive alerts before each session."
+            "<b>SIGNAL TEST</b>\n\ncanompx3 trade alerter is working.\nYou will receive alerts before each session."
         )
         print(f"Test alert: {'OK' if ok else 'FAIL'}")
         return
