@@ -359,27 +359,45 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         active=True,  # Upgraded from 50K — $3K DD gives $2,250 margin
         allowed_sessions=None,  # All validated sessions eligible (was 5 — blocked 4 profitable sessions)
         daily_lanes=(
-            # ALLOCATOR REBALANCE 2026-04-02 (post-16yr rebuild).
-            # 117 strategies scored, 47 deployable. Top 5 by annual_r.
-            # First MGC lanes — TOKYO_OPEN and EUROPE_FLOW both HOT regime.
-            # SM=1.0 validated (account applies 0.75x at execution).
+            # ALLOCATOR REBALANCE 2026-04-03 (post-2026 rebuild + regime-only gating).
+            # 124 validated, 112 deployable, 12 paused. Top 9 by annual_r.
+            # DD: $1560 / $3000 (52%). All sessions HOT.
+            # max_orb_size_pts: ~1.5x per-session P90 from adversarial audit.
             DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12",
+                "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
+                "MGC",
+                "CME_REOPEN",
+                max_orb_size_pts=30.0,  # MGC P90=20.4
+            ),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
+                "MNQ",
+                "SINGAPORE_OPEN",
+                max_orb_size_pts=90.0,  # MNQ SING P90=59
+            ),
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
                 "MNQ",
                 "COMEX_SETTLE",
-                max_orb_size_pts=80.0,
+                max_orb_size_pts=80.0,  # MNQ COMEX P90=52
             ),
             DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6",
+                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
                 "MNQ",
                 "EUROPE_FLOW",
+                max_orb_size_pts=120.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
+                "MNQ",
+                "TOKYO_OPEN",
                 max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
-                "MGC_TOKYO_OPEN_E2_RR1.0_CB1_ORB_G5",
-                "MGC",
-                "TOKYO_OPEN",
-                max_orb_size_pts=40.0,
+                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50",
+                "MNQ",
+                "NYSE_OPEN",
+                max_orb_size_pts=300.0,  # MNQ NYSE_OPEN P90=212
             ),
             DailyLaneSpec(
                 "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075",
@@ -388,15 +406,22 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=120.0,
             ),
             DailyLaneSpec(
-                "MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G5",
+                "MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10",
+                "MNQ",
+                "US_DATA_1000",
+                max_orb_size_pts=150.0,  # MNQ US_DATA P90=101
+            ),
+            DailyLaneSpec(
+                "MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6",
                 "MGC",
                 "EUROPE_FLOW",
-                max_orb_size_pts=40.0,
+                max_orb_size_pts=30.0,  # MGC P90=20.4
             ),
         ),
         notes=(
-            "$100K Apex. 5 lanes (2 MGC + 3 MNQ). Allocator rebalance 2026-04-02 "
-            "post-16yr rebuild. 117 validated, 47 deployable. $3K DD."
+            "$100K Apex. 9 lanes (2 MGC + 7 MNQ). Allocator rebalance 2026-04-03 "
+            "post-2026 rebuild + regime-only gating. 124 validated, 112 deployable. "
+            "DD $1560/$3000 (52%)."
         ),
     ),
     # =========================================================================
