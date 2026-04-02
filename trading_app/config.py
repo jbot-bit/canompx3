@@ -534,6 +534,76 @@ class OvernightRangeAbsFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class PrevDayRangeNormFilter(StrategyFilter):
+    """Filter by prior day range normalized by ATR-20.
+
+    Gates on prev_day_range / atr_20 >= min_ratio. Higher ratio means
+    yesterday was more volatile relative to the recent regime.
+
+    No lookahead: prev_day_range and atr_20 are strictly prior-day values,
+    safe for ALL sessions.
+
+    Fail-closed: missing prev_day_range or atr_20 = ineligible day.
+
+    @research-source scripts/research/scan_presession_features.py
+    @research-source scripts/research/scan_presession_t2t8.py
+    @entry-models E2
+    @revalidated-for E2 (Apr 2026)
+    """
+
+    min_ratio: float
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        pdr = row.get("prev_day_range")
+        atr = row.get("atr_20")
+        if pdr is None or atr is None or atr <= 0:
+            return False  # fail-closed
+        return pdr / atr >= self.min_ratio
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        if "prev_day_range" not in df.columns or "atr_20" not in df.columns:
+            return pd.Series(False, index=df.index)
+        valid = df["prev_day_range"].notna() & df["atr_20"].notna() & (df["atr_20"] > 0)
+        ratio = df["prev_day_range"] / df["atr_20"].replace(0, float("nan"))
+        return valid & (ratio >= self.min_ratio)
+
+
+@dataclass(frozen=True)
+class GapNormFilter(StrategyFilter):
+    """Filter by absolute gap size normalized by ATR-20.
+
+    Gates on abs(gap_open_points) / atr_20 >= min_ratio. Higher ratio means
+    a larger overnight gap relative to the regime.
+
+    No lookahead: gap_open_points is computed from prior close to current open,
+    safe for ALL sessions.
+
+    Fail-closed: missing gap_open_points or atr_20 = ineligible day.
+
+    @research-source scripts/research/scan_presession_features.py
+    @research-source scripts/research/scan_presession_t2t8.py
+    @entry-models E2
+    @revalidated-for E2 (Apr 2026)
+    """
+
+    min_ratio: float
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        gap = row.get("gap_open_points")
+        atr = row.get("atr_20")
+        if gap is None or atr is None or atr <= 0:
+            return False  # fail-closed
+        return abs(gap) / atr >= self.min_ratio
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        if "gap_open_points" not in df.columns or "atr_20" not in df.columns:
+            return pd.Series(False, index=df.index)
+        valid = df["gap_open_points"].notna() & df["atr_20"].notna() & (df["atr_20"] > 0)
+        ratio = df["gap_open_points"].abs() / df["atr_20"].replace(0, float("nan"))
+        return valid & (ratio >= self.min_ratio)
+
+
+@dataclass(frozen=True)
 class DirectionFilter(StrategyFilter):
     """Filter by breakout direction (long/short only)."""
 
@@ -1152,6 +1222,47 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
         description="Overnight range >= 100 points",
         min_range=100.0,
     ),
+    # Pre-session volatility filters (Apr 2026 research scan).
+    # VALIDATED: bigger prev_day_range/atr predicts better ORB WR (+7-9% spread).
+    # Direction: HIGH_BETTER — trade when prior day was volatile, skip quiet days.
+    # No lookahead: prev_day_range and atr_20 are strictly prior-day values.
+    # Routed to LONDON_METALS + EUROPE_FLOW via get_filters_for_grid().
+    # @research-source scripts/research/scan_presession_features.py
+    # @research-source scripts/research/scan_presession_t2t8.py
+    # @entry-models E2
+    # @revalidated-for E2 (Apr 2026)
+    "PDR_R080": PrevDayRangeNormFilter(
+        filter_type="PDR_R080",
+        description="prev_day_range/atr >= 0.80 (~Q55, passes ~45%)",
+        min_ratio=0.80,
+    ),
+    "PDR_R105": PrevDayRangeNormFilter(
+        filter_type="PDR_R105",
+        description="prev_day_range/atr >= 1.05 (~Q60, passes ~40%)",
+        min_ratio=1.05,
+    ),
+    "PDR_R125": PrevDayRangeNormFilter(
+        filter_type="PDR_R125",
+        description="prev_day_range/atr >= 1.25 (~Q75, passes ~25%)",
+        min_ratio=1.25,
+    ),
+    # Gap size filter for CME_REOPEN MGC only (+9.2% WR spread, p=0.009).
+    # Bigger gaps = stronger conviction at session open = better ORB resolution.
+    # No lookahead: gap_open_points is prior close to current open.
+    # Routed to CME_REOPEN via get_filters_for_grid().
+    # @research-source scripts/research/scan_presession_t2t8.py
+    # @entry-models E2
+    # @revalidated-for E2 (Apr 2026)
+    "GAP_R005": GapNormFilter(
+        filter_type="GAP_R005",
+        description="abs(gap)/atr >= 0.005 (~Q50, passes ~50%)",
+        min_ratio=0.005,
+    ),
+    "GAP_R015": GapNormFilter(
+        filter_type="GAP_R015",
+        description="abs(gap)/atr >= 0.015 (~Q75, passes ~25%)",
+        min_ratio=0.015,
+    ),
 }
 
 # Calendar skip overlays (NOT in discovery grid — applied at portfolio/paper_trader level)
@@ -1280,6 +1391,25 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
     if session in _overnight_clean_sessions:
         for ovn_key in ("OVNRNG_10", "OVNRNG_25", "OVNRNG_50", "OVNRNG_100"):
             filters[ovn_key] = ALL_FILTERS[ovn_key]
+
+    # Pre-session volatility filters (Apr 2026 research scan).
+    # VALIDATED: bigger prev_day_range/atr predicts better ORB WR.
+    # PDR: LONDON_METALS MGC (p=0.003, 9/10yr), EUROPE_FLOW MGC+MNQ (p=0.008/0.017).
+    # GAP: CME_REOPEN MGC only (p=0.009, WFE=0.68).
+    # No lookahead — prev_day_range/atr_20 and gap_open_points are strictly prior-day.
+    # @research-source scripts/research/scan_presession_t2t8.py
+    _pdr_validated = {
+        ("MGC", "LONDON_METALS"),
+        ("MGC", "EUROPE_FLOW"),
+        ("MNQ", "EUROPE_FLOW"),
+    }
+    if (instrument, session) in _pdr_validated:
+        for pdr_key in ("PDR_R080", "PDR_R105", "PDR_R125"):
+            filters[pdr_key] = ALL_FILTERS[pdr_key]
+
+    if instrument == "MGC" and session == "CME_REOPEN":
+        for gap_key in ("GAP_R005", "GAP_R015"):
+            filters[gap_key] = ALL_FILTERS[gap_key]
 
     # REMOVED (Feb 2026): NO_DBL_BREAK / NODBL composites for SINGAPORE_OPEN.
     # double_break column is LOOK-AHEAD — computed over full session AFTER
