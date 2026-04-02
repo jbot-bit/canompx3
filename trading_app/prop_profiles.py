@@ -852,7 +852,7 @@ def get_profile(profile_id: str) -> AccountProfile:
     return ACCOUNT_PROFILES[profile_id]
 
 
-def _parse_strategy_id(strategy_id: str) -> dict:
+def parse_strategy_id(strategy_id: str) -> dict:
     """Parse strategy parameters from canonical strategy_id string.
 
     Format: {INSTR}_{SESSION}_{ENTRY}_{RR}_{CB}_{FILTER}[_O{MIN}][_S{MULT}]
@@ -940,7 +940,7 @@ def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
     registry: dict[str, dict] = {}
 
     for lane in profile.daily_lanes:
-        parsed = _parse_strategy_id(lane.strategy_id)
+        parsed = parse_strategy_id(lane.strategy_id)
         is_half = lane.planned_stop_multiplier is not None or "0.5x" in lane.execution_notes
         shadow = lane.instrument == "MGC" and lane.orb_label == "TOKYO_OPEN"  # MGC is shadow-only
 
@@ -973,7 +973,7 @@ def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
         if ts_profile:
             for lane in ts_profile.daily_lanes:
                 if lane.orb_label not in registry:
-                    parsed = _parse_strategy_id(lane.strategy_id)
+                    parsed = parse_strategy_id(lane.strategy_id)
                     registry[lane.orb_label] = {
                         "strategy_id": lane.strategy_id,
                         "instrument": lane.instrument,

@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 """
-Backfill and sync paper trades for Apex MNQ lanes into gold.db.
+Backfill and sync paper trades for prop lanes into gold.db.
 
-Reads pre-computed outcomes from orb_outcomes x daily_features,
-applies each lane's filter gate, and writes to paper_trades table.
+Reads pre-computed outcomes from orb_outcomes, applies each lane's filter
+via matches_row (canonical filter interface from config.py), and writes
+to paper_trades table.
+
+Lanes derived from prop_profiles.py at runtime — zero hardcoded strategy_ids.
+Filter application uses matches_row, not SQL WHERE fragments.
 
 Usage:
     python -m trading_app.paper_trade_logger           # Full backfill from 2026-01-01
     python -m trading_app.paper_trade_logger --sync     # Incremental (new days only)
     python -m trading_app.paper_trade_logger --dry-run  # Show what would be inserted
+    python -m trading_app.paper_trade_logger --profile apex_100k_manual
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ import duckdb
 from pipeline.db_config import configure_connection
 from pipeline.log import get_logger
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
 
 logger = get_logger(__name__)
 
@@ -32,11 +38,7 @@ OOS_START = datetime.date(2026, 1, 1)
 
 @dataclass(frozen=True)
 class LaneDef:
-    """Definition of one paper-trade lane.
-
-    Lane definitions here mirror prop_profiles.py daily_lanes for the
-    apex_150k profile. If lanes change there, update here too.
-    """
+    """Definition of one paper-trade lane (derived from prop_profiles)."""
 
     strategy_id: str
     lane_name: str
@@ -47,124 +49,98 @@ class LaneDef:
     entry_model: str
     confirm_bars: int
     filter_type: str
-    filter_sql: str  # WHERE clause fragment referencing daily_features alias
 
 
-# ── 5 Apex MNQ lanes ──
-# SYNC GUARD: strategy_ids MUST match prop_profiles.py apex_50k_manual.daily_lanes.
-# filter_sql is unique to paper_trade_logger (backtest replay) and cannot be derived
-# from prop_profiles. When lanes change in prop_profiles, update here too.
-# Drift check verifies sync at runtime (check_drift.py).
-LANES: tuple[LaneDef, ...] = (
-    # HONEST REBUILD 2026-04-02: E2 fakeout-inclusive, pre-entry-only filters.
-    # Zero look-ahead. All filter_sql uses data available at ORB-end time.
-    LaneDef(
-        strategy_id="MNQ_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
-        lane_name="CME_PRE_COST",
-        instrument="MNQ",
-        orb_label="CME_PRECLOSE",
-        orb_minutes=5,
-        rr_target=1.0,
-        entry_model="E2",
-        confirm_bars=1,
-        filter_type="COST_LT08",
-        filter_sql="(2.74 / (orb_size * 2.0)) < 0.08",  # MNQ friction=$2.74/RT
-    ),
-    LaneDef(
-        strategy_id="MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_8K",
-        lane_name="COMEX_ORBVOL",
-        instrument="MNQ",
-        orb_label="COMEX_SETTLE",
-        orb_minutes=5,
-        rr_target=1.5,
-        entry_model="E2",
-        confirm_bars=1,
-        filter_type="ORB_VOL_8K",
-        filter_sql="orb_dollar_volume >= 8000",  # ORB window dollar volume
-    ),
-    LaneDef(
-        strategy_id="MNQ_EUROPE_FLOW_E2_RR2.0_CB1_OVNRNG_100",
-        lane_name="EUROPE_OVNRNG",
-        instrument="MNQ",
-        orb_label="EUROPE_FLOW",
-        orb_minutes=5,
-        rr_target=2.0,
-        entry_model="E2",
-        confirm_bars=1,
-        filter_type="OVNRNG_100",
-        filter_sql="overnight_range_pts >= 100",  # pre-session data
-    ),
-    LaneDef(
-        strategy_id="MNQ_NYSE_CLOSE_E2_RR1.0_CB1_OVNRNG_100",
-        lane_name="NYSE_CLOSE_OVNRNG",
-        instrument="MNQ",
-        orb_label="NYSE_CLOSE",
-        orb_minutes=5,
-        rr_target=1.0,
-        entry_model="E2",
-        confirm_bars=1,
-        filter_type="OVNRNG_100",
-        filter_sql="overnight_range_pts >= 100",  # pre-session data
-    ),
-    LaneDef(
-        strategy_id="MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08",
-        lane_name="TOKYO_COST",
-        instrument="MNQ",
-        orb_label="TOKYO_OPEN",
-        orb_minutes=5,
-        rr_target=1.5,
-        entry_model="E2",
-        confirm_bars=1,
-        filter_type="COST_LT08",
-        filter_sql="(2.74 / (orb_size * 2.0)) < 0.08",  # MNQ friction=$2.74/RT
-    ),
-)
+def _build_lanes(profile_id: str | None = None) -> tuple[LaneDef, ...]:
+    """Build lane definitions from a prop profile's daily_lanes.
+
+    Single source of truth: prop_profiles.py → parse_strategy_id.
+    No hardcoded strategy_ids or filter_sql in this module.
+    If profile_id is None, uses first active profile.
+    """
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, parse_strategy_id
+
+    if profile_id is None:
+        for pid, p in ACCOUNT_PROFILES.items():
+            if p.active:
+                profile_id = pid
+                break
+        else:
+            raise RuntimeError("No active profiles found")
+
+    profile = ACCOUNT_PROFILES[profile_id]
+    lanes = []
+    for spec in profile.daily_lanes:
+        parsed = parse_strategy_id(spec.strategy_id)
+        lane_name = f"{spec.orb_label}_{parsed['filter_type'][:12]}"
+        lanes.append(
+            LaneDef(
+                strategy_id=spec.strategy_id,
+                lane_name=lane_name,
+                instrument=spec.instrument,
+                orb_label=spec.orb_label,
+                orb_minutes=parsed["orb_minutes"],
+                rr_target=parsed["rr_target"],
+                entry_model=parsed["entry_model"],
+                confirm_bars=parsed["confirm_bars"],
+                filter_type=parsed["filter_type"],
+            )
+        )
+    return tuple(lanes)
 
 
-def _validate_lanes() -> None:
-    """Assert LANES match canonical apex_50k_manual profile in prop_profiles.py."""
-    from trading_app.prop_profiles import ACCOUNT_PROFILES
+def _inject_cross_asset_atrs(
+    con: duckdb.DuckDBPyConnection,
+    feat_row: dict,
+    instrument: str,
+    trading_day: datetime.date,
+) -> None:
+    """Inject cross-asset ATR percentiles into daily features row.
 
-    expected = {lane.strategy_id for lane in ACCOUNT_PROFILES["apex_50k_manual"].daily_lanes}
-    actual = {lane.strategy_id for lane in LANES}
-    if actual != expected:
-        diff = actual.symmetric_difference(expected)
-        raise RuntimeError(f"Lane mismatch vs prop_profiles.py apex_50k_manual: {diff}")
+    Required for CrossAssetATRFilter.matches_row (fail-closed without it).
+    Mirrors paper_trader._inject_cross_asset_atrs_for_replay.
+    """
+    cross_sources = {f.source_instrument for f in ALL_FILTERS.values() if isinstance(f, CrossAssetATRFilter)}
+    for source in cross_sources:
+        if source == instrument:
+            continue
+        src_result = con.execute(
+            """SELECT atr_20_pct FROM daily_features
+               WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL
+                 AND trading_day = ?
+               LIMIT 1""",
+            [source, trading_day],
+        ).fetchone()
+        if src_result and src_result[0] is not None:
+            feat_row[f"cross_atr_{source}_pct"] = float(src_result[0])
 
 
-def _is_cross_asset(lane: LaneDef) -> bool:
-    return lane.filter_type.startswith("X_")
-
-
-def _build_query(lane: LaneDef, *, since: datetime.date | None = None) -> tuple[str, list]:
-    """Build the SELECT query for one lane. Returns (sql, params)."""
+def _query_outcomes(
+    con: duckdb.DuckDBPyConnection,
+    lane: LaneDef,
+    since: datetime.date | None = None,
+) -> list[tuple]:
+    """Query raw outcomes for a lane (no filter applied — filter in Python)."""
     start = since if since is not None else OOS_START
-
-    if _is_cross_asset(lane):
-        # Cross-asset filter: join MES daily_features for atr_20_pct
-        sql = f"""
-            SELECT
-                o.trading_day, o.orb_label, o.entry_ts,
-                CASE WHEN o.entry_price > o.stop_price THEN 'long' ELSE 'short' END,
-                o.entry_price, o.stop_price, o.target_price,
-                o.exit_price, o.exit_ts, o.outcome, o.pnl_r
-            FROM orb_outcomes o
-            JOIN daily_features d_mes
-                ON d_mes.symbol = 'MES'
-                AND d_mes.trading_day = o.trading_day
-                AND d_mes.orb_minutes = 5
-            WHERE o.symbol = ?
-              AND o.orb_label = ?
-              AND o.orb_minutes = ?
-              AND o.rr_target = ?
-              AND o.entry_model = ?
-              AND o.confirm_bars = ?
-              AND o.outcome IS NOT NULL
-              AND {lane.filter_sql}
-              AND o.trading_day >= ?
-            ORDER BY o.trading_day
+    return con.execute(
         """
-        params = [
+        SELECT
+            o.trading_day, o.orb_label, o.entry_ts,
+            CASE WHEN o.entry_price > o.stop_price THEN 'long' ELSE 'short' END,
+            o.entry_price, o.stop_price, o.target_price,
+            o.exit_price, o.exit_ts, o.outcome, o.pnl_r
+        FROM orb_outcomes o
+        WHERE o.symbol = ?
+          AND o.orb_label = ?
+          AND o.orb_minutes = ?
+          AND o.rr_target = ?
+          AND o.entry_model = ?
+          AND o.confirm_bars = ?
+          AND o.outcome IS NOT NULL
+          AND o.trading_day >= ?
+        ORDER BY o.trading_day
+        """,
+        [
             lane.instrument,
             lane.orb_label,
             lane.orb_minutes,
@@ -172,55 +148,63 @@ def _build_query(lane: LaneDef, *, since: datetime.date | None = None) -> tuple[
             lane.entry_model,
             lane.confirm_bars,
             start,
-        ]
-    else:
-        # Same-instrument filter: join own daily_features at matching aperture
-        sql = f"""
-            SELECT
-                o.trading_day, o.orb_label, o.entry_ts,
-                CASE WHEN o.entry_price > o.stop_price THEN 'long' ELSE 'short' END,
-                o.entry_price, o.stop_price, o.target_price,
-                o.exit_price, o.exit_ts, o.outcome, o.pnl_r
-            FROM orb_outcomes o
-            JOIN daily_features d
-                ON d.symbol = o.symbol
-                AND d.trading_day = o.trading_day
-                AND d.orb_minutes = ?
-            WHERE o.symbol = ?
-              AND o.orb_label = ?
-              AND o.orb_minutes = ?
-              AND o.rr_target = ?
-              AND o.entry_model = ?
-              AND o.confirm_bars = ?
-              AND o.outcome IS NOT NULL
-              AND {lane.filter_sql}
-              AND o.trading_day >= ?
-            ORDER BY o.trading_day
-        """
-        params = [
-            lane.orb_minutes,  # daily_features JOIN
-            lane.instrument,
-            lane.orb_label,
-            lane.orb_minutes,
-            lane.rr_target,
-            lane.entry_model,
-            lane.confirm_bars,
-            start,
-        ]
+        ],
+    ).fetchall()
 
-    return sql, params
+
+def _load_features(
+    con: duckdb.DuckDBPyConnection,
+    instrument: str,
+    since: datetime.date | None = None,
+) -> dict[datetime.date, dict]:
+    """Load daily_features indexed by trading_day."""
+    start = since if since is not None else OOS_START
+    rows = con.execute(
+        """
+        SELECT * FROM daily_features
+        WHERE symbol = ? AND orb_minutes = 5 AND trading_day >= ?
+        ORDER BY trading_day
+        """,
+        [instrument, start],
+    ).fetchall()
+    cols = [desc[0] for desc in con.description]
+    result = {}
+    for row in rows:
+        d = dict(zip(cols, row, strict=False))
+        result[d["trading_day"]] = d
+    return result
+
+
+def _is_cross_asset_filter(filter_type: str) -> bool:
+    """Check if this filter needs cross-asset ATR injection."""
+    f = ALL_FILTERS.get(filter_type)
+    return isinstance(f, CrossAssetATRFilter)
 
 
 def backfill(
     db_path: Path | str | None = None,
     sync: bool = False,
     dry_run: bool = False,
+    profile_id: str | None = None,
 ) -> dict[str, dict]:
-    """Backfill paper_trades from orb_outcomes x daily_features.
+    """Backfill paper_trades from orb_outcomes, filtered by matches_row.
 
-    Returns dict of lane_name -> {count, cumulative_r, min_day, max_day}.
+    Returns dict of strategy_id -> {count, cumulative_r, min_day, max_day}.
     """
-    _validate_lanes()
+    # Resolve profile
+    if profile_id is None:
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        for pid, p in ACCOUNT_PROFILES.items():
+            if p.active:
+                profile_id = pid
+                break
+        else:
+            raise RuntimeError("No active profiles found")
+
+    lanes = _build_lanes(profile_id)
+    logger.info(f"Profile: {profile_id}, {len(lanes)} lanes")
+
     path = str(db_path) if db_path else str(GOLD_DB_PATH)
     results: dict[str, dict] = {}
 
@@ -232,7 +216,7 @@ def backfill(
     with duckdb.connect(path) as con:
         configure_connection(con, writing=True)
 
-        for lane in LANES:
+        for lane in lanes:
             since = None
             if sync:
                 row = con.execute(
@@ -242,28 +226,63 @@ def backfill(
                 if row and row[0] is not None:
                     since = row[0] + datetime.timedelta(days=1)
 
-            sql, params = _build_query(lane, since=since)
-            rows = con.execute(sql, params).fetchall()
+            # 1. Load raw outcomes (no filter)
+            raw_outcomes = _query_outcomes(con, lane, since=since)
 
-            # ── Fail-closed OOS boundary assertion ────────────────────
-            for r in rows:
+            # 2. Load daily_features for filter application
+            features = _load_features(con, lane.instrument, since=since)
+
+            # 3. Apply filter via matches_row (canonical filter interface)
+            strat_filter = ALL_FILTERS.get(lane.filter_type)
+            if strat_filter is None:
+                logger.warning(f"Unknown filter {lane.filter_type} — skipping {lane.strategy_id}")
+                results[lane.strategy_id] = {"count": 0, "cumulative_r": 0, "min_day": None, "max_day": None}
+                continue
+
+            needs_cross = _is_cross_asset_filter(lane.filter_type)
+            filtered_rows = []
+            for r in raw_outcomes:
                 trading_day = r[0]
                 if isinstance(trading_day, datetime.datetime):
                     trading_day = trading_day.date()
+
+                # OOS boundary assertion (fail-closed)
                 if trading_day < OOS_START:
                     raise ValueError(
                         f"OOS BOUNDARY VIOLATION: {lane.strategy_id} row "
                         f"trading_day={trading_day} < {OOS_START}. Aborting."
                     )
 
+                feat_row = features.get(trading_day)
+                if feat_row is None:
+                    continue
+
+                # Break must exist for this session
+                if feat_row.get(f"orb_{lane.orb_label}_break_dir") is None:
+                    continue
+
+                # Inject cross-asset ATR if needed
+                if needs_cross:
+                    _inject_cross_asset_atrs(con, feat_row, lane.instrument, trading_day)
+
+                # Apply filter
+                if not strat_filter.matches_row(feat_row, lane.orb_label):
+                    continue
+
+                filtered_rows.append(r)
+
             if dry_run:
-                total_r = sum(r[10] for r in rows if r[10] is not None)
-                logger.info(f"[DRY RUN] {lane.lane_name}: {len(rows)} trades, cumulative R={total_r:+.2f}")
-                results[lane.lane_name] = {
-                    "count": len(rows),
+                total_r = sum(r[10] for r in filtered_rows if r[10] is not None)
+                logger.info(
+                    f"[DRY RUN] {lane.strategy_id}: "
+                    f"{len(filtered_rows)}/{len(raw_outcomes)} trades pass filter, "
+                    f"cumulative R={total_r:+.2f}"
+                )
+                results[lane.strategy_id] = {
+                    "count": len(filtered_rows),
                     "cumulative_r": round(total_r, 4),
-                    "min_day": str(rows[0][0]) if rows else None,
-                    "max_day": str(rows[-1][0]) if rows else None,
+                    "min_day": str(filtered_rows[0][0]) if filtered_rows else None,
+                    "max_day": str(filtered_rows[-1][0]) if filtered_rows else None,
                 }
                 continue
 
@@ -279,7 +298,7 @@ def backfill(
                     [lane.strategy_id],
                 )
 
-            if rows:
+            if filtered_rows:
                 insert_data = [
                     (
                         r[0],
@@ -294,14 +313,14 @@ def backfill(
                         r[9],
                         r[10],
                         lane.strategy_id,
-                        lane.lane_name,
+                        f"{lane.orb_label}_{lane.filter_type[:12]}",
                         lane.instrument,
                         lane.orb_minutes,
                         lane.rr_target,
                         lane.filter_type,
                         lane.entry_model,
                     )
-                    for r in rows
+                    for r in filtered_rows
                 ]
                 con.executemany(
                     """
@@ -327,7 +346,7 @@ def backfill(
                 [lane.strategy_id],
             ).fetchone()
 
-            results[lane.lane_name] = {
+            results[lane.strategy_id] = {
                 "count": summary[0],
                 "cumulative_r": round(summary[1], 4),
                 "min_day": str(summary[2]) if summary[2] else None,
@@ -335,7 +354,9 @@ def backfill(
             }
 
             action = "synced" if sync else "backfilled"
-            logger.info(f"{lane.lane_name}: {action} {len(rows)} new rows (total {summary[0]}, cumR={summary[1]:+.2f})")
+            logger.info(
+                f"{lane.strategy_id}: {action} {len(filtered_rows)} trades (total {summary[0]}, cumR={summary[1]:+.2f})"
+            )
 
     return results
 
@@ -344,9 +365,10 @@ def main():
     parser = argparse.ArgumentParser(description="Paper trade logger")
     parser.add_argument("--sync", action="store_true", help="Incremental sync (new days only)")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be inserted")
+    parser.add_argument("--profile", type=str, default=None, help="Profile ID (default: first active)")
     args = parser.parse_args()
 
-    results = backfill(sync=args.sync, dry_run=args.dry_run)
+    results = backfill(sync=args.sync, dry_run=args.dry_run, profile_id=args.profile)
 
     print()
     print("=" * 60)
@@ -354,13 +376,13 @@ def main():
     print("=" * 60)
     total_trades = 0
     total_r = 0.0
-    for lane_name, info in results.items():
+    for sid, info in results.items():
         n = info["count"]
         cr = info["cumulative_r"]
         total_trades += n
         total_r += cr
-        print(f"  {lane_name:<20s}  trades={n:3d}  cumR={cr:+.2f}  ({info['min_day']} to {info['max_day']})")
-    print(f"  {'TOTAL':<20s}  trades={total_trades:3d}  cumR={total_r:+.2f}")
+        print(f"  {sid:<55s}  trades={n:3d}  cumR={cr:+.2f}")
+    print(f"  {'TOTAL':<55s}  trades={total_trades:3d}  cumR={total_r:+.2f}")
     print("=" * 60)
 
 

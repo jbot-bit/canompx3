@@ -231,6 +231,24 @@ def check_forward_monitor_freshness() -> tuple[bool, str]:
         return True, "WARN: forward_monitor output unreadable"
 
 
+def check_allocation_staleness_gate() -> tuple[bool, str]:
+    """Check if lane allocation is stale (>35d warn, >60d block).
+
+    Uses check_allocation_staleness from lane_allocator.py.
+    Missing file = BLOCK (fail-closed).
+    """
+    from trading_app.lane_allocator import check_allocation_staleness
+
+    status, days_old = check_allocation_staleness()
+    if status == "BLOCK":
+        if days_old == -1:
+            return True, "WARN: No lane_allocation.json found. Run: python scripts/tools/rebalance_lanes.py"
+        return False, f"BLOCKED: allocation {days_old}d old (>60d). Run: python scripts/tools/rebalance_lanes.py"
+    if status == "WARNING":
+        return True, f"WARN: allocation {days_old}d old (>35d). Rebalance soon."
+    return True, f"Allocation {days_old}d old — fresh"
+
+
 def check_signal_exists(con, session: str, lane: dict, today: date) -> tuple[bool, str]:
     """Check if today has outcome data for this session (signal fired)."""
     instrument = lane["instrument"]
@@ -277,6 +295,10 @@ def run_checks(session: str) -> bool:
 
         ok, msg = check_forward_monitor_freshness()
         results.append(("Forward monitor", ok, msg))
+
+        # Allocation staleness
+        ok, msg = check_allocation_staleness_gate()
+        results.append(("Allocation staleness", ok, msg))
 
         # Account state
         ok, msg = check_hwm_tracker()
