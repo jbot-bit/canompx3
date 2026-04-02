@@ -51,7 +51,7 @@ class LaneDef:
     filter_type: str
 
 
-def _build_lanes(profile_id: str | None = None) -> tuple[LaneDef, ...]:
+def build_lanes(profile_id: str | None = None) -> tuple[LaneDef, ...]:
     """Build lane definitions from a prop profile's daily_lanes.
 
     Single source of truth: prop_profiles.py → parse_strategy_id.
@@ -202,7 +202,7 @@ def backfill(
         else:
             raise RuntimeError("No active profiles found")
 
-    lanes = _build_lanes(profile_id)
+    lanes = build_lanes(profile_id)
     logger.info(f"Profile: {profile_id}, {len(lanes)} lanes")
 
     path = str(db_path) if db_path else str(GOLD_DB_PATH)

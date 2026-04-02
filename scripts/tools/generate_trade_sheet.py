@@ -328,9 +328,7 @@ def _enrich_trades_with_regime(
 
     for t in all_trades:
         # Filter status
-        t["filter_status"] = _classify_filter_status(
-            t["filter_type"], t["instrument"], regime_ctx
-        )
+        t["filter_status"] = _classify_filter_status(t["filter_type"], t["instrument"], regime_ctx)
 
         # Trades per year — prefer DB trades_per_year, fall back to sample/years
         sid = t["strategy_id"]
@@ -602,6 +600,14 @@ def collect_manual_candidates(
                        ORDER BY vs.expectancy_r DESC
                    ) as rn
             FROM validated_setups vs
+            INNER JOIN family_rr_locks frl
+              ON vs.instrument = frl.instrument
+              AND vs.orb_label = frl.orb_label
+              AND vs.filter_type = frl.filter_type
+              AND vs.entry_model = frl.entry_model
+              AND vs.orb_minutes = frl.orb_minutes
+              AND vs.confirm_bars = frl.confirm_bars
+              AND vs.rr_target = frl.locked_rr
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id
             WHERE LOWER(vs.status) = 'active'
@@ -741,9 +747,7 @@ def _build_session_cards(
 
         # Instrument badges for header
         session_instruments = sorted(set(t["instrument"] for t in session_trades))
-        instr_badges_html = " ".join(
-            f'<span class="badge badge-instr">{instr}</span>' for instr in session_instruments
-        )
+        instr_badges_html = " ".join(f'<span class="badge badge-instr">{instr}</span>' for instr in session_instruments)
 
         # Count live + avail
         n_live = sum(1 for t in session_trades if t.get("section") == "deployed")
@@ -772,14 +776,9 @@ def _build_session_cards(
                         chip_cls = "regime-normal"
                     else:
                         chip_cls = "regime-low"
-                    chips.append(
-                        f'<span class="regime-chip {chip_cls}">'
-                        f"{instr} ATR {atr:.0f}th pct</span>"
-                    )
+                    chips.append(f'<span class="regime-chip {chip_cls}">{instr} ATR {atr:.0f}th pct</span>')
             if chips:
-                regime_bar_html = (
-                    '<div class="regime-bar">' + " ".join(chips) + "</div>"
-                )
+                regime_bar_html = '<div class="regime-bar">' + " ".join(chips) + "</div>"
 
         rows_html = ""
         for t in session_trades:
@@ -996,8 +995,11 @@ def generate_html(
 
     # Build unified session cards
     cards_html = _build_session_cards(
-        all_trades, session_times, profiles_used,
-        next_session=next_session, regime_ctx=regime_ctx,
+        all_trades,
+        session_times,
+        profiles_used,
+        next_session=next_session,
+        regime_ctx=regime_ctx,
     )
 
     # Instrument summary — all three sections

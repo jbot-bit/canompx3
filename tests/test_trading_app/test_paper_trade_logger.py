@@ -9,26 +9,26 @@ class TestBuildLanes:
     """Lanes derived from prop_profiles must have valid structure."""
 
     def test_lanes_match_active_profile(self):
-        """_build_lanes returns lanes matching the active profile's daily_lanes count."""
-        from trading_app.paper_trade_logger import _build_lanes
+        """build_lanes returns lanes matching the active profile's daily_lanes count."""
+        from trading_app.paper_trade_logger import build_lanes
         from trading_app.prop_profiles import ACCOUNT_PROFILES
 
         for pid, p in ACCOUNT_PROFILES.items():
             if p.active and p.daily_lanes:
-                lanes = _build_lanes(pid)
+                lanes = build_lanes(pid)
                 assert len(lanes) == len(p.daily_lanes), (
-                    f"Profile {pid}: _build_lanes returned {len(lanes)} but daily_lanes has {len(p.daily_lanes)}"
+                    f"Profile {pid}: build_lanes returned {len(lanes)} but daily_lanes has {len(p.daily_lanes)}"
                 )
                 break
 
     def test_lane_strategy_ids_match_profile(self):
         """Every lane's strategy_id must come from the profile."""
-        from trading_app.paper_trade_logger import _build_lanes
+        from trading_app.paper_trade_logger import build_lanes
         from trading_app.prop_profiles import ACCOUNT_PROFILES
 
         for pid, p in ACCOUNT_PROFILES.items():
             if p.active and p.daily_lanes:
-                lanes = _build_lanes(pid)
+                lanes = build_lanes(pid)
                 profile_ids = {spec.strategy_id for spec in p.daily_lanes}
                 lane_ids = {lane.strategy_id for lane in lanes}
                 assert lane_ids == profile_ids, f"Strategy ID mismatch in {pid}: {lane_ids ^ profile_ids}"
@@ -36,9 +36,9 @@ class TestBuildLanes:
 
     def test_all_lanes_have_required_fields(self):
         """Every lane must have valid trading parameters."""
-        from trading_app.paper_trade_logger import _build_lanes
+        from trading_app.paper_trade_logger import build_lanes
 
-        lanes = _build_lanes()  # first active profile
+        lanes = build_lanes()  # first active profile
         for lane in lanes:
             assert lane.strategy_id, "Lane missing strategy_id"
             assert lane.instrument, "Lane missing instrument"
@@ -50,9 +50,9 @@ class TestBuildLanes:
     def test_filter_type_registered(self):
         """Every lane's filter_type must exist in ALL_FILTERS."""
         from trading_app.config import ALL_FILTERS
-        from trading_app.paper_trade_logger import _build_lanes
+        from trading_app.paper_trade_logger import build_lanes
 
-        lanes = _build_lanes()
+        lanes = build_lanes()
         for lane in lanes:
             assert lane.filter_type in ALL_FILTERS, (
                 f"Lane {lane.strategy_id} filter_type '{lane.filter_type}' not in ALL_FILTERS"

@@ -35,12 +35,12 @@ import duckdb
 
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.paper_trade_logger import _build_lanes
+from trading_app.paper_trade_logger import build_lanes
 from trading_app.prop_profiles import ACCOUNT_PROFILES
 
 # Build lanes from first active profile
 _active_profile = next((pid for pid, p in ACCOUNT_PROFILES.items() if p.active), None)
-LANES = _build_lanes(_active_profile) if _active_profile else ()
+LANES = build_lanes(_active_profile) if _active_profile else ()
 
 # ---------------------------------------------------------------------------
 # Logging
