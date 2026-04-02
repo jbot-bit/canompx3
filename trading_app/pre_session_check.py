@@ -242,7 +242,7 @@ def check_allocation_staleness_gate() -> tuple[bool, str]:
     status, days_old = check_allocation_staleness()
     if status == "BLOCK":
         if days_old == -1:
-            return True, "WARN: No lane_allocation.json found. Run: python scripts/tools/rebalance_lanes.py"
+            return False, "BLOCKED: No lane_allocation.json. Run: python scripts/tools/rebalance_lanes.py"
         return False, f"BLOCKED: allocation {days_old}d old (>60d). Run: python scripts/tools/rebalance_lanes.py"
     if status == "WARNING":
         return True, f"WARN: allocation {days_old}d old (>35d). Rebalance soon."
