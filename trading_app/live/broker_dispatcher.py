@@ -102,6 +102,9 @@ class BrokerDispatcher(BrokerRouter):
         # Same-broker fan-out (e.g., CopyOrderRouter): just swap accountId
         return {**primary_spec, "accountId": router.account_id}
 
+    def query_order_status(self, order_id: int) -> dict:
+        return self.primary.query_order_status(order_id)
+
     @property
     def all_routers(self) -> list[BrokerRouter]:
         """All routers (primary + secondaries) for status/health checks."""
