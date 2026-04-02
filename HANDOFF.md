@@ -6,6 +6,32 @@
 
 ---
 
+## Update (Apr 2 — Trade Sheet V3: Unified Timeline + Regime Awareness)
+
+### Completed
+- **Trade sheet V3** (`scripts/tools/generate_trade_sheet.py`): Full rewrite of HTML generation
+  - **MANUAL section added** — REGIME tier (N>=30) strategies now visible, including MGC morning sessions (CME_REOPEN 8AM, TOKYO_OPEN 10AM). Previously ALL MGC strategies were hidden (PURGED fitness + N<100 filter).
+  - **Unified timeline** — DEPLOYED+OPPORTUNITIES+MANUAL merged into ONE card per session. No more repeated sessions. Status badges per row: LIVE (green), AVAIL (blue), MANUAL (amber).
+  - **Regime awareness** — ATR percentile banner per session (MGC 96th, MES 100th, MNQ 74th today). Filter pre-check: ACTIVE (passes today), VERIFY (can't pre-check, e.g. ORB size), INACTIVE (dimmed). Frequency column (~X/yr).
+  - **Code review**: connection leak fixed, dead CSS removed, docstring updated.
+  - Commit `d35c9a0`
+
+### Key Findings
+- **MGC edge_families PURGED is STALE** — `compute_fitness()` returns FIT for all 6 MGC strategies. The PURGED status in edge_families hasn't been updated.
+- **MGC ATR 96th percentile** — gold is in exceptional high-vol regime. ORB_G5 filter fires 93% of recent days (vs 10% historical). Trade frequency is regime-dependent.
+- **MGC regime performance split**: HIGH vol WR=63% AvgR=+0.11 vs NORMAL vol WR=78% AvgR=+0.35. Edge is weaker in HIGH vol but still positive.
+- **all_years_positive = FALSE** for all 6 MGC strategies — at least 1 losing year each.
+
+### Not Done
+- Live filter pre-check for OVNRNG filters (overnight_range_pct was NULL in latest data)
+- Regime-adjusted stats display (showing regime-specific WR/ExpR instead of all-time averages)
+- The 2 deployed strategies that warn "not in validated_setups" need investigation: `MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G4_CONT_S075` and `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL_S075`
+
+### Memory saved
+- `feedback_manual_tradebook.md` — trade book must show REGIME strategies for manual trading
+
+---
+
 ## Update (Apr 1 — Automation Infrastructure + Prop Audit + E2 Bug Discovery)
 
 ### Completed (this terminal)
