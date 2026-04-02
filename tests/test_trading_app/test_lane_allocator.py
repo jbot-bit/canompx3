@@ -181,8 +181,12 @@ def _seed_features_mixed(db_path, day_sizes, *, symbol="MNQ", break_dir="long"):
 class TestClassifyStatus:
     """Unit tests for the status classification logic."""
 
-    def test_pause_after_2_negative_months(self):
-        """Test 2: Strategy paused after 2 consecutive negative months."""
+    def test_hot_session_deploys_despite_negative_months(self):
+        """Test 2: Strategy deploys when session is HOT even with negative months.
+
+        Regime-only gating: individual month streaks are noise.
+        Backtest 2022-2025: regime gate +630R vs individual pause -799R.
+        """
         monthly = [
             ("2025-06", -0.05, 20),
             ("2025-05", -0.08, 18),
@@ -195,59 +199,54 @@ class TestClassifyStatus:
             months_neg=2,
             months_pos_since=0,
             annual_r=-2.0,
-            session_regime_expr=0.05,
+            session_regime_expr=0.05,  # HOT session
+            monthly=monthly,
+        )
+        assert status == "DEPLOY"
+        assert "HOT" in reason
+
+    def test_cold_session_pauses_despite_positive_trailing(self):
+        """Test 3: Strategy pauses when session is COLD even if trailing is positive."""
+        monthly = [
+            ("2025-06", 0.12, 20),
+            ("2025-05", 0.08, 18),
+            ("2025-04", 0.10, 22),
+        ]
+        status, reason = _classify_status(
+            trailing_expr=0.10,
+            trailing_n=60,
+            actual_months=3,
+            months_neg=0,
+            months_pos_since=3,
+            annual_r=20.0,
+            session_regime_expr=-0.03,  # COLD session
             monthly=monthly,
         )
         assert status == "PAUSE"
-        assert "2 consecutive months negative" in reason
+        assert "COLD" in reason
 
-    def test_resume_after_3_positive_months(self):
-        """Test 3: Strategy resumes after 3 positive months following a negative streak."""
-        monthly = [
-            ("2025-06", 0.12, 20),  # positive (most recent)
-            ("2025-05", 0.08, 18),  # positive
-            ("2025-04", 0.10, 22),  # positive → 3 positive since neg streak
-            ("2025-03", -0.05, 15),  # negative streak start
-            ("2025-02", -0.08, 16),  # negative streak (2 consecutive)
-            ("2025-01", 0.15, 20),  # positive before streak
-        ]
-        status, reason = _classify_status(
-            trailing_expr=0.05,
-            trailing_n=111,
-            actual_months=6,
-            months_neg=0,  # no current negative streak
-            months_pos_since=3,  # 3 positive months since last neg
-            annual_r=12.0,
-            session_regime_expr=0.05,
-            monthly=monthly,
-        )
-        assert status == "RESUME"
-        assert "Recovery confirmed" in reason
-        assert "3 positive months" in reason
+    def test_hot_session_deploys_despite_deeply_negative(self):
+        """Test 4: Even deeply negative individual strategy deploys in HOT session.
 
-    def test_magnitude_override(self):
-        """Test 4: 3mo avg ExpR < -0.10 triggers immediate pause even without consecutive negatives."""
-        # Months alternate but are deeply negative on average
+        The regime gate is the ONLY gate. Individual magnitude doesn't matter.
+        """
         monthly = [
-            ("2025-06", -0.15, 30),  # negative
-            ("2025-05", 0.02, 10),  # positive (but tiny N)
-            ("2025-04", -0.20, 25),  # negative
-            ("2025-03", 0.10, 20),  # positive
+            ("2025-06", -0.15, 30),
+            ("2025-05", 0.02, 10),
+            ("2025-04", -0.20, 25),
         ]
-        # 3-month weighted avg: (-0.15*30 + 0.02*10 + -0.20*25) / (30+10+25)
-        # = (-4.5 + 0.2 + -5.0) / 65 = -9.3/65 = -0.143
         status, reason = _classify_status(
             trailing_expr=-0.05,
             trailing_n=85,
             actual_months=4,
-            months_neg=1,  # only 1 consecutive (most recent is negative)
+            months_neg=1,
             months_pos_since=0,
             annual_r=-15.0,
-            session_regime_expr=0.05,
+            session_regime_expr=0.05,  # HOT session overrides individual
             monthly=monthly,
         )
-        assert status == "PAUSE"
-        assert "Magnitude override" in reason
+        assert status == "DEPLOY"
+        assert "HOT" in reason
 
     def test_regime_gate_hot_deploys(self):
         """Test 5a: Thin-data strategy deploys when session regime is HOT."""
@@ -277,9 +276,9 @@ class TestClassifyStatus:
             monthly=[("2025-06", -0.02, 10)],
         )
         assert status == "PAUSE"
-        assert "session regime COLD" in reason
+        assert "COLD" in reason
 
-    def test_regime_gate_none_stale(self):
+    def test_no_regime_thin_data_stale(self):
         """Test 5c: Thin-data strategy with no regime data → STALE."""
         status, reason = _classify_status(
             trailing_expr=0.0,
@@ -292,32 +291,31 @@ class TestClassifyStatus:
             monthly=[("2025-06", 0.0, 5)],
         )
         assert status == "STALE"
-        assert "Insufficient trades" in reason
+        assert "No regime data" in reason
 
-    def test_provisional_status(self):
-        """Test 13: Strategy with <6 months data gets PROVISIONAL."""
+    def test_no_regime_positive_trailing_deploys(self):
+        """Test 13: No regime data but positive trailing → DEPLOY."""
         status, reason = _classify_status(
             trailing_expr=0.10,
             trailing_n=50,
-            actual_months=3,  # < PROVISIONAL_MONTHS (6)
+            actual_months=3,
             months_neg=0,
             months_pos_since=0,
             annual_r=20.0,
-            session_regime_expr=0.05,
+            session_regime_expr=None,
             monthly=[
                 ("2025-06", 0.10, 20),
                 ("2025-05", 0.12, 15),
                 ("2025-04", 0.08, 15),
             ],
         )
-        assert status == "PROVISIONAL"
-        assert "3 months" in reason
+        assert status == "DEPLOY"
+        assert "trailing positive" in reason
 
-    def test_individual_month_negative(self):
-        """Test 16: Both individual months negative → PAUSE (not just average).
+    def test_hot_session_overrides_individual_negatives(self):
+        """Test 16: Barely negative individual months DON'T pause in HOT session.
 
-        Even if the magnitude is small, two individually negative months
-        trigger the 2-month consecutive pause rule.
+        Regime-only: individual month streaks are noise. Session regime is structural.
         """
         monthly = [
             ("2025-06", -0.01, 25),  # barely negative
@@ -328,14 +326,14 @@ class TestClassifyStatus:
             trailing_expr=0.06,  # overall positive
             trailing_n=75,
             actual_months=3,
-            months_neg=2,  # 2 consecutive individual months negative
+            months_neg=2,
             months_pos_since=0,
             annual_r=6.0,
-            session_regime_expr=0.05,
+            session_regime_expr=0.05,  # HOT
             monthly=monthly,
         )
-        assert status == "PAUSE"
-        assert "2 consecutive months negative" in reason
+        assert status == "DEPLOY"
+        assert "HOT" in reason
 
 
 # ═══════════════════════════════════════════════════════════════════
