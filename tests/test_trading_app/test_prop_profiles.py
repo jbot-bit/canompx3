@@ -101,9 +101,15 @@ class TestAccountProfile:
 
     def test_self_funded_profile(self):
         p = get_profile("self_funded_tradovate")
-        assert p.stop_multiplier == 1.0  # Self-funded = full stop (lanes validated at SM=1.0)
-        assert p.max_slots == 5
-        assert p.active is False  # Activate after Tradovate personal API test
+        assert p.account_size == 30_000
+        assert p.stop_multiplier == 0.75
+        assert p.max_slots == 11
+        assert len(p.daily_lanes) == 11
+        assert p.active is False
+        assert p.payout_policy_id == "self_funded"
+        # All lanes must have ORB caps (stress test showed uncapped tail risk)
+        for lane in p.daily_lanes:
+            assert lane.max_orb_size_pts is not None, f"{lane.strategy_id} missing ORB cap"
 
     def test_profile_copies(self):
         p = get_profile("topstep_50k")
