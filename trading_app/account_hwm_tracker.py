@@ -312,6 +312,7 @@ class AccountHWMTracker:
             )
             if self._consecutive_poll_failures >= _MAX_CONSECUTIVE_POLL_FAILURES:
                 self._halt = True
+                self._halt_reason = "POLL_FAILURE"
                 self._halt_ts = datetime.now(UTC).isoformat()
                 log.critical(
                     "HWM HALT: %d consecutive equity poll failures — halting for safety",
@@ -390,9 +391,14 @@ class AccountHWMTracker:
     def check_halt(self) -> tuple[bool, str]:
         """Check if trading should be halted. Returns (should_halt, reason).
 
-        Halt reasons: DD_TRAILING, DAILY_LOSS, WEEKLY_LOSS, or empty.
+        Halt reasons: DD_TRAILING, DAILY_LOSS, WEEKLY_LOSS, POLL_FAILURE, or empty.
         """
         if self._halt:
+            if self._halt_reason == "POLL_FAILURE":
+                return True, (
+                    f"POLL_FAILURE: {self._consecutive_poll_failures} consecutive equity poll failures "
+                    f"— halted for safety (last equity=${self._last_equity:.2f})"
+                )
             if self._halt_reason == "DAILY_LOSS":
                 daily_loss = (self._daily_start_equity or 0) - self._last_equity
                 return True, (
