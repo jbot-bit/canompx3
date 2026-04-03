@@ -1,0 +1,210 @@
+{
+  "skill": "bloomey-review",
+  "version": 1,
+  "tests": [
+    {
+      "id": "br-01",
+      "prompt": "bloomey review my changes",
+      "assertions": [
+        {
+          "id": "br-01-a1",
+          "type": "command_ran",
+          "pattern": "git diff",
+          "description": "Must run git diff to find changed files when none are specified"
+        },
+        {
+          "id": "br-01-a2",
+          "type": "regex_match",
+          "pattern": "=== BLOOMEY REVIEW ===",
+          "description": "Must use the canonical output header"
+        },
+        {
+          "id": "br-01-a3",
+          "type": "regex_match",
+          "pattern": "Grade:\\s*[A-F][+-]?",
+          "description": "Must assign a grade (A through F)"
+        },
+        {
+          "id": "br-01-a4",
+          "type": "regex_match",
+          "pattern": "Section A.*Seven Sins",
+          "description": "Must include Section A Seven Sins scan"
+        },
+        {
+          "id": "br-01-a5",
+          "type": "regex_match",
+          "pattern": "Section B.*Canonical Integrity",
+          "description": "Must include Section B Canonical Integrity"
+        },
+        {
+          "id": "br-01-a6",
+          "type": "regex_match",
+          "pattern": "Section C.*Statistical Rigor",
+          "description": "Must include Section C Statistical Rigor"
+        },
+        {
+          "id": "br-01-a7",
+          "type": "regex_match",
+          "pattern": "Section D.*Production Readiness",
+          "description": "Must include Section D Production Readiness"
+        },
+        {
+          "id": "br-01-a8",
+          "type": "regex_match",
+          "pattern": "(Action items|Verdict)",
+          "description": "Must include Verdict and Action items"
+        }
+      ]
+    },
+    {
+      "id": "br-02",
+      "prompt": "review outcome_builder.py for look-ahead bias",
+      "assertions": [
+        {
+          "id": "br-02-a1",
+          "type": "regex_match",
+          "pattern": "(Read|file_path).*outcome_builder",
+          "description": "Must read the specified file before reviewing"
+        },
+        {
+          "id": "br-02-a2",
+          "type": "regex_match",
+          "pattern": "(PREMISE|look.ahead)",
+          "description": "Must use semi-formal reasoning for look-ahead bias claims"
+        },
+        {
+          "id": "br-02-a3",
+          "type": "regex_match",
+          "pattern": "(TRACE|line\\s*\\d+|:\\d+)",
+          "description": "Critical findings must include line-level trace"
+        },
+        {
+          "id": "br-02-a4",
+          "type": "regex_not_match",
+          "pattern": "(might be|could potentially|there may be a concern)",
+          "description": "Must not hedge — direct language required, no pussyfooting"
+        }
+      ]
+    },
+    {
+      "id": "br-03",
+      "prompt": "code review — is this statistically sound",
+      "assertions": [
+        {
+          "id": "br-03-a1",
+          "type": "regex_match",
+          "pattern": "Grade:\\s*[A-F][+-]?",
+          "description": "Must assign a grade"
+        },
+        {
+          "id": "br-03-a2",
+          "type": "regex_match",
+          "pattern": "(p.value|BH FDR|sample size|N\\s*[=<>]|\\bN\\b.*\\d+)",
+          "description": "Statistical rigor section must address p-values, FDR, or sample sizes"
+        },
+        {
+          "id": "br-03-a3",
+          "type": "regex_match",
+          "pattern": "Section C.*Statistical Rigor",
+          "description": "Must include statistical rigor section"
+        },
+        {
+          "id": "br-03-a4",
+          "type": "regex_not_match",
+          "pattern": "(significant|edge|proven).{0,30}(p\\s*>\\s*0\\.05|no test|untested)",
+          "description": "Must not claim significance without a test"
+        }
+      ]
+    },
+    {
+      "id": "br-04",
+      "prompt": "anything wrong with this code before I commit",
+      "assertions": [
+        {
+          "id": "br-04-a1",
+          "type": "command_ran",
+          "pattern": "git diff",
+          "description": "Must find changed files via git diff when none specified"
+        },
+        {
+          "id": "br-04-a2",
+          "type": "regex_match",
+          "pattern": "(Look.ahead|Data snooping|Overfitting|Survivorship|Storytelling|Outlier|Transaction cost)",
+          "description": "Seven sins must be explicitly named in the scan"
+        },
+        {
+          "id": "br-04-a3",
+          "type": "regex_match",
+          "pattern": "(ACTIVE_ORB_INSTRUMENTS|SESSION_CATALOG|COST_SPECS|hardcod)",
+          "description": "Canonical integrity check must scan for hardcoded lists/values"
+        },
+        {
+          "id": "br-04-a4",
+          "type": "regex_match",
+          "pattern": "Grade:\\s*[A-F][+-]?",
+          "description": "Must assign a grade"
+        }
+      ]
+    },
+    {
+      "id": "br-05",
+      "prompt": "bloomey — found look-ahead bias at line 47",
+      "assertions": [
+        {
+          "id": "br-05-a1",
+          "type": "regex_match",
+          "pattern": "(PREMISE|premise)",
+          "description": "Must show PREMISE in semi-formal reasoning for the claim"
+        },
+        {
+          "id": "br-05-a2",
+          "type": "regex_match",
+          "pattern": "(TRACE|trace|→|file:.*line|:\\d+)",
+          "description": "Must show TRACE — execution path proving the bias"
+        },
+        {
+          "id": "br-05-a3",
+          "type": "regex_match",
+          "pattern": "(EVIDENCE|evidence|quote|code)",
+          "description": "Must show EVIDENCE — actual code lines cited"
+        },
+        {
+          "id": "br-05-a4",
+          "type": "regex_match",
+          "pattern": "(VERDICT|verdict|SUPPORT|REFUTE|INSUFFICIENT)",
+          "description": "Must reach a VERDICT — support, refute, or insufficient evidence"
+        },
+        {
+          "id": "br-05-a5",
+          "type": "regex_match",
+          "pattern": "Grade:\\s*[CF][+-]?",
+          "description": "Confirmed look-ahead bias must score C or worse per grading rubric"
+        }
+      ]
+    },
+    {
+      "id": "br-06",
+      "prompt": "review — this strategy has Sharpe 2.1 with N=25",
+      "assertions": [
+        {
+          "id": "br-06-a1",
+          "type": "regex_match",
+          "pattern": "(N\\s*<\\s*30|INVALID|REGIME|overfitting|Overfitting|sample size)",
+          "description": "Must flag N=25 as below the 30-sample REGIME threshold"
+        },
+        {
+          "id": "br-06-a2",
+          "type": "regex_match",
+          "pattern": "Grade:\\s*[B-F]",
+          "description": "High Sharpe with N<30 is an overfitting red flag — must not grade A"
+        },
+        {
+          "id": "br-06-a3",
+          "type": "regex_not_match",
+          "pattern": "ACTIVE_ORB_INSTRUMENTS.*hardcode|hardcode.*ACTIVE_ORB_INSTRUMENTS",
+          "description": "Must not falsely flag correct canonical imports"
+        }
+      ]
+    }
+  ]
+}

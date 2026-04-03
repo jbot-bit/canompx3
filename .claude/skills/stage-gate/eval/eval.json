@@ -1,0 +1,180 @@
+{
+  "skill": "stage-gate",
+  "version": 1,
+  "tests": [
+    {
+      "id": "sg-01",
+      "prompt": "I want to add a new filter column to build_daily_features.py",
+      "assertions": [
+        {
+          "id": "sg-01-a1",
+          "type": "regex_match",
+          "pattern": "STAGE_STATE",
+          "description": "Must reference STAGE_STATE.md (NEVER TRIVIAL — build_daily_features is a core file)"
+        },
+        {
+          "id": "sg-01-a2",
+          "type": "regex_match",
+          "pattern": "(scope_lock|scope:)",
+          "description": "Must include scope_lock listing affected files"
+        },
+        {
+          "id": "sg-01-a3",
+          "type": "regex_match",
+          "pattern": "IMPLEMENTATION",
+          "description": "Must classify as IMPLEMENTATION mode (not TRIVIAL)"
+        },
+        {
+          "id": "sg-01-a4",
+          "type": "regex_not_match",
+          "pattern": "mode:\\s*TRIVIAL",
+          "description": "build_daily_features is NEVER TRIVIAL — must not write TRIVIAL state"
+        },
+        {
+          "id": "sg-01-a5",
+          "type": "regex_match",
+          "pattern": "(acceptance|done when|complete when)",
+          "description": "Must include acceptance criteria"
+        }
+      ]
+    },
+    {
+      "id": "sg-02",
+      "prompt": "fix a typo in the README",
+      "assertions": [
+        {
+          "id": "sg-02-a1",
+          "type": "regex_match",
+          "pattern": "(TRIVIAL|trivial)",
+          "description": "README typo fix is genuinely trivial — must classify as TRIVIAL"
+        },
+        {
+          "id": "sg-02-a2",
+          "type": "regex_not_match",
+          "pattern": "preflight-auditor",
+          "description": "TRIVIAL mode does not require preflight-auditor dispatch"
+        }
+      ]
+    },
+    {
+      "id": "sg-03",
+      "prompt": "build a new entry model in config.py",
+      "assertions": [
+        {
+          "id": "sg-03-a1",
+          "type": "regex_match",
+          "pattern": "STAGE_STATE",
+          "description": "config.py is NEVER TRIVIAL — must write STAGE_STATE.md"
+        },
+        {
+          "id": "sg-03-a2",
+          "type": "regex_not_match",
+          "pattern": "mode:\\s*TRIVIAL",
+          "description": "config.py entry model edit must never be TRIVIAL"
+        },
+        {
+          "id": "sg-03-a3",
+          "type": "regex_match",
+          "pattern": "(scope_lock|scope:)",
+          "description": "Must define scope_lock"
+        },
+        {
+          "id": "sg-03-a4",
+          "type": "regex_match",
+          "pattern": "(preflight|CLEAR|BLOCKED)",
+          "description": "Must run or mention preflight-auditor before implementation"
+        }
+      ]
+    },
+    {
+      "id": "sg-04",
+      "prompt": "where was I — pick up where I left off",
+      "assertions": [
+        {
+          "id": "sg-04-a1",
+          "type": "regex_match",
+          "pattern": "(STAGE_STATE|docs/runtime)",
+          "description": "Must check docs/runtime/STAGE_STATE.md first"
+        },
+        {
+          "id": "sg-04-a2",
+          "type": "regex_match",
+          "pattern": "(REBASE|RESUME|resume-rebase|stale|Continue)",
+          "description": "Must detect returning-to-interrupted-work pattern and route to REBASE/RESUME"
+        }
+      ]
+    },
+    {
+      "id": "sg-05",
+      "prompt": "go — implement the plan we just approved",
+      "assertions": [
+        {
+          "id": "sg-05-a1",
+          "type": "regex_match",
+          "pattern": "STAGE_STATE",
+          "description": "Must write STAGE_STATE.md before executing"
+        },
+        {
+          "id": "sg-05-a2",
+          "type": "regex_match",
+          "pattern": "(preflight|CLEAR|BLOCKED)",
+          "description": "Must run preflight-auditor before implementation"
+        },
+        {
+          "id": "sg-05-a3",
+          "type": "regex_match",
+          "pattern": "(scope_lock|scope:)",
+          "description": "STAGE_STATE must include scope_lock"
+        }
+      ]
+    },
+    {
+      "id": "sg-06",
+      "prompt": "plan how to refactor strategy_validator.py to support a new filter dimension",
+      "assertions": [
+        {
+          "id": "sg-06-a1",
+          "type": "regex_match",
+          "pattern": "(DESIGN|design)",
+          "description": "Must classify as DESIGN mode — user said 'plan'"
+        },
+        {
+          "id": "sg-06-a2",
+          "type": "regex_not_match",
+          "pattern": "(editing|writing code|implementing|def \\w+)",
+          "description": "Must NOT write code in DESIGN mode — wait for approval"
+        },
+        {
+          "id": "sg-06-a3",
+          "type": "regex_match",
+          "pattern": "(wait|approval|go ahead|approve|confirm)",
+          "description": "Must wait for user approval before proceeding to implementation"
+        }
+      ]
+    },
+    {
+      "id": "sg-07",
+      "prompt": "this stage is done, clean it up",
+      "assertions": [
+        {
+          "id": "sg-07-a1",
+          "type": "regex_match",
+          "pattern": "(check_drift|drift)",
+          "description": "Stage completion requires drift check"
+        },
+        {
+          "id": "sg-07-a2",
+          "type": "regex_match",
+          "pattern": "(pytest|tests)",
+          "description": "Stage completion requires running tests"
+        },
+        {
+          "id": "sg-07-a3",
+          "type": "regex_match",
+          "pattern": "(delete|remove|clean).*STAGE_STATE|STAGE_STATE.*(delete|remove|clean)",
+          "description": "Must delete STAGE_STATE.md when all stages are done"
+        }
+      ]
+    }
+  ]
+}
