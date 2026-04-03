@@ -1,7 +1,7 @@
 {
-  "total_iterations": 132,
+  "total_iterations": 133,
   "last_updated": "2026-04-04",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 139,
   "findings_by_type": {
     "canonical_violation": {
@@ -40,13 +40,13 @@
       "deferred": 1,
       "fix_rate": 0.75
     },
-    "falsy_zero": {
-      "found": 3,
-      "fixed": 3,
+    "stale_metadata": {
+      "found": 4,
+      "fixed": 4,
       "deferred": 0,
       "fix_rate": 1.0
     },
-    "stale_metadata": {
+    "falsy_zero": {
       "found": 3,
       "fixed": 3,
       "deferred": 0,
@@ -117,11 +117,11 @@
     "CRITICAL": 3,
     "HIGH": 9,
     "MEDIUM": 29,
-    "LOW": 91
+    "LOW": 92
   },
   "classifications": {
     "judgment": 61,
-    "mechanical": 46,
+    "mechanical": 47,
     "audit-only": 25
   },
   "files_audited": {
@@ -259,6 +259,11 @@
       "audit_count": 2,
       "last_iter": 89,
       "findings": 1
+    },
+    "pipeline/run_pipeline.py": {
+      "audit_count": 2,
+      "last_iter": 140,
+      "findings": 2
     },
     "scripts/tools/select_family_rr.py": {
       "audit_count": 2,
@@ -503,11 +508,6 @@
     "pipeline/health_check.py": {
       "audit_count": 1,
       "last_iter": 67,
-      "findings": 1
-    },
-    "pipeline/run_pipeline.py": {
-      "audit_count": 1,
-      "last_iter": 68,
       "findings": 1
     },
     "pipeline/init_db.py": {
@@ -2428,6 +2428,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "b8a5af8"
+    },
+    {
+      "iter": 140,
+      "date": "2026-04-04",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/run_pipeline.py:14",
+      "finding_type": "stale_metadata",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "312ec41"
     }
   ]
 }

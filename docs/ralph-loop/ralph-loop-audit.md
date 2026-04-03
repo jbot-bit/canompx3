@@ -3,48 +3,55 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 139
+## Last iteration: 140
 
-## RALPH AUDIT — Iteration 139
+## RALPH AUDIT — Iteration 140
 ## Date: 2026-04-04
-## Infrastructure Gates: PASS (77 drift checks PASS, 0 skipped, 7 advisory; behavioral audit 7/7 clean; ruff clean; 8/8 test_build_bars_5m.py + 737 pre-commit suite PASS)
+## Infrastructure Gates: PASS (77 drift checks PASS, 0 skipped, 7 advisory; behavioral audit 7/7 clean; ruff clean; 29/29 test_run_pipeline.py + 737 pre-commit suite PASS)
 
 | Gate | Result | Detail |
 |------|--------|--------|
 | `check_drift.py` | PASS | 77 checks PASS, 0 skipped, 7 advisory |
 | `audit_behavioral.py` | PASS | all 7 checks clean |
 | `ruff check` | PASS | clean |
-| pytest targeted | PASS | 8/8 test_build_bars_5m.py |
+| pytest targeted | PASS | 29/29 test_run_pipeline.py |
 
 ---
 
-## Scope: pipeline/build_bars_5m.py
+## Scope: pipeline/run_pipeline.py + pipeline/run_full_pipeline.py
 
 ---
 
 ## Seven Sins Scan
 
-### pipeline/build_bars_5m.py
+### pipeline/run_pipeline.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Fail-open | Line 336: verify_5m_integrity guarded by `row_count > 0` — if source data exists but INSERT produces 0 rows (SQL defect), verify is silently skipped and sys.exit(0) reached | MEDIUM | FIXED (b8a5af8) |
-| `except Exception as e` | Line 208: catch-all in transaction block — re-raises after ROLLBACK + logger.error | LOW | ACCEPTABLE (pattern 4: correct fail-closed behavior — exception is re-raised, not swallowed; ROLLBACK guards DB integrity) |
-| Hardcoded check labels | Lines 346-350: "No duplicates", "5-minute alignment", "OHLCV sanity", "Volume non-negative" hardcoded in logger.info calls — if verify_5m_integrity gains new checks, the printed list will be wrong | LOW | ACCEPTABLE (pattern 1: labels mirror verify_5m_integrity's 4 fixed checks which have a stable docstring; no count claim, no dynamic check; cosmetic mismatch at worst) |
-| All other sins | GOLD_DB_PATH used; asset_configs used; no hardcoded instruments/sessions/costs; no orphan imports; no dead code | — | CLEAN |
+| Orphan risk / stale metadata | Line 14: docstring listed (MGC, MNQ, NQ) as valid instruments. NQ is a full-size data source symbol with orb_active=False; active ORB instrument is MES | LOW | FIXED (312ec41) |
+| Canonical violation (help text) | Line 156: list_instruments() in argparse help includes dead instruments; no choices= guard | LOW | ACCEPTABLE (pattern 4: get_asset_config() in every downstream subprocess fails-closed on unknown instruments) |
+| Fail-open (vacuous all()) | Line 243: all() on empty results — vacuously True | LOW | ACCEPTABLE (pattern 1: PIPELINE_STEPS constant has 4 entries; dry_run exits before loop; empty list unreachable) |
+
+### pipeline/run_full_pipeline.py
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Canonical violation | Line 123: hardcoded --min-sample=30 string instead of REGIME_MIN_SAMPLES | MEDIUM | ACCEPTABLE (pattern 4: pipeline/ cannot import from trading_app/ per one-way dep rule; canon lock documented inline at line 115) |
+| All other sins | No hardcoded sessions/costs/DB paths; no orphan imports; no dead code; step count dynamic | — | CLEAN |
 
 ---
 
 ## Summary
 
-- pipeline/build_bars_5m.py: 1 MEDIUM finding — FIXED; 2 LOW — ACCEPTABLE
-- Action: fix ([judgment] — behavior change: verify now runs unconditionally unless dry_run)
+- pipeline/run_pipeline.py: 1 LOW — FIXED; 2 LOW — ACCEPTABLE
+- pipeline/run_full_pipeline.py: 1 MEDIUM — ACCEPTABLE (one-way dep constraint)
+- Action: fix ([mechanical] — docstring correction, no behavior change)
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 205 files fully scanned (1 new file added this iteration: pipeline/build_bars_5m.py).
+> Cumulative list — 207 files fully scanned (2 new files added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -83,6 +90,8 @@
 - pipeline/ingest_dbn_daily.py — added iter 137
 - pipeline/build_daily_features.py — added iter 138
 - pipeline/build_bars_5m.py — added iter 139
+- pipeline/run_pipeline.py — added iter 140
+- pipeline/run_full_pipeline.py — added iter 140
 - scripts/tools/ — 51 files (iters 18-100)
 - scripts/infra/ — 1 file (iter 72)
 - scripts/migrations/ — 1 file (iter 73)
@@ -91,9 +100,9 @@
 - scripts/databento_backfill.py — added iter 135
 - research/ — 21 files (iters 101-113)
 - docs/plans/ — 2 files (iter 103)
-- **Total: 205 files fully scanned**
+- **Total: 207 files fully scanned**
 
 ## Next iteration targets
 - trading_app/ml/evaluate.py — LOW tier, unscanned ML evaluation path (1 importer)
 - trading_app/ml/evaluate_validated.py — LOW tier, unscanned ML evaluation validation path (1 importer)
-- pipeline/run_pipeline.py — unscanned pipeline orchestration entry point (called by multiple callers found in blast radius scan)
+- pipeline/pipeline_status.py — unscanned pipeline status/rebuild orchestrator (referenced in ARCHITECTURE.md commands)
