@@ -710,22 +710,15 @@ class TestQueryOpenOrders:
 
 
 class TestBracketPriceCollar:
-    """IMPORTANT-005: Price collar now validates bracket prices too."""
+    """Price collar validates ENTRY stop only. Bracket targets are NOT collared.
+    This matches ProjectX behavior and prevents rejecting RR2.5+ bracket targets."""
 
-    def test_bracket_target_rejected_by_collar(self, router):
-        """Bracket target price too far from market should be rejected."""
-        router.update_market_price(100.0)
-        spec = router.build_order_spec("long", "E2", 100.0, "MNQM6")
-        bracket = router.build_bracket_spec("long", "MNQM6", 100.0, 99.0, 200.0)  # Target at 200 = 100% deviation
-        merged = router.merge_bracket_into_entry(spec, bracket)
-        with pytest.raises(ValueError, match="PRICE_COLLAR_REJECTED"):
-            router.submit(merged)
-
-    def test_bracket_within_collar_passes(self, router):
-        """Normal bracket prices within collar should pass."""
+    def test_bracket_target_far_from_market_passes(self, router):
+        """RR2.5 bracket target at ~1% from market should NOT be rejected."""
         router.update_market_price(100.0)
         spec = router.build_order_spec("long", "E2", 100.1, "MNQM6")
-        bracket = router.build_bracket_spec("long", "MNQM6", 100.1, 99.9, 100.3)
+        # Target at 102.5 = 2.5% deviation — would fail old bracket collar but should pass now
+        bracket = router.build_bracket_spec("long", "MNQM6", 100.1, 99.0, 102.5)
         merged = router.merge_bracket_into_entry(spec, bracket)
 
         with patch("trading_app.live.tradovate.order_router.request_with_retry") as mock_req:
@@ -735,6 +728,13 @@ class TestBracketPriceCollar:
             mock_req.return_value = mock_resp
             result = router.submit(merged)
             assert result["order_id"] == 1
+
+    def test_entry_stop_still_collared(self, router):
+        """Entry stop price far from market should still be rejected."""
+        router.update_market_price(100.0)
+        spec = router.build_order_spec("long", "E2", 110.0, "MNQM6")  # 10% deviation on entry stop
+        with pytest.raises(ValueError, match="PRICE_COLLAR_REJECTED"):
+            router.submit(spec)
 
 
 class TestCancelBracketOrders:
