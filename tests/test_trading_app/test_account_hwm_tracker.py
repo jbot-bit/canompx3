@@ -1,11 +1,14 @@
 """Tests for persistent dollar-based HWM tracker."""
 
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from trading_app.account_hwm_tracker import AccountHWMTracker, HWMState
+from trading_app.account_hwm_tracker import AccountHWMTracker, HWMState, _BRISBANE
 
 
 @pytest.fixture
@@ -113,7 +116,7 @@ class TestHWMTracking:
         assert state.halt_triggered
         halted, reason = tracker.check_halt()
         assert halted
-        assert "HWM_HALT" in reason
+        assert "DD_TRAILING" in reason
 
 
 class TestHaltBehavior:
@@ -280,7 +283,7 @@ class TestEODTrailing:
         eod_tracker.update_equity(47500.0)  # DD = $2500 > $2000 limit
         halted, reason = eod_tracker.check_halt()
         assert halted
-        assert "HALT" in reason
+        assert "DD_TRAILING" in reason
 
     def test_dd_computed_from_frozen_hwm(self, eod_tracker):
         eod_tracker.update_equity(50000.0)
@@ -428,3 +431,284 @@ class TestDDBudgetValidation:
             assert "worst-case" in violations[0]
         finally:
             del ACCOUNT_PROFILES["_test_overcommit"]
+
+
+def _mock_brisbane_time(hour, weekday=1, day_offset=0):
+    """Create a UTC datetime that maps to the given Brisbane hour and weekday.
+
+    Brisbane = UTC+10. weekday: 0=Mon, 1=Tue, ...
+    day_offset shifts the date forward/backward by N days.
+    """
+    # Start from a known Monday: 2026-04-06 is a Monday
+    base = datetime(2026, 4, 6, tzinfo=UTC)
+    # Shift to desired weekday
+    target_bris = base + timedelta(days=weekday + day_offset)
+    # Set Brisbane hour, then convert back to UTC
+    target_bris = target_bris.replace(hour=hour, minute=0, second=0)
+    target_utc = target_bris - timedelta(hours=10)  # Brisbane is UTC+10
+    return target_utc
+
+
+class TestDailyLossLimit:
+    """Daily loss limit: non-ratcheting, resets at 09:00 Brisbane."""
+
+    def test_daily_limit_hit_triggers_halt(self, state_dir):
+        """Acceptance: daily limit hit → check_halt returns DAILY_LOSS."""
+        # Tuesday 10:00 Brisbane
+        t0 = _mock_brisbane_time(10, weekday=1)
+        with patch("trading_app.account_hwm_tracker.datetime") as mock_dt:
+            mock_dt.now.return_value = t0
+            mock_dt.fromisoformat = datetime.fromisoformat
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            t = AccountHWMTracker(
+                "SELF001",
+                "self_funded",
+                dd_limit_dollars=3000.0,
+                state_dir=state_dir,
+                dd_type="none",
+                daily_loss_limit=600.0,
+            )
+            t.update_equity(30000.0)
+            # Lose $600 (exactly at limit)
+            t.update_equity(29400.0)
+            halted, reason = t.check_halt()
+            assert halted
+            assert "DAILY_LOSS" in reason
+
+    def test_daily_limit_resets_next_day(self, state_dir):
+        """Acceptance: daily limit resets next day → check_halt returns NONE."""
+        # Tuesday 10:00 Brisbane
+        t0 = _mock_brisbane_time(10, weekday=1)
+        # Wednesday 10:00 Brisbane
+        t1 = _mock_brisbane_time(10, weekday=2)
+
+        with patch("trading_app.account_hwm_tracker.datetime") as mock_dt:
+            mock_dt.fromisoformat = datetime.fromisoformat
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            # Day 1: hit the limit
+            mock_dt.now.return_value = t0
+            t = AccountHWMTracker(
+                "SELF001",
+                "self_funded",
+                dd_limit_dollars=3000.0,
+                state_dir=state_dir,
+                dd_type="none",
+                daily_loss_limit=600.0,
+            )
+            t.update_equity(30000.0)
+            t.update_equity(29400.0)
+            halted, _ = t.check_halt()
+            assert halted
+
+            # Day 2: equity stayed at 29400, but daily counter resets
+            mock_dt.now.return_value = t1
+            t.update_equity(29400.0)
+            halted, reason = t.check_halt()
+            assert not halted
+            assert "DAILY_LOSS" not in reason
+
+    def test_below_daily_limit_no_halt(self, state_dir):
+        """Loss below daily limit does NOT halt."""
+        t0 = _mock_brisbane_time(10, weekday=1)
+        with patch("trading_app.account_hwm_tracker.datetime") as mock_dt:
+            mock_dt.now.return_value = t0
+            mock_dt.fromisoformat = datetime.fromisoformat
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            t = AccountHWMTracker(
+                "SELF001",
+                "self_funded",
+                dd_limit_dollars=3000.0,
+                state_dir=state_dir,
+                dd_type="none",
+                daily_loss_limit=600.0,
+            )
+            t.update_equity(30000.0)
+            t.update_equity(29500.0)  # $500 loss < $600 limit
+            halted, _ = t.check_halt()
+            assert not halted
+
+
+class TestWeeklyLossLimit:
+    """Weekly loss limit: non-ratcheting, resets Monday 09:00 Brisbane."""
+
+    def test_weekly_limit_hit_triggers_halt(self, state_dir):
+        """Acceptance: weekly limit hit → check_halt returns WEEKLY_LOSS."""
+        t0 = _mock_brisbane_time(10, weekday=2)  # Wednesday
+        with patch("trading_app.account_hwm_tracker.datetime") as mock_dt:
+            mock_dt.now.return_value = t0
+            mock_dt.fromisoformat = datetime.fromisoformat
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            t = AccountHWMTracker(
+                "SELF001",
+                "self_funded",
+                dd_limit_dollars=3000.0,
+                state_dir=state_dir,
+                dd_type="none",
+                weekly_loss_limit=1500.0,
+            )
+            t.update_equity(30000.0)
+            t.update_equity(28500.0)  # $1500 loss = limit
+            halted, reason = t.check_halt()
+            assert halted
+            assert "WEEKLY_LOSS" in reason
+
+    def test_weekly_limit_resets_monday(self, state_dir):
+        """Acceptance: weekly limit resets Monday → check_halt returns NONE."""
+        # Friday 10:00
+        t0 = _mock_brisbane_time(10, weekday=4)
+        # Next Monday 10:00
+        t1 = _mock_brisbane_time(10, weekday=0, day_offset=7)
+
+        with patch("trading_app.account_hwm_tracker.datetime") as mock_dt:
+            mock_dt.fromisoformat = datetime.fromisoformat
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            # Week 1: hit the weekly limit
+            mock_dt.now.return_value = t0
+            t = AccountHWMTracker(
+                "SELF001",
+                "self_funded",
+                dd_limit_dollars=3000.0,
+                state_dir=state_dir,
+                dd_type="none",
+                weekly_loss_limit=1500.0,
+            )
+            t.update_equity(30000.0)
+            t.update_equity(28500.0)
+            halted, _ = t.check_halt()
+            assert halted
+
+            # Next Monday: weekly counter resets
+            mock_dt.now.return_value = t1
+            t.update_equity(28500.0)
+            halted, reason = t.check_halt()
+            assert not halted
+            assert "WEEKLY_LOSS" not in reason
+
+
+class TestPropProfileUnchanged:
+    """Acceptance: prop profile (no daily/weekly) → unchanged behavior."""
+
+    def test_no_daily_weekly_limits_behaves_as_before(self, state_dir):
+        """Prop tracker without daily/weekly limits works identically."""
+        t = AccountHWMTracker(
+            "PROP001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            dd_type="intraday_trailing",
+            # No daily_loss_limit or weekly_loss_limit
+        )
+        t.update_equity(50000.0)
+        t.update_equity(51000.0)
+        t.update_equity(50500.0)
+        halted, reason = t.check_halt()
+        assert not halted
+        assert "HWM_OK" in reason or "WARNING" in reason
+
+        # Hit trailing DD limit
+        t.update_equity(49000.0)
+        halted, reason = t.check_halt()
+        assert halted
+        assert "DD_TRAILING" in reason
+
+    def test_daily_weekly_none_skips_period_checks(self, state_dir):
+        """With None limits, period state stays None."""
+        t = AccountHWMTracker(
+            "PROP001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            dd_type="intraday_trailing",
+        )
+        t.update_equity(50000.0)
+        assert t._daily_start_equity is None
+        assert t._weekly_start_equity is None
+
+
+class TestDailyWeeklyPersistence:
+    """Period state persists across restarts."""
+
+    def test_daily_state_survives_restart(self, state_dir):
+        t0 = _mock_brisbane_time(10, weekday=1)
+        with patch("trading_app.account_hwm_tracker.datetime") as mock_dt:
+            mock_dt.now.return_value = t0
+            mock_dt.fromisoformat = datetime.fromisoformat
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            t1 = AccountHWMTracker(
+                "SELF001",
+                "self_funded",
+                dd_limit_dollars=3000.0,
+                state_dir=state_dir,
+                dd_type="none",
+                daily_loss_limit=600.0,
+            )
+            t1.update_equity(30000.0)
+            saved_date = t1._daily_start_date
+
+        # Reload from disk
+        t2 = AccountHWMTracker(
+            "SELF001",
+            "self_funded",
+            dd_limit_dollars=3000.0,
+            state_dir=state_dir,
+            dd_type="none",
+            daily_loss_limit=600.0,
+        )
+        assert t2._daily_start_equity == 30000.0
+        assert t2._daily_start_date == saved_date
+
+
+class TestDailyWeeklyValidation:
+    """Constructor validation for period limits."""
+
+    def test_negative_daily_limit_raises(self, state_dir):
+        with pytest.raises(ValueError, match="daily_loss_limit must be positive"):
+            AccountHWMTracker(
+                "X",
+                "x",
+                dd_limit_dollars=1000.0,
+                state_dir=state_dir,
+                daily_loss_limit=-100.0,
+            )
+
+    def test_negative_weekly_limit_raises(self, state_dir):
+        with pytest.raises(ValueError, match="weekly_loss_limit must be positive"):
+            AccountHWMTracker(
+                "X",
+                "x",
+                dd_limit_dollars=1000.0,
+                state_dir=state_dir,
+                weekly_loss_limit=0,
+            )
+
+
+class TestDDTrailingTakesPrecedence:
+    """Trailing DD halt takes priority over daily/weekly."""
+
+    def test_trailing_dd_fires_before_daily(self, state_dir):
+        t0 = _mock_brisbane_time(10, weekday=1)
+        with patch("trading_app.account_hwm_tracker.datetime") as mock_dt:
+            mock_dt.now.return_value = t0
+            mock_dt.fromisoformat = datetime.fromisoformat
+            mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
+
+            t = AccountHWMTracker(
+                "SELF001",
+                "self_funded",
+                dd_limit_dollars=500.0,  # Very tight DD limit
+                state_dir=state_dir,
+                dd_type="none",
+                daily_loss_limit=600.0,
+            )
+            t.update_equity(30000.0)
+            # Lose $500 — hits DD limit (500) before daily (600)
+            t.update_equity(29500.0)
+            halted, reason = t.check_halt()
+            assert halted
+            assert "DD_TRAILING" in reason
