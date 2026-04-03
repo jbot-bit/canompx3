@@ -123,7 +123,14 @@ class CheckpointManager:
         with open(self.checkpoint_file, "r") as f:
             for line in f:
                 if line.strip():
-                    record = json.loads(line)
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        print(
+                            f"[CHECKPOINT] WARNING: skipping corrupt line in {self.checkpoint_file}: {exc}",
+                            file=sys.stderr,
+                        )
+                        continue
                     key = (record["chunk_start"], record["chunk_end"])
                     # Keep latest record per chunk (by attempt_id, or later in file for same attempt)
                     # Use >= so that 'done' overwrites 'in_progress' with same attempt_id

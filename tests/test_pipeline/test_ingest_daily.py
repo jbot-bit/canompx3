@@ -155,3 +155,40 @@ class TestCheckpointRoundtrip:
                 record = json.loads(line)
                 assert "chunk_start" in record
                 assert "status" in record
+
+    def test_corrupt_checkpoint_line_is_skipped(self, tmp_path, capsys):
+        """A truncated/corrupt JSON line must not crash _load_checkpoints.
+
+        Valid lines before and after the corrupt line must still load.
+        """
+        src = tmp_path / "source.dbn.zst"
+        src.write_bytes(b"fake data")
+
+        cp = CheckpointManager(tmp_path / "checkpoints", src)
+        cp.write_checkpoint("2024-01-01", "2024-01-07", "done", rows_written=100)
+
+        # Inject a corrupt line (simulates mid-write process kill)
+        cp_file = list((tmp_path / "checkpoints").glob("checkpoint_*.jsonl"))[0]
+        with open(cp_file, "a") as f:
+            f.write('{"chunk_start": "2024-01-08", "chunk_end": "2024-01-14", "st\n')  # truncated
+
+        # Also write a valid line after the corrupt one
+        with open(cp_file, "a") as f:
+            f.write(
+                '{"chunk_start": "2024-01-15", "chunk_end": "2024-01-21", "status": "done", '
+                '"rows_written": 200, "started_at": null, "finished_at": null, '
+                '"source_dbn": {}, "error": null, "attempt_id": 2}\n'
+            )
+
+        # Reload — must not raise
+        cp2 = CheckpointManager(tmp_path / "checkpoints", src)
+
+        # The valid "done" entry from before the corrupt line loads correctly
+        assert cp2.get_chunk_status("2024-01-01", "2024-01-07") == "done"
+        # The valid entry after the corrupt line also loads
+        assert cp2.get_chunk_status("2024-01-15", "2024-01-21") == "done"
+        # The corrupt line's chunk is absent (not partially loaded)
+        assert cp2.get_chunk_status("2024-01-08", "2024-01-14") is None
+        # Warning was emitted to stderr
+        captured = capsys.readouterr()
+        assert "[CHECKPOINT] WARNING" in captured.err
