@@ -1,6 +1,8 @@
 # tests/test_trading_app/test_prop_profiles.py
 """Tests for trading_app.prop_profiles — prop firm config and data structures."""
 
+from dataclasses import replace
+
 import pytest
 
 from trading_app.prop_profiles import (
@@ -15,10 +17,13 @@ from trading_app.prop_profiles import (
     TradingBook,
     TradingBookEntry,
     compute_profit_split_factor,
+    get_active_profile_ids,
     get_account_tier,
+    get_profile_lane_definitions,
     get_firm_spec,
     get_lane_registry,
     get_profile,
+    resolve_profile_id,
 )
 
 
@@ -36,7 +41,7 @@ class TestPropFirmSpec:
 
     def test_mffu_exists(self):
         spec = get_firm_spec("mffu")
-        assert spec.auto_trading == "semi"
+        assert spec.auto_trading == "full"  # Official: help.myfundedfutures.com article 8444599
 
     def test_self_funded_no_firm(self):
         spec = get_firm_spec("self_funded")
@@ -72,31 +77,27 @@ class TestPropFirmAccount:
 
 class TestAccountProfile:
     def test_default_profiles_exist(self):
-        p = get_profile("topstep_50k")
+        p = get_profile("topstep_50k_mnq_auto")
         assert p.firm == "topstep"
         assert p.account_size == 50_000
         assert p.stop_multiplier == 0.75
-        assert p.copies == 5  # 5 Express accounts — MGC morning lane
+        assert p.copies == 2  # start small, scale after proving loop
+        assert p.payout_policy_id == "topstep_express_standard"
         assert p.active is True
 
-    def test_apex_manual_profile(self):
-        p = get_profile("apex_50k_manual")
-        assert p.firm == "apex"
-        assert p.copies == 1  # Manual proof only
-        assert p.active is False  # Superseded by apex_100k_manual
-
-    def test_apex_100k_profile(self):
-        p = get_profile("apex_100k_manual")
-        assert p.firm == "apex"
-        assert p.account_size == 100_000
+    def test_topstep_primary_auto_profile(self):
+        p = get_profile("topstep_50k_mnq_auto")
+        assert p.firm == "topstep"
+        assert p.account_size == 50_000
         assert p.active is True
-        assert len(p.daily_lanes) == 7  # Honest deployment: RR-locked, COST_LT preferred
+        assert len(p.daily_lanes) == 5  # Allocator-driven primary deployment
 
     def test_tradeify_scaling_profile(self):
         p = get_profile("tradeify_50k")
         assert p.firm == "tradeify"
         assert p.copies == 5  # PRIMARY MNQ scaling lane
-        assert p.active is False  # No daily_lanes configured yet (ground audit 2026-03-30)
+        assert p.payout_policy_id == "tradeify_select_funded"
+        assert p.active is False  # Inactive until Tradovate runtime parity is verified
 
     def test_self_funded_profile(self):
         p = get_profile("self_funded_50k")
@@ -111,6 +112,24 @@ class TestAccountProfile:
     def test_unknown_profile_raises(self):
         with pytest.raises(KeyError):
             get_profile("nonexistent")
+
+    def test_resolve_profile_id_single_active_default(self):
+        assert resolve_profile_id() == "topstep_50k_mnq_auto"
+
+    def test_resolve_profile_id_multiple_active_fails_closed(self, monkeypatch):
+        monkeypatch.setitem(
+            ACCOUNT_PROFILES,
+            "tradeify_50k",
+            replace(get_profile("tradeify_50k"), active=True),
+        )
+        with pytest.raises(ValueError, match="Multiple active execution profiles"):
+            resolve_profile_id()
+
+    def test_get_active_profile_ids_filters_self_funded_and_inactive(self):
+        active = get_active_profile_ids()
+        assert "topstep_50k_mnq_auto" in active
+        assert "tradeify_50k" not in active
+        assert "self_funded_50k" not in active
 
 
 class TestProfitSplitFactor:
@@ -178,15 +197,15 @@ class TestDailyLaneSpecOrbCap:
         assert lane.max_orb_size_pts == 150.0
 
     def test_tokyo_open_has_cap(self):
-        """TOKYO_OPEN lane must have max_orb_size_pts set in the apex manual profile."""
-        p = get_profile("apex_50k_manual")
+        """TOKYO_OPEN lane must have max_orb_size_pts set in the primary TopStep profile."""
+        p = get_profile("topstep_50k_mnq_auto")
         tokyo_lanes = [lane for lane in p.daily_lanes if lane.orb_label == "TOKYO_OPEN"]
         assert len(tokyo_lanes) == 1
         assert tokyo_lanes[0].max_orb_size_pts == 80.0
 
     def test_all_lanes_have_caps(self):
-        """All Apex lanes must have max_orb_size_pts set (adversarial audit 2026-03-29)."""
-        p = get_profile("apex_50k_manual")
+        """All active primary lanes must have max_orb_size_pts set."""
+        p = get_profile("topstep_50k_mnq_auto")
         for lane in p.daily_lanes:
             assert lane.max_orb_size_pts is not None, f"{lane.orb_label} missing ORB cap"
             assert lane.max_orb_size_pts > 0, f"{lane.orb_label} cap must be positive"
@@ -205,20 +224,27 @@ class TestLaneRegistryOrbCap:
         assert registry["TOKYO_OPEN"]["max_orb_size_pts"] == 80.0  # MNQ COST_LT10
 
     def test_all_registry_lanes_have_caps(self):
-        """All lanes should have ORB caps after honest deployment 2026-04-03."""
+        """All primary active lanes should have ORB caps after honest deployment 2026-04-03."""
         registry = get_lane_registry()
         expected_caps = {
-            "CME_PRECLOSE": 120.0,
-            "EUROPE_FLOW": 100.0,
-            "SINGAPORE_OPEN": 100.0,
+            "CME_REOPEN": 30.0,
+            "EUROPE_FLOW": 120.0,
+            "SINGAPORE_OPEN": 90.0,
             "COMEX_SETTLE": 80.0,
             "TOKYO_OPEN": 80.0,
-            "NYSE_CLOSE": 80.0,
-            "NYSE_OPEN": 200.0,
         }
         for label, expected in expected_caps.items():
             if label in registry:
                 assert registry[label]["max_orb_size_pts"] == expected, f"{label} cap mismatch"
+
+    def test_duplicate_session_profile_raises_on_session_registry(self):
+        with pytest.raises(ValueError, match="multiple lanes for session"):
+            get_lane_registry("topstep_50k_type_a")
+
+    def test_duplicate_session_profile_preserves_all_lane_definitions(self):
+        lanes = get_profile_lane_definitions("topstep_50k_type_a")
+        us_data = [lane for lane in lanes if lane["orb_label"] == "US_DATA_1000"]
+        assert len(us_data) >= 2
 
 
 class TestOrbCapLogic:
@@ -258,8 +284,8 @@ class TestOrbCapLogic:
 class TestCorrectedTierValues:
     """Verify prop firm rule corrections from April 2026 audit.
 
-    Sources: saveonpropfirms.com/blog/tradeify-select-guide,
-    topstep.com/express-funded-account-rules, Apex support articles.
+    Sources: saveonpropfirms.com/blog/tradeify-select-guide and
+    Topstep support pages.
     """
 
     def test_tradeify_dd_corrected(self):
@@ -277,11 +303,11 @@ class TestCorrectedTierValues:
         assert ACCOUNT_TIERS[("topstep", 100_000)].max_dd == 3_000
         assert ACCOUNT_TIERS[("topstep", 150_000)].max_dd == 4_500
 
-    def test_apex_consistency_rule(self):
-        """Apex 4.0: 50% consistency (was 30% legacy)."""
+    def test_topstep_has_no_firm_level_consistency_rule(self):
+        """TopStep path-specific consistency is modeled in payout policies, not firm spec."""
         from trading_app.prop_profiles import PROP_FIRM_SPECS
 
-        assert PROP_FIRM_SPECS["apex"].consistency_rule == 0.50
+        assert PROP_FIRM_SPECS["topstep"].consistency_rule is None
 
     def test_topstep_close_time(self):
         """TopStep: 3:10 PM CT = 4:10 PM ET."""
