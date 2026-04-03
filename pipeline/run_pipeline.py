@@ -11,7 +11,7 @@ Usage:
     python pipeline/run_pipeline.py --instrument MGC --start 2024-01-01 --end 2024-12-31 --resume
 
 Options:
-    --instrument INST     Instrument to process (MGC, MNQ, NQ)
+    --instrument INST     Instrument to process (MGC, MNQ, MES)
     --start YYYY-MM-DD    Start date (inclusive)
     --end YYYY-MM-DD      End date (inclusive)
     --resume              Resume ingest from checkpoint
