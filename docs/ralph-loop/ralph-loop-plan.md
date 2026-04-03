@@ -1,10 +1,10 @@
-## Iteration: 138
-## Target: pipeline/build_daily_features.py:1086
-## Finding: Wrong comment "~200 5m bars ≈ ~3.5 days" contradicts the correct comment at line 664 "200 bars ≈ 16.7 hours of 5m bars" in the same file. 200 × 5min = 1000 min = 16.7 hours, not 3.5 days. Someone adjusting the lookback based on the wrong comment could reduce days=10 to ~4 and silently break RSI warm-up.
-## Classification: [mechanical]
-## Blast Radius: 0 callers affected (comment-only change), test_build_daily_features.py is companion test
+## Iteration: 139
+## Target: pipeline/build_bars_5m.py:336
+## Finding: Fail-open — verify_5m_integrity skipped when row_count == 0, allowing a SQL build defect (source rows exist but INSERT produces 0 rows) to exit with code 0
+## Classification: [judgment]
+## Blast Radius: 1 file (main() only; build_5m_bars and verify_5m_integrity signatures unchanged; subprocess callers unchanged)
 ## Invariants:
-##   1. days=10 value MUST NOT change — it's conservatively correct
-##   2. No logic changes — comment fix only
-##   3. Drift checks must still pass
-## Diff estimate: 1 line
+##   1. dry_run must still skip integrity check
+##   2. verify_5m_integrity() signature unchanged
+##   3. A genuine no-source-data run (source_count == 0) must still return 0 cleanly (verify will run but find nothing — that is correct behavior)
+## Diff estimate: 1 line (remove `and row_count > 0` from the condition)
