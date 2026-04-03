@@ -1,10 +1,10 @@
-## Iteration: 135
-## Target: scripts/databento_backfill.py:133-139 + scripts/tools/refresh_data.py:248-249
-## Finding: Silent failure — (1) load_manifest() crashes on corrupt JSON with unhandled JSONDecodeError; (2) cleanup unlink exception is silently swallowed with no log
+## Iteration: 137
+## Target: pipeline/ingest_dbn_daily.py:379
+## Finding: Outer try/except in the per-file loop catches all exceptions and `continue`s — fail-open: DB commits may proceed with data missing from failed files before the end-of-loop files_failed check can abort.
 ## Classification: [judgment]
-## Blast Radius: 0 external callers (both are standalone CLI tools); load_manifest called from 1 place in same file (run_download:373); unlink except called from 1 place in refresh_instrument
+## Blast Radius: 1 file changed; 0 importers change behavior (DAILY_FILE_PATTERN import unaffected); 1 test file (test_ingest_daily.py)
 ## Invariants:
-##   1. load_manifest must return a valid dict (same interface); corrupt manifest -> fresh empty dict
-##   2. refresh_instrument must still return False after ingest failure (fail-closed not changed)
-##   3. save_manifest path and manifest schema are unchanged
-## Diff estimate: 6 lines production code
+##   1. Successfully processed files must be committed exactly as before
+##   2. Schema validation, PK safety, integrity checks must remain unchanged
+##   3. stats counters must remain accurate for the successful-only case
+## Diff estimate: 4 lines production code
