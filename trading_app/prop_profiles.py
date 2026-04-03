@@ -267,6 +267,7 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     ("bulenox", 150_000): PropFirmAccount("bulenox", 150_000, 4_500, 15, 150),
     ("bulenox", 250_000): PropFirmAccount("bulenox", 250_000, 5_500, 25, 250),
     # Self-funded
+    ("self_funded", 30_000): PropFirmAccount("self_funded", 30_000, 3_000, 15, 150),
     ("self_funded", 50_000): PropFirmAccount("self_funded", 50_000, 5_000, 50, 500),
 }
 
@@ -736,7 +737,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         account_size=30_000,
         copies=1,
         stop_multiplier=0.75,  # Same as prop — validated, don't change without re-testing
-        max_slots=11,
+        max_slots=10,
         max_risk_per_trade=300.0,  # $300 cap = 1% of $30K per trade
         active=False,  # Activate after opening Tradovate personal account + API test
         allowed_sessions=frozenset(
@@ -752,93 +753,77 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
-        # 11-lane book. Stress-tested with REAL filters 2025-2026.
-        # $23,817/yr at 1ct. Max DD -$1,237 (4.1% of $30K). Worst day -$499.
-        # Spec: docs/plans/2026-04-03-self-funded-tradovate-design.md
-        # Dropped: MES_CME_PRECLOSE (-$689 full history), MES_US_DATA_830 (-$9,626),
-        #          MES_NYSE_OPEN (-$134), MNQ/MES_LONDON_METALS, MNQ_US_DATA_830.
+        # 10 allocator-driven lanes (Apr 4 2026). All in validated_setups (active).
+        # ORB caps: $300 / point_value (MGC=30pt, MNQ=150pt, MES=60pt).
+        # Replaced 11 manual lanes (2 were UNDEPLOYABLE — failed FDR / not discovered).
+        # Allocator source: rebalance_lanes.py --date 2026-04-04 --profile self_funded_tradovate
         daily_lanes=(
-            # --- CORE 5 (same as topstep_50k_mnq_auto, with caps restored) ---
             DailyLaneSpec(
                 "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
                 "MGC",
                 "CME_REOPEN",
-                max_orb_size_pts=30.0,  # Cap RESTORED: uncapped allows $1,003 single loss
+                max_orb_size_pts=30.0,
             ),
             DailyLaneSpec(
                 "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
                 "MNQ",
                 "SINGAPORE_OPEN",
-                max_orb_size_pts=90.0,
+                max_orb_size_pts=150.0,
             ),
             DailyLaneSpec(
                 "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
                 "MNQ",
                 "COMEX_SETTLE",
-                max_orb_size_pts=150.0,  # Raised from 80 — extra trades +$2,510/yr, max risk $300
+                max_orb_size_pts=150.0,
             ),
             DailyLaneSpec(
                 "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
                 "MNQ",
                 "EUROPE_FLOW",
-                max_orb_size_pts=120.0,  # Cap RESTORED: only 2 trades above this (N=2 is noise)
+                max_orb_size_pts=150.0,
             ),
             DailyLaneSpec(
                 "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
                 "MNQ",
                 "TOKYO_OPEN",
-                max_orb_size_pts=80.0,
+                max_orb_size_pts=150.0,
             ),
-            # --- EXTRA 6 (from Type-A book, stress-tested positive) ---
-            # UNDEPLOYABLE: ATR70_VOL not in experimental or validated — never pipeline-validated.
-            # Validated alternative: MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50 (N=1441, Sharpe=1.15)
             DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50",
                 "MNQ",
                 "NYSE_OPEN",
-                max_orb_size_pts=70.0,
-                execution_notes="UNDEPLOYABLE: not in validated_setups. Replace with OVNRNG_50.",
-            ),
-            # UNDEPLOYABLE: X_MES_ATR70 fdr_significant=False in experimental. Too weak for FDR.
-            # Validated alternative: MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10 (N=1941, Sharpe=0.73)
-            DailyLaneSpec(
-                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR70_S075",
-                "MNQ",
-                "US_DATA_1000",
-                max_orb_size_pts=65.0,
-                execution_notes="UNDEPLOYABLE: fdr_significant=False. Replace with COST_LT10 RR1.5.",
+                max_orb_size_pts=150.0,
             ),
             DailyLaneSpec(
-                "MGC_US_DATA_1000_E2_RR1.0_CB1_ORB_G6",
-                "MGC",
-                "US_DATA_1000",
-                max_orb_size_pts=15.0,
-            ),
-            DailyLaneSpec(
-                "MES_US_DATA_1000_E2_RR1.0_CB1_VOL_RV15_N20_S075",
-                "MES",
-                "US_DATA_1000",
-                max_orb_size_pts=20.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075",
                 "MNQ",
                 "CME_PRECLOSE",
-                max_orb_size_pts=50.0,
+                max_orb_size_pts=150.0,
             ),
             DailyLaneSpec(
-                "MNQ_CME_REOPEN_E2_RR1.0_CB1_VOL_RV30_N20",
+                "MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10",
                 "MNQ",
-                "CME_REOPEN",
-                max_orb_size_pts=50.0,
+                "US_DATA_1000",
+                max_orb_size_pts=150.0,
+            ),
+            DailyLaneSpec(
+                "MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6",
+                "MGC",
+                "EUROPE_FLOW",
+                max_orb_size_pts=30.0,
+            ),
+            DailyLaneSpec(
+                "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12",
+                "MES",
+                "NYSE_OPEN",
+                max_orb_size_pts=60.0,
             ),
         ),
         payout_policy_id="self_funded",
         notes=(
-            "Self-funded Tradovate personal account. 11 honest lanes, stress-tested "
-            "with real filters. $23,817/yr at 1ct (2025-2026 backtest). Max DD -$1,237 "
-            "(4.1%). Phase 1: 5 core lanes. Phase 2: add 6 extra. Phase 3: scale to 2-3ct. "
-            "Margin: $50/contract intraday (Tradovate). Commission: $1.22/RT (Free plan). "
+            "Self-funded Tradovate personal account. 10 allocator-validated lanes "
+            "(Apr 4 2026 rebalance). All in validated_setups. Profile SM=0.75 overrides "
+            "at runtime. Margin: $50/contract intraday (Tradovate). Commission: $1.22/RT. "
             "Self-imposed limits: daily -$600, weekly -$1,500, DD halt -$3,000."
         ),
     ),
