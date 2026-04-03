@@ -524,34 +524,61 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         profile_id="topstep_50k_mnq_auto",
         firm="topstep",
         account_size=50_000,
-        copies=1,  # Start with 1 Express, scale to 5 after proving loop
+        copies=2,  # Start with 1-2 Express, scale to 5 after proving loop
         stop_multiplier=0.75,
-        max_slots=1,  # Single lane — prove loop, then add lanes
+        max_slots=5,  # Allocator recommends 5 lanes
         active=True,
-        allowed_sessions=frozenset({"COMEX_SETTLE"}),
-        allowed_instruments=frozenset({"MNQ"}),
-        # COMEX_SETTLE = bot-only session (03:30 AM Brisbane, never manually tradeable).
-        # Adds genuine portfolio diversification vs Apex manual lanes.
-        # Scorer output 2026-03-31: score 0.225, rank #3 of deployed lanes.
-        # Higher marginal value than duplicating CME_PRECLOSE (already on Apex).
-        # ROBUST family (7 members, PBO=0.000, FDR adj_p=0.0000).
-        # 2025 forward: +25.7R (N=63). 50 trades/yr = fastest loop proof.
-        # Risk $29/trade = 1.5% DD, 2.9% DLL. 34 consecutive losers to DLL.
-        # @research-source score_lanes.py composite score 2026-03-31
-        # @revalidated-for E2 event-based sessions, holdout-clean re-discovery (2026-03-31)
+        allowed_sessions=frozenset(
+            {
+                "CME_REOPEN",
+                "SINGAPORE_OPEN",
+                "COMEX_SETTLE",
+                "EUROPE_FLOW",
+                "TOKYO_OPEN",
+            }
+        ),
+        allowed_instruments=frozenset({"MNQ", "MGC"}),
+        # ALLOCATOR-DRIVEN LANES (2026-04-03 rebalance).
+        # Lane selection by lane_allocator.build_allocation() — not manual.
+        # Allocator uses trailing 12mo ExpR, regime gating, family RR locks.
+        # Run: python -m trading_app.lane_allocator to refresh.
+        # Total: 223.1 R/yr from 5 lanes. MGC CME_REOPEN is top lane.
         daily_lanes=(
             DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL_S075",
+                "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
+                "MGC",
+                "CME_REOPEN",
+                max_orb_size_pts=30.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
+                "MNQ",
+                "SINGAPORE_OPEN",
+                max_orb_size_pts=90.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
                 "MNQ",
                 "COMEX_SETTLE",
                 max_orb_size_pts=80.0,
             ),
+            DailyLaneSpec(
+                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
+                "MNQ",
+                "EUROPE_FLOW",
+                max_orb_size_pts=120.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
+                "MNQ",
+                "TOKYO_OPEN",
+                max_orb_size_pts=80.0,
+            ),
         ),
         notes=(
-            "Phase 2b: First MNQ auto lane via ProjectX API. "
-            "COMEX_SETTLE 03:30 Brisbane (bot-only session). "
-            "ATR70_VOL_S075 = stats match live 0.75x stops. "
-            "Risk $29/trade = 1.5% DD. Scale to 5 Express after loop proof."
+            "Allocator-driven lanes (2026-04-03). 1-2 copies, scale to 5. "
+            "223.1 R/yr from 5 lanes. MGC CME_REOPEN = top (64.4R/yr). "
+            "Refresh: python -m trading_app.lane_allocator"
         ),
     ),
     # =========================================================================
