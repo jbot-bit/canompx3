@@ -1,8 +1,8 @@
 {
-  "total_iterations": 128,
-  "last_updated": "2026-04-01",
+  "total_iterations": 130,
+  "last_updated": "2026-04-04",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 135,
+  "last_high_finding_iter": 137,
   "findings_by_type": {
     "canonical_violation": {
       "found": 47,
@@ -11,10 +11,10 @@
       "fix_rate": 0.77
     },
     "silent_failure": {
-      "found": 21,
-      "fixed": 19,
+      "found": 23,
+      "fixed": 21,
       "deferred": 1,
-      "fix_rate": 0.9
+      "fix_rate": 0.91
     },
     "other": {
       "found": 19,
@@ -115,12 +115,12 @@
   },
   "findings_by_severity": {
     "CRITICAL": 3,
-    "HIGH": 8,
-    "MEDIUM": 26,
+    "HIGH": 9,
+    "MEDIUM": 27,
     "LOW": 91
   },
   "classifications": {
-    "judgment": 58,
+    "judgment": 60,
     "mechanical": 45,
     "audit-only": 25
   },
@@ -958,6 +958,16 @@
     "scripts/databento_backfill.py": {
       "audit_count": 1,
       "last_iter": 135,
+      "findings": 1
+    },
+    "pipeline/ingest_dbn_mgc.py": {
+      "audit_count": 1,
+      "last_iter": 136,
+      "findings": 1
+    },
+    "pipeline/ingest_dbn_daily.py": {
+      "audit_count": 1,
+      "last_iter": 137,
       "findings": 1
     }
   },
@@ -2369,6 +2379,28 @@
       "severity": "HIGH",
       "verdict": "FIXED",
       "commit": "7e70c22"
+    },
+    {
+      "iter": 136,
+      "date": "2026-04-04",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "pipeline/ingest_dbn_mgc.py:126",
+      "finding_type": "silent_failure",
+      "severity": "HIGH",
+      "verdict": "FIXED",
+      "commit": "4089b29"
+    },
+    {
+      "iter": 137,
+      "date": "2026-04-04",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "pipeline/ingest_dbn_daily.py:379",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "4a62a53"
     }
   ]
 }
