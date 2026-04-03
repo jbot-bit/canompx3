@@ -3,7 +3,7 @@
 POST /v1/auth/accesstokenrequest with {name, password, cid, sec, deviceId}
 → {accessToken, mdAccessToken, expirationTime, userId}.
 
-Token lifetime: ~24h (expirationTime in response). Refresh via /auth/renewaccesstoken.
+Token lifetime: ~90min. Proactive refresh at 75min via /auth/renewaccesstoken.
 
 Env vars:
     TRADOVATE_USER      — account username (also accepts TRADOVATE_USERNAME)

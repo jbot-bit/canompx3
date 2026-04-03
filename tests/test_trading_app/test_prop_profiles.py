@@ -101,7 +101,7 @@ class TestAccountProfile:
 
     def test_self_funded_profile(self):
         p = get_profile("self_funded_tradovate")
-        assert p.stop_multiplier == 0.75
+        assert p.stop_multiplier == 1.0  # Self-funded = full stop (lanes validated at SM=1.0)
         assert p.max_slots == 5
         assert p.active is False  # Activate after Tradovate personal API test
 

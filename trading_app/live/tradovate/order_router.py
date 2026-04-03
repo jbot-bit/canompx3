@@ -251,3 +251,33 @@ class TradovateOrderRouter(BrokerRouter):
         resp.raise_for_status()
         data = resp.json()
         return data if isinstance(data, list) else []
+
+    def cancel_bracket_orders(self, contract_id: str) -> int:
+        """Cancel orphaned bracket orders for a contract. Returns count cancelled.
+
+        Tradovate bracket legs are Limit (target) and Stop (stop-loss) orders.
+        Fail-closed: raises on query failure so caller knows cleanup wasn't performed.
+        """
+        from .http import RateLimitExhausted
+
+        try:
+            orders = self.query_open_orders()
+        except RateLimitExhausted:
+            raise
+        except Exception as e:
+            log.error("Cannot query open orders for bracket cleanup: %s", e)
+            raise
+
+        cancelled = 0
+        for o in orders:
+            o_symbol = o.get("symbol", o.get("contractSymbol", ""))
+            oid = o.get("orderId", o.get("id"))
+            o_type = o.get("orderType", "")
+
+            if o_symbol == contract_id and o_type in ("Limit", "Stop") and oid:
+                try:
+                    self.cancel(oid)
+                    cancelled += 1
+                except Exception as e:
+                    log.warning("Failed to cancel bracket order %s: %s", oid, e)
+        return cancelled
