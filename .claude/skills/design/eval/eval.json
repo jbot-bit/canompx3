@@ -1,0 +1,138 @@
+{
+  "skill": "design",
+  "version": 1,
+  "tests": [
+    {
+      "id": "ds-01",
+      "prompt": "design a new pre-session staleness check",
+      "assertions": [
+        {
+          "id": "ds-01-a1",
+          "type": "regex_match",
+          "pattern": "STRATEGY_BLUEPRINT|blueprint|NO-GO",
+          "description": "Turn 1 ORIENT: checks Strategy Blueprint for NO-GOs"
+        },
+        {
+          "id": "ds-01-a2",
+          "type": "regex_match",
+          "pattern": "docs/specs/|spec",
+          "description": "Turn 1 ORIENT: checks for existing spec"
+        },
+        {
+          "id": "ds-01-a3",
+          "type": "regex_match",
+          "pattern": "(?:blast.?radius|import|caller|downstream)",
+          "description": "Turn 1 ORIENT: maps blast radius"
+        },
+        {
+          "id": "ds-01-a4",
+          "type": "regex_match",
+          "pattern": "(?:approach|option|alternative|trade.?off).*(?:1|2|3|A|B|C)",
+          "description": "Turn 2 DESIGN: proposes 2-3 approaches with trade-offs"
+        },
+        {
+          "id": "ds-01-a5",
+          "type": "regex_match",
+          "pattern": "(?:file|path|create|modify).*\\.(py|md|json)",
+          "description": "Turn 3 DETAIL: lists exact file paths"
+        },
+        {
+          "id": "ds-01-a6",
+          "type": "regex_match",
+          "pattern": "(?:test|pytest|drift|check_drift)",
+          "description": "Turn 4 VALIDATE: includes test strategy"
+        },
+        {
+          "id": "ds-01-a7",
+          "type": "regex_match",
+          "pattern": "(?:rollback|revert|undo|back out)",
+          "description": "Turn 4 VALIDATE: includes rollback plan"
+        },
+        {
+          "id": "ds-01-a8",
+          "type": "text_not_contains",
+          "value": "def ",
+          "description": "HARD GATE: does NOT write code (plan mode)"
+        },
+        {
+          "id": "ds-01-a9",
+          "type": "regex_match",
+          "pattern": "(?:approv|confirm|go ahead|wait|proceed)",
+          "description": "Plan mode: asks for approval before implementation"
+        }
+      ]
+    },
+    {
+      "id": "ds-02",
+      "prompt": "plan adding a new filter type to the pipeline",
+      "assertions": [
+        {
+          "id": "ds-02-a1",
+          "type": "regex_match",
+          "pattern": "(?:TRADING_RULES|trading.?rules)",
+          "description": "Checks TRADING_RULES.md for filter authority"
+        },
+        {
+          "id": "ds-02-a2",
+          "type": "regex_match",
+          "pattern": "(?:config\\.py|ALL_FILTERS|filter_type)",
+          "description": "References canonical filter source (trading_app/config.py)"
+        },
+        {
+          "id": "ds-02-a3",
+          "type": "regex_match",
+          "pattern": "(?:daily_features|build_daily_features)",
+          "description": "Traces filter to daily_features table"
+        },
+        {
+          "id": "ds-02-a4",
+          "type": "regex_match",
+          "pattern": "(?:one.?way|pipeline.*trading_app|never.*import.*from.*trading)",
+          "description": "Checks one-way dependency rule"
+        },
+        {
+          "id": "ds-02-a5",
+          "type": "text_not_contains",
+          "value": "class ",
+          "description": "HARD GATE: no code in plan mode"
+        },
+        {
+          "id": "ds-02-a6",
+          "type": "regex_match",
+          "pattern": "(?:PURPOSE|why|matters|breaks without)",
+          "description": "Turn 1: articulates PURPOSE"
+        }
+      ]
+    },
+    {
+      "id": "ds-03",
+      "prompt": "how should we build a CUSUM fitness detector",
+      "assertions": [
+        {
+          "id": "ds-03-a1",
+          "type": "regex_match",
+          "pattern": "(?:hard_lessons|prior.*failure|went wrong|lesson)",
+          "description": "Turn 2: checks what went wrong before in this domain"
+        },
+        {
+          "id": "ds-03-a2",
+          "type": "regex_match",
+          "pattern": "(?:YAGNI|simple|minimal|incremental)",
+          "description": "Applies YAGNI — not over-engineering"
+        },
+        {
+          "id": "ds-03-a3",
+          "type": "regex_match",
+          "pattern": "(?:memory|pinecone|research|prior|found)",
+          "description": "Checks prior research before designing from scratch"
+        },
+        {
+          "id": "ds-03-a4",
+          "type": "regex_match",
+          "pattern": "(?:failure.?mode|risk|edge.?case|what if)",
+          "description": "Turn 4: identifies failure modes"
+        }
+      ]
+    }
+  ]
+}
