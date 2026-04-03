@@ -1,8 +1,8 @@
 {
-  "total_iterations": 130,
+  "total_iterations": 131,
   "last_updated": "2026-04-04",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 137,
+  "last_high_finding_iter": 138,
   "findings_by_type": {
     "canonical_violation": {
       "found": 47,
@@ -11,10 +11,10 @@
       "fix_rate": 0.77
     },
     "silent_failure": {
-      "found": 23,
-      "fixed": 21,
+      "found": 24,
+      "fixed": 22,
       "deferred": 1,
-      "fix_rate": 0.91
+      "fix_rate": 0.92
     },
     "other": {
       "found": 19,
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 9,
-    "MEDIUM": 27,
+    "MEDIUM": 28,
     "LOW": 91
   },
   "classifications": {
     "judgment": 60,
-    "mechanical": 45,
+    "mechanical": 46,
     "audit-only": 25
   },
   "files_audited": {
@@ -158,6 +158,11 @@
     "webhook_server.py": {
       "audit_count": 3,
       "last_iter": 9,
+      "findings": 3
+    },
+    "pipeline/build_daily_features.py": {
+      "audit_count": 3,
+      "last_iter": 138,
       "findings": 3
     },
     "performance_monitor.py": {
@@ -208,11 +213,6 @@
     "projectx/order_router.py": {
       "audit_count": 2,
       "last_iter": 21,
-      "findings": 2
-    },
-    "pipeline/build_daily_features.py": {
-      "audit_count": 2,
-      "last_iter": 36,
       "findings": 2
     },
     "live_config.py": {
@@ -2401,6 +2401,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "4a62a53"
+    },
+    {
+      "iter": 138,
+      "date": "2026-04-04",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "pipeline/build_daily_features.py:1086",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "74e051a"
     }
   ]
 }
