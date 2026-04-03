@@ -44,6 +44,15 @@ _SKIP_PATTERNS = [
     ".git/",
 ]
 
+# Reference docs where E0/dead instrument mentions are historical context, not active claims.
+# These docs exist to document WHY things were purged — E0 mentions are expected.
+_E0_SKIP_FILES = [
+    "BREAD_AND_BUTTER_REFERENCE.md",
+    "STRATEGY_DISCOVERY_AUDIT.md",
+    "PINECONE_INTEGRATION.md",
+    "RESEARCH_ARCHIVE.md",
+]
+
 # How many days before an "as of" date is flagged
 STALE_DAYS_THRESHOLD = 60
 
@@ -164,12 +173,18 @@ def check_instrument_status(
     """Flag dead instruments referenced as active."""
     if not dead_instruments:
         return
+    # Skip reference docs where dead instrument mentions are historical data tables
+    if any(skip in filepath for skip in _E0_SKIP_FILES):
+        return
     # Build pattern dynamically from canonical source
     dead_pat = "|".join(re.escape(i) for i in sorted(dead_instruments))
     # Pattern 1: "Active ... : ... <DEAD>" (lists)
     list_pattern = rf"[Aa]ctive.*?:.*?\b({dead_pat})\b"
     # Pattern 2: "<DEAD> ... active" or "active ... <DEAD>" (prose)
     prose_pattern = rf"\b({dead_pat})\b.*\bactive\b|\bactive\b.*\b({dead_pat})\b"
+    # Skip lines where dead instruments appear in a "Dead for ORB" clause
+    if re.search(r"(?:dead|removed|retired|killed|dropped|paused|archived|do not)", line, re.IGNORECASE):
+        return
     for match in re.finditer(list_pattern, line):
         inst = match.group(1)
         result.add(
@@ -182,9 +197,6 @@ def check_instrument_status(
         return  # One finding per line is enough
     for match in re.finditer(prose_pattern, line, re.IGNORECASE):
         inst = match.group(1) or match.group(2)
-        # Skip lines that say the instrument is dead/removed
-        if re.search(r"(?:dead|removed|retired|killed|dropped)", line, re.IGNORECASE):
-            continue
         result.add(
             file=filepath,
             line=line_num,
@@ -197,6 +209,9 @@ def check_instrument_status(
 
 def check_e0_references(line: str, line_num: int, filepath: str, result: ScanResult) -> None:
     """Flag E0 entry model referenced as active/usable."""
+    # Skip reference docs where E0 mentions are historical context
+    if any(skip in filepath for skip in _E0_SKIP_FILES):
+        return
     # E0 is purged — any reference suggesting it's active is stale
     # But historical references ("E0 was purged") are fine
     patterns = [
@@ -206,8 +221,12 @@ def check_e0_references(line: str, line_num: int, filepath: str, result: ScanRes
     ]
     for pat in patterns:
         if re.search(pat, line, re.IGNORECASE):
-            # Skip lines that mention E0 as dead/purged
-            if re.search(r"(?:purge|dead|remove|retire|replaced)", line, re.IGNORECASE):
+            # Skip lines that mention E0 as dead/purged/historical/comparative
+            if re.search(
+                r"(?:purge|dead|remove|retire|replaced|artifact|bias|historical|than\s+E0)",
+                line,
+                re.IGNORECASE,
+            ):
                 continue
             result.add(
                 file=filepath,
