@@ -6,7 +6,178 @@
 
 ---
 
+## Update (Apr 3 — Codex: Profile/Lane/Payout Hardening Follow-Up)
+
+### Completed
+- Implemented fail-closed profile/lane hardening in:
+  - [trading_app/prop_profiles.py](/mnt/c/Users/joshd/canompx3/trading_app/prop_profiles.py)
+  - [trading_app/log_trade.py](/mnt/c/Users/joshd/canompx3/trading_app/log_trade.py)
+  - [trading_app/pre_session_check.py](/mnt/c/Users/joshd/canompx3/trading_app/pre_session_check.py)
+  - [trading_app/sprt_monitor.py](/mnt/c/Users/joshd/canompx3/trading_app/sprt_monitor.py)
+  - [trading_app/weekly_review.py](/mnt/c/Users/joshd/canompx3/trading_app/weekly_review.py)
+  - [trading_app/live/session_orchestrator.py](/mnt/c/Users/joshd/canompx3/trading_app/live/session_orchestrator.py)
+  - [trading_app/prop_firm_policies.py](/mnt/c/Users/joshd/canompx3/trading_app/prop_firm_policies.py)
+  - [trading_app/consistency_tracker.py](/mnt/c/Users/joshd/canompx3/trading_app/consistency_tracker.py)
+- Added canonical helpers:
+  - `get_active_profile_ids()`
+  - `resolve_profile_id()`
+  - `get_profile_lane_definitions()`
+- `get_lane_registry()` is now a session-keyed convenience view only and raises if a profile has duplicate `orb_label` lanes instead of silently overwriting.
+- `log_trade.py` no longer freezes lane definitions at import time. It resolves the profile and lane at runtime and supports `--strategy-id` for duplicate-session profiles.
+- `pre_session_check.py` now resolves one explicit profile context and threads it through consistency/DD checks instead of silently using whichever active profile happened to win a sort.
+- `sprt_monitor.py` now tracks by `strategy_id` instead of collapsing everything by session.
+- `session_orchestrator.py` now loads ORB caps from the injected profile portfolio when available, not from the default repo profile.
+- Tradeify payout policy is explicitly partial and payout eligibility now fails closed for partial/unmodeled policies instead of returning optimistic eligibility.
+
+### Review Findings Closed
+- Implicit active-profile selection in operator tools
+- Silent duplicate-session lane overwrite
+- Partial Tradeify payout policy yielding misleading eligibility
+
+### Verification
+- `python3 -m py_compile` passed for all touched runtime/test modules.
+- Targeted regression slice passed:
+  - `tests/test_trading_app/test_prop_profiles.py`
+  - `tests/test_trading_app/test_consistency_tracker.py`
+  - `tests/test_trading_app/test_pre_session_check.py`
+  - `tests/test_trading_app/test_performance_monitor.py`
+  - `tests/test_trading_app/test_live_config.py`
+  - `tests/test_trading_app/test_lane_allocator.py`
+  - `tests/test_trading_app/test_lane_ctl.py`
+  - `tests/test_trading_app/test_prop_portfolio.py`
+- Result: `194 passed`
+- Extra check: `timeout 45s ./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_session_orchestrator.py -q` timed out after reaching only the first 7 tests, so the live-path change is only `py_compile`-verified unless a later session reruns that test file cleanly.
+
+### Important Current Behavior
+- If more than one active execution profile with `daily_lanes` exists, default profile resolution now fails closed and tells the operator to pass an explicit profile.
+- If a profile contains multiple lanes for the same session, session-only tooling now fails closed instead of dropping lanes.
+- Tradeify payout outputs should now be interpreted as `UNMODELED` / not determinable until official payout-path modeling is completed.
+
+### Next Sensible Step
+- Finish the official-source payout-path normalization for `Tradeify` and `Topstep` so firm scoring can move from `partial/incomplete` to canonical economics.
+
+## Update (Apr 3 — Codex: Dashboard UX Redesign for Brisbane Schedule Clarity)
+
+### Completed
+- **Dashboard redesigned around timed lanes instead of raw session tiles.**
+  - [trading_app/live/bot_dashboard.html](/mnt/c/Users/joshd/canompx3/trading_app/live/bot_dashboard.html) fully rewritten as a schedule-first operations board.
+  - Profiles now show timed lanes as `HH:MM Brisbane + instrument + session + setup`.
+  - Live lanes now render **one card per strategy lane**, not one card per session key.
+  - Trades table now shows planned Brisbane session time and human-readable lane labels instead of opaque strategy IDs.
+- **Backend metadata exposed for UI clarity.**
+  - [trading_app/live/bot_dashboard.py](/mnt/c/Users/joshd/canompx3/trading_app/live/bot_dashboard.py) now parses strategy IDs server-side and attaches `session_time_brisbane`, `lane_label`, `entry_model`, `rr_target`, `confirm_bars`, and `filter_type` to trade/account payloads.
+  - [trading_app/live/bot_state.py](/mnt/c/Users/joshd/canompx3/trading_app/live/bot_state.py) now emits `lane_cards` keyed by strategy, with explicit Brisbane session times, fixing the prior ambiguity when multiple instruments shared one session.
+
+### Important Notes
+- **No runtime was launched from this terminal.** This session only did read-only diagnosis, then code edits, then targeted verification.
+- Legacy `lanes` payload is still emitted for compatibility, but the redesigned dashboard consumes `lane_cards`.
+- `lane_cards` fixes a real UX/data bug: the old session-keyed structure could overwrite one lane with another when two strategies shared the same `orb_label`.
+
+### Verification
+- `./.venv-wsl/bin/python -m py_compile trading_app/live/bot_state.py trading_app/live/bot_dashboard.py`
+- Helper sanity check passed:
+  - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` -> `03:30 Brisbane`
+  - `MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6` -> `08:00 Brisbane`
+
+### Files Changed
+- `trading_app/live/bot_dashboard.html`
+- `trading_app/live/bot_dashboard.py`
+- `trading_app/live/bot_state.py`
+
+## Update (Apr 3 — Codex: Clean-Room "Superpower Claude" Brief + Plugin Wiring)
+
+### Completed
+- Added a new clean-room workspace brief generator at:
+  - `scripts/tools/claude_superpower_brief.py`
+- Wired both Claude hooks to the same generator:
+  - `.claude/hooks/session-start.py`
+  - `.claude/hooks/post-compact-reinject.py`
+- Added a local Claude plugin command bundle:
+  - `plugins/superpower-claude/.claude-plugin/plugin.json`
+  - `plugins/superpower-claude/README.md`
+  - `plugins/superpower-claude/commands/brief-workspace.md`
+  - `plugins/superpower-claude/scripts/brief-workspace.sh`
+- Added focused regression coverage:
+  - `tests/test_tools/test_claude_superpower_brief.py`
+
+### What It Does
+- Session start now gets a concise repo brief instead of only git/stage snippets.
+- Post-compaction reinjection now restores:
+  - handoff summary
+  - current recommendation
+  - broken/decaying/paused signals
+  - upcoming Brisbane sessions
+  - memory topic pointers
+- Claude can now request the same brief on demand through the local plugin command.
+
+### Guardrails
+- Clean-room only: no leaked or proprietary Claude Code code was used.
+- One source of truth: hooks and plugin command all call the same Python generator.
+- Brief uses `project_pulse` fast mode only; it does not run drift/tests during hook execution.
+
+---
+
+## Update (Apr 3 — Session 4: Per-Session Signal Research DEAD + Final State)
+
+### Research
+- **Per-session WR optimization: 0/21 BH FDR survivors** after scratch bug fix. Existing filter grid is optimal.
+- **Scratch bug found:** outcome='scratch' has NULL pnl_r. Was inflating chi2 by 3-50x. ALWAYS filter outcome IN ('win','loss').
+- **MGC gap/atr signal confirmed** (p=0.01, 12/17yr) but GAP filter implementation negative. Signal real, filter wrong.
+- **Filter live-readiness verified against code.** All 7 lanes bot-safe. ORB_VOL/DIR not live-wired.
+
+### Portfolio State
+- 124 validated, 57 families, 7 honest deployed lanes (COST_LT, RR-locked)
+- 28 PURGED families unlocked. G-filter redundancy is MGC-only (Codex corrected).
+- No new filters needed. System is optimal for current data.
+
+### Next Session
+- Apply honest lanes to TopStep/MFFU/Bulenox profiles
+- Paper trade 7 lanes for forward evidence
+- Investigate GAP filter threshold (current R005/R015 may be wrong thresholds)
+
+---
+
 ## Update (Apr 3 — Session 2: 3-Tier Portfolio Integrity Fix + Codex Correction)
+
+## Update (Apr 3 — Session 3: Apex De-Scoped From Active Project Path)
+
+### Completed
+- **Apex removed from active/default/canonical project surfaces.**
+  - Removed from `trading_app/prop_firm_policies.py` canonical payout layer
+  - Removed from `trading_app/prop_profiles.py` firm specs, account tiers, and account profiles
+  - Default operator surfaces now point at `topstep_50k_mnq_auto`, not Apex
+  - `pre_session_check.py` consistency gate is now profile-aware instead of hardcoded to Apex
+  - `TRADING_RULES.md` active portfolio section rewritten around TopStep primary deployment
+  - `manual-trading-playbook.md` now explicitly deprecates Apex for active use and underwrites to stricter official interpretation
+
+### Why
+- Official Apex pages remain internally inconsistent:
+  - compliance pages prohibit bots / trade mirroring / system-managed PA-Live trading
+  - other official pages still describe multi-account / copy-adjacent mechanics
+- For this repo, the stricter interpretation wins, so Apex is not usable for the active project path
+
+### Verified
+- `python3 -m py_compile ...` on all touched trading-app modules: PASS
+- Targeted test slice: `136 passed`
+  - `test_prop_firm_policies.py`
+  - `test_prop_profiles.py`
+  - `test_consistency_tracker.py`
+  - `test_prop_portfolio.py`
+  - `test_lane_ctl.py`
+  - `test_lane_allocator.py`
+
+### Important nuance
+- Historical Apex references still exist in archived docs/plans/prompts outside the active path.
+- They were intentionally left as provenance. Active code/tests/runtime/defaults no longer treat Apex as current.
+
+### Follow-up hardening (same session)
+- Fixed remaining logic gap: `pre_session_check.py` consistency gate now checks the active profile at the account level, not hardcoded `MNQ` only.
+- Added `find_active_primary_profile()` and kept `find_active_manual_profile()` as a backward-compatible alias.
+- Removed remaining active UI/style references to Apex in the live dashboard.
+- Extra verification:
+  - targeted pytest rerun: `131 passed`
+  - live/performance slice: `44 passed`
+  - pre-session slice: `12 passed`
 
 ### Codex Adversarial Review (same session)
 **My claim "G-filters globally redundant with COST_LT" was OVERCLAIMED.**
