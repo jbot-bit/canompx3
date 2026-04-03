@@ -572,7 +572,7 @@ A "family" = one unique combination of `(session, entry_model, filter_level)`. A
 - `ATRVelocityFilter` class in `trading_app/config.py`. `ATR_VELOCITY_OVERLAY = ATRVelocityFilter()`.
 - Columns in `daily_features`: `atr_vel_ratio`, `atr_vel_regime`, `orb_{label}_compression_z`, `orb_{label}_compression_tier`.
 - Wired into: `ExecutionEngine` (live), `portfolio.py` (backtesting).
-- Scripts: `research/research_avoid_crosscheck.py` (original, E0/old sessions), `research/research_mnq_singapore_avoid.py` (MNQ revalidation), `research/research_mes_compressed_spring.py` (MES revalidation).
+- Scripts: `research/research_mnq_singapore_avoid.py` (MNQ revalidation), `research/research_mes_compressed_spring.py` (MES revalidation). Original E0/old-session script removed.
 - Warm-up period (< 5 prior ATR days): fail-open.
 
 ---
