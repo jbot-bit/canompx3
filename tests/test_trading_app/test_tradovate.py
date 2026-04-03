@@ -593,3 +593,169 @@ class TestBrokerFactory:
         assert components["router_class"].__name__ == "TradovateOrderRouter"
         assert components["contracts_class"].__name__ == "TradovateContracts"
         assert components["positions_class"].__name__ == "TradovatePositions"
+
+
+# ---------------------------------------------------------------------------
+# Bloomey review gap fixes
+# ---------------------------------------------------------------------------
+
+
+class TestTokenRenewal:
+    """GAP-004: Token renewal path was untested."""
+
+    @patch.dict(
+        "os.environ",
+        {
+            "TRADOVATE_USERNAME": "test",
+            "TRADOVATE_PASSWORD": "pass",
+            "TRADOVATE_CID": "123",
+            "TRADOVATE_SEC": "secret",
+            "TRADOVATE_DEMO": "1",
+        },
+    )
+    @patch("trading_app.live.tradovate.auth.requests.post")
+    def test_renew_success(self, mock_post):
+        """Renewal returns new token without full re-login."""
+        from trading_app.live.tradovate.auth import TradovateAuth
+
+        # Initial login
+        login_resp = MagicMock()
+        login_resp.raise_for_status = MagicMock()
+        login_resp.json.return_value = {"accessToken": "old_tok", "userId": 1}
+
+        # Renewal response
+        renew_resp = MagicMock()
+        renew_resp.raise_for_status = MagicMock()
+        renew_resp.json.return_value = {"accessToken": "new_tok"}
+
+        mock_post.side_effect = [login_resp, renew_resp]
+
+        auth = TradovateAuth()
+        auth.get_token()  # Initial login
+        assert auth._access_token == "old_tok"
+
+        # Force renewal
+        auth._acquired_at = 0  # Expire the token
+        auth._renew_or_login()
+        assert auth._access_token == "new_tok"
+
+    @patch.dict(
+        "os.environ",
+        {
+            "TRADOVATE_USERNAME": "test",
+            "TRADOVATE_PASSWORD": "pass",
+            "TRADOVATE_CID": "123",
+            "TRADOVATE_SEC": "secret",
+            "TRADOVATE_DEMO": "1",
+        },
+    )
+    @patch("trading_app.live.tradovate.auth.requests.post")
+    def test_renew_fails_falls_back_to_login(self, mock_post):
+        """If renewal fails, falls back to full login."""
+        import requests as req
+        from trading_app.live.tradovate.auth import TradovateAuth
+
+        login_resp = MagicMock()
+        login_resp.raise_for_status = MagicMock()
+        login_resp.json.return_value = {"accessToken": "tok1", "userId": 1}
+
+        renew_fail = MagicMock()
+        renew_fail.raise_for_status.side_effect = req.RequestException("renewal failed")
+
+        relogin_resp = MagicMock()
+        relogin_resp.raise_for_status = MagicMock()
+        relogin_resp.json.return_value = {"accessToken": "tok2", "userId": 1}
+
+        mock_post.side_effect = [login_resp, renew_fail, relogin_resp]
+
+        auth = TradovateAuth()
+        auth.get_token()
+        auth._acquired_at = 0
+        auth._renew_or_login()
+        assert auth._access_token == "tok2"  # Fell back to full login
+
+
+class TestQueryOpenOrders:
+    """GAP-005: query_open_orders was untested."""
+
+    @patch("trading_app.live.tradovate.order_router.request_with_retry")
+    def test_returns_list(self, mock_req, router):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = [
+            {"orderId": 1, "symbol": "MNQM6", "orderType": "Stop"},
+            {"orderId": 2, "symbol": "MNQM6", "orderType": "Limit"},
+        ]
+        mock_req.return_value = mock_resp
+
+        orders = router.query_open_orders()
+        assert len(orders) == 2
+        assert orders[0]["orderId"] == 1
+
+    @patch("trading_app.live.tradovate.order_router.request_with_retry")
+    def test_returns_empty_on_non_list(self, mock_req, router):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = {"error": "something"}
+        mock_req.return_value = mock_resp
+
+        orders = router.query_open_orders()
+        assert orders == []
+
+    def test_returns_empty_no_auth(self):
+        from trading_app.live.tradovate.order_router import TradovateOrderRouter
+
+        router = TradovateOrderRouter(account_id=1, auth=None, tick_size=0.25)
+        assert router.query_open_orders() == []
+
+
+class TestBracketPriceCollar:
+    """IMPORTANT-005: Price collar now validates bracket prices too."""
+
+    def test_bracket_target_rejected_by_collar(self, router):
+        """Bracket target price too far from market should be rejected."""
+        router.update_market_price(100.0)
+        spec = router.build_order_spec("long", "E2", 100.0, "MNQM6")
+        bracket = router.build_bracket_spec("long", "MNQM6", 100.0, 99.0, 200.0)  # Target at 200 = 100% deviation
+        merged = router.merge_bracket_into_entry(spec, bracket)
+        with pytest.raises(ValueError, match="PRICE_COLLAR_REJECTED"):
+            router.submit(merged)
+
+    def test_bracket_within_collar_passes(self, router):
+        """Normal bracket prices within collar should pass."""
+        router.update_market_price(100.0)
+        spec = router.build_order_spec("long", "E2", 100.1, "MNQM6")
+        bracket = router.build_bracket_spec("long", "MNQM6", 100.1, 99.9, 100.3)
+        merged = router.merge_bracket_into_entry(spec, bracket)
+
+        with patch("trading_app.live.tradovate.order_router.request_with_retry") as mock_req:
+            mock_resp = MagicMock()
+            mock_resp.raise_for_status = MagicMock()
+            mock_resp.json.return_value = {"orderId": 1}
+            mock_req.return_value = mock_resp
+            result = router.submit(merged)
+            assert result["order_id"] == 1
+
+
+class TestCancelBracketOrders:
+    """CRITICAL-003 follow-up: cancel_bracket_orders works on Tradovate."""
+
+    @patch("trading_app.live.tradovate.order_router.request_with_retry")
+    def test_cancels_matching_brackets(self, mock_req, router):
+        # query_open_orders returns brackets
+        query_resp = MagicMock()
+        query_resp.raise_for_status = MagicMock()
+        query_resp.json.return_value = [
+            {"orderId": 10, "symbol": "MNQM6", "orderType": "Limit"},
+            {"orderId": 11, "symbol": "MNQM6", "orderType": "Stop"},
+            {"orderId": 12, "symbol": "MGCM6", "orderType": "Stop"},  # Different symbol
+        ]
+
+        # cancel responses
+        cancel_resp = MagicMock()
+        cancel_resp.raise_for_status = MagicMock()
+
+        mock_req.side_effect = [query_resp, cancel_resp, cancel_resp]
+
+        cancelled = router.cancel_bracket_orders("MNQM6")
+        assert cancelled == 2  # Only MNQM6 brackets, not MGCM6
