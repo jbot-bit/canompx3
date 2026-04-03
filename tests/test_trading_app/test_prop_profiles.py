@@ -100,10 +100,10 @@ class TestAccountProfile:
         assert p.active is False  # Inactive until Tradovate runtime parity is verified
 
     def test_self_funded_profile(self):
-        p = get_profile("self_funded_50k")
-        assert p.stop_multiplier == 1.0
-        assert p.max_slots == 10
-        assert p.active is False  # Phase 3 — not active yet
+        p = get_profile("self_funded_tradovate")
+        assert p.stop_multiplier == 0.75
+        assert p.max_slots == 5
+        assert p.active is False  # Activate after Tradovate personal API test
 
     def test_profile_copies(self):
         p = get_profile("topstep_50k")
@@ -129,7 +129,7 @@ class TestAccountProfile:
         active = get_active_profile_ids()
         assert "topstep_50k_mnq_auto" in active
         assert "tradeify_50k" not in active
-        assert "self_funded_50k" not in active
+        assert "self_funded_tradovate" not in active
 
 
 class TestProfitSplitFactor:

@@ -729,17 +729,68 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     # =========================================================================
     # Phase 3: Self-funded (after prop proof, $100K/year target)
     # =========================================================================
-    "self_funded_50k": AccountProfile(
-        profile_id="self_funded_50k",
+    "self_funded_tradovate": AccountProfile(
+        profile_id="self_funded_tradovate",
         firm="self_funded",
         account_size=50_000,
         copies=1,
-        stop_multiplier=1.0,
-        max_slots=10,
-        active=False,  # Phase 3 — not active until prop proof complete
-        # None = all sessions, all instruments
-        payout_policy_id="self_funded",
-        notes="Own capital. ALL 9 sessions. 5-10c. DD=temporary. IBKR (not built yet).",
+        stop_multiplier=0.75,
+        max_slots=5,
+        active=False,  # Activate after opening Tradovate personal account + API test
+        allowed_sessions=frozenset(
+            {
+                "CME_REOPEN",
+                "SINGAPORE_OPEN",
+                "COMEX_SETTLE",
+                "EUROPE_FLOW",
+                "TOKYO_OPEN",
+            }
+        ),
+        allowed_instruments=frozenset({"MNQ", "MGC"}),
+        # ALLOCATOR-DRIVEN LANES — same as topstep_50k_mnq_auto.
+        # ORB caps REMOVED on 3 lanes (real data shows they cut profitable trades).
+        # TOKYO_OPEN cap KEPT (data shows it protects from $1,089 in losses).
+        # Verified from orb_outcomes 2025-2026 risk_dollars analysis.
+        daily_lanes=(
+            DailyLaneSpec(
+                "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
+                "MGC",
+                "CME_REOPEN",
+                max_orb_size_pts=None,  # Removed: was cutting $548 profit in 15mo
+            ),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
+                "MNQ",
+                "SINGAPORE_OPEN",
+                max_orb_size_pts=90.0,  # Never hit — cap irrelevant
+            ),
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=None,  # Removed: was cutting $2,510 profit in 15mo
+            ),
+            DailyLaneSpec(
+                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
+                "MNQ",
+                "EUROPE_FLOW",
+                max_orb_size_pts=None,  # Removed: was cutting $981 profit in 15mo
+            ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
+                "MNQ",
+                "TOKYO_OPEN",
+                max_orb_size_pts=80.0,  # KEPT: data shows cap protects from $1,089 losses
+            ),
+        ),
+        notes=(
+            "Self-funded on Tradovate personal account. Start at 1ct, scale to 2-5ct. "
+            "No split, no caps, no callups, no rules. API already built. "
+            "ORB caps removed on 3 lanes (verified profitable from 2025-2026 data). "
+            "TOKYO_OPEN cap kept (data shows it protects). "
+            "Margin: MNQ $50 day trade, MGC $200 day trade (Tradovate official). "
+            "Commission: $1.90/RT MNQ, $2.40/RT MGC (Free plan all-in)."
+        ),
     ),
 }
 
