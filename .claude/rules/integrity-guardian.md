@@ -33,8 +33,11 @@ For every production file change, ask:
 - Drift checks still pass? (`python pipeline/check_drift.py`)
 - Spec in `docs/specs/` compliant?
 
-## 5. Evidence Over Assertion
+## 5. Evidence Over Assertion — Generation Is Not Validation
 Provide verifiable output, not claims. Show command output, row counts, test results.
+- **Generation is not validation.** No LLM output is trusted until verified with execution evidence.
+- For code review findings: trace the execution path (file:line → call → file:line) before claiming a bug exists. Confident wrong findings are worse than no findings.
+- Use semi-formal reasoning: PREMISE → TRACE → EVIDENCE → CONCLUSION. Do not report findings where TRACE or EVIDENCE is empty.
 
 ## 6. Spec Compliance
 Check `docs/specs/` before building ANY feature. If a spec exists, follow it exactly.

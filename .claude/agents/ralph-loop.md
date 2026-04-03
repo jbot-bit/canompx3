@@ -103,7 +103,18 @@ Recommendation: Re-scope to unscanned critical/high-centrality files, or STOP.
 - Skip to Step 5 with verdict `DIMINISHING_RETURNS`.
 - **Override:** If scope was explicitly provided by the user (not from "Next iteration targets"), proceed anyway.
 
-Read the scope file. Scan for Seven Sins:
+Read the scope file. For every potential finding, apply semi-formal reasoning:
+
+```
+PREMISE:  What specific violation am I claiming? (one sentence)
+TRACE:    file:line → import/call → file:line (follow the actual chain)
+EVIDENCE: Quote the code. If I ran a command, show output.
+VERDICT:  SUPPORT → report | REFUTE → discard | INSUFFICIENT → skip
+```
+
+Do NOT report findings where TRACE is empty. Do NOT guess behavior from function names — trace the actual call. A finding with wrong TRACE is worse than no finding (false positives erode trust and waste iterations).
+
+Scan for Seven Sins:
 
 | Sin | Pattern |
 |-----|---------|
