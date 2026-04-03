@@ -1381,3 +1381,25 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 0 external callers (both standalone CLI tools); 1 internal caller each within same file
 - Verification: PASS (ruff clean, 67 drift checks pass, pre-commit suite pass)
 - Commit: 7e70c22
+
+## Iteration 136 — 2026-04-04
+- Phase: fix
+- Classification: [judgment]
+- Target: pipeline/ingest_dbn_mgc.py:126
+- Finding: Silent crash — CheckpointManager._load_checkpoints() calls json.loads() with no JSONDecodeError handler. A corrupt JSONL checkpoint line (from process kill during write_checkpoint) propagates an unhandled exception that crashes the entire ingest run with no recovery message, even when prior checkpoints are valid and the run could resume.
+- Action: Wrapped json.loads() in try/except json.JSONDecodeError; corrupt lines are skipped with a stderr warning. Valid lines before and after the corrupt entry continue to load correctly. Added regression test test_corrupt_checkpoint_line_is_skipped to test_ingest_daily.py.
+- Blast radius: 1 file changed; 3 production callers (ingest_dbn.py, ingest_dbn_daily.py, ingest_dbn_mgc.py main()), 1 test file
+- Verification: PASS (18/18 test_ingest_daily.py, 77 drift checks pass, pre-commit suite pass)
+- Commit: 4089b29
+
+---
+
+## Iteration 137 — 2026-04-04
+- Phase: fix
+- Classification: [judgment]
+- Target: pipeline/ingest_dbn_daily.py:379
+- Finding: Fail-open exception handler in per-file loop — outer try/except caught all file processing errors and called `continue`, allowing the loop to proceed and flush already-buffered data to DB even after a file failed. The end-of-loop `files_failed` check was too late: DB commits for subsequent files could already have been written, leaving silently incomplete data in bars_1m.
+- Action: Changed `except` block from `stats["files_failed"] += 1; continue` to `traceback.print_exc(); sys.exit(1)`. Added `import traceback`. Removed now-dead `files_failed` counter (key from stats dict, Files failed log line, and end-of-loop files_failed > 0 check). Added `FATAL:` prefix to error message for grep-ability.
+- Blast radius: 1 file changed; DAILY_FILE_PATTERN import in audit_bars_coverage.py unaffected; test behavior unchanged
+- Verification: PASS (18/18 test_ingest_daily.py, 77 drift checks pass, 737 fast tests pass, pre-commit suite pass)
+- Commit: 4a62a53
