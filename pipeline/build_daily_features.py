@@ -1083,7 +1083,9 @@ def build_daily_features(
 
     # Bulk-load bars_5m for RSI computation (one query instead of ~1500)
     # RSI needs up to 200 bars BEFORE the first trading day's 09:00, so extend lookback
-    rsi_lookback_start = range_start_utc - timedelta(days=10)  # ~200 5m bars ≈ ~3.5 days
+    rsi_lookback_start = range_start_utc - timedelta(
+        days=10
+    )  # 200 5m bars ≈ 16.7 trading hours; 10d is conservative over-fetch
     logger.info("  Bulk-loading bars_5m for RSI...")
 
     all_bars_5m_df = con.execute(
