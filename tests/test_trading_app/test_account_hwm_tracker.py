@@ -189,6 +189,9 @@ class TestPollFailures:
         tracker.update_equity(None)
         tracker.update_equity(None)
         assert tracker._halt
+        halted, reason = tracker.check_halt()
+        assert halted
+        assert "POLL_FAILURE" in reason
 
     def test_successful_poll_resets_failure_count(self, tracker):
         tracker.update_equity(50000.0)
