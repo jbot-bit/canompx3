@@ -32,3 +32,4 @@ Every research claim must include:
 - 2026 holdout is sacred. Do not use for discovery. Forward-test = monitoring only.
 - No edits before read-only audit. Non-trivial changes require PASS 1 (audit) before PASS 2 (implement).
 - Derived layers marked `DISCOVERY SAFETY: UNSAFE` in their module docstrings.
+- **NEVER simulate strategy P&L without applying the strategy's filter.** Querying `orb_outcomes` with only instrument+session+entry_model+RR but WITHOUT the filter_type (COST_LT, VOL_RV, ATR70_VOL, OVNRNG, ORB_G, etc.) produces UNFILTERED results that overcount trades and misrepresent both P&L and risk. Every simulation MUST join `daily_features` and apply the exact filter condition. If the filter column is missing or broken, say UNVERIFIED — do not substitute `1=1`.

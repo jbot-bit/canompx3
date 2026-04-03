@@ -71,35 +71,42 @@ Stress-tested against full history + 2025-2026. Two historically negative lanes 
 
 ---
 
-## 3. Performance (Stress-Tested from gold.db)
+## 3. Performance (Stress-Tested from gold.db — WITH REAL FILTERS)
 
-### 2025-2026 Backtest (334 trading days, 1ct per lane)
+**IMPORTANT:** These numbers use the actual strategy filters (COST_LT, OVNRNG, ATR70_VOL, VOL_RV, ORB_G6) applied via daily_features triple-join. Two lanes (MNQ_NYSE_OPEN ATR70_VOL, MNQ_US_DATA_1000 X_MES_ATR70) have filter column issues — marked UNVERIFIED. All other lanes are filter-verified.
+
+### 2025-2026 Backtest (329 trading days, 1ct per lane)
 
 | Metric | Value |
 |---|---|
-| Total P&L | $32,658/yr |
-| Monthly avg | $2,722 |
-| Daily avg | $97.78 |
-| Win days | 60% |
-| Losing months | 1/16 (Jun 2025: -$930) |
-| Worst single day | -$998 |
-| Max drawdown | -$2,199 (7.3% of $30K) |
-| Worst 5-day window | -$2,163 |
-| Worst 60-day period | +$763 (still positive) |
+| Total P&L | $23,817/yr |
+| Monthly avg | $1,985 |
+| Daily avg | $72.39 |
+| Trades/day | 4.9 |
+| Win days | 62% |
+| Losing months | 1/16 (Jun 2025: -$857) |
+| Worst single day | -$499 |
+| Max drawdown | -$1,237 (4.1% of $30K) |
 | MNQ all-lanes-lose days | 0.6% |
+
+### Filter impact
+
+Filters reject ~50% of trades. Rejected trades are net positive (+$1,574/yr in 2025-2026) BUT filters improve per-trade edge on every lane. Filters were validated by BH FDR over full 16-year history — they protect against cold regimes where unfiltered trades turn negative. In a hot regime (2025-2026), unfiltered trades look profitable. That's selection bias.
 
 ### Scaling
 
-| Contracts | Annual | Monthly | Worst Day | Max DD | DD % of $30K |
-|---|---|---|---|---|---|
-| 1ct | $32,658 | $2,722 | -$998 | -$2,199 | 7.3% |
-| 2ct | $65,316 | $5,443 | -$1,996 | -$4,398 | 14.7% |
-| 3ct | $97,974 | $8,164 | -$2,994 | -$6,597 | 22.0% |
+| Contracts | Annual (gross) | Commission | Net Annual | Monthly | Worst Day | Max DD | DD % |
+|---|---|---|---|---|---|---|---|
+| 1ct | $23,817 | $1,639 | **$22,178** | $1,848 | -$499 | -$1,237 | 4.1% |
+| 2ct | $47,634 | $3,134 | **$44,500** | $3,708 | -$998 | -$2,474 | 8.2% |
+| 3ct | $71,452 | $4,629 | **$66,822** | $5,569 | -$1,497 | -$3,710 | 12.4% |
 
-### Year-by-Year Consistency (full history per lane)
+### Year-by-Year Consistency (filtered, 2025-2026 per lane)
 
-- 9/11 lanes positive in BOTH 2025 and 2026
-- 2 lanes on WATCH: MGC_US_DATA_1000 (2026 neg, small N), MNQ_CME_PRECLOSE (2026 barely neg)
+Lanes with proper filters applied:
+- 7/11 positive in both 2025 and 2026
+- 2 UNVERIFIED: MNQ_NYSE_OPEN (filter column issue), MNQ_US_DATA_1000 (cross-instrument filter not in daily_features)
+- 2 WATCH: MES_US_DATA_1000 (2026 barely -$21), MNQ_CME_REOPEN VOL_RV30 (2026 -$118, only 29 trades)
 - Kill criterion for WATCH lanes: if negative for 3 consecutive months, remove from book
 
 ---
@@ -156,7 +163,7 @@ Self-funded rules DON'T ratchet. Daily/weekly limits reset. The drawdown halt me
 | MGC commission | $0.39/side + $0.22 exchange = $1.22/RT |
 | MES commission | $0.39/side + $0.22 exchange = $1.22/RT |
 | Market data (CME Level 1) | ~$12/mo |
-| Annual cost (~4 trades/day) | ~$1,374/yr |
+| Annual cost (~5 trades/day) | ~$1,639/yr |
 
 Note: our cost model assumes $2.74/RT for MNQ and $5.74/RT for MGC. Tradovate Free plan is cheaper ($1.22/RT). Backtests are CONSERVATIVE — real costs are lower.
 
