@@ -1,16 +1,18 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Fix bracket collar rejecting RR2.5+ trades
-updated: 2026-04-03T17:00:00Z
+task: Self-funded Tradovate Stage 1 — profile config (11 lanes, caps, payout policy)
+updated: 2026-04-03T18:00:00Z
 scope_lock:
-  - trading_app/live/tradovate/order_router.py
-  - tests/test_trading_app/test_tradovate.py
+  - trading_app/prop_profiles.py
+  - tests/test_trading_app/test_prop_profiles.py
 blast_radius:
-  - order_router.py: revert bracket collar to entry-stop-only (matches ProjectX). No caller changes needed.
-  - test_tradovate.py: update bracket collar test to verify entry-only behavior.
+  - prop_profiles.py: update self_funded_tradovate profile. No other profiles touched.
+  - Tests: add/update test for self-funded profile lane count and config.
+  - No schema changes, no pipeline changes.
 acceptance:
-  - MGC RR2.5 bracket order does NOT get collar-rejected
-  - Entry stop price still collared at 0.5%
-  - All tests pass
+  - python -c "from trading_app.prop_profiles import ACCOUNT_PROFILES; p=ACCOUNT_PROFILES['self_funded_tradovate']; print(len(p.daily_lanes), p.account_size, p.payout_policy_id)" prints "11 30000 self_funded"
+  - All 11 lanes have correct ORB caps (MGC CME=30, SINGAPORE=90, COMEX=150, EUROPE=120, TOKYO=80, NYSE=70, USDATA1000 MNQ=65 MGC=15 MES=20, PRECLOSE=50, CMEREOPEN=50)
+  - python -m pytest tests/test_trading_app/test_prop_profiles.py -x -q passes
+  - python pipeline/check_drift.py passes
 ---

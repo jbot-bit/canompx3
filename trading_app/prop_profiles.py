@@ -732,10 +732,10 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     "self_funded_tradovate": AccountProfile(
         profile_id="self_funded_tradovate",
         firm="self_funded",
-        account_size=50_000,
+        account_size=30_000,
         copies=1,
-        stop_multiplier=1.0,  # Self-funded = full stop. Lane IDs validated at SM=1.0 (no _S075 suffix).
-        max_slots=5,
+        stop_multiplier=0.75,  # Same as prop — validated, don't change without re-testing
+        max_slots=11,
         active=False,  # Activate after opening Tradovate personal account + API test
         allowed_sessions=frozenset(
             {
@@ -744,52 +744,94 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "COMEX_SETTLE",
                 "EUROPE_FLOW",
                 "TOKYO_OPEN",
+                "NYSE_OPEN",
+                "US_DATA_1000",
+                "CME_PRECLOSE",
             }
         ),
-        allowed_instruments=frozenset({"MNQ", "MGC"}),
-        # ALLOCATOR-DRIVEN LANES — same as topstep_50k_mnq_auto.
-        # ORB caps REMOVED on 3 lanes (real data shows they cut profitable trades).
-        # TOKYO_OPEN cap KEPT (data shows it protects from $1,089 in losses).
-        # Verified from orb_outcomes 2025-2026 risk_dollars analysis.
+        allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
+        # 11-lane book. Stress-tested with REAL filters 2025-2026.
+        # $23,817/yr at 1ct. Max DD -$1,237 (4.1% of $30K). Worst day -$499.
+        # Spec: docs/plans/2026-04-03-self-funded-tradovate-design.md
+        # Dropped: MES_CME_PRECLOSE (-$689 full history), MES_US_DATA_830 (-$9,626),
+        #          MES_NYSE_OPEN (-$134), MNQ/MES_LONDON_METALS, MNQ_US_DATA_830.
         daily_lanes=(
+            # --- CORE 5 (same as topstep_50k_mnq_auto, with caps restored) ---
             DailyLaneSpec(
                 "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
                 "MGC",
                 "CME_REOPEN",
-                max_orb_size_pts=None,  # Removed: was cutting $548 profit in 15mo
+                max_orb_size_pts=30.0,  # Cap RESTORED: uncapped allows $1,003 single loss
             ),
             DailyLaneSpec(
                 "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
                 "MNQ",
                 "SINGAPORE_OPEN",
-                max_orb_size_pts=90.0,  # Never hit — cap irrelevant
+                max_orb_size_pts=90.0,
             ),
             DailyLaneSpec(
                 "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
                 "MNQ",
                 "COMEX_SETTLE",
-                max_orb_size_pts=None,  # Removed: was cutting $2,510 profit in 15mo
+                max_orb_size_pts=150.0,  # Raised from 80 — extra trades +$2,510/yr, max risk $300
             ),
             DailyLaneSpec(
                 "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
                 "MNQ",
                 "EUROPE_FLOW",
-                max_orb_size_pts=None,  # Removed: was cutting $981 profit in 15mo
+                max_orb_size_pts=120.0,  # Cap RESTORED: only 2 trades above this (N=2 is noise)
             ),
             DailyLaneSpec(
                 "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
                 "MNQ",
                 "TOKYO_OPEN",
-                max_orb_size_pts=80.0,  # KEPT: data shows cap protects from $1,089 losses
+                max_orb_size_pts=80.0,
+            ),
+            # --- EXTRA 6 (from Type-A book, stress-tested positive) ---
+            DailyLaneSpec(
+                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL",
+                "MNQ",
+                "NYSE_OPEN",
+                max_orb_size_pts=70.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR70_S075",
+                "MNQ",
+                "US_DATA_1000",
+                max_orb_size_pts=65.0,
+            ),
+            DailyLaneSpec(
+                "MGC_US_DATA_1000_E2_RR1.0_CB1_ORB_G6",
+                "MGC",
+                "US_DATA_1000",
+                max_orb_size_pts=15.0,
+            ),
+            DailyLaneSpec(
+                "MES_US_DATA_1000_E2_RR1.0_CB1_VOL_RV15_N20_S075",
+                "MES",
+                "US_DATA_1000",
+                max_orb_size_pts=20.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20",
+                "MNQ",
+                "CME_PRECLOSE",
+                max_orb_size_pts=50.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_CME_REOPEN_E2_RR1.0_CB1_VOL_RV30_N20",
+                "MNQ",
+                "CME_REOPEN",
+                max_orb_size_pts=50.0,
             ),
         ),
+        payout_policy_id="self_funded",
         notes=(
-            "Self-funded on Tradovate personal account. Start at 1ct, scale to 2-5ct. "
-            "No split, no caps, no callups, no rules. API already built. "
-            "ORB caps removed on 3 lanes (verified profitable from 2025-2026 data). "
-            "TOKYO_OPEN cap kept (data shows it protects). "
-            "Margin: MNQ $50 day trade, MGC $200 day trade (Tradovate official). "
-            "Commission: $1.90/RT MNQ, $2.40/RT MGC (Free plan all-in)."
+            "Self-funded Tradovate personal account. 11 honest lanes, stress-tested "
+            "with real filters. $23,817/yr at 1ct (2025-2026 backtest). Max DD -$1,237 "
+            "(4.1%). Phase 1: 5 core lanes. Phase 2: add 6 extra. Phase 3: scale to 2-3ct. "
+            "Margin: $50/contract intraday (Tradovate). Commission: $1.22/RT (Free plan). "
+            "Self-imposed limits: daily -$600, weekly -$1,500, DD halt -$3,000."
         ),
     ),
 }
