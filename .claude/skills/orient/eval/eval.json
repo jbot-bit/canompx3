@@ -1,0 +1,60 @@
+{
+  "skill": "orient",
+  "version": 1,
+  "tests": [
+    {
+      "id": "or-01",
+      "prompt": "where are we",
+      "assertions": [
+        {
+          "id": "or-01-a1",
+          "type": "regex_match",
+          "pattern": "(STAGE_STATE|stage.*none|no active stage)",
+          "description": "Checks for active stage state"
+        },
+        {
+          "id": "or-01-a2",
+          "type": "regex_match",
+          "pattern": "(HANDOFF|handoff)",
+          "description": "Reads HANDOFF.md for coordination state"
+        },
+        {
+          "id": "or-01-a3",
+          "type": "regex_not_match",
+          "pattern": "\\d+ (validated|strategies).*from memory",
+          "description": "Does not cite strategy counts from memory"
+        },
+        {
+          "id": "or-01-a4",
+          "type": "regex_match",
+          "pattern": "(recommend|suggest|next|action|priority)",
+          "description": "Provides recommended next action"
+        }
+      ]
+    },
+    {
+      "id": "or-02",
+      "prompt": "what's the project status",
+      "assertions": [
+        {
+          "id": "or-02-a1",
+          "type": "regex_match",
+          "pattern": "(git log|recent commit|latest commit)",
+          "description": "Checks recent git activity"
+        },
+        {
+          "id": "or-02-a2",
+          "type": "regex_match",
+          "pattern": "(MGC|MNQ|MES)",
+          "description": "References active instruments"
+        },
+        {
+          "id": "or-02-a3",
+          "type": "regex_not_match",
+          "pattern": "(M2K|MCL|SIL|M6E|MBT)",
+          "description": "Does not reference dead instruments as active"
+        }
+      ]
+    }
+  ]
+}
