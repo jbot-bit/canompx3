@@ -86,6 +86,7 @@ class AccountProfile:
     # Canonical payout path for this account (e.g. topstep_express_standard).
     # None = payout mechanics are not modeled for this profile.
     payout_policy_id: str | None = None
+    max_risk_per_trade: float | None = None  # Dollar cap per trade. None = no limit.
     notes: str = ""
 
 
@@ -736,6 +737,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=1,
         stop_multiplier=0.75,  # Same as prop — validated, don't change without re-testing
         max_slots=11,
+        max_risk_per_trade=300.0,  # $300 cap = 1% of $30K per trade
         active=False,  # Activate after opening Tradovate personal account + API test
         allowed_sessions=frozenset(
             {

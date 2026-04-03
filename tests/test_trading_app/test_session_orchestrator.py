@@ -195,6 +195,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._consecutive_engine_errors = 0
     orch._blocked_strategies = set()
     orch._orb_caps = {}  # ORB cap map — populated per test
+    orch._max_risk_per_trade = None  # Dollar cap — populated per test
     orch.order_router = c.router
     orch.positions = c.positions
     orch._write_signal_record = MagicMock()
@@ -2124,3 +2125,68 @@ class TestOrbCapGate:
         assert record["type"] == "ORB_CAP_SKIP"
         assert record["risk_pts"] == 200.0
         assert record["cap_pts"] == 150.0
+
+
+@pytest.mark.asyncio
+class TestMaxRiskPerTrade:
+    """Per-trade dollar risk cap: reject trades exceeding max_risk_per_trade."""
+
+    def _build_risk_capped_orch(self, max_risk: float | None = 300.0) -> SessionOrchestrator:
+        strat = _nyse_open_strategy()
+        portfolio = Portfolio(
+            name="test",
+            instrument="MNQ",
+            strategies=[strat],
+            account_equity=30000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        c = FakeBrokerComponents(fill_price=20000.0)
+        orch = build_orchestrator(c)
+        orch.instrument = "MNQ"
+        orch.portfolio = portfolio
+        orch._strategy_map = {strat.strategy_id: strat}
+        orch.cost_spec.point_value = 2.0  # MNQ = $2/pt
+        orch._max_risk_per_trade = max_risk
+        return orch
+
+    async def test_250_under_cap_accepted(self):
+        """$250 risk (125 pts × $2/pt) under $300 cap → accepted."""
+        orch = self._build_risk_capped_orch(max_risk=300.0)
+        event = _nyse_open_entry(risk_points=125.0)  # 125 × $2 = $250
+        await orch._handle_event(event)
+        assert len(orch.order_router.submitted) > 0
+
+    async def test_350_over_cap_rejected(self):
+        """$350 risk (175 pts × $2/pt) over $300 cap → rejected."""
+        orch = self._build_risk_capped_orch(max_risk=300.0)
+        event = _nyse_open_entry(risk_points=175.0)  # 175 × $2 = $350
+        await orch._handle_event(event)
+        assert len(orch.order_router.submitted) == 0
+        orch._write_signal_record.assert_called()
+        record = orch._write_signal_record.call_args[0][0]
+        assert record["type"] == "MAX_RISK_SKIP"
+        assert record["risk_dollars"] == 350.0
+        assert record["cap_dollars"] == 300.0
+
+    async def test_no_cap_any_risk_accepted(self):
+        """Profile without max_risk_per_trade → all trades accepted."""
+        orch = self._build_risk_capped_orch(max_risk=None)
+        event = _nyse_open_entry(risk_points=500.0)  # 500 × $2 = $1000
+        await orch._handle_event(event)
+        assert len(orch.order_router.submitted) > 0
+
+    async def test_none_risk_points_passes(self):
+        """No risk_points on event → max risk check skipped (fail-open)."""
+        orch = self._build_risk_capped_orch(max_risk=300.0)
+        event = _nyse_open_entry(risk_points=None)
+        await orch._handle_event(event)
+        # Should not be blocked by max risk check (fail-open on missing data)
+
+    async def test_exactly_at_cap_accepted(self):
+        """$300 risk exactly at $300 cap → accepted (strict greater-than)."""
+        orch = self._build_risk_capped_orch(max_risk=300.0)
+        event = _nyse_open_entry(risk_points=150.0)  # 150 × $2 = $300 exactly
+        await orch._handle_event(event)
+        assert len(orch.order_router.submitted) > 0
