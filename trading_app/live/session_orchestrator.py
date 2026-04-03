@@ -138,6 +138,20 @@ class SessionOrchestrator:
                 raise  # Fail-closed: prop accounts MUST have working cap loading
             log.warning("Could not load ORB caps from lane registry — caps DISABLED")
 
+        # Per-trade max risk in dollars (account-level cap, None = no limit)
+        self._max_risk_per_trade: float | None = None
+        if portfolio is not None and portfolio.name.startswith("profile_"):
+            try:
+                from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+                pid = portfolio.name.removeprefix("profile_")
+                prof = ACCOUNT_PROFILES.get(pid)
+                if prof is not None and prof.max_risk_per_trade is not None:
+                    self._max_risk_per_trade = prof.max_risk_per_trade
+                    log.info("Max risk per trade: $%.0f", self._max_risk_per_trade)
+            except Exception:
+                log.warning("Could not load max_risk_per_trade from profile — guard DISABLED")
+
         # Execution stack
         self.cost_spec: CostSpec = get_cost_spec(instrument)
         cost = self.cost_spec
@@ -1374,6 +1388,30 @@ class SessionOrchestrator:
                             "strategy_id": event.strategy_id,
                             "risk_pts": event.risk_points,
                             "cap_pts": orb_cap,
+                        }
+                    )
+                    return
+
+            # Per-trade max risk guard — dollar-based account-level cap.
+            # Converts risk_points to dollars via cost_spec.point_value.
+            if self._max_risk_per_trade is not None and event.risk_points is not None:
+                risk_dollars = event.risk_points * self.cost_spec.point_value * event.contracts
+                if risk_dollars > self._max_risk_per_trade:
+                    log.warning(
+                        "MAX_RISK_SKIP: %s risk=$%.0f > cap=$%.0f (%.1f pts × $%.2f × %d ct). Trade skipped.",
+                        event.strategy_id,
+                        risk_dollars,
+                        self._max_risk_per_trade,
+                        event.risk_points,
+                        self.cost_spec.point_value,
+                        event.contracts,
+                    )
+                    self._write_signal_record(
+                        {
+                            "type": "MAX_RISK_SKIP",
+                            "strategy_id": event.strategy_id,
+                            "risk_dollars": round(risk_dollars, 2),
+                            "cap_dollars": self._max_risk_per_trade,
                         }
                     )
                     return
