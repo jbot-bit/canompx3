@@ -49,6 +49,17 @@ Use Agent tool with `pr-review-toolkit:code-reviewer` subagent type. Provide:
 
 Alternatively, for a deeper quant-focused review with Seven Sins grading, use `/bloomey-review`.
 
+**Include this semi-formal reasoning instruction in the agent prompt:**
+
+> For each finding you report, complete this chain before reporting:
+>
+> 1. **PREMISE:** What specific claim are you making? (one sentence)
+> 2. **TRACE:** What file:line → import/call → file:line path proves it? (follow the chain, don't guess from names)
+> 3. **EVIDENCE:** Quote the relevant code lines or command output.
+> 4. **CONCLUSION:** SUPPORT (report it) | REFUTE (discard silently) | INSUFFICIENT (say UNSUPPORTED)
+>
+> Do NOT report any finding where TRACE or EVIDENCE is empty. Show the full PREMISE→TRACE→EVIDENCE chain for Critical findings. For Important/Minor, line citation suffices.
+
 **3. Blueprint Cross-Check**
 
 If the changes touch strategy, research, ML, or trading logic:
