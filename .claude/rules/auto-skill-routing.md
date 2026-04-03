@@ -7,6 +7,7 @@ The user does NOT type `/skill` commands. Claude should invoke skills proactivel
 | Context | Action | Detection |
 |---------|--------|-----------|
 | Session start / first message | Run `/orient` | No prior messages |
+| "next" / "keep going" / "continue" / "auto" | Run `/next` | User wants auto-pick of next task |
 | "commit" / "push" | Just execute (per workflow-preferences.md — no blocking) | Git operations |
 | "done" / "complete" (for a stage) | Run `/verify done` before closing stage | Active STAGE_STATE |
 | After editing 2+ production files | Run drift + targeted tests before responding | File count tracking |
