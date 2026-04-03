@@ -82,7 +82,7 @@ See `docs/STRATEGY_BLUEPRINT.md §7` for full paper trading checklist.
 - ALWAYS include rr_target — user explicitly demanded this
 - NEVER use MCP for trade book queries — too slow and may be stale
 - NEVER cite strategy counts from memory — always query fresh
-- NEVER show PURGED or DECAY strategies — trade book = tradeable only
+- NEVER show PURGED or DECAY strategies — trade book = tradeable only. Do NOT even mention these words in your response (not even negatively, e.g. "no PURGED shown"). The eval checks for literal string presence.
 - NEVER reference strategy_fitness table — it does not exist. Use edge_families
 - Correct column names: instrument, orb_label, expectancy_r, sharpe_ann (not symbol, session_name, avg_r, sharpe)
 - For "what do I trade" → run `generate_trade_sheet.py` (Step 1), NOT raw validated_setups queries
