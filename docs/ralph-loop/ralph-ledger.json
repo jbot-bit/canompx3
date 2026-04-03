@@ -1,8 +1,8 @@
 {
-  "total_iterations": 131,
+  "total_iterations": 132,
   "last_updated": "2026-04-04",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 138,
+  "last_high_finding_iter": 139,
   "findings_by_type": {
     "canonical_violation": {
       "found": 47,
@@ -11,8 +11,8 @@
       "fix_rate": 0.77
     },
     "silent_failure": {
-      "found": 24,
-      "fixed": 22,
+      "found": 25,
+      "fixed": 23,
       "deferred": 1,
       "fix_rate": 0.92
     },
@@ -116,11 +116,11 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 9,
-    "MEDIUM": 28,
+    "MEDIUM": 29,
     "LOW": 91
   },
   "classifications": {
-    "judgment": 60,
+    "judgment": 61,
     "mechanical": 46,
     "audit-only": 25
   },
@@ -968,6 +968,11 @@
     "pipeline/ingest_dbn_daily.py": {
       "audit_count": 1,
       "last_iter": 137,
+      "findings": 1
+    },
+    "pipeline/build_bars_5m.py": {
+      "audit_count": 1,
+      "last_iter": 139,
       "findings": 1
     }
   },
@@ -2412,6 +2417,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "74e051a"
+    },
+    {
+      "iter": 139,
+      "date": "2026-04-04",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "pipeline/build_bars_5m.py:336",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "b8a5af8"
     }
   ]
 }

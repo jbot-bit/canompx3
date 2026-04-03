@@ -1417,3 +1417,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Commit: 74e051a
 
 ---
+
+## Iteration 139 — 2026-04-04
+- Phase: fix
+- Classification: [judgment]
+- Target: pipeline/build_bars_5m.py:336
+- Finding: Fail-open in main() — verify_5m_integrity was guarded by `row_count > 0`. If source bars_1m exist but the INSERT produces 0 rows (SQL defect), build_5m_bars returns 0, verification is silently skipped, and sys.exit(0) is reached. This masks a broken build as a success.
+- Action: Removed `and row_count > 0` from the verify condition. verify_5m_integrity now runs whenever not dry_run. With 0 rows in range, all checks pass cleanly (0 dupes, 0 misaligned, 0 OHLCV, 0 neg vol) — legitimate empty builds still succeed.
+- Blast radius: 1 file (build_bars_5m.py main() only); callers invoke as subprocess; verify_5m_integrity signature unchanged
+- Verification: PASS (8/8 test_build_bars_5m.py + 77 drift checks + 737 pre-commit suite)
+- Commit: b8a5af8
+
+---
