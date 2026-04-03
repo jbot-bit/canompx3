@@ -68,3 +68,6 @@ DAILY_DBN_DIR = PROJECT_ROOT / "DB" / "GOLD_DB_FULLSIZE"
 
 # Default DBN file (single concatenated file — may not exist if using daily files)
 DEFAULT_DBN_FILE = OHLCV_DIR / "glbx-mdp3-20100912-20260203.ohlcv-1m.dbn.zst"
+
+# Trace logs directory (structured JSON audit/research traces)
+TRACES_DIR = PROJECT_ROOT / "logs" / "traces"
