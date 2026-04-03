@@ -1,7 +1,7 @@
 ---
 name: verify
 description: >
-  Run verification gates. Modes: quick (4 gates pre-commit), full (impact map + gates),
+  Run verification gates. Modes: quick (5 gates pre-commit), full (impact map + gates),
   done (stage acceptance + lint/types + gates). Default: quick.
   Use when: "verify", "health check", "pre-commit", "is everything ok", "are we good",
   "integrity check", "done?", "all green?", "run the gates".
@@ -49,7 +49,7 @@ Use `TEST_MAP` from `.claude/hooks/post-edit-pipeline.py` for companion tests.
 
 **Step 3:** Check fail-closed patterns in modified files (no bare `except Exception` returning success, no hardcoded counts, subprocess return codes checked).
 
-**Step 4:** Run all 4 gates (same as quick mode).
+**Step 4:** Run all 5 gates (same as quick mode).
 
 **Step 5:** Emit evidence block with file list and impact table.
 
@@ -65,7 +65,7 @@ ruff check pipeline/ trading_app/ scripts/ --quiet
 ruff format --check pipeline/ trading_app/ scripts/
 ```
 
-**Step 3:** Run all 4 gates (drift, integrity, behavioral, tests).
+**Step 3:** Run all 5 gates (drift, integrity, behavioral, tests, lint).
 
 **Step 4:** Run targeted companion tests for changed files (check `TEST_MAP`).
 
