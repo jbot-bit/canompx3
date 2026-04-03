@@ -71,15 +71,16 @@ Add a `max_risk_per_trade` check before order submission:
 **Files:** `scripts/tools/_tmp_honest_stress_test.py` (or permanent version), investigation
 
 Two lanes have filter column issues:
-- [ ] MNQ_NYSE_OPEN ATR70_VOL: column is `atr_20_pct` not `atr_pct_rank` — verify correct column name and rerun
-- [ ] MNQ_US_DATA_1000 X_MES_ATR70: cross-instrument filter has no pre-computed column in daily_features — investigate how strategy_discovery applies this filter, replicate in simulation
+- [x] MNQ_NYSE_OPEN ATR70_VOL: column `atr_20_pct` is CORRECT (not `atr_pct_rank`). Filter works. But strategy NOT in validated_setups — never pipeline-validated.
+- [x] MNQ_US_DATA_1000 X_MES_ATR70: cross-instrument injection works at all levels (discovery, live, paper). But strategy fdr_significant=False in experimental — too weak for BH FDR.
 
-**If filters work properly:** update spec with corrected numbers.
-**If filters can't be applied:** mark lanes as UNDEPLOYABLE until fixed.
+**Result:** Both lanes marked UNDEPLOYABLE. Validated alternatives identified:
+- NYSE_OPEN → `MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50` (N=1441, Sharpe=1.15)
+- US_DATA_1000 → `MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10` (N=1941, Sharpe=0.73)
 
 **Acceptance:**
-- Both lanes have verified filter-applied P&L in spec
-- OR both lanes are marked UNDEPLOYABLE with explanation
+- ~~Both lanes have verified filter-applied P&L in spec~~
+- [x] Both lanes are marked UNDEPLOYABLE with explanation
 
 ---
 
