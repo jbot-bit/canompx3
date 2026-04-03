@@ -26,6 +26,37 @@ Every research claim must include:
 6. K used for BH FDR (report both global K and instrument/family K; use instrument/family K for promotion decisions, global K for headline claims; never swap K post-hoc)
 7. WFE (if walk-forward was performed)
 
+## Validated Universe Rule (MANDATORY — added 2026-04-04)
+
+**NEVER run research queries against the full unfiltered `orb_outcomes` table.**
+
+`orb_outcomes` contains every possible outcome for every session, entry model, RR target, and confirm_bars — 3M+ rows of noise. Testing a new feature against this undifferentiated mass is testing noise against noise. Any "signal" found is meaningless because:
+1. Most of those parameter combos are NOT validated and have negative expectancy
+2. The massive N (millions) makes even 0.01R random fluctuations "statistically significant"
+3. Filters are not applied — you're mixing filtered and unfiltered trade populations
+
+**Research queries MUST be scoped to one of:**
+- The 124 validated strategies (join `validated_setups` to get the strategy dimensions, then query `orb_outcomes` with those exact filters applied via `daily_features`)
+- A specific hypothesis about a specific session+instrument+filter combo
+- The deployed portfolio (strategy IDs from `prop_profiles.ACCOUNT_PROFILES`)
+
+**Template for valid research query:**
+```sql
+-- Get outcomes for VALIDATED strategies only, with filters applied
+SELECT o.*, d.prev_day_close, d.prev_day_low, d.prev_day_range
+FROM orb_outcomes o
+JOIN daily_features d
+    ON o.trading_day = d.trading_day AND o.symbol = d.symbol AND o.orb_minutes = d.orb_minutes
+JOIN validated_setups v
+    ON o.symbol = v.instrument AND o.orb_label = v.orb_label
+    AND o.orb_minutes = 5 AND o.entry_model = v.entry_model
+    AND o.confirm_bars = v.confirm_bars AND o.rr_target = v.rr_target
+WHERE v.status = 'active'
+  AND [apply v.filter_type condition from daily_features]
+```
+
+**If you catch yourself writing `FROM orb_outcomes WHERE symbol IN ('MGC','MNQ','MES')` without a validated_setups join or explicit filter application — STOP. You are about to test noise.**
+
 ## Hard Rules
 
 - If docs conflict with canonical data → docs are STALE. Mark them, do not trust them.
