@@ -15,22 +15,24 @@ Run verification gates: $ARGUMENTS
 
 ## Mode: quick (pre-commit gates)
 
-Run ALL 4 gates. ANY failure = STOP.
+Run ALL 5 gates. ANY failure = STOP.
 
 ```bash
 python pipeline/check_drift.py
 python scripts/tools/audit_integrity.py
 python scripts/tools/audit_behavioral.py
 python -m pytest tests/ -x -q
+ruff check pipeline/ trading_app/ scripts/ --quiet
 ```
 
 Emit evidence block:
 ```
 === VERIFY (quick) ===
-Drift:      PASS/FAIL
+Drift:      PASS/FAIL (N checks passed)
 Integrity:  PASS/FAIL
 Behavioral: PASS/FAIL
 Tests:      PASS/FAIL (N passed)
+Lint:       PASS/FAIL
 ======================
 ```
 
