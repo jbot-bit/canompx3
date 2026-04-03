@@ -21,6 +21,7 @@ The user does NOT type `/skill` commands. Claude should invoke skills proactivel
 | Schema/init_db edit | Require full stage-gate (complex change) | File is init_db.py or cost_model.py |
 | config.py entry model edit | Require full stage-gate (breaking change) | File is trading_app/config.py |
 | User says "done"/"complete" for a stage | Run `/verify done` before closing | Trigger words + active STAGE_STATE |
+| "improve skill" / "optimize skill" / "skill loop" / "overnight" | Run `/skill-improve` | Skill self-improvement loop |
 
 ## Post-Work Auto-Checks
 
