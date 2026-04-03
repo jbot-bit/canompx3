@@ -790,17 +790,23 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=80.0,
             ),
             # --- EXTRA 6 (from Type-A book, stress-tested positive) ---
+            # UNDEPLOYABLE: ATR70_VOL not in experimental or validated — never pipeline-validated.
+            # Validated alternative: MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50 (N=1441, Sharpe=1.15)
             DailyLaneSpec(
                 "MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL",
                 "MNQ",
                 "NYSE_OPEN",
                 max_orb_size_pts=70.0,
+                execution_notes="UNDEPLOYABLE: not in validated_setups. Replace with OVNRNG_50.",
             ),
+            # UNDEPLOYABLE: X_MES_ATR70 fdr_significant=False in experimental. Too weak for FDR.
+            # Validated alternative: MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10 (N=1941, Sharpe=0.73)
             DailyLaneSpec(
                 "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR70_S075",
                 "MNQ",
                 "US_DATA_1000",
                 max_orb_size_pts=65.0,
+                execution_notes="UNDEPLOYABLE: fdr_significant=False. Replace with COST_LT10 RR1.5.",
             ),
             DailyLaneSpec(
                 "MGC_US_DATA_1000_E2_RR1.0_CB1_ORB_G6",

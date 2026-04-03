@@ -41,8 +41,8 @@ Stress-tested against full history + 2025-2026. Two historically negative lanes 
 | 3 | MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 | MNQ | COMEX_SETTLE | 1.5 | 150pt | +$3,464 | +$706 | CORE |
 | 4 | MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10 | MNQ | EUROPE_FLOW | 3.0 | 120pt | +$1,981 | +$909 | CORE |
 | 5 | MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10 | MNQ | TOKYO_OPEN | 2.0 | 80pt | +$903 | +$1,082 | CORE |
-| 6 | MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL | MNQ | NYSE_OPEN | 1.0 | 70pt | +$5,389 | +$2,325 | CORE |
-| 7 | MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR70_S075 | MNQ | US_DATA_1000 | 1.0 | 65pt | +$1,928 | +$398 | CORE |
+| 6 | MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL | MNQ | NYSE_OPEN | 1.0 | 70pt | +$5,389 | +$2,325 | **UNDEPLOYABLE** |
+| 7 | MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR70_S075 | MNQ | US_DATA_1000 | 1.0 | 65pt | +$1,928 | +$398 | **UNDEPLOYABLE** |
 | 8 | MGC_US_DATA_1000_E2_RR1.0_CB1_ORB_G6 | MGC | US_DATA_1000 | 1.0 | 15pt | +$2,273 | -$223 | WATCH |
 | 9 | MES_US_DATA_1000_E2_RR1.0_CB1_VOL_RV15_N20_S075 | MES | US_DATA_1000 | 1.0 | 20pt | +$533 | +$466 | CORE |
 | 10 | MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20 | MNQ | CME_PRECLOSE | 1.0 | 50pt | +$1,451 | -$43 | WATCH |
@@ -73,7 +73,12 @@ Stress-tested against full history + 2025-2026. Two historically negative lanes 
 
 ## 3. Performance (Stress-Tested from gold.db — WITH REAL FILTERS)
 
-**IMPORTANT:** These numbers use the actual strategy filters (COST_LT, OVNRNG, ATR70_VOL, VOL_RV, ORB_G6) applied via daily_features triple-join. Two lanes (MNQ_NYSE_OPEN ATR70_VOL, MNQ_US_DATA_1000 X_MES_ATR70) have filter column issues — marked UNVERIFIED. All other lanes are filter-verified.
+**IMPORTANT:** These numbers use the actual strategy filters (COST_LT, OVNRNG, ATR70_VOL, VOL_RV, ORB_G6) applied via daily_features triple-join.
+
+**Stage 4 finding (Apr 4 2026):** Filter columns are CORRECT (atr_20_pct, rel_vol, cross_atr_MES_pct all exist and work). However, 2 lanes are **UNDEPLOYABLE** — not pipeline-validated:
+- **Lane 6 (NYSE_OPEN ATR70_VOL):** Not in experimental_strategies or validated_setups. Never ran through discovery. Validated alternative: `MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50` (N=1441, ExpR=0.112, Sharpe=1.15).
+- **Lane 7 (US_DATA_1000 X_MES_ATR70 S075):** In experimental but fdr_significant=False (ExpR=0.019, Sharpe=0.22). Too weak for BH FDR. Validated alternative: `MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10` (N=1941, ExpR=0.078, Sharpe=0.73).
+- **Action required:** Replace these lanes with validated alternatives before deployment. Replacing will change the portfolio P&L estimate.
 
 ### 2025-2026 Backtest (329 trading days, 1ct per lane)
 
