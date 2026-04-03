@@ -1,28 +1,25 @@
 ---
 stage: IMPLEMENTATION
 mode: IMPLEMENTATION
-task: Tradovate broker integration + BrokerDispatcher (multi-firm deployment)
-updated: 2026-04-03T10:00:00Z
+task: Governance tools — trace system, research claim validator, stale-doc scanner
+updated: 2026-04-03T14:00:00Z
 scope_lock:
-  - trading_app/live/tradovate/__init__.py
-  - trading_app/live/tradovate/auth.py
-  - trading_app/live/tradovate/order_router.py
-  - trading_app/live/tradovate/contracts.py
-  - trading_app/live/tradovate/positions.py
-  - trading_app/live/broker_dispatcher.py
-  - trading_app/live/broker_factory.py
-  - trading_app/live/projectx/order_router.py
-  - trading_app/live/tradovate/http.py
-  - trading_app/live/broker_base.py
+  - pipeline/trace.py
+  - pipeline/paths.py
+  - scripts/tools/research_claim_validator.py
+  - scripts/tools/stale_doc_scanner.py
+  - tests/test_governance_tools.py
+  - logs/traces/.gitkeep
+  - .gitignore
 blast_radius:
-  - All NEW files except broker_factory.py and broker_base.py
-  - broker_factory.py: add create_tradovate_components() alongside existing create_broker_components()
-  - broker_base.py: add update_market_price() default no-op to BrokerRouter ABC (both impls already have it)
-  - SessionOrchestrator NOT touched (uses BrokerRouter ABC)
+  - pipeline/paths.py: add 1 constant (TRACES_DIR). No callers affected.
+  - All other files are NEW — zero blast radius on existing code.
+  - No schema changes, no entry model changes, no pipeline logic changes.
 acceptance:
-  - TradovateAuth authenticates with demo endpoint
-  - TradovateOrderRouter places market/stop/bracket orders
-  - BrokerDispatcher routes to N CopyOrderRouters
-  - Existing ProjectX integration unaffected
-  - Drift clean
+  - python scripts/tools/research_claim_validator.py --n 150 --p 0.003 --mechanism "cost-gated" exits 0 (VALID)
+  - python scripts/tools/research_claim_validator.py --n 25 --p 0.003 --mechanism "cost-gated" exits 1 (INVALID)
+  - python scripts/tools/research_claim_validator.py --n 50 --p 0.003 --mechanism "cost-gated" exits 0 (REGIME_ONLY)
+  - python scripts/tools/stale_doc_scanner.py runs without error
+  - python -m pytest tests/test_governance_tools.py -x -q passes
+  - python pipeline/check_drift.py passes
 ---

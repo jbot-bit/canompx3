@@ -54,6 +54,7 @@ env/
 
 # Logs & checkpoints
 *.log
+logs/traces/*.json
 pipeline/checkpoints/
 
 # Environment & secrets
