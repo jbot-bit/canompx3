@@ -333,7 +333,7 @@ def main():
         row_count = build_5m_bars(con, symbol, start_date, end_date, args.dry_run)
 
         # Verify (skip for dry run)
-        if not args.dry_run and row_count > 0:
+        if not args.dry_run:
             logger.info("Verifying integrity...")
             ok, failures = verify_5m_integrity(con, symbol, start_date, end_date)
 
