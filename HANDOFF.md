@@ -6,6 +6,39 @@
 
 ---
 
+## Update (Apr 3 — Claude: Governance Tools + Self-Funded Design + System Audit)
+
+### Completed
+1. **Governance tools built:** `pipeline/trace.py` (GovernanceDecision enum, TraceReport), `scripts/tools/research_claim_validator.py`, `scripts/tools/stale_doc_scanner.py`. 49 tests. Code-reviewed, 4 findings fixed.
+2. **Semi-formal reasoning templates** added to bloomey-review, code-review, ralph-loop agents. "Generation is not validation" rule added to integrity-guardian.md.
+3. **Full system doc audit:** CLAUDE.md, TRADING_RULES.md, RESEARCH_RULES.md, ARCHITECTURE.md, STRATEGY_BLUEPRINT.md — all read line-by-line. 10 stale claims fixed. Caught and reverted my own bad edit (18→19 templates was wrong — enum has 18).
+4. **Self-funded Tradovate design spec** (`docs/plans/2026-04-03-self-funded-tradovate-design.md`): 11-lane portfolio stress-tested WITH real filters. $23,817/yr at 1ct. Max DD -$1,237 (4.1% of $30K).
+5. **Stage 1 implemented:** `self_funded_tradovate` profile updated — 11 lanes, $30K, S0.75, all caps, payout_policy=self_funded. 44 tests pass.
+6. **New project rule:** Never simulate without filters (research-truth-protocol.md). First stress test was $32,658 unfiltered — real filtered number was $23,817. $10K difference.
+
+### Remaining (Stages 2-6)
+- Stage 2: Daily/weekly loss limits in HWM tracker (~2hr)
+- Stage 3: Per-trade max risk guard in session_orchestrator (~1hr)
+- Stage 4: Fix 2 unverified filter columns (ATR70_VOL=atr_20_pct, X_MES_ATR70 cross-instrument) (~1.5hr)
+- Stage 5: Tradovate personal account auth (manual, 30min)
+- Stage 6: Integration test
+
+### Key Findings
+- Tradovate intraday margin: $50/contract (vs IBKR $5-6K for MGC). Game changer for self-funded.
+- Commission difference is negligible ($0.02/RT on MNQ). Cost model is already accurate.
+- Filters cost $1,574/yr in rejected profitable trades BUT protect against cold regimes.
+- 8/11 lanes are MNQ — Nasdaq concentration is the main portfolio risk.
+
+### Files Changed This Session
+- `pipeline/trace.py` (NEW), `pipeline/paths.py`, `scripts/tools/research_claim_validator.py` (NEW), `scripts/tools/stale_doc_scanner.py` (NEW), `tests/test_governance_tools.py` (NEW)
+- `.claude/skills/bloomey-review/SKILL.md`, `.claude/skills/code-review/SKILL.md`, `.claude/agents/ralph-loop.md`, `.claude/rules/integrity-guardian.md`
+- `CLAUDE.md`, `TRADING_RULES.md`, `RESEARCH_RULES.md`, `docs/ARCHITECTURE.md`, `docs/STRATEGY_BLUEPRINT.md`, `docs/BREAD_AND_BUTTER_REFERENCE.md`
+- `.claude/rules/research-truth-protocol.md`
+- `trading_app/prop_profiles.py`, `tests/test_trading_app/test_prop_profiles.py`
+- `docs/plans/2026-04-03-self-funded-tradovate-design.md` (NEW), `docs/plans/2026-04-03-self-funded-implementation-stages.md` (NEW)
+
+---
+
 ## Update (Apr 3 — Claude: Skill Merge + Memory Cleanup)
 
 ### Completed
