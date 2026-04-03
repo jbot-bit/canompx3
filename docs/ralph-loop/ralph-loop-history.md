@@ -1403,3 +1403,17 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file changed; DAILY_FILE_PATTERN import in audit_bars_coverage.py unaffected; test behavior unchanged
 - Verification: PASS (18/18 test_ingest_daily.py, 77 drift checks pass, 737 fast tests pass, pre-commit suite pass)
 - Commit: 4a62a53
+
+---
+
+## Iteration 138 — 2026-04-04
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/build_daily_features.py:1086
+- Finding: Wrong comment "~200 5m bars ≈ ~3.5 days" at line 1086 contradicts the correct comment at line 664 ("200 bars ≈ 16.7 hours") in the same file. 200 × 5min = 1000 min = 16.7 hours; the wrong "3.5 days" comment could mislead someone to reduce days=10 to ~4, silently breaking RSI warm-up.
+- Action: Corrected comment to "200 5m bars ≈ 16.7 trading hours; 10d is conservative over-fetch". days=10 value unchanged.
+- Blast radius: 1 file (build_daily_features.py); comment-only, 0 callers affected
+- Verification: PASS (62/62 test_build_daily_features.py + 77 drift checks + 737 pre-commit suite)
+- Commit: 74e051a
+
+---
