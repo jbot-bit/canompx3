@@ -1429,3 +1429,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Commit: b8a5af8
 
 ---
+
+## Iteration 140 — 2026-04-04
+- Phase: fix
+- Classification: [mechanical]
+- Target: pipeline/run_pipeline.py:14
+- Finding: Stale NQ symbol in module docstring — line 14 listed "(MGC, MNQ, NQ)" as valid instruments. NQ is the full-size Nasdaq data source symbol (orb_active=False); the correct active ORB micro instrument is MES.
+- Action: Updated docstring "(MGC, MNQ, NQ)" → "(MGC, MNQ, MES)". No behavior change — docstring only.
+- Blast radius: 1 file (run_pipeline.py docstring only); no callers affected
+- Verification: PASS (29/29 test_run_pipeline.py + 77 drift checks + 737 pre-commit suite)
+- Commit: 312ec41
