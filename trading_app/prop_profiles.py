@@ -734,7 +734,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         firm="self_funded",
         account_size=50_000,
         copies=1,
-        stop_multiplier=0.75,
+        stop_multiplier=1.0,  # Self-funded = full stop. Lane IDs validated at SM=1.0 (no _S075 suffix).
         max_slots=5,
         active=False,  # Activate after opening Tradovate personal account + API test
         allowed_sessions=frozenset(

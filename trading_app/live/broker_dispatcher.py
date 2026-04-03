@@ -105,6 +105,20 @@ class BrokerDispatcher(BrokerRouter):
     def query_order_status(self, order_id: int) -> dict:
         return self.primary.query_order_status(order_id)
 
+    def cancel_bracket_orders(self, contract_id: str) -> int:
+        """Cancel bracket orders on primary + best-effort on secondaries."""
+        cancelled = self.primary.cancel_bracket_orders(contract_id)
+        for router in self.secondaries:
+            try:
+                cancelled += router.cancel_bracket_orders(contract_id)
+            except Exception:
+                log.warning(
+                    "BrokerDispatcher: secondary %s bracket cleanup failed",
+                    type(router).__name__,
+                    exc_info=True,
+                )
+        return cancelled
+
     @property
     def all_routers(self) -> list[BrokerRouter]:
         """All routers (primary + secondaries) for status/health checks."""
