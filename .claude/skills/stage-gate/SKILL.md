@@ -53,8 +53,8 @@ Exactly ONE of:
 |------|--------|
 | REBASE/RESUME | Returning to interrupted work, "where was I", stale state |
 | TRUTH AUDIT | Need to verify what's real before deciding anything |
-| DESIGN | Planning, exploring, "how should we", "what if", "4t" |
-| IMPLEMENTATION | Ready to code: "build it", "go", "do it", plan is approved |
+| DESIGN | Planning, exploring, "how should we", "what if", "4t", "plan" |
+| IMPLEMENTATION | Ready to build: "build it", "go", "do it", "add a new X", "implement", "I want to add/change/remove" — any direct intent to modify code. The Design Proposal Gate (CLAUDE.md) handles design-before-code; classify the MODE by user intent, not by whether design is needed. |
 | VERIFICATION | Checking work: "verify", "test", "did it work" |
 | TOO BROAD | Fails the breadth check below |
 

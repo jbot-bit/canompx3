@@ -17,12 +17,12 @@ con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 
 print('=== REGIME SUMMARY ===')
 print(con.sql('''
-    SELECT vs.instrument, COALESCE(ef.robustness_status, 'NO_FAMILY') as status,
+    SELECT vs.instrument, COALESCE(ef.robustness_status, 'NO_FAMILY') as regime_status,
            COALESCE(ef.trade_tier, 'NONE') as tier, COUNT(*) as count
     FROM validated_setups vs
     LEFT JOIN edge_families ef ON vs.strategy_id = ef.head_strategy_id
     WHERE LOWER(vs.status) = 'active'
-    GROUP BY vs.instrument, status, tier ORDER BY vs.instrument, status
+    GROUP BY vs.instrument, regime_status, tier ORDER BY vs.instrument, regime_status
 ''').fetchdf().to_string(index=False))
 
 print('\n=== EDGE FAMILIES ===')
