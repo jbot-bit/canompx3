@@ -100,7 +100,7 @@ Once the task is identified and staged:
 
 1. Read ALL scope files before writing any code (2-pass method)
 2. Write code
-3. Verify: `python -m pipeline.check_drift` + targeted tests
+3. Verify: `python pipeline/check_drift.py` + targeted tests
 4. Report result concisely (3 lines max)
 
 ## STEP 3: SIDEBAR — session awareness
