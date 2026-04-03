@@ -10,10 +10,11 @@ Usage:
 
 import logging
 import os
+import re
 import subprocess
 import sys
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -23,6 +24,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from pipeline.db_config import configure_connection
+from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.live.bot_state import read_state
 
@@ -33,6 +35,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 JOURNAL_PATH = PROJECT_ROOT / "live_journal.db"
 STOP_FILE = PROJECT_ROOT / "live_session.stop"
 LOG_DIR = PROJECT_ROOT / "logs"
+BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
 
 app = FastAPI(title="Bot Dashboard")
 
@@ -56,6 +59,173 @@ def _resolve_profile() -> str:
         name,
     )
     return "topstep_50k_mnq_auto"
+
+
+def _get_session_time_brisbane(session_name: str | None, trading_day: date | None = None) -> str | None:
+    """Resolve a session's Brisbane clock time for a specific trading day."""
+    if not session_name:
+        return None
+    entry = SESSION_CATALOG.get(session_name)
+    if not entry:
+        return None
+    resolver = entry.get("resolver")
+    if not resolver:
+        return None
+    hour, minute = resolver(trading_day or datetime.now(BRISBANE_TZ).date())
+    return f"{hour:02d}:{minute:02d}"
+
+
+def _sort_time_key(time_text: str | None) -> tuple[int, int]:
+    if not time_text:
+        return (99, 99)
+    try:
+        hour_text, minute_text = time_text.split(":", maxsplit=1)
+        return int(hour_text), int(minute_text)
+    except (AttributeError, ValueError):
+        return (99, 99)
+
+
+def _strategy_meta(strategy_id: str | None, trading_day: date | None = None) -> dict[str, object]:
+    """Extract human-readable strategy metadata for dashboard display."""
+    strategy_id = strategy_id or ""
+    session_name = None
+    instrument = None
+
+    for candidate in sorted(SESSION_CATALOG, key=len, reverse=True):
+        token = f"_{candidate}_"
+        if token in strategy_id:
+            prefix, _, _suffix = strategy_id.partition(token)
+            session_name = candidate
+            instrument = prefix.split("_", maxsplit=1)[0] if prefix else None
+            break
+
+    entry_match = re.search(r"_E(\d+)", strategy_id)
+    rr_match = re.search(r"_RR([0-9.]+)", strategy_id)
+    cb_match = re.search(r"_CB(\d+)", strategy_id)
+    filter_match = re.search(r"_CB\d+_(.+)$", strategy_id)
+
+    session_time = _get_session_time_brisbane(session_name, trading_day)
+    label = strategy_id
+    if instrument and session_name:
+        label = f"{instrument} {session_name}"
+
+    return {
+        "instrument_label": instrument,
+        "session_name": session_name,
+        "session_time_brisbane": session_time,
+        "entry_model": f"E{entry_match.group(1)}" if entry_match else None,
+        "rr_target": float(rr_match.group(1)) if rr_match else None,
+        "confirm_bars": int(cb_match.group(1)) if cb_match else None,
+        "filter_type": filter_match.group(1) if filter_match else None,
+        "lane_label": label,
+    }
+
+
+def _legacy_lanes_to_lane_cards(
+    lanes: dict[str, dict] | None,
+    trading_day: date | None = None,
+    account_name: str | None = None,
+) -> list[dict[str, object]]:
+    """Backfill lane_cards from legacy session-keyed bot_state payloads.
+
+    Old bot_state snapshots only stored one row per session, so shared-session
+    strategies cannot be recovered exactly. This function reconstructs all
+    profile lanes when possible and only applies live runtime fields to the
+    exact strategy rows still recoverable from the legacy payload.
+    """
+    raw_lanes = lanes or {}
+    lane_cards: list[dict[str, object]] = []
+
+    strategy_runtime: dict[str, dict] = {}
+    session_runtime: dict[str, list[dict]] = {}
+    for session_name, lane in raw_lanes.items():
+        strategy_id = lane.get("strategy_id")
+        if strategy_id:
+            strategy_runtime[strategy_id] = lane
+        session_runtime.setdefault(session_name, []).append(lane)
+
+    profile_id = None
+    if account_name and account_name.startswith("profile_"):
+        profile_id = account_name.removeprefix("profile_")
+
+    if profile_id:
+        try:
+            from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+            profile = ACCOUNT_PROFILES.get(profile_id)
+            if profile is not None:
+                for lane in profile.daily_lanes:
+                    runtime = strategy_runtime.get(lane.strategy_id)
+                    session_rows = session_runtime.get(lane.orb_label, [])
+                    shared_session_collision = runtime is None and len(session_rows) > 0
+                    meta = _strategy_meta(lane.strategy_id, trading_day)
+                    lane_cards.append(
+                        {
+                            "lane_key": lane.strategy_id,
+                            "strategy_id": lane.strategy_id,
+                            "instrument": lane.instrument,
+                            "session_name": lane.orb_label,
+                            "session_time_brisbane": _get_session_time_brisbane(lane.orb_label, trading_day),
+                            "filter_type": runtime.get("filter_type") if runtime else meta.get("filter_type"),
+                            "rr_target": runtime.get("rr_target")
+                            if runtime and runtime.get("rr_target") is not None
+                            else meta.get("rr_target"),
+                            "orb_minutes": runtime.get("orb_minutes") if runtime else None,
+                            "entry_model": runtime.get("entry_model") if runtime else meta.get("entry_model"),
+                            "confirm_bars": runtime.get("confirm_bars")
+                            if runtime and runtime.get("confirm_bars") is not None
+                            else meta.get("confirm_bars"),
+                            "status": runtime.get("status", "WAITING")
+                            if runtime
+                            else ("UNKNOWN" if shared_session_collision else "WAITING"),
+                            "direction": runtime.get("direction") if runtime else None,
+                            "entry_price": runtime.get("entry_price") if runtime else None,
+                            "current_pnl_r": runtime.get("current_pnl_r") if runtime else None,
+                            "status_detail": (
+                                "Legacy session-keyed state cannot disambiguate this lane until the bot restarts."
+                                if shared_session_collision
+                                else None
+                            ),
+                        }
+                    )
+        except Exception:
+            pass
+
+    if not lane_cards:
+        for session_name, lane in raw_lanes.items():
+            strategy_id = lane.get("strategy_id")
+            meta = _strategy_meta(strategy_id, trading_day)
+            card = {
+                "lane_key": strategy_id or session_name,
+                "strategy_id": strategy_id,
+                "instrument": lane.get("instrument") or meta.get("instrument_label"),
+                "session_name": lane.get("session_name") or meta.get("session_name") or session_name,
+                "session_time_brisbane": lane.get("session_time_brisbane")
+                or meta.get("session_time_brisbane")
+                or _get_session_time_brisbane(session_name, trading_day),
+                "filter_type": lane.get("filter_type") or meta.get("filter_type"),
+                "rr_target": lane.get("rr_target") if lane.get("rr_target") is not None else meta.get("rr_target"),
+                "orb_minutes": lane.get("orb_minutes"),
+                "entry_model": lane.get("entry_model") or meta.get("entry_model"),
+                "confirm_bars": lane.get("confirm_bars")
+                if lane.get("confirm_bars") is not None
+                else meta.get("confirm_bars"),
+                "status": lane.get("status", "WAITING"),
+                "direction": lane.get("direction"),
+                "entry_price": lane.get("entry_price"),
+                "current_pnl_r": lane.get("current_pnl_r"),
+                "status_detail": None,
+            }
+            lane_cards.append(card)
+
+    lane_cards.sort(
+        key=lambda item: (
+            _sort_time_key(item.get("session_time_brisbane")),
+            str(item.get("instrument") or ""),
+            str(item.get("strategy_id") or ""),
+        )
+    )
+    return lane_cards
 
 
 # Track background processes. Guarded by _bg_lock to prevent race conditions
@@ -153,7 +323,7 @@ async def api_status():
     """Read bot state from JSON file."""
     state = read_state()
     if not state:
-        return {"mode": "STOPPED", "lanes": {}, "bars_received": 0}
+        return {"mode": "STOPPED", "lanes": {}, "lane_cards": [], "bars_received": 0}
     # Check heartbeat staleness
     hb = state.get("heartbeat_utc")
     if hb:
@@ -164,6 +334,19 @@ async def api_status():
             state["heartbeat_age_s"] = 9999
     else:
         state["heartbeat_age_s"] = 9999
+    trading_day = None
+    raw_trading_day = state.get("trading_day")
+    if isinstance(raw_trading_day, str):
+        try:
+            trading_day = date.fromisoformat(raw_trading_day)
+        except ValueError:
+            trading_day = None
+    if not state.get("lane_cards") and state.get("lanes"):
+        state["lane_cards"] = _legacy_lanes_to_lane_cards(
+            state.get("lanes"),
+            trading_day,
+            state.get("account_name"),
+        )
     return state
 
 
@@ -205,6 +388,9 @@ async def api_trades():
                 "exited_at",
             ]
             trades = [dict(zip(cols, r, strict=False)) for r in rows]
+            for trade in trades:
+                meta = _strategy_meta(trade.get("strategy_id"), trade.get("trading_day"))
+                trade.update(meta)
             return {"trades": trades}
     except Exception as e:
         return {"trades": [], "error": str(e)}
@@ -270,9 +456,32 @@ async def api_accounts():
             firm = get_firm_spec(p.firm)
             lanes_summary = []
             for lane in p.daily_lanes:
-                # Human-readable: "COMEX_SETTLE ATR70_VOL"
-                filter_part = lane.strategy_id.split("CB1_")[1] if "CB1_" in lane.strategy_id else ""
-                lanes_summary.append({"session": lane.orb_label, "filter": filter_part, "instrument": lane.instrument})
+                meta = _strategy_meta(lane.strategy_id)
+                session_time = _get_session_time_brisbane(lane.orb_label)
+                rr_target = meta.get("rr_target")
+                rr_label = f"RR{rr_target:g}" if isinstance(rr_target, float) else None
+                setup_parts = [part for part in (meta.get("entry_model"), rr_label, meta.get("filter_type")) if part]
+                lanes_summary.append(
+                    {
+                        "session": lane.orb_label,
+                        "session_time_brisbane": session_time,
+                        "filter": meta.get("filter_type"),
+                        "instrument": lane.instrument,
+                        "entry_model": meta.get("entry_model"),
+                        "rr_target": meta.get("rr_target"),
+                        "confirm_bars": meta.get("confirm_bars"),
+                        "label": f"{lane.instrument} {lane.orb_label}",
+                        "schedule_label": (f"{session_time} Brisbane" if session_time else "Time unknown"),
+                        "setup_label": " | ".join(setup_parts) if setup_parts else "Setup unknown",
+                    }
+                )
+            lanes_summary.sort(
+                key=lambda item: (
+                    _sort_time_key(str(item.get("session_time_brisbane") or "")),
+                    str(item.get("instrument") or ""),
+                    str(item.get("session") or ""),
+                )
+            )
             accounts.append(
                 {
                     "profile_id": pid,

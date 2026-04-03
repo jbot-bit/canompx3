@@ -755,7 +755,7 @@ def print_daily(
         profile = ACCOUNT_PROFILES[pid]
         firm_spec = get_firm_spec(profile.firm)
         copies_str = f" x{profile.copies}" if profile.copies > 1 else ""
-        short_name = firm_spec.display_name.split()[0]  # "Apex Trader Funding" -> "Apex"
+        short_name = firm_spec.display_name.split()[0]
         label = f"{short_name}{copies_str}"
         if firm_spec.auto_trading == "none":
             label += " manual"

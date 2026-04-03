@@ -31,8 +31,8 @@ def mock_state(state_dir):
         yield state_dir
 
 
-PROFILE = "apex_50k_manual"
-TEST_SID = "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL_S075"
+PROFILE = "topstep_50k_mnq_auto"
+TEST_SID = "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
 TEST_SESSION = "COMEX_SETTLE"
 
 

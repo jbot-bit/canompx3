@@ -1,7 +1,7 @@
 """
 Persistent dollar-based High Water Mark tracker for prop firm trailing drawdown.
 
-Prop firms (Apex, TopStep, Tradeify) use EOD trailing drawdown from the account's
+Supported prop firms use EOD trailing drawdown from the account's
 ALL-TIME high water mark in dollars. The existing RiskManager tracks R-units within
 a single process lifetime — it resets on restart and doesn't know about dollar equity.
 
@@ -69,11 +69,11 @@ class AccountHWMTracker:
     Supports two trailing modes via dd_type:
     - "eod_trailing" (default): HWM only advances at session close via record_session_end().
       Intraday update_equity() tracks equity for halt detection but does NOT ratchet HWM.
-      This matches Apex/TopStep/Tradeify EOD trailing mechanics.
+      This matches the supported EOD trailing mechanics used in the active project.
     - "intraday_trailing": HWM advances on every update_equity() call (legacy behavior).
 
     Supports freeze_at_balance: when HWM reaches this level, it locks permanently.
-    For Apex 50K EOD PA: freeze_at_balance = 52100 (threshold locks at $50,100).
+    Example: freeze_at_balance = starting_balance + max_dd + 100.
     """
 
     def __init__(

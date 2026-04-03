@@ -26,9 +26,7 @@ from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 
 # Lane definitions — imported from canonical source (prop_profiles.py)
-from trading_app.prop_profiles import get_lane_registry
-
-LANE_DEFS = get_lane_registry()
+from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
 
 
 def compute_pnl_r(direction: str, entry: float, exit_price: float, stop: float) -> float:
@@ -42,13 +40,47 @@ def compute_pnl_r(direction: str, entry: float, exit_price: float, stop: float) 
         return (entry - exit_price) / risk
 
 
-def log_trade(args):
-    session = args.session
-    if session not in LANE_DEFS:
-        print(f"ERROR: Unknown session '{session}'")
+def _resolve_lane(args) -> tuple[str, dict]:
+    """Resolve one lane from the requested profile/session or strategy_id."""
+    profile_id = resolve_profile_id(args.profile)
+    lanes = get_profile_lane_definitions(profile_id)
+
+    if args.strategy_id:
+        matches = [lane for lane in lanes if lane["strategy_id"] == args.strategy_id]
+        if not matches:
+            print(f"ERROR: Unknown strategy_id '{args.strategy_id}' for profile '{profile_id}'")
+            sys.exit(1)
+        lane = matches[0]
+        if args.session and args.session != lane["orb_label"]:
+            print(
+                f"ERROR: --session {args.session!r} does not match strategy session {lane['orb_label']!r} "
+                f"for {args.strategy_id}"
+            )
+            sys.exit(1)
+        return profile_id, lane
+
+    if not args.session:
+        print("ERROR: Must specify --session or --strategy-id")
         sys.exit(1)
 
-    lane = LANE_DEFS[session]
+    matches = [lane for lane in lanes if lane["orb_label"] == args.session]
+    if not matches:
+        valid = ", ".join(sorted({lane["orb_label"] for lane in lanes}))
+        print(f"ERROR: Unknown session '{args.session}' for profile '{profile_id}'. Valid: {valid}")
+        sys.exit(1)
+    if len(matches) > 1:
+        options = ", ".join(lane["strategy_id"] for lane in matches)
+        print(
+            f"ERROR: Session '{args.session}' has multiple lanes in profile '{profile_id}'. "
+            f"Use --strategy-id. Options: {options}"
+        )
+        sys.exit(1)
+    return profile_id, matches[0]
+
+
+def log_trade(args):
+    profile_id, lane = _resolve_lane(args)
+    session = lane["orb_label"]
     instrument = lane["instrument"]
     cost = COST_SPECS[instrument]
     today = date.today()
@@ -156,7 +188,7 @@ def log_trade(args):
     # Print confirmation
     outcome = "WIN" if pnl_r > 0 else ("LOSS" if pnl_r < 0 else "SCRATCH")
     print(f"\n{'=' * 60}")
-    print(f"TRADE LOGGED: {session} | {direction.upper()} | {outcome}")
+    print(f"TRADE LOGGED: {profile_id} | {session} | {direction.upper()} | {outcome}")
     print(f"  Entry: {entry_price} | Exit: {exit_price} | Stop: {stop_price}")
     print(f"  PnL: {pnl_r:+.4f}R = ${pnl_dollar:+.2f}")
     print(f"  Slippage: entry={slippage_entry} ticks, exit={slippage_exit} ticks")
@@ -168,7 +200,9 @@ def log_trade(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Log a manual trade to paper_trades")
-    parser.add_argument("--session", required=True, choices=list(LANE_DEFS.keys()))
+    parser.add_argument("--profile", help="Execution profile id. Required if multiple active profiles exist.")
+    parser.add_argument("--session", help="Session/orb label to log")
+    parser.add_argument("--strategy-id", help="Explicit strategy id for profiles with duplicate sessions")
     parser.add_argument("--direction", required=True, choices=["long", "short"])
     parser.add_argument("--entry", required=True, type=float, help="Entry fill price")
     parser.add_argument("--exit", type=float, help="Exit fill price")

@@ -125,14 +125,16 @@ class SimResult:
 
     total_gross_profit: float = 0
     total_withdrawn_net: float = 0
+    net_income: float = 0  # total_withdrawn_net - reset_costs (actual take-home)
     payout_count: int = 0
     blow_count: int = 0
     reset_costs: float = 0
-    extraction_rate: float = 0  # withdrawn / gross
+    extraction_rate: float = 0  # net_income / gross (capped at 1.0)
     days_to_first_payout: int = 0
-    annual_withdrawn: float = 0
+    annual_withdrawn: float = 0  # net_income / years
     peak_balance: float = 0
     worst_drawdown: float = 0
+    intraday_approximated: bool = False  # True if DD type is intraday but data is daily
     payouts: list = field(default_factory=list)  # [(day, gross, net)]
 
 
@@ -171,7 +173,9 @@ class PayoutSimulator:
         self._blow_count = 0
         self._reset_costs = 0
         self._gross_profit = 0
+        self._total_positive_pnl = 0  # For consistency: sum of positive-PnL days only
         self._first_payout_day = 0
+        self._worst_dd_seen = 0.0  # Track worst intra-run drawdown
         self._payouts: list[tuple[int, float, float]] = []
 
     def run(self) -> SimResult:
@@ -188,20 +192,23 @@ class PayoutSimulator:
         years = max(total_days / 252, 0.1)  # ~252 trading days/year
 
         gross = self._gross_profit
-        net = self.total_withdrawn_net
-        extraction = net / gross if gross > 0 else 0
+        net_withdrawn = self.total_withdrawn_net
+        net_income = net_withdrawn - self._reset_costs  # Actual take-home after blow costs
+        extraction = min(net_income / gross, 1.0) if gross > 0 else 0
 
         return SimResult(
             total_gross_profit=gross,
-            total_withdrawn_net=net,
+            total_withdrawn_net=net_withdrawn,
+            net_income=net_income,
             payout_count=self.payout_count,
             blow_count=self._blow_count,
             reset_costs=self._reset_costs,
             extraction_rate=extraction,
             days_to_first_payout=self._first_payout_day,
-            annual_withdrawn=net / years,
+            annual_withdrawn=net_income / years,
             peak_balance=self.peak_balance,
-            worst_drawdown=self.peak_balance - min(self.balance, self.policy.starting_balance),
+            worst_drawdown=self._worst_dd_seen,
+            intraday_approximated=self.policy.dd_type == "intraday_trailing",
             payouts=self._payouts,
         )
 
@@ -214,9 +221,11 @@ class PayoutSimulator:
         if pnl > 0:
             self._gross_profit += pnl
 
-        # Track best day for consistency rule
+        # Track best day for consistency rule (positive PnL only in denominator)
         if pnl > self.best_day_pnl:
             self.best_day_pnl = pnl
+        if pnl > 0:
+            self._total_positive_pnl += pnl
         self.total_pnl_since_start += pnl
 
         # Update peak and DD floor
@@ -233,6 +242,11 @@ class PayoutSimulator:
             if self.dd_floor >= lock_target:
                 self.dd_floor = lock_target
                 self.dd_locked = True
+
+        # Track worst intra-run drawdown (before blow check)
+        current_dd = self.peak_balance - self.balance
+        if current_dd > self._worst_dd_seen:
+            self._worst_dd_seen = current_dd
 
         # Check blow
         if self.balance <= self.dd_floor:
@@ -283,17 +297,17 @@ class PayoutSimulator:
         # For subsequent TopStep payouts: must have profit > $0 since last payout
         # (simplified: always require some profit above floor)
 
-        # Check consistency rule
-        if p.consistency_rule is not None and self.total_pnl_since_start > 0:
-            best_day_pct = self.best_day_pnl / self.total_pnl_since_start
+        # Check consistency rule (denominator = total POSITIVE PnL, not net)
+        if p.consistency_rule is not None and self._total_positive_pnl > 0:
+            best_day_pct = self.best_day_pnl / self._total_positive_pnl
             if best_day_pct > p.consistency_rule:
                 return  # Blocked by consistency
 
         # Calculate available for withdrawal
+        # CRITICAL: min_balance for WITHDRAWAL is always >= starting_balance.
+        # DD floor=$0 means you can LOSE to $0. It does NOT mean you can WITHDRAW to $0.
+        # You can only withdraw PROFIT above starting balance (minus safety reserve).
         min_balance = p.starting_balance + p.safety_reserve
-        if self.first_payout_taken and p.dd_lock_at == 0:
-            # TopStep after first payout: floor at $0, can withdraw down to $0 + safety margin
-            min_balance = p.safety_reserve  # Just safety reserve (which is $0 for TopStep)
 
         available = self.balance - min_balance
         if available < p.min_payout:
@@ -370,6 +384,7 @@ class PayoutSimulator:
         self.first_payout_taken = False
         self.best_day_pnl = 0
         self.total_pnl_since_start = 0
+        self._total_positive_pnl = 0
         self.blown = False
 
 
@@ -403,18 +418,19 @@ if __name__ == "__main__":
         targets = {args.firm: firms[args.firm]}
 
     print(
-        f"{'Firm':20s} | {'Gross':>10s} | {'Net':>10s} | {'Payouts':>7s} | {'Blows':>5s} | {'Extract':>7s} | {'$/yr':>10s}"
+        f"{'Firm':20s} | {'Gross':>10s} | {'Take-Home':>10s} | {'Payouts':>7s} | {'Blows':>5s} | {'Resets':>7s} | {'Extract':>7s} | {'$/yr':>10s}"
     )
-    print("-" * 85)
+    print("-" * 100)
 
     for _name, factory in targets.items():
         policy = factory()
         sim = PayoutSimulator(policy, trades, contracts=args.contracts)
         result = sim.run()
+        warn = " [!intraday approx]" if result.intraday_approximated else ""
         print(
-            f"{policy.name:20s} | ${result.total_gross_profit:>9,.0f} | ${result.total_withdrawn_net:>9,.0f} | "
-            f"{result.payout_count:>7d} | {result.blow_count:>5d} | "
-            f"{result.extraction_rate:>6.1%} | ${result.annual_withdrawn:>9,.0f}"
+            f"{policy.name:20s} | ${result.total_gross_profit:>9,.0f} | ${result.net_income:>9,.0f} | "
+            f"{result.payout_count:>7d} | {result.blow_count:>5d} | ${result.reset_costs:>6,.0f} | "
+            f"{result.extraction_rate:>6.1%} | ${result.annual_withdrawn:>9,.0f}{warn}"
         )
 
     sys.exit(0)

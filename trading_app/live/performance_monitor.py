@@ -49,7 +49,7 @@ class PerformanceMonitor:
     Usage:
         # From prop_profiles (preferred):
         from trading_app.prop_profiles import ACCOUNT_PROFILES
-        profile = ACCOUNT_PROFILES["apex_50k_manual"]
+        profile = ACCOUNT_PROFILES["topstep_50k_mnq_auto"]
         # strategies from select_for_profile() or daily_lanes resolution
         monitor = PerformanceMonitor(strategies)
         ...

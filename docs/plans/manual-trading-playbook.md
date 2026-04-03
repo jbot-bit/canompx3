@@ -1,8 +1,8 @@
 # Trading Playbook — Brisbane
 
-**Status:** CANONICAL prop trading playbook
+**Status:** CANONICAL prop trading playbook, with Apex path deprecated as of 2026-04-03
 **Version:** V4 — Phase 1 trimmed to CORE 5 tradeable sessions, March 24 2026
-**Goal:** Prove edge live on props → scale via Tradeify/TopStep automation → self-funded IBKR for $100K/year
+**Goal:** Prove edge live on automation-capable props → scale via Tradeify/TopStep automation → self-funded IBKR for $100K/year
 This file is the single working prop memo for this repo.
 Use it for:
 - current firm selection and sizing
@@ -14,6 +14,12 @@ Rule hygiene:
 - Official firm rules drift. Re-check the firm's support docs before paying for or scaling any account.
 - This file separates verified official rules from local modeled conclusions.
 - If a firm doc conflicts with older local notes, underwrite to the stricter interpretation until confirmed.
+
+### Active Plan Guardrail
+
+- Apex is **removed from the active project path**.
+- Reason: current official Apex pages are too restrictive and internally inconsistent for this repo's system use. Compliance pages prohibit bots / trade mirroring / system-managed PA-Live trading, while other pages still describe limited same-owner copy contexts. Underwriting to the stricter interpretation means Apex is not usable for the active project.
+- Any remaining Apex references below are historical context until this document is fully rewritten. Do not use them for current account selection.
 
 ### Evidence Classes Used In This File
 
@@ -28,11 +34,12 @@ Maintenance rule:
 
 ### Firm Rule Snapshot (mixed evidence — read labels per entry)
 
-**Apex 50K EOD** `OFFICIAL RULE`
-- Manual proof lane only (1 account). NOT the scaling vehicle.
-- Official docs checked in this cycle support: `20` active PA accounts max, `4 mini / 40 micro` cap on `50K EOD`, and EOD payout gating with `5` qualifying days at `+$250` minimum, safety net `52,100`, minimum balance `52,600`, and `6` payouts max.
-- Official compliance docs **prohibit** automation AND copy trading on PA / Live accounts. "PA and Live Prop Accounts must be traded by the actual individual listed on the account and not by any other party, person, system, automated trading bot, copy, or trade mirror service." Manual only.
-- Important caveat: Apex documentation is not perfectly clean. The EOD payout page uses a `50%` consistency framing, while broader compliance pages still contain stricter language around windfall concentration / compliance behavior. Underwrite to the stricter interpretation until the dashboard and support match.
+**Apex** `OFFICIAL RULE / DEPRECATED FOR ACTIVE USE`
+- Not part of the active project path.
+- Official Apex pages remain relevant only as historical justification for removal:
+  - compliance pages prohibit bots / copy / trade mirroring on PA / Live
+  - payout and account pages still describe multi-account and copy-adjacent mechanics
+  - under the repo's stricter-underwriting rule, that conflict kills Apex for current use
 - Sources:
   - `https://support.apextraderfunding.com/hc/en-us/articles/4406804554779-How-Many-Paid-Funded-Accounts-Am-I-Allowed-to-Have`
   - `https://support.apextraderfunding.com/hc/en-us/articles/47204516592795-EOD-Performance-Accounts-PA`
@@ -77,7 +84,6 @@ Maintenance rule:
 
 These are the operating conclusions from local research and sim work in this repo. They are useful, but they are not firm-policy facts.
 
-- `Apex 50K EOD` is manual proof only (1 account). Automation and copy trading are prohibited.
 - `Tradeify 50K` is the primary MNQ automation scaling lane (5 accounts, Tradovate API).
 - `TopStep 50K Express` is the MGC automation lane (5 Express accounts, ProjectX API).
 - The overnight deployed sessions are: CME_PRECLOSE, COMEX_SETTLE, NYSE_OPEN (all MNQ on Tradeify). NYSE_CLOSE removed in V4 (not CORE 5).
@@ -89,8 +95,8 @@ These are the operating conclusions from local research and sim work in this rep
 Ambiguity kill:
 - A separate local sim result also exists for a stricter `Apex manual ladder` built around `MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G5 + MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV12_N20`.
 - Treat that result as `LOCAL MODEL ONLY`, not as the canonical repo plan.
-- The canonical repo plan in this file is still: `Apex manual proof -> Tradeify + TopStep scaling -> self-funded IBKR`.
-- If memory files or older notes imply "Apex remains the main scaling vehicle," those notes are superseded by this playbook.
+- The canonical repo plan in this file is now: `TopStep + Tradeify scaling -> self-funded IBKR`.
+- If memory files or older notes imply `Apex manual proof` or `Apex remains the main scaling vehicle`, those notes are superseded by this playbook.
 
 If any of these change, update them as `LOCAL MODEL` conclusions, not as firm rules.
 
@@ -178,7 +184,7 @@ These aren't suggestions. They're circuit breakers. The system makes money over 
 
 ## The Plan in One Sentence
 
-Phase 1: trade manually on Apex to prove the edge is real. Phase 2: scale via automated Tradeify (5 accts MNQ) + TopStep (5 accts MGC) for ~$60K/year. Phase 3: self-funded IBKR with $50K own capital for $100K+/year.
+Phase 1: prove the execution loop on TopStep and Tradeify-compatible setups. Phase 2: scale via automated Tradeify (5 accts MNQ) + TopStep (5 accts MGC) for ~$60K/year. Phase 3: self-funded IBKR with $50K own capital for $100K+/year.
 
 ---
 

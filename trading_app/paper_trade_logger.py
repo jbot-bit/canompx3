@@ -13,7 +13,7 @@ Usage:
     python -m trading_app.paper_trade_logger           # Full backfill from 2026-01-01
     python -m trading_app.paper_trade_logger --sync     # Incremental (new days only)
     python -m trading_app.paper_trade_logger --dry-run  # Show what would be inserted
-    python -m trading_app.paper_trade_logger --profile apex_100k_manual
+    python -m trading_app.paper_trade_logger --profile topstep_50k_mnq_auto
 """
 
 from __future__ import annotations

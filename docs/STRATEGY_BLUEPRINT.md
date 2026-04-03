@@ -407,9 +407,9 @@ Row counts verified 2026-03-21. Commands: `docs/ARCHITECTURE.md`.
 | Thread | Stage | Next Step | Blocking? |
 |--------|-------|-----------|-----------|
 | MNQ RR1.0 raw baseline | Gate 7 (paper trade) | Deploy signal-only. Kill criteria in pre-reg doc. Code ready (`--raw-baseline`). | No — other terminal running |
-| MNQ RR2.0 O30 ML | **BLOCKED by 3 methodology FAILs** (see §6 Blockers) | Fix EPV (reduce features ≤5), retrain positive-only, pre-register sessions | Yes — cannot go to production |
-| Confluence univariate scan | Gate 1 (design drafted) | Test existing ML features as standalone signals on positive baselines. `docs/plans/2026-03-21-confluence-features-design.md` | No — feeds EPV fix |
-| 2026 holdout test | Gate 4 (waiting) | April 2026, N≥100 per session. 3 pre-registered strategies. | Time-gated |
+| MNQ RR2.0 O30 ML | **DEAD** (V2 Phase 1: 0/12 BH survivors at K=12. All 3 FAILs fixed, methodology clean. Phase 2 cancelled.) | None — path closed Mar 2026 | No |
+| Confluence univariate scan | Gate 3 (tested) | 48 BH FDR survivors, 25/25 WF DEPLOYABLE. New-on-new stacking DEAD (0/8 OOS). Deployed+new & veto UNTESTED. | No |
+| 2026 holdout test | Gate 5 (monitoring) | Apr 2026 forward data collecting. Pre-registered strategies deployed. | Time-gated |
 | Simple regime filter (ATR>50pct) | Gate 2 (untested) | Run quartile comparison vs ML. Lower complexity alternative. | Deferred |
 | Edge families rebuild | Infrastructure | Run build_edge_families.py (0 rows currently) | Needed for fitness tracking |
 
@@ -425,7 +425,7 @@ Epistemic humility. These are assumptions baked into the system that COULD be wr
 |-----------|------------------|--------------------------|-------------|
 | ORB size is THE edge | Feb 2026 stress test, friction mechanism | Size filter stops working (gold returns to $1800, ORBs shrink) | Monitor avg ORB size vs filter gate. If G5+ qualifies < 5 days/month → edge dying. |
 | MNQ E2 baselines are real | BH FDR at N=55, yearly consistency | 2026 forward test fails (pre-registered, binding) | April 2026: N≥100 per session |
-| ML at RR2.0 O30 has genuine skill | Bootstrap 5K: p=0.0016 (NYSE_OPEN O30). BUT 3 methodology FAILs open (EPV, negative baselines, selection bias). | EPV fix changes feature set → model changes → p-values change. Current model is overfit (23 features, 55 positives). | Fix 3 FAILs → retrain → re-bootstrap → THEN evaluate. |
+| ~~ML at RR2.0 O30 has genuine skill~~ | **FALSIFIED Mar 2026.** V2 Phase 1: 0/12 BH survivors at K=12 after fixing all 3 FAILs. Phase 2 cancelled. Raw baselines are the portfolio. | N/A — assumption dead | Do not re-test without fundamentally new feature source. |
 | Cost model is accurate ($2.74 MNQ) | Industry standard + 1-tick slippage | Real slippage > 1 tick systematically | Paper trade kill criterion: avg slippage > 3 ticks → STOP |
 | E2 stop-market is unbiased | Includes fakeouts, uses slippage | E2 still optimistic vs real fills (spread widens at session opens) | Compare paper trade fills to backtest fills |
 | 60/20/20 time split is appropriate | Standard ML practice | Market regime shifted at split boundary (val period was hot) | Walk-forward validation with multiple split points |

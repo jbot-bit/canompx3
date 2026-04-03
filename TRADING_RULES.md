@@ -468,33 +468,32 @@ Many filter variants produce the SAME trade set.
 
 *Source: `trading_app/prop_profiles.py` (ACCOUNT_PROFILES)*
 
-### Active Lanes (Apex 50K Manual — Phase 1)
+### Active Lanes (TopStep Primary)
 
-5 MNQ lanes on Apex + 1 MGC shadow lane on TopStep. All E2 entry model, CB1 confirm bars.
-Stop multiplier: 0.75x (prop survival sizing). Strategies passed stratified-K BH FDR, walk-forward, and stress tests.
+Allocator-driven primary deployment lives on TopStep via [`topstep_50k_mnq_auto`](/mnt/c/Users/joshd/canompx3/trading_app/prop_profiles.py).
+All lanes are E2 / CB1 with 0.75x stop sizing and explicit ORB caps.
 
-| # | Session | Instrument | Filter | ORB Min | RR | Status | Notes |
-|---|---------|------------|--------|---------|-----|--------|-------|
-| 1 | NYSE_CLOSE | MNQ | VOL_RV12_N20 | O5 | 1.0 | TRADE | Highest ExpR lane. Switched O15→O5 (2026-03-29, aperture ARITHMETIC_ONLY) |
-| 2 | SINGAPORE_OPEN | MNQ | ORB_G8 | O15 | 4.0 | TRADE | 0.5x sizing (RR4.0 = long loss streaks). Hist max DD -$3,540 |
-| 3 | COMEX_SETTLE | MNQ | ATR70_VOL | O5 | 1.0 | TRADE | Alarm required (03:30/04:30 Brisbane) |
-| 4 | NYSE_OPEN | MNQ | X_MES_ATR60 | O5 | 1.0 | TRADE | 150pt max risk_points cap. Switched O15→O5 (2026-03-29, aperture ARITHMETIC_ONLY) |
-| 5 | US_DATA_1000 | MNQ | X_MES_ATR60 | O5 | 1.0 | TRADE | S0.75 stop multiplier embedded in strategy ID |
-| 6 | TOKYO_OPEN | MGC | ORB_G4_CONT | O5 | 2.0 | REVIEW | TopStep shadow — 1 contract only until N=250. CONDITIONAL (per-session P95 cleared, P99 not) |
+| # | Session | Instrument | Filter | RR | Status | Notes |
+|---|---------|------------|--------|----|--------|-------|
+| 1 | CME_REOPEN | MGC | ORB_G6 | 2.5 | TRADE | Highest trailing annual R in current allocator book |
+| 2 | SINGAPORE_OPEN | MNQ | COST_LT12 | 2.0 | TRADE | Strong trailing regime score |
+| 3 | COMEX_SETTLE | MNQ | OVNRNG_100 | 1.5 | TRADE | Hot session, capped at 80 pts |
+| 4 | EUROPE_FLOW | MNQ | COST_LT10 | 3.0 | TRADE | Wider target, capped at 120 pts |
+| 5 | TOKYO_OPEN | MNQ | COST_LT10 | 2.0 | TRADE | Current fifth deployed lane |
 
-### Account Routing
-| Account | Firm | Instrument | Sessions | Phase |
-|---------|------|------------|----------|-------|
-| apex_50k_manual | Apex | MNQ | Lanes 1-5 | Phase 1 (manual proof) |
-| topstep_50k | TopStep | MGC | Lane 6 only | Phase 1 (shadow trade) |
-| tradeify_50k | Tradeify | MNQ | CME_PRECLOSE, COMEX_SETTLE, NYSE_CLOSE, NYSE_OPEN | Phase 2 (automation, 5 copies) |
-| self_funded_50k | Self-Funded | All | All sessions | Phase 3 (inactive) |
+### Conditional / Secondary Routing
+| Account | Firm | Instrument | Sessions | Role |
+|---------|------|------------|----------|------|
+| topstep_50k_mnq_auto | TopStep | MNQ + MGC | CME_REOPEN, SINGAPORE_OPEN, COMEX_SETTLE, EUROPE_FLOW, TOKYO_OPEN | Active primary deployment |
+| topstep_50k | TopStep | MGC | TOKYO_OPEN | Conditional shadow lane only |
+| tradeify_50k | Tradeify | MNQ | CME_PRECLOSE, NYSE_CLOSE, COMEX_SETTLE, US_DATA_1000, TOKYO_OPEN | Automation candidate, inactive until broker/runtime parity |
+| self_funded_50k | Self-Funded | All | All sessions | Phase 3, inactive |
 
 ### Portfolio Risk
-- Apex DD limit: $2,000 (50K account). Historical combined DD: -$3,409 (breaches limit)
-- Mitigations: Lane 2 at 0.5x sizing, intraday DD halt at -$1,000
-- Apex prohibits automation AND copy trading — manual only
-- MGC lane is shadow-only (TopStep) — do not size up until N=250 with temporal diversity
+- Apex is removed from the active project path. Official Apex compliance/rule conflicts make it non-usable for this system.
+- Primary active bot profile is `topstep_50k_mnq_auto`.
+- `topstep_50k` remains conditional only. Do not size up the MGC TOKYO_OPEN lane until the forward gate is cleared.
+- `tradeify_50k` stays inactive until Tradovate execution/runtime parity is fully verified.
 
 ---
 

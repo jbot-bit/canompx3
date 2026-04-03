@@ -8,9 +8,11 @@ Bot writes on each bar and on each trade event.
 import json
 import logging
 import os
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+
+from pipeline.dst import SESSION_CATALOG
 
 log = logging.getLogger(__name__)
 
@@ -45,11 +47,32 @@ def clear_state() -> None:
     STATE_FILE.unlink(missing_ok=True)
 
 
+def _get_session_time_brisbane(orb_label: str, trading_day: date | None = None) -> str:
+    """Resolve a session's Brisbane clock time for the given trading day."""
+    entry = SESSION_CATALOG.get(orb_label)
+    if entry is None:
+        return "unknown"
+    resolver = entry.get("resolver")
+    if resolver is None:
+        return "unknown"
+    hour, minute = resolver(trading_day or date.today())
+    return f"{hour:02d}:{minute:02d}"
+
+
+def _sort_time_key(time_text: str) -> tuple[int, int]:
+    try:
+        hour_text, minute_text = time_text.split(":", maxsplit=1)
+        return int(hour_text), int(minute_text)
+    except (ValueError, AttributeError):
+        return (99, 99)
+
+
 def build_state_snapshot(
     *,
     mode: str,
     instrument: str,
     contract: str,
+    trading_day: date,
     account_id: int,
     account_name: str,
     daily_pnl_r: float,
@@ -62,12 +85,19 @@ def build_state_snapshot(
 ) -> dict[str, Any]:
     """Build a state dict from orchestrator internals."""
     lanes: dict[str, dict] = {}
+    lane_cards: list[dict[str, Any]] = []
     for s in strategies:
         lane = {
+            "lane_key": s.strategy_id,
             "strategy_id": s.strategy_id,
+            "instrument": s.instrument,
+            "session_name": s.orb_label,
+            "session_time_brisbane": _get_session_time_brisbane(s.orb_label, trading_day),
             "filter_type": s.filter_type,
             "rr_target": s.rr_target,
             "orb_minutes": s.orb_minutes,
+            "entry_model": s.entry_model,
+            "confirm_bars": s.confirm_bars,
             "status": "WAITING",
             "direction": None,
             "entry_price": None,
@@ -93,11 +123,17 @@ def build_state_snapshot(
                 lane["current_pnl_r"] = t.pnl_r
                 break
         lanes[s.orb_label] = lane
+        lane_cards.append(lane)
+
+    lane_cards.sort(
+        key=lambda item: (_sort_time_key(item["session_time_brisbane"]), item["instrument"], item["strategy_id"])
+    )
 
     return {
         "mode": mode,
         "instrument": instrument,
         "contract": contract,
+        "trading_day": trading_day.isoformat(),
         "account_id": account_id,
         "account_name": account_name,
         "daily_pnl_r": round(daily_pnl_r, 4),
@@ -106,4 +142,5 @@ def build_state_snapshot(
         "bars_received": bars_received,
         "strategies_loaded": len(strategies),
         "lanes": lanes,
+        "lane_cards": lane_cards,
     }
