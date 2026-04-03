@@ -6,6 +6,23 @@
 
 ---
 
+## Update (Apr 3 — Claude: Skill Merge + Memory Cleanup)
+
+### Completed
+- Merged `/quant-tdd` skill: superpowers TDD discipline + pipeline-specific patterns (tripwire, JOIN, idempotency, fail-closed) into single data-grounded skill
+- Stripped all narrative/persuasion from skill — references only (file paths, imports, commands, code patterns, checklists)
+- Cleaned MEMORY.md: 214 → 156 lines. Removed SUPERSEDED entries, duplicate architecture sections, stale ACTION QUEUE. Consolidated feedback files into separate table.
+- Added `feedback_no_narrative_in_skills.md` — hard rule: no persuasion essays, rationalization tables, or opinion in skills
+
+### User Direction
+- Skills must expose bugs from a fresh professional POV — no bias injection
+- Hooks enforce discipline mechanically; skills only need to instruct WHAT and WHERE
+
+### Next Session
+- See `next_session_todo_apr3.md` for P1/P2/P3 queue
+
+---
+
 ## Update (Apr 3 — Codex: Profile/Lane/Payout Hardening Follow-Up)
 
 ### Completed
