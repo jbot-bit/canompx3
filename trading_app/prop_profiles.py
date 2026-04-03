@@ -54,7 +54,7 @@ class PropFirmAccount:
 
 @dataclass(frozen=True)
 class DailyLaneSpec:
-    """Exact daily execution lane for a manual profile."""
+    """Exact daily execution lane for an account profile."""
 
     strategy_id: str
     instrument: str
@@ -81,8 +81,11 @@ class AccountProfile:
     allowed_sessions: frozenset[str] | None = None
     # Instrument routing. None = all allowed (firm bans still apply).
     allowed_instruments: frozenset[str] | None = None
-    # Exact daily lanes for manual profiles. Empty = use dynamic selection.
+    # Exact daily lanes for an account profile. Empty = use dynamic selection.
     daily_lanes: tuple[DailyLaneSpec, ...] = ()
+    # Canonical payout path for this account (e.g. topstep_express_standard).
+    # None = payout mechanics are not modeled for this profile.
+    payout_policy_id: str | None = None
     notes: str = ""
 
 
@@ -157,7 +160,7 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         dd_type="eod_trailing",
         # Flat 90/10 since Jan 12, 2026. First 4 Express payouts capped at 50% of available balance.
         profit_split_tiers=((float("inf"), 0.90),),
-        consistency_rule=0.40,
+        consistency_rule=None,  # No universal firm-level consistency rule. Standard vs Consistency path handled in payout policies.
         news_restriction=False,
         close_time_et="16:10",  # 3:10 PM CT = 4:10 PM ET. Verified 2026-04-01.
         platform="topstepx",
@@ -169,16 +172,22 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
     "mffu": PropFirmSpec(
         name="mffu",
         display_name="MyFundedFutures",
-        dd_type="eod_trailing",  # Core/Pro are EOD; Rapid is intraday (handled at tier level)
-        profit_split_tiers=((float("inf"), 0.80),),  # Core/Pro default; Rapid overrides at tier
-        consistency_rule=0.40,  # Core funded; Rapid/Pro have none
-        news_restriction=True,  # Flat 2 min before/after Tier 1
+        dd_type="intraday_trailing",  # Rapid sim = intraday trailing. Live = EOD. (official: article 13134709)
+        profit_split_tiers=((float("inf"), 0.90),),  # Rapid = 90/10 since Jan 12 2026 (official: article 13745661)
+        consistency_rule=None,  # Rapid sim funded = none (official: article 13134709). Eval = 50%.
+        news_restriction=True,  # No T1 news in sim funded (official: article 13134709)
         close_time_et="16:10",
         platform="tradovate",
         min_hold_seconds=None,
         banned_instruments=frozenset(),
-        auto_trading="semi",  # Own strategies with active monitoring
-        notes="News restriction: flat 2min before/after FOMC/CPI/NFP. Contract limits TBD.",
+        auto_trading="full",  # "Traders may make use of automated trading strategies" (official: article 8444599)
+        notes=(
+            "RAPID PLAN ONLY. Sim: intraday DD $2K locks at $100, daily payouts, $2100 buffer, 90/10. "
+            "Live: EOD DD $2K floor at $0, 4mini/40micro (reduced from 5/50). "
+            "$5K reserve held on Live transition. 21-day cooldown after Live blow. "
+            "No T1 news in sim. $10K single day = forced Live transition. "
+            "Source: help.myfundedfutures.com articles 13134709, 13134718, 13286746, 13745661."
+        ),
     ),
     "tradeify": PropFirmSpec(
         name="tradeify",
@@ -194,34 +203,6 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         auto_trading="full",  # Own bots allowed on Select (exclusive ownership, no cross-firm)
         notes="PRIMARY MNQ scaling lane. 5 accts, Tradovate API. Bot must be exclusive (no cross-firm). Group Trading broken for brackets — use API.",
     ),
-    "apex": PropFirmSpec(
-        name="apex",
-        display_name="Apex Trader Funding",
-        dd_type="eod_trailing",
-        profit_split_tiers=((float("inf"), 1.00),),  # 100% split on EOD PA plans
-        consistency_rule=0.50,  # 50% since Apex 4.0 (Mar 2026). Was 30% legacy. Verified 2026-04-01.
-        news_restriction=False,
-        close_time_et="16:59",
-        platform="tradovate",
-        min_hold_seconds=None,
-        banned_instruments=frozenset({"MGC", "GC", "SI", "SIL", "HG", "PL", "PA"}),
-        auto_trading="none",  # PROHIBITED — PA Compliance: no bots, no copy trading, manual only
-        # Official rules (resources/prop-firm-official-rules.md, fetched 2026-03-16):
-        # - Automation/copy trading → immediate account closure + forfeiture
-        # - 5:1 max RR ratio (stop ≤ 5× target) — all our RR1-4 strategies comply
-        # - 30% per-trade loss rule: open unrealized loss ≤ 30% of start-of-day profit
-        # - Stop losses REQUIRED on every trade (mental stops OK unless on Probation)
-        # - Contract scaling: half max until trailing threshold reached
-        # - Safety net: first 3 payouts require balance > DD + $100
-        # - 8 trading day eval period, min $50 profit on 5 different days
-        # - Metals SUSPENDED (not permanent ban — check periodically)
-        notes=(
-            "Manual proof only (1 account). Automation AND copy trading PROHIBITED on PA/Live. "
-            "Metals suspended. 5:1 RR max. 30% per-trade loss rule. 30% windfall consistency. "
-            "Contract scaling: half max until trailing threshold ($52.6K on 50K). "
-            "Safety net first 3 payouts: balance > DD + $100."
-        ),
-    ),
     "self_funded": PropFirmSpec(
         name="self_funded",
         display_name="Self-Funded",
@@ -236,6 +217,27 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
         auto_trading="full",
         notes="Your own capital. DD is temporary, not fatal.",
     ),
+    "bulenox": PropFirmSpec(
+        name="bulenox",
+        display_name="Bulenox",
+        dd_type="eod_trailing",  # Trader chooses trailing or EOD at qualification (official: bulenox.com/help/master-account)
+        profit_split_tiers=((10_000, 1.00), (float("inf"), 0.90)),  # 100% first $10K, then 90/10
+        consistency_rule=0.40,  # 40% rule: best day < 40% of total profit (official: master account rules)
+        news_restriction=False,
+        close_time_et="16:00",  # Not explicitly published — using CME default
+        platform="rithmic",
+        min_hold_seconds=None,
+        banned_instruments=frozenset(),
+        auto_trading="full",  # "Traders can use third-party algorithms" (official: bulenox.com/help)
+        notes=(
+            "DD locks at starting+$100. Safety reserve LOCKED ($2.6K on 50K). "
+            "First 3 payouts capped ($1.5K on 50K). After 3rd: UNCAPPED. "
+            "Weekly Wednesday payouts. 10 trading days before first withdrawal. "
+            "Min $1K payout. Up to 3 simultaneous Master accounts (11 total). "
+            "One-time activation fee, no monthly. Rithmic platform. "
+            "Source: bulenox.com/help/master-account (scraped Apr 3 2026)."
+        ),
+    ),
 }
 
 
@@ -246,20 +248,23 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     ("topstep", 50_000): PropFirmAccount("topstep", 50_000, 2_000, 5, 50),
     ("topstep", 100_000): PropFirmAccount("topstep", 100_000, 3_000, 10, 100),
     ("topstep", 150_000): PropFirmAccount("topstep", 150_000, 4_500, 15, 150),
-    # MFFU Core (EOD, 80/20). 50K DD confirmed $2K (not $1.5K).
+    # MFFU Rapid (intraday trailing sim, EOD live). 90/10 split. Official: article 13134709.
+    # Live contracts REDUCED: 4/40, 6/60, 8/80 (official: article 13134718).
     ("mffu", 50_000): PropFirmAccount("mffu", 50_000, 2_000, 5, 50),
-    ("mffu", 100_000): PropFirmAccount("mffu", 100_000, 3_000, 8, 80),
-    ("mffu", 150_000): PropFirmAccount("mffu", 150_000, 4_500, 12, 120),
+    ("mffu", 100_000): PropFirmAccount("mffu", 100_000, 3_000, 6, 60),
+    ("mffu", 150_000): PropFirmAccount("mffu", 150_000, 4_500, 8, 80),
     # Tradeify Select: verified 2026-04-01 via saveonpropfirms.com/blog/tradeify-select-guide
     # Prior values ($4K/$6K on 100K/150K) were from old Growth plan. Select = $2K/$3K/$4.5K.
     ("tradeify", 50_000): PropFirmAccount("tradeify", 50_000, 2_000, 4, 40),
     ("tradeify", 100_000): PropFirmAccount("tradeify", 100_000, 3_000, 8, 80),
     ("tradeify", 150_000): PropFirmAccount("tradeify", 150_000, 4_500, 12, 120),
-    # Apex 4.0 EOD PA (March 2026) — metals banned, DLL introduced.
-    # DLL is soft: pauses trading for the day, does NOT fail the account.
-    ("apex", 50_000): PropFirmAccount("apex", 50_000, 2_000, 4, 40, daily_loss_limit=1_000),
-    ("apex", 100_000): PropFirmAccount("apex", 100_000, 3_000, 6, 60, daily_loss_limit=1_500),
-    ("apex", 150_000): PropFirmAccount("apex", 150_000, 4_000, 9, 90, daily_loss_limit=2_000),
+    # Bulenox Master (official: bulenox.com/help/master-account, scraped Apr 3 2026)
+    # DD locks at starting+$100. Safety reserve locked. One-time activation fee.
+    ("bulenox", 25_000): PropFirmAccount("bulenox", 25_000, 1_500, 2, 20),
+    ("bulenox", 50_000): PropFirmAccount("bulenox", 50_000, 2_500, 5, 50),
+    ("bulenox", 100_000): PropFirmAccount("bulenox", 100_000, 3_000, 10, 100),
+    ("bulenox", 150_000): PropFirmAccount("bulenox", 150_000, 4_500, 15, 150),
+    ("bulenox", 250_000): PropFirmAccount("bulenox", 250_000, 5_500, 25, 250),
     # Self-funded
     ("self_funded", 50_000): PropFirmAccount("self_funded", 50_000, 5_000, 50, 500),
 }
@@ -270,161 +275,6 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
 # =========================================================================
 
 ACCOUNT_PROFILES: dict[str, AccountProfile] = {
-    # =========================================================================
-    # Phase 1: Manual proof (1 account, prove the edge)
-    # =========================================================================
-    "apex_50k_manual": AccountProfile(
-        profile_id="apex_50k_manual",
-        firm="apex",
-        account_size=50_000,
-        copies=1,
-        stop_multiplier=0.75,
-        max_slots=5,
-        active=False,  # Superseded by apex_100k_manual ($3K DD vs $2K)
-        # Phase 1 manual: 5 validated MNQ lanes.
-        # Score-driven rebuild 2026-03-31: composite score = ExpR * sharpe_adj * ayp *
-        # n_confidence * fitness * rr_adj * prop_sm. 20% switching threshold (Carver Ch 12).
-        # @research-source score-driven lane selection 2026-03-31
-        # @revalidated-for E2 event-based sessions, post-confluence filters (2026-03-31)
-        allowed_sessions=frozenset(
-            {
-                "CME_PRECLOSE",  # 5:45 AM Brisbane — score #1 (1.396)
-                "NYSE_CLOSE",  # 6:00 AM Brisbane — score #2 (0.833)
-                "COMEX_SETTLE",  # 3:30/4:30 AM Brisbane — score #3 (0.753)
-                "US_DATA_1000",  # 00:00/01:00 AM Brisbane — score #4 (0.625)
-                "TOKYO_OPEN",  # 10:00 AM Brisbane — score #5 (0.587)
-            }
-        ),
-        daily_lanes=(
-            # Lane selection via composite score applied uniformly to all 586 MNQ
-            # candidates (non-PURGED, N>=100, E2 CB1 O5). Switching threshold 20%.
-            # ORB caps from adversarial audit P90 data (2026-03-29).
-            # L1: CME_PRECLOSE — NEW. Score 1.396 (#1). AYP=True, Sharpe 2.41.
-            # Was 0 survivors in old validation; confluence filters unlocked 73 strategies.
-            DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
-                "MNQ",
-                "CME_PRECLOSE",
-                max_orb_size_pts=120.0,
-            ),
-            # L2: NYSE_CLOSE — UPGRADED from VOL_RV12_N20 (+67.7% score).
-            # VOL_RV20_N20 is strict superset filter (fewer, higher-edge trades).
-            DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
-                "MNQ",
-                "NYSE_CLOSE",
-                max_orb_size_pts=100.0,
-            ),
-            # L3: COMEX_SETTLE — KEPT (ATR70_VOL tied with OVNRNG_100 at +0.4%).
-            DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL_S075",
-                "MNQ",
-                "COMEX_SETTLE",
-                max_orb_size_pts=80.0,
-            ),
-            # L4: US_DATA_1000 — KEPT (already score-optimal). AYP=True, Sharpe 1.80.
-            DailyLaneSpec(
-                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
-                "MNQ",
-                "US_DATA_1000",
-                max_orb_size_pts=120.0,
-            ),
-            # L5: TOKYO_OPEN MNQ — NEW. Score 0.587 (#5). WHITELISTED fitness.
-            # Replaces NYSE_OPEN (score 0.530, #8). RR2.5 = wider target.
-            DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20_S075",
-                "MNQ",
-                "TOKYO_OPEN",
-                max_orb_size_pts=80.0,
-            ),
-        ),
-        notes=(
-            "Phase 1 manual. 5 MNQ lanes rebuilt 2026-03-31 via composite score. "
-            "S075 aligned 2026-04-01 (strategy_ids reference _S075 validated variants). "
-            "DD budget: $750 / $2K = 37.5%. "
-            "Filter diversity: 4 filter families across 5 lanes."
-        ),
-    ),
-    # =========================================================================
-    # UPGRADE PATH: $100K Apex EOD PA. DD limit $3,000 (vs $2K on $50K).
-    # Same 5 lanes + ORB caps from adversarial audit. Activate when ready.
-    # =========================================================================
-    "apex_100k_manual": AccountProfile(
-        profile_id="apex_100k_manual",
-        firm="apex",
-        account_size=100_000,
-        copies=1,
-        stop_multiplier=0.75,
-        max_slots=7,
-        active=True,  # Upgraded from 50K — $3K DD gives $2,250 margin
-        allowed_sessions=frozenset(
-            {
-                "CME_PRECLOSE",
-                "COMEX_SETTLE",
-                "EUROPE_FLOW",
-                "SINGAPORE_OPEN",
-                "TOKYO_OPEN",
-                "NYSE_OPEN",
-                "NYSE_CLOSE",
-            }
-        ),
-        daily_lanes=(
-            # HONEST DEPLOYMENT 2026-04-03. Adversarial audit findings:
-            # - All RR targets from family_rr_locks (no RR snooping)
-            # - COST_LT filters preferred (stable across price levels)
-            # - ORB_G8 at NYSE_CLOSE only (88% pass — acceptable with monitoring)
-            # - No vacuous filters (OVNRNG_50=100% pass, ORB_G6=96% for MNQ)
-            # - DD: $296 worst-case / $3000 (10%)
-            # - All 7 verified in validated_setups + family_rr_locks
-            DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
-                "MNQ",
-                "CME_PRECLOSE",
-                max_orb_size_pts=120.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT08",
-                "MNQ",
-                "EUROPE_FLOW",
-                max_orb_size_pts=100.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_SINGAPORE_OPEN_E2_RR1.0_CB1_COST_LT08",
-                "MNQ",
-                "SINGAPORE_OPEN",
-                max_orb_size_pts=100.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12",
-                "MNQ",
-                "COMEX_SETTLE",
-                max_orb_size_pts=80.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR1.0_CB1_COST_LT10",
-                "MNQ",
-                "TOKYO_OPEN",
-                max_orb_size_pts=80.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT08",
-                "MNQ",
-                "NYSE_OPEN",
-                max_orb_size_pts=200.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8",
-                "MNQ",
-                "NYSE_CLOSE",
-                max_orb_size_pts=80.0,
-            ),
-        ),
-        notes=(
-            "$100K Apex. 7 lanes (all MNQ). RR-locked, COST_LT preferred. "
-            "Adversarial audit 2026-04-03: vacuous filters removed, RR snoop fixed. "
-            "DD $296/$3000 (10%). MGC CME_REOPEN on trade sheet as MANUAL only."
-        ),
-    ),
     # =========================================================================
     # Phase 2: Automation scaling (Tradeify MNQ + TopStep MGC)
     # =========================================================================
@@ -438,13 +288,13 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         allowed_sessions=frozenset({"CME_PRECLOSE", "NYSE_CLOSE", "COMEX_SETTLE", "US_DATA_1000", "TOKYO_OPEN"}),
         allowed_instruments=frozenset({"MNQ"}),
         active=False,  # Activate when Tradovate API bot is ready for per-account execution
-        # Score-driven rebuild 2026-03-31 — mirrors Apex sessions.
-        # CME_PRECLOSE uses ATR70_VOL (not VOL_RV20_N20 like Apex) = cross-firm filter diversity.
+        # Score-driven rebuild 2026-03-31 — mirrors the active MNQ session set.
+        # CME_PRECLOSE uses ATR70_VOL instead of the stricter VOL_RV20_N20 lane for diversity.
         # Execution: Tradovate API per-account (Group Trading broken for brackets).
         # Bot must be exclusive to Tradeify (official rule — no cross-firm sharing).
         # 10s microscalp rule: no issue for ORB trades (hold 27-100+ minutes).
         daily_lanes=(
-            # CME_PRECLOSE — ATR70_VOL (different filter from Apex = diversification)
+            # CME_PRECLOSE — ATR70_VOL for cross-profile filter diversity
             DailyLaneSpec(
                 "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ATR70_VOL",
                 "MNQ",
@@ -476,6 +326,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=80.0,
             ),
         ),
+        payout_policy_id="tradeify_select_funded",
         notes=(
             "Phase 2 MNQ auto. 5 copies x 5 lanes via Tradovate API. "
             "CME_PRECLOSE ATR70_VOL still SM=1.0 ID (S075 variant not yet validated). "
@@ -489,6 +340,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         copies=5,  # 5 Express accounts — MGC morning lane
         stop_multiplier=0.75,
         max_slots=4,
+        active=False,  # Conditional shadow lane. Keep explicit, but do not treat as project primary.
         # CONDITIONAL — per-session null P95=0.153 cleared, P99=0.364 not cleared
         # N=125 trades. Reduce size: 1 contract only until N=250.
         # Invalidation: 3 consecutive losing months OR forward ExpR < 0.10
@@ -507,6 +359,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=26.0,  # P90=20.4, was execution_notes only. Now code-enforced.
             ),
         ),
+        payout_policy_id="topstep_express_standard",
         notes=(
             "MGC CONDITIONAL — per-session P95 cleared, P99 not. 1 contract max. "
             "Invalidate at 3 losing months or ExpR<0.10. "
@@ -575,6 +428,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=80.0,
             ),
         ),
+        payout_policy_id="topstep_express_standard",
         notes=(
             "Allocator-driven lanes (2026-04-03). 1-2 copies, scale to 5. "
             "223.1 R/yr from 5 lanes. MGC CME_REOPEN = top (64.4R/yr). "
@@ -681,6 +535,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL", "MNQ", "NYSE_OPEN", max_orb_size_pts=70.0
             ),  # P90=104.1, capped ~P70
         ),
+        payout_policy_id="topstep_express_standard",
         notes=(
             "TYPE-A auto. 8 sessions, 16 lanes, 3 instruments. TopStepX/ProjectX. "
             "DD budget: $1,384 worst-day at 1ct = 69% of $2K DD. Start 1ct, ramp with buffer. "
@@ -741,6 +596,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_OVNRNG_25_S075", "MES", "NYSE_OPEN", max_orb_size_pts=20.0),
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL", "MNQ", "NYSE_OPEN", max_orb_size_pts=70.0),
         ),
+        payout_policy_id="topstep_express_standard",
         notes=(
             "TYPE-A auto 100K. Same 16 lanes as 50K. $3K DD = 46% at 1ct. "
             "TopStepX no DLL. AGGRO ceiling: 1ct. YOLO: 2ct. "
@@ -808,6 +664,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_OVNRNG_25_S075", "MES", "NYSE_OPEN", max_orb_size_pts=20.0),
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL", "MNQ", "NYSE_OPEN", max_orb_size_pts=70.0),
         ),
+        payout_policy_id="tradeify_select_funded",
         notes=(
             "TYPE-B auto. 8 sessions, 15 lanes, 3 instruments. Tradovate API (auth broken). "
             "DD budget: $1,391 worst-day at 1ct = 70% of $2K DD. Start 1ct. "
@@ -862,6 +719,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_OVNRNG_25_S075", "MES", "NYSE_OPEN", max_orb_size_pts=20.0),
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL", "MNQ", "NYSE_OPEN", max_orb_size_pts=70.0),
         ),
+        payout_policy_id="tradeify_select_funded",
         notes=(
             "TYPE-B auto 100K. Same 15 lanes as 50K. $3K DD = 46% at 1ct. "
             "No DLL. AGGRO: 1ct. YOLO: 2ct. "
@@ -880,6 +738,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         max_slots=10,
         active=False,  # Phase 3 — not active until prop proof complete
         # None = all sessions, all instruments
+        payout_policy_id="self_funded",
         notes="Own capital. ALL 9 sessions. 5-10c. DD=temporary. IBKR (not built yet).",
     ),
 }
@@ -903,6 +762,52 @@ def get_account_tier(firm: str, account_size: int) -> PropFirmAccount:
 def get_profile(profile_id: str) -> AccountProfile:
     """Look up account profile. Raises KeyError if not found."""
     return ACCOUNT_PROFILES[profile_id]
+
+
+def get_active_profile_ids(
+    *,
+    require_daily_lanes: bool = True,
+    exclude_self_funded: bool = True,
+) -> list[str]:
+    """Return active profile ids that match the requested constraints."""
+    active: list[str] = []
+    for pid, profile in ACCOUNT_PROFILES.items():
+        if not profile.active:
+            continue
+        if require_daily_lanes and not profile.daily_lanes:
+            continue
+        if exclude_self_funded and profile.firm == "self_funded":
+            continue
+        active.append(pid)
+    return active
+
+
+def resolve_profile_id(
+    profile_id: str | None = None,
+    *,
+    require_daily_lanes: bool = True,
+    active_only: bool = True,
+    exclude_self_funded: bool = True,
+) -> str:
+    """Resolve one profile id, failing closed on ambiguity."""
+    if profile_id is not None:
+        profile = get_profile(profile_id)
+        if active_only and not profile.active:
+            raise ValueError(f"Profile {profile_id!r} is not active")
+        if require_daily_lanes and not profile.daily_lanes:
+            raise ValueError(f"Profile {profile_id!r} has no daily_lanes configured")
+        if exclude_self_funded and profile.firm == "self_funded":
+            raise ValueError(f"Profile {profile_id!r} is self-funded and not valid for this command")
+        return profile_id
+
+    active = get_active_profile_ids(require_daily_lanes=require_daily_lanes, exclude_self_funded=exclude_self_funded)
+    if not active:
+        raise ValueError("No active execution profile with daily_lanes is configured")
+    if len(active) > 1:
+        raise ValueError(
+            "Multiple active execution profiles found: " + ", ".join(sorted(active)) + ". Pass an explicit profile_id."
+        )
+    return active[0]
 
 
 def parse_strategy_id(strategy_id: str) -> dict:
@@ -956,93 +861,79 @@ _LANE_NAMES: dict[str, str] = {
     "CME_PRECLOSE": "CME_PRE",
     "COMEX_SETTLE": "COMEX_G8",
     "US_DATA_1000": "US_DATA_XMES",
-    # TOKYO_OPEN: MNQ lane (Apex primary) takes priority over MGC shadow (TopStep).
-    # MGC shadow is suppressed in get_lane_registry when MNQ TOKYO_OPEN is present.
     "TOKYO_OPEN": "TOKYO_VOL",
 }
 
 
+def find_active_primary_profile() -> str:
+    """Backward-compatible wrapper for the single active execution profile."""
+    return resolve_profile_id()
+
+
 def find_active_manual_profile() -> str:
-    """Find the active Apex manual profile (highest account_size wins)."""
-    best = None
-    for pid, p in ACCOUNT_PROFILES.items():
-        if not p.active or not p.daily_lanes or p.firm != "apex":
-            continue
-        if best is None or p.account_size > ACCOUNT_PROFILES[best].account_size:
-            best = pid
-    return best or "apex_50k_manual"  # fallback if none active
+    """Backward-compatible alias for the active primary execution profile."""
+    return find_active_primary_profile()
 
 
-def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
-    """Build a lane registry from a profile's daily_lanes.
+def get_profile_lane_definitions(profile_id: str | None = None) -> list[dict]:
+    """Return the canonical lane definitions for one execution profile.
 
-    If profile_id is None, auto-selects the active Apex manual profile.
-    Merges TopStep lanes (as shadow) from all active TopStep profiles.
-
-    Returns {orb_label: {strategy_id, instrument, orb_label, entry_model,
-    rr_target, confirm_bars, filter_type, orb_minutes, lane_name,
-    is_half_size, shadow_only, execution_notes, stop_multiplier}}.
+    The returned list preserves profile order and keeps full lane identity via
+    strategy_id so consumers do not collapse duplicate sessions.
 
     This is the SINGLE SOURCE OF TRUTH for lane definitions.
     All consumer scripts (pre_session_check, log_trade, forward_monitor,
     slippage_scenario, sprt_monitor) must import from here.
     """
-    if profile_id is None:
-        profile_id = find_active_manual_profile()
+    profile_id = resolve_profile_id(profile_id, active_only=profile_id is None)
     profile = ACCOUNT_PROFILES[profile_id]
-    registry: dict[str, dict] = {}
+    lane_defs: list[dict] = []
 
     for lane in profile.daily_lanes:
         parsed = parse_strategy_id(lane.strategy_id)
         is_half = lane.planned_stop_multiplier is not None or "0.5x" in lane.execution_notes
-        shadow = lane.instrument == "MGC" and lane.orb_label == "TOKYO_OPEN"  # MGC is shadow-only
+        shadow = False
 
-        registry[lane.orb_label] = {
-            "strategy_id": lane.strategy_id,
-            "instrument": lane.instrument,
-            "orb_label": lane.orb_label,
-            "entry_model": parsed["entry_model"],
-            "rr_target": parsed["rr_target"],
-            "confirm_bars": parsed["confirm_bars"],
-            "filter_type": parsed["filter_type"],
-            "orb_minutes": parsed["orb_minutes"],
-            "lane_name": _LANE_NAMES.get(lane.orb_label, lane.orb_label),
-            "stop_multiplier": profile.stop_multiplier,
-            "is_half_size": is_half,
-            "shadow_only": shadow,
-            "execution_notes": lane.execution_notes,
-            "max_orb_size_pts": lane.max_orb_size_pts,
-        }
+        lane_defs.append(
+            {
+                "profile_id": profile.profile_id,
+                "strategy_id": lane.strategy_id,
+                "instrument": lane.instrument,
+                "orb_label": lane.orb_label,
+                "entry_model": parsed["entry_model"],
+                "rr_target": parsed["rr_target"],
+                "confirm_bars": parsed["confirm_bars"],
+                "filter_type": parsed["filter_type"],
+                "orb_minutes": parsed["orb_minutes"],
+                "lane_name": _LANE_NAMES.get(lane.orb_label, lane.orb_label),
+                "stop_multiplier": profile.stop_multiplier,
+                "is_half_size": is_half,
+                "shadow_only": shadow,
+                "execution_notes": lane.execution_notes,
+                "max_orb_size_pts": lane.max_orb_size_pts,
+            }
+        )
 
-    # Also include TopStep shadow lanes for any Apex manual profile.
-    # Note: if Apex has an MNQ lane at the same session (e.g. TOKYO_OPEN),
-    # the Apex lane takes priority and the MGC shadow is suppressed.
-    # This is intentional — MNQ TOKYO_OPEN is the primary trade.
-    # NOTE: Only merges topstep_50k (MGC shadow). topstep_50k_mnq_auto is
-    # a separate bot-only profile — accessed via its own get_lane_registry() call,
-    # not merged into the Apex manual registry.
-    if profile.firm == "apex":
-        ts_profile = ACCOUNT_PROFILES.get("topstep_50k")
-        if ts_profile:
-            for lane in ts_profile.daily_lanes:
-                if lane.orb_label not in registry:
-                    parsed = parse_strategy_id(lane.strategy_id)
-                    registry[lane.orb_label] = {
-                        "strategy_id": lane.strategy_id,
-                        "instrument": lane.instrument,
-                        "orb_label": lane.orb_label,
-                        "entry_model": parsed["entry_model"],
-                        "rr_target": parsed["rr_target"],
-                        "confirm_bars": parsed["confirm_bars"],
-                        "filter_type": parsed["filter_type"],
-                        "orb_minutes": parsed["orb_minutes"],
-                        "lane_name": _LANE_NAMES.get(lane.orb_label, lane.orb_label),
-                        "stop_multiplier": ts_profile.stop_multiplier,
-                        "is_half_size": False,
-                        "shadow_only": True,  # TopStep MGC is shadow-trade
-                        "execution_notes": lane.execution_notes,
-                        "max_orb_size_pts": lane.max_orb_size_pts,
-                    }
+    return lane_defs
+
+
+def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
+    """Return a session-keyed lane map for profiles with unique sessions only."""
+    registry: dict[str, dict] = {}
+    duplicate_labels: set[str] = set()
+    for lane in get_profile_lane_definitions(profile_id):
+        label = lane["orb_label"]
+        if label in registry:
+            duplicate_labels.add(label)
+            continue
+        registry[label] = lane
+
+    if duplicate_labels:
+        dupes = ", ".join(sorted(duplicate_labels))
+        raise ValueError(
+            "Profile has multiple lanes for session(s): "
+            f"{dupes}. Use full lane definitions or strategy_id instead of session-only lookup."
+        )
 
     return registry
 
