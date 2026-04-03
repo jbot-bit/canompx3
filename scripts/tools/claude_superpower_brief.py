@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from datetime import date
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -47,6 +48,82 @@ def _recent_memory_notes(root: Path, limit: int = 2) -> list[str]:
         return []
     notes = sorted(memory_dir.glob("????-??-??.md"), reverse=True)
     return [p.name for p in notes[:limit]]
+
+
+def _memory_note_line(root: Path, limit: int = 2, stale_after_days: int = 7) -> str | None:
+    notes = _recent_memory_notes(root, limit=limit)
+    if not notes:
+        return None
+
+    latest = notes[0]
+    try:
+        latest_day = date.fromisoformat(latest.removesuffix(".md"))
+        age_days = (date.today() - latest_day).days
+    except ValueError:
+        return f"  Recent notes: {' | '.join(notes)}"
+
+    if age_days <= stale_after_days:
+        return f"  Recent notes: {' | '.join(notes)}"
+    return f"  Notes stale: latest {latest} ({age_days}d old)"
+
+
+def _extract_handoff_context(root: Path) -> tuple[str | None, str | None, str | None]:
+    handoff = root / "HANDOFF.md"
+    if not handoff.exists():
+        return None, None, None
+
+    tool: str | None = None
+    when: str | None = None
+    summary: str | None = None
+    in_last_session = False
+
+    for raw_line in handoff.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if line.startswith("## Last Session"):
+            in_last_session = True
+            continue
+        if in_last_session and line.startswith("## "):
+            break
+        if not in_last_session:
+            continue
+        if line.startswith("- **Tool:** "):
+            tool = line.removeprefix("- **Tool:** ").strip()
+        elif line.startswith("- **Date:** "):
+            when = line.removeprefix("- **Date:** ").strip()
+        elif line.startswith("- **Summary:** "):
+            summary = line.removeprefix("- **Summary:** ").strip()
+    return tool, when, summary
+
+
+def _fallback_lines(root: Path, *, mode: str, error: Exception) -> list[str]:
+    lines = ["SUPERPOWER BRIEF:", f"  Brief degraded: {error.__class__.__name__}"]
+
+    stage_file = root / "docs" / "runtime" / "STAGE_STATE.md"
+    if stage_file.exists():
+        content = stage_file.read_text(encoding="utf-8", errors="replace")
+        mode_match = re.search(r"^mode:\s*(.+)$", content, flags=re.MULTILINE)
+        task_match = re.search(r"^task:\s*(.+)$", content, flags=re.MULTILINE)
+        if task_match or mode_match:
+            lines.append(
+                f"  Stage: {task_match.group(1) if task_match else '?'} — {mode_match.group(1) if mode_match else '?'}"
+            )
+
+    tool, when, summary = _extract_handoff_context(root)
+    if summary:
+        lines.append(f"  Last: {tool or '?'} ({when or '?'}) — {summary}")
+
+    topics = _extract_memory_topics(root)
+    if topics:
+        lines.append(f"  Memory topics: {' | '.join(topics)}")
+
+    note_line = _memory_note_line(root)
+    if note_line:
+        lines.append(note_line)
+
+    if mode == "post-compact":
+        lines.append("  Compact rule: re-check live files before trusting prior context.")
+
+    return lines
 
 
 def _top_items(report: PulseReport, category: str, limit: int = 2) -> list[str]:
@@ -99,9 +176,9 @@ def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
     if topics:
         lines.append(f"  Memory topics: {' | '.join(topics)}")
 
-    notes = _recent_memory_notes(root)
-    if notes:
-        lines.append(f"  Recent notes: {' | '.join(notes)}")
+    note_line = _memory_note_line(root)
+    if note_line:
+        lines.append(note_line)
 
     if mode == "post-compact":
         lines.append("  Compact rule: re-check live files before trusting prior context.")
@@ -110,12 +187,15 @@ def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
 
 
 def build_brief(*, root: Path, mode: str = "session-start") -> str:
-    report = build_pulse(
-        root=root,
-        fast=True,
-        skip_drift=True,
-        skip_tests=True,
-    )
+    try:
+        report = build_pulse(
+            root=root,
+            fast=True,
+            skip_drift=True,
+            skip_tests=True,
+        )
+    except Exception as exc:
+        return "\n".join(_fallback_lines(root, mode=mode, error=exc))
     return "\n".join(_render_lines(report, mode=mode, root=root))
 
 

@@ -70,3 +70,39 @@ class TestClaudeSuperpowerBrief:
             brief = build_brief(root=tmp_path, mode="post-compact")
 
         assert "Compact rule: re-check live files before trusting prior context." in brief
+
+    def test_stale_notes_are_marked_stale_not_recent(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "memory" / "2026-01-01.md", "old")
+
+        with patch("scripts.tools.claude_superpower_brief.build_pulse", return_value=_sample_report()):
+            brief = build_brief(root=tmp_path, mode="interactive")
+
+        assert "Notes stale: latest 2026-01-01.md" in brief
+        assert "Recent notes:" not in brief
+
+    def test_build_brief_falls_back_when_pulse_raises(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "docs" / "runtime" / "STAGE_STATE.md",
+            "mode: implementation\ntask: harden hooks\n",
+        )
+        _mkfile(
+            tmp_path / "HANDOFF.md",
+            "\n".join(
+                [
+                    "## Last Session",
+                    "- **Tool:** Codex",
+                    "- **Date:** 2026-04-03",
+                    "- **Summary:** Added superpower brief",
+                ]
+            ),
+        )
+        _mkfile(tmp_path / "MEMORY.md", "## Tooling\n")
+
+        with patch("scripts.tools.claude_superpower_brief.build_pulse", side_effect=RuntimeError("boom")):
+            brief = build_brief(root=tmp_path, mode="post-compact")
+
+        assert "Brief degraded: RuntimeError" in brief
+        assert "Stage: harden hooks — implementation" in brief
+        assert "Last: Codex (2026-04-03) — Added superpower brief" in brief
+        assert "Memory topics: Tooling" in brief
+        assert "Compact rule: re-check live files before trusting prior context." in brief
