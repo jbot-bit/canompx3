@@ -215,6 +215,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     root = Path(args.root).resolve()
+    # Windows terminals default to cp1252 which can't handle → and other Unicode
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     print(build_brief(root=root, mode=args.mode))
     return 0
 
