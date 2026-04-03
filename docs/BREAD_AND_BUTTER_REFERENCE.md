@@ -2,7 +2,8 @@
 
 **Generated:** 2026-02-25
 **Data:** gold.db, orb_outcomes + daily_features (triple-join verified)
-**ORB:** 5-minute, all 4 active instruments
+**ORB:** 5-minute, active instruments at time of generation
+**⚠ E0 entry model was PURGED Feb 2026** (3 compounding optimistic biases). E0 sections below are historical reference — do not use E0 for trading or discovery. Active models: E1, E2.
 
 ---
 
