@@ -16,12 +16,14 @@ import json
 import logging
 import shutil
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 log = logging.getLogger(__name__)
 
 _DEFAULT_STATE_DIR = Path(__file__).resolve().parent.parent / "data" / "state"
+_BRISBANE = ZoneInfo("Australia/Brisbane")
 
 
 @dataclass
@@ -85,11 +87,17 @@ class AccountHWMTracker:
         *,
         dd_type: str = "eod_trailing",
         freeze_at_balance: float | None = None,
+        daily_loss_limit: float | None = None,
+        weekly_loss_limit: float | None = None,
     ):
         if dd_limit_dollars <= 0:
             raise ValueError(f"dd_limit_dollars must be positive, got {dd_limit_dollars}")
         if dd_type not in ("eod_trailing", "intraday_trailing", "none"):
             raise ValueError(f"dd_type must be eod_trailing/intraday_trailing/none, got {dd_type}")
+        if daily_loss_limit is not None and daily_loss_limit <= 0:
+            raise ValueError(f"daily_loss_limit must be positive, got {daily_loss_limit}")
+        if weekly_loss_limit is not None and weekly_loss_limit <= 0:
+            raise ValueError(f"weekly_loss_limit must be positive, got {weekly_loss_limit}")
 
         self._account_id = str(account_id)
         self._firm = firm
@@ -97,6 +105,8 @@ class AccountHWMTracker:
         self._dd_type = dd_type
         self._freeze_at = freeze_at_balance
         self._hwm_frozen = False
+        self._daily_loss_limit = daily_loss_limit
+        self._weekly_loss_limit = weekly_loss_limit
         self._state_dir = state_dir or _DEFAULT_STATE_DIR
         self._state_dir.mkdir(parents=True, exist_ok=True)
         self._state_file = self._state_dir / f"account_hwm_{self._account_id}.json"
@@ -107,10 +117,17 @@ class AccountHWMTracker:
         self._last_equity_ts: str = ""
         self._halt: bool = False
         self._halt_ts: str | None = None
+        self._halt_reason: str = ""
         self._session_log: list[dict] = []
         self._session_start_equity: float | None = None
         self._session_peak: float = 0.0
         self._consecutive_poll_failures: int = 0
+
+        # Period loss tracking (non-ratcheting, resets at boundaries)
+        self._daily_start_equity: float | None = None
+        self._daily_start_date: str | None = None  # YYYY-MM-DD Brisbane trading day
+        self._weekly_start_equity: float | None = None
+        self._weekly_start_date: str | None = None  # Monday YYYY-MM-DD Brisbane
 
         self._load_state()
 
@@ -130,7 +147,12 @@ class AccountHWMTracker:
             self._last_equity_ts = data.get("last_equity_timestamp", "")
             self._halt = bool(data.get("halt_triggered", False))
             self._halt_ts = data.get("halt_timestamp")
+            self._halt_reason = data.get("halt_reason", "")
             self._hwm_frozen = bool(data.get("hwm_frozen", False))
+            self._daily_start_equity = data.get("daily_start_equity")
+            self._daily_start_date = data.get("daily_start_date")
+            self._weekly_start_equity = data.get("weekly_start_equity")
+            self._weekly_start_date = data.get("weekly_start_date")
             self._session_log = data.get("session_log", [])[-_MAX_SESSION_LOG:]
             log.info(
                 "HWM tracker loaded: account=%s firm=%s HWM=$%.2f last=$%.2f halt=%s",
@@ -174,6 +196,75 @@ class AccountHWMTracker:
                 self._hwm - self._dd_limit,
             )
 
+    @staticmethod
+    def _brisbane_trading_day(utc_iso: str | None = None) -> str:
+        """Compute the Brisbane trading day (YYYY-MM-DD).
+
+        Trading day boundary is 09:00 Brisbane. Times before 09:00
+        belong to the PREVIOUS calendar day's trading session.
+        """
+        if utc_iso:
+            dt = datetime.fromisoformat(utc_iso)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            bris = dt.astimezone(_BRISBANE)
+        else:
+            bris = datetime.now(_BRISBANE)
+        if bris.hour < 9:
+            bris = bris - timedelta(days=1)
+        return bris.strftime("%Y-%m-%d")
+
+    @staticmethod
+    def _brisbane_week_monday(utc_iso: str | None = None) -> str:
+        """Compute the Monday date for the current Brisbane trading week.
+
+        Week boundary is Monday 09:00 Brisbane. Before that = previous week.
+        """
+        if utc_iso:
+            dt = datetime.fromisoformat(utc_iso)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            bris = dt.astimezone(_BRISBANE)
+        else:
+            bris = datetime.now(_BRISBANE)
+        if bris.hour < 9:
+            bris = bris - timedelta(days=1)
+        # Monday = weekday 0
+        monday = bris - timedelta(days=bris.weekday())
+        return monday.strftime("%Y-%m-%d")
+
+    def _check_period_resets(self, equity: float) -> None:
+        """Reset daily/weekly counters if period boundary crossed."""
+        now_iso = datetime.now(UTC).isoformat()
+        today = self._brisbane_trading_day(now_iso)
+        this_monday = self._brisbane_week_monday(now_iso)
+
+        # Daily reset
+        if self._daily_loss_limit is not None:
+            if self._daily_start_date is None or self._daily_start_date != today:
+                old = self._daily_start_date
+                self._daily_start_equity = equity
+                self._daily_start_date = today
+                # Clear daily halt if it was set
+                if self._halt and self._halt_reason == "DAILY_LOSS":
+                    self._halt = False
+                    self._halt_ts = None
+                    self._halt_reason = ""
+                    log.info("Daily loss limit RESET: new trading day %s (was %s)", today, old)
+
+        # Weekly reset
+        if self._weekly_loss_limit is not None:
+            if self._weekly_start_date is None or self._weekly_start_date != this_monday:
+                old = self._weekly_start_date
+                self._weekly_start_equity = equity
+                self._weekly_start_date = this_monday
+                # Clear weekly halt if it was set
+                if self._halt and self._halt_reason == "WEEKLY_LOSS":
+                    self._halt = False
+                    self._halt_ts = None
+                    self._halt_reason = ""
+                    log.info("Weekly loss limit RESET: new week %s (was %s)", this_monday, old)
+
     def _save_state(self) -> None:
         data = {
             "account_id": self._account_id,
@@ -187,8 +278,13 @@ class AccountHWMTracker:
             "dd_pct_used": round(self._dd_pct(), 4),
             "halt_triggered": self._halt,
             "halt_timestamp": self._halt_ts,
+            "halt_reason": self._halt_reason,
             "hwm_frozen": self._hwm_frozen,
             "dd_type": self._dd_type,
+            "daily_start_equity": self._daily_start_equity,
+            "daily_start_date": self._daily_start_date,
+            "weekly_start_equity": self._weekly_start_equity,
+            "weekly_start_date": self._weekly_start_date,
             "session_log": self._session_log[-_MAX_SESSION_LOG:],
         }
         tmp = self._state_file.with_suffix(".tmp")
@@ -235,6 +331,9 @@ class AccountHWMTracker:
             self._hwm_ts = now
             log.info("HWM initialised from broker: $%.2f", current_equity)
 
+        # Check and reset daily/weekly periods before halt checks
+        self._check_period_resets(current_equity)
+
         # Advance HWM based on dd_type:
         # - eod_trailing: HWM only advances at session close (record_session_end)
         # - intraday_trailing / none: HWM advances on every equity update
@@ -245,26 +344,70 @@ class AccountHWMTracker:
         if current_equity > self._session_peak:
             self._session_peak = current_equity
 
-        # Check halt condition
-        if not self._halt and self._dd_used() >= self._dd_limit:
-            self._halt = True
-            self._halt_ts = now
-            log.critical(
-                "HWM HALT TRIGGERED: DD $%.2f >= limit $%.2f (HWM=$%.2f, equity=$%.2f)",
-                self._dd_used(),
-                self._dd_limit,
-                self._hwm,
-                current_equity,
-            )
+        # Check halt conditions (trailing DD, then daily, then weekly)
+        if not self._halt:
+            if self._dd_used() >= self._dd_limit:
+                self._halt = True
+                self._halt_ts = now
+                self._halt_reason = "DD_TRAILING"
+                log.critical(
+                    "HWM HALT TRIGGERED: DD $%.2f >= limit $%.2f (HWM=$%.2f, equity=$%.2f)",
+                    self._dd_used(),
+                    self._dd_limit,
+                    self._hwm,
+                    current_equity,
+                )
+            elif self._daily_loss_limit is not None and self._daily_start_equity is not None:
+                daily_loss = self._daily_start_equity - current_equity
+                if daily_loss >= self._daily_loss_limit:
+                    self._halt = True
+                    self._halt_ts = now
+                    self._halt_reason = "DAILY_LOSS"
+                    log.critical(
+                        "DAILY LOSS HALT: loss $%.2f >= limit $%.2f (start=$%.2f, equity=$%.2f)",
+                        daily_loss,
+                        self._daily_loss_limit,
+                        self._daily_start_equity,
+                        current_equity,
+                    )
+            elif self._weekly_loss_limit is not None and self._weekly_start_equity is not None:
+                weekly_loss = self._weekly_start_equity - current_equity
+                if weekly_loss >= self._weekly_loss_limit:
+                    self._halt = True
+                    self._halt_ts = now
+                    self._halt_reason = "WEEKLY_LOSS"
+                    log.critical(
+                        "WEEKLY LOSS HALT: loss $%.2f >= limit $%.2f (start=$%.2f, equity=$%.2f)",
+                        weekly_loss,
+                        self._weekly_loss_limit,
+                        self._weekly_start_equity,
+                        current_equity,
+                    )
 
         self._save_state()
         return self._build_state()
 
     def check_halt(self) -> tuple[bool, str]:
-        """Check if trading should be halted. Returns (should_halt, reason)."""
+        """Check if trading should be halted. Returns (should_halt, reason).
+
+        Halt reasons: DD_TRAILING, DAILY_LOSS, WEEKLY_LOSS, or empty.
+        """
         if self._halt:
+            if self._halt_reason == "DAILY_LOSS":
+                daily_loss = (self._daily_start_equity or 0) - self._last_equity
+                return True, (
+                    f"DAILY_LOSS: loss ${daily_loss:.2f} >= limit ${self._daily_loss_limit:.2f} "
+                    f"(day started ${self._daily_start_equity:.2f}, equity=${self._last_equity:.2f})"
+                )
+            if self._halt_reason == "WEEKLY_LOSS":
+                weekly_loss = (self._weekly_start_equity or 0) - self._last_equity
+                return True, (
+                    f"WEEKLY_LOSS: loss ${weekly_loss:.2f} >= limit ${self._weekly_loss_limit:.2f} "
+                    f"(week started ${self._weekly_start_equity:.2f}, equity=${self._last_equity:.2f})"
+                )
+            # DD_TRAILING or legacy halt (no reason stored)
             return True, (
-                f"HWM_HALT: DD ${self._dd_used():.2f} >= limit ${self._dd_limit:.2f} "
+                f"DD_TRAILING: DD ${self._dd_used():.2f} >= limit ${self._dd_limit:.2f} "
                 f"(HWM=${self._hwm:.2f} on {self._hwm_ts[:10]}, equity=${self._last_equity:.2f})"
             )
 
@@ -324,6 +467,7 @@ class AccountHWMTracker:
         old_halt = self._halt
         self._halt = False
         self._halt_ts = None
+        self._halt_reason = ""
         self._consecutive_poll_failures = 0
         self._save_state()
         log.warning(
@@ -336,7 +480,7 @@ class AccountHWMTracker:
 
     def get_status_summary(self) -> dict:
         """For weekly_review and pre_session_check integration."""
-        return {
+        summary = {
             "account_id": self._account_id,
             "firm": self._firm,
             "hwm_dollars": round(self._hwm, 2),
@@ -349,9 +493,21 @@ class AccountHWMTracker:
             "hwm_frozen": self._hwm_frozen,
             "dd_type": self._dd_type,
             "halt_triggered": self._halt,
+            "halt_reason": self._halt_reason,
             "halt_timestamp": self._halt_ts,
             "sessions_tracked": len(self._session_log),
         }
+        if self._daily_loss_limit is not None:
+            daily_loss = (self._daily_start_equity or 0) - self._last_equity if self._daily_start_equity else 0
+            summary["daily_loss_limit"] = self._daily_loss_limit
+            summary["daily_loss_current"] = round(max(0, daily_loss), 2)
+            summary["daily_start_date"] = self._daily_start_date
+        if self._weekly_loss_limit is not None:
+            weekly_loss = (self._weekly_start_equity or 0) - self._last_equity if self._weekly_start_equity else 0
+            summary["weekly_loss_limit"] = self._weekly_loss_limit
+            summary["weekly_loss_current"] = round(max(0, weekly_loss), 2)
+            summary["weekly_start_date"] = self._weekly_start_date
+        return summary
 
     def _build_state(self) -> HWMState:
         pct = self._dd_pct()
