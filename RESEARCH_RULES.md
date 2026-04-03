@@ -242,7 +242,7 @@ See `TRADING_RULES.md` → What Doesn't Work table.
 Also: `docs/RESEARCH_ARCHIVE.md` for full data.
 
 ### Re-Validation Trigger
-Cross-instrument findings (concordance, MGC US_DATA_830 gate) should be re-validated when overlapping day count reaches **800 days** (currently 579). This is a data trigger, not a time trigger. Do not re-run at arbitrary dates.
+Cross-instrument findings (concordance, MGC US_DATA_830 gate) should be re-validated when overlapping day count reaches **800 days**. Query `gold.db` for current count — do not cite a number from memory. This is a data trigger, not a time trigger. Do not re-run at arbitrary dates.
 
 ---
 

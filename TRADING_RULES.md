@@ -313,7 +313,7 @@ Config: `SESSION_EXIT_MODE["TOKYO_OPEN"] = "fixed_target"`, `IB_DURATION_MINUTES
 
 **MNQ: ACTIVE.** 17 ROBUST strategies (all CORE tier, all WF passed). DIR_LONG and ORB_G8 families in live portfolio. Cross-market flow from SGX/HKEX open drives directional ORB edge on NQ that doesn't exist on gold. Full research: `docs/RESEARCH_ARCHIVE.md`.
 
-**MES/M2K: NOT EXCLUDED.** No blanket exclusion — assessed per normal fitness pipeline.
+**MES: NOT EXCLUDED.** No blanket exclusion — assessed per normal fitness pipeline.
 
 ---
 
@@ -545,7 +545,7 @@ A "family" = one unique combination of `(session, entry_model, filter_level)`. A
 ### ATR Regime Decision (2026-02-13)
 - **NO hard ATR pre-trade gate.** Threshold-sensitive, family-inconsistent, inflated by prior lookahead.
 - **KEEP ATR for position sizing:** Turtle-style vol normalization in `portfolio.py`.
-- **KEEP rolling fitness:** `strategy_fitness.py` + `live_config.py` regime tier = the regime gate.
+- **KEEP rolling fitness:** `strategy_fitness.py` regime assessment = the regime gate.
 - Full ATR research: `docs/RESEARCH_ARCHIVE.md`.
 
 ### ATR Velocity + ORB Compression AVOID Signal (MGC ONLY — revalidated Mar 2026)
@@ -628,7 +628,7 @@ This is why small ORBs lose — friction eats the edge.
 ## Execution Realism Constraints (Layer 7 Audit, Mar 2026)
 
 ### Signal Collision Priority
-When multiple strategies fire on the same ORB break (same session × aperture), `max_per_orb=1` in the risk manager allows only one entry. The winning strategy is the first match in portfolio iteration order (`LIVE_PORTFOLIO` spec order → `build_live_portfolio` output order). There is no ExpR-based or Sharpe-based ranking. Backtester and execution engine share this behavior — backtest results reflect this ordering. If priority matters operationally, reorder `LIVE_PORTFOLIO` specs by preference.
+When multiple strategies fire on the same ORB break (same session × aperture), `max_per_orb=1` in the risk manager allows only one entry. The winning strategy is the first match in portfolio iteration order (lane order from `prop_profiles.ACCOUNT_PROFILES` → `build_lanes()` output order). There is no ExpR-based or Sharpe-based ranking. Backtester and execution engine share this behavior — backtest results reflect this ordering. If priority matters operationally, reorder lanes by preference.
 
 ### Backtest-to-Live Scratch Gap
 Backtester (outcome_builder) labels unresolved trades as "scratch" with `pnl_r=NULL`, excluding them from win/loss/ExpR statistics. The execution engine marks scratches to market at session end, producing real P&L. Layer 2 audit confirmed scratches average +0.40R net favorable excursion (MES). **Live performance will exceed backtested performance on scratch-heavy strategies.** This is a conservative backtest bias — not a concern, but worth knowing when comparing live results to historical ExpR.
