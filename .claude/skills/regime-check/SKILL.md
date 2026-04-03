@@ -32,7 +32,25 @@ print(con.sql('''
     FROM edge_families GROUP BY instrument, trade_tier ORDER BY instrument, trade_tier
 ''').fetchdf().to_string(index=False))
 
-print(f'\nEdge families last built: {con.sql(\"SELECT MAX(created_at) FROM edge_families\").fetchone()[0]}')
+last_built = con.sql('SELECT MAX(created_at) FROM edge_families').fetchone()[0]
+print(f'\nEdge families last built: {last_built}')
+import datetime
+if last_built:
+    age_days = (datetime.datetime.now(datetime.timezone.utc) - last_built.replace(tzinfo=datetime.timezone.utc)).days if hasattr(last_built, 'replace') else None
+    if age_days and age_days > 30:
+        print(f'  WARNING: {age_days} days old — STALE')
+    elif age_days is not None:
+        print(f'  ({age_days} days old — FRESH)')
+
+print('\n=== INSTRUMENT HEALTH SUMMARY ===')
+print(con.sql('''
+    SELECT instrument,
+           SUM(CASE WHEN trade_tier='CORE' THEN 1 ELSE 0 END) as core_families,
+           SUM(CASE WHEN trade_tier='REGIME' THEN 1 ELSE 0 END) as regime_families,
+           COUNT(*) as total_families,
+           ROUND(AVG(head_expectancy_r), 4) as avg_expr
+    FROM edge_families GROUP BY instrument ORDER BY instrument
+''').fetchdf().to_string(index=False))
 
 print('\n=== ORB SIZE TREND (MNQ O5, 6mo windows) ===')
 print(con.sql('''
