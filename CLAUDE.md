@@ -60,7 +60,7 @@ Frozen specs (`CANONICAL_*.txt`) → read-only; live code is truth.
 
 **ONE database** (`gold.db`) at `<project>/gold.db` — local disk, no cloud sync.
 
-`C:\db\gold.db` is an auto-synced scratch copy — drift check #37 copies canonical → scratch when stale. All scripts default to canonical `gold.db` via `pipeline.paths.GOLD_DB_PATH`. Drift check #62 blocks any hardcoded scratch DB defaults in active code.
+`C:\db\gold.db` scratch copy is **DEPRECATED** (Mar 2026) — caused stale-data bugs. `pipeline.paths.GOLD_DB_PATH` blocks it. Drift check #37 verifies canonical DB exists; drift check #62 blocks hardcoded scratch DB defaults in code.
 
 **Rules:**
 - NEVER run two write processes against the same DuckDB file simultaneously
@@ -87,7 +87,7 @@ Discovery uses ONLY canonical layers (`bars_1m`, `daily_features`, `orb_outcomes
 - Session list/times → `from pipeline.dst import SESSION_CATALOG`
 - Cost models → `from pipeline.cost_model import COST_SPECS`
 - Active instruments → `from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS`
-- Live portfolio → `from trading_app.live_config import LIVE_PORTFOLIO`
+- Deployed lanes → `from trading_app.prop_profiles import ACCOUNT_PROFILES`
 
 ### Research Provenance Rule
 Config values derived from research (e.g. `EARLY_EXIT_MINUTES`) must include `@research-source`, `@entry-models`, and `@revalidated-for` annotations. Drift check #45 enforces this. When entry models change, re-validate all research-derived values against the new model before citing them as validated.
