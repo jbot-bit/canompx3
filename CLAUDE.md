@@ -26,7 +26,6 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 | `docs/specs/*.md` | Feature specs pending implementation | **Check before building ANY feature** |
 
 Full file inventory → `REPO_MAP.md` (auto-generated, never hand-edit).
-Frozen specs (`CANONICAL_*.txt`) → read-only; live code is truth.
 
 **Conflict resolution:** Code behavior → CLAUDE.md. Trading logic → TRADING_RULES.md. Research → RESEARCH_RULES.md.
 
@@ -70,7 +69,7 @@ Frozen specs (`CANONICAL_*.txt`) → read-only; live code is truth.
 
 ## MCP Server (gold-db)
 
-`gold-db` MCP server (`trading_app/mcp_server.py`) — 4 read-only tools. **ALWAYS prefer over raw SQL.** Tools: `list_available_queries`, `query_trading_db` (19 templates, row cap 5000), `get_strategy_fitness` (always `summary_only=True` for portfolio-wide), `get_canonical_context`. See `.claude/rules/mcp-usage.md` for intent→tool mapping.
+`gold-db` MCP server (`trading_app/mcp_server.py`) — 4 read-only tools. **ALWAYS prefer over raw SQL.** Tools: `list_available_queries`, `query_trading_db` (18 templates, row cap 5000), `get_strategy_fitness` (always `summary_only=True` for portfolio-wide), `get_canonical_context`. See `.claude/rules/mcp-usage.md` for intent→tool mapping.
 
 ---
 
