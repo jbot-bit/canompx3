@@ -113,7 +113,14 @@ class TradovateAuth(BrokerAuth):
         password = os.environ.get("TRADOVATE_PASS") or os.environ["TRADOVATE_PASSWORD"]
         cid = int(os.environ["TRADOVATE_CID"])
         sec = os.environ["TRADOVATE_SEC"]
-        device_id = os.environ.get("TRADOVATE_DEVICE_ID", str(uuid.uuid4()))
+        device_id = os.environ.get("TRADOVATE_DEVICE_ID")
+        if not device_id:
+            device_id = str(uuid.uuid4())
+            log.warning(
+                "TRADOVATE_DEVICE_ID not set — using random %s. "
+                "Set a stable device ID in .env to avoid Tradovate flagging multiple devices.",
+                device_id,
+            )
 
         resp = requests.post(
             f"{self._base}/auth/accesstokenrequest",

@@ -93,18 +93,27 @@ class TradovateOrderRouter(BrokerRouter):
         if self.auth is None:
             raise RuntimeError("No auth — cannot submit orders")
 
-        # Price collar for stop orders
-        stop_price = spec.get("stopPrice")
-        if stop_price is not None and self._last_known_price is not None and self._last_known_price > 0:
-            deviation = abs(stop_price - self._last_known_price) / self._last_known_price
-            if deviation > self._price_collar_pct:
-                msg = (
-                    f"PRICE_COLLAR_REJECTED: symbol={spec.get('symbol')} "
-                    f"stop={stop_price:.2f} deviates {deviation:.2%} from market "
-                    f"{self._last_known_price:.2f} (collar={self._price_collar_pct:.2%})"
-                )
-                log.critical(msg)
-                raise ValueError(msg)
+        # Price collar — validate ALL prices against market (entry stop + bracket prices)
+        if self._last_known_price is not None and self._last_known_price > 0:
+            prices_to_check = []
+            if spec.get("stopPrice") is not None:
+                prices_to_check.append(("stopPrice", spec["stopPrice"]))
+            for bracket_key in ("bracket1", "bracket2"):
+                bracket = spec.get(bracket_key)
+                if isinstance(bracket, dict):
+                    for pfield in ("price", "stopPrice"):
+                        if bracket.get(pfield) is not None:
+                            prices_to_check.append((f"{bracket_key}.{pfield}", bracket[pfield]))
+
+            for label, price in prices_to_check:
+                deviation = abs(price - self._last_known_price) / self._last_known_price
+                if deviation > self._price_collar_pct:
+                    msg = (
+                        f"PRICE_COLLAR_REJECTED: {label}={price:.2f} deviates {deviation:.2%} "
+                        f"from market {self._last_known_price:.2f} (collar={self._price_collar_pct:.2%})"
+                    )
+                    log.critical(msg)
+                    raise ValueError(msg)
 
         import json as _json
 

@@ -214,13 +214,13 @@ BROKER=projectx              # "projectx" or "tradovate"
 PROJECTX_USER=your_username
 PROJECTX_API_KEY=your_api_key
 
-# Tradovate credentials (kept for future use)
-TRADOVATE_USER=joshdlees@gmail.com
-TRADOVATE_PASS='Dontjade22!'
-TRADOVATE_APP_ID=Sample App
+# Tradovate credentials — SET IN .env, NEVER COMMIT VALUES
+TRADOVATE_USER=<your_tradovate_username>
+TRADOVATE_PASS=<your_tradovate_api_password>
+TRADOVATE_APP_ID=<your_app_id>
 TRADOVATE_APP_VERSION=1.0
-TRADOVATE_CID=8
-TRADOVATE_SEC=f03741b6-f634-48d6-9308-c8fb871150c2
+TRADOVATE_CID=<your_cid>
+TRADOVATE_SEC=<your_api_secret>
 ```
 
 ### CLI Override
