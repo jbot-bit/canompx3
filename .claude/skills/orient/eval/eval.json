@@ -51,8 +51,8 @@
         {
           "id": "or-02-a3",
           "type": "regex_not_match",
-          "pattern": "(M2K|MCL|SIL|M6E|MBT)",
-          "description": "Does not reference dead instruments as active"
+          "pattern": "(?:active|ACTIVE|deployed|trading|live).*(?:M2K|MCL|SIL|M6E|MBT)|(?:M2K|MCL|SIL|M6E|MBT).*(?:active|ACTIVE|deployed|trading|live)",
+          "description": "Does not reference dead instruments as active (mentioning them as dead is fine)"
         }
       ]
     }

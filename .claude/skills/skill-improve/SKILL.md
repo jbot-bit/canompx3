@@ -38,7 +38,7 @@ digraph loop {
     "Git commit" -> "Re-run ALL tests";
     "Re-run ALL tests" -> "Score improved?" [label=""];
     "Score improved?" -> "Keep commit, update baseline" [label="yes"];
-    "Score improved?" -> "git reset --hard baseline" [label="no/same"];
+    "Score improved?" -> "git checkout baseline -- SKILL.md" [label="no/same"];
     "Keep commit, update baseline" -> "Run test N" [label="next iteration"];
     "git reset --hard baseline" -> "Analyze failure" [label="try different change"];
 }
@@ -97,7 +97,7 @@ git commit -m "skill-improve: ${SKILL_NAME} iter ${N} — [what changed]"
 python scripts/tools/skill_scorer.py "$EVAL_PATH" --transcript output.txt
 ```
 - If pass_rate IMPROVED → keep commit, update baseline
-- If pass_rate SAME or WORSE → `git reset --hard $BASELINE_COMMIT` and try a DIFFERENT change
+- If pass_rate SAME or WORSE → revert ONLY the skill file: `git checkout $BASELINE_COMMIT -- "$SKILL_PATH" && git reset HEAD~1` (do NOT use `git reset --hard` — it destroys all uncommitted work)
 - After 3 consecutive reverts on same failure → log as STUCK, skip to next failure
 
 **f. Log to results.jsonl**
@@ -124,6 +124,7 @@ Commits reverted: 1
 - **Score is truth.** Your opinion of the SKILL.md doesn't matter — only the score.
 - **Never edit the scorer.** That's the immutable ground truth.
 - **Never edit eval.json.** That's the human-defined success criteria.
+- **Verify scope before commit.** Run `git diff --name-only` before committing — if ANY file other than `$SKILL_PATH` was modified, unstage it. Only `$SKILL_PATH` gets committed.
 - **Log everything.** Kept AND reverted experiments go in results.jsonl.
 - **Regressions are failures.** If fixing A breaks B, revert and try differently.
 

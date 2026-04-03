@@ -58,18 +58,27 @@ def check_assertion(assertion: dict, text: str) -> dict:
         result["passed"] = not bool(re.search(pattern, text, flags))
 
     elif atype == "command_ran":
-        pattern = assertion["pattern"]
-        result["passed"] = bool(re.search(pattern, text))
+        # Anchored check: look for execution markers ($ prompt, Bash tool, output blocks)
+        # not just casual mentions. Patterns: "$ python X", "Bash: X", "Running X", output blocks
+        cmd_pattern = assertion["pattern"]
+        execution_anchors = [
+            rf"[\$>]\s*.*{cmd_pattern}",  # shell prompt
+            rf"(?:Bash|bash|command|Running|running|Executing).*{cmd_pattern}",  # tool call markers
+            rf"```[\s\S]*?{cmd_pattern}[\s\S]*?```",  # code block with command
+            rf"(?:PASS|FAIL|Error|output)[\s\S]{{0,500}}{cmd_pattern}",  # near execution output
+            rf"{cmd_pattern}[\s\S]{{0,200}}(?:PASS|FAIL|passed|failed|\d+ check)",  # command near results
+        ]
+        result["passed"] = any(bool(re.search(anchor, text, re.IGNORECASE)) for anchor in execution_anchors)
 
     elif atype == "line_count_gte":
-        pattern = assertion.get("pattern", ".")
+        pattern = assertion.get("pattern", "^.+$")
         threshold = assertion["threshold"]
         matches = len(re.findall(pattern, text, re.MULTILINE))
         result["passed"] = matches >= threshold
         result["actual_count"] = matches
 
     elif atype == "line_count_lte":
-        pattern = assertion.get("pattern", ".")
+        pattern = assertion.get("pattern", "^.+$")
         threshold = assertion["threshold"]
         matches = len(re.findall(pattern, text, re.MULTILINE))
         result["passed"] = matches <= threshold
@@ -210,6 +219,9 @@ def main():
 
     if "--test-id" in sys.argv:
         test_id_idx = sys.argv.index("--test-id") + 1
+        if test_id_idx >= len(sys.argv):
+            print("Error: --test-id requires a value", file=sys.stderr)
+            sys.exit(1)
         test_id = sys.argv[test_id_idx]
         matching = [t for t in assessment_def["tests"] if t["id"] == test_id]
         if not matching:
@@ -218,6 +230,12 @@ def main():
         result = score_test(matching[0], text)
         print(json.dumps(result, indent=2))
     else:
+        # Without --test-id, same transcript is scored against ALL tests.
+        # This is only valid for summary/overview — each test ideally needs its own transcript.
+        print(
+            "WARNING: scoring all tests against same transcript (use --test-id for per-test scoring)",
+            file=sys.stderr,
+        )
         transcripts = {t["id"]: text for t in assessment_def["tests"]}
         result = score_all(assessment_def, transcripts)
         print(json.dumps(result, indent=2))
