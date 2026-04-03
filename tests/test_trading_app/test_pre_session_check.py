@@ -1,11 +1,20 @@
 """Tests for pre_session_check — HWM fail-closed + manual halt."""
 
 import json
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from trading_app.pre_session_check import check_dd_circuit_breaker, check_manual_halt
+import pytest
+
+from trading_app.pre_session_check import (
+    _resolve_session_lane,
+    check_consistency_rule,
+    check_dd_circuit_breaker,
+    check_manual_halt,
+)
+from trading_app.prop_profiles import ACCOUNT_PROFILES, get_profile
 
 
 def _make_hwm_file(tmp_path: Path, data: dict, filename: str = "account_hwm_TEST123.json") -> Path:
@@ -182,3 +191,24 @@ class TestManualHalt:
             ok, msg = check_manual_halt()
         assert ok is False
         assert "indefinite" in msg
+
+
+def test_resolve_session_lane_ambiguous_profile_requires_strategy_specific_tool():
+    with patch.dict(
+        ACCOUNT_PROFILES,
+        {"topstep_50k_type_a": replace(get_profile("topstep_50k_type_a"), active=True)},
+        clear=False,
+    ):
+        with pytest.raises(ValueError, match="multiple lanes"):
+            _resolve_session_lane("US_DATA_1000", "topstep_50k_type_a")
+
+
+def test_check_consistency_rule_fails_closed_on_ambiguous_active_profiles(monkeypatch):
+    monkeypatch.setitem(
+        ACCOUNT_PROFILES,
+        "tradeify_50k",
+        replace(get_profile("tradeify_50k"), active=True),
+    )
+    ok, msg = check_consistency_rule()
+    assert ok is False
+    assert "Multiple active execution profiles" in msg

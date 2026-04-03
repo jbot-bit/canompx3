@@ -124,7 +124,11 @@ class SessionOrchestrator:
         try:
             from trading_app.prop_profiles import get_lane_registry
 
-            for label, info in get_lane_registry().items():
+            profile_id = None
+            if portfolio is not None and portfolio.name.startswith("profile_"):
+                profile_id = portfolio.name.removeprefix("profile_")
+
+            for label, info in get_lane_registry(profile_id=profile_id).items():
                 cap = info.get("max_orb_size_pts")
                 if cap is not None:
                     self._orb_caps[label] = cap
@@ -358,7 +362,7 @@ class SessionOrchestrator:
                             tier = get_account_tier(prof.firm, prof.account_size)
                             firm_spec = get_firm_spec(prof.firm)
                             acct_id = str(account_id) if account_id else pid
-                            # Apex 50K EOD: freeze at $52,100 (safety net)
+                            # Freeze EOD trailing accounts at start_balance + max_dd + $100.
                             freeze = None
                             if firm_spec.dd_type == "eod_trailing":
                                 freeze = prof.account_size + tier.max_dd + 100
@@ -735,6 +739,7 @@ class SessionOrchestrator:
                 mode=mode,
                 instrument=self.instrument,
                 contract=self.contract_symbol,
+                trading_day=self.trading_day,
                 account_id=account_id,
                 account_name=getattr(self, "_account_name", ""),
                 daily_pnl_r=self.engine.daily_pnl_r,

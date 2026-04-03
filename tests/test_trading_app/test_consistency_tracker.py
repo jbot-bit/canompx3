@@ -10,6 +10,7 @@ from trading_app.consistency_tracker import (
     check_consistency,
     check_microscalp_compliance,
     check_payout_eligibility,
+    check_profile_payout_eligibility,
 )
 
 
@@ -64,18 +65,21 @@ def db_with_trades(tmp_path):
 
 
 class TestConsistency:
-    def test_consistency_ok(self, db_with_trades):
-        result = check_consistency(firm="apex", instrument="MNQ", db_path=db_with_trades)
+    def test_topstep_standard_has_no_consistency_rule(self, db_with_trades):
+        result = check_consistency(firm="topstep", instrument="MNQ", db_path=db_with_trades)
+        assert result is None
+
+    def test_topstep_consistency_policy_warn(self, db_with_trades):
+        result = check_consistency(
+            firm="topstep",
+            instrument="MNQ",
+            db_path=db_with_trades,
+            policy_id="topstep_express_consistency",
+        )
         assert result is not None
         # Best day = $200 (Mar 2). Total profit = 100+200+50+80+60+90 = $580
-        # Windfall = 200/580 = 34.5% > 30% limit
+        # Windfall = 200/580 = 34.5% < 40% limit but > 85% of 40% (=34%) -> WARN
         assert result.best_day_pnl == 200.0
-        assert result.status == "OK"  # 34.5% < 50% Apex limit (updated Apex 4.0)
-
-    def test_consistency_topstep_warn(self, db_with_trades):
-        result = check_consistency(firm="topstep", instrument="MNQ", db_path=db_with_trades)
-        assert result is not None
-        # 200/580 = 34.5% < 40% limit but > 85% of 40% (=34%) -> WARN
         assert result.status == "WARN"
 
     def test_consistency_no_trades(self, tmp_path):
@@ -87,7 +91,12 @@ class TestConsistency:
             )
         """)
         con.close()
-        result = check_consistency(firm="apex", instrument="MNQ", db_path=db)
+        result = check_consistency(
+            firm="topstep",
+            instrument="MNQ",
+            db_path=db,
+            policy_id="topstep_express_consistency",
+        )
         assert result is None
 
     def test_tradeify_no_consistency_rule(self, db_with_trades):
@@ -97,13 +106,15 @@ class TestConsistency:
 
 
 class TestPayoutEligibility:
-    def test_apex_eligible(self, db_with_trades):
-        result = check_payout_eligibility(firm="apex", instrument="MNQ", db_path=db_with_trades)
-        # 9 trading days (>8), profitable days with $50+: Mar 1($70), Mar 2($200), Mar 3($50), Mar 5($80), Mar 6($60), Mar 8($90) = 6
-        assert result.trading_days >= 8
-        assert result.eligible
+    def test_tradeify_has_partial_policy_only(self, db_with_trades):
+        result = check_payout_eligibility(firm="tradeify", instrument="MNQ", db_path=db_with_trades)
+        assert result.policy_id == "tradeify_select_funded"
+        assert result.policy_status == "partial"
+        assert result.profit_threshold == 0.0
+        assert not result.eligible
+        assert any("partially modeled" in note for note in result.notes)
 
-    def test_apex_not_eligible_few_days(self, tmp_path):
+    def test_tradeify_not_eligible_few_days(self, tmp_path):
         db = tmp_path / "few.db"
         con = duckdb.connect(str(db))
         con.execute("""
@@ -117,9 +128,36 @@ class TestPayoutEligibility:
             ('2026-03-02', '2026-03-02 08:00:00', 200.0, 'MNQ', 'live')
         """)
         con.close()
-        result = check_payout_eligibility(firm="apex", instrument="MNQ", db_path=db)
+        result = check_payout_eligibility(firm="tradeify", instrument="MNQ", db_path=db)
+        assert result.policy_status == "partial"
         assert not result.eligible
         assert result.trading_days == 2
+
+    def test_topstep_standard_not_eligible_on_150_rule(self, db_with_trades):
+        result = check_payout_eligibility(firm="topstep", instrument="MNQ", db_path=db_with_trades)
+        assert result.policy_id == "topstep_express_standard"
+        assert result.policy_status == "complete"
+        assert result.profit_threshold == 150.0
+        assert result.profitable_days_50 == 1  # only Mar 2 qualifies at $200
+        assert not result.eligible
+
+    def test_topstep_consistency_policy_is_eligible(self, db_with_trades):
+        result = check_payout_eligibility(
+            firm="topstep",
+            instrument="MNQ",
+            db_path=db_with_trades,
+            policy_id="topstep_express_consistency",
+        )
+        assert result.policy_id == "topstep_express_consistency"
+        assert result.policy_status == "complete"
+        assert result.trading_days == 8
+        assert result.eligible
+
+    def test_profile_aware_topstep_uses_standard_policy(self, db_with_trades):
+        result = check_profile_payout_eligibility("topstep_50k_mnq_auto", instrument="MNQ", db_path=db_with_trades)
+        assert result.policy_id == "topstep_express_standard"
+        assert result.policy_status == "complete"
+        assert result.profit_threshold == 150.0
 
 
 class TestMicroscalp:

@@ -49,22 +49,22 @@ _BACKTEST_STATS: dict[str, dict] = {
 
 
 def _build_lanes() -> dict[str, dict]:
-    from trading_app.prop_profiles import get_lane_registry
+    from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
 
-    registry = get_lane_registry()
     lanes = {}
-    for i, (label, lane) in enumerate(sorted(registry.items()), 1):
+    profile_id = resolve_profile_id()
+    for i, lane in enumerate(get_profile_lane_definitions(profile_id), 1):
+        label = lane["orb_label"]
+        strategy_id = lane["strategy_id"]
         bt = _BACKTEST_STATS.get(label, {"mu0": 0.10, "sigma": 1.0})
         suffix = " (shadow)" if lane.get("shadow_only") else ""
-        lanes[label] = {
+        lanes[strategy_id] = {
             "mu0": bt["mu0"],
             "sigma": bt["sigma"],
+            "orb_label": label,
             "label": f"L{i} {label} {lane['filter_type']}{suffix}",
         }
     return lanes
-
-
-LANES = _build_lanes()
 
 
 def compute_sprt(trades: list[float], mu0: float, sigma: float) -> tuple[float, str]:
@@ -117,13 +117,14 @@ def run_monitor():
     print(f"\n{'Lane':<40} {'N':>4} {'SPRT':>8} {'Lower':>8} {'Upper':>8} {'Status':<12} {'Streak':>6} {'MaxStr':>6}")
     print("-" * 110)
 
+    lanes = _build_lanes()
     results = []
-    for session, params in LANES.items():
+    for strategy_id, params in lanes.items():
         rows = con.execute(
             """SELECT pnl_r FROM paper_trades
-               WHERE orb_label = ? AND pnl_r IS NOT NULL
+               WHERE strategy_id = ? AND pnl_r IS NOT NULL
                ORDER BY trading_day""",
-            [session],
+            [strategy_id],
         ).fetchall()
 
         trades = [r[0] for r in rows]
@@ -131,7 +132,9 @@ def run_monitor():
 
         if n == 0:
             print(f"{params['label']:<40} {0:>4} {'N/A':>8} {-A:>8.3f} {B:>8.3f} {'NO DATA':<12} {0:>6} {0:>6}")
-            results.append({"session": session, "n": 0, "sprt": 0, "status": "NO_DATA"})
+            results.append(
+                {"strategy_id": strategy_id, "orb_label": params["orb_label"], "n": 0, "sprt": 0, "status": "NO_DATA"}
+            )
             continue
 
         lr, status = compute_sprt(trades, params["mu0"], params["sigma"])
@@ -152,7 +155,8 @@ def run_monitor():
 
         results.append(
             {
-                "session": session,
+                "strategy_id": strategy_id,
+                "orb_label": params["orb_label"],
                 "n": n,
                 "sprt": round(lr, 4),
                 "status": status,

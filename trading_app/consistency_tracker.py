@@ -15,6 +15,7 @@ import duckdb
 
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.prop_firm_policies import get_default_payout_policy_for_firm, get_payout_policy
 
 log = logging.getLogger(__name__)
 
@@ -33,9 +34,12 @@ class ConsistencyResult:
 
 @dataclass
 class PayoutEligibility:
+    policy_id: str | None
+    policy_status: str
     trading_days: int
     min_trading_days: int
-    profitable_days_50: int  # days with >= $50 profit
+    profitable_days_50: int  # days with >= profit_threshold
+    profit_threshold: float
     min_profitable_days: int
     eligible: bool
     notes: list[str]
@@ -70,20 +74,25 @@ def check_consistency(
     firm: str,
     instrument: str | None = None,
     db_path: Path | None = None,
+    policy_id: str | None = None,
 ) -> ConsistencyResult | None:
     """Check prop firm consistency rule (windfall day limit).
 
-    Apex: 30% rule — no single day > 30% of total profit.
-    TopStep: 40% rule.
-    Tradeify: no consistency rule when funded on Select Flex.
+    Uses the payout-path rule when policy_id is provided.
+    Returns None when the firm/path has no active consistency rule.
     """
     from trading_app.prop_profiles import PROP_FIRM_SPECS
 
     spec = PROP_FIRM_SPECS.get(firm)
-    if spec is None or spec.consistency_rule is None:
-        return None  # no consistency rule for this firm
+    limit_pct = None
+    if policy_id is not None:
+        policy = get_payout_policy(policy_id)
+        limit_pct = policy.consistency_rule
+    elif spec is not None:
+        limit_pct = spec.consistency_rule
 
-    limit_pct = spec.consistency_rule
+    if limit_pct is None:
+        return None  # no consistency rule for this firm
     db = db_path or _get_paper_trades_db()
 
     with duckdb.connect(str(db), read_only=True) as con:
@@ -148,22 +157,50 @@ def check_payout_eligibility(
     firm: str,
     instrument: str | None = None,
     db_path: Path | None = None,
+    policy_id: str | None = None,
 ) -> PayoutEligibility:
     """Check if payout eligibility requirements are met.
 
-    Apex: 8 trading days, $50 profit on 5 different days.
-    TopStep/Tradeify: TBD — uses defaults.
+    Uses canonical payout-policy definitions where available.
+    This models what can be inferred from paper_trades only. It does not
+    know about prior payouts, balance-based caps, or manual approval state.
     """
-    min_trading_days = 8  # Apex default
-    min_profitable_days = 5  # Apex: $50+ on 5 days
-    profit_threshold = 50.0
+    policy = get_payout_policy(policy_id) if policy_id else get_default_payout_policy_for_firm(firm)
+
+    if policy is None:
+        return PayoutEligibility(
+            policy_id=None,
+            policy_status="unmodeled",
+            trading_days=0,
+            min_trading_days=0,
+            profitable_days_50=0,
+            profit_threshold=0.0,
+            min_profitable_days=0,
+            eligible=False,
+            notes=[f"No modeled payout policy for firm={firm!r}"],
+        )
+
+    min_trading_days = policy.min_trading_days or policy.winning_days_required or 0
+    min_profitable_days = policy.winning_days_required or 0
+    profit_threshold = policy.winning_day_profit_threshold or 0.0
+    policy_status = policy.model_status
 
     db = db_path or _get_paper_trades_db()
 
     with duckdb.connect(str(db), read_only=True) as con:
         configure_connection(con)
         if not _has_paper_trades(con):
-            return PayoutEligibility(0, min_trading_days, 0, min_profitable_days, False, ["No paper_trades table"])
+            return PayoutEligibility(
+                policy.policy_id,
+                policy_status,
+                0,
+                min_trading_days,
+                0,
+                profit_threshold,
+                min_profitable_days,
+                False,
+                ["No paper_trades table"],
+            )
 
         where = "WHERE pnl_dollar IS NOT NULL"
         params = []
@@ -185,23 +222,105 @@ def check_payout_eligibility(
 
         trading_days = len(rows)
         profitable_days = sum(1 for _, pnl in rows if pnl >= profit_threshold)
+        total_profit = sum(pnl for _, pnl in rows)
 
         notes = []
+        if policy_status != "complete":
+            notes.append(
+                f"Payout policy {policy.policy_id} is only partially modeled; eligibility is not determinable yet"
+            )
         if trading_days < min_trading_days:
             notes.append(f"Need {min_trading_days - trading_days} more trading days")
-        if profitable_days < min_profitable_days:
+        if min_profitable_days > 0 and profitable_days < min_profitable_days:
             notes.append(f"Need {min_profitable_days - profitable_days} more profitable days (${profit_threshold}+)")
 
-        eligible = trading_days >= min_trading_days and profitable_days >= min_profitable_days
+        consistency_ok = True
+        if policy.consistency_rule is not None:
+            positive_days = [pnl for _, pnl in rows if pnl > 0]
+            best_day = max(positive_days, default=0.0)
+            positive_total = sum(positive_days)
+            if positive_total <= 0:
+                consistency_ok = False
+                notes.append("Need positive net profit for consistency-based payout path")
+            else:
+                windfall = best_day / positive_total
+                max_allowed = policy.consistency_rule
+                if windfall > max_allowed:
+                    consistency_ok = False
+                    notes.append(
+                        f"Largest day is {windfall:.1%} of positive profit, above {max_allowed:.0%} consistency limit"
+                    )
+
+        positive_balance_ok = total_profit > 0
+        if not positive_balance_ok:
+            notes.append("Need net profit above $0 in the current payout window")
+
+        eligible = (
+            policy_status == "complete"
+            and trading_days >= min_trading_days
+            and profitable_days >= min_profitable_days
+            and consistency_ok
+            and positive_balance_ok
+        )
+
+        if policy.payout_cap_balance_pct is not None:
+            notes.append(f"Payout cap: up to {policy.payout_cap_balance_pct:.0%} of account balance")
+        if policy.payout_cap_dollars is not None:
+            notes.append(f"Per-request cap: ${policy.payout_cap_dollars:,.0f}")
+        if policy.additional_days_after_payout is not None:
+            notes.append(
+                f"After payout: restart cycle and add {policy.additional_days_after_payout} new qualifying day(s)"
+            )
+        if policy.daily_payouts_unlock_winning_days is not None:
+            notes.append(
+                f"Daily payouts unlock after {policy.daily_payouts_unlock_winning_days} winning day(s) in this stage"
+            )
 
         return PayoutEligibility(
+            policy_id=policy.policy_id,
+            policy_status=policy_status,
             trading_days=trading_days,
             min_trading_days=min_trading_days,
             profitable_days_50=profitable_days,
+            profit_threshold=profit_threshold,
             min_profitable_days=min_profitable_days,
             eligible=eligible,
             notes=notes,
         )
+
+
+def check_profile_consistency(
+    profile_id: str,
+    instrument: str | None = None,
+    db_path: Path | None = None,
+) -> ConsistencyResult | None:
+    """Profile-aware consistency check using the account's payout path."""
+    from trading_app.prop_profiles import get_profile
+
+    profile = get_profile(profile_id)
+    return check_consistency(
+        firm=profile.firm,
+        instrument=instrument,
+        db_path=db_path,
+        policy_id=profile.payout_policy_id,
+    )
+
+
+def check_profile_payout_eligibility(
+    profile_id: str,
+    instrument: str | None = None,
+    db_path: Path | None = None,
+) -> PayoutEligibility:
+    """Profile-aware payout eligibility using the account's payout path."""
+    from trading_app.prop_profiles import get_profile
+
+    profile = get_profile(profile_id)
+    return check_payout_eligibility(
+        firm=profile.firm,
+        instrument=instrument,
+        db_path=db_path,
+        policy_id=profile.payout_policy_id,
+    )
 
 
 def check_account_idle(

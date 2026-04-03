@@ -107,10 +107,14 @@ def section_0b_consistency():
             for instrument in active_instruments:
                 pe = check_payout_eligibility(firm=firm, instrument=instrument)
                 if pe is not None:
+                    payout_status = (
+                        "ELIGIBLE" if pe.eligible else ("UNMODELED" if pe.policy_status != "complete" else "NOT YET")
+                    )
                     print(
                         f"  Payout ({firm} {instrument}): {pe.trading_days}/{pe.min_trading_days} trading days, "
-                        f"{pe.profitable_days_50}/{pe.min_profitable_days} profitable days ($50+) — "
-                        f"{'ELIGIBLE' if pe.eligible else 'NOT YET'}"
+                        f"{pe.profitable_days_50}/{pe.min_profitable_days} qualifying days "
+                        f"(${pe.profit_threshold:.0f}+) — "
+                        f"{payout_status}"
                     )
                     for note in pe.notes:
                         print(f"    -> {note}")
@@ -295,16 +299,18 @@ def section_8_orb_monitor(con):
     print("\n  SECTION 8 - ORB SIZE MONITOR")
 
     try:
-        from trading_app.prop_profiles import get_lane_registry
+        from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
     except ImportError:
         print("  Cannot load lane registry — skipping ORB monitor.")
         return
 
-    registry = get_lane_registry()
+    profile_id = resolve_profile_id()
+    lane_defs = get_profile_lane_definitions(profile_id)
     print(f"  {'Lane':<25} {'Cap':>8} {'20d Med':>8} {'5d Med':>8} {'Trend':>10} {'Alert':>20}")
     print("  " + "-" * 90)
 
-    for label, info in sorted(registry.items()):
+    for info in lane_defs:
+        label = info["strategy_id"]
         sess = info["orb_label"]
         om = info["orb_minutes"]
         cap_risk = info.get("max_orb_size_pts")  # cap on risk_points (stop distance)

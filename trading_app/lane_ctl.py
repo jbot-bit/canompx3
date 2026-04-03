@@ -157,7 +157,7 @@ def main():
     parser = argparse.ArgumentParser(description="Lane control — pause/resume daily lanes")
     parser.add_argument("action", choices=["pause", "resume", "list"], help="Action to perform")
     parser.add_argument("session", nargs="?", help="Session name (e.g. SINGAPORE_OPEN)")
-    parser.add_argument("--profile", default="apex_50k_manual", help="Profile ID (default: apex_50k_manual)")
+    parser.add_argument("--profile", default="topstep_50k_mnq_auto", help="Profile ID (default: topstep_50k_mnq_auto)")
     parser.add_argument("--reason", default="", help="Reason for pausing")
     parser.add_argument("--expires", default=None, help="Expiry date YYYY-MM-DD")
     args = parser.parse_args()

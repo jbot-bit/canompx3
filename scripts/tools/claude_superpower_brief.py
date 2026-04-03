@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""High-signal workspace brief for Claude hooks and on-demand commands.
+
+Clean-room implementation inspired by publicly discussed ideas around:
+- concise "brief" output modes
+- stronger context persistence across compaction
+- memory pointers instead of dumping raw history
+
+This script intentionally uses only repo-local truth sources and existing
+project helpers. It does not depend on or reproduce any leaked code.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.tools.project_pulse import PulseReport, build_pulse  # noqa: E402
+
+
+def _extract_memory_topics(root: Path, limit: int = 4) -> list[str]:
+    memory_md = root / "MEMORY.md"
+    if not memory_md.exists():
+        return []
+
+    topics: list[str] = []
+    for line in memory_md.read_text(encoding="utf-8", errors="replace").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            topic = stripped.removeprefix("## ").strip()
+            if topic:
+                topics.append(topic)
+        if len(topics) >= limit:
+            break
+    return topics
+
+
+def _recent_memory_notes(root: Path, limit: int = 2) -> list[str]:
+    memory_dir = root / "memory"
+    if not memory_dir.exists():
+        return []
+    notes = sorted(memory_dir.glob("????-??-??.md"), reverse=True)
+    return [p.name for p in notes[:limit]]
+
+
+def _top_items(report: PulseReport, category: str, limit: int = 2) -> list[str]:
+    return [item.summary for item in report.items if item.category == category][:limit]
+
+
+def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
+    lines: list[str] = ["SUPERPOWER BRIEF:"]
+
+    stage_file = root / "docs" / "runtime" / "STAGE_STATE.md"
+    if stage_file.exists():
+        content = stage_file.read_text(encoding="utf-8", errors="replace")
+        mode_match = re.search(r"^mode:\s*(.+)$", content, flags=re.MULTILINE)
+        task_match = re.search(r"^task:\s*(.+)$", content, flags=re.MULTILINE)
+        if task_match or mode_match:
+            lines.append(
+                f"  Stage: {task_match.group(1) if task_match else '?'} — {mode_match.group(1) if mode_match else '?'}"
+            )
+
+    if report.handoff_summary:
+        tool = report.handoff_tool or "?"
+        when = report.handoff_date or "?"
+        lines.append(f"  Last: {tool} ({when}) — {report.handoff_summary}")
+
+    if report.recommendation:
+        lines.append(f"  Next: {report.recommendation}")
+
+    if report.handoff_next_steps:
+        lines.append(f"  Active step: {report.handoff_next_steps[0]}")
+
+    broken = _top_items(report, "broken")
+    if broken:
+        lines.append(f"  Broken: {' | '.join(broken)}")
+
+    decaying = _top_items(report, "decaying")
+    if decaying:
+        lines.append(f"  Decaying: {' | '.join(decaying)}")
+
+    paused = _top_items(report, "paused")
+    if paused:
+        lines.append(f"  Paused: {' | '.join(paused)}")
+
+    if report.upcoming_sessions:
+        top_sessions = []
+        for session in report.upcoming_sessions[:2]:
+            top_sessions.append(f"{session['label']} {session['brisbane_time']} (+{session['hours_away']}h)")
+        lines.append(f"  Upcoming: {' | '.join(top_sessions)}")
+
+    topics = _extract_memory_topics(root)
+    if topics:
+        lines.append(f"  Memory topics: {' | '.join(topics)}")
+
+    notes = _recent_memory_notes(root)
+    if notes:
+        lines.append(f"  Recent notes: {' | '.join(notes)}")
+
+    if mode == "post-compact":
+        lines.append("  Compact rule: re-check live files before trusting prior context.")
+
+    return lines
+
+
+def build_brief(*, root: Path, mode: str = "session-start") -> str:
+    report = build_pulse(
+        root=root,
+        fast=True,
+        skip_drift=True,
+        skip_tests=True,
+    )
+    return "\n".join(_render_lines(report, mode=mode, root=root))
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Generate a concise Claude workspace brief")
+    parser.add_argument("--root", default=str(PROJECT_ROOT), help="Project root")
+    parser.add_argument(
+        "--mode",
+        choices=("session-start", "post-compact", "interactive"),
+        default="interactive",
+        help="Rendering mode",
+    )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    root = Path(args.root).resolve()
+    print(build_brief(root=root, mode=args.mode))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

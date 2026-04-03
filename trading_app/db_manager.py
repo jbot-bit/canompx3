@@ -298,7 +298,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
 
         con.execute(FAMILY_RR_LOCKS_SCHEMA)
 
-        # Table 8: paper_trades (forward OOS validation for Apex lanes)
+        # Table 8: paper_trades (forward OOS validation for active project lanes)
         con.execute("""
             CREATE TABLE IF NOT EXISTS paper_trades (
                 trading_day      DATE NOT NULL,

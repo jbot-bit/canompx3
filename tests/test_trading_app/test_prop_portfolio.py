@@ -68,7 +68,7 @@ class TestDDPerContract:
 
 
 class TestInstrumentBans:
-    def test_apex_bans_mgc(self):
+    def test_custom_bans_filter_mgc(self):
         strats = [
             _make_strategy(instrument="MGC"),
             _make_strategy(instrument="MNQ", strategy_id="MNQ_TOKYO_E2"),
@@ -270,17 +270,14 @@ class TestEndToEnd:
         assert len(tokyo_mgc) <= 1
         assert len(book.excluded) > 0
 
-    def test_apex_blocks_mgc(self):
+    def test_topstep_allows_mgc(self):
         pool = [
             _make_strategy(instrument="MGC", strategy_id="mgc1"),
             _make_strategy(instrument="MNQ", strategy_id="mnq1", orb_label="SINGAPORE_OPEN"),
         ]
-        profile = AccountProfile(
-            "test", "apex", 50_000, 1, 0.75, max_slots=6, allowed_sessions=frozenset({"SINGAPORE_OPEN", "CME_REOPEN"})
-        )
+        profile = AccountProfile("test", "topstep", 50_000, 1, 0.75, max_slots=6)
         book = select_for_profile(profile, pool)
-        assert all(e.instrument != "MGC" for e in book.entries)
-        assert any("banned" in ex.reason.lower() for ex in book.excluded)
+        assert any(e.instrument == "MGC" for e in book.entries)
 
     def test_self_funded_more_slots(self):
         pool = [
@@ -497,8 +494,8 @@ class TestCheckDailyLanesDDBudget:
         )
 
     def test_under_budget(self):
-        """2 lanes at 0.75x = $100/lane = $200 < $2,000 Apex DD."""
-        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        """2 lanes at 0.75x = $100/lane = $200 < $2,000 TopStep DD."""
+        profile = AccountProfile("test", "topstep", 50_000, stop_multiplier=0.75)
         lanes = [self._make_lane(planned_stop=0.75) for _ in range(2)]
         _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
         assert total == 200.0
@@ -506,8 +503,8 @@ class TestCheckDailyLanesDDBudget:
         assert not over
 
     def test_over_budget(self):
-        """25 lanes at 0.75x = $100/lane = $2,500 > $2,000 Apex DD."""
-        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        """25 lanes at 0.75x = $100/lane = $2,500 > $2,000 TopStep DD."""
+        profile = AccountProfile("test", "topstep", 50_000, stop_multiplier=0.75)
         lanes = [self._make_lane(planned_stop=0.75) for _ in range(25)]
         _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
         assert total == 2500.0  # 25 x $100
@@ -516,7 +513,7 @@ class TestCheckDailyLanesDDBudget:
 
     def test_hold_lanes_excluded(self):
         """Non-TRADE lanes don't count toward DD budget."""
-        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        profile = AccountProfile("test", "topstep", 50_000, stop_multiplier=0.75)
         lanes = [
             self._make_lane("TRADE", planned_stop=0.75),
             self._make_lane("HOLD", planned_stop=0.75),
@@ -526,18 +523,18 @@ class TestCheckDailyLanesDDBudget:
         assert total == 100.0  # Only 1 TRADE lane
         assert not over
 
-    def test_real_apex_profile_fits(self):
-        """The actual apex_50k_manual profile with 5 lanes now fits DD budget."""
+    def test_real_topstep_primary_profile_fits(self):
+        """The active TopStep primary profile fits DD budget."""
         from trading_app.prop_profiles import ACCOUNT_PROFILES
 
-        profile = ACCOUNT_PROFILES["apex_50k_manual"]
+        profile = ACCOUNT_PROFILES["topstep_50k_mnq_auto"]
         lanes = [self._make_lane(planned_stop=profile.stop_multiplier) for _ in range(len(profile.daily_lanes))]
         _max_dd, total, limit, over = check_daily_lanes_dd_budget(profile, lanes)
         assert not over, f"5 lanes at $100 should fit: ${total} <= ${limit}"
 
     def test_mixed_stop_multipliers(self):
         """Lanes with different stop multipliers get different DD contributions."""
-        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        profile = AccountProfile("test", "topstep", 50_000, stop_multiplier=0.75)
         lanes = [
             self._make_lane(planned_stop=0.75),  # $100
             self._make_lane(planned_stop=1.0),  # $120
@@ -548,7 +545,7 @@ class TestCheckDailyLanesDDBudget:
 
     def test_no_tradeable_lanes(self):
         """All lanes HOLD/SKIP = zero DD exposure."""
-        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        profile = AccountProfile("test", "topstep", 50_000, stop_multiplier=0.75)
         lanes = [self._make_lane("HOLD"), self._make_lane("SKIP")]
         _max_dd, total, _limit, over = check_daily_lanes_dd_budget(profile, lanes)
         assert total == 0.0
@@ -556,7 +553,7 @@ class TestCheckDailyLanesDDBudget:
 
     def test_fallback_to_profile_stop_when_planned_none(self):
         """Lane with planned_stop=None uses profile.stop_multiplier."""
-        profile = AccountProfile("test", "apex", 50_000, stop_multiplier=0.75)
+        profile = AccountProfile("test", "topstep", 50_000, stop_multiplier=0.75)
         lanes = [self._make_lane(planned_stop=None)]  # Should use 0.75 from profile
         _max_dd, total, _limit, _over = check_daily_lanes_dd_budget(profile, lanes)
         assert total == 100.0  # 0.75x fallback = $100

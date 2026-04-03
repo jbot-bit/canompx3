@@ -1,7 +1,7 @@
 {
   "rebalance_date": "2026-04-03",
   "trailing_window_months": 12,
-  "profile_id": "apex_100k_manual",
+  "profile_id": "topstep_50k_mnq_auto",
   "lanes": [
     {
       "strategy_id": "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",

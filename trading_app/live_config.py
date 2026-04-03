@@ -141,8 +141,8 @@ INSTRUMENT_ATR_GATE: dict[str, float] = {
 # strategies. This entire code path is dead.
 #
 # SOLE AUTHORITY for live strategy config: trading_app.prop_profiles.py
-#   - Apex manual: ACCOUNT_PROFILES["apex_50k_manual"] (4 MNQ lanes)
-#   - TopStep conditional: ACCOUNT_PROFILES["topstep_50k"] (1 MGC lane)
+#   - TopStep auto: ACCOUNT_PROFILES["topstep_50k_mnq_auto"] (allocator-driven)
+#   - TopStep conditional: ACCOUNT_PROFILES["topstep_50k"] (1 conditional MGC lane)
 #   - Tradeify auto: ACCOUNT_PROFILES["tradeify_50k"] (pending)
 #
 # Kept for backwards compatibility with drift checks and UI code that

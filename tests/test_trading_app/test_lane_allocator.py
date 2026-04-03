@@ -490,7 +490,7 @@ class TestReport:
         scores = [deployed, paused]
         allocation = [deployed]
 
-        report = generate_report(scores, allocation, date(2025, 7, 1), "apex_100k_manual")
+        report = generate_report(scores, allocation, date(2025, 7, 1), "topstep_50k_mnq_auto")
 
         # Required sections
         assert "Selected Lanes" in report
@@ -499,7 +499,7 @@ class TestReport:
 
         # Must include profile and date
         assert "2025-07-01" in report
-        assert "apex_100k_manual" in report
+        assert "topstep_50k_mnq_auto" in report
 
         # Deployed strategy appears in selected lanes
         assert deployed.strategy_id in report

@@ -25,12 +25,6 @@ from pipeline.paths import GOLD_DB_PATH
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 
-# Lane definitions — imported from canonical source (prop_profiles.py)
-from trading_app.prop_profiles import get_lane_registry
-
-LANE_DEFS = get_lane_registry()
-
-
 HALT_FILE = STATE_DIR / "halt_trading.json"
 
 
@@ -130,7 +124,7 @@ def check_dd_circuit_breaker() -> tuple[bool, str]:
     return True, "No DD tracker state (first session — will init from broker)"
 
 
-def check_daily_equity() -> tuple[bool, str]:
+def check_daily_equity(profile_id: str | None = None) -> tuple[bool, str]:
     """Check today's equity tracking state."""
     eq_file = STATE_DIR / f"equity_{date.today()}.json"
     if not eq_file.exists():
@@ -142,15 +136,17 @@ def check_daily_equity() -> tuple[bool, str]:
     dd = data.get("current_dd", 0.0)
 
     # DLL from canonical ACCOUNT_TIERS (not hardcoded)
-    from trading_app.prop_profiles import ACCOUNT_PROFILES, ACCOUNT_TIERS
+    from trading_app.prop_profiles import ACCOUNT_TIERS, get_profile, resolve_profile_id
 
     dll = 1000.0  # fallback
-    for _pid, prof in ACCOUNT_PROFILES.items():
-        if prof.active:
-            tier = ACCOUNT_TIERS.get((prof.firm, prof.account_size))
-            if tier and tier.daily_loss_limit:
-                dll = tier.daily_loss_limit
-            break
+    try:
+        resolved_profile_id = resolve_profile_id(profile_id)
+        prof = get_profile(resolved_profile_id)
+        tier = ACCOUNT_TIERS.get((prof.firm, prof.account_size))
+        if tier and tier.daily_loss_limit:
+            dll = tier.daily_loss_limit
+    except Exception:
+        pass
 
     if dd <= -dll:
         return False, f"DAILY DD LIMIT BREACHED: ${dd:.0f} (limit -${dll:,.0f})"
@@ -213,21 +209,43 @@ def check_hwm_tracker() -> tuple[bool, str]:
     return (not any_halt), f"DD TRACKER: {msg}"
 
 
-def check_consistency_rule() -> tuple[bool, str]:
+def check_consistency_rule(profile_id: str | None = None) -> tuple[bool, str]:
     """Check prop firm consistency rule status."""
     try:
-        from trading_app.consistency_tracker import check_consistency
+        from trading_app.consistency_tracker import check_profile_consistency
+        from trading_app.prop_profiles import get_profile, resolve_profile_id
 
-        result = check_consistency(firm="apex", instrument="MNQ")
+        resolved_profile_id = resolve_profile_id(profile_id)
+        profile = get_profile(resolved_profile_id)
+        result = check_profile_consistency(resolved_profile_id, instrument=None)
         if result is None:
-            return True, "Consistency: no trades yet"
+            return True, f"Consistency: no active rule for {profile.profile_id}"
         status_ok = result.status != "BREACH"
         return status_ok, (
-            f"Consistency ({result.limit_pct:.0%} rule): best day ${result.best_day_pnl:.0f} on {result.best_day_date} "
+            f"Consistency {profile.profile_id} ({result.limit_pct:.0%} rule): best day ${result.best_day_pnl:.0f} on {result.best_day_date} "
             f"= {result.windfall_pct:.1f}% of ${result.total_profit:.0f} total — {result.status}"
         )
     except Exception as e:
         return False, f"BLOCKED: Consistency check failed: {e}"
+
+
+def _resolve_session_lane(session: str, profile_id: str | None = None) -> tuple[str, dict]:
+    """Resolve one session lane for the requested profile, failing closed on ambiguity."""
+    from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
+
+    resolved_profile_id = resolve_profile_id(profile_id)
+    lanes = get_profile_lane_definitions(resolved_profile_id)
+    matches = [lane for lane in lanes if lane["orb_label"] == session]
+    if not matches:
+        valid = ", ".join(sorted({lane["orb_label"] for lane in lanes}))
+        raise ValueError(f"Unknown session '{session}' for profile '{resolved_profile_id}'. Valid: {valid}")
+    if len(matches) > 1:
+        options = ", ".join(lane["strategy_id"] for lane in matches)
+        raise ValueError(
+            f"Session '{session}' has multiple lanes in profile '{resolved_profile_id}'. "
+            f"Use a strategy-specific tool. Options: {options}"
+        )
+    return resolved_profile_id, matches[0]
 
 
 def check_forward_monitor_freshness() -> tuple[bool, str]:
@@ -314,17 +332,17 @@ def check_signal_exists(con, session: str, lane: dict, today: date) -> tuple[boo
     return True, f"No signal yet for {session} today (may not have fired yet)"
 
 
-def run_checks(session: str) -> bool:
+def run_checks(session: str, profile_id: str | None = None) -> bool:
     """Run all checks for a session. Returns True if GO.
 
     Checks run in order: manual halt → data freshness → account state →
     signal → DD budget → lane-specific.
     """
-    if session not in LANE_DEFS:
-        print(f"ERROR: Unknown session '{session}'. Valid: {', '.join(LANE_DEFS.keys())}")
+    try:
+        resolved_profile_id, lane = _resolve_session_lane(session, profile_id)
+    except ValueError as e:
+        print(f"ERROR: {e}")
         return False
-
-    lane = LANE_DEFS[session]
     today = date.today()
     results = []
 
@@ -360,10 +378,10 @@ def run_checks(session: str) -> bool:
         ok, msg = check_dd_circuit_breaker()
         results.append(("DD circuit breaker (intraday)", ok, msg))
 
-        ok, msg = check_daily_equity()
+        ok, msg = check_daily_equity(resolved_profile_id)
         results.append(("Daily equity", ok, msg))
 
-        ok, msg = check_consistency_rule()
+        ok, msg = check_consistency_rule(resolved_profile_id)
         results.append(("Consistency rule", ok, msg))
 
         # Signal
@@ -377,9 +395,9 @@ def run_checks(session: str) -> bool:
     # DD budget check (from daily_lanes)
     try:
         from trading_app.prop_portfolio import check_daily_lanes_dd_budget, resolve_daily_lanes
-        from trading_app.prop_profiles import find_active_manual_profile, get_profile
+        from trading_app.prop_profiles import get_profile
 
-        profile = get_profile(find_active_manual_profile())
+        profile = get_profile(resolved_profile_id)
         if profile.daily_lanes:
             resolved = resolve_daily_lanes(profile, db_path=GOLD_DB_PATH, trading_day=today)
             _dd_per, total_dd, dd_limit, over = check_daily_lanes_dd_budget(profile, resolved)
@@ -409,7 +427,7 @@ def run_checks(session: str) -> bool:
     # Print results
     all_pass = True
     print(f"\n{'=' * 70}")
-    print(f"PRE-SESSION CHECK: {session} | {today} | {lane['instrument']}")
+    print(f"PRE-SESSION CHECK: {resolved_profile_id} | {session} | {today} | {lane['instrument']}")
     print(f"Strategy: {lane['strategy_id']}")
     orb_cap = lane.get("max_orb_size_pts")
     cap_str = f"{orb_cap:.0f} pts" if orb_cap else "NONE"
@@ -450,7 +468,8 @@ def run_checks(session: str) -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description="Pre-session health check (hard gate)")
-    parser.add_argument("--session", choices=list(LANE_DEFS.keys()), help="Session to check")
+    parser.add_argument("--profile", help="Execution profile id. Required if multiple active profiles exist.")
+    parser.add_argument("--session", help="Session to check")
     parser.add_argument("--halt", metavar="REASON", help="Halt all trading until tomorrow")
     parser.add_argument("--resume", action="store_true", help="Clear manual halt")
     args = parser.parse_args()
@@ -464,7 +483,7 @@ def main():
     if not args.session:
         parser.error("--session is required (or use --halt/--resume)")
 
-    ok = run_checks(args.session)
+    ok = run_checks(args.session, profile_id=args.profile)
     sys.exit(0 if ok else 1)
 
 

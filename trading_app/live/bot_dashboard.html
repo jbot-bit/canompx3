@@ -1,738 +1,1461 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ORB Bot Dashboard</title>
-<link id="favicon" rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23ef4444'/></svg>">
-<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" onerror="document.body.style.color='#e0e0e0'"></script>
+<link id="favicon" rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23dc2626'/></svg>">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-  body { font-family: 'JetBrains Mono', monospace; background: #0a0e14; color: #e0e0e0; }
-  .pulse { animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
-  .pulse-warning { animation: pulse-warning 1s infinite; }
-  @keyframes pulse-warning { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); } 50% { box-shadow: 0 0 20px 4px rgba(239,68,68,0.6); } }
-  .lane-card { transition: border-color 0.3s, box-shadow 0.3s; }
-  .lane-card:hover { box-shadow: 0 0 20px rgba(59,130,246,0.15); }
-  .btn-control { transition: transform 0.1s; cursor: pointer; }
-  .btn-control:active { transform: scale(0.95); }
-  .progress-bar { transition: width 0.5s ease; }
-  #preflight-output { max-height: 300px; overflow-y: auto; }
+  :root {
+    --bg: #0a0f14;
+    --panel: #101821;
+    --panel-2: #152230;
+    --panel-3: #1b2c3d;
+    --border: #24384a;
+    --text: #e5eef5;
+    --muted: #8ea2b5;
+    --soft: #65809a;
+    --green: #34d399;
+    --yellow: #fbbf24;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --cyan: #67e8f9;
+    --purple: #c084fc;
+    --shadow: 0 20px 40px rgba(0, 0, 0, 0.28);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at top right, rgba(103, 232, 249, 0.10), transparent 28%),
+      radial-gradient(circle at top left, rgba(96, 165, 250, 0.08), transparent 24%),
+      linear-gradient(180deg, #091018 0%, #0a0f14 100%);
+    color: var(--text);
+    font-family: "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular", "Consolas", monospace;
+  }
+
+  button,
+  input {
+    font: inherit;
+  }
+
+  .shell {
+    width: min(1500px, calc(100% - 32px));
+    margin: 0 auto;
+    padding: 24px 0 40px;
+  }
+
+  .hero {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: end;
+    margin-bottom: 18px;
+  }
+
+  .eyebrow {
+    color: var(--cyan);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    margin: 0;
+    font-size: clamp(26px, 4vw, 42px);
+    line-height: 1.05;
+  }
+
+  .hero-copy {
+    margin-top: 8px;
+    color: var(--muted);
+    max-width: 720px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .panel {
+    background: linear-gradient(180deg, rgba(21, 34, 48, 0.96), rgba(16, 24, 33, 0.96));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+  }
+
+  .hero-action {
+    align-self: stretch;
+    min-width: 240px;
+    border: 1px solid rgba(248, 113, 113, 0.55);
+    background: linear-gradient(180deg, rgba(153, 27, 27, 0.95), rgba(127, 29, 29, 0.95));
+    color: #fff;
+    border-radius: 18px;
+    padding: 16px 18px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .hero-action:hover {
+    filter: brightness(1.06);
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .summary-card {
+    padding: 16px 18px;
+  }
+
+  .summary-label {
+    display: block;
+    margin-bottom: 10px;
+    color: var(--soft);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .summary-value {
+    font-size: 20px;
+    line-height: 1.2;
+    font-weight: 700;
+  }
+
+  .summary-detail {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .tool-button {
+    border: 1px solid var(--border);
+    background: rgba(27, 44, 61, 0.92);
+    color: var(--text);
+    border-radius: 12px;
+    padding: 10px 14px;
+    cursor: pointer;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-size: 12px;
+  }
+
+  .tool-button:hover {
+    border-color: #36526b;
+    background: rgba(31, 52, 73, 0.96);
+  }
+
+  .tool-button.primary {
+    background: rgba(8, 145, 178, 0.18);
+    border-color: rgba(103, 232, 249, 0.30);
+    color: var(--cyan);
+  }
+
+  .tool-button.warn {
+    background: rgba(180, 83, 9, 0.16);
+    border-color: rgba(251, 191, 36, 0.30);
+    color: var(--yellow);
+  }
+
+  .tool-button.danger {
+    background: rgba(185, 28, 28, 0.18);
+    border-color: rgba(248, 113, 113, 0.30);
+    color: #fecaca;
+  }
+
+  .section {
+    margin-top: 14px;
+    padding: 18px;
+  }
+
+  .section-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 14px;
+  }
+
+  .section-title {
+    margin: 0;
+    font-size: 18px;
+  }
+
+  .section-copy {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .status-panel {
+    display: none;
+    margin-top: 14px;
+    padding: 18px;
+  }
+
+  .status-grid {
+    display: grid;
+    grid-template-columns: 220px repeat(5, minmax(0, 1fr));
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .mode-card {
+    background: rgba(10, 15, 20, 0.55);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px;
+  }
+
+  .mode-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 10px 14px;
+    border-radius: 999px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    font-size: 12px;
+    text-transform: uppercase;
+  }
+
+  .mode-badge.live {
+    background: rgba(220, 38, 38, 0.18);
+    color: #fecaca;
+  }
+
+  .mode-badge.demo {
+    background: rgba(37, 99, 235, 0.18);
+    color: #bfdbfe;
+  }
+
+  .mode-badge.signal {
+    background: rgba(5, 150, 105, 0.18);
+    color: #bbf7d0;
+  }
+
+  .mode-badge.stopped {
+    background: rgba(71, 85, 105, 0.24);
+    color: #cbd5e1;
+  }
+
+  .mode-copy {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .metric-card {
+    background: rgba(10, 15, 20, 0.45);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 14px 16px;
+  }
+
+  .metric-label {
+    color: var(--soft);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .metric-value {
+    margin-top: 12px;
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .metric-sub {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .dd-track {
+    margin-top: 12px;
+    height: 10px;
+    background: rgba(36, 56, 74, 0.92);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .dd-bar {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #22c55e, #16a34a);
+    transition: width 0.4s ease;
+  }
+
+  .pulse {
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .profiles-grid,
+  .live-grid {
+    display: grid;
+    gap: 12px;
+  }
+
+  .profiles-grid {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  }
+
+  .live-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .profile-card,
+  .lane-card {
+    border: 1px solid var(--border);
+    background: rgba(10, 15, 20, 0.40);
+    border-radius: 16px;
+    padding: 16px;
+  }
+
+  .profile-head,
+  .lane-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: start;
+  }
+
+  .firm-line {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .firm-name {
+    font-weight: 800;
+    font-size: 18px;
+  }
+
+  .firm-size {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .profile-chip,
+  .lane-chip {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 700;
+  }
+
+  .chip-auto {
+    color: #bbf7d0;
+    background: rgba(5, 150, 105, 0.18);
+  }
+
+  .chip-manual {
+    color: #cbd5e1;
+    background: rgba(71, 85, 105, 0.22);
+  }
+
+  .chip-live {
+    color: #fecaca;
+    background: rgba(220, 38, 38, 0.18);
+  }
+
+  .chip-demo {
+    color: #bfdbfe;
+    background: rgba(37, 99, 235, 0.18);
+  }
+
+  .chip-signal {
+    color: #bbf7d0;
+    background: rgba(5, 150, 105, 0.18);
+  }
+
+  .chip-inactive {
+    color: #94a3b8;
+    background: rgba(71, 85, 105, 0.18);
+  }
+
+  .profile-meta {
+    margin-top: 12px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .lane-list {
+    margin-top: 14px;
+    display: grid;
+    gap: 8px;
+  }
+
+  .lane-row {
+    display: grid;
+    grid-template-columns: 108px 1fr;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(21, 34, 48, 0.90);
+    border: 1px solid rgba(36, 56, 74, 0.92);
+  }
+
+  .lane-time {
+    color: var(--cyan);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .lane-title {
+    font-weight: 700;
+    font-size: 13px;
+  }
+
+  .lane-subtitle {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .lane-values {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .value-box {
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(21, 34, 48, 0.72);
+    border: 1px solid rgba(36, 56, 74, 0.85);
+  }
+
+  .value-label {
+    color: var(--soft);
+    font-size: 10px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+  }
+
+  .value-text {
+    margin-top: 6px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .lane-foot {
+    margin-top: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .actions-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .profile-button {
+    flex: 1;
+    border-radius: 12px;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-size: 11px;
+    background: rgba(21, 34, 48, 0.92);
+    color: var(--text);
+  }
+
+  .profile-button.signal {
+    color: #bbf7d0;
+    border-color: rgba(34, 197, 94, 0.26);
+    background: rgba(5, 150, 105, 0.12);
+  }
+
+  .profile-button.demo {
+    color: #bfdbfe;
+    border-color: rgba(96, 165, 250, 0.28);
+    background: rgba(37, 99, 235, 0.12);
+  }
+
+  .profile-button.live {
+    color: #fecaca;
+    border-color: rgba(248, 113, 113, 0.30);
+    background: rgba(185, 28, 28, 0.14);
+  }
+
+  .profile-button.stop {
+    color: #fff;
+    border-color: rgba(248, 113, 113, 0.30);
+    background: rgba(185, 28, 28, 0.62);
+  }
+
+  .profile-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  .live-gate {
+    margin-top: 8px;
+  }
+
+  .live-gate input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: rgba(10, 15, 20, 0.65);
+    color: var(--text);
+  }
+
+  .empty-state {
+    padding: 20px;
+    border-radius: 14px;
+    border: 1px dashed rgba(103, 128, 154, 0.35);
+    color: var(--muted);
+    text-align: center;
+    background: rgba(10, 15, 20, 0.32);
+  }
+
+  .activity-panel {
+    display: none;
+    margin-top: 14px;
+    padding: 18px;
+  }
+
+  .activity-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .close-link {
+    border: none;
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  pre {
+    margin: 0;
+    padding: 14px;
+    border-radius: 14px;
+    background: rgba(10, 15, 20, 0.60);
+    border: 1px solid rgba(36, 56, 74, 0.85);
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 320px;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: 14px;
+    border: 1px solid rgba(36, 56, 74, 0.85);
+    background: rgba(10, 15, 20, 0.40);
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 920px;
+  }
+
+  th,
+  td {
+    text-align: left;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(36, 56, 74, 0.80);
+    vertical-align: top;
+    font-size: 12px;
+  }
+
+  th {
+    color: var(--soft);
+    font-size: 11px;
+    letter-spacing: 0.10em;
+    text-transform: uppercase;
+  }
+
+  tr:hover td {
+    background: rgba(21, 34, 48, 0.34);
+  }
+
+  .trade-lane {
+    font-weight: 700;
+  }
+
+  .trade-sub {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .trade-summary {
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .align-right {
+    text-align: right;
+  }
+
+  .positive { color: var(--green); }
+  .negative { color: var(--red); }
+  .warning { color: var(--yellow); }
+  .muted { color: var(--muted); }
+  .cyan { color: var(--cyan); }
+  .blue { color: var(--blue); }
+
+  .footer-note {
+    margin-top: 12px;
+    text-align: center;
+    color: var(--soft);
+    font-size: 11px;
+  }
+
+  .hidden {
+    display: none !important;
+  }
+
+  @media (max-width: 1100px) {
+    .summary-grid,
+    .status-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 820px) {
+    .shell {
+      width: min(100% - 20px, 100%);
+      padding-top: 16px;
+    }
+
+    .hero {
+      grid-template-columns: 1fr;
+    }
+
+    .summary-grid,
+    .status-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .lane-row {
+      grid-template-columns: 1fr;
+    }
+
+    .lane-values {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>
 </head>
-<body class="min-h-screen p-4 md:p-6">
-
-<!-- KILL BUTTON — TOP OF PAGE, FULL WIDTH, ALWAYS VISIBLE -->
-<button id="btn-kill" class="btn-control w-full py-4 mb-4 rounded-xl font-bold text-lg bg-red-700 hover:bg-red-600 text-white tracking-wider">
-  KILL ALL TRADES
-</button>
-
-<!-- NEXT SESSION BANNER + DATA FRESHNESS -->
-<div class="flex flex-wrap items-center gap-4 mb-4 p-3 rounded-xl bg-[#111922] border border-[#1e2d3d]">
-  <div class="flex items-center gap-2">
-    <span class="text-xs text-gray-500 font-bold">NEXT</span>
-    <span id="next-session" class="text-sm font-bold text-cyan-400">Loading...</span>
-  </div>
-  <div class="flex-1"></div>
-  <div class="flex items-center gap-2">
-    <span class="text-xs text-gray-500 font-bold">DATA</span>
-    <span id="data-status" class="text-xs text-gray-400">Checking...</span>
-  </div>
-  <button id="btn-preflight" class="btn-control px-3 py-1.5 rounded-lg font-bold text-xs bg-gray-700 hover:bg-gray-600 text-white">
-    PREFLIGHT
-  </button>
-  <button id="btn-refresh" class="btn-control px-3 py-1.5 rounded-lg font-bold text-xs bg-cyan-700 hover:bg-cyan-600 text-white">
-    REFRESH ALL
-  </button>
-</div>
-
-<!-- ACTIVE SESSION STATUS (only visible when bot running) -->
-<div id="session-status-bar" class="hidden flex flex-wrap items-center gap-4 mb-4 p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]">
-  <div id="mode-badge" class="px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-gray-800 text-gray-400">STOPPED</div>
-  <div class="flex-1 min-w-[200px]">
-    <div class="text-xs text-gray-500">ACCOUNT</div>
-    <div id="account-info" class="text-sm truncate">&mdash;</div>
-  </div>
-  <div class="text-right">
-    <div class="text-xs text-gray-500">DAILY P&amp;L</div>
-    <div id="daily-pnl" class="text-lg font-bold">0.00R</div>
-  </div>
-  <div class="w-full md:w-48">
-    <div class="flex justify-between text-xs text-gray-500 mb-1">
-      <span>DD USED</span>
-      <span id="dd-pct">0%</span>
+<body>
+<div class="shell">
+  <header class="hero">
+    <div>
+      <div class="eyebrow">ORB Bot Dashboard</div>
+      <h1>Brisbane Session Board</h1>
+      <div class="hero-copy">
+        Profiles, live lanes, and trades arranged by when they matter. The dashboard should answer three questions fast:
+        what runs next, what is live now, and what actually traded today.
+      </div>
     </div>
-    <div class="h-3 bg-[#1a2332] rounded-full overflow-hidden">
-      <div id="dd-bar" class="progress-bar h-full bg-green-500 rounded-full" style="width:0%"></div>
+    <button id="btn-kill" class="hero-action">Kill All Trades</button>
+  </header>
+
+  <section class="summary-grid">
+    <div class="panel summary-card">
+      <span class="summary-label">Next Session</span>
+      <div id="next-session" class="summary-value">Loading...</div>
+      <div id="next-session-detail" class="summary-detail">Brisbane clock</div>
     </div>
-  </div>
-  <div class="text-right">
-    <div class="text-xs text-gray-500">HEARTBEAT</div>
-    <div id="heartbeat" class="text-sm">&mdash;</div>
-  </div>
-  <div class="text-right">
-    <div class="text-xs text-gray-500">BARS</div>
-    <div id="bars-count" class="text-sm">0</div>
-  </div>
-</div>
+    <div class="panel summary-card">
+      <span class="summary-label">Data</span>
+      <div id="data-status" class="summary-value">Checking...</div>
+      <div id="data-status-detail" class="summary-detail">Latest bars per instrument</div>
+    </div>
+    <div class="panel summary-card">
+      <span class="summary-label">Running Profile</span>
+      <div id="running-profile" class="summary-value">Idle</div>
+      <div id="running-profile-detail" class="summary-detail">No live session</div>
+    </div>
+    <div class="panel summary-card">
+      <span class="summary-label">Mode</span>
+      <div id="summary-mode" class="summary-value">Stopped</div>
+      <div id="summary-mode-detail" class="summary-detail">No orders or signals active</div>
+    </div>
+  </section>
 
-<!-- ACCOUNT CARDS -->
-<div id="accounts-grid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
-  <div class="p-4 rounded-xl bg-[#111922] border border-[#1e2d3d] text-center text-gray-600 text-sm">Loading accounts...</div>
-</div>
-
-<!-- LANE CARDS (visible when session running) -->
-<div id="lanes-grid" class="grid grid-cols-2 xl:grid-cols-4 gap-3 md:gap-4 mb-4"></div>
-
-<!-- ACTIVITY LOG (preflight, refresh, session output) -->
-<div id="activity-panel" class="hidden mb-6 p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]">
-  <div class="flex justify-between items-center mb-2">
-    <span id="activity-title" class="text-sm font-bold text-gray-400">OUTPUT</span>
-    <button id="btn-close-activity" class="text-gray-500 hover:text-white text-xs cursor-pointer">CLOSE</button>
+  <div class="toolbar">
+    <button id="btn-preflight" class="tool-button primary">Run Preflight</button>
+    <button id="btn-refresh" class="tool-button warn">Refresh Data</button>
   </div>
-  <pre id="activity-output" class="text-xs text-green-400 whitespace-pre-wrap max-h-[300px] overflow-y-auto">Ready</pre>
-</div>
 
-<!-- TRADE LOG -->
-<div class="rounded-xl bg-[#111922] border border-[#1e2d3d] overflow-hidden">
-  <div class="p-4 border-b border-[#1e2d3d]">
-    <span class="text-sm font-bold text-gray-400">TODAY'S TRADES</span>
-  </div>
-  <div class="overflow-x-auto">
-    <table class="w-full text-xs">
-      <thead>
-        <tr class="text-gray-500 border-b border-[#1e2d3d]">
-          <th class="p-2 text-left">TIME</th>
-          <th class="p-2 text-left">INST</th>
-          <th class="p-2 text-left">LANE</th>
-          <th class="p-2 text-left">DIR</th>
-          <th class="p-2 text-right">ENTRY</th>
-          <th class="p-2 text-right">EXIT</th>
-          <th class="p-2 text-right">P&amp;L (R)</th>
-          <th class="p-2 text-left">STATUS</th>
-        </tr>
-      </thead>
-      <tbody id="trade-log">
-        <tr><td colspan="8" class="p-4 text-center text-gray-600">No trades today</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+  <section id="session-status-panel" class="panel status-panel">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Live Session</h2>
+        <div class="section-copy">Current runtime health for the session already in progress.</div>
+      </div>
+    </div>
+    <div class="status-grid">
+      <div class="mode-card">
+        <div id="mode-badge" class="mode-badge stopped">Stopped</div>
+        <div id="mode-copy" class="mode-copy">No live session detected.</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Account</div>
+        <div id="account-info" class="metric-value">-</div>
+        <div class="metric-sub">Active broker account and profile source</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Daily P&amp;L</div>
+        <div id="daily-pnl" class="metric-value">0.00R</div>
+        <div class="metric-sub">Realized plus open session P&amp;L</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Drawdown Used</div>
+        <div id="dd-pct" class="metric-value">0%</div>
+        <div class="dd-track"><div id="dd-bar" class="dd-bar"></div></div>
+        <div class="metric-sub">Share of configured daily loss limit</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Heartbeat</div>
+        <div id="heartbeat" class="metric-value">-</div>
+        <div class="metric-sub">How fresh the bot state file is</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Bars</div>
+        <div id="bars-count" class="metric-value">0</div>
+        <div class="metric-sub">Bars received this runtime session</div>
+      </div>
+    </div>
+  </section>
 
-<div class="mt-4 text-center text-xs text-gray-600">
-  ORB Bot Dashboard &middot; Auto-refreshes every 5s &middot; <span id="last-update">&mdash;</span>
+  <section class="panel section">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Profiles</h2>
+        <div class="section-copy">Each profile is laid out as a Brisbane schedule so you can see what runs when.</div>
+      </div>
+    </div>
+    <div id="accounts-grid" class="profiles-grid">
+      <div class="empty-state">Loading profiles...</div>
+    </div>
+  </section>
+
+  <section id="live-lanes-panel" class="panel section hidden">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Live Lanes</h2>
+        <div class="section-copy">One card per actual strategy lane. No more collapsing multiple instruments into one session tile.</div>
+      </div>
+    </div>
+    <div id="live-lanes-grid" class="live-grid"></div>
+  </section>
+
+  <section id="activity-panel" class="panel activity-panel">
+    <div class="activity-head">
+      <div>
+        <h2 id="activity-title" class="section-title">Activity</h2>
+        <div class="section-copy">Operational output for preflight, refresh, and session actions.</div>
+      </div>
+      <button id="btn-close-activity" class="close-link">Close</button>
+    </div>
+    <pre id="activity-output">Ready</pre>
+  </section>
+
+  <section class="panel section">
+    <div class="section-head">
+      <div>
+        <h2 class="section-title">Trades Today</h2>
+        <div class="section-copy">Trades shown with planned Brisbane session time and lane label, not raw strategy IDs.</div>
+      </div>
+      <div id="trade-summary" class="trade-summary">Waiting for trade journal...</div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Logged</th>
+            <th>Lane</th>
+            <th>Setup</th>
+            <th>Dir</th>
+            <th class="align-right">Entry</th>
+            <th class="align-right">Exit</th>
+            <th class="align-right">P&amp;L</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="trade-log">
+          <tr><td colspan="8" class="muted">No trades today</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="footer-note">
+    Auto-refreshes every 5s. Last update: <span id="last-update">-</span>
+  </div>
 </div>
 
 <script>
 "use strict";
 
-// Default lanes — overridden dynamically from API on first poll
-let LANES = [
-  { name: "NYSE_CLOSE",      color: "text-blue-400",    borderActive: "#3b82f6" },
-  { name: "SINGAPORE_OPEN",  color: "text-purple-400",  borderActive: "#a855f7" },
-  { name: "COMEX_SETTLE",    color: "text-amber-400",   borderActive: "#f59e0b" },
-  { name: "NYSE_OPEN",       color: "text-emerald-400", borderActive: "#10b981" },
-];
+const FIRM_STYLES = {
+  "Apex Trader Funding": { color: "#fdba74" },
+  "TopStep": { color: "#93c5fd" },
+  "Tradeify": { color: "#86efac" },
+  "MyFundedFutures": { color: "#d8b4fe" },
+  "Self-Funded": { color: "#cbd5e1" },
+};
 
-const LANE_COLORS = [
-  { color: "text-blue-400",    borderActive: "#3b82f6" },
-  { color: "text-purple-400",  borderActive: "#a855f7" },
-  { color: "text-amber-400",   borderActive: "#f59e0b" },
-  { color: "text-emerald-400", borderActive: "#10b981" },
-  { color: "text-cyan-400",    borderActive: "#06b6d4" },
-  { color: "text-rose-400",    borderActive: "#f43f5e" },
-  { color: "text-lime-400",    borderActive: "#84cc16" },
-  { color: "text-orange-400",  borderActive: "#f97316" },
-];
-let lanesBuilt = false;
-let _runningProfile = null;  // Track which profile is currently running (from bot_state)
+let sessionCountdowns = {};
+let refreshPolling = false;
+let autoRefreshTriggered = false;
+let runningProfile = null;
 
-function rebuildLanesFromApi(laneKeys) {
-  if (lanesBuilt && laneKeys.length === LANES.length &&
-      laneKeys.every((k, i) => k === LANES[i].name)) return;
-  LANES = laneKeys.map((name, i) => ({
-    name,
-    color: LANE_COLORS[i % LANE_COLORS.length].color,
-    borderActive: LANE_COLORS[i % LANE_COLORS.length].borderActive,
-  }));
-  const grid = document.getElementById("lanes-grid");
-  while (grid.firstChild) grid.removeChild(grid.firstChild);
-  buildLaneCards();
-  lanesBuilt = true;
+function byId(id) {
+  return document.getElementById(id);
 }
 
-function buildLaneCards() {
-  const grid = document.getElementById("lanes-grid");
-  for (const lane of LANES) {
-    const card = document.createElement("div");
-    card.id = "lane-" + lane.name;
-    card.className = "lane-card p-4 rounded-xl bg-[#111922] border border-[#1e2d3d]";
-    card.dataset.borderActive = lane.borderActive;
+function setText(id, text) {
+  const el = byId(id);
+  if (el) el.textContent = text;
+}
 
-    const header = document.createElement("div");
-    header.className = "flex justify-between items-center mb-3";
-    const title = document.createElement("span");
-    title.className = "text-sm font-bold " + lane.color;
-    title.textContent = lane.name;
-    const badge = document.createElement("span");
-    badge.className = "lane-status px-2 py-0.5 rounded text-xs font-bold bg-gray-700 text-gray-300";
-    badge.textContent = "WAITING";
-    header.appendChild(title);
-    header.appendChild(badge);
+function fmtNumber(value, digits = 2) {
+  return value == null || Number.isNaN(Number(value)) ? "—" : Number(value).toFixed(digits);
+}
 
-    const filterDiv = document.createElement("div");
-    filterDiv.className = "lane-filter text-xs text-gray-500 mb-2";
-    filterDiv.textContent = "\u2014";
+function fmtPrice(value) {
+  return value == null ? "—" : Number(value).toFixed(2);
+}
 
-    const details = document.createElement("div");
-    details.className = "grid grid-cols-2 gap-2 text-sm";
-    for (const [label, cls] of [["Dir", "lane-dir"], ["Entry", "lane-entry"], ["P&L", "lane-pnl"], ["RR", "lane-rr"]]) {
-      const cell = document.createElement("div");
-      const lbl = document.createElement("span");
-      lbl.className = "text-gray-500";
-      lbl.textContent = label + ": ";
-      const val = document.createElement("span");
-      val.className = cls;
-      val.textContent = "\u2014";
-      cell.appendChild(lbl);
-      cell.appendChild(val);
-      details.appendChild(cell);
+function fmtR(value) {
+  return value == null ? "—" : `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}R`;
+}
+
+function fmtClock(value, withSeconds = true) {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleTimeString("en-AU", {
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+      second: withSeconds ? "2-digit" : undefined,
+    });
+  } catch (_e) {
+    return "—";
+  }
+}
+
+function timeSortKey(value) {
+  if (!value || !value.includes(":")) return 9999;
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function updateFavicon(mode) {
+  const color = (mode === "STOPPED" || mode === "OFFLINE") ? "%23dc2626" : "%2322c55e";
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='${color}'/></svg>`;
+  byId("favicon").setAttribute("href", "data:image/svg+xml," + svg);
+}
+
+function laneStatusClass(status) {
+  if (status === "IN_TRADE") return "chip-live";
+  if (status === "ARMED") return "chip-demo";
+  if (status === "FLAT") return "chip-signal";
+  if (status === "UNKNOWN") return "chip-manual";
+  return "chip-manual";
+}
+
+function modeClass(mode) {
+  if (mode === "LIVE") return "live";
+  if (mode === "DEMO") return "demo";
+  if (mode === "SIGNAL") return "signal";
+  return "stopped";
+}
+
+function getCountdownText(sessionName) {
+  const mins = sessionCountdowns[sessionName];
+  if (mins == null) return "";
+  if (mins <= 0) return "Now";
+  const hours = Math.floor(mins / 60);
+  const minutes = mins % 60;
+  if (hours > 0) return `in ${hours}h ${minutes}m`;
+  return `in ${minutes}m`;
+}
+
+function summarizeDataError(errorText) {
+  if (!errorText) return { headline: "Error", detail: "Unknown data status error" };
+  if (errorText.includes("Cannot open file")) {
+    return {
+      headline: "DB Busy",
+      detail: "gold.db is locked by another process right now",
+    };
+  }
+  return {
+    headline: "Error",
+    detail: errorText,
+  };
+}
+
+function renderEmpty(container, text) {
+  container.innerHTML = `<div class="empty-state">${text}</div>`;
+}
+
+function setupLabel(meta) {
+  const parts = [];
+  if (meta.entry_model) parts.push(meta.entry_model);
+  if (meta.rr_target != null) parts.push(`RR${Number(meta.rr_target).toString()}`);
+  if (meta.filter_type) parts.push(meta.filter_type);
+  return parts.join(" | ") || "Setup unknown";
+}
+
+function renderAccounts(accounts) {
+  const grid = byId("accounts-grid");
+  grid.innerHTML = "";
+  if (!accounts.length) {
+    renderEmpty(grid, "No profiles found.");
+    return;
+  }
+
+  const sorted = [...accounts].sort((a, b) => {
+    if (a.active !== b.active) return b.active - a.active;
+    const aAuto = a.auto_trading === "full" || a.auto_trading === "semi";
+    const bAuto = b.auto_trading === "full" || b.auto_trading === "semi";
+    if (aAuto !== bAuto) return bAuto - aAuto;
+    return b.lane_count - a.lane_count;
+  });
+
+  for (const acct of sorted) {
+    const style = FIRM_STYLES[acct.firm] || FIRM_STYLES["Self-Funded"];
+    const isAuto = acct.auto_trading === "full" || acct.auto_trading === "semi";
+    const isRunning = runningProfile === acct.profile_id;
+
+    const card = document.createElement("article");
+    card.className = "profile-card";
+    if (!acct.active) card.style.opacity = "0.55";
+
+    const lanesHtml = (acct.lanes || []).slice(0, 5).map((lane) => `
+      <div class="lane-row">
+        <div class="lane-time">${lane.session_time_brisbane || "??:??"} Brisbane</div>
+        <div>
+          <div class="lane-title">${lane.label || `${lane.instrument || ""} ${lane.session || ""}`.trim()}</div>
+          <div class="lane-subtitle">${lane.setup_label || "Setup unknown"}</div>
+        </div>
+      </div>
+    `).join("");
+
+    const moreCount = Math.max(0, (acct.lanes || []).length - 5);
+    const statusChip = !acct.active
+      ? `<span class="profile-chip chip-inactive">Inactive</span>`
+      : isAuto
+        ? `<span class="profile-chip chip-auto">Auto</span>`
+        : `<span class="profile-chip chip-manual">Manual</span>`;
+
+    card.innerHTML = `
+      <div class="profile-head">
+        <div>
+          <div class="firm-line">
+            <span class="firm-name" style="color:${style.color}">${acct.firm}</span>
+            <span class="firm-size">$${acct.account_size / 1000}K</span>
+          </div>
+          <div class="profile-meta">
+            ${acct.profile_id}<br>
+            ${acct.instruments && acct.instruments.length ? acct.instruments.join(" + ") : "All instruments"} |
+            ${acct.lane_count} lane${acct.lane_count === 1 ? "" : "s"} |
+            DD $${Number(acct.max_dd).toLocaleString()}${acct.dll ? ` | DLL $${Number(acct.dll).toLocaleString()}` : ""}${acct.copies > 1 ? ` | x${acct.copies} accounts` : ""}
+          </div>
+        </div>
+        ${statusChip}
+      </div>
+      <div class="lane-list">
+        ${lanesHtml || '<div class="empty-state">No timed lanes on this profile.</div>'}
+        ${moreCount > 0 ? `<div class="lane-subtitle">+ ${moreCount} more timed lanes</div>` : ""}
+      </div>
+    `;
+
+    if (isAuto && acct.active && acct.lane_count > 0) {
+      if (isRunning) {
+        const stopRow = document.createElement("div");
+        stopRow.className = "actions-row";
+        stopRow.innerHTML = `<button class="profile-button stop pulse">Stop Session</button>`;
+        stopRow.querySelector("button").addEventListener("click", async () => {
+          if (!confirm("Stop the running session?")) return;
+          try {
+            await fetch("/api/action/kill", { method: "POST" });
+            showActivity("Session Stop", "Stopping session...", "warning");
+          } catch (e) {
+            appendActivity("Error: " + e.message);
+          }
+        });
+        card.appendChild(stopRow);
+      } else {
+        const actions = document.createElement("div");
+        actions.className = "actions-row";
+        actions.innerHTML = `
+          <button class="profile-button signal">Signal</button>
+          <button class="profile-button demo">Demo</button>
+          <button class="profile-button live" disabled>Live</button>
+        `;
+        const [btnSignal, btnDemo, btnLive] = actions.querySelectorAll("button");
+        btnSignal.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments.join("+") || "ALL", "signal"));
+        btnDemo.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments.join("+") || "ALL", "demo"));
+        card.appendChild(actions);
+
+        const gate = document.createElement("div");
+        gate.className = "live-gate";
+        gate.innerHTML = `<input type="text" placeholder="Type LIVE to unlock real orders">`;
+        const input = gate.querySelector("input");
+        input.addEventListener("input", () => {
+          const armed = input.value.trim() === "LIVE";
+          btnLive.disabled = !armed;
+        });
+        btnLive.addEventListener("click", () => {
+          if (input.value.trim() !== "LIVE") return;
+          launchSession(acct.profile_id, acct.firm, acct.instruments.join("+") || "ALL", "live");
+          input.value = "";
+          btnLive.disabled = true;
+        });
+        card.appendChild(gate);
+      }
+    } else if (!acct.active || (!isAuto && acct.active)) {
+      const note = document.createElement("div");
+      note.className = "profile-meta";
+      note.style.marginTop = "14px";
+      note.textContent = !acct.active ? "Inactive profile" : "Manual trading only";
+      card.appendChild(note);
     }
 
-    const countdown = document.createElement("div");
-    countdown.className = "lane-countdown text-xs text-gray-600 mt-2 text-right";
-    countdown.textContent = "";
-
-    card.appendChild(header);
-    card.appendChild(filterDiv);
-    card.appendChild(details);
-    card.appendChild(countdown);
     grid.appendChild(card);
   }
 }
 
-// Session countdowns from server (DST-correct). Cached from /api/sessions.
-let sessionCountdowns = {};
+function renderLiveLanes(lanes) {
+  const panel = byId("live-lanes-panel");
+  const grid = byId("live-lanes-grid");
+  grid.innerHTML = "";
 
-function getCountdown(sessionName) {
-  const mins = sessionCountdowns[sessionName];
-  if (mins == null) return "";
-  if (mins <= 0) return "NOW";
-  const hrs = Math.floor(mins / 60);
-  const m = mins % 60;
-  if (hrs > 0) return "in " + hrs + "h " + m + "m";
-  return "in " + m + "m";
+  if (!lanes.length) {
+    panel.classList.add("hidden");
+    return;
+  }
+
+  panel.classList.remove("hidden");
+
+  const sorted = [...lanes].sort((a, b) => {
+    const timeDiff = timeSortKey(a.session_time_brisbane) - timeSortKey(b.session_time_brisbane);
+    if (timeDiff !== 0) return timeDiff;
+    const aLabel = `${a.instrument || ""}${a.session_name || ""}${a.strategy_id || ""}`;
+    const bLabel = `${b.instrument || ""}${b.session_name || ""}${b.strategy_id || ""}`;
+    return aLabel.localeCompare(bLabel);
+  });
+
+  for (const lane of sorted) {
+    const card = document.createElement("article");
+    card.className = "lane-card";
+    const status = lane.status || "WAITING";
+    const pnlClass = lane.current_pnl_r == null ? "muted" : (Number(lane.current_pnl_r) >= 0 ? "positive" : "negative");
+    const direction = lane.direction ? String(lane.direction).toUpperCase() : "—";
+    const countdown = getCountdownText(lane.session_name);
+    const title = `${lane.instrument || "?"} ${lane.session_name || lane.strategy_id || "Unknown lane"}`;
+    const setup = setupLabel(lane);
+    const footLeft = lane.status_detail || lane.strategy_id || "Unknown strategy";
+    card.innerHTML = `
+      <div class="lane-head">
+        <div>
+          <div class="lane-time">${lane.session_time_brisbane || "??:??"} Brisbane</div>
+          <div class="lane-title">${title}</div>
+          <div class="lane-subtitle">${setup}</div>
+        </div>
+        <span class="lane-chip ${laneStatusClass(status)}">${status.replace("_", " ")}</span>
+      </div>
+      <div class="lane-values">
+        <div class="value-box">
+          <div class="value-label">Direction</div>
+          <div class="value-text">${direction}</div>
+        </div>
+        <div class="value-box">
+          <div class="value-label">Entry</div>
+          <div class="value-text">${fmtPrice(lane.entry_price)}</div>
+        </div>
+        <div class="value-box">
+          <div class="value-label">P&amp;L</div>
+          <div class="value-text ${pnlClass}">${fmtR(lane.current_pnl_r)}</div>
+        </div>
+        <div class="value-box">
+          <div class="value-label">Aperture</div>
+          <div class="value-text">${lane.orb_minutes != null ? `${lane.orb_minutes}m` : "—"}</div>
+        </div>
+      </div>
+      <div class="lane-foot">
+        <span>${footLeft}</span>
+        <span>${countdown || "No countdown"}</span>
+      </div>
+    `;
+    grid.appendChild(card);
+  }
 }
 
-function updateFavicon(mode) {
-  const color = (mode === "STOPPED" || mode === "OFFLINE") ? "%23ef4444" : "%2322c55e";
-  const svg = "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='" + color + "'/></svg>";
-  document.getElementById("favicon").setAttribute("href", "data:image/svg+xml," + svg);
+function renderTrades(trades) {
+  const tbody = byId("trade-log");
+  const summary = byId("trade-summary");
+  tbody.innerHTML = "";
+
+  if (!trades.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="muted">No trades today</td></tr>`;
+    summary.textContent = "No trades logged in the current journal window.";
+    return;
+  }
+
+  let totalR = 0;
+  let openCount = 0;
+  for (const trade of trades) {
+    if (trade.actual_r != null) totalR += Number(trade.actual_r);
+    if (!trade.exited_at) openCount += 1;
+
+    const tr = document.createElement("tr");
+    const statusText = trade.exited_at ? (trade.exit_reason || "Closed") : "Open";
+    const statusClass = trade.exited_at ? "muted" : "blue";
+    const laneTitle = trade.lane_label || trade.strategy_id || "Unknown lane";
+    const plannedTime = trade.session_time_brisbane ? `${trade.session_time_brisbane} Brisbane` : "Planned time unknown";
+    const setup = setupLabel(trade);
+
+    tr.innerHTML = `
+      <td>${fmtClock(trade.created_at)}</td>
+      <td>
+        <div class="trade-lane">${laneTitle}</div>
+        <div class="trade-sub">${plannedTime}</div>
+      </td>
+      <td>
+        <div>${setup}</div>
+        <div class="trade-sub">${trade.strategy_id || "Unknown strategy"}</div>
+      </td>
+      <td class="${trade.direction === "long" ? "positive" : trade.direction === "short" ? "negative" : "muted"}">${trade.direction ? String(trade.direction).toUpperCase() : "—"}</td>
+      <td class="align-right">${fmtPrice(trade.fill_entry || trade.engine_entry)}</td>
+      <td class="align-right">${fmtPrice(trade.fill_exit)}</td>
+      <td class="align-right ${trade.actual_r == null ? "muted" : Number(trade.actual_r) >= 0 ? "positive" : "negative"}">${fmtR(trade.actual_r)}</td>
+      <td class="${statusClass}">${statusText}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  const totalRow = document.createElement("tr");
+  totalRow.innerHTML = `
+    <td colspan="5"></td>
+    <td class="align-right"><strong>Total</strong></td>
+    <td class="align-right ${totalR >= 0 ? "positive" : "negative"}"><strong>${fmtR(totalR)}</strong></td>
+    <td class="muted">${trades.length} trade${trades.length === 1 ? "" : "s"}${openCount ? ` | ${openCount} open` : ""}</td>
+  `;
+  tbody.appendChild(totalRow);
+  summary.textContent = `${trades.length} trade${trades.length === 1 ? "" : "s"} shown${openCount ? `, ${openCount} still open` : ""}.`;
 }
 
-function setText(id, text) { const el = document.getElementById(id); if (el) el.textContent = text; }
-function setClass(id, cls) { const el = document.getElementById(id); if (el) el.className = cls; }
+function showActivity(title, text, tone) {
+  const panel = byId("activity-panel");
+  const output = byId("activity-output");
+  panel.style.display = "block";
+  setText("activity-title", title);
+  output.textContent = text;
+  output.className = tone === "error"
+    ? "negative"
+    : tone === "success"
+      ? "positive"
+      : tone === "warning"
+        ? "warning"
+        : "cyan";
+}
+
+function appendActivity(text) {
+  const output = byId("activity-output");
+  output.textContent += `\n${text}`;
+  output.scrollTop = output.scrollHeight;
+}
+
+function updateStatus(state) {
+  const mode = state.mode || "STOPPED";
+  updateFavicon(mode);
+  setText("summary-mode", mode);
+  setText("summary-mode-detail", mode === "STOPPED" ? "No orders or signals active" : "Runtime session detected");
+
+  const accountName = state.account_name || "";
+  const profileId = accountName.startsWith("profile_") ? accountName.slice(8) : null;
+  if (profileId !== runningProfile) {
+    runningProfile = mode === "STOPPED" ? null : profileId;
+    fetchAccounts();
+  }
+
+  setText("running-profile", runningProfile || "Idle");
+  setText("running-profile-detail", runningProfile ? "Currently selected profile" : "No live session");
+
+  const modeBadge = byId("mode-badge");
+  modeBadge.className = `mode-badge ${modeClass(mode)}`;
+  modeBadge.textContent = mode;
+  setText("mode-copy", mode === "STOPPED" ? "No live session detected." : "Live runtime metrics from bot_state.json.");
+
+  const statusPanel = byId("session-status-panel");
+  if (mode === "STOPPED") {
+    statusPanel.style.display = "none";
+    byId("live-lanes-panel").classList.add("hidden");
+  } else {
+    statusPanel.style.display = "block";
+  }
+
+  const accountLabel = state.account_name ? `${state.account_name} (#${state.account_id || "?"})` : "—";
+  const copyLabel = state.shadow_count ? ` + ${state.shadow_count} shadow${state.shadow_count > 1 ? "s" : ""}` : "";
+  setText("account-info", accountLabel + copyLabel);
+
+  const pnl = Number(state.daily_pnl_r || 0);
+  setText("daily-pnl", `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}R`);
+  byId("daily-pnl").className = `metric-value ${pnl >= 0 ? "positive" : "negative"}`;
+
+  const limit = Math.abs(Number(state.daily_loss_limit_r || 0)) || 1;
+  const used = Math.abs(Math.min(pnl, 0));
+  const pct = Math.min(100, (used / limit) * 100);
+  setText("dd-pct", `${pct.toFixed(0)}%`);
+  const ddBar = byId("dd-bar");
+  ddBar.style.width = `${pct}%`;
+  ddBar.style.background = pct > 80
+    ? "linear-gradient(90deg, #fb7185, #dc2626)"
+    : pct > 50
+      ? "linear-gradient(90deg, #fbbf24, #f59e0b)"
+      : "linear-gradient(90deg, #34d399, #16a34a)";
+
+  const hbAge = Number(state.heartbeat_age_s || 9999);
+  const hbEl = byId("heartbeat");
+  if (mode === "STOPPED") {
+    hbEl.textContent = "—";
+    hbEl.className = "metric-value muted";
+  } else if (hbAge < 30) {
+    hbEl.textContent = `${hbAge.toFixed(0)}s ago`;
+    hbEl.className = "metric-value positive";
+  } else if (hbAge < 120) {
+    hbEl.textContent = `${hbAge.toFixed(0)}s ago`;
+    hbEl.className = "metric-value warning";
+  } else {
+    hbEl.textContent = `${hbAge.toFixed(0)}s stale`;
+    hbEl.className = "metric-value negative pulse";
+  }
+
+  setText("bars-count", String(state.bars_received || 0));
+
+  const laneCards = Array.isArray(state.lane_cards) ? state.lane_cards : [];
+  renderLiveLanes(laneCards);
+  setText("last-update", fmtClock(new Date(), true));
+}
 
 async function fetchStatus() {
   try {
-    const r = await fetch("/api/status");
-    const d = await r.json();
-    updateStatus(d);
+    const response = await fetch("/api/status");
+    const data = await response.json();
+    updateStatus(data);
   } catch (_e) {
-    setText("mode-badge", "OFFLINE");
-    setClass("mode-badge", "px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-gray-800 text-gray-400");
+    setText("summary-mode", "OFFLINE");
+    setText("summary-mode-detail", "Dashboard backend unreachable");
+    updateFavicon("OFFLINE");
   }
 }
 
 async function fetchTrades() {
   try {
-    const r = await fetch("/api/trades");
-    const d = await r.json();
-    updateTrades(d.trades || []);
+    const response = await fetch("/api/trades");
+    const data = await response.json();
+    renderTrades(data.trades || []);
   } catch (_e) {}
 }
 
-function updateStatus(d) {
-  const mode = d.mode || "STOPPED";
-  // Track running profile — re-render accounts if changed (show STOP vs START)
-  const acctName = d.account_name || "";
-  const newProfile = acctName.startsWith("profile_") ? acctName.slice(8) : null;
-  if (newProfile !== _runningProfile) {
-    _runningProfile = mode === "STOPPED" ? null : newProfile;
-    fetchAccounts();  // Re-render cards with STOP/START swap
-  }
-  // Show/hide session status bar based on whether bot is running
-  const statusBar = document.getElementById("session-status-bar");
-  if (mode === "STOPPED") {
-    statusBar.classList.add("hidden");
-    if (_runningProfile !== null) { _runningProfile = null; fetchAccounts(); }
-  } else {
-    statusBar.classList.remove("hidden");
-  }
-  const badge = document.getElementById("mode-badge");
-  badge.textContent = mode;
-  const colors = {
-    LIVE:    "px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-red-600 text-white",
-    DEMO:    "px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-blue-600 text-white",
-    SIGNAL:  "px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-green-700 text-white",
-    STOPPED: "px-5 py-2 rounded-lg text-xl font-bold tracking-wider bg-gray-800 text-gray-400",
-  };
-  badge.className = colors[mode] || colors.STOPPED;
-  updateFavicon(mode);
-
-  const acctLabel = d.account_name ? d.account_name + " (#" + d.account_id + ")" : "\u2014";
-  const copyLabel = d.shadow_count ? " + " + d.shadow_count + " shadow" + (d.shadow_count > 1 ? "s" : "") : "";
-  setText("account-info", acctLabel + copyLabel);
-
-  const pnl = d.daily_pnl_r || 0;
-  setText("daily-pnl", (pnl >= 0 ? "+" : "") + pnl.toFixed(2) + "R");
-  setClass("daily-pnl", "text-lg font-bold " + (pnl >= 0 ? "text-green-400" : "text-red-400"));
-
-  const limit = Math.abs(d.daily_loss_limit_r || 5);
-  const used = Math.abs(Math.min(pnl, 0));
-  const pct = Math.min(100, (used / limit) * 100);
-  setText("dd-pct", pct.toFixed(0) + "%");
-  const bar = document.getElementById("dd-bar");
-  bar.style.width = pct + "%";
-  bar.className = "progress-bar h-full rounded-full " + (pct > 80 ? "bg-red-500" : pct > 50 ? "bg-yellow-500" : "bg-green-500");
-  // Pulse the entire DD container when over 70%
-  const ddContainer = bar.parentElement;
-  if (pct > 70) { ddContainer.classList.add("pulse-warning"); } else { ddContainer.classList.remove("pulse-warning"); }
-
-  const hbEl = document.getElementById("heartbeat");
-  const age = d.heartbeat_age_s || 9999;
-  if (age < 30) {
-    hbEl.textContent = age.toFixed(0) + "s ago";
-    hbEl.className = "text-sm text-green-400";
-  } else if (age < 120) {
-    hbEl.textContent = age.toFixed(0) + "s ago";
-    hbEl.className = "text-sm text-yellow-400";
-  } else if (mode === "STOPPED") {
-    hbEl.textContent = "\u2014";
-    hbEl.className = "text-sm text-gray-500";
-  } else {
-    hbEl.textContent = age.toFixed(0) + "s STALE";
-    hbEl.className = "text-sm text-red-400 pulse";
-  }
-
-  setText("bars-count", String(d.bars_received || 0));
-
-  const lanes = d.lanes || {};
-  const laneKeys = Object.keys(lanes);
-  if (laneKeys.length > 0) rebuildLanesFromApi(laneKeys);
-  for (const laneInfo of LANES) {
-    const card = document.getElementById("lane-" + laneInfo.name);
-    if (!card) continue;
-    const lane = lanes[laneInfo.name] || {};
-    const status = lane.status || "WAITING";
-
-    const statusEl = card.querySelector(".lane-status");
-    statusEl.textContent = status;
-    const sc = {
-      WAITING:  "lane-status px-2 py-0.5 rounded text-xs font-bold bg-gray-700 text-gray-300",
-      ARMED:    "lane-status px-2 py-0.5 rounded text-xs font-bold bg-yellow-700 text-yellow-200",
-      IN_TRADE: "lane-status px-2 py-0.5 rounded text-xs font-bold bg-blue-600 text-white",
-      FLAT:     "lane-status px-2 py-0.5 rounded text-xs font-bold bg-green-800 text-green-300",
-    };
-    statusEl.className = sc[status] || sc.WAITING;
-    card.style.borderColor = status === "IN_TRADE" ? laneInfo.borderActive : (status === "FLAT" ? "#22c55e33" : "#1e2d3d");
-
-    card.querySelector(".lane-filter").textContent = lane.filter_type || "\u2014";
-    card.querySelector(".lane-dir").textContent = lane.direction || "\u2014";
-    card.querySelector(".lane-entry").textContent = lane.entry_price ? lane.entry_price.toFixed(2) : "\u2014";
-    const pnlEl = card.querySelector(".lane-pnl");
-    if (lane.current_pnl_r != null) {
-      pnlEl.textContent = (lane.current_pnl_r >= 0 ? "+" : "") + lane.current_pnl_r.toFixed(2) + "R";
-      pnlEl.className = "lane-pnl " + (lane.current_pnl_r >= 0 ? "text-green-400" : "text-red-400");
-    } else { pnlEl.textContent = "\u2014"; pnlEl.className = "lane-pnl"; }
-    card.querySelector(".lane-rr").textContent = lane.rr_target ? "RR" + lane.rr_target : "\u2014";
-    // Countdown to next session
-    const cdEl = card.querySelector(".lane-countdown");
-    if (cdEl) {
-      const cd = getCountdown(laneInfo.name);
-      cdEl.textContent = cd ? cd : "";
-    }
-  }
-  setText("last-update", new Date().toLocaleTimeString());
-}
-
-function updateTrades(trades) {
-  const tbody = document.getElementById("trade-log");
-  while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
-  if (!trades.length) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 8; td.className = "p-4 text-center text-gray-600"; td.textContent = "No trades today";
-    tr.appendChild(td); tbody.appendChild(tr); return;
-  }
-  let totalR = 0;
-  for (const t of trades) {
-    const pnl = t.actual_r;
-    if (pnl != null) totalR += pnl;
-    const tr = document.createElement("tr");
-    tr.className = "border-b border-[#1e2d3d] hover:bg-[#1a2332]";
-    const statusText = t.exited_at ? (t.exit_reason || "CLOSED") : "OPEN";
-    const statusCls = t.exited_at ? "text-gray-400" : "text-blue-400";
-    const cells = [
-      { text: t.created_at ? new Date(t.created_at).toLocaleTimeString() : "\u2014", cls: "p-2" },
-      { text: t.instrument || "\u2014", cls: "p-2 text-gray-400" },
-      { text: extractSession(t.strategy_id), cls: "p-2" },
-      { text: (t.direction || "\u2014").toUpperCase(), cls: "p-2 " + (t.direction === "long" ? "text-green-400" : "text-red-400") },
-      { text: fmtP(t.fill_entry || t.engine_entry), cls: "p-2 text-right" },
-      { text: fmtP(t.fill_exit), cls: "p-2 text-right" },
-      { text: fmtR(pnl), cls: "p-2 text-right " + rCol(pnl) },
-      { text: statusText, cls: "p-2 " + statusCls },
-    ];
-    for (const c of cells) {
-      const td = document.createElement("td"); td.className = c.cls; td.textContent = c.text; tr.appendChild(td);
-    }
-    tbody.appendChild(tr);
-  }
-  // Total row
-  const totalTr = document.createElement("tr");
-  totalTr.className = "border-t-2 border-[#2a3a4a] font-bold";
-  const totalCells = [
-    { text: "", cls: "p-2" },
-    { text: "", cls: "p-2" },
-    { text: "", cls: "p-2" },
-    { text: "", cls: "p-2" },
-    { text: "", cls: "p-2" },
-    { text: "TOTAL", cls: "p-2 text-right text-gray-400" },
-    { text: fmtR(totalR), cls: "p-2 text-right " + rCol(totalR) },
-    { text: trades.length + " trades", cls: "p-2 text-gray-500" },
-  ];
-  for (const c of totalCells) {
-    const td = document.createElement("td"); td.className = c.cls; td.textContent = c.text; totalTr.appendChild(td);
-  }
-  tbody.appendChild(totalTr);
-}
-
-function extractSession(s) {
-  if (!s) return "\u2014";
-  // Strategy IDs: CB1_SESSION_NAME_E2_FILTER... — extract between CB1_ and _E[0-9]
-  const m = s.match(/^CB1_(.+?)_E[0-9]/);
-  if (m) return m[1];
-  return s;
-}
-function fmtP(v) { return v != null ? v.toFixed(2) : "\u2014"; }
-function fmtR(r) { return r != null ? ((r >= 0 ? "+" : "") + r.toFixed(2) + "R") : "\u2014"; }
-function rCol(r) { return r == null ? "" : (r >= 0 ? "text-green-400" : "text-red-400"); }
-
-// Activity panel helpers
-function showActivity(title, text, color) {
-  const panel = document.getElementById("activity-panel");
-  panel.classList.remove("hidden");
-  setText("activity-title", title);
-  const output = document.getElementById("activity-output");
-  output.textContent = text;
-  output.className = "text-xs whitespace-pre-wrap max-h-[300px] overflow-y-auto " + (color || "text-yellow-400");
-}
-function appendActivity(text) {
-  const output = document.getElementById("activity-output");
-  output.textContent += "\n" + text;
-  output.scrollTop = output.scrollHeight;
-}
-
-// Firm badge colors
-const FIRM_COLORS = {
-  "Apex Trader Funding": { bg: "bg-orange-900", text: "text-orange-300", border: "border-orange-700" },
-  "TopStep": { bg: "bg-blue-900", text: "text-blue-300", border: "border-blue-700" },
-  "Tradeify": { bg: "bg-green-900", text: "text-green-300", border: "border-green-700" },
-  "MyFundedFutures": { bg: "bg-purple-900", text: "text-purple-300", border: "border-purple-700" },
-  "Self-Funded": { bg: "bg-gray-800", text: "text-gray-300", border: "border-gray-600" },
-};
-
 async function fetchAccounts() {
   try {
-    const r = await fetch("/api/accounts");
-    const d = await r.json();
-    const grid = document.getElementById("accounts-grid");
-    while (grid.firstChild) grid.removeChild(grid.firstChild);
-    const accounts = (d.accounts || []).sort((a, b) => {
-      if (a.active !== b.active) return b.active - a.active;
-      const aAuto = a.auto_trading === "full" || a.auto_trading === "semi";
-      const bAuto = b.auto_trading === "full" || b.auto_trading === "semi";
-      if (aAuto !== bAuto) return bAuto - aAuto;
-      return b.lane_count - a.lane_count;
-    });
-    for (const acct of accounts) {
-      const colors = FIRM_COLORS[acct.firm] || FIRM_COLORS["Self-Funded"];
-      const isAuto = acct.auto_trading === "full" || acct.auto_trading === "semi";
-      const opacity = acct.active ? "" : "opacity-40";
+    const response = await fetch("/api/accounts");
+    const data = await response.json();
+    renderAccounts(data.accounts || []);
+  } catch (_e) {
+    renderEmpty(byId("accounts-grid"), "Could not load profiles.");
+  }
+}
 
-      const card = document.createElement("div");
-      card.className = `p-4 rounded-xl bg-[#111922] border ${acct.active ? colors.border : "border-[#1e2d3d]"} ${opacity}`;
+async function fetchSessions() {
+  try {
+    const response = await fetch("/api/sessions");
+    const data = await response.json();
+    for (const session of (data.sessions || [])) {
+      sessionCountdowns[session.name] = session.minutes_away;
+    }
+    if (!data.next) {
+      setText("next-session", "No upcoming session");
+      setText("next-session-detail", "Brisbane clock");
+      return;
+    }
+    const next = data.next;
+    const timeText = `${String(next.hour).padStart(2, "0")}:${String(next.minute).padStart(2, "0")}`;
+    const countdown = getCountdownText(next.name);
+    setText("next-session", `${next.name} · ${timeText}`);
+    setText("next-session-detail", countdown ? `${countdown} · Brisbane clock` : "Brisbane clock");
+  } catch (_e) {}
+}
 
-      // Header: Firm + Size + Mode badge
-      const header = document.createElement("div");
-      header.className = "flex items-center justify-between mb-2";
-      const title = document.createElement("div");
-      const firmSpan = document.createElement("span");
-      firmSpan.className = "font-bold " + colors.text;
-      firmSpan.textContent = acct.firm;
-      const sizeSpan = document.createElement("span");
-      sizeSpan.className = "text-gray-400 ml-1";
-      sizeSpan.textContent = "$" + (acct.account_size/1000) + "K";
-      title.appendChild(firmSpan);
-      title.appendChild(sizeSpan);
-      const badge = document.createElement("span");
-      badge.className = `px-2 py-0.5 rounded text-xs font-bold ${isAuto ? "bg-green-800 text-green-300" : "bg-gray-700 text-gray-400"}`;
-      badge.textContent = isAuto ? "AUTO" : "MANUAL";
-      header.appendChild(title);
-      header.appendChild(badge);
+async function fetchDataStatus() {
+  try {
+    const response = await fetch("/api/data-status");
+    const data = await response.json();
+    const btn = byId("btn-refresh");
 
-      // Info: instruments, lanes, DD
-      const info = document.createElement("div");
-      info.className = "text-xs text-gray-500 mb-2";
-      const instruments = acct.instruments.length ? acct.instruments.join("+") : "ALL";
-      info.textContent = instruments + " | " + acct.lane_count + " lane" + (acct.lane_count!==1?"s":"") + " | DD $" + acct.max_dd.toLocaleString() + (acct.dll ? " | DLL $"+acct.dll.toLocaleString() : "") + (acct.copies > 1 ? " | x"+acct.copies+" accounts" : "");
+    if (data.error) {
+      const summary = summarizeDataError(data.error);
+      setText("data-status", summary.headline);
+      setText("data-status-detail", summary.detail);
+      btn.className = "tool-button warn";
+      return;
+    }
 
-      // Lanes list
-      const lanesList = document.createElement("div");
-      lanesList.className = "text-xs text-gray-400 mb-3";
-      for (const lane of acct.lanes.slice(0, 3)) {
-        const div = document.createElement("div");
-        div.textContent = `${lane.session} ${lane.filter}`;
-        lanesList.appendChild(div);
+    const parts = [];
+    for (const [inst, info] of Object.entries(data.instruments || {})) {
+      parts.push(`${inst} ${info.last_bar_date || "?"}`);
+    }
+    setText("data-status", data.any_stale ? "Attention" : "Current");
+    setText("data-status-detail", parts.join(" | "));
+
+    if (data.any_stale) {
+      btn.className = "tool-button danger pulse";
+      if (!autoRefreshTriggered && !refreshPolling) {
+        autoRefreshTriggered = true;
+        btn.click();
       }
-      if (acct.lanes.length > 3) {
-        const more = document.createElement("div");
-        more.className = "text-gray-600";
-        more.textContent = `+ ${acct.lanes.length - 3} more`;
-        lanesList.appendChild(more);
-      }
-
-      card.appendChild(header);
-      card.appendChild(info);
-      card.appendChild(lanesList);
-
-      // Mode buttons OR stop button (depending on whether this profile is running)
-      const isRunning = _runningProfile === acct.profile_id;
-      if (isAuto && acct.active && acct.lane_count > 0) {
-        if (isRunning) {
-          // This profile is running — show STOP button instead of start buttons
-          const btnStop = document.createElement("button");
-          btnStop.className = "btn-control w-full py-2 rounded-lg font-bold text-sm bg-red-600 hover:bg-red-500 text-white pulse-warning";
-          btnStop.textContent = "STOP SESSION";
-          btnStop.addEventListener("click", async () => {
-            if (!confirm("Stop the running session?")) return;
-            try {
-              await fetch("/api/action/kill", { method: "POST" });
-              showActivity("SESSION STOP", "Stopping session...", "text-red-400");
-            } catch (e) { appendActivity("Error: " + e.message); }
-          });
-          card.appendChild(btnStop);
-        } else {
-          const btnRow = document.createElement("div");
-          btnRow.className = "flex gap-2 mt-2";
-
-          // Signal button
-          const btnSignal = document.createElement("button");
-          btnSignal.className = "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-green-700 hover:bg-green-600 text-white";
-          btnSignal.textContent = "SIGNAL";
-          btnSignal.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, instruments, "signal"));
-          btnRow.appendChild(btnSignal);
-
-          // Demo button
-          const btnDemo = document.createElement("button");
-          btnDemo.className = "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-blue-700 hover:bg-blue-600 text-white";
-          btnDemo.textContent = "DEMO";
-          btnDemo.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, instruments, "demo"));
-          btnRow.appendChild(btnDemo);
-
-          // Live button (requires safety gate)
-          const btnLive = document.createElement("button");
-          btnLive.className = "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-red-800 text-gray-500 cursor-not-allowed";
-          btnLive.textContent = "LIVE";
-          btnLive.disabled = true;
-          btnRow.appendChild(btnLive);
-
-          card.appendChild(btnRow);
-
-          // Live safety gate: text input to unlock
-          const liveGate = document.createElement("div");
-          liveGate.className = "flex gap-2 mt-1";
-          const liveInput = document.createElement("input");
-          liveInput.type = "text";
-          liveInput.placeholder = "Type LIVE to unlock";
-          liveInput.className = "flex-1 px-2 py-1 rounded text-xs bg-gray-800 border border-gray-700 text-white";
-          liveInput.addEventListener("input", () => {
-            const armed = liveInput.value.trim() === "LIVE";
-            btnLive.disabled = !armed;
-            btnLive.className = armed
-              ? "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-red-600 hover:bg-red-500 text-white"
-              : "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-red-800 text-gray-500 cursor-not-allowed";
-          });
-          liveGate.appendChild(liveInput);
-          card.appendChild(liveGate);
-
-          btnLive.addEventListener("click", () => {
-            if (liveInput.value.trim() !== "LIVE") return;
-            launchSession(acct.profile_id, acct.firm, instruments, "live");
-            liveInput.value = "";
-            btnLive.disabled = true;
-            btnLive.className = "btn-control flex-1 py-2 rounded-lg font-bold text-xs bg-red-800 text-gray-500 cursor-not-allowed";
-          });
-        }
-      } else if (!isAuto && acct.active) {
-        const label = document.createElement("div");
-        label.className = "text-center text-xs text-gray-600 py-2";
-        label.textContent = "Manual trading only";
-        card.appendChild(label);
-      } else if (!acct.active) {
-        const label = document.createElement("div");
-        label.className = "text-center text-xs text-gray-600 py-2";
-        label.textContent = "Inactive";
-        card.appendChild(label);
-      }
-
-      grid.appendChild(card);
+    } else {
+      btn.className = "tool-button warn";
     }
   } catch (_e) {}
 }
 
 async function launchSession(profileId, firmName, instruments, mode) {
-  const modeLabels = { signal: "SIGNAL-ONLY", demo: "DEMO (paper)", live: "LIVE (real money)" };
-  const label = modeLabels[mode] || mode;
-  const warn = mode === "live" ? "\n\nREAL MONEY orders will be placed!" : (mode === "demo" ? "\n\nPaper orders on demo account." : "\n\nNo orders will be placed.");
-  if (!confirm(`Start ${label} session?\n\n${firmName} - ${instruments}\nProfile: ${profileId}${warn}`)) return;
-  const color = mode === "live" ? "text-red-400" : (mode === "demo" ? "text-blue-400" : "text-green-400");
-  showActivity(`${label} START`, `Launching ${profileId}...`, color);
+  const modeLabels = {
+    signal: "SIGNAL-ONLY",
+    demo: "DEMO",
+    live: "LIVE",
+  };
+  const warning = mode === "live"
+    ? "\n\nREAL MONEY orders will be placed."
+    : mode === "demo"
+      ? "\n\nPaper orders only."
+      : "\n\nSignals only. No orders will be placed.";
+  if (!confirm(`Start ${modeLabels[mode]} session?\n\n${firmName} | ${instruments}\nProfile: ${profileId}${warning}`)) return;
+
+  showActivity(`${modeLabels[mode]} Start`, `Launching ${profileId}...`, mode === "live" ? "error" : "info");
   try {
     const params = new URLSearchParams({ profile: profileId, mode: mode });
-    const r = await fetch("/api/action/start?" + params, { method: "POST" });
-    const d = await r.json();
-    appendActivity(d.message || d.status);
-    if (d.pid) appendActivity("PID: " + d.pid);
-  } catch (e) { appendActivity("Error: " + e.message); }
+    const response = await fetch("/api/action/start?" + params.toString(), { method: "POST" });
+    const data = await response.json();
+    appendActivity(data.message || data.status || "No response");
+    if (data.pid) appendActivity(`PID: ${data.pid}`);
+  } catch (e) {
+    appendActivity("Error: " + e.message);
+  }
 }
 
-async function fetchSessions() {
+byId("btn-refresh").addEventListener("click", async () => {
+  showActivity("Data Refresh", "Starting data refresh (Databento download + pipeline rebuild)...", "info");
   try {
-    const r = await fetch("/api/sessions");
-    const d = await r.json();
-    // Cache countdowns for lane cards (server-side DST-correct)
-    for (const s of (d.sessions || [])) { sessionCountdowns[s.name] = s.minutes_away; }
-    const el = document.getElementById("next-session");
-    if (d.next) {
-      const n = d.next;
-      const hrs = Math.floor(Math.abs(n.minutes_away) / 60);
-      const mins = Math.abs(n.minutes_away) % 60;
-      const timeStr = `${String(n.hour).padStart(2,"0")}:${String(n.minute).padStart(2,"0")}`;
-      if (n.minutes_away <= 0) {
-        el.textContent = `${n.name} ${timeStr} - NOW`;
-        el.className = "text-sm font-bold text-green-400 pulse";
-      } else if (hrs > 0) {
-        el.textContent = `${n.name} ${timeStr} - in ${hrs}h ${mins}m`;
-        el.className = "text-sm font-bold text-cyan-400";
-      } else {
-        el.textContent = `${n.name} ${timeStr} - in ${mins}m`;
-        el.className = "text-sm font-bold text-yellow-400";
-      }
-    } else {
-      el.textContent = "No upcoming sessions";
-      el.className = "text-sm text-gray-500";
+    const response = await fetch("/api/action/refresh", { method: "POST" });
+    const data = await response.json();
+    appendActivity(data.message || data.status);
+    if ((data.status === "started" || data.status === "running") && !refreshPolling) {
+      refreshPolling = true;
+      const poll = setInterval(async () => {
+        try {
+          const statusResponse = await fetch("/api/action/refresh-status");
+          const statusData = await statusResponse.json();
+          if (statusData.status === "done") {
+            appendActivity("\nDONE: Data refresh complete.");
+            clearInterval(poll);
+            refreshPolling = false;
+            fetchDataStatus();
+          } else if (statusData.status === "failed") {
+            appendActivity("\nFAILED:\n" + (statusData.output || "Unknown error"));
+            clearInterval(poll);
+            refreshPolling = false;
+          }
+        } catch (_e) {}
+      }, 3000);
     }
-  } catch (_e) {}
-}
-
-// Data freshness
-async function fetchDataStatus() {
-  try {
-    const r = await fetch("/api/data-status");
-    const d = await r.json();
-    const el = document.getElementById("data-status");
-    const btn = document.getElementById("btn-refresh");
-    if (d.error) { el.textContent = "Error: " + d.error; return; }
-    const parts = [];
-    for (const [inst, info] of Object.entries(d.instruments || {})) {
-      const gap = info.gap_days;
-      const color = gap <= 1 ? "text-green-400" : gap <= 3 ? "text-yellow-400" : "text-red-400";
-      parts.push(inst + ": " + (info.last_bar_date || "?") + " (" + gap + "d)");
-    }
-    el.textContent = parts.join(" | ");
-    el.className = "text-xs " + (d.any_stale ? "text-red-400" : "text-green-400");
-    // Highlight refresh button if stale
-    if (d.any_stale) {
-      btn.className = "btn-control px-3 py-1.5 rounded-lg font-bold text-xs bg-red-600 hover:bg-red-500 text-white pulse";
-      // Auto-refresh on first load if stale (no manual click needed)
-      if (!autoRefreshTriggered && !refreshPolling) {
-        autoRefreshTriggered = true;
-        console.log("Data stale — auto-triggering refresh...");
-        document.getElementById("btn-refresh").click();
-      }
-    } else {
-      btn.className = "btn-control px-3 py-1.5 rounded-lg font-bold text-xs bg-cyan-700 hover:bg-cyan-600 text-white";
-    }
-  } catch (_e) {}
-}
-
-// Refresh data
-let refreshPolling = false;
-let autoRefreshTriggered = false;  // One-shot: auto-refresh on first stale detection
-document.getElementById("btn-refresh").addEventListener("click", async function() {
-  showActivity("DATA REFRESH", "Starting data refresh (Databento download + pipeline rebuild)...", "text-cyan-400");
-  try {
-    const r = await fetch("/api/action/refresh", { method: "POST" });
-    const d = await r.json();
-    appendActivity(d.message || d.status);
-    if (d.status === "started" || d.status === "running") {
-      // Poll for completion
-      if (!refreshPolling) {
-        refreshPolling = true;
-        const poll = setInterval(async () => {
-          try {
-            const sr = await fetch("/api/action/refresh-status");
-            const sd = await sr.json();
-            if (sd.status === "done") {
-              appendActivity("\nDONE: Data refresh complete.");
-              document.getElementById("activity-output").className = "text-xs whitespace-pre-wrap max-h-[300px] overflow-y-auto text-green-400";
-              clearInterval(poll);
-              refreshPolling = false;
-              fetchDataStatus();
-            } else if (sd.status === "failed") {
-              appendActivity("\nFAILED:\n" + (sd.output || "Unknown error"));
-              document.getElementById("activity-output").className = "text-xs whitespace-pre-wrap max-h-[300px] overflow-y-auto text-red-400";
-              clearInterval(poll);
-              refreshPolling = false;
-            }
-          } catch (_e) {}
-        }, 3000);
-      }
-    }
-  } catch (e) { appendActivity("Error: " + e.message); }
+  } catch (e) {
+    appendActivity("Error: " + e.message);
+  }
 });
 
-// Kill
-document.getElementById("btn-kill").addEventListener("click", async function() {
+byId("btn-preflight").addEventListener("click", async () => {
+  showActivity("Preflight", "Running pre-flight checks...", "info");
+  try {
+    const response = await fetch("/api/action/preflight", { method: "POST" });
+    const data = await response.json();
+    showActivity(
+      `Preflight ${String(data.status || "").toUpperCase()}`,
+      data.output || "No output",
+      data.status === "pass" ? "success" : "error",
+    );
+  } catch (e) {
+    appendActivity("Error: " + e.message);
+  }
+});
+
+byId("btn-kill").addEventListener("click", async () => {
   if (!confirm("KILL ALL TRADES?\n\nThis writes the stop file and shuts down the bot.\nOpen positions will be closed at market.")) return;
   if (!confirm("SECOND CONFIRMATION:\nAre you sure? This stops all trading immediately.")) return;
   try {
-    const r = await fetch("/api/action/kill", { method: "POST" });
-    const d = await r.json();
-    showActivity("KILL", d.message || "Kill signal sent", "text-red-400");
-  } catch (e) { showActivity("KILL", "Kill failed: " + e.message, "text-red-400"); }
+    const response = await fetch("/api/action/kill", { method: "POST" });
+    const data = await response.json();
+    showActivity("Kill", data.message || "Kill signal sent", "error");
+  } catch (e) {
+    showActivity("Kill", "Kill failed: " + e.message, "error");
+  }
 });
 
-// Preflight
-document.getElementById("btn-preflight").addEventListener("click", async function() {
-  showActivity("PREFLIGHT", "Running pre-flight checks...", "text-cyan-400");
-  try {
-    const r = await fetch("/api/action/preflight", { method: "POST" });
-    const d = await r.json();
-    const color = d.status === "pass" ? "text-green-400" : "text-red-400";
-    showActivity("PREFLIGHT — " + (d.status || "").toUpperCase(), d.output || "No output", color);
-  } catch (e) { appendActivity("Error: " + e.message); }
+byId("btn-close-activity").addEventListener("click", () => {
+  byId("activity-panel").style.display = "none";
 });
 
-// Close activity panel
-document.getElementById("btn-close-activity").addEventListener("click", function() {
-  document.getElementById("activity-panel").classList.add("hidden");
-});
-
-// Init — load everything on page open
-buildLaneCards();
 fetchAccounts();
 fetchSessions();
 fetchStatus();
@@ -740,9 +1463,9 @@ fetchTrades();
 fetchDataStatus();
 setInterval(fetchStatus, 5000);
 setInterval(fetchTrades, 10000);
-setInterval(fetchAccounts, 60000);  // Refresh account cards every 60s (pick up profile changes)
+setInterval(fetchAccounts, 60000);
 setInterval(fetchDataStatus, 30000);
-setInterval(fetchSessions, 30000);  // Update session countdown from server every 30s
+setInterval(fetchSessions, 30000);
 </script>
 </body>
 </html>
