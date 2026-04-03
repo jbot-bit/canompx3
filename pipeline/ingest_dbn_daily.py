@@ -26,6 +26,7 @@ import argparse
 import json
 import re
 import sys
+import traceback
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -276,7 +277,6 @@ def main():
     stats = {
         "files_processed": 0,
         "files_skipped": 0,
-        "files_failed": 0,
         "chunks_done": 0,
         "rows_written": 0,
         "trading_days_processed": 0,
@@ -377,9 +377,9 @@ def main():
             stats["files_processed"] += 1
 
         except Exception as e:
-            logger.error(f"Failed processing {fpath.name}: {e}")
-            stats["files_failed"] += 1
-            continue
+            logger.error(f"FATAL: Failed processing {fpath.name}: {e}")
+            traceback.print_exc()
+            sys.exit(1)
 
         # =====================================================================
         # FLUSH BUFFER WHEN FULL
@@ -544,7 +544,6 @@ def main():
     logger.info(f"Instrument: {symbol}")
     logger.info(f"Files processed: {stats['files_processed']}")
     logger.info(f"Files skipped: {stats['files_skipped']}")
-    logger.info(f"Files failed: {stats['files_failed']}")
     logger.info(f"Chunks committed: {stats['chunks_done']}")
     logger.info(f"Trading days: {stats['trading_days_processed']}")
     logger.info(f"Total rows: {stats['rows_written']:,}")
@@ -559,13 +558,6 @@ def main():
         logger.info(f"Database rows ({symbol}): {count:,}")
         logger.info(f"Date range: {date_range[0]} to {date_range[1]}")
         con.close()
-
-    if stats["files_failed"] > 0:
-        logger.error(
-            f"FAIL: {stats['files_failed']} file(s) failed during ingestion. "
-            "Data may be incomplete — do NOT proceed with downstream pipeline stages."
-        )
-        sys.exit(1)
 
     logger.info(f"SUCCESS: {symbol} daily ingestion complete and validated.")
     sys.exit(0)
