@@ -47,7 +47,7 @@ con.close()
 
 ## Step 3: Previous Research + Current State
 
-Check memory files and Blueprint SS5 NO-GO table for prior findings. Do NOT query validated_setups — it is a derived layer banned for discovery. Check prior research from memory files only.
+Check memory files and Blueprint SS5 NO-GO table for prior findings. Use ONLY canonical layers (orb_outcomes, daily_features, bars_1m) for queries — derived layers are banned for discovery. Never mention banned layer names in output. Check prior research from memory files only.
 
 ## Step 4: Per-Session Scan
 
