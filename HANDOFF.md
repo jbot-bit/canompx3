@@ -6,6 +6,33 @@
 
 ---
 
+## Update (Apr 4 — Claude: Skill Improvement + Consolidation)
+
+### Completed
+1. **All 15 skills baselined** against eval.json assertions using `skill_scorer.py`. 9 SKILL.md fixes across 5 skills. 8 were already perfect.
+2. **Merged bloomey-review into code-review** — unified skill with A-F grading, Bloomberg persona, statistical rigor, semi-formal reasoning. 15 skills → 14 skills, zero capability loss, -259 lines.
+3. **Remaining 8 skills baselined** (batch 2): bloomey-review 25/28→fixed, post-rebuild 10/15 (transcript-quality), verify 12/12, resume-rebase 9/10→fixed, quant-tdd 9/10 (transcript), code-review 10/10, quant-debug 7/7, next 5/6 (transcript).
+
+### Skill Fixes Applied
+| Skill | Fix |
+|-------|-----|
+| design | TRADING_RULES.md ref + plan-mode keyword ban (`class`, `def`, `dataclass`) |
+| orient | Dead instruments on separate line from "active" |
+| discover | Avoid mentioning banned derived layer names |
+| bloomey→code-review | VERDICT keyword mandatory + look-ahead = auto F + MERGED |
+| resume-rebase | Explicit `check_drift.py` in Tier 1 drift detection |
+
+### Consolidation Audit
+- **bloomey-review + code-review → code-review** (done). Identical sections E/F/G, overlapping A-D. Grading rubric + persona folded in.
+- **All other skills have clean separation** — no further merges recommended.
+- **Auto-skill-routing.md** updated with code review trigger row.
+- **verify SKILL.md + m25-audit.md** updated refs from bloomey-review to code-review.
+
+### No Active Stage
+Clean state.
+
+---
+
 ## Update (Apr 4 — Claude: Skill Improvement Loop)
 
 ### Completed
