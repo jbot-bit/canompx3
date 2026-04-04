@@ -249,8 +249,9 @@ class TestLaneRegistryOrbCap:
 
     def test_duplicate_session_profile_preserves_all_lane_definitions(self):
         lanes = get_profile_lane_definitions("topstep_50k_type_a")
-        us_data = [lane for lane in lanes if lane["orb_label"] == "US_DATA_1000"]
-        assert len(us_data) >= 2
+        # NYSE_OPEN has both MNQ and MES lanes (multi-instrument per session)
+        nyse_open = [lane for lane in lanes if lane["orb_label"] == "NYSE_OPEN"]
+        assert len(nyse_open) >= 2
 
 
 class TestOrbCapLogic:

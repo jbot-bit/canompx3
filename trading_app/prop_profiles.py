@@ -290,49 +290,25 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         allowed_sessions=frozenset({"CME_PRECLOSE", "NYSE_CLOSE", "COMEX_SETTLE", "US_DATA_1000", "TOKYO_OPEN"}),
         allowed_instruments=frozenset({"MNQ"}),
         active=False,  # Activate when Tradovate API bot is ready for per-account execution
-        # Score-driven rebuild 2026-03-31 — mirrors the active MNQ session set.
-        # CME_PRECLOSE uses ATR70_VOL instead of the stricter VOL_RV20_N20 lane for diversity.
+        # Allocator-generated 2026-04-04 — all lanes validated. Refresh via
+        # rebalance_lanes.py --profile tradeify_50k before activation.
         # Execution: Tradovate API per-account (Group Trading broken for brackets).
         # Bot must be exclusive to Tradeify (official rule — no cross-firm sharing).
         # 10s microscalp rule: no issue for ORB trades (hold 27-100+ minutes).
         daily_lanes=(
-            # CME_PRECLOSE — ATR70_VOL for cross-profile filter diversity
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100", "MNQ", "COMEX_SETTLE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10", "MNQ", "TOKYO_OPEN", max_orb_size_pts=120.0),
             DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_ATR70_VOL",
-                "MNQ",
-                "CME_PRECLOSE",
-                max_orb_size_pts=120.0,
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075", "MNQ", "CME_PRECLOSE", max_orb_size_pts=120.0
             ),
-            DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075",
-                "MNQ",
-                "NYSE_CLOSE",
-                max_orb_size_pts=100.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ATR70_VOL_S075",
-                "MNQ",
-                "COMEX_SETTLE",
-                max_orb_size_pts=80.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60_S075",
-                "MNQ",
-                "US_DATA_1000",
-                max_orb_size_pts=120.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR2.5_CB1_VOL_RV30_N20_S075",
-                "MNQ",
-                "TOKYO_OPEN",
-                max_orb_size_pts=80.0,
-            ),
+            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10", "MNQ", "US_DATA_1000", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_CLOSE", max_orb_size_pts=120.0),
         ),
         payout_policy_id="tradeify_select_funded",
         notes=(
             "Phase 2 MNQ auto. 5 copies x 5 lanes via Tradovate API. "
-            "CME_PRECLOSE ATR70_VOL still SM=1.0 ID (S075 variant not yet validated). "
-            "Other 4 lanes S075 aligned 2026-04-01. DD $2K, budget $750 (37.5%)."
+            "Lanes allocator-generated 2026-04-04 (all validated). "
+            "DD $2K, budget $750 (37.5%)."
         ),
     ),
     "topstep_50k": AccountProfile(
@@ -479,70 +455,27 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
+        # Allocator-generated 2026-04-04 — all lanes validated. 8/16 slots filled
+        # (DD budget limits further slots). Refresh via rebalance_lanes.py before activation.
         daily_lanes=(
-            # --- US_DATA_1000 (00:00 Brisbane) — 3 instruments ---
+            DailyLaneSpec("MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6", "MGC", "CME_REOPEN", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100", "MNQ", "COMEX_SETTLE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10", "MNQ", "TOKYO_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_OPEN", max_orb_size_pts=120.0),
             DailyLaneSpec(
-                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR70_S075", "MNQ", "US_DATA_1000", max_orb_size_pts=65.0
-            ),  # P90=89.7, capped ~P75
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075", "MNQ", "CME_PRECLOSE", max_orb_size_pts=120.0
+            ),
+            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10", "MNQ", "US_DATA_1000", max_orb_size_pts=120.0),
             DailyLaneSpec(
-                "MGC_US_DATA_1000_E2_RR1.0_CB1_ORB_G6", "MGC", "US_DATA_1000", max_orb_size_pts=15.0
-            ),  # P90=13.0
-            DailyLaneSpec(
-                "MES_US_DATA_1000_E2_RR1.0_CB1_VOL_RV15_N20_S075", "MES", "US_DATA_1000", max_orb_size_pts=20.0
-            ),  # P90=18.5
-            # --- COMEX_SETTLE (03:30 Brisbane) — 2 instruments ---
-            DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_8K", "MNQ", "COMEX_SETTLE", max_orb_size_pts=50.0
-            ),  # P90=46.0
-            DailyLaneSpec(
-                "MES_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8_S075", "MES", "COMEX_SETTLE", max_orb_size_pts=12.0
-            ),  # P90=10.3
-            # --- CME_PRECLOSE (05:45 Brisbane) — 2 instruments ---
-            DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20", "MNQ", "CME_PRECLOSE", max_orb_size_pts=50.0
-            ),  # P90=48.5
-            DailyLaneSpec(
-                "MES_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075", "MES", "CME_PRECLOSE", max_orb_size_pts=12.0
-            ),  # P90=11.3
-            # --- CME_REOPEN (08:00 Brisbane) — 1 instrument ---
-            DailyLaneSpec(
-                "MNQ_CME_REOPEN_E2_RR1.0_CB1_VOL_RV30_N20", "MNQ", "CME_REOPEN", max_orb_size_pts=50.0
-            ),  # P90=65.2, capped ~P75
-            # --- TOKYO_OPEN (10:00 Brisbane) — 2 instruments ---
-            DailyLaneSpec(
-                "MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G4_CONT_S075", "MGC", "TOKYO_OPEN", max_orb_size_pts=10.0
-            ),  # P90=8.4
-            DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR3.0_CB1_VOL_RV30_N20_S075", "MNQ", "TOKYO_OPEN", max_orb_size_pts=40.0
-            ),  # P90=36.7
-            # --- LONDON_METALS (17:00 Brisbane) — 2 instruments ---
-            DailyLaneSpec(
-                "MES_LONDON_METALS_E2_RR3.0_CB1_VOL_RV25_N20_S075", "MES", "LONDON_METALS", max_orb_size_pts=10.0
-            ),  # P90=8.3
-            DailyLaneSpec(
-                "MNQ_LONDON_METALS_E2_RR1.5_CB1_ATR70_VOL_S075", "MNQ", "LONDON_METALS", max_orb_size_pts=40.0
-            ),  # P90=36.5
-            # --- US_DATA_830 (22:30 Brisbane) — 2 instruments ---
-            DailyLaneSpec(
-                "MNQ_US_DATA_830_E2_RR1.0_CB1_COST_LT12", "MNQ", "US_DATA_830", max_orb_size_pts=65.0
-            ),  # P90=94.9, capped ~P70
-            DailyLaneSpec(
-                "MES_US_DATA_830_E2_RR1.0_CB1_VOL_RV20_N20_S075", "MES", "US_DATA_830", max_orb_size_pts=25.0
-            ),  # P90=23.1
-            # --- NYSE_OPEN (23:30 Brisbane) — 2 instruments ---
-            DailyLaneSpec(
-                "MES_NYSE_OPEN_E2_RR2.0_CB1_OVNRNG_25_S075", "MES", "NYSE_OPEN", max_orb_size_pts=20.0
-            ),  # P90=18.8
-            DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL", "MNQ", "NYSE_OPEN", max_orb_size_pts=70.0
-            ),  # P90=104.1, capped ~P70
+                "MES_LONDON_METALS_E2_RR2.5_CB1_ORB_VOL_8K_S075", "MES", "LONDON_METALS", max_orb_size_pts=30.0
+            ),
+            DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MES", "NYSE_OPEN", max_orb_size_pts=30.0),
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "TYPE-A auto. 8 sessions, 16 lanes, 3 instruments. TopStepX/ProjectX. "
-            "DD budget: $1,384 worst-day at 1ct = 69% of $2K DD. Start 1ct, ramp with buffer. "
-            "Fork sessions: CME_PRECLOSE, TOKYO_OPEN, LONDON_METALS. "
-            "All lanes DB-validated 2026-04-01 (CORE, E2 CB1 O5, N>=100)."
+            "TYPE-A auto. 7 sessions, 8 lanes (DD-budget limited), 3 instruments. TopStepX/ProjectX. "
+            "Lanes allocator-generated 2026-04-04 (all validated). "
+            "Refresh via rebalance_lanes.py before activation."
         ),
     ),
     # --- TYPE-A: TopStep 100K (5 Express accounts via ProjectX) ---
@@ -567,42 +500,27 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
-        # Same lanes as 50K TYPE-A — tier only affects DD budget
+        # Allocator-generated 2026-04-04 — same lanes as 50K TYPE-A.
+        # Refresh via rebalance_lanes.py before activation.
         daily_lanes=(
+            DailyLaneSpec("MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6", "MGC", "CME_REOPEN", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100", "MNQ", "COMEX_SETTLE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10", "MNQ", "TOKYO_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_OPEN", max_orb_size_pts=120.0),
             DailyLaneSpec(
-                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR70_S075", "MNQ", "US_DATA_1000", max_orb_size_pts=65.0
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075", "MNQ", "CME_PRECLOSE", max_orb_size_pts=120.0
             ),
-            DailyLaneSpec("MGC_US_DATA_1000_E2_RR1.0_CB1_ORB_G6", "MGC", "US_DATA_1000", max_orb_size_pts=15.0),
+            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10", "MNQ", "US_DATA_1000", max_orb_size_pts=120.0),
             DailyLaneSpec(
-                "MES_US_DATA_1000_E2_RR1.0_CB1_VOL_RV15_N20_S075", "MES", "US_DATA_1000", max_orb_size_pts=20.0
+                "MES_LONDON_METALS_E2_RR2.5_CB1_ORB_VOL_8K_S075", "MES", "LONDON_METALS", max_orb_size_pts=30.0
             ),
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_8K", "MNQ", "COMEX_SETTLE", max_orb_size_pts=50.0),
-            DailyLaneSpec("MES_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8_S075", "MES", "COMEX_SETTLE", max_orb_size_pts=12.0),
-            DailyLaneSpec("MNQ_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20", "MNQ", "CME_PRECLOSE", max_orb_size_pts=50.0),
-            DailyLaneSpec(
-                "MES_CME_PRECLOSE_E2_RR1.0_CB1_VOL_RV20_N20_S075", "MES", "CME_PRECLOSE", max_orb_size_pts=12.0
-            ),
-            DailyLaneSpec("MNQ_CME_REOPEN_E2_RR1.0_CB1_VOL_RV30_N20", "MNQ", "CME_REOPEN", max_orb_size_pts=50.0),
-            DailyLaneSpec("MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G4_CONT_S075", "MGC", "TOKYO_OPEN", max_orb_size_pts=10.0),
-            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR3.0_CB1_VOL_RV30_N20_S075", "MNQ", "TOKYO_OPEN", max_orb_size_pts=40.0),
-            DailyLaneSpec(
-                "MES_LONDON_METALS_E2_RR3.0_CB1_VOL_RV25_N20_S075", "MES", "LONDON_METALS", max_orb_size_pts=10.0
-            ),
-            DailyLaneSpec(
-                "MNQ_LONDON_METALS_E2_RR1.5_CB1_ATR70_VOL_S075", "MNQ", "LONDON_METALS", max_orb_size_pts=40.0
-            ),
-            DailyLaneSpec("MNQ_US_DATA_830_E2_RR1.0_CB1_COST_LT12", "MNQ", "US_DATA_830", max_orb_size_pts=65.0),
-            DailyLaneSpec(
-                "MES_US_DATA_830_E2_RR1.0_CB1_VOL_RV20_N20_S075", "MES", "US_DATA_830", max_orb_size_pts=25.0
-            ),
-            DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_OVNRNG_25_S075", "MES", "NYSE_OPEN", max_orb_size_pts=20.0),
-            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL", "MNQ", "NYSE_OPEN", max_orb_size_pts=70.0),
+            DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MES", "NYSE_OPEN", max_orb_size_pts=30.0),
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "TYPE-A auto 100K. Same 16 lanes as 50K. $3K DD = 46% at 1ct. "
-            "TopStepX no DLL. AGGRO ceiling: 1ct. YOLO: 2ct. "
-            "Upgrade from 50K when payouts flowing."
+            "TYPE-A auto 100K. Same 8 lanes as 50K. $3K DD = 46% at 1ct. "
+            "Lanes allocator-generated 2026-04-04 (all validated). "
+            "Refresh via rebalance_lanes.py before activation."
         ),
     ),
     # --- TYPE-B: Tradeify 50K (5 accounts via Tradovate API) ---
@@ -627,52 +545,25 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
+        # Allocator-generated 2026-04-04 — all lanes validated. 9/15 slots filled
+        # (DD budget limits further slots). Refresh via rebalance_lanes.py before activation.
         daily_lanes=(
-            # --- US_DATA_1000 (00:00 Brisbane) — 3 instruments ---
-            DailyLaneSpec(
-                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR70_S075", "MNQ", "US_DATA_1000", max_orb_size_pts=65.0
-            ),
-            DailyLaneSpec("MGC_US_DATA_1000_E2_RR1.0_CB1_ORB_G6", "MGC", "US_DATA_1000", max_orb_size_pts=15.0),
-            DailyLaneSpec(
-                "MES_US_DATA_1000_E2_RR1.0_CB1_VOL_RV15_N20_S075", "MES", "US_DATA_1000", max_orb_size_pts=20.0
-            ),
-            # --- COMEX_SETTLE (03:30 Brisbane) — 2 instruments ---
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_8K", "MNQ", "COMEX_SETTLE", max_orb_size_pts=50.0),
-            DailyLaneSpec("MES_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8_S075", "MES", "COMEX_SETTLE", max_orb_size_pts=12.0),
-            # --- NYSE_CLOSE (06:00 Brisbane) — 2 instruments ---
-            DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV25_N20", "MNQ", "NYSE_CLOSE", max_orb_size_pts=50.0
-            ),  # P90=60.3, capped ~P75
-            DailyLaneSpec(
-                "MES_NYSE_CLOSE_E2_RR1.0_CB1_COST_LT10", "MES", "NYSE_CLOSE", max_orb_size_pts=13.0
-            ),  # P90=12.3
-            # --- CME_REOPEN (08:00 Brisbane) — 1 instrument ---
-            DailyLaneSpec("MNQ_CME_REOPEN_E2_RR1.0_CB1_VOL_RV30_N20", "MNQ", "CME_REOPEN", max_orb_size_pts=50.0),
-            # --- SINGAPORE_OPEN (11:00 Brisbane) — 1 instrument ---
-            DailyLaneSpec(
-                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ORB_VOL_2K", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=35.0
-            ),  # P90=30.8
-            # --- EUROPE_FLOW (18:00 Brisbane) — 2 instruments ---
-            DailyLaneSpec("MGC_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G4", "MGC", "EUROPE_FLOW", max_orb_size_pts=8.0),  # P90=6.4
-            DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_OVNRNG_100", "MNQ", "EUROPE_FLOW", max_orb_size_pts=35.0
-            ),  # P90=32.8
-            # --- US_DATA_830 (22:30 Brisbane) — 2 instruments ---
-            DailyLaneSpec("MNQ_US_DATA_830_E2_RR1.0_CB1_COST_LT12", "MNQ", "US_DATA_830", max_orb_size_pts=65.0),
-            DailyLaneSpec(
-                "MES_US_DATA_830_E2_RR1.0_CB1_VOL_RV20_N20_S075", "MES", "US_DATA_830", max_orb_size_pts=25.0
-            ),
-            # --- NYSE_OPEN (23:30 Brisbane) — 2 instruments ---
-            DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_OVNRNG_25_S075", "MES", "NYSE_OPEN", max_orb_size_pts=20.0),
-            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL", "MNQ", "NYSE_OPEN", max_orb_size_pts=70.0),
+            DailyLaneSpec("MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6", "MGC", "CME_REOPEN", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100", "MNQ", "COMEX_SETTLE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10", "MNQ", "EUROPE_FLOW", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10", "MNQ", "US_DATA_1000", max_orb_size_pts=120.0),
+            DailyLaneSpec("MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6", "MGC", "EUROPE_FLOW", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_CLOSE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MES", "NYSE_OPEN", max_orb_size_pts=30.0),
         ),
         payout_policy_id="tradeify_select_funded",
         notes=(
-            "TYPE-B auto. 8 sessions, 15 lanes, 3 instruments. Tradovate API (auth broken). "
-            "DD budget: $1,391 worst-day at 1ct = 70% of $2K DD. Start 1ct. "
-            "Fork sessions: NYSE_CLOSE, SINGAPORE_OPEN, EUROPE_FLOW. "
-            "Tradeify: 90% split, no DLL, no consistency rule, 10s min hold (N/A for ORB). "
-            "Bot must be exclusive to Tradeify (no cross-firm sharing)."
+            "TYPE-B auto. 7 sessions, 9 lanes (DD-budget limited), 3 instruments. "
+            "Tradovate API (auth broken). Lanes allocator-generated 2026-04-04 (all validated). "
+            "Bot must be exclusive to Tradeify (no cross-firm sharing). "
+            "Refresh via rebalance_lanes.py before activation."
         ),
     ),
     # --- TYPE-B: Tradeify 100K (5 accounts via Tradovate API) ---
@@ -697,35 +588,24 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
-        # Same lanes as 50K TYPE-B — tier only affects DD budget
+        # Allocator-generated 2026-04-04 — same lanes as 50K TYPE-B.
+        # Refresh via rebalance_lanes.py before activation.
         daily_lanes=(
-            DailyLaneSpec(
-                "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR70_S075", "MNQ", "US_DATA_1000", max_orb_size_pts=65.0
-            ),
-            DailyLaneSpec("MGC_US_DATA_1000_E2_RR1.0_CB1_ORB_G6", "MGC", "US_DATA_1000", max_orb_size_pts=15.0),
-            DailyLaneSpec(
-                "MES_US_DATA_1000_E2_RR1.0_CB1_VOL_RV15_N20_S075", "MES", "US_DATA_1000", max_orb_size_pts=20.0
-            ),
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_8K", "MNQ", "COMEX_SETTLE", max_orb_size_pts=50.0),
-            DailyLaneSpec("MES_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8_S075", "MES", "COMEX_SETTLE", max_orb_size_pts=12.0),
-            DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_VOL_RV25_N20", "MNQ", "NYSE_CLOSE", max_orb_size_pts=50.0),
-            DailyLaneSpec("MES_NYSE_CLOSE_E2_RR1.0_CB1_COST_LT10", "MES", "NYSE_CLOSE", max_orb_size_pts=13.0),
-            DailyLaneSpec("MNQ_CME_REOPEN_E2_RR1.0_CB1_VOL_RV30_N20", "MNQ", "CME_REOPEN", max_orb_size_pts=50.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ORB_VOL_2K", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=35.0),
-            DailyLaneSpec("MGC_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G4", "MGC", "EUROPE_FLOW", max_orb_size_pts=8.0),
-            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR2.0_CB1_OVNRNG_100", "MNQ", "EUROPE_FLOW", max_orb_size_pts=35.0),
-            DailyLaneSpec("MNQ_US_DATA_830_E2_RR1.0_CB1_COST_LT12", "MNQ", "US_DATA_830", max_orb_size_pts=65.0),
-            DailyLaneSpec(
-                "MES_US_DATA_830_E2_RR1.0_CB1_VOL_RV20_N20_S075", "MES", "US_DATA_830", max_orb_size_pts=25.0
-            ),
-            DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_OVNRNG_25_S075", "MES", "NYSE_OPEN", max_orb_size_pts=20.0),
-            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_ATR70_VOL", "MNQ", "NYSE_OPEN", max_orb_size_pts=70.0),
+            DailyLaneSpec("MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6", "MGC", "CME_REOPEN", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100", "MNQ", "COMEX_SETTLE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10", "MNQ", "EUROPE_FLOW", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10", "MNQ", "US_DATA_1000", max_orb_size_pts=120.0),
+            DailyLaneSpec("MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6", "MGC", "EUROPE_FLOW", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_CLOSE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MES", "NYSE_OPEN", max_orb_size_pts=30.0),
         ),
         payout_policy_id="tradeify_select_funded",
         notes=(
-            "TYPE-B auto 100K. Same 15 lanes as 50K. $3K DD = 46% at 1ct. "
-            "No DLL. AGGRO: 1ct. YOLO: 2ct. "
-            "Upgrade from 50K when payouts flowing."
+            "TYPE-B auto 100K. Same 9 lanes as 50K. $3K DD = 46% at 1ct. "
+            "Lanes allocator-generated 2026-04-04 (all validated). "
+            "Refresh via rebalance_lanes.py before activation."
         ),
     ),
     # =========================================================================
