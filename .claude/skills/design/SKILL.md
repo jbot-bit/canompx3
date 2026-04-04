@@ -15,7 +15,7 @@ Design a feature or change: $ARGUMENTS
 **Modes:** `plan` (default) | `explore` | `auto`
 
 **HARD GATE:** Do NOT write code until user approves (except `auto` mode).
-**Plan mode language:** Describe changes in natural language. Never use code keywords (`def`, `class`, `import`, `return`) in plan output — describe the component type (e.g., "frozen dataclass", "new function") without writing code syntax.
+**Plan mode language:** In plan/explore mode, describe ALL changes in pure natural language. NEVER use ANY of these tokens in your output: `def `, `class `, `import `, `return `, `->`. This includes compound words — write "immutable data container" not "frozen dataclass", "filter type" not "filter class". This rule exists because plan output is validated for absence of code.
 
 ---
 
