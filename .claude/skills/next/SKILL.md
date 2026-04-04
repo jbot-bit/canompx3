@@ -121,3 +121,14 @@ Do not let this override the implementation task. It's information, not a redire
 - Maximum 1 task. If there's a queue, do the first one. The user will say /next again for the second.
 - Acceptance check in Case A is MANDATORY. Do not resume work that's already done — close it and move on.
 - Memory action queue items may be stale. Before picking one, verify it hasn't already been completed (quick git log or code check).
+
+## OUTPUT FORMAT
+
+Your response MUST follow this structure — no menus, no numbered options:
+
+1. **State summary** (2-3 lines): What STAGE_STATE, HANDOFF, and action queue told you.
+2. **Decision** (1 line, bolded): "**Resuming:** [task]" or "**Next task:** [description]. Source: [handoff/memory/pulse]."
+3. **Classification** (1 line): TRIVIAL or IMPLEMENTATION + scope files.
+4. **Action**: Start reading scope files and implementing. No preamble.
+
+Do NOT list the action queue items. Do NOT enumerate alternatives. The user said "next" — they want ONE decision and immediate action.

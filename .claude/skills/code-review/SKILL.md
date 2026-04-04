@@ -24,8 +24,19 @@ Dispatch a code review after completing work. Catches issues before they compoun
 ## Process
 
 **1. Identify the scope:**
+
+Determine what to review based on the user's request:
+- "review the last commit" → `git log --oneline -1` then `git diff HEAD~1` to get the full diff
+- "review my changes" (uncommitted) → `git diff` (staged + unstaged)
+- "review this PR / branch" → `git merge-base HEAD origin/main` then diff from there
+
 ```bash
-BASE_SHA=$(git merge-base HEAD origin/main)  # or HEAD~N for recent work
+# For last commit:
+git log --oneline -1
+git diff HEAD~1
+
+# For branch work:
+BASE_SHA=$(git merge-base HEAD origin/main)
 HEAD_SHA=$(git rev-parse HEAD)
 ```
 
