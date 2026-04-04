@@ -93,6 +93,31 @@ For each changed file, scan for the seven sins of quantitative investing:
 - [ ] DB writes are single-process? (no concurrent DuckDB writes)
 - [ ] Test coverage? (check TEST_MAP for companion test file)
 
+### Section E: CALLER DISCIPLINE (Weight: HARD GATE — from hard_lessons.md #2, #8, #12)
+
+- [ ] For ANY changed function signature: `grep -r "function_name"` — ALL callers updated?
+- [ ] For ANY changed type (set→dict, str→enum): every `sorted()`, `for x in`, f-string checked?
+- [ ] Blast radius scanned BOTH directions: callees AND callers?
+- [ ] Blanket exclusions are instrument-aware (dict not set) — hard_lesson #12?
+- [ ] "Backward compatible default" used as excuse to skip caller updates? → FLAG IT
+
+### Section F: INTEGRATION & EXECUTION (Weight: HARD GATE — from Apr 4 audit)
+
+- [ ] For CLI entry points: trace the full call chain — does it actually run on real data?
+- [ ] For multi-component changes: components CONNECT, not just individually correct?
+- [ ] Execute at least ONE critical code path: `python -c "from X import Y; Y(args)"`
+- [ ] Labels, docstrings, field values are NOT evidence — execution output is evidence (rule #7)
+- [ ] For `except` blocks: inject the failure, verify the handler does what it claims
+- [ ] What's MISSING? (missing gate, missing validation, missing error path that SHOULD exist)
+
+### Section G: IMPROVEMENTS
+
+After all findings, provide 1-3 concrete improvements:
+- Missing guard that SHOULD exist (gap found during review)
+- Test that would catch this class of bug next time
+- Architectural cleanup that prevents the issue category
+- Integration test that verifies the end-to-end path works
+
 ### Grading
 
 | Grade | Criteria |
@@ -124,6 +149,15 @@ Section C -- Statistical Rigor: [score]
 
 Section D -- Production Readiness: [score]
   [findings with line citations]
+
+Section E -- Caller Discipline: [PASS/FAIL]
+  [grep evidence for changed signatures]
+
+Section F -- Integration & Execution: [PASS/FAIL]
+  [execution output proving critical paths work]
+
+Section G -- Improvements: [1-3 items]
+  [concrete, grounded in review findings]
 
 Verdict: [1-2 sentence summary]
 Action items: [numbered list of required changes]
