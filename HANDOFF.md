@@ -6,6 +6,47 @@
 
 ---
 
+## Update (Apr 4 — Claude: Karpathy Skill Self-Improvement Loop + Ralph x5)
+
+### Completed
+1. **Ralph x5:** 5 autonomous audit iterations. 2 real fail-open bugs fixed (ingest_dbn_daily exception swallowing, build_bars_5m integrity skip on row_count=0), 3 documentation fixes. Commits 4089b29→312ec41.
+2. **Skill self-improvement framework built (Karpathy auto-research pattern):**
+   - `scripts/tools/skill_scorer.py` — immutable binary assertion scorer (13 types, execution-anchored `command_ran`)
+   - `.claude/skills/skill-improve/SKILL.md` — autonomous loop: edit→test→score→keep/revert
+   - `.claude/skills/skill-improve/eval-schema.md` — eval.json format reference
+3. **15 skills now have evals** (260+ binary assertions total). Coverage: trade-book, verify, orient, design, stage-gate, regime-check, bloomey-review, code-review, research, quant-debug, next, resume-rebase, quant-tdd, post-rebuild, discover.
+4. **10 skills actively improved** with committed fixes:
+   - trade-book: 85%→100% (anti-mention rule for PURGED/DECAY)
+   - verify: 60%→100% (ruff lint added as 5th gate)
+   - quant-debug: 86%→100% (NEVER rule rephrasing)
+   - stage-gate: expanded classification examples
+   - regime-check: staleness age calc + health summary
+   - next: output format to prevent menu-listing
+   - research: academic grounding step + Blueprint path
+   - code-review: explicit git command mapping
+   - discover: SKILL.md improvements
+   - orient: context assertions added
+5. **Code review of framework:** 7 findings (3 CRITICAL), all fixed. Key: line_count default pattern bug, command_ran gameability (now execution-anchored), git reset --hard → targeted checkout.
+6. **Context grounding assertions** added to research (academic refs, prior research), design (lit awareness, project memory), orient (action queue, deployment state, research routing).
+
+### Remaining (Tier 3 — low priority)
+- 7 skills still need evals: audit, blast-radius, task-splitter, validate-instrument, rebuild-outcomes, pinecone-assistant, skill-improve (meta)
+- Run `/skill-improve <name>` to create evals and improve any skill
+
+### How to Use
+- `/skill-improve trade-book` — run improvement loop on any skill
+- `python scripts/tools/skill_scorer.py <eval.json> --test-id <id> --transcript <file>` — score manually
+- Add `eval/eval.json` to any skill directory to enable the loop
+
+### Files Changed This Session
+- `scripts/tools/skill_scorer.py` (NEW), `.claude/skills/skill-improve/` (NEW)
+- `.claude/skills/*/eval/eval.json` (NEW, 15 skills)
+- `.claude/skills/trade-book/SKILL.md`, `.claude/skills/verify/SKILL.md`, `.claude/skills/stage-gate/SKILL.md`, `.claude/skills/regime-check/SKILL.md`, `.claude/skills/quant-debug/SKILL.md`, `.claude/skills/next/SKILL.md`, `.claude/skills/research/SKILL.md`, `.claude/skills/code-review/SKILL.md`, `.claude/skills/discover/SKILL.md`, `.claude/skills/orient/eval/eval.json`
+- `pipeline/ingest_dbn_daily.py` (fail-open fix), `pipeline/build_bars_5m.py` (integrity skip fix), `pipeline/build_daily_features.py` (comment fix), `pipeline/run_pipeline.py` (docstring fix)
+- `.claude/rules/auto-skill-routing.md` (skill-improve trigger added)
+
+---
+
 ## Update (Apr 3 — Claude: Governance Tools + Self-Funded Design + System Audit)
 
 ### Completed
