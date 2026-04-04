@@ -44,7 +44,7 @@ In order (skip empty):
 1. **Session delta** — commits since last session
 2. **BROKEN** — each item + its `action` field
 3. **DECAYING** — stale pipelines, WATCH/DECAY strategies
-4. **Strategic state** — instruments, validated count, edge families (one-liner each)
+4. **Strategic state** — active instruments, validated count, edge families (one-liner each). List dead instruments on a SEPARATE line, never in the same sentence as "active"/"deployed"/"live".
 5. **Upcoming sessions** — next 6h with strategy counts
 6. **Context** — handoff summary + top 3 next steps
 7. **Time since green** — one line if not "now"
