@@ -6,6 +6,26 @@
 
 ---
 
+## Update (Apr 4 — Claude: Context Optimization V1+V2)
+
+### Completed
+**51% reduction in always-on context** (861→422 lines loaded per message):
+- CLAUDE.md: 285→103 (removed @ARCHITECTURE.md ref, compressed all subsections)
+- Always-on rules: 405→179 (workflow-prefs 81→28, 2 rules made conditional via paths:)
+- MEMORY.md: 171→140 (consolidated ML/audit/prop entries, removed duplicates)
+- 6 plugins disabled (typescript-lsp, frontend-design, security-guidance, pr-review-toolkit, feature-dev, code-simplifier)
+
+### User Action Needed
+Disconnect unused Claude AI integrations (account-level): Gmail, Calendar, Cloudflare, Slack. These are deferred tools (~400 tokens, not critical) but add noise.
+
+### Re-enable as needed
+`pr-review-toolkit`, `feature-dev`, `code-simplifier` — toggle in `.claude/settings.json` for PR/feature sessions.
+
+### Unstaged changes from prior session
+`scripts/run_live_session.py`, `trading_app/live/multi_runner.py`, `trading_app/portfolio.py`, `tests/test_trading_app/test_multi_runner.py` — have uncommitted changes. Lint error in multi_runner.py (E741 ambiguous var `l`).
+
+---
+
 ## Update (Apr 4 — Claude: Karpathy Skill Self-Improvement Loop + Ralph x5)
 
 ### Completed
