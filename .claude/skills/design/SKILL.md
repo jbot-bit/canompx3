@@ -15,6 +15,7 @@ Design a feature or change: $ARGUMENTS
 **Modes:** `plan` (default) | `explore` | `auto`
 
 **HARD GATE:** Do NOT write code until user approves (except `auto` mode).
+**Plan mode language:** Describe changes in natural language. Never use code keywords (`def`, `class`, `import`, `return`) in plan output — describe the component type (e.g., "frozen dataclass", "new function") without writing code syntax.
 
 ---
 
@@ -39,7 +40,7 @@ After questions answered → run the 4-turn flow below.
 2. **Check `docs/STRATEGY_BLUEPRINT.md`** — route to correct section, NO-GO registry (SS5), assumptions (SS10)
 3. Read ALL affected files — trace imports, map blast radius
 4. Check `docs/specs/` for existing spec (if one exists, follow it)
-5. Check authority docs (CLAUDE.md / TRADING_RULES.md / RESEARCH_RULES.md)
+5. Check authority docs — **TRADING_RULES.md** for any trading logic, filters, sessions, or entry models; RESEARCH_RULES.md for statistical methodology; CLAUDE.md for architecture
 6. Check canonical sources that might be touched (ACTIVE_ORB_INSTRUMENTS, SESSION_CATALOG, config, COST_SPECS, GOLD_DB_PATH)
 7. Articulate PURPOSE: why this matters, what breaks without it
 
