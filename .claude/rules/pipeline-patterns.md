@@ -1,3 +1,7 @@
+---
+paths:
+  - "pipeline/**"
+---
 # Pipeline Patterns
 
 Core principles (fail-closed, idempotent, one-way dependency) and DST resolution → see CLAUDE.md.

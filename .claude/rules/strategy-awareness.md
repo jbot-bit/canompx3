@@ -1,3 +1,9 @@
+---
+paths:
+  - "trading_app/strategy_*"
+  - "research/**"
+  - "docs/STRATEGY_BLUEPRINT.md"
+---
 # Strategy Awareness — Blueprint Routing
 
 Before any strategy, research, or trading work:
