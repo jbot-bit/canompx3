@@ -145,8 +145,9 @@ def check_daily_equity(profile_id: str | None = None) -> tuple[bool, str]:
         tier = ACCOUNT_TIERS.get((prof.firm, prof.account_size))
         if tier and tier.daily_loss_limit:
             dll = tier.daily_loss_limit
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"WARNING: could not load DLL for profile {profile_id!r} — using fallback ${dll:,.0f} ({exc})",
+              file=sys.stderr)
 
     if dd <= -dll:
         return False, f"DAILY DD LIMIT BREACHED: ${dd:.0f} (limit -${dll:,.0f})"
