@@ -60,7 +60,7 @@ When M2.5 flags a finding, Claude Code MUST:
 | `improvements` | Institutional improvement suggestions | Head-of-quant graded sections |
 
 ## Integration Points
-- **Script**: `python scripts/tools/m25_auto_audit.py --advisory` (auto-detect + triage). Referenced by `/bloomey-review`.
+- **Script**: `python scripts/tools/m25_auto_audit.py --advisory` (auto-detect + triage). Referenced by `/code-review`.
 - **Pre-commit hook [5/5]**: Runs on staged files, advisory only, never blocks
 - **Health check**: Runs on last commit's changes, advisory only
 - **On-demand scripts** (used by the skill internally):

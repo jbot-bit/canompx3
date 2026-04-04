@@ -1,6 +1,6 @@
 {
   "skill": "code-review",
-  "version": 1,
+  "version": 2,
   "tests": [
     {
       "id": "cr-01",
@@ -9,43 +9,43 @@
         {
           "id": "cr-01-a1",
           "type": "command_ran",
-          "pattern": "git (diff|log|show)",
+          "pattern": "git diff|git log",
           "description": "Identifies scope via git diff/log"
         },
         {
           "id": "cr-01-a2",
           "type": "regex_match",
-          "pattern": "(?:Seven Sins|hardcoded|canonical|bare except|fail-closed)",
+          "pattern": "(Seven Sins|seven sins|look.?ahead|snooping|overfitting|survivorship|storytelling|outlier|cost illusion)",
           "description": "Checks Seven Sins criteria"
         },
         {
           "id": "cr-01-a3",
           "type": "regex_match",
-          "pattern": "(?:ACTIVE_ORB_INSTRUMENTS|SESSION_CATALOG|COST_SPECS|GOLD_DB_PATH|config)",
+          "pattern": "(canonical|ACTIVE_ORB|SESSION_CATALOG|COST_SPECS|GOLD_DB_PATH|one.?way)",
           "description": "Checks canonical integrity sources"
         },
         {
           "id": "cr-01-a4",
           "type": "regex_match",
-          "pattern": "(?:PREMISE|TRACE|EVIDENCE|file.*:\\d+|line \\d+)",
+          "pattern": "(PREMISE|TRACE|EVIDENCE|file:\\d+|line \\d+)",
           "description": "Uses semi-formal reasoning or file:line citations"
         },
         {
           "id": "cr-01-a5",
           "type": "regex_match",
-          "pattern": "(?:Critical|Important|Minor|severity)",
+          "pattern": "(Critical|Important|Minor|CRITICAL|HIGH|MEDIUM|severity)",
           "description": "Reports severity levels"
         },
         {
           "id": "cr-01-a6",
           "type": "regex_match",
-          "pattern": "(?:test|companion|TEST_MAP|drift)",
+          "pattern": "(companion test|TEST_MAP|test coverage|test.*updated)",
           "description": "Checks companion test coverage"
         },
         {
           "id": "cr-01-a7",
           "type": "regex_match",
-          "pattern": "(?:pipeline.*trading_app|one.?way|dependency)",
+          "pattern": "(one.?way|pipeline.*trading_app|never.*import)",
           "description": "Checks one-way dependency rule"
         }
       ]
@@ -63,14 +63,128 @@
         {
           "id": "cr-02-a2",
           "type": "regex_match",
-          "pattern": "(?:Critical|Important|Minor|PASS|no issues|clean)",
-          "description": "Provides clear verdict"
+          "pattern": "(Verdict|verdict|APPROVE|REJECT|Grade)",
+          "description": "Provides clear verdict or grade"
         },
         {
           "id": "cr-02-a3",
           "type": "text_not_contains",
           "value": "looks good to me",
           "description": "Does not give rubber-stamp approval without evidence"
+        }
+      ]
+    },
+    {
+      "id": "cr-03",
+      "prompt": "bloomey review my changes",
+      "assertions": [
+        {
+          "id": "cr-03-a1",
+          "type": "command_ran",
+          "pattern": "git diff",
+          "description": "Must run git diff to find changed files"
+        },
+        {
+          "id": "cr-03-a2",
+          "type": "regex_match",
+          "pattern": "=== BLOOMEY REVIEW ===",
+          "description": "Must use the canonical output header"
+        },
+        {
+          "id": "cr-03-a3",
+          "type": "regex_match",
+          "pattern": "Grade:\\s*[A-F][+-]?",
+          "description": "Must assign a grade (A through F)"
+        },
+        {
+          "id": "cr-03-a4",
+          "type": "regex_match",
+          "pattern": "Section A|Seven Sins",
+          "description": "Must include Section A Seven Sins scan"
+        },
+        {
+          "id": "cr-03-a5",
+          "type": "regex_match",
+          "pattern": "Section B|Canonical",
+          "description": "Must include Section B Canonical Integrity"
+        },
+        {
+          "id": "cr-03-a6",
+          "type": "regex_match",
+          "pattern": "Section C|Statistical",
+          "description": "Must include Section C Statistical Rigor"
+        },
+        {
+          "id": "cr-03-a7",
+          "type": "regex_match",
+          "pattern": "Section D|Production",
+          "description": "Must include Section D Production Readiness"
+        },
+        {
+          "id": "cr-03-a8",
+          "type": "regex_match",
+          "pattern": "(Verdict|Action item)",
+          "description": "Must include Verdict and Action items"
+        }
+      ]
+    },
+    {
+      "id": "cr-04",
+      "prompt": "bloomey — found look-ahead bias at line 47",
+      "assertions": [
+        {
+          "id": "cr-04-a1",
+          "type": "regex_match",
+          "pattern": "PREMISE",
+          "description": "Must show PREMISE in semi-formal reasoning"
+        },
+        {
+          "id": "cr-04-a2",
+          "type": "regex_match",
+          "pattern": "TRACE",
+          "description": "Must show TRACE — execution path"
+        },
+        {
+          "id": "cr-04-a3",
+          "type": "regex_match",
+          "pattern": "EVIDENCE",
+          "description": "Must show EVIDENCE — actual code lines"
+        },
+        {
+          "id": "cr-04-a4",
+          "type": "regex_match",
+          "pattern": "(VERDICT|verdict|SUPPORT|REFUTE|INSUFFICIENT)",
+          "description": "Must reach a VERDICT"
+        },
+        {
+          "id": "cr-04-a5",
+          "type": "regex_match",
+          "pattern": "Grade:\\s*[CF][+-]?",
+          "description": "Confirmed look-ahead bias must score C or worse (F per rubric)"
+        }
+      ]
+    },
+    {
+      "id": "cr-05",
+      "prompt": "review — this strategy has Sharpe 2.1 with N=25",
+      "assertions": [
+        {
+          "id": "cr-05-a1",
+          "type": "regex_match",
+          "pattern": "(N.*25|25.*below|25.*threshold|INVALID|REGIME|sample)",
+          "description": "Must flag N=25 as below threshold"
+        },
+        {
+          "id": "cr-05-a2",
+          "type": "regex_match",
+          "pattern": "(overfit|red flag|not.*grade.*A|cannot|insufficient)",
+          "description": "High Sharpe with N<30 is overfitting red flag"
+        },
+        {
+          "id": "cr-05-a3",
+          "type": "regex_not_match",
+          "pattern": "incorrect.*import|wrong.*canonical|bad.*import",
+          "description": "Must not falsely flag correct canonical imports"
         }
       ]
     }

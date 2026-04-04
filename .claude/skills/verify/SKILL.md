@@ -85,4 +85,4 @@ ruff format --check pipeline/ trading_app/ scripts/
 - Never hardcode check counts — self-reported at runtime.
 - Never claim "done" without fresh evidence in THIS response.
 - If ANY gate fails: stop, investigate, fix, re-run ALL gates.
-- For institutional code review with grading → `/bloomey-review`
+- For institutional code review with grading → `/code-review`
