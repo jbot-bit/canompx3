@@ -6,6 +6,44 @@
 
 ---
 
+## Update (Apr 4 — Claude: Self-Funded Deployment + Regime Gate + Multi-Instrument Fix)
+
+### Completed
+1. **Self-funded Stages 1-4b:** Profile config (10 allocator-validated lanes), daily/weekly loss limits ($600/$1500), per-trade max risk ($300), account tier (self_funded, 30000), replaced 2 UNDEPLOYABLE lanes with allocator output.
+2. **Regime gate in session_orchestrator:** Loads `lane_allocation.json` paused list at init, blocks PAUSED strategies at entry time with `REGIME_PAUSED` signal record. Fail-open if file missing. Closes the advisory→enforcement gap.
+3. **Multi-instrument execution fix:** `build_profile_portfolio()` now accepts `instrument=` filter for mixed-instrument profiles. `MultiInstrumentRunner` accepts `profile_id=` to build per-instrument portfolios. `run_live_session.py` auto-routes mixed profiles to MultiInstrumentRunner. BLOCKER for both active topstep AND self-funded profiles — now fixed.
+4. **Execution-verified regime audit:** 6 tests with injection (PAUSED exclusion, pre-session warning, staleness blocking, no backfill, no live gate, DD not auto-refilled). All passed. 4 gaps documented honestly.
+5. **Edge family audit:** Code traced, no lookahead/bias found. Median head election, PBO computation, cross-duration protection all clean. PURGED label is confusing but correct.
+6. **Code review:** Regime gate reviewed — all 5 specific checks passed (fail-open correct, all fixtures covered, both modes gated, path consistent, schema matches).
+
+### Key Findings
+- **6 inactive profiles have UNVALIDATED lanes** (ATR70_VOL, X_MES_ATR70 — same issue we fixed on self_funded). Not urgent since inactive.
+- **Regime gap:** No intra-month detection. Monthly rebalance is the gate. CUSUM-based fitness (action queue) would close this.
+- **Cold session damage is massive:** SINGAPORE_OPEN -887R cold vs +46R hot. Regime gating is not optional.
+- **Pre-session check is advisory only** — `(True, msg)` for all cases. Orchestrator regime gate is the enforcement layer.
+
+### Files Changed This Session
+- `trading_app/account_hwm_tracker.py` (daily/weekly loss limits, POLL_FAILURE reason)
+- `trading_app/prop_profiles.py` (allocator lanes, account tier, max_risk_per_trade)
+- `trading_app/live/session_orchestrator.py` (regime gate, max_risk gate)
+- `trading_app/live/multi_runner.py` (profile_id injection)
+- `trading_app/portfolio.py` (instrument filter for mixed profiles)
+- `scripts/run_live_session.py` (multi-instrument profile routing)
+- `tests/test_trading_app/test_account_hwm_tracker.py` (+period limit tests)
+- `tests/test_trading_app/test_session_orchestrator.py` (+regime gate + max risk tests)
+- `tests/test_trading_app/test_multi_runner.py` (+profile injection tests)
+- `docs/plans/2026-04-03-self-funded-tradovate-design.md` (UNDEPLOYABLE lanes flagged)
+- `docs/plans/2026-04-03-self-funded-implementation-stages.md` (Stages 1-4 resolved)
+
+### Next Session
+- **Stage 5:** Open Tradovate personal account (manual — no code)
+- **Stage 6:** Integration test (`run_live_session.py --profile self_funded_tradovate --signal-only`)
+- **Weekly rebalance schedule:** Set up `rebalance_lanes.py` to run weekly (cron or manual discipline)
+- **6 inactive profiles:** Run allocator to replace unvalidated lanes (same pattern as self_funded fix)
+- **CUSUM fitness:** Action queue item — faster regime break detection than monthly rebalance
+
+---
+
 ## Update (Apr 4 — Claude: Context Optimization V1+V2)
 
 ### Completed
