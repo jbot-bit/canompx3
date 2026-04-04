@@ -16,10 +16,11 @@ Use when: "research", "investigate", "test this hypothesis", "is X real", "does 
 
 ## Step 0: Pre-Research (MANDATORY)
 
-1. **Blueprint NO-GO (SS5):** Already dead? Tell user, STOP.
+1. **Blueprint NO-GO (SS5):** Read `docs/STRATEGY_BLUEPRINT.md` SS5 NO-GO registry. Already dead? Tell user, STOP.
 2. **Assumptions (SS10):** Does this depend on a flagged assumption?
-3. **Previous research:** Check memory + TRADING_RULES.md. Don't re-run dead ends.
+3. **Previous research:** Check memory files, `TRADING_RULES.md`, and prior session notes. If prior research exists, cite it (what was tested, what survived, what was killed) before running new tests. Do NOT re-run dead ends without a new approach. Reference the specific memory file or research script.
 4. **Variable scoping:** List variables to test. Before declaring ANY dimension dead, test >=3 values (Gate 2).
+5. **Academic grounding:** Check `resources/` for relevant PDFs (Aronson, Chan, Carver, Harvey-Liu, Pardo, Lopez de Prado). Reference applicable methodology.
 
 ## Step 1: Frame the Hypothesis
 
