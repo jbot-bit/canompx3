@@ -152,6 +152,27 @@ class SessionOrchestrator:
             except Exception:
                 log.warning("Could not load max_risk_per_trade from profile — guard DISABLED")
 
+        # Regime gate: load paused strategies from allocator output.
+        # Strategies PAUSED by the allocator (session regime COLD) are blocked
+        # at entry time. Fail-open if file missing or corrupt.
+        self._regime_paused: set[str] = set()
+        try:
+            _alloc_path = Path(__file__).resolve().parents[2] / "docs" / "runtime" / "lane_allocation.json"
+            if _alloc_path.exists():
+                import json as _json
+
+                _alloc_data = _json.loads(_alloc_path.read_text())
+                self._regime_paused = {e["strategy_id"] for e in _alloc_data.get("paused", [])}
+                if self._regime_paused:
+                    log.warning(
+                        "REGIME GATE: %d strategies PAUSED — entries will be blocked",
+                        len(self._regime_paused),
+                    )
+            else:
+                log.info("No lane_allocation.json — regime gate disabled")
+        except Exception:
+            log.warning("Failed to load lane_allocation.json — regime gate disabled (fail-open)")
+
         # Execution stack
         self.cost_spec: CostSpec = get_cost_spec(instrument)
         cost = self.cost_spec
@@ -1430,6 +1451,17 @@ class SessionOrchestrator:
                     self._notify(f"ENTRY BLOCKED (DD HALT): {event.strategy_id} — {reason}")
                     self._write_signal_record({"type": "ENTRY_BLOCKED_DD_HALT", "strategy_id": event.strategy_id})
                     return
+
+            # Regime gate — block entries for strategies paused by allocator.
+            # Session regime COLD = negative 6mo trailing ExpR. Loaded from
+            # lane_allocation.json at init. Fail-open if file missing.
+            if event.strategy_id in self._regime_paused:
+                log.info(
+                    "REGIME_PAUSED: %s — session COLD per allocator. Entry blocked.",
+                    event.strategy_id,
+                )
+                self._write_signal_record({"type": "REGIME_PAUSED", "strategy_id": event.strategy_id})
+                return
 
             if self.signal_only:
                 record = self._positions.on_signal_entry(
