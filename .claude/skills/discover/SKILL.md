@@ -47,7 +47,7 @@ con.close()
 
 ## Step 3: Previous Research + Current State
 
-Check memory files and Blueprint SS5 NO-GO table for prior findings. Query validated_setups for current state.
+Check memory files and Blueprint SS5 NO-GO table for prior findings. Do NOT query validated_setups — it is a derived layer banned for discovery. Check prior research from memory files only.
 
 ## Step 4: Per-Session Scan
 

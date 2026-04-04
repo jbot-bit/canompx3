@@ -1,0 +1,84 @@
+{
+  "skill": "discover",
+  "version": 1,
+  "tests": [
+    {
+      "id": "dv-01",
+      "prompt": "discover edges for MNQ CME_OPEN",
+      "assertions": [
+        {
+          "id": "dv-01-a1",
+          "type": "text_contains",
+          "value": "NO-GO",
+          "description": "Must check NO-GO registry before any research"
+        },
+        {
+          "id": "dv-01-a2",
+          "type": "text_contains",
+          "value": "orb_outcomes",
+          "description": "Must query canonical layer orb_outcomes, not derived layers"
+        },
+        {
+          "id": "dv-01-a3",
+          "type": "text_not_contains",
+          "value": "validated_setups",
+          "description": "Must NOT use validated_setups for discovery — derived layer banned"
+        },
+        {
+          "id": "dv-01-a4",
+          "type": "regex_match",
+          "pattern": "p[=-]?value|p\\s*[<=>]\\s*0\\.\\d+",
+          "description": "Must report p-value for any finding"
+        },
+        {
+          "id": "dv-01-a5",
+          "type": "regex_match",
+          "pattern": "N\\s*=\\s*\\d+|sample.{0,10}\\d+|\\bN\\b.*\\d{2,}",
+          "description": "Must report sample size"
+        },
+        {
+          "id": "dv-01-a6",
+          "type": "text_contains",
+          "value": "BH",
+          "description": "Must apply BH FDR correction"
+        },
+        {
+          "id": "dv-01-a7",
+          "type": "text_contains",
+          "value": "STRATEGY_BLUEPRINT",
+          "description": "Must reference Strategy Blueprint in pre-check"
+        },
+        {
+          "id": "dv-01-a8",
+          "type": "regex_match",
+          "pattern": "INVALID|REGIME|CORE",
+          "description": "Must classify findings by sample-size thresholds"
+        },
+        {
+          "id": "dv-01-a9",
+          "type": "regex_match",
+          "pattern": "E0.*PURGE|PURGE.*E0|E0 is purged|purged.*E0",
+          "description": "Must note E0 is purged — default entry model is E2"
+        },
+        {
+          "id": "dv-01-a10",
+          "type": "regex_match",
+          "pattern": "RR.*1\\.|1\\..*RR|rr_target",
+          "description": "Must test multiple RR values in baseline scan"
+        },
+        {
+          "id": "dv-01-a11",
+          "type": "regex_match",
+          "pattern": "orb_minutes|aperture|\\b5m|\\b15m|\\b30m",
+          "description": "Must cover multiple apertures (5/15/30m)"
+        },
+        {
+          "id": "dv-01-a12",
+          "type": "regex_match",
+          "pattern": "validated|promising|observation",
+          "description": "Labels findings by statistical threshold (validated/promising/observation)"
+        }
+      ]
+    }
+  ]
+}
