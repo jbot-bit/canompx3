@@ -1,0 +1,54 @@
+{
+  "skill": "quant-debug",
+  "version": 1,
+  "tests": [
+    {
+      "id": "qd-01",
+      "prompt": "why are there zero trades for MGC TOKYO_OPEN",
+      "assertions": [
+        {
+          "id": "qd-01-a1",
+          "type": "regex_match",
+          "pattern": "(orb_outcomes|daily_features|bars_1m)",
+          "description": "Queries a canonical data layer first before reading code"
+        },
+        {
+          "id": "qd-01-a2",
+          "type": "regex_match",
+          "pattern": "(filter|filter_type|daily_features.*join|join.*daily_features)",
+          "description": "Checks filter application — orb_outcomes must be joined with daily_features"
+        },
+        {
+          "id": "qd-01-a3",
+          "type": "regex_match",
+          "pattern": "(TOKYO_OPEN|tokyo_open|session.*MGC|MGC.*session)",
+          "description": "Checks orb_outcomes for the specific session being debugged"
+        },
+        {
+          "id": "qd-01-a4",
+          "type": "regex_not_match",
+          "pattern": "(it'?s? (probably|likely) a bug|assume.*bug|must be a bug)",
+          "description": "Does NOT assume a bug without evidence"
+        },
+        {
+          "id": "qd-01-a5",
+          "type": "regex_match",
+          "pattern": "(\\d+ row|row.*\\d+|count.*\\d+|\\d+.*count|= \\d+|returned \\d+|found \\d+)",
+          "description": "Reports actual row counts from data query"
+        },
+        {
+          "id": "qd-01-a6",
+          "type": "regex_match",
+          "pattern": "(missing data|date range|no rows|empty|zero rows|0 rows|filter too strict|G6|G8|low N|expected)",
+          "description": "Traces pipeline path — identifies root cause category (C: missing data)"
+        },
+        {
+          "id": "qd-01-a7",
+          "type": "regex_not_match",
+          "pattern": "(loosen.*filter|relax.*filter|fix.*filter.*increase|increase.*sample)",
+          "description": "Does NOT suggest loosening filters to increase sample size"
+        }
+      ]
+    }
+  ]
+}

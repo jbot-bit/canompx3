@@ -1,0 +1,72 @@
+{
+  "skill": "quant-tdd",
+  "description": "Evals for quant-tdd skill — verifies RED-GREEN-REFACTOR cycle is followed, test is written before implementation, canonical sources are used, and drift check is included.",
+  "tests": [
+    {
+      "id": "vwap-filter-tdd",
+      "prompt": "implement a new VWAP filter in build_daily_features.py",
+      "assertions": [
+        {
+          "id": "test-before-implementation",
+          "description": "Writes or discusses writing a test BEFORE the implementation code",
+          "type": "regex_match",
+          "pattern": "RED|write.*test.*first|test.*before.*impl|failing test|write.*failing"
+        },
+        {
+          "id": "checks-test-map",
+          "description": "Checks TEST_MAP or post-edit-pipeline.py for test file mapping",
+          "type": "regex_match",
+          "pattern": "TEST_MAP|post-edit-pipeline\\.py"
+        },
+        {
+          "id": "test-file-path-convention",
+          "description": "References test file path matching tests/test_<module>/test_<filename>.py convention",
+          "type": "regex_match",
+          "pattern": "tests/test_|test_build_daily_features|tests\\\\test_"
+        },
+        {
+          "id": "no-implementation-first",
+          "description": "Does NOT write implementation code before the test (no def.*vwap in production code section before test section)",
+          "type": "regex_not_match",
+          "pattern": "(?:implementation|def.*vwap|def.*filter)[\\s\\S]{0,200}(?:RED|write.*test|failing test)"
+        },
+        {
+          "id": "references-canonical-sources",
+          "description": "References canonical sources (asset_configs, dst, cost_model, etc.) — never hardcodes",
+          "type": "regex_match",
+          "pattern": "ACTIVE_ORB_INSTRUMENTS|SESSION_CATALOG|COST_SPECS|asset_configs|integrity.guardian|canonical"
+        },
+        {
+          "id": "verify-red-step",
+          "description": "Instructs to run pytest to verify the test FAILS first",
+          "type": "regex_match",
+          "pattern": "pytest.*-v|verify.*fail|must fail|confirm.*fail|RED.*verif|run.*test.*fail"
+        },
+        {
+          "id": "drift-check-in-completion",
+          "description": "Includes drift check (check_drift.py) in the completion/verification step",
+          "type": "regex_match",
+          "pattern": "check_drift\\.py|drift check"
+        },
+        {
+          "id": "blast-radius-before-production",
+          "description": "Mentions blast-radius check before touching production code",
+          "type": "regex_match",
+          "pattern": "blast.radius|blast_radius"
+        },
+        {
+          "id": "reads-existing-tests-first",
+          "description": "Reads existing tests to understand fixtures and style before writing new test",
+          "type": "regex_match",
+          "pattern": "read.*exist|existing test|conftest|tmp_db|fixture"
+        },
+        {
+          "id": "completion-gate-checklist",
+          "description": "Includes completion gate or checklist items (every new function has a test, RED verified, GREEN verified, etc.)",
+          "type": "regex_match",
+          "pattern": "completion gate|every new function|RED verified|GREEN verified|\\[ \\]|\\[x\\]"
+        }
+      ]
+    }
+  ]
+}

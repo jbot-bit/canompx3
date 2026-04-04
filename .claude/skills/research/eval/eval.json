@@ -1,0 +1,72 @@
+{
+  "skill": "research",
+  "version": 1,
+  "tests": [
+    {
+      "id": "rs-01",
+      "prompt": "research whether gap size predicts ORB success",
+      "assertions": [
+        {
+          "id": "rs-01-a1",
+          "type": "regex_match",
+          "pattern": "(?:NO.?GO|Blueprint|blueprint|dead|prior research)",
+          "description": "Step 0: checks Blueprint NO-GO registry"
+        },
+        {
+          "id": "rs-01-a2",
+          "type": "regex_match",
+          "pattern": "(?:H0|H1|null|hypothesis|mechanism)",
+          "description": "Step 1: frames hypothesis with H0/H1"
+        },
+        {
+          "id": "rs-01-a3",
+          "type": "regex_match",
+          "pattern": "(?:kill.*criterion|falsif|disprove|kills this)",
+          "description": "Step 1: defines kill criterion"
+        },
+        {
+          "id": "rs-01-a4",
+          "type": "command_ran",
+          "pattern": "(?:duckdb|python|GOLD_DB_PATH|gold\\.db)",
+          "description": "Queries data (not just reads code)"
+        },
+        {
+          "id": "rs-01-a5",
+          "type": "regex_match",
+          "pattern": "p[\\s=<>]+0\\.\\d+|p-value",
+          "description": "Reports actual p-value from statistical test"
+        },
+        {
+          "id": "rs-01-a6",
+          "type": "regex_match",
+          "pattern": "N[\\s=:]+\\d+|sample.?size|n[\\s=]+\\d{2,}",
+          "description": "Reports sample size N"
+        },
+        {
+          "id": "rs-01-a7",
+          "type": "regex_not_match",
+          "pattern": "from memory|I recall|previously found",
+          "description": "Does NOT cite stats from memory"
+        },
+        {
+          "id": "rs-01-a8",
+          "type": "regex_match",
+          "pattern": "(?:orb_outcomes|daily_features|bars_1m)",
+          "description": "Uses canonical layers"
+        },
+        {
+          "id": "rs-01-a9",
+          "type": "regex_match",
+          "pattern": "(?:BH|FDR|Bonferroni|multiple.?test|K\\s*=)",
+          "description": "Addresses multiple testing correction"
+        },
+        {
+          "id": "rs-01-a10",
+          "type": "regex_match",
+          "pattern": "(?:VALIDATED|KILL|DEAD|ARITHMETIC_ONLY|verdict|finding)",
+          "description": "Provides clear verdict label"
+        }
+      ]
+    }
+  ]
+}
