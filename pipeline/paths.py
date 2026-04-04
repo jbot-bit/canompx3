@@ -71,3 +71,6 @@ DEFAULT_DBN_FILE = OHLCV_DIR / "glbx-mdp3-20100912-20260203.ohlcv-1m.dbn.zst"
 
 # Trace logs directory (structured JSON audit/research traces)
 TRACES_DIR = PROJECT_ROOT / "logs" / "traces"
+
+# Live trading journal — separate DB to avoid write contention with gold.db
+LIVE_JOURNAL_DB_PATH = PROJECT_ROOT / "live_journal.db"

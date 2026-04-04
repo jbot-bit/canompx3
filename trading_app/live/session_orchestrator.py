@@ -24,7 +24,7 @@ from pipeline.calendar_filters import day_of_week, is_friday, is_nfp_day, is_ope
 from pipeline.cost_model import CostSpec, get_cost_spec
 from pipeline.daily_backfill import run_backfill_for_instrument
 from pipeline.db_config import configure_connection
-from pipeline.paths import GOLD_DB_PATH
+from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.live.bar_aggregator import Bar
 from trading_app.live.broker_factory import create_broker_components, get_broker_name
@@ -352,7 +352,7 @@ class SessionOrchestrator:
 
         # Persistent trade journal — survives process crashes (separate DB to avoid contention)
         journal_mode = "signal" if signal_only else ("demo" if demo else "live")
-        journal_path = Path(__file__).parent.parent.parent / "live_journal.db"
+        journal_path = LIVE_JOURNAL_DB_PATH
         self.journal = TradeJournal(journal_path, mode=journal_mode)
         if not self.journal.is_healthy:
             if journal_mode == "live":
