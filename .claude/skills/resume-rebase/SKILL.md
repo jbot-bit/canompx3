@@ -21,7 +21,8 @@ Extract `updated` timestamp and scope_lock files from STAGE_STATE.md.
 
 ### Tier 1 — DRIFT STALE (authoritative, check first)
 
-Run in parallel:
+Run drift check first: `python pipeline/check_drift.py` — if drift checks fail, scope assumptions may be invalid.
+Then run in parallel:
 - `git log --oneline --since="[updated]" -- [each scope_lock file]`
   → Any commits touching scope files since last update? → DRIFT STALE
 - `git diff --name-only HEAD -- [each scope_lock file]`

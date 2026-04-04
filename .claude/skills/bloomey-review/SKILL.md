@@ -42,7 +42,7 @@ VERDICT:  Does evidence SUPPORT or REFUTE my premise?
 
 **Why this exists:** Standard reasoning lets reviewers claim "this might be an issue" without tracing the actual code path. Semi-formal reasoning forces you to follow function calls and data flows step-by-step. This catches edge cases (like shadowed function names or upstream guards) that surface-level pattern matching misses. Confidence without trace is worse than no finding.
 
-In the output, show the TRACE for every Critical/High finding. For Medium/Low, the line citation suffices.
+In the output, show PREMISE → TRACE → EVIDENCE → VERDICT for every Critical/High finding. The word "VERDICT:" MUST appear literally. For Medium/Low, the line citation suffices.
 
 ### Step 0: Identify What to Review
 
@@ -128,7 +128,7 @@ After all findings, provide 1-3 concrete improvements:
 | **B** | Multiple MEDIUM sins or one HIGH sin with mitigation |
 | **C** | One CRITICAL sin or multiple HIGH sins |
 | **D** | Multiple CRITICAL sins or fundamental design flaw |
-| **F** | Look-ahead bias in production code, or data snooping without FDR |
+| **F** | Look-ahead bias in production code, or data snooping without FDR. **Confirmed look-ahead = automatic F, no exceptions.** |
 
 ### Output Format
 
