@@ -27,14 +27,14 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from pipeline.db_config import configure_connection
 from pipeline.dst import SESSION_CATALOG
-from pipeline.paths import GOLD_DB_PATH
+from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.live.bot_state import read_state
 
 log = logging.getLogger(__name__)
 
 PORT = int(os.environ.get("BOT_DASHBOARD_PORT", "8080"))
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-JOURNAL_PATH = PROJECT_ROOT / "live_journal.db"
+JOURNAL_PATH = LIVE_JOURNAL_DB_PATH
 STOP_FILE = PROJECT_ROOT / "live_session.stop"
 LOG_DIR = PROJECT_ROOT / "logs"
 BRISBANE_TZ = ZoneInfo("Australia/Brisbane")

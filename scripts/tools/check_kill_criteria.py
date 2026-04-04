@@ -32,6 +32,8 @@ from pathlib import Path
 
 import duckdb
 
+from pipeline.paths import LIVE_JOURNAL_DB_PATH
+
 # =========================================================================
 # Pre-registered kill thresholds (FROZEN -- from pre-registration doc)
 # =========================================================================
@@ -89,7 +91,7 @@ def compute_obf_p_equivalent(z_boundary: float) -> float:
 
 
 def _default_journal_path() -> Path:
-    return Path(__file__).parent.parent.parent / "live_journal.db"
+    return LIVE_JOURNAL_DB_PATH
 
 
 def load_journal(journal_path: Path, instrument: str = "MNQ") -> list[dict]:
