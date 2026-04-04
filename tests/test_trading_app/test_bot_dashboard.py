@@ -55,20 +55,20 @@ def test_strategy_meta_extracts_human_readable_lane_fields():
 
 def test_legacy_lanes_reconstruct_all_profile_lanes_and_mark_ambiguous_shared_sessions():
     profile = ACCOUNT_PROFILES["topstep_50k_type_a"]
-    mnq_comex = next(l for l in profile.daily_lanes if l.strategy_id == "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_VOL_8K")
-    mes_comex = next(l for l in profile.daily_lanes if l.strategy_id == "MES_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8_S075")
+    mnq_nyse = next(l for l in profile.daily_lanes if l.strategy_id == "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50")
+    mes_nyse = next(l for l in profile.daily_lanes if l.strategy_id == "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12")
 
     cards = _legacy_lanes_to_lane_cards(
         lanes={
-            "COMEX_SETTLE": {
-                "strategy_id": mnq_comex.strategy_id,
+            "NYSE_OPEN": {
+                "strategy_id": mnq_nyse.strategy_id,
                 "status": "IN_TRADE",
                 "direction": "long",
                 "entry_price": 21543.25,
                 "current_pnl_r": 0.8,
-                "rr_target": 1.5,
+                "rr_target": 1.0,
                 "orb_minutes": 5,
-                "filter_type": "ORB_VOL_8K",
+                "filter_type": "OVNRNG_50",
             }
         },
         trading_day=date(2026, 4, 3),
@@ -77,14 +77,14 @@ def test_legacy_lanes_reconstruct_all_profile_lanes_and_mark_ambiguous_shared_se
 
     assert len(cards) == len(profile.daily_lanes)
 
-    mnq_card = next(card for card in cards if card["strategy_id"] == mnq_comex.strategy_id)
-    mes_card = next(card for card in cards if card["strategy_id"] == mes_comex.strategy_id)
+    mnq_card = next(card for card in cards if card["strategy_id"] == mnq_nyse.strategy_id)
+    mes_card = next(card for card in cards if card["strategy_id"] == mes_nyse.strategy_id)
 
     assert mnq_card["status"] == "IN_TRADE"
     assert mnq_card["direction"] == "long"
-    assert mnq_card["session_time_brisbane"] == "03:30"
+    assert mnq_card["session_time_brisbane"] == "23:30"
 
     assert mes_card["status"] == "UNKNOWN"
     assert mes_card["status_detail"] is not None
     assert "cannot disambiguate" in mes_card["status_detail"]
-    assert mes_card["session_time_brisbane"] == "03:30"
+    assert mes_card["session_time_brisbane"] == "23:30"
