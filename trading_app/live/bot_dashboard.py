@@ -245,7 +245,8 @@ def _legacy_lanes_to_lane_cards(
                         }
                     )
         except Exception:
-            pass
+            log.warning("Failed to load profile %r for lane reconstruction — falling back to raw lanes",
+                        profile_id, exc_info=True)
 
     if not lane_cards:
         for session_name, lane in raw_lanes.items():
