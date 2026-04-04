@@ -131,6 +131,54 @@
           "type": "regex_match",
           "pattern": "(?:failure.?mode|risk|edge.?case|what if)",
           "description": "Turn 4: identifies failure modes"
+        },
+        {
+          "id": "ds-03-a5",
+          "type": "regex_match",
+          "pattern": "(?:resources/|academic|literature|Carver|Chan|Lopez|Aronson|PDF|pdf)",
+          "description": "References academic literature or says none applies"
+        },
+        {
+          "id": "ds-03-a6",
+          "type": "regex_match",
+          "pattern": "(?:CUSUM|cumulative.?sum|changepoint|change.?point|regime.?break)",
+          "description": "Shows domain knowledge of CUSUM methodology"
+        }
+      ]
+    },
+    {
+      "id": "ds-04",
+      "prompt": "plan improving the pre-session check for deployment",
+      "assertions": [
+        {
+          "id": "ds-04-a1",
+          "type": "regex_match",
+          "pattern": "(?:prop_profiles|ACCOUNT_PROFILES|lane|deployment)",
+          "description": "Grounds in current deployment context"
+        },
+        {
+          "id": "ds-04-a2",
+          "type": "regex_match",
+          "pattern": "(?:pre_session|staleness|mismatch|fitness)",
+          "description": "References existing pre-session check infrastructure"
+        },
+        {
+          "id": "ds-04-a3",
+          "type": "regex_match",
+          "pattern": "(?:spec|docs/specs|existing.*spec)",
+          "description": "Checks for existing spec before redesigning"
+        },
+        {
+          "id": "ds-04-a4",
+          "type": "regex_match",
+          "pattern": "(?:memory|prior.*session|what.*learned|hard_lessons|history)",
+          "description": "Consults project memory / prior work in this area"
+        },
+        {
+          "id": "ds-04-a5",
+          "type": "text_not_contains",
+          "value": "def ",
+          "description": "No code in plan mode"
         }
       ]
     }
