@@ -31,7 +31,8 @@ INVESTIGATION_KEYWORDS = re.compile(
     r"what happened|how many|mismatch|diverge|divergence|wrong|bug|"
     r"real data|actual number|empirical|verify|count|trade count|"
     r"sample size|performance|how bad|magnitude|compare.*actual|"
-    r"query first|data first"
+    r"query first|data first|doesn.?t add up|looks? wrong|off|"
+    r"doesn.?t make sense|weird|something.?s? off|numbers"
     r")\b",
     re.IGNORECASE,
 )
@@ -42,7 +43,8 @@ TRADING_QUERY_KEYWORDS = re.compile(
     r"what do i trade|what.s live|my trades|my playbook|my portfolio|"
     r"trade tonight|trading tonight|what.s on tonight|"
     r"morning trades|evening trades|active strategies|"
-    r"what am i trading|current positions"
+    r"what am i trading|current positions|my strats|my book|"
+    r"show me my stuff|what.?s deployed|what.?s running"
     r")\b",
     re.IGNORECASE,
 )
