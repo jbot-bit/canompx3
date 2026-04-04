@@ -6,6 +6,45 @@
 
 ---
 
+## Update (Apr 4 — Claude: Research + Ghost Cleanup + Market Calendar)
+
+### Completed
+1. **Research: prev_close_position NO-GO.** Tested against validated universe (17,953 filtered trades). 0/17 BH survivors across pooled, per-session, gap interaction tests. Dead in all forms.
+2. **Research: Bull-day short avoidance VALIDATED.** p=0.0007, 14/17 years stable, survives BH FDR at K=22. Strongest at NYSE_OPEN (p=0.0005). Implement as half-size on bull-day shorts, not skip. Saved to memory + blueprint.
+3. **Validated Universe Rule** baked into `.claude/rules/research-truth-protocol.md`. Prevents testing against unfiltered 3.6M orb_outcomes — must scope to validated strategies with filters applied.
+4. **Ghost lane cleanup:** 62 ghost strategy_ids removed from 5 inactive profiles. All replaced with allocator-generated validated lanes. topstep_50k (conditional shadow) left intentionally.
+5. **Market calendar awareness:** New `pipeline/market_calendar.py` using `exchange-calendars` library. Session orchestrator blocks on CME holidays (RuntimeError), adjusts force-flatten on early close days to min(firm, exchange). Pre-session check gates on holidays.
+6. **Code review found 2 critical bugs, both fixed:** (a) Sunday evening CME open was blocked as holiday — fixed with `is_market_open_at()` ground truth. (b) Negative `mins_to_close` on late restart didn't trigger flatten — fixed with `_flatten_on_start` flag.
+
+### Key Findings
+- **prev_day_range standalone: NO-GO.** p=0.057, 69% corr with ATR. Already captured by existing filters.
+- **CME has 3 full holidays/year** (New Year, Good Friday, Christmas) and **8 early close days** (MLK, Presidents, Memorial, Jul 4, Labor, Thanksgiving, Black Friday, Christmas Eve). All close at 12:00 PM CT.
+- **Early close blocks 4 sessions:** COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE, CME_REOPEN (all start after 12:00 PM CT).
+- **exchange-calendars library covers through Apr 2027.** Beyond that: fail-open with WARNING log.
+- **Memory updated:** Stale `apex_100k_manual` reference corrected to `topstep_50k_mnq_auto` (5 lanes, 2 copies).
+
+### Files Changed
+- `pipeline/market_calendar.py` (NEW — holiday/early-close awareness)
+- `trading_app/live/session_orchestrator.py` (holiday block, early close flatten adjustment)
+- `trading_app/pre_session_check.py` (calendar gate)
+- `trading_app/prop_profiles.py` (62 ghost lanes replaced with allocator output)
+- `.claude/rules/research-truth-protocol.md` (Validated Universe Rule)
+- `tests/test_pipeline/test_market_calendar.py` (NEW — 35 tests)
+- `tests/test_trading_app/test_session_orchestrator.py` (calendar mock fixture, holiday tests)
+- `tests/test_trading_app/test_pre_session_check.py` (updated for new profile lanes)
+- `tests/test_trading_app/test_prop_profiles.py` (updated for new profile lanes)
+- `scripts/research/` (6 research scripts)
+- `pyproject.toml` + `uv.lock` (exchange-calendars dependency)
+
+### Next Session
+- **Stage 5:** Open Tradovate personal account (manual — no code)
+- **Stage 6:** Integration test (`run_live_session.py --profile self_funded_tradovate --signal-only`)
+- **Bull-short implementation:** Add half-size logic to execution engine when NYSE_OPEN lanes activate
+- **CUSUM fitness:** Action queue — faster regime break detection than monthly rebalance
+- **Databento backfill:** NQ zip (2016-2021) + extensions to 2010
+
+---
+
 ## Update (Apr 4 — Claude: Context Optimization V3 — ADHD Semantic Routing)
 
 ### Completed
