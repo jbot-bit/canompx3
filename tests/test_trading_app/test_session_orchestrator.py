@@ -196,6 +196,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._blocked_strategies = set()
     orch._orb_caps = {}  # ORB cap map — populated per test
     orch._max_risk_per_trade = None  # Dollar cap — populated per test
+    orch._regime_paused = set()  # Regime gate — populated per test
     orch.order_router = c.router
     orch.positions = c.positions
     orch._write_signal_record = MagicMock()
@@ -2188,5 +2189,55 @@ class TestMaxRiskPerTrade:
         """$300 risk exactly at $300 cap → accepted (strict greater-than)."""
         orch = self._build_risk_capped_orch(max_risk=300.0)
         event = _nyse_open_entry(risk_points=150.0)  # 150 × $2 = $300 exactly
+        await orch._handle_event(event)
+        assert len(orch.order_router.submitted) > 0
+
+
+@pytest.mark.asyncio
+class TestRegimeGate:
+    """Regime gate: block entries for strategies paused by allocator."""
+
+    def _build_regime_orch(self, paused: set[str] | None = None) -> SessionOrchestrator:
+        strat = _nyse_open_strategy()
+        portfolio = Portfolio(
+            name="test",
+            instrument="MNQ",
+            strategies=[strat],
+            account_equity=30000.0,
+            risk_per_trade_pct=2.0,
+            max_concurrent_positions=4,
+            max_daily_loss_r=5.0,
+        )
+        c = FakeBrokerComponents(fill_price=20000.0)
+        orch = build_orchestrator(c)
+        orch.instrument = "MNQ"
+        orch.portfolio = portfolio
+        orch._strategy_map = {strat.strategy_id: strat}
+        orch._regime_paused = paused or set()
+        return orch
+
+    async def test_paused_strategy_blocked(self):
+        """Strategy in _regime_paused → entry blocked, signal record written."""
+        sid = "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60_O15"
+        orch = self._build_regime_orch(paused={sid})
+        event = _nyse_open_entry(risk_points=100.0)
+        await orch._handle_event(event)
+        assert len(orch.order_router.submitted) == 0
+        orch._write_signal_record.assert_called()
+        record = orch._write_signal_record.call_args[0][0]
+        assert record["type"] == "REGIME_PAUSED"
+        assert record["strategy_id"] == sid
+
+    async def test_non_paused_strategy_proceeds(self):
+        """Strategy NOT in paused set → entry proceeds normally."""
+        orch = self._build_regime_orch(paused={"SOME_OTHER_STRATEGY"})
+        event = _nyse_open_entry(risk_points=100.0)
+        await orch._handle_event(event)
+        assert len(orch.order_router.submitted) > 0
+
+    async def test_empty_paused_set_all_proceed(self):
+        """Empty _regime_paused → backward compatible, all entries proceed."""
+        orch = self._build_regime_orch(paused=set())
+        event = _nyse_open_entry(risk_points=100.0)
         await orch._handle_event(event)
         assert len(orch.order_router.submitted) > 0
