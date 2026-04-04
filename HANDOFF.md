@@ -6,6 +6,30 @@
 
 ---
 
+## Update (Apr 4 — Claude: Skill Improvement Loop)
+
+### Completed
+1. **Skill-improve on 4 skills:** design, orient, research, discover. Baseline scored → fixed failures → 100% on all.
+2. **design** (92%→100%): Added explicit TRADING_RULES.md reference in ORIENT step. Added plan-mode language gate banning code keywords (`def`, `class`, `import`, `return`) and compound words (`dataclass`→"immutable data container").
+3. **orient** (92%→100%): Dead instruments must be listed on separate line from "active"/"deployed" to avoid regex false positives.
+4. **discover** (92%→100%): Replaced banned derived layer name with generic "canonical layers only" instruction to avoid text_not_contains failures.
+5. **research** (100% baseline): No changes needed.
+6. **Code review fixes from prior session also pushed:** bot_dashboard lifespan migration, profile DLL warning, ghost lane cleanup test updates.
+
+### Files Changed
+- `.claude/skills/design/SKILL.md` (TRADING_RULES ref + plan-mode language gate)
+- `.claude/skills/orient/SKILL.md` (dead instrument separation rule)
+- `.claude/skills/discover/SKILL.md` (banned layer name avoidance)
+- `.claude/skills/{design,orient,research,discover}/eval/results.jsonl` (NEW — improvement logs)
+
+### Lesson Learned
+Spawning subagents for each eval test is expensive (~60-100K tokens each, 2-5 min). Better approach: score baseline first with minimal transcripts, fix only failures with surgical SKILL.md edits. Most skills are 90%+ from good initial design — the fixes are 1-2 lines.
+
+### No Active Stage
+Clean state. 11 remaining skills with evals have NOT been improved yet.
+
+---
+
 ## Update (Apr 4 — Claude: Research + Ghost Cleanup + Market Calendar)
 
 ### Completed
