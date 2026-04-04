@@ -2075,6 +2075,58 @@ class SessionOrchestrator:
             )
             self.trading_day = actual_day
 
+        # Market calendar checks — FAIL-LOUD on holidays, adjust on early close
+        try:
+            from pipeline.market_calendar import (
+                effective_close_et,
+                is_cme_holiday,
+                is_early_close,
+            )
+
+            # Convert Brisbane trading day to US date for calendar lookup.
+            # Brisbane trading day (09:00→09:00) spans two US calendar dates.
+            # Use the US date that contains the bulk of US trading hours:
+            # Brisbane afternoon (14:00+) = same US date; morning = previous US date.
+            # Simplest correct approach: use UTC "now" to get the current US date.
+            us_date = datetime.now(ZoneInfo("America/New_York")).date()
+
+            if is_cme_holiday(us_date):
+                msg = (
+                    f"CME HOLIDAY ({us_date}) — ALL SESSIONS BLOCKED. "
+                    "Refusing to trade. Check cmegroup.com/holiday-calendar."
+                )
+                log.critical(msg)
+                self._notify(msg)
+                raise RuntimeError(msg)
+
+            if is_early_close(us_date):
+                log.warning(
+                    "EARLY CLOSE DAY (%s) — exchange closes at 12:00 PM CT / 1:00 PM ET",
+                    us_date,
+                )
+                self._notify(f"Early close day ({us_date}). Afternoon sessions will not fire.")
+                # Adjust force-flatten to the earlier of firm close and exchange close
+                if self._close_hour_et is not None:
+                    from datetime import time as dt_time
+
+                    firm_close = dt_time(self._close_hour_et, self._close_min_et or 0)
+                    eff = effective_close_et(us_date, firm_close_et=firm_close)
+                    if eff is not None and eff < firm_close:
+                        self._close_hour_et = eff.hour
+                        self._close_min_et = eff.minute
+                        log.warning(
+                            "Force-flatten adjusted: %02d:%02d ET (was %s)",
+                            eff.hour,
+                            eff.minute,
+                            firm_close,
+                        )
+        except ImportError:
+            log.warning("market_calendar not available — calendar checks skipped")
+        except RuntimeError:
+            raise  # Re-raise the holiday block
+        except Exception as e:
+            log.warning("Market calendar check failed: %s — proceeding without calendar awareness", e)
+
         # Run component self-tests before accepting any bars
         results = self.run_self_tests()
 

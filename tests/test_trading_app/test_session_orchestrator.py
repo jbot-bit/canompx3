@@ -16,6 +16,21 @@ import pytest
 
 from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live.session_orchestrator import SessionOrchestrator
+
+
+# ---------------------------------------------------------------------------
+# Global mock: prevent calendar holiday check from blocking tests.
+# Tests may run on actual CME holidays (e.g., Good Friday).
+# ---------------------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _mock_market_calendar():
+    with (
+        patch("pipeline.market_calendar.is_cme_holiday", return_value=False),
+        patch("pipeline.market_calendar.is_early_close", return_value=False),
+    ):
+        yield
+
+
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 
 # ---------------------------------------------------------------------------

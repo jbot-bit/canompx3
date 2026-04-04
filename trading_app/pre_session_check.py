@@ -346,6 +346,23 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
     today = date.today()
     results = []
 
+    # Market calendar (check FIRST — holidays override everything)
+    try:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from pipeline.market_calendar import is_cme_holiday, is_early_close
+
+        us_date = datetime.now(ZoneInfo("America/New_York")).date()
+        if is_cme_holiday(us_date):
+            print(f"BLOCKED: CME HOLIDAY ({us_date}) — all sessions closed.")
+            return False
+        if is_early_close(us_date):
+            print(f"WARNING: Early close day ({us_date}). Exchange closes 12:00 PM CT / 1:00 PM ET.")
+            print("         Afternoon sessions (COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE, CME_REOPEN) may not fire.")
+    except ImportError:
+        pass  # market_calendar not installed — skip
+
     # Manual halt (check first — overrides everything)
     ok, msg = check_manual_halt()
     results.append(("Manual halt", ok, msg))

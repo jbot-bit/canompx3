@@ -194,13 +194,14 @@ class TestManualHalt:
 
 
 def test_resolve_session_lane_ambiguous_profile_requires_strategy_specific_tool():
+    # NYSE_OPEN has both MNQ and MES lanes in type_a profiles
     with patch.dict(
         ACCOUNT_PROFILES,
         {"topstep_50k_type_a": replace(get_profile("topstep_50k_type_a"), active=True)},
         clear=False,
     ):
         with pytest.raises(ValueError, match="multiple lanes"):
-            _resolve_session_lane("US_DATA_1000", "topstep_50k_type_a")
+            _resolve_session_lane("NYSE_OPEN", "topstep_50k_type_a")
 
 
 def test_check_consistency_rule_fails_closed_on_ambiguous_active_profiles(monkeypatch):

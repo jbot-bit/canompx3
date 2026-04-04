@@ -90,7 +90,7 @@ One task at a time. Never batch without verification. **"Done" = tests pass (sho
 ### Design Proposal Gate (MANDATORY)
 Before writing ANY code on a non-trivial change, present: (1) **What** and why, (2) **Files** to touch, (3) **Blast radius**, (4) **Approach**.
 
-**Self-check (DO NOT SKIP):** Simulate happy path, edge case (NULL/empty/sparse), and failure mode internally. SHOW what you tested and found — don't just claim you checked. Fix flaws before presenting. Your first draft is always wrong.
+**Self-check (DO NOT SKIP):** Simulate happy path, edge case (NULL/empty/sparse), and failure mode internally. SHOW what you tested and found — don't just claim you checked. Performative self-review (claiming you checked without showing evidence) is worse than no self-review. Fix flaws before presenting. Your first draft is always wrong.
 
 Wait for user confirmation before writing code. Exceptions: trivial changes, "just do it", git ops, read-only exploration.
 
