@@ -361,7 +361,8 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
             print(f"WARNING: Early close day ({us_date}). Exchange closes 12:00 PM CT / 1:00 PM ET.")
             print("         Afternoon sessions (COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE, CME_REOPEN) may not fire.")
     except ImportError:
-        pass  # market_calendar not installed — skip
+        print("WARNING: market_calendar not available — holiday/early-close check SKIPPED")
+        print("         Install exchange-calendars: uv sync")
 
     # Manual halt (check first — overrides everything)
     ok, msg = check_manual_halt()
