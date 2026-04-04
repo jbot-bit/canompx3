@@ -14,6 +14,8 @@ import re
 import subprocess
 import sys
 import threading
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -37,7 +39,61 @@ STOP_FILE = PROJECT_ROOT / "live_session.stop"
 LOG_DIR = PROJECT_ROOT / "logs"
 BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
 
-app = FastAPI(title="Bot Dashboard")
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Startup: clean stale locks/state. Shutdown: terminate child processes."""
+    # ── Startup ──
+    import tempfile
+
+    lock_dir = Path(tempfile.gettempdir()) / "canompx3"
+    if lock_dir.exists():
+        for lock_file in lock_dir.glob("bot_*.lock"):
+            try:
+                lock_file.unlink()
+                log.info("Startup: removed stale lock %s", lock_file.name)
+            except PermissionError:
+                log.warning("Startup: lock %s still held — process may be running", lock_file.name)
+            except Exception:
+                pass
+
+    from trading_app.live.bot_state import STATE_FILE, clear_state
+
+    if STATE_FILE.exists():
+        state = read_state()
+        hb = state.get("heartbeat_utc")
+        if hb:
+            try:
+                age = (datetime.now(UTC) - datetime.fromisoformat(hb)).total_seconds()
+                if age > 300:  # 5 minutes stale = definitely dead
+                    clear_state()
+                    log.info("Startup: cleared stale bot_state (heartbeat %ds old)", int(age))
+            except Exception:
+                pass
+
+    yield
+
+    # ── Shutdown ──
+    for name, val in list(_bg_processes.items()):
+        if not isinstance(val, subprocess.Popen):
+            if hasattr(val, "close"):
+                try:
+                    val.close()
+                except Exception:
+                    pass
+            continue
+        if val.poll() is None:
+            log.warning("Shutdown: terminating orphaned %s process (PID %d)", name, val.pid)
+            try:
+                val.terminate()
+                val.wait(timeout=10)
+            except Exception:
+                try:
+                    val.kill()
+                except Exception:
+                    pass
+
+
+app = FastAPI(title="Bot Dashboard", lifespan=_lifespan)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -239,80 +295,6 @@ def _ensure_log_dir() -> Path:
     """Create logs/ directory if it doesn't exist."""
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     return LOG_DIR
-
-
-# ── Startup handler — clean up stale state from prior crashes ────────────────
-
-
-@app.on_event("startup")
-async def _startup_cleanup():
-    """Clean up stale lock files and bot state from prior crashes.
-
-    On Windows, crashed python.exe processes leave lock files and DB handles.
-    The .bat launcher kills processes; this handler cleans up any remaining
-    file-level artifacts so the dashboard starts clean every time.
-    """
-    import tempfile
-
-    lock_dir = Path(tempfile.gettempdir()) / "canompx3"
-    if lock_dir.exists():
-        for lock_file in lock_dir.glob("bot_*.lock"):
-            try:
-                lock_file.unlink()
-                log.info("Startup: removed stale lock %s", lock_file.name)
-            except PermissionError:
-                log.warning("Startup: lock %s still held — process may be running", lock_file.name)
-            except Exception:
-                pass
-
-    # Clear stale bot_state.json so dashboard shows STOPPED (not a ghost heartbeat)
-    from trading_app.live.bot_state import STATE_FILE, clear_state
-
-    if STATE_FILE.exists():
-        state = read_state()
-        hb = state.get("heartbeat_utc")
-        if hb:
-            try:
-                from datetime import UTC, datetime
-
-                age = (datetime.now(UTC) - datetime.fromisoformat(hb)).total_seconds()
-                if age > 300:  # 5 minutes stale = definitely dead
-                    clear_state()
-                    log.info("Startup: cleared stale bot_state (heartbeat %ds old)", int(age))
-            except Exception:
-                pass
-
-
-# ── Shutdown handler — prevent orphaned child processes ──────────────────────
-
-
-@app.on_event("shutdown")
-async def _shutdown_children():
-    """Terminate all background subprocesses and close file handles on server shutdown.
-
-    Without this, orphaned session or refresh processes continue running
-    after dashboard restart — a live bot with no dashboard monitoring it.
-    """
-    for name, val in list(_bg_processes.items()):
-        # Skip non-Popen entries (log paths, file handles stored as metadata)
-        if not isinstance(val, subprocess.Popen):
-            # Close any file handles
-            if hasattr(val, "close"):
-                try:
-                    val.close()
-                except Exception:
-                    pass
-            continue
-        if val.poll() is None:
-            log.warning("Shutdown: terminating orphaned %s process (PID %d)", name, val.pid)
-            try:
-                val.terminate()
-                val.wait(timeout=10)
-            except Exception:
-                try:
-                    val.kill()
-                except Exception:
-                    pass
 
 
 # ── API Endpoints ─────────────────────────────────────────────────────────────
