@@ -1,3 +1,9 @@
+---
+paths:
+  - "pipeline/check_drift.py"
+  - "trading_app/config.py"
+  - "trading_app/strategy_*.py"
+---
 # Large File Reading Protocol
 
 Read tool limit: 2000 lines/call — files above this are silently truncated.

@@ -27,12 +27,12 @@ STATE_FILE = Path(__file__).parent / ".data-first-state.json"
 # Keywords that signal an investigation (user wants data, not code reading)
 INVESTIGATION_KEYWORDS = re.compile(
     r"\b("
-    r"check|investigate|why is|why are|why does|why did|what.s happening|"
+    r"check|investigate|why is|why are|why does|why did|what.?s happening|"
     r"what happened|how many|mismatch|diverge|divergence|wrong|bug|"
     r"real data|actual number|empirical|verify|count|trade count|"
     r"sample size|performance|how bad|magnitude|compare.*actual|"
     r"query first|data first|doesn.?t add up|looks? wrong|off|"
-    r"doesn.?t make sense|weird|something.?s? off|numbers"
+    r"doesn.?t make sense|weird|something.?s off|numbers"
     r")\b",
     re.IGNORECASE,
 )
@@ -40,8 +40,8 @@ INVESTIGATION_KEYWORDS = re.compile(
 # Keywords for trading queries — must use build_live_portfolio(), not validated_setups
 TRADING_QUERY_KEYWORDS = re.compile(
     r"\b("
-    r"what do i trade|what.s live|my trades|my playbook|my portfolio|"
-    r"trade tonight|trading tonight|what.s on tonight|"
+    r"what do i trade|what.?s live|my trades|my playbook|my portfolio|"
+    r"trade tonight|trading tonight|what.?s on tonight|"
     r"morning trades|evening trades|active strategies|"
     r"what am i trading|current positions|my strats|my book|"
     r"show me my stuff|what.?s deployed|what.?s running"
@@ -53,7 +53,7 @@ TRADING_QUERY_KEYWORDS = re.compile(
 SESSION_TIME_KEYWORDS = re.compile(
     r"\b("
     r"what time|when does|when is|session time|trade time|"
-    r"tonight.s session|what.s on at|schedule tonight|"
+    r"tonight.?s session|what.?s on at|schedule tonight|"
     r"session start|when.*open|when.*close"
     r")\b",
     re.IGNORECASE,
@@ -135,8 +135,8 @@ RESEARCH_KEYWORDS = re.compile(
 
 ORIENT_KEYWORDS = re.compile(
     r"\b("
-    r"where are we|what.s the status|orient|what.s broken|"
-    r"state of|health check|what needs doing|what.s next"
+    r"where are we|what.?s the status|orient|what.?s broken|"
+    r"state of|health check|what needs doing|what.?s next"
     r")\b",
     re.IGNORECASE,
 )
