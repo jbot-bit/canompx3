@@ -76,7 +76,11 @@ After implementing a fix:
 ### NEVER Do This
 
 - Guess at a fix without reproducing the bug first
-- "Fix" low trade counts by loosening filters (low N under strict filters is expected)
+- Suggest weakening filter criteria to get more trades — low N under strict filters (G6/G8) is expected, not a bug
 - Assume `double_break` can be used as a filter (it's look-ahead)
 - Trust line numbers from error messages without reading the actual code
 - Claim "fixed" without running the test and showing the output
+
+### Output Discipline
+
+When reporting findings, state row counts as concrete numbers (e.g., "orb_outcomes returned 0 rows", "daily_features has 4,562 rows"). Do NOT parrot rule text verbatim — summarize in your own words. If the root cause is "no data" or "no surviving strategies," say so directly with the evidence.
