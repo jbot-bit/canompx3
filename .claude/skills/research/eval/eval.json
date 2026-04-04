@@ -65,6 +65,60 @@
           "type": "regex_match",
           "pattern": "(?:VALIDATED|KILL|DEAD|ARITHMETIC_ONLY|verdict|finding)",
           "description": "Provides clear verdict label"
+        },
+        {
+          "id": "rs-01-a11",
+          "type": "regex_match",
+          "pattern": "(?:resources/|pdf|Aronson|Chan|Carver|Lopez|Harvey|Pardo|academic|literature)",
+          "description": "References local academic sources or says none available"
+        },
+        {
+          "id": "rs-01-a12",
+          "type": "regex_match",
+          "pattern": "(?:memory|pinecone|prior.*session|previous.*research|TRADING_RULES)",
+          "description": "Checks prior project research before running new tests"
+        },
+        {
+          "id": "rs-01-a13",
+          "type": "regex_match",
+          "pattern": "(?:adversarial|disprove|falsif|trying to fail|survive)",
+          "description": "Research is adversarial by default — trying to disprove"
+        }
+      ]
+    },
+    {
+      "id": "rs-02",
+      "prompt": "is break speed a real signal or noise",
+      "assertions": [
+        {
+          "id": "rs-02-a1",
+          "type": "regex_match",
+          "pattern": "(?:Blueprint|NO.?GO|break.?speed|RESURRECTED|Simpson)",
+          "description": "Checks Blueprint — break speed was resurrected from NO-GO (Simpson's paradox)"
+        },
+        {
+          "id": "rs-02-a2",
+          "type": "regex_match",
+          "pattern": "(?:break_delay_min|break.*delay|delay.*break)",
+          "description": "References the correct column name"
+        },
+        {
+          "id": "rs-02-a3",
+          "type": "command_ran",
+          "pattern": "(?:duckdb|python|GOLD_DB_PATH)",
+          "description": "Queries data, doesn't just cite prior findings"
+        },
+        {
+          "id": "rs-02-a4",
+          "type": "regex_match",
+          "pattern": "(?:WR|win.?rate|monoton|quintile|bin)",
+          "description": "Tests win rate monotonicity across bins"
+        },
+        {
+          "id": "rs-02-a5",
+          "type": "regex_match",
+          "pattern": "p[\\s=<>]+0\\.\\d+|p-value",
+          "description": "Reports p-value"
         }
       ]
     }

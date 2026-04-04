@@ -53,6 +53,48 @@
           "type": "regex_not_match",
           "pattern": "(?:active|ACTIVE|deployed|trading|live).*(?:M2K|MCL|SIL|M6E|MBT)|(?:M2K|MCL|SIL|M6E|MBT).*(?:active|ACTIVE|deployed|trading|live)",
           "description": "Does not reference dead instruments as active (mentioning them as dead is fine)"
+        },
+        {
+          "id": "or-02-a4",
+          "type": "regex_match",
+          "pattern": "(?:action.?queue|next_session_todo|ROADMAP|priority|todo)",
+          "description": "References action queue or roadmap for next steps"
+        },
+        {
+          "id": "or-02-a5",
+          "type": "regex_match",
+          "pattern": "(?:deploy|lane|prop|topstep|account|profile)",
+          "description": "References current deployment state"
+        }
+      ]
+    },
+    {
+      "id": "or-03",
+      "prompt": "orient me on the research state",
+      "assertions": [
+        {
+          "id": "or-03-a1",
+          "type": "regex_match",
+          "pattern": "(?:Blueprint|STRATEGY_BLUEPRINT|NO.?GO|dead)",
+          "description": "References Strategy Blueprint for research routing"
+        },
+        {
+          "id": "or-03-a2",
+          "type": "regex_match",
+          "pattern": "(?:ML.*DEAD|break.?speed|RESURRECTED|validated|124)",
+          "description": "Shows awareness of key research findings"
+        },
+        {
+          "id": "or-03-a3",
+          "type": "regex_match",
+          "pattern": "(?:holdout|2026|sacred|pre.?registered)",
+          "description": "References 2026 holdout status"
+        },
+        {
+          "id": "or-03-a4",
+          "type": "regex_match",
+          "pattern": "(?:memory|pinecone|prior.*finding|research.*history)",
+          "description": "Consults project memory for research context"
         }
       ]
     }
