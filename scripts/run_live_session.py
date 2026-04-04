@@ -305,24 +305,41 @@ def main() -> None:
         if args.raw_baseline:
             print("--profile and --raw-baseline are mutually exclusive.")
             sys.exit(1)
-        from trading_app.portfolio import build_profile_portfolio
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
 
-        raw_portfolio = build_profile_portfolio(profile_id=args.profile)
-        # Override instrument from profile (profile knows its instrument)
-        if not args.all and args.instrument is None:
-            args.instrument = raw_portfolio.instrument
-        elif args.instrument and args.instrument != raw_portfolio.instrument:
-            print(
-                f"WARNING: --instrument {args.instrument} conflicts with profile instrument "
-                f"{raw_portfolio.instrument}. Using profile instrument."
+        profile = ACCOUNT_PROFILES[args.profile]
+        profile_instruments = sorted({lane.instrument for lane in profile.daily_lanes})
+
+        if len(profile_instruments) > 1:
+            # Multi-instrument profile → route to MultiInstrumentRunner
+            # (build_profile_portfolio can't handle mixed instruments in one call)
+            args._multi_instrument_profile = True
+            args._profile_instruments = profile_instruments
+            log.info(
+                "Profile '%s' has %d instruments: %s → will use MultiInstrumentRunner",
+                args.profile,
+                len(profile_instruments),
+                profile_instruments,
             )
-            args.instrument = raw_portfolio.instrument
-        log.info(
-            "Profile '%s': %d strategies loaded for %s",
-            args.profile,
-            len(raw_portfolio.strategies),
-            raw_portfolio.instrument,
-        )
+        else:
+            args._multi_instrument_profile = False
+            from trading_app.portfolio import build_profile_portfolio
+
+            raw_portfolio = build_profile_portfolio(profile_id=args.profile)
+            if not args.all and args.instrument is None:
+                args.instrument = raw_portfolio.instrument
+            elif args.instrument and args.instrument != raw_portfolio.instrument:
+                print(
+                    f"WARNING: --instrument {args.instrument} conflicts with profile instrument "
+                    f"{raw_portfolio.instrument}. Using profile instrument."
+                )
+                args.instrument = raw_portfolio.instrument
+            log.info(
+                "Profile '%s': %d strategies loaded for %s",
+                args.profile,
+                len(raw_portfolio.strategies),
+                raw_portfolio.instrument,
+            )
     elif args.raw_baseline:
         if args.all:
             print("--raw-baseline + --all not supported. Use --instrument X.")
@@ -339,8 +356,9 @@ def main() -> None:
         )
         log.info("Raw baseline: %d strategies loaded", len(raw_portfolio.strategies))
 
-    # Validate instrument is set (required unless --profile inferred it)
-    if not args.instrument and not args.all:
+    # Validate instrument is set (required unless --profile inferred it or multi-instrument)
+    _is_multi_profile = getattr(args, "_multi_instrument_profile", False)
+    if not args.instrument and not args.all and not _is_multi_profile:
         print("ERROR: --instrument or --all is required (unless --profile is used).")
         sys.exit(1)
 
@@ -384,25 +402,40 @@ def main() -> None:
     # Stop-file path — cleaned up after session ends (feeds no longer delete it)
     _stop_file = Path(__file__).parent.parent / "live_session.stop"
 
-    # Multi-instrument mode (signal-only only — demo/live blocked above)
-    if args.all:
-        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+    # Multi-instrument mode: --all OR multi-instrument --profile
+    if args.all or _is_multi_profile:
         from trading_app.live.multi_runner import MultiInstrumentRunner
 
-        # Acquire instance lock for each instrument
-        for inst in ACTIVE_ORB_INSTRUMENTS:
-            acquire_instance_lock(inst)
+        if _is_multi_profile:
+            _insts = args._profile_instruments
+            for inst in _insts:
+                acquire_instance_lock(inst)
+            _names = ", ".join(_insts)
+            _print_mode_banner("signal" if signal_only else "live", f"PROFILE {args.profile} ({_names})")
+            runner = MultiInstrumentRunner(
+                instruments=_insts,
+                broker=args.broker,
+                demo=demo,
+                signal_only=signal_only,
+                account_id=args.account_id,
+                force_orphans=args.force_orphans,
+                profile_id=args.profile,
+            )
+        else:
+            from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 
-        _all_names = ", ".join(ACTIVE_ORB_INSTRUMENTS)
-        _print_mode_banner("signal", f"ALL ({_all_names})")
-        runner = MultiInstrumentRunner(
-            instruments=None,  # uses ACTIVE_ORB_INSTRUMENTS
-            broker=args.broker,
-            demo=demo,
-            signal_only=signal_only,
-            account_id=args.account_id,
-            force_orphans=args.force_orphans,
-        )
+            for inst in ACTIVE_ORB_INSTRUMENTS:
+                acquire_instance_lock(inst)
+            _all_names = ", ".join(ACTIVE_ORB_INSTRUMENTS)
+            _print_mode_banner("signal", f"ALL ({_all_names})")
+            runner = MultiInstrumentRunner(
+                instruments=None,  # uses ACTIVE_ORB_INSTRUMENTS
+                broker=args.broker,
+                demo=demo,
+                signal_only=signal_only,
+                account_id=args.account_id,
+                force_orphans=args.force_orphans,
+            )
         try:
             asyncio.run(runner.run())
         finally:

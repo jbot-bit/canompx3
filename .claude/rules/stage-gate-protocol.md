@@ -26,30 +26,14 @@ pipeline/, trading_app/, scripts/ (except reports/infra/gen_*)
 Pipeline logic, config, schema, validation, session, DB-write paths.
 See NEVER_TRIVIAL list in `.claude/hooks/stage-gate-guard.py`.
 
-## Stale detection (drift-first):
-1. Git log on scope files since last update → if changed → STALE
-2. >4 hours since update → AGE STALE (fallback)
+## Stale detection
+Git log on scope files since last update → if changed → STALE. >4 hours → AGE STALE.
 
-## Mid-execution discipline:
-When a script or command fails during execution:
-- Fix the infrastructure (import, env, path) → resume the plan
-- Do NOT change behavior (rewrite flow, replace scripts with manual steps, rework pipeline)
-- If the fix requires a system change → STOP, flag it, return to user
+## Mid-execution discipline
+When a script fails: fix infrastructure (import, env, path) → resume. Do NOT change behavior. If fix requires system change → STOP, flag, return to user.
 
 ## Scope Discipline (anti-creep)
-If you need to add files to scope_lock during implementation that weren't in the original plan:
-1. **Inform the user** — explain why the extra file is needed.
-2. **Update blast_radius** — the new file may have its own downstream consumers and tests.
-3. **Do NOT silently expand scope.** Self-expanding scope_lock without telling the user is how subtle bugs get buried.
+Adding files to scope_lock mid-implementation: (1) inform user why, (2) update blast_radius, (3) NEVER silently expand scope.
 
-## Stage Completion Requirements
-Before deleting STAGE_STATE.md (closing a stage):
-1. **Tests:** Run affected tests. Paste actual pass/fail output — not "should pass."
-2. **Dead code:** `grep -r` for functions, imports, or config entries orphaned by this change. Remove them before closing.
-3. **Drift:** `python pipeline/check_drift.py` must pass.
-4. **"Implementation complete" or "done" without all three = stage stays open.** Do not close it.
-
-## Token efficiency:
-- TRIVIAL state = 3 lines. Don't over-document quick fixes.
-- Stage awareness hook = 1-3 lines per message. Includes workflow directives when relevant.
-- Don't re-read STAGE_STATE.md if the hook already told you the mode.
+## Stage Completion — "done" means PROVEN
+Before deleting STAGE_STATE.md: (1) tests pass (show output), (2) dead code swept (`grep -r`), (3) `python pipeline/check_drift.py` passes. All three required.

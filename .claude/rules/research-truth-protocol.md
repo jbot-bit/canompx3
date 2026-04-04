@@ -1,3 +1,11 @@
+---
+paths:
+  - "trading_app/strategy_*"
+  - "trading_app/outcome_*"
+  - "research/**"
+  - "scripts/tools/*"
+  - "scripts/reports/*"
+---
 # Research Truth Protocol (enforced 2026-03-24)
 
 Canonical authority: `RESEARCH_RULES.md` § Discovery Layer Discipline.

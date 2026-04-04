@@ -14,6 +14,7 @@ import logging
 from pathlib import Path
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from trading_app.portfolio import build_profile_portfolio
 
 from .session_orchestrator import SessionOrchestrator
 
@@ -39,9 +40,16 @@ class MultiInstrumentRunner:
         signal_only: bool = True,
         account_id: int = 0,
         force_orphans: bool = False,
+        profile_id: str | None = None,
     ):
         if instruments is None:
-            instruments = list(ACTIVE_ORB_INSTRUMENTS)
+            if profile_id is not None:
+                from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+                profile = ACCOUNT_PROFILES[profile_id]
+                instruments = sorted({lane.instrument for lane in profile.daily_lanes})
+            else:
+                instruments = list(ACTIVE_ORB_INSTRUMENTS)
 
         self.instruments = instruments
         self.orchestrators: dict[str, SessionOrchestrator] = {}
@@ -49,6 +57,10 @@ class MultiInstrumentRunner:
 
         for inst in instruments:
             try:
+                portfolio = None
+                if profile_id is not None:
+                    portfolio = build_profile_portfolio(profile_id, instrument=inst)
+
                 orch = SessionOrchestrator(
                     instrument=inst,
                     broker=broker,
@@ -56,6 +68,7 @@ class MultiInstrumentRunner:
                     signal_only=signal_only,
                     account_id=account_id,
                     force_orphans=force_orphans,
+                    portfolio=portfolio,
                 )
                 self.orchestrators[inst] = orch
                 log.info(

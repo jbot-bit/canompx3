@@ -1,3 +1,10 @@
+---
+paths:
+  - "trading_app/mcp_server.py"
+  - "trading_app/strategy_*"
+  - "trading_app/outcome_*"
+  - "scripts/reports/*"
+---
 # MCP Server Usage (gold-db)
 
 ## Golden Rule
