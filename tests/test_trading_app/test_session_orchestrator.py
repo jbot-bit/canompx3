@@ -774,31 +774,18 @@ class TestKillSwitch:
                 await orch.run()
 
     async def test_sunday_evening_not_blocked(self, orch):
-        """Sunday evening CME open must NOT be blocked as holiday."""
+        """Sunday evening: is_cme_holiday=True but market open -> no RuntimeError."""
+        feed_inst = MagicMock()
+        feed_inst.run = AsyncMock(return_value=None)
+        feed_inst.was_stopped = True
+        orch._feed_class = MagicMock(return_value=feed_inst)
 
-        class InstantFeed:
-            def __init__(self, *a, **kw):
-                self._stop_requested = False
-
-            def stop(self):
-                self._stop_requested = True
-
-            @property
-            def was_stopped(self):
-                return self._stop_requested
-
-            async def run(self, symbol):
-                return
-
-        orch._feed_class = InstantFeed
-
-        # is_cme_holiday=True (Sunday date) but market IS open (overnight session)
         with (
             patch("pipeline.market_calendar.is_cme_holiday", return_value=True),
             patch("pipeline.market_calendar.is_market_open_at", return_value=True),
             patch("pipeline.market_calendar.is_early_close", return_value=False),
         ):
-            await orch.run()  # Should NOT raise
+            await orch.run()  # Must NOT raise RuntimeError
 
     async def test_bar_heartbeat_logs_gap(self, orch):
         """Bar heartbeat detects >180s gap and logs CRITICAL."""
