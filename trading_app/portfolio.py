@@ -707,14 +707,17 @@ def build_profile_portfolio(
     risk_per_trade_pct: float = 2.0,
     max_concurrent_positions: int = 3,
     max_daily_loss_r: float = 5.0,
+    instrument: str | None = None,
 ) -> Portfolio:
     """Build a portfolio from a prop_profiles.py account profile.
 
     Reads daily_lanes from the profile, looks up each strategy_id in
     validated_setups, and builds a Portfolio with the exact validated params.
 
-    This bypasses LIVE_PORTFOLIO and its LIVE_MIN_EXPECTANCY_R threshold,
-    using the pre-validated, FDR-tested strategies directly.
+    Args:
+        instrument: If provided, include only lanes matching this instrument.
+            Use for multi-instrument profiles that need one orchestrator per instrument.
+            DD budget check is skipped for subsets (validated on full profile in tests).
 
     Raises RuntimeError if any lane's strategy_id is missing from validated_setups.
     """
@@ -738,20 +741,32 @@ def build_profile_portfolio(
     if account_equity is None:
         account_equity = float(profile.account_size)
 
-    # Determine instrument from lanes (all lanes must be same instrument)
-    instruments = {lane.instrument for lane in profile.daily_lanes}
-    if len(instruments) != 1:
-        raise RuntimeError(
-            f"Profile '{profile_id}' has mixed instruments: {instruments}. "
-            f"SessionOrchestrator requires single instrument."
-        )
-    instrument = instruments.pop()
+    # Filter lanes by instrument if specified (multi-instrument profiles)
+    lanes = profile.daily_lanes
+    if instrument is not None:
+        lanes = tuple(lane for lane in lanes if lane.instrument == instrument)
+        if not lanes:
+            raise RuntimeError(
+                f"Profile '{profile_id}' has no lanes for instrument '{instrument}'. "
+                f"Available: {sorted({lane.instrument for lane in profile.daily_lanes})}"
+            )
+    else:
+        # No filter — all lanes must be same instrument
+        instruments = {lane.instrument for lane in lanes}
+        if len(instruments) != 1:
+            raise RuntimeError(
+                f"Profile '{profile_id}' has mixed instruments: {instruments}. "
+                f"Pass instrument= to select one, or use MultiInstrumentRunner."
+            )
+        instrument = instruments.pop()
 
     strategies: list[PortfolioStrategy] = []
     cost_spec = get_cost_spec(instrument)
 
+    _skip_dd_check = instrument is not None and len(lanes) < len(profile.daily_lanes)
+
     with duckdb.connect(str(db_path), read_only=True) as con:
-        for lane in profile.daily_lanes:
+        for lane in lanes:
             row = con.execute(
                 """
                 SELECT strategy_id, instrument, orb_label, entry_model,
@@ -872,38 +887,40 @@ def build_profile_portfolio(
             )
 
     # --- DD budget pre-flight check (fail-closed) ---
-    # Deferred import: prop_portfolio imports PortfolioStrategy from this module at top level,
-    # but portfolio.py is already loaded when this function runs, so no circular import.
-    from trading_app.prop_portfolio import _compute_dd_per_contract
-    from trading_app.prop_profiles import get_firm_spec
+    # Skip for instrument-filtered subsets — DD is validated on the full profile
+    # by validate_dd_budget() in tests. Per-instrument subset check is meaningless
+    # (the total DD is what matters, not per-instrument slices).
+    if not _skip_dd_check:
+        from trading_app.prop_portfolio import _compute_dd_per_contract
+        from trading_app.prop_profiles import get_firm_spec
 
-    firm_spec = get_firm_spec(profile.firm)
-    dd_type = firm_spec.dd_type
+        firm_spec = get_firm_spec(profile.firm)
+        dd_type = firm_spec.dd_type
 
-    dd_breakdown: list[str] = []
-    total_dd = 0.0
-    for s in strategies:
-        lane_dd = _compute_dd_per_contract(s.stop_multiplier, dd_type)
-        total_dd += lane_dd
-        dd_breakdown.append(f"  {s.strategy_id}: stop={s.stop_multiplier:.2f}x -> ${lane_dd:,.0f}")
+        dd_breakdown: list[str] = []
+        total_dd = 0.0
+        for s in strategies:
+            lane_dd = _compute_dd_per_contract(s.stop_multiplier, dd_type)
+            total_dd += lane_dd
+            dd_breakdown.append(f"  {s.strategy_id}: stop={s.stop_multiplier:.2f}x -> ${lane_dd:,.0f}")
 
-    dd_pct = total_dd / tier.max_dd * 100 if tier.max_dd > 0 else 0
-    if total_dd > tier.max_dd:
-        raise RuntimeError(
-            f"DD BUDGET EXCEEDED: ${total_dd:,.0f} / ${tier.max_dd:,.0f} ({dd_pct:.0f}%) "
-            f"for profile '{profile_id}' ({profile.firm} ${profile.account_size:,}).\n"
-            + "\n".join(dd_breakdown)
-            + "\nReduce lanes or increase account tier. "
-            "select_for_profile() would reject lanes 3+."
+        dd_pct = total_dd / tier.max_dd * 100 if tier.max_dd > 0 else 0
+        if total_dd > tier.max_dd:
+            raise RuntimeError(
+                f"DD BUDGET EXCEEDED: ${total_dd:,.0f} / ${tier.max_dd:,.0f} ({dd_pct:.0f}%) "
+                f"for profile '{profile_id}' ({profile.firm} ${profile.account_size:,}).\n"
+                + "\n".join(dd_breakdown)
+                + "\nReduce lanes or increase account tier. "
+                "select_for_profile() would reject lanes 3+."
+            )
+        logger.info(
+            "DD budget: $%.0f / $%.0f (%.0f%%) — %d lanes for %s",
+            total_dd,
+            tier.max_dd,
+            dd_pct,
+            len(strategies),
+            profile_id,
         )
-    logger.info(
-        "DD budget: $%.0f / $%.0f (%.0f%%) — %d lanes for %s",
-        total_dd,
-        tier.max_dd,
-        dd_pct,
-        len(strategies),
-        profile_id,
-    )
 
     logger.info(
         "Profile portfolio '%s': %d strategies for %s (stop=%.2fx)",

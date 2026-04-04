@@ -197,6 +197,49 @@ class TestMultiInstrumentRunner:
         mock_mnq.run.assert_awaited_once()
 
 
+class TestProfileInjection:
+    """Multi-instrument profile creates per-instrument orchestrators with portfolios."""
+
+    @patch("trading_app.live.multi_runner.SessionOrchestrator")
+    @patch("trading_app.live.multi_runner.build_profile_portfolio")
+    def test_profile_creates_per_instrument_portfolios(self, mock_build, mock_orch_cls):
+        """profile_id triggers build_profile_portfolio per instrument."""
+        mock_portfolio = MagicMock()
+        mock_portfolio.strategies = [MagicMock()]
+        mock_build.return_value = mock_portfolio
+        mock_orch = MagicMock()
+        mock_orch.portfolio.strategies = [MagicMock()]
+        mock_orch_cls.return_value = mock_orch
+
+        runner = MultiInstrumentRunner(
+            instruments=["MGC", "MNQ"],
+            profile_id="topstep_50k_mnq_auto",
+            signal_only=True,
+        )
+
+        assert mock_build.call_count == 2
+        # Verify each call got the right instrument filter
+        calls = {c.kwargs["instrument"] for c in mock_build.call_args_list}
+        assert calls == {"MGC", "MNQ"}
+        assert len(runner.orchestrators) == 2
+
+    @patch("trading_app.live.multi_runner.SessionOrchestrator")
+    def test_no_profile_no_portfolio_injection(self, mock_orch_cls):
+        """Without profile_id, orchestrator gets portfolio=None (existing behavior)."""
+        mock_orch = MagicMock()
+        mock_orch.portfolio.strategies = [MagicMock()]
+        mock_orch_cls.return_value = mock_orch
+
+        MultiInstrumentRunner(
+            instruments=["MNQ"],
+            signal_only=True,
+        )
+
+        # portfolio kwarg should be None (no injection)
+        call_kwargs = mock_orch_cls.call_args.kwargs
+        assert call_kwargs.get("portfolio") is None
+
+
 class TestStopFileRaceCondition:
     """Verify stop-file is NOT deleted by individual feeds."""
 

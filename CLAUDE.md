@@ -2,8 +2,6 @@
 
 Guidance for Claude Code working with this repository.
 
-@docs/ARCHITECTURE.md
-
 ## Project Overview
 
 Multi-instrument futures data pipeline — builds clean, replayable local datasets for ORB breakout trading research and backtesting from Databento DBN files. Active instruments: MGC (Micro Gold), MNQ (Micro Nasdaq), MES (Micro S&P 500). Dead for ORB: MCL, SIL, M6E, MBT, M2K.
@@ -16,22 +14,9 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 
 ## Document Authority
 
-| Document | Scope | Conflict Rule |
-|----------|-------|---------------|
-| `CLAUDE.md` | Code structure, commands, guardrails, AI behavior | Wins for code decisions |
-| `TRADING_RULES.md` | Trading rules, sessions, filters, research findings, NO-GOs | Wins for trading logic |
-| `RESEARCH_RULES.md` | Research methodology, statistical standards, trading lens | Wins for research/analysis decisions |
-| `ROADMAP.md` | Planned features, phase status | Updated on phase completion |
-| `docs/STRATEGY_BLUEPRINT.md` | Research routing, test gates, variable space, NO-GOs | **Open before ANY research/planning session** |
-| `docs/specs/*.md` | Feature specs pending implementation | **Check before building ANY feature** |
+**Conflict resolution:** Code → CLAUDE.md. Trading logic → `TRADING_RULES.md`. Research → `RESEARCH_RULES.md`. Features → check `docs/specs/*.md` BEFORE building. Research routing → `docs/STRATEGY_BLUEPRINT.md`.
 
-Full file inventory → `REPO_MAP.md` (auto-generated, never hand-edit).
-
-**Conflict resolution:** Code behavior → CLAUDE.md. Trading logic → TRADING_RULES.md. Research → RESEARCH_RULES.md.
-
-**Cross-tool state:** Shared decisions live in `HANDOFF.md` and `docs/plans/`, not in Claude-private memory. Read `HANDOFF.md` on session start. For parallel work, prefer `scripts/infra/claude-worktree.sh open <task>` instead of sharing one mutable branch with Codex. See `AGENTS.md` § Cross-Tool Coordination.
-
-**Staleness rule:** `HANDOFF.md`, `docs/plans/`, memory notes, and prior session summaries capture intent and coordination state — but they may be stale. They are NOT authoritative over live code, current DB state, canonical config modules, or current command output. If a doc's claims about state contradict the repo/DB → repo/DB is truth; explicitly report the contradiction.
+**Cross-tool state:** `HANDOFF.md` + `docs/plans/` — read on session start. May be stale: repo/DB is truth over docs. `REPO_MAP.md` = auto-generated file inventory.
 
 ---
 
@@ -81,96 +66,38 @@ Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift det
 Discovery uses ONLY canonical layers (`bars_1m`, `daily_features`, `orb_outcomes`). Derived layers (`validated_setups`, `edge_families`, `live_config`, docs) are **banned for truth-finding**. Full rules → `RESEARCH_RULES.md` § Discovery Layer Discipline. Enforcement → `.claude/rules/research-truth-protocol.md`.
 
 ### Volatile Data Rule
-**NEVER cite strategy counts, session counts, drift check counts, cost model numbers, or any other changing stat from memory files or docs.** These go stale after every rebuild. Instead:
-- Strategy counts/performance → query `gold-db` MCP tools
-- Session list/times → `from pipeline.dst import SESSION_CATALOG`
-- Cost models → `from pipeline.cost_model import COST_SPECS`
-- Active instruments → `from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS`
-- Deployed lanes → `from trading_app.prop_profiles import ACCOUNT_PROFILES`
+**NEVER cite changing stats from memory/docs.** Query live: strategy counts → `gold-db` MCP, sessions → `pipeline.dst.SESSION_CATALOG`, costs → `pipeline.cost_model.COST_SPECS`, instruments → `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS`, lanes → `trading_app.prop_profiles.ACCOUNT_PROFILES`.
 
 ### Research Provenance Rule
-Config values derived from research (e.g. `EARLY_EXIT_MINUTES`) must include `@research-source`, `@entry-models`, and `@revalidated-for` annotations. Drift check #45 enforces this. When entry models change, re-validate all research-derived values against the new model before citing them as validated.
+Config values from research need `@research-source`, `@entry-models`, `@revalidated-for`. Drift check #45 enforces.
 
 ### Source-of-Truth Chain Rule
-For any audit, debugging, or research task:
-- First identify the canonical source of truth for the layer being examined
-- Verify whether each downstream file/module/table derives from that source or silently redefines it
-- If the source-of-truth itself may be wrong, audit upstream first before touching downstream
-- Never patch downstream behavior to compensate for suspected upstream corruption
+Identify canonical source → verify downstream derives from it → if source may be wrong, audit upstream first → never patch downstream to compensate for upstream corruption.
 
 ### Local Academic / Project-Source Grounding Rule
-For methodological, statistical, validation, monitoring, execution-realism, or prop-rule claims:
-- Prefer local project sources and local academic PDFs/books in `resources/` over training memory
-- For nontrivial methodological claims, name the local source(s) consulted when relevant
-- If project canon and an academic source differ, project canon governs implementation; academic source is used as adversarial reference material
-- If no local source supports a claim, say UNSUPPORTED rather than improvising
-
-**PDF grounding protocol (MANDATORY — do not silently fake this):**
-- When grounding a claim in a `resources/` PDF: **EXTRACT text from the file first.** Do not cite from training memory as if you read it.
-- If extraction fails (tool error, reader not installed, garbled output): say **"PDF read failed for [filename]. Cannot ground this claim in local copy."**
-- You MAY still use training knowledge, but you MUST label it explicitly: "From training memory — not verified against local PDF."
-- **NEVER** silently substitute training memory for a failed PDF read. The user has caught this multiple times. If you can't read the file, say so.
+Prefer local sources (`resources/` PDFs, project canon) over training memory. If no local source, say UNSUPPORTED.
+**PDF protocol:** EXTRACT text from the file — never cite from training memory as if you read it. If extraction fails, say so explicitly. Label training-memory claims as "From training memory — not verified against local PDF."
 
 ### Audit-First Default for Research Layers
-For research pipeline layers (data integrity, outcomes, discovery, validation, noise/significance, portfolio construction, execution realism, monitoring): default workflow is **audit → adversarial audit → fix → rerun → freeze layer → move on**. Do not skip to implementation when truth-state is unverified. Do not advance to the next layer until the current layer is explicitly frozen or blocked upstream.
+Research layers: **audit → adversarial audit → fix → rerun → freeze → move on**. Do not skip to implementation when truth-state is unverified.
 
 ### 2-Pass Implementation Method (MANDATORY)
-Every non-trivial code change follows two passes:
+1. **Discovery:** Read affected files, understand blast radius, articulate PURPOSE before writing code.
+2. **Implementation:** Write → verify (drift + tests + behavioral audit) → fix regressions → review.
 
-1. **Discovery:** Read ALL affected files. Understand architecture, patterns, blast radius. Articulate PURPOSE (why it matters, what breaks without it) before writing code. Run guardian prompts if applicable.
-2. **Implementation:** Write code → verify (run `check_drift.py`, `audit_behavioral.py`, tests) → fix regressions → code review.
-
-One task at a time. Implement → verify → review → next. Never batch without verification.
-
-**Completion evidence ("done" means PROVEN, not CLAIMED):**
-- **Tests:** Run affected tests. Show actual output. "Tests should pass" is not evidence.
-- **Dead code:** `grep -r` for functions, imports, config entries orphaned by this change. Remove them. Do not leave dead code for future discovery.
-- **Drift:** `python pipeline/check_drift.py` must pass.
-- Do not close the stage or claim completion without all three.
+One task at a time. Never batch without verification. **"Done" = tests pass (show output) + dead code swept (`grep -r`) + `check_drift.py` passes.** All three required.
 
 ### Design Proposal Gate (MANDATORY)
-Before writing ANY code on a non-trivial change, present a brief proposal:
+Before writing ANY code on a non-trivial change, present: (1) **What** and why, (2) **Files** to touch, (3) **Blast radius**, (4) **Approach**.
 
-1. **What:** One sentence — what you're about to do and why
-2. **Files:** Which files you'll touch (create/modify/delete)
-3. **Blast radius:** What else could break (callers, tests, drift checks)
-4. **Approach:** Key design choice if there are alternatives
-5. **Self-check (DO NOT SKIP):** Before presenting the proposal, simulate it through 3 scenarios internally:
-   - **Happy path:** does the change work as intended end-to-end?
-   - **Edge case:** what if inputs are NULL/empty/missing? What about first-time runs, concurrent access, or instruments with sparse data?
-   - **Failure mode:** what if a dependency changed, a downstream consumer expects the old interface, or a test mock doesn't cover the new behavior?
-   Fix everything that breaks in simulation. Then present. **Do NOT present your first draft — it has flaws you haven't found yet. Your first draft is always wrong; iterate internally until you can't find more problems.** If you present and the user has to push back with obvious flaws, you skipped this step.
+**Self-check (DO NOT SKIP):** Simulate happy path, edge case (NULL/empty/sparse), and failure mode internally. SHOW what you tested and found — don't just claim you checked. Fix flaws before presenting. Your first draft is always wrong.
 
-   **Anti-performative rule:** Do not just SAY "I simulated three scenarios and they all passed." SHOW what you tested and what you found. State the specific edge case and how your plan handles it. If all three scenarios found zero issues, you didn't look hard enough — go deeper. Performative self-review (claiming you checked without showing evidence) is worse than no self-review because it creates false confidence.
-
-Wait for user confirmation ("go", "yes", "do it", "looks good") before writing code. If the user says "no" or redirects, update the proposal. Do NOT silently proceed.
-
-**Exceptions** (no proposal needed):
-- Trivial changes: typo fixes, comment updates, single-line bug fixes
-- User explicitly said "just do it" or "skip the proposal"
-- Git operations (commit, push, merge) — covered by Git Operations rule
-- Running queries or read-only exploration
-
-**Entry-point invariance:** This gate applies regardless of how work is initiated — direct request, `/stage-gate`, `/plan`, `/design`, or any other entry point. The quality bar is the same.
-
-**Why this exists:** 38+ sessions hit "wrong approach" because Claude dove into code without confirming intent, or presented a flawed first-draft plan that the user had to catch and correct. A 30-second self-check prevents 30-minute reversals.
+Wait for user confirmation before writing code. Exceptions: trivial changes, "just do it", git ops, read-only exploration.
 
 ---
 
 ## Strategy Classification — Behavioral Rules
+Low trade count ≠ bug (G6/G8 filters expected). Verify `trade_days <= eligible_days` first. If `trade_days > eligible_days` → corruption. Never "fix" filters to increase N. Never recommend REGIME as standalone. Trading logic → `TRADING_RULES.md`. Thresholds → `docs/ARCHITECTURE.md`.
 
-1. NEVER treat "low trade count" alone as evidence of a bug
-2. ALWAYS verify `trade_days <= eligible_days` before investigating
-3. If `trade_days > eligible_days` → assume corruption until proven otherwise
-4. Do NOT suggest "fixing" filters to increase sample size
-5. NEVER recommend REGIME strategies as standalone trading systems
-6. For trading logic (filters, entry models, edge zones, Sharpe formulas) → see `TRADING_RULES.md`
-7. For classification thresholds and trade day invariant → see `docs/ARCHITECTURE.md`
 
----
-
-## What's NOT Built Yet
-
-See `ROADMAP.md` for current phase status and planned features.
-
-**Do NOT reference unbuilt features in code or tests. Build guardrails for what exists.**
+Do NOT reference unbuilt features in code or tests — see `ROADMAP.md` for what's planned.

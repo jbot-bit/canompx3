@@ -53,10 +53,4 @@ Metadata, comments, docstrings, bundle fields, and config labels are NOT evidenc
 - **Reading code is not verifying code. Verifying requires execution + output inspection.**
 
 ## 8. Research Finding Staleness — Never Inline Stats
-Research findings go stale when entry models change (E0 purge), sessions rename (fixed -> event-based), or data grows (2 years -> 5 years). Rules:
-- **NEVER inline research stats** (p-values, N counts, "9/9 sessions") in code comments or docstrings. They will go stale.
-- **Instead, reference the source**: `@research-source script_name.py` + `@revalidated-for E1/E2 event-based (date)`.
-- When research is revalidated, update ALL downstream references (config.py docstrings, TRADING_RULES.md, memory files). Use `grep -r` to find them.
-- **Research scripts are historical artifacts** — their docstrings describe what they tested, not current truth. Don't update old script docstrings to match new findings; write new scripts.
-- When citing a research finding, always ask: "Was this tested with current entry models on current session names?" If unsure, don't cite — re-run.
-- The governing docs for research findings are `TRADING_RULES.md` (trading logic) and `compressed_spring.md` / memory files (findings). Code docstrings are downstream — they reference, not define.
+Never inline research stats (p-values, N counts) in code. Use `@research-source` + `@revalidated-for` annotations. Full rules → `.claude/rules/research-truth-protocol.md`.
