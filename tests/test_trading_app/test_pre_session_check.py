@@ -11,6 +11,7 @@ import pytest
 from trading_app.pre_session_check import (
     _resolve_session_lane,
     check_consistency_rule,
+    check_daily_equity,
     check_dd_circuit_breaker,
     check_manual_halt,
 )
@@ -191,6 +192,45 @@ class TestManualHalt:
             ok, msg = check_manual_halt()
         assert ok is False
         assert "indefinite" in msg
+
+
+# ── Daily equity / DLL fallback tests ────────────────────────────────
+
+
+class TestDailyEquityDLLFallback:
+    """check_daily_equity must warn on profile lookup failure and use fallback DLL."""
+
+    def test_profile_lookup_failure_warns_and_uses_fallback(self, tmp_path, capsys):
+        """When resolve_profile_id raises, function should still return a result
+        using the $1000 fallback DLL and emit a warning to stderr."""
+        state_dir = tmp_path / "data" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        eq_file = state_dir / f"equity_{date.today()}.json"
+        eq_file.write_text(json.dumps({"date": str(date.today()), "starting_equity": 50000, "current_dd": -200.0}))
+
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            with patch("trading_app.prop_profiles.resolve_profile_id", side_effect=KeyError("bad_profile")):
+                ok, msg = check_daily_equity(profile_id="bad_profile")
+
+        assert ok is True
+        assert "$-200" in msg or "Daily DD" in msg
+        stderr = capsys.readouterr().err
+        assert "WARNING" in stderr
+        assert "bad_profile" in stderr
+        assert "fallback" in stderr or "$1,000" in stderr
+
+    def test_profile_lookup_success_uses_real_dll(self, tmp_path):
+        """When profile lookup succeeds, function uses the real DLL from ACCOUNT_TIERS."""
+        state_dir = tmp_path / "data" / "state"
+        state_dir.mkdir(parents=True, exist_ok=True)
+        eq_file = state_dir / f"equity_{date.today()}.json"
+        eq_file.write_text(json.dumps({"date": str(date.today()), "starting_equity": 50000, "current_dd": -800.0}))
+
+        with patch("trading_app.pre_session_check.STATE_DIR", state_dir):
+            ok, msg = check_daily_equity(profile_id="topstep_50k_mnq_auto")
+
+        # Should pass — real DLL for topstep_50k is ~$1000, DD of $800 is under
+        assert ok is True
 
 
 def test_resolve_session_lane_ambiguous_profile_requires_strategy_specific_tool():
