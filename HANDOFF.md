@@ -6,6 +6,28 @@
 
 ---
 
+## Update (Apr 4 — Claude: Context Optimization V3 — ADHD Semantic Routing)
+
+### Completed
+1. **ADHD-friendly semantic routing:** Expanded auto-skill-routing.md from abstract categories to natural-language example phrases (e.g., "off", "wrong", "doesn't add up" → quant-debug). Same line count, better intent matching.
+2. **Apostrophe-optional regex fix:** Fixed 9 patterns in data-first-guard.py where `.` (requires char) should be `.?` (optional char). "whats", "doesnt", "tonights" etc. now match correctly.
+3. **3 rules made conditional:** pipeline-patterns.md (pipeline/**), large-file-reads.md (large files only), strategy-awareness.md (strategy/research paths). Saves ~60 tokens/turn when not relevant.
+4. **Anti-performative self-review restored:** Added back "Performative self-review is worse than no self-review" to CLAUDE.md Design Proposal Gate.
+5. **User profile + ADHD feedback saved to memory** for future sessions.
+
+### Files Changed
+- `.claude/rules/auto-skill-routing.md` (semantic triggers)
+- `.claude/hooks/data-first-guard.py` (regex fixes)
+- `.claude/rules/pipeline-patterns.md` (conditional paths)
+- `.claude/rules/large-file-reads.md` (conditional paths)
+- `.claude/rules/strategy-awareness.md` (conditional paths)
+- `CLAUDE.md` (anti-performative rule)
+
+### No Active Stage
+Clean state. Next session can pick up from action queue.
+
+---
+
 ## Update (Apr 4 — Claude: Self-Funded Deployment + Regime Gate + Multi-Instrument Fix)
 
 ### Completed
