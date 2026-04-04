@@ -2076,28 +2076,36 @@ class SessionOrchestrator:
             self.trading_day = actual_day
 
         # Market calendar checks — FAIL-LOUD on holidays, adjust on early close
+        self._flatten_on_start = False
         try:
             from pipeline.market_calendar import (
                 effective_close_et,
                 is_cme_holiday,
                 is_early_close,
+                is_market_open_at,
             )
 
-            # Convert Brisbane trading day to US date for calendar lookup.
-            # Brisbane trading day (09:00→09:00) spans two US calendar dates.
-            # Use the US date that contains the bulk of US trading hours:
-            # Brisbane afternoon (14:00+) = same US date; morning = previous US date.
-            # Simplest correct approach: use UTC "now" to get the current US date.
+            utc_now = datetime.now(ZoneInfo("UTC"))
             us_date = datetime.now(ZoneInfo("America/New_York")).date()
 
             if is_cme_holiday(us_date):
-                msg = (
-                    f"CME HOLIDAY ({us_date}) — ALL SESSIONS BLOCKED. "
-                    "Refusing to trade. Check cmegroup.com/holiday-calendar."
+                # Date says holiday — but verify market isn't actually open.
+                # Sunday 6 PM ET = Sunday date, but CME opens for Monday's session.
+                # Use is_market_open_at for ground truth.
+                market_open_now = is_market_open_at(utc_now)
+                market_opens_soon = is_market_open_at(utc_now + timedelta(hours=2))
+                if not market_open_now and not market_opens_soon:
+                    msg = (
+                        f"CME HOLIDAY ({us_date}) — ALL SESSIONS BLOCKED. "
+                        "Refusing to trade. Check cmegroup.com/holiday-calendar."
+                    )
+                    log.critical(msg)
+                    self._notify(msg)
+                    raise RuntimeError(msg)
+                log.info(
+                    "US date %s is non-session but market is open or opens soon (overnight session) — proceeding",
+                    us_date,
                 )
-                log.critical(msg)
-                self._notify(msg)
-                raise RuntimeError(msg)
 
             if is_early_close(us_date):
                 log.warning(
@@ -2105,7 +2113,6 @@ class SessionOrchestrator:
                     us_date,
                 )
                 self._notify(f"Early close day ({us_date}). Afternoon sessions will not fire.")
-                # Adjust force-flatten to the earlier of firm close and exchange close
                 if self._close_hour_et is not None:
                     from datetime import time as dt_time
 
@@ -2120,12 +2127,19 @@ class SessionOrchestrator:
                             eff.minute,
                             firm_close,
                         )
+                        mins = self._minutes_to_close_et()
+                        if mins is not None and mins < 0:
+                            log.critical(
+                                "Adjusted close already passed (%d min ago) — "
+                                "will emergency-flatten any open positions",
+                                abs(int(mins)),
+                            )
+                            self._flatten_on_start = True
         except ImportError:
-            log.warning("market_calendar not available — calendar checks skipped")
+            log.critical("market_calendar not available — CANNOT verify holiday status")
+            self._notify("WARNING: market_calendar import failed — holiday check SKIPPED")
         except RuntimeError:
             raise  # Re-raise the holiday block
-        except Exception as e:
-            log.warning("Market calendar check failed: %s — proceeding without calendar awareness", e)
 
         # Run component self-tests before accepting any bars
         results = self.run_self_tests()
