@@ -1,0 +1,78 @@
+{
+  "skill": "code-review",
+  "version": 1,
+  "tests": [
+    {
+      "id": "cr-01",
+      "prompt": "review the last commit",
+      "assertions": [
+        {
+          "id": "cr-01-a1",
+          "type": "command_ran",
+          "pattern": "git (diff|log|show)",
+          "description": "Identifies scope via git diff/log"
+        },
+        {
+          "id": "cr-01-a2",
+          "type": "regex_match",
+          "pattern": "(?:Seven Sins|hardcoded|canonical|bare except|fail-closed)",
+          "description": "Checks Seven Sins criteria"
+        },
+        {
+          "id": "cr-01-a3",
+          "type": "regex_match",
+          "pattern": "(?:ACTIVE_ORB_INSTRUMENTS|SESSION_CATALOG|COST_SPECS|GOLD_DB_PATH|config)",
+          "description": "Checks canonical integrity sources"
+        },
+        {
+          "id": "cr-01-a4",
+          "type": "regex_match",
+          "pattern": "(?:PREMISE|TRACE|EVIDENCE|file.*:\\d+|line \\d+)",
+          "description": "Uses semi-formal reasoning or file:line citations"
+        },
+        {
+          "id": "cr-01-a5",
+          "type": "regex_match",
+          "pattern": "(?:Critical|Important|Minor|severity)",
+          "description": "Reports severity levels"
+        },
+        {
+          "id": "cr-01-a6",
+          "type": "regex_match",
+          "pattern": "(?:test|companion|TEST_MAP|drift)",
+          "description": "Checks companion test coverage"
+        },
+        {
+          "id": "cr-01-a7",
+          "type": "regex_match",
+          "pattern": "(?:pipeline.*trading_app|one.?way|dependency)",
+          "description": "Checks one-way dependency rule"
+        }
+      ]
+    },
+    {
+      "id": "cr-02",
+      "prompt": "review my changes before I commit",
+      "assertions": [
+        {
+          "id": "cr-02-a1",
+          "type": "command_ran",
+          "pattern": "git diff",
+          "description": "Runs git diff for uncommitted changes"
+        },
+        {
+          "id": "cr-02-a2",
+          "type": "regex_match",
+          "pattern": "(?:Critical|Important|Minor|PASS|no issues|clean)",
+          "description": "Provides clear verdict"
+        },
+        {
+          "id": "cr-02-a3",
+          "type": "text_not_contains",
+          "value": "looks good to me",
+          "description": "Does not give rubber-stamp approval without evidence"
+        }
+      ]
+    }
+  ]
+}
