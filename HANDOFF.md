@@ -6,6 +6,50 @@
 
 ---
 
+## Update (Apr 5 — Break Speed Research: Signal Real, Not Worth Deploying)
+
+### Completed
+1. **COST_LT × FAST + OVNRNG × FAST composite filters** added to discovery grid (config.py). 81 filters in ALL_FILTERS (was 65).
+2. **Discovery + validation run** for all 3 instruments. MNQ=102, MGC=9 (+2), MES=14 (-1). No new composite survivors at K=70K (wrong framework).
+3. **Raw-data overlay test on validated strategies** (correct framework, K=32-88). 14 MNQ BH FDR survivors. 0 MGC, 0 MES.
+4. **E2 order timeout** implemented in execution engine (Phase 1.5 time gate). Paper trader `--e2-timeout` flag. Session orchestrator wired.
+5. **Comprehensive K=88 test** across ALL instruments × ALL sessions. CME_PRECLOSE strongest (7/9 BH, +15pp). NYSE_OPEN (3/9 BH).
+6. **Paper trader A/B verified**: +25R over 8 years = +3R/yr. Not worth operational complexity.
+7. **Critical finding**: NYSE_CLOSE/COMEX_SETTLE/EUROPE_FLOW slow trades are PROFITABLE — must NOT timeout those sessions.
+8. **Config set to DORMANT** (empty dict). Engine capability retained for future use.
+
+### Key Research Findings
+- Break speed signal is REAL (passes T1-T7 battery) but REDUNDANT with existing filters (COST_LT, ORB_G already select 74-92% fast breaks)
+- Signal is MNQ-only. MGC: N too small. MES: marginal.
+- Sessions with order-flow concentration (CME_PRECLOSE, NYSE_OPEN): fast breaks = better WR
+- Sessions with gradual flow (COMEX_SETTLE, EUROPE_FLOW, NYSE_CLOSE): slow breaks are fine
+- TOKYO_OPEN, SINGAPORE_OPEN: no break speed signal at all
+- Correct overlay testing framework: K=validated_strategies (20-88), NOT K=full_grid (70K)
+
+### Files Changed
+- `trading_app/config.py` — composite filters + E2_ORDER_TIMEOUT (dormant) + _OVNRNG_FILTERS extraction
+- `trading_app/execution_engine.py` — LiveORB.complete_ts + e2_order_timeout parameter + Phase 1.5 time gate
+- `trading_app/paper_trader.py` — use_e2_timeout param + --e2-timeout CLI flag
+- `trading_app/live/session_orchestrator.py` — passes E2_ORDER_TIMEOUT to engine
+- `tests/test_trading_app/test_config.py` — ALL_FILTERS count 65→81
+
+### Validated Strategies (post-run)
+- MNQ: 102 (unchanged)
+- MGC: 9 (+2 from pre-session count of 7)
+- MES: 14 (-1 from 15)
+- Total: 125
+
+### No Active Stage
+Clean state. Pre-existing drift #59 (4 missing family_rr_locks) — run `python scripts/tools/select_family_rr.py`.
+
+### Next Sensible Step
+- Fix drift #59: `python scripts/tools/select_family_rr.py` (housekeeping from validation run adding 2 MGC strategies)
+- Build edge families: `python scripts/tools/build_edge_families.py --instrument MGC` (needed after +2 MGC validated)
+- Blueprint §5 update: break speed NO-GO → PARTIALLY RESURRECTED (housekeeping)
+- E2 timeout: revisit when portfolio has >5 lanes or broker supports GTD stops
+
+---
+
 ## Update (Apr 5 — Prop Firm Automation Research: Verified Rules)
 
 ### Completed
