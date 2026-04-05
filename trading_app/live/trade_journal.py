@@ -252,12 +252,12 @@ class TradeJournal:
             )
         return result
 
-    def incomplete_trades(self, trading_day=None) -> list[dict]:
-        """Return trades with entry but no exit (crash detection).
+    def incomplete_trades(self, trading_day: date) -> list[dict]:
+        """Return trades with entry but no exit for a specific trading day (crash detection).
 
-        If trading_day is specified, only returns incomplete trades from that day.
-        Without a filter, stale incomplete records from previous days would be
-        incorrectly restored as active positions.
+        trading_day is REQUIRED. Omitting the day filter would return stale incomplete
+        records from all previous days, causing crash-restart to incorrectly restore
+        positions from prior sessions.
 
         FAIL-CLOSED: raises on error — returning empty list would hide open
         positions, preventing exit management on crash-restart.
@@ -267,25 +267,15 @@ class TradeJournal:
                 "TradeJournal unavailable — cannot determine incomplete trades. "
                 "Risk of unmanaged open positions. Refusing to start."
             )
-        if trading_day is not None:
-            rows = self._con.execute(
-                """
-                SELECT trade_id, strategy_id, instrument, direction, engine_entry, fill_entry
-                FROM live_trades
-                WHERE exited_at IS NULL AND trading_day = ?
-                ORDER BY created_at
-                """,
-                [trading_day],
-            ).fetchall()
-        else:
-            rows = self._con.execute(
-                """
-                SELECT trade_id, strategy_id, instrument, direction, engine_entry, fill_entry
-                FROM live_trades
-                WHERE exited_at IS NULL
-                ORDER BY created_at
-                """
-            ).fetchall()
+        rows = self._con.execute(
+            """
+            SELECT trade_id, strategy_id, instrument, direction, engine_entry, fill_entry
+            FROM live_trades
+            WHERE exited_at IS NULL AND trading_day = ?
+            ORDER BY created_at
+            """,
+            [trading_day],
+        ).fetchall()
         return [
             {
                 "trade_id": r[0],

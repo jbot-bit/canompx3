@@ -262,7 +262,7 @@ class TestIncompleteTrades:
             entry_model="E2",
             engine_entry=2950.0,
         )
-        incomplete = journal.incomplete_trades()
+        incomplete = journal.incomplete_trades(trading_day=date(2026, 3, 14))
         assert len(incomplete) == 1
         assert incomplete[0]["strategy_id"] == "orphan_strat"
 
@@ -278,7 +278,7 @@ class TestIncompleteTrades:
             engine_entry=2950.0,
         )
         journal.record_exit(trade_id=tid, exit_reason="target", actual_r=1.0)
-        assert len(journal.incomplete_trades()) == 0
+        assert len(journal.incomplete_trades(trading_day=date(2026, 3, 14))) == 0
 
 
 class TestOrphanedExit:
@@ -355,7 +355,7 @@ class TestFailOpen:
         j = TradeJournal(journal_path, mode="test")
         j.close()
         with pytest.raises(RuntimeError, match="cannot determine incomplete"):
-            j.incomplete_trades()
+            j.incomplete_trades(trading_day=date(2026, 3, 14))
 
     def test_double_close_safe(self, journal_path):
         j = TradeJournal(journal_path, mode="test")
