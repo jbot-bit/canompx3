@@ -42,7 +42,7 @@ def check_manual_halt() -> tuple[bool, str]:
         reason = data.get("reason", "no reason given")
         return False, f"MANUAL HALT: {reason}"
     except (json.JSONDecodeError, OSError):
-        return True, "WARN: halt file unreadable — treating as no halt"
+        return False, "BLOCKED: halt file exists but unreadable — cannot verify halt status"
 
 
 def write_halt(reason: str) -> None:
@@ -204,7 +204,8 @@ def check_hwm_tracker() -> tuple[bool, str]:
             else:
                 results.append(f"OK {acct}: DD ${used:.0f}/{limit:.0f} ({pct:.0%}) — ${remaining:.0f} remaining")
         except Exception as e:
-            results.append(f"ERROR reading {f.name}: {e}")
+            any_halt = True  # fail-closed: can't verify DD state → block
+            results.append(f"BLOCKED {f.name}: {e}")
 
     msg = " | ".join(results)
     return (not any_halt), f"DD TRACKER: {msg}"

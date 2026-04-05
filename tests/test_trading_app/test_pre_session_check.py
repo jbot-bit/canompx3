@@ -13,6 +13,7 @@ from trading_app.pre_session_check import (
     check_consistency_rule,
     check_daily_equity,
     check_dd_circuit_breaker,
+    check_hwm_tracker,
     check_manual_halt,
 )
 from trading_app.prop_profiles import ACCOUNT_PROFILES, get_profile
@@ -176,13 +177,13 @@ class TestManualHalt:
         assert "expired" in msg.lower()
 
     def test_corrupt_halt_file(self, tmp_path):
-        """Corrupt halt file → pass with warning (can't verify halt)."""
+        """Corrupt halt file → BLOCKED (fail-closed: can't verify halt status)."""
         halt = tmp_path / "halt_trading.json"
         halt.write_text("{{{invalid json")
         with patch("trading_app.pre_session_check.HALT_FILE", halt):
             ok, msg = check_manual_halt()
-        assert ok is True
-        assert "unreadable" in msg.lower()
+        assert ok is False
+        assert "BLOCKED" in msg
 
     def test_halt_no_expiry(self, tmp_path):
         """Halt with no expiry field → blocks indefinitely."""
@@ -231,6 +232,25 @@ class TestDailyEquityDLLFallback:
 
         # Should pass — real DLL for topstep_50k is ~$1000, DD of $800 is under
         assert ok is True
+
+
+class TestHWMTrackerFailClosed:
+    """check_hwm_tracker must fail-closed on corrupt HWM files."""
+
+    def test_corrupt_hwm_file_blocks_trading(self):
+        """Corrupt HWM file → check_hwm_tracker returns False (fail-closed)."""
+        from trading_app.pre_session_check import STATE_DIR
+
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        corrupt = STATE_DIR / "account_hwm_TEST_BAD_DATA.json"
+        try:
+            corrupt.write_text("{{{not valid json")
+            ok, msg = check_hwm_tracker()
+            assert ok is False, f"Corrupt HWM file should block trading: {msg}"
+            assert "BLOCKED" in msg
+        finally:
+            if corrupt.exists():
+                corrupt.unlink()
 
 
 def test_resolve_session_lane_ambiguous_profile_requires_strategy_specific_tool():
