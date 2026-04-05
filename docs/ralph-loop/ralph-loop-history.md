@@ -1559,3 +1559,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file, monitoring-only field, no P&L computation affected
 - Verification: PASS (29/29 test_position_tracker.py, drift 77/77)
 - Commit: 71422aa
+
+---
+
+## Iteration 151 — 2026-04-05
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/account_hwm_tracker.py:306-322
+- Finding: Poll failure counter (_consecutive_poll_failures) not persisted to JSON state file. update_equity(None) only called _save_state() at the halt threshold; sub-threshold failures were not written. On process restart the counter reset to 0, allowing indefinite equity poll failures without ever reaching the halt threshold — a fail-open safety gap.
+- Action: (1) Added _save_state() call unconditionally on every poll failure (not gated by threshold). (2) Added "consecutive_poll_failures" to _save_state() data dict. (3) Added restore of _consecutive_poll_failures in _load_state(). (4) Added test_poll_failure_counter_persisted_before_threshold verifying counter survives simulated restart.
+- Blast radius: 1 production file, 1 test file, no API change
+- Verification: PASS (46/46 test_account_hwm_tracker.py, drift 77/77)
+- Commit: 8e9924d

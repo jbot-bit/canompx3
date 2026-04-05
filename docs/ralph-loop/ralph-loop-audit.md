@@ -3,42 +3,40 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 150
+## Last iteration: 151
 
-## RALPH AUDIT — Iteration 150
+## RALPH AUDIT — Iteration 151
 ## Date: 2026-04-05
-## Infrastructure Gates: behavioral audit PASS, ruff PASS (1 pre-existing UP017 in scripts/databento_daily.py, not in scope), drift 77/77 PASS, 29/29 test_position_tracker.py PASS
+## Infrastructure Gates: behavioral audit PASS, ruff PASS (1 pre-existing UP017 in scripts/databento_daily.py, not in scope), drift 77/77 PASS, 46/46 test_account_hwm_tracker.py PASS
 
 ---
 
-## Iteration 150 — trading_app/live/position_tracker.py
+## Iteration 151 — trading_app/account_hwm_tracker.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Silent failure (monitoring) | `entry_slippage` computed as `fill_price - engine_entry_price` without direction adjustment — for SHORT trades a fill above engine price is favorable (sold higher) but reported as positive (adverse) slippage, inverting the sign for all short entries in the trade journal | LOW | FIXED 71422aa |
-| `on_exit_filled` state guard | No explicit warning when called on PENDING_ENTRY or FLAT state — assessed as ACCEPTABLE: emergency kill-switch path deliberately calls on_exit_filled on any active state, so permissiveness is by design | — | ACCEPTABLE |
-| All others | No look-ahead bias, no cost illusion, no hardcoded canonical lists, no fail-open paths. R2-H2/R2-H3 guards correct and fully tested. Slippage field is monitoring-only — actual_r P&L unaffected. | — | CLEAN |
+| Fail-open | `_consecutive_poll_failures` not persisted — process restart between failures resets counter, allowing indefinite equity poll failures without halting | MEDIUM | FIXED 8e9924d |
+| All others | No look-ahead bias, no cost illusion, no hardcoded canonical lists, no silent failure (corrupt state backed up + logged, not swallowed). Period reset auto-clears only matching halt reasons. check_halt() `or 0` fallback on None start_equity produces misleading message text but halt remains correctly enforced. | — | CLEAN |
 
 ### Audit Notes
 
-- **entry_slippage sign (FIXED):** Line 155 used `fill_price - record.engine_entry_price` regardless of direction. Adverse slippage convention: positive = worse fill for the trade direction. For LONG, fill > engine is adverse (+). For SHORT, fill > engine is favorable (sold higher), so slippage should be negative. Fix: `direction_mult = -1.0 if record.direction == "short" else 1.0`. Field flows to `session_orchestrator._record_exit` → `TradeRecord.slippage_pts` → `trade_journal.record_exit` and `performance_monitor` totals. `actual_r` computed independently, unaffected.
-- **`on_exit_filled` without state guard (ACCEPTABLE):** Kill-switch flatten path (`session_orchestrator.py:1926`) calls `on_exit_filled` on ENTERED positions directly (skipping `on_exit_sent`) as emergency flatten. All other callers (1349, 1771, 1824) call from PENDING_EXIT. Permissive design is intentional. Matches ACCEPTABLE rule 1 (intentional emergency behavior, not a canonical list or safety gap).
-- **`best_entry_price` fallback:** None-check is correct; `test_fill_price_zero_not_falsy` confirms 0.0 fill does not fall through. CLEAN.
-- **`stale_positions` timeout default 300s:** Hard-coded default only — callers can override. ACCEPTABLE rule 1 (per-session heuristic).
+- **Poll failure counter fail-open (FIXED):** Lines 313-322 in `update_equity(None)` only called `_save_state()` when `_consecutive_poll_failures >= _MAX_CONSECUTIVE_POLL_FAILURES`. Sub-threshold failures (1, 2) were not written. `_consecutive_poll_failures` was also absent from the `_save_state()` data dict and not read back in `_load_state()`, so a process restart reset the counter to 0. Fix: (1) `_save_state()` moved outside the threshold `if` block — called unconditionally on every poll failure. (2) `"consecutive_poll_failures"` added to the JSON save dict. (3) `_load_state()` now restores `_consecutive_poll_failures` from the saved value. Production diff: 3 lines. Test added: `test_poll_failure_counter_persisted_before_threshold`.
+- **check_halt() `or 0` fallback:** In DAILY_LOSS and WEEKLY_LOSS branches, `(self._daily_start_equity or 0)` could produce a negative loss message if start_equity is None while halt is set. The halt itself (`self._halt = True`) is correctly enforced; only the message text is potentially misleading. This path is unlikely in practice (start_equity is set by `_check_period_resets` before halt checks). CLEAN / not actioned.
+- **Canonical check:** No hardcoded instruments, sessions, entry models, cost specs, or DB paths. Module is pure risk accounting. CLEAN.
+- **Fail-closed check:** `update_equity(None)` halts after 3 consecutive failures. `check_halt()` returns `(True, reason)` on any halt. `is_safe` property returns `not self.halt_triggered`. Period resets only clear halt if `halt_reason` matches the period type — cross-reason contamination impossible.
 
 ---
 
-## Summary — Iteration 150
+## Summary — Iteration 151
 
-- 1 LOW finding — FIXED ([judgment], 3-line production diff + 4 tests)
-- 1 finding ACCEPTABLE
-- Commit: 71422aa
+- 1 MEDIUM finding — FIXED ([judgment], 3-line production diff + 18 test lines)
+- Commit: 8e9924d
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 217 files fully scanned (1 new file added this iteration).
+> Cumulative list — 218 files fully scanned (1 new file added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -97,10 +95,11 @@
 - trading_app/live/rithmic/auth.py — added iter 148
 - trading_app/live/bot_dashboard.py — added iter 149
 - trading_app/live/position_tracker.py — added iter 150
-- **Total: 217 files fully scanned**
+- trading_app/account_hwm_tracker.py — added iter 151
+- **Total: 218 files fully scanned**
 
 ## Next iteration targets
-- trading_app/account_hwm_tracker.py — unscanned high-centrality file (referenced from pre_session_check, session_orchestrator)
 - trading_app/live/rithmic/__init__.py — unscanned rithmic package init
 - trading_app/live/bot_state.py — imported by bot_dashboard; unscanned state management
 - trading_app/live/trade_journal.py — slippage_pts consumer; worth auditing now that entry slippage sign is corrected
+- trading_app/live/rithmic/data_feed.py — unscanned rithmic data feed (if exists)

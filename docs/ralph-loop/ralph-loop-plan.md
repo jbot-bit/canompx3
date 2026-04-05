@@ -1,11 +1,10 @@
-## Iteration: 149
-## Target: trading_app/live/bot_dashboard.py:501
-## Finding: api_sessions() passes date.today() (system local date) to DST resolvers instead of now_bris.date() (Brisbane date) — incorrect during NYSE_OPEN midnight crossing period
+## Iteration: 151
+## Target: trading_app/account_hwm_tracker.py:322
+## Finding: Poll failure counter not persisted — process restart between poll failures resets counter, allowing indefinite poll failures without halting (fail-open)
 ## Classification: [judgment]
-## Blast Radius: 1 file (bot_dashboard.py), display-only endpoint, no production trading path
+## Blast Radius: 1 production file, 1 test file (no API change, just saves state more frequently on poll failures)
 ## Invariants:
-##   1. api_sessions() JSON shape unchanged (sessions list + next field)
-##   2. DST resolver interface resolver(date) -> tuple[int, int] unchanged
-##   3. Session sort order by minutes_away unchanged
-## Diff estimate: 3 lines
-## Secondary fix: line 70 silent except Exception: pass on heartbeat parse failure → add log.warning [mechanical]
+##   1. After N consecutive poll failures the halt IS still triggered
+##   2. _save_state() on non-threshold failure must not raise — should be same call as existing path
+##   3. No behavioral change to post-threshold path or any other code path
+## Diff estimate: 1 production line + ~8 test lines
