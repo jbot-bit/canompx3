@@ -9,7 +9,7 @@ from .broker_base import BrokerAuth, BrokerContracts, BrokerFeed, BrokerPosition
 log = logging.getLogger(__name__)
 
 # Valid broker names — canonical source for dispatcher
-VALID_BROKERS = ("projectx", "tradovate")
+VALID_BROKERS = ("projectx", "tradovate", "rithmic")
 
 
 class BrokerComponents(TypedDict):
@@ -87,6 +87,22 @@ def create_broker_components(
             "router_class": TradovateOrderRouter,
             "contracts_class": TradovateContracts,
             "positions_class": TradovatePositions,
+        }
+
+    elif broker == "rithmic":
+        from .rithmic.auth import RithmicAuth
+        from .rithmic.contracts import RithmicContracts
+        from .rithmic.order_router import RithmicOrderRouter
+        from .rithmic.positions import RithmicPositions
+
+        auth = RithmicAuth()
+        log.info("Broker: Rithmic (Bulenox/Elite)")
+        return {
+            "auth": auth,
+            "feed_class": None,  # No Rithmic feed — use ProjectX master feed
+            "router_class": RithmicOrderRouter,
+            "contracts_class": RithmicContracts,
+            "positions_class": RithmicPositions,
         }
 
     raise AssertionError("unreachable")

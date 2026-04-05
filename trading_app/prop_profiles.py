@@ -609,6 +609,69 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
     ),
     # =========================================================================
+    # Phase 2d: Rithmic scaling (Bulenox — durable, no forced conversion)
+    # =========================================================================
+    "bulenox_50k": AccountProfile(
+        profile_id="bulenox_50k",
+        firm="bulenox",
+        account_size=50_000,
+        copies=3,  # Max 3 simultaneous Master accounts (official: bulenox.com/help/master-account)
+        stop_multiplier=0.75,
+        max_slots=5,
+        active=False,  # Activate after Rithmic API conformance + paper trading validation
+        allowed_sessions=frozenset(
+            {
+                "CME_REOPEN",
+                "SINGAPORE_OPEN",
+                "COMEX_SETTLE",
+                "EUROPE_FLOW",
+                "TOKYO_OPEN",
+            }
+        ),
+        allowed_instruments=frozenset({"MNQ", "MGC"}),
+        # Same lanes as topstep_50k_mnq_auto (proven allocation).
+        # Refresh via rebalance_lanes.py --profile bulenox_50k before activation.
+        daily_lanes=(
+            DailyLaneSpec(
+                "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
+                "MGC",
+                "CME_REOPEN",
+                max_orb_size_pts=30.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
+                "MNQ",
+                "SINGAPORE_OPEN",
+                max_orb_size_pts=90.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=80.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
+                "MNQ",
+                "EUROPE_FLOW",
+                max_orb_size_pts=120.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
+                "MNQ",
+                "TOKYO_OPEN",
+                max_orb_size_pts=80.0,
+            ),
+        ),
+        notes=(
+            "Bulenox 50K via Rithmic API. 3 copies (max simultaneous). "
+            "No forced conversion. 100% first $10K then 90/10. "
+            "40% consistency rule. DD locks at starting+$100. "
+            "Lanes mirror topstep_50k_mnq_auto (proven). "
+            "Source: bulenox.com/help/master-account (scraped Apr 3 2026)."
+        ),
+    ),
+    # =========================================================================
     # Phase 3: Self-funded (after prop proof, $100K/year target)
     # =========================================================================
     "self_funded_tradovate": AccountProfile(
