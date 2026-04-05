@@ -23,11 +23,9 @@ class CopyOrderRouter(BrokerRouter):
     """Wraps a primary + N shadow OrderRouters. Same interface as BrokerRouter."""
 
     def __init__(self, primary: BrokerRouter, shadows: list[BrokerRouter]):
+        super().__init__(account_id=primary.account_id, auth=primary.auth)
         self.primary = primary
         self.shadows = shadows
-        # Expose primary's fields for Liskov compatibility with BrokerRouter
-        self.account_id = primary.account_id
-        self.auth = primary.auth
 
     def build_order_spec(
         self,
@@ -49,7 +47,13 @@ class CopyOrderRouter(BrokerRouter):
         result = self.primary.submit(spec)
         primary_status = result.get("status", "unknown")
 
-        if primary_status in ("Filled", "Working"):
+        # Inverted check: skip shadows only on known failures. This ensures
+        # compatibility across brokers (ProjectX: "Filled"/"Working",
+        # Rithmic: "submitted") without maintaining a whitelist.
+        _SKIP_STATUSES = ("rejected", "error", "cancelled")
+        if primary_status.lower() in _SKIP_STATUSES:
+            log.info("Primary status=%s — skipping shadow copies", primary_status)
+        else:
             for shadow in self.shadows:
                 try:
                     shadow_result = shadow.submit(spec)
@@ -65,8 +69,6 @@ class CopyOrderRouter(BrokerRouter):
                         shadow.account_id,
                         exc_info=True,
                     )
-        else:
-            log.info("Primary status=%s — skipping shadow copies", primary_status)
 
         return result
 
@@ -75,8 +77,19 @@ class CopyOrderRouter(BrokerRouter):
         return self.primary.build_exit_spec(direction, symbol, qty)
 
     def cancel(self, order_id: int) -> None:
-        """Cancel on primary. Shadow brackets are broker-managed."""
+        """Cancel on primary (fail-closed), then best-effort cancel shadows."""
         self.primary.cancel(order_id)
+        for shadow in self.shadows:
+            try:
+                shadow.cancel(order_id)
+                log.info("Shadow account %s: order %s cancelled", shadow.account_id, order_id)
+            except Exception:
+                log.warning(
+                    "Shadow account %s: cancel order %s failed — verify manually",
+                    shadow.account_id,
+                    order_id,
+                    exc_info=True,
+                )
 
     def cancel_bracket_orders(self, contract_id: str) -> int:
         """Cancel orphaned bracket orders on primary + all shadows.
@@ -99,6 +112,19 @@ class CopyOrderRouter(BrokerRouter):
                     exc_info=True,
                 )
         return cancelled
+
+    def update_market_price(self, price: float) -> None:
+        """Forward market price to primary + all shadows for price collar checks."""
+        self.primary.update_market_price(price)
+        for shadow in self.shadows:
+            try:
+                shadow.update_market_price(price)
+            except Exception:
+                log.warning(
+                    "Shadow account %s: update_market_price failed",
+                    shadow.account_id,
+                    exc_info=True,
+                )
 
     def supports_native_brackets(self) -> bool:
         """Delegate to primary."""
