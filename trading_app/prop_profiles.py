@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from trading_app.config import ENTRY_MODELS
+
 # =========================================================================
 # Data structures
 # =========================================================================
@@ -854,7 +856,7 @@ def parse_strategy_id(strategy_id: str) -> dict:
         "orb_minutes": 5,
     }
     for p in parts:
-        if p in ("E1", "E2", "E3"):
+        if p in ENTRY_MODELS:
             result["entry_model"] = p
         elif p.startswith("RR"):
             result["rr_target"] = float(p[2:])

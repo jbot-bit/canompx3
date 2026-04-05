@@ -85,7 +85,14 @@ class BrokerDispatcher(BrokerRouter):
         """Forward market price to all routers for price collar checks."""
         self.primary.update_market_price(price)
         for router in self.secondaries:
-            router.update_market_price(price)
+            try:
+                router.update_market_price(price)
+            except Exception:
+                log.warning(
+                    "BrokerDispatcher: secondary %s update_market_price failed",
+                    type(router).__name__,
+                    exc_info=True,
+                )
 
     def _adapt_spec(self, primary_spec: dict, router: BrokerRouter) -> dict:
         """Adapt a primary broker's order spec for a secondary broker.

@@ -110,14 +110,22 @@ class MultiInstrumentRunner:
         results = await asyncio.gather(*tasks.values(), return_exceptions=True)
 
         # Report per-instrument results
+        failures = 0
         for inst, result in zip(tasks.keys(), results, strict=True):
             if isinstance(result, Exception):
                 log.error("Orchestrator %s failed: %s", inst, result)
+                failures += 1
             else:
                 log.info("Orchestrator %s completed cleanly", inst)
 
         # Clean up stop file after ALL feeds have exited
         _STOP_FILE.unlink(missing_ok=True)
+
+        # Fail-closed: if ALL orchestrators crashed, surface failure to caller
+        if failures == len(tasks):
+            raise RuntimeError(
+                f"All {failures} orchestrators failed — session did not complete"
+            )
 
     async def _run_one(self, instrument: str, orch: SessionOrchestrator) -> None:
         """Run a single orchestrator with error isolation."""

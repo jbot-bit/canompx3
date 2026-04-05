@@ -569,8 +569,8 @@ def generate_report(
                         "  ACTION: Update prop_profiles.py daily_lanes if you accept these changes.",
                     ]
                 )
-    except ImportError:
-        pass
+    except ImportError as e:
+        lines.append(f"\n  [WARNING] Could not load prop_profiles for diff: {e}")
 
     # Paused lanes — collapsed by reason category (not 115 individual lines)
     paused = [s for s in scores if s.status == "PAUSE"]
@@ -613,7 +613,7 @@ def save_allocation(
     output_path: str | Path | None = None,
 ) -> Path:
     """Save allocation to JSON file."""
-    path = Path(output_path) if output_path else Path("docs/runtime/lane_allocation.json")
+    path = Path(output_path) if output_path else Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
 
     data = {
         "rebalance_date": rebalance_date.isoformat(),
