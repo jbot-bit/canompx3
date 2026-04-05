@@ -6,6 +6,39 @@
 
 ---
 
+## Update (Apr 5 — Ralph Loop iters 141-145 + Rithmic Hardening)
+
+### Completed
+1. **Ralph Loop iterations 141-145** — 5 parallel worktree audits on unscanned live trading files.
+   - **4 fixes committed** (`694108d`): prop_profiles canonical violation, lane_allocator path divergence + silent ImportError, multi_runner fail-open on total crash, broker_dispatcher unguarded secondary loop.
+   - **1 unfixed HIGH** (iter 141): `rithmic/order_router.py` `query_open_orders()` returns `[]` when `auth=None` instead of raising — leaves orphaned brackets alive. Agent exhausted turns. **Queued as top priority for next ralph iteration.**
+   - State files updated to iter 145. 212 files now fully scanned.
+2. **Rithmic hardening** (3 commits from prior worktree agents): rejection detection, protobuf field bugs, type guards, fault injection tests.
+
+### Known Issue — Worktree Hook Loop
+- Running ralph agents in parallel worktrees can leave a stale worktree reference if `git worktree remove` fails (Windows file lock).
+- This causes `completion-notify.py` stop hook to loop infinitely (CWD cached in session).
+- **Fix:** `rm -rf .claude/worktrees/agent-*` + `git worktree prune` + restart session.
+- The stale worktree from THIS session (`agent-a8e201e4`) has been cleaned up.
+
+### Next Priorities
+1. Fix rithmic order_router HIGH fail-open (iter 141 unfixed finding)
+2. Continue ralph on: `copy_order_router.py`, `pre_session_check.py`, `bot_dashboard.py`, `position_tracker.py`
+3. Live trading path: TopStep 50K Express signup, Rithmic API access application
+
+### Files Changed
+- `trading_app/prop_profiles.py` — ENTRY_MODELS import replacing hardcoded tuple
+- `trading_app/lane_allocator.py` — file-relative path fix + ImportError warning
+- `trading_app/live/multi_runner.py` — RuntimeError on total orchestrator failure
+- `trading_app/live/broker_dispatcher.py` — try/except on secondary update_market_price
+- `trading_app/live/rithmic/order_router.py` — hardening (rejection, protobuf, type guards)
+- `trading_app/live/rithmic/contracts.py` — fixes from hardening
+- `trading_app/live/rithmic/positions.py` — fixes from hardening
+- `tests/test_trading_app/test_rithmic_router.py` — 32+ new tests
+- `docs/ralph-loop/*` — state files updated to iter 145
+
+---
+
 ## Update (Apr 5 — Break Speed Research: Signal Real, Not Worth Deploying)
 
 ### Completed
