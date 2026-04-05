@@ -421,7 +421,7 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
         profile = get_profile(resolved_profile_id)
         if profile.daily_lanes:
             resolved = resolve_daily_lanes(profile, db_path=GOLD_DB_PATH, trading_day=today)
-            _dd_per, total_dd, dd_limit, over = check_daily_lanes_dd_budget(profile, resolved)
+            _, total_dd, dd_limit, over = check_daily_lanes_dd_budget(profile, resolved)
             if over:
                 pct = total_dd / dd_limit * 100
                 results.append(
