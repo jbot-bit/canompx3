@@ -494,6 +494,47 @@ class TestRithmicSubmitMocked:
         assert call_kwargs[1]["timeout"] == _ORDER_SUBMIT_TIMEOUT
 
 
+    def test_submit_rejected_order_detected(self):
+        """Rithmic rejection (rp_code != '0') sets status to 'rejected'."""
+        from trading_app.live.rithmic.order_router import RithmicOrderRouter
+
+        auth = _make_mock_auth()
+        # Simulate rejection: rp_code="1" (non-zero), empty basket_id
+        auth.run_async.return_value = [SimpleNamespace(basket_id="", rp_code="1")]
+
+        router = RithmicOrderRouter(
+            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
+        )
+        spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
+        result = router.submit(spec)
+
+        assert result["status"] == "rejected"
+        # Falls back to generated order_id since basket_id is empty
+        assert result["order_id"].startswith("orb_")
+
+    def test_submit_empty_basket_id_cache_lookup_works(self):
+        """When basket_id is empty, cache lookup by generated order_id still works."""
+        from trading_app.live.rithmic.order_router import RithmicOrderRouter
+
+        auth = _make_mock_auth()
+        # rp_code="0" (success) but empty basket_id (unusual but possible)
+        auth.run_async.return_value = [SimpleNamespace(basket_id="", rp_code="0")]
+
+        router = RithmicOrderRouter(
+            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
+        )
+        spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
+        result = router.submit(spec)
+
+        # order_id is the generated id (since basket_id empty)
+        gen_id = result["order_id"]
+        assert gen_id.startswith("orb_")
+
+        # query_order_status should find it by generated order_id
+        status = router.query_order_status(gen_id)
+        assert status["status"] == "submitted"
+
+
 class TestRithmicCancelMocked:
     """Test cancel() through the async bridge with mocked auth."""
 

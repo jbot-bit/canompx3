@@ -189,24 +189,42 @@ class RithmicOrderRouter(BrokerRouter):
         if elapsed_ms > 1000:
             log.warning("Order submission took %.0fms", elapsed_ms)
 
-        # Extract basket_id from response (Rithmic-assigned exchange order ID)
+        # Extract basket_id and rp_code from response.
+        # ResponseNewOrder (313) / ResponseBracketOrder (331) fields:
+        #   basket_id (str), rp_code (str: "0"=success, else rejection), user_tag (str)
         basket_id = None
+        rp_code = None
         if responses and hasattr(responses, "__iter__"):
             for r in responses if isinstance(responses, list) else [responses]:
                 if hasattr(r, "basket_id"):
-                    basket_id = r.basket_id
+                    raw_bid = r.basket_id
+                    if raw_bid and raw_bid != "":  # protobuf default is ""
+                        basket_id = raw_bid
+                if hasattr(r, "rp_code"):
+                    rp_code = r.rp_code
+                if basket_id is not None:
                     break
 
-        # Cache order state
+        # Detect rejection via rp_code
+        status = "submitted"
+        if rp_code is not None and rp_code != "" and rp_code != "0":
+            status = "rejected"
+            log.error(
+                "RITHMIC ORDER REJECTED: order_id=%s rp_code=%s basket_id=%s",
+                order_id, rp_code, basket_id,
+            )
+
+        # Cache order state — keyed by generated order_id for reliable lookup.
+        # basket_id may be None for rejected orders.
         self._order_cache[order_id] = {
             "basket_id": basket_id,
-            "status": "submitted",
+            "status": status,
             "fill_price": None,
         }
 
         return {
             "order_id": basket_id or order_id,
-            "status": "submitted",
+            "status": status,
             "fill_price": None,
         }
 
@@ -290,10 +308,12 @@ class RithmicOrderRouter(BrokerRouter):
         if self.auth is None:
             raise RuntimeError("No auth — cannot query order status")
 
-        # Check cache first
+        # Check cache first — match by basket_id OR by generated order_id.
+        # submit() returns basket_id when available, generated order_id otherwise.
+        # The orchestrator stores whichever was returned as entry_order_id.
         order_id_str = str(order_id)
         for uid, cached in self._order_cache.items():
-            if cached.get("basket_id") == order_id_str:
+            if cached.get("basket_id") == order_id_str or uid == order_id_str:
                 return {
                     "order_id": order_id,
                     "status": cached.get("status", "Unknown"),
