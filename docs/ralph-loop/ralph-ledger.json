@@ -1,7 +1,7 @@
 {
-  "total_iterations": 142,
+  "total_iterations": 143,
   "last_updated": "2026-04-05",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 149,
   "findings_by_type": {
     "canonical_violation": {
@@ -17,10 +17,10 @@
       "fix_rate": 0.93
     },
     "other": {
-      "found": 20,
-      "fixed": 10,
+      "found": 21,
+      "fixed": 11,
       "deferred": 1,
-      "fix_rate": 0.5
+      "fix_rate": 0.52
     },
     "dead_code": {
       "found": 14,
@@ -117,10 +117,10 @@
     "CRITICAL": 3,
     "HIGH": 11,
     "MEDIUM": 33,
-    "LOW": 95
+    "LOW": 96
   },
   "classifications": {
-    "judgment": 65,
+    "judgment": 66,
     "mechanical": 50,
     "audit-only": 27
   },
@@ -228,6 +228,11 @@
     "config.py": {
       "audit_count": 2,
       "last_iter": 75,
+      "findings": 2
+    },
+    "trading_app/live/position_tracker.py": {
+      "audit_count": 2,
+      "last_iter": 150,
       "findings": 2
     },
     "trading_app/paper_trader.py": {
@@ -403,11 +408,6 @@
     "test_projectx_router.py": {
       "audit_count": 1,
       "last_iter": 25,
-      "findings": 1
-    },
-    "trading_app/live/position_tracker.py": {
-      "audit_count": 1,
-      "last_iter": 26,
       "findings": 1
     },
     "trading_app/mcp_server.py": {
@@ -2578,6 +2578,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "8da5d5d"
+    },
+    {
+      "iter": 150,
+      "date": "2026-04-05",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/position_tracker.py:155",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "71422aa"
     }
   ]
 }

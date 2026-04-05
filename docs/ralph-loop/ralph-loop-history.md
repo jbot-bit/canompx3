@@ -1547,3 +1547,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file, display-only /api/sessions endpoint, no production trading logic path
 - Verification: PASS (3/3 test_bot_dashboard.py, drift 77/77)
 - Commit: 8da5d5d
+
+---
+
+## Iteration 150 — 2026-04-05
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/position_tracker.py:155
+- Finding: entry_slippage computed as raw price diff (fill_price - engine_entry_price) without direction adjustment. For SHORT trades a fill above engine price is a favorable outcome (sold higher) but was reported as +adverse slippage, inverting the sign for all short entries. Flows to trade_journal.slippage_pts and performance_monitor totals (monitoring only — actual_r unaffected).
+- Action: Added direction_mult (-1.0 for short, +1.0 for long). entry_slippage now positive = adverse for both directions. Added 4 directional tests (long above/below, short above/below) to test_position_tracker.py.
+- Blast radius: 1 file, monitoring-only field, no P&L computation affected
+- Verification: PASS (29/29 test_position_tracker.py, drift 77/77)
+- Commit: 71422aa
