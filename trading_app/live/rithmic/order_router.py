@@ -21,7 +21,10 @@ from ..broker_base import BrokerAuth, BrokerRouter
 log = logging.getLogger(__name__)
 
 _DEFAULT_PRICE_COLLAR_PCT = 0.005
-_BRIDGE_TIMEOUT = 10.0  # seconds for async→sync bridge
+_BRIDGE_TIMEOUT = 10.0  # seconds for async→sync bridge (queries, cancels)
+_ORDER_SUBMIT_TIMEOUT = 20.0  # seconds for order submission — must exceed library's
+                               # internal 30s retry timeout (but library uses retries=1
+                               # for orders, so effective wait = retry_settings.timeout)
 
 
 class RithmicOrderRouter(BrokerRouter):
@@ -131,9 +134,13 @@ class RithmicOrderRouter(BrokerRouter):
                 log.critical(msg)
                 raise ValueError(msg)
 
-        # Generate unique order ID (Rithmic requires user-assigned string ID)
+        # Generate unique order ID (Rithmic requires user-assigned string ID).
+        # Account suffix prevents collisions when copy trading sends multiple
+        # orders in the same second (3 copies = 3 orders/second).
+        # 6-digit random: P(collision) < 0.0002% per second with 3 copies.
         ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-        order_id = f"orb_{ts}_{random.randint(1000, 9999)}"
+        acct_suffix = self._rithmic_account_id[-4:] if len(self._rithmic_account_id) >= 4 else self._rithmic_account_id
+        order_id = f"orb_{ts}_{acct_suffix}_{random.randint(100000, 999999)}"
 
         # Build kwargs for async_rithmic submit_order()
         # Verified signature: submit_order(order_id, symbol, exchange, qty, transaction_type, order_type, **kwargs)
@@ -170,7 +177,7 @@ class RithmicOrderRouter(BrokerRouter):
                     order_type=order_type_int,
                     **submit_kwargs,
                 ),
-                timeout=_BRIDGE_TIMEOUT,
+                timeout=_ORDER_SUBMIT_TIMEOUT,
             )
             elapsed_ms = (time.monotonic() - t0) * 1000
         except Exception as e:
@@ -217,13 +224,20 @@ class RithmicOrderRouter(BrokerRouter):
         }
 
     def cancel(self, order_id: int) -> None:
-        """Cancel an order by basket_id (Rithmic-assigned exchange ID)."""
+        """Cancel an order by basket_id (Rithmic-assigned exchange ID).
+
+        Passes account_id to avoid the library doing a full get_order() scan
+        across all accounts (extra network round-trip).
+        """
         if self.auth is None:
             raise RuntimeError(f"Cannot cancel order {order_id} — no auth configured")
 
         try:
             self.auth.run_async(
-                self.auth.client.cancel_order(basket_id=str(order_id)),
+                self.auth.client.cancel_order(
+                    basket_id=str(order_id),
+                    account_id=self._rithmic_account_id,
+                ),
                 timeout=_BRIDGE_TIMEOUT,
             )
             log.info("Rithmic order cancelled: basket_id=%s", order_id)
@@ -339,7 +353,10 @@ class RithmicOrderRouter(BrokerRouter):
             if o_symbol == contract_id and basket_id:
                 try:
                     self.auth.run_async(
-                        self.auth.client.cancel_order(basket_id=basket_id),
+                        self.auth.client.cancel_order(
+                            basket_id=basket_id,
+                            account_id=self._rithmic_account_id,
+                        ),
                         timeout=_BRIDGE_TIMEOUT,
                     )
                     cancelled += 1

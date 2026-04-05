@@ -2,7 +2,14 @@
 
 Uses async_rithmic PnlPlant for position snapshots and account summaries.
 
-Verified against: async_rithmic 1.5.9 source (plants/pnl.py lines 44-62)
+Response objects are protobuf messages — financial fields (account_balance,
+cash_on_hand, open_position_pnl) are STRING type, not numeric.
+
+Verified against: async_rithmic 1.5.9 protobuf schema:
+  InstrumentPnLPositionUpdate (template 450): buy_qty, sell_qty, net_quantity,
+      avg_open_fill_price, symbol, exchange, open_position_pnl
+  AccountPnLPositionUpdate (template 451): account_balance, cash_on_hand,
+      margin_balance, open_position_pnl (all STRING type=9)
 """
 
 import logging
@@ -42,9 +49,11 @@ class RithmicPositions(BrokerPositions):
 
         result = []
         for p in positions if isinstance(positions, list) else [positions]:
-            # Extract fields from protobuf response object
+            # Protobuf fields from InstrumentPnLPositionUpdate (template 450):
+            #   net_quantity (int), buy_qty (int), sell_qty (int),
+            #   avg_open_fill_price (float), symbol (str)
             symbol = getattr(p, "symbol", "")
-            quantity = getattr(p, "open_long_quantity", 0) - getattr(p, "open_short_quantity", 0)
+            quantity = getattr(p, "net_quantity", 0)
             avg_price = getattr(p, "avg_open_fill_price", 0)
 
             if quantity == 0:
@@ -81,13 +90,18 @@ class RithmicPositions(BrokerPositions):
         if not summaries:
             return None
 
-        # Extract equity from first summary
+        # Extract equity from first summary.
+        # Protobuf fields from AccountPnLPositionUpdate (template 451):
+        #   account_balance, cash_on_hand are STRING type (protobuf type=9).
+        #   Empty string "" is the default for unset string fields.
         summary = summaries[0] if isinstance(summaries, list) else summaries
-        equity = getattr(summary, "account_balance", None)
-        if equity is None:
-            equity = getattr(summary, "cash_on_hand", None)
-        if equity is not None:
-            return float(equity)
+        for field in ("account_balance", "cash_on_hand"):
+            raw = getattr(summary, field, None)
+            if raw is not None and raw != "":
+                try:
+                    return float(raw)
+                except (ValueError, TypeError):
+                    log.warning("Rithmic %s not numeric: '%s' for account %s", field, raw, acct_id_str)
 
         log.warning("Rithmic account summary has no balance field for account %s", acct_id_str)
         return None

@@ -7,6 +7,7 @@ Verified against: async_rithmic 1.5.9 source (plants/ticker.py, plants/order.py)
 """
 
 import logging
+from datetime import date
 
 from ..broker_base import BrokerAuth, BrokerContracts
 
@@ -118,19 +119,22 @@ class RithmicContracts(BrokerContracts):
 
         CME micro futures use quarterly cycle: H (Mar), M (Jun), U (Sep), Z (Dec).
         Roll typically happens ~1 week before expiration on 3rd Friday.
+        We use a 2-week buffer before the expiration month to avoid trading
+        an expired contract (e.g., if today is Mar 20 and MESH6 expired Mar 15).
         """
-        from datetime import date
-
         today = date.today()
         month = today.month
+        day = today.day
         year = today.year % 10  # Single digit year
 
         # Quarterly months and their codes
         quarters = [(3, "H"), (6, "M"), (9, "U"), (12, "Z")]
 
         for q_month, code in quarters:
-            if month <= q_month:
+            # In the expiration month, roll to next contract after day 14
+            # (3rd Friday is always between 15th-21st, roll before it)
+            if month < q_month or (month == q_month and day <= 14):
                 return f"{root}{code}{year}"
 
-        # Past December → next year's March
+        # Past December (or past Dec 14) → next year's March
         return f"{root}H{(year + 1) % 10}"
