@@ -322,11 +322,12 @@ def check_signal_exists(con, session: str, lane: dict, today: date) -> tuple[boo
     """Check if today has outcome data for this session (signal fired)."""
     instrument = lane["instrument"]
     orb_min = lane["orb_minutes"]
+    entry_model = lane["entry_model"]
     row = con.execute(
         """SELECT COUNT(*) FROM orb_outcomes
            WHERE symbol = ? AND orb_label = ? AND orb_minutes = ?
-             AND entry_model = 'E2' AND trading_day = ?""",
-        [instrument, session, orb_min, today],
+             AND entry_model = ? AND trading_day = ?""",
+        [instrument, session, orb_min, entry_model, today],
     ).fetchone()
     n = row[0] if row else 0
     if n > 0:
