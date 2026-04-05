@@ -158,3 +158,58 @@ class TestEdgeCases:
         record = tracker.pop("S1")
         assert record is not None
         assert tracker.get("S1") is None
+
+
+class TestSafetyGuards:
+    """Tests for R2-H2/R2-H3 safety guards — the most critical paths."""
+
+    def test_r2_h2_exit_sent_on_pending_entry_rejected(self):
+        """R2-H2: Cannot exit an entry that hasn't filled yet — must cancel instead."""
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "long", 100.0, order_id=42)
+        result = tracker.on_exit_sent("S1", exit_order_id=99)
+        assert result is None  # REJECTED
+        # Position unchanged — still PENDING_ENTRY
+        assert tracker.get("S1").state == PositionState.PENDING_ENTRY
+
+    def test_r2_h3_late_fill_after_exit_rejected(self):
+        """R2-H3: Late entry fill after exit started must NOT resurrect the position."""
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "long", 100.0, order_id=42)
+        tracker.on_entry_filled("S1", 100.5)
+        tracker.on_exit_sent("S1", exit_order_id=99)
+        assert tracker.get("S1").state == PositionState.PENDING_EXIT
+        # Late fill arrives — must be rejected
+        result = tracker.on_entry_filled("S1", 101.0)
+        assert result is None  # REJECTED
+        # State unchanged — still PENDING_EXIT
+        assert tracker.get("S1").state == PositionState.PENDING_EXIT
+
+    def test_duplicate_entry_fill_ignored(self):
+        """Duplicate fill on already-ENTERED position returns existing record, no state change."""
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "long", 100.0)
+        tracker.on_entry_filled("S1", 100.5)
+        # Duplicate fill
+        result = tracker.on_entry_filled("S1", 101.0)
+        assert result is not None
+        assert result.state == PositionState.ENTERED
+        assert result.fill_entry_price == 100.5  # Original price preserved
+
+    def test_duplicate_exit_sent_ignored(self):
+        """Duplicate on_exit_sent returns existing record, no state change."""
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "long", 100.0)
+        tracker.on_entry_filled("S1", 100.0)
+        tracker.on_exit_sent("S1", exit_order_id=99)
+        # Duplicate exit sent
+        result = tracker.on_exit_sent("S1", exit_order_id=100)
+        assert result is not None
+        assert result.state == PositionState.PENDING_EXIT
+        assert result.exit_order_id == 99  # Original order preserved
+
+    def test_exit_sent_on_unknown_returns_none(self):
+        """Exit sent for unknown strategy returns None."""
+        tracker = PositionTracker()
+        result = tracker.on_exit_sent("UNKNOWN")
+        assert result is None
