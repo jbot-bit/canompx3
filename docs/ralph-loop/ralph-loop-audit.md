@@ -3,42 +3,42 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 149
+## Last iteration: 150
 
-## RALPH AUDIT — Iteration 149
+## RALPH AUDIT — Iteration 150
 ## Date: 2026-04-05
-## Infrastructure Gates: behavioral audit PASS, ruff PASS, drift 77/77 PASS, 3/3 test_bot_dashboard.py PASS
+## Infrastructure Gates: behavioral audit PASS, ruff PASS (1 pre-existing UP017 in scripts/databento_daily.py, not in scope), drift 77/77 PASS, 29/29 test_position_tracker.py PASS
 
 ---
 
-## Iteration 149 — trading_app/live/bot_dashboard.py
+## Iteration 150 — trading_app/live/position_tracker.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Canonical violation (DST date) | `api_sessions()` used `date.today()` (system local date) instead of `now_bris.date()` (Brisbane date) when passing date to DST resolvers — wrong date at NYSE_OPEN midnight crossing (00:30 Brisbane) | LOW | FIXED 8da5d5d |
-| Silent failure | `_lifespan` heartbeat parse `except Exception: pass` at line 70 — no log when heartbeat string is unparseable, stale state decision made silently | LOW | FIXED 8da5d5d |
-| All others | No look-ahead bias, no cost illusion, no hardcoded canonical lists (instruments from ACTIVE_ORB_INSTRUMENTS, sessions from SESSION_CATALOG, profiles from ACCOUNT_PROFILES). Hardcoded fallback profile name at line 117 is ACCEPTABLE (logged warning, downstream script fails gracefully on bad profile). Comment at line 582 naming instruments is ACCEPTABLE (comment only, actual script uses canonical source). | — | CLEAN |
+| Silent failure (monitoring) | `entry_slippage` computed as `fill_price - engine_entry_price` without direction adjustment — for SHORT trades a fill above engine price is favorable (sold higher) but reported as positive (adverse) slippage, inverting the sign for all short entries in the trade journal | LOW | FIXED 71422aa |
+| `on_exit_filled` state guard | No explicit warning when called on PENDING_ENTRY or FLAT state — assessed as ACCEPTABLE: emergency kill-switch path deliberately calls on_exit_filled on any active state, so permissiveness is by design | — | ACCEPTABLE |
+| All others | No look-ahead bias, no cost illusion, no hardcoded canonical lists, no fail-open paths. R2-H2/R2-H3 guards correct and fully tested. Slippage field is monitoring-only — actual_r P&L unaffected. | — | CLEAN |
 
 ### Audit Notes
 
-- **DST date bug (FIXED):** `api_sessions()` computed `now_bris = datetime.now(ZoneInfo("Australia/Brisbane"))` on line 500 correctly, but then called `today = date_type.today()` (system local date) on line 501. The `NYSE_OPEN` resolver constructs `datetime(trading_day.year, trading_day.month, trading_day.day, 9, 30, 0, tzinfo=_US_EASTERN)` — if the host is UTC/US-Eastern and it's after midnight UTC but before 00:30 Brisbane, `date.today()` returns the previous calendar day, yielding a wrong hour. Fix: `today = now_bris.date()`. The `now_bris` variable was already on the line above.
-- **Heartbeat silent failure (FIXED):** `except Exception: pass` on heartbeat ISO parse meant that a corrupted `heartbeat_utc` field would silently leave stale bot state in place at dashboard startup. Fix: `log.warning(...)` so the decision is traceable.
-- **`_resolve_profile()` fallback (ACCEPTABLE):** Line 117 hardcodes `"topstep_50k_mnq_auto"`. This is the active production profile. The function logs a warning when the fallback activates (lines 113-116), and downstream `scripts.run_live_session` fails gracefully if the profile doesn't exist. Pattern: intentional named fallback with explicit log, not a silent canonical violation. Matches ACCEPTABLE rule 1 (intentional heuristic with warning).
-- **Various cleanup `except Exception` handlers:** All resource-release handlers (`log_file.close()`, `lock_file.unlink()`, process termination) are correct — resource cleanup should never fail the outer operation. ACCEPTABLE per pattern 4 (defensive resource release, cannot corrupt state).
-- **`api_sessions()` individual resolver swallow (line 509):** `except Exception: continue` skips broken sessions for display. ACCEPTABLE — display-only, sessions that error show 0 rather than crashing the entire endpoint.
+- **entry_slippage sign (FIXED):** Line 155 used `fill_price - record.engine_entry_price` regardless of direction. Adverse slippage convention: positive = worse fill for the trade direction. For LONG, fill > engine is adverse (+). For SHORT, fill > engine is favorable (sold higher), so slippage should be negative. Fix: `direction_mult = -1.0 if record.direction == "short" else 1.0`. Field flows to `session_orchestrator._record_exit` → `TradeRecord.slippage_pts` → `trade_journal.record_exit` and `performance_monitor` totals. `actual_r` computed independently, unaffected.
+- **`on_exit_filled` without state guard (ACCEPTABLE):** Kill-switch flatten path (`session_orchestrator.py:1926`) calls `on_exit_filled` on ENTERED positions directly (skipping `on_exit_sent`) as emergency flatten. All other callers (1349, 1771, 1824) call from PENDING_EXIT. Permissive design is intentional. Matches ACCEPTABLE rule 1 (intentional emergency behavior, not a canonical list or safety gap).
+- **`best_entry_price` fallback:** None-check is correct; `test_fill_price_zero_not_falsy` confirms 0.0 fill does not fall through. CLEAN.
+- **`stale_positions` timeout default 300s:** Hard-coded default only — callers can override. ACCEPTABLE rule 1 (per-session heuristic).
 
 ---
 
-## Summary — Iteration 149
+## Summary — Iteration 150
 
-- 2 LOW findings — both FIXED ([judgment] + [mechanical], 2-line diff)
-- Commit: 8da5d5d
+- 1 LOW finding — FIXED ([judgment], 3-line production diff + 4 tests)
+- 1 finding ACCEPTABLE
+- Commit: 71422aa
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 216 files fully scanned (1 new file added this iteration).
+> Cumulative list — 217 files fully scanned (1 new file added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -96,10 +96,11 @@
 - trading_app/live/copy_order_router.py — added iter 147
 - trading_app/live/rithmic/auth.py — added iter 148
 - trading_app/live/bot_dashboard.py — added iter 149
-- **Total: 216 files fully scanned**
+- trading_app/live/position_tracker.py — added iter 150
+- **Total: 217 files fully scanned**
 
 ## Next iteration targets
-- trading_app/live/position_tracker.py — unscanned position management
 - trading_app/account_hwm_tracker.py — unscanned high-centrality file (referenced from pre_session_check, session_orchestrator)
 - trading_app/live/rithmic/__init__.py — unscanned rithmic package init
 - trading_app/live/bot_state.py — imported by bot_dashboard; unscanned state management
+- trading_app/live/trade_journal.py — slippage_pts consumer; worth auditing now that entry slippage sign is corrected
