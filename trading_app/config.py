@@ -1518,6 +1518,31 @@ E2_EXCLUDED_FILTER_SUBSTRINGS: tuple[str, ...] = (
 STOP_MULTIPLIERS = [1.0, 0.75]
 
 
+# =========================================================================
+# E2 Order Timeout: break-speed overlay via execution timing
+# =========================================================================
+# Instead of a daily_features filter (look-ahead for E2), this timeout
+# cancels the E2 stop-market trigger if the break hasn't happened within
+# N minutes of ORB completion. Mechanically identical to break_delay_min <= N.
+#
+# Validated per-instrument per-session on raw canonical data (orb_outcomes +
+# daily_features), pipeline filter objects, BH FDR at K=40, bootstrap null
+# floor, ±20% sensitivity, walk-forward, and year stability:
+#
+#   MNQ NYSE_OPEN FAST5:  WR spread +7.6pp, p=0.0001, WFE=0.71, 12/17yr
+#   MNQ NYSE_CLOSE FAST5: WR spread +9.2pp, p=0.009,  WFE=1.50, 10/10yr
+#
+# NOT validated: MGC (0/8, p>0.71), MES (0/4, p>0.11).
+# Keyed by (instrument, session) → timeout_minutes.
+# @research-source memory/break_speed_signal_retest.md
+# @entry-models E2
+# @revalidated-for E2 (Apr 2026)
+E2_ORDER_TIMEOUT: dict[tuple[str, str], float] = {
+    ("MNQ", "NYSE_OPEN"): 5.0,
+    ("MNQ", "NYSE_CLOSE"): 5.0,
+}
+
+
 def apply_tight_stop(outcomes: list[dict], stop_multiplier: float, cost_spec) -> list[dict]:
     """Apply tight stop simulation to a list of outcome dicts (Option B).
 

@@ -232,6 +232,7 @@ def replay_historical(
     live_session_costs: bool = False,
     max_correlation: float = 0.85,
     use_ml: bool = False,
+    use_e2_timeout: bool = False,
 ) -> ReplayResult:
     """
     Feed historical bars_1m through ExecutionEngine + RiskManager.
@@ -279,6 +280,13 @@ def replay_historical(
 
     # MarketState built per-day below; engine gets it on day start
     market_state = None
+    # E2 order timeout: break-speed overlay via execution timing.
+    # Enabled by default for validated (instrument, session) pairs.
+    # Pass None to disable (raw baseline comparison).
+    from trading_app.config import E2_ORDER_TIMEOUT
+
+    _e2_timeout = E2_ORDER_TIMEOUT if use_e2_timeout else None
+
     engine = ExecutionEngine(
         portfolio,
         cost_spec,
@@ -287,6 +295,7 @@ def replay_historical(
         live_session_costs=live_session_costs,
         atr_velocity_overlay=ATR_VELOCITY_OVERLAY,
         ml_predictor=ml_predictor,
+        e2_order_timeout=_e2_timeout,
     )
 
     with duckdb.connect(str(db_path), read_only=True) as con:
@@ -868,6 +877,12 @@ def main():
         default=False,
         help="Multi-RR portfolio: O5 RR1.0 raw baseline + O30 RR2.0 ML-filtered overlay. Implies --use-ml.",
     )
+    parser.add_argument(
+        "--e2-timeout",
+        action="store_true",
+        default=False,
+        help="Enable E2 order timeout (break-speed overlay). MNQ NYSE_OPEN/CLOSE: skip E2 trigger after 5min.",
+    )
     args = parser.parse_args()
 
     # --multi-rr implies --use-ml (Layer 2 needs ML predictor)
@@ -917,6 +932,7 @@ def main():
         live_session_costs=args.live_session_costs,
         max_correlation=args.max_correlation,
         use_ml=args.use_ml,
+        use_e2_timeout=args.e2_timeout,
     )
 
     # Fix 6: No-data warning

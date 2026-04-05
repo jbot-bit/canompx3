@@ -248,12 +248,15 @@ class SessionOrchestrator:
             log.warning("ML predictor init failed: %s — all trades fail-open", e)
             self._ml_predictor = None
 
+        from trading_app.config import E2_ORDER_TIMEOUT
+
         self.engine = ExecutionEngine(
             portfolio=self.portfolio,
             cost_spec=cost,
             risk_manager=self.risk_mgr,
             live_session_costs=True,
             ml_predictor=self._ml_predictor,
+            e2_order_timeout=E2_ORDER_TIMEOUT,
         )
 
         # Contract resolution (needed even in signal-only for front-month lookup)

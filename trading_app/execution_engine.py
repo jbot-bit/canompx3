@@ -80,6 +80,7 @@ class LiveORB:
     break_dir: str | None = None
     break_ts: datetime | None = None
     e2_touched: bool = False  # True once E2 stop-market has triggered on first touch
+    complete_ts: datetime | None = None  # Timestamp when ORB window closed
 
     @property
     def size(self) -> float | None:
@@ -194,6 +195,7 @@ class ExecutionEngine:
         live_session_costs: bool = True,
         atr_velocity_overlay=None,
         ml_predictor=None,
+        e2_order_timeout: dict[tuple[str, str], float] | None = None,
     ):
         self.portfolio = portfolio
         self.cost_spec = cost_spec
@@ -202,6 +204,12 @@ class ExecutionEngine:
         self._live_session_costs = live_session_costs  # Use session-adjusted slippage
         self.atr_velocity_overlay = atr_velocity_overlay  # Contracting ATR skip overlay
         self.ml_predictor = ml_predictor  # Optional LiveMLPredictor for P(win) filtering
+        # E2 order timeout: {(instrument, session) -> minutes}. After ORB completes,
+        # E2 stop-market trigger is skipped if elapsed > timeout. Implements break-speed
+        # overlay without a daily_features filter lookup (which is look-ahead for E2).
+        # None = no timeout (backward compatible). See config.E2_ORDER_TIMEOUT.
+        # @research-source memory/break_speed_signal_retest.md
+        self._e2_order_timeout = e2_order_timeout or {}
         self.ml_skips: int = 0  # Count of ML-skipped trades
 
         # State
@@ -430,6 +438,7 @@ class ExecutionEngine:
             # Mark ORB as complete when window ends
             if not orb.complete and ts >= orb.window_end_utc:
                 orb.complete = True
+                orb.complete_ts = ts
 
         # Phase 1.5: E2 honest entry — first bar touching ORB after window end.
         # E2 stop-market fills on range touch, not close confirmation.
@@ -438,6 +447,21 @@ class ExecutionEngine:
         # timing must match live stop-market execution.
         for (_label, _om), orb in self.orbs.items():
             if orb.complete and not orb.e2_touched and orb.high is not None:
+                # E2 order timeout: skip trigger if too much time elapsed since
+                # ORB completion. Implements break-speed overlay via execution
+                # timing (not daily_features lookup — that's look-ahead for E2).
+                # Keyed by (instrument, session). Absent key = no timeout.
+                # @research-source memory/break_speed_signal_retest.md
+                _timeout_min = self._e2_order_timeout.get(
+                    (self.portfolio.instrument, _label)
+                )
+                if (
+                    _timeout_min is not None
+                    and orb.complete_ts is not None
+                    and (ts - orb.complete_ts).total_seconds() / 60 > _timeout_min
+                ):
+                    orb.e2_touched = True  # prevent re-checking every bar
+                    continue
                 e2_dir = None
                 if bar["high"] > orb.high:
                     e2_dir = "long"
