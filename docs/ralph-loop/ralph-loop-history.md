@@ -1511,3 +1511,27 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file, 1 call site (pre_session_check.py:408), no external importers
 - Verification: PASS (17/17 test_pre_session_check.py pass, behavioral audit clean)
 - Commit: 77d55b3
+
+---
+
+## Iteration 147 — 2026-04-05
+- Phase: audit-only
+- Classification: N/A
+- Target: trading_app/live/copy_order_router.py
+- Finding: No actionable findings. Seven Sins scan clean. All exception handlers use exc_info=True (not silent). No canonical violations, no hardcoded lists, no orphan code. submit() "unknown" status default is acceptable (all concrete brokers always return status; unknown → copy is conservative-correct). cancel_bracket_orders() duck-type on shadows is safe (caught by try/except with full exc_info logging).
+- Action: audit-only, no changes
+- Blast radius: 2 callers (session_orchestrator.py, broker_dispatcher.py); 20 tests all pass
+- Verification: PASS (20/20 test_copy_order_router.py; behavioral audit clean; ruff clean; drift 77/77)
+- Commit: NONE
+
+---
+
+## Iteration 148 — 2026-04-05
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/rithmic/auth.py:54,202
+- Finding: _ensure_connected() and refresh_if_needed() only checked _connected flag, ignoring _auth_healthy=False state after bridge timeout — reconnect path bypassed when connection object exists but is functionally broken (after run_async() TimeoutError sets _auth_healthy=False while leaving _connected=True)
+- Action: Added _auth_healthy check to _ensure_connected() fast-path guard (line 54) and refresh_if_needed() trigger condition (line 202). Both now require _auth_healthy=True to skip reconnect.
+- Blast radius: 1 file, 3 callers in session_orchestrator.py (no change to callers)
+- Verification: PASS (77/77 test_rithmic_router.py, drift 77/77, behavioral audit clean)
+- Commit: d3cfee2

@@ -1,14 +1,14 @@
 {
-  "total_iterations": 139,
+  "total_iterations": 141,
   "last_updated": "2026-04-05",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 2,
   "last_high_finding_iter": 146,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 50,
+      "found": 51,
       "fixed": 38,
       "deferred": 4,
-      "fix_rate": 0.76
+      "fix_rate": 0.75
     },
     "silent_failure": {
       "found": 27,
@@ -52,6 +52,12 @@
       "deferred": 0,
       "fix_rate": 1.0
     },
+    "security": {
+      "found": 2,
+      "fixed": 2,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
     "broad_except": {
       "found": 2,
       "fixed": 2,
@@ -61,12 +67,6 @@
     "connection_leak": {
       "found": 2,
       "fixed": 2,
-      "deferred": 0,
-      "fix_rate": 1.0
-    },
-    "security": {
-      "found": 1,
-      "fixed": 1,
       "deferred": 0,
       "fix_rate": 1.0
     },
@@ -117,12 +117,12 @@
     "CRITICAL": 3,
     "HIGH": 11,
     "MEDIUM": 32,
-    "LOW": 93
+    "LOW": 95
   },
   "classifications": {
-    "judgment": 64,
+    "judgment": 65,
     "mechanical": 49,
-    "audit-only": 26
+    "audit-only": 27
   },
   "files_audited": {
     "execution_engine.py": {
@@ -998,6 +998,16 @@
     "trading_app/pre_session_check.py": {
       "audit_count": 1,
       "last_iter": 146,
+      "findings": 1
+    },
+    "trading_app/live/copy_order_router.py": {
+      "audit_count": 1,
+      "last_iter": 147,
+      "findings": 0
+    },
+    "trading_app/live/rithmic/auth.py": {
+      "audit_count": 1,
+      "last_iter": 148,
       "findings": 1
     }
   },
@@ -2530,6 +2540,28 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "77d55b3"
+    },
+    {
+      "iter": 147,
+      "date": "2026-04-05",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/live/copy_order_router.py",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "CLEAN",
+      "commit": "NONE"
+    },
+    {
+      "iter": 148,
+      "date": "2026-04-05",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/rithmic/auth.py:54,202",
+      "finding_type": "security",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "d3cfee2"
     }
   ]
 }

@@ -1,10 +1,10 @@
-## Iteration: 146
-## Target: trading_app/pre_session_check.py:328
-## Finding: check_signal_exists() hardcodes entry_model='E2' in SQL instead of using lane["entry_model"]
-## Classification: [mechanical]
-## Blast Radius: 1 file, 1 call site (pre_session_check.py:408), 1 test file (test_pre_session_check.py — no direct test for this function)
+## Iteration: 148
+## Target: trading_app/live/rithmic/auth.py:54,202
+## Finding: _ensure_connected() and refresh_if_needed() only gate on _connected flag, ignoring _auth_healthy=False state after bridge timeout — reconnect path is bypassed when connection object exists but is functionally broken
+## Classification: [judgment]
+## Blast Radius: 1 file (auth.py), 3 callers in session_orchestrator.py (no change to callers)
 ## Invariants:
-##   1. Function signature unchanged (con, session, lane, today)
-##   2. SQL query logic unchanged except parameterized entry_model
-##   3. Return tuple format unchanged (bool, str)
-## Diff estimate: 2 lines
+##   [1] Fast path on fully healthy state (_connected=True AND _auth_healthy=True) must still short-circuit immediately
+##   [2] disconnect() behavior unchanged
+##   [3] No new imports
+## Diff estimate: 2 lines changed
