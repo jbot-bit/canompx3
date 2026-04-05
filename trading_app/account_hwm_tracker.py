@@ -60,7 +60,6 @@ class HWMState:
         return max(0.0, self.dd_limit_dollars - self.dd_used_dollars)
 
 
-_WARN_THRESHOLD = 0.75
 _MAX_SESSION_LOG = 30
 _MAX_CONSECUTIVE_POLL_FAILURES = 3
 
