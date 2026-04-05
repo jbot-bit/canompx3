@@ -194,8 +194,10 @@ class RithmicOrderRouter(BrokerRouter):
         #   basket_id (str), rp_code (str: "0"=success, else rejection), user_tag (str)
         basket_id = None
         rp_code = None
-        if responses and hasattr(responses, "__iter__"):
-            for r in responses if isinstance(responses, list) else [responses]:
+        if responses:
+            # _send_and_collect returns a list, but guard against single objects.
+            resp_list = responses if isinstance(responses, list) else [responses]
+            for r in resp_list:
                 if hasattr(r, "basket_id"):
                     raw_bid = r.basket_id
                     if raw_bid and raw_bid != "":  # protobuf default is ""

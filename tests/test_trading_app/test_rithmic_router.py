@@ -1020,6 +1020,53 @@ class TestFaultInjection:
         auth.disconnect()
         assert auth._connected is False
 
+    def test_submit_single_response_not_list(self):
+        """Single protobuf response (not wrapped in list) is handled."""
+        from trading_app.live.rithmic.order_router import RithmicOrderRouter
+
+        auth = _make_mock_auth()
+        # Return a single object, not a list
+        auth.run_async.return_value = SimpleNamespace(basket_id="88001", rp_code="0")
+
+        router = RithmicOrderRouter(
+            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
+        )
+        spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
+        result = router.submit(spec)
+        assert result["order_id"] == "88001"
+        assert result["status"] == "submitted"
+
+    def test_connection_failure_cleans_up_resources(self):
+        """Partial connect failure resets _client, _loop, _thread to None."""
+        from trading_app.live.rithmic.auth import RithmicAuth
+
+        auth = RithmicAuth()
+        auth._user = "test"
+        auth._password = "test"
+        auth._gateway = "wss://fake:443"
+
+        # Patch at the source module (lazy import inside _ensure_connected)
+        with patch("async_rithmic.RithmicClient") as MockClient:
+            mock_client = MagicMock()
+            MockClient.return_value = mock_client
+
+            # Make connect() fail via the async bridge
+            async def fail_connect(**kwargs):
+                raise ConnectionError("refused")
+
+            mock_client.connect = fail_connect
+            mock_client.accounts = None
+
+            with pytest.raises(RuntimeError, match="connection failed"):
+                auth._ensure_connected()
+
+            # Verify cleanup happened — no leaked resources
+            assert auth._client is None
+            assert auth._loop is None
+            assert auth._thread is None
+            assert auth._connected is False
+            assert auth._auth_healthy is False
+
 
 class TestRithmicRollDateBuffer:
     """Test front-month construction respects expiration dates."""

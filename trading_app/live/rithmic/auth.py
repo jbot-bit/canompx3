@@ -63,7 +63,7 @@ class RithmicAuth(BrokerAuth):
         # Import async_rithmic lazily to avoid import errors when not using Rithmic
         from async_rithmic import OrderPlacement, RithmicClient, SysInfraType
 
-        self._client = RithmicClient(
+        client = RithmicClient(
             user=self._user,
             password=self._password,
             system_name=self._system_name,
@@ -74,18 +74,23 @@ class RithmicAuth(BrokerAuth):
         )
 
         # Create background event loop in daemon thread
-        self._loop = asyncio.new_event_loop()
-        self._thread = threading.Thread(
+        loop = asyncio.new_event_loop()
+        thread = threading.Thread(
             target=self._run_loop,
             daemon=True,
             name="rithmic-event-loop",
         )
-        self._thread.start()
+
+        # Assign to instance BEFORE starting, so disconnect() can clean up on failure
+        self._client = client
+        self._loop = loop
+        self._thread = thread
+        thread.start()
 
         # Connect ORDER_PLANT + PNL_PLANT (skip TICKER — ProjectX handles data)
         future = asyncio.run_coroutine_threadsafe(
-            self._client.connect(plants=[SysInfraType.ORDER_PLANT, SysInfraType.PNL_PLANT]),
-            self._loop,
+            client.connect(plants=[SysInfraType.ORDER_PLANT, SysInfraType.PNL_PLANT]),
+            loop,
         )
         try:
             future.result(timeout=_CONNECT_TIMEOUT)
@@ -95,10 +100,20 @@ class RithmicAuth(BrokerAuth):
                 "Rithmic connected: system=%s gateway=%s accounts=%d",
                 self._system_name,
                 self._gateway,
-                len(self._client.accounts) if self._client.accounts else 0,
+                len(client.accounts) if client.accounts else 0,
             )
         except Exception as e:
+            # Clean up partially-created resources to prevent leak on retry
             self._auth_healthy = False
+            self._connected = False
+            try:
+                if loop.is_running():
+                    loop.call_soon_threadsafe(loop.stop)
+            except RuntimeError:
+                pass
+            self._client = None
+            self._loop = None
+            self._thread = None
             log.critical("Rithmic connection FAILED: %s", e)
             raise RuntimeError(f"Rithmic connection failed: {e}") from e
 
