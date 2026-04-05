@@ -54,16 +54,24 @@ class RithmicPositions(BrokerPositions):
             #   avg_open_fill_price (float), symbol (str)
             symbol = getattr(p, "symbol", "")
             quantity = getattr(p, "net_quantity", 0)
-            avg_price = getattr(p, "avg_open_fill_price", 0)
+            raw_avg = getattr(p, "avg_open_fill_price", 0.0)
 
             if quantity == 0:
                 continue
+
+            # avg_open_fill_price is DOUBLE (type=1), default 0.0.
+            # Guard against unexpected string/None from future protobuf changes.
+            try:
+                avg_price = float(raw_avg) if raw_avg else 0.0
+            except (ValueError, TypeError):
+                avg_price = 0.0
+                log.warning("avg_open_fill_price not numeric for %s: %r", symbol, raw_avg)
 
             result.append({
                 "contract_id": symbol,
                 "side": "long" if quantity > 0 else "short",
                 "size": abs(quantity),
-                "avg_price": float(avg_price) if avg_price else 0,
+                "avg_price": avg_price,
             })
 
         if result:

@@ -131,9 +131,10 @@ class RithmicAuth(BrokerAuth):
             return future.result(timeout=timeout)
         except TimeoutError:
             self._auth_healthy = False
-            raise RuntimeError(f"Rithmic async bridge timed out after {timeout}s")
-        except Exception:
+            raise RuntimeError(f"Rithmic async bridge timed out after {timeout}s") from None
+        except Exception as e:
             self._auth_healthy = False
+            log.error("Rithmic async bridge error: %s", e)
             raise
 
     def get_token(self) -> str:
@@ -158,7 +159,7 @@ class RithmicAuth(BrokerAuth):
         Important for prop firms where connection limits apply (Bulenox: 3 simultaneous).
         Ghost sessions from ungraceful disconnects could consume account slots.
         """
-        if self._client is not None and self._connected:
+        if self._client is not None and self._connected and self._loop is not None:
             try:
                 future = asyncio.run_coroutine_threadsafe(
                     self._client.disconnect(), self._loop
@@ -170,8 +171,12 @@ class RithmicAuth(BrokerAuth):
                 self._connected = False
                 self._auth_healthy = False
 
-        if self._loop is not None and self._loop.is_running():
-            self._loop.call_soon_threadsafe(self._loop.stop)
+        if self._loop is not None:
+            try:
+                if self._loop.is_running():
+                    self._loop.call_soon_threadsafe(self._loop.stop)
+            except RuntimeError:
+                pass  # Loop already closed/stopped — safe to ignore
 
     def refresh_if_needed(self) -> None:
         """Check connection health. Reconnect is handled by async_rithmic auto-reconnect.

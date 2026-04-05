@@ -327,21 +327,26 @@ class RithmicOrderRouter(BrokerRouter):
                 timeout=_BRIDGE_TIMEOUT,
             )
             if order:
-                status = getattr(order, "status", "Unknown")
-                fill_price = getattr(order, "avg_fill_price", None)
+                # status is STRING (protobuf type=9), default "".
+                # avg_fill_price is DOUBLE (type=1), default 0.0.
+                raw_status = getattr(order, "status", "")
+                status = str(raw_status) if raw_status else "Unknown"
+                raw_fill = getattr(order, "avg_fill_price", 0.0)
+                fill_price = float(raw_fill) if raw_fill != 0.0 else None
                 return {
                     "order_id": order_id,
-                    "status": str(status),
-                    "fill_price": float(fill_price) if fill_price else None,
+                    "status": status,
+                    "fill_price": fill_price,
                 }
         except Exception as e:
-            log.warning("Rithmic order query failed for basket_id=%s: %s", order_id, e)
+            log.error("Rithmic order query FAILED for basket_id=%s: %s", order_id, e)
 
         return {"order_id": order_id, "status": "Unknown", "fill_price": None}
 
     def query_open_orders(self) -> list[dict]:
         """Query all open/working orders for this account."""
         if self.auth is None:
+            log.warning("query_open_orders called with no auth — returning empty")
             return []
         try:
             orders = self.auth.run_async(

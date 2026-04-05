@@ -840,6 +840,187 @@ class TestRithmicContractResolveMocked:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Fault injection tests — force errors and verify loud failure
+# ---------------------------------------------------------------------------
+
+
+class TestFaultInjection:
+    """Inject failures into the async bridge and verify correct error handling."""
+
+    def test_submit_timeout_raises_not_swallowed(self):
+        """Bridge timeout during submit must raise, not silently return."""
+        from trading_app.live.rithmic.order_router import RithmicOrderRouter
+
+        auth = _make_mock_auth()
+        auth.run_async.side_effect = RuntimeError("Rithmic async bridge timed out after 20.0s")
+
+        router = RithmicOrderRouter(
+            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
+        )
+        spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
+        with pytest.raises(RuntimeError, match="timed out"):
+            router.submit(spec)
+
+    def test_cancel_timeout_raises_not_swallowed(self):
+        """Bridge timeout during cancel must raise."""
+        from trading_app.live.rithmic.order_router import RithmicOrderRouter
+
+        auth = _make_mock_auth()
+        auth.run_async.side_effect = RuntimeError("timed out")
+
+        router = RithmicOrderRouter(
+            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
+        )
+        with pytest.raises(RuntimeError):
+            router.cancel(99001)
+
+    def test_position_query_error_raises_not_swallowed(self):
+        """Position query failure must raise (crash recovery depends on it)."""
+        from trading_app.live.rithmic.positions import RithmicPositions
+
+        auth = _make_mock_auth()
+        auth.run_async.side_effect = RuntimeError("connection lost")
+
+        pos = RithmicPositions(auth=auth)
+        with pytest.raises(RuntimeError, match="connection lost"):
+            pos.query_open(12345)
+
+    def test_equity_query_error_returns_none_not_raises(self):
+        """Equity failure returns None (non-critical monitoring path)."""
+        from trading_app.live.rithmic.positions import RithmicPositions
+
+        auth = _make_mock_auth()
+        auth.run_async.side_effect = RuntimeError("timeout")
+
+        pos = RithmicPositions(auth=auth)
+        result = pos.query_equity(12345)
+        assert result is None
+
+    def test_query_order_status_api_error_returns_unknown(self):
+        """API failure in order status returns Unknown, doesn't crash."""
+        from trading_app.live.rithmic.order_router import RithmicOrderRouter
+
+        auth = _make_mock_auth()
+        auth.run_async.side_effect = RuntimeError("connection reset")
+
+        router = RithmicOrderRouter(
+            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
+        )
+        result = router.query_order_status(99999)
+        assert result["status"] == "Unknown"
+        assert result["fill_price"] is None
+
+    def test_submit_with_corrupted_response_object(self):
+        """Response object missing expected fields doesn't crash."""
+        from trading_app.live.rithmic.order_router import RithmicOrderRouter
+
+        auth = _make_mock_auth()
+        # Response with no basket_id or rp_code attributes at all
+        auth.run_async.return_value = [object()]
+
+        router = RithmicOrderRouter(
+            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
+        )
+        spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
+        result = router.submit(spec)
+        # Should fall back to generated order_id
+        assert result["order_id"].startswith("orb_")
+        assert result["status"] == "submitted"
+
+    def test_positions_with_non_numeric_avg_price(self):
+        """Non-numeric avg_open_fill_price doesn't crash, logs warning."""
+        from trading_app.live.rithmic.positions import RithmicPositions
+
+        auth = _make_mock_auth()
+        auth.run_async.return_value = [
+            SimpleNamespace(symbol="MESM6", net_quantity=1, avg_open_fill_price="BAD_DATA"),
+        ]
+
+        pos = RithmicPositions(auth=auth)
+        result = pos.query_open(12345)
+        assert len(result) == 1
+        assert result[0]["avg_price"] == 0.0  # Graceful fallback
+
+    def test_equity_with_non_numeric_balance(self):
+        """Non-numeric account_balance doesn't crash, tries cash_on_hand."""
+        from trading_app.live.rithmic.positions import RithmicPositions
+
+        auth = _make_mock_auth()
+        auth.run_async.return_value = [
+            SimpleNamespace(account_balance="CORRUPTED", cash_on_hand="45000.00"),
+        ]
+
+        pos = RithmicPositions(auth=auth)
+        equity = pos.query_equity(12345)
+        assert equity == 45000.0  # Falls through to cash_on_hand
+
+    def test_order_status_empty_string_status(self):
+        """Empty-string status from protobuf mapped to 'Unknown'."""
+        from trading_app.live.rithmic.order_router import RithmicOrderRouter
+
+        auth = _make_mock_auth()
+        # Simulate get_order returning object with empty status
+        auth.run_async.return_value = SimpleNamespace(
+            status="", avg_fill_price=0.0
+        )
+
+        router = RithmicOrderRouter(
+            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
+        )
+        result = router.query_order_status(99999)
+        assert result["status"] == "Unknown"
+        assert result["fill_price"] is None
+
+    def test_order_status_filled_returns_price(self):
+        """Filled order returns correct status and fill price."""
+        from trading_app.live.rithmic.order_router import RithmicOrderRouter
+
+        auth = _make_mock_auth()
+        auth.run_async.return_value = SimpleNamespace(
+            status="complete", avg_fill_price=5210.25
+        )
+
+        router = RithmicOrderRouter(
+            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
+        )
+        result = router.query_order_status(99999)
+        assert result["status"] == "complete"
+        assert result["fill_price"] == 5210.25
+
+    def test_bracket_cleanup_partial_cancel_failure(self):
+        """One cancel fails, others still proceed — returns partial count."""
+        from trading_app.live.rithmic.order_router import RithmicOrderRouter
+
+        auth = _make_mock_auth()
+        auth.run_async.side_effect = [
+            # query_open_orders
+            [
+                SimpleNamespace(symbol="MESM6", basket_id="100"),
+                SimpleNamespace(symbol="MESM6", basket_id="101"),
+                SimpleNamespace(symbol="MESM6", basket_id="102"),
+            ],
+            None,                              # cancel 100: success
+            RuntimeError("cancel failed"),     # cancel 101: FAIL
+            None,                              # cancel 102: success
+        ]
+
+        router = RithmicOrderRouter(
+            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
+        )
+        cancelled = router.cancel_bracket_orders("MESM6")
+        assert cancelled == 2  # 2 succeeded, 1 failed
+
+    def test_auth_disconnect_already_stopped_loop(self):
+        """Disconnect with already-stopped loop doesn't crash."""
+        from trading_app.live.rithmic.auth import RithmicAuth
+
+        auth = RithmicAuth()
+        # Not connected — disconnect should be safe no-op
+        auth.disconnect()
+        assert auth._connected is False
+
+
 class TestRithmicRollDateBuffer:
     """Test front-month construction respects expiration dates."""
 
