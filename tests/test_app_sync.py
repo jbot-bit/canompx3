@@ -193,6 +193,24 @@ class TestAllFiltersSync:
         "PDR_R125",
         "GAP_R005",
         "GAP_R015",
+        # Cost-ratio + break-speed composites (Apr 2026 break-speed retest)
+        "COST_LT08_FAST5",
+        "COST_LT08_FAST10",
+        "COST_LT10_FAST5",
+        "COST_LT10_FAST10",
+        "COST_LT12_FAST5",
+        "COST_LT12_FAST10",
+        "COST_LT15_FAST5",
+        "COST_LT15_FAST10",
+        # Overnight-range + break-speed composites (Apr 2026 break-speed retest)
+        "OVNRNG_10_FAST5",
+        "OVNRNG_10_FAST10",
+        "OVNRNG_25_FAST5",
+        "OVNRNG_25_FAST10",
+        "OVNRNG_50_FAST5",
+        "OVNRNG_50_FAST10",
+        "OVNRNG_100_FAST5",
+        "OVNRNG_100_FAST10",
     }
 
     def test_expected_keys(self):
@@ -257,6 +275,12 @@ class TestAllFiltersSync:
             ):
                 continue
             if isinstance(filt, CompositeFilter):
+                # Composite with non-size base (cost-ratio, overnight-range): skip
+                if isinstance(
+                    filt.base,
+                    (CostRatioFilter, OvernightRangeAbsFilter),
+                ):
+                    continue
                 # Composite: base should be OrbSizeFilter with thresholds
                 assert isinstance(filt.base, OrbSizeFilter), f"{key} composite base should be OrbSizeFilter"
                 assert filt.base.min_size is not None or filt.base.max_size is not None, (

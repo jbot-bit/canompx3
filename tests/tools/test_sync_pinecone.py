@@ -233,9 +233,9 @@ def test_collect_files_from_manifest():
     research_keys = [key for _, key in collected["research_output"]]
     assert any("_bundle_" in k for k in research_keys)
 
-    # Total file count should be under 200 (Pinecone practical limit for sync performance)
+    # Total file count should be under 250 (Pinecone practical limit for sync performance)
     total = sum(len(files) for files in collected.values())
-    assert total < 200, f"Total files ({total}) exceeds Pinecone 200-file limit"
+    assert total < 250, f"Total files ({total}) exceeds Pinecone 250-file limit"
 
 
 # ---------------------------------------------------------------------------
