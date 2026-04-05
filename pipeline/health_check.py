@@ -34,9 +34,16 @@ def check_python_deps() -> tuple[bool, str]:
             __import__(pkg)
         except ImportError:
             missing_dev.append(pkg)
-    # pyright is a CLI tool, not importable — check via venv Scripts dir
+    # pyright is a CLI tool, not importable — check via venv Scripts dir or Scripts/ subdir
     venv_scripts = Path(sys.executable).parent
-    if not (venv_scripts / "pyright.exe").exists() and not (venv_scripts / "pyright").exists():
+    scripts_subdir = venv_scripts / "Scripts"
+    pyright_found = (
+        (venv_scripts / "pyright.exe").exists()
+        or (venv_scripts / "pyright").exists()
+        or (scripts_subdir / "pyright.exe").exists()
+        or (scripts_subdir / "pyright").exists()
+    )
+    if not pyright_found:
         missing_dev.append("pyright")
     if missing_prod:
         return False, f"{version}, MISSING production deps: {', '.join(missing_prod)}"

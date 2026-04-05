@@ -70,18 +70,23 @@ PRIORITY_ORDER = {"must_have": 0, "high": 1, "nice_to_have": 2}
 def filter_downloads(
     downloads: list[dict],
     priority: str | None = None,
-    name: str | None = None,
+    name: list[str] | str | None = None,
     schema: str | None = None,
 ) -> list[dict]:
-    """Filter download specs by priority, name, or schema."""
+    """Filter download specs by priority, name(s), or schema."""
     result = downloads
 
     if name:
-        result = [d for d in result if d["name"] == name]
+        # Support both single string and list of names
+        names = name if isinstance(name, list) else [name]
+        result = [d for d in result if d["name"] in names]
         if not result:
-            print(f"FATAL: No download named '{name}' in config")
+            print(f"FATAL: No downloads named {names} in config")
             print(f"  Available: {[d['name'] for d in downloads]}")
             sys.exit(1)
+        missing = set(names) - {d["name"] for d in result}
+        if missing:
+            print(f"WARNING: Names not found in config: {missing}")
         return result
 
     if schema:
@@ -255,16 +260,32 @@ def validate_download(file_path: Path, dl: dict) -> dict:
 
     try:
         store = db.DBNStore.from_file(str(file_path))
-        df = store.to_df()
-        report["rows"] = len(df)
+        file_size_gb = file_path.stat().st_size / (1024**3)
 
-        if len(df) > 0:
-            ts_col = "ts_event" if "ts_event" in df.columns else df.columns[0]
-            if hasattr(df[ts_col], "min"):
-                report["first_ts"] = str(df[ts_col].min())
-                report["last_ts"] = str(df[ts_col].max())
+        if file_size_gb > 2.0:
+            # Large files: use metadata + chunked read for first/last timestamps.
+            # DBNStore exposes .start/.end/.schema without loading records.
+            report["first_ts"] = str(store.start) if store.start else None
+            report["last_ts"] = str(store.end) if store.end else None
+            # Count via chunked iteration (first chunk only to confirm data exists)
+            chunk_count = 0
+            for chunk_df in store.to_df(count=1000):
+                chunk_count += len(chunk_df)
+                break  # Just need to confirm records exist
+            report["rows"] = chunk_count  # Lower bound (first chunk only)
+            report["valid"] = chunk_count > 0
+            report["note"] = f"Large file ({file_size_gb:.1f} GB) — chunked validation"
+        else:
+            df = store.to_df()
+            report["rows"] = len(df)
 
-        report["valid"] = report["rows"] > 0
+            if len(df) > 0:
+                ts_col = "ts_event" if "ts_event" in df.columns else df.columns[0]
+                if hasattr(df[ts_col], "min"):
+                    report["first_ts"] = str(df[ts_col].min())
+                    report["last_ts"] = str(df[ts_col].max())
+
+            report["valid"] = report["rows"] > 0
 
     except Exception as e:
         report["error"] = str(e)
@@ -498,7 +519,7 @@ Examples:
     parser.add_argument(
         "--priority", choices=["must_have", "high", "nice_to_have"], help="Download up to this priority tier"
     )
-    parser.add_argument("--name", help="Download a specific item by name")
+    parser.add_argument("--name", nargs="+", help="Download specific item(s) by name (one or more)")
     parser.add_argument("--schema", help="Download all items of a specific schema")
     parser.add_argument("--from", dest="date_from", help="Override start date (YYYY-MM-DD)")
     parser.add_argument("--to", dest="date_to", help="Override end date (YYYY-MM-DD)")

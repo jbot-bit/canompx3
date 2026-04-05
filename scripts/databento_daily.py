@@ -5,8 +5,10 @@ Designed to run as a daily cron job. Downloads incremental data for all active
 instruments and schemas, validates, and triggers the pipeline build chain.
 
 For ohlcv-1m: delegates to the existing refresh_data.py (download + ingest +
-build 5m bars + daily features). For other schemas (ohlcv-1s, tbbo, trades,
-bbo-1s, statistics): downloads to data/raw/databento/ with validation.
+build 5m bars + daily features). For other schemas (ohlcv-1s, statistics):
+downloads to data/raw/databento/ as research archive. Only FREE (L0) schemas
+are downloaded daily — paid schemas (tbbo, trades, bbo-1s, mbp-1) are
+one-time backfills only.
 
 Usage:
     python scripts/databento_daily.py                  # Full daily refresh
@@ -26,7 +28,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -77,10 +79,12 @@ if _missing:
     )
 
 # Additional schemas to refresh daily (beyond ohlcv-1m which refresh_data.py handles).
-# Standard plan ($179/mo) includes: L0 (ohlcv, stats) unlimited, L1 (tbbo, trades,
-# bbo-1s) 12mo, L2/L3 (mbp-1, mbp-10) 1mo. Refreshes L0 + L1 + mbp-1 daily.
-# NOTE: mbp-10 (10-level book depth) is NOT refreshed daily — large file, backfill only.
-# See config/databento_config.yaml TIER 2 for one-time mbp-10 backfill specs.
+# Only FREE (L0) schemas are downloaded daily. Paid schemas (L1 tbbo/trades/bbo-1s,
+# L2 mbp-1/mbp-10) are one-time backfills only — see config/databento_config.yaml.
+#
+# Rationale (Apr 2026): OI research KILLED (confounded with ATR, r=0.4-0.6).
+# Tick-level data (tbbo/trades/mbp-1) not ingested, no validated use case.
+# Keeping FREE schemas as research archive costs nothing on usage-based plan.
 DAILY_SCHEMAS = [
     {
         "schema": "ohlcv-1s",
@@ -91,26 +95,6 @@ DAILY_SCHEMAS = [
         "schema": "statistics",
         "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
         "description": "Settlement prices, OI, volume stats (L0 FREE)",
-    },
-    {
-        "schema": "tbbo",
-        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
-        "description": "Trade+quote for slippage monitoring (L1 INCLUDED)",
-    },
-    {
-        "schema": "trades",
-        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
-        "description": "Tick-by-tick trades for order flow (L1 INCLUDED)",
-    },
-    {
-        "schema": "bbo-1s",
-        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
-        "description": "1-second bid/ask for spread tracking (L1 INCLUDED)",
-    },
-    {
-        "schema": "mbp-1",
-        "instruments": {k: _DATABENTO_SYMBOLS[k] for k in ACTIVE_ORB_INSTRUMENTS},
-        "description": "Top-of-book for break quality research (L2 INCLUDED 1mo)",
     },
 ]
 
@@ -165,6 +149,19 @@ def refresh_schema(
     client = db.Historical(api_key)
     output_base = PROJECT_ROOT / "data" / "raw" / "databento"
 
+    # Clamp fetch_end to Databento's actual available range to avoid 422 errors.
+    try:
+        ds_range = client.metadata.get_dataset_range(dataset=DATASET)
+        available_end = date.fromisoformat(str(ds_range["end"])[:10])
+        if fetch_end > available_end:
+            log.info(f"  Clamping fetch_end from {fetch_end} to {available_end} (data availability)")
+            fetch_end = available_end
+        if fetch_start >= fetch_end:
+            log.info(f"  {schema}: SKIP (fetch_start {fetch_start} >= available end {fetch_end})")
+            return {f"all_{schema}": "SKIP (no new data available)"}
+    except Exception as e:
+        log.warning(f"  Could not check dataset range: {e} — proceeding with requested dates")
+
     for stored_as, db_symbol in schema_spec["instruments"].items():
         name = f"{stored_as}_{schema}"
         output_dir = output_base / schema / stored_as
@@ -208,10 +205,17 @@ def refresh_schema(
             data.to_file(str(out_file))
             size_mb = out_file.stat().st_size / (1024 * 1024)
 
-            # Quick validation
+            # Quick validation (chunked for large files to avoid OOM)
             store = db.DBNStore.from_file(str(out_file))
-            df = store.to_df()
-            row_count = len(df)
+            file_size_gb = out_file.stat().st_size / (1024**3)
+            if file_size_gb > 2.0:
+                row_count = 0
+                for chunk_df in store.to_df(count=1000):
+                    row_count += len(chunk_df)
+                    break  # First chunk confirms data exists
+            else:
+                df = store.to_df()
+                row_count = len(df)
 
             log.info(f"  {name}: OK ({size_mb:.1f} MB, {row_count:,} records)")
             results[name] = f"OK ({row_count:,} records)"
@@ -230,12 +234,17 @@ def run_daily_refresh(
 ):
     """Full daily refresh pipeline."""
     start_time = time.time()
-    today = date.today()
-    fetch_start = today - timedelta(days=days)
-    fetch_end = today
+    # Use UTC date to avoid Brisbane timezone offset bug.
+    # At 09:30 Brisbane (23:30 UTC), date.today() returns tomorrow's Brisbane
+    # date, but Databento data isn't available that far yet. UTC date is always
+    # safe because we request up to midnight UTC of the current UTC day, which
+    # covers the previous complete trading session.
+    today_utc = datetime.now(timezone.utc).date()
+    fetch_start = today_utc - timedelta(days=days)
+    fetch_end = today_utc
 
     log.info("=" * 60)
-    log.info(f"  DAILY DATABENTO REFRESH -- {today}")
+    log.info(f"  DAILY DATABENTO REFRESH -- {today_utc} (UTC)")
     log.info(f"  Fetch window: {fetch_start} -> {fetch_end} ({days} day(s))")
     if dry_run:
         log.info("  MODE: DRY RUN")
