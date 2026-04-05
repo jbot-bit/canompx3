@@ -152,7 +152,10 @@ class PositionTracker:
         record.entered_at = now
         record.state_changed_at = now
         if record.engine_entry_price is not None:
-            record.entry_slippage = fill_price - record.engine_entry_price
+            # Adverse slippage convention: positive = worse fill for the trade direction.
+            # LONG: fill > engine → paid more → +adverse. SHORT: fill < engine → sold lower → +adverse.
+            direction_mult = -1.0 if record.direction == "short" else 1.0
+            record.entry_slippage = (fill_price - record.engine_entry_price) * direction_mult
         log.debug(
             "Position %s -> ENTERED (fill=%.2f, slip=%s)",
             strategy_id,

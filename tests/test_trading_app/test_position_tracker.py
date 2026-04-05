@@ -2,6 +2,8 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from trading_app.live.position_tracker import PositionState, PositionTracker
 
 
@@ -68,6 +70,38 @@ class TestBestEntryPrice:
         tracker.on_entry_sent("S1", "long", 100.0)
         tracker.on_entry_filled("S1", 0.0)
         assert tracker.best_entry_price("S1", 99.0) == 0.0
+
+
+class TestSlippageDirection:
+    """entry_slippage must use direction-adjusted convention: positive = adverse."""
+
+    def test_long_fill_above_engine_is_adverse(self):
+        """LONG: fill > engine → paid more → positive (adverse) slippage."""
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "long", 100.0)
+        record = tracker.on_entry_filled("S1", 100.5)
+        assert record.entry_slippage == pytest.approx(0.5)
+
+    def test_long_fill_below_engine_is_favorable(self):
+        """LONG: fill < engine → paid less → negative (favorable) slippage."""
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "long", 100.0)
+        record = tracker.on_entry_filled("S1", 99.5)
+        assert record.entry_slippage == pytest.approx(-0.5)
+
+    def test_short_fill_above_engine_is_favorable(self):
+        """SHORT: fill > engine → sold higher → negative (favorable) slippage."""
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "short", 100.0)
+        record = tracker.on_entry_filled("S1", 100.5)
+        assert record.entry_slippage == pytest.approx(-0.5)
+
+    def test_short_fill_below_engine_is_adverse(self):
+        """SHORT: fill < engine → sold lower → positive (adverse) slippage."""
+        tracker = PositionTracker()
+        tracker.on_entry_sent("S1", "short", 100.0)
+        record = tracker.on_entry_filled("S1", 99.5)
+        assert record.entry_slippage == pytest.approx(0.5)
 
 
 class TestStaleDetection:
