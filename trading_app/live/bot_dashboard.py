@@ -68,7 +68,7 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
                     clear_state()
                     log.info("Startup: cleared stale bot_state (heartbeat %ds old)", int(age))
             except Exception:
-                pass
+                log.warning("Startup: failed to parse heartbeat %r — keeping state as-is", hb)
 
     yield
 
@@ -498,7 +498,7 @@ async def api_sessions():
         from pipeline.dst import SESSION_CATALOG
 
         now_bris = datetime.now(ZoneInfo("Australia/Brisbane"))
-        today = date_type.today()
+        today = now_bris.date()  # Use Brisbane date — not system local (matters at NYSE_OPEN midnight crossing)
         sessions = []
         for name, info in sorted(SESSION_CATALOG.items()):
             resolver = info.get("resolver")
