@@ -493,8 +493,6 @@ async def api_accounts():
 async def api_sessions():
     """Server-side DST-correct session schedule with next-session computation."""
     try:
-        from datetime import date as date_type
-
         from pipeline.dst import SESSION_CATALOG
 
         now_bris = datetime.now(ZoneInfo("Australia/Brisbane"))
