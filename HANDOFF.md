@@ -6,6 +6,35 @@
 
 ---
 
+## Update (Apr 5 — Prop Firm Automation Research: Verified Rules)
+
+### Completed
+1. **Scraped and verified automation rules for 6 prop firms** — TopStep, Bulenox, Elite Trader Funding, TickTickTrader, Leeloo, Apex. All from official help pages via Firecrawl.
+2. **TopStep Express→Live forced conversion documented** — 3-5 payouts then discretionary call-up, no opt-out. All Express accounts close. Express is a short extraction window, not permanent scaling.
+3. **Bulenox confirmed as durable automation lane** — bots allowed ("not forbidden"), 3 simultaneous + 11 total Master Accounts, no forced conversion, Rithmic platform, no bot exclusivity.
+4. **Elite Trader Funding identified** — 100% profit split, bots+copy allowed, Rithmic platform. Needs deeper verification on multi-account limits.
+5. **Tradeify marked DEAD** — user confirmed, help pages 403, Tradovate auth broken for weeks. Memory saved: never suggest again.
+6. **TickTickTrader and Leeloo confirmed NO-GO** — both explicitly prohibit automated trading.
+
+### Key Finding
+- **One Rithmic API integration unlocks two firms** (Bulenox + Elite). This is the durable prop scaling lane — no forced conversion, bots allowed, multi-account.
+- **TopStep/ProjectX = prove the loop NOW** (bot code exists), but plan for 3-5 payout window before forced Live.
+
+### Memory Updated
+- `prop_firm_automation_verified_apr5.md` — full verified rules table with sources
+- `feedback_tradeify_dead.md` — never suggest Tradeify
+- `MEMORY.md` action queue — Rithmic integration + TopStep Express at top
+
+### Next Session Priority
+1. TopStep 50K Express account setup (sign up, pass Combine)
+2. Rithmic API integration DESIGN (not code yet)
+3. Elite Trader Funding deep verification (official help pages)
+
+### No Code Changes
+All output was research/memory. Nothing to commit to repo.
+
+---
+
 ## Update (Apr 4 — Claude: Skill Improvement + Consolidation)
 
 ### Completed
