@@ -3,42 +3,42 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 148
+## Last iteration: 149
 
-## RALPH AUDIT — Iteration 148
+## RALPH AUDIT — Iteration 149
 ## Date: 2026-04-05
-## Infrastructure Gates: behavioral audit PASS, ruff PASS (1 pre-existing fixable in databento_daily.py), drift 77/77 PASS, 77/77 test_rithmic_router.py PASS
+## Infrastructure Gates: behavioral audit PASS, ruff PASS, drift 77/77 PASS, 3/3 test_bot_dashboard.py PASS
 
 ---
 
-## Iteration 148 — trading_app/live/rithmic/auth.py
+## Iteration 149 — trading_app/live/bot_dashboard.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Fail-open | `_ensure_connected()` + `refresh_if_needed()` only gate on `_connected`, ignoring `_auth_healthy=False` after bridge timeout — reconnect path bypassed when connection is broken | LOW | FIXED d3cfee2 |
-| Silent failure | `except RuntimeError: pass` at line 113 inside cleanup of already-failed connection — safe (original exception still re-raised at line 118) | — | ACCEPTABLE |
-| All others | No canonical violations, no hardcoded lists, no orphan imports, no cost illusion, no look-ahead bias | — | CLEAN |
+| Canonical violation (DST date) | `api_sessions()` used `date.today()` (system local date) instead of `now_bris.date()` (Brisbane date) when passing date to DST resolvers — wrong date at NYSE_OPEN midnight crossing (00:30 Brisbane) | LOW | FIXED 8da5d5d |
+| Silent failure | `_lifespan` heartbeat parse `except Exception: pass` at line 70 — no log when heartbeat string is unparseable, stale state decision made silently | LOW | FIXED 8da5d5d |
+| All others | No look-ahead bias, no cost illusion, no hardcoded canonical lists (instruments from ACTIVE_ORB_INSTRUMENTS, sessions from SESSION_CATALOG, profiles from ACCOUNT_PROFILES). Hardcoded fallback profile name at line 117 is ACCEPTABLE (logged warning, downstream script fails gracefully on bad profile). Comment at line 582 naming instruments is ACCEPTABLE (comment only, actual script uses canonical source). | — | CLEAN |
 
 ### Audit Notes
 
-- **Reconnect gap (FIXED):** After a `TimeoutError` in `run_async()`, `_auth_healthy` was set to `False` while `_connected` remained `True`. Both `_ensure_connected()` (fast-path guard) and `refresh_if_needed()` only checked `_connected`, so the reconnect path was skipped — leaving the auth permanently broken until process restart. `session_orchestrator.py` calls `refresh_if_needed()` in 3 retry paths (stuck exit, exit retry, reconnect loop), all silently no-ops for this state.
-- **Fix:** `_ensure_connected()` fast-path now requires `_connected AND _client is not None AND _auth_healthy`. `refresh_if_needed()` now triggers reconnect when `not _connected OR not _auth_healthy`.
-- **Thread-safety:** No threading.Lock on `_ensure_connected` — ACCEPTABLE. Architectural single-caller design: `RithmicAuth` created once per profile in `broker_factory.py`; background thread runs loop only, never calls back into `_ensure_connected`.
-- **Stale refs after disconnect:** `disconnect()` leaves `_loop`/`_thread`/`_client` set (non-None). Safe: `_ensure_connected()` overwrites them on reconnect; old thread is daemon and dies when loop is stopped.
-- **`run_async()` marks unhealthy on all exceptions:** Broad catch at line 150 sets `_auth_healthy=False` even for non-connectivity errors (e.g., bad order spec). LOW concern — in practice, malformed orders would raise before reaching `run_async`.
+- **DST date bug (FIXED):** `api_sessions()` computed `now_bris = datetime.now(ZoneInfo("Australia/Brisbane"))` on line 500 correctly, but then called `today = date_type.today()` (system local date) on line 501. The `NYSE_OPEN` resolver constructs `datetime(trading_day.year, trading_day.month, trading_day.day, 9, 30, 0, tzinfo=_US_EASTERN)` — if the host is UTC/US-Eastern and it's after midnight UTC but before 00:30 Brisbane, `date.today()` returns the previous calendar day, yielding a wrong hour. Fix: `today = now_bris.date()`. The `now_bris` variable was already on the line above.
+- **Heartbeat silent failure (FIXED):** `except Exception: pass` on heartbeat ISO parse meant that a corrupted `heartbeat_utc` field would silently leave stale bot state in place at dashboard startup. Fix: `log.warning(...)` so the decision is traceable.
+- **`_resolve_profile()` fallback (ACCEPTABLE):** Line 117 hardcodes `"topstep_50k_mnq_auto"`. This is the active production profile. The function logs a warning when the fallback activates (lines 113-116), and downstream `scripts.run_live_session` fails gracefully if the profile doesn't exist. Pattern: intentional named fallback with explicit log, not a silent canonical violation. Matches ACCEPTABLE rule 1 (intentional heuristic with warning).
+- **Various cleanup `except Exception` handlers:** All resource-release handlers (`log_file.close()`, `lock_file.unlink()`, process termination) are correct — resource cleanup should never fail the outer operation. ACCEPTABLE per pattern 4 (defensive resource release, cannot corrupt state).
+- **`api_sessions()` individual resolver swallow (line 509):** `except Exception: continue` skips broken sessions for display. ACCEPTABLE — display-only, sessions that error show 0 rather than crashing the entire endpoint.
 
 ---
 
-## Summary — Iteration 148
+## Summary — Iteration 149
 
-- 1 LOW finding — FIXED (2 lines, [judgment])
-- Commit: d3cfee2
+- 2 LOW findings — both FIXED ([judgment] + [mechanical], 2-line diff)
+- Commit: 8da5d5d
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 215 files fully scanned (1 new file added this iteration).
+> Cumulative list — 216 files fully scanned (1 new file added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -95,10 +95,11 @@
 - trading_app/pre_session_check.py — added iter 146
 - trading_app/live/copy_order_router.py — added iter 147
 - trading_app/live/rithmic/auth.py — added iter 148
-- **Total: 215 files fully scanned**
+- trading_app/live/bot_dashboard.py — added iter 149
+- **Total: 216 files fully scanned**
 
 ## Next iteration targets
-- trading_app/live/bot_dashboard.py — unscanned live trading UI
 - trading_app/live/position_tracker.py — unscanned position management
 - trading_app/account_hwm_tracker.py — unscanned high-centrality file (referenced from pre_session_check, session_orchestrator)
 - trading_app/live/rithmic/__init__.py — unscanned rithmic package init
+- trading_app/live/bot_state.py — imported by bot_dashboard; unscanned state management

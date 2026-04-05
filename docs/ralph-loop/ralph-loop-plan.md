@@ -1,10 +1,11 @@
-## Iteration: 148
-## Target: trading_app/live/rithmic/auth.py:54,202
-## Finding: _ensure_connected() and refresh_if_needed() only gate on _connected flag, ignoring _auth_healthy=False state after bridge timeout — reconnect path is bypassed when connection object exists but is functionally broken
+## Iteration: 149
+## Target: trading_app/live/bot_dashboard.py:501
+## Finding: api_sessions() passes date.today() (system local date) to DST resolvers instead of now_bris.date() (Brisbane date) — incorrect during NYSE_OPEN midnight crossing period
 ## Classification: [judgment]
-## Blast Radius: 1 file (auth.py), 3 callers in session_orchestrator.py (no change to callers)
+## Blast Radius: 1 file (bot_dashboard.py), display-only endpoint, no production trading path
 ## Invariants:
-##   [1] Fast path on fully healthy state (_connected=True AND _auth_healthy=True) must still short-circuit immediately
-##   [2] disconnect() behavior unchanged
-##   [3] No new imports
-## Diff estimate: 2 lines changed
+##   1. api_sessions() JSON shape unchanged (sessions list + next field)
+##   2. DST resolver interface resolver(date) -> tuple[int, int] unchanged
+##   3. Session sort order by minutes_away unchanged
+## Diff estimate: 3 lines
+## Secondary fix: line 70 silent except Exception: pass on heartbeat parse failure → add log.warning [mechanical]

@@ -1,8 +1,8 @@
 {
-  "total_iterations": 141,
+  "total_iterations": 142,
   "last_updated": "2026-04-05",
-  "consecutive_low_only": 2,
-  "last_high_finding_iter": 146,
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 149,
   "findings_by_type": {
     "canonical_violation": {
       "found": 51,
@@ -11,8 +11,8 @@
       "fix_rate": 0.75
     },
     "silent_failure": {
-      "found": 27,
-      "fixed": 25,
+      "found": 28,
+      "fixed": 26,
       "deferred": 1,
       "fix_rate": 0.93
     },
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 11,
-    "MEDIUM": 32,
+    "MEDIUM": 33,
     "LOW": 95
   },
   "classifications": {
     "judgment": 65,
-    "mechanical": 49,
+    "mechanical": 50,
     "audit-only": 27
   },
   "files_audited": {
@@ -1008,6 +1008,11 @@
     "trading_app/live/rithmic/auth.py": {
       "audit_count": 1,
       "last_iter": 148,
+      "findings": 1
+    },
+    "trading_app/live/bot_dashboard.py": {
+      "audit_count": 1,
+      "last_iter": 149,
       "findings": 1
     }
   },
@@ -2562,6 +2567,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "d3cfee2"
+    },
+    {
+      "iter": 149,
+      "date": "2026-04-05",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/live/bot_dashboard.py:501,70",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "8da5d5d"
     }
   ]
 }

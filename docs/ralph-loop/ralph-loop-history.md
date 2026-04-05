@@ -1535,3 +1535,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file, 3 callers in session_orchestrator.py (no change to callers)
 - Verification: PASS (77/77 test_rithmic_router.py, drift 77/77, behavioral audit clean)
 - Commit: d3cfee2
+
+---
+
+## Iteration 149 — 2026-04-05
+- Phase: fix
+- Classification: [judgment] (primary) + [mechanical] (secondary)
+- Target: trading_app/live/bot_dashboard.py:501,70
+- Finding: api_sessions() used date.today() (system local date) instead of now_bris.date() (Brisbane date) when calling DST resolvers — incorrect during NYSE_OPEN midnight crossing (00:30 Brisbane). NYSE_OPEN resolver constructs US Eastern datetime from trading_day; wrong date returns wrong hour. Secondary: silent except Exception: pass on heartbeat parse failure in _lifespan swallowed errors with no log.
+- Action: Changed date.today() → now_bris.date() (now_bris already computed on prior line). Changed silent pass → log.warning for heartbeat parse failure.
+- Blast radius: 1 file, display-only /api/sessions endpoint, no production trading logic path
+- Verification: PASS (3/3 test_bot_dashboard.py, drift 77/77)
+- Commit: 8da5d5d
