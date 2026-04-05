@@ -1,7 +1,7 @@
 ---
-task: auto-trivial edit of trading_app/pre_session_check.py
+task: auto-trivial edit of scripts/databento_backfill.py
 mode: TRIVIAL
-scope: [trading_app/pre_session_check.py]
-updated: 2026-04-02T03:19:58Z
+scope: [scripts/databento_backfill.py]
+updated: 2026-04-05T08:33:52Z
 agent: auto
 ---
