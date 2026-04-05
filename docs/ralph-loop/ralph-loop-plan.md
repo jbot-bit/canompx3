@@ -1,10 +1,11 @@
-## Iteration: 151
-## Target: trading_app/account_hwm_tracker.py:322
-## Finding: Poll failure counter not persisted — process restart between poll failures resets counter, allowing indefinite poll failures without halting (fail-open)
+## Iteration: 152
+## Target: trading_app/live/trade_journal.py:255-288
+## Finding: `incomplete_trades(trading_day=None)` allows calling without a day filter, returning ALL history incomplete trades — the docstring explicitly warns this "would incorrectly restore stale incomplete records from previous days as active positions". The no-filter code path is reachable and dangerous.
 ## Classification: [judgment]
-## Blast Radius: 1 production file, 1 test file (no API change, just saves state more frequently on poll failures)
+## Blast Radius: 2 files (trade_journal.py production + test_trade_journal.py tests). All production callers in session_orchestrator.py already pass `trading_day=`. 2 test calls need updating.
 ## Invariants:
-##   1. After N consecutive poll failures the halt IS still triggered
-##   2. _save_state() on non-threshold failure must not raise — should be same call as existing path
-##   3. No behavioral change to post-threshold path or any other code path
-## Diff estimate: 1 production line + ~8 test lines
+##   1. get_strategy_ids_for_day() remains fail-closed (raises on _con=None) — do not touch
+##   2. incomplete_trades() must still raise RuntimeError when _con is None (fail-closed)
+##   3. Production callers in session_orchestrator.py already pass trading_day — they must not change
+## Diff estimate: 7 lines production (remove else branch + update signature); 2 test lines
+## Fix: Remove the `trading_day=None` default and the else branch. Make `trading_day: date` required. Update 2 test calls to pass a date.

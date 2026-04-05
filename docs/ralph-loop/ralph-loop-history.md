@@ -1571,3 +1571,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 production file, 1 test file, no API change
 - Verification: PASS (46/46 test_account_hwm_tracker.py, drift 77/77)
 - Commit: 8e9924d
+
+---
+
+## Iteration 152 — 2026-04-05
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/trade_journal.py:255
+- Finding: incomplete_trades(trading_day=None) allowed calling without a day filter. The docstring explicitly warned this would "incorrectly restore stale incomplete records from previous days as active positions" on crash-restart. The no-filter else branch was reachable and dangerous (fail-open position restoration path).
+- Action: Made trading_day a required positional argument (removed None default). Removed the dangerous else branch (6 lines). Updated 3 test call sites to pass trading_day=date(2026, 3, 14). Production callers in session_orchestrator.py already passed trading_day= — no production change.
+- Blast radius: 2 files (1 production, 1 test)
+- Verification: PASS (25/25 test_trade_journal.py, drift 77/77)
+- Commit: 28c7575
