@@ -1538,8 +1538,13 @@ STOP_MULTIPLIERS = [1.0, 0.75]
 # @entry-models E2
 # @revalidated-for E2 (Apr 2026)
 E2_ORDER_TIMEOUT: dict[tuple[str, str], float] = {
-    ("MNQ", "NYSE_OPEN"): 5.0,
-    ("MNQ", "NYSE_CLOSE"): 5.0,
+    ("MNQ", "CME_PRECLOSE"): 5.0,  # 7/9 BH at K=88, +15.2pp WR spread, 6/7yr, WFE=0.95
+    ("MNQ", "NYSE_OPEN"): 5.0,  # 3/9 BH at K=88, +5.5pp WR spread, 12/17yr, WFE=0.71
+    # NYSE_CLOSE: MARGINAL (best p=0.009, 0/5 BH at K=88). Real signal, not FDR-defensible.
+    # COMEX_SETTLE/EUROPE_FLOW: MARGINAL (+5-6pp, not BH at K=88).
+    # TOKYO_OPEN/US_DATA_1000: NO SIGNAL.
+    # MGC: NO SIGNAL (N too small, 32-110 per cell, all p>0.03).
+    # MES: NO SIGNAL (0/4 BH, marginal spreads).
 }
 
 
