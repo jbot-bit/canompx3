@@ -147,8 +147,10 @@ class TestAllFilters:
         # + 4 overnight range absolute (OVNRNG_10/25/50/100 — US sessions only, NOT in BASE)
         # + 3 PDR prev-day-range/atr filters (PDR_R080/R105/R125)
         # + 2 GAP gap/atr filters (GAP_R005/R015)
-        # = 22 + 12 + 12 + 3 + 2 + 2 + 3 + 4 + 3 + 2 = 65
-        assert len(ALL_FILTERS) == 65
+        # + 8 COST_LT × FAST composites (4 COST × 2 FAST = 8)
+        # + 8 OVNRNG × FAST composites (4 OVNRNG × 2 FAST = 8)
+        # = 65 + 8 + 8 = 81
+        assert len(ALL_FILTERS) == 81
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS

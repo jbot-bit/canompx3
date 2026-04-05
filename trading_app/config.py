@@ -1158,6 +1158,33 @@ BASE_GRID_FILTERS: dict[str, StrategyFilter] = {
     **MGC_VOLUME_FILTERS,
 }
 
+# Overnight range absolute filters — extracted for reuse in composites.
+# LOOK-AHEAD for Asian sessions — routed to US/EU sessions only via get_filters_for_grid().
+# Phase 1: 11 BH FDR survivors (q=0.05), ALL MNQ, US sessions.
+# @research-source research/output/confluence_program/phase1_run.py
+_OVNRNG_FILTERS: dict[str, StrategyFilter] = {
+    "OVNRNG_10": OvernightRangeAbsFilter(
+        filter_type="OVNRNG_10",
+        description="Overnight range >= 10 points",
+        min_range=10.0,
+    ),
+    "OVNRNG_25": OvernightRangeAbsFilter(
+        filter_type="OVNRNG_25",
+        description="Overnight range >= 25 points",
+        min_range=25.0,
+    ),
+    "OVNRNG_50": OvernightRangeAbsFilter(
+        filter_type="OVNRNG_50",
+        description="Overnight range >= 50 points",
+        min_range=50.0,
+    ),
+    "OVNRNG_100": OvernightRangeAbsFilter(
+        filter_type="OVNRNG_100",
+        description="Overnight range >= 100 points",
+        min_range=100.0,
+    ),
+}
+
 # Master filter registry — COMPLETE source of truth for all filter types.
 # Every filter_type in validated_setups MUST be in this dict.
 # New scripts look up filters here — no guessing from naming conventions.
@@ -1172,6 +1199,18 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
     **_make_break_quality_composites(_GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST5, "FAST5"),
     **_make_break_quality_composites(_GRID_SIZE_FILTERS_ORB, _BREAK_SPEED_FAST10, "FAST10"),
     **_make_break_quality_composites(_GRID_SIZE_FILTERS_ORB, _BREAK_BAR_CONTINUES, "CONT"),
+    # COST_LT × FAST composites (Apr 2026). Friction gate + order flow momentum.
+    # Data-verified: +0.07R lift over COST alone at NYSE_CLOSE, +0.03R at NYSE_OPEN.
+    # COST_LT is a stricter ORB-size cut on MNQ (nested in G8), but better calibrated.
+    # @research-source memory/break_speed_signal_retest.md
+    **_make_break_quality_composites(COST_RATIO_FILTERS, _BREAK_SPEED_FAST5, "FAST5"),
+    **_make_break_quality_composites(COST_RATIO_FILTERS, _BREAK_SPEED_FAST10, "FAST10"),
+    # OVNRNG × FAST composites (Apr 2026). Genuinely independent dimensions:
+    # overnight range (pre-session) + break speed (intra-session).
+    # Data-verified: +0.08R lift over OVNRNG alone at NYSE_CLOSE, +0.04R at NYSE_OPEN.
+    # @research-source memory/break_speed_signal_retest.md
+    **_make_break_quality_composites(_OVNRNG_FILTERS, _BREAK_SPEED_FAST5, "FAST5"),
+    **_make_break_quality_composites(_OVNRNG_FILTERS, _BREAK_SPEED_FAST10, "FAST10"),
     # Direction filters (session-specific but must be registered for portfolio lookups)
     "DIR_LONG": DIR_LONG,
     "DIR_SHORT": DIR_SHORT,
@@ -1198,34 +1237,8 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
     ),
     # MES TOKYO_OPEN band filters (H2: ORBs >= 12pt are toxic)
     **_MES_1000_BAND_FILTERS,
-    # Overnight range absolute filters (Mar 2026 confluence research program).
-    # LOOK-AHEAD WARNING: NOT in BASE_GRID_FILTERS. Routed to US sessions only
-    # via get_filters_for_grid(). See OvernightRangeAbsFilter docstring.
-    # Phase 1: 11 BH FDR survivors (q=0.05), ALL MNQ, US sessions.
-    # Phase 3: 3 deployable (WFE 1.21-16.39), thresholds 23.5-66.8.
-    # @research-source research/output/confluence_program/phase1_run.py
-    # @entry-models E2
-    # @revalidated-for E2
-    "OVNRNG_10": OvernightRangeAbsFilter(
-        filter_type="OVNRNG_10",
-        description="Overnight range >= 10 points",
-        min_range=10.0,
-    ),
-    "OVNRNG_25": OvernightRangeAbsFilter(
-        filter_type="OVNRNG_25",
-        description="Overnight range >= 25 points",
-        min_range=25.0,
-    ),
-    "OVNRNG_50": OvernightRangeAbsFilter(
-        filter_type="OVNRNG_50",
-        description="Overnight range >= 50 points",
-        min_range=50.0,
-    ),
-    "OVNRNG_100": OvernightRangeAbsFilter(
-        filter_type="OVNRNG_100",
-        description="Overnight range >= 100 points",
-        min_range=100.0,
-    ),
+    # Overnight range absolute filters — from extracted _OVNRNG_FILTERS dict.
+    **_OVNRNG_FILTERS,
     # Pre-session volatility filters (Apr 2026 research scan).
     # VALIDATED: bigger prev_day_range/atr predicts better ORB WR (+7-9% spread).
     # Direction: HIGH_BETTER — trade when prior day was volatile, skip quiet days.
@@ -1344,6 +1357,16 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         filters.update(_make_break_quality_composites(size_filters_orb, _BREAK_SPEED_FAST10, "FAST10"))
         filters.update(_make_break_quality_composites(size_filters_orb, _BREAK_BAR_CONTINUES, "CONT"))
 
+    # COST_LT × FAST composites at break-speed validated sessions (Apr 2026).
+    # Data-verified interaction: LOW_COST + FAST at NYSE_CLOSE = +0.191R (N=700),
+    # NYSE_OPEN = +0.109R (N=1668), CME_REOPEN MGC = +0.178R (N=585).
+    # COST_LT is a stricter ORB-size cut (nested in G8 on MNQ) but better friction-calibrated.
+    # Let FDR decide which instrument×session×RR combos survive — no pre-filtering.
+    # @research-source memory/break_speed_signal_retest.md
+    if session in ("NYSE_CLOSE", "NYSE_OPEN", "CME_REOPEN"):
+        filters.update(_make_break_quality_composites(COST_RATIO_FILTERS, _BREAK_SPEED_FAST5, "FAST5"))
+        filters.update(_make_break_quality_composites(COST_RATIO_FILTERS, _BREAK_SPEED_FAST10, "FAST10"))
+
     # NOFRI removed from CME_REOPEN grid Mar 2026 (LIKELY NOISE — DOW stress test).
     # NOMON retained for LONDON_METALS (PLAUSIBLE BUT UNPROVEN, p=0.006 permutation).
     # NOTUE removed from TOKYO_OPEN grid Mar 2026 (LIKELY NOISE — DOW stress test).
@@ -1395,6 +1418,16 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
     if session in _overnight_clean_sessions:
         for ovn_key in ("OVNRNG_10", "OVNRNG_25", "OVNRNG_50", "OVNRNG_100"):
             filters[ovn_key] = ALL_FILTERS[ovn_key]
+
+    # OVNRNG × FAST composites at sessions with both OVNRNG and break-speed validation.
+    # Genuinely independent dimensions: overnight range (pre-session) + break speed (intra-session).
+    # Data-verified interaction: HIGH_OVN + FAST at NYSE_CLOSE = +0.176R (N=681),
+    # NYSE_OPEN = +0.136R (N=1060). CME_REOPEN excluded (OVNRNG not routed there).
+    # @research-source memory/break_speed_signal_retest.md
+    _ovnrng_fast_sessions = {"NYSE_CLOSE", "NYSE_OPEN"}
+    if session in _overnight_clean_sessions and session in _ovnrng_fast_sessions:
+        filters.update(_make_break_quality_composites(_OVNRNG_FILTERS, _BREAK_SPEED_FAST5, "FAST5"))
+        filters.update(_make_break_quality_composites(_OVNRNG_FILTERS, _BREAK_SPEED_FAST10, "FAST10"))
 
     # Pre-session volatility filters (Apr 2026 research scan).
     # VALIDATED: bigger prev_day_range/atr predicts better ORB WR.
