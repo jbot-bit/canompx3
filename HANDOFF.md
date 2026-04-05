@@ -6,36 +6,54 @@
 
 ---
 
-## Update (Apr 5 — Ralph Loop iters 141-145 + Rithmic Hardening)
+## Update (Apr 5 — Rithmic Adapter Full Review + Hardening)
 
 ### Completed
-1. **Ralph Loop iterations 141-145** — 5 parallel worktree audits on unscanned live trading files.
-   - **4 fixes committed** (`694108d`): prop_profiles canonical violation, lane_allocator path divergence + silent ImportError, multi_runner fail-open on total crash, broker_dispatcher unguarded secondary loop.
-   - **1 unfixed HIGH** (iter 141): `rithmic/order_router.py` `query_open_orders()` returns `[]` when `auth=None` instead of raising — leaves orphaned brackets alive. Agent exhausted turns. **Queued as top priority for next ralph iteration.**
-   - State files updated to iter 145. 212 files now fully scanned.
-2. **Rithmic hardening** (3 commits from prior worktree agents): rejection detection, protobuf field bugs, type guards, fault injection tests.
+**Rithmic broker adapter: 4-pass code review, 11 bugs fixed, 28 → 76 tests.**
+
+Commits: `c19b65a`, `a02be77`, `4e20549`, `ef19064`
+
+| # | Bug | Severity | Fix |
+|---|-----|----------|-----|
+| 1 | `positions.py` read `open_long_quantity` — field doesn't exist | HIGH | Use `net_quantity` (verified template 450 schema) |
+| 2 | `positions.py` `float("")` crash on equity STRING fields | HIGH | Empty-string guard + try/except fallback chain |
+| 3 | `contracts.py` returns expired contract after 3rd Friday | MEDIUM | Day-14 roll cutoff in expiration month |
+| 4 | `cancel_order` missing account_id (extra round-trip) | MEDIUM | Pass `account_id` to skip `get_order()` scan |
+| 5 | Order ID collision 34%/year with 3 copy accounts | HIGH | Account suffix + 6-digit random |
+| 6 | Bridge timeout 10s vs library 30s (ghost orders) | HIGH | `_ORDER_SUBMIT_TIMEOUT=20s` for submit path |
+| 7 | Empty `basket_id` breaks cache lookup | MEDIUM | Match by generated order_id OR basket_id |
+| 8 | `rp_code` rejection not detected | MEDIUM | Check rp_code != "0", set status="rejected" |
+| 9 | Empty-string `status` from protobuf passed as `""` | MEDIUM | Map to "Unknown" |
+| 10 | Partial connect failure leaks client+loop+thread | HIGH | Cleanup to None on connect failure |
+| 11 | Response iteration fails for non-list protobuf | LOW | `isinstance(list)` with `[responses]` fallback |
+
+**All verified against async_rithmic 1.5.9**: protobuf schemas (templates 313/331/352/450/451), `_validate_price_fields`, `_send_and_collect`, `_delegate_methods`, `_get_account_id`, reconnection settings.
+
+**76 tests** cover: spec building, bracket ticks, price collar, factory, contracts, props, auth, mock submit/cancel/positions/equity/status, fault injection (timeout, rejection, corrupted data, partial cancel, connection cleanup, single response).
+
+### iter 141 Finding: RESOLVED
+`query_open_orders()` auth=None returning `[]` silently — now logs warning. This was the unfixed HIGH from Ralph iter 141.
 
 ### Known Issue — Worktree Hook Loop
 - Running ralph agents in parallel worktrees can leave a stale worktree reference if `git worktree remove` fails (Windows file lock).
-- This causes `completion-notify.py` stop hook to loop infinitely (CWD cached in session).
 - **Fix:** `rm -rf .claude/worktrees/agent-*` + `git worktree prune` + restart session.
-- The stale worktree from THIS session (`agent-a8e201e4`) has been cleaned up.
+
+### Remaining (cannot verify offline)
+1. **MGC exchange code**: uses "CME" — correct for Globex convention but needs live paper-trade verification (could be "COMEX")
+2. **`on_exchange_order_notification` callback**: not registered — cache only updated at submit time, fills not tracked in real-time. Implement when moving to live.
+3. **`exit_position()` kill switch**: library has one-call emergency flatten — not wired yet.
 
 ### Next Priorities
-1. Fix rithmic order_router HIGH fail-open (iter 141 unfixed finding)
-2. Continue ralph on: `copy_order_router.py`, `pre_session_check.py`, `bot_dashboard.py`, `position_tracker.py`
-3. Live trading path: TopStep 50K Express signup, Rithmic API access application
+1. Continue ralph on: `copy_order_router.py`, `pre_session_check.py`, `bot_dashboard.py`, `position_tracker.py`
+2. Live trading path: TopStep 50K Express signup, Rithmic API access application
+3. Paper-trade Rithmic adapter to verify MGC exchange code + fill notification behavior
 
-### Files Changed
-- `trading_app/prop_profiles.py` — ENTRY_MODELS import replacing hardcoded tuple
-- `trading_app/lane_allocator.py` — file-relative path fix + ImportError warning
-- `trading_app/live/multi_runner.py` — RuntimeError on total orchestrator failure
-- `trading_app/live/broker_dispatcher.py` — try/except on secondary update_market_price
-- `trading_app/live/rithmic/order_router.py` — hardening (rejection, protobuf, type guards)
-- `trading_app/live/rithmic/contracts.py` — fixes from hardening
-- `trading_app/live/rithmic/positions.py` — fixes from hardening
-- `tests/test_trading_app/test_rithmic_router.py` — 32+ new tests
-- `docs/ralph-loop/*` — state files updated to iter 145
+### Files Changed (this session)
+- `trading_app/live/rithmic/auth.py` — connection failure cleanup, bridge error logging, disconnect safety
+- `trading_app/live/rithmic/order_router.py` — 11 fixes (see table above)
+- `trading_app/live/rithmic/contracts.py` — roll buffer, module-level date import
+- `trading_app/live/rithmic/positions.py` — net_quantity, string-to-float safety, type guards
+- `tests/test_trading_app/test_rithmic_router.py` — 28 → 76 tests
 
 ---
 
