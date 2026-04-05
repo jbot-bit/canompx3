@@ -51,7 +51,7 @@ class RithmicAuth(BrokerAuth):
 
     def _ensure_connected(self) -> None:
         """Lazy-connect on first use. Creates background thread with asyncio event loop."""
-        if self._connected and self._client is not None:
+        if self._connected and self._client is not None and self._auth_healthy:
             return
 
         if not self._user or not self._password or not self._gateway:
@@ -199,5 +199,5 @@ class RithmicAuth(BrokerAuth):
         The library has built-in reconnection with linear backoff (10s, 20s, ...120s).
         This method just ensures we're connected.
         """
-        if not self._connected:
+        if not self._connected or not self._auth_healthy:
             self._ensure_connected()
