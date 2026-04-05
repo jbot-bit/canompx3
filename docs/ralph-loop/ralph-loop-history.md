@@ -1439,3 +1439,63 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file (run_pipeline.py docstring only); no callers affected
 - Verification: PASS (29/29 test_run_pipeline.py + 77 drift checks + 737 pre-commit suite)
 - Commit: 312ec41
+
+---
+
+## Iteration 141 — 2026-04-05
+- Phase: audit-only (agent exhausted turns)
+- Classification: N/A
+- Target: trading_app/live/rithmic/order_router.py
+- Finding: HIGH fail-open — query_open_orders() returns [] when auth is None instead of raising RuntimeError (inconsistent with submit()/cancel() which both raise). Leaves orphaned bracket orders alive. Also: B007 ruff lint (unused loop var uid), hardcoded entry model strings.
+- Action: Finding documented but not fixed — agent ran out of turns during test cycle
+- Blast radius: 3 callers (cancel_bracket_orders, internal)
+- Verification: N/A
+- Commit: NONE
+
+---
+
+## Iteration 142 — 2026-04-05
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/prop_profiles.py:857
+- Finding: parse_strategy_id hardcoded ("E1", "E2", "E3") tuple instead of importing ENTRY_MODELS from trading_app.config — canonical violation. If ENTRY_MODELS changes, parse_strategy_id would silently fail to recognize new entry models.
+- Action: Added module-level `from trading_app.config import ENTRY_MODELS`; replaced `if p in ("E1", "E2", "E3"):` with `if p in ENTRY_MODELS:`. No behavior change (ENTRY_MODELS == ["E1", "E2", "E3"] currently).
+- Blast radius: 2 callers (paper_trade_logger.py:74, prop_profiles.py:922); behavior identical
+- Verification: PASS (44/44 test_prop_profiles.py; drift checks pass)
+- Commit: 694108d (cherry-picked from 104d499)
+
+---
+
+## Iteration 143 — 2026-04-05
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/lane_allocator.py:616,572
+- Finding: LA-01 (MEDIUM): save_allocation() used CWD-relative Path("docs/runtime/lane_allocation.json") while check_allocation_staleness() used file-relative anchor. Running from subdirectory writes/reads different locations. LA-02 (LOW): generate_report() had `except ImportError: pass` silently dropping "Changes vs Current Lanes" section.
+- Action: LA-01: Changed to file-relative anchor matching check_allocation_staleness(). LA-02: Added warning line to report string on ImportError.
+- Blast radius: 1 file, 2 callers (rebalance_lanes.py, tests)
+- Verification: PASS (20/20 test_lane_allocator.py; drift checks pass)
+- Commit: 694108d (cherry-picked from 0c4e1f7)
+
+---
+
+## Iteration 144 — 2026-04-05
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/multi_runner.py:110-117
+- Finding: Fail-open in run() — asyncio.gather(return_exceptions=True) absorbs all per-orchestrator exceptions. run() returned None even if every instrument crashed; caller in run_live_session.py saw clean exit (code 0) despite total session failure.
+- Action: Added failures counter in result-reporting loop. After stop-file cleanup, if failures == len(tasks), raise RuntimeError. Partial failures (degraded mode) preserved — only total failure is now surfaced.
+- Blast radius: 1 file (multi_runner.py); 1 caller (run_live_session.py)
+- Verification: PASS (11/11 test_multi_runner.py; drift checks pass)
+- Commit: 694108d (cherry-picked from e83d272)
+
+---
+
+## Iteration 145 — 2026-04-05
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/broker_dispatcher.py:87-88
+- Finding: update_market_price() secondary loop had no exception guard, unlike submit() and cancel_bracket_orders() which both wrap secondaries in try/except. Exception in secondary propagates to session_orchestrator bar loop with no handler.
+- Action: Added try/except around secondary loop in update_market_price(), logging warning with exc_info=True. Consistent with cancel_bracket_orders() pattern. Primary call remains unguarded (correct — primary is authoritative).
+- Blast radius: 1 file (broker_dispatcher.py); 1 caller (session_orchestrator.py:1083)
+- Verification: PASS (53/53 test_tradovate.py; drift checks pass)
+- Commit: 694108d (cherry-picked from 88ad9ab)

@@ -3,55 +3,76 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 140
+## Last iteration: 145
 
-## RALPH AUDIT — Iteration 140
-## Date: 2026-04-04
-## Infrastructure Gates: PASS (77 drift checks PASS, 0 skipped, 7 advisory; behavioral audit 7/7 clean; ruff clean; 29/29 test_run_pipeline.py + 737 pre-commit suite PASS)
-
-| Gate | Result | Detail |
-|------|--------|--------|
-| `check_drift.py` | PASS | 77 checks PASS, 0 skipped, 7 advisory |
-| `audit_behavioral.py` | PASS | all 7 checks clean |
-| `ruff check` | PASS | clean |
-| pytest targeted | PASS | 29/29 test_run_pipeline.py |
+## RALPH AUDIT — Iterations 141-145 (batch)
+## Date: 2026-04-05
+## Infrastructure Gates: PASS (all worktrees: drift checks PASS, behavioral audit clean, ruff clean, targeted tests PASS)
 
 ---
 
-## Scope: pipeline/run_pipeline.py + pipeline/run_full_pipeline.py
+## Iteration 141 — trading_app/live/rithmic/order_router.py (AUDIT ONLY)
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Fail-open | Line 310: query_open_orders() returns [] when auth is None — submit()/cancel() raise RuntimeError for same condition. Orphaned brackets survive. | HIGH | UNFIXED (agent exhausted turns) |
+| Orphan risk | Line 281: unused loop variable `uid` (ruff B007) | LOW | UNFIXED |
+| Canonical violation | Lines 86,96,108: hardcoded "E1","E2" entry model strings | LOW | UNFIXED |
 
 ---
 
-## Seven Sins Scan
-
-### pipeline/run_pipeline.py
+## Iteration 142 — trading_app/prop_profiles.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Orphan risk / stale metadata | Line 14: docstring listed (MGC, MNQ, NQ) as valid instruments. NQ is a full-size data source symbol with orb_active=False; active ORB instrument is MES | LOW | FIXED (312ec41) |
-| Canonical violation (help text) | Line 156: list_instruments() in argparse help includes dead instruments; no choices= guard | LOW | ACCEPTABLE (pattern 4: get_asset_config() in every downstream subprocess fails-closed on unknown instruments) |
-| Fail-open (vacuous all()) | Line 243: all() on empty results — vacuously True | LOW | ACCEPTABLE (pattern 1: PIPELINE_STEPS constant has 4 entries; dry_run exits before loop; empty list unreachable) |
+| Canonical violation | Line 857: parse_strategy_id hardcoded ("E1","E2","E3") → replaced with ENTRY_MODELS import | MEDIUM | FIXED (694108d) |
+| Canonical violation | _LANE_NAMES dict (lines 887-894): hardcoded session strings as keys | LOW | ACCEPTABLE (pattern 1: explicit continuity constraint, DB migration required on rename) |
+| Canonical violation | _PV inlined point values (line 1000): avoids circular import | LOW | ACCEPTABLE (pattern 4: runtime guard at 1009-1016 verifies against COST_SPECS) |
 
-### pipeline/run_full_pipeline.py
+---
+
+## Iteration 143 — trading_app/lane_allocator.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Canonical violation | Line 123: hardcoded --min-sample=30 string instead of REGIME_MIN_SAMPLES | MEDIUM | ACCEPTABLE (pattern 4: pipeline/ cannot import from trading_app/ per one-way dep rule; canon lock documented inline at line 115) |
-| All other sins | No hardcoded sessions/costs/DB paths; no orphan imports; no dead code; step count dynamic | — | CLEAN |
+| Fail-open (path divergence) | Line 616: save_allocation() used CWD-relative path; check_allocation_staleness() used file-relative | MEDIUM | FIXED (694108d) |
+| Silent failure | Line 572: except ImportError: pass silently dropped report section | LOW | FIXED (694108d) |
+| Canonical violation | Hardcoded 'E2' in _compute_session_regime() | LOW | ACCEPTABLE (pattern 1: intentional architectural design — E2 is canonical unfiltered reference model) |
+| Silent failure | _P90_ORB_PTS.get(instrument, 100.0) fallback | LOW | ACCEPTABLE (pattern 4: unreachable via validated pipeline — validated_setups only contains ACTIVE_ORB_INSTRUMENTS) |
+
+---
+
+## Iteration 144 — trading_app/live/multi_runner.py
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Fail-open | Lines 110-117: asyncio.gather(return_exceptions=True) absorbs all crashes; run() returns None on total failure; caller sees exit code 0 | HIGH | FIXED (694108d) |
+| Orphan risk | Unused import or dead code paths | LOW | CLEAN |
+
+---
+
+## Iteration 145 — trading_app/live/broker_dispatcher.py
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Fail-open (inconsistent guard) | Lines 87-88: update_market_price() secondary loop unguarded; submit() and cancel_bracket_orders() both have try/except | MEDIUM | FIXED (694108d) |
+| All other sins | No hardcoded sessions/costs/DB paths; no orphan imports; no dead code | — | CLEAN |
 
 ---
 
 ## Summary
 
-- pipeline/run_pipeline.py: 1 LOW — FIXED; 2 LOW — ACCEPTABLE
-- pipeline/run_full_pipeline.py: 1 MEDIUM — ACCEPTABLE (one-way dep constraint)
-- Action: fix ([mechanical] — docstring correction, no behavior change)
+- 5 iterations, 13 total findings
+- 4 FIXED (1 HIGH fail-open, 2 MEDIUM, 1 LOW)
+- 3 UNFIXED from iter 141 (agent exhausted turns — HIGH fail-open in rithmic order_router needs manual fix)
+- 4 ACCEPTABLE
+- 2 CLEAN
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 207 files fully scanned (2 new files added this iteration).
+> Cumulative list — 212 files fully scanned (5 new files added this batch).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -100,9 +121,16 @@
 - scripts/databento_backfill.py — added iter 135
 - research/ — 21 files (iters 101-113)
 - docs/plans/ — 2 files (iter 103)
-- **Total: 207 files fully scanned**
+- trading_app/live/rithmic/order_router.py — added iter 141
+- trading_app/prop_profiles.py — added iter 142
+- trading_app/lane_allocator.py — added iter 143
+- trading_app/live/multi_runner.py — added iter 144
+- trading_app/live/broker_dispatcher.py — added iter 145
+- **Total: 212 files fully scanned**
 
 ## Next iteration targets
-- trading_app/ml/evaluate.py — LOW tier, unscanned ML evaluation path (1 importer)
-- trading_app/ml/evaluate_validated.py — LOW tier, unscanned ML evaluation validation path (1 importer)
-- pipeline/pipeline_status.py — unscanned pipeline status/rebuild orchestrator (referenced in ARCHITECTURE.md commands)
+- trading_app/live/rithmic/order_router.py — **PRIORITY: unfixed HIGH fail-open from iter 141** (query_open_orders returns [] on auth=None)
+- trading_app/live/copy_order_router.py — unscanned, same dispatcher-pattern layer
+- trading_app/pre_session_check.py — high-centrality deployment-path file
+- trading_app/live/bot_dashboard.py — unscanned live trading UI
+- trading_app/live/position_tracker.py — unscanned position management

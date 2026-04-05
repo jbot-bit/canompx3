@@ -1,26 +1,26 @@
 {
-  "total_iterations": 133,
-  "last_updated": "2026-04-04",
+  "total_iterations": 138,
+  "last_updated": "2026-04-05",
   "consecutive_low_only": 1,
-  "last_high_finding_iter": 139,
+  "last_high_finding_iter": 144,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 47,
-      "fixed": 36,
-      "deferred": 3,
-      "fix_rate": 0.77
+      "found": 49,
+      "fixed": 37,
+      "deferred": 4,
+      "fix_rate": 0.76
     },
     "silent_failure": {
-      "found": 25,
-      "fixed": 23,
+      "found": 27,
+      "fixed": 25,
       "deferred": 1,
-      "fix_rate": 0.92
+      "fix_rate": 0.93
     },
     "other": {
-      "found": 19,
-      "fixed": 9,
+      "found": 20,
+      "fixed": 10,
       "deferred": 1,
-      "fix_rate": 0.47
+      "fix_rate": 0.5
     },
     "dead_code": {
       "found": 14,
@@ -115,14 +115,14 @@
   },
   "findings_by_severity": {
     "CRITICAL": 3,
-    "HIGH": 9,
-    "MEDIUM": 29,
-    "LOW": 92
+    "HIGH": 11,
+    "MEDIUM": 31,
+    "LOW": 93
   },
   "classifications": {
-    "judgment": 61,
-    "mechanical": 47,
-    "audit-only": 25
+    "judgment": 64,
+    "mechanical": 48,
+    "audit-only": 26
   },
   "files_audited": {
     "execution_engine.py": {
@@ -249,6 +249,11 @@
       "audit_count": 2,
       "last_iter": 120,
       "findings": 1
+    },
+    "trading_app/prop_profiles.py": {
+      "audit_count": 2,
+      "last_iter": 142,
+      "findings": 2
     },
     "pipeline/check_drift.py": {
       "audit_count": 2,
@@ -491,11 +496,6 @@
       "findings": 0
     },
     "trading_app/prop_portfolio.py": {
-      "audit_count": 1,
-      "last_iter": 61,
-      "findings": 1
-    },
-    "trading_app/prop_profiles.py": {
       "audit_count": 1,
       "last_iter": 61,
       "findings": 1
@@ -973,6 +973,26 @@
     "pipeline/build_bars_5m.py": {
       "audit_count": 1,
       "last_iter": 139,
+      "findings": 1
+    },
+    "trading_app/live/rithmic/order_router.py": {
+      "audit_count": 1,
+      "last_iter": 141,
+      "findings": 0
+    },
+    "trading_app/lane_allocator.py": {
+      "audit_count": 1,
+      "last_iter": 143,
+      "findings": 1
+    },
+    "trading_app/live/multi_runner.py": {
+      "audit_count": 1,
+      "last_iter": 144,
+      "findings": 1
+    },
+    "trading_app/live/broker_dispatcher.py": {
+      "audit_count": 1,
+      "last_iter": 145,
       "findings": 1
     }
   },
@@ -2439,6 +2459,61 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "312ec41"
+    },
+    {
+      "iter": 141,
+      "date": "2026-04-05",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/live/rithmic/order_router.py",
+      "finding_type": "canonical_violation",
+      "severity": "HIGH",
+      "verdict": "NOTED",
+      "commit": "NONE"
+    },
+    {
+      "iter": 142,
+      "date": "2026-04-05",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/prop_profiles.py:857",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "694108d (cherry-picked from 104d499)"
+    },
+    {
+      "iter": 143,
+      "date": "2026-04-05",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/lane_allocator.py:616,572",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "694108d (cherry-picked from 0c4e1f7)"
+    },
+    {
+      "iter": 144,
+      "date": "2026-04-05",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/multi_runner.py:110-117",
+      "finding_type": "silent_failure",
+      "severity": "HIGH",
+      "verdict": "FIXED",
+      "commit": "694108d (cherry-picked from e83d272)"
+    },
+    {
+      "iter": 145,
+      "date": "2026-04-05",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/broker_dispatcher.py:87-88",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "694108d (cherry-picked from 88ad9ab)"
     }
   ]
 }
