@@ -1,12 +1,12 @@
 {
-  "total_iterations": 138,
+  "total_iterations": 139,
   "last_updated": "2026-04-05",
-  "consecutive_low_only": 1,
-  "last_high_finding_iter": 144,
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 146,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 49,
-      "fixed": 37,
+      "found": 50,
+      "fixed": 38,
       "deferred": 4,
       "fix_rate": 0.76
     },
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 11,
-    "MEDIUM": 31,
+    "MEDIUM": 32,
     "LOW": 93
   },
   "classifications": {
     "judgment": 64,
-    "mechanical": 48,
+    "mechanical": 49,
     "audit-only": 26
   },
   "files_audited": {
@@ -993,6 +993,11 @@
     "trading_app/live/broker_dispatcher.py": {
       "audit_count": 1,
       "last_iter": 145,
+      "findings": 1
+    },
+    "trading_app/pre_session_check.py": {
+      "audit_count": 1,
+      "last_iter": 146,
       "findings": 1
     }
   },
@@ -2514,6 +2519,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "694108d (cherry-picked from 88ad9ab)"
+    },
+    {
+      "iter": 146,
+      "date": "2026-04-05",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/pre_session_check.py:328",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "77d55b3"
     }
   ]
 }

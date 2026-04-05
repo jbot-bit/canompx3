@@ -3,76 +3,42 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 145
+## Last iteration: 146
 
-## RALPH AUDIT — Iterations 141-145 (batch)
+## RALPH AUDIT — Iteration 146
 ## Date: 2026-04-05
-## Infrastructure Gates: PASS (all worktrees: drift checks PASS, behavioral audit clean, ruff clean, targeted tests PASS)
+## Infrastructure Gates: behavioral audit PASS, ruff PASS, 17/17 test_pre_session_check.py PASS
 
 ---
 
-## Iteration 141 — trading_app/live/rithmic/order_router.py (AUDIT ONLY)
+## Iteration 146 — trading_app/pre_session_check.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Fail-open | Line 310: query_open_orders() returns [] when auth is None — submit()/cancel() raise RuntimeError for same condition. Orphaned brackets survive. | HIGH | UNFIXED (agent exhausted turns) |
-| Orphan risk | Line 281: unused loop variable `uid` (ruff B007) | LOW | UNFIXED |
-| Canonical violation | Lines 86,96,108: hardcoded "E1","E2" entry model strings | LOW | UNFIXED |
+| Canonical violation | Line 328: check_signal_exists() hardcoded `entry_model = 'E2'` in SQL — should use lane["entry_model"] | LOW | FIXED (77d55b3) |
 
 ---
 
-## Iteration 142 — trading_app/prop_profiles.py
+## Iteration 141 — trading_app/live/rithmic/order_router.py (RESOLVED)
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Canonical violation | Line 857: parse_strategy_id hardcoded ("E1","E2","E3") → replaced with ENTRY_MODELS import | MEDIUM | FIXED (694108d) |
-| Canonical violation | _LANE_NAMES dict (lines 887-894): hardcoded session strings as keys | LOW | ACCEPTABLE (pattern 1: explicit continuity constraint, DB migration required on rename) |
-| Canonical violation | _PV inlined point values (line 1000): avoids circular import | LOW | ACCEPTABLE (pattern 4: runtime guard at 1009-1016 verifies against COST_SPECS) |
+| Fail-open | query_open_orders() returned [] on auth=None — orphaned brackets survive | HIGH | FIXED externally (9add5a5) |
+| Orphan risk | Line 281: unused loop variable `uid` (ruff B007) | LOW | FIXED externally (ruff now clean) |
+| Canonical violation | Lines 89,99: hardcoded "E1","E2" dispatch keys in build_order_spec() | LOW | ACCEPTABLE (pattern 1: structural wire-protocol dispatch — E1→MARKET, E2→STOP_MARKET; maps to different protobuf order types, not a canonical list) |
 
 ---
 
-## Iteration 143 — trading_app/lane_allocator.py
+## Summary — Iteration 146
 
-| Sin | Finding | Severity | Status |
-|-----|---------|----------|--------|
-| Fail-open (path divergence) | Line 616: save_allocation() used CWD-relative path; check_allocation_staleness() used file-relative | MEDIUM | FIXED (694108d) |
-| Silent failure | Line 572: except ImportError: pass silently dropped report section | LOW | FIXED (694108d) |
-| Canonical violation | Hardcoded 'E2' in _compute_session_regime() | LOW | ACCEPTABLE (pattern 1: intentional architectural design — E2 is canonical unfiltered reference model) |
-| Silent failure | _P90_ORB_PTS.get(instrument, 100.0) fallback | LOW | ACCEPTABLE (pattern 4: unreachable via validated pipeline — validated_setups only contains ACTIVE_ORB_INSTRUMENTS) |
-
----
-
-## Iteration 144 — trading_app/live/multi_runner.py
-
-| Sin | Finding | Severity | Status |
-|-----|---------|----------|--------|
-| Fail-open | Lines 110-117: asyncio.gather(return_exceptions=True) absorbs all crashes; run() returns None on total failure; caller sees exit code 0 | HIGH | FIXED (694108d) |
-| Orphan risk | Unused import or dead code paths | LOW | CLEAN |
-
----
-
-## Iteration 145 — trading_app/live/broker_dispatcher.py
-
-| Sin | Finding | Severity | Status |
-|-----|---------|----------|--------|
-| Fail-open (inconsistent guard) | Lines 87-88: update_market_price() secondary loop unguarded; submit() and cancel_bracket_orders() both have try/except | MEDIUM | FIXED (694108d) |
-| All other sins | No hardcoded sessions/costs/DB paths; no orphan imports; no dead code | — | CLEAN |
-
----
-
-## Summary
-
-- 5 iterations, 13 total findings
-- 4 FIXED (1 HIGH fail-open, 2 MEDIUM, 1 LOW)
-- 3 UNFIXED from iter 141 (agent exhausted turns — HIGH fail-open in rithmic order_router needs manual fix)
-- 4 ACCEPTABLE
-- 2 CLEAN
+- 1 finding: 1 LOW FIXED
+- All iter 141 findings resolved (HIGH fixed externally, LOW B007 fixed externally, dispatch keys ACCEPTABLE)
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 212 files fully scanned (5 new files added this batch).
+> Cumulative list — 213 files fully scanned (1 new file added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -126,11 +92,12 @@
 - trading_app/lane_allocator.py — added iter 143
 - trading_app/live/multi_runner.py — added iter 144
 - trading_app/live/broker_dispatcher.py — added iter 145
-- **Total: 212 files fully scanned**
+- trading_app/pre_session_check.py — added iter 146
+- **Total: 213 files fully scanned**
 
 ## Next iteration targets
-- trading_app/live/rithmic/order_router.py — **PRIORITY: unfixed HIGH fail-open from iter 141** (query_open_orders returns [] on auth=None)
 - trading_app/live/copy_order_router.py — unscanned, same dispatcher-pattern layer
-- trading_app/pre_session_check.py — high-centrality deployment-path file
 - trading_app/live/bot_dashboard.py — unscanned live trading UI
 - trading_app/live/position_tracker.py — unscanned position management
+- trading_app/live/rithmic/auth.py — unscanned, rithmic auth layer (same module as recently fixed router)
+- trading_app/account_hwm_tracker.py — unscanned high-centrality file (referenced from pre_session_check, session_orchestrator)

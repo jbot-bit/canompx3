@@ -1,10 +1,10 @@
-## Iteration: 142
-## Target: trading_app/prop_profiles.py:857
-## Finding: parse_strategy_id hardcodes ("E1", "E2", "E3") instead of importing ENTRY_MODELS from trading_app.config — canonical violation
+## Iteration: 146
+## Target: trading_app/pre_session_check.py:328
+## Finding: check_signal_exists() hardcodes entry_model='E2' in SQL instead of using lane["entry_model"]
 ## Classification: [mechanical]
-## Blast Radius: 2 callers (paper_trade_logger.py:74, prop_profiles.py:922), no behavior change since ENTRY_MODELS currently equals ["E1", "E2", "E3"]
+## Blast Radius: 1 file, 1 call site (pre_session_check.py:408), 1 test file (test_pre_session_check.py — no direct test for this function)
 ## Invariants:
-##   1. parse_strategy_id("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100") must still return entry_model="E2"
-##   2. Unknown entry model tokens must NOT be matched (behavior preserved by membership test)
-##   3. No circular import (trading_app.config does not import from prop_profiles)
-## Diff estimate: 3 lines (1 added import line, 1 changed line)
+##   1. Function signature unchanged (con, session, lane, today)
+##   2. SQL query logic unchanged except parameterized entry_model
+##   3. Return tuple format unchanged (bool, str)
+## Diff estimate: 2 lines

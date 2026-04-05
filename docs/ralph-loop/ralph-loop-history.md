@@ -1499,3 +1499,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file (broker_dispatcher.py); 1 caller (session_orchestrator.py:1083)
 - Verification: PASS (53/53 test_tradovate.py; drift checks pass)
 - Commit: 694108d (cherry-picked from 88ad9ab)
+
+---
+
+## Iteration 146 — 2026-04-05
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/pre_session_check.py:328
+- Finding: check_signal_exists() hardcoded entry_model='E2' in SQL instead of using lane["entry_model"] — if E1 lane deployed, silently reports "no signal" even when E1 signal exists
+- Action: Replaced hardcoded 'E2' string with lane["entry_model"] variable; SQL now parameterized on actual lane entry model
+- Blast radius: 1 file, 1 call site (pre_session_check.py:408), no external importers
+- Verification: PASS (17/17 test_pre_session_check.py pass, behavioral audit clean)
+- Commit: 77d55b3
