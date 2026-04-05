@@ -348,8 +348,7 @@ class RithmicOrderRouter(BrokerRouter):
     def query_open_orders(self) -> list[dict]:
         """Query all open/working orders for this account."""
         if self.auth is None:
-            log.warning("query_open_orders called with no auth — returning empty")
-            return []
+            raise RuntimeError("No auth — cannot query open orders")
         try:
             orders = self.auth.run_async(
                 self.auth.client.list_orders(account_id=self._rithmic_account_id),

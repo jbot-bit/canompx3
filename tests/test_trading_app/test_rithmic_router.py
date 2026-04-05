@@ -557,6 +557,13 @@ class TestRithmicCancelMocked:
         with pytest.raises(RuntimeError, match="Cannot cancel"):
             router.cancel(99001)
 
+    def test_query_open_orders_no_auth_raises(self):
+        from trading_app.live.rithmic.order_router import RithmicOrderRouter
+
+        router = RithmicOrderRouter(account_id=12345, auth=None, rithmic_account_id="12345")
+        with pytest.raises(RuntimeError, match="No auth"):
+            router.query_open_orders()
+
 
 class TestRithmicQueryOrderStatus:
     """Test query_order_status cache and API fallback."""
