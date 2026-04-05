@@ -148,6 +148,7 @@ class AccountHWMTracker:
             self._halt = bool(data.get("halt_triggered", False))
             self._halt_ts = data.get("halt_timestamp")
             self._halt_reason = data.get("halt_reason", "")
+            self._consecutive_poll_failures = int(data.get("consecutive_poll_failures", 0))
             self._hwm_frozen = bool(data.get("hwm_frozen", False))
             self._daily_start_equity = data.get("daily_start_equity")
             self._daily_start_date = data.get("daily_start_date")
@@ -279,6 +280,7 @@ class AccountHWMTracker:
             "halt_triggered": self._halt,
             "halt_timestamp": self._halt_ts,
             "halt_reason": self._halt_reason,
+            "consecutive_poll_failures": self._consecutive_poll_failures,
             "hwm_frozen": self._hwm_frozen,
             "dd_type": self._dd_type,
             "daily_start_equity": self._daily_start_equity,
@@ -318,7 +320,7 @@ class AccountHWMTracker:
                     "HWM HALT: %d consecutive equity poll failures — halting for safety",
                     self._consecutive_poll_failures,
                 )
-                self._save_state()
+            self._save_state()
             return self._build_state()
 
         self._consecutive_poll_failures = 0

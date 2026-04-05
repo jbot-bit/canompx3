@@ -201,6 +201,25 @@ class TestPollFailures:
         assert tracker._consecutive_poll_failures == 0
         assert not tracker._halt
 
+    def test_poll_failure_counter_persisted_before_threshold(self, tracker, state_dir):
+        """Sub-threshold poll failure counter must survive a process restart so that
+        a crashing process cannot reset the counter and allow indefinite poll failures
+        without ever triggering the halt (fail-open via restart)."""
+        tracker.update_equity(50000.0)
+        tracker.update_equity(None)  # failure 1 of 3 — below threshold
+        assert tracker._consecutive_poll_failures == 1
+        assert not tracker._halt
+        # Simulate process restart by reloading from the same state file
+        reloaded = AccountHWMTracker(
+            "ACC001",
+            "topstep",
+            dd_limit_dollars=2000.0,
+            state_dir=state_dir,
+            dd_type="intraday_trailing",
+        )
+        # Counter must have been written and restored — restart does NOT reset it
+        assert reloaded._consecutive_poll_failures == 1
+
 
 class TestSessionLog:
     def test_session_logged(self, tracker):
