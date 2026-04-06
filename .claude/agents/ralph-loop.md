@@ -61,12 +61,11 @@ Format: `[tag] fix: Ralph Loop iter ITER — <finding> (<ID>)`
 
 If you're unsure which tag → use `[judgment]`. It gets reviewed by Opus.
 
-## Step 0: State
+## Step 0: State + Auto-Targeting
 
 Read `docs/ralph-loop/ralph-loop-audit.md`:
 - Get ITER from `## Last iteration: N`, increment to N+1
-- Check `## Files Fully Scanned` — do NOT re-audit files already listed there
-- Read `Next iteration targets` for scope
+- Check `## Files Fully Scanned` — build set of already-scanned files
 
 Read `docs/ralph-loop/deferred-findings.md` (check open debt + Won't Fix to avoid re-investigating).
 
@@ -74,12 +73,31 @@ Read `docs/ralph-loop/ralph-ledger.json` (cross-iteration intelligence):
 - `consecutive_low_only` — how many recent iterations had only LOW findings
 - `last_high_finding_iter` — when was the last HIGH+ finding
 - `findings_by_type` — which finding types have the best fix rates (prioritize those)
+- `files_audited` — per-file `last_iter` for re-audit staleness
 
-Read `docs/ralph-loop/import_centrality.json` (production-path weighting):
+### Centrality Index Freshness
+Read `docs/ralph-loop/import_centrality.json`. Check the `generated` date:
+- If >14 days old → regenerate: `python scripts/tools/ralph_build_centrality.py`
 - Use the `tiers` field to prioritize targets: critical > high > medium > low
-- When choosing between same-severity findings, prefer files with higher centrality
 
-SCOPE is provided in your task prompt.
+### Auto-Targeting (replaces manual "Next Targets" queue)
+If SCOPE is provided in the task prompt, use it. Otherwise, auto-select target using this priority:
+
+**Priority 1 — Unscanned critical/high files:**
+Files in `import_centrality.json` with tier `critical` or `high` that are NOT in the `Files Fully Scanned` list. Pick the one with most importers.
+
+**Priority 2 — Stale re-audits (modified since last scan):**
+For critical/high files that ARE scanned, check if they've been modified since their audit:
+```bash
+git log -1 --format='%h %as' -- <file>
+```
+If the file was modified after the iteration it was scanned in (compare dates from `files_audited.last_iter` in ledger → look up that iter's date in `iterations[]`), it needs re-audit. Pick the highest-centrality stale file.
+
+**Priority 3 — Unscanned medium files:**
+Same as Priority 1, but for `medium` tier.
+
+**Priority 4 — Low files:**
+Only if nothing better exists. Consider triggering DIMINISHING_RETURNS instead.
 
 ## Step 1: AUDIT
 
@@ -91,13 +109,15 @@ python pipeline/check_drift.py && python scripts/tools/audit_behavioral.py && ru
 If any gate fails → report failure, stop.
 
 ### Diminishing Returns Check
-After the audit, check the ledger: if `consecutive_low_only >= 3` AND the scope file has centrality tier `low` or `medium`:
+After the audit, check the ledger: if `consecutive_low_only >= 5` AND auto-targeting found no Priority 1 or Priority 2 candidates:
 - Do NOT fix another LOW finding. Instead, report:
 ```
 === RALPH: DIMINISHING RETURNS ===
 Last HIGH+ finding: iter N (X iterations ago)
 Consecutive LOW-only iterations: Y
-Recommendation: Re-scope to unscanned critical/high-centrality files, or STOP.
+Unscanned critical/high: 0
+Stale re-audit candidates: 0
+Recommendation: STOP until codebase changes accumulate.
 ===
 ```
 - Skip to Step 5 with verdict `DIMINISHING_RETURNS`.
@@ -114,7 +134,7 @@ VERDICT:  SUPPORT → report | REFUTE → discard | INSUFFICIENT → skip
 
 Do NOT report findings where TRACE is empty. Do NOT guess behavior from function names — trace the actual call. A finding with wrong TRACE is worse than no finding (false positives erode trust and waste iterations).
 
-Scan for Seven Sins:
+Scan for Seven Sins + Extended Dimensions:
 
 | Sin | Pattern |
 |-----|---------|
@@ -125,6 +145,9 @@ Scan for Seven Sins:
 | Canonical violation | Hardcoded instrument lists, entry model tuples, session names, magic numbers |
 | Orphan risk | Unused imports, dead code paths, stale comments on volatile data |
 | Volatile data | Hardcoded strategy counts, session counts, check counts — must be dynamic |
+| **Async safety** | Blocking I/O in async context (`time.sleep`, sync file I/O, sync DB in async fn), `return_exceptions=True` silencing task crashes, shared mutable state without lock in concurrent code |
+| **State persistence gap** | In-memory state modified but not written to disk on every mutation — crash between mutations loses state. Look for `self._field = value` without a corresponding `_save_state()` call in the same code path |
+| **Contract drift** | Caller passes args that don't match current function signature (e.g., removed kwarg still passed), or caller ignores a return value whose meaning changed (e.g., now returns Optional but caller doesn't check None) |
 
 Check canonical integrity:
 - Instruments → `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS`
@@ -190,7 +213,7 @@ Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
 - Infrastructure gate results
 - All findings with status (FIXED/DEFERRED/ACCEPTABLE/NEEDS_REVIEW/DIMINISHING_RETURNS)
 - Seven Sins scan results
-- Next iteration targets (prefer unscanned critical/high-centrality files)
+- Next iteration targets (auto-computed using the Priority 1-4 logic from Step 0)
 - Updated `## Files Fully Scanned` list (add any newly scanned files)
 
 **Append** to `docs/ralph-loop/ralph-loop-history.md` (MUST be done BEFORE ledger rebuild):
