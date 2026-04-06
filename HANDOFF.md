@@ -6,6 +6,27 @@
 
 ---
 
+## Update (Apr 6 — Ralph Audit + Stage-Gate Multi-Terminal Fix)
+
+### Completed
+
+| Commit | Feature |
+|--------|---------|
+| `efbc11c` | Ralph iter 158: instrument guard in mcp_server + stale E3 docstring |
+| `fd645cd` | Teach Ralph stage-gate protocol — dedicated stage file per iteration |
+| `ee56056` | Per-task stage files — eliminate multi-terminal STAGE_STATE.md collisions |
+
+### Key Changes
+- **MCP server:** `_get_strategy_fitness` now rejects dead/unknown instruments with explicit error instead of silent `{"strategy_count": 0}`
+- **Stage-gate system:** All stage writes now go to `docs/runtime/stages/<slug>.md`. No more shared `STAGE_STATE.md`. Multiple terminals can have concurrent stages without collision.
+- **Ralph agent:** Now creates `stages/ralph_iter_N.md` before editing, cleaned up after commit/reject.
+
+### Next Sensible Step
+- Exchange range implementation is WIP in another terminal (init_db, config.py, exchange_range_t2t8.py changes uncommitted there)
+- Action queue items from memory still pending: break speed deployment, bull-day short avoidance, presession features, MNQ grid optimization
+
+---
+
 ## Update (Apr 6 — Dashboard Trading App: Full Build)
 
 ### Completed
