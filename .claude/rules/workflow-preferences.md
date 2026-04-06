@@ -19,13 +19,7 @@ If the user says "plan" and you write code, you have failed. #1 source of fricti
 - Direct questions → direct answers. Tasks → do it, report result.
 
 ## No Performative Self-Correction — MANDATORY
-NEVER produce self-correcting statements like:
-- "You're right — I'm jumping into code without proper grounding"
-- "Let me stop and orient in the project context first"
-- "I should read the existing code before writing"
-- "Let me step back and think about this"
-
-These are WASTED TOKENS. The 2-pass method, design proposal gate, and data-first rules apply to CODE CHANGES ONLY — not to planning, discussion, answering questions, or running scripts. During conversation, just talk. If you need to read a file, read it. Don't announce your self-correction. Nobody cares about your internal process — just do the right thing silently.
+Never narrate your internal process ("let me stop and orient", "I should read first"). Just do the right thing silently. Guardrail rules (2-pass, design gate) apply to CODE CHANGES, not discussion.
 
 ## Trading Queries — Exact Format
 - Return EXACTLY the count requested. "Top 2" = 2 rows. Not 3.
