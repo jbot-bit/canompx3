@@ -243,8 +243,94 @@
   .acct-status-tradeable { background: var(--green-soft); color: var(--green); }
   .acct-status-restricted { background: var(--yellow-soft); color: var(--yellow); }
 
+  /* ── TAB BAR ────────────────────────── */
+  .tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .tab-btn {
+    padding: 8px 20px; background: none; border: none; border-bottom: 2px solid transparent;
+    color: var(--muted); font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--cyan); border-bottom-color: var(--cyan); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── CONNECTIONS PAGE ──────────────── */
+  .conn-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .conn-header-title { font-size: 16px; font-weight: 700; }
+  .conn-add-btn {
+    padding: 6px 14px; border-radius: var(--r); border: 1px solid rgba(0,212,255,0.25);
+    background: var(--cyan-soft); color: var(--cyan); font-size: 12px; font-weight: 700;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .conn-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    padding: 14px 16px; margin-bottom: 10px;
+  }
+  .conn-card.connected { border-left: 3px solid var(--green); }
+  .conn-card.error { border-left: 3px solid var(--red); }
+  .conn-card.disabled { border-left: 3px solid var(--dim); opacity: 0.6; }
+  .conn-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  .conn-name { font-weight: 700; font-size: 14px; }
+  .conn-status { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .conn-status.s-connected { color: var(--green); }
+  .conn-status.s-error { color: var(--red); }
+  .conn-status.s-disabled { color: var(--dim); }
+  .conn-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .conn-error-msg { color: var(--red); font-size: 12px; margin-top: 6px; padding: 8px 10px; background: var(--red-soft); border-radius: var(--r); }
+  .conn-actions { display: flex; gap: 6px; margin-top: 10px; }
+  .conn-btn {
+    padding: 5px 12px; border-radius: var(--r); border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 600; cursor: pointer;
+  }
+  .conn-btn:hover { color: var(--text); border-color: var(--border-hi); }
+  .conn-btn.danger { color: var(--red); border-color: rgba(255,92,92,0.20); }
+  .conn-accts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; margin-top: 12px; }
+  .conn-acct {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 10px 12px; cursor: pointer; position: relative;
+  }
+  .conn-acct:hover { border-color: var(--border-hi); }
+  .conn-acct.selected { border-color: var(--cyan); border-left: 3px solid var(--cyan); }
+  .conn-acct.archived { opacity: 0.3; cursor: default; }
+  .conn-acct-name { font-size: 12px; font-weight: 600; }
+  .conn-acct-bal { font-family: var(--mono); font-size: 18px; font-weight: 700; margin-top: 4px; }
+  .conn-acct-detail { font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .conn-acct-chip {
+    position: absolute; top: 8px; right: 8px; font-size: 9px; font-weight: 700;
+    padding: 2px 6px; border-radius: 999px; text-transform: uppercase;
+  }
+  .add-form {
+    display: none; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-lg); padding: 16px 18px; margin-bottom: 12px;
+  }
+  .add-form.open { display: block; }
+  .add-form-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .add-form-title span { font-size: 14px; font-weight: 700; }
+  .broker-types { display: flex; gap: 8px; margin-bottom: 14px; }
+  .broker-type-btn {
+    flex: 1; padding: 10px; border-radius: var(--r); border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 600;
+    cursor: pointer; text-align: center;
+  }
+  .broker-type-btn.selected { border-color: var(--cyan); color: var(--cyan); background: var(--cyan-soft); }
+  .add-fields { display: grid; gap: 8px; margin-bottom: 12px; }
+  .add-field label { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-bottom: 4px; }
+  .add-field input { width: 100%; padding: 7px 10px; border-radius: var(--r); border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: var(--text); font-size: 12px; }
+  .add-result { margin: 10px 0; padding: 8px 10px; border-radius: var(--r); font-size: 12px; font-weight: 600; display: none; }
+  .add-result.on { display: block; }
+  .add-result.success { background: var(--green-soft); color: var(--green); }
+  .add-result.fail { background: var(--red-soft); color: var(--red); }
+  .add-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .add-actions button { padding: 7px 16px; border-radius: var(--r); font-size: 12px; font-weight: 700; cursor: pointer; border: 1px solid var(--border); }
+  .add-actions .test-btn { background: var(--surface-2); color: var(--cyan); border-color: rgba(0,212,255,0.25); }
+  .add-actions .save-btn { background: var(--green-soft); color: var(--green); border-color: rgba(0,214,143,0.25); }
+  .add-actions .save-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .add-actions .cancel-btn { background: none; color: var(--muted); border: none; }
+  .conn-empty { text-align: center; padding: 40px 20px; color: var(--muted); }
+  .conn-empty-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 8px; }
+
   @media (max-width: 1100px) { .metrics { grid-template-columns: repeat(3, 1fr); } .live-metrics-row { grid-template-columns: repeat(3, 1fr); } }
-  @media (max-width: 820px) { .metrics { grid-template-columns: repeat(2, 1fr); } .topbar { flex-wrap: wrap; } .timeline { display: none; } }
+  @media (max-width: 820px) { .metrics { grid-template-columns: repeat(2, 1fr); } .topbar { flex-wrap: wrap; } .timeline { display: none; } .conn-accts { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -266,6 +352,15 @@
     <button id="btn-refresh" class="topbar-btn warn">Refresh</button>
     <button id="btn-kill" class="topbar-btn danger">Kill All</button>
   </header>
+
+  <!-- TAB BAR -->
+  <nav class="tab-bar">
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab-btn" data-tab="connections" onclick="switchTab('connections')">Connections</button>
+  </nav>
+
+  <!-- ═══ DASHBOARD TAB ═══ -->
+  <div id="tab-dashboard" class="tab-content active">
 
   <!-- METRICS STRIP -->
   <section class="metrics">
@@ -404,6 +499,33 @@
   </section>
 
   <div class="footer">Auto-refresh 5s &middot; <span id="last-update">-</span></div>
+
+  </div><!-- /tab-dashboard -->
+
+  <!-- ═══ CONNECTIONS TAB ═══ -->
+  <div id="tab-connections" class="tab-content">
+
+    <!-- ADD FORM (hidden by default) -->
+    <div id="add-form" class="add-form">
+      <div class="add-form-title"><span>Add Connection</span><button class="add-actions cancel-btn" onclick="closeAddForm()">Cancel</button></div>
+      <div class="broker-types" id="broker-type-selector"></div>
+      <div class="add-fields" id="add-fields"></div>
+      <div id="add-result" class="add-result"></div>
+      <div class="add-actions">
+        <button class="test-btn" onclick="testConnection()">Test Connection</button>
+        <button class="save-btn" id="btn-save-conn" onclick="saveConnection()" disabled>Save &amp; Connect</button>
+      </div>
+    </div>
+
+    <!-- CONNECTION LIST -->
+    <div class="conn-header">
+      <span class="conn-header-title">Broker Connections</span>
+      <button class="conn-add-btn" onclick="openAddForm()">+ Add Connection</button>
+    </div>
+    <div id="conn-list"></div>
+
+  </div><!-- /tab-connections -->
+
 </div>
 
 <script>
@@ -989,8 +1111,281 @@ $("btn-kill").addEventListener("click", async () => {
 
 $("btn-close-activity").addEventListener("click", () => { $("activity-panel").style.display = "none"; });
 
+/* ── Tab Switching ──────────────────── */
+function switchTab(name) {
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.toggle("active", c.id === `tab-${name}`));
+  try { localStorage.setItem("orb_active_tab", name); } catch (_) {}
+  if (name === "connections") fetchBrokerList();
+}
+
+function restoreTab() {
+  try { const t = localStorage.getItem("orb_active_tab"); if (t === "connections") switchTab("connections"); } catch (_) {}
+}
+
+/* ── Connections Page ──────────────── */
+let brokerTypes = {};
+let showArchivedConns = {};
+
+async function fetchBrokerList() {
+  try {
+    const data = await (await fetch("/api/broker/list")).json();
+    brokerTypes = data.broker_types || {};
+    renderConnections(data.connections || []);
+  } catch (e) {
+    $("conn-list").innerHTML = `<div class="conn-error-msg">Failed to load connections: ${e.message}</div>`;
+  }
+}
+
+function renderConnections(connections) {
+  const list = $("conn-list");
+  list.innerHTML = "";
+
+  if (!connections.length) {
+    list.innerHTML = '<div class="conn-empty"><div class="conn-empty-title">No broker connections</div><div>Click "+ Add Connection" to connect your first broker</div></div>';
+    return;
+  }
+
+  for (const conn of connections) {
+    const card = document.createElement("div");
+    const statusClass = !conn.enabled ? "disabled" : conn.status === "connected" ? "connected" : "error";
+    card.className = `conn-card ${statusClass}`;
+
+    const statusLabel = !conn.enabled ? "DISABLED" : conn.status.toUpperCase();
+    const statusCls = !conn.enabled ? "s-disabled" : conn.status === "connected" ? "s-connected" : "s-error";
+
+    let meta = `${conn.broker_type} · ${conn.source === "env" ? "from .env" : "added via UI"}`;
+    if (conn.connected_at) meta += ` · since ${conn.connected_at.substring(11, 19)}`;
+    if (conn.account_count > 0) meta += ` · ${conn.account_count} tradeable`;
+
+    let errorHtml = "";
+    if (conn.last_error && conn.enabled) {
+      errorHtml = `<div class="conn-error-msg">${conn.last_error}</div>`;
+    }
+
+    card.innerHTML = `
+      <div class="conn-top">
+        <span class="conn-name">${conn.display_name}</span>
+        <span class="conn-status ${statusCls}">${statusLabel}</span>
+      </div>
+      <div class="conn-meta">${meta}</div>
+      ${errorHtml}
+    `;
+
+    // Action buttons
+    const actions = document.createElement("div");
+    actions.className = "conn-actions";
+    if (conn.enabled) {
+      const disableBtn = document.createElement("button");
+      disableBtn.className = "conn-btn"; disableBtn.textContent = "Disable";
+      disableBtn.addEventListener("click", () => toggleConn(conn.id));
+      actions.appendChild(disableBtn);
+    } else {
+      const enableBtn = document.createElement("button");
+      enableBtn.className = "conn-btn"; enableBtn.textContent = "Enable";
+      enableBtn.addEventListener("click", () => toggleConn(conn.id));
+      actions.appendChild(enableBtn);
+    }
+    const removeBtn = document.createElement("button");
+    removeBtn.className = "conn-btn danger"; removeBtn.textContent = "Remove";
+    removeBtn.addEventListener("click", () => removeConn(conn.id, conn.display_name));
+    actions.appendChild(removeBtn);
+    card.appendChild(actions);
+
+    // Account cards (from equity data)
+    if (conn.enabled && lastEquityData) {
+      const broker = (lastEquityData.brokers || []).find(b => b.connection_id === conn.id);
+      if (broker && broker.accounts && broker.accounts.length > 0) {
+        const acctGrid = document.createElement("div");
+        acctGrid.className = "conn-accts";
+        const showArchived = showArchivedConns[conn.id] || false;
+        let archivedCount = 0;
+
+        for (const a of broker.accounts) {
+          if (a.status === "archived") { archivedCount++; if (!showArchived) continue; }
+          const acctCard = document.createElement("div");
+          acctCard.className = `conn-acct ${a.id === selectedAccountId ? "selected" : ""} ${a.status === "archived" ? "archived" : ""}`;
+
+          const chipBg = a.status === "tradeable" ? "var(--green-soft)" : a.status === "restricted" ? "var(--yellow-soft)" : "rgba(71,85,105,0.15)";
+          const chipColor = a.status === "tradeable" ? "var(--green)" : a.status === "restricted" ? "var(--yellow)" : "var(--dim)";
+          const chipLabel = a.status === "tradeable" ? "LIVE" : a.status === "restricted" ? "RESTRICTED" : "BLOWN";
+          const shortName = a.name.replace(/-V2-\d+-/, " #").substring(0, 25);
+
+          acctCard.innerHTML = `
+            <div class="conn-acct-name">${shortName}</div>
+            <div class="conn-acct-bal ${a.balance > 0 ? "positive" : "negative"}">${a.balance != null ? fmtDollar(a.balance) : "—"}</div>
+            <div class="conn-acct-detail">Realized · HWM: ${a.hwm ? fmtDollar(a.hwm) : "—"}${a.hwm && a.balance ? ` · DD: ${fmtDollar(Math.max(0, a.hwm - a.balance))}` : ""}</div>
+            <span class="conn-acct-chip" style="background:${chipBg};color:${chipColor}">${chipLabel}</span>
+          `;
+
+          if (a.status === "tradeable") {
+            acctCard.addEventListener("click", () => {
+              selectedAccountId = a.id;
+              $("acct-select").value = String(a.id);
+              try { localStorage.setItem("orb_selected_acct", String(a.id)); } catch (_) {}
+              if (lastEquityData) { updateMetricsFromEquity(lastEquityData); }
+              fetchBrokerList(); // re-render to update selection highlight
+            });
+          }
+          acctGrid.appendChild(acctCard);
+        }
+        card.appendChild(acctGrid);
+
+        if (archivedCount > 0) {
+          const toggleBtn = document.createElement("button");
+          toggleBtn.className = "conn-btn";
+          toggleBtn.style.marginTop = "8px";
+          toggleBtn.textContent = showArchived ? `Hide ${archivedCount} archived` : `Show ${archivedCount} archived`;
+          toggleBtn.addEventListener("click", () => { showArchivedConns[conn.id] = !showArchivedConns[conn.id]; fetchBrokerList(); });
+          card.appendChild(toggleBtn);
+        }
+      }
+    }
+
+    list.appendChild(card);
+  }
+}
+
+async function toggleConn(connId) {
+  try {
+    await fetch("/api/broker/toggle", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id: connId})});
+    fetchBrokerList();
+    fetchEquity();
+  } catch (e) { alert("Toggle failed: " + e.message); }
+}
+
+async function removeConn(connId, displayName) {
+  const input = prompt(`Type "${displayName}" to confirm removal:`);
+  if (input !== displayName) return;
+  try {
+    await fetch("/api/broker/remove", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({id: connId})});
+    fetchBrokerList();
+    fetchEquity();
+  } catch (e) { alert("Remove failed: " + e.message); }
+}
+
+/* ── Add Connection Form ───────────── */
+let addFormBrokerType = "";
+let addFormTested = false;
+
+function openAddForm() {
+  const form = $("add-form");
+  form.classList.add("open");
+  addFormTested = false;
+  $("btn-save-conn").disabled = true;
+  $("add-result").classList.remove("on");
+
+  // Render broker type selector
+  const selector = $("broker-type-selector");
+  selector.innerHTML = "";
+  for (const [key, spec] of Object.entries(brokerTypes)) {
+    const btn = document.createElement("button");
+    btn.className = "broker-type-btn";
+    btn.textContent = spec.display;
+    btn.addEventListener("click", () => selectBrokerType(key));
+    selector.appendChild(btn);
+  }
+  $("add-fields").innerHTML = '<div class="conn-meta">Select a broker type above</div>';
+}
+
+function closeAddForm() {
+  $("add-form").classList.remove("open");
+  addFormBrokerType = "";
+  addFormTested = false;
+}
+
+function selectBrokerType(type) {
+  addFormBrokerType = type;
+  addFormTested = false;
+  $("btn-save-conn").disabled = true;
+  $("add-result").classList.remove("on");
+
+  document.querySelectorAll(".broker-type-btn").forEach(b => b.classList.toggle("selected", b.textContent === brokerTypes[type]?.display));
+
+  const spec = brokerTypes[type];
+  if (!spec) return;
+
+  let html = '<div class="add-field"><label>Display Name</label><input type="text" id="add-display-name" placeholder="My TopStep Account"></div>';
+  for (const f of spec.fields) {
+    const val = f.default || "";
+    const inputType = f.type === "password" ? "password" : "text";
+    const req = f.required ? " *" : "";
+    html += `<div class="add-field"><label>${f.label}${req}</label><input type="${inputType}" id="add-${f.key}" value="${val}" placeholder="${f.label}"></div>`;
+  }
+  $("add-fields").innerHTML = html;
+}
+
+async function testConnection() {
+  if (!addFormBrokerType) return;
+  const spec = brokerTypes[addFormBrokerType];
+  const credentials = {};
+  for (const f of spec.fields) {
+    const el = $(`add-${f.key}`);
+    if (el) credentials[f.key] = el.value;
+  }
+
+  const result = $("add-result");
+  result.textContent = "Testing...";
+  result.className = "add-result on";
+
+  try {
+    const data = await (await fetch("/api/broker/test", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({broker_type: addFormBrokerType, credentials}),
+    })).json();
+
+    if (data.success) {
+      result.textContent = "Connected successfully";
+      result.className = "add-result on success";
+      addFormTested = true;
+      $("btn-save-conn").disabled = false;
+    } else {
+      result.textContent = `Failed: ${data.message}`;
+      result.className = "add-result on fail";
+      addFormTested = false;
+      $("btn-save-conn").disabled = true;
+    }
+  } catch (e) {
+    result.textContent = `Error: ${e.message}`;
+    result.className = "add-result on fail";
+  }
+}
+
+async function saveConnection() {
+  if (!addFormBrokerType || !addFormTested) return;
+  const spec = brokerTypes[addFormBrokerType];
+  const credentials = {};
+  for (const f of spec.fields) {
+    const el = $(`add-${f.key}`);
+    if (el) credentials[f.key] = el.value;
+  }
+  const displayName = $("add-display-name")?.value || addFormBrokerType;
+
+  try {
+    const data = await (await fetch("/api/broker/add", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({broker_type: addFormBrokerType, display_name: displayName, credentials}),
+    })).json();
+
+    if (data.success) {
+      closeAddForm();
+      fetchBrokerList();
+      fetchEquity();
+    } else {
+      const result = $("add-result");
+      result.textContent = `Save failed: ${data.error}`;
+      result.className = "add-result on fail";
+    }
+  } catch (e) {
+    const result = $("add-result");
+    result.textContent = `Error: ${e.message}`;
+    result.className = "add-result on fail";
+  }
+}
+
 /* ── Init ───────────────────────────── */
 restoreSections();
+restoreTab();
 initAccountSelector();
 try { localStorage.removeItem("orb_sections"); } catch (_) {} // migrate old key
 fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity();
