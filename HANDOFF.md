@@ -6,6 +6,31 @@
 
 ---
 
+## Update (Apr 6 — Ralph Audit Sweep + Cleanup)
+
+### Completed
+1. **Rithmic order_router fail-open fix** (`9add5a5`) — `query_open_orders()` returned `[]` when `auth=None`, leaving orphaned brackets. Now raises RuntimeError.
+2. **CopyOrderRouter 4-bug fix** (`367ecd4`) — cancel() shadows, submit() status check (Rithmic compat), update_market_price() forwarding, super().__init__(). +20 tests.
+3. **Pre-session check fail-closed** (`9f7a50e`) — corrupt halt file + HWM tracker now block trading instead of passing with warning.
+4. **Position tracker safety tests** (`971f73f`) — R2-H2, R2-H3, duplicate fill/exit guards. +5 tests.
+5. **Test sync fix** (`928779f`) — composite filter keys + assertion fix. Was FAILING on main.
+6. **Databento infra fixes** (`14ced40`) — UTC date bug (Brisbane midnight), range clamping, multi-name backfill, pyright detection.
+7. **Cleanup** (`9957da1`, `36d1296`) — stale null_seeds, auto_trivial, new data integration design doc.
+8. **Edge families rebuilt** — all 3 instruments (MGC/MES/MNQ).
+9. **Ralph iters 149-152** (background) — slippage sign fix, HWM poll persistence, incomplete_trades default, bot_dashboard lint.
+10. **Token optimization** — self-correction ban rule compressed from 10 lines to 2.
+
+### Ralph Audit Status
+- **219/222 files scanned** (iter 152). HANDOFF P1 (4 files) fully complete.
+- **Remaining low-priority targets:** `rithmic/__init__.py`, `bot_state.py`, `data_feed.py`
+- **Observation (not fixed):** orchestrator sums direction-adjusted entry slippage with raw exit slippage. Monitoring-only field, actual_r unaffected. Needs design pass.
+
+### Next Session
+- User requested: `/ralph x5` — launch 5 parallel ralph-loop agents on remaining unscanned files
+- All other items are user actions (TopStep signup, Rithmic API) or need design decisions
+
+---
+
 ## Update (Apr 5 — Rithmic Adapter Full Review + Hardening)
 
 ### Completed
