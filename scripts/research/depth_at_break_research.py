@@ -100,7 +100,8 @@ for INST in ["MES", "MGC", "MNQ"]:
     outcomes = con.execute(
         f"SELECT o.trading_day, o.orb_label, o.outcome, o.pnl_r "
         f"FROM orb_outcomes o "
-        f"JOIN validated_setups v ON o.symbol = v.instrument AND o.orb_label = v.orb_label "
+        f"JOIN validated_setups v "
+        f"ON o.symbol = v.instrument AND o.orb_label = v.orb_label "
         f"AND o.orb_minutes = 5 AND o.entry_model = v.entry_model "
         f"AND o.confirm_bars = v.confirm_bars AND o.rr_target = v.rr_target "
         f"WHERE o.symbol = '{INST}' AND v.status = 'active' "
