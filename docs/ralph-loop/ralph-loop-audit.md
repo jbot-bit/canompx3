@@ -3,38 +3,38 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 153
+## Last iteration: 154
 
-## RALPH AUDIT — Iteration 153
+## RALPH AUDIT — Iteration 154
 ## Date: 2026-04-06
-## Infrastructure Gates: drift 76/76 PASS (1 pre-existing check 78 advisory), 3/3 test_bot_dashboard.py PASS
+## Infrastructure Gates: drift 76/76 PASS (1 pre-existing check 78 advisory), 46/46 test_prop_portfolio.py PASS
 
 ---
 
-## Iteration 153 — trading_app/live/bot_state.py + bot_dashboard.py
+## Iteration 154 — trading_app/prop_portfolio.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Silent data loss | lanes dict keyed by orb_label silently overwrites strategies sharing a session — second strategy invisible to dashboard | MEDIUM | FIXED 1c6c40e |
-| All others | No look-ahead, no cost illusion, no hardcoded canonical lists. bot_state.py and bot_dashboard.py otherwise clean. | — | CLEAN |
+| Silent failure | `_query_paper_pnl` except Exception: return None — silently swallows all errors with no trace | LOW | FIXED 4099524 |
+| All others | No look-ahead, no cost illusion, no hardcoded canonical lists. prop_portfolio.py otherwise clean. | — | CLEAN |
 
 ### Audit Notes
 
-- **Lanes dict key collision (FIXED):** `build_state_snapshot` in `bot_state.py:125` keyed the `lanes` dict by `s.orb_label`. When two strategies share an `orb_label` (e.g. NYSE_OPEN x2 in `topstep_50k_type_a`), the second silently overwrites the first. The dashboard's `strategy_runtime` dict is built by iterating `raw_lanes.values()` — only one entry per `orb_label` existed, so the second strategy was invisible to status lookup. Fix: key by `s.strategy_id` instead. Updated `bot_dashboard.py` to extract session name from `lane["session_name"]` instead of the dict key for `session_runtime` grouping.
-- **Canonical check:** No hardcoded instruments, sessions, entry models, cost specs, or DB paths. CLEAN.
+- **Silent exception swallowing (FIXED):** `_query_paper_pnl` at line 398 had `except Exception: return None` with no logging. Any DB error, schema mismatch, or runtime issue would be invisible. Fix: added `logger.debug("_query_paper_pnl failed for %s", strategy_id, exc_info=True)` so failures appear in debug logs.
+- **Canonical check:** Imports `get_cost_spec` from canonical source, uses `GOLD_DB_PATH` from `pipeline.paths`. No hardcoded instruments or sessions. CLEAN.
 
 ---
 
-## Summary — Iteration 153
+## Summary — Iteration 154
 
-- 1 MEDIUM finding — FIXED ([judgment], 2-file production diff)
-- Commit: 1c6c40e
+- 1 LOW finding — FIXED ([judgment], 4-line diff)
+- Commit: 4099524
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 220 files fully scanned (2 new files added this iteration).
+> Cumulative list — 221 files fully scanned (1 new file added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -96,10 +96,11 @@
 - trading_app/account_hwm_tracker.py — added iter 151
 - trading_app/live/trade_journal.py — added iter 152
 - trading_app/live/bot_state.py — added iter 153
-- **Total: 220 files fully scanned**
+- trading_app/prop_portfolio.py — added iter 154
+- **Total: 221 files fully scanned**
 
 ## Next iteration targets
 - trading_app/live/rithmic/__init__.py — unscanned rithmic package init
 - trading_app/live/rithmic/data_feed.py — unscanned rithmic data feed (if exists)
-- trading_app/prop_portfolio.py — portfolio construction, worth re-audit after allocator changes
 - trading_app/config.py — canonical config, high-value audit target
+- trading_app/sql_adapter.py — SQL query builder, potential injection or drift

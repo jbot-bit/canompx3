@@ -1595,3 +1595,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 2 production files, no API change
 - Verification: PASS (3/3 test_bot_dashboard.py, drift 76/76 OK + 1 pre-existing advisory)
 - Commit: 1c6c40e
+
+---
+
+## Iteration 154 — 2026-04-06
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/prop_portfolio.py:398
+- Finding: _query_paper_pnl except Exception: return None silently swallows all errors with no trace. Any DB error, schema mismatch, or runtime issue invisible.
+- Action: Added logger.debug with exc_info=True so failures appear in debug logs. Added logging import and module-level logger.
+- Blast radius: 1 production file, no API change
+- Verification: PASS (46/46 test_prop_portfolio.py, drift 76/76 OK)
+- Commit: 4099524
