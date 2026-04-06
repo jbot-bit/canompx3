@@ -107,10 +107,22 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
                 missing.append("atr_20")
             if vel is None:
                 missing.append("atr_vel_regime")
-            print(f"WARN: {', '.join(missing)} = None — run pipeline/build_daily_features.py")
+            # Check if portfolio has ATR-dependent filters — None ATR = all trades rejected
+            atr_filters = ("COST_LT", "ORB_VOL")
+            needs_atr = portfolio is not None and atr is None and any(
+                s.filter_type.startswith(atr_filters) for s in portfolio.strategies
+            )
+            if needs_atr:
+                print(
+                    f"FAILED: {', '.join(missing)} = None and portfolio has "
+                    f"ATR-dependent filters — run pipeline/build_daily_features.py"
+                )
+            else:
+                print(f"WARN: {', '.join(missing)} = None — run pipeline/build_daily_features.py")
+                checks_passed += 1
         else:
             print(f"OK (atr_20={atr}, atr_vel={vel})")
-        checks_passed += 1
+            checks_passed += 1
     except Exception as e:
         print(f"FAILED: {e}")
 

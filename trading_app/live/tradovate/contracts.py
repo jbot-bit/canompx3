@@ -61,6 +61,6 @@ class TradovateContracts(BrokerContracts):
 
         # Return the first (most relevant) contract symbol
         best = contracts[0]
-        symbol = best.get("name", best.get("contractSymbol", ""))
+        symbol = best.get("name") or best.get("contractSymbol") or ""
         log.info("Tradovate front month for %s: %s", instrument, symbol)
         return symbol
