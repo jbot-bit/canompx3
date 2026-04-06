@@ -1619,3 +1619,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 production file (sql_adapter.py). No callers broken — VALID_ENTRY_MODELS is still a set with identical values.
 - Verification: PASS (48/48 test_sql_adapter.py, drift 76/76 OK + 1 pre-existing advisory)
 - Commit: fed8f11
+
+---
+
+## Iteration 156 — 2026-04-06
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/ai/grounding.py GLOSSARY
+- Finding: E2 entry model (stop-market at ORB level + 1-tick slippage) missing from AI grounding GLOSSARY. E1 and E3 present, E2 absent despite being the primary entry model for most deployed strategies.
+- Action: Added E2 definition line to GLOSSARY section.
+- Blast radius: 1 production file (grounding.py), no logic change
+- Verification: PASS (drift 76/76 OK)
+- Commit: 59539eb
