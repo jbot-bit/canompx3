@@ -491,78 +491,178 @@ async def api_accounts():
         return {"accounts": [], "error": str(e)}
 
 
-# ── Live equity cache ────────────────────────────────────────────────
-_equity_cache: dict = {"data": None, "ts": 0}
-_EQUITY_TTL = 30  # seconds
+# ── Live equity ──────────────────────────────────────────────────────
+_equity_cache: dict = {"data": None, "ts": 0.0}
+_equity_lock = threading.Lock()
+_EQUITY_TTL = 30  # seconds — extended to 120 when a live session is detected
+_EQUITY_TTL_LIVE = 120
+
+# Module-level auth singletons (survive between requests, token cache works)
+_projectx_auth: object | None = None
+_projectx_auth_lock = threading.Lock()
+
+_HWM_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "account_hwm.json"
+
+
+def _load_hwm() -> dict[str, float]:
+    """Load high-water-mark balances from persistent JSON."""
+    try:
+        if _HWM_PATH.exists():
+            import json as _json
+
+            return _json.loads(_HWM_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_hwm(hwm: dict[str, float]) -> None:
+    """Persist HWM balances to JSON."""
+    try:
+        import json as _json
+
+        _HWM_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _HWM_PATH.write_text(_json.dumps(hwm, indent=2), encoding="utf-8")
+    except Exception as e:
+        log.warning("Failed to save HWM: %s", e)
+
+
+def _classify_account(can_trade: bool, is_visible: bool) -> str:
+    """Classify account status from API fields (no simulated — REST only)."""
+    if can_trade and is_visible:
+        return "tradeable"
+    if not can_trade and is_visible:
+        return "restricted"  # outside hours, pending review, etc.
+    return "archived"  # blown or hidden
+
+
+def _fetch_projectx_accounts() -> dict:
+    """Fetch all ProjectX accounts in a single API call. Thread-safe singleton auth.
+
+    Returns ONE Account/search call — balance, canTrade, isVisible all included.
+    No per-account query_equity loop (that was the audit-identified bug).
+    """
+    global _projectx_auth
+
+    from trading_app.live.projectx.auth import BASE_URL, ProjectXAuth
+
+    with _projectx_auth_lock:
+        if _projectx_auth is None:
+            _projectx_auth = ProjectXAuth()
+
+    import requests as _requests
+
+    auth = _projectx_auth
+    resp = _requests.post(
+        f"{BASE_URL}/api/Account/search",
+        json={"onlyActiveAccounts": False},
+        headers=auth.headers(),  # type: ignore[union-attr]
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    # Validate application-level success (HTTP 200 is not enough — pitfall #10)
+    if isinstance(data, dict) and data.get("success") is False:
+        raise RuntimeError(f"ProjectX Account/search failed: {data.get('errorMessage', data)}")
+
+    raw_accounts = data if isinstance(data, list) else data.get("accounts") or []
+
+    # Load HWM for DD tracking
+    hwm = _load_hwm()
+    accounts = []
+    for acct in raw_accounts:
+        acct_id = acct.get("id") or acct.get("accountId")
+        if acct_id is None:
+            continue
+        balance = acct.get("balance")
+        can_trade = acct.get("canTrade", False)
+        is_visible = acct.get("isVisible", False)
+        name = acct.get("name", f"account_{acct_id}")
+
+        # Update HWM if balance exceeds stored value
+        hwm_key = str(acct_id)
+        stored_hwm = hwm.get(hwm_key, 0.0)
+        if balance is not None and balance > stored_hwm:
+            hwm[hwm_key] = balance
+            stored_hwm = balance
+
+        accounts.append({
+            "id": int(acct_id),
+            "name": name,
+            "balance": balance,
+            "hwm": stored_hwm if stored_hwm > 0 else balance,
+            "can_trade": can_trade,
+            "is_visible": is_visible,
+            "status": _classify_account(can_trade, is_visible),
+            "broker": "projectx",
+            "broker_display": "TopStepX",
+            "balance_type": "realized",  # excludes unrealized P&L from open positions
+        })
+
+    # Persist updated HWM
+    _save_hwm(hwm)
+
+    return {"name": "projectx", "display": "TopStepX", "error": None, "accounts": accounts}
 
 
 @app.get("/api/equity")
 async def api_equity():
-    """Live account balances from broker API (ProjectX/Tradovate).
+    """Live account balances from all configured brokers.
 
-    Authenticates on first call, caches for 30s. Returns account list with
-    real balances. Falls back gracefully if creds missing or auth fails.
+    Architecture (audit-corrected):
+    - Singleton auth (token cache survives between requests)
+    - Single Account/search call per broker (no per-account loop)
+    - asyncio.to_thread (no event loop blocking)
+    - Per-broker error isolation (one failure doesn't kill others)
+    - HWM tracking for correct trailing DD
+    - fetched_at timestamp for stale detection
     """
+    import asyncio
     import time as _time
 
     now = _time.time()
-    if _equity_cache["data"] is not None and now - _equity_cache["ts"] < _EQUITY_TTL:
-        return _equity_cache["data"]
 
+    # Check if live session is running — use longer TTL to preserve rate limit headroom
+    ttl = _EQUITY_TTL
     try:
-        broker = os.environ.get("BROKER", "").lower()
-        if broker == "projectx":
-            from trading_app.live.projectx.auth import ProjectXAuth
-            from trading_app.live.projectx.positions import ProjectXPositions
-            from trading_app.live.projectx.contract_resolver import ProjectXContracts
+        state_data = read_state()
+        if state_data.get("mode") not in (None, "STOPPED"):
+            ttl = _EQUITY_TTL_LIVE
+    except Exception:
+        pass
 
-            auth = ProjectXAuth()
-            contracts = ProjectXContracts(auth)
-            positions = ProjectXPositions(auth)
+    with _equity_lock:
+        if _equity_cache["data"] is not None and now - _equity_cache["ts"] < ttl:
+            cached = _equity_cache["data"].copy()
+            cached["cached"] = True
+            return cached
 
-            account_list = contracts.resolve_all_account_ids()
-            accounts = []
-            for acct_id, acct_name in account_list:
-                equity = positions.query_equity(acct_id)
-                accounts.append({
-                    "id": acct_id,
-                    "name": acct_name,
-                    "equity": equity,
-                    "broker": "ProjectX (TopStepX)",
-                })
+    brokers = []
 
-            result = {"accounts": accounts, "broker": "projectx", "cached": False}
-        elif broker == "tradovate":
-            from trading_app.live.tradovate.auth import TradovateAuth
-            from trading_app.live.tradovate.contracts import TradovateContracts
-            from trading_app.live.tradovate.positions import TradovatePositions
+    # ProjectX — check if creds exist
+    if os.environ.get("PROJECTX_API_KEY"):
+        try:
+            projectx_result = await asyncio.to_thread(_fetch_projectx_accounts)
+            brokers.append(projectx_result)
+        except Exception as e:
+            log.warning("ProjectX equity fetch failed: %s", e)
+            brokers.append({"name": "projectx", "display": "TopStepX", "error": str(e), "accounts": []})
 
-            auth = TradovateAuth()
-            contracts = TradovateContracts(auth)
-            positions = TradovatePositions(auth)
+    # Rithmic — Phase 2: will piggyback on running session auth
+    # (spinning up Rithmic WebSocket just for equity poll is too expensive)
 
-            account_list = contracts.resolve_all_account_ids()
-            accounts = []
-            for acct_id, acct_name in account_list:
-                equity = positions.query_equity(acct_id)
-                accounts.append({
-                    "id": acct_id,
-                    "name": acct_name,
-                    "equity": equity,
-                    "broker": "Tradovate",
-                })
+    result = {
+        "brokers": brokers,
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "cached": False,
+    }
 
-            result = {"accounts": accounts, "broker": "tradovate", "cached": False}
-        else:
-            result = {"accounts": [], "broker": broker or "none", "error": "No broker configured (set BROKER in .env)"}
-
+    with _equity_lock:
         _equity_cache["data"] = result
-        _equity_cache["ts"] = now
-        return result
+        _equity_cache["ts"] = _time.time()
 
-    except Exception as e:
-        log.warning("Equity fetch failed: %s", e)
-        return {"accounts": [], "error": str(e)}
+    return result
 
 
 @app.get("/api/sessions")

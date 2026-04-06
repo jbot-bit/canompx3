@@ -50,6 +50,13 @@
   .topbar-sep { color: var(--border); }
   .topbar-acct { font-weight: 600; font-size: 13px; }
   .topbar-acct-detail { color: var(--muted); font-size: 12px; }
+  .acct-select {
+    padding: 3px 8px; border-radius: var(--r); border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: 12px; font-weight: 600;
+    cursor: pointer; max-width: 260px;
+  }
+  .acct-select:hover { border-color: var(--border-hi); }
+  .acct-select option { background: var(--surface); color: var(--text); }
   .topbar-mode {
     display: inline-flex; align-items: center; gap: 5px;
     padding: 3px 10px; border-radius: 999px;
@@ -210,6 +217,39 @@
   .footer { margin-top: 12px; text-align: center; color: var(--dim); font-size: 10px; }
   .compat-hidden { display: none; }
 
+  /* ── ERROR BANNER ──────────────────── */
+  .error-banner {
+    display: none; padding: 10px 16px; border-radius: var(--r-lg);
+    background: var(--red-soft); border: 1px solid rgba(255,92,92,0.30);
+    color: var(--red); font-size: 12px; font-weight: 600; margin-bottom: 10px;
+  }
+  .error-banner.on { display: block; }
+  .stale-indicator { border-left: 3px solid var(--yellow) !important; }
+
+  /* ── ACCOUNT SELECTOR ──────────────── */
+  .acct-select {
+    padding: 3px 8px; border-radius: var(--r); border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: 12px; font-weight: 600;
+    cursor: pointer; max-width: 280px;
+  }
+  .acct-select:hover { border-color: var(--border-hi); }
+  .acct-select option { background: var(--surface); color: var(--text); }
+
+  /* ── BROKER ACCOUNTS CARDS ─────────── */
+  .broker-accounts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
+  .broker-acct-card {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 10px 14px; position: relative;
+  }
+  .broker-acct-card.selected { border-color: var(--cyan); border-left: 3px solid var(--cyan); }
+  .broker-acct-card.restricted { border-left: 3px solid var(--yellow); opacity: 0.7; }
+  .broker-acct-card .acct-name { font-weight: 600; font-size: 12px; }
+  .broker-acct-card .acct-balance { font-family: var(--mono); font-size: 16px; font-weight: 700; margin-top: 4px; }
+  .broker-acct-card .acct-detail { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .broker-acct-card .acct-status { display: inline-flex; padding: 2px 6px; border-radius: 999px; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; position: absolute; top: 10px; right: 10px; }
+  .acct-status-tradeable { background: var(--green-soft); color: var(--green); }
+  .acct-status-restricted { background: var(--yellow-soft); color: var(--yellow); }
+
   @media (max-width: 1100px) { .metrics { grid-template-columns: repeat(3, 1fr); } .live-metrics-row { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 820px) { .metrics { grid-template-columns: repeat(2, 1fr); } .topbar { flex-wrap: wrap; } .timeline { display: none; } }
 </style>
@@ -221,7 +261,8 @@
   <header class="topbar">
     <span class="topbar-brand">ORB</span>
     <span class="topbar-sep">│</span>
-    <span id="topbar-acct" class="topbar-acct">Loading...</span>
+    <select id="acct-select" class="acct-select"><option value="">Loading accounts...</option></select>
+    <span id="topbar-acct" class="topbar-acct"></span>
     <span id="topbar-acct-detail" class="topbar-acct-detail"></span>
     <span id="header-mode-badge" class="topbar-mode stopped"><span class="dot"></span> <span id="summary-mode">Stopped</span></span>
     <span id="summary-mode-detail" class="compat-hidden"></span>
@@ -265,6 +306,24 @@
       <div class="metric-lbl">Data</div>
       <div id="data-status" class="metric-val sm">Checking...</div>
       <div id="data-status-detail" class="metric-sub"></div>
+    </div>
+  </section>
+
+  <!-- ERROR BANNER (equity/auth failures) -->
+  <div id="equity-error" class="error-banner"></div>
+
+  <!-- BROKER ACCOUNTS -->
+  <section id="broker-accounts-section" class="sec collapsed">
+    <div class="sec-hd" onclick="toggleSection('broker')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Broker Accounts</span>
+      <span id="broker-acct-badge" class="sec-badge"></span>
+      <div class="sec-right">
+        <button id="btn-toggle-archived" class="toggle-btn" onclick="event.stopPropagation();toggleArchived()">Show Archived</button>
+      </div>
+    </div>
+    <div class="sec-bd">
+      <div id="broker-acct-grid" class="broker-accounts"><div class="empty">Loading accounts...</div></div>
     </div>
   </section>
 
@@ -365,6 +424,9 @@ const FIRM_STYLES = {
 let sessionCountdowns = {}, refreshPolling = false, autoRefreshTriggered = false;
 let runningProfile = null, showInactive = false, lastAccountsData = [];
 let activeProfileData = null;
+let selectedAccountId = null;  // persisted in localStorage
+let showArchived = false;
+let lastEquityData = null;  // cached for re-renders
 
 const $ = id => document.getElementById(id);
 const setText = (id, t) => { const e = $(id); if (e) e.textContent = t; };
@@ -385,7 +447,7 @@ function modeClass(m) { return m === "LIVE" ? "live" : m === "DEMO" ? "demo" : m
 function laneStatusClass(s) { return s === "IN_TRADE" ? "chip-live" : s === "ARMED" ? "chip-demo" : s === "FLAT" ? "chip-signal" : "chip-manual"; }
 
 /* ── Section Toggle ─────────────────── */
-const SEC_MAP = {profiles: "profiles-section", trades: "trades-section", lanes: "live-lanes-panel", specs: "specs-section"};
+const SEC_MAP = {profiles: "profiles-section", trades: "trades-section", lanes: "live-lanes-panel", specs: "specs-section", broker: "broker-accounts-section"};
 
 function toggleSection(name) {
   const el = $(SEC_MAP[name]); if (!el) return;
@@ -403,6 +465,21 @@ function toggleInactive() {
   showInactive = !showInactive;
   $("btn-toggle-inactive").textContent = showInactive ? "Hide Inactive" : "Show Inactive";
   renderAccounts(lastAccountsData);
+}
+
+function toggleArchived() {
+  showArchived = !showArchived;
+  if (lastEquityData) renderBrokerAccounts(lastEquityData);
+}
+
+/* ── Account Selector ───────────────── */
+function initAccountSelector() {
+  try { selectedAccountId = parseInt(localStorage.getItem("orb_selected_acct")) || null; } catch (_) {}
+  $("acct-select").addEventListener("change", (e) => {
+    selectedAccountId = parseInt(e.target.value) || null;
+    try { localStorage.setItem("orb_selected_acct", String(selectedAccountId || "")); } catch (_) {}
+    if (lastEquityData) updateMetricsFromEquity(lastEquityData);
+  });
 }
 
 /* ── Favicon ────────────────────────── */
@@ -708,37 +785,176 @@ async function fetchDataStatus() {
   } catch (_) {}
 }
 
+/* ── Equity: fetch + render ──────────── */
+function getAllAccounts(data) {
+  const all = [];
+  for (const b of (data.brokers || [])) {
+    if (b.error) continue;
+    for (const a of (b.accounts || [])) all.push(a);
+  }
+  return all;
+}
+
+function getTradeableAccounts(data) {
+  return getAllAccounts(data).filter(a => a.status === "tradeable");
+}
+
+function getSelectedAccount(data) {
+  const tradeable = getTradeableAccounts(data);
+  if (!tradeable.length) return null;
+  if (selectedAccountId) {
+    const match = tradeable.find(a => a.id === selectedAccountId);
+    if (match) return match;
+  }
+  return tradeable[0]; // fallback to first tradeable
+}
+
+function updateMetricsFromEquity(data) {
+  const acct = getSelectedAccount(data);
+  const balanceEl = $("metric-balance");
+  const balanceSubEl = $("metric-balance-sub");
+
+  if (!acct) {
+    balanceEl.textContent = "—";
+    balanceEl.className = "metric-val muted";
+    balanceSubEl.textContent = "no tradeable accounts";
+    return;
+  }
+
+  balanceEl.textContent = fmtDollar(acct.balance);
+  balanceEl.className = `metric-val ${acct.balance != null && acct.balance > 0 ? "positive" : "muted"}`;
+  balanceSubEl.textContent = `${acct.broker_display} · realized`;
+
+  // DD from HWM (correct trailing DD, not starting balance)
+  if (acct.hwm != null && acct.balance != null) {
+    const ddUsed = Math.max(0, acct.hwm - acct.balance);
+    const ddLeftEl = $("metric-dd-left");
+    // Use profile max_dd if available, otherwise estimate from account name
+    const maxDd = activeProfileData ? activeProfileData.max_dd : 2000;
+    const ddRemaining = Math.max(0, maxDd - ddUsed);
+    ddLeftEl.textContent = fmtDollar(ddRemaining);
+    ddLeftEl.className = `metric-val ${ddRemaining < maxDd * 0.2 ? "negative" : ddRemaining < maxDd * 0.5 ? "warning" : "positive"}`;
+    $("metric-dd-left-sub").textContent = `HWM ${fmtDollar(acct.hwm)}`;
+    $("metric-dd-sub").textContent = `${fmtDollar(ddUsed)} of ${fmtDollar(maxDd)}`;
+  }
+
+  // Update topbar display
+  $("topbar-acct").textContent = acct.broker_display || "";
+  $("topbar-acct-detail").textContent = acct.name || "";
+}
+
+function renderAccountSelector(data) {
+  const sel = $("acct-select");
+  const tradeable = getTradeableAccounts(data);
+  sel.innerHTML = "";
+  if (!tradeable.length) {
+    sel.innerHTML = '<option value="">No tradeable accounts</option>';
+    return;
+  }
+  for (const a of tradeable) {
+    const opt = document.createElement("option");
+    opt.value = String(a.id);
+    const shortName = a.name.replace(/-V2-\d+-/, " #").substring(0, 30);
+    opt.textContent = `${shortName} · ${fmtDollar(a.balance)}`;
+    if (a.id === selectedAccountId) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  // Auto-select first if none selected
+  if (!selectedAccountId && tradeable.length > 0) {
+    selectedAccountId = tradeable[0].id;
+    sel.value = String(selectedAccountId);
+    try { localStorage.setItem("orb_selected_acct", String(selectedAccountId)); } catch (_) {}
+  }
+}
+
+function renderBrokerAccounts(data) {
+  const grid = $("broker-acct-grid");
+  grid.innerHTML = "";
+  let tradeableCount = 0, archivedCount = 0;
+
+  for (const broker of (data.brokers || [])) {
+    if (broker.error) {
+      grid.innerHTML += `<div class="empty" style="color:var(--red)">${broker.display}: ${broker.error}</div>`;
+      continue;
+    }
+    for (const a of (broker.accounts || [])) {
+      if (a.status === "archived") { archivedCount++; if (!showArchived) continue; }
+      if (a.status === "tradeable") tradeableCount++;
+
+      const card = document.createElement("div");
+      card.className = "broker-acct-card";
+      if (a.id === selectedAccountId) card.classList.add("selected");
+      if (a.status === "restricted") card.classList.add("restricted");
+      if (a.status === "archived") card.style.opacity = "0.3";
+
+      const statusCls = a.status === "tradeable" ? "acct-status-tradeable" : a.status === "restricted" ? "acct-status-restricted" : "";
+      const statusLabel = a.status === "tradeable" ? "LIVE" : a.status === "restricted" ? "RESTRICTED" : "BLOWN";
+
+      card.innerHTML = `
+        <div class="acct-name">${a.name}</div>
+        <div class="acct-balance ${a.balance != null && a.balance > 0 ? "positive" : "negative"}">${a.balance != null ? fmtDollar(a.balance) : "—"}</div>
+        <div class="acct-detail">${a.broker_display} · ID: ${a.id}${a.hwm ? ` · HWM: ${fmtDollar(a.hwm)}` : ""}</div>
+        ${statusCls ? `<span class="acct-status ${statusCls}">${statusLabel}</span>` : `<span class="acct-status" style="background:rgba(71,85,105,0.15);color:var(--dim)">${statusLabel}</span>`}
+      `;
+
+      if (a.status === "tradeable") {
+        card.style.cursor = "pointer";
+        card.addEventListener("click", () => {
+          selectedAccountId = a.id;
+          $("acct-select").value = String(a.id);
+          try { localStorage.setItem("orb_selected_acct", String(a.id)); } catch (_) {}
+          if (lastEquityData) { renderBrokerAccounts(lastEquityData); updateMetricsFromEquity(lastEquityData); }
+        });
+      }
+      grid.appendChild(card);
+    }
+  }
+
+  $("broker-acct-badge").textContent = `${tradeableCount} tradeable`;
+  const archBtn = $("btn-toggle-archived");
+  if (archivedCount > 0) { archBtn.style.display = ""; archBtn.textContent = showArchived ? `Hide ${archivedCount} Archived` : `Show ${archivedCount} Archived`; }
+  else { archBtn.style.display = "none"; }
+}
+
+function showEquityError(msg) {
+  const banner = $("equity-error");
+  banner.textContent = `Equity fetch failed: ${msg}`;
+  banner.classList.add("on");
+  $("metric-balance").parentElement.classList.add("stale-indicator");
+}
+
+function clearEquityError() {
+  $("equity-error").classList.remove("on");
+  $("metric-balance").parentElement.classList.remove("stale-indicator");
+}
+
 async function fetchEquity() {
   try {
     const data = await (await fetch("/api/equity")).json();
-    if (data.error) {
-      $("metric-balance-sub").textContent = data.error.substring(0, 40);
-      return;
+
+    // Check for per-broker errors
+    let hasError = false;
+    for (const b of (data.brokers || [])) {
+      if (b.error) { showEquityError(`${b.display}: ${b.error}`); hasError = true; }
     }
-    if (data.accounts && data.accounts.length > 0) {
-      // Show first account equity (primary trading account)
-      const primary = data.accounts[0];
-      if (primary.equity != null) {
-        $("metric-balance").textContent = fmtDollar(primary.equity);
-        $("metric-balance").className = "metric-val positive";
-        $("metric-balance-sub").textContent = `${primary.name} · ${data.broker}`;
+    if (!hasError && (data.brokers || []).length > 0) clearEquityError();
 
-        // If multiple accounts, show total
-        if (data.accounts.length > 1) {
-          const total = data.accounts.reduce((s, a) => s + (a.equity || 0), 0);
-          $("metric-balance-sub").textContent = `${fmtDollar(total)} total · ${data.accounts.length} accounts`;
-        }
-
-        // Update DD remaining with real equity if we have profile data
-        if (activeProfileData) {
-          const ddUsedDollars = activeProfileData.account_size - primary.equity;
-          const ddRemaining = activeProfileData.max_dd - Math.max(0, ddUsedDollars);
-          $("metric-dd-left").textContent = fmtDollar(Math.max(0, ddRemaining));
-          $("metric-dd-left").className = `metric-val ${ddRemaining < activeProfileData.max_dd * 0.2 ? "negative" : ddRemaining < activeProfileData.max_dd * 0.5 ? "warning" : "positive"}`;
-        }
+    // Stale indicator — check fetched_at age
+    if (data.fetched_at) {
+      const age = (Date.now() - new Date(data.fetched_at).getTime()) / 1000;
+      if (age > 90) {
+        $("metric-balance").parentElement.classList.add("stale-indicator");
+        $("metric-balance-sub").textContent += ` · ${Math.floor(age / 60)}m ago`;
       }
     }
-  } catch (_) {}
+
+    lastEquityData = data;
+    renderAccountSelector(data);
+    renderBrokerAccounts(data);
+    updateMetricsFromEquity(data);
+  } catch (e) {
+    showEquityError(e.message || "Network error");
+  }
 }
 
 /* ── Actions ────────────────────────── */
@@ -782,6 +998,7 @@ $("btn-close-activity").addEventListener("click", () => { $("activity-panel").st
 
 /* ── Init ───────────────────────────── */
 restoreSections();
+initAccountSelector();
 try { localStorage.removeItem("orb_sections"); } catch (_) {} // migrate old key
 fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity();
 setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000); setInterval(fetchEquity, 30000);
