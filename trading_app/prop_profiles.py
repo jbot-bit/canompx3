@@ -397,7 +397,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT12",
+                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
                 "MNQ",
                 "EUROPE_FLOW",
                 max_orb_size_pts=120.0,
