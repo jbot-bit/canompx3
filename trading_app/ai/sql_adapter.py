@@ -14,6 +14,7 @@ import pandas as pd
 from pipeline.asset_configs import get_active_instruments
 from pipeline.cost_model import COST_SPECS
 from pipeline.init_db import ORB_LABELS
+from trading_app.config import ENTRY_MODELS
 
 
 class QueryTemplate(str, Enum):
@@ -55,7 +56,7 @@ MAX_RESULT_ROWS = 1000
 VALID_ORB_LABELS = set(ORB_LABELS)
 
 # Valid entry models
-VALID_ENTRY_MODELS = {"E1", "E2", "E3"}
+VALID_ENTRY_MODELS = set(ENTRY_MODELS)
 
 # Valid filter types (subset for validation)
 VALID_FILTER_PREFIXES = {"NO_FILTER", "ORB_G", "ORB_L", "VOL_", "DIR_", "DOW_", "M6E_", "COST_"}
