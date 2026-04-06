@@ -7,1392 +7,751 @@
 <link id="favicon" rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23dc2626'/></svg>">
 <style>
   :root {
-    --bg: #0b1017;
-    --panel: #111920;
-    --panel-hi: #162029;
-    --border: #1e2e3e;
-    --border-hi: #2a4058;
-    --text: #e8eff5;
-    --muted: #7c92a6;
-    --soft: #556a7e;
-    --green: #34d399;
-    --green-dim: rgba(52, 211, 153, 0.12);
-    --yellow: #fbbf24;
-    --yellow-dim: rgba(251, 191, 36, 0.10);
-    --red: #f87171;
-    --red-dim: rgba(248, 113, 113, 0.10);
-    --blue: #60a5fa;
-    --blue-dim: rgba(96, 165, 250, 0.10);
-    --cyan: #67e8f9;
-    --cyan-dim: rgba(103, 232, 249, 0.08);
-    --purple: #c084fc;
-    --radius: 12px;
-    --radius-lg: 16px;
+    --bg: #0a0e13;
+    --surface: #0f1419;
+    --surface-2: #151c24;
+    --surface-3: #1a232e;
+    --border: #1e2a38;
+    --border-hi: #2a3a4e;
+    --text: #e4ecf4;
+    --text-2: #b0c0d0;
+    --muted: #6b7f94;
+    --dim: #455568;
+    --green: #00d68f;
+    --green-soft: rgba(0,214,143,0.10);
+    --red: #ff5c5c;
+    --red-soft: rgba(255,92,92,0.10);
+    --yellow: #ffc107;
+    --yellow-soft: rgba(255,193,7,0.08);
+    --blue: #4da6ff;
+    --blue-soft: rgba(77,166,255,0.10);
+    --cyan: #00d4ff;
+    --cyan-soft: rgba(0,212,255,0.08);
+    --orange: #ff9f43;
+    --r: 8px;
+    --r-lg: 12px;
+    --mono: "JetBrains Mono","SF Mono","Cascadia Code","Consolas",monospace;
   }
-
-  * { box-sizing: border-box; margin: 0; }
-
-  body {
-    min-height: 100vh;
-    background: var(--bg);
-    color: var(--text);
-    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    font-size: 13px;
-    line-height: 1.5;
-  }
-
-  .mono {
-    font-family: "JetBrains Mono", "SF Mono", "Cascadia Code", "Consolas", monospace;
-  }
-
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; font-size: 13px; line-height: 1.4; min-height: 100vh; }
+  .m { font-family: var(--mono); }
   button, input { font: inherit; }
 
-  /* ── Shell ────────────────────────────────── */
-  .shell {
-    max-width: 1440px;
-    margin: 0 auto;
-    padding: 16px 20px 40px;
+  /* ── SHELL ──────────────────────────── */
+  .shell { max-width: 1500px; margin: 0 auto; padding: 0 16px 32px; }
+
+  /* ── TOP BAR ────────────────────────── */
+  .topbar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg); z-index: 10;
   }
-
-  /* ── Header ───────────────────────────────── */
-  .header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 16px;
+  .topbar-brand { font-weight: 800; font-size: 14px; color: var(--cyan); letter-spacing: 0.04em; }
+  .topbar-sep { color: var(--border); }
+  .topbar-acct { font-weight: 600; font-size: 13px; }
+  .topbar-acct-detail { color: var(--muted); font-size: 12px; }
+  .topbar-mode {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 3px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   }
-
-  .header-title {
-    font-size: 16px;
-    font-weight: 700;
-    white-space: nowrap;
+  .topbar-mode .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .topbar-mode.stopped { background: rgba(71,85,105,0.18); color: var(--dim); }
+  .topbar-mode.signal { background: var(--green-soft); color: var(--green); }
+  .topbar-mode.demo { background: var(--blue-soft); color: var(--blue); }
+  .topbar-mode.live { background: var(--red-soft); color: var(--red); }
+  .topbar-spacer { flex: 1; }
+  .topbar-btn {
+    padding: 5px 12px; border-radius: var(--r); border: 1px solid var(--border);
+    background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 600;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em; transition: all 0.12s;
   }
+  .topbar-btn:hover { border-color: var(--border-hi); color: var(--text); }
+  .topbar-btn.primary { border-color: rgba(0,212,255,0.20); color: var(--cyan); }
+  .topbar-btn.primary:hover { background: var(--cyan-soft); }
+  .topbar-btn.warn { border-color: rgba(255,193,7,0.20); color: var(--yellow); }
+  .topbar-btn.warn:hover { background: var(--yellow-soft); }
+  .topbar-btn.danger { border-color: rgba(255,92,92,0.25); color: var(--red); }
+  .topbar-btn.danger:hover { background: var(--red-soft); }
 
-  .header-mode {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+  /* ── METRICS STRIP ──────────────────── */
+  .metrics {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 1px;
+    background: var(--border); border-radius: var(--r-lg); overflow: hidden;
+    margin: 12px 0;
   }
+  .metric { background: var(--surface); padding: 12px 14px; }
+  .metric:first-child { border-radius: var(--r-lg) 0 0 var(--r-lg); }
+  .metric:last-child { border-radius: 0 var(--r-lg) var(--r-lg) 0; }
+  .metric-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.10em; text-transform: uppercase; color: var(--dim); margin-bottom: 6px; }
+  .metric-val { font-family: var(--mono); font-size: 18px; font-weight: 700; line-height: 1.2; }
+  .metric-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .metric-val.sm { font-size: 15px; }
+  .dd-bar-wrap { height: 5px; background: var(--surface-3); border-radius: 3px; margin-top: 8px; overflow: hidden; }
+  .dd-bar-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--green), #16a34a); transition: width 0.4s; }
 
-  .header-mode.stopped { background: rgba(71, 85, 105, 0.20); color: var(--soft); }
-  .header-mode.signal { background: var(--green-dim); color: var(--green); }
-  .header-mode.demo { background: var(--blue-dim); color: var(--blue); }
-  .header-mode.live { background: var(--red-dim); color: var(--red); }
-
-  .header-dot {
-    width: 7px; height: 7px;
-    border-radius: 50%;
-    background: currentColor;
+  /* ── SESSION TIMELINE ───────────────── */
+  .timeline {
+    display: flex; align-items: center; gap: 0;
+    padding: 10px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--r-lg); margin-bottom: 12px; overflow-x: auto;
   }
+  .tl-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); margin-right: 14px; white-space: nowrap; }
+  .tl-node { display: flex; flex-direction: column; align-items: center; min-width: 80px; position: relative; }
+  .tl-dot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--border-hi); background: var(--surface); transition: all 0.2s; }
+  .tl-dot.active { background: var(--green); border-color: var(--green); box-shadow: 0 0 8px rgba(0,214,143,0.4); }
+  .tl-dot.next { background: var(--cyan); border-color: var(--cyan); }
+  .tl-dot.past { background: var(--dim); border-color: var(--dim); }
+  .tl-name { font-size: 10px; font-weight: 600; color: var(--text-2); margin-top: 4px; white-space: nowrap; }
+  .tl-time { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .tl-line { flex: 1; height: 2px; background: var(--border); min-width: 12px; margin: 0 -2px; align-self: flex-start; margin-top: 4px; }
 
-  .header-spacer { flex: 1; }
-
-  .header-btn {
-    padding: 7px 14px;
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    background: var(--panel);
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.15s;
+  /* ── SECTIONS ───────────────────────── */
+  .sec {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    margin-bottom: 10px; overflow: hidden;
   }
-
-  .header-btn:hover { border-color: var(--border-hi); color: var(--text); }
-  .header-btn.primary { border-color: rgba(103, 232, 249, 0.25); color: var(--cyan); }
-  .header-btn.primary:hover { background: var(--cyan-dim); }
-  .header-btn.danger { border-color: rgba(248, 113, 113, 0.30); color: var(--red); }
-  .header-btn.danger:hover { background: var(--red-dim); }
-  .header-btn.warn { border-color: rgba(251, 191, 36, 0.25); color: var(--yellow); }
-  .header-btn.warn:hover { background: var(--yellow-dim); }
-
-  /* ── Status Strip ─────────────────────────── */
-  .status-strip {
-    display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 16px;
+  .sec-hd {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; cursor: pointer; user-select: none;
   }
+  .sec-hd:hover { background: rgba(255,255,255,0.015); }
+  .sec-chv { width: 14px; height: 14px; color: var(--dim); transition: transform 0.15s; flex-shrink: 0; }
+  .sec.collapsed .sec-chv { transform: rotate(-90deg); }
+  .sec.collapsed .sec-bd { display: none; }
+  .sec-ttl { font-size: 13px; font-weight: 700; }
+  .sec-badge { font-size: 11px; color: var(--muted); }
+  .sec-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .sec-bd { padding: 0 14px 12px; }
 
-  .status-card {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 16px 18px;
-    position: relative;
-    overflow: hidden;
-  }
+  /* ── ACCOUNT SPECS ──────────────────── */
+  .specs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+  .spec-item { padding: 8px 10px; background: var(--surface-2); border-radius: var(--r); border: 1px solid var(--border); }
+  .spec-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+  .spec-val { font-size: 13px; font-weight: 600; margin-top: 3px; }
+  .spec-notes { margin-top: 8px; padding: 8px 10px; background: var(--surface-2); border-radius: var(--r); border: 1px solid var(--border); font-size: 12px; color: var(--muted); line-height: 1.5; }
 
-  .status-card.hero-card {
-    border-left: 3px solid var(--cyan);
-  }
+  /* ── POSITIONS TABLE ────────────────── */
+  .pos-table { width: 100%; border-collapse: collapse; }
+  .pos-table th { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .pos-table td { padding: 8px 10px; border-bottom: 1px solid rgba(30,42,56,0.5); font-size: 12px; vertical-align: middle; }
+  .pos-table tr:hover td { background: rgba(255,255,255,0.015); }
+  .pos-table .r { text-align: right; }
 
-  .status-card.hero-card .status-value {
-    font-size: 24px;
-  }
+  /* ── LIVE SESSION OVERLAY ───────────── */
+  .live-panel { display: none; margin-bottom: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px 14px; }
+  .live-panel.on { display: block; }
+  .live-metrics-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; }
+  .live-m { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; }
+  .live-m-lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+  .live-m-val { font-family: var(--mono); font-size: 16px; font-weight: 700; margin-top: 6px; line-height: 1.2; }
 
-  .status-label {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.10em;
-    text-transform: uppercase;
-    color: var(--soft);
-    margin-bottom: 8px;
-  }
-
-  .status-value {
-    font-size: 18px;
-    font-weight: 700;
-    line-height: 1.2;
-  }
-
-  .status-detail {
-    margin-top: 6px;
-    font-size: 12px;
-    color: var(--muted);
-  }
-
-  /* ── Sections ─────────────────────────────── */
-  .section {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    margin-bottom: 12px;
-    overflow: hidden;
-  }
-
-  .section-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 18px;
-    cursor: pointer;
-    user-select: none;
-    transition: background 0.1s;
-  }
-
-  .section-header:hover { background: rgba(255,255,255,0.02); }
-
-  .section-chevron {
-    width: 16px;
-    height: 16px;
-    color: var(--soft);
-    transition: transform 0.2s;
-    flex-shrink: 0;
-  }
-
-  .section.collapsed .section-chevron { transform: rotate(-90deg); }
-  .section.collapsed .section-body { display: none; }
-
-  .section-title {
-    font-size: 14px;
-    font-weight: 700;
-  }
-
-  .section-badge {
-    font-size: 11px;
-    color: var(--muted);
-    font-weight: 500;
-  }
-
-  .section-header-right {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .section-body { padding: 0 18px 16px; }
-
-  /* ── Live Session Panel ───────────────────── */
-  .live-session-panel {
-    display: none;
-    margin-bottom: 12px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-left: 3px solid var(--green);
-    border-radius: var(--radius-lg);
-    padding: 16px 18px;
-  }
-
-  .live-session-panel.active-live { border-left-color: var(--red); }
-  .live-session-panel.active-demo { border-left-color: var(--blue); }
-  .live-session-panel.active-signal { border-left-color: var(--green); }
-
-  .live-metrics {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 12px;
-    margin-top: 12px;
-  }
-
-  .live-metric {
-    background: rgba(0,0,0,0.20);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px 14px;
-  }
-
-  .live-metric-label {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.10em;
-    text-transform: uppercase;
-    color: var(--soft);
-  }
-
-  .live-metric-value {
-    margin-top: 8px;
-    font-size: 18px;
-    font-weight: 700;
-    line-height: 1.2;
-  }
-
-  .dd-track {
-    margin-top: 10px;
-    height: 6px;
-    background: rgba(36, 56, 74, 0.60);
-    border-radius: 999px;
-    overflow: hidden;
-  }
-
-  .dd-bar {
-    height: 100%;
-    width: 0%;
-    border-radius: 999px;
-    background: linear-gradient(90deg, #22c55e, #16a34a);
-    transition: width 0.4s ease;
-  }
-
-  /* ── Profiles ─────────────────────────────── */
-  .profiles-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-    gap: 10px;
-  }
-
-  .profile-card {
-    border: 1px solid var(--border);
-    background: rgba(0,0,0,0.15);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-    transition: opacity 0.2s;
-  }
-
-  .profile-card.active-auto { border-left: 3px solid var(--green); }
-  .profile-card.inactive-card { opacity: 0.35; }
-
-  .profile-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    align-items: start;
-  }
-
-  .firm-line {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: baseline;
-  }
-
-  .firm-name { font-weight: 700; font-size: 15px; }
-  .firm-size { color: var(--muted); font-size: 12px; }
-
-  .profile-chip {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 999px;
-    padding: 4px 10px;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-weight: 700;
-  }
-
-  .chip-auto { color: var(--green); background: var(--green-dim); }
-  .chip-manual { color: var(--muted); background: rgba(71, 85, 105, 0.18); }
-  .chip-inactive { color: var(--soft); background: rgba(71, 85, 105, 0.12); }
-
-  .profile-meta {
-    margin-top: 8px;
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.5;
-  }
-
-  .lane-list { margin-top: 10px; display: grid; gap: 4px; }
-
-  .lane-row {
-    display: grid;
-    grid-template-columns: 100px 1fr;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: rgba(21, 34, 48, 0.60);
-    font-size: 12px;
-  }
-
-  .lane-time {
-    color: var(--cyan);
-    font-weight: 700;
-    font-size: 12px;
-  }
-
-  .lane-title { font-weight: 600; font-size: 12px; }
-
-  .lane-subtitle {
-    color: var(--muted);
-    font-size: 11px;
-    margin-top: 2px;
-  }
-
-  .actions-row {
-    display: flex;
-    gap: 6px;
-    margin-top: 12px;
-  }
-
-  .profile-button {
-    flex: 1;
-    border-radius: var(--radius);
-    padding: 9px 10px;
-    border: 1px solid var(--border);
-    cursor: pointer;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    font-size: 11px;
-    background: var(--panel);
-    color: var(--text);
-    transition: all 0.15s;
-  }
-
-  .profile-button.signal { color: var(--green); border-color: rgba(34, 197, 94, 0.25); }
-  .profile-button.signal:hover { background: var(--green-dim); }
-  .profile-button.demo { color: var(--blue); border-color: rgba(96, 165, 250, 0.25); }
-  .profile-button.demo:hover { background: var(--blue-dim); }
-  .profile-button.live { color: var(--red); border-color: rgba(248, 113, 113, 0.25); }
-  .profile-button.live:hover { background: var(--red-dim); }
-  .profile-button.stop { color: #fff; background: rgba(185, 28, 28, 0.55); border-color: rgba(248, 113, 113, 0.35); }
-  .profile-button:disabled { cursor: not-allowed; opacity: 0.35; }
-
-  .live-gate { margin-top: 6px; }
-  .live-gate input {
-    width: 100%;
-    padding: 8px 10px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: rgba(0,0,0,0.25);
-    color: var(--text);
-    font-size: 12px;
-  }
-
-  .inactive-toggle {
-    margin-top: 10px;
-    padding: 8px 0;
-    text-align: center;
-  }
-
-  .toggle-btn {
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    color: var(--soft);
-    font-size: 12px;
-    padding: 6px 14px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .toggle-btn:hover { color: var(--muted); border-color: var(--border-hi); }
-
-  /* ── Live Lanes ───────────────────────────── */
-  .live-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 10px;
-  }
-
-  .lane-card {
-    border: 1px solid var(--border);
-    background: rgba(0,0,0,0.15);
-    border-radius: var(--radius);
-    padding: 14px 16px;
-  }
-
-  .lane-head {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    align-items: start;
-  }
-
-  .lane-chip {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 999px;
-    padding: 4px 10px;
-    font-size: 10px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    font-weight: 700;
-  }
-
-  .chip-live { color: #fecaca; background: var(--red-dim); }
-  .chip-demo { color: #bfdbfe; background: var(--blue-dim); }
-  .chip-signal { color: #bbf7d0; background: var(--green-dim); }
-
-  .lane-values {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
-    margin-top: 12px;
-  }
-
-  .value-box {
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: rgba(21, 34, 48, 0.50);
-    border: 1px solid rgba(36, 56, 74, 0.50);
-  }
-
-  .value-label {
-    color: var(--soft);
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .value-text {
-    margin-top: 4px;
-    font-size: 14px;
-    font-weight: 700;
-  }
-
-  .lane-foot {
-    margin-top: 10px;
-    display: flex;
-    justify-content: space-between;
-    color: var(--muted);
-    font-size: 11px;
-  }
-
-  /* ── Trades Table ─────────────────────────── */
-  .table-wrap {
-    overflow-x: auto;
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    background: rgba(0,0,0,0.15);
-  }
-
-  table { width: 100%; border-collapse: collapse; min-width: 860px; }
-
-  th, td {
-    text-align: left;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: top;
-    font-size: 12px;
-  }
-
-  th {
-    color: var(--soft);
-    font-size: 10px;
-    letter-spacing: 0.10em;
-    text-transform: uppercase;
-    font-weight: 600;
-  }
-
-  tr:hover td { background: rgba(255,255,255,0.015); }
-
+  /* ── TRADES TABLE ───────────────────── */
+  .tbl-wrap { overflow-x: auto; border-radius: var(--r); border: 1px solid var(--border); background: var(--surface-2); }
+  table.blotter { width: 100%; border-collapse: collapse; min-width: 800px; }
+  .blotter th, .blotter td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 12px; vertical-align: top; }
+  .blotter th { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+  .blotter tr:hover td { background: rgba(255,255,255,0.015); }
+  .blotter .r { text-align: right; }
   .trade-lane { font-weight: 600; }
-  .trade-sub { margin-top: 2px; color: var(--muted); font-size: 11px; }
+  .trade-sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
   .trade-summary { color: var(--muted); font-size: 12px; }
-  .align-right { text-align: right; }
 
-  /* ── Activity Panel ───────────────────────── */
-  .activity-panel {
-    display: none;
-    margin-bottom: 12px;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 16px 18px;
+  /* ── PROFILES ───────────────────────── */
+  .profiles-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 8px; }
+  .pf-card { border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--r); padding: 12px 14px; }
+  .pf-card.active-auto { border-left: 3px solid var(--green); }
+  .pf-card.inactive-card { opacity: 0.3; }
+  .pf-head { display: flex; justify-content: space-between; align-items: start; gap: 8px; }
+  .pf-firm { font-weight: 700; font-size: 14px; }
+  .pf-size { color: var(--muted); font-size: 12px; }
+  .pf-meta { margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .pf-chip { display: inline-flex; padding: 3px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+  .chip-auto { color: var(--green); background: var(--green-soft); }
+  .chip-manual { color: var(--muted); background: rgba(71,85,105,0.15); }
+  .chip-inactive { color: var(--dim); background: rgba(71,85,105,0.10); }
+  .chip-live { color: #fecaca; background: var(--red-soft); }
+  .chip-demo { color: #bfdbfe; background: var(--blue-soft); }
+  .chip-signal { color: #bbf7d0; background: var(--green-soft); }
+  .lane-list { margin-top: 8px; display: grid; gap: 3px; }
+  .lane-row { display: grid; grid-template-columns: 90px 1fr; gap: 6px; padding: 6px 8px; border-radius: 6px; background: rgba(0,0,0,0.15); font-size: 11px; }
+  .lane-time { font-family: var(--mono); color: var(--cyan); font-weight: 600; font-size: 11px; }
+  .lane-title { font-weight: 600; font-size: 11px; }
+  .lane-subtitle { color: var(--muted); font-size: 10px; }
+  .actions-row { display: flex; gap: 5px; margin-top: 10px; }
+  .pf-btn {
+    flex: 1; border-radius: var(--r); padding: 7px 8px; border: 1px solid var(--border);
+    cursor: pointer; font-weight: 700; text-transform: uppercase; font-size: 10px;
+    letter-spacing: 0.04em; background: var(--surface); color: var(--text); transition: all 0.12s;
   }
+  .pf-btn.signal { color: var(--green); border-color: rgba(0,214,143,0.20); }
+  .pf-btn.demo { color: var(--blue); border-color: rgba(77,166,255,0.20); }
+  .pf-btn.live { color: var(--red); border-color: rgba(255,92,92,0.20); }
+  .pf-btn.stop { color: #fff; background: rgba(185,28,28,0.5); border-color: rgba(255,92,92,0.3); }
+  .pf-btn:disabled { cursor: not-allowed; opacity: 0.3; }
+  .live-gate { margin-top: 5px; }
+  .live-gate input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: var(--text); font-size: 11px; }
 
-  .activity-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-  }
+  /* ── ACTIVITY ───────────────────────── */
+  .activity { display: none; margin-bottom: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 12px 14px; }
+  .activity-hd { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .close-link { border: none; background: none; color: var(--dim); cursor: pointer; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  pre { margin: 0; padding: 10px; border-radius: var(--r); background: rgba(0,0,0,0.25); border: 1px solid var(--border); overflow: auto; white-space: pre-wrap; word-break: break-word; max-height: 240px; font-family: var(--mono); font-size: 11px; }
 
-  .close-link {
-    border: none;
-    background: none;
-    color: var(--soft);
-    cursor: pointer;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
-
-  .close-link:hover { color: var(--muted); }
-
-  pre {
-    margin: 0;
-    padding: 12px;
-    border-radius: var(--radius);
-    background: rgba(0,0,0,0.25);
-    border: 1px solid var(--border);
-    overflow: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    max-height: 280px;
-    font-family: "JetBrains Mono", "SF Mono", "Consolas", monospace;
-    font-size: 12px;
-  }
-
-  /* ── Empty State ──────────────────────────── */
-  .empty-state {
-    padding: 16px;
-    border-radius: var(--radius);
-    border: 1px dashed rgba(100, 120, 140, 0.25);
-    color: var(--soft);
-    text-align: center;
-    font-size: 12px;
-  }
-
-  /* ── Utility ──────────────────────────────── */
-  .positive { color: var(--green); }
-  .negative { color: var(--red); }
-  .warning { color: var(--yellow); }
-  .muted { color: var(--muted); }
-  .cyan { color: var(--cyan); }
-  .blue { color: var(--blue); }
+  /* ── MISC ────────────────────────────── */
+  .empty { padding: 14px; border-radius: var(--r); border: 1px dashed rgba(100,120,140,0.2); color: var(--dim); text-align: center; font-size: 12px; }
+  .positive { color: var(--green); } .negative { color: var(--red); } .warning { color: var(--yellow); }
+  .muted { color: var(--muted); } .cyan { color: var(--cyan); } .blue { color: var(--blue); }
   .hidden { display: none !important; }
   .pulse { animation: pulse 1.5s infinite; }
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+  .toggle-btn { background: none; border: 1px solid var(--border); border-radius: var(--r); color: var(--dim); font-size: 11px; padding: 4px 10px; cursor: pointer; }
+  .toggle-btn:hover { color: var(--muted); border-color: var(--border-hi); }
+  .footer { margin-top: 12px; text-align: center; color: var(--dim); font-size: 10px; }
+  .compat-hidden { display: none; }
 
-  .footer {
-    margin-top: 16px;
-    text-align: center;
-    color: var(--soft);
-    font-size: 11px;
-  }
-
-  /* ── Mode badges (legacy compat) ──────────── */
-  .mode-badge { display: none; }
-  .metric-card, .metric-label, .metric-value, .metric-sub,
-  .mode-card, .mode-copy, .summary-label, .summary-value, .summary-detail { /* JS compat */ }
-
-  /* ── Responsive ───────────────────────────── */
-  @media (max-width: 1100px) {
-    .status-strip { grid-template-columns: 1fr 1fr; }
-    .live-metrics { grid-template-columns: repeat(3, 1fr); }
-  }
-
-  @media (max-width: 820px) {
-    .shell { padding: 12px 12px 32px; }
-    .status-strip { grid-template-columns: 1fr; }
-    .status-card.hero-card .status-value { font-size: 20px; }
-    .live-metrics { grid-template-columns: 1fr 1fr; }
-    .lane-row { grid-template-columns: 1fr; }
-    .header { flex-wrap: wrap; }
-  }
+  @media (max-width: 1100px) { .metrics { grid-template-columns: repeat(3, 1fr); } .live-metrics-row { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 820px) { .metrics { grid-template-columns: repeat(2, 1fr); } .topbar { flex-wrap: wrap; } .timeline { display: none; } }
 </style>
 </head>
 <body>
 <div class="shell">
 
-  <!-- ── Header ──────────────────────────────── -->
-  <header class="header">
-    <div class="header-title">ORB Bot</div>
-    <div id="header-mode-badge" class="header-mode stopped">
-      <span class="header-dot"></span>
-      <span id="summary-mode">Stopped</span>
-    </div>
-    <span id="summary-mode-detail" style="display:none"></span>
-    <div class="header-spacer"></div>
-    <button id="btn-preflight" class="header-btn primary">Preflight</button>
-    <button id="btn-refresh" class="header-btn warn">Refresh Data</button>
-    <button id="btn-kill" class="header-btn danger">Kill All</button>
+  <!-- TOP BAR -->
+  <header class="topbar">
+    <span class="topbar-brand">ORB</span>
+    <span class="topbar-sep">│</span>
+    <span id="topbar-acct" class="topbar-acct">Loading...</span>
+    <span id="topbar-acct-detail" class="topbar-acct-detail"></span>
+    <span id="header-mode-badge" class="topbar-mode stopped"><span class="dot"></span> <span id="summary-mode">Stopped</span></span>
+    <span id="summary-mode-detail" class="compat-hidden"></span>
+    <span id="running-profile" class="compat-hidden">Idle</span>
+    <span id="running-profile-detail" class="compat-hidden"></span>
+    <span class="topbar-spacer"></span>
+    <button id="btn-preflight" class="topbar-btn primary">Preflight</button>
+    <button id="btn-refresh" class="topbar-btn warn">Refresh</button>
+    <button id="btn-kill" class="topbar-btn danger">Kill All</button>
   </header>
 
-  <!-- ── Status Strip ────────────────────────── -->
-  <section class="status-strip">
-    <div class="status-card hero-card">
-      <div class="status-label">Next Session</div>
-      <div id="next-session" class="status-value mono">Loading...</div>
-      <div id="next-session-detail" class="status-detail"></div>
+  <!-- METRICS STRIP -->
+  <section class="metrics">
+    <div class="metric">
+      <div class="metric-lbl">Balance</div>
+      <div id="metric-balance" class="metric-val">—</div>
+      <div id="metric-balance-sub" class="metric-sub">starting capital</div>
     </div>
-    <div class="status-card">
-      <div class="status-label">Data</div>
-      <div id="data-status" class="status-value">Checking...</div>
-      <div id="data-status-detail" class="status-detail"></div>
+    <div class="metric">
+      <div class="metric-lbl">P&amp;L Today</div>
+      <div id="metric-pnl" class="metric-val">—</div>
+      <div id="metric-pnl-sub" class="metric-sub"></div>
     </div>
-    <div class="status-card">
-      <div class="status-label">Profile</div>
-      <div id="running-profile" class="status-value">Idle</div>
-      <div id="running-profile-detail" class="status-detail" style="display:none"></div>
+    <div class="metric">
+      <div class="metric-lbl">DD Used</div>
+      <div id="dd-pct" class="metric-val">0%</div>
+      <div class="dd-bar-wrap"><div id="dd-bar" class="dd-bar-fill"></div></div>
+      <div id="metric-dd-sub" class="metric-sub"></div>
     </div>
-    <div class="status-card">
-      <div class="status-label">Today P&amp;L</div>
-      <div id="summary-pnl" class="status-value mono muted">0.00R</div>
-      <div id="summary-pnl-detail" class="status-detail"></div>
+    <div class="metric">
+      <div class="metric-lbl">DD Remaining</div>
+      <div id="metric-dd-left" class="metric-val positive">—</div>
+      <div id="metric-dd-left-sub" class="metric-sub"></div>
     </div>
-  </section>
-
-  <!-- ── Live Session (shows when running) ───── -->
-  <section id="session-status-panel" class="live-session-panel">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <div>
-        <span style="font-weight:700; font-size:14px;">Live Session</span>
-        <span id="mode-badge" class="header-mode stopped" style="margin-left:10px;">Stopped</span>
-      </div>
-      <span id="mode-copy" style="display:none"></span>
+    <div class="metric">
+      <div class="metric-lbl">Next Session</div>
+      <div id="next-session" class="metric-val sm">Loading...</div>
+      <div id="next-session-detail" class="metric-sub"></div>
     </div>
-    <div class="live-metrics">
-      <div class="live-metric">
-        <div class="live-metric-label">Account</div>
-        <div id="account-info" class="live-metric-value" style="font-size:14px;">-</div>
-      </div>
-      <div class="live-metric">
-        <div class="live-metric-label">Daily P&amp;L</div>
-        <div id="daily-pnl" class="live-metric-value mono">0.00R</div>
-      </div>
-      <div class="live-metric">
-        <div class="live-metric-label">Drawdown</div>
-        <div id="dd-pct" class="live-metric-value">0%</div>
-        <div class="dd-track"><div id="dd-bar" class="dd-bar"></div></div>
-      </div>
-      <div class="live-metric">
-        <div class="live-metric-label">Heartbeat</div>
-        <div id="heartbeat" class="live-metric-value">-</div>
-      </div>
-      <div class="live-metric">
-        <div class="live-metric-label">Bars</div>
-        <div id="bars-count" class="live-metric-value mono">0</div>
-      </div>
+    <div class="metric">
+      <div class="metric-lbl">Data</div>
+      <div id="data-status" class="metric-val sm">Checking...</div>
+      <div id="data-status-detail" class="metric-sub"></div>
     </div>
   </section>
 
-  <!-- ── Activity (shows on action) ──────────── -->
-  <section id="activity-panel" class="activity-panel">
-    <div class="activity-head">
-      <span id="activity-title" style="font-weight:700; font-size:14px;">Activity</span>
+  <!-- SESSION TIMELINE -->
+  <div id="session-timeline" class="timeline">
+    <span class="tl-label">Sessions</span>
+    <span class="muted" style="font-size:11px">Loading schedule...</span>
+  </div>
+
+  <!-- LIVE SESSION (shows when running) -->
+  <section id="session-status-panel" class="live-panel">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-weight:700;font-size:13px;">Live Session</span>
+      <span id="mode-badge" class="topbar-mode stopped">Stopped</span>
+      <span id="mode-copy" class="compat-hidden"></span>
+    </div>
+    <div class="live-metrics-row">
+      <div class="live-m"><div class="live-m-lbl">Account</div><div id="account-info" class="live-m-val" style="font-size:13px">—</div></div>
+      <div class="live-m"><div class="live-m-lbl">Daily P&amp;L</div><div id="daily-pnl" class="live-m-val m">0.00R</div></div>
+      <div class="live-m"><div class="live-m-lbl">Drawdown</div><div id="live-dd" class="live-m-val">0%</div></div>
+      <div class="live-m"><div class="live-m-lbl">Heartbeat</div><div id="heartbeat" class="live-m-val">—</div></div>
+      <div class="live-m"><div class="live-m-lbl">Bars</div><div id="bars-count" class="live-m-val m">0</div></div>
+    </div>
+  </section>
+
+  <!-- ACTIVITY -->
+  <section id="activity-panel" class="activity">
+    <div class="activity-hd">
+      <span id="activity-title" style="font-weight:700;font-size:13px">Activity</span>
       <button id="btn-close-activity" class="close-link">Close</button>
     </div>
     <pre id="activity-output">Ready</pre>
   </section>
 
-  <!-- ── Live Lanes (shows when running) ─────── -->
-  <section id="live-lanes-panel" class="section hidden">
-    <div class="section-header" onclick="toggleSection('live-lanes')">
-      <svg class="section-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
-      <span class="section-title">Live Lanes</span>
-      <span id="live-lanes-badge" class="section-badge"></span>
+  <!-- POSITIONS / LIVE LANES -->
+  <section id="live-lanes-panel" class="sec hidden">
+    <div class="sec-hd" onclick="toggleSection('lanes')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Positions</span>
+      <span id="live-lanes-badge" class="sec-badge"></span>
     </div>
-    <div class="section-body" id="live-lanes-body">
-      <div id="live-lanes-grid" class="live-grid"></div>
+    <div class="sec-bd"><div id="live-lanes-grid"></div></div>
+  </section>
+
+  <!-- ACCOUNT SPECS -->
+  <section id="specs-section" class="sec collapsed">
+    <div class="sec-hd" onclick="toggleSection('specs')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Account Specs</span>
+      <span id="specs-badge" class="sec-badge"></span>
+    </div>
+    <div class="sec-bd">
+      <div id="specs-content" class="specs-grid"></div>
+      <div id="specs-notes" class="spec-notes" style="display:none"></div>
     </div>
   </section>
 
-  <!-- ── Profiles ────────────────────────────── -->
-  <section id="profiles-section" class="section">
-    <div class="section-header" onclick="toggleSection('profiles')">
-      <svg class="section-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
-      <span class="section-title">Profiles</span>
-      <span id="profiles-badge" class="section-badge"></span>
-      <div class="section-header-right">
-        <button id="btn-toggle-inactive" class="toggle-btn" onclick="event.stopPropagation(); toggleInactive();">Show Inactive</button>
-      </div>
+  <!-- TRADE BLOTTER -->
+  <section id="trades-section" class="sec">
+    <div class="sec-hd" onclick="toggleSection('trades')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Trade Blotter</span>
+      <span id="trades-badge" class="sec-badge">0</span>
+      <div class="sec-right"><span id="trade-summary" class="trade-summary"></span></div>
     </div>
-    <div class="section-body" id="profiles-body">
-      <div id="accounts-grid" class="profiles-grid">
-        <div class="empty-state">Loading profiles...</div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ── Trades Today ────────────────────────── -->
-  <section id="trades-section" class="section">
-    <div class="section-header" onclick="toggleSection('trades')">
-      <svg class="section-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
-      <span class="section-title">Trades Today</span>
-      <span id="trades-badge" class="section-badge"></span>
-      <div class="section-header-right">
-        <span id="trade-summary" class="trade-summary"></span>
-      </div>
-    </div>
-    <div class="section-body" id="trades-body">
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Lane</th>
-              <th>Setup</th>
-              <th>Dir</th>
-              <th class="align-right">Entry</th>
-              <th class="align-right">Exit</th>
-              <th class="align-right">P&amp;L</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="trade-log">
-            <tr><td colspan="8" class="muted">No trades today</td></tr>
-          </tbody>
+    <div class="sec-bd">
+      <div class="tbl-wrap">
+        <table class="blotter">
+          <thead><tr><th>Time</th><th>Lane</th><th>Setup</th><th>Dir</th><th class="r">Entry</th><th class="r">Exit</th><th class="r">P&amp;L</th><th>Status</th></tr></thead>
+          <tbody id="trade-log"><tr><td colspan="8" class="muted">No trades today</td></tr></tbody>
         </table>
       </div>
     </div>
   </section>
 
-  <div class="footer">
-    Auto-refreshes every 5s &middot; <span id="last-update">-</span>
-  </div>
+  <!-- PROFILES -->
+  <section id="profiles-section" class="sec">
+    <div class="sec-hd" onclick="toggleSection('profiles')">
+      <svg class="sec-chv" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 4 10 8 6 12"/></svg>
+      <span class="sec-ttl">Profiles</span>
+      <span id="profiles-badge" class="sec-badge"></span>
+      <div class="sec-right"><button id="btn-toggle-inactive" class="toggle-btn" onclick="event.stopPropagation();toggleInactive()">Show Inactive</button></div>
+    </div>
+    <div class="sec-bd"><div id="accounts-grid" class="profiles-grid"><div class="empty">Loading...</div></div></div>
+  </section>
+
+  <div class="footer">Auto-refresh 5s &middot; <span id="last-update">-</span></div>
 </div>
 
 <script>
 "use strict";
 
 const FIRM_STYLES = {
-  "Apex Trader Funding": { color: "#fdba74" },
-  "TopStep": { color: "#93c5fd" },
-  "Tradeify": { color: "#86efac" },
-  "Bulenox": { color: "#fca5a5" },
-  "Elite Trader Funding": { color: "#fcd34d" },
-  "MyFundedFutures": { color: "#d8b4fe" },
-  "Self-Funded": { color: "#cbd5e1" },
+  "Apex Trader Funding":{color:"#fdba74"},"TopStep":{color:"#93c5fd"},"Tradeify":{color:"#86efac"},
+  "Bulenox":{color:"#fca5a5"},"Elite Trader Funding":{color:"#fcd34d"},"MyFundedFutures":{color:"#d8b4fe"},"Self-Funded":{color:"#cbd5e1"},
 };
 
-let sessionCountdowns = {};
-let refreshPolling = false;
-let autoRefreshTriggered = false;
-let runningProfile = null;
-let showInactive = false;
-let lastAccountsData = [];
+let sessionCountdowns = {}, refreshPolling = false, autoRefreshTriggered = false;
+let runningProfile = null, showInactive = false, lastAccountsData = [];
+let activeProfileData = null;
 
-/* ── Helpers ──────────────────────────────────── */
-function byId(id) { return document.getElementById(id); }
-function setText(id, text) { const el = byId(id); if (el) el.textContent = text; }
-function fmtNumber(value, digits = 2) { return value == null || Number.isNaN(Number(value)) ? "—" : Number(value).toFixed(digits); }
-function fmtPrice(value) { return value == null ? "—" : Number(value).toFixed(2); }
-function fmtR(value) { return value == null ? "—" : `${Number(value) >= 0 ? "+" : ""}${Number(value).toFixed(2)}R`; }
+const $ = id => document.getElementById(id);
+const setText = (id, t) => { const e = $(id); if (e) e.textContent = t; };
+const fmtPrice = v => v == null ? "—" : Number(v).toFixed(2);
+const fmtR = v => v == null ? "—" : `${Number(v) >= 0 ? "+" : ""}${Number(v).toFixed(2)}R`;
+const fmtDollar = v => v == null ? "—" : `$${Number(v).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
 
-function fmtClock(value, withSeconds = true) {
-  if (!value) return "—";
-  try {
-    return new Date(value).toLocaleTimeString("en-AU", {
-      hour12: false, hour: "2-digit", minute: "2-digit",
-      second: withSeconds ? "2-digit" : undefined,
-    });
-  } catch (_e) { return "—"; }
+function fmtClock(v, sec = true) {
+  if (!v) return "—";
+  try { return new Date(v).toLocaleTimeString("en-AU", {hour12: false, hour: "2-digit", minute: "2-digit", second: sec ? "2-digit" : undefined}); }
+  catch (_) { return "—"; }
 }
 
-function timeSortKey(value) {
-  if (!value || !value.includes(":")) return 9999;
-  const [hour, minute] = value.split(":").map(Number);
-  return hour * 60 + minute;
-}
+function timeSortKey(v) { if (!v || !v.includes(":")) return 9999; const [h, m] = v.split(":").map(Number); return h * 60 + m; }
+function getCountdownText(name) { const m = sessionCountdowns[name]; if (m == null) return ""; if (m <= 0) return "Now"; const h = Math.floor(m / 60); return h > 0 ? `in ${h}h ${m % 60}m` : `in ${m}m`; }
+function setupLabel(meta) { const p = []; if (meta.entry_model) p.push(meta.entry_model); if (meta.rr_target != null) p.push(`RR${Number(meta.rr_target)}`); if (meta.filter_type) p.push(meta.filter_type); return p.join(" | ") || "—"; }
+function modeClass(m) { return m === "LIVE" ? "live" : m === "DEMO" ? "demo" : m === "SIGNAL" ? "signal" : "stopped"; }
+function laneStatusClass(s) { return s === "IN_TRADE" ? "chip-live" : s === "ARMED" ? "chip-demo" : s === "FLAT" ? "chip-signal" : "chip-manual"; }
 
-/* ── Section Collapse ─────────────────────────── */
-const SECTION_MAP = {
-  "profiles": "profiles-section",
-  "trades": "trades-section",
-  "live-lanes": "live-lanes-panel",
-};
+/* ── Section Toggle ─────────────────── */
+const SEC_MAP = {profiles: "profiles-section", trades: "trades-section", lanes: "live-lanes-panel", specs: "specs-section"};
 
 function toggleSection(name) {
-  const el = byId(SECTION_MAP[name]);
-  if (!el) return;
+  const el = $(SEC_MAP[name]); if (!el) return;
   el.classList.toggle("collapsed");
-  const state = {};
-  for (const [key, id] of Object.entries(SECTION_MAP)) {
-    state[key] = byId(id)?.classList.contains("collapsed") || false;
-  }
-  try { localStorage.setItem("orb_sections", JSON.stringify(state)); } catch (_e) {}
+  const st = {};
+  for (const [k, id] of Object.entries(SEC_MAP)) { st[k] = $(id)?.classList.contains("collapsed") || false; }
+  try { localStorage.setItem("orb_sec", JSON.stringify(st)); } catch (_) {}
 }
 
 function restoreSections() {
-  try {
-    const state = JSON.parse(localStorage.getItem("orb_sections") || "{}");
-    for (const [key, collapsed] of Object.entries(state)) {
-      const el = byId(SECTION_MAP[key]);
-      if (el && collapsed) el.classList.add("collapsed");
-    }
-  } catch (_e) {}
+  try { const st = JSON.parse(localStorage.getItem("orb_sec") || "{}"); for (const [k, c] of Object.entries(st)) { const el = $(SEC_MAP[k]); if (el && c) el.classList.add("collapsed"); } } catch (_) {}
 }
 
-/* ── Inactive Toggle ──────────────────────────── */
 function toggleInactive() {
   showInactive = !showInactive;
-  byId("btn-toggle-inactive").textContent = showInactive ? "Hide Inactive" : "Show Inactive";
+  $("btn-toggle-inactive").textContent = showInactive ? "Hide Inactive" : "Show Inactive";
   renderAccounts(lastAccountsData);
 }
 
-/* ── Favicon ──────────────────────────────────── */
+/* ── Favicon ────────────────────────── */
 function updateFavicon(mode) {
-  const color = (mode === "STOPPED" || mode === "OFFLINE") ? "%23dc2626" : "%2322c55e";
-  byId("favicon").setAttribute("href", `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='${color}'/></svg>`);
+  const c = (mode === "STOPPED" || mode === "OFFLINE") ? "%23dc2626" : "%2322c55e";
+  $("favicon").setAttribute("href", `data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='${c}'/></svg>`);
 }
 
-/* ── Lane / Status Helpers ────────────────────── */
-function laneStatusClass(status) {
-  if (status === "IN_TRADE") return "chip-live";
-  if (status === "ARMED") return "chip-demo";
-  if (status === "FLAT") return "chip-signal";
-  return "chip-manual";
+/* ── Account Summary + Specs ────────── */
+function renderAccountSummary(accounts) {
+  const active = accounts.find(a => a.active && (a.auto_trading === "full" || a.auto_trading === "semi"));
+  activeProfileData = active || null;
+
+  if (active) {
+    const fc = (FIRM_STYLES[active.firm] || FIRM_STYLES["Self-Funded"]).color;
+    $("topbar-acct").innerHTML = `<span style="color:${fc}">${active.firm}</span> ${fmtDollar(active.account_size)}`;
+    $("topbar-acct-detail").textContent = `${active.instruments.join("+")} · ${active.lane_count} lanes · ${active.platform || ""}`;
+    $("metric-balance").textContent = fmtDollar(active.account_size);
+    $("metric-balance-sub").textContent = "starting capital";
+    $("metric-dd-sub").textContent = `of ${fmtDollar(active.max_dd)} max`;
+    $("metric-dd-left").textContent = fmtDollar(active.max_dd);
+    $("metric-dd-left-sub").textContent = active.dll ? `DLL ${fmtDollar(active.dll)}/day` : "";
+
+    $("specs-badge").textContent = active.profile_id;
+    const specs = [
+      {l: "Firm", v: active.firm}, {l: "Platform", v: active.platform || "—"}, {l: "Size", v: fmtDollar(active.account_size)},
+      {l: "Max DD", v: fmtDollar(active.max_dd)}, {l: "Daily Loss Limit", v: active.dll ? fmtDollar(active.dll) : "None"},
+      {l: "Stop Multiplier", v: active.stop_multiplier ? `${active.stop_multiplier}x` : "Default"},
+      {l: "Copies", v: String(active.copies)}, {l: "Lanes", v: String(active.lane_count)},
+      {l: "Instruments", v: active.instruments.join(", ") || "All"}, {l: "Automation", v: active.auto_trading || "manual"},
+    ];
+    $("specs-content").innerHTML = specs.map(s => `<div class="spec-item"><div class="spec-lbl">${s.l}</div><div class="spec-val">${s.v}</div></div>`).join("");
+    const notesEl = $("specs-notes");
+    if (active.notes) { notesEl.textContent = active.notes; notesEl.style.display = ""; } else { notesEl.style.display = "none"; }
+  } else {
+    $("topbar-acct").textContent = "No active profile";
+    $("topbar-acct-detail").textContent = "";
+  }
 }
 
-function modeClass(mode) {
-  if (mode === "LIVE") return "live";
-  if (mode === "DEMO") return "demo";
-  if (mode === "SIGNAL") return "signal";
-  return "stopped";
+/* ── Session Timeline ───────────────── */
+function renderTimeline(sessions, nextName) {
+  const tl = $("session-timeline");
+  if (!sessions.length) { tl.innerHTML = '<span class="tl-label">Sessions</span><span class="muted" style="font-size:11px">No sessions loaded</span>'; return; }
+  const sorted = [...sessions].sort((a, b) => timeSortKey(a.time) - timeSortKey(b.time));
+  let html = '<span class="tl-label">Today</span>';
+  sorted.forEach((s, i) => {
+    const isNext = s.name === nextName;
+    const isPast = s.minutes_away != null && s.minutes_away < 0;
+    const dotClass = isNext ? "next" : isPast ? "past" : "";
+    html += `<div class="tl-node"><div class="tl-dot ${dotClass}"></div><div class="tl-name">${s.short_name || s.name}</div><div class="tl-time">${s.time || ""}</div></div>`;
+    if (i < sorted.length - 1) html += '<div class="tl-line"></div>';
+  });
+  tl.innerHTML = html;
 }
 
-function getCountdownText(sessionName) {
-  const mins = sessionCountdowns[sessionName];
-  if (mins == null) return "";
-  if (mins <= 0) return "Now";
-  const hours = Math.floor(mins / 60);
-  const minutes = mins % 60;
-  if (hours > 0) return `in ${hours}h ${minutes}m`;
-  return `in ${minutes}m`;
-}
-
-function summarizeDataError(errorText) {
-  if (!errorText) return { headline: "Error", detail: "Unknown" };
-  if (errorText.includes("Cannot open file")) return { headline: "DB Busy", detail: "gold.db locked" };
-  return { headline: "Error", detail: errorText };
-}
-
-function setupLabel(meta) {
-  const parts = [];
-  if (meta.entry_model) parts.push(meta.entry_model);
-  if (meta.rr_target != null) parts.push(`RR${Number(meta.rr_target)}`);
-  if (meta.filter_type) parts.push(meta.filter_type);
-  return parts.join(" | ") || "—";
-}
-
-function renderEmpty(container, text) {
-  container.innerHTML = `<div class="empty-state">${text}</div>`;
-}
-
-/* ── Render: Accounts ─────────────────────────── */
+/* ── Render: Accounts ───────────────── */
 function renderAccounts(accounts) {
   lastAccountsData = accounts;
-  const grid = byId("accounts-grid");
+  renderAccountSummary(accounts);
+  const grid = $("accounts-grid");
   grid.innerHTML = "";
-  if (!accounts.length) { renderEmpty(grid, "No profiles found."); return; }
+  if (!accounts.length) { grid.innerHTML = '<div class="empty">No profiles found.</div>'; return; }
 
   const sorted = [...accounts].sort((a, b) => {
     if (a.active !== b.active) return b.active - a.active;
-    const aAuto = a.auto_trading === "full" || a.auto_trading === "semi";
-    const bAuto = b.auto_trading === "full" || b.auto_trading === "semi";
-    if (aAuto !== bAuto) return bAuto - aAuto;
+    const aA = a.auto_trading === "full" || a.auto_trading === "semi";
+    const bA = b.auto_trading === "full" || b.auto_trading === "semi";
+    if (aA !== bA) return bA - aA;
     return b.lane_count - a.lane_count;
   });
 
-  let activeCount = 0;
-  let inactiveCount = 0;
-
+  let activeCount = 0, inactiveCount = 0;
   for (const acct of sorted) {
-    const isActive = acct.active;
-    const isAuto = acct.auto_trading === "full" || acct.auto_trading === "semi";
+    const isActive = acct.active, isAuto = acct.auto_trading === "full" || acct.auto_trading === "semi";
     const isRunning = runningProfile === acct.profile_id;
-
-    if (!isActive) {
-      inactiveCount++;
-      if (!showInactive) continue;
-    } else {
-      activeCount++;
-    }
+    if (!isActive) { inactiveCount++; if (!showInactive) continue; } else { activeCount++; }
 
     const style = FIRM_STYLES[acct.firm] || FIRM_STYLES["Self-Funded"];
     const card = document.createElement("article");
-    card.className = "profile-card";
+    card.className = "pf-card";
     if (isAuto && isActive) card.classList.add("active-auto");
     if (!isActive) card.classList.add("inactive-card");
 
-    const lanesHtml = (acct.lanes || []).slice(0, 6).map((lane) => `
-      <div class="lane-row">
-        <div class="lane-time mono">${lane.session_time_brisbane || "??:??"}</div>
-        <div>
-          <div class="lane-title">${lane.label || `${lane.instrument || ""} ${lane.session || ""}`.trim()}</div>
-          <div class="lane-subtitle">${lane.setup_label || "—"}</div>
-        </div>
-      </div>
+    const lanesHtml = (acct.lanes || []).slice(0, 6).map(l => `
+      <div class="lane-row"><div class="lane-time">${l.session_time_brisbane || "??:??"}</div><div><div class="lane-title">${l.label || `${l.instrument || ""} ${l.session || ""}`.trim()}</div><div class="lane-subtitle">${l.setup_label || "—"}</div></div></div>
     `).join("");
-
-    const moreCount = Math.max(0, (acct.lanes || []).length - 6);
-    const statusChip = !isActive
-      ? `<span class="profile-chip chip-inactive">Inactive</span>`
-      : isAuto
-        ? `<span class="profile-chip chip-auto">Auto</span>`
-        : `<span class="profile-chip chip-manual">Manual</span>`;
+    const more = Math.max(0, (acct.lanes || []).length - 6);
+    const chip = !isActive ? '<span class="pf-chip chip-inactive">Inactive</span>' : isAuto ? '<span class="pf-chip chip-auto">Auto</span>' : '<span class="pf-chip chip-manual">Manual</span>';
 
     card.innerHTML = `
-      <div class="profile-head">
-        <div>
-          <div class="firm-line">
-            <span class="firm-name" style="color:${style.color}">${acct.firm}</span>
-            <span class="firm-size">$${acct.account_size / 1000}K</span>
-          </div>
-          <div class="profile-meta">
-            <span class="mono" style="font-size:11px">${acct.profile_id}</span> &middot;
-            ${acct.instruments && acct.instruments.length ? acct.instruments.join("+") : "All"} &middot;
-            ${acct.lane_count} lane${acct.lane_count === 1 ? "" : "s"} &middot;
-            DD $${Number(acct.max_dd).toLocaleString()}${acct.dll ? ` &middot; DLL $${Number(acct.dll).toLocaleString()}` : ""}${acct.copies > 1 ? ` &middot; x${acct.copies}` : ""}
-          </div>
-        </div>
-        ${statusChip}
-      </div>
-      <div class="lane-list">
-        ${lanesHtml || '<div class="empty-state">No timed lanes</div>'}
-        ${moreCount > 0 ? `<div class="lane-subtitle" style="text-align:center;padding:4px">+ ${moreCount} more</div>` : ""}
-      </div>
+      <div class="pf-head"><div><div style="display:flex;gap:6px;align-items:baseline"><span class="pf-firm" style="color:${style.color}">${acct.firm}</span><span class="pf-size">$${acct.account_size / 1000}K</span></div>
+      <div class="pf-meta"><span class="m" style="font-size:10px">${acct.profile_id}</span> · ${acct.instruments?.join("+") || "All"} · ${acct.lane_count} lanes · DD ${fmtDollar(acct.max_dd)}${acct.dll ? ` · DLL ${fmtDollar(acct.dll)}` : ""}${acct.copies > 1 ? ` · x${acct.copies}` : ""}</div></div>${chip}</div>
+      <div class="lane-list">${lanesHtml || '<div class="empty">No lanes</div>'}${more > 0 ? `<div class="lane-subtitle" style="text-align:center;padding:3px">+${more} more</div>` : ""}</div>
     `;
 
     if (isAuto && isActive && acct.lane_count > 0) {
       if (isRunning) {
-        const stopRow = document.createElement("div");
-        stopRow.className = "actions-row";
-        stopRow.innerHTML = `<button class="profile-button stop pulse">Stop Session</button>`;
-        stopRow.querySelector("button").addEventListener("click", async () => {
-          if (!confirm("Stop the running session?")) return;
-          try { await fetch("/api/action/kill", { method: "POST" }); showActivity("Session Stop", "Stopping...", "warning"); }
+        const sr = document.createElement("div"); sr.className = "actions-row";
+        sr.innerHTML = '<button class="pf-btn stop pulse">Stop Session</button>';
+        sr.querySelector("button").addEventListener("click", async () => {
+          if (!confirm("Stop session?")) return;
+          try { await fetch("/api/action/kill", {method: "POST"}); showActivity("Stop", "Stopping...", "warning"); }
           catch (e) { appendActivity("Error: " + e.message); }
         });
-        card.appendChild(stopRow);
+        card.appendChild(sr);
       } else {
-        const actions = document.createElement("div");
-        actions.className = "actions-row";
-        actions.innerHTML = `
-          <button class="profile-button signal">Signal</button>
-          <button class="profile-button demo">Demo</button>
-          <button class="profile-button live" disabled>Live</button>
-        `;
-        const [btnSignal, btnDemo, btnLive] = actions.querySelectorAll("button");
-        btnSignal.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments.join("+") || "ALL", "signal"));
-        btnDemo.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments.join("+") || "ALL", "demo"));
-        card.appendChild(actions);
-
-        const gate = document.createElement("div");
-        gate.className = "live-gate";
-        gate.innerHTML = `<input type="text" placeholder="Type LIVE to unlock">`;
-        const input = gate.querySelector("input");
-        input.addEventListener("input", () => { btnLive.disabled = input.value.trim() !== "LIVE"; });
-        btnLive.addEventListener("click", () => {
-          if (input.value.trim() !== "LIVE") return;
-          launchSession(acct.profile_id, acct.firm, acct.instruments.join("+") || "ALL", "live");
-          input.value = ""; btnLive.disabled = true;
-        });
+        const ar = document.createElement("div"); ar.className = "actions-row";
+        ar.innerHTML = '<button class="pf-btn signal">Signal</button><button class="pf-btn demo">Demo</button><button class="pf-btn live" disabled>Live</button>';
+        const [bs, bd, bl] = ar.querySelectorAll("button");
+        bs.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "signal"));
+        bd.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "demo"));
+        card.appendChild(ar);
+        const gate = document.createElement("div"); gate.className = "live-gate";
+        gate.innerHTML = '<input type="text" placeholder="Type LIVE to unlock">';
+        const inp = gate.querySelector("input");
+        inp.addEventListener("input", () => { bl.disabled = inp.value.trim() !== "LIVE"; });
+        bl.addEventListener("click", () => { if (inp.value.trim() !== "LIVE") return; launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "live"); inp.value = ""; bl.disabled = true; });
         card.appendChild(gate);
       }
     } else if (!isActive) {
-      const note = document.createElement("div");
-      note.className = "profile-meta";
-      note.style.marginTop = "10px";
-      note.style.fontStyle = "italic";
-      note.textContent = "Inactive";
-      card.appendChild(note);
+      const n = document.createElement("div"); n.className = "pf-meta"; n.style.cssText = "margin-top:8px;font-style:italic"; n.textContent = "Inactive"; card.appendChild(n);
     } else if (isActive && !isAuto) {
-      const note = document.createElement("div");
-      note.className = "profile-meta";
-      note.style.marginTop = "10px";
-      note.textContent = "Manual trading only";
-      card.appendChild(note);
+      const n = document.createElement("div"); n.className = "pf-meta"; n.style.marginTop = "8px"; n.textContent = "Manual only"; card.appendChild(n);
     }
-
     grid.appendChild(card);
   }
-
-  // Update badge and toggle button
-  byId("profiles-badge").textContent = `${activeCount} active`;
-  const toggleBtn = byId("btn-toggle-inactive");
-  if (inactiveCount > 0) {
-    toggleBtn.style.display = "";
-    toggleBtn.textContent = showInactive ? `Hide ${inactiveCount} Inactive` : `Show ${inactiveCount} Inactive`;
-  } else {
-    toggleBtn.style.display = "none";
-  }
+  $("profiles-badge").textContent = `${activeCount} active`;
+  const tb = $("btn-toggle-inactive");
+  if (inactiveCount > 0) { tb.style.display = ""; tb.textContent = showInactive ? `Hide ${inactiveCount} Inactive` : `Show ${inactiveCount} Inactive`; }
+  else { tb.style.display = "none"; }
 }
 
-/* ── Render: Live Lanes ───────────────────────── */
+/* ── Render: Live Lanes (table) ─────── */
 function renderLiveLanes(lanes) {
-  const panel = byId("live-lanes-panel");
-  const grid = byId("live-lanes-grid");
+  const panel = $("live-lanes-panel"), grid = $("live-lanes-grid");
   grid.innerHTML = "";
-
   if (!lanes.length) { panel.classList.add("hidden"); return; }
   panel.classList.remove("hidden");
-  byId("live-lanes-badge").textContent = `${lanes.length} lane${lanes.length === 1 ? "" : "s"}`;
+  $("live-lanes-badge").textContent = `${lanes.length} lane${lanes.length === 1 ? "" : "s"}`;
 
-  const sorted = [...lanes].sort((a, b) => {
-    const timeDiff = timeSortKey(a.session_time_brisbane) - timeSortKey(b.session_time_brisbane);
-    if (timeDiff !== 0) return timeDiff;
-    return `${a.instrument || ""}${a.session_name || ""}`.localeCompare(`${b.instrument || ""}${b.session_name || ""}`);
-  });
-
-  for (const lane of sorted) {
-    const card = document.createElement("article");
-    card.className = "lane-card";
-    const status = lane.status || "WAITING";
-    const pnlClass = lane.current_pnl_r == null ? "muted" : (Number(lane.current_pnl_r) >= 0 ? "positive" : "negative");
-    const direction = lane.direction ? String(lane.direction).toUpperCase() : "—";
-    const countdown = getCountdownText(lane.session_name);
-    const title = `${lane.instrument || "?"} ${lane.session_name || lane.strategy_id || "?"}`;
-
-    card.innerHTML = `
-      <div class="lane-head">
-        <div>
-          <div class="lane-time mono">${lane.session_time_brisbane || "??:??"}</div>
-          <div class="lane-title">${title}</div>
-          <div class="lane-subtitle">${setupLabel(lane)}</div>
-        </div>
-        <span class="lane-chip ${laneStatusClass(status)}">${status.replace("_", " ")}</span>
-      </div>
-      <div class="lane-values">
-        <div class="value-box">
-          <div class="value-label">Dir</div>
-          <div class="value-text">${direction}</div>
-        </div>
-        <div class="value-box">
-          <div class="value-label">Entry</div>
-          <div class="value-text mono">${fmtPrice(lane.entry_price)}</div>
-        </div>
-        <div class="value-box">
-          <div class="value-label">P&L</div>
-          <div class="value-text mono ${pnlClass}">${fmtR(lane.current_pnl_r)}</div>
-        </div>
-        <div class="value-box">
-          <div class="value-label">ORB</div>
-          <div class="value-text">${lane.orb_minutes != null ? `${lane.orb_minutes}m` : "—"}</div>
-        </div>
-      </div>
-      <div class="lane-foot">
-        <span>${lane.status_detail || lane.strategy_id || ""}</span>
-        <span>${countdown || ""}</span>
-      </div>
-    `;
-    grid.appendChild(card);
+  const sorted = [...lanes].sort((a, b) => timeSortKey(a.session_time_brisbane) - timeSortKey(b.session_time_brisbane) || `${a.instrument}`.localeCompare(`${b.instrument}`));
+  let html = '<table class="pos-table"><thead><tr><th>Time</th><th>Session</th><th>Instr</th><th>Status</th><th>Dir</th><th class="r">Entry</th><th class="r">P&L</th><th>Detail</th></tr></thead><tbody>';
+  for (const l of sorted) {
+    const st = l.status || "WAITING";
+    const pnlCls = l.current_pnl_r == null ? "muted" : Number(l.current_pnl_r) >= 0 ? "positive" : "negative";
+    const dir = l.direction ? String(l.direction).toUpperCase() : "—";
+    html += `<tr>
+      <td class="m">${l.session_time_brisbane || "?"}</td>
+      <td>${l.session_name || "?"}</td>
+      <td><strong>${l.instrument || "?"}</strong></td>
+      <td><span class="pf-chip ${laneStatusClass(st)}">${st.replace("_", " ")}</span></td>
+      <td class="${dir === "LONG" ? "positive" : dir === "SHORT" ? "negative" : "muted"}">${dir}</td>
+      <td class="r m">${fmtPrice(l.entry_price)}</td>
+      <td class="r m ${pnlCls}">${fmtR(l.current_pnl_r)}</td>
+      <td class="muted" style="font-size:11px">${l.status_detail || setupLabel(l)}</td>
+    </tr>`;
   }
+  html += '</tbody></table>';
+  grid.innerHTML = html;
 }
 
-/* ── Render: Trades ───────────────────────────── */
+/* ── Render: Trades ─────────────────── */
 function renderTrades(trades) {
-  const tbody = byId("trade-log");
-  const summary = byId("trade-summary");
+  const tbody = $("trade-log"), summary = $("trade-summary");
   tbody.innerHTML = "";
+  if (!trades.length) { tbody.innerHTML = '<tr><td colspan="8" class="muted">No trades today</td></tr>'; summary.textContent = ""; $("trades-badge").textContent = "0"; return; }
+  $("trades-badge").textContent = `${trades.length}`;
+  $("trades-section").classList.remove("collapsed");
 
-  if (!trades.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="muted">No trades today</td></tr>`;
-    summary.textContent = "";
-    byId("trades-badge").textContent = "0";
-    return;
-  }
-
-  byId("trades-badge").textContent = `${trades.length}`;
-  // Auto-expand trades when there are entries
-  byId("trades-section").classList.remove("collapsed");
-
-  let totalR = 0;
-  let openCount = 0;
-  for (const trade of trades) {
-    if (trade.actual_r != null) totalR += Number(trade.actual_r);
-    if (!trade.exited_at) openCount += 1;
-
+  let totalR = 0, openCount = 0;
+  for (const t of trades) {
+    if (t.actual_r != null) totalR += Number(t.actual_r);
+    if (!t.exited_at) openCount++;
     const tr = document.createElement("tr");
-    const statusText = trade.exited_at ? (trade.exit_reason || "Closed") : "Open";
-    const statusClass = trade.exited_at ? "muted" : "blue";
-
+    const stTxt = t.exited_at ? (t.exit_reason || "Closed") : "Open";
+    const stCls = t.exited_at ? "muted" : "blue";
     tr.innerHTML = `
-      <td class="mono">${fmtClock(trade.created_at)}</td>
-      <td>
-        <div class="trade-lane">${trade.lane_label || trade.strategy_id || "?"}</div>
-        <div class="trade-sub">${trade.session_time_brisbane ? `${trade.session_time_brisbane} Bris` : ""}</div>
-      </td>
-      <td>
-        <div>${setupLabel(trade)}</div>
-        <div class="trade-sub mono">${trade.strategy_id || ""}</div>
-      </td>
-      <td class="${trade.direction === "long" ? "positive" : trade.direction === "short" ? "negative" : "muted"}">${trade.direction ? String(trade.direction).toUpperCase() : "—"}</td>
-      <td class="align-right mono">${fmtPrice(trade.fill_entry || trade.engine_entry)}</td>
-      <td class="align-right mono">${fmtPrice(trade.fill_exit)}</td>
-      <td class="align-right mono ${trade.actual_r == null ? "muted" : Number(trade.actual_r) >= 0 ? "positive" : "negative"}">${fmtR(trade.actual_r)}</td>
-      <td class="${statusClass}">${statusText}</td>
-    `;
+      <td class="m">${fmtClock(t.created_at)}</td>
+      <td><div class="trade-lane">${t.lane_label || t.strategy_id || "?"}</div><div class="trade-sub">${t.session_time_brisbane ? `${t.session_time_brisbane} Bris` : ""}</div></td>
+      <td><div>${setupLabel(t)}</div><div class="trade-sub m">${t.strategy_id || ""}</div></td>
+      <td class="${t.direction === "long" ? "positive" : t.direction === "short" ? "negative" : "muted"}">${t.direction ? String(t.direction).toUpperCase() : "—"}</td>
+      <td class="r m">${fmtPrice(t.fill_entry || t.engine_entry)}</td>
+      <td class="r m">${fmtPrice(t.fill_exit)}</td>
+      <td class="r m ${t.actual_r == null ? "muted" : Number(t.actual_r) >= 0 ? "positive" : "negative"}">${fmtR(t.actual_r)}</td>
+      <td class="${stCls}">${stTxt}</td>`;
     tbody.appendChild(tr);
   }
-
-  const totalRow = document.createElement("tr");
-  totalRow.innerHTML = `
-    <td colspan="5"></td>
-    <td class="align-right"><strong>Total</strong></td>
-    <td class="align-right mono ${totalR >= 0 ? "positive" : "negative"}"><strong>${fmtR(totalR)}</strong></td>
-    <td class="muted">${trades.length} trade${trades.length === 1 ? "" : "s"}${openCount ? ` | ${openCount} open` : ""}</td>
-  `;
-  tbody.appendChild(totalRow);
+  const tr2 = document.createElement("tr");
+  tr2.innerHTML = `<td colspan="5"></td><td class="r"><strong>Total</strong></td><td class="r m ${totalR >= 0 ? "positive" : "negative"}"><strong>${fmtR(totalR)}</strong></td><td class="muted">${trades.length} trade${trades.length === 1 ? "" : "s"}${openCount ? ` | ${openCount} open` : ""}</td>`;
+  tbody.appendChild(tr2);
   summary.textContent = `${trades.length} trade${trades.length === 1 ? "" : "s"}${openCount ? `, ${openCount} open` : ""}`;
 }
 
-/* ── Activity ─────────────────────────────────── */
+/* ── Activity ───────────────────────── */
 function showActivity(title, text, tone) {
-  const panel = byId("activity-panel");
-  panel.style.display = "block";
+  $("activity-panel").style.display = "block";
   setText("activity-title", title);
-  const output = byId("activity-output");
-  output.textContent = text;
-  output.className = tone === "error" ? "negative" : tone === "success" ? "positive" : tone === "warning" ? "warning" : "cyan";
+  const o = $("activity-output"); o.textContent = text;
+  o.className = tone === "error" ? "negative" : tone === "success" ? "positive" : tone === "warning" ? "warning" : "cyan";
 }
+function appendActivity(text) { const o = $("activity-output"); o.textContent += `\n${text}`; o.scrollTop = o.scrollHeight; }
 
-function appendActivity(text) {
-  const output = byId("activity-output");
-  output.textContent += `\n${text}`;
-  output.scrollTop = output.scrollHeight;
-}
-
-/* ── Update Status ────────────────────────────── */
+/* ── Update Status ──────────────────── */
 function updateStatus(state) {
   const mode = state.mode || "STOPPED";
   updateFavicon(mode);
   setText("summary-mode", mode === "STOPPED" ? "Stopped" : mode);
+  $("header-mode-badge").className = `topbar-mode ${modeClass(mode)}`;
 
-  // Header mode badge
-  const headerBadge = byId("header-mode-badge");
-  headerBadge.className = `header-mode ${modeClass(mode)}`;
-
-  const accountName = state.account_name || "";
-  const profileId = accountName.startsWith("profile_") ? accountName.slice(8) : null;
-  if (profileId !== runningProfile) {
-    runningProfile = mode === "STOPPED" ? null : profileId;
-    fetchAccounts();
-  }
-
+  const acctName = state.account_name || "";
+  const profileId = acctName.startsWith("profile_") ? acctName.slice(8) : null;
+  if (profileId !== runningProfile) { runningProfile = mode === "STOPPED" ? null : profileId; fetchAccounts(); }
   setText("running-profile", runningProfile || "Idle");
 
-  // Live session panel mode badge
-  const modeBadge = byId("mode-badge");
-  modeBadge.className = `header-mode ${modeClass(mode)}`;
-  modeBadge.textContent = mode;
+  $("mode-badge").className = `topbar-mode ${modeClass(mode)}`;
+  $("mode-badge").textContent = mode;
 
-  const statusPanel = byId("session-status-panel");
-  if (mode === "STOPPED") {
-    statusPanel.style.display = "none";
-    byId("live-lanes-panel").classList.add("hidden");
-  } else {
-    statusPanel.style.display = "block";
-    statusPanel.className = `live-session-panel active-${modeClass(mode)}`;
-  }
+  const panel = $("session-status-panel");
+  if (mode === "STOPPED") { panel.classList.remove("on"); $("live-lanes-panel").classList.add("hidden"); }
+  else { panel.classList.add("on"); }
 
-  const accountLabel = state.account_name ? `${state.account_name} (#${state.account_id || "?"})` : "—";
+  const acctLabel = state.account_name ? `${state.account_name} (#${state.account_id || "?"})` : "—";
   const copyLabel = state.shadow_count ? ` + ${state.shadow_count} shadow${state.shadow_count > 1 ? "s" : ""}` : "";
-  setText("account-info", accountLabel + copyLabel);
+  setText("account-info", acctLabel + copyLabel);
 
   const pnl = Number(state.daily_pnl_r || 0);
   setText("daily-pnl", fmtR(pnl));
-  byId("daily-pnl").className = `live-metric-value mono ${pnl >= 0 ? "positive" : "negative"}`;
+  $("daily-pnl").className = `live-m-val m ${pnl >= 0 ? "positive" : "negative"}`;
 
-  // Summary P&L card
-  setText("summary-pnl", fmtR(pnl));
-  byId("summary-pnl").className = `status-value mono ${pnl >= 0 ? "positive" : pnl < 0 ? "negative" : "muted"}`;
+  $("metric-pnl").textContent = fmtR(pnl);
+  $("metric-pnl").className = `metric-val ${pnl >= 0 ? "positive" : pnl < 0 ? "negative" : "muted"}`;
+  $("metric-pnl-sub").textContent = mode !== "STOPPED" ? "session active" : "no session";
 
   const limit = Math.abs(Number(state.daily_loss_limit_r || 0)) || 1;
   const used = Math.abs(Math.min(pnl, 0));
   const pct = Math.min(100, (used / limit) * 100);
   setText("dd-pct", `${pct.toFixed(0)}%`);
-  const ddBar = byId("dd-bar");
+  $("dd-pct").className = `metric-val ${pct > 80 ? "negative" : pct > 50 ? "warning" : "positive"}`;
+  setText("live-dd", `${pct.toFixed(0)}%`);
+  const ddBar = $("dd-bar");
   ddBar.style.width = `${pct}%`;
-  ddBar.style.background = pct > 80
-    ? "linear-gradient(90deg, #fb7185, #dc2626)"
-    : pct > 50
-      ? "linear-gradient(90deg, #fbbf24, #f59e0b)"
-      : "linear-gradient(90deg, #34d399, #16a34a)";
+  ddBar.style.background = pct > 80 ? "linear-gradient(90deg,#fb7185,#dc2626)" : pct > 50 ? "linear-gradient(90deg,#fbbf24,#f59e0b)" : "linear-gradient(90deg,var(--green),#16a34a)";
+
+  if (activeProfileData) {
+    const ddLeft = activeProfileData.max_dd * (1 - pct / 100);
+    $("metric-dd-left").textContent = fmtDollar(ddLeft);
+    $("metric-dd-left").className = `metric-val ${ddLeft < activeProfileData.max_dd * 0.2 ? "negative" : ddLeft < activeProfileData.max_dd * 0.5 ? "warning" : "positive"}`;
+  }
 
   const hbAge = Number(state.heartbeat_age_s || 9999);
-  const hbEl = byId("heartbeat");
-  if (mode === "STOPPED") {
-    hbEl.textContent = "—";
-    hbEl.className = "live-metric-value muted";
-  } else if (hbAge < 30) {
-    hbEl.textContent = `${hbAge.toFixed(0)}s ago`;
-    hbEl.className = "live-metric-value positive";
-  } else if (hbAge < 120) {
-    hbEl.textContent = `${hbAge.toFixed(0)}s ago`;
-    hbEl.className = "live-metric-value warning";
-  } else {
-    hbEl.textContent = `${hbAge.toFixed(0)}s stale`;
-    hbEl.className = "live-metric-value negative pulse";
-  }
+  const hbEl = $("heartbeat");
+  if (mode === "STOPPED") { hbEl.textContent = "—"; hbEl.className = "live-m-val muted"; }
+  else if (hbAge < 30) { hbEl.textContent = `${hbAge.toFixed(0)}s`; hbEl.className = "live-m-val positive"; }
+  else if (hbAge < 120) { hbEl.textContent = `${hbAge.toFixed(0)}s`; hbEl.className = "live-m-val warning"; }
+  else { hbEl.textContent = `${hbAge.toFixed(0)}s STALE`; hbEl.className = "live-m-val negative pulse"; }
 
   setText("bars-count", String(state.bars_received || 0));
   renderLiveLanes(Array.isArray(state.lane_cards) ? state.lane_cards : []);
   setText("last-update", fmtClock(new Date(), true));
 }
 
-/* ── Fetch Functions ──────────────────────────── */
+/* ── Fetchers ───────────────────────── */
 async function fetchStatus() {
-  try {
-    const r = await fetch("/api/status");
-    updateStatus(await r.json());
-  } catch (_e) {
-    setText("summary-mode", "Offline");
-    byId("header-mode-badge").className = "header-mode stopped";
-    updateFavicon("OFFLINE");
-  }
+  try { updateStatus(await (await fetch("/api/status")).json()); }
+  catch (_) { setText("summary-mode", "Offline"); $("header-mode-badge").className = "topbar-mode stopped"; updateFavicon("OFFLINE"); }
 }
-
-async function fetchTrades() {
-  try {
-    const r = await fetch("/api/trades");
-    renderTrades((await r.json()).trades || []);
-  } catch (_e) {}
-}
-
-async function fetchAccounts() {
-  try {
-    const r = await fetch("/api/accounts");
-    renderAccounts((await r.json()).accounts || []);
-  } catch (_e) {
-    renderEmpty(byId("accounts-grid"), "Could not load profiles.");
-  }
-}
+async function fetchTrades() { try { renderTrades((await (await fetch("/api/trades")).json()).trades || []); } catch (_) {} }
+async function fetchAccounts() { try { renderAccounts((await (await fetch("/api/accounts")).json()).accounts || []); } catch (_) { $("accounts-grid").innerHTML = '<div class="empty">Could not load.</div>'; } }
 
 async function fetchSessions() {
   try {
-    const r = await fetch("/api/sessions");
-    const data = await r.json();
+    const data = await (await fetch("/api/sessions")).json();
     for (const s of (data.sessions || [])) sessionCountdowns[s.name] = s.minutes_away;
-    if (!data.next) {
-      setText("next-session", "No upcoming");
-      setText("next-session-detail", "");
-      return;
-    }
+    const tlData = (data.sessions || []).map(s => ({
+      name: s.name,
+      short_name: s.name.replace("_OPEN", "").replace("_SETTLE", "").replace("CME_", "").replace("COMEX_", "").substring(0, 8),
+      time: s.hour != null ? `${String(s.hour).padStart(2, "0")}:${String(s.minute).padStart(2, "0")}` : "",
+      minutes_away: s.minutes_away,
+    }));
+    renderTimeline(tlData, data.next?.name || "");
+    if (!data.next) { setText("next-session", "No upcoming"); setText("next-session-detail", ""); return; }
     const next = data.next;
-    const timeText = `${String(next.hour).padStart(2, "0")}:${String(next.minute).padStart(2, "0")}`;
-    const countdown = getCountdownText(next.name);
-    setText("next-session", `${next.name} · ${timeText}`);
-    setText("next-session-detail", countdown || "");
-  } catch (_e) {}
+    setText("next-session", `${next.name} · ${String(next.hour).padStart(2, "0")}:${String(next.minute).padStart(2, "0")}`);
+    setText("next-session-detail", getCountdownText(next.name) || "");
+  } catch (_) {}
 }
 
 async function fetchDataStatus() {
   try {
-    const r = await fetch("/api/data-status");
-    const data = await r.json();
-    const btn = byId("btn-refresh");
-
+    const data = await (await fetch("/api/data-status")).json();
+    const btn = $("btn-refresh");
     if (data.error) {
-      const s = summarizeDataError(data.error);
-      setText("data-status", s.headline);
-      setText("data-status-detail", s.detail);
-      btn.className = "header-btn warn";
-      return;
+      const s = data.error.includes("Cannot open file") ? {h: "DB Busy", d: "gold.db locked"} : {h: "Error", d: data.error};
+      setText("data-status", s.h); setText("data-status-detail", s.d); btn.className = "topbar-btn warn"; return;
     }
-
-    const parts = [];
-    for (const [inst, info] of Object.entries(data.instruments || {})) {
-      parts.push(`${inst} ${info.last_bar_date || "?"}`);
-    }
+    const parts = []; for (const [inst, info] of Object.entries(data.instruments || {})) parts.push(`${inst} ${info.last_bar_date || "?"}`);
     setText("data-status", data.any_stale ? "Stale" : "Current");
-    byId("data-status").className = `status-value ${data.any_stale ? "warning" : "positive"}`;
+    $("data-status").className = `metric-val sm ${data.any_stale ? "warning" : "positive"}`;
     setText("data-status-detail", parts.join(" · "));
-
-    if (data.any_stale) {
-      btn.className = "header-btn danger pulse";
-      if (!autoRefreshTriggered && !refreshPolling) {
-        autoRefreshTriggered = true;
-        btn.click();
-      }
-    } else {
-      btn.className = "header-btn warn";
-    }
-  } catch (_e) {}
+    if (data.any_stale) { btn.className = "topbar-btn danger pulse"; if (!autoRefreshTriggered && !refreshPolling) { autoRefreshTriggered = true; btn.click(); } }
+    else { btn.className = "topbar-btn warn"; }
+  } catch (_) {}
 }
 
-/* ── Actions ──────────────────────────────────── */
-async function launchSession(profileId, firmName, instruments, mode) {
-  const labels = { signal: "SIGNAL-ONLY", demo: "DEMO", live: "LIVE" };
-  const warning = mode === "live" ? "\n\nREAL MONEY orders." : mode === "demo" ? "\n\nPaper orders only." : "\n\nSignals only.";
-  if (!confirm(`Start ${labels[mode]}?\n\n${firmName} | ${instruments}\n${profileId}${warning}`)) return;
-
-  showActivity(`${labels[mode]} Start`, `Launching ${profileId}...`, mode === "live" ? "error" : "info");
-  try {
-    const params = new URLSearchParams({ profile: profileId, mode: mode });
-    const r = await fetch("/api/action/start?" + params.toString(), { method: "POST" });
-    const data = await r.json();
-    appendActivity(data.message || data.status || "No response");
-    if (data.pid) appendActivity(`PID: ${data.pid}`);
-  } catch (e) { appendActivity("Error: " + e.message); }
+/* ── Actions ────────────────────────── */
+async function launchSession(pid, firm, instr, mode) {
+  const lbl = {signal: "SIGNAL-ONLY", demo: "DEMO", live: "LIVE"};
+  const warn = mode === "live" ? "\n\nREAL MONEY." : mode === "demo" ? "\n\nPaper orders." : "\n\nSignals only.";
+  if (!confirm(`Start ${lbl[mode]}?\n\n${firm} | ${instr}\n${pid}${warn}`)) return;
+  showActivity(`${lbl[mode]} Start`, `Launching ${pid}...`, mode === "live" ? "error" : "info");
+  try { const d = await (await fetch(`/api/action/start?${new URLSearchParams({profile: pid, mode})}`, {method: "POST"})).json(); appendActivity(d.message || d.status || "No response"); if (d.pid) appendActivity(`PID: ${d.pid}`); }
+  catch (e) { appendActivity("Error: " + e.message); }
 }
 
-byId("btn-refresh").addEventListener("click", async () => {
-  showActivity("Data Refresh", "Starting refresh...", "info");
+$("btn-refresh").addEventListener("click", async () => {
+  showActivity("Refresh", "Starting data refresh...", "info");
   try {
-    const r = await fetch("/api/action/refresh", { method: "POST" });
-    const data = await r.json();
-    appendActivity(data.message || data.status);
-    if ((data.status === "started" || data.status === "running") && !refreshPolling) {
+    const d = await (await fetch("/api/action/refresh", {method: "POST"})).json();
+    appendActivity(d.message || d.status);
+    if ((d.status === "started" || d.status === "running") && !refreshPolling) {
       refreshPolling = true;
       const poll = setInterval(async () => {
-        try {
-          const sr = await fetch("/api/action/refresh-status");
-          const sd = await sr.json();
-          if (sd.status === "done") { appendActivity("\nDone."); clearInterval(poll); refreshPolling = false; fetchDataStatus(); }
-          else if (sd.status === "failed") { appendActivity("\nFailed:\n" + (sd.output || "Unknown")); clearInterval(poll); refreshPolling = false; }
-        } catch (_e) {}
+        try { const s = await (await fetch("/api/action/refresh-status")).json(); if (s.status === "done") { appendActivity("\nDone."); clearInterval(poll); refreshPolling = false; fetchDataStatus(); } else if (s.status === "failed") { appendActivity("\nFailed:\n" + (s.output || "Unknown")); clearInterval(poll); refreshPolling = false; } } catch (_) {}
       }, 3000);
     }
   } catch (e) { appendActivity("Error: " + e.message); }
 });
 
-byId("btn-preflight").addEventListener("click", async () => {
+$("btn-preflight").addEventListener("click", async () => {
   showActivity("Preflight", "Running checks...", "info");
-  try {
-    const r = await fetch("/api/action/preflight", { method: "POST" });
-    const data = await r.json();
-    showActivity(`Preflight ${String(data.status || "").toUpperCase()}`, data.output || "No output", data.status === "pass" ? "success" : "error");
-  } catch (e) { appendActivity("Error: " + e.message); }
+  try { const d = await (await fetch("/api/action/preflight", {method: "POST"})).json(); showActivity(`Preflight ${String(d.status || "").toUpperCase()}`, d.output || "No output", d.status === "pass" ? "success" : "error"); }
+  catch (e) { appendActivity("Error: " + e.message); }
 });
 
-byId("btn-kill").addEventListener("click", async () => {
-  if (!confirm("KILL ALL TRADES?\n\nStops the bot and closes open positions at market.")) return;
+$("btn-kill").addEventListener("click", async () => {
+  if (!confirm("KILL ALL TRADES?\nStops bot, closes positions at market.")) return;
   if (!confirm("SECOND CONFIRMATION: Are you sure?")) return;
-  try {
-    const r = await fetch("/api/action/kill", { method: "POST" });
-    const data = await r.json();
-    showActivity("Kill", data.message || "Kill sent", "error");
-  } catch (e) { showActivity("Kill", "Failed: " + e.message, "error"); }
+  try { const d = await (await fetch("/api/action/kill", {method: "POST"})).json(); showActivity("Kill", d.message || "Kill sent", "error"); }
+  catch (e) { showActivity("Kill", "Failed: " + e.message, "error"); }
 });
 
-byId("btn-close-activity").addEventListener("click", () => { byId("activity-panel").style.display = "none"; });
+$("btn-close-activity").addEventListener("click", () => { $("activity-panel").style.display = "none"; });
 
-/* ── Init ─────────────────────────────────────── */
+/* ── Init ───────────────────────────── */
 restoreSections();
-fetchAccounts();
-fetchSessions();
-fetchStatus();
-fetchTrades();
-fetchDataStatus();
-setInterval(fetchStatus, 5000);
-setInterval(fetchTrades, 10000);
-setInterval(fetchAccounts, 60000);
-setInterval(fetchDataStatus, 30000);
-setInterval(fetchSessions, 30000);
+try { localStorage.removeItem("orb_sections"); } catch (_) {} // migrate old key
+fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus();
+setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000);
 </script>
 </body>
 </html>
