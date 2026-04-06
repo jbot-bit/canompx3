@@ -3,38 +3,41 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 154
+## Last iteration: 155
 
-## RALPH AUDIT — Iteration 154
+## RALPH AUDIT — Iteration 155
 ## Date: 2026-04-06
-## Infrastructure Gates: drift 76/76 PASS (1 pre-existing check 78 advisory), 46/46 test_prop_portfolio.py PASS
+## Infrastructure Gates: drift 76/76 PASS (1 pre-existing check 78 advisory), 48/48 test_sql_adapter.py PASS
 
 ---
 
-## Iteration 154 — trading_app/prop_portfolio.py
+## Iteration 155 — trading_app/ai/sql_adapter.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Silent failure | `_query_paper_pnl` except Exception: return None — silently swallows all errors with no trace | LOW | FIXED 4099524 |
-| All others | No look-ahead, no cost illusion, no hardcoded canonical lists. prop_portfolio.py otherwise clean. | — | CLEAN |
+| Canonical violation | `VALID_ENTRY_MODELS = {"E1", "E2", "E3"}` hardcoded instead of deriving from `trading_app.config.ENTRY_MODELS` | LOW | FIXED fed8f11 |
+| All others | No look-ahead, no silent failure, no cost illusion. sql_adapter.py otherwise clean. | — | CLEAN |
 
 ### Audit Notes
 
-- **Silent exception swallowing (FIXED):** `_query_paper_pnl` at line 398 had `except Exception: return None` with no logging. Any DB error, schema mismatch, or runtime issue would be invisible. Fix: added `logger.debug("_query_paper_pnl failed for %s", strategy_id, exc_info=True)` so failures appear in debug logs.
-- **Canonical check:** Imports `get_cost_spec` from canonical source, uses `GOLD_DB_PATH` from `pipeline.paths`. No hardcoded instruments or sessions. CLEAN.
+- **Canonical violation (FIXED):** `VALID_ENTRY_MODELS` at line 58 was a hardcoded set `{"E1", "E2", "E3"}`. The canonical source is `trading_app.config.ENTRY_MODELS`. Drift check #13 actively guards against divergence, but fixing the root cause (hardcoded duplication) makes the check trivially pass by construction rather than by coincidence. Fix: added `from trading_app.config import ENTRY_MODELS` import and changed to `VALID_ENTRY_MODELS = set(ENTRY_MODELS)`.
+- **rithmic/__init__.py:** Clean. Docstring, 4 re-exports, no findings.
+- **rithmic/data_feed.py:** Does not exist (order-only adapter, by design).
+- **Canonical check:** `VALID_INSTRUMENTS` derives from `get_active_instruments()` (canonical), `VALID_ORB_LABELS` from `ORB_LABELS` (canonical), `VALID_ENTRY_MODELS` now canonical. `VALID_RR_TARGETS` and `VALID_CONFIRM_BARS` are grid parameters with no single canonical source — acceptable.
+- **Note on pre-existing drift:** Check 78 (`scripts/research/depth_at_break_research.py:103` — symbol vs instrument column convention) was present before this iteration and is a no-touch zone (research script). Not introduced by this fix.
 
 ---
 
-## Summary — Iteration 154
+## Summary — Iteration 155
 
-- 1 LOW finding — FIXED ([judgment], 4-line diff)
-- Commit: 4099524
+- 1 LOW finding — FIXED ([mechanical], 2-line diff)
+- Commit: fed8f11
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 221 files fully scanned (1 new file added this iteration).
+> Cumulative list — 223 files fully scanned (2 new files added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -97,10 +100,12 @@
 - trading_app/live/trade_journal.py — added iter 152
 - trading_app/live/bot_state.py — added iter 153
 - trading_app/prop_portfolio.py — added iter 154
-- **Total: 221 files fully scanned**
+- trading_app/live/rithmic/__init__.py — added iter 155
+- trading_app/ai/sql_adapter.py — added iter 155
+- **Total: 223 files fully scanned**
 
 ## Next iteration targets
-- trading_app/live/rithmic/__init__.py — unscanned rithmic package init
-- trading_app/live/rithmic/data_feed.py — unscanned rithmic data feed (if exists)
-- trading_app/config.py — canonical config, high-value audit target
-- trading_app/sql_adapter.py — SQL query builder, potential injection or drift
+- trading_app/config.py — canonical config, high-value audit target (no-touch zone, audit-only)
+- trading_app/live/rithmic/contracts.py — unscanned rithmic contracts resolver
+- trading_app/live/rithmic/positions.py — unscanned rithmic positions module
+- trading_app/ai/grounding.py — unscanned AI grounding module

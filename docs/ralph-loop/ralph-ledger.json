@@ -1,20 +1,20 @@
 {
-  "total_iterations": 154,
+  "total_iterations": 148,
   "last_updated": "2026-04-06",
-  "consecutive_low_only": 1,
-  "last_high_finding_iter": 153,
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 155,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 51,
-      "fixed": 38,
+      "found": 52,
+      "fixed": 39,
       "deferred": 4,
       "fix_rate": 0.75
     },
     "silent_failure": {
-      "found": 31,
-      "fixed": 29,
+      "found": 32,
+      "fixed": 30,
       "deferred": 1,
-      "fix_rate": 0.93
+      "fix_rate": 0.94
     },
     "other": {
       "found": 21,
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 12,
-    "MEDIUM": 34,
+    "MEDIUM": 37,
     "LOW": 96
   },
   "classifications": {
-    "judgment": 68,
-    "mechanical": 50,
+    "judgment": 70,
+    "mechanical": 51,
     "audit-only": 27
   },
   "files_audited": {
@@ -255,6 +255,11 @@
       "last_iter": 120,
       "findings": 1
     },
+    "trading_app/prop_portfolio.py": {
+      "audit_count": 2,
+      "last_iter": 154,
+      "findings": 2
+    },
     "trading_app/prop_profiles.py": {
       "audit_count": 2,
       "last_iter": 142,
@@ -323,6 +328,11 @@
     "research/research_1015_vs_1000.py": {
       "audit_count": 2,
       "last_iter": 109,
+      "findings": 2
+    },
+    "trading_app/live/bot_dashboard.py": {
+      "audit_count": 2,
+      "last_iter": 153,
       "findings": 2
     },
     "strategy_validator.py": {
@@ -494,11 +504,6 @@
       "audit_count": 1,
       "last_iter": 60,
       "findings": 0
-    },
-    "trading_app/prop_portfolio.py": {
-      "audit_count": 1,
-      "last_iter": 61,
-      "findings": 1
     },
     "scripts/tools/pipeline_status.py": {
       "audit_count": 1,
@@ -1010,11 +1015,6 @@
       "last_iter": 148,
       "findings": 1
     },
-    "trading_app/live/bot_dashboard.py": {
-      "audit_count": 1,
-      "last_iter": 149,
-      "findings": 1
-    },
     "trading_app/account_hwm_tracker.py": {
       "audit_count": 1,
       "last_iter": 151,
@@ -1023,6 +1023,16 @@
     "trading_app/live/trade_journal.py": {
       "audit_count": 1,
       "last_iter": 152,
+      "findings": 1
+    },
+    "trading_app/live/bot_state.py": {
+      "audit_count": 1,
+      "last_iter": 153,
+      "findings": 1
+    },
+    "trading_app/ai/sql_adapter.py": {
+      "audit_count": 1,
+      "last_iter": 155,
       "findings": 1
     }
   },
@@ -2621,6 +2631,39 @@
       "severity": "HIGH",
       "verdict": "FIXED",
       "commit": "28c7575"
+    },
+    {
+      "iter": 153,
+      "date": "2026-04-06",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/bot_state.py:125, trading_app/live/bot_dashboard.py:197-201",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "1c6c40e"
+    },
+    {
+      "iter": 154,
+      "date": "2026-04-06",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/prop_portfolio.py:398",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "4099524"
+    },
+    {
+      "iter": 155,
+      "date": "2026-04-06",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/ai/sql_adapter.py:58",
+      "finding_type": "canonical_violation",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "fed8f11"
     }
   ]
 }

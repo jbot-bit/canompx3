@@ -1607,3 +1607,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 production file, no API change
 - Verification: PASS (46/46 test_prop_portfolio.py, drift 76/76 OK)
 - Commit: 4099524
+
+---
+
+## Iteration 155 — 2026-04-06
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/ai/sql_adapter.py:58
+- Finding: VALID_ENTRY_MODELS = {"E1","E2","E3"} is a hardcoded canonical list. Canonical source is trading_app.config.ENTRY_MODELS. If a model is added/removed from config, the validator silently drifts (check_drift.py Check 13 would catch it post-facto, but the source of truth is still duplicated).
+- Action: Added `from trading_app.config import ENTRY_MODELS` import; replaced hardcoded set with `set(ENTRY_MODELS)`. Check 13 now passes by construction, not just by coincidence.
+- Blast radius: 1 production file (sql_adapter.py). No callers broken — VALID_ENTRY_MODELS is still a set with identical values.
+- Verification: PASS (48/48 test_sql_adapter.py, drift 76/76 OK + 1 pre-existing advisory)
+- Commit: fed8f11
