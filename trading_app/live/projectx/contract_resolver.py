@@ -101,9 +101,9 @@ class ProjectXContracts(BrokerContracts):
 
         search_terms = INSTRUMENT_SEARCH_TERMS.get(instrument, [instrument])
         for contract in contracts:
-            name = contract.get("name", "")
-            desc = contract.get("description", "")
-            cid = str(contract.get("id", ""))
+            name = contract.get("name") or ""
+            desc = contract.get("description") or ""
+            cid = str(contract.get("id") or "")
             if any(
                 term.upper() in name.upper() or term.upper() in desc.upper() or term.upper() in cid.upper()
                 for term in search_terms

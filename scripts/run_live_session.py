@@ -101,7 +101,15 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
         row = SessionOrchestrator._build_daily_features_row(preflight_trading_day, instrument)
         atr = row.get("atr_20")
         vel = row.get("atr_vel_regime")
-        print(f"OK (atr_20={atr}, atr_vel={vel})")
+        if atr is None or vel is None:
+            missing = []
+            if atr is None:
+                missing.append("atr_20")
+            if vel is None:
+                missing.append("atr_vel_regime")
+            print(f"WARN: {', '.join(missing)} = None — run pipeline/build_daily_features.py")
+        else:
+            print(f"OK (atr_20={atr}, atr_vel={vel})")
         checks_passed += 1
     except Exception as e:
         print(f"FAILED: {e}")
@@ -367,8 +375,23 @@ def main() -> None:
             print("Preflight with --all not supported. Use --instrument X.")
             sys.exit(1)
         demo = not args.live
-        ok = _run_preflight(args.instrument, args.broker, demo, portfolio=raw_portfolio)
-        sys.exit(0 if ok else 1)
+        if _is_multi_profile:
+            # Multi-instrument profile: run preflight per instrument
+            from trading_app.portfolio import build_profile_portfolio
+
+            all_ok = True
+            for inst in args._profile_instruments:
+                print(f"\n{'='*50}")
+                print(f"Preflight: {inst}")
+                print(f"{'='*50}")
+                inst_portfolio = build_profile_portfolio(profile_id=args.profile, instrument=inst)
+                ok = _run_preflight(inst, args.broker, demo, portfolio=inst_portfolio)
+                if not ok:
+                    all_ok = False
+            sys.exit(0 if all_ok else 1)
+        else:
+            ok = _run_preflight(args.instrument, args.broker, demo, portfolio=raw_portfolio)
+            sys.exit(0 if ok else 1)
 
     # Default to signal-only if no mode specified (safest default)
     if not args.signal_only and not args.demo and not args.live:
