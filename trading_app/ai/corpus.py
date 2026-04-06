@@ -5,9 +5,12 @@ Reads project documentation into memory for prompt injection.
 No RAG needed -- total corpus fits easily in Claude's context window.
 """
 
+import logging
 from pathlib import Path
 
 from pipeline.cost_model import COST_SPECS
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
@@ -52,6 +55,7 @@ def load_corpus() -> dict[str, str]:
         if fpath.exists():
             corpus[name] = fpath.read_text(encoding="utf-8")
         else:
+            logger.warning("Corpus file missing: %s (%s)", info["path"], name)
             corpus[name] = f"[MISSING: {fpath}]"
     return corpus
 

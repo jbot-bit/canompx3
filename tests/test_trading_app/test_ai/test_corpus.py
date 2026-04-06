@@ -1,6 +1,8 @@
 """Tests for trading_app.ai.corpus."""
 
+import logging
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -29,6 +31,21 @@ class TestCorpusFiles:
 
 class TestLoadCorpus:
     """Test corpus loading."""
+
+    def test_missing_file_logs_warning(self, tmp_path, caplog):
+        """load_corpus() must emit a WARNING when a corpus file is missing."""
+        fake_files = {
+            "TEST_DOC": {
+                "path": "nonexistent_file_ralph_test.md",
+                "priority": "HIGH",
+                "description": "test",
+            }
+        }
+        with patch("trading_app.ai.corpus.CORPUS_FILES", fake_files):
+            with caplog.at_level(logging.WARNING, logger="trading_app.ai.corpus"):
+                result = load_corpus()
+        assert result["TEST_DOC"].startswith("[MISSING:")
+        assert any("nonexistent_file_ralph_test.md" in r.message for r in caplog.records)
 
     def test_load_corpus_returns_dict(self):
         corpus = load_corpus()
