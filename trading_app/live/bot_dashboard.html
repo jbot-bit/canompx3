@@ -1504,6 +1504,8 @@ initAccountSelector();
 try { localStorage.removeItem("orb_sections"); } catch (_) {} // migrate old key
 fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity();
 setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000); setInterval(fetchEquity, 30000);
+// Auto-refresh broker list when on Connections tab
+setInterval(() => { if ($("tab-connections")?.classList.contains("active")) fetchBrokerList(); }, 30000);
 </script>
 </body>
 </html>
