@@ -71,11 +71,13 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 log.warning("Startup: failed to parse heartbeat %r — keeping state as-is", hb)
 
     # ── Connect brokers ──
+    import asyncio as _aio
+
     from dotenv import load_dotenv as _ld
     _ld()  # Ensure .env loaded before broker_connections reads os.environ
     from trading_app.live.broker_connections import connection_manager
     connection_manager.load()
-    connection_manager.connect_all_enabled()
+    await _aio.to_thread(connection_manager.connect_all_enabled)
 
     yield
 

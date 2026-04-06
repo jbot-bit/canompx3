@@ -1034,8 +1034,12 @@ function getSelectedAccount(data) {
   if (selectedAccountId) {
     const match = tradeable.find(a => a.id === selectedAccountId);
     if (match) return match;
+    // Selected account went non-tradeable (blown/restricted) — warn and fallback
+    showEquityError(`Account ${selectedAccountId} no longer tradeable — switched to ${tradeable[0].name}`);
+    selectedAccountId = tradeable[0].id;
+    try { localStorage.setItem("orb_selected_acct", String(selectedAccountId)); } catch (_) {}
   }
-  return tradeable[0]; // fallback to first tradeable
+  return tradeable[0];
 }
 
 function updateMetricsFromEquity(data) {
