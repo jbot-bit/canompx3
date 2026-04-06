@@ -190,6 +190,32 @@ Write plan to `docs/ralph-loop/ralph-loop-plan.md`:
 ## Diff estimate: N lines
 ```
 
+### Stage-Gate (BEFORE any edit)
+
+Production edits are blocked by the stage-gate hook unless an active stage permits them.
+**Create `docs/runtime/stages/ralph_iter_ITER.md` BEFORE editing any production file:**
+
+```markdown
+---
+task: Ralph Loop iter ITER — <1-line finding>
+mode: IMPLEMENTATION
+scope_lock:
+  - <production file to edit>
+  - <test file if adding tests>
+blast_radius:
+  - <production file> (<what changes>)
+  - <test file> (<what changes>)
+updated: <ISO timestamp>
+agent: ralph
+---
+```
+
+Rules:
+- `scope_lock` must list EVERY file you will edit (production + tests)
+- `blast_radius` must be ≥30 chars (hook enforces this)
+- Create the stage file FIRST, then edit. Hook checks on every Edit call.
+- `docs/runtime/stages/` is a safe directory — no stage needed to write there.
+
 ## Step 3: IMPLEMENT + VERIFY (combined)
 
 Apply the minimal fix. Then run verification in ONE bash call:
@@ -197,13 +223,14 @@ Apply the minimal fix. Then run verification in ONE bash call:
 python -m pytest tests/test_trading_app/test_<scope>.py -x -q && python pipeline/check_drift.py
 ```
 
-If fails → revert with `git checkout HEAD -- <file>`, mark REJECTED, skip to Step 5.
+If fails → revert with `git checkout HEAD -- <file>`, remove stage file (`rm -f docs/runtime/stages/ralph_iter_ITER.md`), mark REJECTED, skip to Step 5.
 
-If passes → commit:
+If passes → commit and clean up stage file:
 ```bash
 git add <files> && git commit -m "[tag] fix: Ralph Loop iter ITER — <finding> (<ID>)
 
 Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>"
+rm -f docs/runtime/stages/ralph_iter_ITER.md
 ```
 
 ## Step 4: UPDATE FILES
