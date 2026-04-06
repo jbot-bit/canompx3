@@ -25,7 +25,7 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Primary stage file (Claude Code convention)
+# Legacy stage file — Claude Code now uses stages/*.md, but this is still read for backwards compat
 STAGE_STATE = Path("docs/runtime/STAGE_STATE.md")
 # Directory for additional agent stage files (Codex, worktrees, etc.)
 STAGES_DIR = Path("docs/runtime/stages")

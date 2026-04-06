@@ -10,14 +10,15 @@ Run these in parallel:
 1. `git log --oneline -10`
 2. `git status --short`
 3. `git stash list`
-4. Read `docs/runtime/STAGE_STATE.md` (if exists)
+4. Read all `docs/runtime/stages/*.md` (also check legacy `docs/runtime/STAGE_STATE.md`)
 5. Read `HANDOFF.md` (if exists)
 6. If task involved DB: `python -c "import duckdb; db=duckdb.connect('gold.db',read_only=True); print(db.sql('SELECT table_name, estimated_size FROM duckdb_tables()').fetchall())"`
 7. If task involved pipeline: `python scripts/tools/pipeline_status.py --status`
 
 ## STEP 2: STALE DETECTION (two-tier, drift-first)
 
-Extract `updated` timestamp and scope_lock files from STAGE_STATE.md.
+For each active stage file in `stages/*.md`, extract `updated` timestamp and scope_lock files.
+If multiple stage files exist, run stale detection for EACH independently.
 
 ### Tier 1 — DRIFT STALE (authoritative, check first)
 
@@ -46,25 +47,27 @@ STALE CHECK:
 
 ## STEP 3: CROSS-TERMINAL CONFLICT CHECK
 
-If STAGE_STATE.md exists, check:
-- `terminal` field — does it match current terminal?
-- `git log --oneline --since="[updated]" -- [scope_lock files]` — any commits from another session?
-- Any scope_lock files modified but uncommitted by another process?
+List all active stage files in `stages/*.md`:
+- If multiple stages exist with OVERLAPPING scope_lock files → CONFLICT (two terminals editing same files)
+- For each stage: `git log --oneline --since="[updated]" -- [scope_lock files]` �� commits from another session?
+- Any scope_lock files modified but uncommitted?
 
 ```
 CONFLICT CHECK:
-  Last stage update: [timestamp] by [terminal]
-  Commits since: [count] — [summary if any]
+  Active stages: [list filenames + tasks]
+  Scope overlap: [files in multiple stages, or "none"]
+  Commits since: [count per stage] — [summary if any]
   Scope files changed externally: [list or "none"]
   Verdict: CLEAN | CONFLICT
 ```
 
 If CONFLICT → flag stale assumptions, force re-preflight.
+If multiple non-conflicting stages → safe. Ask user which to resume.
 
 ## STEP 4: RESTATE POSITION
 
 ```
-TASK: [from STAGE_STATE.md]
+TASK: [from active stage file]
 STAGE: [N/M — description]
 MODE: [current mode]
 COMMITTED: [what's in git for this task]
@@ -83,5 +86,5 @@ STALE: [what changed since last known state]
 
 ## STEP 6: UPDATE STATE
 
-Update `docs/runtime/STAGE_STATE.md` with refreshed truth + timestamp.
+Update the matched `docs/runtime/stages/<slug>.md` with refreshed truth + timestamp.
 Dispatch back to /stage-gate Step 5 (continue) or Step 3 (reclassify).

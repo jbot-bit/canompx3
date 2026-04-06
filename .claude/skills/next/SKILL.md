@@ -12,7 +12,7 @@ Triggers: "next", "auto-implement", "what should I do", "keep going"
 
 Run ALL of these in parallel — do not read sequentially:
 
-1. Read `docs/runtime/STAGE_STATE.md` (if exists)
+1. Read all `docs/runtime/stages/*.md` (also check legacy `docs/runtime/STAGE_STATE.md`)
 2. Read HANDOFF.md — scan for the FIRST `## Update` block. Within it, look for any of: `### Next Session`, `### Next Sensible Step`, `### Next`, or bullet lines starting with `- Next:`. These vary across tools (Claude, Codex).
 3. `git log --oneline -5`
 4. `git status --short`
@@ -24,12 +24,12 @@ Work through this tree top-to-bottom. Take the FIRST match.
 
 ### Case A: Active IMPLEMENTATION stage — check if DONE first
 
-STAGE_STATE.md has `mode: IMPLEMENTATION` and a `task:` field.
+stage file has `mode: IMPLEMENTATION` and a `task:` field.
 
 1. **Acceptance check (do this BEFORE resuming):** Read the `acceptance:` field. For each criterion, run the command or check the condition. If ALL acceptance criteria are already met:
    → Announce: "**Stage complete:** [task]. All acceptance criteria pass."
    → Show evidence (command outputs).
-   → Delete STAGE_STATE.md.
+   → Delete stage file.
    → Fall through to Case E to find the NEXT task.
 
 2. **Stale check:** `git log --oneline --since="[updated]" -- [scope_lock files]`
@@ -44,18 +44,18 @@ STAGE_STATE.md has `mode: IMPLEMENTATION` and a `task:` field.
 
 ### Case B: Active DESIGN stage exists
 
-STAGE_STATE.md has `mode: DESIGN`.
+stage file has `mode: DESIGN`.
 
 **Action:** Announce: "**Active design:** [task]. Continuing design iteration."
 → Re-read the design state and continue where it left off.
 
 ### Case C: Active TRIVIAL stage exists
 
-STAGE_STATE.md has `mode: TRIVIAL`.
+stage file has `mode: TRIVIAL`.
 
 **Action:** Just do it. Read the scope file, make the fix, verify, close the stage.
 
-### Case D: STAGE_STATE.md exists but is STALE or ABANDONED
+### Case D: stage file exists but is STALE or ABANDONED
 
 Stale detection — two signals, BOTH required to declare abandoned:
 - `updated` is >8 hours old
@@ -65,12 +65,12 @@ If only old but no other activity → user just paused. Treat as Case A/B/C (res
 If old AND other activity → truly abandoned.
 
 **Action:** Announce: "Stale stage detected: [task] (last updated [timestamp], [N] unrelated commits since). Reclassifying."
-→ Delete STAGE_STATE.md
+→ Delete stage file
 → Fall through to Case E.
 
 ### Case E: No active stage — derive next task
 
-No STAGE_STATE.md, or it was just cleaned up.
+No stage file, or it was just cleaned up.
 
 **Priority order for finding the next task:**
 
@@ -86,8 +86,8 @@ No STAGE_STATE.md, or it was just cleaned up.
 
 - Announce: "**Next task:** [description]. Source: [handoff/memory/pulse]."
 - Classify: Is it TRIVIAL or needs full staging?
-  - TRIVIAL (<=2 files, mechanical) → write minimal STAGE_STATE, implement immediately
-  - Non-trivial → write STAGE_STATE with scope_lock + acceptance, run preflight, start implementing
+  - TRIVIAL (<=2 files, mechanical) → write minimal `stages/<slug>.md`, implement immediately
+  - Non-trivial → write `stages/<slug>.md` with scope_lock + acceptance, run preflight, start implementing
 - **Do NOT ask "should I proceed?" — the user invoked /next, which means GO.**
 
 ### Case F: Nothing actionable found
@@ -114,7 +114,7 @@ Do not let this override the implementation task. It's information, not a redire
 
 - /next means GO. Do not ask permission. Do not present menus. Pick ONE task and start it.
 - If multiple tasks tie in priority, pick the one with smallest blast radius.
-- NEVER start work without writing STAGE_STATE.md first (even TRIVIAL).
+- NEVER start work without writing a `stages/<slug>.md` file first (even TRIVIAL).
 - If the derived task touches NEVER_TRIVIAL files, use full staging — no shortcuts.
 - If HANDOFF.md contradicts current code state, trust code. Flag the contradiction.
 - Do not pick tasks that require user input (research decisions, architecture choices). Those need /design, not /next.
@@ -126,7 +126,7 @@ Do not let this override the implementation task. It's information, not a redire
 
 Your response MUST follow this structure — no menus, no numbered options:
 
-1. **State summary** (2-3 lines): What STAGE_STATE, HANDOFF, and action queue told you.
+1. **State summary** (2-3 lines): What active stages, HANDOFF, and action queue told you.
 2. **Decision** (1 line, bolded): "**Resuming:** [task]" or "**Next task:** [description]. Source: [handoff/memory/pulse]."
 3. **Classification** (1 line): TRIVIAL or IMPLEMENTATION + scope files.
 4. **Action**: Start reading scope files and implementing. No preamble.

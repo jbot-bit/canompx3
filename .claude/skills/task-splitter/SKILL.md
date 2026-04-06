@@ -38,7 +38,7 @@ Stage N: [one line]
 
 "Stage 1 is safe to execute. Stages 2-N deferred until Stage 1 completes and verifies."
 
-If user approves → write Stage 1 as approved stage in STAGE_STATE.md → proceed via /stage-gate Step 5.
+If user approves → write Stage 1 as approved stage in `docs/runtime/stages/<slug>.md` → proceed via /stage-gate Step 5.
 
 ## REFUSE:
 - Executing all stages at once

@@ -21,15 +21,33 @@ except Exception:  # pragma: no cover - hook fallback path
 def _legacy_startup_lines() -> list[str]:
     lines = ["NEW SESSION — Auto-orientation:"]
 
-    stage_file = PROJECT_ROOT / "docs" / "runtime" / "STAGE_STATE.md"
-    if stage_file.exists():
-        content = stage_file.read_text(encoding="utf-8")
+    # Read all stage files (stages/*.md + legacy STAGE_STATE.md)
+    stages_dir = PROJECT_ROOT / "docs" / "runtime" / "stages"
+    legacy_file = PROJECT_ROOT / "docs" / "runtime" / "STAGE_STATE.md"
+    found_any = False
+
+    if stages_dir.is_dir():
+        for sf in sorted(stages_dir.glob("*.md")):
+            if sf.name == ".gitkeep":
+                continue
+            content = sf.read_text(encoding="utf-8")
+            for field in ("mode", "task"):
+                for line in content.splitlines():
+                    if line.strip().startswith(f"{field}:"):
+                        lines.append(f"  Active stage [{sf.stem}]: {line.strip()}")
+                        found_any = True
+                        break
+
+    if legacy_file.exists():
+        content = legacy_file.read_text(encoding="utf-8")
         for field in ("mode", "task"):
             for line in content.splitlines():
                 if line.strip().startswith(f"{field}:"):
-                    lines.append(f"  Active stage: {line.strip()}")
+                    lines.append(f"  Active stage [legacy]: {line.strip()}")
+                    found_any = True
                     break
-    else:
+
+    if not found_any:
         lines.append("  No active stage.")
 
     try:
@@ -92,7 +110,7 @@ def main() -> None:
         pass
     elif session_type == "clear":
         lines = ["CONTEXT CLEARED — Re-grounding context:"]
-        lines.extend(_superpower_lines("interactive") or ["Re-read STAGE_STATE.md if active work exists."])
+        lines.extend(_superpower_lines("interactive") or ["Re-read docs/runtime/stages/*.md if active work exists."])
 
     if lines:
         print("\n".join(lines), file=sys.stderr)

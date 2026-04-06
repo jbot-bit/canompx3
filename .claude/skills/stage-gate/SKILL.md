@@ -3,11 +3,24 @@ Classify the current task and control stage execution: $ARGUMENTS
 Use when: starting non-trivial work, mode unclear, or stage-gate-guard hook blocked an edit.
 Triggers: "stage-gate", "classify", "what mode", "gate check", "what stage am I in"
 
+## STAGE FILE CONVENTION
+
+All stage files live in `docs/runtime/stages/<slug>.md`. There is NO single shared file — each task gets its own.
+
+**Slug generation:** task name → lowercase → spaces/special chars to underscores → truncate 40 chars.
+Example: "MCP server instrument guard" → `stages/mcp_server_instrument_guard.md`
+**Collision guard:** If the slug file already exists and belongs to a DIFFERENT task, append `_2`, `_3`, etc.
+
+**Legacy:** If `docs/runtime/STAGE_STATE.md` exists from an older session, treat it as another active stage (the hook reads it). Do not write new stages there.
+
 ## STEP 1: CHECK EXISTING STATE
 
-Read `docs/runtime/STAGE_STATE.md` if it exists.
-- Active stage? → Ask: "Continue [stage description], or reclassify?"
-- No file or stale? → Proceed to Step 2.
+Read all files in `docs/runtime/stages/*.md`.
+- Active stage(s) found? → List them. Ask: "Continue [stage description], or reclassify?"
+- If multiple active stages from different terminals, list all with their task descriptions.
+- No files or all stale? → Proceed to Step 2.
+
+Also check legacy `docs/runtime/STAGE_STATE.md` — if it exists, include it in the list.
 
 Stale detection (drift-first):
 1. If file exists, check `git log --oneline --since="[updated timestamp]" -- [scope_lock files]`
@@ -32,18 +45,16 @@ Is this task trivial? ALL conditions must be true:
 
 If any target file is in the NEVER TRIVIAL list → skip to Step 3 (full classification).
 
-If genuinely trivial → write minimal state and stop:
+If genuinely trivial → write minimal state to `docs/runtime/stages/<slug>.md` and stop:
 ```yaml
-# docs/runtime/STAGE_STATE.md
 ---
 task: "[one-liner]"
 mode: TRIVIAL
 scope: [file1.py]
 updated: [ISO timestamp]
-terminal: [main|worktree-name]
 ---
 ```
-Done. Hook will pass for non-core files. No further ceremony.
+Done. Hook will pass for non-core files. No further ceremony. Delete the file when the trivial fix is committed.
 
 ## STEP 3: CLASSIFY MODE
 
@@ -96,34 +107,35 @@ If 2+ domains but tightly coupled with clear joint acceptance → proceed. Note 
 1. Planner returns structured stage output (not prose)
 2. Present Stage 1 to user exactly as planner structured it
 3. **Wait.** User must say "go", "approved", "do it", "looks good", or equivalent.
-4. **IMMEDIATELY on approval:** write the approved stage to `docs/runtime/STAGE_STATE.md` using full schema:
+4. **IMMEDIATELY on approval:** write the approved stage to `docs/runtime/stages/<slug>.md` using full schema:
    - `mode: IMPLEMENTATION`
    - `stage_purpose:` from planner output
    - `scope_lock:` from planner's file list — exact paths
    - `acceptance:` from planner's acceptance criteria — exact commands
    - `proven:` / `unproven:` / `blockers:` carried from planner output
-5. Confirm: "Stage [N] approved and locked in STAGE_STATE.md. Scope: [files]. Running preflight."
+5. Confirm: "Stage [N] approved and locked in stages/<slug>.md. Scope: [files]. Running preflight."
 6. Dispatch preflight-auditor. If CLEAR → proceed to execution. If BLOCKED → stop, report.
 
-**The structured STAGE_STATE.md IS the approval record.**
-**Do NOT proceed to implementation until STAGE_STATE.md contains the approved stage.**
+**The structured stage file IS the approval record.**
+**Do NOT proceed to implementation until `stages/<slug>.md` contains the approved stage.**
 
 ## STEP 6: STAGE COMPLETION CHECKPOINT
 
 When stage work is done:
 1. Show evidence (command output, not claims)
-2. Update STAGE_STATE.md: mark current stage DONE, describe next stage
-3. **Commit policy:** commit STAGE_STATE.md WITH the stage's code changes in the same commit.
-   - Do NOT commit STAGE_STATE.md alone
+2. Update your `stages/<slug>.md`: mark current stage DONE, describe next stage
+3. **Commit policy:** commit the stage file WITH the stage's code changes in the same commit.
+   - Do NOT commit the stage file alone
    - Do NOT commit on every in-flight update — only at checkpoints
 4. **STOP. Do not auto-proceed.**
-5. User says "next" → write next stage to STAGE_STATE.md → preflight → execute
-6. If ALL stages are done → delete `docs/runtime/STAGE_STATE.md` (cleanup — prevents stale state lingering)
+5. User says "next" → update the stage file with next stage → preflight → execute
+6. If ALL stages are done → delete your `docs/runtime/stages/<slug>.md` (cleanup — prevents stale state lingering)
 
 ## HARD RULES
-- No implementation without an approved stage in STAGE_STATE.md
+- No implementation without an approved stage in `stages/<slug>.md`
 - No editing files outside scope_lock
 - No skipping preflight for non-trivial implementation
 - No auto-proceeding past a checkpoint
-- If user says "just do it" → still write TRIVIAL or minimal STAGE_STATE, preflight can be skipped
-- STAGE_STATE.md commit policy: update freely, commit only at checkpoints bundled with code
+- If user says "just do it" → still write TRIVIAL or minimal stage file, preflight can be skipped
+- Stage file commit policy: update freely, commit only at checkpoints bundled with code
+- NEVER write to `docs/runtime/STAGE_STATE.md` — that path is deprecated (hooks still read it for backwards compat)

@@ -98,14 +98,30 @@ def _extract_handoff_context(root: Path) -> tuple[str | None, str | None, str | 
 def _fallback_lines(root: Path, *, mode: str, error: Exception) -> list[str]:
     lines = ["SUPERPOWER BRIEF:", f"  Brief degraded: {error.__class__.__name__}"]
 
-    stage_file = root / "docs" / "runtime" / "STAGE_STATE.md"
-    if stage_file.exists():
-        content = stage_file.read_text(encoding="utf-8", errors="replace")
+    # Read all stage files (stages/*.md + legacy STAGE_STATE.md)
+    stages_dir = root / "docs" / "runtime" / "stages"
+    if stages_dir.is_dir():
+        for sf in sorted(stages_dir.glob("*.md")):
+            if sf.name == ".gitkeep":
+                continue
+            try:
+                sc = sf.read_text(encoding="utf-8", errors="replace")
+                sm = re.search(r"^mode:\s*(.+)$", sc, flags=re.MULTILINE)
+                st = re.search(r"^task:\s*(.+)$", sc, flags=re.MULTILINE)
+                if st or sm:
+                    lines.append(
+                        f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}"
+                    )
+            except OSError:
+                pass
+    legacy_file = root / "docs" / "runtime" / "STAGE_STATE.md"
+    if legacy_file.exists():
+        content = legacy_file.read_text(encoding="utf-8", errors="replace")
         mode_match = re.search(r"^mode:\s*(.+)$", content, flags=re.MULTILINE)
         task_match = re.search(r"^task:\s*(.+)$", content, flags=re.MULTILINE)
         if task_match or mode_match:
             lines.append(
-                f"  Stage: {task_match.group(1) if task_match else '?'} — {mode_match.group(1) if mode_match else '?'}"
+                f"  Stage [legacy]: {task_match.group(1) if task_match else '?'} — {mode_match.group(1) if mode_match else '?'}"
             )
 
     tool, when, summary = _extract_handoff_context(root)
@@ -133,14 +149,30 @@ def _top_items(report: PulseReport, category: str, limit: int = 2) -> list[str]:
 def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
     lines: list[str] = ["SUPERPOWER BRIEF:"]
 
-    stage_file = root / "docs" / "runtime" / "STAGE_STATE.md"
-    if stage_file.exists():
-        content = stage_file.read_text(encoding="utf-8", errors="replace")
+    # Read all stage files (stages/*.md + legacy STAGE_STATE.md)
+    stages_dir = root / "docs" / "runtime" / "stages"
+    if stages_dir.is_dir():
+        for sf in sorted(stages_dir.glob("*.md")):
+            if sf.name == ".gitkeep":
+                continue
+            try:
+                sc = sf.read_text(encoding="utf-8", errors="replace")
+                sm = re.search(r"^mode:\s*(.+)$", sc, flags=re.MULTILINE)
+                st = re.search(r"^task:\s*(.+)$", sc, flags=re.MULTILINE)
+                if st or sm:
+                    lines.append(
+                        f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}"
+                    )
+            except OSError:
+                pass
+    legacy_file = root / "docs" / "runtime" / "STAGE_STATE.md"
+    if legacy_file.exists():
+        content = legacy_file.read_text(encoding="utf-8", errors="replace")
         mode_match = re.search(r"^mode:\s*(.+)$", content, flags=re.MULTILINE)
         task_match = re.search(r"^task:\s*(.+)$", content, flags=re.MULTILINE)
         if task_match or mode_match:
             lines.append(
-                f"  Stage: {task_match.group(1) if task_match else '?'} — {mode_match.group(1) if mode_match else '?'}"
+                f"  Stage [legacy]: {task_match.group(1) if task_match else '?'} — {mode_match.group(1) if mode_match else '?'}"
             )
 
     if report.handoff_summary:

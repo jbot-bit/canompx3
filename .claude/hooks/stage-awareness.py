@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Stage awareness hook v3: fires on every user prompt.
+"""Stage awareness hook v4: fires on every user prompt.
 
 Injects stage context AND workflow directives so Claude can't skip
 blast radius, self-review, or completion evidence — regardless of
 how the user initiates work.
+
+v4 changes (from v3):
+- All stages are peers — no "primary" STAGE_STATE.md. Everything in stages/*.md.
+- Legacy STAGE_STATE.md still read for backwards compat.
+- Directive selection uses first IMPLEMENTATION/DESIGN stage, not hardcoded primary.
 
 v3 changes (from v2):
 - Stale STAGE_STATE detection (>4h → warn, forces re-orientation)
@@ -98,14 +103,15 @@ def main():
     except (json.JSONDecodeError, Exception):
         sys.exit(0)
 
-    # ── Collect all stage files (multi-agent) ────────────────────────
+    # ── Collect all stage files (stages/ first, legacy STAGE_STATE.md last) ──
     stage_files = []
-    if STAGE_STATE.exists():
-        stage_files.append(("claude", STAGE_STATE))
     if STAGES_DIR.is_dir():
         for f in sorted(STAGES_DIR.glob("*.md")):
-            agent_name = f.stem  # e.g., "codex", "auto_trivial"
+            agent_name = f.stem  # e.g., "codex", "auto_trivial", "mcp_server_fix"
             stage_files.append((agent_name, f))
+    # Legacy fallback — still read for backwards compat
+    if STAGE_STATE.exists():
+        stage_files.append(("legacy", STAGE_STATE))
 
     if not stage_files:
         variant = datetime.now().minute % len(NONE_DIRECTIVES)
@@ -153,15 +159,18 @@ def main():
     if not output_lines:
         sys.exit(0)
 
-    # Print all stages, then a directive for the primary (first) stage
-    primary_content = stage_files[0][1].read_text(encoding="utf-8")
-    primary_mode = parse_field(primary_content, "mode")
-
     print("\n".join(output_lines), file=sys.stderr)
 
-    if primary_mode == "DESIGN":
-        variant = datetime.now().minute % len(DESIGN_DIRECTIVES)
-        print(DESIGN_DIRECTIVES[variant], file=sys.stderr)
+    # Directive for the first DESIGN stage found (if any)
+    for _, fpath in stage_files:
+        try:
+            content = fpath.read_text(encoding="utf-8")
+            if parse_field(content, "mode") == "DESIGN":
+                variant = datetime.now().minute % len(DESIGN_DIRECTIVES)
+                print(DESIGN_DIRECTIVES[variant], file=sys.stderr)
+                break
+        except (OSError, UnicodeDecodeError):
+            continue
 
     if len(stage_files) > 1:
         print(

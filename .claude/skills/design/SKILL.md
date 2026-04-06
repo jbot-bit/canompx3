@@ -81,13 +81,13 @@ Save design to `docs/plans/YYYY-MM-DD-<topic>-design.md`.
 ### Mode: plan (default)
 
 Present design and WAIT for approval ("go", "approved", "do it", "looks good").
-- On approval: write Stage 1 to `docs/runtime/STAGE_STATE.md` (IMPLEMENTATION mode, scope_lock from Turn 3, acceptance from Turn 4)
+- On approval: write Stage 1 to `docs/runtime/stages/<slug>.md` (IMPLEMENTATION mode, scope_lock from Turn 3, acceptance from Turn 4)
 - On "iterate"/"change": revise, stay in design mode
 
 ### Mode: auto
 
 After Turn 4, auto-proceed without pause:
-1. Write design doc + STAGE_STATE, commit both
+1. Write design doc + `stages/<slug>.md`, commit both
 2. Begin implementation
 
 **Safety override:** If design reveals schema change, entry model change, or blast radius > 5 files → STOP and ask (safety overrides speed).
