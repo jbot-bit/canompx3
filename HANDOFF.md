@@ -6,6 +6,66 @@
 
 ---
 
+## Update (Apr 6 — Bloomberg Dashboard + Live Equity + Multi-Broker)
+
+### Completed
+
+**Dashboard: full Bloomberg-level redesign + live TopStepX equity integration.**
+
+Commits: `edd0d68`, `4f509a3`, `9380466`, `9553fbc`
+
+1. **Bloomberg-level dashboard** (`edd0d68`) — system-ui font, 6-metric strip (balance/P&L/DD/next session/data), session timeline with visual dots, collapsible sections, account specs panel, positions as table, inactive profiles hidden behind toggle. ~40% smaller file.
+
+2. **Live equity from TopStepX** (`4f509a3`) — `/api/equity` endpoint calls ProjectX API, returns real account balances. 30s cache.
+
+3. **Multi-broker equity rewrite** (`9380466`) — double-audited design (planner agent + adversarial audit). Fixes:
+   - Singleton `ProjectXAuth` with `threading.Lock` (was creating new auth per request)
+   - Single `Account/search` call (was calling per-account in a loop)
+   - `asyncio.to_thread` wrapper (was blocking event loop with sync `requests.post`)
+   - HWM tracking in `data/account_hwm.json` (DD = HWM - balance, not starting_balance - balance)
+   - Per-broker error isolation (one failure doesn't kill others)
+   - `fetched_at` timestamp for stale detection
+   - `canTrade` + `isVisible` status classification (no `simulated` — REST-only per API spec)
+   - Error banner (full-width, red, untruncated) + stale indicator (yellow border >90s)
+   - Extended TTL (120s) when live session detected (rate limit safety)
+   - Account selector dropdown in topbar + clickable broker account cards
+   - 3 tradeable accounts, 42 archived (blown evals hidden behind toggle)
+
+4. **Ralph iters 146-152** — 7 files scanned, 6 bugs fixed across live trading stack (hardcoded E2, auth reconnect gap, DST date bug, silent heartbeat, short slippage sign, incomplete_trades default).
+
+5. **Code review fixes** (`9553fbc`) — duplicate CSS rule removed.
+
+### Design Doc
+`docs/plans/2026-04-06-multi-broker-equity-design.md` — full audit trail with all 15 findings.
+
+### Dashboard App Vision (saved to memory)
+Phase 1 DONE (live equity). Phase 2: account switcher settings, profile CRUD. Phase 3: SignalR WebSocket, historical equity chart, multi-broker unified view. See `memory/dashboard_app_vision.md`.
+
+### Known Limitations
+- Balance is **realized only** (excludes unrealized P&L from open positions — labeled in UI)
+- HWM starts from first observation (true prop firm peak may be higher from before this tool)
+- No profile-to-account-ID linkage yet (DD uses profile's max_dd as fallback)
+- Rithmic equity deferred to Phase 2 (needs running session, can't spin up WebSocket just for polls)
+
+### Next Session
+1. Continue Ralph on remaining files: `rithmic/__init__.py`, `bot_state.py`, `data_feed.py`
+2. Dashboard Phase 2: profile-to-account mapping, settings panel, account CRUD
+3. TopStep 50K Express: sign up, pass Combine (user action)
+4. Exchange pit range/ATR feature: VALIDATED at CME_REOPEN — needs implementation plan
+
+### Files Changed (this session)
+- `trading_app/live/bot_dashboard.html` — full Bloomberg rewrite + account selector + broker cards
+- `trading_app/live/bot_dashboard.py` — `/api/equity` endpoint, singleton auth, HWM tracking, notes field
+- `trading_app/live/pre_session_check.py` — Ralph fixes (entry_model param, Pyright lint)
+- `trading_app/live/rithmic/auth.py` — Ralph fix (reconnect gap)
+- `trading_app/live/position_tracker.py` — Ralph fix (short slippage sign)
+- `trading_app/live/trade_journal.py` — Ralph fix (incomplete_trades required param)
+- `trading_app/account_hwm_tracker.py` — Ralph fix (poll failure persistence) + dead constant
+- `docs/plans/2026-04-06-multi-broker-equity-design.md` — design doc
+- `data/account_hwm.json` — HWM persistence (gitignored)
+
+---
+
 ## Update (Apr 6 — Ralph Audit Sweep + Cleanup)
 
 ### Completed
