@@ -194,11 +194,12 @@ def _legacy_lanes_to_lane_cards(
 
     strategy_runtime: dict[str, dict] = {}
     session_runtime: dict[str, list[dict]] = {}
-    for session_name, lane in raw_lanes.items():
+    for _lane_key, lane in raw_lanes.items():
         strategy_id = lane.get("strategy_id")
         if strategy_id:
             strategy_runtime[strategy_id] = lane
-        session_runtime.setdefault(session_name, []).append(lane)
+        sname = lane.get("session_name", _lane_key)
+        session_runtime.setdefault(sname, []).append(lane)
 
     profile_id = None
     if account_name and account_name.startswith("profile_"):
@@ -482,6 +483,7 @@ async def api_accounts():
                     "instruments": sorted(p.allowed_instruments) if p.allowed_instruments else [],
                     "sessions": sorted(p.allowed_sessions) if p.allowed_sessions else [],
                     "stop_multiplier": p.stop_multiplier,
+                    "notes": getattr(p, "notes", None) or "",
                 }
             )
         return {"accounts": accounts}

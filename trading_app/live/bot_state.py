@@ -28,7 +28,7 @@ def write_state(data: dict[str, Any]) -> None:
         tmp.write_text(json.dumps(data, default=str, indent=2), encoding="utf-8")
         os.replace(str(tmp), str(STATE_FILE))
     except Exception:
-        log.debug("bot_state write failed", exc_info=True)
+        log.warning("bot_state write failed — dashboard state may be stale", exc_info=True)
         tmp.unlink(missing_ok=True)
 
 
@@ -38,7 +38,7 @@ def read_state() -> dict[str, Any]:
         if STATE_FILE.exists():
             return json.loads(STATE_FILE.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
-        log.debug("bot_state read failed", exc_info=True)
+        log.warning("bot_state read failed — returning empty state", exc_info=True)
     return {}
 
 
@@ -122,7 +122,7 @@ def build_state_snapshot(
                 lane["entry_price"] = t.entry_price
                 lane["current_pnl_r"] = t.pnl_r
                 break
-        lanes[s.orb_label] = lane
+        lanes[s.strategy_id] = lane
         lane_cards.append(lane)
 
     lane_cards.sort(
