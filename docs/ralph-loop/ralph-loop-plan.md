@@ -1,11 +1,11 @@
-## Iteration: 155
-## Target: trading_app/ai/sql_adapter.py:58
-## Finding: VALID_ENTRY_MODELS = {"E1", "E2", "E3"} hardcoded canonical list — should derive from trading_app.config.ENTRY_MODELS
-## Classification: [mechanical]
-## Blast Radius: 1 file (sql_adapter.py). Callers (grounding.py, query_agent.py, mcp_server.py) import SQLAdapter/templates not VALID_ENTRY_MODELS. phase_4_config_sync.py and check_drift.py import VALID_ENTRY_MODELS but only to compare it with ENTRY_MODELS — after fix, they will always be equal (trivially passing).
+## Iteration: 158
+## Target: trading_app/mcp_server.py:136-185 + :253
+## Finding 1: Silent-failure — _get_strategy_fitness returns {"strategy_count": 0} with no error for invalid/dead instruments (e.g., M2K), instead of a clear error dict. ACTIVE_ORB_INSTRUMENTS is imported but not used for validation in this path.
+## Finding 2 (batch): Stale docstring at line 253 — "entry_model: One of: E1, E2, E3" but E3 is soft-retired (SKIP_ENTRY_MODELS).
+## Classification: [judgment] (Finding 1 — new guard); [mechanical] (Finding 2 — doc fix). Combined commit tagged [judgment].
+## Blast Radius: 1 production file (mcp_server.py), 1 test file (test_mcp_server.py)
 ## Invariants:
-##   1. VALID_ENTRY_MODELS must remain a set (callers use `in` operator)
-##   2. _validate_entry_model() behavior must not change for valid inputs
-##   3. check_drift.py check_entry_models_sync() must continue to pass
-## Diff estimate: 3 lines (add import, change 1 assignment)
-## Fix: Import ENTRY_MODELS from trading_app.config; replace hardcoded set with set(ENTRY_MODELS)
+##   1. Valid instrument calls must behave identically to before
+##   2. Error return format must be {"error": "..."} — consistent with _query_trading_db
+##   3. No change to compute_fitness or compute_portfolio_fitness signatures
+## Diff estimate: ~5 lines production + ~8 lines test

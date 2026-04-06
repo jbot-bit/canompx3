@@ -3,15 +3,30 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 157
+## Last iteration: 158
 
-## RALPH AUDIT — Iteration 157
+## RALPH AUDIT — Iteration 158
 ## Date: 2026-04-06
 ## Infrastructure Gates: drift 76/76 PASS (1 pre-existing check 78 advisory)
 
 ---
 
-## Iteration 157 — trading_app/ai/query_agent.py
+## Iteration 158 — trading_app/mcp_server.py
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Silent failure | `_get_strategy_fitness(instrument="M2K")` returns `{"strategy_count": 0}` instead of error. `ACTIVE_ORB_INSTRUMENTS` imported but not validated. | MEDIUM | FIXED |
+| Stale docstring | Line 253: "E1, E2, E3" but E3 soft-retired (SKIP_ENTRY_MODELS) | LOW | FIXED |
+
+### Audit Notes
+
+- **Instrument guard (FIXED):** Added `ACTIVE_ORB_INSTRUMENTS` validation at top of `_get_strategy_fitness`. Dead/unknown instruments now return `{"error": "Invalid instrument..."}` matching existing error format from `_query_trading_db`.
+- **Stale E3 docstring (FIXED):** Updated "E1, E2, E3" → "E1, E2" in `query_trading_db` tool description.
+- **Test:** Added `TestGetStrategyFitness` class with 2 tests (dead instrument M2K, typo "FAKE"). 19/19 pass.
+
+---
+
+## Prior: Iteration 157 — trading_app/ai/query_agent.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|

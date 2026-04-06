@@ -9,6 +9,7 @@ from trading_app.mcp_server import (
     _ALLOWED_PARAMS,
     MAX_MCP_ROWS,
     _generate_warnings,
+    _get_strategy_fitness,
     _list_available_queries,
     _query_trading_db,
 )
@@ -144,6 +145,18 @@ class TestGuardrails:
             "rr_target",
             "confirm_bars",
         } == _ALLOWED_PARAMS
+
+
+class TestGetStrategyFitness:
+    def test_invalid_instrument_returns_error(self):
+        """Dead/unknown instrument returns error, not silent empty result."""
+        result = _get_strategy_fitness(instrument="M2K")
+        assert "error" in result
+        assert "M2K" in result["error"]
+
+    def test_invalid_instrument_with_typo(self):
+        result = _get_strategy_fitness(instrument="FAKE")
+        assert "error" in result
 
 
 class TestGenerateWarnings:

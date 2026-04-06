@@ -147,6 +147,9 @@ def _get_strategy_fitness(
     db_path = GOLD_DB_PATH
     as_of = date.today()
 
+    if not strategy_id and instrument not in ACTIVE_ORB_INSTRUMENTS:
+        return {"error": f"Invalid instrument '{instrument}'. Active: {sorted(ACTIVE_ORB_INSTRUMENTS)}"}
+
     if strategy_id:
         try:
             score = compute_fitness(
@@ -250,7 +253,7 @@ def _build_server():
                       regime_compare, correlation, double_break_stats,
                       gap_analysis, rolling_stability.
             orb_label: ORB session filter. E.g.: CME_REOPEN, TOKYO_OPEN, LONDON_METALS, NYSE_OPEN.
-            entry_model: Entry model filter. One of: E1, E2, E3.
+            entry_model: Entry model filter. One of: E1, E2.
             filter_type: ORB size filter. Examples: ORB_G4, ORB_G6, NO_FILTER.
             min_sample_size: Minimum number of trades.
             instrument: Instrument filter (default MGC). One of: MGC, MNQ, MES.
