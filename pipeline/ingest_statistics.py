@@ -4,7 +4,8 @@ Ingest CME exchange statistics into exchange_statistics table.
 
 Reads statistics files (databento .dbn.zst) and extracts per-calendar-date
 statistics (session high/low, settlement, OI, volume) for front-month contracts.
-Used by build_daily_features to compute pit_range_atr.
+Populates the exchange_statistics table. The pit_range_atr column in
+daily_features is backfilled separately using the data stored here.
 
 Idempotent: DELETE+INSERT per instrument. Safe to re-run.
 

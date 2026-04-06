@@ -864,6 +864,8 @@ class PitRangeFilter(StrategyFilter):
         return val >= self.min_ratio
 
     def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
         if "pit_range_atr" not in df.columns:
             return pd.Series(False, index=df.index)
         return df["pit_range_atr"].notna() & (df["pit_range_atr"] >= self.min_ratio)
