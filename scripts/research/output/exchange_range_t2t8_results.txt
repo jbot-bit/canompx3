@@ -103,8 +103,8 @@ INSTRUMENT: MES
 
   T6 NULL FLOOR (running 10000 bootstraps)...
   T6 NULL FLOOR: PASS
-     observed=+17.6%, null_mean=-0.0%
-     null_P95=7.1%, null_P99=9.3%
+     observed=+17.6%, null_mean=+0.1%
+     null_P95=7.1%, null_P99=9.1%
      bootstrap p=0.000100 (n=10000)
      BH threshold (rank 1, K=320): 0.000156
      BH PASS: YES
@@ -218,7 +218,7 @@ INSTRUMENT: MGC
 
   T6 NULL FLOOR (running 10000 bootstraps)...
   T6 NULL FLOOR: PASS
-     observed=+18.1%, null_mean=+0.0%
+     observed=+18.1%, null_mean=-0.0%
      null_P95=6.8%, null_P99=8.9%
      bootstrap p=0.000100 (n=10000)
      BH threshold (rank 1, K=320): 0.000156
@@ -335,7 +335,7 @@ INSTRUMENT: MNQ
 
   T6 NULL FLOOR (running 10000 bootstraps)...
   T6 NULL FLOOR: PASS
-     observed=+16.6%, null_mean=-0.0%
+     observed=+16.6%, null_mean=+0.0%
      null_P95=6.9%, null_P99=9.2%
      bootstrap p=0.000100 (n=10000)
      BH threshold (rank 1, K=320): 0.000156
