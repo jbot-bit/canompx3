@@ -491,6 +491,80 @@ async def api_accounts():
         return {"accounts": [], "error": str(e)}
 
 
+# ── Live equity cache ────────────────────────────────────────────────
+_equity_cache: dict = {"data": None, "ts": 0}
+_EQUITY_TTL = 30  # seconds
+
+
+@app.get("/api/equity")
+async def api_equity():
+    """Live account balances from broker API (ProjectX/Tradovate).
+
+    Authenticates on first call, caches for 30s. Returns account list with
+    real balances. Falls back gracefully if creds missing or auth fails.
+    """
+    import time as _time
+
+    now = _time.time()
+    if _equity_cache["data"] is not None and now - _equity_cache["ts"] < _EQUITY_TTL:
+        return _equity_cache["data"]
+
+    try:
+        broker = os.environ.get("BROKER", "").lower()
+        if broker == "projectx":
+            from trading_app.live.projectx.auth import ProjectXAuth
+            from trading_app.live.projectx.positions import ProjectXPositions
+            from trading_app.live.projectx.contract_resolver import ProjectXContracts
+
+            auth = ProjectXAuth()
+            contracts = ProjectXContracts(auth)
+            positions = ProjectXPositions(auth)
+
+            account_list = contracts.resolve_all_account_ids()
+            accounts = []
+            for acct_id, acct_name in account_list:
+                equity = positions.query_equity(acct_id)
+                accounts.append({
+                    "id": acct_id,
+                    "name": acct_name,
+                    "equity": equity,
+                    "broker": "ProjectX (TopStepX)",
+                })
+
+            result = {"accounts": accounts, "broker": "projectx", "cached": False}
+        elif broker == "tradovate":
+            from trading_app.live.tradovate.auth import TradovateAuth
+            from trading_app.live.tradovate.contracts import TradovateContracts
+            from trading_app.live.tradovate.positions import TradovatePositions
+
+            auth = TradovateAuth()
+            contracts = TradovateContracts(auth)
+            positions = TradovatePositions(auth)
+
+            account_list = contracts.resolve_all_account_ids()
+            accounts = []
+            for acct_id, acct_name in account_list:
+                equity = positions.query_equity(acct_id)
+                accounts.append({
+                    "id": acct_id,
+                    "name": acct_name,
+                    "equity": equity,
+                    "broker": "Tradovate",
+                })
+
+            result = {"accounts": accounts, "broker": "tradovate", "cached": False}
+        else:
+            result = {"accounts": [], "broker": broker or "none", "error": "No broker configured (set BROKER in .env)"}
+
+        _equity_cache["data"] = result
+        _equity_cache["ts"] = now
+        return result
+
+    except Exception as e:
+        log.warning("Equity fetch failed: %s", e)
+        return {"accounts": [], "error": str(e)}
+
+
 @app.get("/api/sessions")
 async def api_sessions():
     """Server-side DST-correct session schedule with next-session computation."""

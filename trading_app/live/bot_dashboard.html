@@ -708,6 +708,39 @@ async function fetchDataStatus() {
   } catch (_) {}
 }
 
+async function fetchEquity() {
+  try {
+    const data = await (await fetch("/api/equity")).json();
+    if (data.error) {
+      $("metric-balance-sub").textContent = data.error.substring(0, 40);
+      return;
+    }
+    if (data.accounts && data.accounts.length > 0) {
+      // Show first account equity (primary trading account)
+      const primary = data.accounts[0];
+      if (primary.equity != null) {
+        $("metric-balance").textContent = fmtDollar(primary.equity);
+        $("metric-balance").className = "metric-val positive";
+        $("metric-balance-sub").textContent = `${primary.name} · ${data.broker}`;
+
+        // If multiple accounts, show total
+        if (data.accounts.length > 1) {
+          const total = data.accounts.reduce((s, a) => s + (a.equity || 0), 0);
+          $("metric-balance-sub").textContent = `${fmtDollar(total)} total · ${data.accounts.length} accounts`;
+        }
+
+        // Update DD remaining with real equity if we have profile data
+        if (activeProfileData) {
+          const ddUsedDollars = activeProfileData.account_size - primary.equity;
+          const ddRemaining = activeProfileData.max_dd - Math.max(0, ddUsedDollars);
+          $("metric-dd-left").textContent = fmtDollar(Math.max(0, ddRemaining));
+          $("metric-dd-left").className = `metric-val ${ddRemaining < activeProfileData.max_dd * 0.2 ? "negative" : ddRemaining < activeProfileData.max_dd * 0.5 ? "warning" : "positive"}`;
+        }
+      }
+    }
+  } catch (_) {}
+}
+
 /* ── Actions ────────────────────────── */
 async function launchSession(pid, firm, instr, mode) {
   const lbl = {signal: "SIGNAL-ONLY", demo: "DEMO", live: "LIVE"};
@@ -750,8 +783,8 @@ $("btn-close-activity").addEventListener("click", () => { $("activity-panel").st
 /* ── Init ───────────────────────────── */
 restoreSections();
 try { localStorage.removeItem("orb_sections"); } catch (_) {} // migrate old key
-fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus();
-setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000);
+fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity();
+setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000); setInterval(fetchEquity, 30000);
 </script>
 </body>
 </html>
