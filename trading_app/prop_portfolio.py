@@ -15,9 +15,12 @@ Usage:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 import duckdb  # noqa: F401 — used at runtime in _load_daily_snapshot
 
@@ -395,6 +398,7 @@ def _query_paper_pnl(db_path: Path, strategy_id: str, lookback_days: int = 30) -
                 return None
             return {"wins": row[0], "losses": row[1], "cum_r": row[2], "last_trade": row[3]}
     except Exception:
+        logger.debug("_query_paper_pnl failed for %s: %s", strategy_id, exc_info=True)
         return None
 
 
