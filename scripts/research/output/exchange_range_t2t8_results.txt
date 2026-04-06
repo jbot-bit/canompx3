@@ -1,0 +1,398 @@
+================================================================================
+AUDIT REPORT -- F5_exchange_range_atr at CME_REOPEN
+================================================================================
+Entry model: E1 (matches screening scan)
+RR target: 1.0
+Bootstrap: 10000 permutations
+BH K: 320 (original search space)
+
+--- DATA PIPELINE ---
+  Pre-merge outcomes: 7932
+  Post-merge (with stats): 6174
+  Coverage: 77.8%
+  WARNING: COVERAGE BELOW 95% -- investigate cal_date alignment
+  MES: 1982 rows
+  MGC: 2070 rows
+  MNQ: 2013 rows
+  DB freshness: 2026-04-05
+
+================================================================================
+INSTRUMENT: MES
+================================================================================
+
+  T1 WR MONOTONICITY: PASS
+     Q5-Q1 WR spread: +17.6%
+     Q1: WR=38.5% ExpR=-0.472 AvgWinR=0.371 (n=397)
+     Q5: WR=56.2% ExpR=-0.131 AvgWinR=0.547 (n=397)
+       Q1: WR=38.5% ExpR=-0.472 AvgWinR=0.371 n=397
+       Q2: WR=41.4% ExpR=-0.415 AvgWinR=0.413 n=396
+       Q3: WR=52.5% ExpR=-0.230 AvgWinR=0.465 n=396
+       Q4: WR=47.7% ExpR=-0.296 AvgWinR=0.476 n=396
+       Q5: WR=56.2% ExpR=-0.131 AvgWinR=0.547 n=397
+
+  T1b MULTI-RR: PASS
+     RR=1.0: spread=+17.6% (N=1982)
+     RR=1.5: spread=+9.2% (N=1794)
+     RR=2.0: spread=+5.8% (N=1714)
+
+  T1c DIRECTION: INFO
+     LONG: spread=+16.5% (N=967)
+     SHORT: spread=+19.2% (N=1015)
+
+  T2 IS BASELINE: PASS
+     IS (2010-2019): spread=+20.1%, N=1181
+
+  T3 WALK-FORWARD: SUSPECT_LEAKAGE
+     Mean WFE: 1.00, Worst: 0.00
+     Sign flips: 1/11 OOS years
+     2014: IS=+11.8% OOS=+31.8% WFE=2.70 n=109 +
+     2015: IS=+21.0% OOS=+12.0% WFE=0.57 n=122 +
+     2016: IS=+19.2% OOS=+30.4% WFE=1.59 n=115 +
+     2017: IS=+21.9% OOS=+19.0% WFE=0.87 n=103 +
+     2018: IS=+21.9% OOS=+23.1% WFE=1.05 n=129 +
+     2020: IS=+20.1% OOS=+18.5% WFE=0.92 n=135 +
+     2021: IS=+21.1% OOS=+42.3% WFE=2.01 n=129 +
+     2022: IS=+23.5% OOS=+7.4% WFE=0.31 n=135 +
+     2023: IS=+21.2% OOS=+15.4% WFE=0.73 n=127 +
+     2024: IS=+19.6% OOS=+0.0% WFE=0.00 n=114 X
+     2025: IS=+18.2% OOS=+4.2% WFE=0.23 n=117 +
+
+  T4 SENSITIVITY: PASS
+     Feature +/-20% (stable: True):
+       scale=0.8: spread=+17.6%
+       scale=0.9: spread=+17.6%
+       scale=1.0: spread=+17.6%
+       scale=1.1: spread=+17.6%
+       scale=1.2: spread=+17.6%
+     ATR period (stable: True):
+       ATR_15_approx: spread=+17.6%
+       ATR_20: spread=+17.6%
+       ATR_25_approx: spread=+17.6%
+     Bin robustness (stable: True):
+         median: spread=+9.6% (n=991|991)
+        tercile: spread=+14.4% (n=661|661)
+       quartile: spread=+16.7% (n=496|496)
+       quintile: spread=+17.6% (n=397|397)
+         decile: spread=+17.1% (n=199|199)
+
+  T5 FAMILY: PASS (7/11 same sign)
+     CME_REOPEN           spread=+17.6% (N=1982) <--
+     NYSE_OPEN            spread=+8.1% (N=3839)
+     EUROPE_FLOW          spread=+4.1% (N=3877)
+     LONDON_METALS        spread=+3.9% (N=3875)
+     US_DATA_830          spread=+1.3% (N=3807)
+     COMEX_SETTLE         spread=+0.5% (N=3807)
+     TOKYO_OPEN           spread=+0.2% (N=3881)
+     NYSE_CLOSE           spread=+0.0% (N=1475)
+     CME_PRECLOSE         spread=-0.3% (N=2696)
+     SINGAPORE_OPEN       spread=-0.4% (N=3880)
+     US_DATA_1000         spread=-1.8% (N=3826)
+
+  T5b CONFOUND: PASS
+     corr(F5, ATR_20) = -0.046 (p=0.0414)
+     corr(F5, orb_size_CME_REOPEN) = +0.244 (p=0.0000)
+     corr(F5, rel_vol_CME_REOPEN) = +0.242 (p=0.0000)
+     ATR-stratified WR spread:
+        low: spread=+20.7% (N=661)
+        mid: spread=+19.2% (N=661)
+       high: spread=+9.8% (N=660)
+
+  T5c FILTER INTERACTION (within G5): PASS
+     G5-filtered: spread=+11.8% (N=338)
+     Unfiltered:   spread=+17.6%
+
+  T6 NULL FLOOR (running 10000 bootstraps)...
+  T6 NULL FLOOR: PASS
+     observed=+17.6%, null_mean=-0.0%
+     null_P95=7.1%, null_P99=9.3%
+     bootstrap p=0.000100 (n=10000)
+     BH threshold (rank 1, K=320): 0.000156
+     BH PASS: YES
+
+  T7 PER-YEAR: PASS
+     13/16 years same sign (81%)
+     2010: +7.9% (n=76) +
+     2011: +7.1% (n=155) +
+     2012: -8.1% (n=148) X
+     2013: +9.9% (n=131) +
+     2014: +28.3% (n=109) +
+     2015: +8.2% (n=122) +
+     2016: +19.8% (n=115) +
+     2017: +18.5% (n=103) +
+     2018: -0.9% (n=129) X
+     2019: +13.9% (n=93) +
+     2020: +6.7% (n=135) +
+     2021: +10.0% (n=129) +
+     2022: -3.8% (n=135) X
+     2023: +5.5% (n=127) +
+     2024: +17.5% (n=114) +
+     2025: +6.0% (n=117) +
+
+  VERDICTS: {'T1': 'PASS', 'T2': 'PASS', 'T3': 'SUSPECT_LEAKAGE', 'T4': 'PASS', 'T5': 'PASS', 'T5b': 'PASS', 'T5c': 'PASS', 'T6': 'PASS', 'T7': 'PASS'}
+  8 PASS, 0 FAIL
+  === MES OVERALL: VALIDATED
+
+================================================================================
+INSTRUMENT: MGC
+================================================================================
+
+  T1 WR MONOTONICITY: PASS
+     Q5-Q1 WR spread: +18.1%
+     Q1: WR=38.9% ExpR=-0.507 AvgWinR=0.269 (n=414)
+     Q5: WR=57.0% ExpR=-0.119 AvgWinR=0.545 (n=414)
+       Q1: WR=38.9% ExpR=-0.507 AvgWinR=0.269 n=414
+       Q2: WR=43.2% ExpR=-0.423 AvgWinR=0.334 n=414
+       Q3: WR=51.7% ExpR=-0.279 AvgWinR=0.396 n=414
+       Q4: WR=52.2% ExpR=-0.242 AvgWinR=0.453 n=414
+       Q5: WR=57.0% ExpR=-0.119 AvgWinR=0.545 n=414
+
+  T1b MULTI-RR: PASS
+     RR=1.0: spread=+18.1% (N=2070)
+     RR=1.5: spread=+17.4% (N=1873)
+     RR=2.0: spread=+13.1% (N=1795)
+
+  T1c DIRECTION: INFO
+     LONG: spread=+17.8% (N=1095)
+     SHORT: spread=+18.5% (N=975)
+
+  T2 IS BASELINE: PASS
+     IS (2010-2019): spread=+17.4%, N=1221
+
+  T3 WALK-FORWARD: SUSPECT_LEAKAGE
+     Mean WFE: 1.06, Worst: -0.23
+     Sign flips: 1/12 OOS years
+     2014: IS=+11.3% OOS=+30.4% WFE=2.68 n=114 +
+     2015: IS=+15.8% OOS=+15.4% WFE=0.97 n=127 +
+     2016: IS=+14.5% OOS=+12.0% WFE=0.83 n=123 +
+     2017: IS=+14.1% OOS=+3.8% WFE=0.27 n=129 +
+     2018: IS=+15.8% OOS=+12.5% WFE=0.79 n=118 +
+     2019: IS=+15.1% OOS=+41.5% WFE=2.76 n=126 +
+     2020: IS=+17.4% OOS=+16.0% WFE=0.92 n=124 +
+     2021: IS=+17.8% OOS=+24.1% WFE=1.35 n=142 +
+     2022: IS=+20.5% OOS=+33.3% WFE=1.63 n=134 +
+     2023: IS=+22.0% OOS=-5.2% WFE=-0.23 n=136 X
+     2024: IS=+18.5% OOS=+7.7% WFE=0.42 n=127 +
+     2025: IS=+19.4% OOS=+6.9% WFE=0.36 n=145 +
+
+  T4 SENSITIVITY: PASS
+     Feature +/-20% (stable: True):
+       scale=0.8: spread=+18.1%
+       scale=0.9: spread=+18.1%
+       scale=1.0: spread=+18.1%
+       scale=1.1: spread=+18.1%
+       scale=1.2: spread=+18.1%
+     ATR period (stable: True):
+       ATR_15_approx: spread=+18.1%
+       ATR_20: spread=+18.1%
+       ATR_25_approx: spread=+18.1%
+     Bin robustness (stable: True):
+         median: spread=+11.8% (n=1035|1035)
+        tercile: spread=+14.2% (n=690|690)
+       quartile: spread=+15.4% (n=518|518)
+       quintile: spread=+18.1% (n=414|414)
+         decile: spread=+18.8% (n=207|207)
+
+  T5 FAMILY: PASS (6/9 same sign)
+     CME_REOPEN           spread=+18.1% (N=2070) <--
+     LONDON_METALS        spread=+3.5% (N=3921)
+     NYSE_OPEN            spread=+2.2% (N=3854)
+     SINGAPORE_OPEN       spread=+2.2% (N=3915)
+     US_DATA_1000         spread=+1.1% (N=3670)
+     EUROPE_FLOW          spread=+0.4% (N=3919)
+     TOKYO_OPEN           spread=-1.5% (N=3924)
+     US_DATA_830          spread=-1.7% (N=3656)
+     COMEX_SETTLE         spread=-1.7% (N=3743)
+
+  T5b CONFOUND: PASS
+     corr(F5, ATR_20) = +0.036 (p=0.1046)
+     corr(F5, orb_size_CME_REOPEN) = +0.225 (p=0.0000)
+     corr(F5, rel_vol_CME_REOPEN) = +0.271 (p=0.0000)
+     ATR-stratified WR spread:
+        low: spread=+18.8% (N=690)
+        mid: spread=+20.3% (N=690)
+       high: spread=+10.9% (N=690)
+
+  T5c FILTER INTERACTION (within G5): PASS
+     G5-filtered: spread=-26.9% (N=127)
+     Unfiltered:   spread=+18.1%
+
+  T6 NULL FLOOR (running 10000 bootstraps)...
+  T6 NULL FLOOR: PASS
+     observed=+18.1%, null_mean=+0.0%
+     null_P95=6.8%, null_P99=8.9%
+     bootstrap p=0.000100 (n=10000)
+     BH threshold (rank 1, K=320): 0.000156
+     BH PASS: YES
+
+  T7 PER-YEAR: PASS
+     15/16 years same sign (94%)
+     2010: +2.6% (n=78) +
+     2011: +1.4% (n=148) +
+     2012: +11.2% (n=133) +
+     2013: +15.2% (n=125) +
+     2014: +15.8% (n=114) +
+     2015: +16.6% (n=127) +
+     2016: +7.2% (n=123) +
+     2017: +4.0% (n=129) +
+     2018: +15.3% (n=118) +
+     2019: +23.8% (n=126) +
+     2020: +3.2% (n=124) +
+     2021: +16.9% (n=142) +
+     2022: +25.4% (n=134) +
+     2023: +4.4% (n=136) +
+     2024: +8.6% (n=127) +
+     2025: -0.6% (n=145) X
+
+  VERDICTS: {'T1': 'PASS', 'T2': 'PASS', 'T3': 'SUSPECT_LEAKAGE', 'T4': 'PASS', 'T5': 'PASS', 'T5b': 'PASS', 'T5c': 'PASS', 'T6': 'PASS', 'T7': 'PASS'}
+  8 PASS, 0 FAIL
+  === MGC OVERALL: VALIDATED
+
+================================================================================
+INSTRUMENT: MNQ
+================================================================================
+
+  T1 WR MONOTONICITY: PASS
+     Q5-Q1 WR spread: +16.6%
+     Q1: WR=38.0% ExpR=-0.472 AvgWinR=0.392 (n=403)
+     Q5: WR=54.6% ExpR=-0.118 AvgWinR=0.615 (n=403)
+       Q1: WR=38.0% ExpR=-0.472 AvgWinR=0.392 n=403
+       Q2: WR=45.3% ExpR=-0.303 AvgWinR=0.540 n=402
+       Q3: WR=53.3% ExpR=-0.167 AvgWinR=0.562 n=403
+       Q4: WR=54.0% ExpR=-0.154 AvgWinR=0.567 n=402
+       Q5: WR=54.6% ExpR=-0.118 AvgWinR=0.615 n=403
+
+  T1b MULTI-RR: PASS
+     RR=1.0: spread=+16.6% (N=2013)
+     RR=1.5: spread=+12.0% (N=1782)
+     RR=2.0: spread=+7.0% (N=1714)
+
+  T1c DIRECTION: INFO
+     LONG: spread=+14.0% (N=1032)
+     SHORT: spread=+17.5% (N=981)
+
+  T2 IS BASELINE: PASS
+     IS (2010-2019): spread=+15.1%, N=1206
+
+  T3 WALK-FORWARD: SUSPECT_LEAKAGE
+     Mean WFE: 1.19, Worst: -0.14
+     Sign flips: 2/11 OOS years
+     2015: IS=+18.4% OOS=+13.0% WFE=0.71 n=114 +
+     2016: IS=+18.9% OOS=+31.8% WFE=1.68 n=110 +
+     2017: IS=+18.2% OOS=+11.5% WFE=0.63 n=111 +
+     2018: IS=+17.7% OOS=-2.5% WFE=-0.14 n=136 X
+     2019: IS=+13.7% OOS=+34.8% WFE=2.54 n=112 +
+     2020: IS=+15.1% OOS=+17.1% WFE=1.13 n=131 +
+     2021: IS=+14.9% OOS=+30.8% WFE=2.06 n=128 +
+     2022: IS=+15.7% OOS=+0.0% WFE=0.00 n=130 X
+     2023: IS=+15.0% OOS=+29.6% WFE=1.97 n=134 +
+     2024: IS=+15.6% OOS=+16.7% WFE=1.07 n=119 +
+     2025: IS=+16.2% OOS=+22.7% WFE=1.40 n=121 +
+
+  T4 SENSITIVITY: PASS
+     Feature +/-20% (stable: True):
+       scale=0.8: spread=+16.6%
+       scale=0.9: spread=+16.6%
+       scale=1.0: spread=+16.6%
+       scale=1.1: spread=+16.6%
+       scale=1.2: spread=+16.6%
+     ATR period (stable: True):
+       ATR_15_approx: spread=+16.6%
+       ATR_20: spread=+16.6%
+       ATR_25_approx: spread=+16.6%
+     Bin robustness (stable: True):
+         median: spread=+10.7% (n=1007|1006)
+        tercile: spread=+13.1% (n=671|671)
+       quartile: spread=+15.4% (n=504|503)
+       quintile: spread=+16.6% (n=403|403)
+         decile: spread=+17.8% (n=202|202)
+
+  T5 FAMILY: PASS (9/12 same sign)
+     CME_REOPEN           spread=+16.6% (N=2013) <--
+     US_DATA_830          spread=+5.6% (N=3869)
+     BRISBANE_1025        spread=+5.4% (N=3907)
+     TOKYO_OPEN           spread=+3.3% (N=3922)
+     LONDON_METALS        spread=+3.2% (N=3931)
+     SINGAPORE_OPEN       spread=+2.6% (N=3915)
+     EUROPE_FLOW          spread=+2.4% (N=3930)
+     NYSE_CLOSE           spread=+1.0% (N=1542)
+     CME_PRECLOSE         spread=+0.4% (N=2853)
+     NYSE_OPEN            spread=-0.9% (N=3852)
+     COMEX_SETTLE         spread=-1.1% (N=3856)
+     US_DATA_1000         spread=-1.5% (N=3873)
+
+  T5b CONFOUND: PASS
+     corr(F5, ATR_20) = -0.037 (p=0.0971)
+     corr(F5, orb_size_CME_REOPEN) = +0.187 (p=0.0000)
+     corr(F5, rel_vol_CME_REOPEN) = +0.173 (p=0.0000)
+     ATR-stratified WR spread:
+        low: spread=+21.9% (N=671)
+        mid: spread=+7.8% (N=671)
+       high: spread=+16.7% (N=671)
+
+  T5c FILTER INTERACTION (within G5): PASS
+     G5-filtered: spread=+11.0% (N=1106)
+     Unfiltered:   spread=+16.6%
+
+  T6 NULL FLOOR (running 10000 bootstraps)...
+  T6 NULL FLOOR: PASS
+     observed=+16.6%, null_mean=-0.0%
+     null_P95=6.9%, null_P99=9.2%
+     bootstrap p=0.000100 (n=10000)
+     BH threshold (rank 1, K=320): 0.000156
+     BH PASS: YES
+
+  T7 PER-YEAR: PASS
+     12/16 years same sign (75%)
+     2010: +0.0% (n=86) X
+     2011: +3.9% (n=154) +
+     2012: +12.7% (n=158) +
+     2013: +25.9% (n=127) +
+     2014: +26.5% (n=98) +
+     2015: +14.0% (n=114) +
+     2016: +14.5% (n=110) +
+     2017: +13.6% (n=111) +
+     2018: +0.0% (n=136) X
+     2019: +10.7% (n=112) +
+     2020: +8.4% (n=131) +
+     2021: +0.0% (n=128) X
+     2022: -4.6% (n=130) X
+     2023: +9.0% (n=134) +
+     2024: +19.3% (n=119) +
+     2025: +17.4% (n=121) +
+
+  VERDICTS: {'T1': 'PASS', 'T2': 'PASS', 'T3': 'SUSPECT_LEAKAGE', 'T4': 'PASS', 'T5': 'PASS', 'T5b': 'PASS', 'T5c': 'PASS', 'T6': 'PASS', 'T7': 'PASS'}
+  8 PASS, 0 FAIL
+  === MNQ OVERALL: VALIDATED
+
+================================================================================
+T8 CROSS-INSTRUMENT
+================================================================================
+  PASS (3/3 positive)
+  MES  spread=+17.6% (N=1982)
+  MGC  spread=+18.1% (N=2070)
+  MNQ  spread=+16.6% (N=2013)
+
+================================================================================
+E2 CONCORDANCE (informational -- not a gate)
+================================================================================
+  INFO
+  MES  E2 spread=+21.5% (N=2043)
+  MGC  E2 spread=+22.7% (N=2179)
+  MNQ  E2 spread=+19.6% (N=2143)
+
+================================================================================
+FINAL DECISION
+================================================================================
+  MES: VALIDATED
+  MGC: VALIDATED
+  MNQ: VALIDATED
+
+  VALIDATED: 3/3
+  KILLED: 0/3
+
+  >>> ALL INSTRUMENTS VALIDATED -- proceed to deployment design <<<
+
+  Mechanism: UNVERIFIED (no order flow data to test causation)
+  Feature: exchange pit session range / ATR -- prior day, zero look-ahead
+  Session: CME_REOPEN only (other sessions not BH-significant at K=320)
+  NOTE: MGC exception was NOT pre-registered (seen p=0.053 pre-2019 first)
