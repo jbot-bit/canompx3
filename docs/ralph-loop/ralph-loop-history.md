@@ -1631,3 +1631,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 production file (grounding.py), no logic change
 - Verification: PASS (drift 76/76 OK)
 - Commit: 59539eb
+
+---
+
+## Iteration 157 — 2026-04-06
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/ai/query_agent.py:102,152
+- Finding: Duplicate hardcoded model string "claude-sonnet-4-5-20250929" in two client.messages.create() calls. Rotating model requires updating both — forgetting one silently uses different models for SQL generation vs interpretation.
+- Action: Extracted to _AI_MODEL constant at module level. Both calls now reference the constant.
+- Blast radius: 1 production file, no API change
+- Verification: PASS (drift 76/76 OK)
+- Commit: b165e68

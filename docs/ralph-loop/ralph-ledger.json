@@ -1,7 +1,7 @@
 {
-  "total_iterations": 156,
+  "total_iterations": 157,
   "last_updated": "2026-04-06",
-  "consecutive_low_only": 3,
+  "consecutive_low_only": 4,
   "last_high_finding_iter": 155,
   "findings_by_type": {
     "canonical_violation": {

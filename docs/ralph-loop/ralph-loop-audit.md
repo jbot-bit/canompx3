@@ -3,39 +3,39 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 156
+## Last iteration: 157
 
-## RALPH AUDIT — Iteration 156
+## RALPH AUDIT — Iteration 157
 ## Date: 2026-04-06
 ## Infrastructure Gates: drift 76/76 PASS (1 pre-existing check 78 advisory)
 
 ---
 
-## Iteration 156 — trading_app/ai/grounding.py
+## Iteration 157 — trading_app/ai/query_agent.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Canonical violation | E2 entry model missing from GLOSSARY — the primary entry model across most strategies was absent from AI grounding context | LOW | FIXED 59539eb |
-| All others | config.py = audit-only (canonical source, no violations). rithmic/contracts.py + rithmic/positions.py = CLEAN. grounding.py otherwise clean. | — | CLEAN |
+| Canonical violation | Duplicate hardcoded model string "claude-sonnet-4-5-20250929" at lines 102 and 152 — update one, forget the other | LOW | FIXED b165e68 |
+| All others | config.py = audit-only (canonical, no violations). chat_handler.py = clean. query_agent.py otherwise clean. | — | CLEAN |
 
 ### Audit Notes
 
-- **E2 missing from GLOSSARY (FIXED):** The AI grounding system prompt in `grounding.py` had E1 and E3 in the GLOSSARY but omitted E2 (stop-market at ORB level + 1-tick slippage). E2 is the primary entry model for the vast majority of deployed strategies. Fix: added E2 definition line.
-- **config.py audit:** Canonical source for ENTRY_MODELS, filters, etc. No violations found — correctly authoritative.
-- **rithmic modules:** contracts.py and positions.py (if they exist) — clean or non-existent by design (order-only adapter).
+- **Duplicate model string (FIXED):** `query_agent.py` had `model="claude-sonnet-4-5-20250929"` hardcoded in two separate `client.messages.create()` calls (lines 102 and 152). If the model is rotated, updating one and forgetting the other would silently use different models for SQL generation vs interpretation passes. Fix: extracted to `_AI_MODEL` constant at module level.
+- **config.py audit:** Canonical source for ENTRY_MODELS, filters, etc. No violations — correctly authoritative.
+- **chat_handler.py:** Clean — no canonical violations, no silent failures.
 
 ---
 
-## Summary — Iteration 156
+## Summary — Iteration 157
 
-- 1 LOW finding — FIXED ([mechanical], 1-line diff)
-- Commit: 59539eb
+- 1 LOW finding — FIXED ([mechanical], 8-line diff)
+- Commit: b165e68
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 224 files fully scanned (1 new file added this iteration).
+> Cumulative list — 226 files fully scanned (2 new files added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -101,10 +101,12 @@
 - trading_app/live/rithmic/__init__.py — added iter 155
 - trading_app/ai/sql_adapter.py — added iter 155
 - trading_app/ai/grounding.py — added iter 156
-- **Total: 224 files fully scanned**
+- trading_app/ai/query_agent.py — added iter 157
+- trading_app/ai/chat_handler.py — added iter 157
+- **Total: 226 files fully scanned**
 
 ## Next iteration targets
-- trading_app/config.py — canonical config, audit-only (verify downstream consumers)
-- trading_app/live/rithmic/contracts.py — unscanned rithmic contracts resolver (if exists)
-- trading_app/live/rithmic/positions.py — unscanned rithmic positions module (if exists)
-- trading_app/ai/chat_handler.py — unscanned AI chat handler
+- trading_app/ai/__init__.py — unscanned AI package init
+- trading_app/mcp_server.py — MCP server, high-value audit target
+- pipeline/outcome_builder.py — core pipeline, worth re-audit
+- pipeline/features.py — feature computation, potential lookahead
