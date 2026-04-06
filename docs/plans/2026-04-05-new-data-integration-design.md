@@ -257,5 +257,18 @@ Keep ohlcv-1s (FREE, useful for break speed research later) and statistics (FREE
 - Savings: ~$197/mo = $2,364/yr
 
 ### Remaining research before cancellation:
-1. Spread-at-break test (tbbo downloading now, ~30 min test once ready)
-2. That's it. OI is dead. Trades/mbp-1 have no hypothesis.
+1. ~~Spread-at-break~~ KILLED (Apr 5 — no spread variation, 92-96% at 1-2 ticks)
+2. ~~Depth-at-break~~ KILLED (Apr 6 — endogeneity artefact, no cross-instrument concordance)
+3. ~~Directional imbalance~~ KILLED (Apr 6 — mixed directions, no concordance)
+4. ALL microstructure hypotheses DEAD for CME micro futures.
+
+### Remaining 1s bar research (NEXT SESSION):
+- 1s bars (3.9 GB, 16yr) never tested — genuinely different from tick data
+- Break speed at 1s = refinement of VALIDATED 1m signal (3 BH FDR survivors)
+- BUT: deploy the 1m break speed filter FIRST (ACTION QUEUE #3), THEN test 1s refinement
+- Proper sequence: deploy proven → refine if needed → explore novel 1s features
+- See `break_speed_signal_retest.md` for existing validation results
+- Plan: `docs/plans/2026-04-06-1s-break-speed-plan.md` (next session)
+
+### Subscription: CANCEL NOW.
+No remaining hypothesis requires paid data. 1s bars are FREE.
