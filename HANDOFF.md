@@ -6,6 +6,22 @@
 
 ---
 
+## Update (Apr 6 — Preflight Fixes)
+
+### Completed
+
+**Fix preflight for multi-instrument profiles** (`ed6f67d`)
+
+1. **Multi-instrument preflight** — `--profile topstep_50k_mnq_auto --preflight` was passing `instrument=None, portfolio=None` because multi-instrument profiles skip `raw_portfolio` build. Now runs per-instrument preflight with per-instrument portfolio.
+2. **Contract resolver None guard** — ProjectX API can return `{"name": None}`, crashing `.upper()`. Fixed with `or ""` pattern.
+3. **Daily features false positive** — `atr_20=None` was reported as OK. Now prints WARN with remediation hint.
+
+### In Progress
+- ATR-dependent filter check in daily features preflight (from code review improvement #1)
+- Tradovate contracts.py consistency fix (from code review improvement #2)
+
+---
+
 ## Update (Apr 6 — Bloomberg Dashboard + Live Equity + Multi-Broker)
 
 ### Completed
