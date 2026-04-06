@@ -376,6 +376,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # Allocator uses trailing 12mo ExpR, regime gating, family RR locks.
         # Run: python -m trading_app.lane_allocator to refresh.
         # Total: 223.1 R/yr from 5 lanes. MGC CME_REOPEN is top lane.
+        # EUROPE_FLOW swapped COST_LT10→LT12 (2026-04-06): +18% R/yr, era-validated.
         daily_lanes=(
             DailyLaneSpec(
                 "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
@@ -396,7 +397,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
+                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT12",
                 "MNQ",
                 "EUROPE_FLOW",
                 max_orb_size_pts=120.0,
