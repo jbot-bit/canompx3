@@ -6,6 +6,26 @@
 
 ---
 
+## Update (Apr 6 — EUROPE_FLOW Lane Swap COST_LT10→LT12)
+
+### Completed
+
+| Commit | Feature |
+|--------|---------|
+| `1cf13e0` | EUROPE_FLOW lane COST_LT10→COST_LT12 (+18% R/yr) |
+
+### Key Changes
+- **Lane swap:** `topstep_50k_mnq_auto` EUROPE_FLOW lane now `COST_LT12` (was `COST_LT10`)
+- **DB:** `MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT12` promoted to `validated_setups` (era_dependent=True)
+- **Research:** OVNRNG fallback chain KILLED (negative conditional ExpR on small-ORB days). Cost-band widening is the only viable path.
+- **Era trap documented:** Wider filters expose pre-2019 parent symbol data → Phase 3 failure. Memory: `era_contamination_trap.md`.
+
+### Not Done
+- Inactive profiles still use COST_LT10 for EUROPE_FLOW — update when activating
+- COST_BAND_10_12 dual-lane approach (Approach B) deferred — marginal +0.2 R/yr
+
+---
+
 ## Update (Apr 6 — Ralph Audit + Stage-Gate Multi-Terminal Fix)
 
 ### Completed
