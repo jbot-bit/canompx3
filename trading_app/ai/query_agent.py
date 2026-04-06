@@ -22,6 +22,10 @@ from trading_app.ai.sql_adapter import (
 )
 from trading_app.config import generate_strategy_warnings
 
+# Pinned model version for all AI query passes.
+# Update here when the model is rotated — one place, both passes stay in sync.
+_AI_MODEL = "claude-sonnet-4-5-20250929"
+
 
 @dataclass
 class QueryResult:
@@ -99,7 +103,7 @@ class QueryAgent:
         system_prompt = build_grounding_prompt(self.corpus, self.schema_summary)
 
         response = self.client.messages.create(
-            model="claude-sonnet-4-5-20250929",
+            model=_AI_MODEL,
             max_tokens=500,
             temperature=0.0,
             system=system_prompt,
@@ -149,7 +153,7 @@ class QueryAgent:
         prompt = build_interpretation_prompt(self.corpus, question, data_summary)
 
         response = self.client.messages.create(
-            model="claude-sonnet-4-5-20250929",
+            model=_AI_MODEL,
             max_tokens=1000,
             temperature=0.0,
             messages=[{"role": "user", "content": prompt}],
