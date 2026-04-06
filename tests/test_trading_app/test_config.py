@@ -16,6 +16,7 @@ from trading_app.config import (
     DayOfWeekSkipFilter,
     NoFilter,
     OrbSizeFilter,
+    PitRangeFilter,
     StrategyFilter,
     VolumeFilter,
     get_filters_for_grid,
@@ -149,8 +150,9 @@ class TestAllFilters:
         # + 2 GAP gap/atr filters (GAP_R005/R015)
         # + 8 COST_LT × FAST composites (4 COST × 2 FAST = 8)
         # + 8 OVNRNG × FAST composites (4 OVNRNG × 2 FAST = 8)
-        # = 65 + 8 + 8 = 81
-        assert len(ALL_FILTERS) == 81
+        # + 1 PIT_MIN (pit range/atr anti-filter, CME_REOPEN only — Apr 2026)
+        # = 65 + 8 + 8 + 1 = 82
+        assert len(ALL_FILTERS) == 82
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -841,3 +843,77 @@ class TestBreakQualityComposites:
             comp.matches_row({"orb_CME_REOPEN_size": 8.0, "orb_CME_REOPEN_break_bar_continues": False}, "CME_REOPEN")
             is False
         )
+
+
+class TestPitRangeFilter:
+    """PitRangeFilter gates on pit_range_atr >= min_ratio (exchange pit range / ATR-20)."""
+
+    def test_matches_above_threshold(self):
+        f = PitRangeFilter(filter_type="TEST", description="test", min_ratio=0.10)
+        assert f.matches_row({"pit_range_atr": 0.25}, "CME_REOPEN") is True
+
+    def test_rejects_below_threshold(self):
+        f = PitRangeFilter(filter_type="TEST", description="test", min_ratio=0.10)
+        assert f.matches_row({"pit_range_atr": 0.05}, "CME_REOPEN") is False
+
+    def test_at_boundary_matches(self):
+        """Exactly at min_ratio should match (>=)."""
+        f = PitRangeFilter(filter_type="TEST", description="test", min_ratio=0.10)
+        assert f.matches_row({"pit_range_atr": 0.10}, "CME_REOPEN") is True
+
+    def test_fail_closed_missing(self):
+        """Missing pit_range_atr key -> ineligible (fail-closed)."""
+        f = PitRangeFilter(filter_type="TEST", description="test", min_ratio=0.10)
+        assert f.matches_row({}, "CME_REOPEN") is False
+
+    def test_fail_closed_none(self):
+        """None pit_range_atr -> ineligible (fail-closed)."""
+        f = PitRangeFilter(filter_type="TEST", description="test", min_ratio=0.10)
+        assert f.matches_row({"pit_range_atr": None}, "CME_REOPEN") is False
+
+    def test_matches_df_above(self):
+        import pandas as pd
+
+        f = PitRangeFilter(filter_type="TEST", description="test", min_ratio=0.10)
+        df = pd.DataFrame({"pit_range_atr": [0.25, 0.05, None, 0.10]})
+        result = f.matches_df(df, "CME_REOPEN")
+        assert list(result) == [True, False, False, True]
+
+    def test_matches_df_missing_column(self):
+        import pandas as pd
+
+        f = PitRangeFilter(filter_type="TEST", description="test", min_ratio=0.10)
+        df = pd.DataFrame({"other_col": [1, 2, 3]})
+        result = f.matches_df(df, "CME_REOPEN")
+        assert not result.any()
+
+    def test_pit_min_registered(self):
+        """PIT_MIN instance is in ALL_FILTERS with correct parameters."""
+        assert "PIT_MIN" in ALL_FILTERS
+        f = ALL_FILTERS["PIT_MIN"]
+        assert isinstance(f, PitRangeFilter)
+        assert f.min_ratio == 0.10
+        assert f.filter_type == "PIT_MIN"
+
+    def test_routed_to_cme_reopen_only(self):
+        """PIT_MIN must be in CME_REOPEN grid and absent from all other sessions."""
+        grid = get_filters_for_grid("MNQ", "CME_REOPEN")
+        assert "PIT_MIN" in grid, "PIT_MIN missing from CME_REOPEN grid"
+
+        for sess in [
+            "CME_PRECLOSE", "COMEX_SETTLE", "NYSE_OPEN", "NYSE_CLOSE",
+            "SINGAPORE_OPEN", "TOKYO_OPEN", "EUROPE_FLOW", "LONDON_METALS",
+        ]:
+            grid = get_filters_for_grid("MNQ", sess)
+            assert "PIT_MIN" not in grid, f"PIT_MIN should NOT be in {sess} grid"
+
+    def test_frozen(self):
+        f = PitRangeFilter(filter_type="TEST", description="test", min_ratio=0.10)
+        with pytest.raises(AttributeError):
+            f.min_ratio = 0.20
+
+    def test_to_json_roundtrip(self):
+        f = PitRangeFilter(filter_type="PIT_MIN", description="test", min_ratio=0.10)
+        data = json.loads(f.to_json())
+        assert data["filter_type"] == "PIT_MIN"
+        assert data["min_ratio"] == 0.10
