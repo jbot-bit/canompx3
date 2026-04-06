@@ -107,10 +107,14 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
                 missing.append("atr_20")
             if vel is None:
                 missing.append("atr_vel_regime")
-            # Check if portfolio has ATR-dependent filters — None ATR = all trades rejected
-            atr_filters = ("COST_LT", "ORB_VOL")
-            needs_atr = portfolio is not None and atr is None and any(
-                s.filter_type.startswith(atr_filters) for s in portfolio.strategies
+            # Check if portfolio has filters that depend on atr_20 or atr_vel_regime
+            # atr_20: PDR_* (PrevDayRangeNorm), GAP_* (GapNorm), X_*_ATR* (CrossAssetATR), ATR70/80 (OwnATRPct)
+            # atr_vel_regime: ATR_VEL (ATRVelocity)
+            atr_prefixes = ("PDR_", "GAP_", "X_MES_ATR", "X_MGC_ATR", "ATR70", "ATR80")
+            vel_prefixes = ("ATR_VEL",)
+            needs_atr = portfolio is not None and (
+                (atr is None and any(s.filter_type.startswith(atr_prefixes) for s in portfolio.strategies))
+                or (vel is None and any(s.filter_type.startswith(vel_prefixes) for s in portfolio.strategies))
             )
             if needs_atr:
                 print(
