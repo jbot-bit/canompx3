@@ -60,11 +60,6 @@ def load_corpus() -> dict[str, str]:
     return corpus
 
 
-def get_corpus_file_paths() -> list[str]:
-    """Return list of relative paths referenced by corpus (for drift check)."""
-    return [info["path"] for info in CORPUS_FILES.values()]
-
-
 def get_schema_definitions(db_path: str) -> str:
     """Extract table/column info from DuckDB information_schema.
 
