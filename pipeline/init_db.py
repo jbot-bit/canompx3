@@ -315,6 +315,13 @@ CREATE TABLE IF NOT EXISTS daily_features (
     -- NOTE: look-ahead relative to intraday entry — research only, not a live filter
     day_type            TEXT,
 
+    -- Exchange pit range / ATR (Apr 2026 — exchange_range_t2t8.py)
+    -- (prev_day pit_session_high - pit_session_low) / atr_20
+    -- From CME exchange statistics (Databento). Zero look-ahead: pit closes 21:00 UTC,
+    -- CME_REOPEN starts 23:00 UTC. Used by PitRangeFilter at CME_REOPEN.
+    -- @research-source scripts/research/exchange_range_t2t8.py
+    pit_range_atr     DOUBLE,
+
     -- GARCH(1,1) forward volatility forecast (Feb 2026)
     -- 1-step-ahead conditional vol from trailing 252 daily close-to-close log returns.
     -- garch_atr_ratio = garch_forecast_vol / atr_20 (regime comparison signal).
@@ -331,6 +338,24 @@ CREATE TABLE IF NOT EXISTS daily_features (
 
 
 DAILY_FEATURES_SCHEMA = _build_daily_features_ddl()
+
+
+EXCHANGE_STATISTICS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS exchange_statistics (
+    cal_date             DATE    NOT NULL,
+    symbol               TEXT    NOT NULL,
+    session_high         DOUBLE,
+    session_low          DOUBLE,
+    settlement           DOUBLE,
+    opening_price        DOUBLE,
+    indicative_open      DOUBLE,
+    cleared_volume       BIGINT,
+    open_interest        BIGINT,
+    total_cleared_volume BIGINT,
+    front_contract       TEXT,
+    PRIMARY KEY (symbol, cal_date)
+);
+"""
 
 
 def init_db(db_path: Path, force: bool = False):
@@ -505,6 +530,16 @@ def init_db(db_path: Path, force: bool = False):
                     logger.info(f"  Migration: added {col} column to daily_features")
                 except duckdb.CatalogException:
                     pass  # column already exists
+
+        con.execute(EXCHANGE_STATISTICS_SCHEMA)
+        logger.info("  exchange_statistics: created (or already exists)")
+
+        # Migration: add pit_range_atr column (Apr 2026 — F5 exchange pit range)
+        try:
+            con.execute("ALTER TABLE daily_features ADD COLUMN pit_range_atr DOUBLE")
+            logger.info("  Migration: added pit_range_atr column to daily_features")
+        except duckdb.CatalogException:
+            pass  # column already exists
 
         con.execute(PROSPECTIVE_SIGNALS_SCHEMA)
         logger.info("  prospective_signals: created (or already exists)")

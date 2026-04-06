@@ -123,13 +123,14 @@ def load_data(entry_model: str = PRIMARY_ENTRY, rr_target: float = PRIMARY_RR,
          AND d.symbol = o.symbol
          AND d.orb_minutes = o.orb_minutes
         WHERE d.orb_minutes = 5
+          AND d.symbol = ANY($5)
           AND o.orb_label = $1
           AND o.entry_model = $2
           AND o.confirm_bars = $3
           AND o.rr_target = $4
           AND o.outcome IN ('win', 'loss')
           AND d.atr_20 IS NOT NULL AND d.atr_20 > 0
-    """, [session, entry_model, CONFIRM_BARS, rr_target]).fetchdf()
+    """, [session, entry_model, CONFIRM_BARS, rr_target, INSTRUMENTS]).fetchdf()
     con.close()
 
     df["trading_day"] = pd.to_datetime(df["trading_day"]).dt.date
@@ -323,33 +324,63 @@ def test_t3_walkforward(df: pd.DataFrame, inst: str) -> dict:
 
 
 # --- T4: Sensitivity -------------------------------------------------------
+def _compute_actual_atr(period: int) -> pd.DataFrame:
+    """Compute ATR_N from daily OHLC (SMA of true range, matching pipeline convention)."""
+    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+    daily = con.execute("""
+        SELECT trading_day, symbol, daily_high, daily_low, daily_close
+        FROM daily_features
+        WHERE orb_minutes = 5 AND symbol = ANY($1)
+          AND daily_high IS NOT NULL AND daily_low IS NOT NULL
+        ORDER BY symbol, trading_day
+    """, [INSTRUMENTS]).fetchdf()
+    con.close()
+
+    daily["prev_close"] = daily.groupby("symbol")["daily_close"].shift(1)
+    daily["hl"] = daily["daily_high"] - daily["daily_low"]
+    daily["hc"] = (daily["daily_high"] - daily["prev_close"]).abs()
+    daily["lc"] = (daily["daily_low"] - daily["prev_close"]).abs()
+    daily["tr"] = daily[["hl", "hc", "lc"]].max(axis=1)
+    daily.loc[daily["prev_close"].isna(), "tr"] = daily["hl"]
+
+    # SMA of prior N true ranges (no look-ahead — shift(1) then rolling)
+    col = f"recomp_atr_{period}"
+    daily[col] = (
+        daily.groupby("symbol")["tr"]
+        .transform(lambda s: s.shift(1).rolling(period, min_periods=1).mean())
+    )
+    result = daily[["trading_day", "symbol", col]].dropna(subset=[col]).copy()
+    result["trading_day"] = pd.to_datetime(result["trading_day"]).dt.date
+    return result
+
+
 def test_t4_sensitivity(df: pd.DataFrame, inst: str) -> dict:
-    """Feature scaling +/-20%, ATR period perturbation, bin robustness."""
+    """ATR period recomputation (actual, not scaled), bin robustness."""
     sub = df[df["symbol"] == inst].copy()
 
-    # a) Feature scaling +/-20%
-    scale_results = []
-    for scale in [0.8, 0.9, 1.0, 1.1, 1.2]:
-        test_df = sub.copy()
-        test_df[FEATURE_COL] = test_df[FEATURE_COL] * scale
-        spread_info = wr_spread_quintile(test_df)
-        if spread_info:
-            scale_results.append({"scale": scale, "wr_spread": spread_info["wr_spread"]})
-    scale_signs = [r["wr_spread"] > 0 for r in scale_results]
-    scale_stable = (all(scale_signs) or not any(scale_signs)) if scale_signs else False
-
-    # b) ATR period perturbation (approximate: ATR_15 ~ ATR_20/0.95, ATR_25 ~ ATR_20/1.05)
+    # a) Actual ATR period perturbation — recompute F5 with ATR_15, ATR_20, ATR_25
     atr_results = []
-    for atr_scale, label in [(1 / 0.95, "ATR_15_approx"), (1.0, "ATR_20"), (1 / 1.05, "ATR_25_approx")]:
-        test_df = sub.copy()
-        test_df[FEATURE_COL] = test_df[FEATURE_COL] * atr_scale
+    for period in [15, 20, 25]:
+        atr_df = _compute_actual_atr(period)
+        atr_col = f"recomp_atr_{period}"
+        test_df = sub.merge(
+            atr_df[atr_df["symbol"] == inst][["trading_day", atr_col]],
+            on="trading_day", how="inner",
+        )
+        test_df[FEATURE_COL] = (
+            (test_df["prev_session_high"] - test_df["prev_session_low"]) / test_df[atr_col]
+        )
+        test_df = test_df.dropna(subset=[FEATURE_COL])
         spread_info = wr_spread_quintile(test_df)
         if spread_info:
-            atr_results.append({"atr": label, "wr_spread": spread_info["wr_spread"]})
+            atr_results.append({
+                "atr": f"ATR_{period}", "wr_spread": spread_info["wr_spread"],
+                "n": len(test_df),
+            })
     atr_signs = [r["wr_spread"] > 0 for r in atr_results]
     atr_stable = (all(atr_signs) or not any(atr_signs)) if atr_signs else False
 
-    # c) Bin robustness
+    # b) Bin robustness
     bin_results = []
     for n_bins, label in [(2, "median"), (3, "tercile"), (4, "quartile"), (5, "quintile"), (10, "decile")]:
         valid = sub.dropna(subset=[FEATURE_COL])
@@ -372,10 +403,9 @@ def test_t4_sensitivity(df: pd.DataFrame, inst: str) -> dict:
     bin_signs = [r["spread"] > 0 for r in bin_results]
     bin_stable = (all(bin_signs) or not any(bin_signs)) if bin_signs else False
 
-    # Kill only if feature +/-20% flips sign
-    verdict = "PASS" if scale_stable else "FAIL"
+    # Kill if ATR period change flips sign (real sensitivity test)
+    verdict = "PASS" if atr_stable else "FAIL"
     return {
-        "scale_results": scale_results, "scale_stable": scale_stable,
         "atr_results": atr_results, "atr_stable": atr_stable,
         "bin_results": bin_results, "bin_stable": bin_stable,
         "verdict": verdict,
@@ -697,14 +727,10 @@ def main():
         # T4
         t4 = test_t4_sensitivity(df, inst)
         tee(f"\n  T4 SENSITIVITY: {t4['verdict']}", f)
-        if "scale_results" in t4:
-            tee(f"     Feature +/-20% (stable: {t4['scale_stable']}):", f)
-            for r in t4["scale_results"]:
-                tee(f"       scale={r['scale']:.1f}: spread={r['wr_spread']:+.1%}", f)
         if "atr_results" in t4:
-            tee(f"     ATR period (stable: {t4['atr_stable']}):", f)
+            tee(f"     ATR period (actual recomputation, stable: {t4['atr_stable']}):", f)
             for r in t4["atr_results"]:
-                tee(f"       {r['atr']}: spread={r['wr_spread']:+.1%}", f)
+                tee(f"       {r['atr']}: spread={r['wr_spread']:+.1%} (N={r['n']})", f)
         if "bin_results" in t4:
             tee(f"     Bin robustness (stable: {t4['bin_stable']}):", f)
             for r in t4["bin_results"]:

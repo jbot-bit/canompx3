@@ -840,6 +840,36 @@ class BreakBarContinuesFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class PitRangeFilter(StrategyFilter):
+    """Filter by exchange pit range normalized by ATR-20.
+
+    Gates on pit_range_atr >= min_ratio. Higher ratio means the CME pit session
+    was more active relative to the recent volatility regime.
+
+    Zero look-ahead: pit closes 21:00 UTC, CME_REOPEN starts 23:00 UTC.
+    Uses prior-day pit range (shift-1 in exchange_statistics).
+    Fail-closed: missing pit_range_atr = ineligible day.
+
+    @research-source scripts/research/exchange_range_t2t8.py
+    @entry-models E1, E2
+    @revalidated-for E1 (Apr 2026), E2 concordance +3-4pp
+    """
+
+    min_ratio: float
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        val = row.get("pit_range_atr")
+        if val is None:
+            return False  # fail-closed
+        return val >= self.min_ratio
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        if "pit_range_atr" not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df["pit_range_atr"].notna() & (df["pit_range_atr"] >= self.min_ratio)
+
+
+@dataclass(frozen=True)
 class CompositeFilter(StrategyFilter):
     """Chain two filters: base AND overlay must both pass."""
 
@@ -1280,6 +1310,19 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
         description="abs(gap)/atr >= 0.015 (~Q75, passes ~25%)",
         min_ratio=0.015,
     ),
+    # Pit range anti-filter (Apr 2026 — exchange_range_t2t8.py).
+    # Skip dead-pit days: pit_range/atr < 0.10 = bottom 20% = WR 38-39%, deeply negative ExpR.
+    # VALIDATED: 3/3 instruments, BH FDR at K=320, 12-15/16 years positive.
+    # Zero look-ahead: pit closes 21:00 UTC, CME_REOPEN starts 23:00 UTC.
+    # Routed to CME_REOPEN only via get_filters_for_grid().
+    # @research-source scripts/research/exchange_range_t2t8.py
+    # @entry-models E1, E2
+    # @revalidated-for E1 (Apr 2026), E2 concordance +3-4pp
+    "PIT_MIN": PitRangeFilter(
+        filter_type="PIT_MIN",
+        description="pit_range/atr >= 0.10 (skip bottom ~20% dead-pit days)",
+        min_ratio=0.10,
+    ),
 }
 
 # Calendar skip overlays (NOT in discovery grid — applied at portfolio/paper_trader level)
@@ -1447,6 +1490,13 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
     if instrument == "MGC" and session == "CME_REOPEN":
         for gap_key in ("GAP_R005", "GAP_R015"):
             filters[gap_key] = ALL_FILTERS[gap_key]
+
+    # Pit range anti-filter: skip dead-pit days at CME_REOPEN (Apr 2026).
+    # VALIDATED: 3/3 instruments pass T1-T8, BH FDR at K=320, +17% WR spread.
+    # Zero look-ahead: pit closes 21:00 UTC, CME_REOPEN starts 23:00 UTC.
+    # @research-source scripts/research/exchange_range_t2t8.py
+    if session == "CME_REOPEN":
+        filters["PIT_MIN"] = ALL_FILTERS["PIT_MIN"]
 
     # REMOVED (Feb 2026): NO_DBL_BREAK / NODBL composites for SINGAPORE_OPEN.
     # double_break column is LOOK-AHEAD — computed over full session AFTER
