@@ -243,6 +243,29 @@
   .acct-status-tradeable { background: var(--green-soft); color: var(--green); }
   .acct-status-restricted { background: var(--yellow-soft); color: var(--yellow); }
 
+  /* ── SIGNAL STRIP ───────────────────── */
+  .signal-strip {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    margin-bottom: 10px; overflow: hidden;
+  }
+  .signal-strip-hd { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .signal-strip-title { font-size: 13px; font-weight: 700; }
+  .signal-strip-hint { font-size: 11px; color: var(--dim); margin-left: auto; }
+  .signal-table { width: 100%; border-collapse: collapse; }
+  .signal-table th { font-size: 9px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .signal-table td { padding: 8px 10px; border-bottom: 1px solid rgba(30,42,56,0.3); font-size: 12px; vertical-align: middle; }
+  .signal-table tr:hover td { background: rgba(255,255,255,0.015); }
+  .signal-table .r { text-align: right; font-family: var(--mono); }
+  .sig-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .sig-dot.waiting { background: var(--dim); }
+  .sig-dot.armed { background: var(--cyan); }
+  .sig-dot.signal { background: var(--green); animation: pulse 1s infinite; }
+  .sig-dot.in-trade { background: var(--blue); }
+  .sig-dot.flat { background: var(--dim); opacity: 0.5; }
+  .sig-row-signal { background: rgba(0,214,143,0.05); }
+  .sig-row-armed { background: rgba(0,212,255,0.03); }
+  .sig-no-data { padding: 16px; text-align: center; color: var(--dim); font-size: 12px; }
+
   /* ── TAB BAR ────────────────────────── */
   .tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
   .tab-btn {
@@ -419,6 +442,18 @@
   <div id="session-timeline" class="timeline">
     <span class="tl-label">Sessions</span>
     <span class="muted" style="font-size:11px">Loading schedule...</span>
+  </div>
+
+  <!-- SIGNAL STRIP -->
+  <div id="signal-strip" class="signal-strip">
+    <div class="signal-strip-hd">
+      <span class="signal-strip-title">Signals</span>
+      <span id="signal-strip-badge" class="sec-badge"></span>
+      <span class="signal-strip-hint">Start a Signal session to see live ORB status</span>
+    </div>
+    <div id="signal-strip-body">
+      <div class="sig-no-data">No session running — click Signal on your profile to start monitoring</div>
+    </div>
   </div>
 
   <!-- LIVE SESSION (shows when running) -->
@@ -853,7 +888,9 @@ function updateStatus(state) {
   else { hbEl.textContent = `${hbAge.toFixed(0)}s STALE`; hbEl.className = "live-m-val negative pulse"; }
 
   setText("bars-count", String(state.bars_received || 0));
-  renderLiveLanes(Array.isArray(state.lane_cards) ? state.lane_cards : []);
+  const laneCards = Array.isArray(state.lane_cards) ? state.lane_cards : [];
+  renderLiveLanes(laneCards);
+  renderSignalStrip(laneCards, mode);
   setText("last-update", fmtClock(new Date(), true));
 }
 
@@ -898,6 +935,83 @@ async function fetchDataStatus() {
     if (data.any_stale) { btn.className = "topbar-btn danger pulse"; if (!autoRefreshTriggered && !refreshPolling) { autoRefreshTriggered = true; btn.click(); } }
     else { btn.className = "topbar-btn warn"; }
   } catch (_) {}
+}
+
+/* ── Signal Strip ──────────────────── */
+function renderSignalStrip(lanes, mode) {
+  const body = $("signal-strip-body");
+  const hint = document.querySelector(".signal-strip-hint");
+  const badge = $("signal-strip-badge");
+
+  if (!lanes.length || mode === "STOPPED") {
+    body.innerHTML = '<div class="sig-no-data">No session running — click Signal on your profile to start monitoring</div>';
+    if (hint) hint.style.display = "";
+    badge.textContent = "";
+    return;
+  }
+
+  if (hint) hint.style.display = "none";
+  const sorted = [...lanes].sort((a, b) => timeSortKey(a.session_time_brisbane) - timeSortKey(b.session_time_brisbane));
+
+  let signalCount = 0;
+  let html = '<table class="signal-table"><thead><tr><th>Time</th><th>Session</th><th>Instr</th><th>Status</th><th>Dir</th><th class="r">Entry</th><th class="r">Stop</th><th class="r">Target</th><th>Setup</th></tr></thead><tbody>';
+
+  for (const l of sorted) {
+    const st = l.status || "WAITING";
+    const isSignal = st === "IN_TRADE" || (st === "ARMED" && l.direction);
+    const isArmed = st === "ARMED" && !l.direction;
+    if (isSignal) signalCount++;
+
+    // Status dot class
+    let dotClass = "waiting";
+    if (st === "ARMED") dotClass = l.direction ? "signal" : "armed";
+    else if (st === "IN_TRADE") dotClass = "in-trade";
+    else if (st === "FLAT") dotClass = "flat";
+
+    // Status label
+    let statusLabel = st;
+    if (st === "WAITING") statusLabel = "WAIT";
+    if (st === "ARMED" && l.direction) statusLabel = "SIGNAL";
+
+    const dir = l.direction ? String(l.direction).toUpperCase() : "—";
+    const dirClass = dir === "LONG" ? "positive" : dir === "SHORT" ? "negative" : "muted";
+
+    // Compute stop and target from entry + rr_target + direction
+    let stopPrice = "—", targetPrice = "—";
+    if (l.entry_price != null && l.rr_target != null) {
+      // Estimate stop distance from ORB (entry_price is the breakout level)
+      // For E2: stop = other side of ORB. We don't have orb_high/low here,
+      // but we can show entry ± estimated distance based on instrument tick size
+      stopPrice = fmtPrice(l.stop_price || l.entry_price); // will show entry if no stop
+      const rr = Number(l.rr_target);
+      if (l.direction === "long" && l.stop_price) {
+        const risk = l.entry_price - l.stop_price;
+        targetPrice = fmtPrice(l.entry_price + risk * rr);
+      } else if (l.direction === "short" && l.stop_price) {
+        const risk = l.stop_price - l.entry_price;
+        targetPrice = fmtPrice(l.entry_price - risk * rr);
+      }
+    }
+
+    const setup = `${l.entry_model || "?"} | RR${l.rr_target || "?"} | ${l.filter_type || "?"}`;
+    const rowClass = isSignal ? "sig-row-signal" : isArmed ? "sig-row-armed" : "";
+
+    html += `<tr class="${rowClass}">
+      <td class="m">${l.session_time_brisbane || "?"}</td>
+      <td>${l.session_name || "?"}</td>
+      <td><strong>${l.instrument || "?"}</strong></td>
+      <td><span class="sig-dot ${dotClass}"></span>${statusLabel}</td>
+      <td class="${dirClass}">${dir}</td>
+      <td class="r">${l.entry_price != null ? fmtPrice(l.entry_price) : "—"}</td>
+      <td class="r">${stopPrice}</td>
+      <td class="r">${targetPrice}</td>
+      <td class="muted" style="font-size:11px">${setup}</td>
+    </tr>`;
+  }
+
+  html += '</tbody></table>';
+  body.innerHTML = html;
+  badge.textContent = signalCount > 0 ? `${signalCount} active` : `${lanes.length} lanes`;
 }
 
 /* ── Equity: fetch + render ──────────── */
