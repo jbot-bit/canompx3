@@ -1,8 +1,8 @@
 {
-  "total_iterations": 145,
-  "last_updated": "2026-04-05",
+  "total_iterations": 153,
+  "last_updated": "2026-04-06",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 152,
+  "last_high_finding_iter": 153,
   "findings_by_type": {
     "canonical_violation": {
       "found": 51,
@@ -11,8 +11,8 @@
       "fix_rate": 0.75
     },
     "silent_failure": {
-      "found": 30,
-      "fixed": 28,
+      "found": 31,
+      "fixed": 29,
       "deferred": 1,
       "fix_rate": 0.93
     },

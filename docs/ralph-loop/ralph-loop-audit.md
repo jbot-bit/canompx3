@@ -3,40 +3,38 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 151
+## Last iteration: 153
 
-## RALPH AUDIT — Iteration 151
-## Date: 2026-04-05
-## Infrastructure Gates: behavioral audit PASS, ruff PASS (1 pre-existing UP017 in scripts/databento_daily.py, not in scope), drift 77/77 PASS, 46/46 test_account_hwm_tracker.py PASS
+## RALPH AUDIT — Iteration 153
+## Date: 2026-04-06
+## Infrastructure Gates: drift 76/76 PASS (1 pre-existing check 78 advisory), 3/3 test_bot_dashboard.py PASS
 
 ---
 
-## Iteration 151 — trading_app/account_hwm_tracker.py
+## Iteration 153 — trading_app/live/bot_state.py + bot_dashboard.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Fail-open | `_consecutive_poll_failures` not persisted — process restart between failures resets counter, allowing indefinite equity poll failures without halting | MEDIUM | FIXED 8e9924d |
-| All others | No look-ahead bias, no cost illusion, no hardcoded canonical lists, no silent failure (corrupt state backed up + logged, not swallowed). Period reset auto-clears only matching halt reasons. check_halt() `or 0` fallback on None start_equity produces misleading message text but halt remains correctly enforced. | — | CLEAN |
+| Silent data loss | lanes dict keyed by orb_label silently overwrites strategies sharing a session — second strategy invisible to dashboard | MEDIUM | FIXED 1c6c40e |
+| All others | No look-ahead, no cost illusion, no hardcoded canonical lists. bot_state.py and bot_dashboard.py otherwise clean. | — | CLEAN |
 
 ### Audit Notes
 
-- **Poll failure counter fail-open (FIXED):** Lines 313-322 in `update_equity(None)` only called `_save_state()` when `_consecutive_poll_failures >= _MAX_CONSECUTIVE_POLL_FAILURES`. Sub-threshold failures (1, 2) were not written. `_consecutive_poll_failures` was also absent from the `_save_state()` data dict and not read back in `_load_state()`, so a process restart reset the counter to 0. Fix: (1) `_save_state()` moved outside the threshold `if` block — called unconditionally on every poll failure. (2) `"consecutive_poll_failures"` added to the JSON save dict. (3) `_load_state()` now restores `_consecutive_poll_failures` from the saved value. Production diff: 3 lines. Test added: `test_poll_failure_counter_persisted_before_threshold`.
-- **check_halt() `or 0` fallback:** In DAILY_LOSS and WEEKLY_LOSS branches, `(self._daily_start_equity or 0)` could produce a negative loss message if start_equity is None while halt is set. The halt itself (`self._halt = True`) is correctly enforced; only the message text is potentially misleading. This path is unlikely in practice (start_equity is set by `_check_period_resets` before halt checks). CLEAN / not actioned.
-- **Canonical check:** No hardcoded instruments, sessions, entry models, cost specs, or DB paths. Module is pure risk accounting. CLEAN.
-- **Fail-closed check:** `update_equity(None)` halts after 3 consecutive failures. `check_halt()` returns `(True, reason)` on any halt. `is_safe` property returns `not self.halt_triggered`. Period resets only clear halt if `halt_reason` matches the period type — cross-reason contamination impossible.
+- **Lanes dict key collision (FIXED):** `build_state_snapshot` in `bot_state.py:125` keyed the `lanes` dict by `s.orb_label`. When two strategies share an `orb_label` (e.g. NYSE_OPEN x2 in `topstep_50k_type_a`), the second silently overwrites the first. The dashboard's `strategy_runtime` dict is built by iterating `raw_lanes.values()` — only one entry per `orb_label` existed, so the second strategy was invisible to status lookup. Fix: key by `s.strategy_id` instead. Updated `bot_dashboard.py` to extract session name from `lane["session_name"]` instead of the dict key for `session_runtime` grouping.
+- **Canonical check:** No hardcoded instruments, sessions, entry models, cost specs, or DB paths. CLEAN.
 
 ---
 
-## Summary — Iteration 151
+## Summary — Iteration 153
 
-- 1 MEDIUM finding — FIXED ([judgment], 3-line production diff + 18 test lines)
-- Commit: 8e9924d
+- 1 MEDIUM finding — FIXED ([judgment], 2-file production diff)
+- Commit: 1c6c40e
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 218 files fully scanned (1 new file added this iteration).
+> Cumulative list — 220 files fully scanned (2 new files added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -96,10 +94,12 @@
 - trading_app/live/bot_dashboard.py — added iter 149
 - trading_app/live/position_tracker.py — added iter 150
 - trading_app/account_hwm_tracker.py — added iter 151
-- **Total: 218 files fully scanned**
+- trading_app/live/trade_journal.py — added iter 152
+- trading_app/live/bot_state.py — added iter 153
+- **Total: 220 files fully scanned**
 
 ## Next iteration targets
 - trading_app/live/rithmic/__init__.py — unscanned rithmic package init
-- trading_app/live/bot_state.py — imported by bot_dashboard; unscanned state management
-- trading_app/live/trade_journal.py — slippage_pts consumer; worth auditing now that entry slippage sign is corrected
 - trading_app/live/rithmic/data_feed.py — unscanned rithmic data feed (if exists)
+- trading_app/prop_portfolio.py — portfolio construction, worth re-audit after allocator changes
+- trading_app/config.py — canonical config, high-value audit target

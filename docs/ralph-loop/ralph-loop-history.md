@@ -1583,3 +1583,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 2 files (1 production, 1 test)
 - Verification: PASS (25/25 test_trade_journal.py, drift 77/77)
 - Commit: 28c7575
+
+---
+
+## Iteration 153 — 2026-04-06
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/bot_state.py:125, trading_app/live/bot_dashboard.py:197-201
+- Finding: lanes dict keyed by orb_label silently overwrites strategies sharing a session (e.g. NYSE_OPEN x2 in topstep_50k_type_a). Second strategy invisible to dashboard status lookup — silent data loss.
+- Action: Changed lanes key from s.orb_label to s.strategy_id in bot_state.py. Updated bot_dashboard.py to extract session_name from lane data (lane["session_name"]) instead of using the dict key for session_runtime grouping.
+- Blast radius: 2 production files, no API change
+- Verification: PASS (3/3 test_bot_dashboard.py, drift 76/76 OK + 1 pre-existing advisory)
+- Commit: 1c6c40e
