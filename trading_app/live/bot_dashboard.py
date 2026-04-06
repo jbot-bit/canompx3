@@ -491,15 +491,98 @@ async def api_accounts():
         return {"accounts": [], "error": str(e)}
 
 
+# ── Broker connection management ─────────────────────────────────────
+
+
+@app.get("/api/broker/list")
+async def api_broker_list():
+    from trading_app.live.broker_connections import BROKER_TYPES, connection_manager
+
+    return {
+        "connections": connection_manager.list_connections(),
+        "broker_types": {k: {"display": v["display"], "fields": v["fields"]} for k, v in BROKER_TYPES.items()},
+    }
+
+
+@app.post("/api/broker/add")
+async def api_broker_add(request_body: dict | None = None):
+    import asyncio
+
+    from trading_app.live.broker_connections import connection_manager
+
+    if not request_body:
+        return JSONResponse(status_code=400, content={"error": "Request body required"})
+    broker_type = request_body.get("broker_type", "")
+    display_name = request_body.get("display_name", broker_type.title() if broker_type else "")
+    credentials = request_body.get("credentials", {})
+    if not broker_type or not credentials:
+        return JSONResponse(status_code=400, content={"error": "broker_type and credentials required"})
+
+    test_result = await asyncio.to_thread(connection_manager.test_connection, broker_type, credentials)
+    if not test_result["success"]:
+        return JSONResponse(status_code=400, content={"error": f"Test failed: {test_result['message']}"})
+
+    try:
+        conn = connection_manager.add_connection(broker_type, display_name, credentials)
+        await asyncio.to_thread(connection_manager.connect, conn["id"])
+        _equity_cache["data"] = None
+        return {"success": True, "connection": conn}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+@app.post("/api/broker/remove")
+async def api_broker_remove(request_body: dict | None = None):
+    from trading_app.live.broker_connections import connection_manager
+
+    if not request_body or not request_body.get("id"):
+        return JSONResponse(status_code=400, content={"error": "id required"})
+    if not connection_manager.remove_connection(request_body["id"]):
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+    _equity_cache["data"] = None
+    return {"success": True}
+
+
+@app.post("/api/broker/toggle")
+async def api_broker_toggle(request_body: dict | None = None):
+    import asyncio
+
+    from trading_app.live.broker_connections import connection_manager
+
+    if not request_body or not request_body.get("id"):
+        return JSONResponse(status_code=400, content={"error": "id required"})
+    result = connection_manager.toggle_connection(request_body["id"])
+    if result is None:
+        return JSONResponse(status_code=404, content={"error": "Not found"})
+    if result["enabled"]:
+        try:
+            await asyncio.to_thread(connection_manager.connect, result["id"])
+        except Exception as e:
+            return {"success": True, "enabled": True, "connect_error": str(e)}
+    _equity_cache["data"] = None
+    return {"success": True, "enabled": result["enabled"]}
+
+
+@app.post("/api/broker/test")
+async def api_broker_test(request_body: dict | None = None):
+    import asyncio
+
+    from trading_app.live.broker_connections import connection_manager
+
+    if not request_body:
+        return JSONResponse(status_code=400, content={"error": "Request body required"})
+    broker_type = request_body.get("broker_type", "")
+    credentials = request_body.get("credentials", {})
+    if not broker_type or not credentials:
+        return JSONResponse(status_code=400, content={"error": "broker_type and credentials required"})
+    return await asyncio.to_thread(connection_manager.test_connection, broker_type, credentials)
+
+
 # ── Live equity ──────────────────────────────────────────────────────
 _equity_cache: dict = {"data": None, "ts": 0.0}
 _equity_lock = threading.Lock()
 _EQUITY_TTL = 30  # seconds — extended to 120 when a live session is detected
 _EQUITY_TTL_LIVE = 120
-
-# Module-level auth singletons (survive between requests, token cache works)
-_projectx_auth: object | None = None
-_projectx_auth_lock = threading.Lock()
 
 _HWM_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "account_hwm.json"
 
@@ -536,74 +619,65 @@ def _classify_account(can_trade: bool, is_visible: bool) -> str:
     return "archived"  # blown or hidden
 
 
-def _fetch_projectx_accounts() -> dict:
-    """Fetch all ProjectX accounts in a single API call. Thread-safe singleton auth.
+def _fetch_accounts_for_connection(conn_id: str, broker_type: str, auth: object) -> dict:
+    """Fetch accounts for a single broker connection using its auth singleton.
 
-    Returns ONE Account/search call — balance, canTrade, isVisible all included.
-    No per-account query_equity loop (that was the audit-identified bug).
+    Single API call per broker — balance included in response (no per-account loop).
+    HWM tracking for correct trailing DD.
     """
-    global _projectx_auth
-
-    from trading_app.live.projectx.auth import BASE_URL, ProjectXAuth
-
-    with _projectx_auth_lock:
-        if _projectx_auth is None:
-            _projectx_auth = ProjectXAuth()
-
     import requests as _requests
 
-    auth = _projectx_auth
-    resp = _requests.post(
-        f"{BASE_URL}/api/Account/search",
-        json={"onlyActiveAccounts": False},
-        headers=auth.headers(),  # type: ignore[union-attr]
-        timeout=15,
-    )
-    resp.raise_for_status()
-    data = resp.json()
+    if broker_type == "projectx":
+        from trading_app.live.projectx.auth import BASE_URL
 
-    # Validate application-level success (HTTP 200 is not enough — pitfall #10)
-    if isinstance(data, dict) and data.get("success") is False:
-        raise RuntimeError(f"ProjectX Account/search failed: {data.get('errorMessage', data)}")
+        resp = _requests.post(
+            f"{BASE_URL}/api/Account/search",
+            json={"onlyActiveAccounts": False},
+            headers=auth.headers(),  # type: ignore[union-attr]
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
 
-    raw_accounts = data if isinstance(data, list) else data.get("accounts") or []
+        if isinstance(data, dict) and data.get("success") is False:
+            raise RuntimeError(f"ProjectX Account/search failed: {data.get('errorMessage', data)}")
 
-    # Load HWM for DD tracking
-    hwm = _load_hwm()
-    accounts = []
-    for acct in raw_accounts:
-        acct_id = acct.get("id") or acct.get("accountId")
-        if acct_id is None:
-            continue
-        balance = acct.get("balance")
-        can_trade = acct.get("canTrade", False)
-        is_visible = acct.get("isVisible", False)
-        name = acct.get("name", f"account_{acct_id}")
+        raw_accounts = data if isinstance(data, list) else data.get("accounts") or []
+        hwm = _load_hwm()
+        accounts = []
+        for acct in raw_accounts:
+            acct_id = acct.get("id") or acct.get("accountId")
+            if acct_id is None:
+                continue
+            balance = acct.get("balance")
+            can_trade = acct.get("canTrade", False)
+            is_visible = acct.get("isVisible", False)
+            name = acct.get("name", f"account_{acct_id}")
 
-        # Update HWM if balance exceeds stored value
-        hwm_key = str(acct_id)
-        stored_hwm = hwm.get(hwm_key, 0.0)
-        if balance is not None and balance > stored_hwm:
-            hwm[hwm_key] = balance
-            stored_hwm = balance
+            hwm_key = str(acct_id)
+            stored_hwm = hwm.get(hwm_key, 0.0)
+            if balance is not None and balance > stored_hwm:
+                hwm[hwm_key] = balance
+                stored_hwm = balance
 
-        accounts.append({
-            "id": int(acct_id),
-            "name": name,
-            "balance": balance,
-            "hwm": stored_hwm if stored_hwm > 0 else balance,
-            "can_trade": can_trade,
-            "is_visible": is_visible,
-            "status": _classify_account(can_trade, is_visible),
-            "broker": "projectx",
-            "broker_display": "TopStepX",
-            "balance_type": "realized",  # excludes unrealized P&L from open positions
-        })
+            accounts.append({
+                "id": int(acct_id),
+                "name": name,
+                "balance": balance,
+                "hwm": stored_hwm if stored_hwm > 0 else balance,
+                "can_trade": can_trade,
+                "is_visible": is_visible,
+                "status": _classify_account(can_trade, is_visible),
+                "broker": broker_type,
+                "broker_display": "TopStepX",
+                "balance_type": "realized",
+                "connection_id": conn_id,
+            })
 
-    # Persist updated HWM
-    _save_hwm(hwm)
+        _save_hwm(hwm)
+        return {"accounts": accounts, "count": len([a for a in accounts if a["status"] == "tradeable"])}
 
-    return {"name": "projectx", "display": "TopStepX", "error": None, "accounts": accounts}
+    return {"accounts": [], "count": 0}
 
 
 @app.get("/api/equity")
@@ -620,6 +694,8 @@ async def api_equity():
     """
     import asyncio
     import time as _time
+
+    from trading_app.live.broker_connections import connection_manager
 
     now = _time.time()
 
@@ -640,29 +716,43 @@ async def api_equity():
 
     brokers = []
 
-    # ProjectX — check if creds exist
-    if os.environ.get("PROJECTX_API_KEY"):
+    for conn in connection_manager.get_enabled_connections():
+        conn_id = conn["id"]
+        broker_type = conn["broker_type"]
+        display_name = conn.get("display_name", broker_type)
+        auth = connection_manager.get_auth(conn_id)
+
+        if auth is None:
+            try:
+                await asyncio.to_thread(connection_manager.connect, conn_id)
+                auth = connection_manager.get_auth(conn_id)
+            except Exception as e:
+                brokers.append({"name": broker_type, "display": display_name, "connection_id": conn_id, "error": str(e), "accounts": []})
+                continue
+
+        if auth is None:
+            brokers.append({"name": broker_type, "display": display_name, "connection_id": conn_id, "error": "Auth not available", "accounts": []})
+            continue
+
         try:
-            projectx_result = await asyncio.to_thread(_fetch_projectx_accounts)
-            brokers.append(projectx_result)
+            fetch_result = await asyncio.to_thread(_fetch_accounts_for_connection, conn_id, broker_type, auth)
+            connection_manager.update_account_count(conn_id, fetch_result["count"])
+            brokers.append({"name": broker_type, "display": display_name, "connection_id": conn_id, "error": None, "accounts": fetch_result["accounts"]})
         except Exception as e:
-            log.warning("ProjectX equity fetch failed: %s", e)
-            brokers.append({"name": "projectx", "display": "TopStepX", "error": str(e), "accounts": []})
+            log.warning("Equity fetch failed for %s: %s", display_name, e)
+            brokers.append({"name": broker_type, "display": display_name, "connection_id": conn_id, "error": str(e), "accounts": []})
 
-    # Rithmic — Phase 2: will piggyback on running session auth
-    # (spinning up Rithmic WebSocket just for equity poll is too expensive)
-
-    result = {
+    eq_result = {
         "brokers": brokers,
         "fetched_at": datetime.now(UTC).isoformat(),
         "cached": False,
     }
 
     with _equity_lock:
-        _equity_cache["data"] = result
+        _equity_cache["data"] = eq_result
         _equity_cache["ts"] = _time.time()
 
-    return result
+    return eq_result
 
 
 @app.get("/api/sessions")
