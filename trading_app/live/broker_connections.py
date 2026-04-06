@@ -209,8 +209,13 @@ class BrokerConnectionManager:
             if conn.get("enabled", True):
                 try:
                     self.connect(conn["id"])
-                except Exception:
-                    pass
+                except Exception as e:
+                    log.warning(
+                        "connect_all_enabled: failed to connect '%s' (%s): %s",
+                        conn.get("display_name", conn["id"]),
+                        conn.get("broker_type", "?"),
+                        e,
+                    )
 
     def get_auth(self, conn_id: str):
         state = self._states.get(conn_id)
