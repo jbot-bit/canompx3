@@ -1,0 +1,215 @@
+tee: scripts/research/output/break_speed_1s_results.txt: No such file or directory
+======================================================================
+1s BREAK SPEED RESEARCH
+Does 1-second resolution improve break delay measurement?
+======================================================================
+DB: C:\Users\joshd\canompx3\gold.db
+1s data: C:\Users\joshd\canompx3\data\raw\databento\ohlcv-1s
+Instruments: ['MES', 'MGC', 'MNQ']
+ORB aperture: 5m
+
+======================================================================
+PHASE 1: LOADING BREAK EVENTS FROM DAILY_FEATURES
+======================================================================
+Loaded 126260 break events across 3 instruments
+  MES: 43019 events, 11 sessions
+  MGC: 35975 events, 9 sessions
+  MNQ: 47266 events, 12 sessions
+
+======================================================================
+PHASE 2: PROCESSING 1s FILES
+======================================================================
+
+  Processing MES: 35 files
+    [1/35] daily_MES_2026-03-31_to_2026-04-05.ohlcv-1s.dbn.zst... 22 breaks matched
+    [2/35] daily_MES_2026-04-02_to_2026-04-05.ohlcv-1s.dbn.zst... 11 breaks matched
+    [3/35] es_1s_bars_2010-06-06_to_2010-12-01.ohlcv-1s.dbn.zst... 1336 breaks matched
+    [4/35] es_1s_bars_2010-12-01_to_2011-06-01.ohlcv-1s.dbn.zst... 1355 breaks matched
+    [5/35] es_1s_bars_2011-06-01_to_2011-12-01.ohlcv-1s.dbn.zst... 1393 breaks matched
+    [6/35] es_1s_bars_2011-12-01_to_2012-06-01.ohlcv-1s.dbn.zst... 1357 breaks matched
+    [7/35] es_1s_bars_2012-06-01_to_2012-12-01.ohlcv-1s.dbn.zst... 1367 breaks matched
+    [8/35] es_1s_bars_2012-12-01_to_2013-06-01.ohlcv-1s.dbn.zst... 1314 breaks matched
+    [9/35] es_1s_bars_2013-06-01_to_2013-12-01.ohlcv-1s.dbn.zst... 1350 breaks matched
+    [10/35] es_1s_bars_2013-12-01_to_2014-06-01.ohlcv-1s.dbn.zst... 1315 breaks matched
+    [11/35] es_1s_bars_2014-06-01_to_2014-12-01.ohlcv-1s.dbn.zst... 1302 breaks matched
+    [12/35] es_1s_bars_2014-12-01_to_2015-06-01.ohlcv-1s.dbn.zst... 1342 breaks matched
+    [13/35] es_1s_bars_2015-06-01_to_2015-12-01.ohlcv-1s.dbn.zst... 1379 breaks matched
+    [14/35] es_1s_bars_2015-12-01_to_2016-06-01.ohlcv-1s.dbn.zst... 1355 breaks matched
+    [15/35] es_1s_bars_2016-06-01_to_2016-12-01.ohlcv-1s.dbn.zst... 1372 breaks matched
+    [16/35] es_1s_bars_2016-12-01_to_2017-06-01.ohlcv-1s.dbn.zst... 1347 breaks matched
+    [17/35] es_1s_bars_2017-06-01_to_2017-12-01.ohlcv-1s.dbn.zst... 1371 breaks matched
+    [18/35] es_1s_bars_2017-12-01_to_2018-06-01.ohlcv-1s.dbn.zst... 1350 breaks matched
+    [19/35] es_1s_bars_2018-06-01_to_2018-12-01.ohlcv-1s.dbn.zst... 1386 breaks matched
+    [20/35] es_1s_bars_2018-12-01_to_2019-02-12.ohlcv-1s.dbn.zst... 514 breaks matched
+    [21/35] mes_1s_bars_2019-02-12_to_2019-08-01.ohlcv-1s.dbn.zst... 661 breaks matched
+    [22/35] mes_1s_bars_2019-08-01_to_2020-02-01.ohlcv-1s.dbn.zst... 1375 breaks matched
+    [23/35] mes_1s_bars_2020-02-01_to_2020-08-01.ohlcv-1s.dbn.zst... 1363 breaks matched
+    [24/35] mes_1s_bars_2020-08-01_to_2021-02-01.ohlcv-1s.dbn.zst... 1351 breaks matched
+    [25/35] mes_1s_bars_2021-02-01_to_2021-08-01.ohlcv-1s.dbn.zst... 1379 breaks matched
+    [26/35] mes_1s_bars_2021-08-01_to_2022-02-01.ohlcv-1s.dbn.zst... 1396 breaks matched
+    [27/35] mes_1s_bars_2022-02-01_to_2022-08-01.ohlcv-1s.dbn.zst... 1365 breaks matched
+    [28/35] mes_1s_bars_2022-08-01_to_2023-02-01.ohlcv-1s.dbn.zst... 1388 breaks matched
+    [29/35] mes_1s_bars_2023-02-01_to_2023-08-01.ohlcv-1s.dbn.zst... 1353 breaks matched
+    [30/35] mes_1s_bars_2023-08-01_to_2024-02-01.ohlcv-1s.dbn.zst... 1380 breaks matched
+    [31/35] mes_1s_bars_2024-02-01_to_2024-08-01.ohlcv-1s.dbn.zst... 1345 breaks matched
+    [32/35] mes_1s_bars_2024-08-01_to_2025-02-01.ohlcv-1s.dbn.zst... 1380 breaks matched
+    [33/35] mes_1s_bars_2025-02-01_to_2025-08-01.ohlcv-1s.dbn.zst... 1348 breaks matched
+    [34/35] mes_1s_bars_2025-08-01_to_2026-02-01.ohlcv-1s.dbn.zst... 1374 breaks matched
+    [35/35] mes_1s_bars_2026-02-01_to_2026-04-01.ohlcv-1s.dbn.zst... 424 breaks matched
+  MES: 42398 break delays computed from 1s data
+
+  Processing MGC: 17 files
+    [1/17] daily_MGC_2026-03-31_to_2026-04-05.ohlcv-1s.dbn.zst... 17 breaks matched
+    [2/17] daily_MGC_2026-04-02_to_2026-04-05.ohlcv-1s.dbn.zst... 8 breaks matched
+    [3/17] mgc_1s_bars_2019-01-01_to_2019-07-01.ohlcv-1s.dbn.zst... 1123 breaks matched
+    [4/17] mgc_1s_bars_2019-07-01_to_2020-01-01.ohlcv-1s.dbn.zst... 1156 breaks matched
+    [5/17] mgc_1s_bars_2020-01-01_to_2020-07-01.ohlcv-1s.dbn.zst... 1119 breaks matched
+    [6/17] mgc_1s_bars_2020-07-01_to_2021-01-01.ohlcv-1s.dbn.zst... 1159 breaks matched
+    [7/17] mgc_1s_bars_2021-01-01_to_2021-07-01.ohlcv-1s.dbn.zst... 1120 breaks matched
+    [8/17] mgc_1s_bars_2021-07-01_to_2022-01-01.ohlcv-1s.dbn.zst... 1152 breaks matched
+    [9/17] mgc_1s_bars_2022-01-01_to_2022-07-01.ohlcv-1s.dbn.zst... 1133 breaks matched
+    [10/17] mgc_1s_bars_2022-07-01_to_2023-01-01.ohlcv-1s.dbn.zst... 1157 breaks matched
+    [11/17] mgc_1s_bars_2023-01-01_to_2023-07-01.ohlcv-1s.dbn.zst... 1141 breaks matched
+    [12/17] mgc_1s_bars_2023-07-01_to_2024-01-01.ohlcv-1s.dbn.zst... 1145 breaks matched
+    [13/17] mgc_1s_bars_2024-01-01_to_2024-07-01.ohlcv-1s.dbn.zst... 1130 breaks matched
+    [14/17] mgc_1s_bars_2024-07-01_to_2025-01-01.ohlcv-1s.dbn.zst... 1162 breaks matched
+    [15/17] mgc_1s_bars_2025-01-01_to_2025-07-01.ohlcv-1s.dbn.zst... 1135 breaks matched
+    [16/17] mgc_1s_bars_2025-07-01_to_2026-01-01.ohlcv-1s.dbn.zst... 1162 breaks matched
+    [17/17] mgc_1s_bars_2026-01-01_to_2026-04-01.ohlcv-1s.dbn.zst... 533 breaks matched
+  MGC: 16535 break delays computed from 1s data
+
+  Processing MNQ: 35 files
+    [1/35] daily_MNQ_2026-03-31_to_2026-04-05.ohlcv-1s.dbn.zst... 17 breaks matched
+    [2/35] daily_MNQ_2026-04-02_to_2026-04-05.ohlcv-1s.dbn.zst... 6 breaks matched
+    [3/35] mnq_1s_bars_2024-02-04_to_2024-08-01.ohlcv-1s.dbn.zst... 1470 breaks matched
+    [4/35] mnq_1s_bars_2024-08-01_to_2025-02-01.ohlcv-1s.dbn.zst... 1505 breaks matched
+    [5/35] mnq_1s_bars_2025-02-01_to_2025-08-01.ohlcv-1s.dbn.zst... 1487 breaks matched
+    [6/35] mnq_1s_bars_2025-08-01_to_2026-02-01.ohlcv-1s.dbn.zst... 1495 breaks matched
+    [7/35] mnq_1s_bars_2026-02-01_to_2026-04-01.ohlcv-1s.dbn.zst... 477 breaks matched
+    [8/35] nq_1s_bars_2010-06-06_to_2010-12-01.ohlcv-1s.dbn.zst... 1478 breaks matched
+    [9/35] nq_1s_bars_2010-12-01_to_2011-06-01.ohlcv-1s.dbn.zst... 1503 breaks matched
+    [10/35] nq_1s_bars_2011-06-01_to_2011-12-01.ohlcv-1s.dbn.zst... 1524 breaks matched
+    [11/35] nq_1s_bars_2011-12-01_to_2012-06-01.ohlcv-1s.dbn.zst... 1497 breaks matched
+    [12/35] nq_1s_bars_2012-06-01_to_2012-12-01.ohlcv-1s.dbn.zst... 1501 breaks matched
+    [13/35] nq_1s_bars_2012-12-01_to_2013-06-01.ohlcv-1s.dbn.zst... 1442 breaks matched
+    [14/35] nq_1s_bars_2013-06-01_to_2013-12-01.ohlcv-1s.dbn.zst... 1481 breaks matched
+    [15/35] nq_1s_bars_2013-12-01_to_2014-06-01.ohlcv-1s.dbn.zst... 1443 breaks matched
+    [16/35] nq_1s_bars_2014-06-01_to_2014-12-01.ohlcv-1s.dbn.zst... 1432 breaks matched
+    [17/35] nq_1s_bars_2014-12-01_to_2015-06-01.ohlcv-1s.dbn.zst... 1460 breaks matched
+    [18/35] nq_1s_bars_2015-06-01_to_2015-12-01.ohlcv-1s.dbn.zst... 1502 breaks matched
+    [19/35] nq_1s_bars_2015-12-01_to_2016-06-01.ohlcv-1s.dbn.zst... 1480 breaks matched
+    [20/35] nq_1s_bars_2016-06-01_to_2016-12-01.ohlcv-1s.dbn.zst... 1515 breaks matched
+    [21/35] nq_1s_bars_2016-12-01_to_2017-06-01.ohlcv-1s.dbn.zst... 1482 breaks matched
+    [22/35] nq_1s_bars_2017-06-01_to_2017-12-01.ohlcv-1s.dbn.zst... 1521 breaks matched
+    [23/35] nq_1s_bars_2017-12-01_to_2018-06-01.ohlcv-1s.dbn.zst... 1480 breaks matched
+    [24/35] nq_1s_bars_2018-06-01_to_2018-12-01.ohlcv-1s.dbn.zst... 1526 breaks matched
+    [25/35] nq_1s_bars_2018-12-01_to_2019-06-01.ohlcv-1s.dbn.zst... 1473 breaks matched
+    [26/35] nq_1s_bars_2019-06-01_to_2019-12-01.ohlcv-1s.dbn.zst... 1516 breaks matched
+    [27/35] nq_1s_bars_2019-12-01_to_2020-06-01.ohlcv-1s.dbn.zst... 1470 breaks matched
+    [28/35] nq_1s_bars_2020-06-01_to_2020-12-01.ohlcv-1s.dbn.zst... 1529 breaks matched
+    [29/35] nq_1s_bars_2020-12-01_to_2021-06-01.ohlcv-1s.dbn.zst... 1478 breaks matched
+    [30/35] nq_1s_bars_2021-06-01_to_2021-12-01.ohlcv-1s.dbn.zst... 1539 breaks matched
+    [31/35] nq_1s_bars_2021-12-01_to_2022-06-01.ohlcv-1s.dbn.zst... 1497 breaks matched
+    [32/35] nq_1s_bars_2022-06-01_to_2022-12-01.ohlcv-1s.dbn.zst... 1529 breaks matched
+    [33/35] nq_1s_bars_2022-12-01_to_2023-06-01.ohlcv-1s.dbn.zst... 1488 breaks matched
+    [34/35] nq_1s_bars_2023-06-01_to_2023-12-01.ohlcv-1s.dbn.zst... 1516 breaks matched
+    [35/35] nq_1s_bars_2023-12-01_to_2024-02-04.ohlcv-1s.dbn.zst... 512 breaks matched
+  MNQ: 47265 break delays computed from 1s data
+
+Total: 106198 break delays from 1s data
+
+======================================================================
+PHASE 3: VALIDATION
+======================================================================
+
+Direction consistency (1s vs 1m): 91.3%
+  WARNING: Direction mismatch > 5% — investigate!
+  9218 mismatches (could be genuine — 1s may detect different first break)
+
+Correlation (break_delay_min 1s vs 1m):
+  Pearson r = 0.7850, p = 0.00e+00, N = 106198
+
+Delay difference (1m - 1s) in minutes:
+  Mean: 2.329, Median: -0.067
+  Std:  8.093
+  Min:  -45.417, Max: 409.933
+  1s is earlier in 43449 / 106198 cases (40.9%)
+  Same minute: 75545 / 106198 (71.1%)
+
+Per-instrument correlation:
+  MES: r=0.7898, N=42398
+  MGC: r=0.7715, N=16535
+  MNQ: r=0.7845, N=47265
+
+Spot-check (5 random dates per instrument):
+  MES US_DATA_1000 2013-02-07: 1m=2min, 1s=125s (2.08min), diff=-0.08min, dir_1s=short
+  MES CME_PRECLOSE 2012-12-11: 1m=5min, 1s=317s (5.28min), diff=-0.28min, dir_1s=short
+  MES EUROPE_FLOW 2014-02-11: 1m=1min, 1s=72s (1.20min), diff=-0.20min, dir_1s=long
+  MES TOKYO_OPEN 2025-04-03: 1m=0min, 1s=13s (0.22min), diff=-0.22min, dir_1s=long
+  MES TOKYO_OPEN 2010-12-03: 1m=18min, 1s=133s (2.22min), diff=15.78min, dir_1s=short
+  MGC CME_REOPEN 2021-10-06: 1m=49min, 1s=2956s (49.27min), diff=-0.27min, dir_1s=short
+  MGC EUROPE_FLOW 2019-05-28: 1m=16min, 1s=988s (16.47min), diff=-0.47min, dir_1s=long
+  MGC US_DATA_1000 2024-03-20: 1m=3min, 1s=8s (0.13min), diff=2.87min, dir_1s=long
+  MGC COMEX_SETTLE 2024-08-28: 1m=3min, 1s=103s (1.72min), diff=1.28min, dir_1s=long
+  MGC CME_REOPEN 2022-05-26: 1m=47min, 1s=2835s (47.25min), diff=-0.25min, dir_1s=long
+  MNQ COMEX_SETTLE 2015-04-27: 1m=18min, 1s=8s (0.13min), diff=17.87min, dir_1s=short
+  MNQ EUROPE_FLOW 2025-11-07: 1m=15min, 1s=7s (0.12min), diff=14.88min, dir_1s=short
+  MNQ CME_REOPEN 2014-08-19: 1m=23min, 1s=28s (0.47min), diff=22.53min, dir_1s=short
+  MNQ TOKYO_OPEN 2014-11-04: 1m=18min, 1s=75s (1.25min), diff=16.75min, dir_1s=short
+  MNQ BRISBANE_1025 2013-07-08: 1m=1min, 1s=78s (1.30min), diff=-0.30min, dir_1s=short
+
+======================================================================
+PHASE 4: WIN RATE ANALYSIS — 1s vs 1m THRESHOLDS
+======================================================================
+
+--- Per-session WR spreads (1s thresholds) ---
+
+BH FDR results: K=192, 0 significant at q=0.05
+
+--- COMPARISON: 1s vs 1m for 3 validated sessions ---
+Inst  Session          Thr     WR_spread_1s  WR_spread_1m    Delta Verdict
+--------------------------------------------------------------------------------
+MNQ   NYSE_CLOSE       240   s        +3.3%        +1.3%   +2.0% EQUIVALENT
+MGC   CME_REOPEN       600   s        +4.2%        +2.1%   +2.0% 1s BETTER (+>2%)
+MNQ   NYSE_OPEN        120   s        +1.9%        +1.0%   +0.8% EQUIVALENT
+
+--- NOVEL SESSIONS (BH significant, not previously validated) ---
+  None found.
+
+======================================================================
+PHASE 5: ATR CONFOUND CONTROL
+======================================================================
+
+Correlation (break_delay_sec vs ATR20): r=-0.0592, p=2.85e-75
+No BH-significant results to control.
+
+======================================================================
+PHASE 6: ERA CHECK — PRE-2019 vs POST-2019
+======================================================================
+
+MES: pre-2019 N=20794, post-2019 N=17184
+  pre-2019: WR spread (FAST300s) = -2.3% (N_fast=14002, N_slow=6792)
+  post-2019: WR spread (FAST300s) = -0.8% (N_fast=12836, N_slow=4348)
+
+MGC: pre-2019 N=0, post-2019 N=15568
+  Insufficient data for era comparison
+
+MNQ: pre-2019 N=22985, post-2019 N=19679
+  pre-2019: WR spread (FAST300s) = -1.2% (N_fast=17200, N_slow=5785)
+  post-2019: WR spread (FAST300s) = -1.1% (N_fast=15476, N_slow=4203)
+
+======================================================================
+PHASE 7: KILL / PASS VERDICT
+======================================================================
+
+Traceback (most recent call last):
+  File "C:\Users\joshd\canompx3\scripts\research\break_speed_1s_research.py", line 835, in <module>
+    main()
+  File "C:\Users\joshd\canompx3\scripts\research\break_speed_1s_research.py", line 831, in main
+    verdict(correlation, tests_df, results_df)
+  File "C:\Users\joshd\canompx3\scripts\research\break_speed_1s_research.py", line 765, in verdict
+    print("  \u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510")
+  File "C:\Users\joshd\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode characters in position 2-57: character maps to <undefined>
