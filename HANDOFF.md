@@ -6,6 +6,49 @@
 
 ---
 
+## Update (Apr 6 — Dashboard Trading App: Full Build)
+
+### Completed
+**Dashboard evolved from monitoring page to professional trading app in one session.**
+
+| Commit | Feature |
+|--------|---------|
+| `edd0d68` | Bloomberg-level redesign: metrics strip, session timeline, account specs |
+| `4f509a3` | Live equity from TopStepX via ProjectX API |
+| `9380466` | Multi-broker equity: singleton auth, HWM tracking, account selector |
+| `16ef579` | Broker connection manager + CRUD endpoints |
+| `4e2ca44` | Connections tab: two-tab system, connection cards, add-broker form |
+| `d381006` | Signal monitor strip: live ORB status on Dashboard tab |
+| `0996859` | Hardening: 3 audit findings fixed (account switch warning, async lifespan, broker polling) |
+
+Also: Ralph iters 146-152 (7 files, 6 bugs in live trading stack).
+
+### Architecture
+- `broker_connections.py` — connection manager with persistent JSON store + .env fallback
+- `bot_dashboard.py` — 5 broker CRUD endpoints + equity via connection manager
+- `bot_dashboard.html` — two-tab (Dashboard + Connections), signal strip, account selector
+
+### To-Do (saved to memory: `dashboard_todo.md`)
+1. **BLOCKING:** Add stop_price/orb_high/orb_low to bot_state lane_cards (signal strip needs it)
+2. **BLOCKING:** Refactor auth classes for constructor-param creds (dual-connection env clobber)
+3. Auto-start signal session on dashboard startup
+4. TOCTOU equity lock fix
+5. Connection status badge update on auth failure
+
+### Known Limitations (saved to memory: `dashboard_known_limitations.md`)
+- Balance is realized only (no unrealized P&L)
+- HWM resets if account_hwm.json deleted
+- One connection per broker type (env var clobber)
+- Signal strip stop/target always "—" until #1 is done
+
+### Next Session
+- Fix BLOCKING #1 (stop_price in lane_cards) — highest value
+- Auto-start signal session (#5 from to-do)
+- Dashboard Phase 2: profile-to-account mapping, settings improvements
+- Continue with live trading path (TopStep Express)
+
+---
+
 ## Update (Apr 6 — Preflight Fixes)
 
 ### Completed
