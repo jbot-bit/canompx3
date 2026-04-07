@@ -3352,28 +3352,28 @@ def check_symbol_instrument_sql_convention() -> list[str]:
 
 
 def check_holdout_contamination(con=None) -> list[str]:
-    """Detect 2026 holdout contamination in MNQ/MES/MGC (Mode A, Amendment 2.7).
+    """Detect sacred-holdout contamination in MNQ/MES/MGC (Mode A, Amendment 2.7).
 
     Authority: docs/institutional/pre_registered_criteria.md Amendment 2.7 (2026-04-08)
     Decision: docs/plans/2026-04-07-holdout-policy-decision.md (top-of-file rescission)
+    Canonical source: trading_app.holdout_policy
 
-    Policy: 2026-01-01 onwards is the sacred holdout window. Any discovery run
-    that touches 2026 data without --holdout-date 2026-01-01 (or earlier) is
-    contaminated. The 124 existing validated_setups (discovered 2026-04-05/06
-    with 2026 in scope) are grandfathered as research-provisional per
-    Amendment 2.4 — NOT OOS-clean, but not rejected either.
+    Policy: HOLDOUT_SACRED_FROM onwards is the sacred holdout window. Any
+    discovery run that touches sacred-window data without
+    --holdout-date <= HOLDOUT_SACRED_FROM is contaminated. The existing
+    validated_setups discovered during the Apr 3 -> Apr 8 Mode B deviation
+    window are grandfathered as research-provisional per Amendment 2.4 —
+    NOT OOS-clean, but not rejected either.
 
-    Enforcement mechanism: declaration_date below is the Amendment 2.7 commit
-    date (NOT the holdout boundary). Any experimental_strategies row with
-    created_at > declaration_date that contains a '2026' key in yearly_results
-    was discovered without the --holdout-date flag and is flagged as
-    contamination. Rows created on or before 2026-04-08 (the 73,980 existing
-    rows from 2026-04-06) are grandfathered.
+    Enforcement mechanism: HOLDOUT_GRANDFATHER_CUTOFF is the Amendment 2.7
+    commit moment. Any experimental_strategies row with
+    created_at > HOLDOUT_GRANDFATHER_CUTOFF that contains a sacred-year key
+    in yearly_results was discovered without respecting --holdout-date and
+    is flagged as contamination. Rows created at or before the grandfather
+    cutoff are silently grandfathered.
 
     Fail-closed: if DB unavailable, returns a violation (not a silent pass).
     """
-    from datetime import datetime
-
     violations = []
     _own_con = False
     try:
@@ -3386,41 +3386,129 @@ def check_holdout_contamination(con=None) -> list[str]:
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
-        # Mode A holdout policy (Amendment 2.7, 2026-04-08). The date below is
-        # the ENFORCEMENT date, not the holdout boundary (which is 2026-01-01).
-        # Any experimental_strategies row with created_at > 2026-04-08
-        # containing 2026 yearly results was discovered without --holdout-date
-        # and is contamination. Existing rows (max created_at 2026-04-06) are
-        # grandfathered per Amendment 2.4 as research-provisional.
-        # Instrument list comes from ACTIVE_ORB_INSTRUMENTS (canonical source)
-        # so that new active instruments automatically inherit the holdout.
+        # Canonical source for Mode A policy (Amendment 2.7).
+        # HOLDOUT_GRANDFATHER_CUTOFF is the enforcement moment (Apr 8 2026).
+        # HOLDOUT_SACRED_FROM is the sacred window boundary (Jan 1 2026).
+        # Instrument list comes from ACTIVE_ORB_INSTRUMENTS so new active
+        # instruments automatically inherit the holdout.
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from trading_app.holdout_policy import (
+            HOLDOUT_GRANDFATHER_CUTOFF,
+            HOLDOUT_SACRED_FROM,
+        )
 
-        HOLDOUT_DECLARATIONS: dict[str, datetime] = {
-            inst: datetime(2026, 4, 8) for inst in ACTIVE_ORB_INSTRUMENTS
-        }
+        sacred_year_key = str(HOLDOUT_SACRED_FROM.year)
 
-        for instrument, declaration_date in HOLDOUT_DECLARATIONS.items():
+        for instrument in ACTIVE_ORB_INSTRUMENTS:
             contaminated = con.execute(
                 """SELECT COUNT(*) FROM experimental_strategies
                    WHERE instrument = ?
                    AND created_at > ?
                    AND yearly_results IS NOT NULL
-                   AND json_extract_string(yearly_results, '$."2026"') IS NOT NULL""",
-                [instrument, declaration_date],
+                   AND json_extract_string(yearly_results, '$."' || ? || '"') IS NOT NULL""",
+                [instrument, HOLDOUT_GRANDFATHER_CUTOFF, sacred_year_key],
             ).fetchone()[0]
             if contaminated > 0:
                 violations.append(
                     f"  HOLDOUT CONTAMINATION: {instrument} has {contaminated} experimental_strategies "
-                    f"created after {declaration_date.date()} containing 2026 trade data. "
-                    f"Discovery was re-run without --holdout-date 2026-01-01. "
-                    f"Authority: docs/institutional/pre_registered_criteria.md Amendment 2.7"
+                    f"created after {HOLDOUT_GRANDFATHER_CUTOFF.date()} containing "
+                    f"{sacred_year_key} trade data. "
+                    f"Discovery was run without --holdout-date {HOLDOUT_SACRED_FROM.isoformat()}. "
+                    f"Authority: docs/institutional/pre_registered_criteria.md Amendment 2.7. "
+                    f"Canonical source: trading_app.holdout_policy"
                 )
     except (ImportError, OSError) as e:
         violations.append(f"  HOLDOUT CHECK FAILED: {type(e).__name__}: {e}")
     finally:
         if _own_con and con is not None:
             con.close()
+
+    return violations
+
+
+def check_holdout_policy_declaration_consistency() -> list[str]:
+    """Declaration-consistency check for Mode A holdout policy (Amendment 2.7).
+
+    Catches drift between the canonical source (trading_app.holdout_policy),
+    the binding policy doc (pre_registered_criteria.md Amendment 2.7), and
+    the top-level research rules (RESEARCH_RULES.md).
+
+    Asserts:
+    1. trading_app/holdout_policy.py exists and exports the three canonical
+       names (HOLDOUT_SACRED_FROM, HOLDOUT_GRANDFATHER_CUTOFF,
+       enforce_holdout_date).
+    2. HOLDOUT_SACRED_FROM equals date(2026, 1, 1) — Amendment 2.7 lock.
+    3. docs/institutional/pre_registered_criteria.md contains the string
+       "Amendment 2.7" (the rescission of Amendment 2.6).
+    4. RESEARCH_RULES.md references the canonical sacred-from date
+       (2026-01-01) and cites Amendment 2.7.
+
+    Any failure indicates the canonical source and its documentation are out
+    of sync, which is the exact class of drift that produced the Apr 7 Mode B
+    autonomous error (the HANDOFF entry said one thing, the Apr 2 plan said
+    another, and the code had no single source of truth).
+
+    Fail-closed: if the canonical import fails, that IS the violation.
+    """
+    from datetime import date as _date
+    from pathlib import Path
+
+    violations = []
+    project_root = Path(__file__).parent.parent
+
+    # (1) Canonical module exists and exports the three names
+    try:
+        from trading_app.holdout_policy import (
+            HOLDOUT_GRANDFATHER_CUTOFF as _gcut,
+            HOLDOUT_SACRED_FROM as _sfrom,
+            enforce_holdout_date as _enforce,
+        )
+    except ImportError as e:
+        return [
+            f"  HOLDOUT POLICY CANONICAL SOURCE MISSING: {e}. "
+            "Expected trading_app/holdout_policy.py per Amendment 2.7."
+        ]
+
+    # (2) Sacred-from value is the Amendment 2.7 lock
+    if _sfrom != _date(2026, 1, 1):
+        violations.append(
+            f"  HOLDOUT_SACRED_FROM drifted from Amendment 2.7 lock: "
+            f"got {_sfrom.isoformat()}, expected 2026-01-01. "
+            "Changing this requires a new Amendment in pre_registered_criteria.md."
+        )
+
+    # (3) pre_registered_criteria.md cites Amendment 2.7
+    criteria_path = project_root / "docs" / "institutional" / "pre_registered_criteria.md"
+    if not criteria_path.exists():
+        violations.append(f"  {criteria_path} missing — cannot verify Amendment 2.7 citation.")
+    else:
+        criteria_text = criteria_path.read_text(encoding="utf-8", errors="replace")
+        if "Amendment 2.7" not in criteria_text:
+            violations.append(
+                f"  {criteria_path.relative_to(project_root)} does not mention "
+                "'Amendment 2.7' — Mode A declaration missing from binding policy doc."
+            )
+
+    # (4) RESEARCH_RULES.md references the sacred-from date and cites Amendment 2.7
+    rules_path = project_root / "RESEARCH_RULES.md"
+    if not rules_path.exists():
+        violations.append(f"  {rules_path} missing — cannot verify Mode A declaration.")
+    else:
+        rules_text = rules_path.read_text(encoding="utf-8", errors="replace")
+        sacred_str = _sfrom.isoformat()
+        if sacred_str not in rules_text:
+            violations.append(
+                f"  RESEARCH_RULES.md does not mention the sacred-from date "
+                f"'{sacred_str}' — doc-code drift against trading_app.holdout_policy."
+            )
+        if "Amendment 2.7" not in rules_text:
+            violations.append(
+                "  RESEARCH_RULES.md does not cite 'Amendment 2.7' — "
+                "Mode A declaration missing from research rules top-level file."
+            )
+
+    # Silence unused-import lint; these are used indirectly via the import check
+    del _gcut, _enforce
 
     return violations
 
@@ -4093,6 +4181,12 @@ CHECKS = [
         False,
         True,
     ),  # requires_db
+    (
+        "Holdout policy declaration consistency (docs <-> canonical source)",
+        check_holdout_policy_declaration_consistency,
+        False,
+        False,
+    ),
     ("No raw orb_active reads outside asset_configs.py", check_no_raw_orb_active_reads, False, False),
     ("No deprecated C:/db/gold.db in docstring usage examples", check_no_scratch_db_in_docstrings, False, False),
     (
