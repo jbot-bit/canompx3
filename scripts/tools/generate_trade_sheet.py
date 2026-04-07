@@ -291,7 +291,9 @@ def _prefetch_feature_rows(
                 result[(instrument, aperture)] = None
             else:
                 cols = [desc[0] for desc in con.description]
-                result[(instrument, aperture)] = dict(zip(cols, row, strict=False))
+                # strict=True matches the canonical _fetch_feature_row in
+                # trading_app.eligibility.builder (gate 1 review parity fix)
+                result[(instrument, aperture)] = dict(zip(cols, row, strict=True))
     finally:
         con.close()
 
@@ -353,68 +355,6 @@ def _enrich_trades_with_eligibility(
             t["elig_size_mult"] = 1.0
             t["elig_freshness"] = ""
             t["elig_error"] = err_msg
-
-
-def _classify_filter_status(
-    filter_type: str,
-    instrument: str,
-    regime_ctx: dict[str, dict],
-) -> str:
-    """Classify whether a filter is ACTIVE, CHECK, or INACTIVE today.
-
-    ACTIVE = pre-checkable and passes today's regime.
-    CHECK = can't pre-check (ORB size, volume, cost determined during session).
-    INACTIVE = pre-checkable and fails today's regime.
-    """
-    ctx = regime_ctx.get(instrument)
-    if ctx is None:
-        return "CHECK"  # fail-open
-
-    ft = filter_type
-
-    # Composites containing ORB-based components → always CHECK
-    if any(tag in ft for tag in ("ORB_G", "ORB_VOL", "COST_LT", "VOL_RV", "FAST", "CONT")):
-        return "CHECK"
-
-    # NO_FILTER / DIR_LONG / DIR_SHORT → always ACTIVE
-    if ft in ("NO_FILTER", "DIR_LONG", "DIR_SHORT"):
-        return "ACTIVE"
-
-    # ATR percentile filters: ATR_P30, ATR_P50, ATR70_VOL
-    atr_pct = ctx.get("atr_pct")
-    atr_match = _re_module.match(r"ATR_P(\d+)", ft)
-    if atr_match:
-        if atr_pct is None:
-            return "CHECK"
-        threshold = float(atr_match.group(1))
-        return "ACTIVE" if atr_pct >= threshold else "INACTIVE"
-    if ft == "ATR70_VOL":
-        if atr_pct is None:
-            return "CHECK"
-        return "ACTIVE" if atr_pct >= 70 else "INACTIVE"
-
-    # Overnight range filters: OVNRNG_10, OVNRNG_25, etc.
-    ovn_match = _re_module.match(r"OVNRNG_(\d+)", ft)
-    if ovn_match:
-        ovn_pct = ctx.get("overnight_range_pct")
-        if ovn_pct is None:
-            return "CHECK"
-        threshold = float(ovn_match.group(1))
-        return "ACTIVE" if ovn_pct >= threshold else "INACTIVE"
-
-    # Cross-asset ATR filters: X_MES_ATR60, X_MGC_ATR70, etc.
-    x_match = _re_module.match(r"X_(\w+)_ATR(\d+)", ft)
-    if x_match:
-        source_instr = x_match.group(1)
-        threshold = float(x_match.group(2))
-        cross_atrs = ctx.get("cross_atrs", {})
-        source_atr = cross_atrs.get(source_instr)
-        if source_atr is None:
-            return "CHECK"
-        return "ACTIVE" if source_atr >= threshold else "INACTIVE"
-
-    # Anything else we can't classify → CHECK (fail-open)
-    return "CHECK"
 
 
 def _load_trailing_stats() -> dict[str, dict]:
@@ -479,9 +419,6 @@ def _enrich_trades_with_regime(
     trailing = _load_trailing_stats()
 
     for t in all_trades:
-        # Filter status
-        t["filter_status"] = _classify_filter_status(t["filter_type"], t["instrument"], regime_ctx)
-
         # Trades per year — prefer DB trades_per_year, fall back to sample/years
         sid = t["strategy_id"]
         if sid in tpy_map:
@@ -1046,15 +983,12 @@ def _build_session_cards(
                 status_badge = '<span class="badge badge-manual">MANUAL</span>'
                 row_class = "row-manual"
 
-            # Filter status badge
-            filt_status = t.get("filter_status", "CHECK")
-            if filt_status == "ACTIVE":
-                filter_status_badge = '<span class="badge badge-filter-active">&#10003;</span>'
-            elif filt_status == "INACTIVE":
-                filter_status_badge = '<span class="badge badge-filter-check">INACTIVE</span>'
-                row_class += " row-inactive"
-            else:
-                filter_status_badge = '<span class="badge badge-filter-check">&#9201; VERIFY</span>'
+            # Filter status badge — canonical eligibility (delegates to
+            # trading_app.eligibility.builder via _status_badge_from_eligibility)
+            elig_view = _status_badge_from_eligibility(t)
+            filter_status_badge = elig_view["badge_html"] + elig_view["pills_html"]
+            row_class += elig_view["row_class_suffix"]
+            elig_tooltip_parts = elig_view["tooltip_parts"]
 
             # Frequency column
             tpy = t.get("trades_per_year")
@@ -1079,7 +1013,9 @@ def _build_session_cards(
             sm = t.get("stop_mult", 1.0)
             stop_str = f"{sm}x" if sm else "1.0x"
 
-            # Tooltip for instrument cell: strategy_id for avail/manual, profile for deployed
+            # Tooltip for instrument cell: strategy_id for avail/manual, profile for deployed.
+            # Also merges eligibility tooltip parts (blocked-by, waiting-on, freshness)
+            # from the canonical eligibility report.
             tooltip_parts = []
             if section == "deployed":
                 for pid in t.get("profiles", [t.get("profile", "")]):
@@ -1092,7 +1028,8 @@ def _build_session_cards(
                     tooltip_parts.append(t["notes"][:60])
             else:
                 tooltip_parts.append(t.get("strategy_id", ""))
-            tooltip = " | ".join(tooltip_parts)
+            tooltip_parts.extend(elig_tooltip_parts)
+            tooltip = " | ".join(p for p in tooltip_parts if p)
             tooltip_attr = f' title="{tooltip}"' if tooltip else ""
 
             # Stats source label and tooltip
@@ -1969,6 +1906,14 @@ def main():
     all_trades_for_enrichment = list(trades) + list(opportunities) + list(manual_candidates)
     if regime_ctx:
         _enrich_trades_with_regime(all_trades_for_enrichment, regime_ctx, db_path)
+
+    # Canonical eligibility enrichment — single source of truth for filter
+    # status is trading_app.eligibility.builder.build_eligibility_report,
+    # which is also the live dashboard's signal source (Phase 3 of the
+    # parent eligibility-context design). See
+    # docs/plans/2026-04-07-trade-book-canonicalization-design.md.
+    feature_rows = _prefetch_feature_rows(all_trades_for_enrichment, db_path)
+    _enrich_trades_with_eligibility(all_trades_for_enrichment, trading_day, feature_rows)
     print()
 
     # Generate HTML
