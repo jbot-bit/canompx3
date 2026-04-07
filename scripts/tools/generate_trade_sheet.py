@@ -37,6 +37,7 @@ from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.eligibility.builder import build_eligibility_report
 from trading_app.prop_profiles import ACCOUNT_PROFILES
 from trading_app.strategy_fitness import compute_fitness
 
@@ -239,6 +240,119 @@ def _get_regime_context(db_path: Path) -> dict[str, dict]:
         }
 
     return result
+
+
+def _prefetch_feature_rows(
+    trades: list[dict],
+    db_path: Path,
+) -> dict[tuple[str, int], dict | None]:
+    """Pre-fetch latest-available daily_features row per unique (instrument, aperture).
+
+    Strategy: pull the LATEST row per pair (regardless of trading_day) so the
+    pre-session brief has actual data to evaluate against, even when today's
+    daily_features row has not yet been built. The canonical eligibility
+    builder tags freshness (FRESH / PRIOR_DAY / STALE / NO_DATA) from the row's
+    trading_day vs the requested trading_day, so the UI can surface stale data
+    without crashing.
+
+    Matches the pattern used by _get_regime_context: latest row per instrument
+    for regime indicators. Here we extend it to per-aperture because
+    daily_features has 3 rows per (trading_day, symbol) — one per orb_minutes
+    value. The canonical builder needs the row matching the strategy's aperture.
+
+    Returns a dict keyed by (instrument, aperture) → row dict or None.
+    Fail-closed: if the DB connection itself raises, propagate.
+    """
+    pairs: set[tuple[str, int]] = set()
+    for t in trades:
+        instrument = t["instrument"]
+        aperture = int(t.get("aperture", 5) or 5)
+        pairs.add((instrument, aperture))
+
+    result: dict[tuple[str, int], dict | None] = {}
+    if not pairs:
+        return result
+
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        for instrument, aperture in pairs:
+            row = con.execute(
+                """
+                SELECT *
+                FROM daily_features
+                WHERE symbol = ?
+                  AND orb_minutes = ?
+                ORDER BY trading_day DESC
+                LIMIT 1
+                """,
+                [instrument, aperture],
+            ).fetchone()
+            if row is None:
+                result[(instrument, aperture)] = None
+            else:
+                cols = [desc[0] for desc in con.description]
+                result[(instrument, aperture)] = dict(zip(cols, row, strict=False))
+    finally:
+        con.close()
+
+    return result
+
+
+def _enrich_trades_with_eligibility(
+    trades: list[dict],
+    trading_day: date,
+    feature_rows: dict[tuple[str, int], dict | None],
+) -> None:
+    """Attach canonical eligibility fields to each trade dict.
+
+    Delegates filter semantics to build_eligibility_report from
+    trading_app.eligibility.builder. NO re-encoded filter logic.
+
+    Attaches six keys on success:
+      elig_overall     — OverallStatus string value (ELIGIBLE/INELIGIBLE/
+                         DATA_MISSING/NEEDS_LIVE_DATA)
+      elig_blocking    — tuple of condition names currently blocking the lane
+      elig_pending     — tuple of condition names awaiting intra-session resolution
+      elig_stale       — bool: any condition with STALE_VALIDATION status
+      elig_size_mult   — float: product of all passing conditions' size multipliers
+      elig_freshness   — FreshnessStatus string value (FRESH/PRIOR_DAY/STALE/NO_DATA)
+
+    On exception (unknown filter_type, broken describe() contract, etc.):
+    attaches the same six keys with overall="UNKNOWN" and defaults, plus a
+    seventh key elig_error carrying the exception text. Prints a WARNING to
+    stdout (matches _check_fitness pattern) so broken strategies are visible
+    without aborting the whole sheet.
+    """
+    for t in trades:
+        sid = t["strategy_id"]
+        instrument = t["instrument"]
+        aperture = int(t.get("aperture", 5) or 5)
+        feature_row = feature_rows.get((instrument, aperture))
+
+        try:
+            report = build_eligibility_report(
+                strategy_id=sid,
+                trading_day=trading_day,
+                feature_row=feature_row,
+            )
+            t["elig_overall"] = report.overall_status.value
+            t["elig_blocking"] = tuple(c.name for c in report.blocking_conditions)
+            t["elig_pending"] = tuple(c.name for c in report.pending_conditions)
+            t["elig_stale"] = any(
+                c.status.value == "STALE_VALIDATION" for c in report.conditions
+            )
+            t["elig_size_mult"] = float(report.effective_size_multiplier)
+            t["elig_freshness"] = report.freshness_status.value
+        except Exception as exc:  # noqa: BLE001 — adapter boundary, surface as visible UNKNOWN
+            err_msg = f"{type(exc).__name__}: {exc}"
+            print(f"  WARNING: eligibility build failed for {sid}: {err_msg}", flush=True)
+            t["elig_overall"] = "UNKNOWN"
+            t["elig_blocking"] = ()
+            t["elig_pending"] = ()
+            t["elig_stale"] = False
+            t["elig_size_mult"] = 1.0
+            t["elig_freshness"] = ""
+            t["elig_error"] = err_msg
 
 
 def _classify_filter_status(
