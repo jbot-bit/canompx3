@@ -3450,7 +3450,7 @@ def check_filter_self_description_coverage() -> list[str]:
     StrategyFilter class own its own decomposition via the describe()
     method. This check enforces that contract: any new filter added to
     ALL_FILTERS must implement describe() and return a list of
-    AtomDescription instances.
+    AtomDescription instances with valid enum-string fields.
 
     Without this check, a researcher could add a new filter to
     ALL_FILTERS, forget to implement describe(), and silently get the
@@ -3463,10 +3463,37 @@ def check_filter_self_description_coverage() -> list[str]:
       3. Every element is an AtomDescription instance
       4. NoFilter is the only filter allowed to return zero atoms
       5. CompositeFilter atoms come from leaf filters (recursive walk)
+      6. No concrete filter inherits the base class default describe()
+      7. atom.category ∈ {PRE_SESSION, INTRA_SESSION, OVERLAY, DIRECTIONAL}
+      8. atom.resolves_at ∈ {STARTUP, ORB_FORMATION, BREAK_DETECTED,
+         CONFIRM_COMPLETE, TRADE_ENTERED}
+      9. atom.confidence_tier ∈ {PROVEN, PLAUSIBLE, LEGACY, UNKNOWN}
+
+    Rules 7-9 close a silent-default gap in the eligibility adapter: the
+    _CATEGORY_MAP / _RESOLVES_AT_MAP lookups silently coerce typos to
+    PRE_SESSION / STARTUP (losing filter-specific semantics). By asserting
+    valid string membership at the drift layer, we catch the typo at
+    check time instead of at runtime on a mis-labeled eligibility report.
 
     @rule canonical-filter-self-description
-    @stage canonical-filter-self-description (Phase 5)
+    @stage canonical-filter-self-description (Phase 5 + post-review hardening)
     """
+    # Hardcoded enum-string sets. Kept in sync with
+    # trading_app.eligibility.types.ConditionCategory / ResolvesAt and
+    # trading_app.eligibility.types.ConfidenceTier. If those enums change,
+    # this drift check must update in lock-step (single source of truth is
+    # the enum; this set is the contract-level mirror for pipeline-side
+    # validation without a cross-package import).
+    _VALID_CATEGORIES = frozenset({
+        "PRE_SESSION", "INTRA_SESSION", "OVERLAY", "DIRECTIONAL",
+    })
+    _VALID_RESOLVES_AT = frozenset({
+        "STARTUP", "ORB_FORMATION", "BREAK_DETECTED",
+        "CONFIRM_COMPLETE", "TRADE_ENTERED",
+    })
+    _VALID_CONFIDENCE_TIERS = frozenset({
+        "PROVEN", "PLAUSIBLE", "LEGACY", "UNKNOWN",
+    })
     violations: list[str] = []
     try:
         from trading_app.config import (
@@ -3547,6 +3574,30 @@ def check_filter_self_description_coverage() -> list[str]:
                     violations.append(
                         f"  {filter_type} ({cls_name}): describe() yielded "
                         f"{type(atom).__name__}, expected AtomDescription"
+                    )
+                    continue
+                # Validate enum-string field membership. The eligibility
+                # adapter uses _CATEGORY_MAP.get(...) with silent defaults,
+                # so a typo in a filter's describe() would silently coerce
+                # to PRE_SESSION / STARTUP at runtime. Catch it here at
+                # check time instead.
+                if atom.category not in _VALID_CATEGORIES:
+                    violations.append(
+                        f"  {filter_type} ({cls_name}): atom.category="
+                        f"{atom.category!r} not in "
+                        f"{sorted(_VALID_CATEGORIES)}"
+                    )
+                if atom.resolves_at not in _VALID_RESOLVES_AT:
+                    violations.append(
+                        f"  {filter_type} ({cls_name}): atom.resolves_at="
+                        f"{atom.resolves_at!r} not in "
+                        f"{sorted(_VALID_RESOLVES_AT)}"
+                    )
+                if atom.confidence_tier not in _VALID_CONFIDENCE_TIERS:
+                    violations.append(
+                        f"  {filter_type} ({cls_name}): atom.confidence_tier="
+                        f"{atom.confidence_tier!r} not in "
+                        f"{sorted(_VALID_CONFIDENCE_TIERS)}"
                     )
 
             # Verify the leaf has not silently inherited the base class
