@@ -36,9 +36,11 @@ from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
     DST_CLEAN_SESSIONS,
     DYNAMIC_ORB_RESOLVERS,
+    compute_trading_day_utc_range,
     get_break_group,
     is_uk_dst,
     is_us_dst,
+    orb_utc_window as _orb_utc_window,
 )
 from pipeline.init_db import ORB_LABELS
 from pipeline.log import get_logger
@@ -128,21 +130,11 @@ def compute_trading_day(ts_utc: pd.Timestamp) -> date:
     return shifted.date()
 
 
-def compute_trading_day_utc_range(trading_day: date) -> tuple[datetime, datetime]:
-    """
-    Return the [start, end) UTC range for a given trading day.
-
-    trading_day 2024-01-05:
-      start = 2024-01-04 23:00:00 UTC (09:00 Brisbane on 2024-01-05)
-      end   = 2024-01-05 23:00:00 UTC (09:00 Brisbane on 2024-01-06)
-    """
-    # 09:00 Brisbane on trading_day = 23:00 UTC on (trading_day - 1)
-    start_utc = datetime(
-        trading_day.year, trading_day.month, trading_day.day, TRADING_DAY_START_HOUR_LOCAL, 0, 0, tzinfo=BRISBANE_TZ
-    ).astimezone(UTC_TZ)
-
-    end_utc = start_utc + timedelta(hours=24)
-    return start_utc, end_utc
+# compute_trading_day_utc_range is now imported from pipeline.dst (E2 canonical-window
+# refactor 2026-04-07, Stage 2). The name remains a module-level attribute here for
+# external importers that use `from pipeline.build_daily_features import
+# compute_trading_day_utc_range` — Python's import system re-exports the imported name,
+# so no external caller needs to change. Zero re-encoding; single source of truth.
 
 
 def get_trading_days_in_range(
@@ -198,57 +190,14 @@ def get_bars_for_trading_day(con: duckdb.DuckDBPyConnection, symbol: str, tradin
 # =============================================================================
 
 
-def _orb_utc_window(trading_day: date, orb_label: str, orb_minutes: int) -> tuple[datetime, datetime]:
-    """
-    Compute the [start, end) UTC window for an ORB on a given trading day.
-
-    The ORB starts at the local Brisbane time and lasts orb_minutes.
-
-    All sessions are dynamic — the Brisbane hour is resolved per-day
-    based on DST via pipeline/dst.py DYNAMIC_ORB_RESOLVERS.
-
-    Example: CME_REOPEN ORB with 5 min duration on trading_day 2024-01-05
-      local start = 2024-01-05 09:00 Brisbane
-      local end   = 2024-01-05 09:05 Brisbane
-      UTC start   = 2024-01-04 23:00 UTC
-      UTC end     = 2024-01-04 23:05 UTC
-
-    Special case: NYSE_OPEN ORB belongs to the SAME trading day but is
-    at 00:30 the NEXT calendar day in Brisbane.
-      trading_day 2024-01-05, NYSE_OPEN ORB:
-      local start = 2024-01-06 00:30 Brisbane (next calendar day)
-      UTC start   = 2024-01-05 14:30 UTC
-    """
-    if orb_label in DYNAMIC_ORB_RESOLVERS:
-        hour, minute = DYNAMIC_ORB_RESOLVERS[orb_label](trading_day)
-    else:
-        raise ValueError(f"Unknown ORB label '{orb_label}' — not in DYNAMIC_ORB_RESOLVERS")
-
-    # Determine the Brisbane calendar date for this ORB time
-    # Trading day 09:00 Brisbane starts at calendar_date = trading_day
-    # Times 09:00-23:59 are on the same calendar day
-    # Times 00:00-08:59 are on the NEXT calendar day
-    if hour < TRADING_DAY_START_HOUR_LOCAL:
-        # After midnight Brisbane — next calendar day
-        cal_date = trading_day + timedelta(days=1)
-    else:
-        cal_date = trading_day
-
-    local_start = datetime(cal_date.year, cal_date.month, cal_date.day, hour, minute, 0, tzinfo=BRISBANE_TZ)
-    local_end = local_start + timedelta(minutes=orb_minutes)
-
-    utc_start = local_start.astimezone(UTC_TZ)
-    utc_end = local_end.astimezone(UTC_TZ)
-
-    # Fail-closed: ORB must fall within the trading day's UTC window
-    td_start, td_end = compute_trading_day_utc_range(trading_day)
-    if not (td_start <= utc_start < td_end):
-        raise ValueError(
-            f"ORB {orb_label} on {trading_day} resolved to {utc_start} UTC, "
-            f"outside trading day window [{td_start}, {td_end})"
-        )
-
-    return utc_start, utc_end
+# _orb_utc_window is now imported from pipeline.dst as an alias of orb_utc_window
+# (E2 canonical-window refactor 2026-04-07, Stage 2). The imported name remains a
+# module-level attribute here for external importers that do
+# `from pipeline.build_daily_features import _orb_utc_window` (e.g.
+# scripts/research/break_speed_1s_research.py, tests/test_pipeline/
+# test_build_daily_features.py). Python's import system re-exports the imported
+# name, so no external caller needs to change. Zero re-encoding; single source
+# of truth in pipeline.dst.orb_utc_window.
 
 
 def compute_orb_range(bars_df: pd.DataFrame, trading_day: date, orb_label: str, orb_minutes: int) -> dict:
