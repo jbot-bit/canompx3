@@ -30,7 +30,7 @@ from pipeline.cost_model import get_cost_spec
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ENTRY_MODELS
-from trading_app.nested.builder import _verify_e3_sub_bar_fill, resample_to_5m
+from trading_app.entry_rules import _verify_e3_sub_bar_fill, resample_to_5m
 from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS, compute_single_outcome
 
 

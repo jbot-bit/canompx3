@@ -29,86 +29,23 @@ from pipeline.cost_model import get_cost_spec, pnl_points_to_r, to_r_multiple
 from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ENTRY_MODELS
-from trading_app.entry_rules import detect_confirm, resolve_entry
+from trading_app.entry_rules import (
+    _verify_e3_sub_bar_fill,
+    detect_confirm,
+    resample_to_5m,
+    resolve_entry,
+)
 from trading_app.nested.schema import init_nested_schema
 from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
 
 # Entry resolution for nested ORB: always 5-minute bars
 ENTRY_RESOLUTION = 5
 
-
-def resample_to_5m(bars_1m_df: pd.DataFrame, after_ts: datetime) -> pd.DataFrame:
-    """Resample post-ORB 1m bars to 5m OHLCV.
-
-    Takes 1m bars with ts_utc > after_ts, groups into 5-minute buckets
-    (floor to nearest 5-minute boundary), and aggregates OHLCV.
-
-    Args:
-        bars_1m_df: DataFrame with columns [ts_utc, open, high, low, close, volume]
-        after_ts: Only include bars strictly after this timestamp
-
-    Returns:
-        DataFrame with same columns, timestamps floored to 5m boundaries.
-        Empty DataFrame if no bars after after_ts.
-    """
-    post_orb = bars_1m_df[bars_1m_df["ts_utc"] > pd.Timestamp(after_ts)].copy()
-
-    if post_orb.empty:
-        return pd.DataFrame(columns=["ts_utc", "open", "high", "low", "close", "volume"])
-
-    # Floor to 5-minute boundaries (robust for any datetime64 resolution)
-    post_orb["bucket"] = post_orb["ts_utc"].dt.floor("5min")
-
-    # Aggregate per bucket
-    grouped = post_orb.groupby("bucket", sort=True)
-    bars_5m = grouped.agg(
-        open=("open", "first"),
-        high=("high", "max"),
-        low=("low", "min"),
-        close=("close", "last"),
-        volume=("volume", "sum"),
-    ).reset_index()
-
-    bars_5m = bars_5m.rename(columns={"bucket": "ts_utc"})
-    return bars_5m
-
-
-def _verify_e3_sub_bar_fill(
-    bars_1m_df: pd.DataFrame,
-    entry_ts: datetime,
-    entry_price: float,
-    break_dir: str,
-) -> bool:
-    """Verify that 1m bars within the 5m entry candle actually touched the limit price.
-
-    For E3 (limit-at-ORB), the 5m candle may show the price touched the ORB level,
-    but the underlying 1m data might not actually reach it. This post-processing
-    check ensures fill accuracy.
-
-    Args:
-        bars_1m_df: Original 1m bars
-        entry_ts: The 5m bar timestamp where E3 fill was detected
-        entry_price: The limit order price (ORB level)
-        break_dir: "long" or "short"
-
-    Returns:
-        True if 1m data confirms the fill, False otherwise.
-    """
-    # Find 1m bars within the 5m candle: [entry_ts, entry_ts + 5min)
-    bucket_start = pd.Timestamp(entry_ts)
-    bucket_end = bucket_start + pd.Timedelta(minutes=5)
-
-    bars_in_candle = bars_1m_df[(bars_1m_df["ts_utc"] >= bucket_start) & (bars_1m_df["ts_utc"] < bucket_end)]
-
-    if bars_in_candle.empty:
-        return False
-
-    if break_dir == "long":
-        # Long E3: limit buy at orb_high. Need low <= entry_price
-        return bool((bars_in_candle["low"].values <= entry_price).any())
-    else:
-        # Short E3: limit sell at orb_low. Need high >= entry_price
-        return bool((bars_in_candle["high"].values >= entry_price).any())
+# resample_to_5m and _verify_e3_sub_bar_fill were extracted to
+# trading_app/entry_rules.py during the E2 canonical-window refactor
+# (2026-04-07, Stage 4). They are imported above so the rest of this
+# module (which calls them in build_nested_outcomes) still works
+# unchanged. This file is slated for deletion in Stage 7.
 
 
 def build_nested_outcomes(
