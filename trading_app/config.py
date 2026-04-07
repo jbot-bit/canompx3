@@ -646,6 +646,36 @@ class CrossAssetATRFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] >= self.min_pct)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Cross-asset ATR percentile gate. Pre-session, resolves at STARTUP."""
+        _ = (orb_label, entry_model)
+        col = f"cross_atr_{self.source_instrument}_pct"
+        observed = _atom_numeric(row.get(col))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_pct
+        return [
+            AtomDescription(
+                name=f"{self.source_instrument} ATR percentile >= {self.min_pct:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column=col,
+                observed_value=observed,
+                threshold=self.min_pct,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require {self.source_instrument} ATR-20 rolling percentile "
+                    f">= {self.min_pct:g}% (cross-asset volatility regime gate)."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class OwnATRPercentileFilter(StrategyFilter):
@@ -672,6 +702,35 @@ class OwnATRPercentileFilter(StrategyFilter):
         if "atr_20_pct" not in df.columns:
             return pd.Series(False, index=df.index)
         return df["atr_20_pct"].notna() & (df["atr_20_pct"] >= self.min_pct)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Own ATR-20 percentile gate. Pre-session, resolves at STARTUP."""
+        _ = (orb_label, entry_model)
+        observed = _atom_numeric(row.get("atr_20_pct"))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_pct
+        return [
+            AtomDescription(
+                name=f"Own ATR percentile >= {self.min_pct:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="atr_20_pct",
+                observed_value=observed,
+                threshold=self.min_pct,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require own-instrument ATR-20 rolling percentile "
+                    f">= {self.min_pct:g}% (own-vol regime gate)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -703,6 +762,35 @@ class OvernightRangeFilter(StrategyFilter):
         if "overnight_range_pct" not in df.columns:
             return pd.Series(False, index=df.index)
         return df["overnight_range_pct"].notna() & (df["overnight_range_pct"] >= self.min_pct)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Overnight range rolling percentile gate. Pre-session, resolves at STARTUP."""
+        _ = (orb_label, entry_model)
+        observed = _atom_numeric(row.get("overnight_range_pct"))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_pct
+        return [
+            AtomDescription(
+                name=f"Overnight range percentile >= {self.min_pct:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="overnight_range_pct",
+                observed_value=observed,
+                threshold=self.min_pct,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require overnight range rolling percentile >= {self.min_pct:g}% "
+                    f"(Asian-session activity gate)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -745,6 +833,40 @@ class OvernightRangeAbsFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         return df["overnight_range"].notna() & (df["overnight_range"] >= self.min_range)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Absolute overnight range (points) gate. Pre-session, resolves at STARTUP.
+
+        LOOK-AHEAD NOTE: overnight_range is 09:00-17:00 Brisbane. Caller routing
+        (via get_filters_for_grid) restricts this filter to post-17:00 sessions.
+        describe() trusts the routing and emits the atom as PRE_SESSION.
+        """
+        _ = (orb_label, entry_model)
+        observed = _atom_numeric(row.get("overnight_range"))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_range
+        return [
+            AtomDescription(
+                name=f"Overnight range >= {self.min_range:g} pts",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="overnight_range",
+                observed_value=observed,
+                threshold=self.min_range,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require absolute overnight range (09:00-17:00 Brisbane) "
+                    f">= {self.min_range:g} points. Routed only to post-17:00 sessions."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class PrevDayRangeNormFilter(StrategyFilter):
@@ -782,6 +904,43 @@ class PrevDayRangeNormFilter(StrategyFilter):
         ratio = df["prev_day_range"] / df["atr_20"].replace(0, float("nan"))
         return valid & (ratio >= self.min_ratio)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """prev_day_range / atr_20 gate. Pre-session, resolves at STARTUP.
+
+        atr_20 <= 0 is treated as DATA_MISSING (data corruption, not FAIL).
+        matches_row() fails-closed on atr_20 <= 0; describe() surfaces it as
+        missing so the report shows 'data unavailable' instead of a spurious
+        comparison against observed=None.
+        """
+        _ = (orb_label, entry_model)
+        pdr = _atom_numeric(row.get("prev_day_range"))
+        atr = _atom_numeric(row.get("atr_20"))
+        missing = pdr is None or atr is None or atr <= 0
+        observed = None if missing else pdr / atr  # type: ignore[operator]
+        passes = None if missing else observed >= self.min_ratio  # type: ignore[operator]
+        return [
+            AtomDescription(
+                name=f"prev_day_range / atr_20 >= {self.min_ratio:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="prev_day_range",
+                observed_value=observed,
+                threshold=self.min_ratio,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require prior-day range normalized by ATR-20 "
+                    f">= {self.min_ratio:g} (prior-day expansion gate)."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class GapNormFilter(StrategyFilter):
@@ -818,6 +977,40 @@ class GapNormFilter(StrategyFilter):
         valid = df["gap_open_points"].notna() & df["atr_20"].notna() & (df["atr_20"] > 0)
         ratio = df["gap_open_points"].abs() / df["atr_20"].replace(0, float("nan"))
         return valid & (ratio >= self.min_ratio)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """abs(gap_open_points) / atr_20 gate. Pre-session, resolves at STARTUP.
+
+        atr_20 <= 0 treated as DATA_MISSING (see PrevDayRangeNormFilter note).
+        """
+        _ = (orb_label, entry_model)
+        gap = _atom_numeric(row.get("gap_open_points"))
+        atr = _atom_numeric(row.get("atr_20"))
+        missing = gap is None or atr is None or atr <= 0
+        observed = None if missing else abs(gap) / atr  # type: ignore[operator]
+        passes = None if missing else observed >= self.min_ratio  # type: ignore[operator]
+        return [
+            AtomDescription(
+                name=f"abs(gap) / atr_20 >= {self.min_ratio:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="gap_open_points",
+                observed_value=observed,
+                threshold=self.min_ratio,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require absolute overnight gap normalized by ATR-20 "
+                    f">= {self.min_ratio:g} (gap-shock gate)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -1082,6 +1275,39 @@ class PitRangeFilter(StrategyFilter):
         if "pit_range_atr" not in df.columns:
             return pd.Series(False, index=df.index)
         return df["pit_range_atr"].notna() & (df["pit_range_atr"] >= self.min_ratio)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """CME pit range / atr_20 gate. Pre-session, resolves at STARTUP.
+
+        Pit closes 21:00 UTC; CME_REOPEN starts 23:00 UTC — zero look-ahead.
+        Uses the pre-computed pit_range_atr column (already normalized).
+        """
+        _ = (orb_label, entry_model)
+        observed = _atom_numeric(row.get("pit_range_atr"))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_ratio
+        return [
+            AtomDescription(
+                name=f"pit_range / atr_20 >= {self.min_ratio:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="pit_range_atr",
+                observed_value=observed,
+                threshold=self.min_ratio,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require CME pit-session range normalized by ATR-20 "
+                    f">= {self.min_ratio:g} (prior pit activity gate)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
