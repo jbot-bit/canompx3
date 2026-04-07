@@ -46,8 +46,10 @@ Examples of this rule in action:
 
 ### 7. Ground in local resources before training memory
 
-- `resources/` has 15 institutional PDFs.
+- `resources/` has 15+ institutional PDFs.
 - Design decisions resting on literature claims must extract the relevant passage. Training-memory citations must be labeled "from training memory — not verified against local PDF."
+- **Extract-before-dismiss rule:** before characterizing a PDF's content (e.g., "bibliography only", "front matter only", "no relevant content"), extract the table of contents AND at least 3 sample pages from the middle. A single-keyword grep can miss whole chapters when the terminology is different — e.g., on 2026-04-07 a self-review caught a MEDIUM factual error in `docs/specs/research_modes_and_lineage.md` § 9.2 where `resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf` was incorrectly characterized as "bibliography only" because the only `walk.forward` grep hit was in a bibliography entry, when in fact pp 6-28 of the local PDF are Chapter 1 "Introduction" containing substantive backtest-overfitting content including an explicit CPCV reference. The fix is at commit `aec7730`.
+- **Corollary:** keyword matches against PDFs are a starting point, not a conclusion. Always read the surrounding paragraphs before reporting a finding. "`walk`" often means "random walk" (Monte Carlo), "`half`" often means "half-life" (mean reversion) — not walk-forward testing or the 50% Sharpe discount.
 
 ### 8. Verify before claiming
 

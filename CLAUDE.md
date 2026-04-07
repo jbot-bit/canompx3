@@ -76,7 +76,7 @@ Identify canonical source → verify downstream derives from it → if source ma
 
 ### Local Academic / Project-Source Grounding Rule
 Prefer local sources (`resources/` PDFs, project canon) over training memory. If no local source, say UNSUPPORTED.
-**PDF protocol:** EXTRACT text from the file — never cite from training memory as if you read it. If extraction fails, say so explicitly. Label training-memory claims as "From training memory — not verified against local PDF."
+**PDF protocol:** EXTRACT text from the file — never cite from training memory as if you read it. If extraction fails, say so explicitly. Label training-memory claims as "From training memory — not verified against local PDF." **Before dismissing a PDF as "bibliography only" / "front matter only" / "nothing relevant" based on a keyword grep, extract the table of contents AND at least 3 sample pages from the middle of the PDF to confirm the actual structure.** A single-keyword grep can miss whole chapters when the terminology is different (e.g., "walk-forward" vs "random walk", "half" vs "half-life"). A 2026-04-07 self-review caught a case where `resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf` was incorrectly characterized as "bibliography only" when pp 6-28 are actually Chapter 1 "Introduction" with substantive backtest-overfitting content — see `docs/specs/research_modes_and_lineage.md` § 9.2 Revision history. Commit `aec7730` is the fix.
 
 ### Audit-First Default for Research Layers
 Research layers: **audit → adversarial audit → fix → rerun → freeze → move on**. Do not skip to implementation when truth-state is unverified.
