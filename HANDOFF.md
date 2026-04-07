@@ -6,7 +6,49 @@
 
 ---
 
-## Update (Apr 7 — A-grade Hardening — IN PROGRESS, RESUME POINT)
+## Update (Apr 7 — A-grade Hardening — COMPLETE)
+
+### Status
+**CLOSED.** All 3 Bloomey review #2 findings addressed. TDD RED → GREEN via
+single commit `9a95aec`. 203/203 eligibility tests pass. Drift check #85
+(filter self-description coverage) PASSED. Grade progression B+ → A- → A
+achieved.
+
+### Final commit chain (read-most-recent-first)
+- `9a95aec` fix(eligibility): fail-closed on describe() contract violations
+  (Fix 1 + Fix 2 combined — both addressed runtime runtime defense-in-depth
+  for the same class of bug; splitting into 2 commits would have been
+  cosmetic since the fixes are spatially interleaved and tightly coupled)
+- `54303ea` test(eligibility): regression tests for describe() contract violations (TDD RED)
+- `e2b6f8b` feat(pipeline): drift check #85 — enum-string validation on atom fields
+- `448e6d6` test(eligibility): regression tests for fail-closed describe() exception handling
+- `719e906` fix(eligibility): fail-closed on describe() exceptions (B+ → A- hardening)
+
+### What landed in 9a95aec
+**Fix 1 — `_walk_filter_atoms` return-shape validation**
+- New helper `_synthetic_failed_atom(filter_type, error_msg)` (single source
+  of truth, used by both the exception path and the return-shape paths)
+- Reject non-list/tuple returns (None, dict, str, generator, set) →
+  synthetic DATA_MISSING atom
+- Per-element validation: non-`AtomDescription` items in a valid list
+  become synthetic atoms; valid siblings in the same list are preserved
+
+**Fix 2 — `_atom_to_condition` explicit enum validation**
+- New helper `_contract_violation_record(source_filter, error_msg)`
+- Silent `.get(default)` lookups on `_CATEGORY_MAP`, `_RESOLVES_AT_MAP`,
+  `_CONFIDENCE_TIER_MAP` replaced with explicit `not in` membership checks
+- New `build_errors: list[str]` parameter; both existing call sites updated
+  (`_build_atr_velocity_condition` + main loop in `build_eligibility_report`)
+
+### Pre-existing issue (NOT this stage, still unresolved)
+Drift Check #57 fails: `MGC: 1 trading day(s) with != 3 rows in
+daily_features` (trading_day 2026-04-06). Same as the previous stage
+close — `pipeline/build_daily_features.py` incomplete build. Unrelated
+to eligibility work. Track separately.
+
+---
+
+## Update (Apr 7 — A-grade Hardening — PRIOR IN-PROGRESS STATE, archived)
 
 ### Status
 Mid-iteration on Bloomey review #2 findings. TDD RED state committed. Two code fixes pending. Safe to close and reopen — all progress is saved in commits.
