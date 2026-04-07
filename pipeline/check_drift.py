@@ -3480,6 +3480,210 @@ def check_no_scratch_db_in_docstrings() -> list[str]:
     return violations
 
 
+# =============================================================================
+# E2 canonical-window fix — structural locks (added 2026-04-07, Stage 8)
+# =============================================================================
+#
+# These five checks lock in the Stage 5 fail-closed E2 fix from the
+# E2 canonical-window refactor. Each one prevents a specific regression
+# vector that would re-introduce fakeout-blind backtests (Chan Ch 1 p4
+# violation: backtest must equal live execution). See
+# docs/postmortems/2026-04-07-e2-canonical-window-fix.md for the full
+# postmortem of why these checks exist.
+#
+# Each check is paired with a negative test in
+# tests/test_pipeline/test_check_drift.py that injects a controlled
+# violation and asserts the check detects it (Generation Is Not Validation
+# rule from .claude/rules/integrity-guardian.md).
+
+
+def check_canonical_orb_utc_window_source() -> list[str]:
+    """Only pipeline/dst.py may define `def orb_utc_window(`.
+
+    Stage 1 of the E2 canonical-window refactor consolidated three parallel
+    implementations of "compute ORB window end UTC" into one canonical
+    function in pipeline.dst. This check prevents accidental re-encoding
+    in build_daily_features, execution_engine, outcome_builder, or any
+    new file — a regression that would re-create the parallel-models
+    drift that originally caused the fakeout-blind backtest bug.
+
+    Allowed: pipeline/dst.py (the canonical home), check_drift.py (this
+    file, which references the symbol name in regex), and tests
+    (test fixtures may import or reference the symbol).
+    """
+    violations = []
+    pattern = re.compile(r"^\s*def\s+orb_utc_window\s*\(", re.MULTILINE)
+    canonical_file = PIPELINE_DIR / "dst.py"
+    scan_dirs = [PIPELINE_DIR, TRADING_APP_DIR, SCRIPTS_DIR]
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            if py_file.resolve() == canonical_file.resolve():
+                continue
+            if py_file.name == "check_drift.py":
+                continue
+            if "archive" in py_file.parts:
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for match in pattern.finditer(content):
+                line_no = content[: match.start()].count("\n") + 1
+                try:
+                    rel: Path | str = py_file.relative_to(PROJECT_ROOT)
+                except ValueError:
+                    rel = py_file  # tmp_path during testing — fall back to absolute
+                violations.append(
+                    f"  {rel}:{line_no} — defines orb_utc_window outside canonical "
+                    f"pipeline/dst.py. The E2 canonical-window refactor (2026-04-07) "
+                    f"requires a single source of truth. Import from pipeline.dst instead."
+                )
+    return violations
+
+
+def check_no_silent_break_ts_fallback() -> list[str]:
+    """trading_app/outcome_builder.py must not silently fall back to break_ts.
+
+    Stage 5 of the E2 canonical-window refactor deleted these lookahead-bias
+    patterns from compute_single_outcome:
+      - `if orb_end_utc is not None else break_ts` (the L455 silent fallback)
+      - `orb_end_utc or break_ts` (a shorter equivalent)
+      - `= break_ts - timedelta(minutes=break_delay)` (the L782 derivation
+        from break_delay_min, which was a different shape of the same bug)
+
+    Each pattern would scan from the close-confirmed break bar instead of
+    the canonical ORB window close, missing fakeout entries and producing
+    backtest results that diverge from live execution (Chan Ch 1 p4
+    violation). This check prevents reintroduction.
+    """
+    violations = []
+    forbidden_patterns = [
+        ("if orb_end_utc is not None else break_ts",
+         "silent fallback to break_ts — re-creates Stage 5 lookahead bias"),
+        ("orb_end_utc or break_ts",
+         "shorthand silent fallback to break_ts — re-creates Stage 5 lookahead bias"),
+        ("= break_ts - timedelta(minutes=break_delay)",
+         "L782-style derivation from break_delay_min — re-creates Stage 5 lookahead bias"),
+    ]
+    target = TRADING_APP_DIR / "outcome_builder.py"
+    if not target.exists():
+        return [f"  {target} — missing (cannot verify Stage 5 fix)"]
+    try:
+        content = target.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        return [f"  {target} — read failed: {e}"]
+    for needle, reason in forbidden_patterns:
+        if needle in content:
+            # Find first line number for the report
+            line_no = content[: content.find(needle)].count("\n") + 1
+            try:
+                rel: Path | str = target.relative_to(PROJECT_ROOT)
+            except ValueError:
+                rel = target  # tmp_path during testing — fall back to absolute
+            violations.append(
+                f"  {rel}:{line_no} — forbidden pattern '{needle}': {reason}"
+            )
+    return violations
+
+
+def check_compute_single_outcome_canonical_kwargs() -> list[str]:
+    """compute_single_outcome must accept (trading_day, orb_label, orb_minutes, orb_end_utc).
+
+    Stage 5 added these parameters as the canonical fail-closed path for E2
+    entries. A regression that removed any of them would break the
+    fail-closed contract — callers would silently revert to the old
+    break_ts derivation. This check uses inspect.signature to read the
+    actual function parameters at import time, catching renames that a
+    text-based regex would miss.
+    """
+    violations = []
+    try:
+        import inspect
+
+        from trading_app.outcome_builder import compute_single_outcome
+    except ImportError as e:
+        return [f"  trading_app.outcome_builder.compute_single_outcome — import failed: {e}"]
+    required = {"trading_day", "orb_label", "orb_minutes", "orb_end_utc"}
+    sig = inspect.signature(compute_single_outcome)
+    missing = required - set(sig.parameters.keys())
+    if missing:
+        violations.append(
+            f"  trading_app.outcome_builder.compute_single_outcome — missing canonical "
+            f"kwargs {sorted(missing)}. Stage 5 of the E2 canonical-window refactor "
+            f"requires all four (trading_day, orb_label, orb_minutes, orb_end_utc) "
+            f"to enforce the fail-closed contract. Re-adding any will silently break "
+            f"the lookahead-bias guard."
+        )
+    return violations
+
+
+def check_nested_builder_absent() -> list[str]:
+    """trading_app/nested/builder.py must not exist.
+
+    Stage 7 of the E2 canonical-window refactor deleted this 536-line
+    module. It targeted a `nested_outcomes` table that was never created
+    in init_db.py — every build_nested_outcomes() invocation crashed on
+    the missing table, so the module was structurally dead from day one.
+    Worse, it embedded a buggy E2 path (the same lookahead-bias bug as
+    Stage 5 fixed in outcome_builder).
+
+    Two real helpers (resample_to_5m, _verify_e3_sub_bar_fill) were
+    rescued to trading_app/entry_rules.py in Stage 4 before the deletion.
+    Re-creating the file would re-introduce the dead-table bug AND the
+    duplicate E2 implementation, both of which Stage 7 eliminated.
+    """
+    target = TRADING_APP_DIR / "nested" / "builder.py"
+    if target.exists():
+        try:
+            rel: Path | str = target.relative_to(PROJECT_ROOT)
+        except ValueError:
+            rel = target  # tmp_path during testing — fall back to absolute
+        return [
+            f"  {rel} — file must not exist. Stage 7 of the E2 canonical-window "
+            f"refactor (2026-04-07) deleted this 536-line dead module. The two real "
+            f"helpers it contained (resample_to_5m, _verify_e3_sub_bar_fill) live in "
+            f"trading_app/entry_rules.py — import from there. See "
+            f"docs/postmortems/2026-04-07-e2-canonical-window-fix.md."
+        ]
+    return []
+
+
+def check_resample_helpers_in_entry_rules() -> list[str]:
+    """resample_to_5m and _verify_e3_sub_bar_fill must be defined in trading_app.entry_rules.
+
+    Stage 4 of the E2 canonical-window refactor extracted these helpers
+    from the doomed nested/builder.py to trading_app/entry_rules.py before
+    Stage 7 deleted the original. They're used by trading_app/nested/audit_outcomes.py.
+    Moving them to a different module would break that import without
+    necessarily breaking tests (audit_outcomes is rarely run). This check
+    asserts the canonical home by importing the helpers and reading
+    `__module__` — catching any silent relocation.
+    """
+    violations = []
+    expected_module = "trading_app.entry_rules"
+    try:
+        from trading_app.entry_rules import (
+            _verify_e3_sub_bar_fill,
+            resample_to_5m,
+        )
+    except ImportError as e:
+        return [
+            f"  trading_app.entry_rules — could not import resample_to_5m or "
+            f"_verify_e3_sub_bar_fill: {e}. Stage 4 of the E2 canonical-window refactor "
+            f"placed these helpers here as the canonical home."
+        ]
+    for fn, name in [(resample_to_5m, "resample_to_5m"), (_verify_e3_sub_bar_fill, "_verify_e3_sub_bar_fill")]:
+        if fn.__module__ != expected_module:
+            violations.append(
+                f"  trading_app.entry_rules.{name} — __module__ is {fn.__module__!r}, "
+                f"expected {expected_module!r}. Stage 4 of the E2 canonical-window "
+                f"refactor placed these helpers in trading_app/entry_rules.py."
+            )
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -3693,6 +3897,37 @@ CHECKS = [
     ),  # requires_db
     ("No raw orb_active reads outside asset_configs.py", check_no_raw_orb_active_reads, False, False),
     ("No deprecated C:/db/gold.db in docstring usage examples", check_no_scratch_db_in_docstrings, False, False),
+    # ── E2 canonical-window fix structural locks (2026-04-07, Stage 8) ────────
+    (
+        "Canonical orb_utc_window source (only pipeline/dst.py may define it)",
+        check_canonical_orb_utc_window_source,
+        False,
+        False,
+    ),
+    (
+        "No silent break_ts fallback in outcome_builder (Stage 5 fail-closed lock)",
+        check_no_silent_break_ts_fallback,
+        False,
+        False,
+    ),
+    (
+        "compute_single_outcome canonical kwargs present (trading_day/orb_label/orb_minutes/orb_end_utc)",
+        check_compute_single_outcome_canonical_kwargs,
+        False,
+        False,
+    ),
+    (
+        "trading_app/nested/builder.py absent (Stage 7 dead-code deletion)",
+        check_nested_builder_absent,
+        False,
+        False,
+    ),
+    (
+        "resample_to_5m + _verify_e3_sub_bar_fill canonical home is trading_app.entry_rules",
+        check_resample_helpers_in_entry_rules,
+        False,
+        False,
+    ),
 ]  # end CHECKS
 
 

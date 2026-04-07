@@ -670,3 +670,234 @@ class TestUvLockExists:
         violations = check_uv_lock_exists(tmp_path)
         assert len(violations) == 1
         assert "skeleton" in violations[0]
+
+
+# ============================================================================
+# E2 canonical-window fix structural-lock checks (Stage 8 of refactor 2026-04-07)
+# ============================================================================
+#
+# Each test injects a controlled violation of one of the 5 new structural
+# locks, then asserts the corresponding drift check detects it. This proves
+# the checks actually catch their target — without negative tests, the
+# checks could silently rot into "always passes" no-ops.
+#
+# Reference: docs/postmortems/2026-04-07-e2-canonical-window-fix.md.
+
+
+class TestCanonicalOrbUtcWindowSource:
+    """Test that check_canonical_orb_utc_window_source catches non-canonical defs."""
+
+    def test_passes_when_only_canonical_defines_it(self):
+        """The current repo state must pass — pipeline/dst.py is the only definer."""
+        from pipeline.check_drift import check_canonical_orb_utc_window_source
+
+        violations = check_canonical_orb_utc_window_source()
+        assert violations == [], f"Current repo should be canonical-clean: {violations}"
+
+    def test_catches_duplicate_definition_in_trading_app(self, tmp_path, monkeypatch):
+        """Inject a fake `def orb_utc_window(` in trading_app/ — must be flagged."""
+        from pipeline import check_drift
+
+        fake_trading = tmp_path / "trading_app"
+        fake_trading.mkdir()
+        offender = fake_trading / "rogue_orb.py"
+        offender.write_text(
+            "def orb_utc_window(trading_day, orb_label, orb_minutes):\n"
+            "    return None, None\n"
+        )
+        # Keep PIPELINE_DIR/SCRIPTS_DIR pointing somewhere harmless so the
+        # canonical pipeline/dst.py definer doesn't appear in the scan
+        # (we want to test detection of duplicates only).
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_trading)
+        monkeypatch.setattr(check_drift, "PIPELINE_DIR", empty)
+        monkeypatch.setattr(check_drift, "SCRIPTS_DIR", empty)
+
+        violations = check_drift.check_canonical_orb_utc_window_source()
+        assert len(violations) > 0
+        assert any("rogue_orb.py" in v for v in violations)
+
+    def test_catches_duplicate_definition_in_scripts(self, tmp_path, monkeypatch):
+        """Inject a fake `def orb_utc_window(` in scripts/ — must be flagged."""
+        from pipeline import check_drift
+
+        fake_scripts = tmp_path / "scripts"
+        fake_scripts.mkdir()
+        offender = fake_scripts / "tools" / "bad_orb.py"
+        offender.parent.mkdir()
+        offender.write_text(
+            "def orb_utc_window(td, lbl, m):\n"
+            "    pass\n"
+        )
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        monkeypatch.setattr(check_drift, "SCRIPTS_DIR", fake_scripts)
+        monkeypatch.setattr(check_drift, "PIPELINE_DIR", empty)
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", empty)
+
+        violations = check_drift.check_canonical_orb_utc_window_source()
+        assert len(violations) > 0
+        assert any("bad_orb.py" in v for v in violations)
+
+
+class TestNoSilentBreakTsFallback:
+    """Test that check_no_silent_break_ts_fallback catches Stage 5 regressions."""
+
+    def test_passes_on_current_outcome_builder(self):
+        """The current Stage 5 fix must not contain any forbidden pattern."""
+        from pipeline.check_drift import check_no_silent_break_ts_fallback
+
+        violations = check_no_silent_break_ts_fallback()
+        assert violations == [], (
+            f"trading_app/outcome_builder.py contains a forbidden silent-fallback "
+            f"pattern — Stage 5 of the E2 canonical-window refactor is broken: {violations}"
+        )
+
+    def test_catches_if_else_silent_fallback(self, tmp_path, monkeypatch):
+        """Inject the L455-style silent fallback — must be flagged."""
+        from pipeline import check_drift
+
+        fake_dir = tmp_path / "trading_app"
+        fake_dir.mkdir()
+        (fake_dir / "outcome_builder.py").write_text(
+            "scan_start = orb_end_utc if orb_end_utc is not None else break_ts\n"
+        )
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_dir)
+
+        violations = check_drift.check_no_silent_break_ts_fallback()
+        assert len(violations) > 0
+        assert any("if orb_end_utc is not None else break_ts" in v for v in violations)
+
+    def test_catches_or_shorthand_fallback(self, tmp_path, monkeypatch):
+        """Inject the `orb_end_utc or break_ts` shorthand — must be flagged."""
+        from pipeline import check_drift
+
+        fake_dir = tmp_path / "trading_app"
+        fake_dir.mkdir()
+        (fake_dir / "outcome_builder.py").write_text(
+            "x = orb_end_utc or break_ts\n"
+        )
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_dir)
+
+        violations = check_drift.check_no_silent_break_ts_fallback()
+        assert len(violations) > 0
+        assert any("orb_end_utc or break_ts" in v for v in violations)
+
+    def test_catches_break_delay_derivation(self, tmp_path, monkeypatch):
+        """Inject the L782-style derivation from break_delay_min — must be flagged."""
+        from pipeline import check_drift
+
+        fake_dir = tmp_path / "trading_app"
+        fake_dir.mkdir()
+        (fake_dir / "outcome_builder.py").write_text(
+            "orb_end_utc = break_ts - timedelta(minutes=break_delay)\n"
+        )
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_dir)
+
+        violations = check_drift.check_no_silent_break_ts_fallback()
+        assert len(violations) > 0
+        assert any("break_ts - timedelta(minutes=break_delay)" in v for v in violations)
+
+
+class TestComputeSingleOutcomeCanonicalKwargs:
+    """Test that check_compute_single_outcome_canonical_kwargs catches signature drift."""
+
+    def test_passes_on_current_signature(self):
+        """The Stage 5 signature must include all 4 canonical kwargs."""
+        from pipeline.check_drift import (
+            check_compute_single_outcome_canonical_kwargs,
+        )
+
+        violations = check_compute_single_outcome_canonical_kwargs()
+        assert violations == [], (
+            f"compute_single_outcome signature is missing a required canonical kwarg — "
+            f"Stage 5 of the E2 canonical-window refactor is broken: {violations}"
+        )
+
+    def test_catches_missing_kwarg_via_monkeypatched_signature(self, monkeypatch):
+        """Replace compute_single_outcome with a stub missing canonical kwargs."""
+        import trading_app.outcome_builder as ob
+
+        def stub(bars_df, break_ts, orb_high, orb_low, break_dir, rr_target,
+                 confirm_bars, trading_day_end, cost_spec, entry_model="E1"):
+            # Deliberately missing trading_day, orb_label, orb_minutes, orb_end_utc
+            return {}
+
+        monkeypatch.setattr(ob, "compute_single_outcome", stub)
+        from pipeline.check_drift import (
+            check_compute_single_outcome_canonical_kwargs,
+        )
+
+        violations = check_compute_single_outcome_canonical_kwargs()
+        assert len(violations) > 0
+        assert any("trading_day" in v or "orb_label" in v or "orb_minutes" in v
+                   or "orb_end_utc" in v for v in violations)
+
+
+class TestNestedBuilderAbsent:
+    """Test that check_nested_builder_absent catches re-creation of dead module."""
+
+    def test_passes_when_file_absent(self):
+        """Stage 7 deleted nested/builder.py — current state must pass."""
+        from pipeline.check_drift import check_nested_builder_absent
+
+        violations = check_nested_builder_absent()
+        assert violations == [], (
+            f"trading_app/nested/builder.py exists but Stage 7 of the E2 "
+            f"canonical-window refactor deleted it: {violations}"
+        )
+
+    def test_catches_re_creation(self, tmp_path, monkeypatch):
+        """Re-create nested/builder.py — must be flagged."""
+        from pipeline import check_drift
+
+        fake_trading = tmp_path / "trading_app"
+        nested_dir = fake_trading / "nested"
+        nested_dir.mkdir(parents=True)
+        builder = nested_dir / "builder.py"
+        builder.write_text("# accidentally re-created dead module\n")
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_trading)
+
+        violations = check_drift.check_nested_builder_absent()
+        assert len(violations) > 0
+        assert any("nested" in v and "builder.py" in v for v in violations)
+
+
+class TestResampleHelpersInEntryRules:
+    """Test that resample helpers are pinned to trading_app.entry_rules."""
+
+    def test_passes_on_current_module_location(self):
+        """Both helpers live in trading_app.entry_rules per Stage 4."""
+        from pipeline.check_drift import check_resample_helpers_in_entry_rules
+
+        violations = check_resample_helpers_in_entry_rules()
+        assert violations == [], (
+            f"resample_to_5m or _verify_e3_sub_bar_fill is not in "
+            f"trading_app.entry_rules — Stage 4 of the E2 canonical-window "
+            f"refactor placed them there: {violations}"
+        )
+
+    def test_catches_helper_relocation(self, monkeypatch):
+        """Monkeypatch resample_to_5m's __module__ to a wrong module — must be flagged."""
+        import trading_app.entry_rules as er
+        from pipeline.check_drift import check_resample_helpers_in_entry_rules
+
+        original_module = er.resample_to_5m.__module__
+        # Wrap and override __module__
+        wrapped = type(er.resample_to_5m)(
+            er.resample_to_5m.__code__,
+            er.resample_to_5m.__globals__,
+            er.resample_to_5m.__name__,
+            er.resample_to_5m.__defaults__,
+            er.resample_to_5m.__closure__,
+        )
+        wrapped.__module__ = "rogue.module"
+        monkeypatch.setattr(er, "resample_to_5m", wrapped)
+
+        violations = check_resample_helpers_in_entry_rules()
+        # Restore handled by monkeypatch teardown.
+        assert len(violations) > 0
+        assert any("resample_to_5m" in v for v in violations)
+        # Sanity: confirm the original was correct (otherwise the test is moot)
+        assert original_module == "trading_app.entry_rules"
