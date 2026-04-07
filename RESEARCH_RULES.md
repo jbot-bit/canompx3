@@ -3,6 +3,17 @@
 **Authority:** Wins for all research methodology, statistical analysis, and trading interpretation decisions.
 **Conflict:** If TRADING_RULES.md says "X works" and this file says "the evidence for X is weak" → this file wins on methodology, TRADING_RULES.md wins on what to trade.
 
+> **Phase 0 literature grounding (2026-04-07).** This file's statistical thresholds are now backed by verbatim PDF extracts in [`docs/institutional/literature/`](docs/institutional/literature/). Specifically:
+>
+> - **The Bailey Rule** (§ Statistical Rigor below) — see [`docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md`](docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md) for MinBTL theorem and [`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`](docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md) for the DSR formula.
+> - **Multiple-testing thresholds** — see [`docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md`](docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md) (t ≥ 3.79) and [`docs/institutional/literature/harvey_liu_2015_backtesting.md`](docs/institutional/literature/harvey_liu_2015_backtesting.md) (BHY haircut, profitability hurdle Exhibit 4).
+> - **Theory-first principle** — see [`docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md`](docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md): *"Backtests are not a research tool. Theories are."*
+> - **Live drift monitoring** — see [`docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md`](docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md) for the Shiryaev-Roberts procedure.
+>
+> **The 12 locked criteria** that any validated strategy must meet live in [`docs/institutional/pre_registered_criteria.md`](docs/institutional/pre_registered_criteria.md) (v2 with 5 Codex audit amendments). Read it BEFORE any discovery run. Discovery without a committed pre-registered hypothesis file in `docs/audit/hypotheses/` is banned per Criterion 1. The 300-trial MinBTL bound is per Criterion 2.
+>
+> **⚠️ Known governance inconsistency (Codex finding 2026-04-07):** The "2026 holdout is sacred" rule below conflicts with `pipeline/check_drift.py:3381 HOLDOUT_DECLARATIONS = {}` (empty dict, no active enforcement) AND with v2 Criterion 8 (Amendment 2.3) which makes 2026 OOS contingent on a pre-run Mode A (holdout-clean) vs Mode B (post-holdout-monitoring) declaration. Resolution requires a project-level policy decision; until then, treat the rule below as ASPIRATIONAL pending the declaration. See [`docs/audits/2026-04-07-finite-data-orb-audit.md`](docs/audits/2026-04-07-finite-data-orb-audit.md) for the full Codex finding.
+
 ---
 
 ## Role
