@@ -126,6 +126,33 @@ class BrokerRouter(ABC):
         """
         raise NotImplementedError
 
+    def cancel_bracket_orders(self, contract_id: str) -> int:
+        """Cancel orphaned bracket orders for a contract.
+
+        Returns the number of orders cancelled. Used on startup to clean up
+        brackets left over from a prior crashed session.
+
+        Default implementation returns 0 (no-op). Concrete routers override
+        to query and cancel broker-side bracket legs.
+        """
+        return 0
+
+    def verify_bracket_legs(
+        self, entry_order_id: int, contract_id: str
+    ) -> tuple[int | None, int | None]:
+        """Verify that bracket legs (SL + TP) were actually created at the broker.
+
+        Returns (stop_loss_order_id, take_profit_order_id). Both None if the
+        broker does not support bracket verification (e.g. Rithmic with native
+        server-side brackets does not need verification).
+
+        Only meaningful for brokers that merge brackets into the entry order
+        and create separate child orders (ProjectX AutoBracket). For
+        server-side bracket brokers, legs are atomic with entry — no verify
+        needed.
+        """
+        return (None, None)
+
 
 class BrokerContracts(ABC):
     """Resolve accounts and contract symbols."""

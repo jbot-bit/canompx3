@@ -1285,6 +1285,10 @@ class SessionOrchestrator:
         Returns the broker result dict/dataclass on success.
         Raises on final failure after all retries exhausted.
         """
+        assert self.order_router is not None, (
+            "_submit_exit_with_retry called but order_router is None "
+            "(signal_only=True). Live-only code path reached in signal mode."
+        )
         loop = asyncio.get_running_loop()
         for attempt in range(self.EXIT_RETRY_MAX):
             try:
@@ -1324,6 +1328,10 @@ class SessionOrchestrator:
         On success: removes from tracker. On failure: blocks new entries for strategy
         and sends CRITICAL alert with actionable details.
         """
+        assert self.order_router is not None, (
+            "_retry_stuck_exit called but order_router is None "
+            "(signal_only=True). Live-only code path reached in signal mode."
+        )
         sid = record.strategy_id
         log.critical("STUCK EXIT RECOVERY: re-attempting close for %s", sid)
         try:

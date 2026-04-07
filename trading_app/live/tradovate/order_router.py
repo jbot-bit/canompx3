@@ -8,9 +8,13 @@ isAutomated: MUST be true for all bot-placed orders (Tradovate requirement).
 
 import logging
 import time
+from typing import TYPE_CHECKING
 
 from ..broker_base import BrokerAuth, BrokerRouter
 from .http import request_with_retry
+
+if TYPE_CHECKING:
+    from .auth import TradovateAuth
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +27,11 @@ class TradovateOrderRouter(BrokerRouter):
     Compatible with Tradeify, MFFU, and direct Tradovate accounts.
     Same BrokerRouter interface as ProjectXOrderRouter.
     """
+
+    # Narrow the inherited BrokerAuth | None type — at runtime this is always
+    # TradovateAuth | None, which exposes .base_url. Methods that touch
+    # auth.base_url check `if self.auth is None` first.
+    auth: "TradovateAuth | None"
 
     def __init__(
         self,
