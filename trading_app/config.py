@@ -1274,6 +1274,42 @@ class DirectionFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         return df[col] == self.direction
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Direction gate. Directional, resolves at BREAK_DETECTED.
+
+        IMPORTANT: pre-break, the break direction is genuinely unknown (PENDING),
+        not DATA_MISSING. This is distinct from the old parallel-model bug
+        which marked DirectionFilter as NOT_APPLICABLE_DIRECTION unconditionally.
+        The filter DOES apply; it just hasn't resolved yet.
+        """
+        _ = entry_model
+        col = f"orb_{orb_label}_break_dir"
+        raw = row.get(col)
+        missing = _atom_is_missing(raw)
+        passes = None if missing else (raw == self.direction)
+        return [
+            AtomDescription(
+                name=f"Break direction == {self.direction}",
+                category="DIRECTIONAL",
+                resolves_at="BREAK_DETECTED",
+                passes=passes,
+                feature_column=col,
+                observed_value=None if missing else raw,
+                threshold=self.direction,
+                comparator="==",
+                is_data_missing=False,  # PENDING, not truly missing
+                explanation=(
+                    f"Strategy trades only {self.direction}-direction breaks. "
+                    f"Resolves once the break direction is observed."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class CalendarSkipFilter(StrategyFilter):
@@ -1310,6 +1346,38 @@ class CalendarSkipFilter(StrategyFilter):
                 mask = mask & ~df["is_friday"].fillna(False).astype(bool)
         return mask
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Calendar overlay summary. OVERLAY, resolves at STARTUP.
+
+        NOTE: This is the filter-as-filter_type path (deprecated in discovery).
+        The eligibility builder's richer calendar overlay (which can emit
+        HALF_SIZE with size_multiplier=0.5) is handled separately in
+        trading_app/eligibility/builder.py. This override exists to satisfy
+        the drift check that every StrategyFilter is self-describing.
+        """
+        _ = entry_model
+        passes = self.matches_row(row, orb_label)
+        return [
+            AtomDescription(
+                name="Calendar skip overlay",
+                category="OVERLAY",
+                resolves_at="STARTUP",
+                passes=passes,
+                explanation=(
+                    f"Skip trading on "
+                    f"NFP={self.skip_nfp} / OPEX={self.skip_opex} / "
+                    f"Friday({self.skip_friday_session or 'off'}). "
+                    f"Rich overlay (HALF_SIZE, sizing) handled by the "
+                    f"eligibility builder separately."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class DayOfWeekSkipFilter(StrategyFilter):
@@ -1334,6 +1402,41 @@ class DayOfWeekSkipFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         # NaN → fail-closed (notna check), then exclude skip_days
         return df["day_of_week"].notna() & ~df["day_of_week"].isin(self.skip_days)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Day-of-week skip gate. Pre-session, resolves at STARTUP.
+
+        day_of_week follows Python weekday convention (0=Mon..6=Sun) and
+        is derived from trading_day. Fail-closed on missing DOW.
+        """
+        _ = (orb_label, entry_model)
+        dow_num = _atom_numeric(row.get("day_of_week"))
+        missing = dow_num is None
+        dow_int = int(dow_num) if dow_num is not None else None
+        passes = None if missing else (dow_int not in self.skip_days)
+        skip_list = list(self.skip_days)
+        return [
+            AtomDescription(
+                name=f"Day of week not in {skip_list}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="day_of_week",
+                observed_value=dow_int,
+                threshold=skip_list,
+                comparator="not in",
+                is_data_missing=missing,
+                explanation=(
+                    f"Skip trading on day_of_week {skip_list} "
+                    f"(0=Mon, 6=Sun, Python weekday convention)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -1393,6 +1496,72 @@ class ATRVelocityFilter(StrategyFilter):
         # Skip when BOTH contracting AND non-expanded
         return ~(is_contracting & is_non_expanded)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """ATR velocity overlay. Delegates to canonical matches_row().
+
+        CRITICAL CANONICAL DELEGATION: this method MUST call
+        self.matches_row() directly for the passes bool. Do NOT re-encode
+        the vel_regime/compression_tier comparison — the canonical
+        matches_row has warm-up fail-open semantics (missing compression
+        tier -> True, meaning PASS not DATA_MISSING). A parallel re-implementation
+        would drift from canonical and mislabel warm-up days as FAIL. The
+        prior parallel-model bug did exactly this.
+
+        Non-monitored sessions (anything outside apply_to_sessions) are
+        marked NOT_APPLICABLE so the eligibility report shows the overlay
+        is scoped to the two MGC sessions where signal was confirmed.
+        """
+        _ = entry_model
+        if orb_label not in self.apply_to_sessions:
+            return [
+                AtomDescription(
+                    name="ATR velocity overlay",
+                    category="OVERLAY",
+                    resolves_at="ORB_FORMATION",
+                    passes=True,
+                    is_not_applicable=True,
+                    not_applicable_reason=(
+                        f"Session '{orb_label}' is not in the monitored "
+                        f"set {list(self.apply_to_sessions)} — ATR velocity "
+                        f"signal is confirmed only for MGC CME_REOPEN and "
+                        f"MGC TOKYO_OPEN."
+                    ),
+                    explanation=(
+                        "ATR velocity overlay: skip when ATR is actively "
+                        "contracting AND the ORB is Neutral/Compressed."
+                    ),
+                )
+            ]
+        # Canonical delegation — warm-up fail-open is inherited.
+        passes = self.matches_row(row, orb_label)
+        vel_regime = row.get("atr_vel_regime")
+        comp_tier = row.get(f"orb_{orb_label}_compression_tier")
+        vel_str = "missing" if _atom_is_missing(vel_regime) else str(vel_regime)
+        tier_str = "missing" if _atom_is_missing(comp_tier) else str(comp_tier)
+        return [
+            AtomDescription(
+                name="Not (Contracting ATR + Neutral/Compressed ORB)",
+                category="OVERLAY",
+                resolves_at="ORB_FORMATION",
+                passes=passes,
+                feature_column="atr_vel_regime",
+                observed_value=f"vel={vel_str}, tier={tier_str}",
+                threshold="not (Contracting & non-Expanded)",
+                comparator="!=",
+                is_data_missing=False,  # warm-up is fail-open, not missing
+                explanation=(
+                    "Skip sessions when ATR is actively contracting AND the "
+                    "ORB is Neutral or Compressed. Fail-open on warm-up "
+                    "(missing compression tier -> PASS, matching canonical)."
+                ),
+            )
+        ]
+
 
 # Default ATR velocity overlay — applied as portfolio-level overlay.
 ATR_VELOCITY_OVERLAY = ATRVelocityFilter()
@@ -1427,6 +1596,41 @@ class DoubleBreakFilter(StrategyFilter):
             return df[col].isna() | ~df[col].astype(bool)
         else:
             return df[col].fillna(False).astype(bool)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """DoubleBreakFilter is LOOK-AHEAD and has no real-time semantics.
+
+        double_break checks whether BOTH ORB sides were breached during the
+        FULL session (i.e. after trade entry). It was removed from production
+        discovery 2026-02 (6 validated strategies proved to be artifacts).
+        describe() always returns NOT_APPLICABLE so the eligibility report
+        surfaces the filter as dead rather than claiming it passed/failed.
+        """
+        _ = (row, orb_label, entry_model)
+        return [
+            AtomDescription(
+                name="Double-break filter",
+                category="INTRA_SESSION",
+                resolves_at="ORB_FORMATION",
+                passes=None,
+                is_not_applicable=True,
+                not_applicable_reason=(
+                    "double_break is look-ahead: it checks whether BOTH ORB "
+                    "sides were breached during the full session (after trade "
+                    "entry). Cannot be used as a real-time gate. Removed from "
+                    "production discovery 2026-02."
+                ),
+                explanation=(
+                    "Deprecated filter — kept only for backward-compat with "
+                    "legacy strategy ids."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -1671,6 +1875,24 @@ class CompositeFilter(StrategyFilter):
 
     def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
         return self.base.matches_df(df, orb_label) & self.overlay.matches_df(df, orb_label)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Composite = base AND overlay. Atoms are the UNION of component atoms.
+
+        Zero re-encoded logic — delegates fully to base.describe() and
+        overlay.describe(). Consumers see each component's atoms separately,
+        preserving granularity for the eligibility report (so the user can
+        see which component failed instead of a single opaque FAIL).
+        """
+        return [
+            *self.base.describe(row, orb_label, entry_model),
+            *self.overlay.describe(row, orb_label, entry_model),
+        ]
 
 
 # =========================================================================
