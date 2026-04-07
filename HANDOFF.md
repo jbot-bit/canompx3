@@ -6,7 +6,54 @@
 
 ---
 
-## Update (Apr 7 — Canonical Filter Self-Description Refactor — IN PROGRESS)
+## Update (Apr 7 — Canonical Filter Self-Description Refactor — COMPLETE)
+
+### Status
+**STAGE CLOSED.** All 6 phases complete. 196/196 eligibility tests pass.
+Drift Check #85 (filter self-description coverage) added and PASSING.
+Parallel-model bug eliminated structurally.
+
+### Final commit chain (read-most-recent-first)
+- `32356b8` feat(pipeline): drift check #85 — filter self-description coverage
+- `d67d6bc` chore(eligibility): delete decomposition.py + its tests (parallel model eliminated)
+- `08b3568` refactor(eligibility): rewrite builder as thin canonical-delegation adapter
+- `812befd` test(eligibility): rewrite test file for thin-adapter contract (TDD RED)
+- `9128b30` feat(config): OwnATR + DOW filters expose canonical confidence_tier metadata
+- `dedb12e` feat(config): CrossAssetATR + ATRVelocity filters expose canonical metadata
+- `bf4896e` feat(config): BreakSpeed/BreakBarContinues filters expose canonical metadata
+- `6b7495d` feat(config): PitRange/PDR/Gap filters expose canonical metadata + type-error capture
+- `deefd64` feat(config): AtomDescription gains validated_for, confidence_tier, error_message
+- `32af0d1` feat(config): overlays/directional/composite describe() — DirectionFilter PENDING (foundation, pre-stage)
+
+### What landed
+- **AtomDescription** extended with `validated_for`, `last_revalidated`, `confidence_tier`, `error_message` fields
+- **9 filter classes** got `ClassVar` canonical metadata: PitRange, PDR, Gap, BreakSpeed, BreakBarContinues, CrossAssetATR, ATRVelocity, OwnATRPercentile, DayOfWeekSkip
+- **trading_app/eligibility/builder.py** rewritten as thin adapter (~686 lines incl. heavy docstrings, vs 843 prior). Pure mechanical translation: `_walk_filter_atoms` → `_status_from_atom` → `_atom_to_condition`
+- **trading_app/eligibility/decomposition.py DELETED** (607 lines) along with `tests/test_trading_app/test_eligibility_decomposition.py` (249 lines)
+- **tests/test_trading_app/test_eligibility_builder.py** rewritten (51 tests, all 8 ConditionStatus values covered)
+- **pipeline/check_drift.py** Check #85 added — iterates ALL_FILTERS, walks composites, asserts `describe()` returns `list[AtomDescription]`, asserts no concrete filter inherits the base default
+
+### Bugs eliminated structurally
+1. **HALF_SIZE → FAIL** (preserved fix from prior hardening)
+2. **NaN silent FAIL** — `_atom_is_missing` (pandas semantics) + `_atom_numeric` propagation
+3. **ATR velocity warm-up FAIL** — canonical delegation via `ATRVelocityFilter.matches_row()` inherits fail-open
+4. **CONT+E2 mislabel** — canonical `_e2_look_ahead_reason` membership test
+5. **FAST+E2 latent fall-through** — same canonical mechanism as CONT
+6. **DirectionFilter NOT_APPLICABLE_DIRECTION unconditionally** — now correctly PENDING pre-break
+7. **PDR/GAP type mismatch silent DATA_MISSING** — explicit `error_message` capture surfaces in `report.build_errors`
+8. **NOT_APPLICABLE_INSTRUMENT via hardcoded tuples** — now driven by `ClassVar VALIDATED_FOR` on the canonical filter class
+9. **STALE_VALIDATION via spec sidecar** — now driven by `ClassVar LAST_REVALIDATED`
+
+### Future-proofing
+- Adding a new filter requires: subclass `StrategyFilter` → implement `matches_row`, `describe`, ClassVar metadata → register in `ALL_FILTERS`. Drift Check #85 mechanically blocks regressions.
+- Forward-compatible with eventual DB-backed metadata: ClassVar surface stays the same; could be populated from `validation_run_log` at startup.
+
+### Pre-existing issue (NOT this stage)
+Drift Check #57 fails: `MGC: 1 trading day(s) with != 3 rows in daily_features` (trading_day 2026-04-06). This is a data integrity issue from an incomplete `daily_features` build. Confirmed unrelated: `pipeline/build_daily_features.py` last touched in commits 74e051a/499acc0, well before this refactor. Track separately.
+
+---
+
+## Update (Apr 7 — Canonical Filter Self-Description Refactor — PRIOR HISTORY, archived)
 
 ### Status
 Mid-refactor. Foundation committed at `f9231dc`. ~17 filter classes still need `describe()` overrides. Next session picks up at Task #19.
