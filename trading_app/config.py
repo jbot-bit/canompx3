@@ -78,14 +78,120 @@ GRID (5,544 strategy combinations, full grid before ENABLED_SESSIONS filtering):
 from __future__ import annotations
 
 import json
+import math
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import date
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pipeline.cost_model import COST_SPECS, get_cost_spec
 
 if TYPE_CHECKING:
     import pandas as pd
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Filter self-description — AtomDescription
+# ──────────────────────────────────────────────────────────────────────────
+#
+# Canonical support for eligibility visibility. Every StrategyFilter can
+# describe itself as a list of atomic conditions via the `describe()` method.
+# This is the SINGLE source of truth for "how does this filter evaluate".
+# No parallel decomposition registry allowed.
+#
+# Design: docs/plans/2026-04-07-canonical-filter-self-description-design.md
+# Rule:   .claude/rules/institutional-rigor.md — no re-encoded canonical logic
+# ──────────────────────────────────────────────────────────────────────────
+
+
+# Missing-value detection used by describe() implementations. Consistent
+# with pandas semantics: treats None, NaN, pd.NA, NaT as missing.
+def _atom_is_missing(value: Any) -> bool:
+    """True if value represents missing data (None, NaN, NaT, pd.NA).
+
+    This is the canonical missing-data check for describe() implementations.
+    Built on pandas.isna() which handles Python None, float NaN, numpy NaN,
+    pandas NA, and pandas NaT uniformly. Lazy-imports pandas.
+    """
+    if value is None:
+        return True
+    if isinstance(value, float) and math.isnan(value):
+        return True
+    try:
+        import pandas as pd
+
+        return bool(pd.isna(value))
+    except (ImportError, ValueError, TypeError):
+        return False
+
+
+def _atom_numeric(value: Any) -> float | None:
+    """Return value as float if numeric and non-missing, else None.
+
+    Combines _atom_is_missing with explicit numeric conversion. Used by
+    describe() implementations to narrow types for comparisons — pyright
+    cannot narrow through _atom_is_missing alone.
+    """
+    if _atom_is_missing(value):
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(f):
+        return None
+    return f
+
+
+@dataclass(frozen=True)
+class AtomDescription:
+    """A single atomic condition produced by a filter's describe() method.
+
+    Filters produce one or more AtomDescription records per call to
+    describe(). Each atom represents one logical check against the daily
+    features row — e.g. "ORB size >= 5 pts" or "cost ratio < 10%".
+
+    The ELIGIBILITY LAYER consumes these to build its user-facing report
+    with explicit statuses. All filter semantics live here — the eligibility
+    builder MUST NOT re-encode any logic; it only translates AtomDescription
+    to its ConditionRecord format.
+
+    Fields:
+    - name: human-readable description of the check
+    - category: PRE_SESSION | INTRA_SESSION | OVERLAY | DIRECTIONAL
+    - resolves_at: lifecycle event at which a PENDING atom resolves
+      (STARTUP | ORB_FORMATION | BREAK_DETECTED | CONFIRM_COMPLETE | TRADE_ENTERED)
+    - feature_column: the daily_features column this atom reads (already
+      session-resolved; None for derived or overlay atoms)
+    - observed_value: the actual value today, or None if missing/pending
+    - threshold: the comparison threshold from the filter instance
+    - comparator: plain-English comparator ("≥", "<", "==", etc.)
+    - passes: True (PASS), False (FAIL), None (PENDING or MISSING)
+    - is_data_missing: True if the required data was missing (distinct from FAIL)
+    - is_not_applicable: True if this atom does not apply to the caller's
+      (instrument, session, entry_model) combination
+    - not_applicable_reason: if is_not_applicable, human-readable reason
+    - last_revalidated: date of last research revalidation, from filter
+      annotations
+    - size_multiplier: trade sizing modifier for PASS conditions (default 1.0,
+      0.5 for calendar HALF_SIZE)
+    - explanation: one-sentence plain-English description
+    """
+
+    name: str
+    category: str
+    resolves_at: str
+    passes: bool | None
+    feature_column: str | None = None
+    observed_value: Any = None
+    threshold: Any = None
+    comparator: str = ""
+    is_data_missing: bool = False
+    is_not_applicable: bool = False
+    not_applicable_reason: str = ""
+    last_revalidated: date | None = None
+    size_multiplier: float = 1.0
+    explanation: str = ""
 
 # ── Noise ExpR floor per entry model ──────────────────────────────────────
 # NO LONGER A HARD GATE (2026-03-21). Phase 2b removed from strategy_validator.
@@ -201,6 +307,48 @@ class StrategyFilter:
             index=df.index,
         )
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Return atomic descriptions of this filter's conditions.
+
+        Default implementation: one atom derived from matches_row() result.
+        This works correctly for simple filters but loses granularity for
+        composites. Composite filters MUST override to return multiple atoms
+        so consumers can see which component failed.
+
+        The filter owns its decomposition — the eligibility layer MUST NOT
+        re-encode comparison logic. If you need finer atoms, override here.
+
+        Args:
+            row: A daily_features row as a dict (e.g. from DataFrame.to_dict)
+            orb_label: The session identifier (e.g. "CME_REOPEN")
+            entry_model: The strategy's entry model ("E1" | "E2" | "E3") —
+                used to mark atoms as NOT_APPLICABLE when look-ahead unsafe
+
+        Returns:
+            List of AtomDescription records. An empty list means "this filter
+            has no atomic gates" (e.g. NoFilter). A single-atom list is the
+            most common case.
+        """
+        _ = entry_model  # base class default does not use entry_model
+        passes = self.matches_row(row, orb_label)
+        return [
+            AtomDescription(
+                name=self.description,
+                category="INTRA_SESSION",  # conservative default
+                resolves_at="ORB_FORMATION",
+                passes=passes,
+                threshold=None,
+                observed_value=None,
+                comparator="",
+                explanation=self.description,
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class NoFilter(StrategyFilter):
@@ -216,6 +364,20 @@ class NoFilter(StrategyFilter):
         import pandas as pd
 
         return pd.Series(True, index=df.index)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """NoFilter has zero atomic gates — always eligible by filter definition.
+
+        Overlays (calendar, ATR velocity) are added separately by the
+        eligibility builder, not by this method.
+        """
+        _ = (row, orb_label, entry_model)
+        return []
 
 
 @dataclass(frozen=True)
@@ -247,6 +409,57 @@ class OrbSizeFilter(StrategyFilter):
         if self.max_size is not None:
             mask = mask & (df[col] < self.max_size)
         return mask
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Describe ORB size gate as up to two atoms (min_size, optional max_size).
+
+        ORB size is intra-session: it resolves at ORB_FORMATION because the
+        size is only known once the ORB window closes.
+        """
+        _ = entry_model  # size gates are entry-model agnostic
+        col = f"orb_{orb_label}_size"
+        observed = _atom_numeric(row.get(col))
+        missing = observed is None
+
+        atoms: list[AtomDescription] = []
+        if self.min_size is not None:
+            passes = None if observed is None else observed >= self.min_size
+            atoms.append(
+                AtomDescription(
+                    name=f"ORB size >= {self.min_size:g} pts",
+                    category="INTRA_SESSION",
+                    resolves_at="ORB_FORMATION",
+                    passes=passes,
+                    feature_column=col,
+                    observed_value=observed,
+                    threshold=self.min_size,
+                    comparator=">=",
+                    is_data_missing=missing,
+                    explanation=f"Skip ORBs smaller than {self.min_size:g} points.",
+                )
+            )
+        if self.max_size is not None:
+            passes = None if observed is None else observed < self.max_size
+            atoms.append(
+                AtomDescription(
+                    name=f"ORB size < {self.max_size:g} pts",
+                    category="INTRA_SESSION",
+                    resolves_at="ORB_FORMATION",
+                    passes=passes,
+                    feature_column=col,
+                    observed_value=observed,
+                    threshold=self.max_size,
+                    comparator="<",
+                    is_data_missing=missing,
+                    explanation=f"Skip ORBs larger than {self.max_size:g} points (band filter).",
+                )
+            )
+        return atoms
 
 
 @dataclass(frozen=True)
@@ -1129,7 +1342,7 @@ _M6E_SIZE_FILTERS: dict[str, OrbSizeFilter] = {
 
 
 def _make_dow_composites(
-    size_filters: dict[str, StrategyFilter],
+    size_filters: "Mapping[str, StrategyFilter]",
     dow_filter: DayOfWeekSkipFilter,
     suffix: str,
 ) -> dict[str, CompositeFilter]:
@@ -1163,7 +1376,7 @@ def _make_dbl_composites(
 
 
 def _make_break_quality_composites(
-    size_filters: dict[str, StrategyFilter],
+    size_filters: Mapping[str, StrategyFilter],
     bq_filter: StrategyFilter,
     suffix: str,
 ) -> dict[str, CompositeFilter]:

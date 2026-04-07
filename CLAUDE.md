@@ -81,11 +81,14 @@ Prefer local sources (`resources/` PDFs, project canon) over training memory. If
 ### Audit-First Default for Research Layers
 Research layers: **audit → adversarial audit → fix → rerun → freeze → move on**. Do not skip to implementation when truth-state is unverified.
 
+### Institutional Rigor (MANDATORY — non-negotiable)
+**Always take the proper long-term institutional-grounded fix.** No band-aids, no skipping, no dead code, no silent failures, no re-encoding canonical logic. Review own work before claiming done. When review cycles keep finding new bugs, refactor — don't patch. Full rules → `.claude/rules/institutional-rigor.md`.
+
 ### 2-Pass Implementation Method (MANDATORY)
 1. **Discovery:** Read affected files, understand blast radius, articulate PURPOSE before writing code.
-2. **Implementation:** Write → verify (drift + tests + behavioral audit) → fix regressions → review.
+2. **Implementation:** Write → verify (drift + tests + behavioral audit) → fix regressions → **self-review** → fix new findings.
 
-One task at a time. Never batch without verification. **"Done" = tests pass (show output) + dead code swept (`grep -r`) + `check_drift.py` passes.** All three required.
+One task at a time. Never batch without verification. **"Done" = tests pass (show output) + dead code swept (`grep -r`) + `check_drift.py` passes + self-review passed.** All four required.
 
 ### Design Proposal Gate (MANDATORY)
 Before writing ANY code on a non-trivial change, present: (1) **What** and why, (2) **Files** to touch, (3) **Blast radius**, (4) **Approach**.
