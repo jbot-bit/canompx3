@@ -8,7 +8,7 @@ PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
 
 if [[ ! -f "$VENV/bin/python" ]]; then
   echo "ERROR: .venv-wsl/bin/python not found." >&2
-  echo "Run 'uv sync --frozen' inside WSL to create the venv." >&2
+  echo "Run 'UV_PROJECT_ENVIRONMENT=.venv-wsl uv sync --frozen --python 3.13 --group dev' inside WSL to create the venv." >&2
   echo "Windows Claude Code uses .venv/ - this script is WSL-only." >&2
   exit 1
 fi
