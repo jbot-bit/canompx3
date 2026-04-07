@@ -1547,6 +1547,76 @@ def run_validation(
     return passed, rejected
 
 
+def _check_mode_a_holdout_integrity(db_path: Path | None, instrument: str) -> None:
+    """Pre-flight gate: refuse to validate when NEW Mode A contamination exists.
+
+    Amendment 2.7 (pre_registered_criteria.md, 2026-04-08) mandates that any
+    ``experimental_strategies`` row created AFTER the grandfather cutoff
+    containing sacred-window (currently ``HOLDOUT_SACRED_FROM.year``) yearly
+    results must have been discovered with ``--holdout-date
+    HOLDOUT_SACRED_FROM`` or earlier. The discovery CLI enforces this at
+    entry (Stage 3 of the Amendment 2.7 enforcement refactor), but if a
+    row lands in ``experimental_strategies`` via a bypass path (direct SQL,
+    a legacy script, a test fixture), the validator must refuse to promote
+    it rather than silently bless contaminated work.
+
+    This function is a belt-and-suspenders check: ``check_drift.py``
+    ``check_holdout_contamination()`` surfaces the same violation at drift
+    check time, and the discovery CLI prevents it at entry, so in normal
+    operation this pre-flight is a no-op (zero new violations). It fails
+    loud only when the two upstream gates have been bypassed.
+
+    Parameters
+    ----------
+    db_path
+        Path to gold.db (``None`` uses the canonical default).
+    instrument
+        Instrument symbol to check (validator runs per-instrument).
+
+    Raises
+    ------
+    ValueError
+        If any experimental_strategies row for this instrument has
+        ``created_at > HOLDOUT_GRANDFATHER_CUTOFF`` AND contains
+        ``yearly_results['<sacred_year>']``. The error message cites
+        Amendment 2.7 and the canonical source module.
+    """
+    from trading_app.holdout_policy import (
+        HOLDOUT_GRANDFATHER_CUTOFF,
+        HOLDOUT_SACRED_FROM,
+    )
+
+    effective_path = db_path if db_path else GOLD_DB_PATH
+    if not Path(effective_path).exists():
+        # Fail-open: if the DB isn't there, discovery hasn't run anyway.
+        # The discovery CLI gate would have caught contamination at entry.
+        return
+
+    sacred_year = str(HOLDOUT_SACRED_FROM.year)
+    with duckdb.connect(str(effective_path), read_only=True) as con:
+        row = con.execute(
+            """SELECT COUNT(*) FROM experimental_strategies
+               WHERE instrument = ?
+               AND created_at > ?
+               AND yearly_results IS NOT NULL
+               AND json_extract_string(yearly_results, '$."' || ? || '"') IS NOT NULL""",
+            [instrument, HOLDOUT_GRANDFATHER_CUTOFF, sacred_year],
+        ).fetchone()
+        new_contam = row[0] if row is not None else 0
+
+    if new_contam > 0:
+        raise ValueError(
+            f"Validator refuses to promote {new_contam} {instrument} "
+            f"experimental_strategies with {sacred_year} data created after "
+            f"{HOLDOUT_GRANDFATHER_CUTOFF.date().isoformat()}. "
+            f"This violates Mode A (pre_registered_criteria.md Amendment 2.7). "
+            f"Either re-run discovery with --holdout-date "
+            f"{HOLDOUT_SACRED_FROM.isoformat()} or promote from a "
+            f"pre-grandfather DB snapshot. "
+            f"Canonical source: trading_app.holdout_policy"
+        )
+
+
 def main():
     import argparse
 
@@ -1611,6 +1681,16 @@ def main():
 
     exclude = set(args.exclude_years) if args.exclude_years else None
     db_path = Path(args.db) if args.db else None
+
+    # Mode A holdout integrity gate (Amendment 2.7). Belt-and-suspenders check
+    # that refuses to promote any experimental_strategies rows created after
+    # the grandfather cutoff with sacred-window data. Discovery CLI enforces
+    # this at entry (Stage 3 refactor), but this validator gate catches any
+    # bypass path. In normal operation this is a no-op.
+    try:
+        _check_mode_a_holdout_integrity(db_path, args.instrument)
+    except ValueError as e:
+        parser.error(str(e))  # exits code 2 with standard argparse error format
 
     # Load per-session K overrides if provided
     fdr_k_overrides = None
