@@ -5,6 +5,19 @@
 
 **Scope:** All strategy discovery, validation, and deployment decisions for ORB breakout trading on CME micro futures (MGC, MNQ, MES). Does not apply to feature engineering for signals already in the validated set.
 
+> **⚠️ 2026-04-07 v2 AMENDMENTS — READ BEFORE APPLYING SECTIONS 2.2, 2.3, 4.4, 5.**
+>
+> After this framework was written, a parallel Codex audit (`docs/audits/2026-04-07-finite-data-orb-audit.md`) identified three places where the framework was ahead of what the live codebase has actually solved. Those findings were integrated into `pre_registered_criteria.md` as v2 amendments 2.1-2.5. **The criteria file is the binding current state; this framework file is the rationale backing.** Where the two disagree, follow the criteria file.
+>
+> Specific deltas to apply mentally when reading this framework:
+> - **§ 2.2 DSR:** Framework says "binding rule: DSR > 0.95". Amendment 2.1 downgrades DSR to **cross-check only** until `N_eff` is formally solved in-repo (`strategy_validator.py:583-589, :1400-1453` explicitly removed DSR/FST as hard gates for this reason). DSR must still be computed and reported; it must not override BH-FDR or WFE as a deploy switch.
+> - **§ 2.3 Chordia:** Framework says "t ≥ 3.00 OR theory". Amendment 2.2 refines to a **banded** threshold: t ≥ 3.79 flag / t ≥ 3.00 with pre-registered theory / t in [2.0, 3.0] passes only under strict co-requirements (pre-reg + theory + BH FDR + WFE ≥ 0.50 + 2026 OOS or N/A).
+> - **§ 4.4 Holdout OOS:** Framework assumes 2026 is clean. Amendment 2.3 makes this **contingent** on a pre-run holdout policy declaration — Mode A (holdout-clean, 2026 excluded from discovery) or Mode B (post-holdout-monitoring, 2026 consumed, forward-paper only). `pipeline/check_drift.py:3381 HOLDOUT_DECLARATIONS = {}` (empty dict) is the silent-guardrail bug that triggered this amendment. Mixing modes is banned.
+> - **§ 5 Currently deployed lanes:** Framework flags lanes against DSR > 0.95 and t < 3.00. Amendment 2.4 reclassifies the current 5 deployed MNQ/MGC lanes as **research-provisional + operationally deployable**, NOT production-grade institutional proof. Passing all 12 criteria remains the bar for production-grade.
+> - **§ 7 check_drift.py new check:** The proposed holdout-declaration and hypothesis-file enforcement checks are **blocked** until `e2-canonical-window-fix` worktree merges (`pipeline/check_drift.py` is in its scope_lock).
+>
+> Amendment 2.5 adds a new rule not in this framework: execution overlays (calendar skip, ATR velocity, E2 timeout, market-state gating) must be reported separately from discovery-filter evidence. See `pre_registered_criteria.md` § v2 Amendment 2.5.
+
 ---
 
 ## 1. The problem we are solving
@@ -63,9 +76,11 @@ At our typical data horizon (~240 monthly obs equivalent for proxy-extended, ~26
 
 ### 2.5 Theory-first principle (Lopez de Prado 2020)
 
-Reference: `literature/lopez_de_prado_2020_ml_for_asset_managers.md` (pending — pp 6-28 read, extract pending).
+Reference: `literature/lopez_de_prado_2020_ml_for_asset_managers.md` (verbatim extract committed 2026-04-07 in `0028333`, covering printed pp 1-23 / PDF pp 6-28 of the Cambridge Elements short-form Chapter 1 "Introduction").
 
-Key principle from LdP 2020 Chapter 1: "Successful investment strategies are specific implementations of general theories. An investment strategy that lacks a theoretical justification is likely to be false. Hence, an asset manager should concentrate her efforts on developing a theory rather than on backtesting potential trading rules."
+Key principle from LdP 2020 § 1.10 Conclusions (printed p 22, verbatim): *"Successful investment strategies are specific implementations of general theories. An investment strategy that lacks a theoretical justification is likely to be false. Hence, a researcher should concentrate her efforts on developing a theory, rather than of backtesting potential strategies."*
+
+Companion principle from § 1.2.1 Lesson 1 (printed p 3, verbatim): *"Contrary to popular belief, backtesting is not a research tool. Backtests can never prove that a strategy is a true positive, and they may only provide evidence that a strategy is a false positive."*
 
 **Binding rule:** Every pre-registered hypothesis must cite specific economic or microstructural theory. Purely data-mined patterns without theoretical grounding are not eligible for validation.
 
@@ -211,5 +226,7 @@ Each of these is a candidate for a pre-registered research question once the fra
 - `README.md` — master index for this directory
 - `HANDOFF.md` — session state as of 2026-04-07
 - `literature/` — verbatim source extracts
-- `pre_registered_criteria.md` — LOCKED thresholds (to be written)
-- `hypothesis_registry_template.md` — template for pre-registration (to be written)
+- `pre_registered_criteria.md` — LOCKED thresholds (v2 locked 2026-04-07 in `0028333`, with 5 amendments incorporating Codex audit findings)
+- `hypothesis_registry_template.md` — template for pre-registration (committed in `0028333`)
+- `../audit/hypotheses/README.md` — workflow + infrastructure directory (committed in `7bc47a7`)
+- `../audits/2026-04-07-finite-data-orb-audit.md` — Codex audit that produced the v2 amendments (committed in `390e408`)
