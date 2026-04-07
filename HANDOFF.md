@@ -6,6 +6,194 @@
 
 ---
 
+## Update (Apr 7 — A-grade Hardening — IN PROGRESS, RESUME POINT)
+
+### Status
+Mid-iteration on Bloomey review #2 findings. TDD RED state committed. Two code fixes pending. Safe to close and reopen — all progress is saved in commits.
+
+### Resume point (next session starts here)
+
+**Commit head:** `54303ea` — test(eligibility): regression tests for describe() contract violations (TDD RED)
+
+**IMPORTANT mixed-commit note:** `54303ea` accidentally absorbed 9 unrelated live-trading files (`broker_base.py`, `session_orchestrator.py`, `copy_order_router.py`, `broker_dispatcher.py`, `projectx/order_router.py`, `rithmic/auth.py`, `rithmic/order_router.py`, `tradovate/order_router.py`, `test_copy_order_router.py`) that were already in the staging index from another active session. These files do NOT belong to this hardening stream — they were preserved accidentally via the shared index. The relevant file for THIS work is `tests/test_trading_app/test_eligibility_builder.py` (+164 lines, new TestFailClosedOnContractViolation class).
+
+### What's committed (TDD RED)
+`54303ea` adds 3 tests in `TestFailClosedOnContractViolation`, currently RED:
+
+1. `test_describe_returns_none_surfaces_as_data_missing` — filter returns None. Current failure: `TypeError: NoneType object is not iterable`.
+2. `test_describe_returns_junk_list_surfaces_as_data_missing` — filter returns `['not an atom', 42, None]`. Current failure: `AttributeError: 'str' object has no attribute 'error_message'`.
+3. `test_atom_with_typo_category_surfaces_as_data_missing` — atom has `category='INTRA_SESION'`. Current failure: silently coerces to PRE_SESSION + status=PASS.
+
+Verify RED on resume: `PYTHONPATH=. python -m pytest tests/test_trading_app/test_eligibility_builder.py::TestFailClosedOnContractViolation -q`
+
+### What's PENDING (next-session work)
+
+**Fix 1 — `_walk_filter_atoms` return-value validation** (`trading_app/eligibility/builder.py` lines ~140-202)
+
+Add a new helper `_synthetic_failed_atom(filter_type, error_msg)` that returns an `AtomDescription` with `passes=None, is_data_missing=True, category="PRE_SESSION", resolves_at="STARTUP", error_message=error_msg`. Use it in BOTH the existing exception path AND the new return-value validation paths.
+
+After the existing `try: atoms = filt.describe(...) except Exception:` block:
+
+```python
+# Validate return shape — fail-closed on any contract violation
+if not isinstance(atoms, (list, tuple)):
+    error_msg = (
+        f"{filt.filter_type}.describe returned {type(atoms).__name__}, "
+        f"expected list[AtomDescription]"
+    )
+    return [(filt.filter_type, _synthetic_failed_atom(filt.filter_type, error_msg))]
+
+# Validate each element, substituting synthetic for bad ones (preserves
+# partial-success: valid atoms still surface, bad ones become DATA_MISSING)
+result: list[tuple[str, AtomDescription]] = []
+for atom in atoms:
+    if not isinstance(atom, AtomDescription):
+        error_msg = (
+            f"{filt.filter_type}.describe yielded {type(atom).__name__}, "
+            f"expected AtomDescription"
+        )
+        result.append((filt.filter_type, _synthetic_failed_atom(filt.filter_type, error_msg)))
+    else:
+        result.append((filt.filter_type, atom))
+return result
+```
+
+This closes tests 1 and 2.
+
+**Fix 2 — `_atom_to_condition` explicit enum validation** (`trading_app/eligibility/builder.py` around line 269)
+
+Signature change: add `build_errors: list[str]` parameter. Update both callers:
+- Main loop in `build_eligibility_report` (line ~624)
+- `_build_atr_velocity_condition` return statement
+
+Replace the silent `.get(default)` lookups with explicit membership checks. On miss: append to build_errors, return a synthetic DATA_MISSING `ConditionRecord` via a new helper `_contract_violation_record(source_filter, error_msg)`:
+
+```python
+def _contract_violation_record(source_filter: str, error_msg: str) -> ConditionRecord:
+    return ConditionRecord(
+        name=f"{source_filter}: atom contract violation",
+        category=ConditionCategory.PRE_SESSION,
+        status=ConditionStatus.DATA_MISSING,
+        resolves_at=ResolvesAt.STARTUP,
+        source_filter=source_filter,
+        confidence_tier=ConfidenceTier.UNKNOWN,
+        explanation=error_msg,
+    )
+
+def _atom_to_condition(
+    atom: AtomDescription,
+    source_filter: str,
+    instrument: str,
+    session: str,
+    trading_day: date,
+    build_errors: list[str],  # NEW
+) -> ConditionRecord:
+    # Validate enum strings — fail-closed on typos (drift check #85
+    # catches at check time, this is runtime defense-in-depth)
+    if atom.category not in _CATEGORY_MAP:
+        error_msg = (
+            f"{source_filter}: atom.category={atom.category!r} not a valid "
+            f"ConditionCategory (expected one of {sorted(_CATEGORY_MAP)})"
+        )
+        build_errors.append(error_msg)
+        return _contract_violation_record(source_filter, error_msg)
+    if atom.resolves_at not in _RESOLVES_AT_MAP:
+        error_msg = (
+            f"{source_filter}: atom.resolves_at={atom.resolves_at!r} not a valid "
+            f"ResolvesAt (expected one of {sorted(_RESOLVES_AT_MAP)})"
+        )
+        build_errors.append(error_msg)
+        return _contract_violation_record(source_filter, error_msg)
+    if atom.confidence_tier not in _CONFIDENCE_TIER_MAP:
+        error_msg = (
+            f"{source_filter}: atom.confidence_tier={atom.confidence_tier!r} not a "
+            f"valid ConfidenceTier (expected one of {sorted(_CONFIDENCE_TIER_MAP)})"
+        )
+        build_errors.append(error_msg)
+        return _contract_violation_record(source_filter, error_msg)
+
+    # All enum strings valid — proceed with direct indexing (not .get)
+    category = _CATEGORY_MAP[atom.category]
+    resolves_at = _RESOLVES_AT_MAP[atom.resolves_at]
+    confidence_tier = _CONFIDENCE_TIER_MAP[atom.confidence_tier]
+    status = _status_from_atom(atom, instrument, session, trading_day)
+    return ConditionRecord(...)  # existing body unchanged
+```
+
+This closes test 3.
+
+**Caller updates for Fix 2:**
+
+Main loop (~line 624):
+```python
+for source_filter, atom in atom_pairs:
+    if atom.error_message is not None:
+        build_errors.append(atom.error_message)
+    conditions.append(
+        _atom_to_condition(
+            atom, source_filter, instrument, orb_label, trading_day, build_errors
+        )
+    )
+```
+
+`_build_atr_velocity_condition` return (~line 520):
+```python
+return _atom_to_condition(
+    atom,
+    source_filter="atr_velocity",
+    instrument=instrument,
+    session=session,
+    trading_day=trading_day,
+    build_errors=build_errors,  # already in scope as param
+)
+```
+
+### Verification plan on resume
+
+```bash
+# 1. Confirm baseline RED
+PYTHONPATH=. python -m pytest tests/test_trading_app/test_eligibility_builder.py::TestFailClosedOnContractViolation -q
+# expect 3 failed
+
+# 2. After Fix 1 (return-value validation) — 2 should pass
+PYTHONPATH=. python -m pytest tests/test_trading_app/test_eligibility_builder.py::TestFailClosedOnContractViolation -q
+# expect 1 failed (the typo test), 2 passed
+
+# 3. After Fix 2 (enum validation) — all 3 pass
+PYTHONPATH=. python -m pytest tests/test_trading_app/test_eligibility_builder.py::TestFailClosedOnContractViolation -q
+# expect 3 passed
+
+# 4. Full eligibility suite — verify no regressions
+PYTHONPATH=. python -m pytest tests/test_trading_app/test_config.py tests/test_trading_app/test_eligibility_builder.py tests/test_trading_app/test_eligibility_types.py -q
+# expect 203 passed (200 + 3 new)
+
+# 5. Drift check — verify Check #85 still PASSES
+python pipeline/check_drift.py 2>&1 | grep -E "Check 85|Check 57"
+# expect Check 85 PASSED, Check 57 still failing (pre-existing, unrelated)
+```
+
+### Commit plan on resume
+
+1. `fix(eligibility): _walk_filter_atoms validates describe() return shape (A-grade fix 1)` — Fix 1 + helper
+2. `fix(eligibility): _atom_to_condition explicit enum validation (A-grade fix 2)` — Fix 2 + helper + caller updates
+
+### Context notes
+
+- **Pre-existing drift Check 57** (MGC daily_features 2026-04-06 row count) remains unrelated. Ignore.
+- **Mixed commit 54303ea** contains 9 unrelated live-trading files from another session's staging. Do NOT attempt to revert or rewrite history — those changes belong somewhere and shouldn't be lost. They're harmless for this work stream.
+- **The post-edit hook blocks on drift, which blocks on Check 57.** Every edit to scope files fires the hook. Check 57 is not caused by this work — verify by reading the hook output for "MGC: 1 trading day(s) with != 3 rows in daily_features".
+- **Current grade progression:** B+ (original review) → A- (first hardening, commits 719e906/448e6d6/e2b6f8b) → A (pending Fix 1 + Fix 2 from this handoff). Grade target on resume: A.
+
+### Prior hardening already landed (A-grade review #1 findings)
+
+- `719e906` fix(eligibility): fail-closed on describe() exceptions — synthetic DATA_MISSING on raise
+- `448e6d6` test(eligibility): regression tests for fail-closed describe() exception handling
+- `e2b6f8b` feat(pipeline): drift check #85 — enum-string validation on atom fields
+
+These closed all 4 B+ findings. Review #2 found 3 new MEDIUM findings at the runtime defense-in-depth layer, which are what this resume point addresses.
+
+---
+
 ## Update (Apr 7 — Canonical Filter Self-Description Refactor — COMPLETE)
 
 ### Status
