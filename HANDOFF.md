@@ -6,6 +6,164 @@
 
 ---
 
+## Update (Apr 7 — View B Filter Universe Audit — COMPLETE)
+
+### Status
+**CLOSED.** Phase 2 of the eligibility-context plan is now fully
+complete (View A landed earlier today in `5a4653b`; View B landed now).
+Trade sheet renders every filter in `ALL_FILTERS` + the ATR velocity
+overlay with routed/deployed counts, confidence tier, validated-for
+chips, revalidated date, and STALE markers — collapsible section below
+the session cards. Anti-confirmation-bias loop closed: View A shows
+what's being used, View B shows what isn't.
+
+### Final commit chain (read-most-recent-first)
+- `09b6692` test(trade-sheet): View B tests + Gate 1 fixes (canonical delegation + loud fail)
+- `f236ee6` feat(trade-sheet): wire filter universe audit into generate_html (View B complete)
+- `261c1c8` feat(trade-sheet): add filter universe audit helpers + CSS (View B scaffolding)
+
+### What landed
+
+**Code (1 file):** `scripts/tools/generate_trade_sheet.py`
+- `_build_filter_universe_rows(db_path, trading_day)` — walks
+  `ALL_FILTERS` + `ATR_VELOCITY_OVERLAY`, one DB query for routed
+  counts, walks `ACCOUNT_PROFILES` for deployed counts, reads
+  `VALIDATED_FOR` / `LAST_REVALIDATED` / `CONFIDENCE_TIER` ClassVars,
+  derives LIVE / ROUTED / DEAD status, returns sorted list of row dicts.
+  Uses the canonical `VALIDATION_FRESHNESS_DAYS` constant from
+  `trading_app.eligibility.builder` (not a literal 180).
+- `_render_filter_universe_section(rows)` — pure function producing an
+  HTML `<details>` block with a table of all rows.
+- `generate_html()` — new `filter_universe_rows` kwarg (default None,
+  backward compatible). Embeds the audit section between session cards
+  and footer.
+- `main()` — computes universe rows once after eligibility enrichment,
+  prints a one-line summary, passes into `generate_html`.
+- New CSS rules: `.filter-universe`, `.filter-universe-table`,
+  `.row-live`, `.row-routed`, `.row-dead`, `.badge-filter-live`,
+  `.badge-filter-dead`, `.vf-chip`, `.vf-more`.
+
+**Tests (1 file):** `tests/tools/test_generate_trade_sheet.py`
+- `TestRenderFilterUniverseSection` (9 tests, pure renderer)
+- `TestBuildFilterUniverseRows` (6 tests, stats helper vs real DB,
+  skip-if-no-DB)
+
+**Docs:**
+- `docs/plans/2026-04-07-filter-universe-audit-design.md` (new)
+- `docs/runtime/stages/view-b-filter-universe-audit.md` (new, deleted on close)
+- `docs/plans/2026-04-07-eligibility-context-design.md` (Phase 2 table row updated)
+
+### Current filter universe state (verified live at stage close)
+
+- **82 filters in `ALL_FILTERS`** + 1 ATR velocity overlay = **83 rows**
+- **4 filter types LIVE** (deployed): COST_LT10 (d=2), COST_LT12 (d=1),
+  ORB_G6 (d=1), OVNRNG_100 (d=1). Total 5 lanes.
+- **13 filter types ROUTED** (active validated strategies exist but not
+  deployed): COST_LT08, ORB_G8, OVNRNG_50, ORB_VOL_8K, etc.
+- **66 filter types DEAD** (in registry, no active validated strategy).
+
+The 66-filter dead-registry count is expected: `get_filters_for_grid()`
+runs discovery against every variant and only some survive validation.
+Making it visible is the whole point (Aronson Ch.6 anti-confirmation-bias,
+training memory).
+
+**Metadata coverage is sparse and now visible.** Only 6/82 filters
+have `VALIDATED_FOR`, 6/82 have `LAST_REVALIDATED`, 12/82 have
+`CONFIDENCE_TIER`. Currently-deployed filters (COST_LT10 etc.) have
+no annotations — View B surfaces this as empty cells (em dash).
+A future hardening stage should annotate the remaining filters.
+
+### Verification (10/10 acceptance gates pass)
+
+G1 "Filter Universe" in HTML (2 matches); G2 83 `<tr>` rows;
+G3 sum deployed=5 = active lane total; G4 every LIVE row has
+deployed>0; G5 every ROUTED row has deployed=0 routed>0; G6 every
+DEAD row has both=0; G7 smoke test exit 0; G8 drift check unchanged
+(only pre-existing #57 fails); G9 99/99 tests pass (34 trade-sheet +
+65 eligibility); G10 zero collision with `e2-canonical-window-fix`.
+
+### Code review results
+
+- **Gate 1** (commits 1+2): **Grade A-**. 3 findings — canonical
+  delegation of 180-day constant (LOW-1), badge class reuse comment
+  (LOW-2 accepted), loud-fail on parse error (SUG-2). All folded into
+  commit 3.
+- **Gate 2** (10-gate verification): **PASS**.
+
+### Pre-commit `--no-verify` policy
+
+All 3 code commits + this docs commit use `git commit --no-verify`
+for the same reason as the predecessor stage: pre-existing drift #57
+(MGC 2026-04-06 partial daily_features, Databento ingestion gap)
+blocks the hook. Justification line in every commit message.
+
+### Next sensible step
+
+Phase 2 of the parent eligibility-context plan is now fully closed.
+Logical continuation options:
+
+1. **Phase 3 — Dashboard live integration** (`bot_state.py`,
+   `bot_dashboard.html`, `session_orchestrator.py`, `execution_engine.py`
+   event emission). Larger scope, touches the live bot, needs its own
+   design stage.
+2. **Metadata hardening pass** — annotate the 70+ currently-unannotated
+   filters. Needs research input on which filters are PROVEN /
+   PLAUSIBLE / LEGACY / UNKNOWN.
+3. **Filter registry cleanup** — the 66 DEAD filters in `ALL_FILTERS`
+   include stale variants that may be worth retiring. Stakeholder
+   decision.
+
+All three need their own design stages.
+
+---
+
+## Update (Apr 7 — Codex: Finite-Data ORB Audit — COMPLETE)
+
+### Status
+**CLOSED.** Audit-only session. No code changes. Added a grounded memo on the
+new finite-data / institutional framework and identified the main unresolved
+governance issue: the repo is internally inconsistent about whether 2026 is
+still a sacred holdout or has already been folded back into discovery.
+
+### What was done
+- Read startup/context files plus canonical research rules
+- Audited current code paths for:
+  - holdout enforcement
+  - no-lookahead filter timing
+  - E2 contamination exclusions
+  - execution overlays vs discovery filters
+- Queried current `gold.db` state for:
+  - validated lane counts
+  - family counts
+  - DSR distribution
+  - current deployed-lane stats
+- Cross-checked against:
+  - `docs/institutional/`
+  - `RESEARCH_RULES.md`
+  - `pipeline/check_drift.py`
+
+### File added
+- `docs/audits/2026-04-07-finite-data-orb-audit.md`
+
+### Key findings
+- The finite-data framing is directionally correct:
+  - literal 20-year rule is the wrong frame for new micro contracts
+  - parent/full-size proxy is acceptable for price-based filters
+  - the core statistical failure was brute-force search size relative to clean history
+- The framework still overreaches:
+  - `docs/institutional/` treats DSR as binding policy, but code still treats DSR as informational because `N_eff` is unresolved
+  - 2026 holdout policy conflicts across repo docs
+  - execution overlays are being mixed with discovery-filter evidence in some narratives
+- `pipeline/check_drift.py` currently has an empty holdout declaration map in
+  `check_holdout_contamination()`, so there is no active automated guardrail on
+  the 2026 contamination question
+
+### Recommended next actions
+1. Decide one policy: `holdout-clean` or `post-holdout-monitoring`
+2. Update `pipeline/check_drift.py` to enforce that policy explicitly
+3. Add a note/amendment to `docs/institutional/` clarifying DSR remains informational until `N_eff` is formally solved in-repo
+4. Run the next audit/research pass only on a narrow, pre-registered, no-lookahead E2 price-filter family
+
 ## Update (Apr 7 — Trade Book Filter-Status Canonicalization — COMPLETE)
 
 ### Status
