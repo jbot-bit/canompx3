@@ -111,6 +111,47 @@ class TestParseStrategyId:
         dims = parse_strategy_id("MNQ_NYSE_CLOSE_E1_RR2.0_CB1_ORB_G5_FAST5")
         assert dims["filter_type"] == "ORB_G5_FAST5"
 
+    def test_stop_multiplier_suffix_stripped(self):
+        """_S\\d+ stop-multiplier suffix must be stripped from filter_type.
+
+        40 of 124 active validated_setups strategies (2026-04-07) carry
+        an _S075 (= 0.75x stop) suffix. Without stripping, the synthetic
+        filter_type 'COST_LT12_S075' fails the ALL_FILTERS membership
+        check inside build_eligibility_report and the trade book falls
+        back to UNKNOWN. Drift check 66 (Stop multiplier ID-column
+        consistency) confirms _S\\d+ is a known canonical naming
+        convention; this test pins parse_strategy_id alignment with
+        that convention.
+
+        See: docs/plans/2026-04-07-trade-book-canonicalization-design.md
+        § "Audit-corrected plan" gap 13.
+        """
+        dims = parse_strategy_id("MGC_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12_S075")
+        assert dims["instrument"] == "MGC"
+        assert dims["orb_label"] == "TOKYO_OPEN"
+        assert dims["entry_model"] == "E2"
+        assert dims["rr_target"] == 1.5
+        assert dims["filter_type"] == "COST_LT12"  # _S075 stripped
+        assert dims["orb_minutes"] == 5
+
+    def test_stop_multiplier_with_composite_filter(self):
+        """Stop-multiplier strip must preserve composite filter parts."""
+        dims = parse_strategy_id("MES_LONDON_METALS_E2_RR1.0_CB1_ORB_VOL_8K_S075")
+        assert dims["filter_type"] == "ORB_VOL_8K"  # _S075 stripped, not _8K_S075
+        assert dims["orb_minutes"] == 5
+
+    def test_stop_multiplier_with_aperture_suffix(self):
+        """If both _S075 and _O15 appear, both must be stripped correctly."""
+        dims = parse_strategy_id("MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10_S075_O15")
+        assert dims["filter_type"] == "COST_LT10"
+        assert dims["orb_minutes"] == 15
+
+    def test_stop_multiplier_after_aperture(self):
+        """Some legacy ids may have _O15 then _S075; both still stripped."""
+        dims = parse_strategy_id("MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10_O15_S075")
+        assert dims["filter_type"] == "COST_LT10"
+        assert dims["orb_minutes"] == 15
+
     def test_unknown_instrument_raises(self):
         with pytest.raises(ValueError):
             parse_strategy_id("XYZ_NYSE_CLOSE_E2_RR2.0_CB1_COST_LT10")

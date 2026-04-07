@@ -9,25 +9,65 @@ of: 1
 scope_lock:
   - scripts/tools/generate_trade_sheet.py
   - tests/tools/test_generate_trade_sheet.py
+  - trading_app/eligibility/builder.py
+  - tests/test_trading_app/test_eligibility_builder.py
   - docs/plans/2026-04-07-trade-book-canonicalization-design.md
   - docs/plans/2026-04-07-eligibility-context-design.md
   - docs/runtime/stages/trade-book-canonicalization.md
   - HANDOFF.md
-blast_radius: |
-  Replaces the trade book's filter-status computation with calls to the canonical
-  eligibility builder (build_eligibility_report from trading_app.eligibility.builder).
-  Touches 4 code/test files and 3 doc files. NO changes to trading_app/eligibility/,
-  trading_app/config.py, pipeline/*, or any file in the e2-canonical-window-fix
-  scope_lock. Zero schema changes, zero data rebuilds, zero entry model changes,
-  zero trading logic changes. Display layer refactor only.
 
-  Blast direction is strictly one-way: trade sheet script becomes a thin consumer of
-  trading_app.eligibility. The canonical source is untouched. Existing consumers of
-  the eligibility builder (eventual dashboard integration in Phase 3) are unaffected.
+scope_expansion_log:
+  - date: 2026-04-07
+    added_files:
+      - trading_app/eligibility/builder.py
+      - tests/test_trading_app/test_eligibility_builder.py
+    reason: |
+      Smoke test (Gate 2) revealed that 40 of 124 active validated_setups
+      strategies (32%) have a _S075 stop-multiplier suffix that
+      parse_strategy_id does not strip. The parse silently produces an
+      invalid filter_type (e.g., 'COST_LT08_S075' instead of 'COST_LT08'),
+      which then fails the ALL_FILTERS membership check inside
+      build_eligibility_report and triggers the UNKNOWN fallback.
 
-  Rollback: single-commit revert of commit 3 restores pre-refactor behaviour
-  (commits 1 and 2 are dead code until 3 wires them). Full revert via
-  `git revert HEAD~4..HEAD` is ~1 minute.
+      Without the canonical-source fix, the trade-book refactor would be a
+      strict UX regression for ~32% of validated strategies (the old
+      classifier handled them via composite-tag fall-through to VERIFY).
+
+      Per .claude/rules/institutional-rigor.md rule 4 ('delegate to
+      canonical, fix at source'), the right place to fix this is in
+      parse_strategy_id, mirroring the existing _O\d+ aperture stripping.
+      One line of code + one regression test.
+
+      This is a deliberate scope expansion documented per
+      .claude/rules/stage-gate-protocol.md ('Adding files to scope_lock
+      mid-implementation: (1) inform user why, (2) update blast_radius,
+      (3) NEVER silently expand scope.'). Both files are added here AND
+      the reason is in the commit message.
+blast_radius: Trade sheet script becomes a thin consumer of trading_app.eligibility.builder. Touches generate_trade_sheet.py and its test file plus tests/test_trading_app/test_eligibility_builder.py and trading_app/eligibility/builder.py (mid-execution scope expansion to fix _S075 suffix in parse_strategy_id). NO changes to trading_app/config.py, pipeline/*, or any file in the e2-canonical-window-fix scope_lock. Zero schema changes, zero data rebuilds, zero entry model changes, zero trading logic changes. One-way dependency: trade sheet → eligibility module. Rollback via single-commit revert of commit 3 restores pre-refactor behaviour. Full revert via git revert HEAD~5..HEAD takes ~1 minute. See ## Blast Radius section below for full detail.
+
+## Blast Radius
+
+Replaces the trade book's filter-status computation with calls to the canonical
+eligibility builder (build_eligibility_report from trading_app.eligibility.builder).
+Touches 4 code/test files and 3 doc files in the original scope plus
+trading_app/eligibility/builder.py and tests/test_trading_app/test_eligibility_builder.py
+added mid-execution to fix the _S075 stop-multiplier suffix in parse_strategy_id.
+
+NO changes to trading_app/config.py, pipeline/*, or any file in the
+e2-canonical-window-fix scope_lock. Zero schema changes, zero data rebuilds,
+zero entry model changes, zero trading logic changes. Display layer refactor
+plus a 1-line canonical parser fix.
+
+Blast direction is strictly one-way: trade sheet script becomes a thin consumer
+of trading_app.eligibility. The canonical source receives a tiny parser
+hardening but its public API contract is unchanged. Existing consumers of the
+eligibility builder (eventual dashboard integration in Phase 3) are unaffected
+because the parser fix is purely additive (strips a suffix that was previously
+left attached and silently broke ALL_FILTERS lookup).
+
+Rollback: single-commit revert of commit 3 restores pre-refactor behaviour
+(commits 1 and 2 are dead code until 3 wires them). Full revert via
+`git revert HEAD~5..HEAD` is ~1 minute.
 
 acceptance:
   G1_classifier_deleted:

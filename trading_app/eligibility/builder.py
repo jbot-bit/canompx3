@@ -114,9 +114,26 @@ def parse_strategy_id(strategy_id: str) -> dict[str, Any]:
     confirm_bars = int(parts[em_idx + 2][2:])
 
     remaining = parts[em_idx + 3 :]
+
+    # Strip stop-multiplier suffix _S\d+ (e.g., _S075 = 0.75x stop) if present.
+    # The stop multiplier is a deployment dimension stored in
+    # validated_setups.stop_multiplier as a float; the strategy_id string
+    # encodes it as an _S\d+ token at the end (or before _O for aperture).
+    # It is NOT a filter type, so it must not pollute filter_type lookup.
+    # 40 of 124 active validated_setups strategies (2026-04-07) carry this
+    # suffix. Without stripping, build_eligibility_report fails the
+    # ALL_FILTERS membership check on synthetic strings like 'COST_LT08_S075'.
+    if remaining and remaining[-1].startswith("S") and remaining[-1][1:].isdigit():
+        remaining = remaining[:-1]
+
     orb_minutes = 5
     if remaining and remaining[-1].startswith("O") and remaining[-1][1:].isdigit():
         orb_minutes = int(remaining[-1][1:])
+        remaining = remaining[:-1]
+
+    # Stop-multiplier suffix may also appear AFTER the aperture suffix in
+    # some legacy ids; strip again for safety. Idempotent.
+    if remaining and remaining[-1].startswith("S") and remaining[-1][1:].isdigit():
         remaining = remaining[:-1]
 
     filter_type = "_".join(remaining) if remaining else "NO_FILTER"
