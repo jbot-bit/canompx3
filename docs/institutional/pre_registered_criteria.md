@@ -11,6 +11,7 @@
 | Version | Date | Change | Signer |
 |---|---|---|---|
 | v1 | 2026-04-07 | Initial lock. All criteria derived from Phase 0 literature extraction. | Claude Code audit session |
+| v2 | 2026-04-07 | Codex audit feedback integrated. DSR downgraded from binding to cross-check (N_eff unresolved). Chordia t-threshold reframed as severity benchmark, not hard bar. Criterion 8 (2026 OOS) gated on holdout-policy decision. See amendment at bottom. | Claude Code session (Codex audit incorporated) |
 
 ---
 
@@ -260,3 +261,106 @@ To amend these criteria:
 5. Update the version history table at the top.
 
 Prior versions remain visible permanently for audit.
+
+---
+
+## v2 Amendment (2026-04-07) — Codex audit feedback integration
+
+**Justification:** A parallel Codex audit (`docs/audits/2026-04-07-finite-data-orb-audit.md`) reviewed the v1 criteria against current repo code and flagged three cases where v1 was ahead of what the codebase has actually solved. This amendment is not threshold relaxation — v1 was internally inconsistent with the live validator, and this amendment brings the criteria into alignment with what the repo can currently enforce. Loosening thresholds for performance reasons remains banned.
+
+### Amendment 2.1 — Criterion 5 (DSR) downgraded from binding to cross-check
+
+**v1 statement:** "Required threshold: DSR > 0.95."
+
+**Problem identified by Codex:**
+- `trading_app/strategy_validator.py:583-589` and `:1400-1453` explicitly removed DSR and False Strategy Theorem as hard gates because `N_eff` (the effective number of independent trials for adjusting the DSR formula) remains unresolved.
+- The adversarial audit `docs/plans/2026-03-18-adversarial-review-findings.md:47-58` confirms DSR is informational, not binding, pending ONC (Optimal Number of Clusters) for N_eff estimation.
+- Current DB state: `0 / 124` validated_setups have `dsr_score > 0.95`. Max `dsr_score = 0.1198`. A policy that makes DSR binding while the repo computes DSR against an unknown N_eff is a policy that rejects every strategy the repo has ever produced — including ones that may be valid.
+
+**Amended statement:** DSR is a CROSS-CHECK, not a hard gate, until `N_eff` is formally solved in-repo.
+- Every candidate strategy must have its DSR computed and reported in the audit write-up.
+- DSR MAY flag strategies as suspect even when BH FDR passes.
+- DSR does NOT override BH FDR or WFE as deploy/don't-deploy switches until N_eff is resolved.
+
+**Required follow-up:** Issue a dedicated task to formalize N_eff estimation in `trading_app/strategy_discovery.py`, document the method, and verify against Bailey-LdP 2014 Equation 9. Until that task closes, DSR stays cross-check only.
+
+### Amendment 2.2 — Criterion 4 (Chordia t-statistic) reframed as severity benchmark
+
+**v1 statement:** "Require t ≥ 3.00 (with theory) or t ≥ 3.79 (without)."
+
+**Problem identified by Codex:** The Chordia et al 2018 threshold was derived from a 2M-strategy universe across CRSP/COMPUSTAT equity factors with a specific FDP-StepM method that accounts for cross-correlation structure in that universe. Transplanting it unchanged into this repo's ORB futures family structure is aggressive and not grounded in our own effective-N analysis.
+
+**Amended statement:** Chordia's t ≥ 3.79 is a SEVERITY BENCHMARK, not a universal hard bar.
+- Strategies that clear t ≥ 3.79 get a "clears Chordia" flag in their audit write-up.
+- Strategies with t ≥ 3.00 (HLZ threshold) pass the criterion if they also cite a pre-registered economic theory.
+- Strategies with 2.0 ≤ t < 3.00 can pass ONLY if:
+  - Pre-registered with theory citation, AND
+  - BH FDR passes on the pre-registered family K (not raw brute-force K), AND
+  - WFE ≥ 0.50, AND
+  - 2026 OOS positive (or holdout-policy N/A per Amendment 2.3)
+- Strategies with t < 2.0 do not pass.
+
+**Why this is honest, not relaxation:** Chordia 3.79 was never grounded in our specific ORB family structure. The new banding is more defensible because it acknowledges the gap between literature benchmarks and repo-specific validity.
+
+### Amendment 2.3 — Criterion 8 (2026 OOS) gated on holdout policy decision
+
+**v1 statement:** "For discovery runs using `--holdout-date 2026-01-01`, the held-out 2026 period must show positive ExpR and OOS ExpR ≥ 0.40 × IS ExpR."
+
+**Problem identified by Codex:** Repo authority is internally inconsistent on whether 2026 is still a sacred holdout:
+- `RESEARCH_RULES.md:26` says 2026 holdout is sacred.
+- `docs/plans/2026-04-02-16yr-pipeline-rebuild.md:79-83, 110` instructs discovery with `--holdout-date 2026-01-01`.
+- `docs/pre-registrations/2026-03-20-mnq-rr1-verified-sessions.md:4` says the holdout test completed and 2026 has been reincorporated.
+- `pipeline/check_drift.py:3354-3405` contains a holdout contamination checker whose declaration map is EMPTY, so no instrument is actively guarded by that check.
+
+Criterion 8 assumed a clean 2026 holdout, but the repo has not decided the policy.
+
+**Amended statement:** Criterion 8 is CONTINGENT on a pre-run holdout policy declaration.
+- Before any discovery run, the project must declare ONE of:
+  - **Mode A — Holdout-clean:** discovery data ends 2025-12-31. 2026 excluded from session, RR, filter, and lane choice. 2026 only used later for OOS reporting. Criterion 8 enforced as v1.
+  - **Mode B — Post-holdout-monitoring:** 2026 already consumed. No more "clean 2026 holdout" claims. Criterion 8 REPLACED by a forward-paper-only requirement (minimum 6 months live paper with positive ExpR before deploy decision).
+- The declaration must be committed to the hypothesis file BEFORE discovery runs.
+- Mixing the two modes is banned.
+
+**Required follow-up:** Decide the holdout policy at the project level and update `pipeline/check_drift.py` holdout declaration map to enforce it. This touches `pipeline/check_drift.py` which is currently in e2-canonical-window-fix scope_lock — defer enforcement until that stage merges.
+
+### Amendment 2.4 — Current lane classification language
+
+**v1 implication:** Strategies passing all 12 criteria are "validated." Strategies not passing are "provisional."
+
+**Codex finding:** Even the best currently-deployed lanes (N = 591 to 1941 trades per lane) are classified ahead of what the repo has solved. Trade count is not the bottleneck — selection bias, regime-span weakness, holdout contamination, and policy drift between discovery and live overlays are the actual failure modes.
+
+**Amended classification language:** The current 5 deployed MNQ/MGC lanes should be explicitly labeled as:
+- **Operationally deployable** — the live system can execute them.
+- **Research-provisional** — consistent with available evidence, not proof of durable edge.
+- **Not yet production-grade institutional proof** — passing all 12 criteria remains the bar for that label.
+
+This applies to documentation, memory files, and any downstream use of the word "validated." Use "provisional" or "research-provisional" to describe the current state honestly.
+
+### Amendment 2.5 — Execution overlays vs discovery filters
+
+**New requirement (not in v1):** Execution overlays (calendar skip, ATR velocity skip, E2 order timeout, market-state gating) MUST be reported and evaluated SEPARATELY from discovery filters. Per `trading_app/config.py:2600-2611` and `trading_app/execution_engine.py:207-212, 654-674`, overlays change the live decision rule in ways not encoded in `strategy_id`. A lane can be "clean" at discovery time and still have later operational logic that shifts the actual traded distribution.
+
+**Rule:** Any claim about a strategy's evidence base must specify whether it refers to (a) the discovery-filter-only backtest, (b) the discovery-filter + overlays backtest, or (c) live/paper forward data. Mixing (a) and (b) in the same evidence object is banned.
+
+---
+
+## v2 Acceptance matrix (replaces v1 for current work)
+
+A strategy is ELIGIBLE FOR DEPLOYMENT under v2 if:
+
+| Criterion | Threshold | Enforcement |
+|---|---|---|
+| 1 Pre-registration | file exists at `docs/audit/hypotheses/` | BINDING |
+| 2 MinBTL | N ≤ 300 (clean MNQ) or N ≤ 2000 (proxy-extended) | BINDING |
+| 3 BH FDR | q < 0.05 on pre-registered family K | BINDING |
+| 4 Chordia t-statistic | banded per Amendment 2.2 | BINDING via banding |
+| 5 DSR | computed + reported | **CROSS-CHECK ONLY** (Amendment 2.1) |
+| 6 WFE | WFE ≥ 0.50 | BINDING |
+| 7 Sample size | N ≥ 100 trades | BINDING |
+| 8 2026 OOS / forward | depends on holdout policy | **CONTINGENT** (Amendment 2.3) |
+| 9 Era stability | no era ExpR < -0.05 (N ≥ 50) | BINDING |
+| 10 Data era compat | volume filters MICRO-only | BINDING |
+| 11 Account death MC | 90-day survival ≥ 70% | BINDING (at deployment) |
+| 12 Shiryaev-Roberts | active drift monitor | BINDING (post-deployment) |
+
+A strategy passing 1-4, 6-7, 9-10 is **research-provisional**. Passing 11 makes it **operationally deployable**. Passing 8 (under whichever holdout policy applies) + 12 months of live with 12 active makes it **production-grade institutional proof**. The current 5 lanes are at research-provisional + operationally deployable — not production-grade.

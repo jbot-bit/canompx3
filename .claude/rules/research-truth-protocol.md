@@ -72,3 +72,48 @@ WHERE v.status = 'active'
 - No edits before read-only audit. Non-trivial changes require PASS 1 (audit) before PASS 2 (implement).
 - Derived layers marked `DISCOVERY SAFETY: UNSAFE` in their module docstrings.
 - **NEVER simulate strategy P&L without applying the strategy's filter.** Querying `orb_outcomes` with only instrument+session+entry_model+RR but WITHOUT the filter_type (COST_LT, VOL_RV, ATR70_VOL, OVNRNG, ORB_G, etc.) produces UNFILTERED results that overcount trades and misrepresent both P&L and risk. Every simulation MUST join `daily_features` and apply the exact filter condition. If the filter column is missing or broken, say UNVERIFIED — do not substitute `1=1`.
+
+## Phase 0 Literature Grounding (MANDATORY — added 2026-04-07)
+
+Before running ANY discovery that writes to `experimental_strategies` or `validated_setups`, you MUST:
+
+1. **Read `docs/institutional/pre_registered_criteria.md`** — the 12 locked criteria every validated strategy must meet. These were derived from the Phase 0 literature extraction and are NOT subject to post-hoc relaxation.
+
+2. **Write a pre-registered hypothesis file** at `docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml` BEFORE any backtest. Template: `docs/institutional/hypothesis_registry_template.md`. The file must include:
+   - Numbered hypotheses with economic theory citations
+   - Exact filter dimensions and threshold ranges
+   - Total expected trial count (N ≤ 300 clean-MNQ, N ≤ 2000 proxy-extended)
+   - Kill criteria stating what outcome refutes the hypothesis
+
+3. **Cite the specific literature file** for each statistical method used. Files live in `docs/institutional/literature/`. Never cite thresholds from training memory.
+
+4. **MinBTL check:** Before running any enumeration, compute `MinBTL = 2·Ln[N] / E[max_N]²` using the committed pre-registered N. If `MinBTL > available_clean_data_years`, reduce N. Source: `docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md`.
+
+5. **No brute-force sweeps >300 trials.** The April 2026 audit established that prior brute-force discovery (~35,000 trials on 2.2-6 years of clean data) violated Bailey et al 2013 MinBTL by ~600x. Enumeration budgets must be pre-committed and bounded.
+
+### Criteria summary (see `pre_registered_criteria.md` for full text)
+
+| # | Criterion | Threshold | Source |
+|---|-----------|-----------|--------|
+| 1 | Pre-registered hypothesis file | exists before run | LdP 2020 + Bailey 2013 |
+| 2 | MinBTL constraint | N ≤ 300 (or 2000 proxy) | Bailey et al 2013 |
+| 3 | BH FDR | q < 0.05 on pre-reg family | Harvey-Liu 2015 + Chordia 2018 |
+| 4 | Chordia t-statistic | t ≥ 3.00 (w/ theory) or 3.79 (w/o) | Chordia et al 2018 |
+| 5 | Deflated Sharpe Ratio | DSR > 0.95 | Bailey-LdP 2014 Eq. 2 |
+| 6 | Walk-forward efficiency | WFE ≥ 0.50 | LdP 2020 + project convention |
+| 7 | Sample size | N ≥ 100 trades deployable | HL 2015 Exhibit 4 |
+| 8 | 2026 OOS positive | OOS ExpR ≥ 0.40 × IS | OOS principle |
+| 9 | Era stability | no era ExpR < −0.05 (N≥50) | 2026-04-07 audit finding |
+| 10 | Data era compatibility | volume filters MICRO-only | 2026-04-07 audit finding |
+| 11 | Account death Monte Carlo | 90-day survival ≥ 70% | prop firm rulesets |
+| 12 | Shiryaev-Roberts monitor | live drift detection active | Pepelyshev-Polunchenko 2015 |
+
+### Applying to existing validated_setups
+
+Strategies written to `validated_setups` BEFORE 2026-04-07 were discovered under the pre-Phase-0 regime and are provisionally grandfathered but MUST be re-audited against the 12 criteria before any scaling decision. The current 5 deployed MNQ/MGC lanes in `topstep_50k_mnq_auto` are in this provisional bucket — no scaling until re-audit.
+
+### Interaction with this rule file
+
+- This Phase 0 section adds to, does not replace, the Validated Universe Rule above.
+- The two are complementary: Validated Universe Rule prevents testing noise against noise on unfiltered `orb_outcomes`; Phase 0 prevents the resulting pre-filtered universe from being brute-forced without a hypothesis budget.
+- Both must be followed for any research claim to be valid.
