@@ -883,7 +883,25 @@ class CrossAssetATRFilter(StrategyFilter):
     Fail-closed: if the key is absent or None, day is ineligible.
 
     @research-source research/research_vol_regime_filter.py
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: MNQ at 6 US sessions per research_vol_regime_filter.
+      Cross-asset filter is MNQ-only (US sessions where MES leads MNQ flow).
+      Other instrument/session pairs return NOT_APPLICABLE_INSTRUMENT.
+    - LAST_REVALIDATED: None (legacy, pre-Apr 2026 research)
+    - CONFIDENCE_TIER: PROVEN
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("MNQ", "CME_PRECLOSE"),
+        ("MNQ", "COMEX_SETTLE"),
+        ("MNQ", "US_DATA_1000"),
+        ("MNQ", "NYSE_OPEN"),
+        ("MNQ", "NYSE_CLOSE"),
+        ("MNQ", "US_DATA_830"),
+    )
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     source_instrument: str = "MES"
     min_pct: float = 70.0
@@ -908,7 +926,11 @@ class CrossAssetATRFilter(StrategyFilter):
         orb_label: str,
         entry_model: str,
     ) -> list[AtomDescription]:
-        """Cross-asset ATR percentile gate. Pre-session, resolves at STARTUP."""
+        """Cross-asset ATR percentile gate. Pre-session, resolves at STARTUP.
+
+        Threads VALIDATED_FOR + CONFIDENCE_TIER through. Adapter maps
+        non-validated lanes to NOT_APPLICABLE_INSTRUMENT.
+        """
         _ = (orb_label, entry_model)
         col = f"cross_atr_{self.source_instrument}_pct"
         observed = _atom_numeric(row.get(col))
@@ -925,6 +947,8 @@ class CrossAssetATRFilter(StrategyFilter):
                 threshold=self.min_pct,
                 comparator=">=",
                 is_data_missing=missing,
+                validated_for=self.VALIDATED_FOR,
+                confidence_tier=self.CONFIDENCE_TIER,
                 explanation=(
                     f"Require {self.source_instrument} ATR-20 rolling percentile "
                     f">= {self.min_pct:g}% (cross-asset volatility regime gate)."
@@ -1570,11 +1594,27 @@ class ATRVelocityFilter(StrategyFilter):
     NOT applied to: MNQ (no signal), MES (baseline already negative — redundant).
 
     Fail-open: missing data (warm-up period) -> trade is allowed.
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: ((MGC, CME_REOPEN), (MGC, TOKYO_OPEN)) — derived
+      mechanically from apply_to_sessions × instrument restriction.
+      The two sources of truth (apply_to_sessions tuple and VALIDATED_FOR
+      ClassVar) MUST agree — drift check #N enforces this if added.
+    - LAST_REVALIDATED: 2026-03-18 (compressed_spring revalidation)
+    - CONFIDENCE_TIER: PROVEN
     """
 
     filter_type: str = "ATR_VEL"
     description: str = "Skip Contracting ATR × Neutral/Compressed ORB sessions"
     apply_to_sessions: tuple[str, ...] = ("CME_REOPEN", "TOKYO_OPEN")
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("MGC", "CME_REOPEN"),
+        ("MGC", "TOKYO_OPEN"),
+    )
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 3, 18)
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         if orb_label not in self.apply_to_sessions:
@@ -1638,6 +1678,9 @@ class ATRVelocityFilter(StrategyFilter):
                         f"signal is confirmed only for MGC CME_REOPEN and "
                         f"MGC TOKYO_OPEN."
                     ),
+                    validated_for=self.VALIDATED_FOR,
+                    last_revalidated=self.LAST_REVALIDATED,
+                    confidence_tier=self.CONFIDENCE_TIER,
                     explanation=(
                         "ATR velocity overlay: skip when ATR is actively "
                         "contracting AND the ORB is Neutral/Compressed."
@@ -1661,6 +1704,9 @@ class ATRVelocityFilter(StrategyFilter):
                 threshold="not (Contracting & non-Expanded)",
                 comparator="!=",
                 is_data_missing=False,  # warm-up is fail-open, not missing
+                validated_for=self.VALIDATED_FOR,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
                 explanation=(
                     "Skip sessions when ATR is actively contracting AND the "
                     "ORB is Neutral or Compressed. Fail-open on warm-up "
