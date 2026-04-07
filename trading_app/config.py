@@ -1749,7 +1749,26 @@ class BreakSpeedFilter(StrategyFilter):
 
     Uses orb_{label}_break_delay_min from daily_features.
     Fail-closed: missing data means day is ineligible.
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: MNQ at 5 sessions + MGC CME_REOPEN per
+      break_speed_signal_retest.md (Apr 2026). Per-instrument validity
+      enforces NOT_APPLICABLE_INSTRUMENT for non-validated lanes.
+    - LAST_REVALIDATED: 2026-04-01 (Phase 3 retest)
+    - CONFIDENCE_TIER: PROVEN
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("MNQ", "NYSE_CLOSE"),
+        ("MNQ", "NYSE_OPEN"),
+        ("MNQ", "TOKYO_OPEN"),
+        ("MNQ", "LONDON_METALS"),
+        ("MNQ", "CME_REOPEN"),
+        ("MGC", "CME_REOPEN"),
+    )
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 1)
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     max_delay_min: float = 5.0
 
@@ -1778,6 +1797,10 @@ class BreakSpeedFilter(StrategyFilter):
         E2-excluded: break delay is unknown until the break actually occurs,
         but the E2 entry order must already be placed. Canonical gate via
         _e2_look_ahead_reason (E2_EXCLUDED_FILTER_SUBSTRINGS: '_FAST').
+
+        Threads canonical ClassVar metadata into the atom so the eligibility
+        adapter can apply NOT_APPLICABLE_INSTRUMENT for non-validated lanes
+        and STALE_VALIDATION for aged research.
         """
         col = f"orb_{orb_label}_break_delay_min"
         if entry_model == "E2":
@@ -1794,6 +1817,9 @@ class BreakSpeedFilter(StrategyFilter):
                         comparator="<=",
                         is_not_applicable=True,
                         not_applicable_reason=reason,
+                        validated_for=self.VALIDATED_FOR,
+                        last_revalidated=self.LAST_REVALIDATED,
+                        confidence_tier=self.CONFIDENCE_TIER,
                         explanation=(
                             "Break-speed gate does not apply to E2 entries — "
                             "break delay is unknown at E2 order placement."
@@ -1814,6 +1840,9 @@ class BreakSpeedFilter(StrategyFilter):
                 threshold=self.max_delay_min,
                 comparator="<=",
                 is_data_missing=missing,
+                validated_for=self.VALIDATED_FOR,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
                 explanation=(
                     f"Require break within {self.max_delay_min:g} minutes of ORB end "
                     f"(momentum conviction gate)."
@@ -1832,7 +1861,16 @@ class BreakBarContinuesFilter(StrategyFilter):
 
     Uses orb_{label}_break_bar_continues from daily_features.
     Fail-closed: missing data means day is ineligible.
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: empty (E1-only filter, applies broadly within E1)
+    - LAST_REVALIDATED: None (legacy filter, no recent revalidation)
+    - CONFIDENCE_TIER: PLAUSIBLE — confluence boost in some sessions but
+      not a standalone PROVEN signal. E2-incompatible (look-ahead).
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
 
     require_continues: bool = True
 
@@ -1861,6 +1899,8 @@ class BreakBarContinuesFilter(StrategyFilter):
         E2-excluded: bar-close direction is only known once the break bar
         closes, but the E2 entry order must already be placed. Canonical gate
         via _e2_look_ahead_reason (E2_EXCLUDED_FILTER_SUBSTRINGS: '_CONT').
+
+        Threads CONFIDENCE_TIER (PLAUSIBLE) through the atom.
         """
         col = f"orb_{orb_label}_break_bar_continues"
         if entry_model == "E2":
@@ -1877,6 +1917,7 @@ class BreakBarContinuesFilter(StrategyFilter):
                         comparator="==",
                         is_not_applicable=True,
                         not_applicable_reason=reason,
+                        confidence_tier=self.CONFIDENCE_TIER,
                         explanation=(
                             "Break-bar continuation gate does not apply to E2 entries — "
                             "bar-close direction is unknown at E2 order placement."
@@ -1897,6 +1938,7 @@ class BreakBarContinuesFilter(StrategyFilter):
                 threshold=self.require_continues,
                 comparator="==",
                 is_data_missing=missing,
+                confidence_tier=self.CONFIDENCE_TIER,
                 explanation=(
                     "Require the break bar to close in the break direction "
                     "(conviction gate)."
