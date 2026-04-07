@@ -82,7 +82,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import date
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pipeline.cost_model import COST_SPECS, get_cost_spec
 
@@ -200,8 +200,20 @@ class AtomDescription:
     - is_not_applicable: True if this atom does not apply to the caller's
       (instrument, session, entry_model) combination
     - not_applicable_reason: if is_not_applicable, human-readable reason
-    - last_revalidated: date of last research revalidation, from filter
-      annotations
+    - validated_for: tuple of (instrument, session) pairs where research
+      has validated this atom. Empty = applies to all combinations.
+      Sourced from filter ClassVar VALIDATED_FOR. Adapter maps a non-empty
+      tuple that excludes the caller's lane to NOT_APPLICABLE_INSTRUMENT.
+    - last_revalidated: date of last research revalidation. Sourced from
+      filter ClassVar LAST_REVALIDATED. Adapter maps stale (>180 days)
+      to STALE_VALIDATION.
+    - confidence_tier: PROVEN | PLAUSIBLE | LEGACY | UNKNOWN — research
+      quality tier from filter ClassVar CONFIDENCE_TIER. Surfaced in the
+      eligibility report so traders see provenance at a glance.
+    - error_message: optional diagnostic string captured by the filter when
+      it explicitly catches an exception (e.g., type mismatch on division).
+      The adapter aggregates non-None error_messages into report.build_errors
+      so the diagnostic trail is preserved without widening describe()'s API.
     - size_multiplier: trade sizing modifier for PASS conditions (default 1.0,
       0.5 for calendar HALF_SIZE)
     - explanation: one-sentence plain-English description
@@ -218,7 +230,10 @@ class AtomDescription:
     is_data_missing: bool = False
     is_not_applicable: bool = False
     not_applicable_reason: str = ""
+    validated_for: tuple[tuple[str, str], ...] = ()
     last_revalidated: date | None = None
+    confidence_tier: str = "UNKNOWN"
+    error_message: str | None = None
     size_multiplier: float = 1.0
     explanation: str = ""
 
