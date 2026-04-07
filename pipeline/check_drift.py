@@ -3456,24 +3456,32 @@ def check_holdout_policy_declaration_consistency() -> list[str]:
     violations = []
     project_root = Path(__file__).parent.parent
 
-    # (1) Canonical module exists and exports the three names
+    # (1) Canonical module exists and exports the three names. We import the
+    # module as an opaque object and check exports via hasattr so the import
+    # block does not need ruff I001 hand-holding for aliased multi-imports.
     try:
-        from trading_app.holdout_policy import (
-            HOLDOUT_GRANDFATHER_CUTOFF as _gcut,
-            HOLDOUT_SACRED_FROM as _sfrom,
-            enforce_holdout_date as _enforce,
-        )
+        import trading_app.holdout_policy as _hp
     except ImportError as e:
         return [
             f"  HOLDOUT POLICY CANONICAL SOURCE MISSING: {e}. "
             "Expected trading_app/holdout_policy.py per Amendment 2.7."
         ]
 
+    required_exports = ("HOLDOUT_SACRED_FROM", "HOLDOUT_GRANDFATHER_CUTOFF", "enforce_holdout_date")
+    for name in required_exports:
+        if not hasattr(_hp, name):
+            violations.append(
+                f"  HOLDOUT POLICY EXPORT MISSING: trading_app.holdout_policy "
+                f"does not define {name!r} (required by Amendment 2.7)."
+            )
+    if violations:
+        return violations  # bail early — downstream checks rely on the exports
+
     # (2) Sacred-from value is the Amendment 2.7 lock
-    if _sfrom != _date(2026, 1, 1):
+    if _date(2026, 1, 1) != _hp.HOLDOUT_SACRED_FROM:
         violations.append(
             f"  HOLDOUT_SACRED_FROM drifted from Amendment 2.7 lock: "
-            f"got {_sfrom.isoformat()}, expected 2026-01-01. "
+            f"got {_hp.HOLDOUT_SACRED_FROM.isoformat()}, expected 2026-01-01. "
             "Changing this requires a new Amendment in pre_registered_criteria.md."
         )
 
@@ -3495,7 +3503,7 @@ def check_holdout_policy_declaration_consistency() -> list[str]:
         violations.append(f"  {rules_path} missing — cannot verify Mode A declaration.")
     else:
         rules_text = rules_path.read_text(encoding="utf-8", errors="replace")
-        sacred_str = _sfrom.isoformat()
+        sacred_str = _hp.HOLDOUT_SACRED_FROM.isoformat()
         if sacred_str not in rules_text:
             violations.append(
                 f"  RESEARCH_RULES.md does not mention the sacred-from date "
@@ -3506,9 +3514,6 @@ def check_holdout_policy_declaration_consistency() -> list[str]:
                 "  RESEARCH_RULES.md does not cite 'Amendment 2.7' — "
                 "Mode A declaration missing from research rules top-level file."
             )
-
-    # Silence unused-import lint; these are used indirectly via the import check
-    del _gcut, _enforce
 
     return violations
 
