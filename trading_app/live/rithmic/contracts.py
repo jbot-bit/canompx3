@@ -8,8 +8,12 @@ Verified against: async_rithmic 1.5.9 source (plants/ticker.py, plants/order.py)
 
 import logging
 from datetime import date
+from typing import TYPE_CHECKING
 
 from ..broker_base import BrokerAuth, BrokerContracts
+
+if TYPE_CHECKING:
+    from .auth import RithmicAuth
 
 log = logging.getLogger(__name__)
 
@@ -28,6 +32,10 @@ INSTRUMENT_ROOTS: dict[str, str] = {
 
 class RithmicContracts(BrokerContracts):
     """Resolve accounts and front-month contracts via Rithmic API."""
+
+    # Narrow the inherited BrokerAuth type — at runtime this is always
+    # RithmicAuth, which exposes .client (RithmicClient) and .run_async.
+    auth: "RithmicAuth"
 
     def __init__(self, auth: BrokerAuth, **kwargs):
         super().__init__(auth, **kwargs)

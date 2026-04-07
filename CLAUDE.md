@@ -14,9 +14,9 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 
 ## Document Authority
 
-**Conflict resolution:** Code → CLAUDE.md. Trading logic → `TRADING_RULES.md`. Research → `RESEARCH_RULES.md`. Features → check `docs/specs/*.md` BEFORE building. Research routing → `docs/STRATEGY_BLUEPRINT.md`.
+**Conflict resolution:** Code → CLAUDE.md. Trading logic → `TRADING_RULES.md`. Research → `RESEARCH_RULES.md`. Features → check `docs/specs/*.md` BEFORE building. Research routing → `docs/STRATEGY_BLUEPRINT.md`. **Research methodology / statistical thresholds / institutional standards → `docs/institutional/` (literature-grounded passages + locked criteria).**
 
-**Cross-tool state:** `HANDOFF.md` + `docs/plans/` — read on session start. May be stale: repo/DB is truth over docs. `REPO_MAP.md` = auto-generated file inventory.
+**Cross-tool state:** `HANDOFF.md` + `docs/plans/` — read on session start. May be stale: repo/DB is truth over docs. `REPO_MAP.md` = auto-generated file inventory. `docs/institutional/HANDOFF.md` — Phase 0 literature grounding status (2026-04-07).
 
 ---
 
@@ -76,13 +76,15 @@ Identify canonical source → verify downstream derives from it → if source ma
 
 ### Local Academic / Project-Source Grounding Rule
 Prefer local sources (`resources/` PDFs, project canon) over training memory. If no local source, say UNSUPPORTED.
-**PDF protocol:** EXTRACT text from the file — never cite from training memory as if you read it. If extraction fails, say so explicitly. Label training-memory claims as "From training memory — not verified against local PDF."
+**PDF protocol:** EXTRACT text from the file — never cite from training memory as if you read it. If extraction fails, say so explicitly. Label training-memory claims as "From training memory — not verified against local PDF." **Before dismissing a PDF as "bibliography only" / "front matter only" / "nothing relevant" based on a keyword grep, extract the table of contents AND at least 3 sample pages from the middle of the PDF to confirm the actual structure.** A single-keyword grep can miss whole chapters when the terminology is different (e.g., "walk-forward" vs "random walk", "half" vs "half-life"). A 2026-04-07 self-review caught a case where `resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf` was incorrectly characterized as "bibliography only" when pp 6-28 are actually Chapter 1 "Introduction" with substantive backtest-overfitting content — see `docs/specs/research_modes_and_lineage.md` § 9.2 Revision history. Commit `aec7730` is the fix.
 
 ### Audit-First Default for Research Layers
 Research layers: **audit → adversarial audit → fix → rerun → freeze → move on**. Do not skip to implementation when truth-state is unverified.
 
 ### Institutional Rigor (MANDATORY — non-negotiable)
 **Always take the proper long-term institutional-grounded fix.** No band-aids, no skipping, no dead code, no silent failures, no re-encoding canonical logic. Review own work before claiming done. When review cycles keep finding new bugs, refactor — don't patch. Full rules → `.claude/rules/institutional-rigor.md`.
+
+**Research methodology grounding (Phase 0 established 2026-04-07):** All discovery, validation, and deployment decisions must be literature-grounded. `docs/institutional/literature/` contains verbatim extracts from Bailey-Lopez de Prado (DSR, MinBTL, False Strategy Theorem), Harvey-Liu, Chordia et al, and Pepelyshev-Polunchenko. `docs/institutional/pre_registered_criteria.md` locks 12 criteria every validated strategy must meet (MinBTL, DSR > 0.95, Chordia t ≥ 3.0, era stability, etc.). `docs/institutional/hypothesis_registry_template.md` is the pre-registration format for any new discovery run. **No brute-force enumeration of >300 trials allowed** (MinBTL bound). Discovery must cite a committed hypothesis file in `docs/audit/hypotheses/`.
 
 ### 2-Pass Implementation Method (MANDATORY)
 1. **Discovery:** Read affected files, understand blast radius, articulate PURPOSE before writing code.

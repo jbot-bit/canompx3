@@ -37,6 +37,11 @@ from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.eligibility.builder import (
+    VALIDATION_FRESHNESS_DAYS,
+    build_eligibility_report,
+    parse_strategy_id,
+)
 from trading_app.prop_profiles import ACCOUNT_PROFILES
 from trading_app.strategy_fitness import compute_fitness
 
@@ -241,66 +246,119 @@ def _get_regime_context(db_path: Path) -> dict[str, dict]:
     return result
 
 
-def _classify_filter_status(
-    filter_type: str,
-    instrument: str,
-    regime_ctx: dict[str, dict],
-) -> str:
-    """Classify whether a filter is ACTIVE, CHECK, or INACTIVE today.
+def _prefetch_feature_rows(
+    trades: list[dict],
+    db_path: Path,
+) -> dict[tuple[str, int], dict | None]:
+    """Pre-fetch latest-available daily_features row per unique (instrument, aperture).
 
-    ACTIVE = pre-checkable and passes today's regime.
-    CHECK = can't pre-check (ORB size, volume, cost determined during session).
-    INACTIVE = pre-checkable and fails today's regime.
+    Strategy: pull the LATEST row per pair (regardless of trading_day) so the
+    pre-session brief has actual data to evaluate against, even when today's
+    daily_features row has not yet been built. The canonical eligibility
+    builder tags freshness (FRESH / PRIOR_DAY / STALE / NO_DATA) from the row's
+    trading_day vs the requested trading_day, so the UI can surface stale data
+    without crashing.
+
+    Matches the pattern used by _get_regime_context: latest row per instrument
+    for regime indicators. Here we extend it to per-aperture because
+    daily_features has 3 rows per (trading_day, symbol) — one per orb_minutes
+    value. The canonical builder needs the row matching the strategy's aperture.
+
+    Returns a dict keyed by (instrument, aperture) → row dict or None.
+    Fail-closed: if the DB connection itself raises, propagate.
     """
-    ctx = regime_ctx.get(instrument)
-    if ctx is None:
-        return "CHECK"  # fail-open
+    pairs: set[tuple[str, int]] = set()
+    for t in trades:
+        instrument = t["instrument"]
+        aperture = int(t.get("aperture", 5) or 5)
+        pairs.add((instrument, aperture))
 
-    ft = filter_type
+    result: dict[tuple[str, int], dict | None] = {}
+    if not pairs:
+        return result
 
-    # Composites containing ORB-based components → always CHECK
-    if any(tag in ft for tag in ("ORB_G", "ORB_VOL", "COST_LT", "VOL_RV", "FAST", "CONT")):
-        return "CHECK"
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        for instrument, aperture in pairs:
+            row = con.execute(
+                """
+                SELECT *
+                FROM daily_features
+                WHERE symbol = ?
+                  AND orb_minutes = ?
+                ORDER BY trading_day DESC
+                LIMIT 1
+                """,
+                [instrument, aperture],
+            ).fetchone()
+            if row is None:
+                result[(instrument, aperture)] = None
+            else:
+                cols = [desc[0] for desc in con.description]
+                # strict=True matches the canonical _fetch_feature_row in
+                # trading_app.eligibility.builder (gate 1 review parity fix)
+                result[(instrument, aperture)] = dict(zip(cols, row, strict=True))
+    finally:
+        con.close()
 
-    # NO_FILTER / DIR_LONG / DIR_SHORT → always ACTIVE
-    if ft in ("NO_FILTER", "DIR_LONG", "DIR_SHORT"):
-        return "ACTIVE"
+    return result
 
-    # ATR percentile filters: ATR_P30, ATR_P50, ATR70_VOL
-    atr_pct = ctx.get("atr_pct")
-    atr_match = _re_module.match(r"ATR_P(\d+)", ft)
-    if atr_match:
-        if atr_pct is None:
-            return "CHECK"
-        threshold = float(atr_match.group(1))
-        return "ACTIVE" if atr_pct >= threshold else "INACTIVE"
-    if ft == "ATR70_VOL":
-        if atr_pct is None:
-            return "CHECK"
-        return "ACTIVE" if atr_pct >= 70 else "INACTIVE"
 
-    # Overnight range filters: OVNRNG_10, OVNRNG_25, etc.
-    ovn_match = _re_module.match(r"OVNRNG_(\d+)", ft)
-    if ovn_match:
-        ovn_pct = ctx.get("overnight_range_pct")
-        if ovn_pct is None:
-            return "CHECK"
-        threshold = float(ovn_match.group(1))
-        return "ACTIVE" if ovn_pct >= threshold else "INACTIVE"
+def _enrich_trades_with_eligibility(
+    trades: list[dict],
+    trading_day: date,
+    feature_rows: dict[tuple[str, int], dict | None],
+) -> None:
+    """Attach canonical eligibility fields to each trade dict.
 
-    # Cross-asset ATR filters: X_MES_ATR60, X_MGC_ATR70, etc.
-    x_match = _re_module.match(r"X_(\w+)_ATR(\d+)", ft)
-    if x_match:
-        source_instr = x_match.group(1)
-        threshold = float(x_match.group(2))
-        cross_atrs = ctx.get("cross_atrs", {})
-        source_atr = cross_atrs.get(source_instr)
-        if source_atr is None:
-            return "CHECK"
-        return "ACTIVE" if source_atr >= threshold else "INACTIVE"
+    Delegates filter semantics to build_eligibility_report from
+    trading_app.eligibility.builder. NO re-encoded filter logic.
 
-    # Anything else we can't classify → CHECK (fail-open)
-    return "CHECK"
+    Attaches six keys on success:
+      elig_overall     — OverallStatus string value (ELIGIBLE/INELIGIBLE/
+                         DATA_MISSING/NEEDS_LIVE_DATA)
+      elig_blocking    — tuple of condition names currently blocking the lane
+      elig_pending     — tuple of condition names awaiting intra-session resolution
+      elig_stale       — bool: any condition with STALE_VALIDATION status
+      elig_size_mult   — float: product of all passing conditions' size multipliers
+      elig_freshness   — FreshnessStatus string value (FRESH/PRIOR_DAY/STALE/NO_DATA)
+
+    On exception (unknown filter_type, broken describe() contract, etc.):
+    attaches the same six keys with overall="UNKNOWN" and defaults, plus a
+    seventh key elig_error carrying the exception text. Prints a WARNING to
+    stdout (matches _check_fitness pattern) so broken strategies are visible
+    without aborting the whole sheet.
+    """
+    for t in trades:
+        sid = t["strategy_id"]
+        instrument = t["instrument"]
+        aperture = int(t.get("aperture", 5) or 5)
+        feature_row = feature_rows.get((instrument, aperture))
+
+        try:
+            report = build_eligibility_report(
+                strategy_id=sid,
+                trading_day=trading_day,
+                feature_row=feature_row,
+            )
+            t["elig_overall"] = report.overall_status.value
+            t["elig_blocking"] = tuple(c.name for c in report.blocking_conditions)
+            t["elig_pending"] = tuple(c.name for c in report.pending_conditions)
+            t["elig_stale"] = any(
+                c.status.value == "STALE_VALIDATION" for c in report.conditions
+            )
+            t["elig_size_mult"] = float(report.effective_size_multiplier)
+            t["elig_freshness"] = report.freshness_status.value
+        except Exception as exc:  # noqa: BLE001 — adapter boundary, surface as visible UNKNOWN
+            err_msg = f"{type(exc).__name__}: {exc}"
+            print(f"  WARNING: eligibility build failed for {sid}: {err_msg}", flush=True)
+            t["elig_overall"] = "UNKNOWN"
+            t["elig_blocking"] = ()
+            t["elig_pending"] = ()
+            t["elig_stale"] = False
+            t["elig_size_mult"] = 1.0
+            t["elig_freshness"] = ""
+            t["elig_error"] = err_msg
 
 
 def _load_trailing_stats() -> dict[str, dict]:
@@ -365,9 +423,6 @@ def _enrich_trades_with_regime(
     trailing = _load_trailing_stats()
 
     for t in all_trades:
-        # Filter status
-        t["filter_status"] = _classify_filter_status(t["filter_type"], t["instrument"], regime_ctx)
-
         # Trades per year — prefer DB trades_per_year, fall back to sample/years
         sid = t["strategy_id"]
         if sid in tpy_map:
@@ -749,6 +804,85 @@ def _fitness_badge(fitness: str) -> str:
     return f' <span class="badge {cls}">{fitness}</span>'
 
 
+def _status_badge_from_eligibility(trade: dict) -> dict:
+    """Build HTML badge + pills + row-class + tooltip parts from canonical eligibility.
+
+    Canonical consumer of build_eligibility_report output (the six elig_* keys
+    attached by _enrich_trades_with_eligibility). Returns a dict with:
+      badge_html        — main status badge HTML fragment
+      pills_html        — STALE and/or HALF pills (may be empty string)
+      row_class_suffix  — extra CSS class for the row (e.g. ' row-inactive')
+      tooltip_parts     — list of strings to join into the row tooltip
+
+    Mapping from OverallStatus to existing badge vocabulary:
+      ELIGIBLE         → green check badge (matches old ACTIVE)
+      INELIGIBLE       → dimmed INACTIVE badge + row-inactive class
+      NEEDS_LIVE_DATA  → clock VERIFY badge (matches old CHECK)
+      DATA_MISSING     → NEW amber DATA badge + row-inactive class
+      UNKNOWN          → clock VERIFY badge with error in tooltip
+
+    Pills (additive, appended after main badge):
+      elig_stale=True        → STALE pill (validation older than 180d)
+      elig_size_mult < 1.0   → HALF pill (calendar overlay reduces size)
+    """
+    overall = trade.get("elig_overall", "UNKNOWN")
+    blocking = trade.get("elig_blocking", ())
+    pending = trade.get("elig_pending", ())
+    stale = trade.get("elig_stale", False)
+    size_mult = float(trade.get("elig_size_mult", 1.0))
+    freshness = trade.get("elig_freshness", "")
+    elig_error = trade.get("elig_error")
+
+    # ── Main status badge + row class ────────────────────────────────
+    if overall == "ELIGIBLE":
+        badge_html = '<span class="badge badge-filter-active">&#10003;</span>'
+        row_class_suffix = ""
+    elif overall == "INELIGIBLE":
+        badge_html = '<span class="badge badge-filter-check">INACTIVE</span>'
+        row_class_suffix = " row-inactive"
+    elif overall == "NEEDS_LIVE_DATA":
+        badge_html = '<span class="badge badge-filter-check">&#9201; VERIFY</span>'
+        row_class_suffix = ""
+    elif overall == "DATA_MISSING":
+        badge_html = '<span class="badge badge-filter-missing">DATA</span>'
+        row_class_suffix = " row-inactive"
+    else:  # UNKNOWN or any future enum value we don't recognize
+        badge_html = '<span class="badge badge-filter-check">&#9201; VERIFY</span>'
+        row_class_suffix = ""
+
+    # ── Pills (additive) ─────────────────────────────────────────────
+    pills = []
+    if stale:
+        pills.append('<span class="pill pill-stale">STALE</span>')
+    if size_mult < 1.0:
+        pills.append('<span class="pill pill-half">HALF</span>')
+    pills_html = "".join(pills)
+
+    # ── Tooltip parts (merged into row tooltip by caller) ────────────
+    tooltip_parts: list[str] = []
+    if overall == "DATA_MISSING":
+        tooltip_parts.append("feature data missing for this trading day")
+    elif overall == "INELIGIBLE" and blocking:
+        tooltip_parts.append("blocked by: " + "; ".join(blocking))
+    elif overall == "NEEDS_LIVE_DATA" and pending:
+        tooltip_parts.append("waiting on: " + "; ".join(pending))
+
+    if overall == "UNKNOWN" and elig_error:
+        tooltip_parts.append(f"eligibility error: {elig_error}")
+
+    if freshness == "PRIOR_DAY":
+        tooltip_parts.append("freshness: yesterday")
+    elif freshness == "STALE":
+        tooltip_parts.append("freshness: STALE - report may be inaccurate")
+
+    return {
+        "badge_html": badge_html,
+        "pills_html": pills_html,
+        "row_class_suffix": row_class_suffix,
+        "tooltip_parts": tooltip_parts,
+    }
+
+
 def _next_session_label(session_times: dict) -> str | None:
     """Find the next upcoming session based on current Brisbane time."""
     now = datetime.now()
@@ -853,15 +987,12 @@ def _build_session_cards(
                 status_badge = '<span class="badge badge-manual">MANUAL</span>'
                 row_class = "row-manual"
 
-            # Filter status badge
-            filt_status = t.get("filter_status", "CHECK")
-            if filt_status == "ACTIVE":
-                filter_status_badge = '<span class="badge badge-filter-active">&#10003;</span>'
-            elif filt_status == "INACTIVE":
-                filter_status_badge = '<span class="badge badge-filter-check">INACTIVE</span>'
-                row_class += " row-inactive"
-            else:
-                filter_status_badge = '<span class="badge badge-filter-check">&#9201; VERIFY</span>'
+            # Filter status badge — canonical eligibility (delegates to
+            # trading_app.eligibility.builder via _status_badge_from_eligibility)
+            elig_view = _status_badge_from_eligibility(t)
+            filter_status_badge = elig_view["badge_html"] + elig_view["pills_html"]
+            row_class += elig_view["row_class_suffix"]
+            elig_tooltip_parts = elig_view["tooltip_parts"]
 
             # Frequency column
             tpy = t.get("trades_per_year")
@@ -886,7 +1017,9 @@ def _build_session_cards(
             sm = t.get("stop_mult", 1.0)
             stop_str = f"{sm}x" if sm else "1.0x"
 
-            # Tooltip for instrument cell: strategy_id for avail/manual, profile for deployed
+            # Tooltip for instrument cell: strategy_id for avail/manual, profile for deployed.
+            # Also merges eligibility tooltip parts (blocked-by, waiting-on, freshness)
+            # from the canonical eligibility report.
             tooltip_parts = []
             if section == "deployed":
                 for pid in t.get("profiles", [t.get("profile", "")]):
@@ -899,7 +1032,8 @@ def _build_session_cards(
                     tooltip_parts.append(t["notes"][:60])
             else:
                 tooltip_parts.append(t.get("strategy_id", ""))
-            tooltip = " | ".join(tooltip_parts)
+            tooltip_parts.extend(elig_tooltip_parts)
+            tooltip = " | ".join(p for p in tooltip_parts if p)
             tooltip_attr = f' title="{tooltip}"' if tooltip else ""
 
             # Stats source label and tooltip
@@ -975,6 +1109,260 @@ def _build_session_cards(
     return cards_html
 
 
+# ── View B: Filter Universe Audit ─────────────────────────────────────
+# Surfaces every filter in trading_app.config.ALL_FILTERS plus the ATR
+# velocity overlay, cross-referenced against active validated_setups
+# (routed count) and prop_profiles.ACCOUNT_PROFILES (deployed count).
+# Anti-confirmation-bias: showing the full filter universe alongside the
+# deployed slice exposes dead / stale / unrouted filters that would
+# otherwise be invisible in View A.
+#
+# Design: docs/plans/2026-04-07-filter-universe-audit-design.md
+
+
+def _build_filter_universe_rows(db_path: Path, trading_day: date) -> list[dict]:
+    """Walk ALL_FILTERS + ATR_VELOCITY_OVERLAY and produce audit row dicts.
+
+    One read-only DB connection + one aggregate query for routed counts.
+    For each filter: reads the ClassVar metadata (VALIDATED_FOR,
+    LAST_REVALIDATED, CONFIDENCE_TIER), counts active validated_setups
+    strategies using it (routed), counts active profile lanes deploying
+    it (deployed), derives a status badge (LIVE/ROUTED/DEAD).
+
+    Returns a list of row dicts sorted by (deployed DESC, routed DESC,
+    filter_type ASC). The sort order puts LIVE rows at the top and DEAD
+    rows at the bottom so the trader's eye lands on the actionable rows
+    first.
+
+    Pure consumer of trading_app.config and trading_app.prop_profiles —
+    zero re-encoded filter logic, zero calls to build_eligibility_report
+    (View B is per-filter, not per-strategy).
+    """
+    from datetime import date as _date_type
+    from datetime import datetime as _dt_type
+
+    from trading_app.config import ALL_FILTERS, ATR_VELOCITY_OVERLAY
+    from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+    # ── routed counts: one DB query ──────────────────────────────────
+    routed_counts: dict[str, int] = {}
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        rows = con.execute(
+            """
+            SELECT filter_type, COUNT(*)
+            FROM validated_setups
+            WHERE LOWER(status) = 'active'
+            GROUP BY filter_type
+            """
+        ).fetchall()
+        for ft, n in rows:
+            routed_counts[ft] = int(n)
+    finally:
+        con.close()
+
+    # ── deployed counts: walk prop_profiles ──────────────────────────
+    # Uses the canonical parse_strategy_id (which already strips _S075
+    # suffix as of commit 35ae1fd). Lane → filter_type via the same
+    # path used by View A, so counts stay consistent.
+    deployed_counts: dict[str, int] = {}
+    for _pid, profile in ACCOUNT_PROFILES.items():
+        if not profile.active or not profile.daily_lanes:
+            continue
+        for lane in profile.daily_lanes:
+            try:
+                dims = parse_strategy_id(lane.strategy_id)
+            except Exception as exc:  # noqa: BLE001 — adapter boundary, surface loudly
+                # Fail-loud per institutional-rigor rule 6 (no silent
+                # failures). A malformed strategy_id would undercount
+                # deployed lanes in View B; print a WARNING so the
+                # trader notices while keeping the section renderable.
+                print(
+                    f"  WARNING: View B could not parse {lane.strategy_id}: "
+                    f"{type(exc).__name__}: {exc}",
+                    flush=True,
+                )
+                continue
+            ft = dims["filter_type"]
+            deployed_counts[ft] = deployed_counts.get(ft, 0) + 1
+
+    # ── Walk ALL_FILTERS + overlay and build rows ────────────────────
+    # Include the ATR velocity overlay as an extra entry. It lives
+    # outside ALL_FILTERS but has the same ClassVar shape.
+    entries: list[tuple[str, object]] = list(ALL_FILTERS.items())
+    overlay_key = getattr(ATR_VELOCITY_OVERLAY, "filter_type", "ATR_VEL")
+    entries.append((overlay_key, ATR_VELOCITY_OVERLAY))
+
+    rows_out: list[dict] = []
+    for key, filt in entries:
+        cls = type(filt)
+        class_name = cls.__name__
+
+        # Read ClassVar metadata — all three are OPTIONAL (only ~6-12 of
+        # 82 filters have them set). Treat absence as "not annotated".
+        validated_for = getattr(cls, "VALIDATED_FOR", None) or ()
+        last_revalidated = getattr(cls, "LAST_REVALIDATED", None)
+        confidence_tier = getattr(cls, "CONFIDENCE_TIER", None)
+
+        # Stale marker: use the canonical VALIDATION_FRESHNESS_DAYS
+        # constant from trading_app.eligibility.builder (currently 180d).
+        # Institutional-rigor rule 4: delegate, do not re-encode.
+        is_stale = False
+        last_rev_str = ""
+        if last_revalidated is not None:
+            if isinstance(last_revalidated, _dt_type):
+                rev_date = last_revalidated.date()
+            elif isinstance(last_revalidated, _date_type):
+                rev_date = last_revalidated
+            else:
+                rev_date = None
+            if rev_date is not None:
+                last_rev_str = rev_date.isoformat()
+                age_days = (trading_day - rev_date).days
+                is_stale = age_days > VALIDATION_FRESHNESS_DAYS
+
+        # Confidence tier: enum → string value. May be None (unannotated)
+        # or a ConfidenceTier enum.
+        tier_str = ""
+        if confidence_tier is not None:
+            tier_str = (
+                confidence_tier.value
+                if hasattr(confidence_tier, "value")
+                else str(confidence_tier)
+            )
+
+        routed = routed_counts.get(key, 0)
+        deployed = deployed_counts.get(key, 0)
+
+        if deployed > 0:
+            status = "LIVE"
+        elif routed > 0:
+            status = "ROUTED"
+        else:
+            status = "DEAD"
+
+        rows_out.append(
+            {
+                "filter_type": key,
+                "class_name": class_name,
+                "description": _filter_description(key),
+                "confidence_tier": tier_str,
+                "validated_for": tuple(validated_for) if validated_for else (),
+                "last_revalidated": last_rev_str,
+                "is_stale": is_stale,
+                "routed": routed,
+                "deployed": deployed,
+                "status": status,
+            }
+        )
+
+    rows_out.sort(
+        key=lambda r: (-r["deployed"], -r["routed"], r["filter_type"])
+    )
+    return rows_out
+
+
+def _render_filter_universe_section(rows: list[dict]) -> str:
+    """Pure function: list[row dict] → HTML fragment.
+
+    Produces a collapsible <details> block with a summary line
+    ('Filter Universe Audit — X total, Y routed, Z deployed') and a
+    table of all rows, each with status badge + filter_type + class +
+    description + tier + validated-for chips + revalidated date +
+    STALE pill (if stale) + routed + deployed counts.
+
+    Empty / missing metadata renders as '—' (em dash) rather than 'None'
+    or a red warning — most filters (~70 of 82) are unannotated and
+    this is the expected state, not a bug.
+    """
+    total = len(rows)
+    routed_count = sum(1 for r in rows if r["routed"] > 0)
+    deployed_count = sum(1 for r in rows if r["deployed"] > 0)
+    live_lane_sum = sum(r["deployed"] for r in rows)
+    summary_text = (
+        f"Filter Universe Audit &mdash; {total} total, "
+        f"{routed_count} routed, {deployed_count} deployed "
+        f"({live_lane_sum} live lane{'s' if live_lane_sum != 1 else ''})"
+    )
+
+    body_rows = ""
+    for r in rows:
+        # Row class by status
+        row_cls = {
+            "LIVE": "row-live",
+            "ROUTED": "row-routed",
+            "DEAD": "row-dead",
+        }.get(r["status"], "row-dead")
+
+        # Status badge. NOTE: ROUTED intentionally reuses the existing
+        # badge-filter-check amber palette (same visual meaning: "pay
+        # attention, not immediately actionable") rather than introducing
+        # a new dedicated class. Flagged in Gate 1 review as LOW-2 and
+        # accepted.
+        status_badge_cls = {
+            "LIVE": "badge-filter-live",
+            "ROUTED": "badge-filter-check",
+            "DEAD": "badge-filter-dead",
+        }.get(r["status"], "badge-filter-dead")
+        status_badge = f'<span class="badge {status_badge_cls}">{r["status"]}</span>'
+
+        # Validated-for: show up to 3 chips + "..." with full tuple in tooltip
+        vf = r["validated_for"]
+        if vf:
+            chips = [f'<span class="vf-chip">{i}·{s}</span>' for i, s in list(vf)[:3]]
+            vf_html = " ".join(chips)
+            if len(vf) > 3:
+                tooltip = "; ".join(f"{i}·{s}" for i, s in vf)
+                vf_html += f' <span class="vf-more" title="{tooltip}">+{len(vf) - 3}</span>'
+        else:
+            vf_html = "&mdash;"
+
+        # Last revalidated + optional STALE pill
+        if r["last_revalidated"]:
+            lr_html = r["last_revalidated"]
+            if r["is_stale"]:
+                lr_html += ' <span class="pill pill-stale">STALE</span>'
+        else:
+            lr_html = "&mdash;"
+
+        tier_html = r["confidence_tier"] if r["confidence_tier"] else "&mdash;"
+
+        body_rows += f"""
+            <tr class="{row_cls}">
+                <td>{status_badge}</td>
+                <td class="filter-key">{r["filter_type"]}</td>
+                <td class="filter-class">{r["class_name"]}</td>
+                <td class="filter-desc">{r["description"]}</td>
+                <td class="filter-tier">{tier_html}</td>
+                <td class="filter-vf">{vf_html}</td>
+                <td class="filter-lr">{lr_html}</td>
+                <td class="filter-routed">{r["routed"]}</td>
+                <td class="filter-deployed">{r["deployed"]}</td>
+            </tr>"""
+
+    return f"""
+        <details class="filter-universe">
+            <summary>{summary_text}</summary>
+            <table class="filter-universe-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Filter</th>
+                        <th>Class</th>
+                        <th>Description</th>
+                        <th>Tier</th>
+                        <th>Validated For</th>
+                        <th>Revalidated</th>
+                        <th>Routed</th>
+                        <th>Deployed</th>
+                    </tr>
+                </thead>
+                <tbody>{body_rows}
+                </tbody>
+            </table>
+        </details>"""
+
+
 def generate_html(
     trades: list[dict],
     session_times: dict,
@@ -982,8 +1370,16 @@ def generate_html(
     opportunities: list[dict] | None = None,
     manual_candidates: list[dict] | None = None,
     regime_ctx: dict[str, dict] | None = None,
+    filter_universe_rows: list[dict] | None = None,
 ) -> str:
-    """Generate self-contained HTML trade sheet with unified timeline."""
+    """Generate self-contained HTML trade sheet with unified timeline.
+
+    filter_universe_rows: optional list of row dicts from
+    _build_filter_universe_rows. When provided, a collapsible Filter
+    Universe Audit section (View B) is rendered below the session cards.
+    Passed in rather than computed here so generate_html stays a pure
+    rendering function with no DB dependency.
+    """
 
     day_name = trading_day.strftime("%A")
     date_str = trading_day.strftime("%d %b %Y")
@@ -1058,6 +1454,14 @@ def generate_html(
         profiles_used,
         next_session=next_session,
         regime_ctx=regime_ctx,
+    )
+
+    # Build View B — Filter Universe Audit section (optional, only when
+    # rows were pre-computed by main() via _build_filter_universe_rows)
+    filter_universe_html = (
+        _render_filter_universe_section(filter_universe_rows)
+        if filter_universe_rows
+        else ""
     )
 
     # Instrument summary — all three sections
@@ -1555,6 +1959,127 @@ def generate_html(
         color: #d29922;
         border: 1px solid #d29922;
     }}
+    .badge-filter-missing {{
+        background: #3d1f1f;
+        color: #f0883e;
+        border: 1px solid #f0883e;
+    }}
+    .pill {{
+        display: inline-block;
+        font-size: 9px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        margin-left: 3px;
+        vertical-align: middle;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+    }}
+    .pill-stale {{
+        background: #3d2e1f;
+        color: #d29922;
+        border: 1px solid #d29922;
+    }}
+    .pill-half {{
+        background: #3d2e1f;
+        color: #f0883e;
+        border: 1px solid #f0883e;
+    }}
+    /* View B: Filter Universe Audit section */
+    .filter-universe {{
+        margin: 24px 0;
+        padding: 16px;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+    }}
+    .filter-universe summary {{
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        color: #c9d1d9;
+        padding: 6px 0;
+    }}
+    .filter-universe summary:hover {{
+        color: #58a6ff;
+    }}
+    .filter-universe-table {{
+        width: 100%;
+        margin-top: 12px;
+        border-collapse: collapse;
+        font-size: 12px;
+    }}
+    .filter-universe-table th {{
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 1px solid #30363d;
+        color: #8b949e;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 10px;
+        letter-spacing: 0.5px;
+    }}
+    .filter-universe-table td {{
+        padding: 5px 8px;
+        border-bottom: 1px solid #21262d;
+        vertical-align: top;
+    }}
+    .filter-universe-table .filter-key {{
+        font-family: monospace;
+        color: #79c0ff;
+    }}
+    .filter-universe-table .filter-class {{
+        color: #8b949e;
+        font-size: 11px;
+    }}
+    .filter-universe-table .filter-desc {{
+        color: #c9d1d9;
+    }}
+    .filter-universe-table .filter-routed,
+    .filter-universe-table .filter-deployed {{
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: #c9d1d9;
+    }}
+    .row-live {{
+        border-left: 3px solid #3fb950;
+    }}
+    .row-routed {{
+        border-left: 3px solid #d29922;
+    }}
+    .row-dead {{
+        border-left: 3px solid #484f58;
+        opacity: 0.55;
+    }}
+    .badge-filter-live {{
+        background: #1f3a2a;
+        color: #3fb950;
+        border: 1px solid #2ea043;
+    }}
+    .badge-filter-dead {{
+        background: #21262d;
+        color: #8b949e;
+        border: 1px solid #484f58;
+    }}
+    .vf-chip {{
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        margin-right: 3px;
+        background: #21262d;
+        color: #8b949e;
+        border: 1px solid #30363d;
+    }}
+    .vf-more {{
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: #0d1117;
+        color: #8b949e;
+        border: 1px dashed #30363d;
+        cursor: help;
+    }}
     .row-inactive {{
         opacity: 0.25;
     }}
@@ -1631,6 +2156,8 @@ def generate_html(
 
     {cards_html}
 
+    {filter_universe_html}
+
     <div class="footer">
         Unified timeline &mdash; prop_profiles lanes + validated opportunities + manual candidates &mdash;
         hover instrument for strategy ID or profile &mdash; dollar gate applied where applicable
@@ -1676,7 +2203,8 @@ def main():
         con_check = duckdb.connect(str(db_path), read_only=True)
         try:
             for table, col in [("daily_features", "trading_day"), ("orb_outcomes", "trading_day")]:
-                max_date = con_check.execute(f"SELECT MAX({col}) FROM {table}").fetchone()[0]
+                row = con_check.execute(f"SELECT MAX({col}) FROM {table}").fetchone()
+                max_date = row[0] if row is not None else None
                 days_stale = (trading_day - max_date.date()).days if max_date else 999
                 status = "OK" if days_stale <= 2 else f"STALE ({days_stale} days old)"
                 print(f"  {table}: {max_date.date() if max_date else 'EMPTY'} [{status}]")
@@ -1751,6 +2279,27 @@ def main():
     all_trades_for_enrichment = list(trades) + list(opportunities) + list(manual_candidates)
     if regime_ctx:
         _enrich_trades_with_regime(all_trades_for_enrichment, regime_ctx, db_path)
+
+    # Canonical eligibility enrichment — single source of truth for filter
+    # status is trading_app.eligibility.builder.build_eligibility_report,
+    # which is also the live dashboard's signal source (Phase 3 of the
+    # parent eligibility-context design). See
+    # docs/plans/2026-04-07-trade-book-canonicalization-design.md.
+    feature_rows = _prefetch_feature_rows(all_trades_for_enrichment, db_path)
+    _enrich_trades_with_eligibility(all_trades_for_enrichment, trading_day, feature_rows)
+
+    # View B — Filter Universe Audit (Phase 2 complete): compute audit
+    # rows once from ALL_FILTERS + ATR velocity overlay + validated_setups
+    # + prop_profiles. See
+    # docs/plans/2026-04-07-filter-universe-audit-design.md.
+    filter_universe_rows = _build_filter_universe_rows(db_path, trading_day)
+    print(
+        f"  {len(filter_universe_rows)} filters in universe "
+        f"({sum(1 for r in filter_universe_rows if r['status'] == 'LIVE')} LIVE, "
+        f"{sum(1 for r in filter_universe_rows if r['status'] == 'ROUTED')} ROUTED, "
+        f"{sum(1 for r in filter_universe_rows if r['status'] == 'DEAD')} DEAD)",
+        flush=True,
+    )
     print()
 
     # Generate HTML
@@ -1761,6 +2310,7 @@ def main():
         opportunities=opportunities or None,
         manual_candidates=manual_candidates or None,
         regime_ctx=regime_ctx or None,
+        filter_universe_rows=filter_universe_rows,
     )
     output_path.write_text(html, encoding="utf-8")
     print(f"Written to {output_path}")

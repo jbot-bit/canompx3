@@ -240,6 +240,15 @@ class ProjectXOrderRouter(BrokerRouter):
     def supports_native_brackets(self) -> bool:
         return True
 
+    def has_queryable_bracket_legs(self) -> bool:
+        """ProjectX AutoBracket creates separate child orders for SL/TP.
+
+        The bracket legs are queryable via searchOpen as individual orders with
+        IDs entry_id+1 (stop) and entry_id+2 (take profit), tagged with
+        'AutoBracket'. verify_bracket_legs() returns the real order IDs.
+        """
+        return True
+
     def build_bracket_spec(
         self,
         direction: str,

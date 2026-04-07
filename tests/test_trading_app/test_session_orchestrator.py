@@ -1346,13 +1346,23 @@ class TestOrchestratorReconnect:
 
 
 class FakeBracketRouter(FakeRouter):
-    """Router that supports native brackets (atomic: merged into entry)."""
+    """Router that supports native brackets with separately-queryable legs.
+
+    Simulates a ProjectX-style broker: native brackets + distinct SL/TP child
+    orders that can be queried via verify_bracket_legs(). For tests that
+    exercise the Rithmic-style atomic-brackets-without-queryable-legs path,
+    use FakeAtomicBracketRouter below.
+    """
 
     def __init__(self, fill_price=None):
         super().__init__(fill_price)
         self.cancelled_ids = []
+        self.verify_bracket_legs_call_count = 0
 
     def supports_native_brackets(self) -> bool:
+        return True
+
+    def has_queryable_bracket_legs(self) -> bool:
         return True
 
     def build_bracket_spec(self, **kwargs) -> dict:
@@ -1365,10 +1375,28 @@ class FakeBracketRouter(FakeRouter):
         return {**entry_spec, **bracket_spec}
 
     def verify_bracket_legs(self, order_id: int, contract_symbol: str) -> tuple[int, int]:
+        self.verify_bracket_legs_call_count += 1
         return (order_id + 1, order_id + 2)
 
     def cancel(self, order_id: int) -> None:
         self.cancelled_ids.append(order_id)
+
+
+class FakeAtomicBracketRouter(FakeBracketRouter):
+    """Router that simulates Rithmic/Tradovate-style native atomic brackets.
+
+    supports_native_brackets=True (same as FakeBracketRouter — broker merges
+    SL/TP into the entry submission) BUT has_queryable_bracket_legs=False
+    because the legs are atomic with the entry — no separately-queryable
+    child orders exist. session_orchestrator MUST skip the verify_bracket_legs
+    call entirely in this case.
+
+    If a test using this router observes verify_bracket_legs_call_count > 0,
+    the session_orchestrator flag-gate at L1685 has regressed.
+    """
+
+    def has_queryable_bracket_legs(self) -> bool:
+        return False
 
 
 class TestBracketOrders:
@@ -1462,6 +1490,73 @@ class TestBracketOrders:
 
         # Position should be cleaned up despite "already flat" error
         assert orch._positions.get(STRATEGY_ID) is None
+
+    async def test_bracket_verify_skipped_for_atomic_native_broker(self):
+        """REGRESSION GUARD for the has_queryable_bracket_legs() skip path.
+
+        When the broker uses atomic native brackets (has_queryable_bracket_legs
+        returns False — e.g. Rithmic, Tradovate-until-activation), session_orch
+        MUST skip verify_bracket_legs entirely. Otherwise the base default
+        (None, None) is misinterpreted as 'BRACKET LEGS MISSING' and a false
+        CRITICAL Telegram alarm fires on every entry.
+
+        Asserts:
+          1. verify_bracket_legs is NEVER called (call count == 0)
+          2. brackets_submitted counter still increments (atomic path still
+             counts as a successful bracket submission)
+          3. bracket_order_ids stays empty (no separately-queryable legs exist
+             — the broker manages them server-side)
+          4. No 'BRACKET LEGS MISSING' notification fires
+
+        If this test fails, the flag gate at session_orchestrator.py L1685 has
+        regressed and Rithmic/Tradovate activation will drown operators in
+        false-positive Telegram alarms.
+        """
+        router = FakeAtomicBracketRouter(fill_price=2351.0)
+        c = FakeBrokerComponents()
+        c.router = router
+        orch = build_orchestrator(c)
+        orch.order_router = router
+
+        # Track notifications to prove no false alarm fires
+        notifications: list[str] = []
+        orch._notify = notifications.append
+
+        await orch._handle_event(_entry_event(2350.5))
+
+        # Gate 1: verify_bracket_legs was NEVER called
+        assert router.verify_bracket_legs_call_count == 0, (
+            f"verify_bracket_legs must not be called for atomic-bracket broker, "
+            f"but was called {router.verify_bracket_legs_call_count} times"
+        )
+
+        # Gate 2: brackets_submitted counter still incremented
+        assert orch._stats.brackets_submitted == 1, (
+            f"brackets_submitted should increment even on skip path, got "
+            f"{orch._stats.brackets_submitted}"
+        )
+
+        # Gate 3: bracket_order_ids stays empty (no separately-queryable legs)
+        record = orch._positions.get(STRATEGY_ID)
+        assert record is not None, "Position should exist after ENTRY fill"
+        assert record.bracket_order_ids == [], (
+            f"bracket_order_ids must be empty for atomic-bracket broker "
+            f"(no separately-queryable legs), got: {record.bracket_order_ids}"
+        )
+
+        # Gate 4: no 'BRACKET LEGS MISSING' notification
+        missing_alarms = [n for n in notifications if "BRACKET LEGS MISSING" in n]
+        assert missing_alarms == [], (
+            f"False 'BRACKET LEGS MISSING' alarm fired for atomic-bracket broker: "
+            f"{missing_alarms}"
+        )
+
+        # Also verify the native-bracket spec was actually merged into entry
+        # (atomic brackets still use the merged-into-entry submission path)
+        assert len(router.submitted) == 1
+        submitted = router.submitted[0]
+        assert "stopLossBracket" in submitted
+        assert "takeProfitBracket" in submitted
 
 
 # ---------------------------------------------------------------------------

@@ -82,7 +82,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from datetime import date
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from pipeline.cost_model import COST_SPECS, get_cost_spec
 
@@ -143,6 +143,35 @@ def _atom_numeric(value: Any) -> float | None:
     return f
 
 
+def _e2_look_ahead_reason(filter_type: str) -> str | None:
+    """Return E2 look-ahead exclusion reason if filter_type is E2-excluded.
+
+    Canonical source: E2_EXCLUDED_FILTER_PREFIXES / E2_EXCLUDED_FILTER_SUBSTRINGS
+    (defined later in this module). Mirrors the gate used in
+    strategy_discovery.py:1161 and execution_engine.py:627 — do NOT re-encode
+    the membership rule; delegate to the same constants.
+
+    Returns a human-readable reason string if the filter is E2-excluded, or
+    None if the filter is E2-safe. Used by describe() overrides on break-bar
+    dependent filters (BreakSpeed, BreakBarContinues, Volume, CombinedATRVol).
+    """
+    # Forward reference to constants defined lower in the module.
+    # Python resolves globals at call time, so this is safe as long as the
+    # module has finished importing before describe() is invoked.
+    if filter_type.startswith(E2_EXCLUDED_FILTER_PREFIXES):
+        return (
+            f"E2 look-ahead: filter_type '{filter_type}' depends on break-bar "
+            f"properties unknown at E2 entry placement"
+        )
+    for sub in E2_EXCLUDED_FILTER_SUBSTRINGS:
+        if sub in filter_type:
+            return (
+                f"E2 look-ahead: filter_type '{filter_type}' depends on break-bar "
+                f"properties unknown at E2 entry placement (substring '{sub}')"
+            )
+    return None
+
+
 @dataclass(frozen=True)
 class AtomDescription:
     """A single atomic condition produced by a filter's describe() method.
@@ -171,8 +200,20 @@ class AtomDescription:
     - is_not_applicable: True if this atom does not apply to the caller's
       (instrument, session, entry_model) combination
     - not_applicable_reason: if is_not_applicable, human-readable reason
-    - last_revalidated: date of last research revalidation, from filter
-      annotations
+    - validated_for: tuple of (instrument, session) pairs where research
+      has validated this atom. Empty = applies to all combinations.
+      Sourced from filter ClassVar VALIDATED_FOR. Adapter maps a non-empty
+      tuple that excludes the caller's lane to NOT_APPLICABLE_INSTRUMENT.
+    - last_revalidated: date of last research revalidation. Sourced from
+      filter ClassVar LAST_REVALIDATED. Adapter maps stale (>180 days)
+      to STALE_VALIDATION.
+    - confidence_tier: PROVEN | PLAUSIBLE | LEGACY | UNKNOWN — research
+      quality tier from filter ClassVar CONFIDENCE_TIER. Surfaced in the
+      eligibility report so traders see provenance at a glance.
+    - error_message: optional diagnostic string captured by the filter when
+      it explicitly catches an exception (e.g., type mismatch on division).
+      The adapter aggregates non-None error_messages into report.build_errors
+      so the diagnostic trail is preserved without widening describe()'s API.
     - size_multiplier: trade sizing modifier for PASS conditions (default 1.0,
       0.5 for calendar HALF_SIZE)
     - explanation: one-sentence plain-English description
@@ -189,7 +230,10 @@ class AtomDescription:
     is_data_missing: bool = False
     is_not_applicable: bool = False
     not_applicable_reason: str = ""
+    validated_for: tuple[tuple[str, str], ...] = ()
     last_revalidated: date | None = None
+    confidence_tier: str = "UNKNOWN"
+    error_message: str | None = None
     size_multiplier: float = 1.0
     explanation: str = ""
 
@@ -502,6 +546,56 @@ class CostRatioFilter(StrategyFilter):
             result.loc[inst_mask] = cost_ratio_pct < self.max_cost_ratio_pct
         return result
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Cost-ratio gate derived from orb size + canonical cost spec.
+
+        Intra-session: resolves at ORB_FORMATION (size known at ORB close).
+        Both missing/zero orb_size and unknown symbol surface as DATA_MISSING
+        so the report shows 'data unavailable' instead of a spurious FAIL.
+        """
+        _ = entry_model  # cost-ratio applies to all entry models
+        size_col = f"orb_{orb_label}_size"
+        size = _atom_numeric(row.get(size_col))
+        symbol = row.get("symbol")
+        missing = size is None or symbol is None or size <= 0
+
+        observed_ratio: float | None = None
+        if not missing:
+            assert size is not None  # type narrowing for pyright
+            try:
+                cost_spec = get_cost_spec(str(symbol))
+                raw_risk = size * cost_spec.point_value
+                observed_ratio = (
+                    100.0 * cost_spec.total_friction / (raw_risk + cost_spec.total_friction)
+                )
+            except ValueError:
+                missing = True
+                observed_ratio = None
+
+        passes = None if missing else observed_ratio < self.max_cost_ratio_pct  # type: ignore[operator]
+        return [
+            AtomDescription(
+                name=f"Cost ratio < {self.max_cost_ratio_pct:g}%",
+                category="INTRA_SESSION",
+                resolves_at="ORB_FORMATION",
+                passes=passes,
+                feature_column=size_col,
+                observed_value=observed_ratio,
+                threshold=self.max_cost_ratio_pct,
+                comparator="<",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require round-trip cost share of raw ORB risk "
+                    f"< {self.max_cost_ratio_pct:g}% (minimum-viable-trade-size screen)."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class VolumeFilter(StrategyFilter):
@@ -531,6 +625,58 @@ class VolumeFilter(StrategyFilter):
         if col not in df.columns:
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] >= self.min_rel_vol)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Relative-volume gate. Intra-session, resolves at BREAK_DETECTED.
+
+        E2-excluded: rel_vol includes break-bar volume, unknown at E2 entry.
+        """
+        col = f"rel_vol_{orb_label}"
+        if entry_model == "E2":
+            reason = _e2_look_ahead_reason(self.filter_type)
+            if reason is not None:
+                return [
+                    AtomDescription(
+                        name=f"Rel volume >= {self.min_rel_vol:g}",
+                        category="INTRA_SESSION",
+                        resolves_at="BREAK_DETECTED",
+                        passes=None,
+                        feature_column=col,
+                        threshold=self.min_rel_vol,
+                        comparator=">=",
+                        is_not_applicable=True,
+                        not_applicable_reason=reason,
+                        explanation=(
+                            "Relative-volume gate does not apply to E2 entries — "
+                            "break-bar volume is unknown at E2 order placement."
+                        ),
+                    )
+                ]
+        observed = _atom_numeric(row.get(col))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_rel_vol
+        return [
+            AtomDescription(
+                name=f"Rel volume >= {self.min_rel_vol:g}",
+                category="INTRA_SESSION",
+                resolves_at="BREAK_DETECTED",
+                passes=passes,
+                feature_column=col,
+                observed_value=observed,
+                threshold=self.min_rel_vol,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline "
+                    f"(breakout conviction gate)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -578,6 +724,82 @@ class CombinedATRVolumeFilter(VolumeFilter):
             & (df[rel_col] >= self.min_rel_vol)
         )
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Combined ATR regime + rel-volume gate. Emits TWO atoms.
+
+        - ATR-20 percentile atom: PRE_SESSION, resolves at STARTUP (E2-safe).
+        - Rel-volume atom: INTRA_SESSION, resolves at BREAK_DETECTED.
+          E2-excluded by filter_type prefix (ATR70_VOL). For E2 the volume
+          atom is NOT_APPLICABLE but the ATR atom still evaluates normally,
+          preserving granularity in the eligibility report.
+        """
+        # Atom 1: ATR regime (E2-safe, pre-session)
+        atr_obs = _atom_numeric(row.get("atr_20_pct"))
+        atr_missing = atr_obs is None
+        atr_passes = None if atr_missing else atr_obs >= self.min_atr_pct
+        atr_atom = AtomDescription(
+            name=f"ATR percentile >= {self.min_atr_pct:g}",
+            category="PRE_SESSION",
+            resolves_at="STARTUP",
+            passes=atr_passes,
+            feature_column="atr_20_pct",
+            observed_value=atr_obs,
+            threshold=self.min_atr_pct,
+            comparator=">=",
+            is_data_missing=atr_missing,
+            explanation=(
+                f"Require own ATR-20 rolling percentile >= {self.min_atr_pct:g}% "
+                f"(high-vol regime gate)."
+            ),
+        )
+
+        # Atom 2: rel_vol (E2-excluded via filter_type prefix)
+        vol_col = f"rel_vol_{orb_label}"
+        if entry_model == "E2":
+            reason = _e2_look_ahead_reason(self.filter_type)
+            if reason is not None:
+                vol_atom = AtomDescription(
+                    name=f"Rel volume >= {self.min_rel_vol:g}",
+                    category="INTRA_SESSION",
+                    resolves_at="BREAK_DETECTED",
+                    passes=None,
+                    feature_column=vol_col,
+                    threshold=self.min_rel_vol,
+                    comparator=">=",
+                    is_not_applicable=True,
+                    not_applicable_reason=reason,
+                    explanation=(
+                        "Relative-volume half of the combined gate does not "
+                        "apply to E2 entries — break-bar volume is unknown at "
+                        "E2 order placement."
+                    ),
+                )
+                return [atr_atom, vol_atom]
+
+        vol_obs = _atom_numeric(row.get(vol_col))
+        vol_missing = vol_obs is None
+        vol_passes = None if vol_missing else vol_obs >= self.min_rel_vol
+        vol_atom = AtomDescription(
+            name=f"Rel volume >= {self.min_rel_vol:g}",
+            category="INTRA_SESSION",
+            resolves_at="BREAK_DETECTED",
+            passes=vol_passes,
+            feature_column=vol_col,
+            observed_value=vol_obs,
+            threshold=self.min_rel_vol,
+            comparator=">=",
+            is_data_missing=vol_missing,
+            explanation=(
+                f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline."
+            ),
+        )
+        return [atr_atom, vol_atom]
+
 
 @dataclass(frozen=True)
 class OrbVolumeFilter(StrategyFilter):
@@ -615,6 +837,40 @@ class OrbVolumeFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] >= self.min_volume)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Aggregate ORB-window volume gate. Intra-session, resolves at ORB_FORMATION.
+
+        E2-safe: ORB-window volume is fully observed once the ORB closes,
+        before any E2 break can occur.
+        """
+        _ = entry_model
+        col = f"orb_{orb_label}_volume"
+        observed = _atom_numeric(row.get(col))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_volume
+        return [
+            AtomDescription(
+                name=f"ORB volume >= {self.min_volume:g}",
+                category="INTRA_SESSION",
+                resolves_at="ORB_FORMATION",
+                passes=passes,
+                feature_column=col,
+                observed_value=observed,
+                threshold=self.min_volume,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require aggregate ORB-window volume >= {self.min_volume:g} "
+                    f"contracts (session participation gate)."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class CrossAssetATRFilter(StrategyFilter):
@@ -627,7 +883,25 @@ class CrossAssetATRFilter(StrategyFilter):
     Fail-closed: if the key is absent or None, day is ineligible.
 
     @research-source research/research_vol_regime_filter.py
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: MNQ at 6 US sessions per research_vol_regime_filter.
+      Cross-asset filter is MNQ-only (US sessions where MES leads MNQ flow).
+      Other instrument/session pairs return NOT_APPLICABLE_INSTRUMENT.
+    - LAST_REVALIDATED: None (legacy, pre-Apr 2026 research)
+    - CONFIDENCE_TIER: PROVEN
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("MNQ", "CME_PRECLOSE"),
+        ("MNQ", "COMEX_SETTLE"),
+        ("MNQ", "US_DATA_1000"),
+        ("MNQ", "NYSE_OPEN"),
+        ("MNQ", "NYSE_CLOSE"),
+        ("MNQ", "US_DATA_830"),
+    )
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     source_instrument: str = "MES"
     min_pct: float = 70.0
@@ -646,6 +920,42 @@ class CrossAssetATRFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] >= self.min_pct)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Cross-asset ATR percentile gate. Pre-session, resolves at STARTUP.
+
+        Threads VALIDATED_FOR + CONFIDENCE_TIER through. Adapter maps
+        non-validated lanes to NOT_APPLICABLE_INSTRUMENT.
+        """
+        _ = (orb_label, entry_model)
+        col = f"cross_atr_{self.source_instrument}_pct"
+        observed = _atom_numeric(row.get(col))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_pct
+        return [
+            AtomDescription(
+                name=f"{self.source_instrument} ATR percentile >= {self.min_pct:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column=col,
+                observed_value=observed,
+                threshold=self.min_pct,
+                comparator=">=",
+                is_data_missing=missing,
+                validated_for=self.VALIDATED_FOR,
+                confidence_tier=self.CONFIDENCE_TIER,
+                explanation=(
+                    f"Require {self.source_instrument} ATR-20 rolling percentile "
+                    f">= {self.min_pct:g}% (cross-asset volatility regime gate)."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class OwnATRPercentileFilter(StrategyFilter):
@@ -656,7 +966,17 @@ class OwnATRPercentileFilter(StrategyFilter):
 
     April 2026 hypothesis H4: MNQ_ATR_P60 as simpler alternative to X_MES_ATR60
     (CORR(MES_ATR20, MNQ_ATR20) = 0.93 — cross-asset filter is 93% redundant).
+
+    Canonical metadata:
+    - VALIDATED_FOR: empty (applies broadly — no instrument restriction
+      proven; the filter is a vol-regime gate that should generalize).
+    - LAST_REVALIDATED: None (recent hypothesis, no formal revalidation date)
+    - CONFIDENCE_TIER: PLAUSIBLE — H4 hypothesis test result, not yet
+      promoted to PROVEN status.
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
 
     min_pct: float = 60.0
 
@@ -672,6 +992,39 @@ class OwnATRPercentileFilter(StrategyFilter):
         if "atr_20_pct" not in df.columns:
             return pd.Series(False, index=df.index)
         return df["atr_20_pct"].notna() & (df["atr_20_pct"] >= self.min_pct)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Own ATR-20 percentile gate. Pre-session, resolves at STARTUP.
+
+        Threads CONFIDENCE_TIER (PLAUSIBLE) through.
+        """
+        _ = (orb_label, entry_model)
+        observed = _atom_numeric(row.get("atr_20_pct"))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_pct
+        return [
+            AtomDescription(
+                name=f"Own ATR percentile >= {self.min_pct:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="atr_20_pct",
+                confidence_tier=self.CONFIDENCE_TIER,
+                observed_value=observed,
+                threshold=self.min_pct,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require own-instrument ATR-20 rolling percentile "
+                    f">= {self.min_pct:g}% (own-vol regime gate)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -703,6 +1056,35 @@ class OvernightRangeFilter(StrategyFilter):
         if "overnight_range_pct" not in df.columns:
             return pd.Series(False, index=df.index)
         return df["overnight_range_pct"].notna() & (df["overnight_range_pct"] >= self.min_pct)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Overnight range rolling percentile gate. Pre-session, resolves at STARTUP."""
+        _ = (orb_label, entry_model)
+        observed = _atom_numeric(row.get("overnight_range_pct"))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_pct
+        return [
+            AtomDescription(
+                name=f"Overnight range percentile >= {self.min_pct:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="overnight_range_pct",
+                observed_value=observed,
+                threshold=self.min_pct,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require overnight range rolling percentile >= {self.min_pct:g}% "
+                    f"(Asian-session activity gate)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -745,6 +1127,40 @@ class OvernightRangeAbsFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         return df["overnight_range"].notna() & (df["overnight_range"] >= self.min_range)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Absolute overnight range (points) gate. Pre-session, resolves at STARTUP.
+
+        LOOK-AHEAD NOTE: overnight_range is 09:00-17:00 Brisbane. Caller routing
+        (via get_filters_for_grid) restricts this filter to post-17:00 sessions.
+        describe() trusts the routing and emits the atom as PRE_SESSION.
+        """
+        _ = (orb_label, entry_model)
+        observed = _atom_numeric(row.get("overnight_range"))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_range
+        return [
+            AtomDescription(
+                name=f"Overnight range >= {self.min_range:g} pts",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="overnight_range",
+                observed_value=observed,
+                threshold=self.min_range,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require absolute overnight range (09:00-17:00 Brisbane) "
+                    f">= {self.min_range:g} points. Routed only to post-17:00 sessions."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class PrevDayRangeNormFilter(StrategyFilter):
@@ -762,7 +1178,16 @@ class PrevDayRangeNormFilter(StrategyFilter):
     @research-source scripts/research/scan_presession_t2t8.py
     @entry-models E2
     @revalidated-for E2 (Apr 2026)
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: empty (applies all sessions — no instrument restriction)
+    - LAST_REVALIDATED: 2026-04-02 (presession scan refresh)
+    - CONFIDENCE_TIER: PROVEN (BH FDR survivor, year-stable)
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 2)
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     min_ratio: float
 
@@ -782,6 +1207,82 @@ class PrevDayRangeNormFilter(StrategyFilter):
         ratio = df["prev_day_range"] / df["atr_20"].replace(0, float("nan"))
         return valid & (ratio >= self.min_ratio)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """prev_day_range / atr_20 gate. Pre-session, resolves at STARTUP.
+
+        atr_20 <= 0 is treated as DATA_MISSING (data corruption, not FAIL).
+        matches_row() fails-closed on atr_20 <= 0; describe() surfaces it as
+        missing so the report shows 'data unavailable' instead of a spurious
+        comparison against observed=None.
+
+        Type mismatches (e.g. string in prev_day_range column from schema
+        drift) are explicitly caught and reported via the atom's
+        error_message field. The eligibility adapter aggregates non-None
+        error_messages into report.build_errors so the diagnostic trail is
+        preserved without parallel error-tracking. Status surfaces as
+        DATA_MISSING (infrastructure problem, not a trading signal).
+        """
+        _ = (orb_label, entry_model)
+        raw_pdr = row.get("prev_day_range")
+        raw_atr = row.get("atr_20")
+        pdr = _atom_numeric(raw_pdr)
+        atr = _atom_numeric(raw_atr)
+        error_message: str | None = None
+        observed: float | None = None
+        missing = False
+
+        if pdr is None or atr is None:
+            # One or both raw inputs missing/non-numeric. Distinguish "field
+            # absent" (missing) from "field present but wrong type" (also
+            # missing, but with diagnostic message).
+            missing = True
+            if raw_pdr is not None and pdr is None and not _atom_is_missing(raw_pdr):
+                error_message = (
+                    f"PDR: type mismatch on prev_day_range — expected numeric, "
+                    f"got {type(raw_pdr).__name__}({raw_pdr!r})"
+                )
+            elif raw_atr is not None and atr is None and not _atom_is_missing(raw_atr):
+                error_message = (
+                    f"PDR: type mismatch on atr_20 — expected numeric, "
+                    f"got {type(raw_atr).__name__}({raw_atr!r})"
+                )
+        elif atr <= 0:
+            missing = True
+            error_message = f"PDR: invalid atr_20={atr!r} (must be > 0)"
+        else:
+            observed = pdr / atr
+
+        passes: bool | None
+        if missing or observed is None:
+            passes = None
+        else:
+            passes = observed >= self.min_ratio
+        return [
+            AtomDescription(
+                name=f"prev_day_range / atr_20 >= {self.min_ratio:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="prev_day_range",
+                observed_value=observed,
+                threshold=self.min_ratio,
+                comparator=">=",
+                is_data_missing=missing,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
+                error_message=error_message,
+                explanation=(
+                    f"Require prior-day range normalized by ATR-20 "
+                    f">= {self.min_ratio:g} (prior-day expansion gate)."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class GapNormFilter(StrategyFilter):
@@ -799,7 +1300,20 @@ class GapNormFilter(StrategyFilter):
     @research-source scripts/research/scan_presession_t2t8.py
     @entry-models E2
     @revalidated-for E2 (Apr 2026)
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: MGC CME_REOPEN only — gap-shock signal is gold-specific
+      and CME-reopen-specific per scan_presession_t2t8.py
+    - LAST_REVALIDATED: 2026-04-02
+    - CONFIDENCE_TIER: PROVEN
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("MGC", "CME_REOPEN"),
+    )
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 2)
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     min_ratio: float
 
@@ -818,6 +1332,71 @@ class GapNormFilter(StrategyFilter):
         valid = df["gap_open_points"].notna() & df["atr_20"].notna() & (df["atr_20"] > 0)
         ratio = df["gap_open_points"].abs() / df["atr_20"].replace(0, float("nan"))
         return valid & (ratio >= self.min_ratio)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """abs(gap_open_points) / atr_20 gate. Pre-session, resolves at STARTUP.
+
+        atr_20 <= 0 treated as DATA_MISSING (see PrevDayRangeNormFilter note).
+        Type mismatches caught explicitly and reported via error_message.
+        """
+        _ = (orb_label, entry_model)
+        raw_gap = row.get("gap_open_points")
+        raw_atr = row.get("atr_20")
+        gap = _atom_numeric(raw_gap)
+        atr = _atom_numeric(raw_atr)
+        error_message: str | None = None
+        observed: float | None = None
+        missing = False
+
+        if gap is None or atr is None:
+            missing = True
+            if raw_gap is not None and gap is None and not _atom_is_missing(raw_gap):
+                error_message = (
+                    f"GAP: type mismatch on gap_open_points — expected numeric, "
+                    f"got {type(raw_gap).__name__}({raw_gap!r})"
+                )
+            elif raw_atr is not None and atr is None and not _atom_is_missing(raw_atr):
+                error_message = (
+                    f"GAP: type mismatch on atr_20 — expected numeric, "
+                    f"got {type(raw_atr).__name__}({raw_atr!r})"
+                )
+        elif atr <= 0:
+            missing = True
+            error_message = f"GAP: invalid atr_20={atr!r} (must be > 0)"
+        else:
+            observed = abs(gap) / atr
+
+        passes: bool | None
+        if missing or observed is None:
+            passes = None
+        else:
+            passes = observed >= self.min_ratio
+        return [
+            AtomDescription(
+                name=f"abs(gap) / atr_20 >= {self.min_ratio:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="gap_open_points",
+                observed_value=observed,
+                threshold=self.min_ratio,
+                comparator=">=",
+                is_data_missing=missing,
+                validated_for=self.VALIDATED_FOR,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
+                error_message=error_message,
+                explanation=(
+                    f"Require absolute overnight gap normalized by ATR-20 "
+                    f">= {self.min_ratio:g} (gap-shock gate)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -839,6 +1418,42 @@ class DirectionFilter(StrategyFilter):
         if col not in df.columns:
             return pd.Series(False, index=df.index)
         return df[col] == self.direction
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Direction gate. Directional, resolves at BREAK_DETECTED.
+
+        IMPORTANT: pre-break, the break direction is genuinely unknown (PENDING),
+        not DATA_MISSING. This is distinct from the old parallel-model bug
+        which marked DirectionFilter as NOT_APPLICABLE_DIRECTION unconditionally.
+        The filter DOES apply; it just hasn't resolved yet.
+        """
+        _ = entry_model
+        col = f"orb_{orb_label}_break_dir"
+        raw = row.get(col)
+        missing = _atom_is_missing(raw)
+        passes = None if missing else (raw == self.direction)
+        return [
+            AtomDescription(
+                name=f"Break direction == {self.direction}",
+                category="DIRECTIONAL",
+                resolves_at="BREAK_DETECTED",
+                passes=passes,
+                feature_column=col,
+                observed_value=None if missing else raw,
+                threshold=self.direction,
+                comparator="==",
+                is_data_missing=False,  # PENDING, not truly missing
+                explanation=(
+                    f"Strategy trades only {self.direction}-direction breaks. "
+                    f"Resolves once the break direction is observed."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -876,6 +1491,38 @@ class CalendarSkipFilter(StrategyFilter):
                 mask = mask & ~df["is_friday"].fillna(False).astype(bool)
         return mask
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Calendar overlay summary. OVERLAY, resolves at STARTUP.
+
+        NOTE: This is the filter-as-filter_type path (deprecated in discovery).
+        The eligibility builder's richer calendar overlay (which can emit
+        HALF_SIZE with size_multiplier=0.5) is handled separately in
+        trading_app/eligibility/builder.py. This override exists to satisfy
+        the drift check that every StrategyFilter is self-describing.
+        """
+        _ = entry_model
+        passes = self.matches_row(row, orb_label)
+        return [
+            AtomDescription(
+                name="Calendar skip overlay",
+                category="OVERLAY",
+                resolves_at="STARTUP",
+                passes=passes,
+                explanation=(
+                    f"Skip trading on "
+                    f"NFP={self.skip_nfp} / OPEX={self.skip_opex} / "
+                    f"Friday({self.skip_friday_session or 'off'}). "
+                    f"Rich overlay (HALF_SIZE, sizing) handled by the "
+                    f"eligibility builder separately."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class DayOfWeekSkipFilter(StrategyFilter):
@@ -883,6 +1530,16 @@ class DayOfWeekSkipFilter(StrategyFilter):
 
     Uses day_of_week column (0=Mon..6=Sun, Python weekday convention).
     Fail-closed: missing day_of_week means day is ineligible.
+
+    Canonical metadata:
+    - VALIDATED_FOR: empty (DOW signal applies broadly; lane routing
+      decisions live in get_filters_for_grid, not here)
+    - LAST_REVALIDATED: None
+    - CONFIDENCE_TIER: derived from skip_days — Monday-skip (NOMON) is
+      PLAUSIBLE per confluence research; Tuesday/Friday-skip (NOTUE,
+      NOFRI) are LEGACY (removed from grid Mar 2026, retained for DB
+      compat). The describe() method derives the tier from the actual
+      skip set so each instance reports its own tier accurately.
     """
 
     skip_days: tuple[int, ...] = ()
@@ -900,6 +1557,61 @@ class DayOfWeekSkipFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         # NaN → fail-closed (notna check), then exclude skip_days
         return df["day_of_week"].notna() & ~df["day_of_week"].isin(self.skip_days)
+
+    def _confidence_tier(self) -> str:
+        """Derive tier from skip_days. NOMON (Monday=0) = PLAUSIBLE
+        per confluence research; Tuesday/Friday skips = LEGACY (removed
+        from grid Mar 2026 but retained for DB compat).
+
+        If the skip set contains both PLAUSIBLE and LEGACY days, the
+        lower tier (LEGACY) wins — conservative provenance disclosure.
+        """
+        if not self.skip_days:
+            return "UNKNOWN"
+        # Friday=4, Tuesday=1 are LEGACY
+        if any(d in (1, 4) for d in self.skip_days):
+            return "LEGACY"
+        # Monday=0 only path
+        return "PLAUSIBLE"
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Day-of-week skip gate. Pre-session, resolves at STARTUP.
+
+        day_of_week follows Python weekday convention (0=Mon..6=Sun) and
+        is derived from trading_day. Fail-closed on missing DOW.
+
+        Threads instance-derived confidence_tier through (LEGACY for
+        Tuesday/Friday skips, PLAUSIBLE for Monday-only).
+        """
+        _ = (orb_label, entry_model)
+        dow_num = _atom_numeric(row.get("day_of_week"))
+        missing = dow_num is None
+        dow_int = int(dow_num) if dow_num is not None else None
+        passes = None if missing else (dow_int not in self.skip_days)
+        skip_list = list(self.skip_days)
+        return [
+            AtomDescription(
+                name=f"Day of week not in {skip_list}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="day_of_week",
+                observed_value=dow_int,
+                threshold=skip_list,
+                comparator="not in",
+                is_data_missing=missing,
+                confidence_tier=self._confidence_tier(),
+                explanation=(
+                    f"Skip trading on day_of_week {skip_list} "
+                    f"(0=Mon, 6=Sun, Python weekday convention)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -926,11 +1638,27 @@ class ATRVelocityFilter(StrategyFilter):
     NOT applied to: MNQ (no signal), MES (baseline already negative — redundant).
 
     Fail-open: missing data (warm-up period) -> trade is allowed.
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: ((MGC, CME_REOPEN), (MGC, TOKYO_OPEN)) — derived
+      mechanically from apply_to_sessions × instrument restriction.
+      The two sources of truth (apply_to_sessions tuple and VALIDATED_FOR
+      ClassVar) MUST agree — drift check #N enforces this if added.
+    - LAST_REVALIDATED: 2026-03-18 (compressed_spring revalidation)
+    - CONFIDENCE_TIER: PROVEN
     """
 
     filter_type: str = "ATR_VEL"
     description: str = "Skip Contracting ATR × Neutral/Compressed ORB sessions"
     apply_to_sessions: tuple[str, ...] = ("CME_REOPEN", "TOKYO_OPEN")
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("MGC", "CME_REOPEN"),
+        ("MGC", "TOKYO_OPEN"),
+    )
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 3, 18)
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         if orb_label not in self.apply_to_sessions:
@@ -958,6 +1686,78 @@ class ATRVelocityFilter(StrategyFilter):
             return pd.Series(True, index=df.index)
         # Skip when BOTH contracting AND non-expanded
         return ~(is_contracting & is_non_expanded)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """ATR velocity overlay. Delegates to canonical matches_row().
+
+        CRITICAL CANONICAL DELEGATION: this method MUST call
+        self.matches_row() directly for the passes bool. Do NOT re-encode
+        the vel_regime/compression_tier comparison — the canonical
+        matches_row has warm-up fail-open semantics (missing compression
+        tier -> True, meaning PASS not DATA_MISSING). A parallel re-implementation
+        would drift from canonical and mislabel warm-up days as FAIL. The
+        prior parallel-model bug did exactly this.
+
+        Non-monitored sessions (anything outside apply_to_sessions) are
+        marked NOT_APPLICABLE so the eligibility report shows the overlay
+        is scoped to the two MGC sessions where signal was confirmed.
+        """
+        _ = entry_model
+        if orb_label not in self.apply_to_sessions:
+            return [
+                AtomDescription(
+                    name="ATR velocity overlay",
+                    category="OVERLAY",
+                    resolves_at="ORB_FORMATION",
+                    passes=True,
+                    is_not_applicable=True,
+                    not_applicable_reason=(
+                        f"Session '{orb_label}' is not in the monitored "
+                        f"set {list(self.apply_to_sessions)} — ATR velocity "
+                        f"signal is confirmed only for MGC CME_REOPEN and "
+                        f"MGC TOKYO_OPEN."
+                    ),
+                    validated_for=self.VALIDATED_FOR,
+                    last_revalidated=self.LAST_REVALIDATED,
+                    confidence_tier=self.CONFIDENCE_TIER,
+                    explanation=(
+                        "ATR velocity overlay: skip when ATR is actively "
+                        "contracting AND the ORB is Neutral/Compressed."
+                    ),
+                )
+            ]
+        # Canonical delegation — warm-up fail-open is inherited.
+        passes = self.matches_row(row, orb_label)
+        vel_regime = row.get("atr_vel_regime")
+        comp_tier = row.get(f"orb_{orb_label}_compression_tier")
+        vel_str = "missing" if _atom_is_missing(vel_regime) else str(vel_regime)
+        tier_str = "missing" if _atom_is_missing(comp_tier) else str(comp_tier)
+        return [
+            AtomDescription(
+                name="Not (Contracting ATR + Neutral/Compressed ORB)",
+                category="OVERLAY",
+                resolves_at="ORB_FORMATION",
+                passes=passes,
+                feature_column="atr_vel_regime",
+                observed_value=f"vel={vel_str}, tier={tier_str}",
+                threshold="not (Contracting & non-Expanded)",
+                comparator="!=",
+                is_data_missing=False,  # warm-up is fail-open, not missing
+                validated_for=self.VALIDATED_FOR,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
+                explanation=(
+                    "Skip sessions when ATR is actively contracting AND the "
+                    "ORB is Neutral or Compressed. Fail-open on warm-up "
+                    "(missing compression tier -> PASS, matching canonical)."
+                ),
+            )
+        ]
 
 
 # Default ATR velocity overlay — applied as portfolio-level overlay.
@@ -994,6 +1794,41 @@ class DoubleBreakFilter(StrategyFilter):
         else:
             return df[col].fillna(False).astype(bool)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """DoubleBreakFilter is LOOK-AHEAD and has no real-time semantics.
+
+        double_break checks whether BOTH ORB sides were breached during the
+        FULL session (i.e. after trade entry). It was removed from production
+        discovery 2026-02 (6 validated strategies proved to be artifacts).
+        describe() always returns NOT_APPLICABLE so the eligibility report
+        surfaces the filter as dead rather than claiming it passed/failed.
+        """
+        _ = (row, orb_label, entry_model)
+        return [
+            AtomDescription(
+                name="Double-break filter",
+                category="INTRA_SESSION",
+                resolves_at="ORB_FORMATION",
+                passes=None,
+                is_not_applicable=True,
+                not_applicable_reason=(
+                    "double_break is look-ahead: it checks whether BOTH ORB "
+                    "sides were breached during the full session (after trade "
+                    "entry). Cannot be used as a real-time gate. Removed from "
+                    "production discovery 2026-02."
+                ),
+                explanation=(
+                    "Deprecated filter — kept only for backward-compat with "
+                    "legacy strategy ids."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class BreakSpeedFilter(StrategyFilter):
@@ -1004,7 +1839,26 @@ class BreakSpeedFilter(StrategyFilter):
 
     Uses orb_{label}_break_delay_min from daily_features.
     Fail-closed: missing data means day is ineligible.
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: MNQ at 5 sessions + MGC CME_REOPEN per
+      break_speed_signal_retest.md (Apr 2026). Per-instrument validity
+      enforces NOT_APPLICABLE_INSTRUMENT for non-validated lanes.
+    - LAST_REVALIDATED: 2026-04-01 (Phase 3 retest)
+    - CONFIDENCE_TIER: PROVEN
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("MNQ", "NYSE_CLOSE"),
+        ("MNQ", "NYSE_OPEN"),
+        ("MNQ", "TOKYO_OPEN"),
+        ("MNQ", "LONDON_METALS"),
+        ("MNQ", "CME_REOPEN"),
+        ("MGC", "CME_REOPEN"),
+    )
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 1)
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     max_delay_min: float = 5.0
 
@@ -1022,6 +1876,70 @@ class BreakSpeedFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] <= self.max_delay_min)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Break-speed gate. Intra-session, resolves at BREAK_DETECTED.
+
+        E2-excluded: break delay is unknown until the break actually occurs,
+        but the E2 entry order must already be placed. Canonical gate via
+        _e2_look_ahead_reason (E2_EXCLUDED_FILTER_SUBSTRINGS: '_FAST').
+
+        Threads canonical ClassVar metadata into the atom so the eligibility
+        adapter can apply NOT_APPLICABLE_INSTRUMENT for non-validated lanes
+        and STALE_VALIDATION for aged research.
+        """
+        col = f"orb_{orb_label}_break_delay_min"
+        if entry_model == "E2":
+            reason = _e2_look_ahead_reason(self.filter_type)
+            if reason is not None:
+                return [
+                    AtomDescription(
+                        name=f"Break delay <= {self.max_delay_min:g} min",
+                        category="INTRA_SESSION",
+                        resolves_at="BREAK_DETECTED",
+                        passes=None,
+                        feature_column=col,
+                        threshold=self.max_delay_min,
+                        comparator="<=",
+                        is_not_applicable=True,
+                        not_applicable_reason=reason,
+                        validated_for=self.VALIDATED_FOR,
+                        last_revalidated=self.LAST_REVALIDATED,
+                        confidence_tier=self.CONFIDENCE_TIER,
+                        explanation=(
+                            "Break-speed gate does not apply to E2 entries — "
+                            "break delay is unknown at E2 order placement."
+                        ),
+                    )
+                ]
+        observed = _atom_numeric(row.get(col))
+        missing = observed is None
+        passes = None if missing else observed <= self.max_delay_min
+        return [
+            AtomDescription(
+                name=f"Break delay <= {self.max_delay_min:g} min",
+                category="INTRA_SESSION",
+                resolves_at="BREAK_DETECTED",
+                passes=passes,
+                feature_column=col,
+                observed_value=observed,
+                threshold=self.max_delay_min,
+                comparator="<=",
+                is_data_missing=missing,
+                validated_for=self.VALIDATED_FOR,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
+                explanation=(
+                    f"Require break within {self.max_delay_min:g} minutes of ORB end "
+                    f"(momentum conviction gate)."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class BreakBarContinuesFilter(StrategyFilter):
@@ -1033,7 +1951,16 @@ class BreakBarContinuesFilter(StrategyFilter):
 
     Uses orb_{label}_break_bar_continues from daily_features.
     Fail-closed: missing data means day is ineligible.
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: empty (E1-only filter, applies broadly within E1)
+    - LAST_REVALIDATED: None (legacy filter, no recent revalidation)
+    - CONFIDENCE_TIER: PLAUSIBLE — confluence boost in some sessions but
+      not a standalone PROVEN signal. E2-incompatible (look-ahead).
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
 
     require_continues: bool = True
 
@@ -1051,6 +1978,64 @@ class BreakBarContinuesFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] == self.require_continues)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Break-bar continuation gate. Intra-session, resolves at CONFIRM_COMPLETE.
+
+        E2-excluded: bar-close direction is only known once the break bar
+        closes, but the E2 entry order must already be placed. Canonical gate
+        via _e2_look_ahead_reason (E2_EXCLUDED_FILTER_SUBSTRINGS: '_CONT').
+
+        Threads CONFIDENCE_TIER (PLAUSIBLE) through the atom.
+        """
+        col = f"orb_{orb_label}_break_bar_continues"
+        if entry_model == "E2":
+            reason = _e2_look_ahead_reason(self.filter_type)
+            if reason is not None:
+                return [
+                    AtomDescription(
+                        name="Break bar closes in break direction",
+                        category="INTRA_SESSION",
+                        resolves_at="CONFIRM_COMPLETE",
+                        passes=None,
+                        feature_column=col,
+                        threshold=self.require_continues,
+                        comparator="==",
+                        is_not_applicable=True,
+                        not_applicable_reason=reason,
+                        confidence_tier=self.CONFIDENCE_TIER,
+                        explanation=(
+                            "Break-bar continuation gate does not apply to E2 entries — "
+                            "bar-close direction is unknown at E2 order placement."
+                        ),
+                    )
+                ]
+        raw = row.get(col)
+        missing = _atom_is_missing(raw)
+        passes = None if missing else bool(raw) == self.require_continues
+        return [
+            AtomDescription(
+                name="Break bar closes in break direction",
+                category="INTRA_SESSION",
+                resolves_at="CONFIRM_COMPLETE",
+                passes=passes,
+                feature_column=col,
+                observed_value=None if missing else bool(raw),
+                threshold=self.require_continues,
+                comparator="==",
+                is_data_missing=missing,
+                confidence_tier=self.CONFIDENCE_TIER,
+                explanation=(
+                    "Require the break bar to close in the break direction "
+                    "(conviction gate)."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class PitRangeFilter(StrategyFilter):
@@ -1066,7 +2051,21 @@ class PitRangeFilter(StrategyFilter):
     @research-source scripts/research/exchange_range_t2t8.py
     @entry-models E1, E2
     @revalidated-for E1 (Apr 2026), E2 concordance +3-4pp
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: 3/3 instruments at CME_REOPEN per scan_presession_t2t8
+    - LAST_REVALIDATED: 2026-04-04 (T1-T8 confluence pass)
+    - CONFIDENCE_TIER: PROVEN (DSR-significant, BH FDR survivor)
     """
+
+    # ── Canonical research metadata (ClassVar — not dataclass fields) ────
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("MGC", "CME_REOPEN"),
+        ("MES", "CME_REOPEN"),
+        ("MNQ", "CME_REOPEN"),
+    )
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 4)
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     min_ratio: float
 
@@ -1083,6 +2082,46 @@ class PitRangeFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         return df["pit_range_atr"].notna() & (df["pit_range_atr"] >= self.min_ratio)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """CME pit range / atr_20 gate. Pre-session, resolves at STARTUP.
+
+        Pit closes 21:00 UTC; CME_REOPEN starts 23:00 UTC — zero look-ahead.
+        Uses the pre-computed pit_range_atr column (already normalized).
+
+        Threads canonical ClassVar metadata (VALIDATED_FOR, LAST_REVALIDATED,
+        CONFIDENCE_TIER) into the atom so the eligibility adapter can apply
+        NOT_APPLICABLE_INSTRUMENT and STALE_VALIDATION mechanically.
+        """
+        _ = (orb_label, entry_model)
+        observed = _atom_numeric(row.get("pit_range_atr"))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_ratio
+        return [
+            AtomDescription(
+                name=f"pit_range / atr_20 >= {self.min_ratio:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="pit_range_atr",
+                observed_value=observed,
+                threshold=self.min_ratio,
+                comparator=">=",
+                is_data_missing=missing,
+                validated_for=self.VALIDATED_FOR,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
+                explanation=(
+                    f"Require CME pit-session range normalized by ATR-20 "
+                    f">= {self.min_ratio:g} (prior pit activity gate)."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class CompositeFilter(StrategyFilter):
@@ -1096,6 +2135,24 @@ class CompositeFilter(StrategyFilter):
 
     def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
         return self.base.matches_df(df, orb_label) & self.overlay.matches_df(df, orb_label)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Composite = base AND overlay. Atoms are the UNION of component atoms.
+
+        Zero re-encoded logic — delegates fully to base.describe() and
+        overlay.describe(). Consumers see each component's atoms separately,
+        preserving granularity for the eligibility report (so the user can
+        see which component failed instead of a single opaque FAIL).
+        """
+        return [
+            *self.base.describe(row, orb_label, entry_model),
+            *self.overlay.describe(row, orb_label, entry_model),
+        ]
 
 
 # =========================================================================

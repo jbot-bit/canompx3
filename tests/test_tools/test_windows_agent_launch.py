@@ -98,6 +98,54 @@ class TestOpenClaudeWorkstream:
         call_mock.assert_called_once_with([r"C:\Users\joshd\.local\bin\claude.exe", "-C", str(tmp_path)])
 
 
+class TestCodexWslCommand:
+    def test_builds_bootstrap_then_open_command(self) -> None:
+        command = windows_agent_launch.build_codex_wsl_command(
+            "/mnt/c/repo",
+            "task-a",
+            "Build / edit",
+            False,
+        )
+
+        assert "set -euo pipefail" in command
+        assert "cd /mnt/c/repo" in command
+        assert "export UV_PROJECT_ENVIRONMENT=.venv-wsl" in command
+        assert "export UV_CACHE_DIR=/tmp/uv-cache" in command
+        assert "export UV_PYTHON_INSTALL_DIR=/tmp/uv-python" in command
+        assert "export UV_LINK_MODE=copy" in command
+        assert 'mkdir -p "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"' in command
+        assert "uv sync --frozen --python 3.13 --group dev" in command
+        assert "export CANOMPX3_WORKSTREAM_PURPOSE='Build / edit'" in command
+        assert "exec ./scripts/infra/codex-worktree.sh open task-a -- --no-alt-screen" in command
+
+    def test_builds_search_command_without_purpose(self) -> None:
+        command = windows_agent_launch.build_codex_wsl_command(
+            "/mnt/c/repo",
+            "task-a",
+            None,
+            True,
+        )
+
+        assert "exec ./scripts/infra/codex-worktree.sh search task-a -- --no-alt-screen" in command
+        assert "CANOMPX3_WORKSTREAM_PURPOSE" not in command
+
+
+class TestOpenCodexWorkstream:
+    def test_uses_saved_search_purpose_for_wsl_launch(self) -> None:
+        with (
+            patch.object(windows_agent_launch, "repo_root", return_value=Path(r"C:\repo")),
+            patch.object(windows_agent_launch, "windows_to_wsl", return_value="/mnt/c/repo"),
+            patch.object(windows_agent_launch, "get_existing_purpose", return_value="Investigate / search"),
+            patch.object(windows_agent_launch, "run_wsl", return_value=0) as run_wsl_mock,
+        ):
+            exit_code = windows_agent_launch.open_codex_workstream("task-a", "Build / edit", False)
+
+        assert exit_code == 0
+        command = run_wsl_mock.call_args.args[0]
+        assert "exec ./scripts/infra/codex-worktree.sh search task-a -- --no-alt-screen" in command
+        assert "export CANOMPX3_WORKSTREAM_PURPOSE='Investigate / search'" in command
+
+
 class TestWorkflowCommands:
     def test_handoff_workstream_invokes_manager(self) -> None:
         with patch.object(windows_agent_launch, "invoke_manager", return_value=(True, "ok")) as invoke_mock:

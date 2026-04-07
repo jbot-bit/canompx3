@@ -13,8 +13,12 @@ Verified against: async_rithmic 1.5.9 protobuf schema:
 """
 
 import logging
+from typing import TYPE_CHECKING
 
 from ..broker_base import BrokerAuth, BrokerPositions
+
+if TYPE_CHECKING:
+    from .auth import RithmicAuth
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +27,10 @@ _BRIDGE_TIMEOUT = 10.0
 
 class RithmicPositions(BrokerPositions):
     """Query Rithmic for open positions and account equity."""
+
+    # Narrow the inherited BrokerAuth type — at runtime this is always
+    # RithmicAuth, which exposes .client (RithmicClient) and .run_async.
+    auth: "RithmicAuth"
 
     def __init__(self, auth: BrokerAuth, **kwargs):
         super().__init__(auth, **kwargs)

@@ -18,6 +18,7 @@ import asyncio
 import logging
 import os
 import threading
+from typing import Any
 
 from ..broker_base import BrokerAuth
 
@@ -35,7 +36,10 @@ class RithmicAuth(BrokerAuth):
     """
 
     def __init__(self):
-        self._client = None
+        # async_rithmic.RithmicClient at runtime. Typed as Any because
+        # async_rithmic may not be installed in dev environments (pyright
+        # can't resolve the import) and the library has no type stubs.
+        self._client: Any = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._connected = False
@@ -60,8 +64,14 @@ class RithmicAuth(BrokerAuth):
                 "RITHMIC_GATEWAY environment variables."
             )
 
-        # Import async_rithmic lazily to avoid import errors when not using Rithmic
-        from async_rithmic import OrderPlacement, RithmicClient, SysInfraType
+        # Import async_rithmic lazily to avoid import errors when not using Rithmic.
+        # async_rithmic is a third-party package with no type stubs and may not be
+        # installed in dev environments — the pyright ignore is intentional.
+        from async_rithmic import (  # pyright: ignore[reportMissingImports]
+            OrderPlacement,
+            RithmicClient,
+            SysInfraType,
+        )
 
         client = RithmicClient(
             user=self._user,
@@ -118,13 +128,23 @@ class RithmicAuth(BrokerAuth):
             raise RuntimeError(f"Rithmic connection failed: {e}") from e
 
     def _run_loop(self) -> None:
-        """Run the asyncio event loop in the background thread."""
+        """Run the asyncio event loop in the background thread.
+
+        _loop is set in _ensure_connected before this thread is started —
+        guaranteed non-None here.
+        """
+        assert self._loop is not None, "RithmicAuth._run_loop called before _loop assigned"
         asyncio.set_event_loop(self._loop)
         self._loop.run_forever()
 
     @property
-    def client(self):
-        """Access the underlying RithmicClient. Connects on first use."""
+    def client(self) -> Any:
+        """Access the underlying RithmicClient. Connects on first use.
+
+        Returns async_rithmic.RithmicClient (guaranteed non-None after
+        _ensure_connected returns successfully — raises RuntimeError
+        otherwise). Typed Any because async_rithmic has no stubs.
+        """
         self._ensure_connected()
         return self._client
 

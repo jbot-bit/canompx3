@@ -8,9 +8,13 @@ isAutomated: MUST be true for all bot-placed orders (Tradovate requirement).
 
 import logging
 import time
+from typing import TYPE_CHECKING
 
 from ..broker_base import BrokerAuth, BrokerRouter
 from .http import request_with_retry
+
+if TYPE_CHECKING:
+    from .auth import TradovateAuth
 
 log = logging.getLogger(__name__)
 
@@ -23,6 +27,11 @@ class TradovateOrderRouter(BrokerRouter):
     Compatible with Tradeify, MFFU, and direct Tradovate accounts.
     Same BrokerRouter interface as ProjectXOrderRouter.
     """
+
+    # Narrow the inherited BrokerAuth | None type — at runtime this is always
+    # TradovateAuth | None, which exposes .base_url. Methods that touch
+    # auth.base_url check `if self.auth is None` first.
+    auth: "TradovateAuth | None"
 
     def __init__(
         self,
@@ -176,6 +185,22 @@ class TradovateOrderRouter(BrokerRouter):
 
     def supports_native_brackets(self) -> bool:
         return True
+
+    def has_queryable_bracket_legs(self) -> bool:
+        """Tradovate placeOSO DOES create separately-queryable bracket1/bracket2
+        child orders, but the query path is NOT YET IMPLEMENTED in this adapter.
+
+        Returning False here is a deliberate trade-off: it prevents false
+        'BRACKET LEGS MISSING' critical alarms when Tradovate is activated,
+        at the cost of the bot not explicitly tracking bracket leg IDs for
+        cancellation (Tradovate auto-cancels brackets when the exit fires).
+
+        TODO(tradovate-activation): before flipping this to True, implement
+        verify_bracket_legs() to query placeOSO child orders via the Tradovate
+        order search endpoint. Until then, this adapter behaves like a native
+        atomic-bracket broker from the session_orchestrator's perspective.
+        """
+        return False
 
     def build_bracket_spec(
         self,

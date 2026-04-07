@@ -60,7 +60,7 @@ Build an `EligibilityReport` data structure that, given a strategy and a trading
 |-------|-------------|-------|-------|
 | 0 | Type definitions + decomposition registry | `trading_app/eligibility/types.py`, `decomposition.py` | this stage |
 | 1 | Eligibility builder + tests | `trading_app/eligibility/builder.py`, `test_eligibility_*.py` | this stage |
-| 2 | Trade sheet integration (View A + View B) | `scripts/tools/generate_trade_sheet.py` | next stage |
+| 2 | Trade sheet integration (View A + View B) | `scripts/tools/generate_trade_sheet.py` | **COMPLETE 2026-04-07** — View A in [`2026-04-07-trade-book-canonicalization-design.md`](./2026-04-07-trade-book-canonicalization-design.md), View B in [`2026-04-07-filter-universe-audit-design.md`](./2026-04-07-filter-universe-audit-design.md). |
 | 3 | Dashboard live integration | `bot_state.py`, `bot_dashboard.html`, `session_orchestrator.py`, `execution_engine.py` (event emission) | stage 3 |
 | 4 | Filter routing audit (separate research task) | `scripts/research/filter_routing_audit.py` | deferred |
 

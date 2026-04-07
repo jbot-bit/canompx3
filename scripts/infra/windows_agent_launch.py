@@ -127,6 +127,38 @@ def run_wsl(command_text: str) -> int:
     return subprocess.call(["wsl.exe", "bash", "-lc", command_text])
 
 
+def build_codex_wsl_command(
+    root_wsl: str,
+    workstream_name: str,
+    purpose: str | None,
+    search_mode: bool,
+) -> str:
+    import shlex
+
+    script_mode = "search" if search_mode else "open"
+    lines = [
+        "set -euo pipefail",
+        f"cd {shlex.quote(root_wsl)}",
+        "export JOBLIB_MULTIPROCESSING=0",
+        "if ! command -v uv >/dev/null 2>&1; then",
+        "  echo 'ERROR: uv is not installed in WSL PATH.' >&2",
+        "  exit 1",
+        "fi",
+        "export UV_PROJECT_ENVIRONMENT=.venv-wsl",
+        "export UV_CACHE_DIR=/tmp/uv-cache",
+        "export UV_PYTHON_INSTALL_DIR=/tmp/uv-python",
+        "export UV_LINK_MODE=copy",
+        "mkdir -p \"$UV_CACHE_DIR\" \"$UV_PYTHON_INSTALL_DIR\"",
+        "uv sync --frozen --python 3.13 --group dev",
+    ]
+    if purpose:
+        lines.append(f"export CANOMPX3_WORKSTREAM_PURPOSE={shlex.quote(purpose)}")
+    lines.append(
+        f"exec ./scripts/infra/codex-worktree.sh {script_mode} {shlex.quote(workstream_name)} -- --no-alt-screen"
+    )
+    return "\n".join(lines)
+
+
 def ensure_managed_worktree(tool_name: str, workstream_name: str, purpose: str | None) -> tuple[Path, str | None]:
     saved_purpose = get_existing_purpose(tool_name, workstream_name)
     final_purpose = saved_purpose or purpose
@@ -172,20 +204,13 @@ def open_claude_workstream(workstream_name: str, purpose: str | None) -> int:
 
 
 def open_codex_workstream(workstream_name: str, purpose: str | None, search_mode: bool = False) -> int:
-    import shlex
-
     root = windows_to_wsl(repo_root())
     saved_purpose = get_existing_purpose("codex", workstream_name)
     if saved_purpose:
         purpose = saved_purpose
         if saved_purpose == "Investigate / search":
             search_mode = True
-    script_mode = "search" if search_mode else "open"
-    command_parts = [f"cd {shlex.quote(root)} &&"]
-    if purpose:
-        command_parts.append(f"CANOMPX3_WORKSTREAM_PURPOSE={shlex.quote(purpose)}")
-    command_parts.append(f"exec ./scripts/infra/codex-worktree.sh {script_mode} {shlex.quote(workstream_name)}")
-    return run_wsl(" ".join(command_parts))
+    return run_wsl(build_codex_wsl_command(root, workstream_name, purpose, search_mode))
 
 
 def handoff_workstream(

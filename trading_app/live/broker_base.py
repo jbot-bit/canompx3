@@ -126,6 +126,62 @@ class BrokerRouter(ABC):
         """
         raise NotImplementedError
 
+    def cancel_bracket_orders(self, contract_id: str) -> int:
+        """Cancel orphaned bracket orders for a contract.
+
+        Returns the number of orders cancelled. Used on startup to clean up
+        brackets left over from a prior crashed session.
+
+        Default implementation returns 0 (no-op). Concrete routers override
+        to query and cancel broker-side bracket legs.
+        """
+        return 0
+
+    def verify_bracket_legs(
+        self, entry_order_id: int, contract_id: str
+    ) -> tuple[int | None, int | None]:
+        """Verify that bracket legs (SL + TP) were actually created at the broker.
+
+        Returns (stop_loss_order_id, take_profit_order_id). Both None if the
+        broker does not support bracket verification (e.g. Rithmic with native
+        server-side brackets does not need verification).
+
+        Only meaningful for brokers that merge brackets into the entry order
+        and create separate child orders (ProjectX AutoBracket). For
+        server-side bracket brokers, legs are atomic with entry — no verify
+        needed.
+
+        IMPORTANT: Callers MUST check `has_queryable_bracket_legs()` before
+        calling this method. The default (None, None) return is NOT a signal
+        of failure — it is the correct answer for brokers without separately-
+        queryable legs. The flag check is the only way to distinguish.
+        """
+        return (None, None)
+
+    def has_queryable_bracket_legs(self) -> bool:
+        """Whether this broker's bracket legs are separately-queryable orders.
+
+        True  — bracket SL/TP legs are distinct child orders with their own
+                order IDs that can be fetched via `verify_bracket_legs()`.
+                Example: ProjectX AutoBracket creates entry_id+1 for SL and
+                entry_id+2 for TP, both returned by searchOpen.
+
+        False — bracket legs are atomic with the entry submission and managed
+                server-side. No separate SL/TP order IDs exist to query.
+                Example: Rithmic native brackets. The broker manages leg
+                cancellation on exit-order submission, so the bot does not
+                need to track leg IDs.
+
+        session_orchestrator checks this flag before calling verify_bracket_legs.
+        When False, the verification path is skipped entirely — no alarm, no
+        fallback, no tracked leg IDs. When True, verify_bracket_legs must
+        return real order IDs.
+
+        Default: True (conservative — assume broker exposes legs and failing
+        verification means a real problem).
+        """
+        return True
+
 
 class BrokerContracts(ABC):
     """Resolve accounts and contract symbols."""

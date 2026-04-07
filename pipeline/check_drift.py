@@ -44,7 +44,11 @@ def _import_duckdb_or_exit():
             print("  uv run python pipeline/check_drift.py", file=sys.stderr)
             print("  scripts/infra/codex-project.sh", file=sys.stderr)
         else:
-            print("Create the WSL environment first with: uv sync --frozen", file=sys.stderr)
+            print(
+                "Create the WSL environment first with: "
+                "UV_PROJECT_ENVIRONMENT=.venv-wsl uv sync --frozen --python 3.13 --group dev",
+                file=sys.stderr,
+            )
         sys.exit(2)
     return duckdb
 
@@ -3439,6 +3443,180 @@ def check_no_raw_orb_active_reads() -> list[str]:
     return violations
 
 
+def check_filter_self_description_coverage() -> list[str]:
+    """Every ALL_FILTERS entry must produce valid AtomDescription via describe().
+
+    The canonical-filter-self-description refactor (2026-04-07) made each
+    StrategyFilter class own its own decomposition via the describe()
+    method. This check enforces that contract: any new filter added to
+    ALL_FILTERS must implement describe() and return a list of
+    AtomDescription instances with valid enum-string fields.
+
+    Without this check, a researcher could add a new filter to
+    ALL_FILTERS, forget to implement describe(), and silently get the
+    base class default — re-introducing the parallel-model drift bug
+    that the refactor eliminated.
+
+    What this check enforces:
+      1. ALL_FILTERS[ft].describe(sample_row, "CME_REOPEN", "E2") does not raise
+      2. The return value is a list (possibly empty for NoFilter)
+      3. Every element is an AtomDescription instance
+      4. NoFilter is the only filter allowed to return zero atoms
+      5. CompositeFilter atoms come from leaf filters (recursive walk)
+      6. No concrete filter inherits the base class default describe()
+      7. atom.category ∈ {PRE_SESSION, INTRA_SESSION, OVERLAY, DIRECTIONAL}
+      8. atom.resolves_at ∈ {STARTUP, ORB_FORMATION, BREAK_DETECTED,
+         CONFIRM_COMPLETE, TRADE_ENTERED}
+      9. atom.confidence_tier ∈ {PROVEN, PLAUSIBLE, LEGACY, UNKNOWN}
+
+    Rules 7-9 close a silent-default gap in the eligibility adapter: the
+    _CATEGORY_MAP / _RESOLVES_AT_MAP lookups silently coerce typos to
+    PRE_SESSION / STARTUP (losing filter-specific semantics). By asserting
+    valid string membership at the drift layer, we catch the typo at
+    check time instead of at runtime on a mis-labeled eligibility report.
+
+    @rule canonical-filter-self-description
+    @stage canonical-filter-self-description (Phase 5 + post-review hardening)
+    """
+    # Hardcoded enum-string sets. Kept in sync with
+    # trading_app.eligibility.types.ConditionCategory / ResolvesAt and
+    # trading_app.eligibility.types.ConfidenceTier. If those enums change,
+    # this drift check must update in lock-step (single source of truth is
+    # the enum; this set is the contract-level mirror for pipeline-side
+    # validation without a cross-package import).
+    _VALID_CATEGORIES = frozenset({
+        "PRE_SESSION", "INTRA_SESSION", "OVERLAY", "DIRECTIONAL",
+    })
+    _VALID_RESOLVES_AT = frozenset({
+        "STARTUP", "ORB_FORMATION", "BREAK_DETECTED",
+        "CONFIRM_COMPLETE", "TRADE_ENTERED",
+    })
+    _VALID_CONFIDENCE_TIERS = frozenset({
+        "PROVEN", "PLAUSIBLE", "LEGACY", "UNKNOWN",
+    })
+    violations: list[str] = []
+    try:
+        from trading_app.config import (
+            ALL_FILTERS,
+            AtomDescription,
+            CompositeFilter,
+            NoFilter,
+            StrategyFilter,
+        )
+    except ImportError as exc:
+        return [f"  Could not import trading_app.config: {exc}"]
+
+    # Sample row with plausible values for all common feature columns.
+    # Using CME_REOPEN as the orb_label exercises the most filters.
+    sample_row = {
+        "orb_CME_REOPEN_size": 8.0,
+        "orb_CME_REOPEN_break_delay_min": 3.0,
+        "orb_CME_REOPEN_break_bar_continues": True,
+        "orb_CME_REOPEN_break_dir": "long",
+        "orb_CME_REOPEN_compression_tier": "Compressed",
+        "orb_volume_ratio_CME_REOPEN": 1.5,
+        "rel_vol_CME_REOPEN": 1.4,
+        "symbol": "MGC",
+        "pit_range_atr": 0.15,
+        "prev_day_range": 200.0,
+        "atr_20": 150.0,
+        "gap_open_points": 5.0,
+        "overnight_range": 80.0,
+        "overnight_range_pct": 60.0,
+        "atr_20_pct": 75.0,
+        "cross_atr_MES_pct": 75.0,
+        "cross_atr_MGC_pct": 75.0,
+        "atr_vel_regime": "Stable",
+        "day_of_week": 2,
+        "is_nfp_day": False,
+        "is_opex_day": False,
+        "is_friday": False,
+        "double_break": 0,
+    }
+
+    def _walk_leaves(filt: StrategyFilter) -> list[StrategyFilter]:
+        if isinstance(filt, CompositeFilter):
+            return _walk_leaves(filt.base) + _walk_leaves(filt.overlay)
+        return [filt]
+
+    for filter_type, filter_inst in sorted(ALL_FILTERS.items()):
+        # Iterate leaves so the check sees the actual class implementing
+        # describe(), not just the composite wrapper.
+        leaves = _walk_leaves(filter_inst)
+        for leaf in leaves:
+            cls_name = type(leaf).__name__
+            try:
+                atoms = leaf.describe(sample_row, "CME_REOPEN", "E2")
+            except Exception as exc:
+                violations.append(
+                    f"  {filter_type} ({cls_name}): describe() raised "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                continue
+
+            if not isinstance(atoms, list):
+                violations.append(
+                    f"  {filter_type} ({cls_name}): describe() returned "
+                    f"{type(atoms).__name__}, expected list"
+                )
+                continue
+
+            # NoFilter is the only filter allowed zero atoms.
+            if not atoms and not isinstance(leaf, NoFilter):
+                violations.append(
+                    f"  {filter_type} ({cls_name}): describe() returned empty "
+                    f"list — only NoFilter may have zero atoms"
+                )
+                continue
+
+            for atom in atoms:
+                if not isinstance(atom, AtomDescription):
+                    violations.append(
+                        f"  {filter_type} ({cls_name}): describe() yielded "
+                        f"{type(atom).__name__}, expected AtomDescription"
+                    )
+                    continue
+                # Validate enum-string field membership. The eligibility
+                # adapter uses _CATEGORY_MAP.get(...) with silent defaults,
+                # so a typo in a filter's describe() would silently coerce
+                # to PRE_SESSION / STARTUP at runtime. Catch it here at
+                # check time instead.
+                if atom.category not in _VALID_CATEGORIES:
+                    violations.append(
+                        f"  {filter_type} ({cls_name}): atom.category="
+                        f"{atom.category!r} not in "
+                        f"{sorted(_VALID_CATEGORIES)}"
+                    )
+                if atom.resolves_at not in _VALID_RESOLVES_AT:
+                    violations.append(
+                        f"  {filter_type} ({cls_name}): atom.resolves_at="
+                        f"{atom.resolves_at!r} not in "
+                        f"{sorted(_VALID_RESOLVES_AT)}"
+                    )
+                if atom.confidence_tier not in _VALID_CONFIDENCE_TIERS:
+                    violations.append(
+                        f"  {filter_type} ({cls_name}): atom.confidence_tier="
+                        f"{atom.confidence_tier!r} not in "
+                        f"{sorted(_VALID_CONFIDENCE_TIERS)}"
+                    )
+
+            # Verify the leaf has not silently inherited the base class
+            # describe(): the default returns one atom with category
+            # 'INTRA_SESSION' and resolves_at 'ORB_FORMATION' regardless
+            # of filter semantics. Concrete filters MUST override
+            # describe() — except NoFilter (returns empty) and the
+            # base StrategyFilter itself (which is never instantiated).
+            uses_base_default = type(leaf).describe is StrategyFilter.describe
+            if uses_base_default and not isinstance(leaf, NoFilter):
+                violations.append(
+                    f"  {filter_type} ({cls_name}): inherits the base class "
+                    f"describe() default — concrete filters MUST override "
+                    f"describe() to surface filter-specific semantics"
+                )
+
+    return violations
+
+
 def check_no_scratch_db_in_docstrings() -> list[str]:
     """No C:/db/gold.db in docstring usage examples (stale since Mar 2026).
 
@@ -3897,6 +4075,12 @@ CHECKS = [
     ),  # requires_db
     ("No raw orb_active reads outside asset_configs.py", check_no_raw_orb_active_reads, False, False),
     ("No deprecated C:/db/gold.db in docstring usage examples", check_no_scratch_db_in_docstrings, False, False),
+    (
+        "Filter self-description coverage (every ALL_FILTERS entry has describe())",
+        check_filter_self_description_coverage,
+        False,
+        False,
+    ),
     # ── E2 canonical-window fix structural locks (2026-04-07, Stage 8) ────────
     (
         "Canonical orb_utc_window source (only pipeline/dst.py may define it)",

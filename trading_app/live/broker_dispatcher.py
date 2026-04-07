@@ -73,6 +73,10 @@ class BrokerDispatcher(BrokerRouter):
     def supports_native_brackets(self) -> bool:
         return self.primary.supports_native_brackets()
 
+    def has_queryable_bracket_legs(self) -> bool:
+        """Delegate to primary — dispatcher inherits the primary's bracket model."""
+        return self.primary.has_queryable_bracket_legs()
+
     def build_bracket_spec(
         self, direction: str, symbol: str, entry_price: float, stop_price: float, target_price: float, qty: int = 1
     ) -> dict | None:
