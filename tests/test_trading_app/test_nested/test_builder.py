@@ -1,6 +1,9 @@
 """
-Tests for trading_app.nested.builder — resample_to_5m, E3 sub-bar verification,
-and outcome computation with 5m bars.
+Tests for resample_to_5m and _verify_e3_sub_bar_fill (originally in
+trading_app.nested.builder, extracted to trading_app.entry_rules during
+the E2 canonical-window refactor 2026-04-07 Stage 4, then nested.builder
+itself was deleted in Stage 7 — this file is kept as the regression suite
+for those two helpers).
 """
 
 import sys
@@ -12,7 +15,7 @@ import pandas as pd
 import pytest
 
 from pipeline.cost_model import get_cost_spec
-from trading_app.nested.builder import _verify_e3_sub_bar_fill, resample_to_5m
+from trading_app.entry_rules import _verify_e3_sub_bar_fill, resample_to_5m
 from trading_app.outcome_builder import compute_single_outcome
 
 # ============================================================================
