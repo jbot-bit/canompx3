@@ -142,7 +142,6 @@ def _walk_filter_atoms(
     row: dict[str, Any],
     orb_label: str,
     entry_model: str,
-    build_errors: list[str],
 ) -> list[tuple[str, AtomDescription]]:
     """Descend into a composite filter, yielding (leaf_filter_type, atom) pairs.
 
@@ -150,23 +149,56 @@ def _walk_filter_atoms(
     recurses into base + overlay, preserving order. Each leaf's filter_type
     becomes the source_filter tag for its atoms.
 
-    Exceptions from describe() are caught, recorded in build_errors, and
-    the filter is skipped (no atoms produced for that branch). This is
-    fail-loud: the build_errors trail surfaces the problem in the report.
+    Fail-closed discipline: if a leaf's describe() raises, a synthetic
+    DATA_MISSING AtomDescription is emitted for that leaf with the exception
+    message captured in `error_message`. This flows into:
+      1. report.conditions — a visible DATA_MISSING record tagged with the
+         broken leaf's filter_type, so _derive_overall_status returns
+         DATA_MISSING instead of silently reporting ELIGIBLE
+      2. report.build_errors — via the main loop's atom.error_message
+         aggregation, preserving diagnostic detail for debugging
+
+    Sibling leaves in a composite are unaffected: if ORB_G5 succeeds but
+    an overlay leaf raises, the composite's report contains ORB_G5's real
+    atoms AND the overlay's synthetic DATA_MISSING atom.
+
+    Exception policy: we catch a broad Exception here because describe()
+    is an adapter boundary — infrastructure failures must surface as
+    explicit conditions, not bubble up as unhandled exceptions from
+    build_eligibility_report. The synthetic atom is the single-source-of-
+    truth for the error; the main loop reads atom.error_message and flows
+    it into build_errors, so there is no duplicate append here.
     """
     if isinstance(filt, CompositeFilter):
         return _walk_filter_atoms(
-            filt.base, row, orb_label, entry_model, build_errors
+            filt.base, row, orb_label, entry_model
         ) + _walk_filter_atoms(
-            filt.overlay, row, orb_label, entry_model, build_errors
+            filt.overlay, row, orb_label, entry_model
         )
     try:
         atoms = filt.describe(row, orb_label, entry_model)
-    except Exception as exc:  # noqa: BLE001 — surface as build_error
-        build_errors.append(
-            f"{filt.filter_type}.describe raised: {type(exc).__name__}: {exc}"
+    except Exception as exc:  # noqa: BLE001 — adapter boundary, fail-closed
+        error_msg = (
+            f"{filt.filter_type}.describe raised: "
+            f"{type(exc).__name__}: {exc}"
         )
-        return []
+        # Fail-closed synthetic atom — surfaces as DATA_MISSING in the
+        # condition list via _status_from_atom's passes=None + category=
+        # PRE_SESSION + is_data_missing=True path.
+        synthetic = AtomDescription(
+            name=f"{filt.filter_type}: describe() failed",
+            category="PRE_SESSION",
+            resolves_at="STARTUP",
+            passes=None,
+            is_data_missing=True,
+            error_message=error_msg,
+            explanation=(
+                f"Filter {filt.filter_type} ({type(filt).__name__}) raised "
+                f"an exception during describe(); cannot verify this "
+                f"condition. See report.build_errors for detail."
+            ),
+        )
+        return [(filt.filter_type, synthetic)]
     return [(filt.filter_type, atom) for atom in atoms]
 
 
@@ -396,40 +428,81 @@ def _build_atr_velocity_condition(
     instrument: str,
     session: str,
     trading_day: date,
+    build_errors: list[str],
 ) -> ConditionRecord | None:
     """Build the ATR velocity overlay via canonical describe() delegation.
 
     Returns None if the overlay does not apply to this (instrument, session)
-    pair. Two skip cases:
-      1. canonical filter marks atom is_not_applicable (session not in
-         apply_to_sessions tuple)
-      2. instrument is not in ATR_VELOCITY_OVERLAY.VALIDATED_FOR
-         (e.g. MNQ at CME_REOPEN — session is monitored on MGC but
-         the overlay isn't validated for MNQ)
+    pair. Returns a synthetic DATA_MISSING ConditionRecord if the canonical
+    describe() raises — fail-closed, not fail-open.
 
-    Both cases mean "skip this overlay entirely" — don't add a condition
-    to the report. This matches pre-refactor behavior where the overlay
-    was simply absent for non-applicable lanes, rather than adding a
-    NOT_APPLICABLE_INSTRUMENT condition that would clutter the report.
+    Flow:
+      1. Pre-check ATR_VELOCITY_OVERLAY.VALIDATED_FOR (reading the
+         canonical ClassVar, not re-encoding). If the lane is outside
+         the validated tuple, skip entirely — no describe() call, no
+         condition added. This is the "overlay doesn't apply here"
+         signal and matches pre-refactor behavior.
+      2. Call ATR_VELOCITY_OVERLAY.describe() inside a try/except. On
+         exception, append to build_errors and return a synthetic
+         DATA_MISSING ConditionRecord so the overlay failure surfaces
+         in the report rather than propagating uncaught (which would
+         break the "never raise on bad data" contract).
+      3. If describe() returns an atom with is_not_applicable=True,
+         respect it (canonical said it doesn't apply — may be a future
+         config change where apply_to_sessions diverges from VALIDATED_FOR).
+      4. Otherwise, mechanically translate to ConditionRecord.
 
-    Pre-refactor parallel model: re-encoded the vel_regime/compression
-    comparison and diverged on warm-up edge cases. Now: pure delegation,
-    inheriting canonical fail-open semantics for free.
+    Pre-refactor parallel model re-encoded vel_regime/compression
+    comparisons and diverged on warm-up edge cases. Now: pure delegation,
+    inheriting canonical fail-open warm-up semantics for free.
+
+    Why pre-check VALIDATED_FOR before calling describe():
+      - Avoids surfacing a spurious DATA_MISSING overlay on non-applicable
+        lanes (e.g., MNQ NYSE_CLOSE) if describe() fails. The overlay
+        genuinely doesn't apply, so a failure there is moot.
+      - Reading ATR_VELOCITY_OVERLAY.VALIDATED_FOR is canonical lookup,
+        not re-encoding. The ClassVar IS the single source of truth; we
+        simply read it directly to decide whether to invoke describe().
     """
+    # Pre-check: if this (instrument, session) is outside the canonical
+    # VALIDATED_FOR tuple, the overlay genuinely doesn't apply — skip
+    # entirely. Reading the ClassVar is canonical delegation.
+    if ATR_VELOCITY_OVERLAY.VALIDATED_FOR and (
+        instrument, session
+    ) not in ATR_VELOCITY_OVERLAY.VALIDATED_FOR:
+        return None
+
     row_safe = feature_row if feature_row is not None else {}
     # entry_model is irrelevant for the ATR velocity overlay (it applies
     # to all entry models on the validated MGC sessions).
-    atoms = ATR_VELOCITY_OVERLAY.describe(row_safe, session, "E2")
+    try:
+        atoms = ATR_VELOCITY_OVERLAY.describe(row_safe, session, "E2")
+    except Exception as exc:  # noqa: BLE001 — adapter boundary, fail-closed
+        error_msg = (
+            f"ATR_VELOCITY_OVERLAY.describe raised: "
+            f"{type(exc).__name__}: {exc}"
+        )
+        build_errors.append(error_msg)
+        # Fail-closed: surface the failure as a visible DATA_MISSING
+        # condition on the (already-verified-applicable) lane rather
+        # than returning None (which means "doesn't apply").
+        return ConditionRecord(
+            name="ATR velocity overlay",
+            category=ConditionCategory.OVERLAY,
+            status=ConditionStatus.DATA_MISSING,
+            resolves_at=ResolvesAt.ORB_FORMATION,
+            source_filter="atr_velocity",
+            confidence_tier=ConfidenceTier.UNKNOWN,
+            explanation=error_msg,
+        )
+
     if not atoms:
         return None
     atom = atoms[0]
     if atom.is_not_applicable:
-        return None
-    # Pre-check the validated_for restriction: if (instrument, session)
-    # is not in the canonical tuple, skip the overlay entirely rather
-    # than letting _status_from_atom map it to NOT_APPLICABLE_INSTRUMENT.
-    # The overlay's absence is the canonical "doesn't apply" signal.
-    if atom.validated_for and (instrument, session) not in atom.validated_for:
+        # Defensive: canonical said doesn't apply despite our pre-check
+        # passing. Respect it (possible future divergence between
+        # apply_to_sessions and VALIDATED_FOR).
         return None
     return _atom_to_condition(
         atom,
@@ -582,9 +655,12 @@ def build_eligibility_report(
     # Walk the filter tree, producing (source_filter, atom) pairs.
     # Filters expect a dict; pass {} when feature_row is None so they
     # can decide for themselves whether to surface DATA_MISSING.
+    # On describe() exception, _walk_filter_atoms returns a synthetic
+    # DATA_MISSING atom whose error_message flows into build_errors via
+    # the main loop below (single source of truth for error aggregation).
     row_for_describe = feature_row if feature_row is not None else {}
     atom_pairs = _walk_filter_atoms(
-        filter_instance, row_for_describe, orb_label, entry_model, build_errors
+        filter_instance, row_for_describe, orb_label, entry_model
     )
 
     # Translate atoms to ConditionRecords AND collect error_messages
@@ -603,7 +679,7 @@ def build_eligibility_report(
         _build_calendar_condition(instrument, orb_label, trading_day, build_errors)
     )
     atr_vel = _build_atr_velocity_condition(
-        feature_row, instrument, orb_label, trading_day
+        feature_row, instrument, orb_label, trading_day, build_errors
     )
     if atr_vel is not None:
         conditions.append(atr_vel)
