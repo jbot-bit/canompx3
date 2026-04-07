@@ -6,6 +6,160 @@
 
 ---
 
+## Update (Apr 7 — Canonical Filter Self-Description Refactor — IN PROGRESS)
+
+### Status
+Mid-refactor. Foundation committed at `f9231dc`. ~17 filter classes still need `describe()` overrides. Next session picks up at Task #19.
+
+### Why this refactor
+Two prior commits (046e80b Phase 0+1 + 7ead764 hardening) built `trading_app/eligibility/` as a PARALLEL MODEL of filter logic — hand-coded decomposition registry, re-encoded comparisons, hardcoded validated_for tuples. Self-code-review of each iteration found new divergences (HALF_SIZE→FAIL, NaN silent FAIL, ATR None divergence, CONT+E2 label lies, FAST+E2 latent bug). The pattern IS the architecture: parallel models drift.
+
+User's directive (Apr 7): "**we always do the proper long-term inst grounded way. we dont skip**." Baked into `.claude/rules/institutional-rigor.md` + `CLAUDE.md` + `memory/feedback_institutional_rigor.md`.
+
+**Fix:** move filter decomposition INTO the filter classes via `describe()` method. Eligibility builder becomes a thin adapter. Zero re-encoded logic. Zero drift risk.
+
+### What's committed (f9231dc)
+
+- `.claude/rules/institutional-rigor.md` — non-negotiable working style rule
+- `CLAUDE.md` — references the rule in 2-pass method
+- `docs/plans/2026-04-07-canonical-filter-self-description-design.md` — full design
+- `docs/runtime/stages/canonical-filter-self-description.md` — stage file with scope_lock + acceptance
+- `trading_app/config.py`:
+  - `AtomDescription` frozen dataclass (fields: name, category, resolves_at, passes, feature_column, observed_value, threshold, comparator, is_data_missing, is_not_applicable, not_applicable_reason, last_revalidated, size_multiplier, explanation)
+  - `_atom_is_missing(value)` — handles None, NaN, pd.NA, NaT (uses pandas.isna)
+  - `_atom_numeric(value)` — narrowed-type numeric conversion (returns None if missing)
+  - `StrategyFilter.describe(row, orb_label, entry_model)` — default returns one atom from matches_row()
+  - `NoFilter.describe()` — returns empty list
+  - `OrbSizeFilter.describe()` — returns up to 2 atoms (min_size + optional max_size band)
+  - Cleanup: `_make_dow_composites` and `_make_break_quality_composites` accept `Mapping[str, StrategyFilter]` (pre-existing variance warnings fixed)
+
+All 123 existing config tests still pass. Test suite: `PYTHONPATH=. python -m pytest tests/test_trading_app/test_config.py`
+
+### What's pending (tasks #19-25)
+
+**Task #19 — Override describe() on remaining filter classes (IN PROGRESS).** Line numbers in `trading_app/config.py` at commit f9231dc:
+
+| Class | Line | Category | Notes |
+|-------|------|----------|-------|
+| CostRatioFilter | 466 | INTRA_SESSION | resolves at ORB_FORMATION, derives cost ratio from orb size + COST_SPECS |
+| VolumeFilter | 507 | INTRA_SESSION | break-bar relative volume, resolves at BREAK_DETECTED |
+| CombinedATRVolumeFilter | 537 | hybrid | ATR_P70 is PRE_SESSION, rel_vol is INTRA_SESSION — 2 atoms |
+| OrbVolumeFilter | 583 | INTRA_SESSION | orb window volume, resolves at ORB_FORMATION |
+| CrossAssetATRFilter | 620 | PRE_SESSION | cross_atr_*_pct, resolves at STARTUP |
+| OwnATRPercentileFilter | 651 | PRE_SESSION | atr_20_pct, resolves at STARTUP |
+| OvernightRangeFilter | 678 | PRE_SESSION | overnight_range_pct |
+| OvernightRangeAbsFilter | 709 | PRE_SESSION | overnight_range points — LOOK-AHEAD for Asian sessions (documented on class) |
+| PrevDayRangeNormFilter | 750 | PRE_SESSION | prev_day_range/atr_20, @revalidated-for E2 (Apr 2026) |
+| GapNormFilter | 787 | PRE_SESSION | abs(gap)/atr_20, MGC CME_REOPEN only (Apr 2026) |
+| DirectionFilter | 824 | DIRECTIONAL | resolves at BREAK_DETECTED — see semantic note below |
+| CalendarSkipFilter | 845 | OVERLAY | DEPRECATED in discovery but handled here for completeness |
+| DayOfWeekSkipFilter | 881 | PRE_SESSION | resolves at STARTUP from trading_day |
+| ATRVelocityFilter | 906 | OVERLAY | **CRITICAL**: delegate to `self.matches_row()` directly — do NOT re-encode. Warm-up fail-open behavior must be preserved |
+| DoubleBreakFilter | 968 | N/A | DEAD / look-ahead — produce NOT_APPLICABLE atom with reason "double_break is look-ahead" |
+| BreakSpeedFilter | 999 | INTRA_SESSION | break_delay_min, resolves at BREAK_DETECTED, E2 must return is_not_applicable=True per E2_EXCLUDED_FILTER_SUBSTRINGS |
+| BreakBarContinuesFilter | 1027 | INTRA_SESSION | break_bar_continues, resolves at CONFIRM_COMPLETE, E2 must return is_not_applicable=True |
+| PitRangeFilter | 1056 | PRE_SESSION | pit_range_atr, 3/3 instruments validated Apr 2026, zero look-ahead (pit closes 21:00 UTC, CME_REOPEN starts 23:00 UTC) |
+| CompositeFilter | 1088 | varies | **CRITICAL**: iterate self.filters and concat their describe() outputs. The composite's atoms are the union of its components' atoms. |
+
+**Semantic note on DirectionFilter:** The previous bug was marking it NOT_APPLICABLE_DIRECTION unconditionally. Correct behavior: at startup, `passes=None` with `resolves_at=BREAK_DETECTED`. No special NOT_APPLICABLE — the filter applies, it just hasn't resolved yet.
+
+**Semantic note on ATRVelocityFilter:** The previous builder diverged from canonical on `atr_vel_regime=None` (my code: DATA_MISSING, canonical: warm-up fail-open = trade allowed). The describe() override MUST call `self.matches_row(row, orb_label)` directly to inherit canonical behavior. Do NOT re-check vel_regime/compression manually.
+
+**Semantic note on E2 exclusions:** Use `E2_EXCLUDED_FILTER_PREFIXES` and `E2_EXCLUDED_FILTER_SUBSTRINGS` from config.py (canonical source) rather than hardcoding "CONT" or "FAST" strings. The filter's describe() should check `entry_model == "E2" and self.filter_type matches an exclusion` and return `is_not_applicable=True, not_applicable_reason="E2 look-ahead: <reason>"`.
+
+**Task #20 — Rewrite `trading_app/eligibility/builder.py` as thin adapter.**
+- Delete `_resolve_pdr`, `_resolve_gap`, `_resolve_dow`, `_compare`, `_resolve_observed`, `_atom_to_condition` and all re-encoded logic.
+- New flow: parse strategy_id → look up `ALL_FILTERS[filter_type]` → call `filter.describe(row, session, entry_model)` → convert `AtomDescription` to `ConditionRecord` → add overlays (calendar via existing `_build_calendar_condition`, ATR velocity via `ATRVelocityFilter.describe()`) → return `EligibilityReport`.
+- Target: <250 lines (from 700).
+- Status mapping: `passes=True` → PASS, `passes=False` → FAIL, `passes=None` with `is_data_missing=False` → PENDING, `passes=None` with `is_data_missing=True` → DATA_MISSING, `is_not_applicable=True` → NOT_APPLICABLE_INSTRUMENT or NOT_APPLICABLE_ENTRY_MODEL based on not_applicable_reason.
+
+**Task #21 — Delete `trading_app/eligibility/decomposition.py` + `tests/test_trading_app/test_eligibility_decomposition.py`.** The parallel model is replaced.
+
+**Task #22 — Rewrite `tests/test_trading_app/test_eligibility_builder.py`.** Test the thin adapter. Key test cases (from self-review of hardening):
+- NaN in feature row → DATA_MISSING (not FAIL)
+- ATR velocity with `atr_vel_regime=None` → PASS (warm-up fail-open, matching canonical)
+- CONT+E2 → NOT_APPLICABLE_ENTRY_MODEL with reason mentioning entry model
+- FAST+E2 → NOT_APPLICABLE_ENTRY_MODEL (the latent bug)
+- HALF_SIZE calendar action → PASS with size_multiplier=0.5 (not FAIL)
+- Composite filter decomposes into component atoms
+
+**Task #23 — Add drift check #N in `pipeline/check_drift.py`.** For each filter in `ALL_FILTERS`, call `describe(sample_row, "CME_REOPEN", "E2")` and assert it returns a `list[AtomDescription]` (possibly empty for NoFilter). Regression block: any new filter that doesn't implement describe() correctly fails the check.
+
+**Task #24 — Self-review.** Run the code-review skill on the committed refactor. Focus areas:
+- Does every filter class override describe() or rely on the default correctly?
+- Are E2 exclusions mechanically derived from E2_EXCLUDED_FILTER_*?
+- Does NaN handling propagate (test it)?
+- Does ATR velocity match canonical on None (test it)?
+- Is there any remaining re-encoded logic in builder.py?
+
+**Task #25 — Final verify + commit.** Full test suite + drift check + close stage file.
+
+### Commit plan (logical chunks)
+
+1. `feat(config): NoFilter + OrbSizeFilter describe() overrides` (✓ in f9231dc)
+2. `feat(config): pre-session filters describe() — PitRange, PDR, GAP, OVNRNG, ATRPct, CrossATR`
+3. `feat(config): intra-session filters describe() — CostRatio, OrbVolume, Volume, CombinedATRVolume, BreakSpeed, BreakBarContinues`
+4. `feat(config): overlays + composite describe() — ATRVelocity, DayOfWeekSkip, CompositeFilter, DirectionFilter`
+5. `feat(config): E2 exclusion handling for BreakSpeed + BreakBarContinues via canonical lists`
+6. `refactor(eligibility): rewrite builder as thin canonical-delegation adapter`
+7. `chore(eligibility): delete decomposition.py and its tests`
+8. `test(config): add describe() coverage per filter class`
+9. `test(eligibility): rewrite test_eligibility_builder.py for thin adapter`
+10. `feat(pipeline): drift check #N — ALL_FILTERS describe() coverage`
+
+### Key files and references
+
+- **Stage file:** `docs/runtime/stages/canonical-filter-self-description.md` (has scope_lock + acceptance criteria)
+- **Design doc:** `docs/plans/2026-04-07-canonical-filter-self-description-design.md`
+- **Institutional rule:** `.claude/rules/institutional-rigor.md` (non-negotiable)
+- **Prior commits:**
+  - `046e80b` Phase 0+1 foundation (had bugs)
+  - `7ead764` hardening (closed 7, introduced 4 new)
+  - `5e5b782` stage close
+  - `f9231dc` canonical refactor foundation (current checkpoint)
+- **Review findings still to fix:** NaN silent FAIL, ATR None divergence, CONT/FAST+E2 label, HALF_SIZE footgun, build_errors wiring, size_multiplier footgun on all-FAIL
+
+### Current deployed lanes (for test fixture design)
+
+From `trading_app.prop_profiles.ACCOUNT_PROFILES['topstep_50k_mnq_auto']`:
+1. MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6
+2. MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12
+3. MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100
+4. MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10
+5. MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10
+
+Target: eligibility builder must produce sensible reports for all five lanes with today's daily_features row.
+
+### Next Session
+
+**Start with:** read this handoff, verify `git log --oneline -5` shows `f9231dc` at top, re-read `trading_app/config.py` around the filter classes to be overridden, then continue Task #19.
+
+**Priority order for overrides:** PitRangeFilter, PrevDayRangeNormFilter, GapNormFilter, OvernightRangeAbsFilter, CrossAssetATRFilter, OwnATRPercentileFilter (pre-session, most visible in review), then CostRatioFilter, BreakSpeedFilter, BreakBarContinuesFilter, OrbVolumeFilter (intra-session), then ATRVelocityFilter + DayOfWeekSkipFilter + DirectionFilter + CompositeFilter (overlays + composites).
+
+**Remember:** no re-encoded logic. Delegate to `self.matches_row(row, orb_label)` where the canonical check already exists. Only introduce new comparison logic when the filter doesn't already have a boolean check (rare — most filters already have it).
+
+---
+
+## Update (Apr 7 — Codex WSL Bootstrap + Double-Click Launcher)
+
+### Completed
+- **Windows Codex launcher hardened** — `scripts/infra/windows_agent_launch.py` now bootstraps WSL explicitly with `UV_PROJECT_ENVIRONMENT=.venv-wsl uv sync --frozen --python 3.13 --group dev` before opening a Codex worktree.
+- **Double-click entrypoint added** — new repo-root `codex-workstream.bat` prompts for a task name and launches Codex via the shared Windows launcher path.
+- **Cross-wire guardrails tightened** — `.venv-wsl/` now gitignored and WSL-only scripts now print the explicit `.venv-wsl` bootstrap command instead of ambiguous `uv sync --frozen`.
+- **Launcher hardening follow-up** — WSL Codex launchers now prefer the user NVM `codex` binary over `/usr/bin/codex`, and Windows-origin launches export `/tmp` uv cache/install dirs plus `--no-alt-screen` to avoid permission/update failures and blank alternate-screen startup.
+- **WSL env provisioned** — `.venv-wsl` created successfully in WSL and targeted launcher tests passed.
+
+### Verification
+- `python3 -m py_compile scripts/infra/windows_agent_launch.py pipeline/check_drift.py`
+- `.venv-wsl/bin/python -m pytest tests/test_tools/test_windows_agent_launch.py -q`
+
+### Operator Notes
+- Safe default for Codex on Windows: double-click `codex-workstream.bat`
+- This path always opens Codex in a managed worktree, so Claude can stay on the main repo or a different worktree without sharing one mutable branch.
+- Claude remains on `.venv`; Codex remains on `.venv-wsl`.
+
+---
+
 ## Update (Apr 6 — EUROPE_FLOW Lane Swap COST_LT10→LT12)
 
 ### Completed
