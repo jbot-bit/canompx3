@@ -37,7 +37,11 @@ from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.eligibility.builder import build_eligibility_report, parse_strategy_id
+from trading_app.eligibility.builder import (
+    VALIDATION_FRESHNESS_DAYS,
+    build_eligibility_report,
+    parse_strategy_id,
+)
 from trading_app.prop_profiles import ACCOUNT_PROFILES
 from trading_app.strategy_fitness import compute_fitness
 
@@ -1168,7 +1172,16 @@ def _build_filter_universe_rows(db_path: Path, trading_day: date) -> list[dict]:
         for lane in profile.daily_lanes:
             try:
                 dims = parse_strategy_id(lane.strategy_id)
-            except Exception:  # noqa: BLE001 — out-of-shape id is a data issue, skip silently here
+            except Exception as exc:  # noqa: BLE001 — adapter boundary, surface loudly
+                # Fail-loud per institutional-rigor rule 6 (no silent
+                # failures). A malformed strategy_id would undercount
+                # deployed lanes in View B; print a WARNING so the
+                # trader notices while keeping the section renderable.
+                print(
+                    f"  WARNING: View B could not parse {lane.strategy_id}: "
+                    f"{type(exc).__name__}: {exc}",
+                    flush=True,
+                )
                 continue
             ft = dims["filter_type"]
             deployed_counts[ft] = deployed_counts.get(ft, 0) + 1
@@ -1191,8 +1204,9 @@ def _build_filter_universe_rows(db_path: Path, trading_day: date) -> list[dict]:
         last_revalidated = getattr(cls, "LAST_REVALIDATED", None)
         confidence_tier = getattr(cls, "CONFIDENCE_TIER", None)
 
-        # Stale marker: > 180 days old (matches the eligibility builder's
-        # VALIDATION_FRESHNESS_DAYS constant — same 180d threshold).
+        # Stale marker: use the canonical VALIDATION_FRESHNESS_DAYS
+        # constant from trading_app.eligibility.builder (currently 180d).
+        # Institutional-rigor rule 4: delegate, do not re-encode.
         is_stale = False
         last_rev_str = ""
         if last_revalidated is not None:
@@ -1205,7 +1219,7 @@ def _build_filter_universe_rows(db_path: Path, trading_day: date) -> list[dict]:
             if rev_date is not None:
                 last_rev_str = rev_date.isoformat()
                 age_days = (trading_day - rev_date).days
-                is_stale = age_days > 180
+                is_stale = age_days > VALIDATION_FRESHNESS_DAYS
 
         # Confidence tier: enum → string value. May be None (unannotated)
         # or a ConfidenceTier enum.
@@ -1280,7 +1294,11 @@ def _render_filter_universe_section(rows: list[dict]) -> str:
             "DEAD": "row-dead",
         }.get(r["status"], "row-dead")
 
-        # Status badge
+        # Status badge. NOTE: ROUTED intentionally reuses the existing
+        # badge-filter-check amber palette (same visual meaning: "pay
+        # attention, not immediately actionable") rather than introducing
+        # a new dedicated class. Flagged in Gate 1 review as LOW-2 and
+        # accepted.
         status_badge_cls = {
             "LIVE": "badge-filter-live",
             "ROUTED": "badge-filter-check",

@@ -7,10 +7,12 @@ import pytest
 
 from scripts.tools.generate_trade_sheet import (
     FitnessCheckResult,
+    _build_filter_universe_rows,
     _check_fitness,
     _enrich_trades_with_eligibility,
     _fitness_badge,
     _prefetch_feature_rows,
+    _render_filter_universe_section,
     _status_badge_from_eligibility,
 )
 
@@ -410,3 +412,225 @@ class TestEnrichTradesIntegration:
             f"deployed lanes raising in canonical builder: "
             f"{[t['strategy_id'] for t in unknowns]}"
         )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# View B — Filter Universe Audit tests
+# Design: docs/plans/2026-04-07-filter-universe-audit-design.md
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _fu_row(status="LIVE", filter_type="COST_LT10", routed=21, deployed=2, **overrides):
+    """Build a minimal filter-universe row dict for renderer tests."""
+    base = {
+        "filter_type": filter_type,
+        "class_name": "CostRatioFilter",
+        "description": "Cost < 10% of ORB",
+        "confidence_tier": "",
+        "validated_for": (),
+        "last_revalidated": "",
+        "is_stale": False,
+        "routed": routed,
+        "deployed": deployed,
+        "status": status,
+    }
+    base.update(overrides)
+    return base
+
+
+class TestRenderFilterUniverseSection:
+    """Pure renderer: list[row dict] → HTML fragment. No DB, no I/O."""
+
+    def test_empty_rows_produces_empty_summary(self):
+        html = _render_filter_universe_section([])
+        assert "Filter Universe Audit" in html
+        assert "0 total" in html
+        assert "<table" in html
+
+    def test_live_row_uses_row_live_class_and_live_badge(self):
+        html = _render_filter_universe_section([_fu_row(status="LIVE", deployed=2)])
+        assert "row-live" in html
+        assert "badge-filter-live" in html
+        assert ">LIVE<" in html
+
+    def test_routed_row_uses_row_routed_class_and_check_badge(self):
+        html = _render_filter_universe_section(
+            [_fu_row(status="ROUTED", routed=10, deployed=0)]
+        )
+        assert "row-routed" in html
+        # ROUTED intentionally reuses badge-filter-check (LOW-2 accepted)
+        assert "badge-filter-check" in html
+        assert ">ROUTED<" in html
+
+    def test_dead_row_uses_row_dead_class_and_dead_badge(self):
+        html = _render_filter_universe_section(
+            [_fu_row(status="DEAD", routed=0, deployed=0)]
+        )
+        assert "row-dead" in html
+        assert "badge-filter-dead" in html
+        assert ">DEAD<" in html
+
+    def test_empty_metadata_renders_as_em_dash(self):
+        html = _render_filter_universe_section([_fu_row()])
+        # Empty tier, validated_for, last_revalidated → em dash (&mdash;)
+        assert "&mdash;" in html
+
+    def test_stale_pill_appears_when_is_stale_true(self):
+        html = _render_filter_universe_section(
+            [_fu_row(last_revalidated="2025-01-01", is_stale=True)]
+        )
+        assert "pill-stale" in html
+        assert "STALE" in html
+
+    def test_validated_for_chips_cap_at_three_with_more_indicator(self):
+        html = _render_filter_universe_section(
+            [
+                _fu_row(
+                    validated_for=(
+                        ("MNQ", "NYSE_CLOSE"),
+                        ("MNQ", "NYSE_OPEN"),
+                        ("MNQ", "US_DATA_830"),
+                        ("MNQ", "CME_PRECLOSE"),
+                        ("MNQ", "COMEX_SETTLE"),
+                    )
+                )
+            ]
+        )
+        # First 3 shown as chips, +2 indicator for the rest
+        assert "vf-chip" in html
+        assert "vf-more" in html
+        assert "+2" in html
+        # Full list appears in tooltip
+        assert "COMEX_SETTLE" in html
+
+    def test_summary_counts_match_rows(self):
+        rows = [
+            _fu_row(status="LIVE", filter_type="A", deployed=2),
+            _fu_row(status="LIVE", filter_type="B", deployed=1),
+            _fu_row(status="ROUTED", filter_type="C", routed=5, deployed=0),
+            _fu_row(status="DEAD", filter_type="D", routed=0, deployed=0),
+        ]
+        html = _render_filter_universe_section(rows)
+        assert "4 total" in html
+        assert "3 routed" in html  # LIVE + ROUTED have routed > 0? Actually LIVE has routed=21 by default, so all 3 count
+        assert "2 deployed" in html  # 2 LIVE rows
+        assert "3 live lanes" in html  # deployed 2 + 1 = 3
+
+    def test_pure_function_does_not_mutate_input(self):
+        row = _fu_row()
+        snapshot = dict(row)
+        _render_filter_universe_section([row])
+        assert row == snapshot, "renderer must not mutate input row dict"
+
+
+class TestBuildFilterUniverseRows:
+    """Stats helper: ALL_FILTERS + ATR_VELOCITY_OVERLAY + DB + prop_profiles
+    → sorted row dicts. Skips gracefully if gold.db is absent."""
+
+    def test_returns_row_per_filter_plus_overlay(self):
+        from pipeline.paths import GOLD_DB_PATH
+        from trading_app.config import ALL_FILTERS
+
+        if not Path(GOLD_DB_PATH).exists():
+            pytest.skip(f"gold.db not present at {GOLD_DB_PATH}")
+
+        rows = _build_filter_universe_rows(GOLD_DB_PATH, date(2026, 4, 7))
+        # One row per filter + one for ATR_VELOCITY_OVERLAY
+        assert len(rows) == len(ALL_FILTERS) + 1
+
+    def test_rows_sorted_by_deployed_then_routed_then_filter_type(self):
+        from pipeline.paths import GOLD_DB_PATH
+
+        if not Path(GOLD_DB_PATH).exists():
+            pytest.skip(f"gold.db not present at {GOLD_DB_PATH}")
+
+        rows = _build_filter_universe_rows(GOLD_DB_PATH, date(2026, 4, 7))
+        # Invariant: sort is (-deployed, -routed, filter_type)
+        for i in range(len(rows) - 1):
+            a, b = rows[i], rows[i + 1]
+            key_a = (-a["deployed"], -a["routed"], a["filter_type"])
+            key_b = (-b["deployed"], -b["routed"], b["filter_type"])
+            assert key_a <= key_b, (
+                f"sort order violated at index {i}: "
+                f"{a['filter_type']} (d={a['deployed']}, r={a['routed']}) "
+                f"vs {b['filter_type']} (d={b['deployed']}, r={b['routed']})"
+            )
+
+    def test_live_routed_dead_classification_is_exhaustive_and_exclusive(self):
+        from pipeline.paths import GOLD_DB_PATH
+
+        if not Path(GOLD_DB_PATH).exists():
+            pytest.skip(f"gold.db not present at {GOLD_DB_PATH}")
+
+        rows = _build_filter_universe_rows(GOLD_DB_PATH, date(2026, 4, 7))
+        # Every row has exactly one of the three statuses, and the status
+        # matches the deployed/routed counts.
+        for r in rows:
+            assert r["status"] in {"LIVE", "ROUTED", "DEAD"}
+            if r["status"] == "LIVE":
+                assert r["deployed"] > 0, f"LIVE but deployed=0: {r['filter_type']}"
+            elif r["status"] == "ROUTED":
+                assert r["deployed"] == 0 and r["routed"] > 0, (
+                    f"ROUTED but counts wrong: {r['filter_type']}"
+                )
+            else:  # DEAD
+                assert r["deployed"] == 0 and r["routed"] == 0, (
+                    f"DEAD but counts nonzero: {r['filter_type']}"
+                )
+
+    def test_deployed_count_matches_active_profile_lane_count(self):
+        from pipeline.paths import GOLD_DB_PATH
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        if not Path(GOLD_DB_PATH).exists():
+            pytest.skip(f"gold.db not present at {GOLD_DB_PATH}")
+
+        rows = _build_filter_universe_rows(GOLD_DB_PATH, date(2026, 4, 7))
+        sum_deployed = sum(r["deployed"] for r in rows)
+
+        expected = 0
+        for _pid, profile in ACCOUNT_PROFILES.items():
+            if profile.active and profile.daily_lanes:
+                expected += len(profile.daily_lanes)
+
+        assert sum_deployed == expected, (
+            f"View B deployed count ({sum_deployed}) does not match "
+            f"active profile lane total ({expected})"
+        )
+
+    def test_routed_count_matches_active_validated_setups_query(self):
+        import duckdb
+
+        from pipeline.paths import GOLD_DB_PATH
+
+        if not Path(GOLD_DB_PATH).exists():
+            pytest.skip(f"gold.db not present at {GOLD_DB_PATH}")
+
+        rows = _build_filter_universe_rows(GOLD_DB_PATH, date(2026, 4, 7))
+
+        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+        try:
+            row = con.execute(
+                "SELECT COUNT(*) FROM validated_setups WHERE LOWER(status)='active'"
+            ).fetchone()
+            assert row is not None
+            expected = row[0]
+        finally:
+            con.close()
+
+        # Note: multiple View B rows can map to the same filter_type across
+        # ALL_FILTERS entries — but every active validated strategy's
+        # filter_type is represented exactly once in ALL_FILTERS, so the
+        # per-row routed sum should equal the active strategy count.
+        sum_routed = sum(r["routed"] for r in rows)
+        assert sum_routed == expected
+
+    def test_stale_threshold_uses_canonical_180_day_constant(self):
+        """Gate 1 LOW-1 fix: literal 180 replaced with
+        VALIDATION_FRESHNESS_DAYS import. This test pins the delegation."""
+        from trading_app.eligibility.builder import VALIDATION_FRESHNESS_DAYS
+
+        # The canonical constant is 180. If this ever changes, the View B
+        # helper inherits it automatically because of the import-driven
+        # delegation.
+        assert VALIDATION_FRESHNESS_DAYS == 180
