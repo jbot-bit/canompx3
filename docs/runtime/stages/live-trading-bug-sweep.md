@@ -9,9 +9,11 @@ of: 1
 scope_lock:
   - trading_app/live/instance_lock.py
   - trading_app/live/broker_base.py
+  - trading_app/live/rithmic/auth.py
   - trading_app/live/rithmic/order_router.py
   - trading_app/live/rithmic/contracts.py
   - trading_app/live/rithmic/positions.py
+  - trading_app/live/tradovate/auth.py
   - trading_app/live/tradovate/order_router.py
   - trading_app/live/session_orchestrator.py
   - tests/test_trading_app/test_instance_lock.py

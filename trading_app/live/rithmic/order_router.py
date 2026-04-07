@@ -15,8 +15,12 @@ import logging
 import random
 import time
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from ..broker_base import BrokerAuth, BrokerRouter
+
+if TYPE_CHECKING:
+    from .auth import RithmicAuth
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +37,12 @@ class RithmicOrderRouter(BrokerRouter):
     Compatible with Bulenox, Elite Trader Funding, and other Rithmic-based firms.
     Same BrokerRouter interface as ProjectXOrderRouter and TradovateOrderRouter.
     """
+
+    # Narrow the inherited BrokerAuth | None type — at runtime this is always
+    # RithmicAuth | None, which exposes .client (RithmicClient) and .run_async.
+    # Methods that touch auth.client/.run_async check `if self.auth is None`
+    # first, which lets pyright narrow to the non-None case.
+    auth: "RithmicAuth | None"
 
     def __init__(
         self,
@@ -365,6 +375,8 @@ class RithmicOrderRouter(BrokerRouter):
         Rithmic brackets are server-side, so this queries open orders and cancels
         any stop/limit legs that match the contract.
         """
+        if self.auth is None:
+            raise RuntimeError("No auth — cannot cancel bracket orders")
         try:
             orders = self.query_open_orders()
         except Exception as e:
