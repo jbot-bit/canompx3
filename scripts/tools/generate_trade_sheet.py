@@ -2203,7 +2203,8 @@ def main():
         con_check = duckdb.connect(str(db_path), read_only=True)
         try:
             for table, col in [("daily_features", "trading_day"), ("orb_outcomes", "trading_day")]:
-                max_date = con_check.execute(f"SELECT MAX({col}) FROM {table}").fetchone()[0]
+                row = con_check.execute(f"SELECT MAX({col}) FROM {table}").fetchone()
+                max_date = row[0] if row is not None else None
                 days_stale = (trading_day - max_date.date()).days if max_date else 999
                 status = "OK" if days_stale <= 2 else f"STALE ({days_stale} days old)"
                 print(f"  {table}: {max_date.date() if max_date else 'EMPTY'} [{status}]")
