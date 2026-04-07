@@ -157,7 +157,7 @@ class TestTradovateAuth:
     )
     @patch("trading_app.live.tradovate.auth.requests.post")
     @patch("trading_app.live.tradovate.auth.time.sleep")
-    def test_login_all_retries_fail(self, mock_sleep, mock_post):
+    def test_login_all_retries_fail(self, _mock_sleep, mock_post):
         fail_resp = MagicMock()
         fail_resp.raise_for_status.side_effect = requests.HTTPError("503")
         mock_post.return_value = fail_resp
@@ -456,7 +456,7 @@ class TestRequestWithRetry:
 
     @patch("trading_app.live.tradovate.http.time.sleep")
     @patch("trading_app.live.tradovate.http.requests.post")
-    def test_429_exhausted_raises(self, mock_post, mock_sleep):
+    def test_429_exhausted_raises(self, mock_post, _mock_sleep):
         resp_429 = MagicMock()
         resp_429.status_code = 429
         mock_post.return_value = resp_429
@@ -617,8 +617,7 @@ class TestBrokerFactory:
             create_broker_components(broker="fake_broker")
 
     @patch.dict("os.environ", {"BROKER": "tradovate", "TRADOVATE_DEMO": "1"})
-    @patch("trading_app.live.tradovate.auth.requests.post")
-    def test_create_tradovate_components(self, mock_post):
+    def test_create_tradovate_components(self):
         # Auth will try to load env vars but won't login until get_token()
         from trading_app.live.broker_factory import create_broker_components
 

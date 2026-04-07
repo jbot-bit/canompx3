@@ -55,7 +55,7 @@ def test_cancel_retries_on_429_then_succeeds(mock_req, mock_sleep):
 
 @patch("trading_app.live.projectx.order_router.time.sleep")
 @patch("trading_app.live.projectx.order_router.requests")
-def test_cancel_raises_rate_limit_exhausted_on_429(mock_req, mock_sleep):
+def test_cancel_raises_rate_limit_exhausted_on_429(mock_req, _mock_sleep):
     """cancel() raises RateLimitExhausted after all retries exhausted."""
     from trading_app.live.projectx.order_router import RateLimitExhausted
 
@@ -72,7 +72,7 @@ def test_cancel_raises_rate_limit_exhausted_on_429(mock_req, mock_sleep):
 
 @patch("trading_app.live.projectx.order_router.time.sleep")
 @patch("trading_app.live.projectx.order_router.requests")
-def test_query_order_status_retries_on_429(mock_req, mock_sleep):
+def test_query_order_status_retries_on_429(mock_req, _mock_sleep):
     """query_order_status() retries on 429 and succeeds."""
     mock_req.get.side_effect = [
         _mock_429(),
@@ -86,7 +86,7 @@ def test_query_order_status_retries_on_429(mock_req, mock_sleep):
 
 @patch("trading_app.live.projectx.order_router.time.sleep")
 @patch("trading_app.live.projectx.order_router.requests")
-def test_query_order_status_raises_on_429_exhaustion(mock_req, mock_sleep):
+def test_query_order_status_raises_on_429_exhaustion(mock_req, _mock_sleep):
     """query_order_status() raises RateLimitExhausted — not silent return."""
     from trading_app.live.projectx.order_router import RateLimitExhausted
 
@@ -101,7 +101,7 @@ def test_query_order_status_raises_on_429_exhaustion(mock_req, mock_sleep):
 
 @patch("trading_app.live.projectx.order_router.time.sleep")
 @patch("trading_app.live.projectx.order_router.requests")
-def test_query_open_orders_retries_on_429(mock_req, mock_sleep):
+def test_query_open_orders_retries_on_429(mock_req, _mock_sleep):
     """query_open_orders() retries on 429 and succeeds."""
     mock_req.post.side_effect = [
         _mock_429(),
@@ -115,7 +115,7 @@ def test_query_open_orders_retries_on_429(mock_req, mock_sleep):
 
 @patch("trading_app.live.projectx.order_router.time.sleep")
 @patch("trading_app.live.projectx.order_router.requests")
-def test_query_open_orders_raises_on_429_exhaustion(mock_req, mock_sleep):
+def test_query_open_orders_raises_on_429_exhaustion(mock_req, _mock_sleep):
     """query_open_orders() raises RateLimitExhausted — not empty list."""
     from trading_app.live.projectx.order_router import RateLimitExhausted
 
@@ -130,7 +130,7 @@ def test_query_open_orders_raises_on_429_exhaustion(mock_req, mock_sleep):
 
 @patch("trading_app.live.projectx.order_router.time.sleep")
 @patch("trading_app.live.projectx.order_router.requests")
-def test_verify_bracket_legs_propagates_429(mock_req, mock_sleep):
+def test_verify_bracket_legs_propagates_429(mock_req, _mock_sleep):
     """verify_bracket_legs() must NOT return (None, None) on 429 — must raise."""
     from trading_app.live.projectx.order_router import RateLimitExhausted
 
@@ -142,7 +142,7 @@ def test_verify_bracket_legs_propagates_429(mock_req, mock_sleep):
 
 @patch("trading_app.live.projectx.order_router.time.sleep")
 @patch("trading_app.live.projectx.order_router.requests")
-def test_cancel_bracket_orders_propagates_429(mock_req, mock_sleep):
+def test_cancel_bracket_orders_propagates_429(mock_req, _mock_sleep):
     """cancel_bracket_orders() must NOT return 0 on 429 — must raise."""
     from trading_app.live.projectx.order_router import RateLimitExhausted
 
