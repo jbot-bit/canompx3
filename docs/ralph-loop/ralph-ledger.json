@@ -1,8 +1,8 @@
 {
-  "total_iterations": 150,
-  "last_updated": "2026-04-06",
+  "total_iterations": 154,
+  "last_updated": "2026-04-07",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 157,
+  "last_high_finding_iter": 161,
   "findings_by_type": {
     "canonical_violation": {
       "found": 53,
@@ -11,8 +11,8 @@
       "fix_rate": 0.75
     },
     "silent_failure": {
-      "found": 32,
-      "fixed": 30,
+      "found": 35,
+      "fixed": 33,
       "deferred": 1,
       "fix_rate": 0.94
     },
@@ -23,8 +23,8 @@
       "fix_rate": 0.55
     },
     "dead_code": {
-      "found": 14,
-      "fixed": 14,
+      "found": 15,
+      "fixed": 15,
       "deferred": 0,
       "fix_rate": 1.0
     },
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 12,
-    "MEDIUM": 38,
-    "LOW": 97
+    "MEDIUM": 41,
+    "LOW": 98
   },
   "classifications": {
-    "judgment": 70,
-    "mechanical": 53,
+    "judgment": 73,
+    "mechanical": 54,
     "audit-only": 27
   },
   "files_audited": {
@@ -238,6 +238,11 @@
     "trading_app/paper_trader.py": {
       "audit_count": 2,
       "last_iter": 41,
+      "findings": 2
+    },
+    "trading_app/mcp_server.py": {
+      "audit_count": 2,
+      "last_iter": 158,
       "findings": 2
     },
     "trading_app/strategy_fitness.py": {
@@ -418,11 +423,6 @@
     "test_projectx_router.py": {
       "audit_count": 1,
       "last_iter": 25,
-      "findings": 1
-    },
-    "trading_app/mcp_server.py": {
-      "audit_count": 1,
-      "last_iter": 32,
       "findings": 1
     },
     "trading_app/cascade_table.py": {
@@ -1043,6 +1043,21 @@
     "trading_app/ai/query_agent.py": {
       "audit_count": 1,
       "last_iter": 157,
+      "findings": 1
+    },
+    "trading_app/ai/corpus.py": {
+      "audit_count": 1,
+      "last_iter": 159,
+      "findings": 1
+    },
+    "trading_app/live/broker_connections.py": {
+      "audit_count": 1,
+      "last_iter": 160,
+      "findings": 1
+    },
+    "trading_app/live/tradovate/contracts.py": {
+      "audit_count": 1,
+      "last_iter": 161,
       "findings": 1
     }
   },
@@ -2696,6 +2711,50 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "b165e68"
+    },
+    {
+      "iter": 158,
+      "date": "2026-04-06",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/mcp_server.py",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "(iter 158 \u2014 see git log)"
+    },
+    {
+      "iter": 159,
+      "date": "2026-04-07",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/ai/corpus.py:63",
+      "finding_type": "dead_code",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "fb6758f"
+    },
+    {
+      "iter": 160,
+      "date": "2026-04-07",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/broker_connections.py:207-213",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "57ab184"
+    },
+    {
+      "iter": 161,
+      "date": "2026-04-07",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/live/tradovate/contracts.py:64",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "6e401d1"
     }
   ]
 }

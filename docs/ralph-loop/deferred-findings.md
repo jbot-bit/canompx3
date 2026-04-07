@@ -20,6 +20,8 @@
 | WF-03 | 44 | strategy_fitness.py | Full scan clean — no findings | Audited iter 44, no actionable findings |
 | WF-04 | 58 | projectx/positions.py:35 | `avg_price: p.get("averagePrice", 0)` uses int 0 vs float 0.0 | Style difference, no correctness impact. avg_price is only used for logging in session_orchestrator (never for P&L computation). |
 | WF-05 | 96 | scripts/tools/audit_15m30m.py:29,44,62,88 | Hardcoded `IN ('MGC','MNQ','MES','M2K')` in SQL queries | Read-only investigation script. Matches current active instruments exactly. If instrument removed, SQL returns 0 rows — not dangerous. Pattern: one-off diagnostic, not canonical source. |
+| WF-06 | 161 | trading_app/live/rithmic/contracts.py:22-26 | `INSTRUMENT_ROOTS` hardcodes `{"MES","MNQ","MGC"}` | Translation dict; fallback `INSTRUMENT_ROOTS.get(instrument, instrument)` is functionally correct for all CME micros (root == symbol name). No safety impact. |
+| WF-07 | 161 | trading_app/live/rithmic/positions.py:93-95 | `query_equity()` returns `None` on exception | Intentional contract: `float | None`. HWM tracker `update_equity(None)` designed for this — tracks consecutive failures and halts after N. All callers guard for None. |
 
 ## Resolved Findings
 

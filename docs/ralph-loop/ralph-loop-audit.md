@@ -3,54 +3,54 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 158
+## Last iteration: 161
 
-## RALPH AUDIT — Iteration 158
-## Date: 2026-04-06
-## Infrastructure Gates: drift 76/76 PASS (1 pre-existing check 78 advisory)
+## RALPH AUDIT — Iteration 161
+## Date: 2026-04-07
+## Infrastructure Gates: drift 77/77 PASS, behavioral audit PASS, ruff advisory-only (UP017 in scripts)
 
 ---
 
-## Iteration 158 — trading_app/mcp_server.py
+## Iteration 161 — trading_app/live/tradovate/contracts.py + rithmic/contracts.py + rithmic/positions.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Silent failure | `_get_strategy_fitness(instrument="M2K")` returns `{"strategy_count": 0}` instead of error. `ACTIVE_ORB_INSTRUMENTS` imported but not validated. | MEDIUM | FIXED |
-| Stale docstring | Line 253: "E1, E2, E3" but E3 soft-retired (SKIP_ENTRY_MODELS) | LOW | FIXED |
+| Silent failure | `tradovate/contracts.py:64` — `resolve_front_month()` returned `""` when API response had no `"name"` or `"contractSymbol"` field; empty string silently passed to order router | MEDIUM | FIXED 6e401d1 |
+| Canonical violation | `rithmic/contracts.py:22-26` — `INSTRUMENT_ROOTS` hardcodes `{"MES","MNQ","MGC"}` | LOW | ACCEPTABLE — translation dict (our symbol → Rithmic root); fallback `INSTRUMENT_ROOTS.get(instrument, instrument)` makes it functionally correct for any instrument where name == root. No safety impact. |
+| Fail-open | `rithmic/positions.py:93-95` — `query_equity()` returns `None` on exception | LOW | ACCEPTABLE — caller `update_equity(None)` in account_hwm_tracker is designed for this (tracks consecutive poll failures, halts after N). `float | None` contract is intentional. |
 
 ### Audit Notes
 
-- **Instrument guard (FIXED):** Added `ACTIVE_ORB_INSTRUMENTS` validation at top of `_get_strategy_fitness`. Dead/unknown instruments now return `{"error": "Invalid instrument..."}` matching existing error format from `_query_trading_db`.
-- **Stale E3 docstring (FIXED):** Updated "E1, E2, E3" → "E1, E2" in `query_trading_db` tool description.
-- **Test:** Added `TestGetStrategyFitness` class with 2 tests (dead instrument M2K, typo "FAKE"). 19/19 pass.
+- **Silent failure FIXED (MEDIUM):** `resolve_front_month()` called `request_with_retry()`, checked `if not contracts` (raises), then extracted `best.get("name") or best.get("contractSymbol") or ""`. If both fields absent, returned `""`. Downstream at `session_orchestrator.py:339,480,2210` uses the symbol in order router submissions — an empty string would reach the broker API silently. Fix: `if not symbol: raise RuntimeError(...)` before `log.info` / `return`. 4 production lines, 3 new test cases.
+
+- **rithmic/contracts.py (CLEAN except LOW):** `INSTRUMENT_ROOTS` dict is redundant since the fallback at line 94 (`INSTRUMENT_ROOTS.get(instrument, instrument)`) is correct for all active instruments. Hardcoding is ACCEPTABLE — see WF criteria. `resolve_front_month()` warns on TickerPlant failure and falls back to `_construct_front_month()` manual construction. `_construct_front_month()` uses `date.today()` (fine for contract rolling logic) with 2-week pre-expiry buffer.
+
+- **rithmic/positions.py (CLEAN except LOW):** `query_open()` is fail-closed (re-raises). `query_equity()` returns `None` on exception — this is the intended contract (`float | None`) per the ABC in `broker_base.py:169`. HWM tracker `update_equity(None)` handles this with `_consecutive_poll_failures` counter and halts after `_MAX_CONSECUTIVE_POLL_FAILURES`. Session-end path at `session_orchestrator.py:2316-2323` also guards with `if end_equity is not None`. ACCEPTABLE.
+
+- **tradovate/contracts.py (CLEAN otherwise):** `resolve_account_id()` correctly raises on empty accounts list. `resolve_all_account_ids()` propagates `KeyError` naturally if JSON structure unexpected (not silent failure). `request_with_retry` uses blocking `time.sleep` but is called from `__init__` (synchronous), not from async context. No async safety issue.
+
+- **pipeline/db_config.py (scanned, CLEAN):** 20-line utility, correct PRAGMA tuning. No findings.
+
+- **pipeline/paths.py (re-audit, CLEAN):** Modified 2026-04-04 (added `LIVE_JOURNAL_DB_PATH`). The change was additive only. `except ImportError: pass` for dotenv is intentional infrastructure. `_resolve_db_path()` scratch-DB block, existence check, fallback all correct.
+
+- **pipeline/asset_configs.py (re-audit, deferred observations):** Modified 2026-04-01 (minimum_start_date extensions). `M2K` has `orb_active: True` but is in `DEAD_ORB_INSTRUMENTS` — contradiction. `ACTIVE_ORB_INSTRUMENTS` filter correctly excludes M2K via `k not in DEAD_ORB_INSTRUMENTS` guard so runtime is correct. No-touch zone — audit only.
 
 ---
 
-## Prior: Iteration 157 — trading_app/ai/query_agent.py
+## Prior: Iteration 160 — trading_app/live/broker_connections.py + webhook_server.py + instance_lock.py + strategy_matcher.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Canonical violation | Duplicate hardcoded model string "claude-sonnet-4-5-20250929" at lines 102 and 152 — update one, forget the other | LOW | FIXED b165e68 |
-| All others | config.py = audit-only (canonical, no violations). chat_handler.py = clean. query_agent.py otherwise clean. | — | CLEAN |
-
-### Audit Notes
-
-- **Duplicate model string (FIXED):** `query_agent.py` had `model="claude-sonnet-4-5-20250929"` hardcoded in two separate `client.messages.create()` calls (lines 102 and 152). If the model is rotated, updating one and forgetting the other would silently use different models for SQL generation vs interpretation passes. Fix: extracted to `_AI_MODEL` constant at module level.
-- **config.py audit:** Canonical source for ENTRY_MODELS, filters, etc. No violations — correctly authoritative.
-- **chat_handler.py:** Clean — no canonical violations, no silent failures.
-
----
-
-## Summary — Iteration 157
-
-- 1 LOW finding — FIXED ([mechanical], 8-line diff)
-- Commit: b165e68
+| Silent failure | `connect_all_enabled()` line 207 — bare `except Exception: pass` silently swallowed all auth failures at bot startup | HIGH | FIXED 57ab184 |
+| Canonical violation | `webhook_server.py:165-170` — `validate_entry_model` hardcodes `("E1", "E2")` instead of referencing ENTRY_MODELS | LOW | ACCEPTABLE — deliberately more restrictive than ENTRY_MODELS (blocks E3, which is soft-retired). Correct behavior at time of writing. |
+| Canonical violation | `strategy_matcher.py:55` — hardcodes `symbol = 'MGC'` in SQL query | LOW | ACCEPTABLE — standalone research script, 0 importers, MGC-specific analysis tool |
+| All others | instance_lock.py, broker_connections.py methods, webhook_server.py guards | — | CLEAN |
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 226 files fully scanned (2 new files added this iteration).
+> Cumulative list — 240 files fully scanned (6 new files added this iteration).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -118,10 +118,23 @@
 - trading_app/ai/grounding.py — added iter 156
 - trading_app/ai/query_agent.py — added iter 157
 - trading_app/ai/chat_handler.py — added iter 157
-- **Total: 226 files fully scanned**
+- trading_app/mcp_server.py — added iter 158
+- trading_app/ai/__init__.py — added iter 159
+- trading_app/ai/corpus.py — added iter 159
+- trading_app/ai/cli.py — added iter 159
+- trading_app/ai/strategy_matcher.py — added iter 160
+- trading_app/live/webhook_server.py — added iter 160
+- trading_app/live/instance_lock.py — added iter 160
+- trading_app/live/broker_connections.py — added iter 160
+- trading_app/live/tradovate/contracts.py — added iter 161
+- trading_app/live/tradovate/http.py — added iter 161
+- trading_app/live/rithmic/contracts.py — added iter 161
+- trading_app/live/rithmic/positions.py — added iter 161
+- pipeline/db_config.py — added iter 161
+- pipeline/paths.py — re-audited iter 161 (modified 2026-04-04)
+- **Total: 240 files fully scanned**
 
 ## Next iteration targets
-- trading_app/ai/__init__.py — unscanned AI package init
-- trading_app/mcp_server.py — MCP server, high-value audit target
-- pipeline/outcome_builder.py — core pipeline, worth re-audit
-- pipeline/features.py — feature computation, potential lookahead
+- Priority 1 (unscanned critical): trading_app/config.py — critical (63 importers), modified 2026-04-06; no-touch zone but audit-only pass warranted given recent PitRangeFilter addition
+- Priority 2 (unscanned medium): trading_app/consistency_tracker.py (medium, 2 importers), trading_app/execution_engine.py / entry_rules.py / risk_manager.py (previously scanned but check staleness vs recent modifications)
+- Priority 3: pipeline/asset_configs.py M2K orb_active:True inconsistency — no-touch zone, DEFER to human review

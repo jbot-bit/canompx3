@@ -1643,3 +1643,51 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 production file, no API change
 - Verification: PASS (drift 76/76 OK)
 - Commit: b165e68
+
+---
+
+## Iteration 158 — 2026-04-06
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/mcp_server.py
+- Finding: _get_strategy_fitness() accepted dead instrument "M2K" without error, returning {"strategy_count": 0} — silent invalid instrument. Also stale docstring "E1, E2, E3" (E3 soft-retired).
+- Action: Added ACTIVE_ORB_INSTRUMENTS validation guard returning {"error": "Invalid instrument..."} for dead/unknown instruments. Updated docstring "E1, E2, E3" → "E1, E2". Added TestGetStrategyFitness class with 2 tests.
+- Blast radius: 1 production file (mcp_server.py), 1 test file
+- Verification: PASS (19/19 tests, drift 76/76 OK)
+- Commit: (iter 158 — see git log)
+
+---
+
+## Iteration 159 — 2026-04-07
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/ai/corpus.py:63
+- Finding: Dead function get_corpus_file_paths() — defined "for drift check" but never called by any file in the codebase. Docstring intent never materialized.
+- Action: Removed 5 lines (function definition, docstring, body). 0 callers broken.
+- Blast radius: 1 file (corpus.py). 2 importers (query_agent.py, mcp_server.py) neither call this function.
+- Verification: PASS (19/19 mcp_server tests, drift 77/77 OK)
+- Commit: fb6758f
+
+---
+
+## Iteration 160 — 2026-04-07
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/broker_connections.py:207-213
+- Finding: connect_all_enabled() had bare `except Exception: pass` — all auth failures silently swallowed at bot startup. Called from bot_dashboard.py:80 via asyncio thread.
+- Action: Changed `except Exception: pass` to `except Exception as e: log.warning(...)` with connection display_name, broker_type, and exception. Continue-on-failure behavior preserved.
+- Blast radius: 1 file (broker_connections.py). 1 caller (bot_dashboard.py:80).
+- Verification: PASS (drift 77/77, behavioral audit PASS)
+- Commit: 57ab184
+
+---
+
+## Iteration 161 — 2026-04-07
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/live/tradovate/contracts.py:64
+- Finding: resolve_front_month() returned empty string "" when Tradovate contract/suggest API response had neither "name" nor "contractSymbol" field — silent empty symbol passed to session_orchestrator and order router downstream.
+- Action: Added `if not symbol: raise RuntimeError(...)` guard before log/return. Added 3 new test cases: success path, no-contracts raises, empty-symbol raises.
+- Blast radius: 2 files (contracts.py + test_tradovate.py). 0 caller behavior changes (all callers already expect RuntimeError on failure; None was never returned — only "" which is now raised).
+- Verification: PASS (56/56 test_tradovate.py, drift 77/77)
+- Commit: 6e401d1
