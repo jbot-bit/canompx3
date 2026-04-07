@@ -137,7 +137,11 @@ def parse_strategy_id(strategy_id: str) -> dict[str, Any]:
 # ==========================================================================
 
 
-def _synthetic_failed_atom(filter_type: str, error_msg: str) -> AtomDescription:
+def _synthetic_failed_atom(
+    filter_type: str,
+    error_msg: str,
+    violation_subtype: str = "contract violation",
+) -> AtomDescription:
     """Fail-closed synthetic atom for filter describe() contract violations.
 
     Single source of truth for "the filter did not honour its describe()
@@ -148,10 +152,23 @@ def _synthetic_failed_atom(filter_type: str, error_msg: str) -> AtomDescription:
     into report.build_errors via the main loop's atom.error_message
     aggregation.
 
+    Args:
+        filter_type: The filter_type tag for the broken filter (used for
+            provenance in the condition name and report traceability).
+        error_msg: Full diagnostic message — exposed in both error_message
+            and explanation fields, and surfaced in report.build_errors
+            via the main loop aggregation.
+        violation_subtype: Short name label distinguishing the violation
+            class. Default "contract violation" preserves a generic label
+            when the caller doesn't know or care. Specific sites pass
+            "raised exception", "returned non-list", or "yielded non-atom"
+            so operators scanning a condition list can diagnose at a
+            glance without reading error_msg.
+
     Institutional-rigor rule #4: one helper, not parallel constructions.
     """
     return AtomDescription(
-        name=f"{filter_type}: describe() contract violation",
+        name=f"{filter_type}: describe() {violation_subtype}",
         category="PRE_SESSION",
         resolves_at="STARTUP",
         passes=None,
@@ -215,7 +232,14 @@ def _walk_filter_atoms(
             f"{filt.filter_type}.describe raised: "
             f"{type(exc).__name__}: {exc}"
         )
-        return [(filt.filter_type, _synthetic_failed_atom(filt.filter_type, error_msg))]
+        return [
+            (
+                filt.filter_type,
+                _synthetic_failed_atom(
+                    filt.filter_type, error_msg, violation_subtype="raised exception"
+                ),
+            )
+        ]
 
     # Validate return shape — fail-closed on any contract violation. The
     # contract is list[AtomDescription]; anything else (None, dict, str,
@@ -225,7 +249,14 @@ def _walk_filter_atoms(
             f"{filt.filter_type}.describe returned {type(atoms).__name__}, "
             f"expected list[AtomDescription]"
         )
-        return [(filt.filter_type, _synthetic_failed_atom(filt.filter_type, error_msg))]
+        return [
+            (
+                filt.filter_type,
+                _synthetic_failed_atom(
+                    filt.filter_type, error_msg, violation_subtype="returned non-list"
+                ),
+            )
+        ]
 
     # Validate each element — bad elements become synthetic DATA_MISSING
     # atoms while valid siblings in the same list are preserved.
@@ -237,7 +268,14 @@ def _walk_filter_atoms(
                 f"expected AtomDescription"
             )
             result.append(
-                (filt.filter_type, _synthetic_failed_atom(filt.filter_type, error_msg))
+                (
+                    filt.filter_type,
+                    _synthetic_failed_atom(
+                        filt.filter_type,
+                        error_msg,
+                        violation_subtype="yielded non-atom",
+                    ),
+                )
             )
         else:
             result.append((filt.filter_type, atom))
@@ -327,7 +365,11 @@ def _status_from_atom(
     return ConditionStatus.PENDING  # PRE_SESSION/OVERLAY genuinely pending
 
 
-def _contract_violation_record(source_filter: str, error_msg: str) -> ConditionRecord:
+def _contract_violation_record(
+    source_filter: str,
+    error_msg: str,
+    violation_subtype: str = "atom contract violation",
+) -> ConditionRecord:
     """Fail-closed ConditionRecord for atom enum-string contract violations.
 
     Single source of truth for "the atom carries a typo'd category,
@@ -339,10 +381,21 @@ def _contract_violation_record(source_filter: str, error_msg: str) -> ConditionR
     defense-in-depth gap left by drift check #85 (which only catches at
     check time, not runtime).
 
+    Args:
+        source_filter: The filter_type tag for the broken filter
+            (carried through to the condition for traceability).
+        error_msg: Full diagnostic message — exposed in the
+            explanation field and surfaced in report.build_errors.
+        violation_subtype: Short label distinguishing the violation
+            class. Default "atom contract violation" preserves a
+            generic label. Specific sites pass "bad category",
+            "bad resolves_at", or "bad confidence_tier" so operators
+            can diagnose at a glance without reading error_msg.
+
     Institutional-rigor rule #4: one helper, not parallel constructions.
     """
     return ConditionRecord(
-        name=f"{source_filter}: atom contract violation",
+        name=f"{source_filter}: {violation_subtype}",
         category=ConditionCategory.PRE_SESSION,
         status=ConditionStatus.DATA_MISSING,
         resolves_at=ResolvesAt.STARTUP,
@@ -391,14 +444,18 @@ def _atom_to_condition(
             f"ConditionCategory (expected one of {sorted(_CATEGORY_MAP)})"
         )
         build_errors.append(error_msg)
-        return _contract_violation_record(source_filter, error_msg)
+        return _contract_violation_record(
+            source_filter, error_msg, violation_subtype="bad category"
+        )
     if atom.resolves_at not in _RESOLVES_AT_MAP:
         error_msg = (
             f"{source_filter}: atom.resolves_at={atom.resolves_at!r} not a "
             f"valid ResolvesAt (expected one of {sorted(_RESOLVES_AT_MAP)})"
         )
         build_errors.append(error_msg)
-        return _contract_violation_record(source_filter, error_msg)
+        return _contract_violation_record(
+            source_filter, error_msg, violation_subtype="bad resolves_at"
+        )
     if atom.confidence_tier not in _CONFIDENCE_TIER_MAP:
         error_msg = (
             f"{source_filter}: atom.confidence_tier={atom.confidence_tier!r} "
@@ -406,7 +463,9 @@ def _atom_to_condition(
             f"(expected one of {sorted(_CONFIDENCE_TIER_MAP)})"
         )
         build_errors.append(error_msg)
-        return _contract_violation_record(source_filter, error_msg)
+        return _contract_violation_record(
+            source_filter, error_msg, violation_subtype="bad confidence_tier"
+        )
 
     # All enum strings valid — direct indexing, no silent defaults.
     category = _CATEGORY_MAP[atom.category]

@@ -1146,3 +1146,116 @@ class TestFailClosedOnContractViolation:
 
         # Overall must not be ELIGIBLE (the typo invalidates the condition)
         assert report.overall_status != OverallStatus.ELIGIBLE
+
+    def test_atom_with_typo_resolves_at_surfaces_as_data_missing(self):
+        """An atom with a typo'd .resolves_at string (e.g. 'STARTIN') must
+        be caught by the adapter's enum validation and surfaced as
+        DATA_MISSING + build_errors, not silently coerced to STARTUP
+        via the _RESOLVES_AT_MAP.get() default.
+
+        Companion to test_atom_with_typo_category_surfaces_as_data_missing —
+        this pins symmetry across all three enum validation paths
+        (category / resolves_at / confidence_tier) at the runtime layer.
+        """
+        from dataclasses import dataclass
+
+        from trading_app.config import ALL_FILTERS, AtomDescription, StrategyFilter
+
+        @dataclass(frozen=True)
+        class _TypoResolvesAtFilter(StrategyFilter):
+            def describe(self, row, orb_label, entry_model):
+                return [
+                    AtomDescription(
+                        name="resolves_at typo test",
+                        category="PRE_SESSION",
+                        resolves_at="STARTIN",  # typo: missing final G
+                        passes=True,
+                        confidence_tier="PROVEN",
+                    )
+                ]
+
+        ALL_FILTERS["TYPO_RESOLVES_AT_FIXTURE"] = _TypoResolvesAtFilter(
+            filter_type="TYPO_RESOLVES_AT_FIXTURE",
+            description="test fixture — typo in atom.resolves_at",
+        )
+        try:
+            report = build_eligibility_report(
+                strategy_id="MNQ_NYSE_CLOSE_E2_RR2.0_CB1_TYPO_RESOLVES_AT_FIXTURE",
+                trading_day=date(2026, 4, 7),
+                feature_row={"trading_day": date(2026, 4, 7), "symbol": "MNQ"},
+            )
+        finally:
+            del ALL_FILTERS["TYPO_RESOLVES_AT_FIXTURE"]
+
+        # passes=True must NOT escape as PASS — typo invalidates the condition
+        broken = [
+            c
+            for c in report.conditions
+            if c.source_filter == "TYPO_RESOLVES_AT_FIXTURE"
+        ]
+        assert len(broken) == 1
+        assert broken[0].status == ConditionStatus.DATA_MISSING
+
+        # build_errors names the invalid resolves_at string
+        assert any(
+            "TYPO_RESOLVES_AT_FIXTURE" in e and "STARTIN" in e
+            for e in report.build_errors
+        )
+
+        assert report.overall_status != OverallStatus.ELIGIBLE
+
+    def test_atom_with_typo_confidence_tier_surfaces_as_data_missing(self):
+        """An atom with a typo'd .confidence_tier string (e.g. 'PROVN')
+        must be caught by the adapter's enum validation and surfaced as
+        DATA_MISSING + build_errors, not silently coerced to UNKNOWN
+        via the _CONFIDENCE_TIER_MAP.get() default.
+
+        Companion to test_atom_with_typo_category_surfaces_as_data_missing
+        and test_atom_with_typo_resolves_at_surfaces_as_data_missing —
+        third leg of the runtime enum-symmetry contract.
+        """
+        from dataclasses import dataclass
+
+        from trading_app.config import ALL_FILTERS, AtomDescription, StrategyFilter
+
+        @dataclass(frozen=True)
+        class _TypoConfidenceTierFilter(StrategyFilter):
+            def describe(self, row, orb_label, entry_model):
+                return [
+                    AtomDescription(
+                        name="confidence_tier typo test",
+                        category="PRE_SESSION",
+                        resolves_at="STARTUP",
+                        passes=True,
+                        confidence_tier="PROVN",  # typo: missing E
+                    )
+                ]
+
+        ALL_FILTERS["TYPO_CONFIDENCE_TIER_FIXTURE"] = _TypoConfidenceTierFilter(
+            filter_type="TYPO_CONFIDENCE_TIER_FIXTURE",
+            description="test fixture — typo in atom.confidence_tier",
+        )
+        try:
+            report = build_eligibility_report(
+                strategy_id="MNQ_NYSE_CLOSE_E2_RR2.0_CB1_TYPO_CONFIDENCE_TIER_FIXTURE",
+                trading_day=date(2026, 4, 7),
+                feature_row={"trading_day": date(2026, 4, 7), "symbol": "MNQ"},
+            )
+        finally:
+            del ALL_FILTERS["TYPO_CONFIDENCE_TIER_FIXTURE"]
+
+        broken = [
+            c
+            for c in report.conditions
+            if c.source_filter == "TYPO_CONFIDENCE_TIER_FIXTURE"
+        ]
+        assert len(broken) == 1
+        assert broken[0].status == ConditionStatus.DATA_MISSING
+
+        # build_errors names the invalid confidence_tier string
+        assert any(
+            "TYPO_CONFIDENCE_TIER_FIXTURE" in e and "PROVN" in e
+            for e in report.build_errors
+        )
+
+        assert report.overall_status != OverallStatus.ELIGIBLE
