@@ -61,6 +61,7 @@ pipeline/checkpoints/
 # Environment & secrets
 .env
 .env.*
+!.env.example
 
 # Live session runtime output
 live_signals.jsonl

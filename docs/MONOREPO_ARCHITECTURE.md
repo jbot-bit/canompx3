@@ -222,8 +222,11 @@ API service layer providing programmatic access to project resources.
 |----------|---------|---------|
 | `DATABENTO_API_KEY` | Futures Pipeline | Databento API access for backfills |
 | `ANTHROPIC_API_KEY` | UI, LLM Code Scanner | Claude API access |
-| `PROJECT_X_API_KEY` | TBD | (Purpose to be documented) |
-| `TELEGRAM_BOT_TOKEN` | Futures Pipeline | Process monitoring alerts |
+| `BROKER` | Live Trading | Broker selection (projectx/tradovate/rithmic, default projectx) |
+| `PROJECTX_USERNAME` | Live Trading | ProjectX / TopstepX API username (live trading auth) |
+| `PROJECTX_API_KEY` | Live Trading | ProjectX / TopstepX API key (live trading auth) |
+| `PROJECTX_BASE_URL` | Live Trading | ProjectX / TopstepX base URL (e.g. `https://api.topstepx.com` for TopStep) |
+| `TELEGRAM_BOT_TOKEN` | Futures Pipeline, Live Trading | Process monitoring + live alerts (fail-closed) |
 | `DUCKDB_PATH` | Futures Pipeline, UI, Research | Override default gold.db path |
 | `SYMBOL` | Futures Pipeline | Default instrument (MGC, MNQ, MCL, MES) |
 | `TZ_LOCAL` | Futures Pipeline | Local timezone (Australia/Brisbane) |
