@@ -27,7 +27,7 @@ Contract alignment:
 import re
 import sys
 import warnings
-from datetime import date, datetime, timedelta
+from datetime import date
 from pathlib import Path
 
 import databento as db
@@ -42,13 +42,12 @@ warnings.filterwarnings("ignore")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline.paths import GOLD_DB_PATH
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
 from pipeline.build_daily_features import (
     _break_detection_window,
-    _orb_utc_window,
 )
 from pipeline.ingest_dbn_mgc import choose_front_contract
-from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
+from pipeline.paths import GOLD_DB_PATH
 
 # ---------------------------------------------------------------------------
 # CONFIGURATION
@@ -144,7 +143,7 @@ def load_break_events() -> pd.DataFrame:
                 if not df.empty:
                     df["instrument"] = inst
                     rows.append(df)
-            except Exception as e:
+            except Exception:
                 # Column may not exist for this session
                 continue
 
@@ -199,7 +198,6 @@ def process_1s_file(filepath: Path, instrument: str, break_events: pd.DataFrame)
 
     # Filter to outright contracts only
     outright_mask = df["symbol"].str.match(outright_pattern.pattern)
-    n_before = len(df)
     df = df[outright_mask].copy()
 
     if df.empty:
@@ -341,7 +339,6 @@ def process_instrument(instrument: str, break_events: pd.DataFrame) -> pd.DataFr
     files = sorted(data_dir.glob("*.dbn.zst"))
     # Deduplicate: prefer the broader daily_ file if it overlaps a narrower daily_ file
     # In practice, just process all files; duplicates will be resolved by trading_day key
-    seen_files = set()
     unique_files = []
     for f in files:
         # Skip duplicate daily files (keep the one with wider range)
@@ -394,12 +391,12 @@ def validate_results(results_df: pd.DataFrame):
     # 3b. Correlation between delays
     valid = results_df.dropna(subset=["break_delay_min_1s", "break_delay_min_1m"])
     r, p = stats.pearsonr(valid["break_delay_min_1s"], valid["break_delay_min_1m"])
-    print(f"\nCorrelation (break_delay_min 1s vs 1m):")
+    print("\nCorrelation (break_delay_min 1s vs 1m):")
     print(f"  Pearson r = {r:.4f}, p = {p:.2e}, N = {len(valid)}")
 
     # 3c. Difference distribution
     diff = valid["break_delay_min_1m"] - valid["break_delay_min_1s"]
-    print(f"\nDelay difference (1m - 1s) in minutes:")
+    print("\nDelay difference (1m - 1s) in minutes:")
     print(f"  Mean: {diff.mean():.3f}, Median: {diff.median():.3f}")
     print(f"  Std:  {diff.std():.3f}")
     print(f"  Min:  {diff.min():.3f}, Max: {diff.max():.3f}")
@@ -407,7 +404,7 @@ def validate_results(results_df: pd.DataFrame):
     print(f"  Same minute: {(diff.abs() < 1.0).sum()} / {len(diff)} ({(diff.abs() < 1.0).mean():.1%})")
 
     # 3d. Per-instrument correlation
-    print(f"\nPer-instrument correlation:")
+    print("\nPer-instrument correlation:")
     for inst in INSTRUMENTS:
         inst_df = valid[valid["instrument"] == inst]
         if len(inst_df) > 10:
@@ -415,7 +412,7 @@ def validate_results(results_df: pd.DataFrame):
             print(f"  {inst}: r={r_inst:.4f}, N={len(inst_df)}")
 
     # 3e. Spot-check: 5 random dates per instrument — print prices for manual verification
-    print(f"\nSpot-check (5 random dates per instrument):")
+    print("\nSpot-check (5 random dates per instrument):")
     for inst in INSTRUMENTS:
         inst_df = valid[valid["instrument"] == inst]
         if len(inst_df) >= 5:
@@ -445,8 +442,7 @@ def wr_analysis(results_df: pd.DataFrame):
     df["is_win"] = (df["outcome"] == "win").astype(float)
 
     # Define thresholds to test
-    thresholds_sec = [60, 120, 180, 240, 300, 600]  # 1-10 min in seconds
-    thresholds_min = [1, 2, 3, 4, 5, 10]  # same in minutes (for 1m comparison)
+    thresholds_sec = [60, 120, 180, 240, 300, 600]  # 1-10 min in seconds (1, 2, 3, 4, 5, 10 minutes)
 
     all_tests = []  # For BH FDR
 
@@ -509,12 +505,7 @@ def wr_analysis(results_df: pd.DataFrame):
 
     # Find the BH cutoff
     sig = tests_df[tests_df["bh_significant"]]
-    if not sig.empty:
-        bh_cutoff = sig["p_value"].max()
-        n_sig = len(sig)
-    else:
-        bh_cutoff = 0
-        n_sig = 0
+    n_sig = len(sig)
 
     print(f"\nBH FDR results: K={K}, {n_sig} significant at q=0.05")
 
@@ -588,7 +579,7 @@ def wr_analysis(results_df: pd.DataFrame):
     validated_set = {(i, s) for i, s in validated_sessions}
     novel = sig[~sig.apply(lambda r: (r["instrument"], r["session"]) in validated_set, axis=1)]
 
-    print(f"\n--- NOVEL SESSIONS (BH significant, not previously validated) ---")
+    print("\n--- NOVEL SESSIONS (BH significant, not previously validated) ---")
     if novel.empty:
         print("  None found.")
     else:
@@ -677,7 +668,7 @@ def era_check(results_df: pd.DataFrame):
         print(f"\n{inst}: pre-2019 N={n_pre}, post-2019 N={n_post}")
 
         if n_pre < 50 or n_post < 50:
-            print(f"  Insufficient data for era comparison")
+            print("  Insufficient data for era comparison")
             continue
 
         # Compare break speed WR at FAST300s (5min) across eras

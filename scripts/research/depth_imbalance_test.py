@@ -9,13 +9,15 @@ break should carry through better.
 Also tests: raw bid/ask imbalance (not directional).
 """
 
+import warnings
+from pathlib import Path
+
 import databento as db
 import duckdb
-import pandas as pd
 import numpy as np
-from pathlib import Path
+import pandas as pd
 from scipy import stats
-import warnings
+
 warnings.filterwarnings("ignore")
 
 GOLD_DB_PATH = Path("gold.db")
@@ -144,7 +146,7 @@ for INST in ["MNQ", "MES", "MGC"]:
               f"diff={sp:+.3f} p={p:.4f}{sig}")
 
     # Per-session for directional imbalance (if aggregate shows anything)
-    print(f"  PER-SESSION (directional imbalance):")
+    print("  PER-SESSION (directional imbalance):")
     for sess in sorted(merged["session"].unique()):
         sub = merged[merged["session"] == sess].copy()
         if len(sub) < 30:

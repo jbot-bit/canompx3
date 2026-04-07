@@ -23,10 +23,9 @@ Literature:
 Gate order: T0 TAUTOLOGY (|corr| > 0.70 with existing features) → T1 WR QUINTILE → BH FDR
 """
 
-import sys
 import re
+import sys
 import warnings
-from datetime import date, timedelta
 from pathlib import Path
 
 import databento as db
@@ -40,9 +39,9 @@ warnings.filterwarnings("ignore")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
 from pipeline.ingest_dbn_mgc import choose_front_contract
+from pipeline.paths import GOLD_DB_PATH
 
 STATS_ROOT = PROJECT_ROOT / "data" / "raw" / "databento" / "statistics"
 INSTRUMENTS = sorted(ACTIVE_ORB_INSTRUMENTS)
@@ -120,7 +119,6 @@ def extract_all_stats(instrument: str) -> pd.DataFrame:
             # Select front-month by cleared volume
             vol_rows = day_df[day_df["stat_type"] == 6]
             front_symbol = None
-            front_plen = None
             for pattern, plen in patterns:
                 matched_vol = vol_rows[vol_rows["symbol"].str.match(pattern.pattern)]
                 if not matched_vol.empty:
@@ -131,7 +129,6 @@ def extract_all_stats(instrument: str) -> pd.DataFrame:
                             vol_by_sym, outright_pattern=pattern, prefix_len=plen
                         )
                         if front_symbol:
-                            front_plen = plen
                             break
 
             if not front_symbol:
@@ -421,7 +418,7 @@ def main():
     print(f"\n  Tests: K={K} ({len(surviving_features)} features x {len(sessions)} sessions x {len(INSTRUMENTS)} instruments)")
     print(f"  BH FDR significant: {len(sig)}")
 
-    print(f"\n  Top 15 by p-value:")
+    print("\n  Top 15 by p-value:")
     print(f"  {'Feature':<25} {'Inst':<5} {'Session':<16} {'WR_Q5':>7} {'WR_Q1':>7} {'Spread':>8} {'N':>6} {'p':>10} {'BH'}")
     print("  " + "-" * 100)
     for _, r in tests_df.head(15).iterrows():
@@ -431,7 +428,7 @@ def main():
               f"{r['N']:>6.0f} {r['p_value']:>10.4f} {bh}")
 
     # Per-feature summary
-    print(f"\n  Per-feature best results:")
+    print("\n  Per-feature best results:")
     for feat in surviving_features:
         ft = tests_df[tests_df["feature"] == feat]
         best = ft.iloc[0] if not ft.empty else None
@@ -442,7 +439,7 @@ def main():
 
     # Cross-instrument check for significant results
     if len(sig) > 0:
-        print(f"\n  Cross-instrument concordance for BH-significant features:")
+        print("\n  Cross-instrument concordance for BH-significant features:")
         for feat in sig["feature"].unique():
             ft = tests_df[tests_df["feature"] == feat]
             for inst in INSTRUMENTS:

@@ -24,10 +24,9 @@ No look-ahead: settlement and cleared volume are published after close,
 before next session open. Used as PRIOR-DAY features only.
 """
 
-import sys
 import re
+import sys
 import warnings
-from datetime import date
 from pathlib import Path
 
 import databento as db
@@ -41,9 +40,9 @@ warnings.filterwarnings("ignore")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline.paths import GOLD_DB_PATH
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS
 from pipeline.ingest_dbn_mgc import choose_front_contract
+from pipeline.paths import GOLD_DB_PATH
 
 STATS_ROOT = PROJECT_ROOT / "data" / "raw" / "databento" / "statistics"
 INSTRUMENTS = sorted(ACTIVE_ORB_INSTRUMENTS)
@@ -436,7 +435,7 @@ def main():
     print(f"  BH FDR significant: {n_sig}")
 
     # Print top 10 by p-value regardless of significance
-    print(f"\n  Top 10 by p-value:")
+    print("\n  Top 10 by p-value:")
     print(f"  {'Feature':<20} {'Inst':<5} {'Session':<16} {'WR_spread':>10} {'N':>6} {'p-value':>10} {'BH'}")
     print("  " + "-" * 80)
     for _, row in tests_df.head(10).iterrows():
@@ -446,14 +445,14 @@ def main():
 
     # Print WR monotonicity check for top results
     if n_sig > 0:
-        print(f"\n  BH SIGNIFICANT RESULTS:")
+        print("\n  BH SIGNIFICANT RESULTS:")
         for _, row in sig.iterrows():
             # Check if WR is monotonic or just noise
             label = "SIGNAL" if abs(row["wr_spread"]) > 0.03 else "WEAK (<3%)"
             print(f"    {row['feature']} {row['instrument']} {row['session']}: "
                   f"spread={row['wr_spread']:+.1%}, p={row['p_value']:.4f} -> {label}")
     else:
-        print(f"\n  NO BH-significant results.")
+        print("\n  NO BH-significant results.")
 
     # =====================================================================
     # VERDICT
@@ -475,7 +474,7 @@ def main():
             print(f"  CONDITIONAL PASS: {strong} strong BH-significant results")
             print("  Proceed to T3-T8 battery for validation.")
 
-    print(f"\n  Summary:")
+    print("\n  Summary:")
     print(f"    H1 (settlement gap): {'KILLED at T0 (tautology)' if not h1_alive else f'{n_sig} BH sig'}")
     print(f"    H2 (cleared volume): {'KILLED at T0 (tautology)' if not h2_alive else f'{n_sig} BH sig'}")
 

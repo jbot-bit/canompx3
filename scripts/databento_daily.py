@@ -28,7 +28,7 @@ import os
 import subprocess
 import sys
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -239,7 +239,7 @@ def run_daily_refresh(
     # date, but Databento data isn't available that far yet. UTC date is always
     # safe because we request up to midnight UTC of the current UTC day, which
     # covers the previous complete trading session.
-    today_utc = datetime.now(timezone.utc).date()
+    today_utc = datetime.now(UTC).date()
     fetch_start = today_utc - timedelta(days=days)
     fetch_end = today_utc
 

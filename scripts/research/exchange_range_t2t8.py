@@ -635,7 +635,10 @@ def test_e2_concordance() -> dict:
 # --- Main -------------------------------------------------------------------
 def main():
     OUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    f = open(OUT_FILE, "w")
+    # noqa rationale: file lifetime spans the entire 234-line main() body; converting
+    # to a `with` block would require re-indenting the whole function and is out of
+    # scope for this lint cleanup commit. Research script, manual close at line 872.
+    f = open(OUT_FILE, "w")  # noqa: SIM115
 
     tee("=" * 80, f)
     tee("AUDIT REPORT -- F5_exchange_range_atr at CME_REOPEN", f)
@@ -855,13 +858,13 @@ def main():
     tee(f"  KILLED: {killed}/{len(INSTRUMENTS)}", f)
 
     if validated == len(INSTRUMENTS):
-        tee(f"\n  >>> ALL INSTRUMENTS VALIDATED -- proceed to deployment design <<<", f)
+        tee("\n  >>> ALL INSTRUMENTS VALIDATED -- proceed to deployment design <<<", f)
     elif validated >= 2:
         tee(f"\n  >>> PARTIAL VALIDATION -- {validated}/{len(INSTRUMENTS)} instruments <<<", f)
     elif validated == 1:
-        tee(f"\n  >>> SINGLE INSTRUMENT -- REGIME_SPECIFIC, shelve <<<", f)
+        tee("\n  >>> SINGLE INSTRUMENT -- REGIME_SPECIFIC, shelve <<<", f)
     else:
-        tee(f"\n  >>> NO INSTRUMENTS VALIDATED -- KILL finding <<<", f)
+        tee("\n  >>> NO INSTRUMENTS VALIDATED -- KILL finding <<<", f)
 
     tee("", f)
     tee("  Mechanism: UNVERIFIED (no order flow data to test causation)", f)

@@ -11,13 +11,15 @@ Literature:
 - Bessembinder & Seguin (1993): depth proxies liquidity, dampens volatility.
 """
 
+import warnings
+from pathlib import Path
+
 import databento as db
 import duckdb
-import pandas as pd
 import numpy as np
-from pathlib import Path
+import pandas as pd
 from scipy import stats
-import warnings
+
 warnings.filterwarnings("ignore")
 
 GOLD_DB_PATH = Path("gold.db")
@@ -120,7 +122,7 @@ for INST in ["MES", "MGC", "MNQ"]:
     print(f"  Matched outcomes: {len(merged)}")
 
     if len(merged) < 50:
-        print(f"  Too few\n")
+        print("  Too few\n")
         continue
 
     # UNCONDITIONAL
@@ -138,7 +140,7 @@ for INST in ["MES", "MGC", "MNQ"]:
     results_all.append({"inst": INST, "test": "unconditional", "diff": sp, "p": p, "direction": direction, "N": len(merged)})
 
     # PER-SESSION
-    print(f"  PER-SESSION:")
+    print("  PER-SESSION:")
     for sess in sorted(merged["session"].unique()):
         sub = merged[merged["session"] == sess]
         if len(sub) < 30:
@@ -161,7 +163,7 @@ for INST in ["MES", "MGC", "MNQ"]:
 
     # ATR CONFOUND CONTROL
     if "atr_20" in merged.columns and merged["atr_20"].notna().sum() > 50:
-        print(f"  ATR-CONTROLLED:")
+        print("  ATR-CONTROLLED:")
         mc = merged.dropna(subset=["atr_20"]).copy()
         try:
             mc["atr_half"] = pd.qcut(mc["atr_20"], 2, labels=["low_atr", "high_atr"], duplicates="drop")
@@ -183,7 +185,7 @@ for INST in ["MES", "MGC", "MNQ"]:
                 dir_a = "THIN=BETTER" if sp_a < 0 else "THICK=BETTER"
                 print(f"    {ag:10s} N={len(sub):4d} diff={sp_a:+.3f} p={p_a:.4f}{sig_a} [{dir_a}]")
         except ValueError:
-            print(f"    ATR stratification failed")
+            print("    ATR stratification failed")
 
     print()
 
