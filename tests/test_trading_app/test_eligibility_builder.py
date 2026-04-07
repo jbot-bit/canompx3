@@ -152,6 +152,19 @@ class TestParseStrategyId:
         assert dims["filter_type"] == "COST_LT10"
         assert dims["orb_minutes"] == 15
 
+    def test_S_in_orb_label_not_stripped(self):
+        """Tokens starting with S but not followed by ONLY digits must
+        not be stripped — guards against hypothetical future session
+        labels like SHANGHAI_OPEN being mis-parsed.
+
+        Pinned by Gate 2 review (2026-04-07) as a defense-in-depth
+        regression test alongside the _S075 stripping fix.
+        """
+        # LONDON_METALS contains 'S' but its tokens are not S\d+
+        dims = parse_strategy_id("MES_LONDON_METALS_E2_RR1.0_CB1_NO_FILTER")
+        assert dims["orb_label"] == "LONDON_METALS"
+        assert dims["filter_type"] == "NO_FILTER"
+
     def test_unknown_instrument_raises(self):
         with pytest.raises(ValueError):
             parse_strategy_id("XYZ_NYSE_CLOSE_E2_RR2.0_CB1_COST_LT10")
