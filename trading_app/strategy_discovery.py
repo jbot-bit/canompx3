@@ -1405,9 +1405,24 @@ def main():
         default=None,
         help="Temporal holdout cutoff (YYYY-MM-DD). Discovery only uses outcomes "
         "BEFORE this date. Use with validator --oos-start for true OOS testing. "
-        "Example: --holdout-date 2025-01-01 discovers on pre-2025 data.",
+        "Example: --holdout-date 2025-01-01 discovers on pre-2025 data. "
+        "DEFAULT: Amendment 2.7 sacred-from date "
+        "(trading_app.holdout_policy.HOLDOUT_SACRED_FROM). Values later than "
+        "the sacred-from date are rejected per Mode A discipline.",
     )
     args = parser.parse_args()
+
+    # Mode A enforcement (Amendment 2.7 / RESEARCH_RULES.md § "2026 holdout is
+    # sacred"). enforce_holdout_date() defaults None to HOLDOUT_SACRED_FROM
+    # and raises ValueError on post-sacred values with a clear error citing
+    # the canonical source. See trading_app/holdout_policy.py and
+    # docs/institutional/pre_registered_criteria.md Amendment 2.7.
+    from trading_app.holdout_policy import enforce_holdout_date
+
+    try:
+        effective_holdout = enforce_holdout_date(args.holdout_date)
+    except ValueError as e:
+        parser.error(str(e))  # exits with code 2 and prints the message
 
     db_path = Path(args.db) if args.db else None
 
@@ -1419,7 +1434,7 @@ def main():
         orb_minutes=args.orb_minutes,
         dry_run=args.dry_run,
         dst_regime=args.dst_regime,
-        holdout_date=args.holdout_date,
+        holdout_date=effective_holdout,
     )
 
 
