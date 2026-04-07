@@ -20,7 +20,7 @@ from datetime import UTC, date, datetime, timedelta
 from enum import Enum
 
 from pipeline.cost_model import CostSpec, get_session_cost_spec, to_r_multiple
-from pipeline.dst import DYNAMIC_ORB_RESOLVERS
+from pipeline.dst import DYNAMIC_ORB_RESOLVERS, orb_utc_window
 from pipeline.log import get_logger
 from trading_app.calendar_overlay import CalendarAction, get_calendar_action
 from trading_app.config import (
@@ -381,10 +381,15 @@ class ExecutionEngine:
         # Multi-aperture: create one LiveORB per unique (session_label, orb_minutes)
         # combination needed by loaded strategies. A session can have 5m, 15m, and 30m
         # ORBs simultaneously — they share the same start time but end at different times.
-        from zoneinfo import ZoneInfo
-
-        _brisbane = ZoneInfo("Australia/Brisbane")
-        _utc = ZoneInfo("UTC")
+        #
+        # Canonical source (E2 canonical-window refactor 2026-04-07, Stage 3):
+        # pipeline.dst.orb_utc_window is the single source of truth for ORB window
+        # timing across backtest (outcome_builder), live engine (this file), and
+        # feature builder (build_daily_features). Any divergence between these
+        # paths is a lookahead/contamination risk per Chan Ch 1 p4 (the backtest
+        # must equal live execution). Previously this file had an inline copy of
+        # the Brisbane->UTC resolver logic which could (and did) drift — see
+        # docs/postmortems/2026-04-07-e2-canonical-window-fix.md.
 
         # Collect unique (label, orb_minutes) pairs from portfolio
         needed_orbs: set[tuple[str, int]] = set()
@@ -392,18 +397,13 @@ class ExecutionEngine:
             if s.orb_label in DYNAMIC_ORB_RESOLVERS:
                 needed_orbs.add((s.orb_label, s.orb_minutes))
 
-        # Resolve DST-aware start times per session (shared across apertures)
-        session_starts: dict[str, datetime] = {}
-        for label in {lbl for lbl, _ in needed_orbs}:
-            resolver = DYNAMIC_ORB_RESOLVERS[label]
-            bris_h, bris_m = resolver(trading_day)
-            cal_date = trading_day + timedelta(days=1) if bris_h < 9 else trading_day
-            local_start = datetime(cal_date.year, cal_date.month, cal_date.day, bris_h, bris_m, 0, tzinfo=_brisbane)
-            session_starts[label] = local_start.astimezone(_utc).replace(tzinfo=UTC)
-
+        # Canonical delegation — no inline resolver logic. The tzinfo is
+        # normalised from ZoneInfo('UTC') to datetime.UTC for consistency with
+        # the rest of this module (bar ts_utc, trade timestamps, LiveIB window).
         for label, orb_minutes in needed_orbs:
-            start = session_starts[label]
-            end = start + timedelta(minutes=orb_minutes)
+            start, end = orb_utc_window(trading_day, label, orb_minutes)
+            start = start.replace(tzinfo=UTC)
+            end = end.replace(tzinfo=UTC)
             self.orbs[(label, orb_minutes)] = LiveORB(
                 label=label,
                 window_start_utc=start,
@@ -443,8 +443,18 @@ class ExecutionEngine:
         # Phase 1.5: E2 honest entry — first bar touching ORB after window end.
         # E2 stop-market fills on range touch, not close confirmation.
         # Must fire BEFORE Phase 2 (close-based break) so E2 enters on fakeout
-        # bars that precede the confirmed break. Per Pardo Ch.4: backtest entry
-        # timing must match live stop-market execution.
+        # bars that precede the confirmed break. Per Chan, "Algorithmic Trading"
+        # (Wiley 2013) Ch 1 p4 (verified verbatim from
+        # resources/Algorithmic_Trading_Chan.pdf PDF p22): "If your backtesting
+        # and live trading programs are one and the same, and the only difference
+        # between backtesting versus live trading is what kind of data you are
+        # feeding into the program (historical data in the former, and live
+        # market data in the latter), then there can be no look-ahead bias in
+        # the program." This Phase 1.5 path is the live-engine half of that
+        # invariant; backtest parity is enforced in outcome_builder via
+        # pipeline.dst.orb_utc_window (E2 canonical-window refactor 2026-04-07).
+        # (Prior comment cited Pardo Ch.4 — NOT verified; local Pardo PDF is
+        # front matter only. Updated to verified Chan citation 2026-04-07.)
         for (_label, _om), orb in self.orbs.items():
             if orb.complete and not orb.e2_touched and orb.high is not None:
                 # E2 order timeout: skip trigger if too much time elapsed since
