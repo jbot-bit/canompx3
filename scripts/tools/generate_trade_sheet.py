@@ -37,7 +37,7 @@ from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.eligibility.builder import build_eligibility_report
+from trading_app.eligibility.builder import build_eligibility_report, parse_strategy_id
 from trading_app.prop_profiles import ACCOUNT_PROFILES
 from trading_app.strategy_fitness import compute_fitness
 
@@ -1105,6 +1105,246 @@ def _build_session_cards(
     return cards_html
 
 
+# ── View B: Filter Universe Audit ─────────────────────────────────────
+# Surfaces every filter in trading_app.config.ALL_FILTERS plus the ATR
+# velocity overlay, cross-referenced against active validated_setups
+# (routed count) and prop_profiles.ACCOUNT_PROFILES (deployed count).
+# Anti-confirmation-bias: showing the full filter universe alongside the
+# deployed slice exposes dead / stale / unrouted filters that would
+# otherwise be invisible in View A.
+#
+# Design: docs/plans/2026-04-07-filter-universe-audit-design.md
+
+
+def _build_filter_universe_rows(db_path: Path, trading_day: date) -> list[dict]:
+    """Walk ALL_FILTERS + ATR_VELOCITY_OVERLAY and produce audit row dicts.
+
+    One read-only DB connection + one aggregate query for routed counts.
+    For each filter: reads the ClassVar metadata (VALIDATED_FOR,
+    LAST_REVALIDATED, CONFIDENCE_TIER), counts active validated_setups
+    strategies using it (routed), counts active profile lanes deploying
+    it (deployed), derives a status badge (LIVE/ROUTED/DEAD).
+
+    Returns a list of row dicts sorted by (deployed DESC, routed DESC,
+    filter_type ASC). The sort order puts LIVE rows at the top and DEAD
+    rows at the bottom so the trader's eye lands on the actionable rows
+    first.
+
+    Pure consumer of trading_app.config and trading_app.prop_profiles —
+    zero re-encoded filter logic, zero calls to build_eligibility_report
+    (View B is per-filter, not per-strategy).
+    """
+    from datetime import date as _date_type
+    from datetime import datetime as _dt_type
+
+    from trading_app.config import ALL_FILTERS, ATR_VELOCITY_OVERLAY
+    from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+    # ── routed counts: one DB query ──────────────────────────────────
+    routed_counts: dict[str, int] = {}
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        rows = con.execute(
+            """
+            SELECT filter_type, COUNT(*)
+            FROM validated_setups
+            WHERE LOWER(status) = 'active'
+            GROUP BY filter_type
+            """
+        ).fetchall()
+        for ft, n in rows:
+            routed_counts[ft] = int(n)
+    finally:
+        con.close()
+
+    # ── deployed counts: walk prop_profiles ──────────────────────────
+    # Uses the canonical parse_strategy_id (which already strips _S075
+    # suffix as of commit 35ae1fd). Lane → filter_type via the same
+    # path used by View A, so counts stay consistent.
+    deployed_counts: dict[str, int] = {}
+    for _pid, profile in ACCOUNT_PROFILES.items():
+        if not profile.active or not profile.daily_lanes:
+            continue
+        for lane in profile.daily_lanes:
+            try:
+                dims = parse_strategy_id(lane.strategy_id)
+            except Exception:  # noqa: BLE001 — out-of-shape id is a data issue, skip silently here
+                continue
+            ft = dims["filter_type"]
+            deployed_counts[ft] = deployed_counts.get(ft, 0) + 1
+
+    # ── Walk ALL_FILTERS + overlay and build rows ────────────────────
+    # Include the ATR velocity overlay as an extra entry. It lives
+    # outside ALL_FILTERS but has the same ClassVar shape.
+    entries: list[tuple[str, object]] = list(ALL_FILTERS.items())
+    overlay_key = getattr(ATR_VELOCITY_OVERLAY, "filter_type", "ATR_VEL")
+    entries.append((overlay_key, ATR_VELOCITY_OVERLAY))
+
+    rows_out: list[dict] = []
+    for key, filt in entries:
+        cls = type(filt)
+        class_name = cls.__name__
+
+        # Read ClassVar metadata — all three are OPTIONAL (only ~6-12 of
+        # 82 filters have them set). Treat absence as "not annotated".
+        validated_for = getattr(cls, "VALIDATED_FOR", None) or ()
+        last_revalidated = getattr(cls, "LAST_REVALIDATED", None)
+        confidence_tier = getattr(cls, "CONFIDENCE_TIER", None)
+
+        # Stale marker: > 180 days old (matches the eligibility builder's
+        # VALIDATION_FRESHNESS_DAYS constant — same 180d threshold).
+        is_stale = False
+        last_rev_str = ""
+        if last_revalidated is not None:
+            if isinstance(last_revalidated, _dt_type):
+                rev_date = last_revalidated.date()
+            elif isinstance(last_revalidated, _date_type):
+                rev_date = last_revalidated
+            else:
+                rev_date = None
+            if rev_date is not None:
+                last_rev_str = rev_date.isoformat()
+                age_days = (trading_day - rev_date).days
+                is_stale = age_days > 180
+
+        # Confidence tier: enum → string value. May be None (unannotated)
+        # or a ConfidenceTier enum.
+        tier_str = ""
+        if confidence_tier is not None:
+            tier_str = (
+                confidence_tier.value
+                if hasattr(confidence_tier, "value")
+                else str(confidence_tier)
+            )
+
+        routed = routed_counts.get(key, 0)
+        deployed = deployed_counts.get(key, 0)
+
+        if deployed > 0:
+            status = "LIVE"
+        elif routed > 0:
+            status = "ROUTED"
+        else:
+            status = "DEAD"
+
+        rows_out.append(
+            {
+                "filter_type": key,
+                "class_name": class_name,
+                "description": _filter_description(key),
+                "confidence_tier": tier_str,
+                "validated_for": tuple(validated_for) if validated_for else (),
+                "last_revalidated": last_rev_str,
+                "is_stale": is_stale,
+                "routed": routed,
+                "deployed": deployed,
+                "status": status,
+            }
+        )
+
+    rows_out.sort(
+        key=lambda r: (-r["deployed"], -r["routed"], r["filter_type"])
+    )
+    return rows_out
+
+
+def _render_filter_universe_section(rows: list[dict]) -> str:
+    """Pure function: list[row dict] → HTML fragment.
+
+    Produces a collapsible <details> block with a summary line
+    ('Filter Universe Audit — X total, Y routed, Z deployed') and a
+    table of all rows, each with status badge + filter_type + class +
+    description + tier + validated-for chips + revalidated date +
+    STALE pill (if stale) + routed + deployed counts.
+
+    Empty / missing metadata renders as '—' (em dash) rather than 'None'
+    or a red warning — most filters (~70 of 82) are unannotated and
+    this is the expected state, not a bug.
+    """
+    total = len(rows)
+    routed_count = sum(1 for r in rows if r["routed"] > 0)
+    deployed_count = sum(1 for r in rows if r["deployed"] > 0)
+    live_lane_sum = sum(r["deployed"] for r in rows)
+    summary_text = (
+        f"Filter Universe Audit &mdash; {total} total, "
+        f"{routed_count} routed, {deployed_count} deployed "
+        f"({live_lane_sum} live lane{'s' if live_lane_sum != 1 else ''})"
+    )
+
+    body_rows = ""
+    for r in rows:
+        # Row class by status
+        row_cls = {
+            "LIVE": "row-live",
+            "ROUTED": "row-routed",
+            "DEAD": "row-dead",
+        }.get(r["status"], "row-dead")
+
+        # Status badge
+        status_badge_cls = {
+            "LIVE": "badge-filter-live",
+            "ROUTED": "badge-filter-check",
+            "DEAD": "badge-filter-dead",
+        }.get(r["status"], "badge-filter-dead")
+        status_badge = f'<span class="badge {status_badge_cls}">{r["status"]}</span>'
+
+        # Validated-for: show up to 3 chips + "..." with full tuple in tooltip
+        vf = r["validated_for"]
+        if vf:
+            chips = [f'<span class="vf-chip">{i}·{s}</span>' for i, s in list(vf)[:3]]
+            vf_html = " ".join(chips)
+            if len(vf) > 3:
+                tooltip = "; ".join(f"{i}·{s}" for i, s in vf)
+                vf_html += f' <span class="vf-more" title="{tooltip}">+{len(vf) - 3}</span>'
+        else:
+            vf_html = "&mdash;"
+
+        # Last revalidated + optional STALE pill
+        if r["last_revalidated"]:
+            lr_html = r["last_revalidated"]
+            if r["is_stale"]:
+                lr_html += ' <span class="pill pill-stale">STALE</span>'
+        else:
+            lr_html = "&mdash;"
+
+        tier_html = r["confidence_tier"] if r["confidence_tier"] else "&mdash;"
+
+        body_rows += f"""
+            <tr class="{row_cls}">
+                <td>{status_badge}</td>
+                <td class="filter-key">{r["filter_type"]}</td>
+                <td class="filter-class">{r["class_name"]}</td>
+                <td class="filter-desc">{r["description"]}</td>
+                <td class="filter-tier">{tier_html}</td>
+                <td class="filter-vf">{vf_html}</td>
+                <td class="filter-lr">{lr_html}</td>
+                <td class="filter-routed">{r["routed"]}</td>
+                <td class="filter-deployed">{r["deployed"]}</td>
+            </tr>"""
+
+    return f"""
+        <details class="filter-universe">
+            <summary>{summary_text}</summary>
+            <table class="filter-universe-table">
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Filter</th>
+                        <th>Class</th>
+                        <th>Description</th>
+                        <th>Tier</th>
+                        <th>Validated For</th>
+                        <th>Revalidated</th>
+                        <th>Routed</th>
+                        <th>Deployed</th>
+                    </tr>
+                </thead>
+                <tbody>{body_rows}
+                </tbody>
+            </table>
+        </details>"""
+
+
 def generate_html(
     trades: list[dict],
     session_times: dict,
@@ -1709,6 +1949,102 @@ def generate_html(
         background: #3d2e1f;
         color: #f0883e;
         border: 1px solid #f0883e;
+    }}
+    /* View B: Filter Universe Audit section */
+    .filter-universe {{
+        margin: 24px 0;
+        padding: 16px;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+    }}
+    .filter-universe summary {{
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 600;
+        color: #c9d1d9;
+        padding: 6px 0;
+    }}
+    .filter-universe summary:hover {{
+        color: #58a6ff;
+    }}
+    .filter-universe-table {{
+        width: 100%;
+        margin-top: 12px;
+        border-collapse: collapse;
+        font-size: 12px;
+    }}
+    .filter-universe-table th {{
+        text-align: left;
+        padding: 6px 8px;
+        border-bottom: 1px solid #30363d;
+        color: #8b949e;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 10px;
+        letter-spacing: 0.5px;
+    }}
+    .filter-universe-table td {{
+        padding: 5px 8px;
+        border-bottom: 1px solid #21262d;
+        vertical-align: top;
+    }}
+    .filter-universe-table .filter-key {{
+        font-family: monospace;
+        color: #79c0ff;
+    }}
+    .filter-universe-table .filter-class {{
+        color: #8b949e;
+        font-size: 11px;
+    }}
+    .filter-universe-table .filter-desc {{
+        color: #c9d1d9;
+    }}
+    .filter-universe-table .filter-routed,
+    .filter-universe-table .filter-deployed {{
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: #c9d1d9;
+    }}
+    .row-live {{
+        border-left: 3px solid #3fb950;
+    }}
+    .row-routed {{
+        border-left: 3px solid #d29922;
+    }}
+    .row-dead {{
+        border-left: 3px solid #484f58;
+        opacity: 0.55;
+    }}
+    .badge-filter-live {{
+        background: #1f3a2a;
+        color: #3fb950;
+        border: 1px solid #2ea043;
+    }}
+    .badge-filter-dead {{
+        background: #21262d;
+        color: #8b949e;
+        border: 1px solid #484f58;
+    }}
+    .vf-chip {{
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        margin-right: 3px;
+        background: #21262d;
+        color: #8b949e;
+        border: 1px solid #30363d;
+    }}
+    .vf-more {{
+        display: inline-block;
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        background: #0d1117;
+        color: #8b949e;
+        border: 1px dashed #30363d;
+        cursor: help;
     }}
     .row-inactive {{
         opacity: 0.25;
