@@ -16,9 +16,12 @@ Import from the single source of truth. Never inline lists or magic numbers.
 | Active instruments | `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS` |
 | All instrument configs | `pipeline.asset_configs.ASSET_CONFIGS` |
 | Session catalog | `pipeline.dst.SESSION_CATALOG` |
+| ORB window timing (UTC) | `pipeline.dst.orb_utc_window(trading_day, orb_label, orb_minutes)` |
 | Entry models / filters | `trading_app.config` |
 | Cost specs | `pipeline.cost_model.COST_SPECS` |
 | DB path | `pipeline.paths.GOLD_DB_PATH` |
+
+**`orb_utc_window` authority:** single source of truth for "compute ORB window end UTC" shared by backtest (`outcome_builder`), live engine (`execution_engine`), and feature builder (`build_daily_features`). Any divergence between these paths is a look-ahead bias risk per Chan Ch 1 p4. Never re-implement in another file; never fall back to `break_ts` when canonical inputs are missing — raise `ValueError` instead. See `docs/postmortems/2026-04-07-e2-canonical-window-fix.md`.
 
 ## 3. Fail-Closed Mindset
 - Never report success after an exception or timeout
