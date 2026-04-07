@@ -210,7 +210,10 @@ def _audit_single_day(con, trading_day, instrument, orb_minutes, cost_spec, resu
                     if stored is None:
                         continue
 
-                    # Recompute outcome
+                    # Recompute outcome.
+                    # Pass canonical lookup triple for E2 fail-closed path
+                    # (E2 canonical-window refactor 2026-04-07, Stage 5).
+                    # Harmless for E1/E3 — only consumed when entry_model='E2'.
                     recomputed = compute_single_outcome(
                         bars_df=bars_5m_df,
                         break_ts=break_ts,
@@ -222,6 +225,9 @@ def _audit_single_day(con, trading_day, instrument, orb_minutes, cost_spec, resu
                         trading_day_end=td_end,
                         cost_spec=cost_spec,
                         entry_model=em,
+                        orb_label=orb_label,
+                        trading_day=trading_day,
+                        orb_minutes=orb_minutes,
                     )
 
                     # E3 sub-bar fill verification (independent check)

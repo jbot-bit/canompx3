@@ -72,6 +72,8 @@ def process_single_day(args):
                 for em in ENTRY_MODELS:
                     if em == "E3" and cb > 1:
                         continue
+                    # Pass canonical lookup triple for E2 fail-closed path
+                    # (E2 canonical-window refactor 2026-04-07, Stage 5).
                     outcome = compute_single_outcome(
                         bars_df=bars_day_df,
                         break_ts=break_ts,
@@ -84,6 +86,8 @@ def process_single_day(args):
                         cost_spec=cost_spec,
                         entry_model=em,
                         orb_label=orb_label,
+                        trading_day=trading_day,
+                        orb_minutes=orb_minutes,
                     )
                     day_batch.append(
                         [

@@ -29,6 +29,7 @@ import pandas as pd
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.build_daily_features import compute_trading_day_utc_range
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, risk_in_dollars, to_r_multiple
+from pipeline.dst import orb_utc_window
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import E2_SLIPPAGE_TICKS, EARLY_EXIT_MINUTES, ENTRY_MODELS, SKIP_ENTRY_MODELS
 from trading_app.db_manager import init_trading_app_schema
@@ -420,11 +421,33 @@ def compute_single_outcome(
     entry_model: str = "E1",
     orb_label: str | None = None,
     orb_end_utc: datetime | None = None,
+    trading_day: date | None = None,
+    orb_minutes: int | None = None,
 ) -> dict:
     """
     Compute outcome for a single (rr_target, confirm_bars, entry_model) combination.
 
+    For E2 entries, the scan-start MUST be the canonical ORB window close.
+    Callers can provide it two ways (E2 canonical-window refactor 2026-04-07,
+    Stage 5):
+      1. Pass `orb_end_utc` directly (e.g. test fixtures with synthetic
+         timestamps not tied to a real session calendar).
+      2. Pass `(trading_day, orb_label, orb_minutes)` and let this function
+         compute it via `pipeline.dst.orb_utc_window` (production callers
+         operating on real trading days).
+
+    If E2 is requested AND neither path is supplied, this raises ValueError.
+    The previous silent fallback to `break_ts` (which produced fakeout-blind
+    backtests) is intentionally deleted — Chan Ch 1 p4 says backtest must
+    equal live execution, and the live engine scans from the canonical ORB
+    window close, not from the later confirmed-break bar.
+
     Returns dict with keys matching orb_outcomes columns.
+
+    Raises:
+        ValueError: If entry_model='E2' and orb_end_utc is None and the
+            canonical lookup triple (trading_day, orb_label, orb_minutes)
+            is incomplete.
     """
     result = {
         "entry_ts": None,
@@ -450,15 +473,32 @@ def compute_single_outcome(
     # Detect entry: E2 uses break-touch, E1/E3 use confirm bars
     if entry_model == "E2":
         # E2 stop-market scans from ORB window close (honest: catches fakeout
-        # bars that touch boundary before the confirmed close-based break).
-        # Falls back to break_ts when orb_end_utc is not provided.
-        e2_scan_start = orb_end_utc if orb_end_utc is not None else break_ts
+        # bars that touch the boundary before the confirmed close-based break).
+        # Per Chan Ch 1 p4, this MUST match the live execution_engine path,
+        # which scans from the canonical orb_utc_window end. There is no
+        # silent fallback to break_ts — that would scan from the LATER
+        # confirmed-break bar and miss fakeout entries, producing different
+        # results from live and reintroducing look-ahead bias.
+        if orb_end_utc is None:
+            if trading_day is not None and orb_label is not None and orb_minutes is not None:
+                _, orb_end_utc = orb_utc_window(trading_day, orb_label, orb_minutes)
+            else:
+                raise ValueError(
+                    "compute_single_outcome(entry_model='E2', ...) requires "
+                    "either explicit orb_end_utc OR all three of "
+                    "(trading_day, orb_label, orb_minutes) for canonical "
+                    "lookup. Got orb_end_utc=None, trading_day="
+                    f"{trading_day!r}, orb_label={orb_label!r}, orb_minutes="
+                    f"{orb_minutes!r}. Silent fallback to break_ts is forbidden "
+                    "(would reintroduce lookahead bias — see Chan Ch 1 p4)."
+                )
+        assert orb_end_utc is not None  # narrowed by the block above
         touch = detect_break_touch(
             bars_df,
             orb_high=orb_high,
             orb_low=orb_low,
             break_dir=break_dir,
-            detection_window_start=e2_scan_start,
+            detection_window_start=orb_end_utc,
             detection_window_end=trading_day_end,
         )
         signal = _resolve_e2(touch, slippage_ticks=E2_SLIPPAGE_TICKS, tick_size=cost_spec.tick_size)
@@ -689,7 +729,7 @@ def build_outcomes(
             SELECT trading_day, symbol, orb_minutes,
                    {
             ", ".join(
-                f"orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts, orb_{lbl}_break_delay_min"
+                f"orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts"
                 for lbl in sessions
             )
         }
@@ -775,11 +815,18 @@ def build_outcomes(
                 if orb_high is None or orb_low is None:
                     continue
 
-                # Compute ORB window end for honest E2 detection.
-                # E2 stop-market scans from ORB close (not from the later
-                # confirmed break bar) so fakeout touches are included.
-                break_delay = row_dict.get(f"orb_{orb_label}_break_delay_min")
-                orb_end_utc = break_ts - timedelta(minutes=break_delay) if break_delay is not None else break_ts
+                # Compute ORB window end via canonical pipeline.dst.orb_utc_window
+                # (E2 canonical-window refactor 2026-04-07, Stage 5). The previous
+                # path derived orb_end_utc from `break_ts - break_delay_min`, with
+                # a silent fallback to `break_ts` when break_delay was NULL — that
+                # produced fakeout-blind backtests, because scanning from the
+                # confirmed-break bar (instead of the canonical ORB close) skips
+                # the in-bar touch that triggers live E2 stop-market fills. Per
+                # Chan Ch 1 p4, backtest must equal live execution; the live
+                # engine uses orb_utc_window so the backtest must too. The
+                # break_delay_min daily_features column is no longer SELECTed
+                # because nothing else in this loop reads it.
+                _, orb_end_utc = orb_utc_window(trading_day, orb_label, orb_minutes)
 
                 # Optimized: detect entry ONCE per (session, EM, CB),
                 # then compute all 6 RR targets with shared bar slicing.
