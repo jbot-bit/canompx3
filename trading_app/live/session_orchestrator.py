@@ -197,9 +197,12 @@ class SessionOrchestrator:
                     for pid, prof in ACCOUNT_PROFILES.items():
                         if portfolio.name == f"profile_{pid}":
                             tier = get_account_tier(prof.firm, prof.account_size)
-                            avg_risk = sum(s.median_risk_dollars for s in strats_with_risk) / max(
-                                1, len(strats_with_risk)
-                            )
+                            # strats_with_risk was filtered on `s.median_risk_dollars and
+                            # s.median_risk_dollars > 0` above — all values guaranteed non-None
+                            # and > 0. `or 0.0` narrows the type for pyright.
+                            avg_risk = sum(
+                                s.median_risk_dollars or 0.0 for s in strats_with_risk
+                            ) / max(1, len(strats_with_risk))
                             if avg_risk > 0:
                                 max_equity_dd_r = -abs(tier.max_dd / avg_risk)
                                 log.info(
@@ -551,11 +554,13 @@ class SessionOrchestrator:
                     record = self._positions.on_entry_sent(sid, direction, validated_fill)
                     if record:
                         self._positions.on_entry_filled(sid, validated_fill)
+                        # validated_fill is the same price used by on_entry_filled;
+                        # it's already a validated float at this point.
                         log.warning(
                             "POSITION RESTORED from journal: %s %s @ %.2f",
                             sid,
                             direction,
-                            float(fill),
+                            validated_fill,
                         )
             if incomplete:
                 log.warning(
@@ -1514,6 +1519,13 @@ class SessionOrchestrator:
                 )
                 return
 
+            # Past the signal_only early return: live mode is active.
+            # order_router is non-None whenever signal_only=False (see __init__ L266-297).
+            assert self.order_router is not None, (
+                "_handle_event ENTRY: order_router is None but signal_only=False — "
+                "broken invariant from __init__."
+            )
+
             if not self._circuit_breaker.should_allow_request():
                 log.critical("CIRCUIT BREAKER OPEN — skipping ENTRY for %s", event.strategy_id)
                 self._notify(f"CIRCUIT BREAKER OPEN — skipping ENTRY for {event.strategy_id}")
@@ -1750,6 +1762,12 @@ class SessionOrchestrator:
                     }
                 )
                 return
+
+            # Past the signal_only early return: live mode is active.
+            assert self.order_router is not None, (
+                "_handle_event EXIT: order_router is None but signal_only=False — "
+                "broken invariant from __init__."
+            )
 
             # Cancel any broker-side bracket orders before submitting exit
             await self._cancel_brackets(event.strategy_id)
@@ -2011,6 +2029,10 @@ class SessionOrchestrator:
         PositionTracker stays PENDING_ENTRY indefinitely. This background task
         detects fills and cancellations.
         """
+        assert self.order_router is not None, (
+            "_fill_poller started but order_router is None (signal_only=True). "
+            "Live-only background task reached in signal mode."
+        )
         while True:
             try:
                 await asyncio.sleep(self.FILL_POLL_INTERVAL)
@@ -2176,6 +2198,14 @@ class SessionOrchestrator:
                     self._notify(msg)
                     return
 
+                # Feedless brokers (e.g. Tradovate, webhook entry) must not reach
+                # the feed-based reconnect loop. Assertion fires only if invariant
+                # is broken — otherwise narrows type for pyright.
+                assert self._feed_class is not None, (
+                    f"SessionOrchestrator.run() reached feed loop for broker "
+                    f"'{self._broker_name}' which has no market data feed. "
+                    "Feedless brokers must use a different entry path (e.g. webhook_server)."
+                )
                 feed = self._feed_class(
                     self.auth,
                     on_bar=self._on_bar,
