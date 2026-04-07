@@ -863,6 +863,85 @@ def _fitness_badge(fitness: str) -> str:
     return f' <span class="badge {cls}">{fitness}</span>'
 
 
+def _status_badge_from_eligibility(trade: dict) -> dict:
+    """Build HTML badge + pills + row-class + tooltip parts from canonical eligibility.
+
+    Canonical consumer of build_eligibility_report output (the six elig_* keys
+    attached by _enrich_trades_with_eligibility). Returns a dict with:
+      badge_html        — main status badge HTML fragment
+      pills_html        — STALE and/or HALF pills (may be empty string)
+      row_class_suffix  — extra CSS class for the row (e.g. ' row-inactive')
+      tooltip_parts     — list of strings to join into the row tooltip
+
+    Mapping from OverallStatus to existing badge vocabulary:
+      ELIGIBLE         → green check badge (matches old ACTIVE)
+      INELIGIBLE       → dimmed INACTIVE badge + row-inactive class
+      NEEDS_LIVE_DATA  → clock VERIFY badge (matches old CHECK)
+      DATA_MISSING     → NEW amber DATA badge + row-inactive class
+      UNKNOWN          → clock VERIFY badge with error in tooltip
+
+    Pills (additive, appended after main badge):
+      elig_stale=True        → STALE pill (validation older than 180d)
+      elig_size_mult < 1.0   → HALF pill (calendar overlay reduces size)
+    """
+    overall = trade.get("elig_overall", "UNKNOWN")
+    blocking = trade.get("elig_blocking", ())
+    pending = trade.get("elig_pending", ())
+    stale = trade.get("elig_stale", False)
+    size_mult = float(trade.get("elig_size_mult", 1.0))
+    freshness = trade.get("elig_freshness", "")
+    elig_error = trade.get("elig_error")
+
+    # ── Main status badge + row class ────────────────────────────────
+    if overall == "ELIGIBLE":
+        badge_html = '<span class="badge badge-filter-active">&#10003;</span>'
+        row_class_suffix = ""
+    elif overall == "INELIGIBLE":
+        badge_html = '<span class="badge badge-filter-check">INACTIVE</span>'
+        row_class_suffix = " row-inactive"
+    elif overall == "NEEDS_LIVE_DATA":
+        badge_html = '<span class="badge badge-filter-check">&#9201; VERIFY</span>'
+        row_class_suffix = ""
+    elif overall == "DATA_MISSING":
+        badge_html = '<span class="badge badge-filter-missing">DATA</span>'
+        row_class_suffix = " row-inactive"
+    else:  # UNKNOWN or any future enum value we don't recognize
+        badge_html = '<span class="badge badge-filter-check">&#9201; VERIFY</span>'
+        row_class_suffix = ""
+
+    # ── Pills (additive) ─────────────────────────────────────────────
+    pills = []
+    if stale:
+        pills.append('<span class="pill pill-stale">STALE</span>')
+    if size_mult < 1.0:
+        pills.append('<span class="pill pill-half">HALF</span>')
+    pills_html = "".join(pills)
+
+    # ── Tooltip parts (merged into row tooltip by caller) ────────────
+    tooltip_parts: list[str] = []
+    if overall == "DATA_MISSING":
+        tooltip_parts.append("feature data missing for this trading day")
+    elif overall == "INELIGIBLE" and blocking:
+        tooltip_parts.append("blocked by: " + "; ".join(blocking))
+    elif overall == "NEEDS_LIVE_DATA" and pending:
+        tooltip_parts.append("waiting on: " + "; ".join(pending))
+
+    if overall == "UNKNOWN" and elig_error:
+        tooltip_parts.append(f"eligibility error: {elig_error}")
+
+    if freshness == "PRIOR_DAY":
+        tooltip_parts.append("freshness: yesterday")
+    elif freshness == "STALE":
+        tooltip_parts.append("freshness: STALE - report may be inaccurate")
+
+    return {
+        "badge_html": badge_html,
+        "pills_html": pills_html,
+        "row_class_suffix": row_class_suffix,
+        "tooltip_parts": tooltip_parts,
+    }
+
+
 def _next_session_label(session_times: dict) -> str | None:
     """Find the next upcoming session based on current Brisbane time."""
     now = datetime.now()
@@ -1668,6 +1747,31 @@ def generate_html(
         background: #3d2e1f;
         color: #d29922;
         border: 1px solid #d29922;
+    }}
+    .badge-filter-missing {{
+        background: #3d1f1f;
+        color: #f0883e;
+        border: 1px solid #f0883e;
+    }}
+    .pill {{
+        display: inline-block;
+        font-size: 9px;
+        padding: 1px 5px;
+        border-radius: 3px;
+        margin-left: 3px;
+        vertical-align: middle;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+    }}
+    .pill-stale {{
+        background: #3d2e1f;
+        color: #d29922;
+        border: 1px solid #d29922;
+    }}
+    .pill-half {{
+        background: #3d2e1f;
+        color: #f0883e;
+        border: 1px solid #f0883e;
     }}
     .row-inactive {{
         opacity: 0.25;
