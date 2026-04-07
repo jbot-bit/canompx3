@@ -13,6 +13,7 @@
 | v1 | 2026-04-07 | Initial lock. All criteria derived from Phase 0 literature extraction. | Claude Code audit session |
 | v2 | 2026-04-07 | Codex audit feedback integrated. DSR downgraded from binding to cross-check (N_eff unresolved). Chordia t-threshold reframed as severity benchmark, not hard bar. Criterion 8 (2026 OOS) gated on holdout-policy decision. See amendments 2.1-2.5 at bottom. | Claude Code session (Codex audit incorporated) |
 | v2.6 | 2026-04-07 | Holdout policy DECLARED — Mode B operative. Pass-2 audit verified the 2026 H1 holdout was consumed per pre-registered protocol on 2026-04-02. New forward-sacred window starts 2026-04-07 (earliest first-look 2026-10-07). Walk-forward continues as OOS discipline for existing discoveries; forward-paper requirement applies to new deployments. See Amendment 2.6 at bottom. | Claude Code session (autonomous decision per user delegation, pass-2 audit verified) |
+| v2.7 | 2026-04-08 | **RESCINDS Amendment 2.6.** Holdout policy corrected to Mode A (holdout-clean) per explicit user correction. 2026-01-01 is the sacred holdout boundary going forward. The 3+ months of real-time 2026 data (2026-01-02 → present) is the accumulating forward OOS record. The 124 existing validated_setups are grandfathered as RESEARCH-PROVISIONAL per Amendment 2.4 — they were discovered with 2026 data in scope and are NOT OOS-clean. Any NEW discovery run must use `--holdout-date 2026-01-01`. See Amendment 2.7 at bottom. | Claude Code session (user correction: *"I THOUGHT WE WERE HOLDING OUT FROM 2026 ONWARDS SO THAT WE HAD 3 MONTHS ALREADY OF TRADES OOS"*) |
 
 ---
 
@@ -407,3 +408,88 @@ A strategy is ELIGIBLE FOR DEPLOYMENT under v2 if:
 | 12 Shiryaev-Roberts | active drift monitor | BINDING (post-deployment) |
 
 A strategy passing 1-4, 6-7, 9-10 is **research-provisional**. Passing 11 makes it **operationally deployable**. Passing 8 (under whichever holdout policy applies) + 12 months of live with 12 active makes it **production-grade institutional proof**. The current 5 lanes are at research-provisional + operationally deployable — not production-grade.
+
+---
+
+## Amendment 2.7 (2026-04-08) — RESCINDS Amendment 2.6 — Mode A holdout-clean operative
+
+**Supersedes:** Amendment 2.6 (2026-04-07 Mode B declaration, commit `1aa11e5`).
+
+**Trigger:** Explicit user correction on 2026-04-08 after reviewing Amendment 2.6:
+
+> *"I THOUGHT WE WERE HOLDING OUT FROM 2026 ONWARDS SO THAT WE HAD 3 MONTHS ALREADY OF TRADES OOS"*
+
+Amendment 2.6 was an autonomous decision made under a delegation that was misread. The user's intent from the start was Mode A (holdout-clean) with 2026-01-01 as the sacred boundary. The 3+ months of real-time 2026 data (2026-01-02 → current) was supposed to be accumulating as genuine forward OOS evidence, not consumed in discovery.
+
+### What Amendment 2.6 got factually right (but misused)
+
+Pass-2 audit evidence cited in Amendment 2.6 is still mechanically accurate:
+- All 124 active `validated_setups` were discovered 2026-04-05 → 2026-04-06
+- Discovery runs had 2026 data in scope (273,000 outcome rows for 2026-01-02 → 2026-04-05 exist in `orb_outcomes`)
+- `HANDOFF.md:1468` did say *"2026 included in discovery — holdout test was spent"*
+- `pre-registrations/2026-03-20-mnq-rr1-verified-sessions.md:4` did say the test was COMPLETED
+
+**What Amendment 2.6 got WRONG:** it interpreted these facts as "the holdout was intentionally spent, so Mode B is the only honest position." The correct interpretation is "an earlier unreviewed decision (HANDOFF.md:1468) violated user intent, and the 124 discoveries are therefore contaminated, not canonical." Mode A is restored; the 124 are grandfathered as research-provisional.
+
+### Operative rules under Amendment 2.7 (Mode A)
+
+- **Sacred holdout window:** **2026-01-01 onwards.** Growing each day. Currently ~3.2 months of real-time forward OOS data (2026-01-02 → 2026-04-08).
+- **The 124 existing validated_setups are grandfathered as RESEARCH-PROVISIONAL** per Amendment 2.4. They were discovered with 2026 data in scope and are NOT OOS-clean evidence. Their walk-forward `wf_passed = True` flag remains valid as in-sample evidence but does not substitute for a clean forward OOS test.
+- **Existing 5 deployed lanes remain operationally deployable** with the same provisional label. No forced rollback. The user has chosen to run them live — that is an operational decision, not a claim of institutional-grade proof.
+- **Any NEW discovery run** must use `--holdout-date 2026-01-01` (or earlier). No exceptions.
+- **Forward OOS scoring protocol:**
+  - New discovery on pre-2026 data → 2026-01-01 → current is the clean OOS window
+  - Report OOS ExpR, sample_size, win_rate, Sharpe on the 2026 window
+  - Criterion 8 enforceable: OOS ExpR ≥ 0 AND OOS ExpR ≥ 0.40 × IS ExpR (per v1, reactivated under Mode A)
+- **The existing 124 cannot retroactively become OOS-clean.** The only way to make one "clean" is to re-run discovery with `--holdout-date 2026-01-01` and verify the same strategy is rediscovered. Any strategy NOT rediscovered under the clean-holdout protocol is NOT OOS-clean.
+- **No mixing of modes:** Mode A is project-wide. No future research may claim Mode B status without another documented amendment.
+- **Forward-paper requirement** (from Amendment 2.6) is SOFTENED: the walk-forward + forward 2026 OOS under Mode A replaces the 6-month forward-paper requirement for strategies that already have 3+ months of Mode-A-clean OOS. For strategies without that window, forward-paper still applies as a supplement.
+
+### Updated Acceptance Matrix (Criterion 8 row)
+
+| Criterion | Threshold | Enforcement |
+|---|---|---|
+| 8 Forward / OOS | Under Mode A: `--holdout-date 2026-01-01` required for discovery; OOS ExpR ≥ 0 AND OOS ExpR ≥ 0.40 × IS ExpR on the 2026-01-01 → current window; walk-forward remains in-sample discipline only | BINDING |
+
+All other rows unchanged from v2 / v2.6.
+
+### Classification of the 124 existing validated_setups under Mode A
+
+| Label | Count | Meaning under Amendment 2.7 |
+|---|---|---|
+| Research-provisional | 124 | Discovered with 2026 in scope. WF in-sample only. NOT OOS-clean. Cannot be called "validated" in the institutional sense. |
+| Operationally deployable | 5 (deployed lanes) | Live trading authorized. Research-provisional status inherited from above. No scaling until re-audited under Mode A. |
+| Production-grade institutional proof | 0 | No strategy has passed all 12 criteria under Mode A yet. |
+
+### What this means for the deployed 5 lanes
+
+Nothing changes operationally. They remain deployed. They remain research-provisional. You are free to trade them — you are not free to call them institutionally proven. The path to institutional proof is:
+
+1. Re-run discovery with `--holdout-date 2026-01-01` (requires Phase 2 data redownload + Phase 3 era schema + Phase 4 clean rediscovery — all gated on post-merge work)
+2. If the same filter-session-entry-model-rr combos are rediscovered on the clean-holdout protocol, they graduate from research-provisional to research-validated
+3. Compute their 2026-01-01 → current ExpR as genuine forward OOS evidence
+4. If ExpR positive and ≥ 40% of IS ExpR → Criterion 8 passes
+5. Then they can be scaled / relabeled as production-grade
+
+### Deferred enforcement (blocked by post-merge sweep)
+
+Now that `e2-canonical-window-fix` has merged into main (`8bc87f7`), these four items are UNBLOCKED and queued for the post-merge sweep:
+
+1. `pipeline/check_drift.py` `HOLDOUT_DECLARATIONS` map populated with `MNQ: 2026-01-01`, `MES: 2026-01-01`, `MGC: 2026-01-01`. Activates the existing `check_holdout_contamination()` function.
+2. `trading_app/strategy_discovery.py` runtime enforcement: reject `--holdout-date > 2026-01-01` for any new discovery run, and require explicit `--holdout-date` argument.
+3. `trading_app/strategy_validator.py` validation gate: verify `discovery_date < 2026-01-01` OR the discovery was run with `--holdout-date 2026-01-01`.
+4. New drift check: assert `RESEARCH_RULES.md`, `pre_registered_criteria.md`, and `pipeline/check_drift.py` HOLDOUT_DECLARATIONS agree on the holdout policy.
+
+### Rescinded items from Amendment 2.6
+
+- ~~"Forward-sacred window starts 2026-04-07"~~ → replaced with "Forward-sacred window is 2026-01-01 onwards"
+- ~~"Earliest first-look at the new window is 2026-10-07"~~ → removed; the 2026-01-01 window is already 3+ months deep
+- ~~"Past window (2026-01-01 → 2026-04-06): CONSUMED"~~ → rescinded; the window is NOT consumed, the contamination is in the 124 strategies' DISCOVERY provenance, not in the data itself
+- ~~"Existing memory/doc references to '+2026 OOS' are historical observations, not strict OOS evidence"~~ → still accurate for the 124 existing strategies, but the 2026 data itself becomes genuine OOS for NEW Mode-A discoveries
+- ~~"Grandfathered as research-provisional + operationally deployable per Amendment 2.4"~~ → this part is kept; grandfathering is still how the 124 are treated
+
+### Acknowledgment of the contamination trade-off
+
+Mode A restoration has a cost: 4 days of discovery work (2026-04-05, 2026-04-06) that produced the 124 validated_setups are now labeled research-provisional rather than canonical. Those 4 days are not wasted — the 124 strategies still represent a testable hypothesis list that can be re-verified under the clean-holdout protocol in Phase 4. The cost is one Phase 4 rediscovery run, not starting from zero.
+
+This cost is accepted as the price of institutional honesty. Alternative (keeping Mode B to avoid the rework) was rejected because it contradicted explicit user intent.

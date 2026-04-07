@@ -1,9 +1,46 @@
-# Holdout Policy Decision — Mode B Declared (2026-04-07)
+# Holdout Policy Decision — RESCINDED → Mode A operative (2026-04-08)
 
-**Status:** DECLARED. Mode B operative across the project as of 2026-04-07.
-**Authority:** This decision document is the project-level declaration referenced by `docs/institutional/pre_registered_criteria.md` v2 Amendment 2.3 ("the project must declare ONE of Mode A or Mode B").
+**Status (as of 2026-04-08):** **Mode B RESCINDED. Mode A (holdout-clean) operative per explicit user correction.** See `pre_registered_criteria.md` Amendment 2.7.
+**Original status (2026-04-07):** Mode B declared autonomously. This declaration was WRONG per user intent and was rescinded the following day.
+**Authority:** `docs/institutional/pre_registered_criteria.md` Amendment 2.7 (2026-04-08) is the project-level policy. This file is kept for audit history.
+
+---
+
+## 2026-04-08 RESCISSION — top of file
+
+**User correction:** *"I THOUGHT WE WERE HOLDING OUT FROM 2026 ONWARDS SO THAT WE HAD 3 MONTHS ALREADY OF TRADES OOS"*
+
+**Operative policy NOW:**
+- **Mode A (holdout-clean) operative.**
+- **Sacred holdout window:** 2026-01-01 onwards. Growing daily. Currently ~3.2 months of real-time forward OOS data.
+- **124 existing validated_setups:** grandfathered as research-provisional per Amendment 2.4. They were discovered with 2026 data in scope → NOT OOS-clean.
+- **5 deployed lanes:** unchanged operationally. Research-provisional status inherited. No scaling until re-audited under Mode A.
+- **Any NEW discovery run:** must use `--holdout-date 2026-01-01` (or earlier).
+- **Existing walk-forward `wf_passed = True` flags:** in-sample discipline only, not OOS evidence.
+
+**What the original Mode B declaration got wrong:** It interpreted `HANDOFF.md:1468` ("2026 included in discovery — holdout test was spent") as "the user intentionally spent the holdout." The correct interpretation is "an earlier autonomous decision violated user intent, and the 124 discoveries are therefore contaminated, not canonical." The user had been operating under the assumption that 2026 was being held out and that 3 months of real-time forward OOS data was accumulating.
+
+**What remains valid from the original Mode B analysis:**
+- Mechanical audit facts (124 setups discovered 2026-04-05→06, 273K 2026 outcome rows in scope) — still true
+- Codex audit recommendations on DSR, Chordia, and execution overlay separation — still binding (Amendments 2.1, 2.2, 2.5)
+- Identification of `check_drift.py` `HOLDOUT_DECLARATIONS` empty dict as an enforcement gap — still valid, now enforceable post e2-fix merge
+
+**What is rescinded from the original Mode B analysis (2026-04-07 below this line):**
+- "Mode B is the only honest position" — rescinded; Mode A is honest and simply requires re-running discovery under the clean-holdout protocol
+- "Forward-sacred window starts 2026-04-07" — rescinded; the sacred window is 2026-01-01 onwards
+- "Earliest first-look 2026-10-07" — rescinded; the window is already 3+ months deep
+- "The 2026-01-01 → 2026-04-06 window is officially CONSUMED" — rescinded; the data is not consumed, the DISCOVERY PROVENANCE of the 124 existing strategies is tainted, which is a different problem
+
+The text below this line is the ORIGINAL 2026-04-07 decision document, kept for audit trail. **It is no longer the operative policy.**
+
+---
+
+# ORIGINAL 2026-04-07 Decision Document (SUPERSEDED by Amendment 2.7)
+
+**Status:** ~~DECLARED. Mode B operative across the project as of 2026-04-07.~~ **RESCINDED 2026-04-08.**
+**Authority:** ~~This decision document is the project-level declaration referenced by `docs/institutional/pre_registered_criteria.md` v2 Amendment 2.3 ("the project must declare ONE of Mode A or Mode B").~~
 **Decision-maker:** Claude Code session (autonomous, per explicit user delegation: *"YOU FIGURE IT OUT WHATS BEST AND MOST PROPER FOR US"*).
-**Reviewable until:** Forever. This decision is documented for audit, not provisional.
+**Reviewable until:** ~~Forever. This decision is documented for audit, not provisional.~~ Rescinded after 1 day.
 
 ---
 
