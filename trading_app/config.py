@@ -966,7 +966,17 @@ class OwnATRPercentileFilter(StrategyFilter):
 
     April 2026 hypothesis H4: MNQ_ATR_P60 as simpler alternative to X_MES_ATR60
     (CORR(MES_ATR20, MNQ_ATR20) = 0.93 — cross-asset filter is 93% redundant).
+
+    Canonical metadata:
+    - VALIDATED_FOR: empty (applies broadly — no instrument restriction
+      proven; the filter is a vol-regime gate that should generalize).
+    - LAST_REVALIDATED: None (recent hypothesis, no formal revalidation date)
+    - CONFIDENCE_TIER: PLAUSIBLE — H4 hypothesis test result, not yet
+      promoted to PROVEN status.
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
 
     min_pct: float = 60.0
 
@@ -989,7 +999,10 @@ class OwnATRPercentileFilter(StrategyFilter):
         orb_label: str,
         entry_model: str,
     ) -> list[AtomDescription]:
-        """Own ATR-20 percentile gate. Pre-session, resolves at STARTUP."""
+        """Own ATR-20 percentile gate. Pre-session, resolves at STARTUP.
+
+        Threads CONFIDENCE_TIER (PLAUSIBLE) through.
+        """
         _ = (orb_label, entry_model)
         observed = _atom_numeric(row.get("atr_20_pct"))
         missing = observed is None
@@ -1001,6 +1014,7 @@ class OwnATRPercentileFilter(StrategyFilter):
                 resolves_at="STARTUP",
                 passes=passes,
                 feature_column="atr_20_pct",
+                confidence_tier=self.CONFIDENCE_TIER,
                 observed_value=observed,
                 threshold=self.min_pct,
                 comparator=">=",
@@ -1516,6 +1530,16 @@ class DayOfWeekSkipFilter(StrategyFilter):
 
     Uses day_of_week column (0=Mon..6=Sun, Python weekday convention).
     Fail-closed: missing day_of_week means day is ineligible.
+
+    Canonical metadata:
+    - VALIDATED_FOR: empty (DOW signal applies broadly; lane routing
+      decisions live in get_filters_for_grid, not here)
+    - LAST_REVALIDATED: None
+    - CONFIDENCE_TIER: derived from skip_days — Monday-skip (NOMON) is
+      PLAUSIBLE per confluence research; Tuesday/Friday-skip (NOTUE,
+      NOFRI) are LEGACY (removed from grid Mar 2026, retained for DB
+      compat). The describe() method derives the tier from the actual
+      skip set so each instance reports its own tier accurately.
     """
 
     skip_days: tuple[int, ...] = ()
@@ -1534,6 +1558,22 @@ class DayOfWeekSkipFilter(StrategyFilter):
         # NaN → fail-closed (notna check), then exclude skip_days
         return df["day_of_week"].notna() & ~df["day_of_week"].isin(self.skip_days)
 
+    def _confidence_tier(self) -> str:
+        """Derive tier from skip_days. NOMON (Monday=0) = PLAUSIBLE
+        per confluence research; Tuesday/Friday skips = LEGACY (removed
+        from grid Mar 2026 but retained for DB compat).
+
+        If the skip set contains both PLAUSIBLE and LEGACY days, the
+        lower tier (LEGACY) wins — conservative provenance disclosure.
+        """
+        if not self.skip_days:
+            return "UNKNOWN"
+        # Friday=4, Tuesday=1 are LEGACY
+        if any(d in (1, 4) for d in self.skip_days):
+            return "LEGACY"
+        # Monday=0 only path
+        return "PLAUSIBLE"
+
     def describe(
         self,
         row: dict,
@@ -1544,6 +1584,9 @@ class DayOfWeekSkipFilter(StrategyFilter):
 
         day_of_week follows Python weekday convention (0=Mon..6=Sun) and
         is derived from trading_day. Fail-closed on missing DOW.
+
+        Threads instance-derived confidence_tier through (LEGACY for
+        Tuesday/Friday skips, PLAUSIBLE for Monday-only).
         """
         _ = (orb_label, entry_model)
         dow_num = _atom_numeric(row.get("day_of_week"))
@@ -1562,6 +1605,7 @@ class DayOfWeekSkipFilter(StrategyFilter):
                 threshold=skip_list,
                 comparator="not in",
                 is_data_missing=missing,
+                confidence_tier=self._confidence_tier(),
                 explanation=(
                     f"Skip trading on day_of_week {skip_list} "
                     f"(0=Mon, 6=Sun, Python weekday convention)."
