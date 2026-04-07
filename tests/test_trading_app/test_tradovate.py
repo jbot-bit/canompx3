@@ -156,14 +156,15 @@ class TestTradovateAuth:
         },
     )
     @patch("trading_app.live.tradovate.auth.requests.post")
-    @patch("trading_app.live.tradovate.auth.time.sleep")
-    def test_login_all_retries_fail(self, _mock_sleep, mock_post):
+    def test_login_all_retries_fail(self, mock_post):
         fail_resp = MagicMock()
         fail_resp.raise_for_status.side_effect = requests.HTTPError("503")
         mock_post.return_value = fail_resp
 
         auth = TradovateAuth()
-        with pytest.raises(RuntimeError, match="auth failed after"):
+        with patch("trading_app.live.tradovate.auth.time.sleep"), pytest.raises(
+            RuntimeError, match="auth failed after"
+        ):
             auth.get_token()
         assert auth.is_healthy is False
 
@@ -454,14 +455,15 @@ class TestRequestWithRetry:
         assert result.status_code == 200
         mock_sleep.assert_called_once()
 
-    @patch("trading_app.live.tradovate.http.time.sleep")
     @patch("trading_app.live.tradovate.http.requests.post")
-    def test_429_exhausted_raises(self, mock_post, _mock_sleep):
+    def test_429_exhausted_raises(self, mock_post):
         resp_429 = MagicMock()
         resp_429.status_code = 429
         mock_post.return_value = resp_429
 
-        with pytest.raises(RateLimitExhausted):
+        with patch("trading_app.live.tradovate.http.time.sleep"), pytest.raises(
+            RateLimitExhausted
+        ):
             request_with_retry("POST", "http://test/api", {})
 
     @patch("trading_app.live.tradovate.http.requests.get")
