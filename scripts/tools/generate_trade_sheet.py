@@ -1352,8 +1352,16 @@ def generate_html(
     opportunities: list[dict] | None = None,
     manual_candidates: list[dict] | None = None,
     regime_ctx: dict[str, dict] | None = None,
+    filter_universe_rows: list[dict] | None = None,
 ) -> str:
-    """Generate self-contained HTML trade sheet with unified timeline."""
+    """Generate self-contained HTML trade sheet with unified timeline.
+
+    filter_universe_rows: optional list of row dicts from
+    _build_filter_universe_rows. When provided, a collapsible Filter
+    Universe Audit section (View B) is rendered below the session cards.
+    Passed in rather than computed here so generate_html stays a pure
+    rendering function with no DB dependency.
+    """
 
     day_name = trading_day.strftime("%A")
     date_str = trading_day.strftime("%d %b %Y")
@@ -1428,6 +1436,14 @@ def generate_html(
         profiles_used,
         next_session=next_session,
         regime_ctx=regime_ctx,
+    )
+
+    # Build View B — Filter Universe Audit section (optional, only when
+    # rows were pre-computed by main() via _build_filter_universe_rows)
+    filter_universe_html = (
+        _render_filter_universe_section(filter_universe_rows)
+        if filter_universe_rows
+        else ""
     )
 
     # Instrument summary — all three sections
@@ -2122,6 +2138,8 @@ def generate_html(
 
     {cards_html}
 
+    {filter_universe_html}
+
     <div class="footer">
         Unified timeline &mdash; prop_profiles lanes + validated opportunities + manual candidates &mdash;
         hover instrument for strategy ID or profile &mdash; dollar gate applied where applicable
@@ -2250,6 +2268,19 @@ def main():
     # docs/plans/2026-04-07-trade-book-canonicalization-design.md.
     feature_rows = _prefetch_feature_rows(all_trades_for_enrichment, db_path)
     _enrich_trades_with_eligibility(all_trades_for_enrichment, trading_day, feature_rows)
+
+    # View B — Filter Universe Audit (Phase 2 complete): compute audit
+    # rows once from ALL_FILTERS + ATR velocity overlay + validated_setups
+    # + prop_profiles. See
+    # docs/plans/2026-04-07-filter-universe-audit-design.md.
+    filter_universe_rows = _build_filter_universe_rows(db_path, trading_day)
+    print(
+        f"  {len(filter_universe_rows)} filters in universe "
+        f"({sum(1 for r in filter_universe_rows if r['status'] == 'LIVE')} LIVE, "
+        f"{sum(1 for r in filter_universe_rows if r['status'] == 'ROUTED')} ROUTED, "
+        f"{sum(1 for r in filter_universe_rows if r['status'] == 'DEAD')} DEAD)",
+        flush=True,
+    )
     print()
 
     # Generate HTML
@@ -2260,6 +2291,7 @@ def main():
         opportunities=opportunities or None,
         manual_candidates=manual_candidates or None,
         regime_ctx=regime_ctx or None,
+        filter_universe_rows=filter_universe_rows,
     )
     output_path.write_text(html, encoding="utf-8")
     print(f"Written to {output_path}")
