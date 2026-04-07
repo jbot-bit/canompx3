@@ -78,6 +78,20 @@ def test_projectx_supports_brackets():
     assert router.supports_native_brackets() is True
 
 
+def test_projectx_has_queryable_bracket_legs():
+    """ProjectX AutoBracket creates separate SL/TP child orders queryable via
+    searchOpen. Flag must be True so session_orchestrator runs the
+    verify_bracket_legs path to capture real order IDs for later cancellation.
+    Regression guard — if this flips to False, the active TopStep production
+    path loses bracket leg tracking.
+    """
+    mock_auth = MagicMock()
+    from trading_app.live.projectx.order_router import ProjectXOrderRouter
+
+    router = ProjectXOrderRouter(account_id=123, auth=mock_auth)
+    assert router.has_queryable_bracket_legs() is True
+
+
 def test_projectx_is_broker_router():
     mock_auth = MagicMock()
     from trading_app.live.broker_base import BrokerRouter

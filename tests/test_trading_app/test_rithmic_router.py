@@ -113,6 +113,24 @@ class TestRithmicBracketSpec:
 
         return RithmicOrderRouter(account_id=12345, auth=None, tick_size=tick_size, rithmic_account_id="12345")
 
+    def test_supports_native_brackets(self):
+        """Rithmic has server-side brackets — stops/targets survive client crash."""
+        router = self._make_router()
+        assert router.supports_native_brackets() is True
+
+    def test_has_queryable_bracket_legs_false(self):
+        """Rithmic native brackets are ATOMIC with the entry submission — no
+        separately-queryable SL/TP order IDs exist. Flag must be False so
+        session_orchestrator skips verify_bracket_legs entirely, preventing
+        false 'BRACKET LEGS MISSING' critical alarms when Rithmic is activated.
+
+        Regression guard — if this flips to True without implementing an
+        actual verify_bracket_legs query, every entry will trigger a false
+        Telegram alarm cascade.
+        """
+        router = self._make_router()
+        assert router.has_queryable_bracket_legs() is False
+
     def test_long_bracket_ticks(self):
         router = self._make_router(tick_size=0.25)
         # Long entry at 5200, stop at 5195, target at 5210

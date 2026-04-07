@@ -281,6 +281,25 @@ class TestTradovateOrderRouter:
             result = router.submit(spec)
             assert result["order_id"] == 1
 
+    def test_supports_native_brackets(self, router):
+        """Tradovate placeOSO merges bracket1/bracket2 into the entry order."""
+        assert router.supports_native_brackets() is True
+
+    def test_has_queryable_bracket_legs_false(self, router):
+        """Tradovate placeOSO DOES create separately-queryable bracket1/bracket2
+        child orders, but the query path is NOT YET IMPLEMENTED in this adapter.
+        Flag is deliberately False to prevent false 'BRACKET LEGS MISSING'
+        critical alarms when Tradovate is activated.
+
+        Regression guard AND activation signal: when Tradovate activation is
+        imminent, implement verify_bracket_legs() to query placeOSO child
+        orders via the order search endpoint AND flip this flag to True. This
+        test will need updating at that point — intentional.
+
+        See trading_app/live/tradovate/order_router.py:189 TODO(tradovate-activation).
+        """
+        assert router.has_queryable_bracket_legs() is False
+
     def test_bracket_spec_long(self, router):
         bracket = router.build_bracket_spec("long", "MNQM6", 100.0, 99.0, 102.0)
         assert bracket is not None
