@@ -16,7 +16,9 @@ scope_lock:
   - trading_app/live/tradovate/auth.py
   - trading_app/live/tradovate/order_router.py
   - trading_app/live/session_orchestrator.py
+  - trading_app/live/copy_order_router.py
   - tests/test_trading_app/test_instance_lock.py
+  - tests/test_trading_app/test_copy_order_router.py
 blast_radius: (1) instance_lock._is_pid_alive currently treats zombie Windows PIDs as alive because OpenProcess returns a valid handle for exited processes (verified: PID 4188 returns handle with exit_code=0 != STILL_ACTIVE=259). Real runtime bug — bot refuses to restart after crash until lock file manually deleted. Fix adds GetExitCodeProcess check. Test added covering the zombie case. (2) BrokerAuth base type in rithmic/* files needs concrete RithmicAuth annotation so self.auth.client / self.auth.run_async type-checks. Runtime unchanged (the attribute access already works because concrete auth has these), just type hygiene. (3) Same pattern for tradovate/order_router.py:49 accessing self.auth.base_url. (4) session_orchestrator signal_only=True sets order_router=None; 15 pyright errors flag None.submit/etc in live-only methods. Fix: add explicit assertion at entry of live-only methods — raises clear error if accidentally called in signal mode (currently crashes with AttributeError deep inside). Blast radius zero for working code paths (assertion always passes when called correctly).
 ---
 

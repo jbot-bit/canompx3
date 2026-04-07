@@ -146,6 +146,18 @@ class CopyOrderRouter(BrokerRouter):
         """Delegate to primary."""
         return self.primary.merge_bracket_into_entry(entry_spec, bracket_spec)
 
+    def verify_bracket_legs(
+        self, entry_order_id: int, contract_id: str
+    ) -> tuple[int | None, int | None]:
+        """Delegate to primary.
+
+        Without this delegate, calls fall through to BrokerRouter's default
+        (None, None) which the session_orchestrator caller interprets as
+        "BRACKET LEGS MISSING" — false critical alarm + empty bracket_order_ids
+        in the active TopStep+CopyOrderRouter+ProjectX path.
+        """
+        return self.primary.verify_bracket_legs(entry_order_id, contract_id)
+
     def query_order_status(self, order_id: int) -> dict:
         """Query primary only (shadows are best-effort, not polled)."""
         return self.primary.query_order_status(order_id)

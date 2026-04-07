@@ -218,3 +218,22 @@ class TestDelegation:
         result = copy.query_order_status(99)
         assert result["status"] == "Filled"
         shadow.query_order_status.assert_not_called()
+
+    def test_verify_bracket_legs_delegates_to_primary(self):
+        """REGRESSION: BrokerRouter base default returns (None, None), which the
+        session_orchestrator caller interprets as 'BRACKET LEGS MISSING' and fires
+        a false CRITICAL alarm with empty bracket_order_ids. The wrapper MUST
+        delegate so the active TopStep+CopyOrderRouter+ProjectX path gets the real
+        SL/TP order IDs from the primary.
+        """
+        primary = _make_mock_router(1)
+        primary.verify_bracket_legs.return_value = (101, 102)
+        shadow = _make_mock_router(2)
+
+        copy = CopyOrderRouter(primary, [shadow])
+        sl_id, tp_id = copy.verify_bracket_legs(entry_order_id=100, contract_id="MESM6")
+        assert sl_id == 101
+        assert tp_id == 102
+        primary.verify_bracket_legs.assert_called_once_with(100, "MESM6")
+        # Shadows are best-effort — verification queries primary only.
+        shadow.verify_bracket_legs.assert_not_called()
