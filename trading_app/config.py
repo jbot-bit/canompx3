@@ -1140,7 +1140,16 @@ class PrevDayRangeNormFilter(StrategyFilter):
     @research-source scripts/research/scan_presession_t2t8.py
     @entry-models E2
     @revalidated-for E2 (Apr 2026)
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: empty (applies all sessions — no instrument restriction)
+    - LAST_REVALIDATED: 2026-04-02 (presession scan refresh)
+    - CONFIDENCE_TIER: PROVEN (BH FDR survivor, year-stable)
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 2)
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     min_ratio: float
 
@@ -1172,13 +1181,49 @@ class PrevDayRangeNormFilter(StrategyFilter):
         matches_row() fails-closed on atr_20 <= 0; describe() surfaces it as
         missing so the report shows 'data unavailable' instead of a spurious
         comparison against observed=None.
+
+        Type mismatches (e.g. string in prev_day_range column from schema
+        drift) are explicitly caught and reported via the atom's
+        error_message field. The eligibility adapter aggregates non-None
+        error_messages into report.build_errors so the diagnostic trail is
+        preserved without parallel error-tracking. Status surfaces as
+        DATA_MISSING (infrastructure problem, not a trading signal).
         """
         _ = (orb_label, entry_model)
-        pdr = _atom_numeric(row.get("prev_day_range"))
-        atr = _atom_numeric(row.get("atr_20"))
-        missing = pdr is None or atr is None or atr <= 0
-        observed = None if missing else pdr / atr  # type: ignore[operator]
-        passes = None if missing else observed >= self.min_ratio  # type: ignore[operator]
+        raw_pdr = row.get("prev_day_range")
+        raw_atr = row.get("atr_20")
+        pdr = _atom_numeric(raw_pdr)
+        atr = _atom_numeric(raw_atr)
+        error_message: str | None = None
+        observed: float | None = None
+        missing = False
+
+        if pdr is None or atr is None:
+            # One or both raw inputs missing/non-numeric. Distinguish "field
+            # absent" (missing) from "field present but wrong type" (also
+            # missing, but with diagnostic message).
+            missing = True
+            if raw_pdr is not None and pdr is None and not _atom_is_missing(raw_pdr):
+                error_message = (
+                    f"PDR: type mismatch on prev_day_range — expected numeric, "
+                    f"got {type(raw_pdr).__name__}({raw_pdr!r})"
+                )
+            elif raw_atr is not None and atr is None and not _atom_is_missing(raw_atr):
+                error_message = (
+                    f"PDR: type mismatch on atr_20 — expected numeric, "
+                    f"got {type(raw_atr).__name__}({raw_atr!r})"
+                )
+        elif atr <= 0:
+            missing = True
+            error_message = f"PDR: invalid atr_20={atr!r} (must be > 0)"
+        else:
+            observed = pdr / atr
+
+        passes: bool | None
+        if missing or observed is None:
+            passes = None
+        else:
+            passes = observed >= self.min_ratio
         return [
             AtomDescription(
                 name=f"prev_day_range / atr_20 >= {self.min_ratio:g}",
@@ -1190,6 +1235,9 @@ class PrevDayRangeNormFilter(StrategyFilter):
                 threshold=self.min_ratio,
                 comparator=">=",
                 is_data_missing=missing,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
+                error_message=error_message,
                 explanation=(
                     f"Require prior-day range normalized by ATR-20 "
                     f">= {self.min_ratio:g} (prior-day expansion gate)."
@@ -1214,7 +1262,20 @@ class GapNormFilter(StrategyFilter):
     @research-source scripts/research/scan_presession_t2t8.py
     @entry-models E2
     @revalidated-for E2 (Apr 2026)
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: MGC CME_REOPEN only — gap-shock signal is gold-specific
+      and CME-reopen-specific per scan_presession_t2t8.py
+    - LAST_REVALIDATED: 2026-04-02
+    - CONFIDENCE_TIER: PROVEN
     """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("MGC", "CME_REOPEN"),
+    )
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 2)
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     min_ratio: float
 
@@ -1243,13 +1304,40 @@ class GapNormFilter(StrategyFilter):
         """abs(gap_open_points) / atr_20 gate. Pre-session, resolves at STARTUP.
 
         atr_20 <= 0 treated as DATA_MISSING (see PrevDayRangeNormFilter note).
+        Type mismatches caught explicitly and reported via error_message.
         """
         _ = (orb_label, entry_model)
-        gap = _atom_numeric(row.get("gap_open_points"))
-        atr = _atom_numeric(row.get("atr_20"))
-        missing = gap is None or atr is None or atr <= 0
-        observed = None if missing else abs(gap) / atr  # type: ignore[operator]
-        passes = None if missing else observed >= self.min_ratio  # type: ignore[operator]
+        raw_gap = row.get("gap_open_points")
+        raw_atr = row.get("atr_20")
+        gap = _atom_numeric(raw_gap)
+        atr = _atom_numeric(raw_atr)
+        error_message: str | None = None
+        observed: float | None = None
+        missing = False
+
+        if gap is None or atr is None:
+            missing = True
+            if raw_gap is not None and gap is None and not _atom_is_missing(raw_gap):
+                error_message = (
+                    f"GAP: type mismatch on gap_open_points — expected numeric, "
+                    f"got {type(raw_gap).__name__}({raw_gap!r})"
+                )
+            elif raw_atr is not None and atr is None and not _atom_is_missing(raw_atr):
+                error_message = (
+                    f"GAP: type mismatch on atr_20 — expected numeric, "
+                    f"got {type(raw_atr).__name__}({raw_atr!r})"
+                )
+        elif atr <= 0:
+            missing = True
+            error_message = f"GAP: invalid atr_20={atr!r} (must be > 0)"
+        else:
+            observed = abs(gap) / atr
+
+        passes: bool | None
+        if missing or observed is None:
+            passes = None
+        else:
+            passes = observed >= self.min_ratio
         return [
             AtomDescription(
                 name=f"abs(gap) / atr_20 >= {self.min_ratio:g}",
@@ -1261,6 +1349,10 @@ class GapNormFilter(StrategyFilter):
                 threshold=self.min_ratio,
                 comparator=">=",
                 is_data_missing=missing,
+                validated_for=self.VALIDATED_FOR,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
+                error_message=error_message,
                 explanation=(
                     f"Require absolute overnight gap normalized by ATR-20 "
                     f">= {self.min_ratio:g} (gap-shock gate)."
@@ -1827,7 +1919,21 @@ class PitRangeFilter(StrategyFilter):
     @research-source scripts/research/exchange_range_t2t8.py
     @entry-models E1, E2
     @revalidated-for E1 (Apr 2026), E2 concordance +3-4pp
+
+    Canonical metadata (consumed by describe() / eligibility adapter):
+    - VALIDATED_FOR: 3/3 instruments at CME_REOPEN per scan_presession_t2t8
+    - LAST_REVALIDATED: 2026-04-04 (T1-T8 confluence pass)
+    - CONFIDENCE_TIER: PROVEN (DSR-significant, BH FDR survivor)
     """
+
+    # ── Canonical research metadata (ClassVar — not dataclass fields) ────
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("MGC", "CME_REOPEN"),
+        ("MES", "CME_REOPEN"),
+        ("MNQ", "CME_REOPEN"),
+    )
+    LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 4)
+    CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
     min_ratio: float
 
@@ -1854,6 +1960,10 @@ class PitRangeFilter(StrategyFilter):
 
         Pit closes 21:00 UTC; CME_REOPEN starts 23:00 UTC — zero look-ahead.
         Uses the pre-computed pit_range_atr column (already normalized).
+
+        Threads canonical ClassVar metadata (VALIDATED_FOR, LAST_REVALIDATED,
+        CONFIDENCE_TIER) into the atom so the eligibility adapter can apply
+        NOT_APPLICABLE_INSTRUMENT and STALE_VALIDATION mechanically.
         """
         _ = (orb_label, entry_model)
         observed = _atom_numeric(row.get("pit_range_atr"))
@@ -1870,6 +1980,9 @@ class PitRangeFilter(StrategyFilter):
                 threshold=self.min_ratio,
                 comparator=">=",
                 is_data_missing=missing,
+                validated_for=self.VALIDATED_FOR,
+                last_revalidated=self.LAST_REVALIDATED,
+                confidence_tier=self.CONFIDENCE_TIER,
                 explanation=(
                     f"Require CME pit-session range normalized by ATR-20 "
                     f">= {self.min_ratio:g} (prior pit activity gate)."
