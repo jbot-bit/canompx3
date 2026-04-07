@@ -1682,7 +1682,7 @@ class SessionOrchestrator:
             # non-native brackets get submitted separately post-fill.
             if _bracket_merged:
                 record = self._positions.get(event.strategy_id)
-                if record is not None and order_id:
+                if record is not None and order_id and self.order_router.has_queryable_bracket_legs():
                     # Verify bracket legs were actually created at the broker.
                     # ProjectX creates bracket legs as separate orders with IDs entry_id+1 (SL)
                     # and entry_id+2 (TP), tagged with 'AutoBracket'.

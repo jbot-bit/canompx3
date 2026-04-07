@@ -982,3 +982,167 @@ class TestFailClosedOnATRVelocityException:
         atr_vel = [c for c in report.conditions if c.source_filter == "atr_velocity"]
         assert len(atr_vel) == 0
         assert not any("ATR_VELOCITY" in e for e in report.build_errors)
+
+
+# ==========================================================================
+# Fail-closed discipline: describe() contract violations (second review pass)
+#
+# Regression tests for Bloomey review #2. The first hardening pass closed
+# the exception-raising paths, but injection probes revealed three more
+# runtime contract violations where the thin adapter's defense-in-depth
+# was incomplete:
+#
+# 1. describe() returns None → TypeError on iteration
+# 2. describe() returns a list with non-AtomDescription items → AttributeError
+# 3. atom has typo in .category/.resolves_at/.confidence_tier → silent default
+#
+# All three are caught by drift check #85 at check time, but runtime
+# behavior was not fail-closed. These tests pin the runtime fail-closed
+# discipline so every broken return shape surfaces as DATA_MISSING.
+# ==========================================================================
+
+
+class TestFailClosedOnContractViolation:
+    """Regression: filter contract violations at runtime must surface as
+    DATA_MISSING conditions, not propagate as uncaught errors or silently
+    coerce to wrong statuses."""
+
+    def test_describe_returns_none_surfaces_as_data_missing(self):
+        """describe() returning None (common 'forgot to return' bug) must
+        surface as a DATA_MISSING condition + build_errors entry, not
+        propagate as TypeError('NoneType is not iterable')."""
+        from dataclasses import dataclass
+
+        from trading_app.config import ALL_FILTERS, StrategyFilter
+
+        @dataclass(frozen=True)
+        class _NoneFilter(StrategyFilter):
+            def describe(self, row, orb_label, entry_model):
+                return None  # type: ignore[return-value]
+
+        ALL_FILTERS["NONE_TEST_FIXTURE"] = _NoneFilter(
+            filter_type="NONE_TEST_FIXTURE",
+            description="test fixture — returns None from describe()",
+        )
+        try:
+            report = build_eligibility_report(
+                strategy_id="MNQ_NYSE_CLOSE_E2_RR2.0_CB1_NONE_TEST_FIXTURE",
+                trading_day=date(2026, 4, 7),
+                feature_row={"trading_day": date(2026, 4, 7), "symbol": "MNQ"},
+            )
+        finally:
+            del ALL_FILTERS["NONE_TEST_FIXTURE"]
+
+        # Must not be ELIGIBLE
+        assert report.overall_status != OverallStatus.ELIGIBLE
+
+        # Synthetic DATA_MISSING condition present
+        broken = [
+            c for c in report.conditions if c.source_filter == "NONE_TEST_FIXTURE"
+        ]
+        assert len(broken) == 1
+        assert broken[0].status == ConditionStatus.DATA_MISSING
+
+        # build_errors surfaces the specific contract violation
+        assert any(
+            "NONE_TEST_FIXTURE" in e and "NoneType" in e
+            for e in report.build_errors
+        )
+
+    def test_describe_returns_junk_list_surfaces_as_data_missing(self):
+        """describe() returning a list with non-AtomDescription items must
+        surface each bad element as a synthetic DATA_MISSING condition, not
+        propagate as AttributeError when the main loop tries to read
+        .error_message on a string."""
+        from dataclasses import dataclass
+
+        from trading_app.config import ALL_FILTERS, StrategyFilter
+
+        @dataclass(frozen=True)
+        class _JunkListFilter(StrategyFilter):
+            def describe(self, row, orb_label, entry_model):
+                return ["not an atom", 42, None]  # type: ignore[return-value]
+
+        ALL_FILTERS["JUNK_LIST_FIXTURE"] = _JunkListFilter(
+            filter_type="JUNK_LIST_FIXTURE",
+            description="test fixture — junk list from describe()",
+        )
+        try:
+            report = build_eligibility_report(
+                strategy_id="MNQ_NYSE_CLOSE_E2_RR2.0_CB1_JUNK_LIST_FIXTURE",
+                trading_day=date(2026, 4, 7),
+                feature_row={"trading_day": date(2026, 4, 7), "symbol": "MNQ"},
+            )
+        finally:
+            del ALL_FILTERS["JUNK_LIST_FIXTURE"]
+
+        assert report.overall_status != OverallStatus.ELIGIBLE
+
+        # At least one DATA_MISSING condition produced for the broken filter
+        broken = [
+            c for c in report.conditions if c.source_filter == "JUNK_LIST_FIXTURE"
+        ]
+        assert len(broken) >= 1
+        assert all(c.status == ConditionStatus.DATA_MISSING for c in broken)
+
+        # build_errors contains the type contract violation
+        assert any(
+            "JUNK_LIST_FIXTURE" in e and "expected AtomDescription" in e
+            for e in report.build_errors
+        )
+
+    def test_atom_with_typo_category_surfaces_as_data_missing(self):
+        """An atom with a typo'd .category string (e.g. 'INTRA_SESION')
+        must be caught by the adapter's enum validation and surfaced as
+        DATA_MISSING + build_errors, not silently coerced to PRE_SESSION
+        via the _CATEGORY_MAP.get() default.
+
+        Drift check #85 catches this at check time, but runtime must also
+        be fail-closed as defense-in-depth.
+        """
+        from dataclasses import dataclass
+
+        from trading_app.config import ALL_FILTERS, AtomDescription, StrategyFilter
+
+        @dataclass(frozen=True)
+        class _TypoCategoryFilter(StrategyFilter):
+            def describe(self, row, orb_label, entry_model):
+                return [
+                    AtomDescription(
+                        name="typo test",
+                        category="INTRA_SESION",  # typo: missing second S
+                        resolves_at="STARTUP",
+                        passes=True,
+                        confidence_tier="PROVEN",
+                    )
+                ]
+
+        ALL_FILTERS["TYPO_CATEGORY_FIXTURE"] = _TypoCategoryFilter(
+            filter_type="TYPO_CATEGORY_FIXTURE",
+            description="test fixture — typo in atom.category",
+        )
+        try:
+            report = build_eligibility_report(
+                strategy_id="MNQ_NYSE_CLOSE_E2_RR2.0_CB1_TYPO_CATEGORY_FIXTURE",
+                trading_day=date(2026, 4, 7),
+                feature_row={"trading_day": date(2026, 4, 7), "symbol": "MNQ"},
+            )
+        finally:
+            del ALL_FILTERS["TYPO_CATEGORY_FIXTURE"]
+
+        # Even though passes=True in the atom, the typo'd category must
+        # be rejected — the condition must NOT resolve to PASS.
+        broken = [
+            c for c in report.conditions if c.source_filter == "TYPO_CATEGORY_FIXTURE"
+        ]
+        assert len(broken) == 1
+        assert broken[0].status == ConditionStatus.DATA_MISSING
+
+        # build_errors names the invalid category string
+        assert any(
+            "TYPO_CATEGORY_FIXTURE" in e and "INTRA_SESION" in e
+            for e in report.build_errors
+        )
+
+        # Overall must not be ELIGIBLE (the typo invalidates the condition)
+        assert report.overall_status != OverallStatus.ELIGIBLE

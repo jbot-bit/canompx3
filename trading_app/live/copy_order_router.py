@@ -158,6 +158,10 @@ class CopyOrderRouter(BrokerRouter):
         """
         return self.primary.verify_bracket_legs(entry_order_id, contract_id)
 
+    def has_queryable_bracket_legs(self) -> bool:
+        """Delegate to primary — wrapper inherits the primary's bracket model."""
+        return self.primary.has_queryable_bracket_legs()
+
     def query_order_status(self, order_id: int) -> dict:
         """Query primary only (shadows are best-effort, not polled)."""
         return self.primary.query_order_status(order_id)

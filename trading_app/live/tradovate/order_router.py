@@ -186,6 +186,22 @@ class TradovateOrderRouter(BrokerRouter):
     def supports_native_brackets(self) -> bool:
         return True
 
+    def has_queryable_bracket_legs(self) -> bool:
+        """Tradovate placeOSO DOES create separately-queryable bracket1/bracket2
+        child orders, but the query path is NOT YET IMPLEMENTED in this adapter.
+
+        Returning False here is a deliberate trade-off: it prevents false
+        'BRACKET LEGS MISSING' critical alarms when Tradovate is activated,
+        at the cost of the bot not explicitly tracking bracket leg IDs for
+        cancellation (Tradovate auto-cancels brackets when the exit fires).
+
+        TODO(tradovate-activation): before flipping this to True, implement
+        verify_bracket_legs() to query placeOSO child orders via the Tradovate
+        order search endpoint. Until then, this adapter behaves like a native
+        atomic-bracket broker from the session_orchestrator's perspective.
+        """
+        return False
+
     def build_bracket_spec(
         self,
         direction: str,

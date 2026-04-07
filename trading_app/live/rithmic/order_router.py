@@ -279,6 +279,20 @@ class RithmicOrderRouter(BrokerRouter):
         """Rithmic has SERVER-SIDE brackets — stops/targets survive client crash."""
         return True
 
+    def has_queryable_bracket_legs(self) -> bool:
+        """Rithmic native brackets are atomic with the entry submission.
+
+        There are no separately-queryable SL/TP order IDs — the broker manages
+        the legs server-side as a single unit attached to the entry. When the
+        exit order fires, the broker automatically cancels the attached legs.
+
+        Returning False tells session_orchestrator to SKIP verify_bracket_legs
+        entirely. Without this, the base default (None, None) would be
+        misinterpreted as 'BRACKET LEGS MISSING' and trigger a false critical
+        alarm on every entry when Rithmic is activated.
+        """
+        return False
+
     def build_bracket_spec(
         self,
         direction: str,

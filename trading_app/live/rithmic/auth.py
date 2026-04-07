@@ -64,8 +64,14 @@ class RithmicAuth(BrokerAuth):
                 "RITHMIC_GATEWAY environment variables."
             )
 
-        # Import async_rithmic lazily to avoid import errors when not using Rithmic
-        from async_rithmic import OrderPlacement, RithmicClient, SysInfraType
+        # Import async_rithmic lazily to avoid import errors when not using Rithmic.
+        # async_rithmic is a third-party package with no type stubs and may not be
+        # installed in dev environments — the pyright ignore is intentional.
+        from async_rithmic import (  # pyright: ignore[reportMissingImports]
+            OrderPlacement,
+            RithmicClient,
+            SysInfraType,
+        )
 
         client = RithmicClient(
             user=self._user,
