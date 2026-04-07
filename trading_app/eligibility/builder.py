@@ -137,6 +137,30 @@ def parse_strategy_id(strategy_id: str) -> dict[str, Any]:
 # ==========================================================================
 
 
+def _synthetic_failed_atom(filter_type: str, error_msg: str) -> AtomDescription:
+    """Fail-closed synthetic atom for filter describe() contract violations.
+
+    Single source of truth for "the filter did not honour its describe()
+    contract" — covers both exception-raising and malformed-return paths in
+    _walk_filter_atoms. The returned atom is translated to a DATA_MISSING
+    ConditionRecord by _status_from_atom via the passes=None +
+    is_data_missing=True + PRE_SESSION + STARTUP path. The error_msg flows
+    into report.build_errors via the main loop's atom.error_message
+    aggregation.
+
+    Institutional-rigor rule #4: one helper, not parallel constructions.
+    """
+    return AtomDescription(
+        name=f"{filter_type}: describe() contract violation",
+        category="PRE_SESSION",
+        resolves_at="STARTUP",
+        passes=None,
+        is_data_missing=True,
+        error_message=error_msg,
+        explanation=error_msg,
+    )
+
+
 def _walk_filter_atoms(
     filt: StrategyFilter,
     row: dict[str, Any],
@@ -149,9 +173,11 @@ def _walk_filter_atoms(
     recurses into base + overlay, preserving order. Each leaf's filter_type
     becomes the source_filter tag for its atoms.
 
-    Fail-closed discipline: if a leaf's describe() raises, a synthetic
-    DATA_MISSING AtomDescription is emitted for that leaf with the exception
-    message captured in `error_message`. This flows into:
+    Fail-closed discipline: if a leaf's describe() raises OR returns a
+    malformed value (not list/tuple, or contains non-AtomDescription
+    elements), a synthetic DATA_MISSING AtomDescription is emitted via
+    _synthetic_failed_atom with the contract-violation message captured
+    in `error_message`. This flows into:
       1. report.conditions — a visible DATA_MISSING record tagged with the
          broken leaf's filter_type, so _derive_overall_status returns
          DATA_MISSING instead of silently reporting ELIGIBLE
@@ -160,7 +186,10 @@ def _walk_filter_atoms(
 
     Sibling leaves in a composite are unaffected: if ORB_G5 succeeds but
     an overlay leaf raises, the composite's report contains ORB_G5's real
-    atoms AND the overlay's synthetic DATA_MISSING atom.
+    atoms AND the overlay's synthetic DATA_MISSING atom. Within a single
+    leaf's return list, valid AtomDescription elements are preserved and
+    only the bad elements are replaced with synthetic atoms — partial
+    success is honoured.
 
     Exception policy: we catch a broad Exception here because describe()
     is an adapter boundary — infrastructure failures must surface as
@@ -168,6 +197,10 @@ def _walk_filter_atoms(
     build_eligibility_report. The synthetic atom is the single-source-of-
     truth for the error; the main loop reads atom.error_message and flows
     it into build_errors, so there is no duplicate append here.
+
+    Return-shape validation: drift check #85 catches describe() contract
+    violations at check time. This runtime validation is defense-in-depth
+    per .claude/rules/institutional-rigor.md rule #6 ("no silent failures").
     """
     if isinstance(filt, CompositeFilter):
         return _walk_filter_atoms(
@@ -182,24 +215,33 @@ def _walk_filter_atoms(
             f"{filt.filter_type}.describe raised: "
             f"{type(exc).__name__}: {exc}"
         )
-        # Fail-closed synthetic atom — surfaces as DATA_MISSING in the
-        # condition list via _status_from_atom's passes=None + category=
-        # PRE_SESSION + is_data_missing=True path.
-        synthetic = AtomDescription(
-            name=f"{filt.filter_type}: describe() failed",
-            category="PRE_SESSION",
-            resolves_at="STARTUP",
-            passes=None,
-            is_data_missing=True,
-            error_message=error_msg,
-            explanation=(
-                f"Filter {filt.filter_type} ({type(filt).__name__}) raised "
-                f"an exception during describe(); cannot verify this "
-                f"condition. See report.build_errors for detail."
-            ),
+        return [(filt.filter_type, _synthetic_failed_atom(filt.filter_type, error_msg))]
+
+    # Validate return shape — fail-closed on any contract violation. The
+    # contract is list[AtomDescription]; anything else (None, dict, str,
+    # generator, set) is a filter bug we refuse to paper over.
+    if not isinstance(atoms, (list, tuple)):
+        error_msg = (
+            f"{filt.filter_type}.describe returned {type(atoms).__name__}, "
+            f"expected list[AtomDescription]"
         )
-        return [(filt.filter_type, synthetic)]
-    return [(filt.filter_type, atom) for atom in atoms]
+        return [(filt.filter_type, _synthetic_failed_atom(filt.filter_type, error_msg))]
+
+    # Validate each element — bad elements become synthetic DATA_MISSING
+    # atoms while valid siblings in the same list are preserved.
+    result: list[tuple[str, AtomDescription]] = []
+    for atom in atoms:
+        if not isinstance(atom, AtomDescription):
+            error_msg = (
+                f"{filt.filter_type}.describe yielded {type(atom).__name__}, "
+                f"expected AtomDescription"
+            )
+            result.append(
+                (filt.filter_type, _synthetic_failed_atom(filt.filter_type, error_msg))
+            )
+        else:
+            result.append((filt.filter_type, atom))
+    return result
 
 
 # ==========================================================================
@@ -285,25 +327,91 @@ def _status_from_atom(
     return ConditionStatus.PENDING  # PRE_SESSION/OVERLAY genuinely pending
 
 
+def _contract_violation_record(source_filter: str, error_msg: str) -> ConditionRecord:
+    """Fail-closed ConditionRecord for atom enum-string contract violations.
+
+    Single source of truth for "the atom carries a typo'd category,
+    resolves_at, or confidence_tier string". Returns a visible
+    DATA_MISSING condition tagged with the source filter so
+    _derive_overall_status refuses to report ELIGIBLE and the user can
+    trace which filter emitted the bad atom. Paired with build_errors
+    accumulation in _atom_to_condition's caller, this closes the runtime
+    defense-in-depth gap left by drift check #85 (which only catches at
+    check time, not runtime).
+
+    Institutional-rigor rule #4: one helper, not parallel constructions.
+    """
+    return ConditionRecord(
+        name=f"{source_filter}: atom contract violation",
+        category=ConditionCategory.PRE_SESSION,
+        status=ConditionStatus.DATA_MISSING,
+        resolves_at=ResolvesAt.STARTUP,
+        source_filter=source_filter,
+        confidence_tier=ConfidenceTier.UNKNOWN,
+        explanation=error_msg,
+    )
+
+
 def _atom_to_condition(
     atom: AtomDescription,
     source_filter: str,
     instrument: str,
     session: str,
     trading_day: date,
+    build_errors: list[str],
 ) -> ConditionRecord:
     """Translate one AtomDescription into one ConditionRecord.
 
-    Mechanical mapping only — no semantic logic. Category/resolves_at
-    string→enum lookups, status derivation via _status_from_atom, and
-    field copying. The atom's error_message is collected separately by
-    the caller (build_eligibility_report) into report.build_errors.
+    Mechanical mapping only — no semantic logic. Category / resolves_at /
+    confidence_tier string→enum lookups are validated explicitly:
+    fail-closed on typos via _contract_violation_record rather than
+    silently coercing to a default. The previous `.get(default)` pattern
+    would flip a typo'd-category atom to PRE_SESSION and let passes=True
+    escape as PASS, hiding a real filter bug from the live eligibility
+    gate.
+
+    Drift check #85 catches these at check time; this runtime validation
+    is defense-in-depth per .claude/rules/institutional-rigor.md rule #6
+    ("no silent failures").
+
+    Status derivation via _status_from_atom (only reached when all enum
+    strings are valid — direct indexing after the membership guards).
+    The atom's error_message is collected separately by the caller
+    (build_eligibility_report) into report.build_errors. Contract
+    violations detected here also append to build_errors directly, so
+    both channels surface the same information.
     """
-    category = _CATEGORY_MAP.get(atom.category, ConditionCategory.PRE_SESSION)
-    resolves_at = _RESOLVES_AT_MAP.get(atom.resolves_at, ResolvesAt.STARTUP)
-    confidence_tier = _CONFIDENCE_TIER_MAP.get(
-        atom.confidence_tier, ConfidenceTier.UNKNOWN
-    )
+    # Validate enum strings — fail-closed on typos. Membership check
+    # instead of `.get(default)` because a silent default would let a
+    # typo'd atom resolve to PASS (see prior PASS-instead-of-DATA_MISSING
+    # regression fixed by this hardening).
+    if atom.category not in _CATEGORY_MAP:
+        error_msg = (
+            f"{source_filter}: atom.category={atom.category!r} not a valid "
+            f"ConditionCategory (expected one of {sorted(_CATEGORY_MAP)})"
+        )
+        build_errors.append(error_msg)
+        return _contract_violation_record(source_filter, error_msg)
+    if atom.resolves_at not in _RESOLVES_AT_MAP:
+        error_msg = (
+            f"{source_filter}: atom.resolves_at={atom.resolves_at!r} not a "
+            f"valid ResolvesAt (expected one of {sorted(_RESOLVES_AT_MAP)})"
+        )
+        build_errors.append(error_msg)
+        return _contract_violation_record(source_filter, error_msg)
+    if atom.confidence_tier not in _CONFIDENCE_TIER_MAP:
+        error_msg = (
+            f"{source_filter}: atom.confidence_tier={atom.confidence_tier!r} "
+            f"not a valid ConfidenceTier "
+            f"(expected one of {sorted(_CONFIDENCE_TIER_MAP)})"
+        )
+        build_errors.append(error_msg)
+        return _contract_violation_record(source_filter, error_msg)
+
+    # All enum strings valid — direct indexing, no silent defaults.
+    category = _CATEGORY_MAP[atom.category]
+    resolves_at = _RESOLVES_AT_MAP[atom.resolves_at]
+    confidence_tier = _CONFIDENCE_TIER_MAP[atom.confidence_tier]
     status = _status_from_atom(atom, instrument, session, trading_day)
 
     return ConditionRecord(
@@ -510,6 +618,7 @@ def _build_atr_velocity_condition(
         instrument=instrument,
         session=session,
         trading_day=trading_day,
+        build_errors=build_errors,
     )
 
 
@@ -663,14 +772,22 @@ def build_eligibility_report(
         filter_instance, row_for_describe, orb_label, entry_model
     )
 
-    # Translate atoms to ConditionRecords AND collect error_messages
+    # Translate atoms to ConditionRecords AND collect error_messages.
+    # _atom_to_condition also writes into build_errors on enum contract
+    # violations (defense-in-depth vs. drift check #85, which runs at
+    # check time not runtime).
     conditions: list[ConditionRecord] = []
     for source_filter, atom in atom_pairs:
         if atom.error_message is not None:
             build_errors.append(atom.error_message)
         conditions.append(
             _atom_to_condition(
-                atom, source_filter, instrument, orb_label, trading_day
+                atom,
+                source_filter,
+                instrument,
+                orb_label,
+                trading_day,
+                build_errors,
             )
         )
 
