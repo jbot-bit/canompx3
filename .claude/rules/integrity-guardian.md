@@ -20,8 +20,11 @@ Import from the single source of truth. Never inline lists or magic numbers.
 | Entry models / filters | `trading_app.config` |
 | Cost specs | `pipeline.cost_model.COST_SPECS` |
 | DB path | `pipeline.paths.GOLD_DB_PATH` |
+| Holdout policy (Mode A) | `trading_app.holdout_policy` — `HOLDOUT_SACRED_FROM`, `HOLDOUT_GRANDFATHER_CUTOFF`, `enforce_holdout_date()` |
 
 **`orb_utc_window` authority:** single source of truth for "compute ORB window end UTC" shared by backtest (`outcome_builder`), live engine (`execution_engine`), and feature builder (`build_daily_features`). Any divergence between these paths is a look-ahead bias risk per Chan Ch 1 p4. Never re-implement in another file; never fall back to `break_ts` when canonical inputs are missing — raise `ValueError` instead. See `docs/postmortems/2026-04-07-e2-canonical-window-fix.md`.
+
+**`holdout_policy` authority:** single source of truth for Mode A sacred-window constants. Consumed by `pipeline.check_drift.check_holdout_contamination()` (contamination detector), `pipeline.check_drift.check_holdout_policy_declaration_consistency()` (docs ↔ code drift detector), `trading_app.strategy_discovery.main()` (CLI enforcement via `enforce_holdout_date()`), and `trading_app.strategy_validator._check_mode_a_holdout_integrity()` (pre-promotion gate). Never inline `date(2026, 1, 1)` or `datetime(2026, 4, 8, ...)` in any downstream file. Changing the canonical values requires a new amendment to `docs/institutional/pre_registered_criteria.md` and a matching update to `RESEARCH_RULES.md`; the declaration-consistency drift check catches any such drift. See `docs/plans/2026-04-07-holdout-policy-decision.md` for the Mode B → Mode A correction audit trail.
 
 ## 3. Fail-Closed Mindset
 - Never report success after an exception or timeout
