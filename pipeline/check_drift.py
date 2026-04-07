@@ -3392,10 +3392,12 @@ def check_holdout_contamination(con=None) -> list[str]:
         # containing 2026 yearly results was discovered without --holdout-date
         # and is contamination. Existing rows (max created_at 2026-04-06) are
         # grandfathered per Amendment 2.4 as research-provisional.
+        # Instrument list comes from ACTIVE_ORB_INSTRUMENTS (canonical source)
+        # so that new active instruments automatically inherit the holdout.
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
         HOLDOUT_DECLARATIONS: dict[str, datetime] = {
-            "MNQ": datetime(2026, 4, 8),
-            "MES": datetime(2026, 4, 8),
-            "MGC": datetime(2026, 4, 8),
+            inst: datetime(2026, 4, 8) for inst in ACTIVE_ORB_INSTRUMENTS
         }
 
         for instrument, declaration_date in HOLDOUT_DECLARATIONS.items():
