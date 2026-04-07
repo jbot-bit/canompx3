@@ -96,3 +96,40 @@ class TestInstanceLock:
 
     def test_pid_alive_dead_process(self):
         assert _is_pid_alive(99999999) is False
+
+    def test_pid_alive_zombie_process_windows(self):
+        """Regression test: Windows zombie PIDs (OpenProcess returns handle but
+        GetExitCodeProcess != STILL_ACTIVE) must be treated as dead.
+
+        Before the GetExitCodeProcess check, a bot crash followed by a restart
+        within seconds-to-minutes could fail because Windows had not yet recycled
+        the PID slot of the crashed process. The stale lock would report "alive"
+        and block acquisition."""
+        import sys
+
+        if sys.platform != "win32":
+            pytest.skip("Windows-specific zombie PID handling")
+
+        import ctypes
+
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        # Scan a range of PIDs to find one where OpenProcess returns a handle
+        # but the exit code is not STILL_ACTIVE — a zombie we can observe.
+        # If none found in the scan window, the test skips (can't fabricate the
+        # OS state reliably). On a busy dev box this reliably finds several.
+        zombie_pid = None
+        for pid in range(1000, 20000, 4):
+            h = ctypes.windll.kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if h:
+                exit_code = ctypes.c_ulong()
+                ok = ctypes.windll.kernel32.GetExitCodeProcess(h, ctypes.byref(exit_code))
+                ctypes.windll.kernel32.CloseHandle(h)
+                if ok and exit_code.value != 259:  # STILL_ACTIVE
+                    zombie_pid = pid
+                    break
+        if zombie_pid is None:
+            pytest.skip("No zombie PID found in scan window (OS state)")
+        assert _is_pid_alive(zombie_pid) is False, (
+            f"PID {zombie_pid} is a zombie (exit_code != STILL_ACTIVE) "
+            "but _is_pid_alive returned True. Would block bot restart after crash."
+        )
