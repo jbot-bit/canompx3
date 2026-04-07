@@ -3352,12 +3352,23 @@ def check_symbol_instrument_sql_convention() -> list[str]:
 
 
 def check_holdout_contamination(con=None) -> list[str]:
-    """Detect 2026 holdout contamination in pre-registered instruments.
+    """Detect 2026 holdout contamination in MNQ/MES/MGC (Mode A, Amendment 2.7).
 
-    Pre-registration: docs/pre-registrations/2026-03-20-mnq-rr1-verified-sessions.md
-    Rule: discovery must not be re-run with 2026 data after the holdout was declared.
-    Detection: experimental_strategies rows created after pre-registration date
-    that contain 2026 trade data in yearly_results.
+    Authority: docs/institutional/pre_registered_criteria.md Amendment 2.7 (2026-04-08)
+    Decision: docs/plans/2026-04-07-holdout-policy-decision.md (top-of-file rescission)
+
+    Policy: 2026-01-01 onwards is the sacred holdout window. Any discovery run
+    that touches 2026 data without --holdout-date 2026-01-01 (or earlier) is
+    contaminated. The 124 existing validated_setups (discovered 2026-04-05/06
+    with 2026 in scope) are grandfathered as research-provisional per
+    Amendment 2.4 — NOT OOS-clean, but not rejected either.
+
+    Enforcement mechanism: declaration_date below is the Amendment 2.7 commit
+    date (NOT the holdout boundary). Any experimental_strategies row with
+    created_at > declaration_date that contains a '2026' key in yearly_results
+    was discovered without the --holdout-date flag and is flagged as
+    contamination. Rows created on or before 2026-04-08 (the 73,980 existing
+    rows from 2026-04-06) are grandfathered.
 
     Fail-closed: if DB unavailable, returns a violation (not a silent pass).
     """
@@ -3375,10 +3386,17 @@ def check_holdout_contamination(con=None) -> list[str]:
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
-        # Pre-registration dates by instrument (extend when new holdouts declared)
-        # MNQ holdout COMPLETED 2026-04-02: test ran (CME_PRECLOSE DEAD),
-        # 2026 data now included in discovery. Walk-forward handles OOS.
-        HOLDOUT_DECLARATIONS: dict[str, datetime] = {}
+        # Mode A holdout policy (Amendment 2.7, 2026-04-08). The date below is
+        # the ENFORCEMENT date, not the holdout boundary (which is 2026-01-01).
+        # Any experimental_strategies row with created_at > 2026-04-08
+        # containing 2026 yearly results was discovered without --holdout-date
+        # and is contamination. Existing rows (max created_at 2026-04-06) are
+        # grandfathered per Amendment 2.4 as research-provisional.
+        HOLDOUT_DECLARATIONS: dict[str, datetime] = {
+            "MNQ": datetime(2026, 4, 8),
+            "MES": datetime(2026, 4, 8),
+            "MGC": datetime(2026, 4, 8),
+        }
 
         for instrument, declaration_date in HOLDOUT_DECLARATIONS.items():
             contaminated = con.execute(
@@ -3393,8 +3411,8 @@ def check_holdout_contamination(con=None) -> list[str]:
                 violations.append(
                     f"  HOLDOUT CONTAMINATION: {instrument} has {contaminated} experimental_strategies "
                     f"created after {declaration_date.date()} containing 2026 trade data. "
-                    f"Discovery was re-run without --holdout-date. "
-                    f"Pre-registration: docs/pre-registrations/2026-03-20-mnq-rr1-verified-sessions.md"
+                    f"Discovery was re-run without --holdout-date 2026-01-01. "
+                    f"Authority: docs/institutional/pre_registered_criteria.md Amendment 2.7"
                 )
     except (ImportError, OSError) as e:
         violations.append(f"  HOLDOUT CHECK FAILED: {type(e).__name__}: {e}")
