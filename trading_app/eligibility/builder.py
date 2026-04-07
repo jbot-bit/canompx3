@@ -146,26 +146,36 @@ def _resolve_observed(
     return val, False
 
 
-def _compare(observed: Any, threshold: Any, comparator: str) -> bool:
-    """Evaluate observed vs threshold using a comparator string."""
+def _compare(observed: Any, threshold: Any, comparator: str) -> tuple[bool, bool]:
+    """Evaluate observed vs threshold using a comparator string.
+
+    Returns (result, type_error). `type_error=True` means the comparison
+    raised TypeError because observed and threshold are incompatible types
+    (e.g., str vs float from a schema drift). The caller MUST map this to
+    DATA_MISSING, not FAIL — a type mismatch is an infrastructure problem,
+    not a legitimate trading signal.
+
+    v1 returned False on TypeError, which silently became FAIL in the
+    condition record. v2 hardening surfaces type errors explicitly.
+    """
     try:
         if comparator == ">=":
-            return observed >= threshold
+            return observed >= threshold, False
         if comparator == "<=":
-            return observed <= threshold
+            return observed <= threshold, False
         if comparator == ">":
-            return observed > threshold
+            return observed > threshold, False
         if comparator == "<":
-            return observed < threshold
+            return observed < threshold, False
         if comparator == "==":
-            return observed == threshold
+            return observed == threshold, False
         if comparator == "!=":
-            return observed != threshold
+            return observed != threshold, False
         if comparator == "in_set":
-            return observed in threshold
+            return observed in threshold, False
     except TypeError:
-        return False
-    return False
+        return False, True
+    return False, False
 
 
 # ==========================================================================
@@ -176,22 +186,62 @@ def _compare(observed: Any, threshold: Any, comparator: str) -> bool:
 # ==========================================================================
 
 
-def _resolve_pdr(feature_row: dict[str, Any]) -> tuple[float | None, bool]:
-    """prev_day_range / atr_20 ratio."""
+def _resolve_pdr(
+    feature_row: dict[str, Any],
+    build_errors: list[str],
+) -> tuple[float | None, bool]:
+    """prev_day_range / atr_20 ratio. Returns (value, is_missing).
+
+    Fails to (None, True) on:
+    - Missing column
+    - NULL value
+    - Non-positive ATR (division by zero or negative)
+    - Type mismatch (e.g., string where number expected)
+
+    Mutates `build_errors` to append a description on type mismatch so the
+    report can distinguish "field missing" from "field wrong type" in the
+    build_errors trail. Guards against the v1 hardening bug where `pdr / atr`
+    on a string crashed the whole eligibility report.
+    """
     pdr = feature_row.get("prev_day_range")
     atr = feature_row.get("atr_20")
-    if pdr is None or atr is None or atr <= 0:
+    if pdr is None or atr is None:
         return None, True
-    return pdr / atr, False
+    try:
+        if atr <= 0:
+            return None, True
+        return pdr / atr, False
+    except (TypeError, ValueError) as exc:
+        build_errors.append(
+            f"PDR: type mismatch computing prev_day_range/atr_20: "
+            f"{type(exc).__name__}: {exc} (pdr={pdr!r}, atr={atr!r})"
+        )
+        return None, True
 
 
-def _resolve_gap(feature_row: dict[str, Any]) -> tuple[float | None, bool]:
-    """abs(gap_open_points) / atr_20 ratio."""
+def _resolve_gap(
+    feature_row: dict[str, Any],
+    build_errors: list[str],
+) -> tuple[float | None, bool]:
+    """abs(gap_open_points) / atr_20 ratio. Returns (value, is_missing).
+
+    Fails to (None, True) on the same conditions as _resolve_pdr and
+    similarly appends build_errors on type mismatch.
+    """
     gap = feature_row.get("gap_open_points")
     atr = feature_row.get("atr_20")
-    if gap is None or atr is None or atr <= 0:
+    if gap is None or atr is None:
         return None, True
-    return abs(gap) / atr, False
+    try:
+        if atr <= 0:
+            return None, True
+        return abs(gap) / atr, False
+    except (TypeError, ValueError) as exc:
+        build_errors.append(
+            f"GAP: type mismatch computing abs(gap_open_points)/atr_20: "
+            f"{type(exc).__name__}: {exc} (gap={gap!r}, atr={atr!r})"
+        )
+        return None, True
 
 
 def _resolve_dow(trading_day: date) -> tuple[str, bool]:
@@ -224,8 +274,13 @@ def _atom_to_condition(
     session: str,
     trading_day: date,
     freshness: FreshnessStatus,
+    build_errors: list[str],
 ) -> ConditionRecord:
-    """Build a ConditionRecord from an AtomSpec and the current feature snapshot."""
+    """Build a ConditionRecord from an AtomSpec and the current feature snapshot.
+
+    Mutates `build_errors` when a silently-caught type mismatch is converted
+    to DATA_MISSING status.
+    """
     # Check per-instrument validity first — applies even before data
     if not _is_validated_for(atom, instrument, session):
         return ConditionRecord(
@@ -275,9 +330,9 @@ def _atom_to_condition(
         # Special resolvers for derived values
         source = atom.source_filter
         if source.startswith("PDR_R") and feature_row is not None:
-            observed, missing = _resolve_pdr(feature_row)
+            observed, missing = _resolve_pdr(feature_row, build_errors)
         elif source.startswith("GAP_R") and feature_row is not None:
-            observed, missing = _resolve_gap(feature_row)
+            observed, missing = _resolve_gap(feature_row, build_errors)
         elif source in ("NOMON", "NOFRI", "NOTUE"):
             observed, missing = _resolve_dow(trading_day)
         else:
@@ -285,13 +340,23 @@ def _atom_to_condition(
 
         if missing:
             status = ConditionStatus.DATA_MISSING
-        elif freshness == FreshnessStatus.STALE:
-            # Still show the observed value but mark stale
-            status = ConditionStatus.FAIL if not _compare(observed, atom.threshold, atom.comparator) else ConditionStatus.PASS
-            # Note: freshness is reported at report level; per-atom stays PASS/FAIL
         else:
-            passed = _compare(observed, atom.threshold, atom.comparator)
-            status = ConditionStatus.PASS if passed else ConditionStatus.FAIL
+            passed, type_error = _compare(observed, atom.threshold, atom.comparator)
+            if type_error:
+                # Type mismatch = infrastructure problem, NOT a trading signal.
+                # v2 hardening: surface explicitly rather than silent FAIL.
+                build_errors.append(
+                    f"{atom.source_filter}: type mismatch comparing "
+                    f"{type(observed).__name__}({observed!r}) vs "
+                    f"{type(atom.threshold).__name__}({atom.threshold!r})"
+                )
+                status = ConditionStatus.DATA_MISSING
+                observed = None
+            else:
+                status = ConditionStatus.PASS if passed else ConditionStatus.FAIL
+                # Freshness is reported at report level — per-atom stays PASS/FAIL.
+                # _ = freshness  # used only for documentation
+                _ = freshness
 
     return ConditionRecord(
         name=atom.name,
@@ -329,18 +394,22 @@ def _build_calendar_condition(
     instrument: str,
     session: str,
     trading_day: date,
+    build_errors: list[str],
 ) -> ConditionRecord:
     """Build the calendar overlay condition.
 
     Returns RULES_NOT_LOADED if the rules file is missing or empty —
     NOT silent NEUTRAL. This is the v2 gap fix.
 
+    Mutates `build_errors` to append any silently-caught exceptions so the
+    caller's EligibilityReport surfaces them in the build_errors field.
+
     Args:
         instrument: strategy instrument for rule lookup.
         session: orb_label for rule lookup.
         trading_day: the trading day for signal detection.
+        build_errors: caller-owned list to append silenced exceptions to.
     """
-    _ = instrument  # currently unused; kept for rule lookup when file present
     atom = calendar_atom_template()
     if not _calendar_rules_loaded():
         return ConditionRecord(
@@ -366,14 +435,22 @@ def _build_calendar_condition(
         from trading_app.calendar_overlay import CalendarAction, get_calendar_action
 
         action = get_calendar_action(instrument, session, trading_day)
+        # HALF_SIZE and NEUTRAL both PASS the eligibility gate — the trade
+        # fires, just with a different size multiplier. Only SKIP blocks.
+        # This is the v2 hardening fix: treat sizing as a separate dimension
+        # from the pass/fail gate.
         if action == CalendarAction.NEUTRAL:
             status = ConditionStatus.PASS
+            size_multiplier = 1.0
         elif action == CalendarAction.HALF_SIZE:
-            status = ConditionStatus.FAIL  # non-neutral = partial block
+            status = ConditionStatus.PASS
+            size_multiplier = 0.5
         else:  # SKIP
             status = ConditionStatus.FAIL
+            size_multiplier = 0.0
         observed = action.name
-    except Exception as exc:  # noqa: BLE001 — surface as DATA_MISSING, not silent
+    except Exception as exc:  # noqa: BLE001 — surface as DATA_MISSING + build_error
+        build_errors.append(f"calendar lookup raised: {type(exc).__name__}: {exc}")
         return ConditionRecord(
             name=atom.name,
             category=atom.category,
@@ -402,6 +479,7 @@ def _build_calendar_condition(
         last_revalidated=atom.last_revalidated,
         confidence_tier=atom.confidence_tier,
         explanation=atom.explanation,
+        size_multiplier=size_multiplier,
     )
 
 
@@ -410,11 +488,21 @@ def _build_atr_velocity_condition(
     session: str,
     feature_row: dict[str, Any] | None,
     trading_day: date,
+    build_errors: list[str],
 ) -> ConditionRecord | None:
     """Build the ATR velocity overlay condition.
 
     Returns None if this overlay does not apply to (instrument, session).
     Otherwise returns a ConditionRecord with explicit status.
+
+    Delegates pass/fail evaluation to the canonical
+    `trading_app.config.ATRVelocityFilter.matches_row()` to eliminate
+    re-encoded filter semantics. If the canonical filter returns False and
+    both atr_vel_regime and compression columns are present, the condition
+    is FAIL. If either column is missing, DATA_MISSING.
+
+    Mutates `build_errors` to append any caught exceptions from the
+    canonical filter call.
     """
     _ = trading_day  # reserved for future freshness checks on regime column
     atom = atr_velocity_atom_template()
@@ -455,9 +543,37 @@ def _build_atr_velocity_condition(
             explanation=atom.explanation,
         )
 
-    # Contracting + {Neutral or Compressed} = FAIL (skip)
-    is_skip = atr_vel == "Contracting" and compression in ("Neutral", "Compressed")
-    status = ConditionStatus.FAIL if is_skip else ConditionStatus.PASS
+    # Delegate to canonical filter — eliminates re-encoded logic.
+    # The canonical ATRVelocityFilter.matches_row returns True when the
+    # trade is ALLOWED (velocity != Contracting, or compression == Expanded).
+    try:
+        from trading_app.config import ATRVelocityFilter
+
+        canonical_filter = ATRVelocityFilter(
+            filter_type="ATR_VEL_CANONICAL",
+            description="canonical delegation",
+        )
+        allowed = canonical_filter.matches_row(feature_row, session)
+        status = ConditionStatus.PASS if allowed else ConditionStatus.FAIL
+    except Exception as exc:  # noqa: BLE001 — surface as DATA_MISSING + build_error
+        build_errors.append(
+            f"ATRVelocityFilter.matches_row raised: {type(exc).__name__}: {exc}"
+        )
+        return ConditionRecord(
+            name=atom.name,
+            category=atom.category,
+            status=ConditionStatus.DATA_MISSING,
+            resolves_at=atom.resolves_at,
+            observed_value=None,
+            threshold=atom.threshold,
+            comparator=atom.comparator,
+            source_filter=atom.source_filter,
+            validated_for=atom.validated_for,
+            last_revalidated=atom.last_revalidated,
+            confidence_tier=atom.confidence_tier,
+            explanation=atom.explanation,
+        )
+
     return ConditionRecord(
         name=atom.name,
         category=atom.category,
@@ -591,9 +707,17 @@ def build_eligibility_report(
     filter_type = dims["filter_type"]
     entry_model = dims["entry_model"]
 
+    # Build errors collected from all silent exception handlers so the
+    # caller can distinguish "no data" from "DB failure" / "type mismatch".
+    # Every `except` block in this file that swallows an exception appends
+    # to this list.
+    build_errors: list[str] = []
+
     # Fetch feature row from DB if not provided
     if feature_row is None and db_path is not None:
-        feature_row = _fetch_feature_row(db_path, instrument, trading_day, dims["orb_minutes"])
+        feature_row = _fetch_feature_row(
+            db_path, instrument, trading_day, dims["orb_minutes"], build_errors
+        )
 
     freshness, as_of_ts = _resolve_freshness(feature_row, trading_day)
 
@@ -602,16 +726,19 @@ def build_eligibility_report(
 
     # Build a condition for each atom
     conditions: list[ConditionRecord] = []
-    build_errors: list[str] = []
 
     for atom in atoms:
-        # CONT atoms are E2-excluded (look-ahead for stop-market entries)
+        # E2 entry model excludes look-ahead filters (CONT, FAST, VOL_RV,
+        # ATR70_VOL). The canonical exclusion list lives in
+        # trading_app.config.E2_EXCLUDED_FILTER_PREFIXES/_SUBSTRINGS — we
+        # check CONT explicitly here because it's the only one in our
+        # current decomposition registry that triggers the exclusion.
         if atom.source_filter == "CONT" and entry_model == "E2":
             conditions.append(
                 ConditionRecord(
                     name=atom.name,
                     category=atom.category,
-                    status=ConditionStatus.NOT_APPLICABLE_INSTRUMENT,  # close-enough semantically
+                    status=ConditionStatus.NOT_APPLICABLE_ENTRY_MODEL,
                     resolves_at=atom.resolves_at,
                     observed_value=None,
                     threshold=atom.threshold,
@@ -628,12 +755,16 @@ def build_eligibility_report(
             )
             continue
         conditions.append(
-            _atom_to_condition(atom, feature_row, instrument, orb_label, trading_day, freshness)
+            _atom_to_condition(
+                atom, feature_row, instrument, orb_label, trading_day, freshness, build_errors
+            )
         )
 
     # Add overlay conditions (calendar always, ATR velocity conditionally)
-    conditions.append(_build_calendar_condition(instrument, orb_label, trading_day))
-    atr_vel_condition = _build_atr_velocity_condition(instrument, orb_label, feature_row, trading_day)
+    conditions.append(_build_calendar_condition(instrument, orb_label, trading_day, build_errors))
+    atr_vel_condition = _build_atr_velocity_condition(
+        instrument, orb_label, feature_row, trading_day, build_errors
+    )
     if atr_vel_condition is not None:
         conditions.append(atr_vel_condition)
 
@@ -659,20 +790,31 @@ def _fetch_feature_row(
     instrument: str,
     trading_day: date,
     orb_minutes: int,
+    build_errors: list[str],
 ) -> dict[str, Any] | None:
     """Fetch one daily_features row for (instrument, trading_day, orb_minutes).
 
-    Returns None if no row found. Does not raise — missing data is normal
-    and surfaces as NO_DATA freshness.
+    Returns None if no row found OR an exception was caught. Mutates
+    `build_errors` to append any caught exceptions so the caller can
+    distinguish "no row exists" from "DB locked" / "schema drift" /
+    "permission denied" etc.
+
+    v2 hardening: previously swallowed all exceptions silently. Now every
+    caught exception is surfaced in the report's build_errors field.
     """
     try:
         import duckdb
     except ImportError:
+        build_errors.append("duckdb package not importable — cannot fetch feature row")
         return None
 
+    con = None
     try:
         con = duckdb.connect(str(db_path), read_only=True)
-    except Exception:  # noqa: BLE001 — return None on any connection failure
+    except Exception as exc:  # noqa: BLE001
+        build_errors.append(
+            f"duckdb.connect({db_path}) raised: {type(exc).__name__}: {exc}"
+        )
         return None
 
     try:
@@ -691,7 +833,11 @@ def _fetch_feature_row(
             return None
         cols = [desc[0] for desc in con.description]
         return dict(zip(cols, row, strict=True))
-    except Exception:  # noqa: BLE001 — DB errors surface as NO_DATA
+    except Exception as exc:  # noqa: BLE001
+        build_errors.append(
+            f"daily_features query raised: {type(exc).__name__}: {exc}"
+        )
         return None
     finally:
-        con.close()
+        if con is not None:
+            con.close()

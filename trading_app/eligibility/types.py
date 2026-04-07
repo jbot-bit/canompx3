@@ -53,9 +53,13 @@ class ConditionStatus(str, Enum):
     is MNQ-specific; for MGC and MES, the signal did not survive T1-T8).
     Distinct from FAIL — the filter is not a gate on this instrument at all."""
 
-    NOT_APPLICABLE_SESSION = "NOT_APPLICABLE_SESSION"
-    """Filter is not routed to this session via get_filters_for_grid(). Either
-    not tested or failed validation on this session."""
+    NOT_APPLICABLE_ENTRY_MODEL = "NOT_APPLICABLE_ENTRY_MODEL"
+    """Filter is look-ahead unsafe for this entry model (e.g., break bar
+    continuation is known only after the bar closes, so it cannot gate an
+    E2 stop-market entry that fires on first touch). Distinct from
+    NOT_APPLICABLE_INSTRUMENT — the reason is execution mechanics, not
+    per-instrument research validation. Canonical exclusion list is in
+    trading_app.config.E2_EXCLUDED_FILTER_PREFIXES / _SUBSTRINGS."""
 
     NOT_APPLICABLE_DIRECTION = "NOT_APPLICABLE_DIRECTION"
     """Direction-conditional filter (e.g., bull-day short avoidance) where the
@@ -224,7 +228,8 @@ class ConditionRecord:
 
     validated_for: tuple[tuple[str, str], ...] = field(default_factory=tuple)
     """Sequence of (instrument, session) tuples where this atom is validated.
-    Used to resolve NOT_APPLICABLE_INSTRUMENT and NOT_APPLICABLE_SESSION."""
+    Used to resolve NOT_APPLICABLE_INSTRUMENT when the current (instrument,
+    session) pair is outside this set."""
 
     last_revalidated: date | None = None
     """Date of last revalidation from @revalidated-for annotation in config.py."""
@@ -234,6 +239,21 @@ class ConditionRecord:
 
     explanation: str = ""
     """One-sentence plain-English description of what this condition means."""
+
+    size_multiplier: float = 1.0
+    """Trade size multiplier to apply IF this condition passes. 1.0 = full
+    position, 0.5 = half size, 0.0 = skip. Default 1.0 for ordinary
+    pass/fail gates.
+
+    This field lets overlay conditions (like calendar HALF_SIZE) pass the
+    eligibility gate while still communicating "trade at reduced size" to
+    the execution engine. Without this separation, HALF_SIZE would be
+    forced to either PASS (losing the sizing information) or FAIL (blocking
+    a profitable trade entirely — a critical behavioral bug).
+
+    The overall size multiplier for a lane is the product of all individual
+    condition multipliers whose status is PASS. See
+    EligibilityReport.effective_size_multiplier."""
 
     @property
     def is_blocking(self) -> bool:
@@ -314,3 +334,20 @@ class EligibilityReport:
     def conditions_by_category(self, category: ConditionCategory) -> tuple[ConditionRecord, ...]:
         """Filter conditions to a single category (PRE_SESSION, INTRA_SESSION, OVERLAY, DIRECTIONAL)."""
         return tuple(c for c in self.conditions if c.category == category)
+
+    @property
+    def effective_size_multiplier(self) -> float:
+        """Product of all PASSING conditions' size_multiplier values.
+
+        Returns 1.0 when no condition reduces size. Returns 0.5 when exactly
+        one HALF_SIZE calendar rule fires. Returns 0.25 if two independent
+        HALF_SIZE rules compound (unlikely but supported).
+
+        Only PASS conditions contribute — FAIL/DATA_MISSING conditions are
+        excluded from the product because they do not trade at all.
+        """
+        mult = 1.0
+        for c in self.conditions:
+            if c.status == ConditionStatus.PASS:
+                mult *= c.size_multiplier
+        return mult

@@ -30,13 +30,15 @@ class TestConditionStatus:
     """The nine explicit statuses must exist and be distinct."""
 
     def test_all_nine_statuses_present(self):
+        """After hardening: NOT_APPLICABLE_SESSION removed (dead enum),
+        NOT_APPLICABLE_ENTRY_MODEL added (CONT+E2 case needed a distinct label)."""
         expected = {
             "PASS",
             "FAIL",
             "PENDING",
             "DATA_MISSING",
             "NOT_APPLICABLE_INSTRUMENT",
-            "NOT_APPLICABLE_SESSION",
+            "NOT_APPLICABLE_ENTRY_MODEL",
             "NOT_APPLICABLE_DIRECTION",
             "RULES_NOT_LOADED",
             "STALE_VALIDATION",
@@ -81,7 +83,7 @@ class TestConditionRecord:
     def test_not_applicable_variants_are_not_blocking(self):
         for status in (
             ConditionStatus.NOT_APPLICABLE_INSTRUMENT,
-            ConditionStatus.NOT_APPLICABLE_SESSION,
+            ConditionStatus.NOT_APPLICABLE_ENTRY_MODEL,
             ConditionStatus.NOT_APPLICABLE_DIRECTION,
         ):
             assert self._make_record(status).is_blocking is False

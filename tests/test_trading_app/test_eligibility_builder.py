@@ -267,8 +267,10 @@ class TestCompositeDecomposition:
         assert "FAST5" in sources
         assert "CONT" in sources
 
-    def test_cont_atom_is_not_applicable_for_e2(self):
-        """CONT is E1-only — E2 can't know break bar direction at entry (look-ahead)."""
+    def test_cont_atom_is_not_applicable_entry_model_for_e2(self):
+        """CONT is E1-only — E2 can't know break bar direction at entry (look-ahead).
+        After hardening: uses NOT_APPLICABLE_ENTRY_MODEL (was mislabeled as
+        NOT_APPLICABLE_INSTRUMENT with a 'close-enough semantically' comment)."""
         report = build_eligibility_report(
             strategy_id="MNQ_NYSE_CLOSE_E2_RR2.0_CB1_ORB_G5_FAST5_CONT",
             trading_day=date(2026, 4, 7),
@@ -276,7 +278,7 @@ class TestCompositeDecomposition:
         )
         cont_conditions = [c for c in report.conditions if c.source_filter == "CONT"]
         assert len(cont_conditions) == 1
-        assert cont_conditions[0].status == ConditionStatus.NOT_APPLICABLE_INSTRUMENT
+        assert cont_conditions[0].status == ConditionStatus.NOT_APPLICABLE_ENTRY_MODEL
 
 
 class TestOverallStatus:
@@ -315,6 +317,230 @@ class TestOverallStatus:
         # in PIT_MIN decomposition only if PIT_MIN had size atoms, which it
         # doesn't. Overall should be DATA_MISSING since the one atom is missing.
         assert report.overall_status in (OverallStatus.DATA_MISSING, OverallStatus.NEEDS_LIVE_DATA)
+
+
+class TestHardeningFixes:
+    """Tests for v2 hardening fixes from self-code-review of commit 046e80b."""
+
+    def test_halfsize_calendar_is_not_ineligible(self):
+        """Calendar HALF_SIZE means 'trade at half size' — it must PASS the
+        eligibility gate with size_multiplier=0.5, NOT FAIL and block the lane.
+
+        This test is gated on the presence of calendar_cascade_rules.json; if
+        rules are not loaded we get RULES_NOT_LOADED instead of HALF_SIZE. In
+        either case, the status must not be FAIL (which would cascade to
+        INELIGIBLE at the overall level)."""
+        report = build_eligibility_report(
+            strategy_id="MNQ_NYSE_CLOSE_E2_RR2.0_CB1_NO_FILTER",
+            trading_day=date(2026, 4, 7),
+            feature_row=_fresh_row(symbol="MNQ"),
+        )
+        calendar = [c for c in report.conditions if c.source_filter == "calendar"][0]
+        # Calendar condition is never FAIL when rules are NEUTRAL/HALF_SIZE
+        assert calendar.status in (
+            ConditionStatus.PASS,
+            ConditionStatus.RULES_NOT_LOADED,
+            # FAIL is only acceptable for SKIP, which requires a specific rule
+        )
+
+    def test_halfsize_produces_size_multiplier(self):
+        """When calendar action is HALF_SIZE, the condition has
+        size_multiplier=0.5 and status=PASS."""
+        # Construct a ConditionRecord directly — this tests the type contract,
+        # not the calendar integration (which depends on the rules file).
+        from trading_app.eligibility.types import (
+            ConditionCategory,
+            ConditionRecord,
+            ResolvesAt,
+        )
+
+        record = ConditionRecord(
+            name="calendar action",
+            category=ConditionCategory.OVERLAY,
+            status=ConditionStatus.PASS,
+            resolves_at=ResolvesAt.STARTUP,
+            source_filter="calendar",
+            observed_value="HALF_SIZE",
+            size_multiplier=0.5,
+        )
+        assert record.status == ConditionStatus.PASS
+        assert record.size_multiplier == 0.5
+        assert record.is_blocking is False
+
+    def test_effective_size_multiplier_compounds(self):
+        """EligibilityReport.effective_size_multiplier is the product of all
+        PASS conditions' size multipliers."""
+        from trading_app.eligibility.types import (
+            ConditionCategory,
+            ConditionRecord,
+            EligibilityReport,
+            FreshnessStatus,
+            OverallStatus,
+            ResolvesAt,
+        )
+
+        conds = (
+            ConditionRecord(
+                name="passes full",
+                category=ConditionCategory.PRE_SESSION,
+                status=ConditionStatus.PASS,
+                resolves_at=ResolvesAt.STARTUP,
+                source_filter="A",
+                size_multiplier=1.0,
+            ),
+            ConditionRecord(
+                name="passes half",
+                category=ConditionCategory.OVERLAY,
+                status=ConditionStatus.PASS,
+                resolves_at=ResolvesAt.STARTUP,
+                source_filter="calendar",
+                size_multiplier=0.5,
+            ),
+        )
+        report = EligibilityReport(
+            strategy_id="X_Y_E2_RR2.0_CB1_NO_FILTER",
+            instrument="X",
+            session="Y",
+            entry_model="E2",
+            trading_day=date(2026, 4, 7),
+            as_of_timestamp=None,
+            freshness_status=FreshnessStatus.FRESH,
+            conditions=conds,
+            overall_status=OverallStatus.ELIGIBLE,
+        )
+        assert report.effective_size_multiplier == 0.5
+
+    def test_pdr_type_mismatch_does_not_crash(self):
+        """v1 bug: _resolve_pdr did `pdr / atr` without type checks; a string
+        in prev_day_range crashed the whole report. v2 hardening: surface as
+        DATA_MISSING with a build_error."""
+        report = build_eligibility_report(
+            strategy_id="MGC_EUROPE_FLOW_E2_RR2.0_CB1_PDR_R080",
+            trading_day=date(2026, 4, 7),
+            feature_row={
+                "trading_day": date(2026, 4, 7),
+                "symbol": "MGC",
+                "prev_day_range": "bad",  # wrong type
+                "atr_20": 150.0,
+            },
+        )
+        pdr = [c for c in report.conditions if c.source_filter == "PDR_R080"][0]
+        assert pdr.status == ConditionStatus.DATA_MISSING
+        # build_errors should contain a PDR type-mismatch entry
+        assert any("PDR" in e and "type mismatch" in e for e in report.build_errors)
+
+    def test_gap_type_mismatch_does_not_crash(self):
+        """Same hardening for _resolve_gap."""
+        report = build_eligibility_report(
+            strategy_id="MGC_CME_REOPEN_E2_RR2.0_CB1_GAP_R005",
+            trading_day=date(2026, 4, 7),
+            feature_row={
+                "trading_day": date(2026, 4, 7),
+                "symbol": "MGC",
+                "gap_open_points": "bad",
+                "atr_20": 150.0,
+            },
+        )
+        gap = [c for c in report.conditions if c.source_filter == "GAP_R005"][0]
+        assert gap.status == ConditionStatus.DATA_MISSING
+        assert any("GAP" in e and "type mismatch" in e for e in report.build_errors)
+
+    def test_compare_type_mismatch_surfaces_as_data_missing(self):
+        """v1 bug: _compare caught TypeError and returned False, which became
+        FAIL silently. v2 hardening: type_error → DATA_MISSING + build_error."""
+        # PIT_MIN expects pit_range_atr (float) compared to 0.10 (float).
+        # Passing a string triggers the _compare TypeError path.
+        report = build_eligibility_report(
+            strategy_id="MGC_CME_REOPEN_E2_RR2.0_CB1_PIT_MIN",
+            trading_day=date(2026, 4, 7),
+            feature_row={
+                "trading_day": date(2026, 4, 7),
+                "symbol": "MGC",
+                "pit_range_atr": "not_a_number",
+            },
+        )
+        pit = [c for c in report.conditions if c.source_filter == "PIT_MIN"][0]
+        assert pit.status == ConditionStatus.DATA_MISSING
+        # build_errors should mention the type mismatch
+        assert any("type mismatch" in e.lower() or "PIT_MIN" in e for e in report.build_errors)
+
+    def test_db_connection_failure_populates_build_errors(self):
+        """v1 bug: _fetch_feature_row swallowed ALL exceptions silently. v2
+        hardening: DB connection failures append to build_errors."""
+        from pathlib import Path
+
+        report = build_eligibility_report(
+            strategy_id="MNQ_NYSE_CLOSE_E2_RR2.0_CB1_NO_FILTER",
+            trading_day=date(2026, 4, 7),
+            db_path=Path("/nonexistent/path/to/nowhere.db"),
+        )
+        assert len(report.build_errors) >= 1
+        # Error should mention duckdb connect
+        assert any("duckdb" in e.lower() for e in report.build_errors)
+
+    def test_atr_velocity_canonical_contracting_expanded_passes(self):
+        """Canonical ATRVelocityFilter: Contracting + Expanded = ALLOWED (trade).
+        v1 bug: my re-encoded logic treated this correctly but diverged on
+        unknown compression values. v2 hardening: delegate to canonical."""
+        report = build_eligibility_report(
+            strategy_id="MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
+            trading_day=date(2026, 4, 7),
+            feature_row={
+                "trading_day": date(2026, 4, 7),
+                "symbol": "MGC",
+                "atr_vel_regime": "Contracting",
+                "orb_CME_REOPEN_compression_tier": "Expanded",
+            },
+        )
+        atr_vel = [c for c in report.conditions if c.source_filter == "atr_velocity"][0]
+        assert atr_vel.status == ConditionStatus.PASS
+
+    def test_atr_velocity_canonical_contracting_neutral_fails(self):
+        """Contracting + Neutral = SKIP per canonical filter."""
+        report = build_eligibility_report(
+            strategy_id="MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
+            trading_day=date(2026, 4, 7),
+            feature_row={
+                "trading_day": date(2026, 4, 7),
+                "symbol": "MGC",
+                "atr_vel_regime": "Contracting",
+                "orb_CME_REOPEN_compression_tier": "Neutral",
+            },
+        )
+        atr_vel = [c for c in report.conditions if c.source_filter == "atr_velocity"][0]
+        assert atr_vel.status == ConditionStatus.FAIL
+
+    def test_atr_velocity_canonical_stable_always_passes(self):
+        """Stable vel_regime = always allowed regardless of compression tier."""
+        report = build_eligibility_report(
+            strategy_id="MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
+            trading_day=date(2026, 4, 7),
+            feature_row={
+                "trading_day": date(2026, 4, 7),
+                "symbol": "MGC",
+                "atr_vel_regime": "Stable",
+                "orb_CME_REOPEN_compression_tier": "Compressed",
+            },
+        )
+        atr_vel = [c for c in report.conditions if c.source_filter == "atr_velocity"][0]
+        assert atr_vel.status == ConditionStatus.PASS
+
+    def test_cont_e2_uses_not_applicable_entry_model(self):
+        """CONT+E2 must use NOT_APPLICABLE_ENTRY_MODEL, not the lying
+        NOT_APPLICABLE_INSTRUMENT label from v1."""
+        report = build_eligibility_report(
+            strategy_id="MNQ_NYSE_CLOSE_E2_RR2.0_CB1_ORB_G5_FAST5_CONT",
+            trading_day=date(2026, 4, 7),
+            feature_row=_fresh_row(symbol="MNQ"),
+        )
+        cont = [c for c in report.conditions if c.source_filter == "CONT"][0]
+        assert cont.status == ConditionStatus.NOT_APPLICABLE_ENTRY_MODEL
+        # Verify the status is distinct from NOT_APPLICABLE_INSTRUMENT
+        assert cont.status != ConditionStatus.NOT_APPLICABLE_INSTRUMENT
+
+    def test_not_applicable_session_removed_from_enum(self):
+        """NOT_APPLICABLE_SESSION was defined but never produced — dead enum."""
+        assert not hasattr(ConditionStatus, "NOT_APPLICABLE_SESSION")
 
 
 class TestBuilderNeverRaisesOnBadData:
