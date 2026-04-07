@@ -182,6 +182,10 @@ class TestStopStructuralSense:
                 TD_END,
                 _cost(),
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07):
+                # synthetic fixture — pass BREAK_TS as orb_end_utc explicitly.
+                # Harmless for E1/E3 (only consumed when entry_model='E2').
+                orb_end_utc=BREAK_TS,
             )
             if result["stop_price"] is not None:
                 assert result["stop_price"] == ORB_LOW, f"Failed for {em}"
@@ -206,6 +210,10 @@ class TestStopStructuralSense:
                 TD_END,
                 _cost(),
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07):
+                # synthetic fixture — pass BREAK_TS as orb_end_utc explicitly.
+                # Harmless for E1/E3 (only consumed when entry_model='E2').
+                orb_end_utc=BREAK_TS,
             )
             if result["stop_price"] is not None:
                 assert result["stop_price"] == ORB_HIGH, f"Failed for {em}"
@@ -228,6 +236,10 @@ class TestWinLossPnl:
                 TD_END,
                 _cost(),
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07):
+                # synthetic fixture — pass BREAK_TS as orb_end_utc explicitly.
+                # Harmless for E1/E3 (only consumed when entry_model='E2').
+                orb_end_utc=BREAK_TS,
             )
             if result["outcome"] == "win":
                 assert result["pnl_r"] > 0, f"Win with negative PnL for {em}"
@@ -274,6 +286,10 @@ class TestCostModelApplied:
                 TD_END,
                 _cost(),
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07):
+                # synthetic fixture — pass BREAK_TS as orb_end_utc explicitly.
+                # Harmless for E1/E3 (only consumed when entry_model='E2').
+                orb_end_utc=BREAK_TS,
             )
             if result["outcome"] == "win":
                 assert result["pnl_r"] < 2.0, (
@@ -299,6 +315,10 @@ class TestEntryModelDifference:
                 TD_END,
                 _cost(),
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07):
+                # synthetic fixture — pass BREAK_TS as orb_end_utc explicitly.
+                # Harmless for E1/E3 (only consumed when entry_model='E2').
+                orb_end_utc=BREAK_TS,
             )
             if result["entry_price"] is not None:
                 prices[em] = result["entry_price"]
@@ -330,6 +350,10 @@ class TestRiskMath:
                 TD_END,
                 _cost(),
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07):
+                # synthetic fixture — pass BREAK_TS as orb_end_utc explicitly.
+                # Harmless for E1/E3 (only consumed when entry_model='E2').
+                orb_end_utc=BREAK_TS,
             )
             if result["entry_price"] is not None and result["stop_price"] is not None:
                 risk = abs(result["entry_price"] - result["stop_price"])
@@ -352,6 +376,10 @@ class TestTargetMath:
                 TD_END,
                 _cost(),
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07):
+                # synthetic fixture — pass BREAK_TS as orb_end_utc explicitly.
+                # Harmless for E1/E3 (only consumed when entry_model='E2').
+                orb_end_utc=BREAK_TS,
             )
             if result["entry_price"] is not None and result["target_price"] is not None:
                 risk = abs(result["entry_price"] - result["stop_price"])
@@ -411,6 +439,10 @@ class TestMaeMfeBounds:
                 TD_END,
                 _cost(),
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07):
+                # synthetic fixture — pass BREAK_TS as orb_end_utc explicitly.
+                # Harmless for E1/E3 (only consumed when entry_model='E2').
+                orb_end_utc=BREAK_TS,
             )
             if result["mae_r"] is not None:
                 assert result["mae_r"] > -1.0, f"Extreme negative MAE for {em}"
@@ -429,6 +461,10 @@ class TestMaeMfeBounds:
                 TD_END,
                 _cost(),
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07):
+                # synthetic fixture — pass BREAK_TS as orb_end_utc explicitly.
+                # Harmless for E1/E3 (only consumed when entry_model='E2').
+                orb_end_utc=BREAK_TS,
             )
             if result["outcome"] == "win" and result["mfe_r"] is not None:
                 assert result["mfe_r"] > 0, f"Win with non-positive MFE for {em}"
@@ -487,6 +523,10 @@ class TestAmbiguousBarConservativeLoss:
                 TD_END,
                 _cost(),
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07):
+                # synthetic fixture — pass BREAK_TS as orb_end_utc explicitly.
+                # Harmless for E1/E3 (only consumed when entry_model='E2').
+                orb_end_utc=BREAK_TS,
             )
             if result["outcome"] is not None and result["outcome"] != "scratch":
                 # If both target and stop could be hit, should be loss
@@ -521,6 +561,8 @@ class TestWinRMultipleExact:
                 TD_END,
                 cost,
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07)
+                orb_end_utc=BREAK_TS,
             )
             if result["outcome"] == "win":
                 entry = result["entry_price"]
@@ -551,6 +593,8 @@ class TestWinRMultipleExact:
                 TD_END,
                 cost,
                 em,
+                # Stage 5 fail-closed (E2 canonical-window refactor 2026-04-07)
+                orb_end_utc=BREAK_TS,
             )
             if result["outcome"] == "win":
                 entry = result["entry_price"]

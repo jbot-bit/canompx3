@@ -307,6 +307,14 @@ class TestE2StopMarketTouch:
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
             entry_model="E2",
+            # E2 canonical-window refactor 2026-04-07, Stage 5: synthetic
+            # fixture with no real session calendar. The test passes
+            # break_ts=T0 above, and the test bars start at T0, so the
+            # ORB window ends at T0 by construction. Pass T0 explicitly
+            # as orb_end_utc to satisfy the new fail-closed contract;
+            # this preserves the exact pre-refactor behaviour (where
+            # the silent fallback used break_ts as scan start).
+            orb_end_utc=T0,
         )
         assert result["entry_ts"] is not None, "E2: bar touching ORB should fill"
         assert result["entry_price"] == pytest.approx(expected_entry), (
@@ -335,6 +343,14 @@ class TestE2StopMarketTouch:
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
             entry_model="E2",
+            # E2 canonical-window refactor 2026-04-07, Stage 5: synthetic
+            # fixture with no real session calendar. The test passes
+            # break_ts=T0 above, and the test bars start at T0, so the
+            # ORB window ends at T0 by construction. Pass T0 explicitly
+            # as orb_end_utc to satisfy the new fail-closed contract;
+            # this preserves the exact pre-refactor behaviour (where
+            # the silent fallback used break_ts as scan start).
+            orb_end_utc=T0,
         )
         assert result["entry_ts"] is None, "E2: no bar touched ORB — must NOT fill"
 
@@ -365,6 +381,14 @@ class TestE2StopMarketTouch:
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
             entry_model="E2",
+            # E2 canonical-window refactor 2026-04-07, Stage 5: synthetic
+            # fixture with no real session calendar. The test passes
+            # break_ts=T0 above, and the test bars start at T0, so the
+            # ORB window ends at T0 by construction. Pass T0 explicitly
+            # as orb_end_utc to satisfy the new fail-closed contract;
+            # this preserves the exact pre-refactor behaviour (where
+            # the silent fallback used break_ts as scan start).
+            orb_end_utc=T0,
         )
         assert result["entry_ts"] is not None, "E2 short: bar touching ORB should fill"
         assert result["entry_price"] == pytest.approx(expected_entry), (
@@ -667,6 +691,11 @@ class TestPnlRBoundsInvariant:
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
             entry_model=model,
+            # Stage 5 fail-closed: E2 requires explicit orb_end_utc
+            # (or canonical triple). Harmless for E1/E3 — only consumed
+            # when entry_model='E2'. Synthetic fixture: T0 = ORB end
+            # by construction.
+            orb_end_utc=T0,
         )
 
         pnl = result["pnl_r"]
@@ -1217,6 +1246,14 @@ class TestE2EntryPriceInvariant:
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
             entry_model="E2",
+            # E2 canonical-window refactor 2026-04-07, Stage 5: synthetic
+            # fixture with no real session calendar. The test passes
+            # break_ts=T0 above, and the test bars start at T0, so the
+            # ORB window ends at T0 by construction. Pass T0 explicitly
+            # as orb_end_utc to satisfy the new fail-closed contract;
+            # this preserves the exact pre-refactor behaviour (where
+            # the silent fallback used break_ts as scan start).
+            orb_end_utc=T0,
         )
         if result["entry_ts"] is not None:
             assert result["entry_price"] == pytest.approx(expected_entry, abs=1e-6), (
@@ -1257,6 +1294,14 @@ class TestE2EntryPriceInvariant:
             trading_day_end=DAY_END,
             cost_spec=_mgc(),
             entry_model="E2",
+            # E2 canonical-window refactor 2026-04-07, Stage 5: synthetic
+            # fixture with no real session calendar. The test passes
+            # break_ts=T0 above, and the test bars start at T0, so the
+            # ORB window ends at T0 by construction. Pass T0 explicitly
+            # as orb_end_utc to satisfy the new fail-closed contract;
+            # this preserves the exact pre-refactor behaviour (where
+            # the silent fallback used break_ts as scan start).
+            orb_end_utc=T0,
         )
         if result["entry_ts"] is not None:
             assert result["entry_price"] == pytest.approx(expected_entry, abs=1e-6), (

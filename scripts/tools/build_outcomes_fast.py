@@ -86,6 +86,11 @@ def process_single_day(args_tuple):
                         if em == "E3" and cb > 1:
                             continue
 
+                        # Pass canonical lookup triple for E2 fail-closed
+                        # path (E2 canonical-window refactor 2026-04-07,
+                        # Stage 5). compute_single_outcome will compute
+                        # orb_end_utc via pipeline.dst.orb_utc_window for
+                        # E2 entries — no silent break_ts fallback.
                         outcome = compute_single_outcome(
                             bars_df=bars_df,
                             break_ts=break_ts,
@@ -97,6 +102,9 @@ def process_single_day(args_tuple):
                             trading_day_end=td_end,
                             cost_spec=cost_spec,
                             entry_model=em,
+                            orb_label=orb_label,
+                            trading_day=trading_day,
+                            orb_minutes=orb_minutes,
                         )
 
                         day_batch.append(

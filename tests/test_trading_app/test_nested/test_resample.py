@@ -1,11 +1,16 @@
-"""Tests for resample_to_5m with timezone edge cases (T3)."""
+"""Tests for resample_to_5m with timezone edge cases (T3).
+
+Originally imported from trading_app.nested.builder; that helper was
+extracted to trading_app.entry_rules during the E2 canonical-window
+refactor 2026-04-07 Stage 4, then nested.builder was deleted in Stage 7.
+"""
 
 from datetime import UTC, datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
 
-from trading_app.nested.builder import resample_to_5m
+from trading_app.entry_rules import resample_to_5m
 
 
 def _ts(hour, minute, tz=UTC):
