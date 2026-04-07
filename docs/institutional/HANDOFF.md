@@ -1,5 +1,20 @@
 # HANDOFF — Phase 0 Literature Grounding (2026-04-07)
 
+> **🟢 SUPERSEDED 2026-04-07.** This file was the mid-session handoff written when Phase 0 was partially complete (6 of 9 literature extracts). **Phase 0 is now FULLY COMPLETE.** All 7 literature extracts, the finite-data framework, the v2 criteria (with 5 Codex amendments), the hypothesis registry template, the `docs/audit/hypotheses/` infrastructure, the Codex finite-data audit, the rule file integrations, and the CLAUDE.md pointers are all committed on `main`. See:
+>
+> - **Current state of Phase 0:** `docs/institutional/README.md` § "v2 status (as of 2026-04-07)"
+> - **Phase 2-5 plan:** `docs/plans/2026-04-07-canonical-data-redownload.md` (committed `63c3c28`)
+> - **Memory file:** `~/.claude/projects/C--Users-joshd-canompx3/memory/institutional_phase0_grounding.md` (commit chain + cost verification)
+> - **Top-level HANDOFF.md:** session-baton entries from 2026-04-07
+>
+> Commit chain for Phase 0: `0028333` (jbot-bit, literature + rules + criteria v1) → `63c3c28` (jbot-bit, redownload plan) → `48d4e2d` (jbot-bit, View B closure + HANDOFF Codex section) → `390e408` (mine, Codex audit file + CLAUDE.md pointers) → `7bc47a7` (mine, audit/hypotheses README) → `f471b54` (mine, finite_data_framework v2 reconciliation).
+>
+> Phase 2 cost verified $0.00 (free on Standard plan, 398.1 MB total). Phase 2-5 execution blocked on `e2-canonical-window-fix` worktree merge (scope_lock on `pipeline/check_drift.py`, `pipeline/build_daily_features.py`, `trading_app/outcome_builder.py`).
+>
+> **Historical mid-session content preserved below for audit history.** Do not act on the "What's PENDING for next session" list — that work is done.
+
+---
+
 **Status:** Partial — 6 of 9 literature extracts written, framework/criteria/template pending.
 **Context clear:** Safe to close terminal. Files on disk, git committed.
 **Next session:** Start by reading `docs/institutional/README.md` and this HANDOFF.

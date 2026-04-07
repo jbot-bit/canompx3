@@ -12,6 +12,7 @@
 ```
 docs/institutional/
 ├── README.md                                   ← you are here
+├── HANDOFF.md                                  ← session handoff (SUPERSEDED 2026-04-07)
 ├── literature/                                 ← verbatim passages from resources/*.pdf
 │   ├── bailey_et_al_2013_pseudo_mathematics.md      ← MinBTL theorem (CRITICAL)
 │   ├── bailey_lopez_de_prado_2014_deflated_sharpe.md ← DSR formula (CRITICAL)
@@ -20,10 +21,28 @@ docs/institutional/
 │   ├── chordia_et_al_2018_two_million_strategies.md  ← t=3.79 threshold
 │   ├── pepelyshev_polunchenko_2015_cusum_sr.md       ← live monitoring
 │   └── lopez_de_prado_2020_ml_for_asset_managers.md  ← theory-first, CPCV
-├── finite_data_framework.md                    ← synthesized approach for short micro data
-├── pre_registered_criteria.md                  ← LOCKED thresholds (no post-hoc changes)
+├── finite_data_framework.md                    ← synthesized approach (v1 + v2 amendment note)
+├── pre_registered_criteria.md                  ← LOCKED thresholds, v2 with 5 Codex amendments
 └── hypothesis_registry_template.md             ← template for pre-registered discovery
+
+Sibling directories (referenced from here but not part of this tree):
+├── ../audit/hypotheses/                        ← pre-registered hypothesis files (infra, 0 files)
+├── ../audits/2026-04-07-finite-data-orb-audit.md ← Codex audit that produced v2 amendments
+└── ../plans/2026-04-07-canonical-data-redownload.md ← Phase 2-5 plan (awaiting e2-fix merge)
 ```
+
+## v2 status (as of 2026-04-07 — read before applying any threshold)
+
+`pre_registered_criteria.md` has been amended from v1 to v2 following a Codex audit
+(`../audits/2026-04-07-finite-data-orb-audit.md`). Five amendments integrated:
+
+- **Amendment 2.1:** DSR > 0.95 downgraded from binding to cross-check until `N_eff` is formally solved in-repo (validator already treats DSR as informational).
+- **Amendment 2.2:** Chordia t ≥ 3.79 reframed as severity benchmark with banded thresholds, not a universal hard bar.
+- **Amendment 2.3:** Criterion 8 (2026 OOS) contingent on pre-run holdout policy declaration (Mode A holdout-clean vs Mode B post-holdout-monitoring). Mixing banned.
+- **Amendment 2.4:** Current 5 deployed lanes reclassified as *research-provisional + operationally deployable*, not *production-grade institutional proof*.
+- **Amendment 2.5:** Execution overlays (calendar skip, ATR velocity, E2 timeout) must be reported separately from discovery-filter evidence.
+
+`finite_data_framework.md` has a top-of-file warning block pointing readers to the criteria file for current binding state — where the framework and criteria disagree, the criteria file wins.
 
 ## How to use this directory
 
@@ -57,9 +76,9 @@ docs/institutional/
 
 ## Cross-references
 
-- `CLAUDE.md` — project-wide instructions (should reference this directory under "Research methodology")
-- `.claude/rules/research-truth-protocol.md` — enforcement of literature grounding
-- `.claude/rules/integrity-guardian.md` — Seven Sins of quant investing
+- `CLAUDE.md` — project-wide instructions. **References this directory** under Document Authority and Institutional Rigor sections (committed `390e408`, 2026-04-07).
+- `.claude/rules/research-truth-protocol.md` — enforcement of literature grounding. **Has Phase 0 section** requiring `pre_registered_criteria.md` reading + hypothesis file before any discovery (committed `0028333`, 2026-04-07).
+- `.claude/rules/institutional-rigor.md` — Seven Sins of quant investing. **Rule 7 updated** to point at `literature/` as canonical citation source (committed `0028333`, 2026-04-07).
 - `.claude/rules/quant-audit-protocol.md` — audit checklist
 - `resources/` — source PDFs (the canonical text — literature files in `literature/` are extracts only)
-- `RESEARCH_RULES.md` — should be updated to reference this directory
+- `RESEARCH_RULES.md` — should be updated to reference this directory (NOT YET DONE — pending separate commit)
