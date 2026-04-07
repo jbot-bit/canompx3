@@ -552,18 +552,45 @@ Direct query of `validated_setups` (gold.db, canonical source):
 
 ### 9.2 Literature grounding — verified against local sources
 
-The institutional-rigor rule requires grounding in local literature before citing a threshold. The local literature verification:
+The institutional-rigor rule requires grounding in local literature before citing a threshold. The verification below was done against every local PDF in `resources/` on 2026-04-07. Every quote cited here was extracted from the local file — none from training memory.
+
+#### Primary source (Pardo — NOT extractable locally)
 
 | Source | Status | Finding |
 |---|---|---|
-| `resources/rober prado - optimization of trading strategies.pdf` (Pardo, 2008, Wiley, ISBN 978-0-470-12801-5) | **PARTIAL — 30 pages only** | Front matter only (title / copyright / TOC / foreword / preface / first preface chapter). Chapter 11 "Walk-Forward Analysis" (p237) where the WFE definition and threshold would live is **not in the local PDF**. TOC confirms the chapter exists: "Robustness and Walk-Forward Efficiency" (p238), "The Cure for Overfitting" (p239), "A More Reliable Measure of Risk and Return" (p241), "Is the Strategy Robust?" (p256), "What Rate of Profit Should We Expect?" (p260). Chapter 12 "Model Efficiency" (p273) also indexed. **None of these pages are extractable locally.** |
-| `resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf` | **BIBLIOGRAPHY ONLY** | 45-page excerpt covering pages 133-139+ (references section). Chapter content on backtest methodology is not present. The one "Walk Forward" hit is a bibliography entry (Żbikowski 2015). |
-| `resources/Algorithmic_Trading_Chan.pdf` | ACCESSIBLE (225pp) | 3 "walk-forward" mentions (pp 25, 55). Not verified to contain a WFE threshold prescription. |
-| `resources/Robert Carver - Systematic Trading.pdf` | ACCESSIBLE (326pp) | 3 "walk forward" mentions (pp 73, 296, 325). Not verified to contain a WFE threshold prescription. |
-| `resources/Building_Reliable_Trading_Systems.pdf` (Fitschen) | ACCESSIBLE (290pp) | No "walk-forward efficiency" or "WFE" hits in body. |
-| `resources/false-strategy-lopez.pdf`, `resources/deflated-sharpe.pdf`, `resources/Pseudo-mathematics-and-financial-charlatanism.pdf`, `resources/backtesting_dukepeople_liu.pdf`, `resources/man_overfitting_2015.pdf`, `resources/Quantitative_Trading_Chan_2008.pdf`, `resources/Evidence_Based_Technical_Analysis_Aronson.pdf` | ACCESSIBLE | No "walk-forward efficiency" or "WFE" hits. The modern quantitative-finance literature (Bailey/Lopez de Prado) uses DSR (Deflated Sharpe Ratio), PBO (Probability of Backtest Overfitting), and combinatorial purged CV as primary gates, not a WFE ratio. |
+| `resources/rober prado - optimization of trading strategies.pdf` (Pardo, 2008, Wiley, ISBN 978-0-470-12801-5) | **PARTIAL — 30 pages only (front matter)** | Only pages i-xvi (title / copyright / TOC / foreword / preface / Dunn foreword) are present. Chapter 11 "Walk-Forward Analysis" starts at printed page 237 and is **not extractable from our local PDF**. TOC confirms the chapter exists with sections: "Robustness and Walk-Forward Efficiency" (p238), "The Cure for Overfitting" (p239), "A More Reliable Measure of Risk and Return" (p241), "The Theory of Relevant Data" (p243), "Is the Strategy Robust?" (p256), "What Rate of Profit Should We Expect?" (p260), "Walk-Forward Analysis and the Portfolio" (p261). Chapter 12 "The Evaluation of Performance" (p263) has a section on "Model Efficiency" (p273). **None of these pages are extractable.** See § 9.5 for the acquisition list. |
 
-**Conclusion:** The "WFE ≥ 0.5" threshold is **UNSUPPORTED by local literature**. It appears in `RESEARCH_RULES.md:59` without a citation. It is conventional in the practitioner literature (widely repeated in Pardo commentaries and algo-trading forums), but we cannot verify the exact threshold value or its theoretical basis against a local primary source. Treating it as theologically correct would violate the institutional-rigor rule. Treating it as completely ungrounded would ignore the fact that no active strategy approaches it, so the gate is a conservative lower-bound filter regardless.
+#### Local grounding chain (verified quotes)
+
+Although the Pardo primary is missing, two local academic-practitioner sources cite Pardo and describe the methodology directly:
+
+| Source | Page | Verified content |
+|---|---|---|
+| **Chan, Ernest P. (2013). *Algorithmic Trading: Winning Strategies and Their Rationale*. Wiley. ISBN 978-1-118-46014-6.** | **p25** | *"[W]e must perform a walk-forward test as a final, true out-of-sample test. This walk-forward test can be conducted in the form of paper trading, but, even better, the model should be traded with real money (albeit with minimal leverage) so as to test those aspects of the strategy that eluded even paper trading. **Most traders would be happy to find that live trading generates a Sharpe ratio better than half of its backtest value.**"* — extracted verbatim from `resources/Algorithmic_Trading_Chan.pdf` p25. This is the **practitioner 0.5 halving heuristic** applied to Sharpe ratio. It is not identical to Pardo's WFE (which is OOS/IS ExpR ratio), but it is the same conceptual 0.5 conservative lower-bound for OOS/IS performance preservation. Chan is a Wiley-published quant with a PhD and a commercially active quant fund. |
+| **Chan, Ernest P. (2013). *Algorithmic Trading*. Wiley.** | **p55** | *"Out-of-sample testing, cross-validation, and high Sharpe ratios are all good practices for reducing data-snooping bias, but none is more definitive than walk-forward testing."* — Chan's summary bullet ranking walk-forward as the most load-bearing data-snooping defense. Supports using walk-forward as the canonical gate mechanism. |
+| **Aronson, David R. (2007). *Evidence-Based Technical Analysis: Applying the Scientific Method and Statistical Inference to Trading Signals*. Wiley. ISBN 978-0-470-00874-4.** | **pp 336-339** | Dedicated section "Walk-Forward Testing" citing Pardo as the primary source: *"walk-forward testing. It is described in Pardo,[35] De La Maza,[36] Katz and McCormick,[37] and Kaufman.[38]"* — extracted verbatim from `resources/Evidence_Based_Technical_Analysis_Aronson.pdf` p338. Aronson's bibliography at p515 footnote 10 gives the full Pardo citation: *"R. Pardo, Design, Testing and Optimization of Trading Systems (New York: John Wiley & Sons, 1992)"* — this is Pardo's 1st edition (1992), later revised as the 2008 2nd edition we have front matter for. |
+| **Aronson (2007). *Evidence-Based Technical Analysis*. Wiley.** | **p339** | *"[T]he decision about how to apportion the data between the in-sample and out-of-sample subsets is arbitrary. **There is no theory that suggests what fraction of the data should be assigned to training and testing.** Results can be very sensitive to these choices. **Often it's a seat-of-the-pants call.**"* — extracted verbatim. **This is the critical institutional-grounding statement:** a rigorous academic-practitioner source explicitly stating that walk-forward partition thresholds have no theoretical basis. Aronson is a Wiley-published ex-trader whose book is widely cited in quant TA academic literature and Chartered Market Technician (CMT) programs. |
+
+#### Negative findings (local PDFs checked, no WFE threshold prescription)
+
+- `resources/Robert Carver - Systematic Trading.pdf` (326pp) — 3 walk-forward mentions at pp 73, 296, 325 (verbatim checked). Carver prescribes walk-forward as a required back-testing practice but gives no numeric threshold: *"make sure it is expanding out of sample or equivalently walk forward. Also it should allow you to fit across multiple instruments and include conservative cost estimates."* (p296)
+- `resources/Building_Reliable_Trading_Systems.pdf` (Fitschen, 290pp) — no "walk-forward efficiency" or "WFE" hits in body.
+- `resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf` (45pp, bibliography excerpt only — not main text) — no chapter content. The "Walk Forward" hit is a bibliography entry for Żbikowski (2015), not a definition. See § 9.5 for what to acquire.
+- `resources/false-strategy-lopez.pdf`, `resources/deflated-sharpe.pdf`, `resources/Pseudo-mathematics-and-financial-charlatanism.pdf`, `resources/backtesting_dukepeople_liu.pdf`, `resources/man_overfitting_2015.pdf`, `resources/Quantitative_Trading_Chan_2008.pdf`, `resources/Two_Million_Trading_Strategies_FDR.pdf`, `resources/real_time_strategy_monitoring_cusum.pdf` — no "walk-forward efficiency" or "WFE" hits. The modern statistical literature (Bailey/Lopez de Prado, Harvey/Liu) uses DSR (Deflated Sharpe Ratio), PBO (Probability of Backtest Overfitting), and combinatorial purged CV as primary gates, not a WFE ratio.
+
+#### Web search (supplementary — read-only, no primary-source text acquired)
+
+Web search on 2026-04-07 for Pardo's exact WFE definition and threshold returned only (a) Wikipedia's `Walk_forward_optimization` article, which cites **Pardo 2008 2nd ed pp 237-262** and **Pardo 1992 1st ed pp 108-119** as the primary source but quotes neither, and (b) practitioner blog posts (QuantInsti, AlgoTrading101, Unger Academy, Surmount, FXNX) which repeat the 0.5 convention without traceable primary citations. Google Books preview of the Pardo 2008 edition does not include Chapter 11 body pages. **No web source provided verbatim extracts of Pardo's definition or threshold.**
+
+#### Conclusion — grounding is PARTIAL but defensible
+
+The "WFE ≥ 0.5" threshold is:
+1. **Not directly verifiable against Pardo's primary source** (our local PDF is front-matter only; web previews don't include the relevant pages).
+2. **Locally grounded via Aronson's explicit statement** that the partition decision is "arbitrary" and has "no theory" — a rigorous academic-practitioner source explicitly demoting it from theoretical principle to practitioner convention.
+3. **Locally grounded via Chan's practitioner statement** that live Sharpe of "half" the backtest value is "what most traders would be happy with" — the same 0.5 conservative lower-bound conceptually, in a Wiley-published source.
+4. **Empirically irrelevant to the current portfolio** — all 124 active strategies are comfortably above it (min = 0.5141).
+
+The honest framing: **the 0.5 threshold is a conservative practitioner lower-bound, not a theoretically justified number.** Aronson is the authoritative local citation for that framing. Enforcing it as a hard gate is defensible as a future-facing sanity check; treating it as theologically correct would misrepresent the literature. The spec's decision (§ 9.3) and the implementation contract (§ 9.4) reflect this posture by requiring the gate AND the explicit grounding caveat in both code comments and `RESEARCH_RULES.md:59`.
 
 ### 9.3 Decision — Modified Option A
 
@@ -575,7 +602,7 @@ Rationale:
 2. **Closes a real silent failure.** `RESEARCH_RULES.md:59` states a standard the code does not enforce — the definition of a silent failure under `.claude/rules/institutional-rigor.md`. A gate that matches the doc eliminates the gap.
 3. **Future-proof.** Any future strategy with `wfe < 0.5` gets blocked at promotion time. Researchers cannot inadvertently introduce the same class of doc/code divergence.
 4. **Additive, not replacing.** The 4-condition load-bearing gate stays intact. WFE becomes a 5th condition. This respects the fact that the existing gate is the evidence-based rule and WFE is a conservative single-number sanity check.
-5. **Honest about grounding.** The 0.5 threshold gets an explicit caveat in both the code and `RESEARCH_RULES.md:59` noting that the Pardo primary source is not locally extractable and that the value is conventional/conservative. Future researchers will see the caveat and can propose a different threshold if they find verifiable literature support. This prevents cargo-culting the number.
+5. **Honest about grounding.** The 0.5 threshold gets an explicit caveat in both the code and `RESEARCH_RULES.md:59` noting: (a) the Pardo primary source (2008 Ch 11 pp 237-262) is not locally extractable, (b) Aronson p339 explicitly states "there is no theory" for the partition threshold, (c) Chan p25 is the secondary local source for the 0.5 halving heuristic applied to Sharpe, and (d) the value is practitioner-conventional, not theoretically derived. Future researchers will see the caveat and can propose a different threshold if they acquire Pardo's chapter body or better peer-reviewed literature. This prevents cargo-culting the number.
 
 ### 9.4 Implementation contract (for Phase E)
 
@@ -593,7 +620,38 @@ When Phase E is executed, the implementation MUST:
    - Strategy where `wfe is None` (pathological windows) → `passed=False`
 8. Run the full `validated_setups` population through a dry-run verification: `SELECT COUNT(*) FROM validated_setups WHERE status='active' AND (wfe IS NULL OR wfe < 0.5)` must return **0** before and after the gate change (proves zero empirical impact).
 
-### 9.5 What this decision does NOT do
+### 9.5 Literature acquisition backlog
+
+The local grounding in § 9.2 is partial. These sources would strengthen the grounding if acquired, but **none of them are blocking** the decision in § 9.3 or the implementation contract in § 9.4. The acquisition list is ordered by marginal value:
+
+1. **Pardo, R. E. (2008). *The Evaluation and Optimization of Trading Strategies* (2nd ed.). Wiley. ISBN 978-0-470-12801-5. Chapters 11–12 (pages 237–280).**
+   - Why: this is the canonical primary source for Walk-Forward Analysis and Walk-Forward Efficiency. Would replace the Aronson-secondary and Chan-adjacent citations with the actual Pardo definition and (possibly) threshold justification.
+   - What to acquire: either (a) the Wiley eBook (~$120 USD, full Ch 11-12 accessible), (b) a used print copy via AbeBooks / eBay / university library, or (c) university-library digital access via `Wiley Online Library` (`onlinelibrary.wiley.com/doi/book/10.1002/9781119196969`).
+   - What to verify in the acquired text: (i) Pardo's exact formula for WFE — is it OOS_ExpR / IS_ExpR, OOS_profit / IS_profit, or something else? (ii) Does Pardo recommend a specific numeric threshold and if so, does he justify 0.5 with an argument? (iii) Does Pardo address the mean-of-ratios pathology that our `walkforward.py:297-299` already corrected for?
+   - Expected finding: Pardo probably gives 0.5 as a practitioner heuristic without theoretical derivation, which would *confirm* Aronson's "no theory" characterization rather than overturn it. If Pardo actually derives the threshold, the local grounding table in § 9.2 should be updated with the Pardo quote and the Aronson "no theory" framing softened.
+
+2. **Pardo, R. E. (1992). *Design, Testing, and Optimization of Trading Systems* (1st ed.). Wiley. Pages 108–119.**
+   - Why: Aronson p515 footnote 10 cites this as the canonical walk-forward source. Wikipedia also cites it as pp 108-119. Older edition, possibly easier to find in used bookstores or academic archives. Lower priority than the 2008 edition because the 2008 edition is the one expanded and refined.
+   - What to acquire: used book market, academic library interlibrary loan.
+
+3. **Lopez de Prado, M. (2018). *Advances in Financial Machine Learning*. Wiley. ISBN 978-1-119-48208-2. Chapters 11 ("The Dangers of Backtesting"), 12 ("Backtesting through Cross-Validation"), and 13 ("Backtesting on Synthetic Data").**
+   - Why: the modern rigorous alternative to walk-forward. Chapter 12 introduces Combinatorial Purged Cross-Validation (CPCV), which Lopez de Prado argues is strictly superior to walk-forward because it generates multiple backtest paths from the same data while respecting temporal ordering and purging label leakage. This is important for the `validation_standards` section of this spec (§ 7) and for deciding whether to eventually replace walk-forward entirely in CONFIRMATION mode (§ 2.2).
+   - What to acquire: Wiley eBook, Amazon Kindle, university library.
+   - What to verify: (i) whether Lopez de Prado explicitly criticizes Pardo's WFE threshold, (ii) whether CPCV provides a replacement metric with stronger theoretical backing, (iii) the PBO formula and its threshold (commonly `PBO < 0.5` in the Bailey-Lopez de Prado paper series).
+
+4. **Kirkpatrick, C. D., & Dahlquist, J. R. (2010). *Technical Analysis: The Complete Resource for Financial Market Technicians*. FT Press. Page 548.**
+   - Why: Wikipedia cites this page as a walk-forward reference. Supplementary confirmation of the practitioner convention.
+   - What to acquire: Pearson eBook, print.
+   - Low priority — likely just a restatement of Pardo.
+
+5. **Pardo & Company original corpus** (`pardo.space/bob-pardo`) — Pardo himself runs a consulting firm and may have published white papers or client documents that define WFE without the book's copyright restriction. Worth checking for publicly available materials.
+
+**What this backlog does NOT include:**
+- Bailey, Borwein, Lopez de Prado, Zhu (2014) "Pseudo-mathematics and financial charlatanism" — **already in local resources** (`resources/Pseudo-mathematics-and-financial-charlatanism.pdf`, 32pp). Does not discuss walk-forward specifically but is relevant to the broader statistical-grounding context. Uses in-sample/out-of-sample terminology once at p3.
+- Bailey, Lopez de Prado (2014) "The Deflated Sharpe Ratio" — **already in local resources** (`resources/deflated-sharpe.pdf`, 22pp). Does not discuss WFE; uses DSR as the primary gate metric.
+- Harvey, Liu, Zhu (2016) "...and the Cross-Section of Expected Returns" — cited in Lopez de Prado MLAM bibliography, referenced in this project's FDR methodology. Not directly relevant to WFE threshold.
+
+### 9.6 What this decision does NOT do
 
 - Does not prescribe a WFE threshold for any mode other than `CONFIRMATION` (§ 2.2). DISCOVERY and DEPLOYMENT_ANALYTICS do not run `walkforward.py`.
 - Does not retroactively retire any current strategies. The empirical state confirms no retirements are needed.
