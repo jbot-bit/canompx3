@@ -12,7 +12,7 @@
 >
 > **The 12 locked criteria** that any validated strategy must meet live in [`docs/institutional/pre_registered_criteria.md`](docs/institutional/pre_registered_criteria.md) (v2 with 5 Codex audit amendments). Read it BEFORE any discovery run. Discovery without a committed pre-registered hypothesis file in `docs/audit/hypotheses/` is banned per Criterion 1. The 300-trial MinBTL bound is per Criterion 2.
 >
-> **⚠️ Known governance inconsistency (Codex finding 2026-04-07):** The "2026 holdout is sacred" rule below conflicts with `pipeline/check_drift.py:3381 HOLDOUT_DECLARATIONS = {}` (empty dict, no active enforcement) AND with v2 Criterion 8 (Amendment 2.3) which makes 2026 OOS contingent on a pre-run Mode A (holdout-clean) vs Mode B (post-holdout-monitoring) declaration. Resolution requires a project-level policy decision; until then, treat the rule below as ASPIRATIONAL pending the declaration. See [`docs/audits/2026-04-07-finite-data-orb-audit.md`](docs/audits/2026-04-07-finite-data-orb-audit.md) for the full Codex finding.
+> **🟢 Holdout policy DECLARED 2026-04-07 — Mode B operative.** The Codex finding above has been resolved. After pass-2 audit (verified against `gold.db`, `HANDOFF.md:1468`, and the pre-registration completion record), Mode B (post-holdout-monitoring) is the only honest position: the pre-registered 2026 holdout test ran 2026-04-02, the holdout was officially "spent", and the 124 current validated_setups were discovered with 2026 in scope (validated via walk-forward, not strict-clean-holdout). A NEW forward-sacred window starts 2026-04-07 (earliest first-look 2026-10-07, per Amendment 2.3 + Codex 6-month minimum). Full decision + audit evidence: [`docs/plans/2026-04-07-holdout-policy-decision.md`](docs/plans/2026-04-07-holdout-policy-decision.md). Codified as Amendment 2.6 in [`docs/institutional/pre_registered_criteria.md`](docs/institutional/pre_registered_criteria.md). **The "2026 holdout is sacred" line below is now historical context, not current rule** — see the inline note where it appears.
 
 ---
 
@@ -34,7 +34,9 @@ When analyzing data or producing research for this project, act as a **systemati
 - Walk-forward efficiency (WFE) where applicable
 - Data state timestamp (e.g., "orb_outcomes through 2026-03-23, 1475 MNQ trading days")
 
-**2026 holdout is sacred.** Forward-test data informs paper-trade monitoring ONLY. It must not be used to select sessions, thresholds, filters, or entry models. Session selection must be reproducible from pre-2026 data alone.
+**Holdout policy: Mode B operative (declared 2026-04-07).** The 2026 H1 window (2026-01-01 → 2026-04-06) was consumed by the pre-registered holdout test on 2026-04-02 and is no longer "sacred". Walk-forward is the operative OOS validation method for current discoveries (HANDOFF.md:1468). The NEW sacred forward window is **2026-04-07 onwards**: no discovery may use this window's data, and the earliest first-look is **2026-10-07** (6-month minimum per pre_registered_criteria.md Amendment 2.3 + Codex audit recommendation). Going forward, every discovery run must declare its holdout boundary in its pre-registered hypothesis file at `docs/audit/hypotheses/`. See [`docs/plans/2026-04-07-holdout-policy-decision.md`](docs/plans/2026-04-07-holdout-policy-decision.md) for the full decision + audit evidence + deferred enforcement work blocked by the e2-canonical-window-fix scope_lock.
+
+> **Historical context (pre-declaration rule, retained for audit history):** This file previously said *"2026 holdout is sacred. Forward-test data informs paper-trade monitoring ONLY. It must not be used to select sessions, thresholds, filters, or entry models. Session selection must be reproducible from pre-2026 data alone."* That rule was correct in spirit but the project consumed the holdout per pre-registered protocol on 2026-04-02. The Mode B declaration above is the honest current state.
 
 ## Statistical Rigor
 

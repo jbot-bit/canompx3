@@ -11,7 +11,8 @@
 | Version | Date | Change | Signer |
 |---|---|---|---|
 | v1 | 2026-04-07 | Initial lock. All criteria derived from Phase 0 literature extraction. | Claude Code audit session |
-| v2 | 2026-04-07 | Codex audit feedback integrated. DSR downgraded from binding to cross-check (N_eff unresolved). Chordia t-threshold reframed as severity benchmark, not hard bar. Criterion 8 (2026 OOS) gated on holdout-policy decision. See amendment at bottom. | Claude Code session (Codex audit incorporated) |
+| v2 | 2026-04-07 | Codex audit feedback integrated. DSR downgraded from binding to cross-check (N_eff unresolved). Chordia t-threshold reframed as severity benchmark, not hard bar. Criterion 8 (2026 OOS) gated on holdout-policy decision. See amendments 2.1-2.5 at bottom. | Claude Code session (Codex audit incorporated) |
+| v2.6 | 2026-04-07 | Holdout policy DECLARED — Mode B operative. Pass-2 audit verified the 2026 H1 holdout was consumed per pre-registered protocol on 2026-04-02. New forward-sacred window starts 2026-04-07 (earliest first-look 2026-10-07). Walk-forward continues as OOS discipline for existing discoveries; forward-paper requirement applies to new deployments. See Amendment 2.6 at bottom. | Claude Code session (autonomous decision per user delegation, pass-2 audit verified) |
 
 ---
 
@@ -341,6 +342,48 @@ This applies to documentation, memory files, and any downstream use of the word 
 **New requirement (not in v1):** Execution overlays (calendar skip, ATR velocity skip, E2 order timeout, market-state gating) MUST be reported and evaluated SEPARATELY from discovery filters. Per `trading_app/config.py:2600-2611` and `trading_app/execution_engine.py:207-212, 654-674`, overlays change the live decision rule in ways not encoded in `strategy_id`. A lane can be "clean" at discovery time and still have later operational logic that shifts the actual traded distribution.
 
 **Rule:** Any claim about a strategy's evidence base must specify whether it refers to (a) the discovery-filter-only backtest, (b) the discovery-filter + overlays backtest, or (c) live/paper forward data. Mixing (a) and (b) in the same evidence object is banned.
+
+### Amendment 2.6 — Holdout policy DECLARED — Mode B operative (2026-04-07)
+
+**Resolves:** Amendment 2.3's gating requirement ("the project must declare ONE of Mode A or Mode B"). The full decision document is at [`docs/plans/2026-04-07-holdout-policy-decision.md`](../plans/2026-04-07-holdout-policy-decision.md).
+
+**Decision-maker:** Claude Code session (autonomous, per explicit user delegation: *"YOU FIGURE IT OUT WHATS BEST AND MOST PROPER FOR US"* + *"ENSURE DOUBLE CHECKING FINDINGS BEFORE MAKING DECISIONS"*).
+
+**Audit method:** Pass-1 (sloppy) → pass-2 (verified against gold.db, HANDOFF.md:1468, pre-registration completion record). Pass-2 refined the mechanism without changing the conclusion.
+
+**Smoking gun:** `HANDOFF.md:1468` states *"2026 included in discovery — holdout test was spent (CME_PRECLOSE DEAD recorded). Walk-forward handles OOS. Live trading = new forward test."* This is an explicit, committed audit-trail decision: the pre-registered 2026 holdout test ran 2026-04-02, killed CME_PRECLOSE NO_FILTER baseline per `docs/plans/2026-03-25-cme-preclose-holdout-test-plan.md`, and after that the holdout was officially "spent". All 124 current `validated_setups` were discovered 2026-04-05 → 2026-04-06 with 2026 in scope; all 124 have `wf_tested = True AND wf_passed = True` (walk-forward is the operative OOS discipline).
+
+**Mode B is the only honest position because:**
+
+1. The holdout test was already RUN and the result is committed to git (`docs/pre-registrations/2026-03-20-mnq-rr1-verified-sessions.md:4` "Status: COMPLETED")
+2. After the test, the project EXPLICITLY chose to fold 2026 into discovery scope and use walk-forward as the OOS discipline (HANDOFF.md:1468)
+3. 124 / 124 active `validated_setups` reflect this choice (all wf_tested + wf_passed, all discovered post-2026)
+4. Reverting to Mode A would require erasing committed audit trail and re-running discovery from scratch (multi-week project, no scientific value because the pre-registered protocol was followed correctly)
+
+**Operative rules under Amendment 2.6 (Mode B):**
+
+- **Past window (2026-01-01 → 2026-04-06):** CONSUMED. No "clean 2026 OOS" claims for any strategy. Existing memory/doc references to "+2026 OOS" are historical observations, not strict OOS evidence.
+- **Forward-sacred window:** **2026-04-07 onwards.** No discovery may use this window's data. Any new hypothesis file at `docs/audit/hypotheses/` must declare a `holdout_date <= 2026-04-07`.
+- **Earliest first-look at the new window:** **2026-10-07** (6-month minimum per Amendment 2.3 + Codex audit recommendation).
+- **Forward-paper requirement** (replaces strict Criterion 8 for new deployments): minimum 6 months live paper with positive ExpR before any deployment decision. Earliest possible new deployment for a strategy first paper-traded 2026-04-07 = **2026-10-07**.
+- **Existing 5 deployed lanes:** Grandfathered as research-provisional + operationally deployable per Amendment 2.4. No retroactive forward-paper requirement (they have walk-forward + live tracking already). No scaling until they pass all 12 v2 criteria.
+- **No mixing of modes:** Mode B is project-wide. No future research may claim Mode A status.
+- **Walk-forward continues** as the operative OOS discipline for new discoveries that fit within the pre-2026-04-07 window. Mode B does not eliminate walk-forward — it adds a forward-sacred window on top.
+
+**Updated Acceptance Matrix (Criterion 8 row only — others unchanged from v2):**
+
+| Criterion | Threshold | Enforcement |
+|---|---|---|
+| 8 Forward / OOS | Walk-forward `wf_passed = True` for in-scope discoveries; **AND** ≥ 6 months forward-paper positive ExpR for new deployments after 2026-04-07 | BINDING (WF) + BINDING (forward-paper, new deployments only) |
+
+**Deferred enforcement (blocked by `e2-canonical-window-fix` scope_lock on `pipeline/check_drift.py`, `pipeline/build_daily_features.py`, `trading_app/strategy_discovery.py`):**
+
+1. `pipeline/check_drift.py` `HOLDOUT_DECLARATIONS` map populated with `MNQ: 2026-04-07`, `MES: 2026-04-07`, `MGC: 2026-04-07`. Activates the existing `check_holdout_contamination()` function.
+2. `trading_app/strategy_discovery.py` runtime enforcement: reject `--holdout-date > 2026-04-07` and require explicit holdout_date for any new discovery run.
+3. `trading_app/strategy_validator.py` validation gate: verify `discovery_date < 2026-04-07` OR hypothesis file declares `holdout_date <= 2026-04-07`.
+4. New drift check: assert `RESEARCH_RULES.md`, this file, and `pipeline/check_drift.py` agree on the holdout policy (catches future drift between docs and code).
+
+All four follow-ups go on the action queue for the post-merge sweep.
 
 ---
 
