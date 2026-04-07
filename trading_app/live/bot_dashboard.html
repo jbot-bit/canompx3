@@ -180,16 +180,25 @@
   .lane-subtitle { color: var(--muted); font-size: 10px; }
   .actions-row { display: flex; gap: 5px; margin-top: 10px; }
   .pf-btn {
-    flex: 1; border-radius: var(--r); padding: 7px 8px; border: 1px solid var(--border);
-    cursor: pointer; font-weight: 700; text-transform: uppercase; font-size: 10px;
-    letter-spacing: 0.04em; background: var(--surface); color: var(--text); transition: all 0.12s;
+    flex: 1; border-radius: var(--r); padding: 8px 6px; border: 1px solid var(--border);
+    cursor: pointer; font-weight: 700; font-size: 11px;
+    background: var(--surface); color: var(--text); transition: all 0.12s;
+    display: flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.15;
   }
+  .pf-btn .btn-title { text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; }
+  .pf-btn .btn-sub { font-size: 9px; font-weight: 500; opacity: 0.75; text-transform: none; letter-spacing: 0; }
   .pf-btn.signal { color: var(--green); border-color: rgba(0,214,143,0.20); }
   .pf-btn.demo { color: var(--blue); border-color: rgba(77,166,255,0.20); }
   .pf-btn.live { color: var(--red); border-color: rgba(255,92,92,0.20); }
-  .pf-btn.stop { color: #fff; background: rgba(185,28,28,0.5); border-color: rgba(255,92,92,0.3); }
+  .pf-btn.stop { color: #fff; background: rgba(185,28,28,0.5); border-color: rgba(255,92,92,0.3); text-transform: uppercase; letter-spacing: 0.04em; }
   .pf-btn:disabled { cursor: not-allowed; opacity: 0.3; }
-  .live-gate { margin-top: 5px; }
+  .mode-legend { margin-top: 8px; padding: 6px 8px; background: rgba(0,0,0,0.15); border-radius: 6px; font-size: 10px; color: var(--dim); line-height: 1.5; }
+  .mode-legend b { color: var(--text); font-weight: 600; }
+  .mode-legend .lg-signal { color: var(--green); }
+  .mode-legend .lg-demo { color: var(--blue); }
+  .mode-legend .lg-live { color: var(--red); }
+  .live-gate { margin-top: 6px; }
+  .live-gate label { display: block; font-size: 10px; color: var(--dim); margin-bottom: 3px; }
   .live-gate input { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: rgba(0,0,0,0.2); color: var(--text); font-size: 11px; }
 
   /* ── ACTIVITY ───────────────────────── */
@@ -738,13 +747,30 @@ function renderAccounts(accounts) {
         card.appendChild(sr);
       } else {
         const ar = document.createElement("div"); ar.className = "actions-row";
-        ar.innerHTML = '<button class="pf-btn signal">Signal</button><button class="pf-btn demo">Demo</button><button class="pf-btn live" disabled>Live</button>';
+        ar.innerHTML =
+          '<button class="pf-btn signal" title="Bot watches the market and sends Telegram alerts when a lane fires. You place orders manually on the TopStep platform. No orders are sent. Safe to run anytime — no money, no Combine impact.">' +
+            '<span class="btn-title">Alerts</span><span class="btn-sub">Telegram only</span>' +
+          '</button>' +
+          '<button class="pf-btn demo" title="Bot places PRACTICE orders on a separate ProjectX demo/sandbox account. No real money. Does NOT trade your Combine — use this only to rehearse the full order round-trip.">' +
+            '<span class="btn-title">Paper</span><span class="btn-sub">Practice, no $$</span>' +
+          '</button>' +
+          '<button class="pf-btn live" disabled title="Bot places REAL orders on your TopStep Combine account. Every trade counts toward your Combine pass/fail metrics. Type LIVE in the box below to unlock this button.">' +
+            '<span class="btn-title">Live</span><span class="btn-sub">Real Combine $$</span>' +
+          '</button>';
         const [bs, bd, bl] = ar.querySelectorAll("button");
         bs.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "signal"));
         bd.addEventListener("click", () => launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "demo"));
         card.appendChild(ar);
+
+        const legend = document.createElement("div"); legend.className = "mode-legend";
+        legend.innerHTML =
+          '<div><b class="lg-signal">Alerts</b> — Telegram only. You trade manually. <em>Zero risk.</em></div>' +
+          '<div><b class="lg-demo">Paper</b> — fake orders on a practice account. Rehearses the bot without touching your Combine.</div>' +
+          '<div><b class="lg-live">Live</b> — real orders on your Combine. Counts toward pass/fail.</div>';
+        card.appendChild(legend);
+
         const gate = document.createElement("div"); gate.className = "live-gate";
-        gate.innerHTML = '<input type="text" placeholder="Type LIVE to unlock">';
+        gate.innerHTML = '<label>To enable <b>Live</b>, type <b>LIVE</b> then click the Live button:</label><input type="text" placeholder="Type LIVE here to unlock real trading">';
         const inp = gate.querySelector("input");
         inp.addEventListener("input", () => { bl.disabled = inp.value.trim() !== "LIVE"; });
         bl.addEventListener("click", () => { if (inp.value.trim() !== "LIVE") return; launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "live"); inp.value = ""; bl.disabled = true; });
