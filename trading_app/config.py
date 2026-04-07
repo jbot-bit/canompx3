@@ -143,6 +143,35 @@ def _atom_numeric(value: Any) -> float | None:
     return f
 
 
+def _e2_look_ahead_reason(filter_type: str) -> str | None:
+    """Return E2 look-ahead exclusion reason if filter_type is E2-excluded.
+
+    Canonical source: E2_EXCLUDED_FILTER_PREFIXES / E2_EXCLUDED_FILTER_SUBSTRINGS
+    (defined later in this module). Mirrors the gate used in
+    strategy_discovery.py:1161 and execution_engine.py:627 — do NOT re-encode
+    the membership rule; delegate to the same constants.
+
+    Returns a human-readable reason string if the filter is E2-excluded, or
+    None if the filter is E2-safe. Used by describe() overrides on break-bar
+    dependent filters (BreakSpeed, BreakBarContinues, Volume, CombinedATRVol).
+    """
+    # Forward reference to constants defined lower in the module.
+    # Python resolves globals at call time, so this is safe as long as the
+    # module has finished importing before describe() is invoked.
+    if filter_type.startswith(E2_EXCLUDED_FILTER_PREFIXES):
+        return (
+            f"E2 look-ahead: filter_type '{filter_type}' depends on break-bar "
+            f"properties unknown at E2 entry placement"
+        )
+    for sub in E2_EXCLUDED_FILTER_SUBSTRINGS:
+        if sub in filter_type:
+            return (
+                f"E2 look-ahead: filter_type '{filter_type}' depends on break-bar "
+                f"properties unknown at E2 entry placement (substring '{sub}')"
+            )
+    return None
+
+
 @dataclass(frozen=True)
 class AtomDescription:
     """A single atomic condition produced by a filter's describe() method.
@@ -502,6 +531,56 @@ class CostRatioFilter(StrategyFilter):
             result.loc[inst_mask] = cost_ratio_pct < self.max_cost_ratio_pct
         return result
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Cost-ratio gate derived from orb size + canonical cost spec.
+
+        Intra-session: resolves at ORB_FORMATION (size known at ORB close).
+        Both missing/zero orb_size and unknown symbol surface as DATA_MISSING
+        so the report shows 'data unavailable' instead of a spurious FAIL.
+        """
+        _ = entry_model  # cost-ratio applies to all entry models
+        size_col = f"orb_{orb_label}_size"
+        size = _atom_numeric(row.get(size_col))
+        symbol = row.get("symbol")
+        missing = size is None or symbol is None or size <= 0
+
+        observed_ratio: float | None = None
+        if not missing:
+            assert size is not None  # type narrowing for pyright
+            try:
+                cost_spec = get_cost_spec(str(symbol))
+                raw_risk = size * cost_spec.point_value
+                observed_ratio = (
+                    100.0 * cost_spec.total_friction / (raw_risk + cost_spec.total_friction)
+                )
+            except ValueError:
+                missing = True
+                observed_ratio = None
+
+        passes = None if missing else observed_ratio < self.max_cost_ratio_pct  # type: ignore[operator]
+        return [
+            AtomDescription(
+                name=f"Cost ratio < {self.max_cost_ratio_pct:g}%",
+                category="INTRA_SESSION",
+                resolves_at="ORB_FORMATION",
+                passes=passes,
+                feature_column=size_col,
+                observed_value=observed_ratio,
+                threshold=self.max_cost_ratio_pct,
+                comparator="<",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require round-trip cost share of raw ORB risk "
+                    f"< {self.max_cost_ratio_pct:g}% (minimum-viable-trade-size screen)."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class VolumeFilter(StrategyFilter):
@@ -531,6 +610,58 @@ class VolumeFilter(StrategyFilter):
         if col not in df.columns:
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] >= self.min_rel_vol)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Relative-volume gate. Intra-session, resolves at BREAK_DETECTED.
+
+        E2-excluded: rel_vol includes break-bar volume, unknown at E2 entry.
+        """
+        col = f"rel_vol_{orb_label}"
+        if entry_model == "E2":
+            reason = _e2_look_ahead_reason(self.filter_type)
+            if reason is not None:
+                return [
+                    AtomDescription(
+                        name=f"Rel volume >= {self.min_rel_vol:g}",
+                        category="INTRA_SESSION",
+                        resolves_at="BREAK_DETECTED",
+                        passes=None,
+                        feature_column=col,
+                        threshold=self.min_rel_vol,
+                        comparator=">=",
+                        is_not_applicable=True,
+                        not_applicable_reason=reason,
+                        explanation=(
+                            "Relative-volume gate does not apply to E2 entries — "
+                            "break-bar volume is unknown at E2 order placement."
+                        ),
+                    )
+                ]
+        observed = _atom_numeric(row.get(col))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_rel_vol
+        return [
+            AtomDescription(
+                name=f"Rel volume >= {self.min_rel_vol:g}",
+                category="INTRA_SESSION",
+                resolves_at="BREAK_DETECTED",
+                passes=passes,
+                feature_column=col,
+                observed_value=observed,
+                threshold=self.min_rel_vol,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline "
+                    f"(breakout conviction gate)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -578,6 +709,82 @@ class CombinedATRVolumeFilter(VolumeFilter):
             & (df[rel_col] >= self.min_rel_vol)
         )
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Combined ATR regime + rel-volume gate. Emits TWO atoms.
+
+        - ATR-20 percentile atom: PRE_SESSION, resolves at STARTUP (E2-safe).
+        - Rel-volume atom: INTRA_SESSION, resolves at BREAK_DETECTED.
+          E2-excluded by filter_type prefix (ATR70_VOL). For E2 the volume
+          atom is NOT_APPLICABLE but the ATR atom still evaluates normally,
+          preserving granularity in the eligibility report.
+        """
+        # Atom 1: ATR regime (E2-safe, pre-session)
+        atr_obs = _atom_numeric(row.get("atr_20_pct"))
+        atr_missing = atr_obs is None
+        atr_passes = None if atr_missing else atr_obs >= self.min_atr_pct
+        atr_atom = AtomDescription(
+            name=f"ATR percentile >= {self.min_atr_pct:g}",
+            category="PRE_SESSION",
+            resolves_at="STARTUP",
+            passes=atr_passes,
+            feature_column="atr_20_pct",
+            observed_value=atr_obs,
+            threshold=self.min_atr_pct,
+            comparator=">=",
+            is_data_missing=atr_missing,
+            explanation=(
+                f"Require own ATR-20 rolling percentile >= {self.min_atr_pct:g}% "
+                f"(high-vol regime gate)."
+            ),
+        )
+
+        # Atom 2: rel_vol (E2-excluded via filter_type prefix)
+        vol_col = f"rel_vol_{orb_label}"
+        if entry_model == "E2":
+            reason = _e2_look_ahead_reason(self.filter_type)
+            if reason is not None:
+                vol_atom = AtomDescription(
+                    name=f"Rel volume >= {self.min_rel_vol:g}",
+                    category="INTRA_SESSION",
+                    resolves_at="BREAK_DETECTED",
+                    passes=None,
+                    feature_column=vol_col,
+                    threshold=self.min_rel_vol,
+                    comparator=">=",
+                    is_not_applicable=True,
+                    not_applicable_reason=reason,
+                    explanation=(
+                        "Relative-volume half of the combined gate does not "
+                        "apply to E2 entries — break-bar volume is unknown at "
+                        "E2 order placement."
+                    ),
+                )
+                return [atr_atom, vol_atom]
+
+        vol_obs = _atom_numeric(row.get(vol_col))
+        vol_missing = vol_obs is None
+        vol_passes = None if vol_missing else vol_obs >= self.min_rel_vol
+        vol_atom = AtomDescription(
+            name=f"Rel volume >= {self.min_rel_vol:g}",
+            category="INTRA_SESSION",
+            resolves_at="BREAK_DETECTED",
+            passes=vol_passes,
+            feature_column=vol_col,
+            observed_value=vol_obs,
+            threshold=self.min_rel_vol,
+            comparator=">=",
+            is_data_missing=vol_missing,
+            explanation=(
+                f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline."
+            ),
+        )
+        return [atr_atom, vol_atom]
+
 
 @dataclass(frozen=True)
 class OrbVolumeFilter(StrategyFilter):
@@ -614,6 +821,40 @@ class OrbVolumeFilter(StrategyFilter):
         if col not in df.columns:
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] >= self.min_volume)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Aggregate ORB-window volume gate. Intra-session, resolves at ORB_FORMATION.
+
+        E2-safe: ORB-window volume is fully observed once the ORB closes,
+        before any E2 break can occur.
+        """
+        _ = entry_model
+        col = f"orb_{orb_label}_volume"
+        observed = _atom_numeric(row.get(col))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_volume
+        return [
+            AtomDescription(
+                name=f"ORB volume >= {self.min_volume:g}",
+                category="INTRA_SESSION",
+                resolves_at="ORB_FORMATION",
+                passes=passes,
+                feature_column=col,
+                observed_value=observed,
+                threshold=self.min_volume,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require aggregate ORB-window volume >= {self.min_volume:g} "
+                    f"contracts (session participation gate)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
@@ -1215,6 +1456,60 @@ class BreakSpeedFilter(StrategyFilter):
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] <= self.max_delay_min)
 
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Break-speed gate. Intra-session, resolves at BREAK_DETECTED.
+
+        E2-excluded: break delay is unknown until the break actually occurs,
+        but the E2 entry order must already be placed. Canonical gate via
+        _e2_look_ahead_reason (E2_EXCLUDED_FILTER_SUBSTRINGS: '_FAST').
+        """
+        col = f"orb_{orb_label}_break_delay_min"
+        if entry_model == "E2":
+            reason = _e2_look_ahead_reason(self.filter_type)
+            if reason is not None:
+                return [
+                    AtomDescription(
+                        name=f"Break delay <= {self.max_delay_min:g} min",
+                        category="INTRA_SESSION",
+                        resolves_at="BREAK_DETECTED",
+                        passes=None,
+                        feature_column=col,
+                        threshold=self.max_delay_min,
+                        comparator="<=",
+                        is_not_applicable=True,
+                        not_applicable_reason=reason,
+                        explanation=(
+                            "Break-speed gate does not apply to E2 entries — "
+                            "break delay is unknown at E2 order placement."
+                        ),
+                    )
+                ]
+        observed = _atom_numeric(row.get(col))
+        missing = observed is None
+        passes = None if missing else observed <= self.max_delay_min
+        return [
+            AtomDescription(
+                name=f"Break delay <= {self.max_delay_min:g} min",
+                category="INTRA_SESSION",
+                resolves_at="BREAK_DETECTED",
+                passes=passes,
+                feature_column=col,
+                observed_value=observed,
+                threshold=self.max_delay_min,
+                comparator="<=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require break within {self.max_delay_min:g} minutes of ORB end "
+                    f"(momentum conviction gate)."
+                ),
+            )
+        ]
+
 
 @dataclass(frozen=True)
 class BreakBarContinuesFilter(StrategyFilter):
@@ -1243,6 +1538,60 @@ class BreakBarContinuesFilter(StrategyFilter):
         if col not in df.columns:
             return pd.Series(False, index=df.index)
         return df[col].notna() & (df[col] == self.require_continues)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """Break-bar continuation gate. Intra-session, resolves at CONFIRM_COMPLETE.
+
+        E2-excluded: bar-close direction is only known once the break bar
+        closes, but the E2 entry order must already be placed. Canonical gate
+        via _e2_look_ahead_reason (E2_EXCLUDED_FILTER_SUBSTRINGS: '_CONT').
+        """
+        col = f"orb_{orb_label}_break_bar_continues"
+        if entry_model == "E2":
+            reason = _e2_look_ahead_reason(self.filter_type)
+            if reason is not None:
+                return [
+                    AtomDescription(
+                        name="Break bar closes in break direction",
+                        category="INTRA_SESSION",
+                        resolves_at="CONFIRM_COMPLETE",
+                        passes=None,
+                        feature_column=col,
+                        threshold=self.require_continues,
+                        comparator="==",
+                        is_not_applicable=True,
+                        not_applicable_reason=reason,
+                        explanation=(
+                            "Break-bar continuation gate does not apply to E2 entries — "
+                            "bar-close direction is unknown at E2 order placement."
+                        ),
+                    )
+                ]
+        raw = row.get(col)
+        missing = _atom_is_missing(raw)
+        passes = None if missing else bool(raw) == self.require_continues
+        return [
+            AtomDescription(
+                name="Break bar closes in break direction",
+                category="INTRA_SESSION",
+                resolves_at="CONFIRM_COMPLETE",
+                passes=passes,
+                feature_column=col,
+                observed_value=None if missing else bool(raw),
+                threshold=self.require_continues,
+                comparator="==",
+                is_data_missing=missing,
+                explanation=(
+                    "Require the break bar to close in the break direction "
+                    "(conviction gate)."
+                ),
+            )
+        ]
 
 
 @dataclass(frozen=True)
