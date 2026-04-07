@@ -21,7 +21,7 @@ Uses zoneinfo (stdlib) for all timezone math -- correct for all years,
 handles edge cases automatically.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 _US_EASTERN = ZoneInfo("America/New_York")
@@ -29,6 +29,33 @@ _US_CHICAGO = ZoneInfo("America/Chicago")
 _UK_LONDON = ZoneInfo("Europe/London")
 _BRISBANE = ZoneInfo("Australia/Brisbane")
 _UTC = ZoneInfo("UTC")
+
+# Public aliases — canonical timezone constants for use across pipeline/ and trading_app/.
+# Promoted from build_daily_features.py during the E2 canonical-window refactor (2026-04-07)
+# to give the codebase a single source of truth for time boundaries.
+#
+# Reference: Chan, "Algorithmic Trading: Winning Strategies and Their Rationale" (Wiley, 2013),
+# Chapter 1 ("Backtesting and Automated Execution"), p4:
+#   "If your backtesting and live trading programs are one and the same, and the only
+#    difference between backtesting versus live trading is what kind of data you are
+#    feeding into the program (historical data in the former, and live market data in the
+#    latter), then there can be no look-ahead bias in the program."
+#
+# This module enforces that invariant for ORB window timing: every consumer of "ORB window
+# end UTC" — backtest (outcome_builder), live engine (execution_engine), feature builder
+# (build_daily_features) — derives from the SAME canonical function (orb_utc_window below).
+BRISBANE_TZ = _BRISBANE
+UTC_TZ = _UTC
+
+# Trading day boundary: 09:00 Brisbane local. A bar at 23:00:00 UTC starts the next
+# trading day (because 09:00 Brisbane = 23:00 UTC previous day, no DST in Brisbane).
+TRADING_DAY_START_HOUR_LOCAL = 9
+
+# Sanity bounds on ORB aperture minutes (matches VALID_ORB_MINUTES in build_daily_features).
+# Bounds chosen to reject obviously wrong inputs (zero, negative, full-day) while allowing
+# all currently-supported apertures (5, 15, 30) plus reasonable future expansion.
+_ORB_MINUTES_MIN = 1
+_ORB_MINUTES_MAX = 60
 
 
 def is_us_dst(trading_day: date) -> bool:
@@ -54,6 +81,59 @@ def is_uk_dst(trading_day: date) -> bool:
     """
     dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_UK_LONDON)
     return dt.utcoffset().total_seconds() == 1 * 3600
+
+
+# =========================================================================
+# CANONICAL TRADING DAY / ORB WINDOW FUNCTIONS
+# =========================================================================
+#
+# Promoted from pipeline/build_daily_features.py during the E2 canonical-window
+# refactor (2026-04-07). These are the single source of truth for:
+#   - The [start, end) UTC range of a trading day
+#   - The [start, end) UTC range of an ORB window within a trading day
+#
+# Every consumer (backtest via outcome_builder, live engine via execution_engine,
+# feature builder via build_daily_features) must import from here — not re-encode.
+# See the module docstring and BRISBANE_TZ/UTC_TZ constants above for the Chan
+# Ch 1 p4 invariant that motivates this consolidation.
+
+
+def compute_trading_day_utc_range(trading_day: date) -> tuple[datetime, datetime]:
+    """
+    Return the [start, end) UTC range for a given trading day.
+
+    A trading day begins at 09:00 Brisbane local (no DST in Brisbane — stable
+    year-round), so:
+
+      trading_day 2024-01-05:
+        start = 2024-01-04 23:00:00 UTC (09:00 Brisbane on 2024-01-05)
+        end   = 2024-01-05 23:00:00 UTC (09:00 Brisbane on 2024-01-06)
+
+    The range is a 24-hour window: [start, end) — start inclusive, end exclusive.
+
+    This function is CANONICAL. Do not re-encode this calendar math anywhere
+    else in the codebase. Import from here.
+    """
+    # 09:00 Brisbane on trading_day = 23:00 UTC on (trading_day - 1).
+    # Brisbane is UTC+10 with no DST — this formula is stable across all dates.
+    start_utc = datetime(
+        trading_day.year,
+        trading_day.month,
+        trading_day.day,
+        TRADING_DAY_START_HOUR_LOCAL,
+        0,
+        0,
+        tzinfo=BRISBANE_TZ,
+    ).astimezone(UTC_TZ)
+
+    end_utc = start_utc + timedelta(hours=24)
+    return start_utc, end_utc
+
+
+# Note: `orb_utc_window` (the canonical ORB window function) is defined
+# further down in this module, AFTER `DYNAMIC_ORB_RESOLVERS` is populated
+# from SESSION_CATALOG. This ordering is deliberate: placing the function
+# next to its data dependency avoids forward-reference code smell.
 
 
 # =========================================================================
@@ -446,6 +526,105 @@ def get_break_group(orb_label: str) -> str | None:
 DYNAMIC_ORB_RESOLVERS = {
     label: entry["resolver"] for label, entry in SESSION_CATALOG.items() if entry["type"] == "dynamic"
 }
+
+
+def orb_utc_window(
+    trading_day: date, orb_label: str, orb_minutes: int
+) -> tuple[datetime, datetime]:
+    """
+    Compute the [start, end) UTC window for an ORB on a given trading day.
+
+    The ORB starts at the session's Brisbane local time (dynamic, DST-aware
+    per DYNAMIC_ORB_RESOLVERS) and lasts `orb_minutes`. The returned range
+    is [start, end) — start inclusive, end exclusive.
+
+    Example: CME_REOPEN ORB with 5-minute aperture on 2024-01-05
+      local start = 2024-01-05 09:00 Brisbane
+      local end   = 2024-01-05 09:05 Brisbane
+      UTC start   = 2024-01-04 23:00 UTC
+      UTC end     = 2024-01-04 23:05 UTC
+
+    Special case: NYSE_OPEN ORB belongs to the SAME trading day but falls at
+    00:30 the NEXT calendar day in Brisbane. The `hour < 9` branch below
+    handles this — the local calendar date is bumped forward by one day so
+    the Brisbane timestamp is constructed correctly.
+
+      trading_day 2024-01-05, NYSE_OPEN ORB:
+        local start = 2024-01-06 00:30 Brisbane (next calendar day)
+        UTC start   = 2024-01-05 14:30 UTC
+
+    Canonical contract (per E2 canonical-window refactor, 2026-04-07):
+      - Single source of truth: every E2 producer (backtest + live + feature
+        builder) calls this function. No parallel re-encoding allowed.
+      - Fail-closed on `orb_label` not registered in DYNAMIC_ORB_RESOLVERS
+        (caller bug — unknown session).
+      - Fail-closed on `orb_minutes` outside [_ORB_MINUTES_MIN, _ORB_MINUTES_MAX]
+        (caller bug — invalid aperture). Note: the predecessor function
+        pipeline/build_daily_features._orb_utc_window did NOT validate this
+        input; the canonical version tightens the contract. Production
+        callers use VALID_ORB_MINUTES = {5, 15, 30} which are all within
+        bounds, so the tightening is zero-impact on real pipeline runs.
+      - Fail-closed if the resolved UTC start falls outside the trading day's
+        [start, end) window (caller bug or session-catalog drift).
+      - Idempotent: same inputs always return the same outputs.
+
+    Raises:
+        ValueError: If orb_label is not in DYNAMIC_ORB_RESOLVERS, if
+            orb_minutes is outside valid bounds, or if the resolved window
+            falls outside the trading day's UTC range.
+    """
+    # Validate orb_minutes explicitly — canonical tightening over predecessor
+    # in build_daily_features._orb_utc_window (which accepted any int). The
+    # bounds catch zero, negative, and implausibly-large apertures.
+    if not (_ORB_MINUTES_MIN <= orb_minutes <= _ORB_MINUTES_MAX):
+        raise ValueError(
+            f"orb_minutes={orb_minutes} outside valid range "
+            f"[{_ORB_MINUTES_MIN}, {_ORB_MINUTES_MAX}]"
+        )
+
+    # Resolve the session's Brisbane (hour, minute) for this trading day.
+    # DYNAMIC_ORB_RESOLVERS holds the per-session DST-aware resolver callables.
+    if orb_label not in DYNAMIC_ORB_RESOLVERS:
+        raise ValueError(
+            f"Unknown ORB label '{orb_label}' — not in DYNAMIC_ORB_RESOLVERS"
+        )
+    hour, minute = DYNAMIC_ORB_RESOLVERS[orb_label](trading_day)
+
+    # Determine the Brisbane calendar date for this ORB time. The trading day
+    # starts at 09:00 Brisbane, so:
+    #   - hour in [09, 23] → ORB is on the same calendar date as trading_day
+    #   - hour in [00, 08] → ORB is on the NEXT calendar date (e.g., NYSE_OPEN)
+    if hour < TRADING_DAY_START_HOUR_LOCAL:
+        cal_date = trading_day + timedelta(days=1)
+    else:
+        cal_date = trading_day
+
+    local_start = datetime(
+        cal_date.year,
+        cal_date.month,
+        cal_date.day,
+        hour,
+        minute,
+        0,
+        tzinfo=BRISBANE_TZ,
+    )
+    local_end = local_start + timedelta(minutes=orb_minutes)
+
+    utc_start = local_start.astimezone(UTC_TZ)
+    utc_end = local_end.astimezone(UTC_TZ)
+
+    # Fail-closed: the resolved ORB start MUST fall within the trading day's
+    # UTC window. If it doesn't, the session catalog or resolver has drifted
+    # and we should surface that immediately rather than silently producing
+    # the wrong window.
+    td_start, td_end = compute_trading_day_utc_range(trading_day)
+    if not (td_start <= utc_start < td_end):
+        raise ValueError(
+            f"ORB {orb_label} on {trading_day} resolved to {utc_start} UTC, "
+            f"outside trading day window [{td_start}, {td_end})"
+        )
+
+    return utc_start, utc_end
 
 
 def validate_catalog():
