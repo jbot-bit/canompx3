@@ -368,6 +368,40 @@ class TestTradovateContracts:
         with pytest.raises(RuntimeError, match="No active"):
             contracts.resolve_account_id()
 
+    @patch("trading_app.live.tradovate.contracts.request_with_retry")
+    def test_resolve_front_month_success(self, mock_req, mock_auth):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = [{"name": "MNQM6", "contractSymbol": "MNQM6"}]
+        mock_req.return_value = mock_resp
+
+        contracts = TradovateContracts(auth=mock_auth)
+        symbol = contracts.resolve_front_month("MNQ")
+        assert symbol == "MNQM6"
+
+    @patch("trading_app.live.tradovate.contracts.request_with_retry")
+    def test_resolve_front_month_no_contracts_raises(self, mock_req, mock_auth):
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = []
+        mock_req.return_value = mock_resp
+
+        contracts = TradovateContracts(auth=mock_auth)
+        with pytest.raises(RuntimeError, match="No contracts found"):
+            contracts.resolve_front_month("MNQ")
+
+    @patch("trading_app.live.tradovate.contracts.request_with_retry")
+    def test_resolve_front_month_empty_symbol_raises(self, mock_req, mock_auth):
+        """API returns a contract object but both name fields are absent/empty."""
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.json.return_value = [{"contractMaturityId": 999}]  # no name/contractSymbol
+        mock_req.return_value = mock_resp
+
+        contracts = TradovateContracts(auth=mock_auth)
+        with pytest.raises(RuntimeError, match="no usable symbol"):
+            contracts.resolve_front_month("MNQ")
+
 
 # ---------------------------------------------------------------------------
 # TradovatePositions
