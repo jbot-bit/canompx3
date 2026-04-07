@@ -1346,13 +1346,22 @@ class TestOrchestratorReconnect:
 
 
 class FakeBracketRouter(FakeRouter):
-    """Router that supports native brackets (atomic: merged into entry)."""
+    """Router that supports native brackets (atomic: merged into entry).
+
+    Simulates a ProjectX-style broker with separately-queryable bracket legs
+    (has_queryable_bracket_legs=True). For tests that exercise the Rithmic-
+    style atomic-brackets-without-queryable-legs path, use
+    FakeAtomicBracketRouter instead.
+    """
 
     def __init__(self, fill_price=None):
         super().__init__(fill_price)
         self.cancelled_ids = []
 
     def supports_native_brackets(self) -> bool:
+        return True
+
+    def has_queryable_bracket_legs(self) -> bool:
         return True
 
     def build_bracket_spec(self, **kwargs) -> dict:
