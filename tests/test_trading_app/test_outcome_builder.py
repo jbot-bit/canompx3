@@ -1064,3 +1064,225 @@ class TestCLI:
             main()
         assert exc_info.value.code == 0
         assert "instrument" in capsys.readouterr().out
+
+
+# ============================================================================
+# E2 fakeout-honesty regression tests (Stage 6 — E2 canonical-window refactor)
+#
+# These tests pin the load-bearing invariant of the entire 9-stage refactor:
+# E2 entries MUST scan from the canonical ORB window close, not from the
+# later confirmed-break bar. The previous silent fallback to break_ts
+# (which was deleted in Stage 5) caused fakeout entries to be invisible to
+# the backtester even though the live engine would have triggered on them
+# — the textbook lookahead-bias divergence Chan Ch 1 p4 warns against:
+#
+#   "If your backtesting and live trading programs are one and the same,
+#    and the only difference between backtesting versus live trading is
+#    what kind of data you are feeding into the program (historical data
+#    in the former, and live market data in the latter), then there can
+#    be no look-ahead bias in the program."
+#   — Chan, "Algorithmic Trading" (Wiley 2013) Ch 1 p4
+#     (extracted verbatim from resources/Algorithmic_Trading_Chan.pdf p22)
+#
+# Test design:
+#   1. test_e2_no_canonical_args_raises_value_error — fail-closed contract
+#   2. test_e2_e1_unchanged_without_canonical_args — E1 still works (regression)
+#   3. test_e2_explicit_orb_end_utc_captures_fakeout_touch — the load-bearing
+#      test: synthetic fakeout day where bar0 pierces orb_high intra-bar but
+#      closes back inside (pure fakeout). E2 with orb_end_utc set BEFORE this
+#      bar must capture the fakeout entry. Without the Stage 5 fix, this entry
+#      was invisible to the backtest because the silent fallback scanned from
+#      the LATER confirmed-break bar.
+# ============================================================================
+
+
+class TestE2FakeoutHonesty:
+    """Stage 6 regression tests: Stage 5 fail-closed + canonical orb_end_utc."""
+
+    def test_e2_no_canonical_args_raises_value_error(self):
+        """E2 with no orb_end_utc and no (trading_day, orb_label, orb_minutes)
+        triple MUST raise ValueError. Silent fallback to break_ts is
+        forbidden — would reintroduce fakeout-blind backtests."""
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 5, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
+        bars = _make_bars(
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
+            [
+                (2698, 2701, 2697, 2701, 100),
+                (2700, 2710, 2700, 2705, 100),
+            ],
+        )
+        with pytest.raises(ValueError, match="orb_end_utc"):
+            compute_single_outcome(
+                bars_df=bars,
+                break_ts=break_ts,
+                orb_high=orb_high,
+                orb_low=orb_low,
+                break_dir="long",
+                rr_target=2.0,
+                confirm_bars=1,
+                trading_day_end=td_end,
+                cost_spec=_cost(),
+                entry_model="E2",
+                # NO orb_end_utc, NO trading_day/orb_label/orb_minutes — must fail
+            )
+
+    def test_e1_unchanged_without_canonical_args(self):
+        """E1 path is unchanged by Stage 5 — calling without canonical args
+        must still work (the fail-closed gate is E2-only)."""
+        orb_high, orb_low = 2700.0, 2690.0
+        break_ts = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
+        bars = _make_bars(
+            datetime(2024, 1, 5, 0, 0, tzinfo=UTC),
+            [
+                (2698, 2701, 2697, 2701, 100),  # bar0: confirm
+                (2700, 2710, 2700, 2705, 100),  # bar1: E1 entry at open=2700
+                (2705, 2730, 2704, 2729, 100),  # bar2: hits target
+            ],
+        )
+        # No orb_end_utc, no canonical triple — must NOT raise for E1
+        result = compute_single_outcome(
+            bars_df=bars,
+            break_ts=break_ts,
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E1",
+        )
+        assert result is not None
+        # Sanity: E1 either fills or doesn't — the test passes as long as
+        # the call returns a dict without raising.
+
+    def test_e2_explicit_orb_end_utc_captures_fakeout_touch(self):
+        """The load-bearing test for the E2 canonical-window refactor.
+
+        Construct a synthetic fakeout day:
+          - ORB window ends at 00:00 UTC (orb_end_utc).
+          - Bar 0 (00:00→00:01 UTC): high pierces orb_high but close returns
+            INSIDE the ORB (a pure fakeout — no confirmed close-based break).
+          - Bar 1 (00:01→00:02 UTC): close-confirmed break of orb_high.
+          - Bar 2+: trade plays out.
+
+        With the Stage 5 fix, E2 scans from orb_end_utc and finds the touch
+        on bar 0 — entry_ts must equal bar 0's timestamp.
+
+        Without the fix (the deleted silent fallback to break_ts), E2 would
+        have scanned from break_ts (bar 1) and missed the bar 0 fakeout entry
+        entirely. The test directly proves the bug is gone.
+        """
+        orb_high, orb_low = 2700.0, 2690.0
+        orb_end = datetime(2024, 1, 5, 0, 0, tzinfo=UTC)  # ORB closes at 00:00
+        bar0_ts = orb_end  # bar 0 = first bar after ORB end
+        bar1_ts = orb_end + timedelta(minutes=1)
+        td_end = datetime(2024, 1, 5, 23, 0, tzinfo=UTC)
+
+        # Synthetic fakeout day:
+        #   bar 0: o=2698, h=2702 (pierces orb_high=2700 intra-bar),
+        #          l=2697, c=2699 (closes BACK INSIDE — pure fakeout).
+        #   bar 1: o=2700, h=2710, l=2700, c=2705 (close-confirmed break).
+        #   bar 2: o=2705, h=2730, l=2704, c=2729 (hits 2x target).
+        bars = _make_bars(
+            bar0_ts,
+            [
+                (2698, 2702, 2697, 2699, 100),  # bar 0: FAKEOUT
+                (2700, 2710, 2700, 2705, 100),  # bar 1: confirmed break
+                (2705, 2730, 2704, 2729, 100),  # bar 2: target hit
+            ],
+        )
+
+        result = compute_single_outcome(
+            bars_df=bars,
+            break_ts=bar1_ts,  # close-based break is bar 1
+            orb_high=orb_high,
+            orb_low=orb_low,
+            break_dir="long",
+            rr_target=2.0,
+            confirm_bars=1,
+            trading_day_end=td_end,
+            cost_spec=_cost(),
+            entry_model="E2",
+            orb_end_utc=orb_end,  # canonical: scan from ORB close, not break_ts
+        )
+
+        assert result["entry_ts"] is not None, (
+            "E2 must capture the bar 0 fakeout touch when orb_end_utc is "
+            "set to the canonical ORB close. If this assertion fails, the "
+            "Stage 5 silent-fallback regression has returned and backtest "
+            "no longer matches live execution (Chan Ch 1 p4 violation)."
+        )
+        # The entry must be on the fakeout bar (bar 0), NOT the confirmed-
+        # break bar (bar 1). This is what makes E2 'honest' — it captures
+        # the live stop-market trigger that the close-based break would miss.
+        assert result["entry_ts"] == bar0_ts, (
+            f"E2 entry_ts must equal bar 0 timestamp (the fakeout touch), "
+            f"got {result['entry_ts']}. If entry_ts equals bar1_ts={bar1_ts}, "
+            f"E2 is scanning from break_ts instead of orb_end_utc — the "
+            f"Stage 5 silent fallback has returned."
+        )
+
+    def test_e2_canonical_triple_equivalent_to_explicit_orb_end_utc(self):
+        """The canonical-triple path (trading_day, orb_label, orb_minutes)
+        must produce the same orb_end_utc as a direct explicit value.
+
+        Uses CME_REOPEN on a winter trading day where the canonical
+        orb_utc_window is well-defined. Both paths should resolve to the
+        same UTC start, so the same E2 outcome.
+        """
+        from pipeline.dst import orb_utc_window
+
+        trading_day = date(2024, 1, 15)  # winter, no DST
+        orb_label = "CME_REOPEN"
+        orb_minutes = 5
+        _, expected_orb_end = orb_utc_window(trading_day, orb_label, orb_minutes)
+
+        # Build bars covering the ORB end window
+        bars = _make_bars(
+            expected_orb_end,
+            [
+                (2698, 2702, 2697, 2699, 100),  # bar 0: fakeout touch
+                (2700, 2710, 2700, 2705, 100),  # bar 1: confirmed break
+                (2705, 2730, 2704, 2729, 100),  # bar 2: target hit
+            ],
+        )
+
+        common_kwargs = {
+            "bars_df": bars,
+            "break_ts": expected_orb_end + timedelta(minutes=1),
+            "orb_high": 2700.0,
+            "orb_low": 2690.0,
+            "break_dir": "long",
+            "rr_target": 2.0,
+            "confirm_bars": 1,
+            "trading_day_end": expected_orb_end + timedelta(hours=23),
+            "cost_spec": _cost(),
+            "entry_model": "E2",
+            "orb_label": orb_label,
+        }
+
+        # Path 1: explicit orb_end_utc
+        result_explicit = compute_single_outcome(
+            **common_kwargs,
+            orb_end_utc=expected_orb_end,
+        )
+
+        # Path 2: canonical lookup via (trading_day, orb_label, orb_minutes)
+        result_canonical = compute_single_outcome(
+            **common_kwargs,
+            trading_day=trading_day,
+            orb_minutes=orb_minutes,
+        )
+
+        # Both paths must produce the same entry timestamp + entry price.
+        # If they differ, the canonical lookup has drifted from the explicit
+        # value — a structural bug in either orb_utc_window or the
+        # compute_single_outcome dispatch.
+        assert result_explicit["entry_ts"] == result_canonical["entry_ts"]
+        assert result_explicit["entry_price"] == result_canonical["entry_price"]
+        assert result_explicit["outcome"] == result_canonical["outcome"]
+        assert result_explicit["pnl_r"] == result_canonical["pnl_r"]
