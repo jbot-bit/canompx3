@@ -1402,9 +1402,12 @@ def run_discovery(
                                     # Only count AFTER the predicate accepts.
                                     # phase_4_accepted_count is the RAW trial
                                     # count for the safety-net assertion below;
-                                    # it counts every combo the predicate lets
-                                    # through regardless of dedup, empty
-                                    # outcomes, or metric compute failure.
+                                    # it counts every combo the predicate
+                                    # accepts AND has non-empty outcomes
+                                    # (empty-outcome combos are skipped at the
+                                    # `if not outcomes: continue` guard above),
+                                    # BEFORE dedup and metric compute. Phase D
+                                    # review CONSIDER #3 — doc drift tightening.
                                     phase_4_accepted_count += 1
 
                                 # Apply tight stop simulation (no-op for 1.0x).
@@ -1491,10 +1494,18 @@ def run_discovery(
         # (predicate-too-permissive bug). Fails closed BEFORE the DB write
         # phase so no rows land in experimental_strategies from an
         # overshoot run.
+        #
+        # Phase D review CONSIDER #4: raised as HypothesisLoaderError (not
+        # ValueError) so the CLI's main() try/except catches it uniformly
+        # with the other Phase 4 discipline failures and exits with a clean
+        # parser.error code 2. A predicate-vs-declared mismatch is morally
+        # a discipline violation (the hypothesis file's own scope block and
+        # declared count disagree), even though its root cause is internal
+        # inconsistency rather than operator action.
         if scope_predicate is not None:
             declared = scope_predicate.total_declared_trials
             if phase_4_accepted_count > declared:
-                raise ValueError(
+                raise HypothesisLoaderError(
                     f"Phase 4 Stage 4.1 safety net: scope predicate accepted "
                     f"{phase_4_accepted_count} raw trials but the hypothesis "
                     f"file declared total_expected_trials={declared}. This "

@@ -30,6 +30,34 @@ metadata:
   holdout_date: "2026-01-01"
   total_expected_trials: 0   # sum across all hypotheses; must be ≤ 300 (clean) or 2000 (proxy)
 
+  # ---- Phase 4 Stage 4.1b: MinBTL proxy-mode opt-in (OPTIONAL) ----
+  # By default, Criterion 2's clean-data bound of 300 trials applies.
+  # To exceed 300 (up to the proxy-data bound of 2000), set BOTH fields:
+  #
+  #   data_source_mode: "proxy"
+  #   data_source_disclosure: "<explicit text describing the proxy data>"
+  #
+  # Both are REQUIRED together when total_expected_trials > 300. The
+  # canonical enforcement point is
+  # ``trading_app.hypothesis_loader.enforce_minbtl_bound`` which is called
+  # by both ``strategy_validator._check_criterion_2_minbtl`` and
+  # ``strategy_discovery.run_discovery`` in Phase 4 enforcement mode.
+  #
+  # The disclosure string must be non-empty and should name the specific
+  # proxy data source (e.g., "NQ parent futures pre-2024-02-05 as proxy
+  # for MNQ micro" for pre-micro-launch MNQ research). Criterion 2's
+  # locked text in pre_registered_criteria.md requires "explicit
+  # data-source disclosure" — this field mechanizes that requirement.
+  #
+  # Example (for a clean-data hypothesis file — both fields omitted):
+  #   (no data_source_mode or data_source_disclosure set)
+  #   total_expected_trials: 60
+  #
+  # Example (for a proxy-extended hypothesis file):
+  #   data_source_mode: "proxy"
+  #   data_source_disclosure: "NQ parent futures 2009-2024-02-05 as proxy for MNQ micro"
+  #   total_expected_trials: 1500
+
 hypotheses:
   - id: 1
     name: "Overnight range predicts EUROPE_FLOW follow-through"

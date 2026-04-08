@@ -1138,3 +1138,144 @@ class TestCanonicalSourceAnnotations:
 
         violations = check_drift.check_canonical_source_annotations()
         assert violations == []
+
+
+class TestPhase4ShaIntegrity:
+    """Phase 4 Stage 4.1 drift check #94: stamped hypothesis_file_sha must
+    reference a real file in docs/audit/hypotheses/.
+
+    These tests use an in-memory DuckDB fixture rather than monkeypatching
+    the default gold.db path. Each test builds a minimal
+    experimental_strategies table, inserts synthetic rows, and calls
+    check_phase_4_sha_integrity with the fixture connection. The tests
+    exercise the actual SQL and resolver logic without touching gold.db.
+    """
+
+    @staticmethod
+    def _make_experimental_db():
+        """In-memory DB with a minimal experimental_strategies schema
+        containing the two columns the check reads: hypothesis_file_sha
+        and created_at."""
+        import duckdb
+
+        con = duckdb.connect(":memory:")
+        con.execute(
+            """
+            CREATE TABLE experimental_strategies (
+                strategy_id TEXT,
+                hypothesis_file_sha TEXT,
+                created_at TIMESTAMPTZ
+            )
+            """
+        )
+        return con
+
+    def test_empty_db_passes(self):
+        """Zero rows → zero violations."""
+        from pipeline import check_drift
+
+        con = self._make_experimental_db()
+        violations = check_drift.check_phase_4_sha_integrity(con=con)
+        assert violations == []
+        con.close()
+
+    def test_pre_ship_row_with_orphan_sha_is_grandfathered(self):
+        """Rows with created_at < PHASE_4_1_SHIP_DATE are outside the
+        check's scope even if their SHA is orphaned."""
+        from datetime import UTC, datetime
+
+        from pipeline import check_drift
+
+        con = self._make_experimental_db()
+        # Pre-ship-date row with an orphaned SHA → should be ignored
+        con.execute(
+            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            ["s1", "orphan_sha_pre_ship", datetime(2026, 4, 1, 12, 0, 0, tzinfo=UTC)],
+        )
+        violations = check_drift.check_phase_4_sha_integrity(con=con)
+        assert violations == []
+        con.close()
+
+    def test_post_ship_row_with_null_sha_is_out_of_scope(self):
+        """NULL hypothesis_file_sha is legacy-mode and outside the check's
+        scope regardless of created_at. The validator handles legacy rows
+        via _is_phase_4_grandfathered."""
+        from datetime import UTC, datetime
+
+        from pipeline import check_drift
+
+        con = self._make_experimental_db()
+        # Post-ship row with NULL SHA → legacy-mode, out of scope
+        con.execute(
+            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            ["s1", None, datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC)],
+        )
+        violations = check_drift.check_phase_4_sha_integrity(con=con)
+        assert violations == []
+        con.close()
+
+    def test_post_ship_row_with_orphan_sha_is_flagged(self):
+        """Post-ship-date + non-null SHA + no matching file → violation."""
+        from datetime import UTC, datetime
+
+        from pipeline import check_drift
+
+        con = self._make_experimental_db()
+        # Post-ship row with an orphaned SHA → should fire
+        con.execute(
+            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            ["s1", "orphan_sha_" + "a" * 53, datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC)],
+        )
+        violations = check_drift.check_phase_4_sha_integrity(con=con)
+        assert len(violations) == 1
+        assert "orphaned SHA" in violations[0]
+        assert "1 row" in violations[0]
+        con.close()
+
+    def test_post_ship_row_with_valid_sha_passes(self, tmp_path, monkeypatch):
+        """Post-ship-date + non-null SHA + SHA resolves to a real file → pass.
+
+        Uses monkeypatch to redirect the hypothesis registry directory to
+        tmp_path where we can control what files exist.
+        """
+        import hashlib
+        from datetime import UTC, datetime
+
+        from pipeline import check_drift
+        from trading_app import hypothesis_loader
+
+        # Write a real hypothesis file in tmp_path and compute its SHA
+        hyp_file = tmp_path / "2026-04-09-valid.yaml"
+        hyp_file.write_text("metadata:\n  name: valid\n", encoding="utf-8")
+        real_sha = hashlib.sha256(hyp_file.read_bytes()).hexdigest()
+
+        # Redirect the registry directory
+        monkeypatch.setattr(hypothesis_loader, "_HYPOTHESIS_DIR", tmp_path)
+
+        con = self._make_experimental_db()
+        con.execute(
+            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            ["s1", real_sha, datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC)],
+        )
+        violations = check_drift.check_phase_4_sha_integrity(con=con)
+        assert violations == [], f"expected pass, got {violations}"
+        con.close()
+
+    def test_multiple_rows_sharing_orphan_sha_reports_once(self):
+        """When multiple rows share the same orphaned SHA, the check
+        deduplicates via SELECT DISTINCT and reports once with a count."""
+        from datetime import UTC, datetime
+
+        from pipeline import check_drift
+
+        con = self._make_experimental_db()
+        shared_sha = "shared_orphan_" + "b" * 50
+        for i in range(5):
+            con.execute(
+                "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+                [f"s{i}", shared_sha, datetime(2026, 5, 1, 12, 0, 0, tzinfo=UTC)],
+            )
+        violations = check_drift.check_phase_4_sha_integrity(con=con)
+        assert len(violations) == 1  # DISTINCT — one violation for 5 rows
+        assert "5 row" in violations[0]
+        con.close()

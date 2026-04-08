@@ -1484,3 +1484,68 @@ class TestFlushBatchDfColumnAlignment:
         assert _BATCH_COLUMNS[-1] == "hypothesis_file_sha"
         # Also verify no duplicate
         assert _BATCH_COLUMNS.count("hypothesis_file_sha") == 1
+
+    def test_sha_stamping_round_trip(self):
+        """Phase D review SHOULD-FIX #2: end-to-end SHA stamping round trip.
+
+        Build a minimal experimental_strategies schema in-memory matching
+        only the columns _flush_batch_df writes to, construct a valid
+        51-element row with a known test SHA in the hypothesis_file_sha
+        slot, call _flush_batch_df, then query back and assert the SHA is
+        present. Validates the 3-edit coordination (_BATCH_COLUMNS + INSERT
+        SQL column list + batch assembly loop) is actually aligned at
+        runtime, not just structurally well-formed.
+
+        Uses a hand-rolled minimal schema rather than init_trading_app_schema
+        because the full schema has foreign keys to daily_features (a
+        pipeline-owned table not present in an isolated test DB).
+        """
+        from typing import Any
+
+        import duckdb
+
+        from trading_app.strategy_discovery import _BATCH_COLUMNS, _flush_batch_df
+
+        con = duckdb.connect(":memory:")
+        # Build a minimal experimental_strategies table with nullable
+        # columns. strategy_id is PRIMARY KEY because _flush_batch_df uses
+        # INSERT OR REPLACE which requires a unique constraint to resolve
+        # conflicts. Other columns are nullable TEXT — the round-trip
+        # only needs to exercise the SHA positional alignment, not the
+        # production column types.
+        col_defs = ",\n            ".join(
+            f"{name} TEXT PRIMARY KEY" if name == "strategy_id" else f"{name} TEXT"
+            for name in _BATCH_COLUMNS
+        )
+        con.execute(f"""
+            CREATE TABLE experimental_strategies (
+            {col_defs}
+            )
+        """)
+
+        test_sha = "abc123" + "0" * 58  # 64-char synthetic SHA
+        row: list[Any] = [None] * len(_BATCH_COLUMNS)
+        col_idx = {name: i for i, name in enumerate(_BATCH_COLUMNS)}
+        row[col_idx["strategy_id"]] = "round_trip_test_strategy"
+        row[col_idx["instrument"]] = "MNQ"
+        row[col_idx["orb_label"]] = "NYSE_OPEN"
+        row[col_idx["orb_minutes"]] = "5"
+        row[col_idx["entry_model"]] = "E2"
+        row[col_idx["filter_type"]] = "NO_FILTER"
+        row[col_idx["hypothesis_file_sha"]] = test_sha
+
+        _flush_batch_df(con, [row])
+
+        # Query back and verify the SHA is in the row
+        result = con.execute(
+            "SELECT hypothesis_file_sha FROM experimental_strategies "
+            "WHERE strategy_id = ?",
+            ["round_trip_test_strategy"],
+        ).fetchone()
+        assert result is not None, "row was not inserted"
+        assert result[0] == test_sha, (
+            f"SHA mismatch — 3-edit coordination broken. "
+            f"Expected {test_sha}, got {result[0]}. "
+            f"Check _BATCH_COLUMNS + INSERT SQL + batch assembly alignment."
+        )
+        con.close()

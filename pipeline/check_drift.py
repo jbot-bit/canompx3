@@ -4071,6 +4071,107 @@ def check_phase_4_validator_gates_present() -> list[str]:
     return violations
 
 
+def check_phase_4_sha_integrity(con=None) -> list[str]:
+    """Verify every stamped hypothesis_file_sha references a real file on disk.
+
+    Phase 4 Stage 4.1 (2026-04-08) adds discovery-side SHA stamping: every
+    experimental_strategies row written by ``run_discovery`` with
+    ``hypothesis_file=<Path>`` carries the content SHA of the hypothesis
+    YAML in ``experimental_strategies.hypothesis_file_sha``. This check is
+    the INTEGRITY guard: any row whose SHA does NOT resolve to a real file
+    in ``docs/audit/hypotheses/`` indicates either (a) tampering (the file
+    was deleted after the run), (b) a rebase that dropped the hypothesis
+    commit, or (c) a test-fixture leak into gold.db.
+
+    Scope: rows with ``created_at >= PHASE_4_1_SHIP_DATE`` AND
+    ``hypothesis_file_sha IS NOT NULL``. Rows created BEFORE the ship date
+    are grandfathered (they come from legacy discovery runs that pre-date
+    Stage 4.1 enforcement). Rows with NULL SHA are legacy-mode runs and
+    are outside this check's scope — the validator's
+    ``_is_phase_4_grandfathered`` handles them.
+
+    This check is INTENTIONALLY narrow: it does NOT assert "post-ship-date
+    rows must have a SHA". That assertion would conflict with legitimate
+    legacy-mode callers (run_full_pipeline.py, parallel_rebuild.py, null
+    seed tests) that intentionally call run_discovery without a hypothesis
+    file. The write-time discipline enforcement for "post-ship runs should
+    stamp a SHA" is the operator's responsibility at the CLI layer; this
+    drift check only catches INTEGRITY violations where a stamped SHA has
+    become orphaned.
+
+    regime/nested/legacy rows with NULL hypothesis_file_sha are filtered
+    out at query time so the check never flags them.
+
+    Fail-closed: if DB unavailable, returns a violation (not a silent pass).
+
+    @canonical-source: trading_app/holdout_policy.py
+    @canonical-source: trading_app/hypothesis_loader.py
+    """
+    violations = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return [
+                    "  PHASE 4 SHA INTEGRITY SKIPPED: gold.db not found — "
+                    "cannot verify hypothesis file SHA integrity"
+                ]
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        from trading_app.holdout_policy import PHASE_4_1_SHIP_DATE
+        from trading_app.hypothesis_loader import find_hypothesis_file_by_sha
+
+        # Fetch every stamped SHA that is subject to integrity enforcement.
+        # Pre-ship-date rows are grandfathered (legacy). Post-ship rows with
+        # NULL SHA are legacy-mode (out of scope — see docstring). Post-ship
+        # rows with non-null SHA are the enforcement target.
+        rows = con.execute(
+            """
+            SELECT DISTINCT hypothesis_file_sha
+            FROM experimental_strategies
+            WHERE hypothesis_file_sha IS NOT NULL
+              AND created_at >= ?
+            """,
+            [PHASE_4_1_SHIP_DATE],
+        ).fetchall()
+
+        for (sha,) in rows:
+            if not isinstance(sha, str) or not sha:
+                violations.append(
+                    f"  PHASE 4 SHA INTEGRITY: malformed SHA value {sha!r} "
+                    f"in experimental_strategies.hypothesis_file_sha"
+                )
+                continue
+            resolved = find_hypothesis_file_by_sha(sha)
+            if resolved is None:
+                # Count rows affected for operator context.
+                row_count = con.execute(
+                    """SELECT COUNT(*) FROM experimental_strategies
+                       WHERE hypothesis_file_sha = ?""",
+                    [sha],
+                ).fetchone()[0]
+                violations.append(
+                    f"  PHASE 4 SHA INTEGRITY: orphaned SHA {sha[:12]}... "
+                    f"({row_count} row(s)) — no file in "
+                    f"docs/audit/hypotheses/ matches this SHA. Either the "
+                    f"hypothesis file was deleted/rebased after discovery, "
+                    f"or a test fixture leaked into gold.db. Investigate "
+                    f"via: SELECT strategy_id, created_at FROM "
+                    f"experimental_strategies WHERE hypothesis_file_sha = "
+                    f"'{sha[:12]}...' LIMIT 5;"
+                )
+    except Exception as exc:
+        violations.append(f"  PHASE 4 SHA INTEGRITY CHECK FAILED: {exc}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 def check_resample_helpers_in_entry_rules() -> list[str]:
     """resample_to_5m and _verify_e3_sub_bar_fill must be defined in trading_app.entry_rules.
 
@@ -4370,6 +4471,12 @@ CHECKS = [
     (
         "Phase 4 validator gate functions present (criteria 1, 2, 8, 9; 4 and 5 deferred per Amendments 2.1/2.2)",
         check_phase_4_validator_gates_present,
+        False,
+        False,
+    ),
+    (
+        "Phase 4 discovery SHA integrity (stamped hypothesis_file_sha must reference real file)",
+        check_phase_4_sha_integrity,
         False,
         False,
     ),
