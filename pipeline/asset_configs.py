@@ -416,3 +416,50 @@ def list_available_instruments() -> list[str]:
         if cfg["dbn_path"] is not None and cfg["dbn_path"].exists():
             available.append(name)
     return sorted(available)
+
+
+# Single source of truth for the outright contract root prefix.
+# Used by every script that needs to map instrument → vendor parent symbol
+# (Databento `MGC.FUT`, etc.). Replaces parallel hardcoded dicts that drifted
+# from canonical post-Phase-2 (commit 82e8b60, Apr 8 2026).
+_OUTRIGHT_ROOT_RE = re.compile(r"^\^(\w+?)\[")
+
+
+def get_outright_root(instrument: str) -> str:
+    """Return the contract root prefix for an instrument (canonical derivation).
+
+    The root is the prefix shared by every outright contract symbol for the
+    instrument — e.g., `MGC` for `MGCM4`/`MGCZ4`, `RTY` for `RTYH4`/`RTYZ4`
+    (M2K data source). Derived from the existing `outright_pattern` regex
+    on `ASSET_CONFIGS[instrument]`. Single source of truth — no parallel
+    dicts allowed (institutional rigor rule 4 — `.claude/rules/integrity-guardian.md`).
+
+    Examples:
+        get_outright_root("MGC") -> "MGC"   # post-Phase-2 real micro
+        get_outright_root("M2K") -> "RTY"   # micro Russell uses RTY parent data
+        get_outright_root("NQ")  -> "NQ"    # parent contract
+
+    Fail-closed:
+        - Unknown instrument           → ValueError
+        - Non-canonical outright_pattern → ValueError (catches future patterns
+          that don't match the `^<ROOT>[<MONTH_CODES>]\\d+$` shape)
+
+    Consumers (Apr 2026):
+        - scripts/tools/refresh_data.py — Databento backfill download
+        - scripts/databento_daily.py    — daily research-archive refresh
+    """
+    key = instrument.upper()
+    cfg = ASSET_CONFIGS.get(key)
+    if cfg is None:
+        raise ValueError(
+            f"Unknown instrument: {instrument!r}. "
+            f"Supported: {sorted(ASSET_CONFIGS.keys())}"
+        )
+    pattern = cfg["outright_pattern"].pattern
+    match = _OUTRIGHT_ROOT_RE.match(pattern)
+    if match is None:
+        raise ValueError(
+            f"Non-canonical outright_pattern for {key}: {pattern!r}. "
+            f"Expected format: ^<ROOT>[<MONTH_CODES>]\\d+$"
+        )
+    return match.group(1)

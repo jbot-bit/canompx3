@@ -1,12 +1,29 @@
 """
-Tests for GC → MGC symbol transformation.
+Tests for GC → MGC symbol transformation (LEGACY ingest path) AND
+post-Phase-2 canonical asset_configs (REAL micro path).
 
-Verifies the critical design decision: raw data uses GC (full-size Gold)
-contracts, but the pipeline stores bars under symbol='MGC' with the original
-GC contract in source_symbol.
+This file has TWO conceptual halves:
 
-The GC→MGC mapping lives in ingest_dbn_mgc.py (legacy path).
-The multi-instrument asset_configs.py uses the GC pattern (matching source data).
+1. LEGACY ingest path (`pipeline/ingest_dbn_mgc.py`) — historical full-size
+   Gold (GC) data is preserved under symbol='MGC' in `bars_1m`. The legacy
+   ingest module still uses `GC_OUTRIGHT_PATTERN` and is consumed by other
+   pipeline modules for historical contract selection logic. These tests
+   exercise that legacy module — DO NOT delete them; they pin invariants
+   that downstream code depends on.
+
+2. POST-PHASE-2 canonical path (`pipeline/asset_configs.py`) — Phase 2 of
+   canonical-data-redownload (commit 82e8b60, Apr 8 2026) replaced the
+   parent-futures data masquerading as MNQ/MES/MGC with REAL micro futures
+   downloaded from the actual contracts. After that landed:
+   - `ASSET_CONFIGS["MGC"]["outright_pattern"]` matches `^MGC...` (was `^GC...`)
+   - `ASSET_CONFIGS["MGC"]["prefix_len"]` = 3 (was 2)
+   - `ASSET_CONFIGS["ES"]["symbol"]` = "ES" (was "MES")
+   The TestAssetConfigMgcPattern + TestAssetConfigMesPattern classes were
+   updated 2026-04-08 (Move C of canonical-data-redownload sweep) to assert
+   the post-Phase-2 reality. Earlier assertions encoding the pre-Phase-2
+   pattern were caught by `pytest tests/test_pipeline/test_gc_mgc_mapping.py`
+   showing 4 failures after Phase 2 landed but before this sweep — see
+   `docs/runtime/stages/move-c-phase-2-regressions.md`.
 """
 
 import re
@@ -119,29 +136,42 @@ class TestGcToMgcDataFlow:
 
 
 class TestAssetConfigMgcPattern:
-    """Verify asset_configs.py MGC entry matches GC source data."""
+    """Verify asset_configs.py MGC entry matches REAL MGC micro contracts.
 
-    def test_mgc_pattern_matches_gc_contracts(self):
-        """MGC config must match GC outrights (data source is full-size Gold)."""
+    POST-PHASE-2 (commit 82e8b60, Apr 8 2026): The MGC config was flipped from
+    `^GC[FGHJKMNQUVXZ]\\d+$` (parent proxy) to `^MGC[FGHJKMNQUVXZ]\\d+$` (real
+    micro) when Phase 2 of canonical-data-redownload replaced the parent
+    futures data with real micro data from MGC.FUT (launched 2023-09-11).
+    These tests pin the post-Phase-2 reality.
+    """
+
+    def test_mgc_pattern_matches_mgc_contracts(self):
+        """MGC config must match real MGC micro outrights (post-Phase-2)."""
+        from pipeline.asset_configs import ASSET_CONFIGS
+
+        pattern = ASSET_CONFIGS["MGC"]["outright_pattern"]
+        for sym in ["MGCM4", "MGCZ4", "MGCG25", "MGCQ5"]:
+            assert pattern.match(sym), f"MGC pattern should match {sym}"
+
+    def test_mgc_pattern_rejects_gc_parent_contracts(self):
+        """MGC config must NOT match GC parent outrights (post-Phase-2 separation).
+
+        Pre-Phase-2 the GC parent data was stored under symbol='MGC'. Phase 2
+        relabeled all parent rows to symbol='GC' and downloaded real MGC.FUT
+        data. The MGC outright_pattern must reject any GC* symbol that arrives
+        — those belong under the GC config (parent), not MGC (real micro).
+        """
         from pipeline.asset_configs import ASSET_CONFIGS
 
         pattern = ASSET_CONFIGS["MGC"]["outright_pattern"]
         for sym in ["GCM4", "GCZ4", "GCG25", "GCQ5"]:
-            assert pattern.match(sym), f"MGC pattern should match {sym}"
+            assert not pattern.match(sym), f"MGC pattern should not match parent {sym}"
 
-    def test_mgc_pattern_rejects_mgc_contracts(self):
-        """MGC config must NOT match MGC outrights (we use GC source data)."""
+    def test_mgc_prefix_len_is_3(self):
+        """Real MGC contracts have 3-char prefix (MGC) before month code (post-Phase-2)."""
         from pipeline.asset_configs import ASSET_CONFIGS
 
-        pattern = ASSET_CONFIGS["MGC"]["outright_pattern"]
-        for sym in ["MGCM4", "MGCZ4", "MGCG25"]:
-            assert not pattern.match(sym), f"MGC pattern should not match {sym}"
-
-    def test_mgc_prefix_len_is_2(self):
-        """GC contracts have 2-char prefix before month code."""
-        from pipeline.asset_configs import ASSET_CONFIGS
-
-        assert ASSET_CONFIGS["MGC"]["prefix_len"] == 2
+        assert ASSET_CONFIGS["MGC"]["prefix_len"] == 3
 
 
 class TestAssetConfigMesPattern:
@@ -184,11 +214,18 @@ class TestAssetConfigMesPattern:
         for sym in ["MESM4", "MESZ4"]:
             assert not pattern.match(sym), f"ES pattern should not match {sym}"
 
-    def test_es_stores_as_mes_symbol(self):
-        """ES config must store data under MES symbol (same as NQ→MNQ)."""
+    def test_es_stores_as_es_symbol(self):
+        """ES config must store data under symbol='ES' (post-Phase-2 relabeling).
+
+        Pre-Phase-2 (commit 82e8b60, Apr 8 2026), ES parent data was stored
+        under symbol='MES' (mislabeled). Phase 2 relabeled all parent rows to
+        symbol='ES' and downloaded real micro MES.FUT data into symbol='MES'.
+        ES is now its own canonical entry — historical parent data, $50/pt
+        cost specs, no orb_active.
+        """
         from pipeline.asset_configs import ASSET_CONFIGS
 
-        assert ASSET_CONFIGS["ES"]["symbol"] == "MES"
+        assert ASSET_CONFIGS["ES"]["symbol"] == "ES"
 
     def test_es_prefix_len_is_2(self):
         """ES contracts have 2-char prefix (ES) before month code."""

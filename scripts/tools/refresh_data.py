@@ -26,20 +26,21 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 # pipeline.paths import triggers .env loading via python-dotenv
 import duckdb  # noqa: E402
 
-from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS  # noqa: E402
+from pipeline.asset_configs import (  # noqa: E402
+    ACTIVE_ORB_INSTRUMENTS,
+    ASSET_CONFIGS,
+    get_outright_root,
+)
 from pipeline.build_daily_features import VALID_ORB_MINUTES  # noqa: E402
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
 
-# Map stored instrument -> Databento parent symbol for download.
-# Derived from outright_pattern prefix in asset_configs.
-DOWNLOAD_SYMBOLS: dict[str, str] = {
-    "MGC": "GC",  # Full-size gold -> stored as MGC
-    "MNQ": "MNQ",  # Native micro Nasdaq (post-2024)
-    "MES": "MES",  # Native micro S&P (post-2024)
-    "M2K": "RTY",  # Full-size Russell -> stored as M2K
-    "2YY": "2YY",  # Native 2-Year Yield futures (research-only)
-    "ZT": "ZT",  # Native 2-Year Treasury Note futures (research-only)
-}
+# Databento parent-symbol resolution is delegated to canonical
+# `pipeline.asset_configs.get_outright_root` (single source of truth).
+# DO NOT re-introduce a parallel hardcoded dict here — the prior
+# `DOWNLOAD_SYMBOLS = {"MGC": "GC", ...}` map silently re-corrupted MGC
+# bars after Phase 2 of canonical-data-redownload (commit 82e8b60,
+# Apr 8 2026) until Move C swept it. See
+# `docs/runtime/stages/move-c-phase-2-regressions.md`.
 
 DATASET = "GLBX.MDP3"
 SCHEMA = "ohlcv-1m"
@@ -81,9 +82,10 @@ def download_dbn(instrument: str, start: date, end: date, dry_run: bool = False)
     """Download DBN file from Databento for the given date range."""
     import databento as db
 
-    parent_symbol = DOWNLOAD_SYMBOLS.get(instrument)
-    if not parent_symbol:
-        print(f"  SKIP: no download symbol mapping for {instrument}")
+    try:
+        parent_symbol = get_outright_root(instrument)
+    except ValueError as exc:
+        print(f"  SKIP: {exc}")
         return None
 
     config = ASSET_CONFIGS[instrument]
@@ -309,8 +311,10 @@ def main():
     instruments = [args.instrument.upper()] if args.instrument else list(ACTIVE_ORB_INSTRUMENTS)
 
     for inst in instruments:
-        if inst not in DOWNLOAD_SYMBOLS:
-            print(f"WARNING: {inst} has no Databento download mapping -- will skip")
+        try:
+            get_outright_root(inst)
+        except ValueError as exc:
+            print(f"WARNING: {inst} has no canonical outright_pattern -- will skip ({exc})")
 
     print("=" * 60)
     print("  DATA REFRESH" + (" (DRY RUN)" if args.dry_run else ""))

@@ -61,21 +61,33 @@ log = logging.getLogger("databento_daily")
 
 DATASET = "GLBX.MDP3"
 
-# Databento API symbol mapping (vendor-specific format, not in ASSET_CONFIGS).
-# Keys must be a superset of ACTIVE_ORB_INSTRUMENTS.
+# Databento API symbol mapping derived from canonical asset_configs (single
+# source of truth — `pipeline.asset_configs.get_outright_root`).
+#
+# DO NOT re-introduce a parallel hardcoded dict here. Pre-Move-C this file
+# had `_DATABENTO_SYMBOLS = {"MGC": "GC.FUT", ...}` which silently polluted
+# the MGC research archive with GC parent data after Phase 2 of
+# canonical-data-redownload (commit 82e8b60, Apr 8 2026) flipped MGC to real
+# micro. See `docs/runtime/stages/move-c-phase-2-regressions.md`.
+
+from pipeline.asset_configs import (  # noqa: E402
+    ACTIVE_ORB_INSTRUMENTS,
+    get_outright_root,
+)
+
 _DATABENTO_SYMBOLS: dict[str, str] = {
-    "MGC": "GC.FUT",  # Full-size gold -> micro gold pipeline
-    "MNQ": "MNQ.FUT",  # Native micro Nasdaq
-    "MES": "MES.FUT",  # Native micro S&P (post-2024; pre-2024 used ES)
+    instrument: f"{get_outright_root(instrument)}.FUT" for instrument in ACTIVE_ORB_INSTRUMENTS
 }
 
-# Fail-closed guard: crash if active instruments not covered
-from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS  # noqa: E402
-
+# Fail-closed guard: every active instrument must resolve to a Databento parent symbol.
+# (The dict comprehension above will already raise ValueError on any unresolvable
+# instrument, but we keep an explicit assertion here so future regressions surface
+# with a load-time failure rather than at first refresh.)
 _missing = set(ACTIVE_ORB_INSTRUMENTS) - set(_DATABENTO_SYMBOLS)
 if _missing:
     raise RuntimeError(
-        f"DATABENTO_SYMBOLS missing active instruments: {_missing}. Update _DATABENTO_SYMBOLS in {__file__}."
+        f"_DATABENTO_SYMBOLS missing active instruments: {_missing}. "
+        f"Verify pipeline.asset_configs.get_outright_root resolves them."
     )
 
 # Additional schemas to refresh daily (beyond ohlcv-1m which refresh_data.py handles).
