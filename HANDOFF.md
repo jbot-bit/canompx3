@@ -6,6 +6,76 @@
 
 ---
 
+## Update (Apr 8 — Holdout Policy Mode A Restoration + Enforcement Refactor — IN PROGRESS, paused for terminal swap)
+
+### Status
+**PAUSED — picking up in a new terminal.** All committed work is clean and pushed-ready. Drift NO DRIFT DETECTED (84 passing). One TODO mid-task: test coverage for two new functions (Stage 6 follow-up).
+
+### What landed today (in commit order, all on `main`)
+
+The session had two interleaved threads — first the Mode A correction (rescinding yesterday's autonomous Mode B declaration), then a 6-stage proper-institutional enforcement refactor.
+
+**Mode A correction (doc-only):**
+- `cec5795` docs(research-rules): Mode A restored — rescind yesterday's Mode B declaration. Reverted RESEARCH_RULES.md "2026 holdout is sacred" rule + audit history block.
+- (User-committed earlier: `bb82add` Amendment 2.7 in pre_registered_criteria.md, plus user-edited rescission header on `docs/plans/2026-04-07-holdout-policy-decision.md`.)
+
+**6-stage Amendment 2.7 enforcement refactor:**
+- `81a7079` feat(holdout-policy): canonical Mode A source of truth (Stage 1 of 6) — NEW `trading_app/holdout_policy.py` with `HOLDOUT_SACRED_FROM`, `HOLDOUT_GRANDFATHER_CUTOFF`, `enforce_holdout_date()`. 13 tests in `tests/test_trading_app/test_holdout_policy.py`.
+- `2c375df` feat(check_drift): import Mode A canonical source + declaration-consistency check (Stage 2 of 6) — refactored `check_holdout_contamination` to import canonical, added new check `check_holdout_policy_declaration_consistency` (now check #83) that asserts docs↔code agree on Mode A.
+- `19d7edd` feat(strategy_discovery): enforce Mode A holdout at CLI (Stage 3 of 6) — added `enforce_holdout_date()` call in `main()`. CLI rejects `--holdout-date > 2026-01-01` with clear error citing Amendment 2.7.
+- `467a0c3` feat(strategy_validator): Mode A holdout integrity gate (Stage 4 of 6) — added `_check_mode_a_holdout_integrity()` pre-flight gate that refuses to promote any experimental_strategies row with sacred-window data created after the grandfather cutoff. Belt-and-suspenders to discovery CLI gate.
+- `0f7cedd` docs(integrity-guardian): canonical sources table — add trading_app.holdout_policy (Stage 5 of 6).
+- `fc043e7` fix(check_drift): clean check_holdout_policy_declaration_consistency lint (Stage 2 follow-up) — I001 + SIM300 fixes from ruff.
+- `0edf8e8` chore(stage): close holdout-enforcement-amendment-2-7 — all 6 stages complete.
+
+**Doc propagation sweep (post-stage-close):**
+- `641a707` docs(institutional): Amendment 2.7 propagation — 3 docs catch up to Mode A operative. Updated `docs/institutional/README.md` (added Amendment 2.6 RESCINDED + 2.7 BINDING entries + Enforcement paragraph), `docs/institutional/finite_data_framework.md` (§ 4.4 + § 7 warning block), `docs/audit/hypotheses/README.md` (Step 3 declares Mode A operative).
+
+### Current state
+
+- **Drift:** NO DRIFT DETECTED. 84 checks passed, 0 violations, 0 skipped. Including new check #83 (declaration consistency).
+- **Holdout policy tests:** 13/13 pass.
+- **Behavioral audit:** 7/7 clean.
+- **Ruff:** 3 errors total — 1 pre-existing UP037 in `trading_app/config.py`, 2 from e2-fix merge in `pipeline/build_daily_features.py` (I001 import sort). **0 introduced by today's work.**
+- **Working tree:** only auto-generated files (`docs/ralph-loop/*`, `live_journal.db`) and intentionally untracked artifacts (`gold_snap.db`, `gold.db.pre-e2-fix.bak`, `docs/runtime/baselines/`).
+
+### What's NOT done — pick up here in next session
+
+**Highest priority — mid-session test gap (institutional rigor):**
+1. **Add tests for `check_holdout_policy_declaration_consistency`** (Stage 2 function in `pipeline/check_drift.py`). Function is pure file/import — easy to test with `tmp_path` fixtures. Suggested test cases: canonical missing → violation, sacred date wrong → violation, criteria.md missing 'Amendment 2.7' → violation, RESEARCH_RULES.md missing date → violation, all good → no violations. Add to `tests/test_pipeline/test_check_drift.py`.
+2. **Add tests for `_check_mode_a_holdout_integrity`** (Stage 4 function in `trading_app/strategy_validator.py`). Needs an in-memory DuckDB fixture with synthetic `experimental_strategies` rows. Suggested cases: empty DB → no error, only grandfathered rows → no error, post-grandfather row with sacred year → ValueError citing Amendment 2.7, post-grandfather row without sacred year → no error. Add to `tests/test_trading_app/test_strategy_validator.py` (or new file).
+
+I started the test gap work but stopped when you asked for the handover. The grep on existing test files returned nothing, so both function names have ZERO test coverage. Per "no skipping" institutional rigor, these should land before any further enforcement work.
+
+**Lower priority — pre-existing tech debt:**
+3. `pipeline/build_daily_features.py` has 2 ruff I001 errors from the e2-fix merge. Mechanical `ruff check --fix` should clear them. Not blocking anything.
+4. `trading_app/config.py:2402` UP037 — quoted type annotation may be a deliberate forward reference. Needs careful read of imports before fixing.
+
+**Phase 2-5 (the big one — needs user approval on scope):**
+5. **Phase 2 Databento redownload** ($0.00 verified, 398.1 MB total). Real micro-futures 1m bars: MNQ 2019-05-06→2024-02-05, MES 2019-05-06→2024-02-12, MGC 2023-09-11→today. Fixes the parent-proxy data mixup the user identified yesterday. **Now unblocked** — e2-fix merged so the baselines are no longer load-bearing. User has not approved the actual download yet.
+6. **Phase 3 era schema** — add `data_era` column to `bars_1m`/`daily_features`/`orb_outcomes`. Add `requires_micro_data` attribute to volume filters in `trading_app/config.py`. Add drift check enforcing Criterion 10 (volume filters MICRO-only). Blocked on Phase 2.
+7. **Phase 4 clean rediscovery** — re-run `strategy_discovery` for MGC/MES/MNQ with `--holdout-date 2026-01-01` (now enforced!) on the rebuilt data. Compare to current 124 grandfathered to identify which strategies survive Mode A discipline. Multi-hour run.
+8. **Phase 5 deployment review** — re-classify the 5 deployed lanes against the 12 v2 criteria under Mode A. Decide which (if any) are now production-grade vs research-provisional vs to-be-retired.
+
+### Key context for next session
+
+- **`trading_app.holdout_policy` is the canonical source.** All Mode A constants live there. Don't inline `date(2026, 1, 1)` or `datetime(2026, 4, 8, ...)` anywhere. Drift check #83 catches violations.
+- **Discovery CLI is now strict.** `python -m trading_app.strategy_discovery --instrument MNQ --orb-minutes 5` (with no `--holdout-date`) defaults to `2026-01-01`. Any later value is rejected with a clear error.
+- **Validator pre-flight gate is active.** `python -m trading_app.strategy_validator --instrument MNQ ...` will raise on any post-grandfather sacred-window contamination.
+- **The 124 existing validated_setups are research-provisional grandfathered.** They are NOT OOS-clean. Continue trading the 5 deployed lanes per Amendment 2.4 (operationally deployable). No scaling until re-validated under Mode A (which requires Phase 4 rediscovery).
+- **My pass-1 audit yesterday missed the upstream Apr 2 plan.** Lesson: for any policy decision, audit the chain of committed artifacts, not just the most recent one. Check the upstream PRESCRIPTION before trusting downstream HANDOFF entries.
+
+### Next session start protocol
+
+1. `git pull` to get this commit + push from previous terminal
+2. `git log --oneline -20` to see all 8 commits from today (cec5795 onwards)
+3. `python pipeline/check_drift.py` — should show 84 passing, 0 violations
+4. Read `docs/institutional/pre_registered_criteria.md` Amendment 2.7 if Mode A context is needed
+5. Pick up at the test coverage gap (item 1 + 2 above) — that's the cleanest "no skipping" continuation
+6. Or pivot to Phase 2 if user wants the data fix instead
+
+---
+
 ## Update (Apr 7 — View B Filter Universe Audit — COMPLETE)
 
 ### Status
