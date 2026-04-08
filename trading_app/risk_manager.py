@@ -77,6 +77,8 @@ class RiskManager:
         daily_pnl_r: float,
         market_state=None,
         orb_minutes: int | None = None,
+        instrument: str | None = None,
+        direction: str | None = None,
     ) -> tuple[bool, str, float]:  # Added float to return type
         suggested_contract_factor = 1.0
 
@@ -93,6 +95,51 @@ class RiskManager:
         if self._halted or daily_pnl_r <= self.limits.max_daily_loss_r:
             self._halted = True
             return False, f"circuit_breaker: daily PnL {daily_pnl_r:.2f}R <= {self.limits.max_daily_loss_r}R", 0.0
+
+        # Check 1b: F-2 same-instrument opposite-direction guard.
+        # @canonical-source docs/research-input/topstep/topstep_cross_account_hedging.md
+        # @verbatim "Cross-account hedging occurs when you hold opposite positions
+        #            across multiple accounts at the same time. This means you're
+        #            simultaneously long and short the same instrument (or highly
+        #            correlated/fungible instruments)."
+        # @verbatim "Yes! You can trade the same instrument across multiple accounts.
+        #            What's prohibited is holding opposite positions simultaneously."
+        # @audit-finding F-2 BLOCKER — refuses entries that would create an opposing
+        # position on the same instrument within the same account. CopyOrderRouter
+        # mirrors trades across copies, so an intra-account hedge would also be a
+        # cross-account hedge → 3rd offense = PERMANENT account closure.
+        #
+        # The check is opt-in (instrument and direction default None for backward
+        # compat). When both are provided, the function scans active_trades for any
+        # ENTERED trade on the SAME instrument with OPPOSITE direction.
+        if instrument is not None and direction is not None:
+            opposite_direction = "short" if direction.lower() == "long" else "long"
+            for t in active_trades:
+                if not hasattr(t, "state") or t.state.value != "ENTERED":
+                    continue
+                # Read instrument from trade.strategy.instrument (the canonical path)
+                # or fall back to a top-level trade.instrument attribute if present.
+                t_instrument = None
+                if hasattr(t, "strategy") and hasattr(t.strategy, "instrument"):
+                    t_instrument = t.strategy.instrument
+                elif hasattr(t, "instrument"):
+                    t_instrument = t.instrument
+                if t_instrument != instrument:
+                    continue
+                t_direction = getattr(t, "direction", None)
+                if t_direction is None:
+                    continue
+                if t_direction.lower() == opposite_direction:
+                    return (
+                        False,
+                        (
+                            f"hedging_guard: cannot enter {direction.upper()} {instrument} — "
+                            f"existing {t_direction.upper()} position on same instrument "
+                            f"({t.strategy_id}). Cross-account hedging is prohibited "
+                            f"(F-2 / TopStep CME Rule 534)."
+                        ),
+                        0.0,
+                    )
 
         # Check 2: Max concurrent positions (correlation-weighted if available)
         entered = [t for t in active_trades if hasattr(t, "state") and t.state.value == "ENTERED"]

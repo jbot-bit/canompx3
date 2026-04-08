@@ -2,7 +2,7 @@
 task: TopStep canonical compliance fixes (Stages 2-8 of plan)
 mode: IMPLEMENTATION
 slug: topstep-canonical-fixes
-scope_lock: [pipeline/cost_model.py, trading_app/prop_profiles.py, trading_app/prop_firm_policies.py, trading_app/pre_session_check.py, trading_app/risk_manager.py, trading_app/topstep_scaling_plan.py, trading_app/live/copy_order_router.py, trading_app/live/session_orchestrator.py, trading_app/live/broker_base.py, pipeline/check_drift.py]
+scope_lock: [pipeline/cost_model.py, trading_app/prop_profiles.py, trading_app/prop_firm_policies.py, trading_app/pre_session_check.py, trading_app/risk_manager.py, trading_app/execution_engine.py, trading_app/topstep_scaling_plan.py, trading_app/live/copy_order_router.py, trading_app/live/session_orchestrator.py, trading_app/live/broker_base.py, pipeline/check_drift.py]
 blast_radius: All backtests (cost model change F-4) + risk_manager.can_enter() callers + session_orchestrator HWM init path + CopyOrderRouter (all live execution) + pre_session_check (startup gate)
 agent: claude-code-opus
 created: 2026-04-08T03:00:00Z

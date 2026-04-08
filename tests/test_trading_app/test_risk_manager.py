@@ -495,3 +495,170 @@ class TestApertureAware:
         assert allowed
         # Correlation gives some factor, aperture caps at 0.5
         assert factor <= 0.5
+
+
+# ─── F-2: Same-instrument opposite-direction guard (cross-account hedging) ──
+# @canonical-source docs/research-input/topstep/topstep_cross_account_hedging.md
+# @verbatim "Cross-account hedging occurs when you hold opposite positions across
+#            multiple accounts at the same time. This means you're simultaneously
+#            long and short the same instrument."
+# @verbatim "Yes! You can trade the same instrument across multiple accounts.
+#            What's prohibited is holding opposite positions simultaneously."
+
+
+@dataclass
+class _FakeStrategy:
+    instrument: str
+
+
+@dataclass
+class _HedgeTrade:
+    """Trade fixture with strategy.instrument and direction for F-2 tests."""
+
+    strategy_id: str
+    orb_label: str
+    direction: str  # "long" or "short"
+    strategy: _FakeStrategy
+    state: _State = _State.ENTERED
+
+
+class TestF2HedgingGuard:
+    """F-2: refuse entries opposite an existing same-instrument position."""
+
+    def _make_rm(self) -> RiskManager:
+        limits = RiskLimits(
+            max_concurrent_positions=10,  # generous so we hit the hedge check first
+            max_per_orb_positions=10,
+            max_per_session_positions=10,
+            max_daily_trades=20,
+        )
+        rm = RiskManager(limits)
+        rm.daily_reset(date(2026, 4, 8))
+        return rm
+
+    def _trade(self, strategy_id: str, instrument: str, direction: str, session: str = "NYSE_OPEN") -> _HedgeTrade:
+        return _HedgeTrade(
+            strategy_id=strategy_id,
+            orb_label=session,
+            direction=direction,
+            strategy=_FakeStrategy(instrument=instrument),
+        )
+
+    def test_long_then_short_same_instrument_blocked(self):
+        rm = self._make_rm()
+        active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")]
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="short",
+        )
+        assert allowed is False
+        assert "hedging_guard" in reason
+        assert "MNQ" in reason
+
+    def test_short_then_long_same_instrument_blocked(self):
+        rm = self._make_rm()
+        active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "short")]
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is False
+        assert "hedging_guard" in reason
+
+    def test_long_then_long_same_instrument_allowed(self):
+        rm = self._make_rm()
+        active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is True
+
+    def test_long_mnq_then_short_mgc_allowed(self):
+        """Different instruments → no hedge."""
+        rm = self._make_rm()
+        active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MGC_CME_REOPEN_E2",
+            orb_label="CME_REOPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MGC",
+            direction="short",
+        )
+        assert allowed is True
+
+    def test_long_then_short_after_exit_allowed(self):
+        """Once the long position EXITED, a new short is fine."""
+        rm = self._make_rm()
+        exited = self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")
+        exited.state = _State.EXITED
+        active = [exited]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="short",
+        )
+        assert allowed is True
+
+    def test_no_instrument_disables_check(self):
+        """Backward compat: callers that don't pass instrument get the old behavior."""
+        rm = self._make_rm()
+        active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            # no instrument/direction → check skipped
+        )
+        assert allowed is True
+
+    def test_armed_position_does_not_count(self):
+        """Only ENTERED positions count for hedge detection (ARMED hasn't filled yet)."""
+        rm = self._make_rm()
+        armed = self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")
+        armed.state = _State.ARMED
+        active = [armed]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="short",
+        )
+        assert allowed is True
+
+    def test_two_existing_positions_block_on_first_match(self):
+        """If multiple longs exist on same instrument, short is blocked."""
+        rm = self._make_rm()
+        active = [
+            self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long"),
+            self._trade("MNQ_TOKYO_OPEN_E2", "MNQ", "long"),
+        ]
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_EUROPE_FLOW_E2",
+            orb_label="EUROPE_FLOW",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="short",
+        )
+        assert allowed is False
+        assert "hedging_guard" in reason

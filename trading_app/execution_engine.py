@@ -898,6 +898,8 @@ class ExecutionEngine:
                     active_trades=self.active_trades,
                     daily_pnl_r=self._total_pnl_r(),
                     orb_minutes=trade.orb_minutes,
+                    instrument=trade.strategy.instrument,  # F-2 hedging guard
+                    direction=trade.direction,             # F-2 hedging guard
                 )
                 if not can_enter:
                     trade.state = TradeState.EXITED
@@ -1106,6 +1108,8 @@ class ExecutionEngine:
                             active_trades=self.active_trades,
                             daily_pnl_r=self._total_pnl_r(),
                             orb_minutes=trade.orb_minutes,
+                            instrument=trade.strategy.instrument,  # F-2 hedging guard
+                            direction=trade.direction,             # F-2 hedging guard
                         )
                         if not can_enter:
                             trade.state = TradeState.EXITED
@@ -1269,6 +1273,8 @@ class ExecutionEngine:
                                 active_trades=self.active_trades,
                                 daily_pnl_r=self._total_pnl_r(),
                                 orb_minutes=trade.orb_minutes,
+                                instrument=trade.strategy.instrument,  # F-2 hedging guard
+                                direction=trade.direction,             # F-2 hedging guard
                             )
                             if not can_enter:
                                 trade.state = TradeState.EXITED
