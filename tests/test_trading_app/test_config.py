@@ -917,3 +917,172 @@ class TestPitRangeFilter:
         data = json.loads(f.to_json())
         assert data["filter_type"] == "PIT_MIN"
         assert data["min_ratio"] == 0.10
+
+
+class TestRequiresMicroData:
+    """Phase 3b: every StrategyFilter must self-describe whether it needs
+    real-micro contract data in bars_1m (vs parent-proxy data).
+
+    Default (price-based filters): False — work on any era.
+    Volume-based (VolumeFilter family, OrbVolumeFilter): True — the volume
+    signal is meaningless on parent-proxy data because MNQ/MES/MGC micro
+    volume is NOT the same as NQ/ES/GC parent volume.
+    CompositeFilter: dynamic — True iff any component requires it.
+
+    Consumers (deferred to Stage 3c/3d):
+    - Stage 3c: rebuild scope filter — only rebuild era-appropriate date ranges
+    - Stage 3d: drift check — reject validated_setups where a volume filter
+      references trades before micro_launch_day
+
+    @rule canonical-filter-self-description (rule 4, integrity-guardian)
+    """
+
+    def test_base_strategy_filter_default_false(self):
+        """Base class default: price-based, era-invariant."""
+        # Use NoFilter as a stand-in for the base class default
+        assert NoFilter().requires_micro_data is False
+
+    def test_orb_size_filter_is_false(self):
+        """ORB size is price-based (high-low of the ORB bars)."""
+        f = OrbSizeFilter(filter_type="ORB_G5", description="test", min_size=5.0)
+        assert f.requires_micro_data is False
+
+    def test_volume_filter_is_true(self):
+        """VolumeFilter (rel_vol) REQUIRES real micro volume data."""
+        f = VolumeFilter(
+            filter_type="VOL_RV12_N20",
+            description="test",
+            min_rel_vol=1.2,
+            lookback_days=20,
+        )
+        assert f.requires_micro_data is True
+
+    def test_orb_volume_filter_is_true(self):
+        """OrbVolumeFilter (aggregate ORB-window volume) REQUIRES real micro."""
+        from trading_app.config import OrbVolumeFilter
+
+        f = OrbVolumeFilter(
+            filter_type="ORB_VOL_2K",
+            description="test",
+            min_volume=2000.0,
+        )
+        assert f.requires_micro_data is True
+
+    def test_combined_atr_volume_filter_inherits_true(self):
+        """CombinedATRVolumeFilter subclasses VolumeFilter → inherits True."""
+        from trading_app.config import CombinedATRVolumeFilter
+
+        f = CombinedATRVolumeFilter(
+            filter_type="ATR70_VOL",
+            description="test",
+            min_rel_vol=1.0,
+            lookback_days=20,
+            min_atr_pct=70.0,
+        )
+        assert f.requires_micro_data is True
+
+    def test_composite_false_when_both_components_false(self):
+        """CompositeFilter of two price-based filters → False."""
+        base = OrbSizeFilter(filter_type="ORB_G5", description="test", min_size=5.0)
+        overlay = NoFilter()
+        comp = CompositeFilter(
+            filter_type="COMPOSITE",
+            description="test",
+            base=base,
+            overlay=overlay,
+        )
+        assert comp.requires_micro_data is False
+
+    def test_composite_true_when_base_is_volume(self):
+        """CompositeFilter with volume base → True (dynamic OR)."""
+        base = VolumeFilter(
+            filter_type="VOL_RV12_N20",
+            description="test",
+            min_rel_vol=1.2,
+        )
+        overlay = OrbSizeFilter(filter_type="ORB_G5", description="test", min_size=5.0)
+        comp = CompositeFilter(
+            filter_type="COMPOSITE",
+            description="test",
+            base=base,
+            overlay=overlay,
+        )
+        assert comp.requires_micro_data is True
+
+    def test_composite_true_when_overlay_is_volume(self):
+        """CompositeFilter with volume overlay → True (dynamic OR)."""
+        base = OrbSizeFilter(filter_type="ORB_G5", description="test", min_size=5.0)
+        overlay = VolumeFilter(
+            filter_type="VOL_RV12_N20",
+            description="test",
+            min_rel_vol=1.2,
+        )
+        comp = CompositeFilter(
+            filter_type="COMPOSITE",
+            description="test",
+            base=base,
+            overlay=overlay,
+        )
+        assert comp.requires_micro_data is True
+
+    def test_nested_composite_propagates(self):
+        """Composite of composite → dynamic OR through all nested levels."""
+        inner = CompositeFilter(
+            filter_type="INNER",
+            description="test",
+            base=VolumeFilter(filter_type="V", description="test", min_rel_vol=1.2),
+            overlay=NoFilter(),
+        )
+        outer = CompositeFilter(
+            filter_type="OUTER",
+            description="test",
+            base=OrbSizeFilter(filter_type="ORB_G5", description="test", min_size=5.0),
+            overlay=inner,
+        )
+        assert outer.requires_micro_data is True
+
+    def test_all_registered_filters_return_bool(self):
+        """Every filter in ALL_FILTERS must have requires_micro_data returning bool.
+
+        Drift guard — catches future filter additions that forget the attribute.
+        """
+        for filter_type, filter_instance in ALL_FILTERS.items():
+            result = filter_instance.requires_micro_data
+            assert isinstance(result, bool), (
+                f"{filter_type}.requires_micro_data should return bool, got {type(result).__name__}"
+            )
+
+    def test_known_volume_filters_in_all_filters_are_true(self):
+        """Sanity check: the volume filters we expect to be True actually are."""
+        known_volume_filter_types = {
+            "VOL_RV12_N20", "VOL_RV15_N20", "VOL_RV20_N20", "VOL_RV25_N20", "VOL_RV30_N20",
+            "ATR70_VOL",
+            "ORB_VOL_2K", "ORB_VOL_4K", "ORB_VOL_8K", "ORB_VOL_16K",
+        }
+        for ft in known_volume_filter_types:
+            if ft not in ALL_FILTERS:
+                continue  # Not all volume variants are always registered
+            assert ALL_FILTERS[ft].requires_micro_data is True, (
+                f"ALL_FILTERS[{ft}] is a known volume filter but requires_micro_data=False"
+            )
+
+    def test_known_price_filters_in_all_filters_are_false(self):
+        """Sanity check: pure price-based filters should all be False."""
+        known_price_filter_types = {
+            "NO_FILTER",
+            "ORB_G2", "ORB_G3", "ORB_G4", "ORB_G5", "ORB_G6", "ORB_G8",
+            "ORB_L2", "ORB_L3", "ORB_L4", "ORB_L6", "ORB_L8",
+            "COST_LT08", "COST_LT10", "COST_LT12",
+        }
+        for ft in known_price_filter_types:
+            if ft not in ALL_FILTERS:
+                continue
+            assert ALL_FILTERS[ft].requires_micro_data is False, (
+                f"ALL_FILTERS[{ft}] is a price filter but requires_micro_data=True"
+            )
+
+    def test_frozen_dataclass_still_frozen(self):
+        """Adding requires_micro_data as @property must not break frozen semantics."""
+        f = NoFilter()
+        with pytest.raises(AttributeError):
+            f.requires_micro_data = True  # type: ignore[misc]
