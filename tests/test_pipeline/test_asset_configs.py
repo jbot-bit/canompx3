@@ -148,3 +148,19 @@ class TestGetOutrightRoot:
         result = get_outright_root("MNQ")
         assert isinstance(result, str)
         assert len(result) > 0
+
+    def test_non_canonical_pattern_raises(self, monkeypatch):
+        """Helper raises ValueError if outright_pattern is structurally non-canonical.
+
+        Closes a coverage gap caught by Bloomey self-review of commit 838ab85
+        (Move C). The unknown-instrument failure path was tested, but the
+        non-canonical-pattern path was not. Inject a fake config with a
+        regex that does not match the canonical `^<ROOT>[<MONTH_CODES>]\\d+$`
+        shape and verify the helper fails-closed instead of returning garbage.
+        """
+        import re
+
+        fake_cfg = {"outright_pattern": re.compile(r"^WEIRDPATTERN$")}
+        monkeypatch.setitem(ASSET_CONFIGS, "_FAKE_BAD_PATTERN", fake_cfg)
+        with pytest.raises(ValueError, match="Non-canonical outright_pattern"):
+            get_outright_root("_FAKE_BAD_PATTERN")

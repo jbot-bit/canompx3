@@ -75,20 +75,15 @@ from pipeline.asset_configs import (  # noqa: E402
     get_outright_root,
 )
 
+# Module-load fail-closed: get_outright_root raises ValueError on any
+# instrument with a missing or non-canonical outright_pattern, aborting the
+# import before any consumer can use a half-built dict. This is strictly
+# stronger than a post-construction set-difference check (which would be
+# unreachable anyway since the comprehension iterates ACTIVE_ORB_INSTRUMENTS
+# directly — `set({k: f(k) for k in S}) == S` always).
 _DATABENTO_SYMBOLS: dict[str, str] = {
     instrument: f"{get_outright_root(instrument)}.FUT" for instrument in ACTIVE_ORB_INSTRUMENTS
 }
-
-# Fail-closed guard: every active instrument must resolve to a Databento parent symbol.
-# (The dict comprehension above will already raise ValueError on any unresolvable
-# instrument, but we keep an explicit assertion here so future regressions surface
-# with a load-time failure rather than at first refresh.)
-_missing = set(ACTIVE_ORB_INSTRUMENTS) - set(_DATABENTO_SYMBOLS)
-if _missing:
-    raise RuntimeError(
-        f"_DATABENTO_SYMBOLS missing active instruments: {_missing}. "
-        f"Verify pipeline.asset_configs.get_outright_root resolves them."
-    )
 
 # Additional schemas to refresh daily (beyond ohlcv-1m which refresh_data.py handles).
 # Only FREE (L0) schemas are downloaded daily. Paid schemas (L1 tbbo/trades/bbo-1s,
