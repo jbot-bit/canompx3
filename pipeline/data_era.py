@@ -125,7 +125,7 @@ def micro_launch_day(instrument: str) -> date:
     micro launch day in bars_1m, so this function raises for them.
 
     Examples:
-        micro_launch_day("MGC") -> date(2023, 9, 11)
+        micro_launch_day("MGC") -> date(2022, 6, 13)
         micro_launch_day("MNQ") -> date(2019, 5, 6)
         micro_launch_day("MES") -> date(2019, 5, 6)
 

@@ -66,9 +66,10 @@ ASSET_CONFIGS = {
     },
     "MGC": {
         # Real Micro Gold (10oz, $10/pt). Source: MGC.FUT contract series from
-        # 2023-09-11 (MGC contract launch). Pre-launch parent GC data is preserved
-        # under symbol='GC' (see GC config below) — relabeled 2026-04-08 as part of
-        # Phase 2 of canonical-data-redownload (docs/plans/2026-04-07-canonical-data-redownload.md).
+        # 2022-06-13 (CME Micro Gold launch). Prior minimum_start_date was 2023-09-11
+        # (our first download date, not the actual launch). Corrected 2026-04-09 when
+        # backfill data (2022-06-13 to 2023-09-10) was downloaded from Databento.
+        # Pre-launch parent GC data is preserved under symbol='GC' (see GC config below).
         # Cost model uses MGC micro specs ($10/pt, NOT GC's $100/pt).
         "dbn_path": PROJECT_ROOT / "data" / "raw" / "databento" / "ohlcv-1m" / "MGC",
         "symbol": "MGC",
@@ -76,7 +77,7 @@ ASSET_CONFIGS = {
         "orb_active": True,
         "outright_pattern": re.compile(r"^MGC[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
-        "minimum_start_date": date(2023, 9, 11),  # MGC contract launch date (real micro)
+        "minimum_start_date": date(2022, 6, 13),  # CME Micro Gold launch (10oz, first traded 2022-06-13)
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN",
