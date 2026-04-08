@@ -1060,3 +1060,81 @@ class TestHoldoutPolicyDeclarationConsistency:
         assert any("HOLDOUT_SACRED_FROM drifted" in v for v in violations)
         assert any("pre_registered_criteria.md" in v for v in violations)
         assert any("RESEARCH_RULES.md" in v for v in violations)
+
+
+# ─── Check 92: @canonical-source annotation integrity (F-1..F-9 stage 8) ──
+# @canonical-source docs/research-input/topstep/topstep_dll_article.md  (referenced for self-test)
+
+
+class TestCanonicalSourceAnnotations:
+    """Drift check 92 — verifies @canonical-source refs point to existing files.
+
+    Established 2026-04-08 by stage 8 of docs/plans/2026-04-08-topstep-canonical-fixes.md.
+    """
+
+    def test_baseline_passes(self):
+        """The current repo has no broken @canonical-source refs."""
+        from pipeline.check_drift import check_canonical_source_annotations
+
+        violations = check_canonical_source_annotations()
+        assert violations == [], (
+            f"Expected zero broken @canonical-source refs but found {len(violations)}: "
+            f"{violations[:5]}"
+        )
+
+    def test_catches_missing_path(self, tmp_path, monkeypatch):
+        """Inject a fake @canonical-source ref to a nonexistent file → flagged."""
+        from pipeline import check_drift
+
+        fake_pkg = tmp_path / "trading_app"
+        fake_pkg.mkdir()
+        bad_file = fake_pkg / "_drift92_negative.py"
+        bad_file.write_text(
+            "# @canonical-source docs/research-input/topstep/THIS_FILE_DOES_NOT_EXIST.md\n"
+        )
+
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_pkg)
+        monkeypatch.setattr(check_drift, "PIPELINE_DIR", tmp_path / "pipeline")
+        monkeypatch.setattr(check_drift, "SCRIPTS_DIR", tmp_path / "scripts")
+        # PROJECT_ROOT must remain at the real repo so the check can resolve
+        # the canonical paths under docs/research-input/.
+
+        violations = check_drift.check_canonical_source_annotations()
+        assert len(violations) == 1
+        assert "THIS_FILE_DOES_NOT_EXIST" in violations[0]
+        assert "_drift92_negative.py" in violations[0]
+
+    def test_ignores_archive_dirs(self, tmp_path, monkeypatch):
+        """Files under archive/ are NOT scanned even with broken refs."""
+        from pipeline import check_drift
+
+        fake_pkg = tmp_path / "trading_app"
+        archive = fake_pkg / "archive"
+        archive.mkdir(parents=True)
+        (archive / "old.py").write_text(
+            "# @canonical-source docs/research-input/MISSING.md\n"
+        )
+
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_pkg)
+        monkeypatch.setattr(check_drift, "PIPELINE_DIR", tmp_path / "pipeline")
+        monkeypatch.setattr(check_drift, "SCRIPTS_DIR", tmp_path / "scripts")
+
+        violations = check_drift.check_canonical_source_annotations()
+        assert violations == []
+
+    def test_ignores_placeholder_refs(self, tmp_path, monkeypatch):
+        """Refs starting with `<` (template placeholders) are skipped."""
+        from pipeline import check_drift
+
+        fake_pkg = tmp_path / "trading_app"
+        fake_pkg.mkdir()
+        (fake_pkg / "doc_template.py").write_text(
+            "# @canonical-source <relative path from project root>\n"
+        )
+
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_pkg)
+        monkeypatch.setattr(check_drift, "PIPELINE_DIR", tmp_path / "pipeline")
+        monkeypatch.setattr(check_drift, "SCRIPTS_DIR", tmp_path / "scripts")
+
+        violations = check_drift.check_canonical_source_annotations()
+        assert violations == []
