@@ -164,3 +164,75 @@ class TestGetOutrightRoot:
         monkeypatch.setitem(ASSET_CONFIGS, "_FAKE_BAD_PATTERN", fake_cfg)
         with pytest.raises(ValueError, match="Non-canonical outright_pattern"):
             get_outright_root("_FAKE_BAD_PATTERN")
+
+
+class TestParentSymbol:
+    """Phase 3a: every ASSET_CONFIGS entry must declare parent_symbol.
+
+    `parent_symbol: str | None` is the canonical parent-contract mapping
+    consumed by `pipeline.data_era`. Added 2026-04-08 (Phase 3a foundation).
+    """
+
+    EXPECTED = {
+        # Active micros → parent preserved post-Phase-2
+        "MGC": "GC",
+        "MNQ": "NQ",
+        "MES": "ES",
+        # Dead micros → use parent data as proxy (cost model adjusts)
+        "M2K": "RTY",
+        "MBT": "BTC",
+        "M6E": "6E",
+        "MCL": "CL",
+        "SIL": "SI",
+        # Native parents and research-only → None
+        "NQ": None,
+        "ES": None,
+        "GC": None,
+        "2YY": None,
+        "ZT": None,
+    }
+
+    def test_all_configs_declare_parent_symbol(self):
+        """Every ASSET_CONFIGS entry must have the parent_symbol key (even if None)."""
+        for inst, cfg in ASSET_CONFIGS.items():
+            assert "parent_symbol" in cfg, (
+                f"{inst} config missing 'parent_symbol' field — "
+                f"Phase 3a requires all configs to declare it"
+            )
+
+    def test_expected_coverage_matches_configs(self):
+        """EXPECTED must cover every entry in ASSET_CONFIGS — drift guard."""
+        configured = set(ASSET_CONFIGS.keys())
+        expected = set(self.EXPECTED.keys())
+        missing = configured - expected
+        extra = expected - configured
+        assert not missing, f"ASSET_CONFIGS has instruments not in test EXPECTED: {missing}"
+        assert not extra, f"Test EXPECTED has instruments not in ASSET_CONFIGS: {extra}"
+
+    def test_active_micros_map_to_canonical_parents(self):
+        assert ASSET_CONFIGS["MGC"]["parent_symbol"] == "GC"
+        assert ASSET_CONFIGS["MNQ"]["parent_symbol"] == "NQ"
+        assert ASSET_CONFIGS["MES"]["parent_symbol"] == "ES"
+
+    def test_dead_micros_declare_parent(self):
+        """Dead micros use parent data — parent_symbol must reflect the actual source."""
+        assert ASSET_CONFIGS["M2K"]["parent_symbol"] == "RTY"
+        assert ASSET_CONFIGS["MBT"]["parent_symbol"] == "BTC"
+        assert ASSET_CONFIGS["M6E"]["parent_symbol"] == "6E"
+        assert ASSET_CONFIGS["MCL"]["parent_symbol"] == "CL"
+        assert ASSET_CONFIGS["SIL"]["parent_symbol"] == "SI"
+
+    def test_parents_and_research_have_none(self):
+        """NQ/ES/GC are parents themselves; 2YY/ZT are research-only natives."""
+        for inst in ("NQ", "ES", "GC", "2YY", "ZT"):
+            assert ASSET_CONFIGS[inst]["parent_symbol"] is None, (
+                f"{inst} should have parent_symbol=None (parent/native)"
+            )
+
+    def test_all_expected_values_match(self):
+        """Full coverage matrix — catches any drift between config and expectations."""
+        for inst, expected_parent in self.EXPECTED.items():
+            actual = ASSET_CONFIGS[inst]["parent_symbol"]
+            assert actual == expected_parent, (
+                f"{inst}.parent_symbol should be {expected_parent!r}, got {actual!r}"
+            )
