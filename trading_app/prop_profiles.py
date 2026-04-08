@@ -89,6 +89,17 @@ class AccountProfile:
     # None = payout mechanics are not modeled for this profile.
     payout_policy_id: str | None = None
     max_risk_per_trade: float | None = None  # Dollar cap per trade. None = no limit.
+    # @canonical-source docs/research-input/topstep/topstep_mll_article.md
+    # @audit-finding F-5 (HWM freeze formula must differentiate XFA vs TC starting balance).
+    # XFA accounts start at $0 broker equity; TC accounts start at account_size.
+    # Default True because the active deployment topstep_50k_mnq_auto is XFA-shaped.
+    # Set to False only for Trading Combine practice profiles.
+    is_express_funded: bool = True
+    # @canonical-source docs/research-input/topstep/topstep_live_funded_parameters.md
+    # @audit-finding F-3 (DEFERRED — LFA DLL = MLL with $10K low-balance override).
+    # Reserved for the LFA-promotion path. Not yet wired into AccountHWMTracker.
+    # Stage 4 reserves the slot; LFA DLL semantics will be wired in a future stage.
+    is_live_funded: bool = False
     notes: str = ""
 
 

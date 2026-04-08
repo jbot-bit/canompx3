@@ -403,10 +403,27 @@ class SessionOrchestrator:
                             tier = get_account_tier(prof.firm, prof.account_size)
                             firm_spec = get_firm_spec(prof.firm)
                             acct_id = str(account_id) if account_id else pid
-                            # Freeze EOD trailing accounts at start_balance + max_dd + $100.
+                            # Freeze EOD trailing accounts at the level where MLL locks
+                            # at $0 forever, plus a $100 safety buffer.
+                            #
+                            # @canonical-source docs/research-input/topstep/topstep_mll_article.md
+                            # @verbatim "For a $50,000 Express Funded Account, your Maximum
+                            #            Loss Limit starts at -$2,000 and trails upward as your
+                            #            balance grows. Once your balance reaches $2,000, the
+                            #            Maximum Loss Limit stays at $0."
+                            # @audit-finding F-5 (MED — formula now differentiates XFA vs TC)
+                            #
+                            # XFA accounts start at $0 broker equity. The peak that locks the
+                            # MLL at $0 is `max_dd` (e.g. $2,000 for 50K). Add a $100 buffer.
+                            #
+                            # TC accounts start at `account_size` broker equity. The peak that
+                            # locks the MLL at $0 is `account_size + max_dd`. Add a $100 buffer.
                             freeze = None
                             if firm_spec.dd_type == "eod_trailing":
-                                freeze = prof.account_size + tier.max_dd + 100
+                                if prof.is_express_funded:
+                                    freeze = tier.max_dd + 100  # XFA starts at $0
+                                else:
+                                    freeze = prof.account_size + tier.max_dd + 100  # TC
                             self._hwm_tracker = AccountHWMTracker(
                                 account_id=acct_id,
                                 firm=prof.firm,
