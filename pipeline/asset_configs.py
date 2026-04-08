@@ -8,9 +8,14 @@ Each asset defines:
 - outright_pattern: Regex to match outright contracts (exclude spreads)
 - prefix_len: Number of chars in symbol prefix before month code
   (GC=2 -> GCG5, NQ=2 -> NQH5, MNQ=3 -> MNQH5)
-- minimum_start_date: Earliest usable date (None if unknown/no DBN)
+- minimum_start_date: Earliest usable date (None if unknown/no DBN). For
+  micros this is the contract launch date used by `data_era.micro_launch_day`.
 - schema_required: Expected DBN schema (always ohlcv-1m)
 - orb_active: Whether the instrument belongs in the active ORB/live universe
+- parent_symbol: Canonical parent contract symbol for micros that proxy to
+  a full-size instrument, or None for native parents and research-only
+  instruments. Consumed by `pipeline.data_era` for PARENT/MICRO
+  classification (Phase 3a foundation, Apr 2026).
 
 FAIL-CLOSED: get_asset_config() aborts if:
 - Unknown instrument
@@ -40,6 +45,7 @@ ASSET_CONFIGS = {
         # BTC trades ~30k contracts/day vs MBT ~5k — far better 1m bar coverage.
         "dbn_path": PROJECT_ROOT / "DB" / "BTC_DB",
         "symbol": "MBT",
+        "parent_symbol": "BTC",  # dead micro — uses full-size BTC parent data
         "outright_pattern": re.compile(r"^BTC[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
         "minimum_start_date": date(2021, 2, 1),
@@ -66,6 +72,7 @@ ASSET_CONFIGS = {
         # Cost model uses MGC micro specs ($10/pt, NOT GC's $100/pt).
         "dbn_path": PROJECT_ROOT / "data" / "raw" / "databento" / "ohlcv-1m" / "MGC",
         "symbol": "MGC",
+        "parent_symbol": "GC",  # active micro — GC parent preserved under symbol='GC'
         "orb_active": True,
         "outright_pattern": re.compile(r"^MGC[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
@@ -90,6 +97,7 @@ ASSET_CONFIGS = {
         # Phase 2 of canonical-data-redownload (docs/plans/2026-04-07-canonical-data-redownload.md).
         "dbn_path": PROJECT_ROOT / "data" / "raw" / "databento" / "ohlcv-1m" / "MNQ",
         "symbol": "MNQ",
+        "parent_symbol": "NQ",  # active micro — NQ parent preserved under symbol='NQ'
         "orb_active": True,
         "outright_pattern": re.compile(r"^MNQ[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
@@ -116,6 +124,7 @@ ASSET_CONFIGS = {
         # CL trades ~500k contracts/day vs MCL ~50k — far better 1m bar coverage.
         "dbn_path": PROJECT_ROOT / "DB" / "CL_DB",
         "symbol": "MCL",
+        "parent_symbol": "CL",  # dead micro — uses full-size CL parent data
         "orb_active": False,
         "outright_pattern": re.compile(r"^CL[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
@@ -139,6 +148,7 @@ ASSET_CONFIGS = {
         # Phase 2 of canonical-data-redownload (docs/plans/2026-04-07-canonical-data-redownload.md).
         "dbn_path": PROJECT_ROOT / "data" / "raw" / "databento" / "ohlcv-1m" / "MES",
         "symbol": "MES",
+        "parent_symbol": "ES",  # active micro — ES parent preserved under symbol='ES'
         "orb_active": True,
         "outright_pattern": re.compile(r"^MES[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
@@ -166,6 +176,7 @@ ASSET_CONFIGS = {
         # of canonical-data-redownload). Cost model: PARENT specs ($50/pt), NOT MES specs.
         "dbn_path": PROJECT_ROOT / "DB" / "MES_DB_2019-2024",
         "symbol": "ES",
+        "parent_symbol": None,  # ES IS the parent
         "orb_active": False,
         "outright_pattern": re.compile(r"^ES[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
@@ -191,6 +202,7 @@ ASSET_CONFIGS = {
         # Quarterly cycle only: H/M/U/Z.
         "dbn_path": PROJECT_ROOT / "DB" / "M2K_DB",
         "symbol": "M2K",
+        "parent_symbol": "RTY",  # dead micro — uses E-mini RTY parent data
         "orb_active": True,
         "outright_pattern": re.compile(r"^RTY[HMUZ]\d{1,2}$"),
         "prefix_len": 3,
@@ -216,6 +228,7 @@ ASSET_CONFIGS = {
         # Identical pattern to GC→MGC, 6E→M6E, RTY→M2K. Cost model uses SIL micro specs ($1000/pt).
         "dbn_path": PROJECT_ROOT / "DB" / "SL_DB",
         "symbol": "SIL",
+        "parent_symbol": "SI",  # dead micro — uses full-size SI parent data
         "orb_active": False,
         "outright_pattern": re.compile(r"^SI[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
@@ -237,6 +250,7 @@ ASSET_CONFIGS = {
         # Asia sessions (TOKYO_OPEN/SINGAPORE_OPEN) are WATCH-ONLY until data confirms breakout edge.
         "dbn_path": PROJECT_ROOT / "DB" / "M6E_DB",
         "symbol": "M6E",
+        "parent_symbol": "6E",  # dead micro — uses full-size 6E parent data
         "orb_active": False,
         "outright_pattern": re.compile(r"^6E[HMUZ]\d{1,2}$"),
         "prefix_len": 2,
@@ -259,6 +273,7 @@ ASSET_CONFIGS = {
         # of canonical-data-redownload). Cost model: PARENT specs ($20/pt), NOT MNQ specs.
         "dbn_path": PROJECT_ROOT / "DB" / "NQ_DB_2021-2024",
         "symbol": "NQ",
+        "parent_symbol": None,  # NQ IS the parent
         "orb_active": False,
         "outright_pattern": re.compile(r"^NQ[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
@@ -289,6 +304,7 @@ ASSET_CONFIGS = {
         # (Bloomey review HIGH finding on commit 82e8b60).
         "dbn_path": PROJECT_ROOT / "DB" / "GOLD_DB_FULLSIZE",
         "symbol": "GC",
+        "parent_symbol": None,  # GC IS the parent
         "orb_active": False,
         "outright_pattern": re.compile(r"^GC[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
@@ -312,6 +328,7 @@ ASSET_CONFIGS = {
         # The initial research path is event-window macro work, not ORB/live trading.
         "dbn_path": PROJECT_ROOT / "DB" / "2YY_DB",
         "symbol": "2YY",
+        "parent_symbol": None,  # research-only native (no micro counterpart)
         "orb_active": False,
         "outright_pattern": re.compile(r"^2YY[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
@@ -325,6 +342,7 @@ ASSET_CONFIGS = {
         # The initial research path is event-window macro work, not ORB/live trading.
         "dbn_path": PROJECT_ROOT / "DB" / "ZT_DB",
         "symbol": "ZT",
+        "parent_symbol": None,  # research-only native (no micro counterpart)
         "orb_active": False,
         "outright_pattern": re.compile(r"^ZT[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
