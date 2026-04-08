@@ -334,6 +334,32 @@ class StrategyFilter:
     filter_type: str
     description: str
 
+    @property
+    def requires_micro_data(self) -> bool:
+        """Does this filter need REAL micro contract data in bars_1m?
+
+        Default False — price-based filters work on any era (parent-proxy
+        or real-micro) because price levels are identical across
+        MNQ/NQ, MES/ES, MGC/GC etc.
+
+        Volume-based filters (VolumeFilter, OrbVolumeFilter) MUST override
+        to return True because MNQ micro volume is NOT the same as NQ
+        parent volume — the selectivity signal only holds on real-micro
+        data.
+
+        CompositeFilter overrides dynamically: True iff any component
+        requires it.
+
+        Consumers (Phase 3c/3d of canonical-data-redownload):
+        - Stage 3c rebuild: only rebuild era-appropriate date ranges
+        - Stage 3d drift check: reject validated_setups with volume filters
+          referencing trades before `data_era.micro_launch_day(instrument)`
+
+        @rule canonical-filter-self-description
+        @canonical-source pipeline/data_era.py (Phase 3a foundation, b032a03)
+        """
+        return False
+
     def to_json(self) -> str:
         """Serialize filter params to JSON."""
         return json.dumps(asdict(self))
@@ -612,6 +638,20 @@ class VolumeFilter(StrategyFilter):
     min_rel_vol: float = 1.2
     lookback_days: int = 20
 
+    @property
+    def requires_micro_data(self) -> bool:
+        """Relative-volume gate requires REAL micro contract data.
+
+        Break-bar volume for MNQ/MES/MGC differs from NQ/ES/GC parent
+        volume. Using parent-proxy data for rel_vol computation produces
+        a meaningless signal (parent volumes are 10-20x micro volumes).
+        Stage 3d will reject validated_setups with VolumeFilter referencing
+        pre-micro-launch trades.
+
+        @canonical-source pipeline/data_era.py
+        """
+        return True
+
     def matches_row(self, row: dict, orb_label: str) -> bool:
         rel_vol = row.get(f"rel_vol_{orb_label}")
         if rel_vol is None:
@@ -822,6 +862,20 @@ class OrbVolumeFilter(StrategyFilter):
     """
 
     min_volume: float
+
+    @property
+    def requires_micro_data(self) -> bool:
+        """Aggregate ORB-window volume requires REAL micro contract data.
+
+        Absolute volume thresholds (e.g. 2K/4K/8K/16K contracts) are
+        calibrated against real-micro trading patterns. Parent-proxy
+        volumes are an order of magnitude higher — a 2K threshold on
+        NQ parent data would fire every session, producing a meaningless
+        signal.
+
+        @canonical-source pipeline/data_era.py
+        """
+        return True
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         volume = row.get(f"orb_{orb_label}_volume")
@@ -2129,6 +2183,20 @@ class CompositeFilter(StrategyFilter):
 
     base: StrategyFilter
     overlay: StrategyFilter
+
+    @property
+    def requires_micro_data(self) -> bool:
+        """Composite requires micro data iff ANY component does.
+
+        Dynamic computation — a price-based base composed with a volume-based
+        overlay (e.g. `ORB_G5 AND VOL_RV12_N20`) still needs real micro data
+        because the overlay's volume gate is meaningless on parent-proxy data.
+        Recurses naturally through nested composites via the inner filter's
+        own `requires_micro_data` property.
+
+        @canonical-source pipeline/data_era.py
+        """
+        return self.base.requires_micro_data or self.overlay.requires_micro_data
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         return self.base.matches_row(row, orb_label) and self.overlay.matches_row(row, orb_label)
