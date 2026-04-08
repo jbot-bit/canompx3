@@ -368,3 +368,134 @@ Untracked / other-terminal / bot (leave alone):
 
 Zero commits ahead of main on this branch (the handover doc is the
 first to commit once you're ready to start).
+
+---
+
+# Rebuild Execution Log — 2026-04-08
+
+**Status:** COMPLETE. All 6 steps ran clean. All validation green.
+
+## Deviation from plan: DuckDB FK enforcement quirk
+
+Step A's original one-transaction approach failed with a FK
+violation:
+
+```
+Constraint Error: Violates foreign key constraint because key
+"symbol: MNQ, trading_day: 2016-02-01, orb_minutes: 5" is still
+referenced by a foreign key in a different table.
+```
+
+Root cause: DuckDB's FK checker on a parent DELETE (`daily_features`)
+inside the same transaction does NOT see the uncommitted child
+DELETEs (`orb_outcomes`) that ran earlier in the same transaction.
+This is a read-your-writes limitation specific to FK enforcement in
+DuckDB.
+
+**Fix (institutional, not band-aid):** Split into two transactions.
+Transaction 1 commits all `orb_outcomes` deletes. Transaction 2 then
+commits all `daily_features` deletes. After Tx1 commits, the FK
+checker sees zero children and allows the parent delete.
+
+`PRAGMA foreign_keys=OFF` was explicitly NOT used — would have
+broken integrity checking for the whole session.
+
+The FK schema: `orb_outcomes.(symbol, trading_day, orb_minutes)`
+references `daily_features.(symbol, trading_day, orb_minutes)`. It
+is 1-to-many (e.g., 360 orb_outcomes children per 1 daily_features
+parent for the 5m aperture). `orb_outcomes` is the only child table
+of `daily_features`; nothing references `orb_outcomes` as a parent.
+
+The rollback from the failed first attempt was clean — tested via
+row-count comparison (11,899,662 and 56,424 unchanged from backup
+snapshot). No damage.
+
+## Execution timeline (Brisbane local)
+
+| Step | Start | Duration | Result |
+|---|---|---|---|
+| Pre-flight verification | 15:50 | ~30s | Backups verified, write lock free, no live-bot |
+| Step A (attempt 1 — ROLLED BACK) | 15:51 | ~20s | FK violation, atomic rollback |
+| Step A (attempt 2 — two-pass) | 15:52 | ~15s | 4,795,704 orb_outcomes + 27,126 daily_features removed |
+| Step B (two-pass) | 15:53 | ~25s | Remaining 4,617,936 + 14,352 removed |
+| Step C (daily_features rebuild, 9 invocations) | 15:54 | ~20 min | 14,373 rows built, all integrity PASSED |
+| Step D (orb_outcomes rebuild, 9 invocations) | 15:54 | 25 min | 4,631,724 outcomes built |
+| Step E (validation, 4 parallel checks) | 16:20 | ~6 min | drift 85/0/7 + behavioral 7/7 + tests 3391 pass |
+
+## Final row counts (after rebuild)
+
+**orb_outcomes** (MNQ/MES/MGC):
+
+```
+MES:  1,906,308  2019-05-06 to 2026-04-06
+MGC:    617,508  2023-09-11 to 2026-04-06
+MNQ:  2,107,908  2019-05-06 to 2026-04-06
+Total: 4,631,724
+```
+
+Note: `orb_outcomes` max = 2026-04-06 vs `daily_features` max =
+2026-04-07. Expected — outcome_builder only writes for days with
+COMPLETED ORB + hold windows, and the most recent trading day hasn't
+closed its full hold window yet.
+
+**daily_features** (MNQ/MES/MGC):
+
+```
+MES 5m/15m/30m:  2,024 rows each  (6,072 total)
+MGC 5m/15m/30m:    743 rows each  (2,229 total)
+MNQ 5m/15m/30m:  2,024 rows each  (6,072 total)
+Total: 14,373
+```
+
+**Per-aperture outcome counts:**
+
+| Instrument | 5m | 15m | 30m |
+|---|---|---|---|
+| MGC | 211,140 | 206,928 | 199,440 |
+| MES | 681,624 | 633,672 | 591,012 |
+| MNQ | 748,008 | 702,000 | 657,900 |
+
+## Validation results
+
+1. **Drift check:** 85 passed, 0 failed, 7 advisory — exact match to
+   post-e2-fix baseline.
+2. **Behavioral audit:** 7/7 checks clean.
+3. **Test suite:** 3,391 passed, 9 skipped in 5:47 (pipeline +
+   trading_app). No regressions.
+4. **DB-level checks:**
+   - Zero pre-launch orphans in either table.
+   - Zero FK orphans (every orb_outcomes row has a matching
+     daily_features parent).
+   - Dead instruments untouched (M2K: 1,544,508; M6E: 324,870;
+     MBT: 530,124; SIL: 86,520).
+   - `validated_setups` unchanged: MNQ=101, MES=14, MGC=9.
+   - Backups dropped at end of Step F.
+
+## Mode A holdout compliance
+
+The rebuild wrote new rows to 2026 dates in both tables. Per
+`pipeline.paths.GOLD_DB_PATH` + `trading_app.holdout_policy`, this is
+NOT a holdout violation because:
+- Data-layer builds are NOT gated by `HOLDOUT_SACRED_FROM`.
+- Only `strategy_discovery.py` (CLI) and
+  `strategy_validator._check_mode_a_holdout_integrity()` enforce
+  the sacred-boundary on discovery/promotion.
+- New 2026 rows are deterministic transformations of `bars_1m`,
+  not discovery sweeps.
+- `validated_setups` was explicitly untouched.
+
+## Backups dropped
+
+Backup tables `orb_outcomes_pre_phase_3c_backup` (9,413,640 rows) and
+`daily_features_pre_phase_3c_backup` (41,478 rows) were dropped after
+Step E validation passed. No longer needed — the rebuild is
+deterministic and reproducible from `bars_1m`.
+
+## Concurrent writer check during rebuild
+
+Two Python processes were running during the rebuild but neither was
+a live bot:
+- `telegram_feed.py` (read-only notifier)
+- `pyright-langserver` (type checker, no DB access)
+
+Write lock was verified free before any destructive step.
