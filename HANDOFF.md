@@ -6,6 +6,37 @@
 
 ---
 
+## Update (Apr 9 — Phase 4.2 Hypothesis Files + Amendment 2.9 + Parent Data Cleanup — COMPLETE)
+
+### What landed today
+
+1. **Amendment 2.9** — Parent/Proxy Data Policy (binding). Codified in `docs/institutional/pre_registered_criteria.md`. DELETE NQ/ES bars, KEEP GC for MGC Tier 2 validation (price-only). 4 new banned practices (#9-#12).
+
+2. **3 hypothesis YAMLs** at `docs/audit/hypotheses/`:
+   - `2026-04-09-mnq-mode-a-rediscovery.yaml` — 16 hypotheses, N=16, strict Bailey E=1.0 PASS
+   - `2026-04-09-mes-mode-a-rediscovery.yaml` — 16 hypotheses, N=16, strict Bailey E=1.0 PASS
+   - `2026-04-09-mgc-mode-a-rediscovery.yaml` — 4 hypotheses, N=4, Bailey E=1.05 PASS (marginal)
+   - All audited (7 findings, all fixed). MNQ/MES ~87% correlation disclosure added.
+
+3. **NQ/ES parent bars deleted from gold.db** — 9.36M rows removed. GC kept (5.5M bars for MGC Tier 2). Drift 87/0/7.
+
+4. **Amendment 2.8** — Factual correction of data horizons post-Phase-3c.
+
+### Current state
+
+- **Drift:** 87 passing, 0 violations, 7 advisory.
+- **gold.db symbols:** MES, MGC, MNQ (active micros) + GC (parent, kept for MGC validation) + M2K/M6E/MBT/MCL/SIL (dead instruments, not deleted).
+- **Holdout enforcement:** all 4 sweep items DONE (check_drift, discovery CLI, validator gate, declaration consistency).
+- **Hypothesis files:** all 3 instruments pre-registered. 36 total trials (16+16+4).
+
+### Next Sensible Step
+
+1. **Phase 4 clean rediscovery** — run `strategy_discovery` with `--holdout-date 2026-01-01` and `--hypothesis-file` for each instrument. Multi-hour compute. This is THE main event.
+2. **MGC Databento backfill** (optional, recommended) — download MGC bars 2022-06-13 to 2023-09-10 to extend clean data from 2.7yr to ~3.9yr (N budget from 4 to 7). ~$0 cost on Standard subscription.
+3. **Phase 5 deployment review** — after rediscovery, re-classify deployed lanes against 12 criteria.
+
+---
+
 ## Update (Apr 8 — Holdout Policy Mode A Restoration + Enforcement Refactor — IN PROGRESS, paused for terminal swap)
 
 ### Status

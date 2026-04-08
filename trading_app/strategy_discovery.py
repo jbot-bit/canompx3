@@ -1554,8 +1554,15 @@ def run_discovery(
             # Required because INSERT OR REPLACE only updates written rows —
             # strategies excluded from the current grid (e.g., E2+CONT after
             # the look-ahead filter exclusion) would persist as zombies.
+            # FK-safe: skip rows referenced by validated_setups.promoted_from
+            # (grandfathered research-provisional strategies per Amendment 2.4).
             con.execute(
-                "DELETE FROM experimental_strategies WHERE instrument = ? AND orb_minutes = ?",
+                """DELETE FROM experimental_strategies
+                WHERE instrument = ? AND orb_minutes = ?
+                  AND strategy_id NOT IN (
+                      SELECT promoted_from FROM validated_setups
+                      WHERE promoted_from IS NOT NULL
+                  )""",
                 [instrument, orb_minutes],
             )
             insert_batch = []
