@@ -29,11 +29,49 @@
 - **Holdout enforcement:** all 4 sweep items DONE (check_drift, discovery CLI, validator gate, declaration consistency).
 - **Hypothesis files:** all 3 instruments pre-registered. 36 total trials (16+16+4).
 
+### Phase 4 Discovery + Validation Results (completed same session)
+
+**Discovery (--holdout-date 2026-01-01, pre-registered hypothesis files):**
+- MNQ: 8/16 BH FDR significant
+- MES: 0/16 BH FDR significant
+- MGC: 0/4 BH FDR significant
+
+**Validation (WF + OOS + FDR stratified K=137):**
+5 MNQ strategies survive full pipeline — ALL with positive 2026 OOS:
+
+| Strategy | WFE | WF Win | 2026 OOS ExpR | IS ExpR |
+|---|---|---|---|---|
+| EUROPE_FLOW G8 | 1.33 | 10/12 | +0.129 | +0.105 |
+| NYSE_OPEN G8 | 2.08 | 8/12 | +0.106 | +0.085 |
+| NYSE_OPEN G4 | 2.08 | 8/12 | +0.108 | +0.085 |
+| NYSE_OPEN G6 | 2.05 | 8/12 | +0.107 | +0.085 |
+| NYSE_OPEN G5 | 2.12 | 8/12 | +0.106 | +0.084 |
+
+**Criteria status for the 5 survivors:**
+- C1 Pre-registration: PASS (hypothesis file exists)
+- C2 MinBTL: PASS (N=16 on 6.65yr)
+- C3 BH FDR: PASS
+- C4 Chordia t: MARGINAL (2.24-2.86, below 3.00 threshold)
+- C5 DSR: 0/5 pass DSR>0.95 (cross-check only per Amendment 2.1)
+- C6 WFE: PASS (all >= 0.50)
+- C7 Sample size: PASS (all N > 1300)
+- C8 2026 OOS: PASS (all positive, all > 0.40 x IS)
+- C9 Era stability: EUROPE_FLOW G8 PASS. NYSE_OPEN 4 variants FAIL (2020 COVID: ExpR=-0.097)
+- C10 Data era: PASS (price-based filters)
+- C11 Account MC: PENDING
+- C12 SR monitor: PENDING
+
+**Key finding: EUROPE_FLOW G8 is the cleanest Mode A survivor.** Only strategy passing C1-C10 (except C4 marginal, C5 cross-check). NYSE_OPEN variants all fail C9 due to 2020 COVID year.
+
+**OVNRNG filter gap found:** OVNRNG_50/100 thresholds are in absolute points. MNQ median overnight range = 75pts (OVNRNG_50 passes 75% of days). MES median = 17.5pts (OVNRNG_50 passes only 7%, OVNRNG_100 = 0.9%). Pipeline needs OVNRNG_15/25 for MES — future hypothesis file.
+
 ### Next Sensible Step
 
-1. **Phase 4 clean rediscovery** — run `strategy_discovery` with `--holdout-date 2026-01-01` and `--hypothesis-file` for each instrument. Multi-hour compute. This is THE main event.
-2. **MGC Databento backfill** (optional, recommended) — download MGC bars 2022-06-13 to 2023-09-10 to extend clean data from 2.7yr to ~3.9yr (N budget from 4 to 7). ~$0 cost on Standard subscription.
-3. **Phase 5 deployment review** — after rediscovery, re-classify deployed lanes against 12 criteria.
+1. **MGC Databento backfill** — download MGC bars 2022-06-13 to 2023-09-10. Same contract (10oz micro gold, launched 2022-06-13). Extends clean data from 2.7yr to ~3.9yr, N budget from 4 to 7.
+2. **MGC re-discovery** — with extended data, re-run hypothesis file.
+3. **MNQ deployment decision** — the 5 survivors overlap heavily with existing deployed lanes. Compare against current `topstep_50k_mnq_auto` portfolio.
+4. **MES new hypothesis file** — COST_LT filters + scaled OVNRNG (requires new pre-registration).
+5. **Phase 5 deployment review** — re-classify deployed lanes against 12 criteria using Mode A evidence.
 
 ---
 
