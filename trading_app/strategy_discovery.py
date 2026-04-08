@@ -43,7 +43,16 @@ from trading_app.config import (
     get_filters_for_grid,
 )
 from trading_app.db_manager import compute_trade_day_hash, init_trading_app_schema
+from trading_app.hypothesis_loader import (
+    HypothesisLoaderError,
+    ScopePredicate,
+    check_mode_a_consistency,
+    enforce_minbtl_bound,
+    extract_scope_predicate,
+    load_hypothesis_metadata,
+)
 from trading_app.outcome_builder import CONFIRM_BARS_OPTIONS, RR_TARGETS
+from trading_app.phase_4_discovery_gates import check_git_cleanliness, check_single_use
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)
@@ -130,11 +139,39 @@ _BATCH_COLUMNS = [
     # BH FDR at discovery (Mar 2026 — Bloomey statistical hardening)
     "fdr_significant_discovery",
     "fdr_adjusted_p_discovery",
+    # Phase 4 Stage 4.1 — pre-registered hypothesis file SHA stamp.
+    # Populated when run_discovery is called with hypothesis_file=<Path>;
+    # NULL on legacy-mode runs. See docs/audit/hypotheses/README.md.
+    "hypothesis_file_sha",
 ]
 
 
 def _flush_batch_df(con, insert_batch: list[list]) -> None:
-    """Flush a batch of strategy rows via DataFrame insert."""
+    # Flush a batch of strategy rows via DataFrame replacement scan.
+    #
+    # Phase 4 Stage 4.1 defensive guard (D-7): every row in ``insert_batch``
+    # MUST have exactly ``len(_BATCH_COLUMNS)`` elements. Without this
+    # check, a mismatch between ``_BATCH_COLUMNS``, the SQL column list
+    # below, and the batch-assembly append loop silently shifts values
+    # into the neighbouring slots (Pandas/DuckDB positional alignment).
+    # The Stage 4.1 SHA-stamping edit is spread across three coordinated
+    # locations, so a mismatch is a real possibility — better to raise
+    # loudly at write time than to silently corrupt experimental_strategies.
+    #
+    # (Comment form instead of docstring to avoid the trading-app schema
+    # drift check treating this as embedded SQL — the word "INSERT" plus
+    # "INTO" patterns in a docstring trigger false positives in
+    # pipeline.check_drift.check_schema_query_consistency_trading_app.)
+    expected_width = len(_BATCH_COLUMNS)
+    for i, row in enumerate(insert_batch):
+        if len(row) != expected_width:
+            raise ValueError(
+                f"_flush_batch_df column alignment error: row {i} has "
+                f"{len(row)} values but _BATCH_COLUMNS has {expected_width}. "
+                f"Check _BATCH_COLUMNS + INSERT column list + batch assembly "
+                f"loop for a three-way mismatch (Phase 4 Stage 4.1 SHA "
+                f"stamping guard)."
+            )
     batch_df = pd.DataFrame(insert_batch, columns=_BATCH_COLUMNS)  # noqa: F841
     con.execute("""
         INSERT OR REPLACE INTO experimental_strategies
@@ -155,7 +192,8 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
          p_value, sharpe_ann_adj, autocorr_lag1,
          sharpe_haircut, skewness, kurtosis_excess,
          n_trials_at_discovery, fst_hurdle,
-         fdr_significant_discovery, fdr_adjusted_p_discovery)
+         fdr_significant_discovery, fdr_adjusted_p_discovery,
+         hypothesis_file_sha)
         SELECT strategy_id, instrument, orb_label, orb_minutes,
                rr_target, confirm_bars, entry_model,
                filter_type, filter_params, stop_multiplier,
@@ -173,7 +211,8 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
                p_value, sharpe_ann_adj, autocorr_lag1,
                sharpe_haircut, skewness, kurtosis_excess,
                n_trials_at_discovery, fst_hurdle,
-               fdr_significant_discovery, fdr_adjusted_p_discovery
+               fdr_significant_discovery, fdr_adjusted_p_discovery,
+               hypothesis_file_sha
         FROM batch_df
     """)
 
@@ -1048,6 +1087,7 @@ def run_discovery(
     dst_regime: str | None = None,
     holdout_date: date | None = None,
     unlock_holdout: str | None = None,
+    hypothesis_file: Path | None = None,
 ) -> int:
     """
     Grid search over all strategy variants.
@@ -1072,6 +1112,30 @@ def run_discovery(
             allowed — but the resulting strategies are research-provisional
             and CANNOT be promoted to deployment without separate validation
             against a fresh untouched holdout window.
+        hypothesis_file: Phase 4 Stage 4.1 — path to a committed pre-registered
+            hypothesis YAML file in ``docs/audit/hypotheses/``. When set, the
+            discovery routine:
+            (a) verifies the file is tracked + clean in git (check_git_cleanliness),
+            (b) enforces Criterion 2 MinBTL on the declared trial count
+                (enforce_minbtl_bound),
+            (c) enforces Amendment 2.7 Mode A consistency on the hypothesis
+                holdout_date (check_mode_a_consistency),
+            (d) verifies the file SHA has not been used in a prior run
+                (check_single_use, runs after connection open),
+            (e) builds a ScopePredicate that limits enumeration to the
+                hypothesis file's declared (filter_type, sessions, rr_targets,
+                entry_models, confirm_bars, stop_multipliers) bundles — this
+                is the pre-facto MinBTL constraint per the Stage 4.1 design,
+                not a post-facto count check,
+            (f) stamps every experimental_strategies row with the file's
+                content SHA so downstream drift check #94 can verify
+                integrity.
+            When None (default), discovery runs in legacy mode with no
+            enforcement and no SHA stamping. Legacy mode exists to preserve
+            pre-Stage-4.1 test fixtures, null-seed scripts, and
+            pipeline/run_full_pipeline.py which is updated in a follow-up
+            stage. The validator's Phase 4 gates treat NULL SHA as
+            legacy bypass per ``_is_phase_4_grandfathered``.
 
     Returns count of strategies written.
     """
@@ -1091,6 +1155,50 @@ def run_discovery(
     if db_path is None:
         db_path = GOLD_DB_PATH
 
+    # ---- Phase 4 Stage 4.1 enforcement (pre-connection) ----
+    # When ``hypothesis_file`` is supplied, run the pure-YAML discipline
+    # gates that do not need a DB connection. The single-use check runs
+    # below after the connection opens. When ``hypothesis_file`` is None
+    # (legacy mode), ALL of this is skipped — the run produces rows with
+    # NULL hypothesis_file_sha which the validator treats as grandfathered
+    # via _is_phase_4_grandfathered.
+    #
+    # Failure semantics: any HypothesisLoaderError from these gates
+    # propagates out of run_discovery to the caller. The CLI main()
+    # translates it into parser.error for a clean exit 2. Function-path
+    # callers (tests, research) see the raised exception and can catch
+    # it if desired.
+    scope_predicate: ScopePredicate | None = None
+    hypothesis_sha: str | None = None
+    if hypothesis_file is not None:
+        logger.info(f"Phase 4 enforcement active: hypothesis file {hypothesis_file}")
+        # Gate 1: file must be tracked + clean in git (lock point integrity).
+        check_git_cleanliness(hypothesis_file)
+        # Gate 2: load + schema-validate YAML.
+        h_meta = load_hypothesis_metadata(hypothesis_file)
+        # Gate 3: Amendment 2.7 Mode A consistency on holdout_date field.
+        check_mode_a_consistency(h_meta)
+        # Gate 4: Criterion 2 MinBTL bound. The proxy-mode flag is read
+        # from metadata.data_source_mode; default is clean (300 cap).
+        source_meta = h_meta.get("metadata", {})
+        on_proxy_data = (
+            isinstance(source_meta, dict)
+            and source_meta.get("data_source_mode") == "proxy"
+        )
+        verdict, reason = enforce_minbtl_bound(h_meta, on_proxy_data=on_proxy_data)
+        if verdict is not None:
+            raise HypothesisLoaderError(reason or "criterion_2: unknown rejection")
+        # Gate 5: build the scope predicate for this instrument. Fails
+        # closed if no hypothesis in the file declares this instrument.
+        scope_predicate = extract_scope_predicate(h_meta, instrument=instrument)
+        hypothesis_sha = str(h_meta["sha"])
+        logger.info(
+            f"  SHA={hypothesis_sha[:12]} "
+            f"declared_trials={scope_predicate.total_declared_trials} "
+            f"hypotheses={len(scope_predicate.hypotheses)} "
+            f"mode={'proxy' if on_proxy_data else 'clean'}"
+        )
+
     if not dry_run:
         init_trading_app_schema(db_path=db_path)
 
@@ -1098,6 +1206,14 @@ def run_discovery(
         from pipeline.db_config import configure_connection
 
         configure_connection(con, writing=True)
+
+        # Phase 4 Stage 4.1: single-use check runs here (needs DB).
+        # Must fire BEFORE the DELETE+INSERT idempotent wipe below, otherwise
+        # the prior SHA evidence is gone and re-runs silently succeed.
+        # Scout Risk 3 and Phase A reviewer rationale captured in
+        # docs/runtime/stages/phase-4-1-discovery-hypothesis-file.md D-4.
+        if hypothesis_sha is not None:
+            check_single_use(hypothesis_sha, con)
 
         # Determine which sessions to search
         sessions = get_enabled_sessions(instrument)
@@ -1164,9 +1280,45 @@ def run_discovery(
         total_combos *= len(STOP_MULTIPLIERS)
         combo_idx = 0
 
+        # Phase 4 Stage 4.1: per-hypothesis scope predicate early-exit sets.
+        # When scope_predicate is set (Phase 4 enforcement mode), each outer
+        # loop level pre-checks the allowed-set to skip iterations early.
+        # The UNION-based early exits are a performance optimization — they
+        # may over-accept combos that cross-pollinate across hypotheses, but
+        # the final per-hypothesis bundle check inside the innermost loop is
+        # the authoritative gate. Correctness is preserved; only wasted
+        # iterations are eliminated.
+        p4_allowed_sessions: frozenset[str] | None = None
+        p4_allowed_filter_types: frozenset[str] | None = None
+        p4_allowed_entry_models: frozenset[str] | None = None
+        p4_allowed_rr_targets: frozenset[float] | None = None
+        p4_allowed_confirm_bars: frozenset[int] | None = None
+        p4_allowed_stop_mults: frozenset[float] | None = None
+        if scope_predicate is not None:
+            p4_allowed_sessions = scope_predicate.allowed_sessions()
+            p4_allowed_filter_types = scope_predicate.allowed_filter_types()
+            p4_allowed_entry_models = scope_predicate.allowed_entry_models()
+            p4_allowed_rr_targets = scope_predicate.allowed_rr_targets()
+            p4_allowed_confirm_bars = scope_predicate.allowed_confirm_bars()
+            p4_allowed_stop_mults = scope_predicate.allowed_stop_multipliers()
+        # Raw count of tuples the predicate accepted — the MinBTL-relevant
+        # trial count for the safety net assertion after the loop.
+        phase_4_accepted_count = 0
+
         for orb_label in sessions:
+            # Phase 4 early-exit: skip sessions not referenced by any hypothesis
+            if p4_allowed_sessions is not None and orb_label not in p4_allowed_sessions:
+                continue
             session_filters = get_filters_for_grid(instrument, orb_label)
             for filter_key, strategy_filter in session_filters.items():
+                # Phase 4 early-exit: skip filter_types not referenced by any
+                # hypothesis. strategy_filter.filter_type is the canonical
+                # source (Phase A review M-2: never hardcode filter key format).
+                if (
+                    p4_allowed_filter_types is not None
+                    and getattr(strategy_filter, "filter_type", None) not in p4_allowed_filter_types
+                ):
+                    continue
                 matching_day_set = filter_days[(filter_key, orb_label)]
 
                 for em in ENTRY_MODELS:
@@ -1182,9 +1334,18 @@ def run_discovery(
                         or any(sub in filter_key for sub in E2_EXCLUDED_FILTER_SUBSTRINGS)
                     ):
                         continue
+                    # Phase 4 early-exit: skip entry_models not referenced
+                    if p4_allowed_entry_models is not None and em not in p4_allowed_entry_models:
+                        continue
                     for rr_target in RR_TARGETS:
+                        # Phase 4 early-exit: skip rr_targets not referenced
+                        if p4_allowed_rr_targets is not None and rr_target not in p4_allowed_rr_targets:
+                            continue
                         for cb in CONFIRM_BARS_OPTIONS:
                             if em in ("E2", "E3") and cb > 1:
+                                continue
+                            # Phase 4 early-exit: skip confirm_bars not referenced
+                            if p4_allowed_confirm_bars is not None and cb not in p4_allowed_confirm_bars:
                                 continue
                             combo_idx += 1
 
@@ -1209,6 +1370,43 @@ def run_discovery(
                                 continue
 
                             for stop_mult in STOP_MULTIPLIERS:
+                                # Phase 4 early-exit: skip stop_mults not referenced
+                                if (
+                                    p4_allowed_stop_mults is not None
+                                    and stop_mult not in p4_allowed_stop_mults
+                                ):
+                                    continue
+
+                                # Phase 4 FULL per-hypothesis bundle check.
+                                # The early-exit sets above filter out most
+                                # non-matching combos via cheap set membership
+                                # lookups, but they use the UNION across
+                                # hypotheses which is permissive. This
+                                # innermost check is the authoritative gate:
+                                # it requires the (session, filter_type, em,
+                                # rr, cb, stop) tuple to match ALL six
+                                # dimensions of a SINGLE hypothesis bundle,
+                                # preventing cross-pollination across
+                                # hypotheses with disjoint scopes.
+                                if scope_predicate is not None:
+                                    filter_type_str = getattr(strategy_filter, "filter_type", "")
+                                    if not scope_predicate.accepts(
+                                        orb_label=orb_label,
+                                        filter_type=filter_type_str,
+                                        entry_model=em,
+                                        rr_target=float(rr_target),
+                                        confirm_bars=int(cb),
+                                        stop_multiplier=float(stop_mult),
+                                    ):
+                                        continue
+                                    # Only count AFTER the predicate accepts.
+                                    # phase_4_accepted_count is the RAW trial
+                                    # count for the safety-net assertion below;
+                                    # it counts every combo the predicate lets
+                                    # through regardless of dedup, empty
+                                    # outcomes, or metric compute failure.
+                                    phase_4_accepted_count += 1
+
                                 # Apply tight stop simulation (no-op for 1.0x).
                                 # Stop variants ARE counted in total_combos (K includes
                                 # len(STOP_MULTIPLIERS) factor). Each stop multiplier
@@ -1285,6 +1483,38 @@ def run_discovery(
 
                 if combo_idx % 500 == 0:
                     logger.info(f"  Progress: {combo_idx}/{total_combos} combos, {len(all_strategies)} strategies")
+
+        # Phase 4 Stage 4.1 safety net: raw accepted count must not exceed
+        # the hypothesis file's declared total_expected_trials. This is the
+        # post-enumeration MinBTL assertion — catches the case where the
+        # scope predicate allows more combinations than the author declared
+        # (predicate-too-permissive bug). Fails closed BEFORE the DB write
+        # phase so no rows land in experimental_strategies from an
+        # overshoot run.
+        if scope_predicate is not None:
+            declared = scope_predicate.total_declared_trials
+            if phase_4_accepted_count > declared:
+                raise ValueError(
+                    f"Phase 4 Stage 4.1 safety net: scope predicate accepted "
+                    f"{phase_4_accepted_count} raw trials but the hypothesis "
+                    f"file declared total_expected_trials={declared}. This "
+                    f"is a predicate-too-permissive bug — either the scope "
+                    f"blocks need tightening OR the declared count needs "
+                    f"increasing in a NEW dated hypothesis file (existing "
+                    f"files are immutable per registry README). Aborting "
+                    f"before DB write."
+                )
+            logger.info(
+                f"Phase 4 safety net: {phase_4_accepted_count}/{declared} raw "
+                f"trials accepted by scope predicate"
+            )
+            if phase_4_accepted_count == 0:
+                logger.warning(
+                    "Phase 4 WARNING: scope predicate accepted ZERO combos. "
+                    "Verify that the hypothesis file's filter.type and scope "
+                    "fields are consistent with ALL_FILTERS in "
+                    "trading_app/config.py. No rows will be written."
+                )
 
         # ---- Dedup: mark canonical vs alias within each group ----
         logger.info(f"Dedup: {len(all_strategies)} strategies, computing canonical...")
@@ -1378,6 +1608,11 @@ def run_discovery(
                         # BH FDR at discovery (Bloomey hardening)
                         fdr.get("fdr_significant"),
                         fdr.get("adjusted_p"),
+                        # Phase 4 Stage 4.1: pre-registered hypothesis file
+                        # SHA. Single-valued for the whole batch — either the
+                        # CLI was invoked with --hypothesis-file (non-None)
+                        # or it was not (None = legacy-mode, all rows NULL).
+                        hypothesis_sha,
                     ]
                 )
 
@@ -1445,6 +1680,23 @@ def main():
         "If you are seeing this help text and don't already know the token, "
         "you almost certainly should NOT be using this flag.",
     )
+    parser.add_argument(
+        "--hypothesis-file",
+        type=Path,
+        default=None,
+        help="Phase 4 Stage 4.1 — path to a committed pre-registered hypothesis "
+        "YAML file in docs/audit/hypotheses/. When set, discovery runs in "
+        "Phase 4 enforcement mode: (1) git cleanliness verified, (2) MinBTL "
+        "bound enforced on declared trial count, (3) Mode A holdout consistency "
+        "verified, (4) single-use enforced (file can only be run once), "
+        "(5) enumeration is scope-limited to the hypothesis file's declared "
+        "(filter_type, sessions, rr_targets, entry_models, confirm_bars, "
+        "stop_multipliers) bundles — NOT a post-facto count check, (6) every "
+        "experimental_strategies row is stamped with the file's content SHA. "
+        "When unset (default), discovery runs in legacy mode with no "
+        "enforcement and no SHA stamping. See docs/audit/hypotheses/README.md "
+        "and docs/institutional/pre_registered_criteria.md.",
+    )
     args = parser.parse_args()
 
     # Mode A enforcement (Amendment 2.7 / RESEARCH_RULES.md § "2026 holdout is
@@ -1465,17 +1717,27 @@ def main():
 
     db_path = Path(args.db) if args.db else None
 
-    run_discovery(
-        db_path=db_path,
-        instrument=args.instrument,
-        start_date=args.start,
-        end_date=args.end,
-        orb_minutes=args.orb_minutes,
-        dry_run=args.dry_run,
-        dst_regime=args.dst_regime,
-        holdout_date=effective_holdout,
-        unlock_holdout=args.unlock_holdout,
-    )
+    # Phase 4 Stage 4.1: wrap run_discovery to translate HypothesisLoaderError
+    # (raised by the loader + gates chain when --hypothesis-file is provided
+    # and a discipline violation is caught) into a clean parser.error exit.
+    # Without this wrap, the exception would propagate as an unhandled
+    # traceback, which is ugly for operators and inconsistent with the
+    # enforce_holdout_date error path above.
+    try:
+        run_discovery(
+            db_path=db_path,
+            instrument=args.instrument,
+            start_date=args.start,
+            end_date=args.end,
+            orb_minutes=args.orb_minutes,
+            dry_run=args.dry_run,
+            dst_regime=args.dst_regime,
+            holdout_date=effective_holdout,
+            unlock_holdout=args.unlock_holdout,
+            hypothesis_file=args.hypothesis_file,
+        )
+    except HypothesisLoaderError as e:
+        parser.error(f"Phase 4 hypothesis discipline: {e}")
 
 
 if __name__ == "__main__":
