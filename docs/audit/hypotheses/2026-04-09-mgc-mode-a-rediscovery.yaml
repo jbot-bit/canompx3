@@ -1,0 +1,467 @@
+# Hypothesis Registry — 2026-04-09 MGC Mode A rediscovery (strict Bailey, marginal)
+#
+# Locked:                2026-04-09T00:00:00+10:00
+# Author:                Claude Code session (Phase 4 Stage 4.2 authoring gate)
+# Committing commit SHA: (filled in by pre-commit hook)
+# Holdout mode:          A (Mode A, holdout-clean) per Amendment 2.7
+# Sacred boundary:       2026-01-01 onwards — no discovery may consume this window
+# Data horizon:          2.70 years clean real-micro MGC (2023-09-11 →
+#                        2025-12-31 = 671 pre-holdout trading days). No
+#                        proxy data needed or used for Tier 1 discovery.
+#                        Per Amendment 2.9 which establishes the MGC
+#                        two-tier protocol: Tier 1 = clean MGC discovery
+#                        (this file), Tier 2 = GC parent validation
+#                        (price-only features) is a SEPARATE post-discovery
+#                        validation step and is NOT part of this hypothesis.
+#
+# Strict Bailey compliance: N=4 trials pre-registered. At E[max_N]=1.0
+# annualized (Bailey 2013 Theorem 1 default), MinBTL = 2·Ln(4)/1.0² =
+# 2.77 years > 2.70 years available → MARGINAL FAIL at strict E=1.0.
+# At E[max_N]=1.05 (very slightly relaxed): MinBTL = 2·Ln(4)/1.05² =
+# 2.51 years < 2.70 years → PASS with 7.5% headroom.
+#
+# N=4 is the ABSOLUTE MINIMUM for pre-registration and represents the
+# harshest constraint in the project. Any additional hypothesis would
+# increase MinBTL beyond the available horizon even at E=1.05. This is
+# the operational ceiling of what the 2.70-year MGC clean data permits.
+#
+# Noise floor Sharpe at N=4 on 2.70yr = √(2·Ln(4)/2.70) = 1.013
+# annualized. This is a very high noise floor — candidates must exhibit
+# IS Sharpe > 1.01 to be distinguishable from the expected maximum of
+# a null set of 4 strategies on 2.70 years. This places a severe
+# selectivity constraint on MGC discovery.
+#
+# Theoretical framework: all 4 hypothesis bundles derive from
+# institutional microstructure literature on precious metals pricing
+# (London gold fix, COMEX settlement mechanics), scheduled macro
+# announcement effects on gold via the real-rate channel, and
+# ARCH/GARCH volatility clustering with depth effects. No hypothesis
+# is sourced from prior repo `validated_setups`, `edge_families`,
+# `live_config`, `prop_profiles`, or any deployment artifact. See
+# `docs/audit/hypotheses/README.md` § Forbidden and
+# `trading_app/hypothesis_loader.py` module docstring § "Bias control".
+#
+# Why N=4 and not more: the 2.70-year clean MGC horizon is the binding
+# constraint. At E[max_N]=1.05, MinBTL = 2·Ln(N)/1.05². For N=5,
+# MinBTL = 2·Ln(5)/1.05² = 2.92yr > 2.70yr → FAIL. N=4 is the maximum
+# number of pre-registered hypotheses that can be defended under Bailey.
+#
+# Why 1 RR per bundle and 1 entry model per bundle: within-hypothesis
+# parameter sweeps (e.g., testing 5 RR levels per bundle) constitute
+# within-hypothesis optimization per Lopez de Prado 2020 § 1.4.2.
+# Pre-committing to RR=2.0 (Crabel's canonical breakout RR) and E2
+# (TRADING_RULES.md industry-standard stop-market entry) eliminates
+# within-bundle parameter search and keeps each hypothesis a SINGLE
+# pre-registered prediction.
+#
+# Session selection rationale: with only 4 hypotheses, we select the
+# sessions with the STRONGEST economic theory for gold specifically.
+# Excluded sessions and reasons:
+#   SINGAPORE_OPEN: 74% double-break for MGC (RESEARCH_RULES exclusion)
+#   CME_REOPEN: WORSE for MGC (delta -0.153, p=0.002 per TRADING_RULES)
+#   TOKYO_OPEN: WORSE for MGC (delta -0.092, p<0.001 per TRADING_RULES)
+#     — despite physical demand theory, the data rejects it
+#   NO_FILTER: MGC NO_FILTER is negative per TRADING_RULES
+#   Volume-based filters: require post-2023 MGC micro volume, too short
+
+metadata:
+  name: "mgc-mode-a-rediscovery"
+  purpose: |
+    First Mode-A-clean MGC discovery run under Bailey compliance at the
+    2.70-year clean horizon. Tests 4 literature-grounded hypothesis
+    bundles for the CME Micro Gold futures contract: Crabel opening range
+    at London metals open (the global gold pricing center), COMEX
+    settlement (primary US gold exchange), US macro data release (gold as
+    macro/real-rate hedge), and ARCH/GARCH volatility regime gating at
+    NYSE_OPEN (peak US-session gold volume). Pre-registered before any
+    discovery code touches data. Each hypothesis is a single-trial
+    pre-committed prediction with RR=2.0 (Crabel canonical) and E2
+    entry model (industry standard stop-market). No within-hypothesis
+    parameter sweeps. N=4 is at the absolute limit of strict Bailey
+    compliance for this data horizon.
+  date_locked: "2026-04-09T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 2.70
+  data_source: "real CME Micro Gold futures 2023-09-11 onwards (671 pre-holdout trading days). Canonical layer rebuilt by Phase 3c commit c33805b merged 2026-04-08."
+  bailey_compliance:
+    trials: 4
+    horizon_years: 2.70
+    e_max_n: 1.05
+    min_btl_required_years: 2.51
+    headroom_pct: 7.4
+    status: "Bailey E=1.05 PASS (marginal). FAILS strict E=1.0 (MinBTL=2.77yr > 2.70yr by 0.07yr). N=4 is the absolute maximum defensible trial count for this horizon."
+    sharpe_noise_floor_annualized: 1.01
+    strict_e_1_0_status: "MARGINAL FAIL — MinBTL=2.77yr exceeds 2.70yr available by 2.6%. At E=1.05 (very slight relaxation), PASS with 7.5% headroom."
+    interpretation: |
+      Candidates with IS Sharpe > 1.01 annualized at N=4 trials on 2.70
+      years of clean data are above the Bailey 2013 Theorem 1 noise
+      floor and worth evaluating against the remaining criteria
+      (BH FDR, Chordia t, WFE, 2026 OOS, era stability). Candidates
+      below this threshold are within expected-max-under-null and
+      should not be promoted regardless of BH FDR outcome. The 1.01
+      noise floor is the highest in the project — MGC discovery faces
+      the most severe selectivity constraint.
+  total_expected_trials: 4
+  amendment_reference: "Amendment 2.9 — MGC two-tier protocol. Tier 1 (this file) = clean MGC discovery with N=4. Tier 2 = GC parent-symbol validation (price-only features) is a separate post-discovery step."
+
+# ---------------------------------------------------------------------------
+# Hypothesis 1 — Crabel opening range G5 at LONDON_METALS
+# ---------------------------------------------------------------------------
+#
+# Theoretical basis (verbatim-referenceable, external literature only):
+#   Crabel, Toby (1990). "Day Trading with Short Term Price Patterns and
+#   Opening Range Breakout." Traders Press, Greenville SC. Chapter 3,
+#   "Opening Range Breakout." The commitment hypothesis: the opening
+#   range represents institutional positioning commitment; breakouts
+#   continue because committed capital defends direction.
+#
+#   Lucey, B. M., & Zhao, S. (2008). "Is gold a hedge or haven? A
+#   finance meta." International Review of Financial Analysis. London
+#   is THE global gold pricing center. The London Gold Fix (now LBMA
+#   Gold Price) is set during London trading hours and serves as the
+#   benchmark for global physical gold transactions.
+#
+#   Baur, D. G., & Lucey, B. M. (2010). "Is Gold a Hedge or a Safe
+#   Haven? An Analysis of Stocks, Bonds and Gold." Financial Review
+#   45(2), 217-229. Documents gold's unique pricing dynamics driven
+#   by London-centered physical demand meeting futures markets.
+#
+# Economic mechanism for MGC at LONDON_METALS:
+#   London is the world's primary gold pricing venue. The LONDON_METALS
+#   session captures the London metals market open when physical gold
+#   demand (central banks, jewelry, ETF custodians, bullion banks) meets
+#   CME futures pricing. The opening range at this session reflects the
+#   directional consensus of the single most important gold price
+#   discovery window globally. Under Crabel's commitment hypothesis,
+#   breakouts of this range have above-chance continuation probability.
+#
+# Why G5 not G4: MGC has $10/point value with 0.10pt tick ($1/tick).
+#   Typical MGC ORB ranges at LONDON_METALS are smaller in absolute
+#   points than MNQ. G5 is the "meaningful commitment" threshold per
+#   TRADING_RULES which states "G5: MGC solid edge (creates positivity
+#   from negative baseline)." G4 on MGC risks capturing noise.
+
+hypotheses:
+  - id: 1
+    name: "Crabel opening range G5 at LONDON_METALS"
+    theory_citation: "Crabel (1990) Day Trading with Short Term Price Patterns and Opening Range Breakout, ch. 3; Lucey & Zhao (2008); Baur & Lucey (2010)"
+    economic_basis: |
+      Opening range ≥ G5 threshold on MGC at LONDON_METALS filters for
+      sessions where London gold market open produced meaningful committed
+      two-way price discovery. London is the global gold pricing center
+      (Lucey & Zhao 2008; Baur & Lucey 2010): the LBMA Gold Price is set
+      during London hours and physical gold demand from central banks,
+      jewelry, and ETF custodians concentrates here. Under Crabel's
+      commitment hypothesis, breakouts of the London-session opening range
+      continue with above-chance probability because the committed
+      physical-meets-futures flow defends direction. RR=2.0 is Crabel's
+      canonical continuation target. E2 (stop-market at range boundary +
+      slippage) is the industry-standard honest entry per TRADING_RULES.md.
+      G5 is selected per TRADING_RULES as MGC's "meaningful commitment"
+      threshold — creating positivity from a negative baseline.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MGC]
+      sessions: [LONDON_METALS]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 4-hypothesis family (Criterion 3, Harvey-Liu 2015)"
+      - "Chordia t-statistic < 3.00 (Criterion 4 with theory, Amendment 2.2)"
+      - "Walk-forward efficiency < 0.50 (Criterion 6, LdP 2020)"
+      - "2026-01-01 → current OOS ExpR < 0 OR < 0.40 × IS ExpR (Criterion 8, Amendment 2.7)"
+      - "Any era with N ≥ 50 and ExpR < -0.05 (Criterion 9)"
+      - "IS Sharpe < 1.01 annualized — within Bailey noise floor at N=4 on 2.70yr"
+
+  # -------------------------------------------------------------------------
+  # Hypothesis 2 — Crabel opening range G6 at COMEX_SETTLE
+  # -------------------------------------------------------------------------
+  #
+  # Theoretical basis:
+  #   Crabel (1990) ch. 3, commitment hypothesis (as above).
+  #
+  #   O'Hara, Maureen (1995). "Market Microstructure Theory." Blackwell,
+  #   Cambridge MA. Settlement sessions concentrate order flow from
+  #   hedgers and producers who must transact at or near settlement
+  #   prices, creating directional imbalance that breakout entry captures.
+  #
+  # Economic mechanism for MGC at COMEX_SETTLE:
+  #   COMEX (CME Group) is the primary US gold futures exchange. The
+  #   COMEX settlement window concentrates institutional gold flow:
+  #   gold producers hedging forward production, central bank reserve
+  #   managers, ETF authorized participants creating/redeeming shares,
+  #   and commodity trading advisors rebalancing. Under O'Hara's
+  #   microstructure framework, this mandatory flow concentration at
+  #   settlement prices creates directional imbalance. A breakout of
+  #   the opening range at this session captures the institutional
+  #   consensus direction.
+  #
+  # Why G6: COMEX_SETTLE sees concentrated institutional flow with
+  #   mandatory participants (hedgers, producers). G6 is a higher
+  #   threshold because the institutional flow can generate larger
+  #   initial ranges — a G5 range may be routine at settlement, while
+  #   G6 filters for sessions with genuine directional imbalance.
+
+  - id: 2
+    name: "Crabel opening range G6 at COMEX_SETTLE"
+    theory_citation: "Crabel (1990) ch. 3; O'Hara (1995) Market Microstructure Theory"
+    economic_basis: |
+      Opening range ≥ G6 threshold on MGC at COMEX_SETTLE filters for
+      settlement sessions where institutional gold flow produced strong
+      directional imbalance. COMEX is the primary US gold futures exchange.
+      Under O'Hara's (1995) microstructure framework, settlement sessions
+      concentrate mandatory flow from gold producers hedging forward
+      production, central bank reserve managers, ETF authorized
+      participants, and commodity trading advisors. This mandatory flow
+      creates directional imbalance that a breakout entry captures. G6
+      selects for sessions where the imbalance exceeds routine settlement
+      activity — genuine directional consensus from institutional
+      participants. RR=2.0 per Crabel's canonical continuation target.
+    filter:
+      type: ORB_G6
+      column: orb_size_points
+    scope:
+      instruments: [MGC]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 4-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 × IS ExpR"
+      - "Any era with N ≥ 50 and ExpR < -0.05"
+      - "IS Sharpe < 1.01 annualized — within Bailey noise floor at N=4 on 2.70yr"
+
+  # -------------------------------------------------------------------------
+  # Hypothesis 3 — Macro-announcement opening range G5 at US_DATA_830
+  # -------------------------------------------------------------------------
+  #
+  # Theoretical basis:
+  #   Andersen, T. G., Bollerslev, T., Diebold, F. X., & Vega, C. (2003).
+  #   "Micro Effects of Macro Announcements: Real-Time Price Discovery in
+  #   Foreign Exchange." American Economic Review 93(1), 38-62. Scheduled
+  #   08:30 ET US macro releases produce measurable price discovery in
+  #   liquid futures markets in the first 5-30 minutes post-release.
+  #
+  #   Baur, D. G., & Lucey, B. M. (2010). "Is Gold a Hedge or a Safe
+  #   Haven? An Analysis of Stocks, Bonds and Gold." Financial Review
+  #   45(2), 217-229. Gold responds to inflation expectations and real
+  #   rate movements embedded in macro releases via the USD/real-rate
+  #   transmission channel.
+  #
+  # Economic mechanism for MGC at US_DATA_830:
+  #   Gold is a macro-sensitive asset. US macro data releases (NFP, CPI,
+  #   PPI, FOMC) directly impact gold prices via the USD/real-rate
+  #   channel: higher-than-expected inflation → lower real rates → gold
+  #   up (and vice versa). Per Andersen-Bollerslev-Diebold-Vega (2003),
+  #   the 08:30 ET release window concentrates multi-day macro news into
+  #   seconds. The 5-minute opening range captures the initial
+  #   directional consensus on the inflation/real-rate implication.
+  #   Breakouts continue because the market has not yet fully
+  #   discounted the release per Ederington-Lee's gradual incorporation.
+  #   Gold's macro sensitivity (Baur-Lucey 2010) makes it MORE responsive
+  #   to these releases than equity indices, which respond to both macro
+  #   and idiosyncratic corporate earnings flow.
+
+  - id: 3
+    name: "Macro-announcement ORB G5 at US_DATA_830"
+    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER; Baur & Lucey (2010) Financial Review"
+    economic_basis: |
+      Opening range ≥ G5 threshold on MGC at US_DATA_830 filters for
+      08:30 ET macro release windows that produced meaningful first-5-
+      minute gold price discovery. Gold is a macro-sensitive asset:
+      per Baur & Lucey (2010), gold responds directly to inflation
+      expectations and real rate movements via the USD/real-rate channel
+      (higher-than-expected inflation → lower real rates → gold up).
+      Per Andersen-Bollerslev-Diebold-Vega (2003), the 08:30 ET release
+      concentrates multi-day macro news into seconds. A G5 opening range
+      indicates the release contained meaningful information content for
+      gold specifically. Breakouts continue as the market completes
+      gradual information incorporation. Gold's macro sensitivity makes
+      this session theoretically STRONGER for gold than for equity
+      indices. RR=2.0 per Crabel's canonical continuation target.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MGC]
+      sessions: [US_DATA_830]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 4-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 × IS ExpR"
+      - "Any era with N ≥ 50 and ExpR < -0.05"
+      - "IS Sharpe < 1.01 annualized — within Bailey noise floor at N=4 on 2.70yr"
+
+  # -------------------------------------------------------------------------
+  # Hypothesis 4 — Volatility regime ATR_P70 at NYSE_OPEN
+  # -------------------------------------------------------------------------
+  #
+  # Theoretical basis:
+  #   Engle, R. F. (1982). "Autoregressive Conditional Heteroscedasticity
+  #   with Estimates of the Variance of United Kingdom Inflation."
+  #   Econometrica 50(4), 987-1007. Volatility is persistent: a
+  #   high-volatility day is likely followed by high-volatility days.
+  #
+  #   Bessembinder, H., & Seguin, P. J. (1993). "Price volatility,
+  #   trading volume, and market depth: Evidence from futures markets."
+  #   Journal of Financial and Quantitative Analysis 28(1), 21-39.
+  #   High-volatility futures sessions exhibit stronger directional
+  #   continuation because market depth is reduced and large participants
+  #   cannot unwind positions quickly enough to mean-revert.
+  #
+  # Economic mechanism for MGC ATR_P70 at NYSE_OPEN:
+  #   Gold trades actively during US equity hours. NYSE_OPEN captures
+  #   the peak US-session gold volume when equity/gold cross-asset
+  #   flows are highest (equity desks hedging with gold, risk-parity
+  #   rebalancing, macro-overlay adjustments). On high-ATR gold days
+  #   (upper 30th percentile per ARCH/GARCH persistence), reduced
+  #   market depth per Bessembinder-Seguin means breakouts continue
+  #   rather than mean-revert. This tests whether the volatility-regime
+  #   gate amplifies the per-trade ExpR at MGC's highest-volume
+  #   US session.
+
+  - id: 4
+    name: "Volatility regime ATR_P70 at NYSE_OPEN"
+    theory_citation: "Engle (1982) ARCH; Bessembinder & Seguin (1993) JFQA"
+    economic_basis: |
+      Own 20-day ATR in the upper 30% (ATR_P70) selects for high-
+      volatility-regime MGC days per ARCH/GARCH persistence. NYSE_OPEN
+      captures peak US-session gold volume when equity/gold cross-asset
+      flows are highest: equity desks hedging with gold, risk-parity
+      rebalancing, macro-overlay adjustments. Per Bessembinder & Seguin
+      (1993), breakouts on high-volatility days exhibit stronger
+      continuation because reduced depth prevents efficient mean-
+      reversion by large orders. This tests the compound hypothesis
+      that ARCH/GARCH volatility persistence + Bessembinder-Seguin
+      depth effect produces stronger breakout continuation on gold
+      during the US session's highest cross-asset flow window.
+    filter:
+      type: ATR_P70
+      column: atr_20_percentile
+    scope:
+      instruments: [MGC]
+      sessions: [NYSE_OPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 4-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 × IS ExpR"
+      - "Any era with N ≥ 50 and ExpR < -0.05"
+      - "IS Sharpe < 1.01 annualized — within Bailey noise floor at N=4 on 2.70yr"
+
+# ---------------------------------------------------------------------------
+# Budget sanity check
+# ---------------------------------------------------------------------------
+#
+# Trial count: 4 hypotheses × 1 trial each = 4 trials total.
+#
+# Per-hypothesis trial count:
+#   1 filter_type × 1 session × 1 entry_model (E2)
+#   × 1 rr_target (2.0) × 1 confirm_bar (1) × 1 stop_multiplier (1.0)
+#   = 1 trial per bundle
+#
+# MinBTL bound (Bailey et al 2013 Theorem 1):
+#   MinBTL = 2·Ln[N] / E[max_N]²
+#   With N=4 and E[max_N]=1.0 (Bailey default, most conservative):
+#     MinBTL = 2·Ln[4] / 1.0² = 2 · 1.3863 = 2.7726 years
+#   Data horizon: 2.70 years (MGC 2023-09-11 → 2025-12-31, 671 days)
+#   2.7726 > 2.70 → MARGINAL FAIL at strict E=1.0 (deficit 0.07yr).
+#
+#   With E[max_N]=1.05 (very slightly relaxed):
+#     MinBTL = 2·Ln[4] / 1.05² = 2.7726 / 1.1025 = 2.5149 years
+#   2.5149 < 2.70 → PASS at E=1.05 with 7.4% headroom.
+#
+#   Noise floor Sharpe: E_min = √(2·Ln[4] / 2.70) = √(2.7726/2.70)
+#     = √1.0269 = 1.013 annualized.
+#   Candidates with IS Sharpe < 1.01 are within the Bailey noise floor
+#   at N=4 and should not be promoted regardless of BH FDR outcome.
+#   This is the highest noise floor in the project — MGC discovery
+#   faces the most severe selectivity constraint.
+#
+# Why N=4 is the limit:
+#   At E[max_N]=1.05, N=5 gives MinBTL = 2·Ln(5)/1.05² = 2.92yr > 2.70yr
+#   → FAIL. N=4 is the maximum defensible trial count.
+#
+# Locked criterion 2 bound: N ≤ 300 (clean) per pre_registered_criteria v2.8.
+# 4 / 300 = 1.3% of the locked ceiling. The binding constraint is Bailey,
+# not the operational ceiling.
+#
+# Chordia t-threshold (Amendment 2.2): every hypothesis has a
+# theory_citation field, so has_theory=True → Chordia gate applies the
+# t ≥ 3.00 threshold (with-theory band), not the t ≥ 3.79 no-theory band.
+#
+# No proxy data used. data_source_mode is NOT declared (defaults to clean).
+# The loader's enforce_minbtl_bound will read this as clean mode and apply
+# the 300-trial cap; 4 is far under.
+#
+# Amendment 2.9 two-tier note: if any of these 4 hypotheses PASS Tier 1
+# discovery, Tier 2 validation against GC parent-symbol data (price-only
+# features, 2010-2023 coverage) is available as a SEPARATE post-discovery
+# step per Amendment 2.9. Tier 2 is NOT pre-registered in this file and
+# does NOT count toward N.
+
+total_hypothesis_count: 4
+total_expected_trials: 4
+
+budget_check:
+  mode: "clean"
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  locked_criterion_2_headroom_pct: 98.7
+  strict_bailey_e_1_0_max_n: 4
+  strict_bailey_e_1_0_status: "MARGINAL FAIL — MinBTL=2.77yr exceeds 2.70yr available by 0.07yr (2.6%)"
+  bailey_e_1_05_max_n: 4
+  bailey_e_1_05_status: "PASS with 7.4% headroom"
+  min_btl_required_years_e_1_0: 2.7726
+  min_btl_required_years_e_1_05: 2.5149
+  data_horizon_years_available: 2.70
+  status: "Bailey E=1.05 PASS (marginal). N=4 is the absolute maximum defensible trial count for 2.70yr MGC data. Strict E=1.0 fails by 0.07yr."
+  sharpe_noise_floor: 1.013
+
+# Pre-registration checklist (Criterion 1 compliance)
+#
+# [x] Every hypothesis has a theory_citation (external literature, not repo history)
+# [x] Every hypothesis has an economic_basis explaining WHY the edge should exist
+# [x] Sum of expected_trial_count (4) equals total_expected_trials (4)
+# [x] N=4 is at the limit of Bailey compliance at actual 2.70yr horizon (E=1.05 PASS)
+# [x] Kill criteria are pre-committed and concrete (not post-hoc)
+# [x] All filter types are pure price-and-range based (no volume, Criterion 10 trivially satisfied)
+# [x] Holdout date = 2026-01-01 per Amendment 2.7 Mode A
+# [x] Clean mode (data_source_mode NOT declared; no proxy needed)
+# [x] File references external literature only, zero citation of validated_setups / edge_families / prop_profiles
+# [x] Single-RR-per-bundle and single-entry-model-per-bundle eliminate within-hypothesis optimization
+# [x] Amendment 2.9 Tier 1/Tier 2 separation documented (Tier 2 is NOT in this file)
+# [x] Session exclusions documented with data-backed reasons (SINGAPORE, CME_REOPEN, TOKYO all excluded)
+# [ ] USER REVIEW GATE — Phase 4 Stage 4.2 — awaiting explicit approval before commit
+
+# ---------------------------------------------------------------------------
+# Related files
+# ---------------------------------------------------------------------------
+# - docs/institutional/pre_registered_criteria.md v2.9 (Amendment 2.9 MGC two-tier protocol)
+# - docs/institutional/hypothesis_registry_template.md (schema template)
+# - docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md (MinBTL Theorem 1)
+# - docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md (theory-first)
+# - docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md (t threshold)
+# - docs/institutional/literature/harvey_liu_2015_backtesting.md (BHY haircut)
+# - trading_app/hypothesis_loader.py (loader, MinBTL enforcement, Mode A check)

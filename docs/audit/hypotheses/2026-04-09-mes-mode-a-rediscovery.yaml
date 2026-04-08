@@ -1,11 +1,11 @@
-# Hypothesis Registry — 2026-04-09 MNQ Mode A rediscovery (strict Bailey)
+# Hypothesis Registry — 2026-04-09 MES Mode A rediscovery (strict Bailey)
 #
 # Locked:                2026-04-09T00:00:00+10:00
 # Author:                Claude Code session (Phase 4 Stage 4.2 authoring gate)
 # Committing commit SHA: (filled in by pre-commit hook)
 # Holdout mode:          A (Mode A, holdout-clean) per Amendment 2.7
 # Sacred boundary:       2026-01-01 onwards — no discovery may consume this window
-# Data horizon:          6.65 years clean real-micro MNQ (2019-05-06 →
+# Data horizon:          6.65 years clean real-micro MES (2019-05-06 →
 #                        2025-12-31 = 1,951 pre-holdout trading days). No
 #                        proxy data needed or used. Per Amendment 2.8
 #                        (2026-04-09) which corrected the stale "~2.2 years"
@@ -29,7 +29,7 @@
 # Why N=16 and not 300: the locked criterion 2 cap is 300 (clean) / 2000
 # (proxy), but Amendment 2.8 establishes that the locked caps are
 # operational ceilings looser than strict Bailey at the actual 6.65-year
-# horizon. Strict Bailey at E=1.0 caps MNQ at N ≤ 28. N=16 operates at
+# horizon. Strict Bailey at E=1.0 caps MES at N ≤ 28. N=16 operates at
 # 43% headroom below strict Bailey — the most rigorous defensible choice
 # given 6.65 years of clean real-micro data.
 #
@@ -40,7 +40,31 @@
 # (TRADING_RULES.md industry-standard stop-market entry) eliminates
 # within-bundle parameter search and keeps each hypothesis a SINGLE
 # pre-registered prediction.
-
+#
+# MES-specific contract notes:
+#   CME Micro E-mini S&P 500, $5/point, $1.25/tick (0.25pt tick size).
+#   Round-trip cost friction: $3.74 (vs MNQ $2.74). G-threshold point
+#   values carry 2.5× the dollar weight on MES ($5/pt) vs MNQ ($2/pt),
+#   so G4 = $20 of range commitment on MES vs $8 on MNQ. Relative to
+#   typical MES ORB ranges the G4/G5/G6/G8 structure remains the same
+#   Crabel commitment filter progression.
+#
+#   MES is currently "untapped" — only 14 existing research-provisional
+#   strategies vs MNQ's 101. This rediscovery is the first institutional-
+#   grade attempt at MES under strict Bailey compliance.
+#
+# Session exclusions (pre-registered, data-grounded):
+#   SINGAPORE_OPEN: EXCLUDED. MES delta = -0.215 (p < 0.001) per TRADING_RULES.md.
+#     Asian equity session produces negative expectancy on S&P 500 futures.
+#   CME_PRECLOSE: EXCLUDED. MES delta = -0.264 (p < 0.001) per TRADING_RULES.md.
+#     Pre-close session is the WORST performer for MES across all instruments.
+#   CME_REOPEN: EXCLUDED. MES CME_REOPEN is TOXIC in winter per TRADING_RULES.md.
+#     All 10 red-flag strategies (edge dies in one regime) are MES CME_REOPEN E1.
+#   TOKYO_OPEN: Not tested (N budget constraint). Neutral-to-negative for MES.
+#   COMEX_SETTLE: Not tested (gold-specific settlement session, not equity-relevant).
+#   LONDON_METALS: Not tested (metals-specific session).
+#   NYSE_CLOSE: Not tested (N budget constraint, separate mechanism from open).
+#
 # Cross-instrument correlation disclosure:
 #   MNQ and MES are ~87% correlated (same US equity asset class, see
 #   RESEARCH_RULES.md). Results on shared sessions (NYSE_OPEN, US_DATA_830,
@@ -50,22 +74,23 @@
 #   count as ONE portfolio bet, not two.
 
 metadata:
-  name: "mnq-mode-a-rediscovery"
+  name: "mes-mode-a-rediscovery"
   purpose: |
-    First Mode-A-clean MNQ discovery run under strict Bailey E=1.0 MinBTL
+    First Mode-A-clean MES discovery run under strict Bailey E=1.0 MinBTL
     compliance at the post-Phase-3c actual 6.65-year clean horizon. Tests
     16 literature-grounded hypothesis bundles for the CME Micro E-mini
-    Nasdaq-100 futures contract: Crabel opening range at three high-flow
-    sessions (NYSE_OPEN, US_DATA_830, EUROPE_FLOW), Ito-Engle-Lin
-    overnight information range, and Bessembinder-Seguin volatility
-    regime gating. Pre-registered before any discovery code touches
-    data. Each hypothesis is a single-trial pre-committed prediction
-    with RR=2.0 (Crabel canonical) and E2 entry model (industry standard
-    stop-market). No within-hypothesis parameter sweeps.
+    S&P 500 futures contract — the benchmark US equity index future:
+    Crabel opening range at three high-flow sessions (NYSE_OPEN,
+    US_DATA_830, EUROPE_FLOW), Ito-Engle-Lin overnight information range,
+    and Bessembinder-Seguin volatility regime gating. Pre-registered
+    before any discovery code touches data. Each hypothesis is a
+    single-trial pre-committed prediction with RR=2.0 (Crabel canonical)
+    and E2 entry model (industry standard stop-market). No within-
+    hypothesis parameter sweeps.
   date_locked: "2026-04-09T00:00:00+10:00"
   holdout_date: "2026-01-01"
   data_horizon_years_clean: 6.65
-  data_source: "real CME Micro E-mini Nasdaq-100 futures 2019-05-06 onwards (1,951 pre-holdout trading days). Canonical layer rebuilt by Phase 3c commit c33805b merged 2026-04-08."
+  data_source: "real CME Micro E-mini S&P 500 futures 2019-05-06 onwards (1,951 pre-holdout trading days). Canonical layer rebuilt by Phase 3c commit c33805b merged 2026-04-08."
   bailey_compliance:
     trials: 16
     horizon_years: 6.65
@@ -102,22 +127,29 @@ metadata:
 #   will defend their direction. Crabel's canonical RR target for
 #   momentum continuation is 2.0.
 #
-# Economic mechanism for MNQ at NYSE_OPEN:
-#   US equity index futures concentrate institutional flow at the NYSE
-#   cash equity open (09:30 ET). Retail and professional equity desks
-#   transact against overnight futures positioning during the first
-#   minutes of cash-equity trading. The 5-minute opening range at this
-#   session captures the bulk of this flow imbalance. Under Crabel's
-#   commitment hypothesis, LARGER opening ranges indicate stronger
-#   overnight positioning that, when broken, has higher follow-through
-#   probability because the committed flow supplies continuation.
+# Economic mechanism for MES at NYSE_OPEN:
+#   S&P 500 futures are THE benchmark US equity index — the instrument
+#   Crabel's opening-range thesis was originally written about (equity
+#   index futures). NYSE_OPEN (09:30 ET) concentrates the single largest
+#   block of institutional equity flow in global markets. Retail and
+#   professional equity desks transact against overnight futures
+#   positioning during the first minutes of cash-equity trading. The
+#   5-minute opening range at this session captures the bulk of this
+#   flow imbalance. Under Crabel's commitment hypothesis, LARGER opening
+#   ranges indicate stronger overnight positioning that, when broken,
+#   has higher follow-through probability because the committed flow
+#   supplies continuation. MES receives the LARGEST share of US equity
+#   index institutional flow as the benchmark S&P 500 micro contract,
+#   making the Crabel thesis arguably STRONGER here than on any other
+#   CME micro equity future.
 #
 # Why G4, G5, G6, G8 as separate bundles and not smaller thresholds:
 #   Crabel's thesis requires the range to represent *meaningful*
-#   commitment, not microstructure noise. On MNQ at NYSE_OPEN, typical
-#   range is 5-15 points; G2/G3 (2-3 points) is comparable to bid-ask
-#   spread × 10 and is dominated by noise. G4/G5/G6/G8 bracket the
-#   plausible "meaningful commitment" zone. Each is pre-committed as
+#   commitment, not microstructure noise. On MES at NYSE_OPEN, typical
+#   range is 2-8 points; each point = $5 so G4 = $20 of range
+#   commitment per contract. G2/G3 on MES is comparable to bid-ask
+#   spread × a few ticks and is dominated by noise. G4/G5/G6/G8 bracket
+#   the plausible "meaningful commitment" zone. Each is pre-committed as
 #   its own bundle because the loader stores filter_type as an exact
 #   match string — we cannot declare a "range" at the bundle level.
 
@@ -126,20 +158,21 @@ hypotheses:
     name: "Crabel opening range G4 at NYSE_OPEN"
     theory_citation: "Crabel (1990) Day Trading with Short Term Price Patterns and Opening Range Breakout, ch. 3"
     economic_basis: |
-      Opening range ≥ 4 points on MNQ at NYSE_OPEN filters for sessions
-      where overnight-to-cash positioning produced at least 4 points of
-      committed two-way commitment in the first 5 minutes. Under
-      Crabel's commitment hypothesis, breakouts of this range continue
-      with above-chance probability because institutional participants
-      anchored the range. RR=2.0 is Crabel's canonical continuation
-      target. E2 (stop-market at the range boundary + slippage) is the
-      industry-standard honest entry per TRADING_RULES.md with no
-      backtest biases.
+      Opening range ≥ 4 points on MES at NYSE_OPEN filters for sessions
+      where overnight-to-cash positioning produced at least 4 points ($20
+      per contract) of committed two-way commitment in the first 5
+      minutes. Under Crabel's commitment hypothesis, breakouts of this
+      range continue with above-chance probability because institutional
+      participants anchored the range. S&P 500 futures are the original
+      equity benchmark Crabel studied — the thesis is strongest here.
+      RR=2.0 is Crabel's canonical continuation target. E2 (stop-market
+      at the range boundary + slippage) is the industry-standard honest
+      entry per TRADING_RULES.md with no backtest biases.
     filter:
       type: ORB_G4
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [NYSE_OPEN]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -166,7 +199,7 @@ hypotheses:
       type: ORB_G5
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [NYSE_OPEN]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -185,14 +218,14 @@ hypotheses:
     name: "Crabel opening range G6 at NYSE_OPEN"
     theory_citation: "Crabel (1990) ch. 3"
     economic_basis: |
-      G6 threshold — upper-mid range of Crabel-plausible MNQ NYSE_OPEN
+      G6 threshold — upper-mid range of Crabel-plausible MES NYSE_OPEN
       ranges. At this threshold sample reduces but per-event
       continuation conviction strengthens under the Crabel thesis.
     filter:
       type: ORB_G6
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [NYSE_OPEN]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -211,16 +244,17 @@ hypotheses:
     name: "Crabel opening range G8 at NYSE_OPEN"
     theory_citation: "Crabel (1990) ch. 3"
     economic_basis: |
-      G8 is the upper end of the Crabel-plausible MNQ NYSE_OPEN range.
+      G8 is the upper end of the Crabel-plausible MES NYSE_OPEN range.
       At this threshold the trial becomes a tail-event test — only
       sessions with very high overnight commitment produce ≥8 point
-      ranges. High per-event conviction, low total sample, thinnest
-      coverage of Criterion 7's N≥100 deployment threshold.
+      ($40 per contract) ranges. High per-event conviction, low total
+      sample, thinnest coverage of Criterion 7's N≥100 deployment
+      threshold.
     filter:
       type: ORB_G8
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [NYSE_OPEN]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -256,32 +290,35 @@ hypotheses:
   #   largest directional move in the first minutes and continued
   #   gradual incorporation over the subsequent half hour.
   #
-  # Economic mechanism for MNQ at US_DATA_830:
+  # Economic mechanism for MES at US_DATA_830:
   #   The 08:30 ET release window concentrates multi-day macro news into
-  #   seconds. Index futures prices adjust via Andersen-Bollerslev-
-  #   Diebold-Vega's real-time discovery process. The 5-minute opening
-  #   range at this session captures the initial directional consensus.
-  #   A range ≥ G-threshold filters for sessions where the release
-  #   produced meaningful first-5-minute discovery; breakouts should
-  #   continue because the market has not yet fully discounted the news
-  #   per Ederington-Lee's gradual incorporation finding.
+  #   seconds. S&P 500 futures — as the benchmark US equity index —
+  #   are among the first and most liquid instruments to reprice after
+  #   macro releases. Prices adjust via Andersen-Bollerslev-Diebold-
+  #   Vega's real-time discovery process. The 5-minute opening range at
+  #   this session captures the initial directional consensus. A range
+  #   ≥ G-threshold filters for sessions where the release produced
+  #   meaningful first-5-minute discovery; breakouts should continue
+  #   because the market has not yet fully discounted the news per
+  #   Ederington-Lee's gradual incorporation finding.
 
   - id: 5
     name: "Macro-announcement ORB G4 at US_DATA_830"
     theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER; Ederington & Lee (1993) JF"
     economic_basis: |
       ORB G4 at US_DATA_830 filters for 08:30 ET release windows that
-      produced ≥4 points of first-5-minute MNQ price discovery —
+      produced ≥4 points of first-5-minute MES price discovery —
       indicating the release contained meaningful information content.
-      Under the Andersen-Bollerslev-Diebold-Vega + Ederington-Lee
-      framework, the subsequent session continues the initial
-      directional move as the market completes the gradual information
-      incorporation.
+      S&P 500 futures are the primary vehicle for macro repricing in
+      US equity markets. Under the Andersen-Bollerslev-Diebold-Vega +
+      Ederington-Lee framework, the subsequent session continues the
+      initial directional move as the market completes the gradual
+      information incorporation.
     filter:
       type: ORB_G4
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [US_DATA_830]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -307,7 +344,7 @@ hypotheses:
       type: ORB_G5
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [US_DATA_830]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -331,7 +368,7 @@ hypotheses:
       type: ORB_G6
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [US_DATA_830]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -350,15 +387,15 @@ hypotheses:
     name: "Macro-announcement ORB G8 at US_DATA_830"
     theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003); Ederington & Lee (1993)"
     economic_basis: |
-      G8 = upper end of plausible post-release range for MNQ. Only
+      G8 = upper end of plausible post-release range for MES. Only
       major surprise releases (NFP surprise, CPI surprise, FOMC day
       with unexpected statement) are expected to produce ≥8 point
-      first-5-minute discovery. Tail-event test.
+      ($40 per contract) first-5-minute discovery. Tail-event test.
     filter:
       type: ORB_G8
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [US_DATA_830]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -393,32 +430,36 @@ hypotheses:
   #   volatility spillovers across major global stock markets
   #   (Tokyo → London → New York).
   #
-  # Economic mechanism for MNQ at EUROPE_FLOW:
-  #   European institutional participants trade US index futures
-  #   throughout their trading day. Information accumulated during the
-  #   European session (overnight London FTSE, DAX, CAC moves; European
-  #   central bank news; European macro releases) is incorporated into
-  #   US futures prices at the moment European markets become active.
-  #   The EUROPE_FLOW session captures this cross-border information
-  #   transfer. The 5-minute opening range at this session is the
-  #   first tranche of European-to-US price discovery per French-Roll
-  #   information-arrival framework and Hamao-Masulis-Ng spillover.
+  # Economic mechanism for MES at EUROPE_FLOW:
+  #   European institutional participants trade US equity index futures
+  #   throughout their trading day. S&P 500 futures receive the largest
+  #   share of this cross-border equity flow because the S&P 500 IS
+  #   the global benchmark equity index. Information accumulated during
+  #   the European session (overnight London FTSE, DAX, CAC moves;
+  #   European central bank news; European macro releases) is
+  #   incorporated into US futures prices at the moment European markets
+  #   become active. The EUROPE_FLOW session captures this cross-border
+  #   information transfer. The 5-minute opening range at this session
+  #   is the first tranche of European-to-US price discovery per
+  #   French-Roll information-arrival framework and Hamao-Masulis-Ng
+  #   spillover.
 
   - id: 9
     name: "Cross-border information ORB G4 at EUROPE_FLOW"
     theory_citation: "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
     economic_basis: |
       ORB G4 at EUROPE_FLOW filters for sessions where the European
-      information-translation produced ≥4 points of first-5-minute US
-      index discovery. Under French-Roll and Hamao-Masulis-Ng, the
-      subsequent session should continue the direction because the
+      information-translation produced ≥4 points of first-5-minute S&P
+      500 futures discovery. Under French-Roll and Hamao-Masulis-Ng,
+      the subsequent session should continue the direction because the
       European-origin information is gradually incorporated into US
-      futures prices.
+      futures prices. MES receives the largest share of cross-border
+      equity flow as the benchmark US index.
     filter:
       type: ORB_G4
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [EUROPE_FLOW]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -444,7 +485,7 @@ hypotheses:
       type: ORB_G5
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [EUROPE_FLOW]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -463,13 +504,13 @@ hypotheses:
     name: "Cross-border information ORB G6 at EUROPE_FLOW"
     theory_citation: "French & Roll (1986); Hamao, Masulis, Ng (1990)"
     economic_basis: |
-      G6 threshold. Upper-mid range of plausible European-flow MNQ
+      G6 threshold. Upper-mid range of plausible European-flow MES
       opening ranges.
     filter:
       type: ORB_G6
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [EUROPE_FLOW]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -488,7 +529,7 @@ hypotheses:
     name: "Cross-border information ORB G8 at EUROPE_FLOW"
     theory_citation: "French & Roll (1986); Hamao, Masulis, Ng (1990)"
     economic_basis: |
-      G8 threshold. Upper end of plausible European-flow MNQ range.
+      G8 threshold. Upper end of plausible European-flow MES range.
       Only high-volatility European sessions (ECB decisions, major
       European macro releases, significant European political news)
       produce ≥8 point first-5-minute discovery. Tail-event test.
@@ -496,7 +537,7 @@ hypotheses:
       type: ORB_G8
       column: orb_size_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [EUROPE_FLOW]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -530,30 +571,47 @@ hypotheses:
   #   private-information-driven price movement during a trading period
   #   predicts continued movement in the next period.
   #
-  # Economic mechanism for MNQ OVNRNG at NYSE_OPEN:
+  # Economic mechanism for MES OVNRNG at NYSE_OPEN:
   #   The overnight range (high minus low during the non-US trading
   #   hours preceding the NYSE cash open) measures how much information
-  #   accumulated in the futures price while US equity markets were
+  #   accumulated in S&P 500 futures prices while US equity markets were
   #   closed. A LARGE overnight range indicates high-information
   #   conditions under Ito-Engle-Lin's meteor shower framework; under
   #   Barclay-Litzenberger-Warner's information-variance relationship,
   #   this informs the subsequent NYSE_OPEN breakout direction.
+  #
+  # MES-specific OVNRNG threshold disclosure (honest calibration):
+  #   OVNRNG_50 on MES = 50 S&P 500 points = ~0.9-1.0% of price. This
+  #   is a LARGE overnight event — typical S&P 500 overnight range is
+  #   20-40 points. OVNRNG_50 selects for the most volatile overnights.
+  #   OVNRNG_100 on MES = 100 S&P 500 points = ~1.8-2.0% of price.
+  #   This is an EXTREME overnight event — COVID-level, major
+  #   geopolitical shock, flash crash. Very rare by construction.
+  #   These filter_type strings are pipeline-defined (cannot be changed
+  #   to e.g. OVNRNG_20), so the hypothesis tests EXTREME overnight
+  #   information rather than moderate overnight information.
+  #   The hypothesis remains valid under Ito-Engle-Lin: extreme
+  #   overnight info should produce the STRONGEST followthrough if the
+  #   theory holds — these are the highest-conviction meteor shower
+  #   events.
 
   - id: 13
     name: "High overnight range OVNRNG_50 at NYSE_OPEN"
     theory_citation: "Ito, Engle, Lin (1992) JIE; Barclay, Litzenberger, Warner (1990) RFS"
     economic_basis: |
-      Overnight range ≥ 50 MNQ points filters for non-US trading hours
-      that produced substantial information-driven price movement.
-      Under Ito-Engle-Lin meteor shower persistence and
-      Barclay-Litzenberger-Warner information-variance linkage, the
+      Overnight range ≥ 50 MES points filters for non-US trading hours
+      that produced substantial information-driven price movement in
+      S&P 500 futures. Under Ito-Engle-Lin meteor shower persistence
+      and Barclay-Litzenberger-Warner information-variance linkage, the
       subsequent NYSE_OPEN breakout is more likely to continue the
-      overnight direction.
+      overnight direction. Note: this is a high-threshold filter on MES
+      — 50 S&P points (~0.9-1.0% of price) selects for the most
+      volatile overnights only (typical overnight range is 20-40 points).
     filter:
       type: OVNRNG_50
       column: overnight_range_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [NYSE_OPEN]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -572,14 +630,17 @@ hypotheses:
     name: "High overnight range OVNRNG_100 at NYSE_OPEN"
     theory_citation: "Ito, Engle, Lin (1992); Barclay, Litzenberger, Warner (1990)"
     economic_basis: |
-      Overnight range ≥ 100 MNQ points. Tighter information-accumulation
+      Overnight range ≥ 100 MES points. Tighter information-accumulation
       threshold. Tests the monotonic prediction that stronger meteor
-      shower conditions yield stronger NYSE_OPEN follow-through.
+      shower conditions yield stronger NYSE_OPEN follow-through. Note:
+      this is an extreme-event filter — 100 S&P points (~1.8-2.0% of
+      price) corresponds to COVID-level or major geopolitical shock
+      overnights and may not reach N>=100 deployable sample.
     filter:
       type: OVNRNG_100
       column: overnight_range_points
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [NYSE_OPEN]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -593,6 +654,7 @@ hypotheses:
       - "2026 OOS ExpR < 0 OR < 0.40 × IS ExpR"
       - "Any era with N ≥ 50 and ExpR < -0.05"
       - "IS Sharpe < 0.91 annualized"
+      - "Sample size N < 100 in-sample — 100-point S&P overnight ranges are extreme events (COVID-level) and may not reach deployable sample"
 
   # -------------------------------------------------------------------------
   # Hypothesis family 5 — Volatility-regime gate at high-flow sessions
@@ -617,7 +679,7 @@ hypotheses:
   #   directional continuation because market depth is reduced and large
   #   participants cannot unwind positions quickly enough to mean-revert.
   #
-  # Economic mechanism for MNQ at ATR_P70 × NYSE_OPEN/US_DATA_830:
+  # Economic mechanism for MES at ATR_P70 × NYSE_OPEN/US_DATA_830:
   #   Own 20-day ATR in the upper 30% (ATR_P70) selects for
   #   high-volatility-regime days per ARCH/GARCH persistence. On these
   #   days, Bessembinder-Seguin's depth effect predicts stronger
@@ -625,23 +687,28 @@ hypotheses:
   #   orders cannot mean-revert efficiently. Gating the two highest-flow
   #   sessions (NYSE_OPEN and US_DATA_830) by the own-volatility regime
   #   tests whether the combined commitment + information effect
-  #   amplifies in high-vol conditions.
+  #   amplifies in high-vol conditions. S&P 500 futures are the deepest
+  #   equity index market — the depth reduction required for the
+  #   Bessembinder-Seguin effect to manifest requires genuinely elevated
+  #   volatility, which ATR_P70 selects for.
 
   - id: 15
     name: "Volatility regime ATR_P70 at NYSE_OPEN"
     theory_citation: "Engle (1982) ARCH; Bollerslev (1986) GARCH; Bessembinder & Seguin (1993) JFQA"
     economic_basis: |
       Own 20-day ATR in the upper 30% selects for high-volatility-regime
-      MNQ days per ARCH/GARCH persistence. Per Bessembinder-Seguin 1993,
+      MES days per ARCH/GARCH persistence. Per Bessembinder-Seguin 1993,
       breakouts on these days exhibit stronger continuation because
       reduced depth prevents efficient mean-reversion by large orders.
       Combined with the Crabel commitment effect at NYSE_OPEN, the
-      high-vol gate should amplify the per-trade ExpR.
+      high-vol gate should amplify the per-trade ExpR. S&P 500 futures
+      are the deepest equity market — ATR_P70 selects for the genuinely
+      elevated conditions where depth reduction becomes material.
     filter:
       type: ATR_P70
       column: atr_20_percentile
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [NYSE_OPEN]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -669,7 +736,7 @@ hypotheses:
       type: ATR_P70
       column: atr_20_percentile
     scope:
-      instruments: [MNQ]
+      instruments: [MES]
       sessions: [US_DATA_830]
       rr_targets: [2.0]
       entry_models: [E2]
@@ -699,7 +766,7 @@ hypotheses:
 #   MinBTL = 2·Ln[N] / E[max_N]²
 #   With N=16 and E[max_N]=1.0 (Bailey default, most conservative):
 #     MinBTL = 2·Ln[16] / 1.0² = 2 · 2.7726 = 5.5452 years
-#   Data horizon: 6.65 years (MNQ 2019-05-06 → 2025-12-31, 1951 days)
+#   Data horizon: 6.65 years (MES 2019-05-06 → 2025-12-31, 1951 days)
 #   5.5452 < 6.65 → strict Bailey E=1.0 PASS with 19.9% headroom.
 #
 #   Noise floor Sharpe: E_min = √(2·Ln[16] / 6.65) = 0.913 annualized.
@@ -757,3 +824,4 @@ budget_check:
 # - docs/institutional/literature/harvey_liu_2015_backtesting.md (BHY haircut)
 # - trading_app/hypothesis_loader.py (loader, MinBTL enforcement, Mode A check)
 # - trading_app/holdout_policy.py (HOLDOUT_SACRED_FROM = 2026-01-01)
+# - docs/audit/hypotheses/2026-04-09-mnq-mode-a-rediscovery.yaml (MNQ companion file)

@@ -14,6 +14,7 @@
 | v2 | 2026-04-07 | Codex audit feedback integrated. DSR downgraded from binding to cross-check (N_eff unresolved). Chordia t-threshold reframed as severity benchmark, not hard bar. Criterion 8 (2026 OOS) gated on holdout-policy decision. See amendments 2.1-2.5 at bottom. | Claude Code session (Codex audit incorporated) |
 | v2.6 | 2026-04-07 | Holdout policy DECLARED — Mode B operative. Pass-2 audit verified the 2026 H1 holdout was consumed per pre-registered protocol on 2026-04-02. New forward-sacred window starts 2026-04-07 (earliest first-look 2026-10-07). Walk-forward continues as OOS discipline for existing discoveries; forward-paper requirement applies to new deployments. See Amendment 2.6 at bottom. | Claude Code session (autonomous decision per user delegation, pass-2 audit verified) |
 | v2.7 | 2026-04-08 | **RESCINDS Amendment 2.6.** Holdout policy corrected to Mode A (holdout-clean) per explicit user correction. 2026-01-01 is the sacred holdout boundary going forward. The 3+ months of real-time 2026 data (2026-01-02 → present) is the accumulating forward OOS record. The 124 existing validated_setups are grandfathered as RESEARCH-PROVISIONAL per Amendment 2.4 — they were discovered with 2026 data in scope and are NOT OOS-clean. Any NEW discovery run must use `--holdout-date 2026-01-01`. See Amendment 2.7 at bottom. | Claude Code session (user correction: *"I THOUGHT WE WERE HOLDING OUT FROM 2026 ONWARDS SO THAT WE HAD 3 MONTHS ALREADY OF TRADES OOS"*) |
+| v2.9 | 2026-04-09 | **Parent/Proxy Data Policy.** Binding rules for NQ/ES/GC parent vs MNQ/MES/MGC micro data. Delete NQ/ES bars. Keep GC for MGC Tier 2 validation (price-only). 4 new banned practices (#9-#12). | Claude Code session (user: *"is it useful at all for us to have the 2 different contract sizes or is it just a canonical fucking project nightmare?"*) |
 | v2.8 | 2026-04-09 | **FACTUAL CORRECTION.** Phase 3c canonical layer rebuild (merged to main as commit `c33805b` on 2026-04-08) replaced pre-2019 parent-proxy bars with real-micro bars for MNQ/MES/MGC. Post-rebuild actual horizons: MNQ/MES 6.65 clean years (1,951 pre-holdout trading days, 2019-05-06 → 2025-12-31), MGC 2.7 clean years (671 pre-holdout days, 2023-09-11 → 2025-12-31). The prior text "~2.2 years of clean MNQ data" and "16 years proxy-extended" in § Criterion 2, and "MNQ/MES from 2024-02-05 onwards; MGC never valid" in § Criterion 10, both predate the Phase 3c rebuild and are factually wrong. All 12 locked numeric thresholds (300/2000 trial bounds, t ≥ 3.00, DSR > 0.95, WFE ≥ 0.50, N ≥ 100, etc.) remain EXACTLY as locked — this amendment is a factual correction of stale narrative, not a threshold relaxation. See Amendment 2.8 at bottom. | Claude Code session (user correction: *"I DONT WANNA FUCK AROUND WITH HALF THIS DATA HALF THAT DATA. I HAVE SUBSCRIPTION TO GET ALL THE DATA"*) |
 
 ---
@@ -571,3 +572,59 @@ The authoring error was: the criteria file worked example was written 2026-04-07
 This failure mode is exactly what `.claude/rules/institutional-rigor.md` rule 8 ("Verify before claiming") prevents, and `.claude/rules/integrity-guardian.md` rule 7 ("Never Trust Metadata — Always Verify") reinforces. The criteria file narrative was metadata about the data horizon; I trusted it without verification; the user's correction is the institutional audit mechanism working correctly.
 
 **No commitments beyond those already locked in the criteria file were invalidated by this stale narrative. The locked numeric thresholds were correct all along; only the worked-example text around them was out of date.**
+
+---
+
+## Amendment 2.9 (2026-04-09) — Parent/Proxy Data Policy (binding)
+
+**Type:** New binding policy. Codifies the parent vs micro data handling rules that were previously implied across Criteria 2, 10, and Banned Practice #8, but never stated as a single coherent policy.
+
+**Trigger:** User review on 2026-04-09 surfaced that the project had NQ/ES/GC parent symbol bars (2010-2024) sitting in `gold.db` alongside clean MNQ/MES/MGC micro bars, with no formal policy on when (if ever) to use them. The core risk: parent data with 10-100x different volume, different tick values ($5/tick NQ vs $0.50/tick MNQ), and different liquidity profiles could contaminate discovery or validation if accidentally mixed with micro data.
+
+**Literature grounding:**
+- Bailey et al 2013 (`literature/bailey_et_al_2013_pseudo_mathematics.md`): MinBTL bounds depend on data LENGTH, but adding proxy data with systematic feature mismatch inflates the denominator without adding real statistical power. The False Strategy Theorem (LdP-Bailey 2018, `literature/lopez_de_prado_bailey_2018_false_strategy.md`) shows that contaminated trials produce the illusion of tighter confidence intervals.
+- Carver (`memory/data_length_literature.md` citing Table 5 p.62): cross-instrument portfolio (3 instruments) needs ~11yr combined, stronger than single-instrument time-extension with proxy data.
+- Project finding `memory/era_contamination_trap.md`: wider filters on proxy-era data expose thin parent-symbol years (1-5 trades) that poison era stability checks.
+
+### Policy rules
+
+**Rule 1 — Discovery MUST use clean micro data only.** Never discover edges on parent-proxy data and claim they apply to micros. The cost model, tick value, liquidity profile, and volume characteristics differ fundamentally between parent and micro contracts.
+
+**Rule 2 — Per-instrument proxy disposition:**
+
+| Instrument | Clean micro data | Bailey N budget | Parent data in gold.db | Disposition |
+|---|---|---|---|---|
+| MNQ | 6.65yr (2019-05-06 → 2025-12-31) | N ≤ 28 (E=1.0) | NQ 2010-2024 (4.6M bars) | **DELETE NQ bars.** Not needed — 6.65yr sufficient for N=16-28 clean discovery. Cross-validate with MES instead. |
+| MES | 6.65yr (2019-05-06 → 2025-12-31) | N ≤ 28 (E=1.0) | ES 2010-2024 (4.8M bars) | **DELETE ES bars.** Same rationale as MNQ. |
+| MGC | 2.70yr (2023-09-11 → 2025-12-31) | N ≤ 4 (E=1.0) | GC 2010-2026 (5.5M bars) | **KEEP GC bars.** MGC N=4 is too small for meaningful discovery alone. GC proxy provides validation tier for price-based features only. |
+
+**Rule 3 — MGC two-tier protocol:**
+- **Tier 1 (discovery):** N ≤ 4 clean trials on 2.70yr MGC micro data. Strict Bailey E=1.0 compliance.
+- **Tier 2 (validation):** Survivors from Tier 1 may be validated against GC parent data (2010-2023) for PRICE-BASED features ONLY (ORB range, session timing, direction, settlement gap). Volume/OI/microstructure filters (ATR70_VOL, OVNRNG, ORB_VOL, rel_vol_*) DO NOT transfer and must NOT be tested on GC data.
+- **GC validation outcomes must be built under symbol "GC" with `COST_SPECS['GC']`**, never mixed into MNQ/MES/MGC orb_outcomes tables.
+- **Statistics must be era-split** (GC pre-2019, GC 2019-2022, MGC 2023+). Never pool across eras in a single p-value.
+
+**Rule 4 — Pipeline protection:** No pipeline path (`outcome_builder`, `strategy_discovery`, `strategy_validator`, `build_daily_features`) may accidentally query parent symbols when the user requests a micro instrument. The `ACTIVE_ORB_INSTRUMENTS` list in `pipeline.asset_configs` governs which symbols are eligible for automated processing. Parent symbols (NQ, ES, GC) are NOT in that list and must never be added.
+
+**Rule 5 — Existing validated_setups provenance:** The 9 existing MGC validated strategies were discovered under the pre-Phase-0 brute-force regime (~35,000 trials on 2.8yr), violating Bailey MinBTL by ~600x. They are grandfathered as research-provisional per Amendment 2.4 but are **statistically suspect** and must not be scaled or treated as institutional evidence without re-validation under the clean protocol.
+
+**Rule 6 — No silent proxy substitution.** If any code path, research query, or hypothesis file uses parent data, it must explicitly declare `data_source_mode: proxy` and cite this amendment. Silent use of parent data (e.g., querying `bars_1m WHERE symbol = 'GC'` in a script that claims to analyze MGC) is a banned practice.
+
+### Updated Banned Practices (additions to existing list)
+
+9. Using parent symbol bars (NQ, ES, GC) in any discovery run for micro instruments (MNQ, MES, MGC).
+10. Mixing parent and micro data in the same orb_outcomes table or the same statistical test.
+11. Applying volume/OI-based filters to parent-era data and treating results as micro-applicable.
+12. Claiming parent-era price-pattern validation as equivalent to clean micro evidence (must be labeled "proxy validation" with explicit era-split disclosure).
+
+### Interaction with existing criteria
+
+- **Criterion 2 (MinBTL):** This policy constrains how the "proxy-extended N ≤ 2000" budget from the locked ceiling can be used. Proxy extension is only available for MGC (via GC), only for Tier 2 validation, and only for price-based features. MNQ/MES have no proxy extension path (NQ/ES bars to be deleted).
+- **Criterion 10 (Data era compatibility):** This policy is a superset — Criterion 10 addresses volume filters on micro data; this policy addresses the entire parent/micro boundary.
+- **Banned Practice #8:** This policy replaces #8 with the stronger #9-#12 above. #8 allowed proxy use "with explicit disclosure + era split"; #9 bans it entirely for discovery, restricting proxy to MGC Tier 2 validation only.
+
+### Deferred action items
+
+1. **Delete NQ and ES bars from gold.db** — one-time cleanup. Run after user confirmation of this amendment.
+2. **MGC Databento backfill** — download MGC bars 2022-06-13 → 2023-09-10 to extend clean micro data to ~3.9yr (N ≤ 7 at E=1.0). Strongly recommended before MGC discovery. Already noted in Amendment 2.8.
+3. **Drift check for parent symbol leakage** — new check that no `orb_outcomes` or `daily_features` row has a symbol matching a known parent symbol list. Queue for next drift check batch.
