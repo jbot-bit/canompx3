@@ -14,6 +14,7 @@
 | v2 | 2026-04-07 | Codex audit feedback integrated. DSR downgraded from binding to cross-check (N_eff unresolved). Chordia t-threshold reframed as severity benchmark, not hard bar. Criterion 8 (2026 OOS) gated on holdout-policy decision. See amendments 2.1-2.5 at bottom. | Claude Code session (Codex audit incorporated) |
 | v2.6 | 2026-04-07 | Holdout policy DECLARED — Mode B operative. Pass-2 audit verified the 2026 H1 holdout was consumed per pre-registered protocol on 2026-04-02. New forward-sacred window starts 2026-04-07 (earliest first-look 2026-10-07). Walk-forward continues as OOS discipline for existing discoveries; forward-paper requirement applies to new deployments. See Amendment 2.6 at bottom. | Claude Code session (autonomous decision per user delegation, pass-2 audit verified) |
 | v2.7 | 2026-04-08 | **RESCINDS Amendment 2.6.** Holdout policy corrected to Mode A (holdout-clean) per explicit user correction. 2026-01-01 is the sacred holdout boundary going forward. The 3+ months of real-time 2026 data (2026-01-02 → present) is the accumulating forward OOS record. The 124 existing validated_setups are grandfathered as RESEARCH-PROVISIONAL per Amendment 2.4 — they were discovered with 2026 data in scope and are NOT OOS-clean. Any NEW discovery run must use `--holdout-date 2026-01-01`. See Amendment 2.7 at bottom. | Claude Code session (user correction: *"I THOUGHT WE WERE HOLDING OUT FROM 2026 ONWARDS SO THAT WE HAD 3 MONTHS ALREADY OF TRADES OOS"*) |
+| v2.8 | 2026-04-09 | **FACTUAL CORRECTION.** Phase 3c canonical layer rebuild (merged to main as commit `c33805b` on 2026-04-08) replaced pre-2019 parent-proxy bars with real-micro bars for MNQ/MES/MGC. Post-rebuild actual horizons: MNQ/MES 6.65 clean years (1,951 pre-holdout trading days, 2019-05-06 → 2025-12-31), MGC 2.7 clean years (671 pre-holdout days, 2023-09-11 → 2025-12-31). The prior text "~2.2 years of clean MNQ data" and "16 years proxy-extended" in § Criterion 2, and "MNQ/MES from 2024-02-05 onwards; MGC never valid" in § Criterion 10, both predate the Phase 3c rebuild and are factually wrong. All 12 locked numeric thresholds (300/2000 trial bounds, t ≥ 3.00, DSR > 0.95, WFE ≥ 0.50, N ≥ 100, etc.) remain EXACTLY as locked — this amendment is a factual correction of stale narrative, not a threshold relaxation. See Amendment 2.8 at bottom. | Claude Code session (user correction: *"I DONT WANNA FUCK AROUND WITH HALF THIS DATA HALF THAT DATA. I HAVE SUBSCRIPTION TO GET ALL THE DATA"*) |
 
 ---
 
@@ -59,29 +60,30 @@ where N is the total pre-registered trial count and E[max_N] is the minimum Shar
 
 If `MinBTL > available_clean_data_years`, reduce N. No exceptions.
 
-**Default bound for our project:** With 2.2 years of clean MNQ data and E[max_N] = 0.5, MinBTL ≤ 2.2 implies:
-```
-2·Ln[N] / 0.25 ≤ 2.2
-Ln[N] ≤ 0.275
-N ≤ 1.32
-```
-That is far too strict for practical use. Using E[max_N] = 1.0 annualized (still conservative) with 2.2 years:
-```
-2·Ln[N] / 1.0 ≤ 2.2
-Ln[N] ≤ 1.1
-N ≤ 3
-```
-Still too strict. The honest implication is that **with only 2.2 years of clean MNQ data, almost no discovery is statistically valid under strict MinBTL.** We need either (a) the proxy-extended horizon of ~16 years, accepting the data-source caveat, or (b) many more years of real MNQ data, or (c) to rely on theory-based priors to reduce effective N dramatically.
+**Default bound for our project** (corrected by Amendment 2.8, 2026-04-09, to reflect post-Phase-3c actual data horizons):
 
-**Practical rule using 16-year proxy-extended horizon:**
-```
-MinBTL = 2·Ln[N] / 1.0 ≤ 16
-Ln[N] ≤ 8
-N ≤ 2981
-```
-So with the proxy-extended horizon and E[max_N] = 1.0, we can test up to about 2,980 independent trials. **Even this is far below our prior ~35,000 trials.**
+Post-Phase-3c canonical layer rebuild (merged to main Apr 8 2026, commit `c33805b`), the actual clean real-micro horizons are:
 
-**Locked bound for v1:** N ≤ 300 pre-registered trials per discovery run on clean MNQ data, OR N ≤ 2,000 pre-registered trials on proxy-extended data with explicit data-source disclosure. These are conservative and leave margin for error in the effective-N estimation.
+| Instrument | First trading day | Pre-holdout days (< 2026-01-01) | Clean years |
+|---|---|---|---|
+| MNQ | 2019-05-06 | 1,951 | ≈ 6.65 |
+| MES | 2019-05-06 | 1,951 | ≈ 6.65 |
+| MGC | 2023-09-11 | 671  | ≈ 2.70 |
+
+With 6.65 years of clean MNQ and E[max_N] = 1.0 annualized (Bailey default), strict MinBTL bounds N:
+```
+2·Ln[N] / 1.0² ≤ 6.65
+Ln[N] ≤ 3.325
+N ≤ 27.8  → max 28 pre-registered trials at strict Bailey E=1.0
+```
+
+At the relaxed E[max_N] = 1.2 (still below the 1.5 "professional Sharpe" level), the bound widens to N ≤ 120. At E[max_N] = 1.5, N ≤ 1,774. The locked 300/2000 cap is looser than strict Bailey E=1.0 but tighter than strict E=1.5, so it functions as an operational ceiling with explicit noise-floor disclosure required when N exceeds the strict-E=1.0 bound.
+
+For 2.7-year MGC (no-backfill), strict Bailey E=1.0 gives N ≤ 4 — too small for meaningful pre-registration. A Databento backfill to MGC launch (2022-06-13, adds ~308 pre-holdout days for ~3.9 clean years) relaxes the strict bound to N ≤ 7 at E=1.0 or N ≤ 17 at E=1.2. The backfill is strongly recommended before any MGC discovery run.
+
+**The earlier "~2.2 years of clean MNQ data" / "16-year proxy-extended horizon" narrative here was stale, predating the Phase 3c rebuild. The locked 300/2000 thresholds below remain exactly as they were — this correction updates the worked example, not the caps.**
+
+**Locked bound for v1 (unchanged):** N ≤ 300 pre-registered trials per discovery run on clean data, OR N ≤ 2,000 pre-registered trials on proxy-extended data with explicit data-source disclosure. These function as operational ceilings. **For institutional maximum rigor, operate at or below the strict Bailey bound for the target instrument's actual horizon** (N ≤ 28 for MNQ/MES at 6.65yr clean, N ≤ 7 for MGC at 3.9yr with backfill, N ≤ 4 for MGC at 2.7yr without).
 
 ---
 
@@ -165,9 +167,15 @@ Strategies with WFE > 0.95 on small OOS samples should be flagged as LEAKAGE_SUS
 
 ## Criterion 10 — Data era compatibility (volume filters)
 
-**Source:** audit finding 2026-04-07 that MNQ pre-2024 source data is actually NQ parent (~10x different volume profile from MNQ micro). 
+**Source:** audit finding 2026-04-07 that MNQ pre-2024 source data was NQ parent (~10x different volume profile from MNQ micro). This source-data issue was resolved by the Phase 3c canonical layer rebuild (commit `c33805b`, merged 2026-04-08) which replaced all parent-proxy bars with real-micro bars for MNQ/MES/MGC. See Amendment 2.8 (2026-04-09) for the factual correction of the prior MICRO-era dates.
 
-**Rule:** Volume-based filters (ORB_VOL, any filter using `orb_*_volume` or `rel_vol_*`) must be computed only on MICRO era data (MNQ/MES from 2024-02-05 onwards; MGC never valid because no real MGC data exists). Price-based filters (ORB_G, COST_LT, OVNRNG using range points) are valid on parent proxy data with disclosure.
+**Rule:** Volume-based filters (ORB_VOL, any filter using `orb_*_volume` or `rel_vol_*`) must be computed only on MICRO-era data. Per Amendment 2.8, real-micro data in this repo covers:
+- **MNQ/MES:** 2019-05-06 onwards (CME Micro E-mini launch date). Volume filters eligible on this entire horizon.
+- **MGC:** 2023-09-11 onwards (present canonical start; MGC launched 2022-06-13 and ~15 months of earlier MGC can be backfilled via Databento subscription). Volume filters eligible from whichever start date applies after backfill decision.
+
+Price-based filters (ORB_G, COST_LT, OVNRNG using range points, ATR_P30/P50/P70) are valid on the full real-micro horizon for each instrument without special disclosure. The parent-proxy caveat no longer applies because the canonical layer no longer contains parent-proxy bars.
+
+**Legacy language corrected:** the earlier "MNQ/MES from 2024-02-05 onwards; MGC never valid because no real MGC data exists" text predates Phase 3c and was factually wrong — the MNQ/MES micro contracts launched 2019, and MGC has been accumulating real-micro data since 2023-09-11. The rule (volume filters only on MICRO era) is unchanged; only the dates were stale.
 
 **Enforcement:** Drift check to flag volume-filter strategies with trades from PARENT era.
 
@@ -493,3 +501,73 @@ Now that `e2-canonical-window-fix` has merged into main (`8bc87f7`), these four 
 Mode A restoration has a cost: 4 days of discovery work (2026-04-05, 2026-04-06) that produced the 124 validated_setups are now labeled research-provisional rather than canonical. Those 4 days are not wasted — the 124 strategies still represent a testable hypothesis list that can be re-verified under the clean-holdout protocol in Phase 4. The cost is one Phase 4 rediscovery run, not starting from zero.
 
 This cost is accepted as the price of institutional honesty. Alternative (keeping Mode B to avoid the rework) was rejected because it contradicted explicit user intent.
+
+---
+
+## Amendment 2.8 (2026-04-09) — Factual correction of post-Phase-3c data horizons
+
+**Type:** Factual correction. **NOT a threshold relaxation.** All 12 locked criteria, their numeric thresholds, and their enforcement status remain exactly as locked. This amendment updates stale narrative text in § Criterion 2 and § Criterion 10 to reflect the canonical data state after the Phase 3c rebuild merged to main.
+
+**Trigger:** During Phase 4 Stage 4.2 hypothesis-file authoring on 2026-04-09, I drafted an MNQ hypothesis file declaring `data_source_mode: "proxy"` on the assumption that MNQ had "~2.2 years clean" + "16 years NQ parent proxy" (per § Criterion 2 worked example as originally written 2026-04-07). The user caught the error:
+
+> *"I DONT WANNA FUCK AROUND WITH HALF THIS DATA HALF THAT DATA. I HAVE SUBSCRIPTION TO GET ALL THE DATA. WHY ARE WE DOING ALL THIS IF WE COULD JUST DOWNLOAD THE RIGHT DATA"*
+
+Ground-truth verification against `gold.db` confirmed the user was right. Post-rebuild actual state:
+
+| Instrument | bars_1m first day | bars_1m last day | Total trading days | Pre-holdout days (< 2026-01-01) | Clean years |
+|---|---|---|---|---|---|
+| MNQ | 2019-05-06 | 2026-04-07 | 2,154 | 1,951 | ≈ 6.65 |
+| MES | 2019-05-06 | 2026-04-07 | 2,154 | 1,951 | ≈ 6.65 |
+| MGC | 2023-09-11 | 2026-04-07 | 801 | 671 | ≈ 2.70 |
+
+**Canonical evidence:** Phase 3c canonical layer rebuild commit `c33805b`, merged to main 2026-04-08. `HANDOFF.md` and memory topic file `phase_4_stage_4_1_shipped.md` reference this rebuild.
+
+### What this amendment corrects
+
+1. **§ Criterion 2 worked example (lines 62-84 as originally written):** the "~2.2 years clean MNQ data" and "16-year proxy-extended horizon" narrative was stale. Corrected in-place to reference post-Phase-3c actuals.
+
+2. **§ Criterion 10 (line 170 as originally written):** the claim "MNQ/MES from 2024-02-05 onwards; MGC never valid because no real MGC data exists" was factually wrong. MNQ/MES CME Micro E-mini contracts launched 2019-05-06 (not 2024); MGC CME Micro Gold launched 2022-06-13 with real-micro data in the canonical layer since 2023-09-11. Corrected in-place.
+
+3. **Derived consequence: strict Bailey MinBTL bounds at E=1.0 for actual horizons:**
+
+   | Instrument | Horizon (yr) | Strict Bailey E=1.0 max N | Strict Bailey E=1.2 max N |
+   |---|---|---|---|
+   | MNQ | 6.65 | 28 | 120 |
+   | MES | 6.65 | 28 | 120 |
+   | MGC (no backfill) | 2.70 | 4  | 7 |
+   | MGC (with Databento backfill to 2022-06-13) | 3.90 | 7  | 17 |
+
+   The MGC no-backfill scenario is too tight for meaningful pre-registration (N ≤ 4). **The amendment recommends the MGC backfill before any MGC discovery run**, and labels MGC-without-backfill as incompatible with institutional pre-registration under strict Bailey.
+
+### What this amendment does NOT change
+
+- The locked 300 clean / 2000 proxy trial caps remain exactly as locked. They function as OPERATIONAL CEILINGS, looser than strict Bailey E=1.0 at the actual horizons. When operating between strict Bailey and the locked ceiling (e.g., 28 < N ≤ 300 for MNQ), the hypothesis file MUST disclose the corresponding Sharpe noise floor and explicitly flag that N exceeds the strict Bailey bound.
+- The 12 criteria, all enforcement states (BINDING / CROSS-CHECK / CONTINGENT), and the v2.7 Mode A holdout policy are unchanged.
+- Prior Amendments 2.1 through 2.7 retain their status.
+
+### Institutional maximum rigor rule
+
+**For institutional maximum rigor, operate at or below the strict Bailey E=1.0 bound for the target instrument's actual horizon.** This is tighter than the locked ceiling but corresponds to the original Bailey 2013 Theorem 1 at its most conservative parameterization. Pre-registered hypothesis files that choose N beyond strict Bailey must include, in `metadata.purpose` or a dedicated `bailey_compliance` field, the computed Sharpe noise floor and an explicit acknowledgment that candidates below that Sharpe are expected to be within noise even if they pass BH FDR.
+
+### Why this matters for Phase 4 Stage 4.2
+
+Stage 4.2 is the first hypothesis-file authoring gate. Authoring three files (MNQ, MES, MGC) under this amendment means:
+
+1. **MNQ file:** 16 hypothesis bundles × 1 trial each = 16 trials. Strict Bailey E=1.0 at 6.65yr gives 28 trial bound, so 16 passes with 43% headroom. Noise floor Sharpe 0.91 annualized. No proxy declaration needed. Clean mode.
+2. **MES file:** same structure as MNQ, 16 trials, same 6.65yr horizon.
+3. **MGC file:** pending backfill decision.
+   - **Backfill completed:** 16 hypothesis bundles possible up to strict Bailey bound of 7 at E=1.0 or 17 at E=1.2. Likely operating at N ≤ 7 with 3.9yr horizon, noise floor ~1.0.
+   - **No backfill:** insufficient horizon for meaningful pre-registration. MGC discovery deferred until backfill lands OR explicitly labeled research-provisional with noise floor Sharpe ≥ 1.46.
+
+### Related follow-ups surfaced during the Stage 4.2 self-audit
+
+- **Loader drift check:** `trading_app.hypothesis_loader.load_hypothesis_metadata` reads `metadata.total_expected_trials` and `extract_scope_predicate` independently sums per-hypothesis `expected_trial_count`, but does not cross-check that they agree. A hypothesis file could silently declare `metadata.total_expected_trials: 10` while summing to 1000 in the per-hypothesis list. Queue a drift-check or loader-level cross-consistency assertion for Phase 4 Stage 4.3.
+- **Databento backfill task for MGC:** Add to the action queue — download MGC bars from 2022-06-13 → 2023-09-10 via existing Databento Standard subscription, run Phase 3c-style canonical rebuild for the added days, re-verify drift checks. One-day wall-time task; ~308 trading days added.
+
+### What was wrong and how it happened
+
+The authoring error was: the criteria file worked example was written 2026-04-07, the Phase 3c canonical rebuild merged 2026-04-08, and the criteria file was not updated between those events. During Stage 4.2 authoring 2026-04-09 I read the criteria file as authoritative without checking whether its data-horizon narrative was still factually current against the DB. The user's instinct check ("WHY ARE WE DOING ALL THIS IF WE COULD JUST DOWNLOAD THE RIGHT DATA") caught the gap. The fix is this amendment plus corrected Stage 4.2 YAML authoring.
+
+This failure mode is exactly what `.claude/rules/institutional-rigor.md` rule 8 ("Verify before claiming") prevents, and `.claude/rules/integrity-guardian.md` rule 7 ("Never Trust Metadata — Always Verify") reinforces. The criteria file narrative was metadata about the data horizon; I trusted it without verification; the user's correction is the institutional audit mechanism working correctly.
+
+**No commitments beyond those already locked in the criteria file were invalidated by this stale narrative. The locked numeric thresholds were correct all along; only the worked-example text around them was out of date.**

@@ -1691,3 +1691,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 2 files (contracts.py + test_tradovate.py). 0 caller behavior changes (all callers already expect RuntimeError on failure; None was never returned — only "" which is now raised).
 - Verification: PASS (56/56 test_tradovate.py, drift 77/77)
 - Commit: 6e401d1
+
+---
+
+## Iteration 162 — 2026-04-07
+- Phase: fix
+- Classification: [mechanical]
+- Target: tests/test_trading_app/test_tradovate.py + tests/test_trading_app/test_projectx_429_retry.py
+- Finding: 10 unused @patch mock parameters across 2 test files — Pyright "not accessed" / ruff ARG002 warnings. Includes one genuinely unnecessary @patch decorator (TradovateAuth.__init__ makes no HTTP calls; test never calls get_token()).
+- Action: Renamed 9 unused `mock_sleep`/`mock_post` params to `_mock_sleep`/`_mock_post` (underscore prefix = intentionally unused). Removed 1 unnecessary @patch decorator + parameter entirely (test_create_tradovate_components).
+- Blast radius: 2 test files only. Zero production code changes.
+- Verification: PASS (65/65 tests, drift 77/77)
+- Commit: 24b30b6
