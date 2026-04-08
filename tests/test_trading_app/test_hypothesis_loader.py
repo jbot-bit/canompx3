@@ -403,6 +403,18 @@ class TestEnforceMinbtlBound:
         with pytest.raises(HypothesisLoaderError, match="total_expected_trials"):
             enforce_minbtl_bound({"total_expected_trials": 0})
 
+    def test_bool_total_trials_raises(self):
+        """Regression guard for the bool-is-subclass-of-int trap.
+
+        ``isinstance(True, int)`` is True in Python, so a YAML file with
+        ``total_expected_trials: true`` would silently be treated as 1 trial
+        without the explicit bool exclusion. Phase A review finding S-1.
+        """
+        with pytest.raises(HypothesisLoaderError, match="total_expected_trials"):
+            enforce_minbtl_bound({"total_expected_trials": True})
+        with pytest.raises(HypothesisLoaderError, match="total_expected_trials"):
+            enforce_minbtl_bound({"total_expected_trials": False})
+
 
 class TestCheckModeAConsistency:
     """Amendment 2.7 sacred boundary enforcement."""

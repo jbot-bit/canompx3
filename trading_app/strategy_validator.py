@@ -76,6 +76,7 @@ from trading_app.db_manager import init_trading_app_schema
 from trading_app.holdout_policy import HOLDOUT_GRANDFATHER_CUTOFF, HOLDOUT_SACRED_FROM
 from trading_app.hypothesis_loader import (
     HypothesisLoaderError,
+    enforce_minbtl_bound,
     load_hypothesis_by_sha,
 )
 from trading_app.strategy_discovery import parse_dst_regime
@@ -853,38 +854,56 @@ def _check_criterion_1_hypothesis_file(row_dict: dict) -> tuple[str | None, str 
 def _check_criterion_2_minbtl(meta: dict, on_proxy_data: bool = False) -> tuple[str | None, str | None]:
     """Criterion 2: hypothesis-file declared trial count must satisfy MinBTL.
 
-    Locked bound (Bailey et al 2013 Theorem 1, applied per
-    ``docs/institutional/pre_registered_criteria.md`` Criterion 2):
-    - N <= 300 trials on clean MNQ data
-    - N <= 2,000 trials on proxy-extended data with explicit data-source
-      disclosure
+    **Phase 4 Stage 4.1b delegation.** This function is now a thin wrapper
+    that delegates to the canonical implementation in
+    ``trading_app.hypothesis_loader.enforce_minbtl_bound``. The 300/2000
+    bounds, the proxy-mode disclosure opt-in, and all Criterion 2 semantics
+    live exclusively in the loader module so that the validator and the
+    discovery-side CLI cannot drift. See
+    ``.claude/rules/institutional-rigor.md`` rule 4 ("delegate to canonical
+    sources — never re-encode").
 
-    The discovery routine in Stage 4.1 will pass ``on_proxy_data`` based on
-    whether the hypothesis file's scope includes pre-2024-02-05 trading days
-    (the parent-symbol era for MNQ/MES). For Stage 4.0 the validator defaults
-    to clean-data mode; the cap can be relaxed in a future stage if needed.
+    The function name, signature, and return shape are PRESERVED so that:
+    - Drift check #93 (``check_phase_4_validator_gates_present``) continues
+      to assert this function exists in the validator module.
+    - The call site in ``_check_phase_4_pre_flight_gates`` needs zero
+      changes across the Stage 4.0 → 4.1b transition.
+
+    The ``on_proxy_data`` flag passthrough is also preserved. Stage 4.0
+    reserved it for Stage 4.1 to activate based on whether a hypothesis
+    file's scope includes pre-2024-02-05 trading days; that activation is
+    a future sub-stage concern, not Stage 4.1b's.
+
+    Parameters
+    ----------
+    meta
+        Hypothesis file metadata dict from ``load_hypothesis_metadata``.
+        Must contain ``total_expected_trials``; proxy mode additionally
+        requires ``metadata.data_source_mode == 'proxy'`` and non-empty
+        ``metadata.data_source_disclosure``.
+    on_proxy_data
+        When True, the proxy-extended bound (2000) is consulted and the
+        disclosure opt-in is enforced. Default False = clean-data bound (300).
 
     Returns
     -------
     tuple[str | None, str | None]
         ``(None, None)`` if the criterion passes.
-        ``("REJECTED", "criterion_2: ...")`` otherwise.
+        ``("REJECTED", "criterion_2: ...")`` otherwise. The reason text
+        comes from the canonical loader implementation.
     """
-    declared_n = meta.get("total_expected_trials")
-    bound = 2000 if on_proxy_data else 300
-    if declared_n is None:
+    # Translate loader-level HypothesisLoaderError (malformed metadata) into
+    # a Criterion 2 rejection so the validator's run_validation loop treats
+    # it as a per-row soft failure rather than a stop-the-world exception.
+    # Stage 4.0's inline version returned this shape for the missing-field
+    # case; the delegation preserves that behavior at the boundary.
+    try:
+        return enforce_minbtl_bound(meta, on_proxy_data=on_proxy_data)
+    except HypothesisLoaderError as exc:
         return (
             "REJECTED",
-            "criterion_2: hypothesis file metadata.total_expected_trials missing",
+            f"criterion_2: {exc}",
         )
-    if declared_n > bound:
-        regime = "proxy-extended" if on_proxy_data else "clean MNQ"
-        return (
-            "REJECTED",
-            f"criterion_2: declared trials={declared_n} exceeds MinBTL bound "
-            f"{bound} for {regime} data (Bailey et al 2013 Theorem 1)",
-        )
-    return (None, None)
 
 
 # Criteria 4 (Chordia) and 5 (DSR) are deferred to Stage 4.0b. See the

@@ -230,7 +230,10 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
         )
 
     declared_n = metadata["total_expected_trials"]
-    if not isinstance(declared_n, int) or declared_n < 1:
+    # Exclude ``bool`` explicitly: ``isinstance(True, int)`` is True in Python,
+    # so without this guard a YAML `total_expected_trials: true` would be
+    # silently treated as 1 trial. Fail-closed per institutional-rigor rule 6.
+    if not isinstance(declared_n, int) or isinstance(declared_n, bool) or declared_n < 1:
         raise HypothesisLoaderError(
             f"Hypothesis file {path} metadata.total_expected_trials must be a positive int, got {declared_n!r}."
         )
@@ -379,7 +382,10 @@ def enforce_minbtl_bound(
         soft Criterion 2 rejection.
     """
     declared = meta.get("total_expected_trials")
-    if not isinstance(declared, int) or declared < 1:
+    # Exclude ``bool`` explicitly: ``isinstance(True, int)`` is True, which
+    # without this guard would silently accept a YAML ``total_expected_trials:
+    # true`` as 1 trial. Fail-closed per institutional-rigor rule 6.
+    if not isinstance(declared, int) or isinstance(declared, bool) or declared < 1:
         raise HypothesisLoaderError(
             f"total_expected_trials must be a positive int, got {declared!r}. "
             f"Hypothesis file is malformed — cannot evaluate Criterion 2."
@@ -430,11 +436,18 @@ def check_mode_a_consistency(meta: dict[str, Any]) -> None:
     AFTER the sacred-from date would implicitly permit discovery to consume
     sacred data, which is banned.
 
+    **Precondition:** ``meta`` must be the output of
+    ``load_hypothesis_metadata``, not a raw YAML parse. The loader handles
+    string→date coercion via ``_coerce_to_date``; a raw YAML dict may carry a
+    string in ``holdout_date`` which this function rejects as a type error
+    rather than attempting to parse (parsing is the loader's responsibility).
+
     Parameters
     ----------
     meta
         Hypothesis file metadata dict from ``load_hypothesis_metadata``. Must
-        contain ``holdout_date`` as a ``datetime.date``.
+        contain ``holdout_date`` as a ``datetime.date`` (or ``datetime`` which
+        is normalized to ``date`` for comparison).
 
     Raises
     ------
@@ -649,16 +662,24 @@ def extract_scope_predicate(
                 f"Hypothesis #{idx} must be a mapping, got {type(h).__name__}"
             )
 
+        # Identity prefix for error messages — include the YAML id and name
+        # fields (if present) so error messages correlate to the human-
+        # authored hypothesis rather than the zero-based list index alone.
+        # Phase A review finding C-2.
+        h_id = h.get("id", "?")
+        h_name = h.get("name", "?")
+        h_tag = f"Hypothesis #{idx} (id={h_id}, name={h_name!r})"
+
         scope = h.get("scope")
         if not isinstance(scope, dict):
             raise HypothesisLoaderError(
-                f"Hypothesis #{idx} missing or malformed 'scope' block"
+                f"{h_tag} missing or malformed 'scope' block"
             )
 
         instruments_raw = scope.get("instruments")
         if not isinstance(instruments_raw, list) or not instruments_raw:
             raise HypothesisLoaderError(
-                f"Hypothesis #{idx} scope.instruments must be a non-empty list"
+                f"{h_tag} scope.instruments must be a non-empty list"
             )
 
         if instrument not in instruments_raw:
@@ -667,48 +688,48 @@ def extract_scope_predicate(
         filter_block = h.get("filter")
         if not isinstance(filter_block, dict):
             raise HypothesisLoaderError(
-                f"Hypothesis #{idx} missing or malformed 'filter' block"
+                f"{h_tag} missing or malformed 'filter' block"
             )
         filter_type = filter_block.get("type")
         if not isinstance(filter_type, str) or not filter_type:
             raise HypothesisLoaderError(
-                f"Hypothesis #{idx} filter.type must be a non-empty string"
+                f"{h_tag} filter.type must be a non-empty string"
             )
 
         sessions_raw = scope.get("sessions")
         if not isinstance(sessions_raw, list) or not sessions_raw:
             raise HypothesisLoaderError(
-                f"Hypothesis #{idx} scope.sessions must be a non-empty list"
+                f"{h_tag} scope.sessions must be a non-empty list"
             )
 
         rr_raw = scope.get("rr_targets")
         if not isinstance(rr_raw, list) or not rr_raw:
             raise HypothesisLoaderError(
-                f"Hypothesis #{idx} scope.rr_targets must be a non-empty list"
+                f"{h_tag} scope.rr_targets must be a non-empty list"
             )
 
         em_raw = scope.get("entry_models")
         if not isinstance(em_raw, list) or not em_raw:
             raise HypothesisLoaderError(
-                f"Hypothesis #{idx} scope.entry_models must be a non-empty list"
+                f"{h_tag} scope.entry_models must be a non-empty list"
             )
 
         cb_raw = scope.get("confirm_bars")
         if not isinstance(cb_raw, list) or not cb_raw:
             raise HypothesisLoaderError(
-                f"Hypothesis #{idx} scope.confirm_bars must be a non-empty list"
+                f"{h_tag} scope.confirm_bars must be a non-empty list"
             )
 
         stop_raw = scope.get("stop_multipliers")
         if not isinstance(stop_raw, list) or not stop_raw:
             raise HypothesisLoaderError(
-                f"Hypothesis #{idx} scope.stop_multipliers must be a non-empty list"
+                f"{h_tag} scope.stop_multipliers must be a non-empty list"
             )
 
         expected = h.get("expected_trial_count")
-        if not isinstance(expected, int) or expected < 1:
+        if not isinstance(expected, int) or isinstance(expected, bool) or expected < 1:
             raise HypothesisLoaderError(
-                f"Hypothesis #{idx} expected_trial_count must be a positive int"
+                f"{h_tag} expected_trial_count must be a positive int"
             )
 
         try:
@@ -717,7 +738,7 @@ def extract_scope_predicate(
             stop_multipliers = frozenset(float(x) for x in stop_raw)
         except (TypeError, ValueError) as exc:
             raise HypothesisLoaderError(
-                f"Hypothesis #{idx} scope contains non-numeric values: {exc}"
+                f"{h_tag} scope contains non-numeric values: {exc}"
             ) from exc
 
         filtered.append(

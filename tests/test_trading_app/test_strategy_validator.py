@@ -1024,19 +1024,46 @@ class TestModeAHoldoutIntegrity:
 # =========================================================================
 
 
-def _write_test_hypothesis(tmp_path: Path, total_trials: int = 60, with_theory: bool = True) -> tuple[Path, str]:
-    """Helper: write a minimal valid hypothesis YAML and return (path, sha)."""
+def _write_test_hypothesis(
+    tmp_path: Path,
+    total_trials: int = 60,
+    with_theory: bool = True,
+    *,
+    data_source_mode: str | None = None,
+    data_source_disclosure: str | None = None,
+) -> tuple[Path, str]:
+    """Helper: write a minimal valid hypothesis YAML and return (path, sha).
+
+    The optional ``data_source_mode`` and ``data_source_disclosure`` kwargs
+    were added in Phase 4 Stage 4.1b to support proxy-mode MinBTL testing.
+    When set (both required together), they are written into
+    ``metadata.data_source_mode`` and ``metadata.data_source_disclosure`` so
+    that ``enforce_minbtl_bound(..., on_proxy_data=True)`` can find them and
+    permit bounds up to 2000 per Criterion 2's "explicit data-source
+    disclosure" clause.
+
+    Default (both None) produces a clean-data hypothesis file. Any test
+    that calls ``_check_criterion_2_minbtl(meta, on_proxy_data=True)`` or
+    ``enforce_minbtl_bound(meta, on_proxy_data=True)`` MUST pass both kwargs
+    or the canonical loader will reject the metadata for missing disclosure.
+    """
     import yaml
 
     from trading_app.hypothesis_loader import compute_file_sha
 
+    metadata_block: dict = {
+        "name": "test_hypothesis",
+        "date_locked": "2026-04-08",
+        "holdout_date": "2026-01-01",
+        "total_expected_trials": total_trials,
+    }
+    if data_source_mode is not None:
+        metadata_block["data_source_mode"] = data_source_mode
+    if data_source_disclosure is not None:
+        metadata_block["data_source_disclosure"] = data_source_disclosure
+
     body: dict = {
-        "metadata": {
-            "name": "test_hypothesis",
-            "date_locked": "2026-04-08",
-            "holdout_date": "2026-01-01",
-            "total_expected_trials": total_trials,
-        },
+        "metadata": metadata_block,
         "hypotheses": [
             {
                 "id": 1,
@@ -1171,22 +1198,114 @@ class TestCriterion2MinBTL:
         assert "500" in reason
 
     def test_passes_under_proxy_data_bound(self, tmp_path):
-        path, _sha = _write_test_hypothesis(tmp_path, total_trials=1500)
+        # Phase 4 Stage 4.1b: proxy mode now requires explicit opt-in via
+        # metadata.data_source_mode + metadata.data_source_disclosure per the
+        # locked Criterion 2 text ("explicit data-source disclosure"). This
+        # test was updated during Phase B to pass the new fields; without
+        # them the canonical enforce_minbtl_bound rejects before the 2000
+        # bound is consulted.
+        path, _sha = _write_test_hypothesis(
+            tmp_path,
+            total_trials=1500,
+            data_source_mode="proxy",
+            data_source_disclosure="NQ parent futures pre-2024-02-05 (synthetic test fixture)",
+        )
         from trading_app.hypothesis_loader import load_hypothesis_metadata
 
         meta = load_hypothesis_metadata(path)
         status, reason = _check_criterion_2_minbtl(meta, on_proxy_data=True)
-        assert status is None
+        assert status is None, f"expected pass, got {status}: {reason}"
 
     def test_fails_when_exceeds_proxy_data_bound(self, tmp_path):
-        path, _sha = _write_test_hypothesis(tmp_path, total_trials=2500)
+        # Same proxy-mode opt-in requirement as test_passes_under_proxy_data_bound.
+        # With opt-in in place, this test now exercises the bound-exceeded
+        # path (2500 > 2000) rather than the missing-disclosure path.
+        path, _sha = _write_test_hypothesis(
+            tmp_path,
+            total_trials=2500,
+            data_source_mode="proxy",
+            data_source_disclosure="NQ parent futures pre-2024-02-05 (synthetic test fixture)",
+        )
         from trading_app.hypothesis_loader import load_hypothesis_metadata
 
         meta = load_hypothesis_metadata(path)
         status, reason = _check_criterion_2_minbtl(meta, on_proxy_data=True)
         assert status == "REJECTED"
         assert reason is not None
-        assert "2000" in reason
+        assert "2500" in reason  # actual declared count in the rejection
+        assert "2000" in reason  # the bound it exceeded
+
+    def test_fails_when_proxy_mode_missing_disclosure(self, tmp_path):
+        """New Stage 4.1b path: proxy bound requested without disclosure opt-in.
+
+        Stage 4.0's inline implementation did not enforce data-source
+        disclosure — it used the 2000 bound whenever ``on_proxy_data=True``
+        regardless of metadata. Stage 4.1's canonical ``enforce_minbtl_bound``
+        implements the locked Criterion 2 text faithfully by requiring
+        ``metadata.data_source_mode == 'proxy'`` AND a non-empty
+        ``metadata.data_source_disclosure``. This test proves the validator's
+        delegation path (Stage 4.1b) also enforces the new requirement.
+        """
+        # 1500 trials would normally pass the proxy bound of 2000, but
+        # without the disclosure opt-in the canonical rejects first.
+        path, _sha = _write_test_hypothesis(tmp_path, total_trials=1500)
+        from trading_app.hypothesis_loader import load_hypothesis_metadata
+
+        meta = load_hypothesis_metadata(path)
+        status, reason = _check_criterion_2_minbtl(meta, on_proxy_data=True)
+        assert status == "REJECTED"
+        assert reason is not None
+        assert "data_source_mode" in reason
+
+    def test_delegation_shares_constants_with_canonical_loader(self, tmp_path):
+        """Phase 4 Stage 4.1b delegation: the validator gate must produce the
+        SAME verdict and reason as the canonical ``enforce_minbtl_bound``.
+
+        This is the regression guard on the delegation refactor. If a future
+        edit ever inlines the 300/2000 bounds back into the validator, the
+        validator and loader paths would diverge silently — this test forces
+        them to stay aligned.
+        """
+        from trading_app.hypothesis_loader import (
+            enforce_minbtl_bound,
+            load_hypothesis_metadata,
+        )
+
+        # Clean-data boundary conditions: 300 passes, 301 rejects.
+        path_pass, _ = _write_test_hypothesis(tmp_path, total_trials=300)
+        meta_pass = load_hypothesis_metadata(path_pass)
+        assert _check_criterion_2_minbtl(meta_pass, on_proxy_data=False) == enforce_minbtl_bound(
+            meta_pass, on_proxy_data=False
+        )
+
+        path_fail, _ = _write_test_hypothesis(tmp_path, total_trials=301)
+        meta_fail = load_hypothesis_metadata(path_fail)
+        assert _check_criterion_2_minbtl(meta_fail, on_proxy_data=False) == enforce_minbtl_bound(
+            meta_fail, on_proxy_data=False
+        )
+
+        # Proxy-data boundary conditions with full opt-in: 2000 passes, 2001 rejects.
+        path_proxy_pass, _ = _write_test_hypothesis(
+            tmp_path,
+            total_trials=2000,
+            data_source_mode="proxy",
+            data_source_disclosure="synthetic test fixture",
+        )
+        meta_proxy_pass = load_hypothesis_metadata(path_proxy_pass)
+        assert _check_criterion_2_minbtl(
+            meta_proxy_pass, on_proxy_data=True
+        ) == enforce_minbtl_bound(meta_proxy_pass, on_proxy_data=True)
+
+        path_proxy_fail, _ = _write_test_hypothesis(
+            tmp_path,
+            total_trials=2001,
+            data_source_mode="proxy",
+            data_source_disclosure="synthetic test fixture",
+        )
+        meta_proxy_fail = load_hypothesis_metadata(path_proxy_fail)
+        assert _check_criterion_2_minbtl(
+            meta_proxy_fail, on_proxy_data=True
+        ) == enforce_minbtl_bound(meta_proxy_fail, on_proxy_data=True)
 
 
 # NOTE: Criterion 4 (Chordia) and Criterion 5 (DSR) test classes are
