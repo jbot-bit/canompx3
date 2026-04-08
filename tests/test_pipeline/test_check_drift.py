@@ -5,6 +5,7 @@ Tests each drift check catches violations and passes clean code.
 """
 
 import tempfile
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from pipeline.check_drift import (
     check_apply_iterrows,
     check_config_filter_sync,
     check_hardcoded_mgc_sql,
+    check_holdout_policy_declaration_consistency,
     check_non_bars1m_writes,
     check_pipeline_never_imports_trading_app,
     check_pyright_config_exists,
@@ -901,3 +903,160 @@ class TestResampleHelpersInEntryRules:
         assert any("resample_to_5m" in v for v in violations)
         # Sanity: confirm the original was correct (otherwise the test is moot)
         assert original_module == "trading_app.entry_rules"
+
+
+class TestHoldoutPolicyDeclarationConsistency:
+    """Tests for ``check_holdout_policy_declaration_consistency`` (drift check #83).
+
+    The function asserts four invariants:
+    1. ``trading_app.holdout_policy`` is importable and exports the three
+       canonical names.
+    2. ``HOLDOUT_SACRED_FROM`` equals ``date(2026, 1, 1)`` (Amendment 2.7 lock).
+    3. ``docs/institutional/pre_registered_criteria.md`` exists and mentions
+       ``Amendment 2.7``.
+    4. ``RESEARCH_RULES.md`` exists, mentions the sacred-from date in
+       ISO format, and cites ``Amendment 2.7``.
+
+    The function reads project-relative paths via ``Path(__file__).parent.parent``,
+    so failure-case tests redirect ``project_root`` by monkeypatching
+    ``pipeline.check_drift.__file__`` to point inside a synthetic ``tmp_path``
+    repo skeleton. This avoids touching the real repo files (which are
+    canonical and asserted by the happy-path test).
+    """
+
+    AMENDMENT = "Amendment 2.7"
+    SACRED_DATE_STR = "2026-01-01"
+
+    def _build_fake_root(
+        self,
+        tmp_path: Path,
+        criteria_text: str | None,
+        rules_text: str | None,
+    ) -> Path:
+        """Build a fake repo skeleton with optional doc files.
+
+        Returns the path to the fake ``pipeline/check_drift.py`` so the caller
+        can monkeypatch ``pipeline.check_drift.__file__`` to it.
+        """
+        fake_root = tmp_path / "fake_repo"
+        pipeline_dir = fake_root / "pipeline"
+        pipeline_dir.mkdir(parents=True)
+        if criteria_text is not None:
+            criteria_dir = fake_root / "docs" / "institutional"
+            criteria_dir.mkdir(parents=True)
+            (criteria_dir / "pre_registered_criteria.md").write_text(criteria_text, encoding="utf-8")
+        if rules_text is not None:
+            (fake_root / "RESEARCH_RULES.md").write_text(rules_text, encoding="utf-8")
+        return pipeline_dir / "check_drift.py"
+
+    def test_happy_path_against_real_repo(self):
+        """The function MUST pass against the actual repo state — this is the
+        gold-standard mirror of ``python pipeline/check_drift.py`` 84/0/0."""
+        violations = check_holdout_policy_declaration_consistency()
+        assert violations == [], (
+            "Real repo declaration consistency drifted — fix the canonical sources "
+            f"before running other tests. Violations: {violations}"
+        )
+
+    def test_missing_export_returns_violation(self, monkeypatch):
+        """If the canonical module loses one of the three required exports,
+        the check must flag the missing name and bail before doc checks."""
+        import trading_app.holdout_policy as hp
+        monkeypatch.delattr(hp, "HOLDOUT_SACRED_FROM", raising=True)
+        violations = check_holdout_policy_declaration_consistency()
+        assert any("HOLDOUT_SACRED_FROM" in v and "EXPORT MISSING" in v for v in violations)
+
+    def test_sacred_from_drift_returns_violation(self, monkeypatch):
+        """If ``HOLDOUT_SACRED_FROM`` is changed without a new Amendment, the
+        check must flag the drift and cite the lock value."""
+        import trading_app.holdout_policy as hp
+        monkeypatch.setattr(hp, "HOLDOUT_SACRED_FROM", date(2027, 1, 1))
+        violations = check_holdout_policy_declaration_consistency()
+        assert any("HOLDOUT_SACRED_FROM drifted" in v for v in violations)
+        assert any("2026-01-01" in v for v in violations)
+
+    def test_criteria_md_missing_amendment_returns_violation(self, monkeypatch, tmp_path):
+        """If ``pre_registered_criteria.md`` exists but does not cite
+        Amendment 2.7, the check must flag the missing citation."""
+        fake_check_drift = self._build_fake_root(
+            tmp_path,
+            criteria_text="some criteria but no amendment marker",
+            rules_text=f"{self.AMENDMENT}\n{self.SACRED_DATE_STR}\n",
+        )
+        monkeypatch.setattr("pipeline.check_drift.__file__", str(fake_check_drift))
+        violations = check_holdout_policy_declaration_consistency()
+        assert any(
+            "pre_registered_criteria.md" in v and self.AMENDMENT in v for v in violations
+        )
+
+    def test_criteria_md_missing_file_returns_violation(self, monkeypatch, tmp_path):
+        """If ``pre_registered_criteria.md`` does not exist on disk, the
+        check must surface the missing file (not silently pass)."""
+        fake_check_drift = self._build_fake_root(
+            tmp_path,
+            criteria_text=None,  # don't create the file
+            rules_text=f"{self.AMENDMENT}\n{self.SACRED_DATE_STR}\n",
+        )
+        monkeypatch.setattr("pipeline.check_drift.__file__", str(fake_check_drift))
+        violations = check_holdout_policy_declaration_consistency()
+        assert any("pre_registered_criteria.md missing" in v for v in violations)
+
+    def test_research_rules_missing_sacred_date_returns_violation(self, monkeypatch, tmp_path):
+        """If ``RESEARCH_RULES.md`` does not contain the sacred-from ISO date,
+        the check must flag the doc-code drift."""
+        fake_check_drift = self._build_fake_root(
+            tmp_path,
+            criteria_text=f"valid criteria {self.AMENDMENT}",
+            rules_text=f"{self.AMENDMENT}\nbut no sacred date here\n",
+        )
+        monkeypatch.setattr("pipeline.check_drift.__file__", str(fake_check_drift))
+        violations = check_holdout_policy_declaration_consistency()
+        assert any(
+            "RESEARCH_RULES.md" in v and self.SACRED_DATE_STR in v for v in violations
+        )
+
+    def test_research_rules_missing_amendment_returns_violation(self, monkeypatch, tmp_path):
+        """If ``RESEARCH_RULES.md`` does not cite Amendment 2.7, the check
+        must flag the missing top-level declaration."""
+        fake_check_drift = self._build_fake_root(
+            tmp_path,
+            criteria_text=f"valid criteria {self.AMENDMENT}",
+            rules_text=f"sacred date {self.SACRED_DATE_STR} but no amendment marker\n",
+        )
+        monkeypatch.setattr("pipeline.check_drift.__file__", str(fake_check_drift))
+        violations = check_holdout_policy_declaration_consistency()
+        assert any(
+            "RESEARCH_RULES.md" in v and self.AMENDMENT in v for v in violations
+        )
+
+    def test_research_rules_missing_file_returns_violation(self, monkeypatch, tmp_path):
+        """If ``RESEARCH_RULES.md`` does not exist on disk, the check must
+        surface the missing file (not silently pass)."""
+        fake_check_drift = self._build_fake_root(
+            tmp_path,
+            criteria_text=f"valid criteria {self.AMENDMENT}",
+            rules_text=None,  # don't create the file
+        )
+        monkeypatch.setattr("pipeline.check_drift.__file__", str(fake_check_drift))
+        violations = check_holdout_policy_declaration_consistency()
+        assert any("RESEARCH_RULES.md missing" in v for v in violations)
+
+    def test_all_invariants_violated_yields_multiple(self, monkeypatch, tmp_path):
+        """When the criteria doc, the rules doc, AND the sacred date all
+        diverge, the check must return multiple violations (no early bail
+        once we're past the export check)."""
+        import trading_app.holdout_policy as hp
+        monkeypatch.setattr(hp, "HOLDOUT_SACRED_FROM", date(2025, 7, 1))
+        fake_check_drift = self._build_fake_root(
+            tmp_path,
+            criteria_text="missing the marker",
+            rules_text="also missing both",
+        )
+        monkeypatch.setattr("pipeline.check_drift.__file__", str(fake_check_drift))
+        violations = check_holdout_policy_declaration_consistency()
+        # Expect: sacred-from drift, criteria amendment-missing,
+        # rules amendment-missing, rules sacred-date-missing.
+        assert len(violations) >= 3, f"Expected multiple violations, got: {violations}"
+        assert any("HOLDOUT_SACRED_FROM drifted" in v for v in violations)
+        assert any("pre_registered_criteria.md" in v for v in violations)
+        assert any("RESEARCH_RULES.md" in v for v in violations)
