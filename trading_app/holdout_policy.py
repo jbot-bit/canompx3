@@ -75,6 +75,25 @@ HOLDOUT_SACRED_FROM: date = date(2026, 1, 1)
 # after this moment are subject to enforcement.
 HOLDOUT_GRANDFATHER_CUTOFF: datetime = datetime(2026, 4, 8, 0, 0, 0, tzinfo=UTC)
 
+# Phase 4 Stage 4.1 ship moment — the instant the discovery-side hypothesis
+# file integration becomes active. Used by drift check #94
+# (``check_phase_4_sha_integrity``) as the cutoff for SHA integrity
+# enforcement: rows written with ``created_at >= PHASE_4_1_SHIP_DATE`` that
+# carry a non-null ``hypothesis_file_sha`` must reference a real file in
+# ``docs/audit/hypotheses/``.
+#
+# Deliberately set to the day AFTER ``HOLDOUT_GRANDFATHER_CUTOFF`` (2026-04-09
+# 00:00 UTC = 2026-04-09 10:00 Brisbane) so that rows created during Stage 4.1
+# implementation and testing on 2026-04-08 itself are NOT retroactively
+# subject to the integrity check. This is the operational grace period for
+# the stage to land cleanly.
+#
+# Distinct from ``HOLDOUT_GRANDFATHER_CUTOFF`` (which gates the VALIDATOR-side
+# Phase 4 pre-flight gates per Stage 4.0): this constant gates the DRIFT
+# CHECK integrity assertion on the DISCOVERY-side SHA stamping added in Stage
+# 4.1. The two cutoffs are one day apart to give Stage 4.1 a grace window.
+PHASE_4_1_SHIP_DATE: datetime = datetime(2026, 4, 9, 0, 0, 0, tzinfo=UTC)
+
 # Hard-gate override token (added 2026-04-08 per explicit user instruction
 # "we need to ensure strictly x 100000 that discovery NEVER RUNS 2026 EVER
 # UNLESS WE FUCKING TYPE THE PASSWORD NUMBER 3656"). The token is a SPEED BUMP
@@ -179,5 +198,6 @@ __all__ = [
     "HOLDOUT_SACRED_FROM",
     "HOLDOUT_GRANDFATHER_CUTOFF",
     "HOLDOUT_OVERRIDE_TOKEN",
+    "PHASE_4_1_SHIP_DATE",
     "enforce_holdout_date",
 ]

@@ -45,11 +45,14 @@ deployment knowledge.
 from __future__ import annotations
 
 import hashlib
-from datetime import date
+from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 
 # The canonical hypothesis registry directory, anchored to the repo root.
 # Discovered at module load time so the validator can locate files without
@@ -306,9 +309,452 @@ def _coerce_to_date(value: Any) -> date | None:
     return None
 
 
+# -----------------------------------------------------------------------------
+# Phase 4 Stage 4.1 additions — canonical MinBTL, ScopePredicate, Mode A check
+# -----------------------------------------------------------------------------
+#
+# These functions are the write-side complements to the read-side loader
+# primitives above. They are ALL pure functions of a metadata dict — no DB,
+# no subprocess, no deployment-artifact reads. The loader's bias-control
+# invariant (see module docstring § "Bias control") is preserved.
+#
+# Write-side gates that DO require side effects (git cleanliness, single-use
+# check against experimental_strategies) live in
+# ``trading_app.phase_4_discovery_gates``, not here.
+#
+# Canonical authority: docs/institutional/pre_registered_criteria.md
+# § Criterion 2 (MinBTL), Amendment 2.7 (Mode A sacred boundary).
+
+# MinBTL bounds — LOCKED per Criterion 2. Changing these requires a new
+# amendment to pre_registered_criteria.md. Bailey et al 2013 Theorem 1:
+# MinBTL = 2·Ln[N] / E[max_N]².
+_MINBTL_CLEAN_BOUND: int = 300
+_MINBTL_PROXY_BOUND: int = 2000
+
+
+def enforce_minbtl_bound(
+    meta: dict[str, Any],
+    on_proxy_data: bool = False,
+) -> tuple[str | None, str | None]:
+    """Enforce Criterion 2 (MinBTL) on a hypothesis file's declared trial count.
+
+    This is the CANONICAL implementation. Two call sites:
+
+    - ``trading_app.strategy_validator._check_criterion_2_minbtl`` — delegates
+      here so the validator and discovery paths share the same bounds. Stage
+      4.0 originally inlined ``bound = 2000 if on_proxy_data else 300``; Stage
+      4.1 moves that logic here to eliminate parallel implementations.
+    - ``trading_app.strategy_discovery.main`` — called at CLI parse time
+      before enumeration begins so a mis-sized hypothesis file fails loud.
+
+    Parameters
+    ----------
+    meta
+        Hypothesis file metadata dict, typically produced by
+        ``load_hypothesis_metadata``. Must contain ``total_expected_trials``
+        as a positive int. ``data_source_mode`` and ``data_source_disclosure``
+        are consulted only when ``on_proxy_data`` is True.
+    on_proxy_data
+        When True, the proxy-extended bound (``_MINBTL_PROXY_BOUND``) applies.
+        The caller is responsible for deciding this based on the scope of the
+        hypothesis file (e.g., does it include pre-micro-launch trading days?).
+        When True, this function additionally requires
+        ``metadata.data_source_mode == "proxy"`` and a non-empty
+        ``metadata.data_source_disclosure`` string, per Criterion 2's
+        "explicit data-source disclosure" clause.
+
+    Returns
+    -------
+    tuple[str | None, str | None]
+        ``(None, None)`` on pass. ``("REJECTED", reason_str)`` on fail.
+        Tuple shape matches the Stage 4.0 pre-flight gate convention in
+        ``strategy_validator.py`` so the validator can delegate with zero
+        call-site churn.
+
+    Raises
+    ------
+    HypothesisLoaderError
+        If ``total_expected_trials`` is missing or malformed. This indicates
+        a broken hypothesis file — loader-level integrity failure, not a
+        soft Criterion 2 rejection.
+    """
+    declared = meta.get("total_expected_trials")
+    if not isinstance(declared, int) or declared < 1:
+        raise HypothesisLoaderError(
+            f"total_expected_trials must be a positive int, got {declared!r}. "
+            f"Hypothesis file is malformed — cannot evaluate Criterion 2."
+        )
+
+    if on_proxy_data:
+        # Proxy mode is an opt-in that requires explicit disclosure per the
+        # locked text of Criterion 2: "N <= 2,000 pre-registered trials on
+        # proxy-extended data with explicit data-source disclosure".
+        source_meta = meta.get("metadata", {}) if isinstance(meta.get("metadata"), dict) else {}
+        mode = source_meta.get("data_source_mode")
+        disclosure = source_meta.get("data_source_disclosure")
+        if mode != "proxy":
+            return (
+                "REJECTED",
+                "criterion_2: proxy-data bound (2000) requested but "
+                "metadata.data_source_mode != 'proxy' — proxy use requires "
+                "explicit opt-in per Criterion 2 locked text",
+            )
+        if not isinstance(disclosure, str) or not disclosure.strip():
+            return (
+                "REJECTED",
+                "criterion_2: proxy-data bound (2000) requested but "
+                "metadata.data_source_disclosure is missing or empty — "
+                "Criterion 2 locked text requires explicit data-source disclosure",
+            )
+        bound = _MINBTL_PROXY_BOUND
+        mode_label = "proxy-extended"
+    else:
+        bound = _MINBTL_CLEAN_BOUND
+        mode_label = "clean-MNQ"
+
+    if declared > bound:
+        return (
+            "REJECTED",
+            f"criterion_2: MinBTL bound exceeded — declared {declared} trials "
+            f"> {mode_label} bound {bound} (pre_registered_criteria.md "
+            f"§ Criterion 2, Bailey et al 2013 Theorem 1)",
+        )
+    return (None, None)
+
+
+def check_mode_a_consistency(meta: dict[str, Any]) -> None:
+    """Validate a hypothesis file's ``holdout_date`` against Amendment 2.7.
+
+    Under Mode A (Amendment 2.7, 2026-04-08), the sacred holdout window begins
+    at ``HOLDOUT_SACRED_FROM``. A hypothesis file declaring ``holdout_date``
+    AFTER the sacred-from date would implicitly permit discovery to consume
+    sacred data, which is banned.
+
+    Parameters
+    ----------
+    meta
+        Hypothesis file metadata dict from ``load_hypothesis_metadata``. Must
+        contain ``holdout_date`` as a ``datetime.date``.
+
+    Raises
+    ------
+    HypothesisLoaderError
+        If ``holdout_date`` is missing, malformed, or strictly greater than
+        ``HOLDOUT_SACRED_FROM``. Error message cites Amendment 2.7 and the
+        canonical source.
+    """
+    holdout = meta.get("holdout_date")
+    if holdout is None:
+        raise HypothesisLoaderError(
+            "metadata.holdout_date is required for Mode A consistency check. "
+            "See docs/audit/hypotheses/README.md and Amendment 2.7."
+        )
+    # Normalize datetime → date for comparison (HOLDOUT_SACRED_FROM is a date).
+    # YAML safe_load may return either; both are accepted here.
+    if isinstance(holdout, datetime):
+        holdout_cmp = holdout.date()
+    elif isinstance(holdout, date):
+        holdout_cmp = holdout
+    else:
+        raise HypothesisLoaderError(
+            f"metadata.holdout_date must be a date or datetime, got {type(holdout).__name__}"
+        )
+    if holdout_cmp > HOLDOUT_SACRED_FROM:
+        raise HypothesisLoaderError(
+            f"Amendment 2.7 violation: hypothesis holdout_date "
+            f"{holdout_cmp.isoformat()} is after the sacred window boundary "
+            f"{HOLDOUT_SACRED_FROM.isoformat()}. Mode A requires holdout_date "
+            f"<= sacred-from. Canonical source: trading_app.holdout_policy."
+        )
+
+
+@dataclass(frozen=True)
+class HypothesisScope:
+    """Immutable scope bundle for a single hypothesis within a registry file.
+
+    Stores the per-hypothesis filter_type + scope dimensions as frozensets of
+    primitive types. The dataclass is frozen so instances are hashable and
+    safe to share across threads. Bundling is preserved — a
+    ``(session, filter_type, em, rr, cb, stop)`` tuple must match one
+    HypothesisScope's ALL dimensions simultaneously, not a flat union across
+    hypotheses.
+
+    This prevents cross-pollination: if hypothesis 1 declares
+    ``OVNRNG + EUROPE_FLOW`` and hypothesis 2 declares ``ORB_G + CME_REOPEN``,
+    the combo ``OVNRNG + CME_REOPEN`` is REJECTED (neither hypothesis
+    declared it) rather than ACCEPTED (flat union would allow it).
+    """
+
+    filter_type: str
+    instruments: frozenset[str]
+    sessions: frozenset[str]
+    rr_targets: frozenset[float]
+    entry_models: frozenset[str]
+    confirm_bars: frozenset[int]
+    stop_multipliers: frozenset[float]
+    expected_trial_count: int
+
+    def accepts(
+        self,
+        *,
+        orb_label: str,
+        filter_type: str,
+        entry_model: str,
+        rr_target: float,
+        confirm_bars: int,
+        stop_multiplier: float,
+    ) -> bool:
+        """Check whether this hypothesis's scope accepts a specific combo.
+
+        All six dimensions must match simultaneously. Instrument is NOT
+        checked here because ScopePredicate.extract_scope_predicate has
+        already filtered to hypotheses for a specific instrument.
+        """
+        return (
+            filter_type == self.filter_type
+            and orb_label in self.sessions
+            and entry_model in self.entry_models
+            and rr_target in self.rr_targets
+            and confirm_bars in self.confirm_bars
+            and stop_multiplier in self.stop_multipliers
+        )
+
+
+@dataclass(frozen=True)
+class ScopePredicate:
+    """Per-hypothesis scope predicate built from a hypothesis registry file.
+
+    Wraps a tuple of ``HypothesisScope`` bundles, each corresponding to one
+    hypothesis in the file (filtered to those declaring the current
+    instrument). The ``accepts`` method returns True if any bundle accepts
+    the combo — OR across hypotheses, but per-bundle AND across dimensions.
+
+    Immutable and hashable. Construct via ``extract_scope_predicate``.
+    """
+
+    hypotheses: tuple[HypothesisScope, ...]
+    instrument: str
+    total_declared_trials: int
+
+    def accepts(
+        self,
+        *,
+        orb_label: str,
+        filter_type: str,
+        entry_model: str,
+        rr_target: float,
+        confirm_bars: int,
+        stop_multiplier: float,
+    ) -> bool:
+        """True iff at least one hypothesis scope bundle accepts the combo."""
+        return any(
+            h.accepts(
+                orb_label=orb_label,
+                filter_type=filter_type,
+                entry_model=entry_model,
+                rr_target=rr_target,
+                confirm_bars=confirm_bars,
+                stop_multiplier=stop_multiplier,
+            )
+            for h in self.hypotheses
+        )
+
+    def allowed_sessions(self) -> frozenset[str]:
+        """Union of sessions across all hypotheses. Early-exit helper."""
+        result: set[str] = set()
+        for h in self.hypotheses:
+            result |= h.sessions
+        return frozenset(result)
+
+    def allowed_filter_types(self) -> frozenset[str]:
+        """Set of allowed filter_types. Early-exit helper."""
+        return frozenset(h.filter_type for h in self.hypotheses)
+
+    def allowed_entry_models(self) -> frozenset[str]:
+        """Union of entry_models across all hypotheses. Early-exit helper."""
+        result: set[str] = set()
+        for h in self.hypotheses:
+            result |= h.entry_models
+        return frozenset(result)
+
+    def allowed_rr_targets(self) -> frozenset[float]:
+        """Union of rr_targets across all hypotheses. Early-exit helper."""
+        result: set[float] = set()
+        for h in self.hypotheses:
+            result |= h.rr_targets
+        return frozenset(result)
+
+    def allowed_confirm_bars(self) -> frozenset[int]:
+        """Union of confirm_bars across all hypotheses. Early-exit helper."""
+        result: set[int] = set()
+        for h in self.hypotheses:
+            result |= h.confirm_bars
+        return frozenset(result)
+
+    def allowed_stop_multipliers(self) -> frozenset[float]:
+        """Union of stop_multipliers across all hypotheses. Early-exit helper."""
+        result: set[float] = set()
+        for h in self.hypotheses:
+            result |= h.stop_multipliers
+        return frozenset(result)
+
+
+def extract_scope_predicate(
+    meta: dict[str, Any],
+    *,
+    instrument: str,
+) -> ScopePredicate:
+    """Build a ScopePredicate from a hypothesis file's metadata for one instrument.
+
+    Iterates ``meta['hypotheses']``, filters to hypotheses whose
+    ``scope.instruments`` contains the given instrument, validates each
+    hypothesis's scope block shape, and constructs ``HypothesisScope``
+    instances from them.
+
+    Parameters
+    ----------
+    meta
+        Hypothesis file metadata dict from ``load_hypothesis_metadata``.
+    instrument
+        Single instrument the predicate is being built for. Required keyword
+        argument to prevent positional arg confusion.
+
+    Returns
+    -------
+    ScopePredicate
+        Immutable predicate containing only hypotheses that apply to this
+        instrument. The instrument field is stamped for later
+        consistency-checking by the caller.
+
+    Raises
+    ------
+    HypothesisLoaderError
+        If ``meta['hypotheses']`` is missing/empty, any hypothesis has a
+        malformed scope block, or ZERO hypotheses declare the given
+        instrument (instrument not in scope for this file).
+    """
+    hypotheses_raw = meta.get("hypotheses")
+    if not isinstance(hypotheses_raw, list) or not hypotheses_raw:
+        raise HypothesisLoaderError(
+            "Hypothesis file has no hypotheses list or it is empty. "
+            "Cannot build scope predicate."
+        )
+
+    filtered: list[HypothesisScope] = []
+    total_trials = 0
+
+    for idx, h in enumerate(hypotheses_raw):
+        if not isinstance(h, dict):
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} must be a mapping, got {type(h).__name__}"
+            )
+
+        scope = h.get("scope")
+        if not isinstance(scope, dict):
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} missing or malformed 'scope' block"
+            )
+
+        instruments_raw = scope.get("instruments")
+        if not isinstance(instruments_raw, list) or not instruments_raw:
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} scope.instruments must be a non-empty list"
+            )
+
+        if instrument not in instruments_raw:
+            continue  # not for this instrument — skip
+
+        filter_block = h.get("filter")
+        if not isinstance(filter_block, dict):
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} missing or malformed 'filter' block"
+            )
+        filter_type = filter_block.get("type")
+        if not isinstance(filter_type, str) or not filter_type:
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} filter.type must be a non-empty string"
+            )
+
+        sessions_raw = scope.get("sessions")
+        if not isinstance(sessions_raw, list) or not sessions_raw:
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} scope.sessions must be a non-empty list"
+            )
+
+        rr_raw = scope.get("rr_targets")
+        if not isinstance(rr_raw, list) or not rr_raw:
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} scope.rr_targets must be a non-empty list"
+            )
+
+        em_raw = scope.get("entry_models")
+        if not isinstance(em_raw, list) or not em_raw:
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} scope.entry_models must be a non-empty list"
+            )
+
+        cb_raw = scope.get("confirm_bars")
+        if not isinstance(cb_raw, list) or not cb_raw:
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} scope.confirm_bars must be a non-empty list"
+            )
+
+        stop_raw = scope.get("stop_multipliers")
+        if not isinstance(stop_raw, list) or not stop_raw:
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} scope.stop_multipliers must be a non-empty list"
+            )
+
+        expected = h.get("expected_trial_count")
+        if not isinstance(expected, int) or expected < 1:
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} expected_trial_count must be a positive int"
+            )
+
+        try:
+            rr_targets = frozenset(float(x) for x in rr_raw)
+            confirm_bars = frozenset(int(x) for x in cb_raw)
+            stop_multipliers = frozenset(float(x) for x in stop_raw)
+        except (TypeError, ValueError) as exc:
+            raise HypothesisLoaderError(
+                f"Hypothesis #{idx} scope contains non-numeric values: {exc}"
+            ) from exc
+
+        filtered.append(
+            HypothesisScope(
+                filter_type=filter_type,
+                instruments=frozenset(instruments_raw),
+                sessions=frozenset(sessions_raw),
+                rr_targets=rr_targets,
+                entry_models=frozenset(em_raw),
+                confirm_bars=confirm_bars,
+                stop_multipliers=stop_multipliers,
+                expected_trial_count=expected,
+            )
+        )
+        total_trials += expected
+
+    if not filtered:
+        raise HypothesisLoaderError(
+            f"Hypothesis file declares no hypotheses for instrument "
+            f"{instrument!r}. Check per-hypothesis scope.instruments lists."
+        )
+
+    return ScopePredicate(
+        hypotheses=tuple(filtered),
+        instrument=instrument,
+        total_declared_trials=total_trials,
+    )
+
+
 __all__ = [
     "HypothesisLoaderError",
+    "HypothesisScope",
+    "ScopePredicate",
+    "check_mode_a_consistency",
     "compute_file_sha",
+    "enforce_minbtl_bound",
+    "extract_scope_predicate",
     "find_hypothesis_file_by_sha",
     "hypothesis_dir",
     "load_hypothesis_by_sha",
