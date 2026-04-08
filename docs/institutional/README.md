@@ -31,18 +31,24 @@ Sibling directories (referenced from here but not part of this tree):
 └── ../plans/2026-04-07-canonical-data-redownload.md ← Phase 2-5 plan (awaiting e2-fix merge)
 ```
 
-## v2 status (as of 2026-04-07 — read before applying any threshold)
+## v2.7 status (as of 2026-04-08 — read before applying any threshold)
 
-`pre_registered_criteria.md` has been amended from v1 to v2 following a Codex audit
-(`../audits/2026-04-07-finite-data-orb-audit.md`). Five amendments integrated:
+`pre_registered_criteria.md` has been amended from v1 to v2.7. The Codex audit
+(`../audits/2026-04-07-finite-data-orb-audit.md`) produced amendments 2.1-2.5 on
+2026-04-07; Amendment 2.6 was a brief Mode B declaration that was rescinded by
+Amendment 2.7 on 2026-04-08 per explicit user correction.
 
 - **Amendment 2.1:** DSR > 0.95 downgraded from binding to cross-check until `N_eff` is formally solved in-repo (validator already treats DSR as informational).
 - **Amendment 2.2:** Chordia t ≥ 3.79 reframed as severity benchmark with banded thresholds, not a universal hard bar.
-- **Amendment 2.3:** Criterion 8 (2026 OOS) contingent on pre-run holdout policy declaration (Mode A holdout-clean vs Mode B post-holdout-monitoring). Mixing banned.
+- **Amendment 2.3:** Criterion 8 (2026 OOS) contingent on pre-run holdout policy declaration. Resolved by Amendment 2.7 below.
 - **Amendment 2.4:** Current 5 deployed lanes reclassified as *research-provisional + operationally deployable*, not *production-grade institutional proof*.
 - **Amendment 2.5:** Execution overlays (calendar skip, ATR velocity, E2 timeout) must be reported separately from discovery-filter evidence.
+- ~~**Amendment 2.6 (RESCINDED 2026-04-08):**~~ Mode B (post-holdout-monitoring) declaration. Rescinded by Amendment 2.7 because the Apr 2 16yr rebuild plan explicitly prescribed `--holdout-date 2026-01-01` and the 117-strategy baseline was legitimately Mode A. The Apr 3 re-run that consumed the holdout for +7 strategies was a premature autonomous error.
+- **Amendment 2.7 (BINDING):** **Mode A (holdout-clean) operative.** Sacred holdout window is 2026-01-01 onwards, currently ~3.2 months deep, growing daily. Every discovery run MUST use `--holdout-date 2026-01-01` (or earlier). Existing 124 validated_setups are grandfathered as research-provisional per Amendment 2.4. See `../plans/2026-04-07-holdout-policy-decision.md` for the audit trail.
 
-`finite_data_framework.md` has a top-of-file warning block pointing readers to the criteria file for current binding state — where the framework and criteria disagree, the criteria file wins.
+`finite_data_framework.md` has a top-of-file warning block pointing readers to the criteria file for current binding state — where the framework and criteria disagree, the criteria file wins. The framework's § 4.4 OOS protocol is now fully active under Mode A.
+
+**Enforcement** (added 2026-04-08 in 6-stage refactor, commits `81a7079`-`0edf8e8`): the canonical Mode A constants live in `trading_app/holdout_policy.py`. Three downstream consumers import from it: `pipeline.check_drift.check_holdout_contamination()` (contamination detector + grandfather logic), `trading_app.strategy_discovery.main()` (CLI rejects post-sacred values), `trading_app.strategy_validator._check_mode_a_holdout_integrity()` (pre-promotion gate). A new drift check `check_holdout_policy_declaration_consistency` (#83) catches future doc-code drift before commit.
 
 ## How to use this directory
 

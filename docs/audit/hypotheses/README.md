@@ -10,7 +10,7 @@
 
 1. **Read** [`docs/institutional/pre_registered_criteria.md`](../../institutional/pre_registered_criteria.md) — the 12 locked criteria any strategy must meet. Note the v2 amendments (DSR as cross-check, Chordia banded, Criterion 8 contingent on holdout policy).
 2. **Read** [`docs/institutional/finite_data_framework.md`](../../institutional/finite_data_framework.md) — the short-sample methodology.
-3. **Declare holdout policy** — Mode A (holdout-clean, 2026 excluded from discovery) or Mode B (post-holdout-monitoring, 2026 consumed). Amendment 2.3 bans mixing.
+3. **Declare holdout policy** — **Mode A (holdout-clean) is operative project-wide as of 2026-04-08 per Amendment 2.7.** Sacred window is 2026-01-01 onwards. Every hypothesis file must include `holdout_date: 2026-01-01` (or earlier) in its metadata. Mode B was briefly declared 2026-04-07 and rescinded the next day; see `../../plans/2026-04-07-holdout-policy-decision.md` for the audit trail.
 4. **Compute the MinBTL bound** — `MinBTL = 2·Ln[N] / E[max_N]²` with N = total pre-registered trials. If `MinBTL > available_clean_data_years`, reduce N. No exceptions.
 5. **Copy the template** — `cp docs/institutional/hypothesis_registry_template.md docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml` and fill in the specifics.
 6. **Commit the hypothesis file BEFORE any backtest code runs.** The pre-commit hook captures the committing SHA as the lock point.
