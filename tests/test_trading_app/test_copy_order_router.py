@@ -262,3 +262,153 @@ class TestDelegation:
         copy = CopyOrderRouter(primary, [])
         assert copy.has_queryable_bracket_legs() is False
         primary.has_queryable_bracket_legs.assert_called_once()
+
+
+# ─── F-2b: Cross-account divergence detection ───────────────────────────
+# @canonical-source docs/research-input/topstep/topstep_cross_account_hedging.md
+# @verbatim "You remain fully responsible for all activity across your accounts,
+#            including positions created through... Automated trading systems."
+
+
+class TestF2bShadowDivergence:
+    """F-2b: shadow operation failures must mark router degraded and raise
+    on next submit, preventing future entries that could create cross-account
+    hedging."""
+
+    def test_clean_router_not_degraded(self):
+        primary = _make_mock_router(1)
+        primary.submit.return_value = {"order_id": "abc", "status": "Filled"}
+        shadow = _make_mock_router(2)
+        shadow.submit.return_value = {"order_id": "def", "status": "Filled"}
+        copy = CopyOrderRouter(primary, [shadow])
+
+        copy.submit({"spec": True})
+        assert copy.is_degraded() is False
+        assert copy.degraded_accounts() == {}
+
+    def test_shadow_submit_failure_marks_degraded(self):
+        primary = _make_mock_router(1)
+        primary.submit.return_value = {"order_id": "abc", "status": "Filled"}
+        shadow = _make_mock_router(2)
+        shadow.submit.side_effect = RuntimeError("broker rate limit")
+        copy = CopyOrderRouter(primary, [shadow])
+
+        # First submit: primary fills, shadow fails. Returns primary result.
+        result = copy.submit({"spec": True})
+        assert result["status"] == "Filled"
+        assert copy.is_degraded() is True
+        assert 2 in copy.degraded_accounts()
+        assert "broker rate limit" in copy.degraded_accounts()[2]
+
+    def test_next_submit_after_degraded_raises(self):
+        from trading_app.live.copy_order_router import ShadowDivergenceError
+
+        primary = _make_mock_router(1)
+        primary.submit.return_value = {"order_id": "abc", "status": "Filled"}
+        shadow = _make_mock_router(2)
+        shadow.submit.side_effect = RuntimeError("broker error")
+        copy = CopyOrderRouter(primary, [shadow])
+
+        # First submit triggers divergence
+        copy.submit({"spec": True})
+        assert copy.is_degraded() is True
+
+        # Second submit must RAISE — cannot place new entries on a degraded router
+        with pytest.raises(ShadowDivergenceError, match="DEGRADED"):
+            copy.submit({"spec": True})
+
+        # Primary should NOT have been called for the second submit
+        assert primary.submit.call_count == 1
+
+    def test_shadow_cancel_failure_marks_degraded(self):
+        primary = _make_mock_router(1)
+        shadow = _make_mock_router(2)
+        shadow.cancel.side_effect = RuntimeError("not found")
+        copy = CopyOrderRouter(primary, [shadow])
+
+        copy.cancel(12345)  # cancel itself does not raise
+        assert copy.is_degraded() is True
+        assert 2 in copy.degraded_accounts()
+        assert "cancel" in copy.degraded_accounts()[2]
+
+    def test_clear_degraded_resets_state(self):
+        primary = _make_mock_router(1)
+        primary.submit.return_value = {"order_id": "abc", "status": "Filled"}
+        shadow = _make_mock_router(2)
+        shadow.submit.side_effect = RuntimeError("transient")
+        copy = CopyOrderRouter(primary, [shadow])
+
+        copy.submit({"spec": True})
+        assert copy.is_degraded() is True
+
+        copy.clear_degraded()
+        assert copy.is_degraded() is False
+        assert copy.degraded_accounts() == {}
+
+        # Now next submit should work again (mock the shadow to succeed)
+        shadow.submit.side_effect = None
+        shadow.submit.return_value = {"order_id": "def", "status": "Filled"}
+        result = copy.submit({"spec": True})
+        assert result["status"] == "Filled"
+        assert copy.is_degraded() is False
+
+    def test_multi_shadow_partial_failure(self):
+        primary = _make_mock_router(1)
+        primary.submit.return_value = {"order_id": "abc", "status": "Filled"}
+        shadow_ok = _make_mock_router(2)
+        shadow_ok.submit.return_value = {"order_id": "def", "status": "Filled"}
+        shadow_bad = _make_mock_router(3)
+        shadow_bad.submit.side_effect = RuntimeError("auth expired")
+
+        copy = CopyOrderRouter(primary, [shadow_ok, shadow_bad])
+        copy.submit({"spec": True})
+
+        # Only the failing shadow should be in degraded set
+        assert copy.is_degraded() is True
+        diverged = copy.degraded_accounts()
+        assert 3 in diverged
+        assert 2 not in diverged
+        # Both shadows were attempted
+        shadow_ok.submit.assert_called_once()
+        shadow_bad.submit.assert_called_once()
+
+    def test_primary_only_router_never_degraded(self):
+        """A CopyOrderRouter with zero shadows can never diverge."""
+        primary = _make_mock_router(1)
+        primary.submit.return_value = {"order_id": "abc", "status": "Filled"}
+        copy = CopyOrderRouter(primary, [])
+
+        copy.submit({"spec": True})
+        copy.submit({"spec": True})
+        copy.submit({"spec": True})
+        assert copy.is_degraded() is False
+
+
+class TestBrokerBaseDefaults:
+    """Default is_degraded / degraded_accounts on BrokerRouter ABC."""
+
+    def test_default_router_not_degraded(self):
+        """Single-account routers (ProjectX, Rithmic, Tradovate direct) cannot
+        diverge from themselves — base class default returns False."""
+        from trading_app.live.broker_base import BrokerRouter
+
+        # Construct a minimal subclass that satisfies the ABC
+        class _StubRouter(BrokerRouter):
+            def build_order_spec(self, *a, **k):
+                return {}
+
+            def submit(self, spec):
+                return {}
+
+            def build_exit_spec(self, *a, **k):
+                return {}
+
+            def cancel(self, order_id):
+                pass
+
+            def supports_native_brackets(self):
+                return False
+
+        r = _StubRouter(account_id=1, auth=None)
+        assert r.is_degraded() is False
+        assert r.degraded_accounts() == {}

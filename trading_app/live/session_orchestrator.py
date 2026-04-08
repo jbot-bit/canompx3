@@ -1067,6 +1067,25 @@ class SessionOrchestrator:
                 active,
                 self.monitor.trade_count,
             )
+            # F-2b: Cross-account divergence proactive check (every 10 bars).
+            # @canonical-source docs/research-input/topstep/topstep_cross_account_hedging.md
+            # If CopyOrderRouter has detected any shadow operation failure since
+            # the last reset, halt the session before any further trades. The
+            # next submit() would raise ShadowDivergenceError anyway, but this
+            # proactive check halts BEFORE the next signal fires (smaller window
+            # of asymmetric position state across copies).
+            if self.order_router is not None and self.order_router.is_degraded():
+                diverged = self.order_router.degraded_accounts()
+                msg = (
+                    f"F-2b SHADOW DIVERGENCE HALT: {len(diverged)} shadow account(s) "
+                    f"out of sync with primary: {diverged}. Triggering kill switch. "
+                    f"Manual reconciliation required before resuming."
+                )
+                log.critical(msg)
+                self._notify(msg)
+                self._kill_switch_fired = True
+                await self._emergency_flatten()
+
             # HWM equity poll (every 10 bars ≈ 10 minutes)
             if self._hwm_tracker is not None and self.positions is not None and self.order_router is not None:
                 try:

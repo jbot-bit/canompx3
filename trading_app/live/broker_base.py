@@ -137,6 +137,28 @@ class BrokerRouter(ABC):
         """
         return 0
 
+    # ─── F-2b cross-account divergence detection (default: never degraded) ──
+    # @canonical-source docs/research-input/topstep/topstep_cross_account_hedging.md
+    # Single-account routers (ProjectX, Rithmic, Tradovate direct) cannot
+    # diverge from themselves, so they always return False / empty. The
+    # CopyOrderRouter wrapper overrides these to track shadow failures.
+
+    def is_degraded(self) -> bool:
+        """True if the router has detected divergence between accounts.
+
+        Single-account routers always return False. Multi-account routers
+        (CopyOrderRouter) override to track shadow operation failures.
+        """
+        return False
+
+    def degraded_accounts(self) -> dict[int, str]:
+        """Return diagnostic map of {account_id: failure_reason}.
+
+        Single-account routers always return an empty dict. Multi-account
+        routers override.
+        """
+        return {}
+
     def verify_bracket_legs(
         self, entry_order_id: int, contract_id: str
     ) -> tuple[int | None, int | None]:
