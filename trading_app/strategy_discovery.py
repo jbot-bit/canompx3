@@ -1047,6 +1047,7 @@ def run_discovery(
     dry_run: bool = False,
     dst_regime: str | None = None,
     holdout_date: date | None = None,
+    unlock_holdout: str | None = None,
 ) -> int:
     """
     Grid search over all strategy variants.
@@ -1063,9 +1064,28 @@ def run_discovery(
             holdout_date. This creates a true temporal holdout (F-02 audit fix)
             for OOS validation. Use with strategy_validator.py --oos-start to
             test discovered strategies on post-holdout data.
+        unlock_holdout: Optional override token to allow holdout_date past the
+            sacred boundary (HOLDOUT_SACRED_FROM = 2026-01-01 per Mode A /
+            Amendment 2.7). Required for any 2026+ data access. Without this
+            token, post-sacred holdout dates raise ValueError. With the
+            correct token, a LOUD WARNING is logged and the override is
+            allowed — but the resulting strategies are research-provisional
+            and CANNOT be promoted to deployment without separate validation
+            against a fresh untouched holdout window.
 
     Returns count of strategies written.
     """
+    # Mode A holdout enforcement — function-level gate (Amendment 2.7).
+    # This is the chokepoint: every caller (CLI, tests, research, internal,
+    # nested/regime discovery wrappers) goes through enforce_holdout_date here.
+    # The CLI main() also calls it (defense in depth) but THIS call is the
+    # authoritative one — no Python caller can bypass.
+    # Override mechanism: pass unlock_holdout="3656" to allow post-sacred dates.
+    # The override is logged loudly and destroys OOS validity.
+    from trading_app.holdout_policy import enforce_holdout_date
+
+    holdout_date = enforce_holdout_date(holdout_date, override_token=unlock_holdout)
+
     if dst_regime not in (None, "winter", "summer"):
         raise ValueError(f"dst_regime must be 'winter', 'summer', or None; got {dst_regime!r}")
     if db_path is None:
