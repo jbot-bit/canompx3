@@ -279,6 +279,33 @@ ASSET_CONFIGS = {
             "BRISBANE_1025",
         ],
     },
+    "GC": {
+        # Parent full-size Gold ($100/pt, 100oz). Source: GC.FUT contract series.
+        # Pre-2023-09-11 data is the only historical source for gold; post-launch is
+        # preserved here for parent-vs-micro comparisons but discovery uses MGC (real micro).
+        # Stored as symbol='GC' (relabeled 2026-04-08 from former 'MGC' as part of Phase 2
+        # of canonical-data-redownload). Cost model: PARENT specs ($100/pt), NOT MGC specs.
+        # Created 2026-04-08 to close the docstring promise in the MGC config above
+        # (Bloomey review HIGH finding on commit 82e8b60).
+        "dbn_path": PROJECT_ROOT / "DB" / "GOLD_DB_FULLSIZE",
+        "symbol": "GC",
+        "orb_active": False,
+        "outright_pattern": re.compile(r"^GC[FGHJKMNQUVXZ]\d{1,2}$"),
+        "prefix_len": 2,
+        "minimum_start_date": date(2010, 6, 6),  # Extended via GC.FUT backfill
+        "schema_required": "ohlcv-1m",
+        "enabled_sessions": [
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "EUROPE_FLOW",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
+        ],
+    },
     "2YY": {
         # Research-only rates candidate. Kept out of ACTIVE_ORB_INSTRUMENTS on purpose.
         # Source data is native CME 2-Year Yield futures (parent symbol 2YY).
