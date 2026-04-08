@@ -245,9 +245,37 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
 
 
 ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
-    # TopStep — DLL removed on TopStepX since Aug 25, 2024.
-    # DLL only applies on NinjaTrader/Tradovate/TradingView platforms.
-    # We trade TopStepX (ProjectX API) → no DLL.
+    # ─── TopStep ────────────────────────────────────────────────────
+    # DLL is OPT-IN on TopstepX for TC/XFA, MANDATORY on Live Funded.
+    # @canonical-source docs/research-input/topstep/topstep_dll_article.md  (article 10490293, scraped 2026-04-08)
+    # @verbatim "The Daily Loss Limit should be viewed as a safety net. It's a risk
+    #            feature that can be turned on and off in your Trading Combine or
+    #            Express Funded Account, but will automatically be applied to all
+    #            Live Funded Accounts."
+    # @verbatim "by removing the Daily Loss Limit on TopstepX™, we're giving traders
+    #            more freedom and flexibility to trade their way."
+    # @audit-finding F-9 (verified TRUE — code claim is correct, see docs/audit/2026-04-08-topstep-canonical-audit.md)
+    # @bot-platform We trade TopstepX (ProjectX API) → DLL exempt for TC/XFA.
+    #
+    # Maximum Loss Limit (MLL) values for TC and XFA:
+    # @canonical-source docs/research-input/topstep/topstep_mll_article.md  (article 8284204, scraped 2026-04-08)
+    # @verbatim "$50K account: $2,000 / $100K account: $3,000 / $150K account: $4,500"
+    #
+    # IMPORTANT: max_contracts_mini/max_contracts_micro below are TOP-OF-LADDER
+    # (max scaling tier reached after sufficient EOD profit). They are NOT day-1 limits.
+    # Day-1 enforcement is pending — see audit finding F-1 (BLOCKER).
+    # @canonical-source docs/research-input/topstep/topstep_scaling_plan_article.md  (article 8284223, scraped 2026-04-08)
+    # @canonical-image docs/research-input/topstep/images/xfa_scaling_chart.png  (visually parsed canonical ladder)
+    # @audit-finding F-1 (Stage 7 fix pending — trading_app/topstep_scaling_plan.py)
+    #
+    # @lfa-only For LIVE FUNDED accounts (not XFA), DLL is MANDATORY = same as MLL
+    # ($2K/$3K/$4.5K) with $10K-low-balance override (DLL drops to $2K).
+    # @canonical-source docs/research-input/topstep/topstep_live_funded_parameters.md  (article 10657969, scraped 2026-04-08)
+    # @verbatim "Live Funded Accounts begin with a Daily Loss Limit based on account
+    #            size: $2,000 for $50K accounts, $3,000 for $100K accounts, $4,500 for
+    #            $150K accounts. Regardless of account size, if the tradable balance
+    #            reaches $10,000 or below, the Daily Loss Limit will be set to $2,000."
+    # @audit-finding F-3 DEFERRED (no LFA today; blocker at LFA-promotion time)
     ("topstep", 50_000): PropFirmAccount("topstep", 50_000, 2_000, 5, 50),
     ("topstep", 100_000): PropFirmAccount("topstep", 100_000, 3_000, 10, 100),
     ("topstep", 150_000): PropFirmAccount("topstep", 150_000, 4_500, 15, 150),
