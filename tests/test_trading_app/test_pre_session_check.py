@@ -15,6 +15,7 @@ from trading_app.pre_session_check import (
     check_dd_circuit_breaker,
     check_hwm_tracker,
     check_manual_halt,
+    check_topstep_xfa_aggregate_cap,
 )
 from trading_app.prop_profiles import ACCOUNT_PROFILES, get_profile
 
@@ -273,3 +274,87 @@ def test_check_consistency_rule_fails_closed_on_ambiguous_active_profiles(monkey
     ok, msg = check_consistency_rule()
     assert ok is False
     assert "Multiple active execution profiles" in msg
+
+
+# ─── F-6: TopStep 5-XFA aggregate cap ────────────────────────────────────
+# @canonical-source docs/research-input/topstep/topstep_xfa_parameters.txt
+# @verbatim "You can have up to 5 active Express Funded Accounts at the same time."
+
+
+class TestTopstepXfaAggregateCap:
+    """check_topstep_xfa_aggregate_cap (F-6) — sums copies across active TopStep profiles."""
+
+    def _patch_profiles(self, monkeypatch, fake_profiles: dict) -> None:
+        """Replace ACCOUNT_PROFILES with a controlled fake set for the duration of one test."""
+        from trading_app import prop_profiles
+
+        monkeypatch.setattr(prop_profiles, "ACCOUNT_PROFILES", fake_profiles)
+
+    def _make_profile(self, profile_id: str, firm: str, copies: int, active: bool):
+        """Build a real AccountProfile from an existing one and override fields."""
+        base = get_profile("topstep_50k_mnq_auto")
+        return replace(base, profile_id=profile_id, firm=firm, copies=copies, active=active)
+
+    def test_under_cap_ok(self, monkeypatch):
+        fake = {
+            "p1": self._make_profile("p1", "topstep", copies=2, active=True),
+            "p2": self._make_profile("p2", "topstep", copies=1, active=False),  # inactive ignored
+        }
+        self._patch_profiles(monkeypatch, fake)
+        ok, msg = check_topstep_xfa_aggregate_cap()
+        assert ok is True
+        assert "2/5" in msg
+
+    def test_at_cap_warns(self, monkeypatch):
+        fake = {
+            "p1": self._make_profile("p1", "topstep", copies=3, active=True),
+            "p2": self._make_profile("p2", "topstep", copies=2, active=True),
+        }
+        self._patch_profiles(monkeypatch, fake)
+        ok, msg = check_topstep_xfa_aggregate_cap()
+        assert ok is True  # at cap = warning, not block
+        assert "WARNING" in msg
+        assert "5/5" in msg
+
+    def test_over_cap_blocks(self, monkeypatch):
+        fake = {
+            "p1": self._make_profile("p1", "topstep", copies=5, active=True),
+            "p2": self._make_profile("p2", "topstep", copies=2, active=True),
+        }
+        self._patch_profiles(monkeypatch, fake)
+        ok, msg = check_topstep_xfa_aggregate_cap()
+        assert ok is False
+        assert "BLOCKED" in msg
+        assert "7" in msg  # total
+
+    def test_ignores_non_topstep_profiles(self, monkeypatch):
+        fake = {
+            "ts": self._make_profile("ts", "topstep", copies=3, active=True),
+            "tradeify": self._make_profile("tradeify", "tradeify", copies=10, active=True),  # ignored
+            "bulenox": self._make_profile("bulenox", "bulenox", copies=10, active=True),  # ignored
+        }
+        self._patch_profiles(monkeypatch, fake)
+        ok, msg = check_topstep_xfa_aggregate_cap()
+        assert ok is True
+        assert "3/5" in msg
+
+    def test_ignores_inactive_topstep_profiles(self, monkeypatch):
+        fake = {
+            "active": self._make_profile("active", "topstep", copies=2, active=True),
+            "inactive_big": self._make_profile("inactive_big", "topstep", copies=10, active=False),
+        }
+        self._patch_profiles(monkeypatch, fake)
+        ok, msg = check_topstep_xfa_aggregate_cap()
+        assert ok is True
+        assert "2/5" in msg
+
+    def test_empty_profiles_ok(self, monkeypatch):
+        self._patch_profiles(monkeypatch, {})
+        ok, msg = check_topstep_xfa_aggregate_cap()
+        assert ok is True
+        assert "0/5" in msg
+
+    def test_current_repo_profiles_within_cap(self):
+        """Sanity check on the actual ACCOUNT_PROFILES — must be ≤ 5 right now."""
+        ok, msg = check_topstep_xfa_aggregate_cap()
+        assert ok is True, f"Repo state breaches 5-XFA cap: {msg}"
