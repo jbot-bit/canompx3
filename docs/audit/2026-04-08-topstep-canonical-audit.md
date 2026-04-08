@@ -432,23 +432,38 @@ During high-volatility events, TopStep imposes additional caps on Express Funded
 
 # Status tracker
 
-Update this file as findings are FIXED:
+Updated 2026-04-08 after stages 1-8 of `docs/plans/2026-04-08-topstep-canonical-fixes.md`:
 
 ```
-F-1  Scaling Plan Day 1 violation              [OPEN]    →  [IN_PROGRESS]  →  [FIXED]
-F-2  Single-user hedging guard                 [OPEN]    →  [IN_PROGRESS]  →  [FIXED]
-F-2b CopyOrderRouter shadow failure asymmetry  [OPEN]    →  [IN_PROGRESS]  →  [FIXED]
-F-3  LFA DLL not modeled                       [DEFERRED]
-F-4  MNQ/MES commissions LOW                   [OPEN]    →  [IN_PROGRESS]  →  [FIXED]
-F-5  XFA HWM freeze formula bug                [OPEN]    →  [IN_PROGRESS]  →  [FIXED]
-F-6  5-XFA aggregate cap unenforced            [OPEN]    →  [IN_PROGRESS]  →  [FIXED]
-F-7  Trade Copier rules                        [REVISED — replaced by F-2b]
-F-8  Vol-event risk adjustments                [OPEN]    →  needs decision
-F-9  DLL exemption claim                       [REFUTED — code is correct, needs annotation]
-F-10 Payout-policy fields verified             [CONFIRMED — needs annotations]
-F-11 Standard additional_days_after_payout     [INFERRED — needs annotation]
-F-12 VPN/VPS prohibition                       [needs user confirmation]
-F-13 Account stacking prohibited               [behavioral note, no code change]
-F-14 30-day inactivity                         [operational reminder]
-F-15 Back2Funded reactivations                 [cost modeling note]
+F-1  Scaling Plan Day 1 violation              [FIXED]     stage 7  140fcf3
+F-2  Single-user hedging guard                 [FIXED]     stage 6  4a75e89
+F-2b CopyOrderRouter shadow failure asymmetry  [FIXED]     stage 5  ffd12b1
+F-3  LFA DLL not modeled                       [DEFERRED]  (no LFA today; stub field added in stage 4)
+F-4  MNQ/MES commissions LOW                   [FIXED]     stage 2  4a9163e
+F-5  XFA HWM freeze formula bug                [FIXED]     stage 4  9226e7c
+F-6  5-XFA aggregate cap unenforced            [FIXED]     stage 3  9f8ce4e
+F-7  Trade Copier rules                        [REVISED]   replaced by F-2b
+F-8  Vol-event risk adjustments                [DEFERRED]  operator runbook entry, not automation
+F-9  DLL exemption claim                       [ANNOTATED] stage 1  923c5ce  (code was correct)
+F-10 Payout-policy fields verified             [ANNOTATED] stage 1  923c5ce
+F-11 Standard additional_days_after_payout     [ANNOTATED] stage 1  923c5ce  (marked @inferred)
+F-12 VPN/VPS prohibition                       [USER CONFIRMED] home hosting OK
+F-13 Account stacking prohibited               [DOCUMENTED] behavioral note
+F-14 30-day inactivity                         [DOCUMENTED] operational reminder
+F-15 Back2Funded reactivations                 [DOCUMENTED] cost modeling note
+
+Drift check 92 (added stage 8, commit 21b2b64) validates every @canonical-source
+annotation in production code. Total drift count now 85 + 7 advisory.
 ```
+
+## Final follow-ups (out of scope for stages 1-8)
+
+1. **Wire Scaling Plan into orchestrator** — `RiskLimits.topstep_xfa_account_size` is set to None today, so the F-1 check is dormant. To activate, the orchestrator must:
+   - Read `prof.account_size` for active TopStep profiles and pass via `RiskLimits(topstep_xfa_account_size=...)`
+   - Call `risk_manager.set_topstep_xfa_eod_balance(broker_equity)` at session start (from HWM tracker `last_equity`)
+
+   This was deferred to keep stage 7's diff surgical. The check is fully implemented and tested; only the wiring is pending. **Must be done before going live with a real XFA.**
+
+2. **Net position calculation article** — `https://intercom.help/topstep-llc/en/articles/8284209` is referenced from the canonical Scaling Plan article but not yet fetched. Stage 7's `total_open_lots` uses GROSS exposure (conservative). If the canonical rule turns out to use NET (long minus short), the function should be updated and re-tested.
+
+3. **Quarterly re-scrape** — next: 2026-07-08. Re-run Firecrawl on all 17 help-center articles in `docs/research-input/topstep/`. Drift check 92 will catch any annotation that points to a renamed/removed file.
