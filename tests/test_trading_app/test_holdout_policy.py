@@ -7,12 +7,14 @@ grandfather cutoff without failing a test.
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, date, datetime
 
 import pytest
 
 from trading_app.holdout_policy import (
     HOLDOUT_GRANDFATHER_CUTOFF,
+    HOLDOUT_OVERRIDE_TOKEN,
     HOLDOUT_SACRED_FROM,
     enforce_holdout_date,
 )
@@ -98,7 +100,83 @@ class TestCanonicalModuleShape:
 
         assert hasattr(hp, "HOLDOUT_SACRED_FROM")
         assert hasattr(hp, "HOLDOUT_GRANDFATHER_CUTOFF")
+        assert hasattr(hp, "HOLDOUT_OVERRIDE_TOKEN")
         assert hasattr(hp, "enforce_holdout_date")
         assert "HOLDOUT_SACRED_FROM" in hp.__all__
         assert "HOLDOUT_GRANDFATHER_CUTOFF" in hp.__all__
+        assert "HOLDOUT_OVERRIDE_TOKEN" in hp.__all__
         assert "enforce_holdout_date" in hp.__all__
+
+
+class TestOverrideToken:
+    """Validate the HOLDOUT_OVERRIDE_TOKEN escape hatch (added 2026-04-08
+    per explicit user instruction). The override allows discovery to access
+    sacred-window data when the correct token is supplied — but emits a LOUD
+    warning and the resulting strategies are research-provisional."""
+
+    def test_override_token_value_is_3656(self):
+        """The token value is pinned at '3656' per explicit user request.
+        Changing this requires a new amendment to pre_registered_criteria.md."""
+        assert HOLDOUT_OVERRIDE_TOKEN == "3656"
+
+    def test_override_with_correct_token_allows_post_sacred(self):
+        """date(2026, 3, 1) + token '3656' should pass through unchanged
+        and not raise."""
+        result = enforce_holdout_date(date(2026, 3, 1), override_token="3656")
+        assert result == date(2026, 3, 1)
+
+    def test_override_with_correct_token_uses_constant(self):
+        """Equivalent: passing HOLDOUT_OVERRIDE_TOKEN constant by reference."""
+        result = enforce_holdout_date(date(2026, 6, 15), override_token=HOLDOUT_OVERRIDE_TOKEN)
+        assert result == date(2026, 6, 15)
+
+    def test_override_with_wrong_token_still_raises(self):
+        """Wrong token must NOT bypass the gate. Any string except '3656'
+        is treated as no token."""
+        with pytest.raises(ValueError, match="Mode A"):
+            enforce_holdout_date(date(2026, 3, 1), override_token="wrong")
+
+    def test_override_with_empty_string_still_raises(self):
+        """Empty string is not a valid token."""
+        with pytest.raises(ValueError, match="Mode A"):
+            enforce_holdout_date(date(2026, 3, 1), override_token="")
+
+    def test_override_with_none_token_still_raises(self):
+        """Default behavior (no token) — unchanged."""
+        with pytest.raises(ValueError, match="Mode A"):
+            enforce_holdout_date(date(2026, 3, 1), override_token=None)
+
+    def test_override_emits_loud_warning(self, caplog):
+        """When the override is invoked, a LOUD warning must be logged with
+        the override date and a clear research-provisional notice. The audit
+        trail is the real defense — the token is just a speed bump."""
+        with caplog.at_level(logging.WARNING, logger="trading_app.holdout_policy"):
+            enforce_holdout_date(date(2026, 4, 1), override_token="3656")
+        # Verify warning was logged
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) >= 1, f"Expected at least one WARNING log, got {warnings}"
+        msg = warnings[0].getMessage()
+        assert "HOLDOUT OVERRIDE INVOKED" in msg
+        assert "2026-04-01" in msg
+        assert "RESEARCH-PROVISIONAL" in msg
+
+    def test_override_does_not_affect_pre_sacred(self):
+        """Pre-sacred dates pass through with or without the token —
+        the override only matters for post-sacred dates."""
+        # No token, pre-sacred
+        assert enforce_holdout_date(date(2025, 6, 1)) == date(2025, 6, 1)
+        # With token, pre-sacred
+        assert enforce_holdout_date(date(2025, 6, 1), override_token="3656") == date(2025, 6, 1)
+
+    def test_override_does_not_affect_none(self):
+        """None still defaults to HOLDOUT_SACRED_FROM regardless of token.
+        The override only matters for explicit post-sacred dates."""
+        assert enforce_holdout_date(None) == HOLDOUT_SACRED_FROM
+        assert enforce_holdout_date(None, override_token="3656") == HOLDOUT_SACRED_FROM
+        assert enforce_holdout_date(None, override_token="wrong") == HOLDOUT_SACRED_FROM
+
+    def test_override_does_not_affect_exact_sacred(self):
+        """date == HOLDOUT_SACRED_FROM passes through (it's the canonical
+        boundary, not a violation)."""
+        assert enforce_holdout_date(date(2026, 1, 1)) == date(2026, 1, 1)
+        assert enforce_holdout_date(date(2026, 1, 1), override_token="3656") == date(2026, 1, 1)

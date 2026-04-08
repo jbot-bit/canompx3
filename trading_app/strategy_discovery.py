@@ -1428,7 +1428,22 @@ def main():
         "Example: --holdout-date 2025-01-01 discovers on pre-2025 data. "
         "DEFAULT: Amendment 2.7 sacred-from date "
         "(trading_app.holdout_policy.HOLDOUT_SACRED_FROM). Values later than "
-        "the sacred-from date are rejected per Mode A discipline.",
+        "the sacred-from date are rejected per Mode A discipline UNLESS "
+        "--unlock-holdout TOKEN is also passed.",
+    )
+    parser.add_argument(
+        "--unlock-holdout",
+        type=str,
+        default=None,
+        help="Override token to allow --holdout-date past the sacred boundary. "
+        "Required for any 2026+ data access. Without this token, post-sacred "
+        "holdout dates raise ValueError. With the correct token, a LOUD WARNING "
+        "is logged and the override is allowed — but the resulting strategies "
+        "are RESEARCH-PROVISIONAL and CANNOT be promoted to deployment without "
+        "separate validation against a fresh untouched holdout window. "
+        "Token value: see trading_app.holdout_policy.HOLDOUT_OVERRIDE_TOKEN. "
+        "If you are seeing this help text and don't already know the token, "
+        "you almost certainly should NOT be using this flag.",
     )
     args = parser.parse_args()
 
@@ -1437,10 +1452,14 @@ def main():
     # and raises ValueError on post-sacred values with a clear error citing
     # the canonical source. See trading_app/holdout_policy.py and
     # docs/institutional/pre_registered_criteria.md Amendment 2.7.
+    # NOTE: this CLI-level call is defense in depth — run_discovery() also
+    # calls enforce_holdout_date as the function-level chokepoint.
     from trading_app.holdout_policy import enforce_holdout_date
 
     try:
-        effective_holdout = enforce_holdout_date(args.holdout_date)
+        effective_holdout = enforce_holdout_date(
+            args.holdout_date, override_token=args.unlock_holdout
+        )
     except ValueError as e:
         parser.error(str(e))  # exits with code 2 and prints the message
 
@@ -1455,6 +1474,7 @@ def main():
         dry_run=args.dry_run,
         dst_regime=args.dst_regime,
         holdout_date=effective_holdout,
+        unlock_holdout=args.unlock_holdout,
     )
 
 
