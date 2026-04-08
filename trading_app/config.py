@@ -2467,7 +2467,7 @@ _M6E_SIZE_FILTERS: dict[str, OrbSizeFilter] = {
 
 
 def _make_dow_composites(
-    size_filters: "Mapping[str, StrategyFilter]",
+    size_filters: Mapping[str, StrategyFilter],
     dow_filter: DayOfWeekSkipFilter,
     suffix: str,
 ) -> dict[str, CompositeFilter]:
