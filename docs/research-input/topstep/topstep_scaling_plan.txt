@@ -1,0 +1,108 @@
+Skip to main content
+Topstep Help Center
+Discord
+Topstep
+
+English
+English
+Search for articles...
+Search for articles...
+All Collections
+Funded Accounts
+Express Funded Account™
+What is the Scaling Plan?
+What is the Scaling Plan?
+Updated this week
+What is the Scaling Plan?
+​Why is the Scaling Plan important?
+
+Micros and Minis in the Scaling Plan
+
+What happens if I accidentally put on more contracts than the Scaling Plan allows but then immediately correct it? Will it count as a rule violation for the day?
+
+How can I avoid exceeding the Scaling Plan?
+
+ 
+
+What is the Scaling Plan?
+The Scaling Plan is an objective in the Express Funded Account. It's evaluated each day when your Trade Report is updated. 
+
+Starting July 22nd, 2025, the Scaling Plan in the Live Funded Account has been replaced with Dynamic Live Risk Expansion. After this date, the Scaling Plan only applies to the Express Funded Account.
+
+As you build or lose equity, your buying power will increase or decrease based on your end-of-day P&L, according to the graphs below. 
+
+ 
+
+The Scaling Plan is in place to ease Traders into the live market environment and build their equity consistently without taking unnecessary risks. Since we implemented the Scaling Plan, the longevity of our Traders has significantly increased. 
+
+ 
+
+Traders will initially be required to scale their trading plans to survive an initial drawdown and to allow a true chance of success in the Express Funded Account.
+
+Why is the Scaling Plan important?
+Acts as a guide on how to responsibly leverage a growing account
+
+Over-leveraging causes the most damage to long-term success
+
+The graphs below are based on your account size. Inside the bar graph is your account balance, and to the right is the corresponding Maximum Position Size.
+
+XFA charts - hc.png
+You are not required to trade the maximum number of contracts. For example, you can trade 2 contracts at one time even though your account balance permits you to trade 3 contracts.
+
+Your maximum number of contracts allowed to trade under the scaling plan does not increase throughout the trading day. If your earnings meet or exceed the required amount to scale up, you still need to wait until the following session to trade the next Scaling Plan level. We recommend that you check your Trade Report each day after it is updated at 5 PM CT to see the number of contracts that are available for your account during the next trading session.
+
+If you have questions about how to calculate your net positions with simultaneous long and short positions in multiple products, please take a look at the example here.
+
+Micros and Minis in the Scaling Plan
+Micros and Minis are counted toward your Maximum Position Size differently depending on the trading platform.
+
+ 
+
+On TopstepX, Micros and Minis are calculated using a 10:1 ratio:
+
+1 Mini contract = 10 Micro contracts
+
+This ratio applies in both the Trading Combine and the Express Funded Account on TopstepX
+
+Your Scaling Plan limits are based on the mini-contract equivalent.
+
+For example, on a $50K Express Funded Account on TopstepX, if your Scaling Plan allows 2 lots, that equals:
+
+2 Mini contracts, or
+
+20 Micro contracts, or
+
+Any combination that equals 2 Minis total
+
+Click here for full details on how Micros and Minis are calculated on TopstepX.
+
+ 
+
+On third-party platforms, Micros are typically treated as full-sized lots for Scaling Plan purposes (1 Micro = 1 lot).
+
+ 
+
+What happens if I accidentally put on more contracts than the Scaling Plan allows, but then immediately correct it? Will it count as a rule violation for the day?
+Traders should always be aware of their net position size and stay within the limits of the Scaling Plan. However, we understand accidents happen and are not in the business of penalizing traders who fat-finger a trade.
+
+ Errors in the Scaling Plan corrected in less than 10 seconds will be ignored.
+
+If traders leave on too many contracts for 10 seconds or more, even if only by a few seconds, their account may be reviewed. Traders always need to know their net market exposure and should be able to correct errors in real time.
+
+How can I avoid exceeding the Scaling Plan?
+If you need some tips to avoid exceeding the Scaling Plan, we recommend trying the following:
+
+Set up your trading platform workspace to include open positions and orders.
+
+Enable the Order Confirmation setting on your trading platform. This will require you to reconfirm an order before it is submitted. See instructions here on how to enable this for each platform.
+
+On the TopstepX™ platform, you can reduce your contract limits by product using the Contract Limits feature. Learn more here.  
+
+Related Articles
+How do I change the contract month on my platform?
+TopstepX™ — Commissions and Fees
+Why are my orders being rejected?
+Risk Adjustments: High Risk/High Volatility
+Did this answer your question?
+😞😐😃
+Topstep Help Center

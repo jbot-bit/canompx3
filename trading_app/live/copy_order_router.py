@@ -10,6 +10,20 @@ Architecture:
     submit() -> primary first, then shadows. Returns primary result.
 
 Rate budget: 200 req/60s (ProjectX). 5 accounts x 1 order each = 5 requests.
+
+@audit-finding F-2b Cross-account divergence detection:
+@canonical-source docs/research-input/topstep/topstep_cross_account_hedging.md
+@verbatim "You remain fully responsible for all activity across your accounts,
+           including positions created through... Automated trading systems.
+           Any third-party tools."
+
+Shadow submission failures used to be silently logged-and-continued, which
+allowed primary and shadows to drift out of sync. A subsequent opposing-
+direction entry could create cross-account hedging (prohibited under
+TopStep's 3-strike progressive enforcement, ending in PERMANENT account
+closure). Stage 5 fix: track divergence state, raise ShadowDivergenceError
+on the NEXT submit after a shadow failure, and expose is_degraded() so the
+orchestrator can halt proactively.
 """
 
 import logging
@@ -19,6 +33,16 @@ from .broker_base import BrokerRouter
 log = logging.getLogger(__name__)
 
 
+class ShadowDivergenceError(RuntimeError):
+    """Raised when CopyOrderRouter detects shadow account divergence.
+
+    Indicates that one or more shadow accounts have failed an operation
+    (submit, cancel, or bracket) such that their position state may differ
+    from the primary. The orchestrator should halt the session and require
+    manual reconciliation before resuming.
+    """
+
+
 class CopyOrderRouter(BrokerRouter):
     """Wraps a primary + N shadow OrderRouters. Same interface as BrokerRouter."""
 
@@ -26,6 +50,10 @@ class CopyOrderRouter(BrokerRouter):
         super().__init__(account_id=primary.account_id, auth=primary.auth)
         self.primary = primary
         self.shadows = shadows
+        # F-2b divergence tracking. Maps shadow account_id → last failure reason string.
+        # An empty dict means no detected divergence. A non-empty dict means at least
+        # one shadow failed an operation and the router is in DEGRADED state.
+        self._shadow_failures: dict[int, str] = {}
 
     def build_order_spec(
         self,
@@ -41,9 +69,21 @@ class CopyOrderRouter(BrokerRouter):
     def submit(self, spec: dict) -> dict:
         """Submit to primary, then copy to all shadows. Return primary result.
 
-        Shadow failures are logged but don't affect the primary trade.
+        F-2b: Refuses to submit if the router is already in degraded state from
+        a previous shadow failure (raises ShadowDivergenceError). On a fresh
+        shadow failure, marks the router degraded so the NEXT submit will raise.
+
         Synchronous (requests-based) to match ProjectXOrderRouter.submit() interface.
         """
+        # F-2b: Refuse new entries if any prior shadow operation diverged.
+        # Continuing would risk creating asymmetric / hedged positions across copies.
+        if self._shadow_failures:
+            raise ShadowDivergenceError(
+                f"CopyOrderRouter is DEGRADED — refusing submit. "
+                f"Diverged shadow accounts: {dict(self._shadow_failures)}. "
+                f"Manual reconciliation required before resuming."
+            )
+
         result = self.primary.submit(spec)
         primary_status = result.get("status", "unknown")
 
@@ -53,22 +93,30 @@ class CopyOrderRouter(BrokerRouter):
         _SKIP_STATUSES = ("rejected", "error", "cancelled")
         if primary_status.lower() in _SKIP_STATUSES:
             log.info("Primary status=%s — skipping shadow copies", primary_status)
-        else:
-            for shadow in self.shadows:
-                try:
-                    shadow_result = shadow.submit(spec)
-                    log.info(
-                        "Shadow copy account %s: %s (order_id=%s)",
-                        shadow.account_id,
-                        shadow_result.get("status", "unknown"),
-                        shadow_result.get("order_id"),
-                    )
-                except Exception:
-                    log.warning(
-                        "Shadow copy FAILED account %s — primary unaffected",
-                        shadow.account_id,
-                        exc_info=True,
-                    )
+            return result
+
+        for shadow in self.shadows:
+            try:
+                shadow_result = shadow.submit(spec)
+                log.info(
+                    "Shadow copy account %s: %s (order_id=%s)",
+                    shadow.account_id,
+                    shadow_result.get("status", "unknown"),
+                    shadow_result.get("order_id"),
+                )
+            except Exception as exc:
+                # F-2b: mark router degraded so the next submit raises.
+                # Do NOT raise here — primary already filled, we need to return
+                # its result so the orchestrator can manage the position.
+                self._shadow_failures[shadow.account_id] = f"submit: {type(exc).__name__}: {exc}"
+                log.critical(
+                    "F-2b SHADOW DIVERGENCE: account %s submit failed — "
+                    "primary already filled (order_id=%s). Router DEGRADED. "
+                    "Next submit will raise ShadowDivergenceError.",
+                    shadow.account_id,
+                    result.get("order_id"),
+                    exc_info=True,
+                )
 
         return result
 
@@ -77,15 +125,24 @@ class CopyOrderRouter(BrokerRouter):
         return self.primary.build_exit_spec(direction, symbol, qty)
 
     def cancel(self, order_id: int) -> None:
-        """Cancel on primary (fail-closed), then best-effort cancel shadows."""
+        """Cancel on primary (fail-closed), then best-effort cancel shadows.
+
+        F-2b: shadow cancel failures mark the router degraded. The next submit
+        will raise. Cancel itself does not raise on shadow failure (idempotent
+        cleanup is fine to retry from the orchestrator path).
+        """
         self.primary.cancel(order_id)
         for shadow in self.shadows:
             try:
                 shadow.cancel(order_id)
                 log.info("Shadow account %s: order %s cancelled", shadow.account_id, order_id)
-            except Exception:
-                log.warning(
-                    "Shadow account %s: cancel order %s failed — verify manually",
+            except Exception as exc:
+                self._shadow_failures[shadow.account_id] = (
+                    f"cancel(order_id={order_id}): {type(exc).__name__}: {exc}"
+                )
+                log.critical(
+                    "F-2b SHADOW DIVERGENCE: account %s cancel order %s failed — "
+                    "router DEGRADED. Next submit will raise ShadowDivergenceError.",
                     shadow.account_id,
                     order_id,
                     exc_info=True,
@@ -174,3 +231,38 @@ class CopyOrderRouter(BrokerRouter):
     @property
     def shadow_count(self) -> int:
         return len(self.shadows)
+
+    # ─── F-2b divergence detection API ───────────────────────────────
+    # @canonical-source docs/research-input/topstep/topstep_cross_account_hedging.md
+    # @audit-finding F-2b — orchestrator integration point for proactive halt-on-divergence
+
+    def is_degraded(self) -> bool:
+        """True if any shadow operation has failed since the last reset.
+
+        The orchestrator should call this after every poll cycle (e.g. in the
+        bar heartbeat loop) and halt the session if it returns True.
+        """
+        return bool(self._shadow_failures)
+
+    def degraded_accounts(self) -> dict[int, str]:
+        """Return a copy of {account_id: failure_reason} for diagnostics.
+
+        Empty dict means no divergence detected.
+        """
+        return dict(self._shadow_failures)
+
+    def clear_degraded(self) -> None:
+        """Clear divergence state after MANUAL reconciliation.
+
+        This should ONLY be called after an operator has verified that all
+        shadow accounts are back in sync with the primary (e.g. all flat,
+        or all holding the same position). Calling this with active divergent
+        positions defeats the F-2b safety guard.
+        """
+        if self._shadow_failures:
+            log.warning(
+                "F-2b: clearing degraded state. Operator must have manually "
+                "reconciled accounts: %s",
+                dict(self._shadow_failures),
+            )
+        self._shadow_failures.clear()

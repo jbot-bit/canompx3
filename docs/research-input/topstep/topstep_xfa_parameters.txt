@@ -1,0 +1,436 @@
+Skip to main content
+Topstep Help Center
+Discord
+Topstep
+
+English
+English
+Search for articles...
+Search for articles...
+All Collections
+Funded Accounts
+Express Funded Account™
+Express Funded Account™ Parameters
+Express Funded Account™ Parameters
+Learn about each type of Express Funded Account and its objectives
+
+Updated today
+Express Funded Account Information
+
+Choose Your Path to Payouts
+
+Express Funded Account Standard: Rules and Objectives
+
+Express Funded Account Consistency: Rules and Objectives
+
+Express Funded Account FAQs
+
+ 
+
+Express Funded Account Information
+The Express Funded Account™, sometimes referred to as the "XFA", is the simulated Funded Level account that traders earn after passing the Trading Combine. After you’ve passed your Trading Combine and completed the necessary steps, you can start taking Payouts from your Express Funded Account based on our Payout Policy. 
+
+ 
+
+Traders are allowed to have up to five (5) Express Funded Accounts active at the same time. Take a look at the full details here: Multiple Express Funded Accounts.  
+
+ 
+
+Your Express Funded Account will show as having a $0 balance in your trading platform when you first start trading the account. The total number of contracts you're allowed in the Express Funded Account is determined by the Scaling Plan.  Making additional profits will increase the number of contracts you're allowed to trade (up to the former Maximum Position Size from your Trading Combine).
+​
+
+Choose Your Path to Payouts
+Starting February 5, 2026, you'll be able to choose between two types of Express Funded Accounts. Read below to learn more about the differences between the Express Funded Account Standard and Express Funded Account Consistency.
+
+Standard Path
+
+Consistency Path
+
+Current payout policy
+
+New payout option
+
+5 winning days of $150+
+
+3 days traded with 40% consistency target
+
+Request 50% of account balance
+
+ up to $5000
+
+Request 50% of account balance 
+
+up to $6,000
+
+90/10 split
+
+90/10 split
+
+ 
+Express Funded Account Standard: Rules and Objectives
+Your main objective in the Express Funded Account Standard is to work toward paying yourself by utilizing our simple Payout Policy. Additionally, the Scaling Plan is an objective that must be followed in the Express Funded Account to help protect your account. The Scaling Plan in the Express Funded Account™ replaces the Maximum Position Size in the Trading Combine.
+
+ 
+
+Rules
+
+ 
+
+There is only one (1) rule in Express Funded Accounts:
+
+Do not allow your Account Balance to hit or exceed the Maximum Loss Limit
+
+Objectives
+
+Payout Eligibility: 5 Winning Days of $150+*
+
+Follow the Scaling Plan
+
+Do not hit or exceed the Daily Loss Limit** or your account will be deactivated for that trading day
+
+Just like the Trading Combine, the Express Funded Account is traded in a simulated environment, but the key differences between these accounts are important to know. 
+
+Consistency Target - There is no Consistency Target in the Express Funded Account Standard.
+
+Profit Target - Unlike your Trading Combine Account, there's no Profit Target in Funded Level Accounts
+
+ 
+
+Express Funded Account Consistency: Rules and Objectives
+Your main objective in the Express Funded Account Consistency is to work toward paying yourself by utilizing our simple Payout Policy. Additionally, the Scaling Plan is an objective that must be followed in the Express Funded Account to help protect your account. The Scaling Plan in the Express Funded Account™ replaces the Maximum Position Size in the Trading Combine.
+
+ 
+
+XFA Consistency is a new Express Funded Account (XFA) option designed to reward disciplined, repeatable trading while offering a faster path to payout eligibility. This article explains how XFA Consistency works, how it compares to XFA Standard, and what to expect depending on your trading program status.
+
+ 
+
+Rules
+
+ 
+
+There is only one (1) rule in Express Funded Accounts:
+
+Do not allow your Account Balance to hit or exceed the Maximum Loss Limit
+
+Objectives
+
+Follow the Scaling Plan
+
+Payout Eligibility: 3 days with 40% consistency target
+
+A minimum of 3 trading days 
+
+At least one trade per day
+
+This is a shorter window compared to the 5 winning-day minimum under XFA Standard.
+
+ 
+
+Just like the Trading Combine, the Express Funded Account is traded in a simulated environment, but the key differences between these accounts are important to know.
+
+Profit Target - Unlike your Trading Combine Account, there's no Profit Target in Express Funded Accounts. 
+
+
+Express Funded Account Consistency FAQs
+What Is Express Funded Account Consistency?
+
+XFA Consistency offers an alternative payout policy available after passing a Trading Combine. When you qualify for an Express Funded Account, you can choose between:
+
+XFA Standard – our existing payout rules
+
+XFA Consistency – a new option that introduces a consistency calculation but allows payout eligibility in as few as 3 trading days
+
+ 
+
+How is Consistency Calculated?
+
+Consistency = Largest Winning Day ÷ Current Total Net Profit
+
+ 
+
+This means if your balance is negative, you don't have profit and will not see consistency tracking on your dashboard. You'll need to build positive profit to unlock consistency tracking. 
+
+ 
+
+
+ 
+
+Why does the Express Funded Account Consistency exist?
+
+XFA Consistency is designed to encourage strong trading habits that support long-term success. By focusing on balanced performance rather than outsized single-day wins, traders are rewarded for consistency while gaining access to earlier payout eligibility.
+
+ 
+
+What is the Payout Cap in the Express Funded Account Consistency?
+
+The payout cap for XFA Consistency is $6,000. If you earn more than $6,000 during a qualifying window, you may request up to the payout cap once all eligibility requirements are met.
+
+ 
+
+Can I have a mix of both Consistency and Standard Express Funded Accounts? 
+
+As long as you are not in our Focused Trader Plan (FTP), you may maintain a mix of XFA Standard and XFA Consistency accounts, up to the overall XFA account limit.
+
+ 
+
+How do payouts affect Consistency? 
+
+After a payout is taken, your consistency calculation resets and applies only to profits earned after that payout.
+​
+
+Example Scenario:
+
+First payout window:
+
+Day 1: $5,000 profit
+
+Day 2: $5,000 profit
+
+Day 3: $5,000 profit
+
+Total profit: $15,000
+
+Consistency: 33%
+​
+
+Payout taken: $5,000
+
+Remaining profit balance: $10,000
+​
+
+New payout window begins:
+
+Day 1: $100 profit
+
+Day 2: $100 profit
+
+Day 3: $100 profit
+
+Consistency is now calculated only on the $300 earned after the payout, and eligibility must be met again before requesting another payout.
+
+ 
+
+Please note: Once selected, the Express Funded Account type applies to that account and cannot be changed.
+
+
+Express Funded Account FAQs
+Can I have more than one Funded Account?
+
+​Yes, with a few rules to keep in mind:
+
+You can have up to 5 active Express Funded Accounts at the same time. 
+
+If you pass a Trading Combine but have already reached your account limit, any new Express Funded Accounts will be on hold until an active account is closed due to a rule violation.
+
+If you have a Shoulder Tap Express Funded Account, you are limited to 1 Express Funded Account. If that account closes, you can have up to 5. Learn more here.
+
+Reminder: Only 1 Live Funded Account is permitted. When you receive one, all Express Funded Accounts are closed. Learn more here.
+
+ 
+
+What combinations of Funded Accounts can I have? 
+Traders can have different account sizes for Express Funded Accounts. For example, you can have two (2) 50K Express Funded Accounts and three (3) 150K Express Funded Accounts at the same time.
+
+Traders can only have one (1) Live Funded Account when offered a Live trading account. The Live Funded Account parameters will be based on the largest account that is passed. 
+
+ 
+
+Can I change the size of my Express Funded Account?
+
+The size of your Express Funded Account will match the size of the Trading Combine you passed. You cannot change the size before you activate, or after. 
+
+ 
+
+Why does the balance in my new Express Funded Account show $0 or N/A?
+
+When you start trading in your new Express Funded Account, it will initially show a balance of zero ($0) or N/A in your trading platform. However, the buying power for this Express Funded Account remains the same as the corresponding Trading Combine account size you passed, whether it's 50K, 100K, or 150K. 
+
+ 
+
+What are the fees for the Express Funded Account?
+
+There’s no monthly subscription fee for an Express Funded Account since the subscription ends once you pass the Trading Combine. 
+
+ 
+
+The Activation Fee is required as a one-time payment per Express Funded Account on our Standard Trading Combine Path. To prevent delays in receiving your Express Funded Account credentials, make sure to use the same email address associated with your Topstep.com account when paying the Activation Fee. 
+
+ 
+
+Do I need to purchase data?
+
+Level 1 (Top of Book) live real-time data is included in your Topstep® membership at no additional cost in the Trading Combine and Express Funded Account. Level 1 Data is sufficient for chart traders, and anyone trading from a DOM or Ladder can upgrade to Level 2 (Depth of Market) data.
+
+You can learn more about the differences between Level 1 & Level 2 Data and step-by-step instructions on how to upgrade to Level 2 data in the Level 1 & Level 2 Market Data article.
+
+ 
+
+How long does it take to receive my Express Funded Account? 
+
+Once you pass the Trading Combine, you can complete the Express Funded Account Activation process and gain access to your new Funded Account within minutes. Click here for step-by-step instructions.
+
+Please note: If you pass your Trading Combine on a Friday, you can pay the Activation Fee immediately, but your new Funded Account will not be available on your Dashboard or in your Trading Platform until the markets reopen at 5 PM CT on Sunday. 
+
+ 
+
+How long do I have to pay the Activation Fee and get started with my Express Funded Account?
+If you have less than five (5) active Express Funded Accounts, you have 30 days from passing your Trading Combine to pay your Activation Fee and get started with the Express Funded Account.
+
+If you pass a Trading Combine and already have a maximum of five (5) active Express Funded Accounts, your additional account will be on hold. You will have 30 days to pay the Activation Fee and get started the next time your active Express Funded Accounts are below the maximum of 5 accounts.
+
+ 
+
+If I pass the Trading Combine but can't pay the Activation Fee right away, will I be rebilled again?
+You will not be rebilled for the monthly subscription fee after passing the Trading Combine. Once you pass the Trading Combine, your monthly rebill payments are automatically turned off.
+
+ 
+
+What happens if I lose my Express Funded Account due to violating the Maximum Loss Limit?
+
+If you break a rule, your Express Funded Account will be liquidated immediately and closed at the end of the trading day. Back2Funded gives you the option to Reactivate it up to 2 times, keeping the same account size and payout policy. Learn more here. 
+
+ 
+
+How do I earn Payouts from a simulated account? 
+The Express Funded Account is a simulated account that allows you to earn from your trading without additional fees. This account speeds up your time to earning (get started in two business days!) while allowing Topstep to manage risk more effectively. Your trades inform our live prop firm trades, and we both earn real money. 
+
+ 
+
+How do I request a Payout? 
+
+​Our Payout Policy can be found here with information on how to request a payout. 
+
+ 
+
+Can automated strategies be used in the Express Funded Account?
+
+Yes, automated strategies are permitted, with a few things to note:
+
+Topstep cannot help set up or troubleshoot automated strategies and will not make exceptions for errant trades or malfunctions.
+
+Before getting started, we recommend testing on your Practice Account and reviewing our Prohibited Conduct and Do's and Don'ts of SIM Fills articles.
+
+Tip: You can duplicate trades across multiple accounts using a trade copier. Learn more here.
+​
+
+ 
+
+Can I copy trade up to five Express Funded Accounts at once?
+Yes, traders can now trade up to $750k of buying power at once!
+
+ 
+
+ What are the benefits of trading multiple Express Funded Accounts? 
+Trading in multiple Express Funded Accounts enables you to refine your approach while learning at a flexible and advanced pace so you can continue to trade with confidence. Topstep is a safe space to trade, learn, and grow.
+
+Here’s how you can benefit from trading multiple Express Funded Accounts:
+
+Trading different products and markets.
+
+Trading at different times of the day. (Examples: The open, economic releases, days of the week, etc.)
+
+Trading on different platforms. 
+
+However, please note: The following conduct is considered prohibited in Multiple Express Funded Accounts:
+
+Any activity that violates Topstep’s Terms of Use.
+
+Taking the opposite trades across multiple accounts to “hedge.”
+
+Learn more here
+
+Trading similarly in partnership with other individuals. (i.e., placing the same trades in the same time increments), opposite strategy, hedging, or other activity.)
+​Important: At any time, Topstep has the right to deny multiple Funded Accounts to a user for any reason. 
+
+ 
+
+Can I take a break from trading my Express Funded Account or put it on hold?
+You can take a break from trading your Express Funded Account for less than 30 days at a time. 
+
+If there is no trading activity (no trades entered) on your Express Funded Account for more than 30 days, it may be subject to closure due to inactivity. 
+
+It is never possible to put an Express Funded Account on hold.
+
+If you are traveling to an ineligible country or dealing with a medical emergency, please reach out to the Trader Support Team for additional assistance.
+
+ 
+
+What Happens When I Get Called Up to the Live Funded Account?
+When Topstep determines that a trader has shown consistent success in the Express Funded Account, that trader will receive an email to move to a Live Funded Account. At that time, all open Express Funded Accounts will be closed. Here’s how it works:
+​
+
+1. How your Live Account size is set
+
+Your Live Funded Account size is based on the average account size of your active and eligible Express Funded Accounts.
+
+Only accounts with at least one payout are included
+
+The average is rounded up to the next tier of $50K, $100K, or $150K
+
+Your Live Funded Account maximum starting balance, rules, and limits are based on this capped size
+
+Example:
+
+You have four 50K XFAs and one 150K XFA.
+
+ 
+
+Step 1 — Calculate the average account size:
+
+(50K + 50K + 50K + 50K + 150K) ÷ 5 = 350K ÷ 5 = 70K average
+
+ 
+
+Step 2 — Determine your Live Funded Account tier:
+
+Your average of 70K rounds up to the 100K Live Funded Account tier.
+
+ 
+
+This becomes the maximum starting balance of your Live Funded Account and determines the rules and limits for your account.
+​
+
+2. How you scale in and scale up
+
+When you’re called up to Live, 20% of your Live Funded Account starting balance is available to trade, and the remaining balance is set in Reserve. It then unlocks the remaining balance in in 25% performance-based milestones until the full available balance is unlocked. 
+
+ 
+
+You can read all about our Live Funded Account Parameters here. 
+
+ 
+
+Can I move from the Express Funded Account to the Live Funded Account at any time?
+Our Risk Managers monitor all traders in the Express Funded Account and may reach out to move you to the Live Account at any time. This decision is made at Topstep’s discretion, based on your performance. Approval is discretionary and based on overall trading behavior. 
+
+ 
+
+Important Links
+
+Scaling Plan
+
+Payout Policy
+
+Maximum Loss Limit
+
+Topstep Prohibited Conduct
+
+Multiple Express Funded Accounts
+
+Express Funded Account Activation
+
+Related Articles
+Topstep Program Overview
+Trading Combine® Parameters
+Express Funded Account™ Activation
+Live Funded Account Parameters
+What is the Responsible Trading Program?
+Did this answer your question?
+😞😐😃
+Express Funded Account Information
+Express Funded Account Standard: Rules and Objectives
+Express Funded Account Consistency: Rules and Objectives
+Express Funded Account Consistency FAQs
+Express Funded Account FAQs
+Topstep Help Center

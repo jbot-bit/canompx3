@@ -4,7 +4,7 @@ Tests for trading_app.strategy_validator module.
 
 import json
 import sys
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import duckdb
@@ -12,6 +12,7 @@ import pytest
 
 from pipeline.cost_model import get_cost_spec
 from trading_app.strategy_validator import (
+    _check_mode_a_holdout_integrity,
     _parse_cost_ratio_cap_pct,
     _parse_orb_size_bounds,
     classify_regime,
@@ -825,3 +826,188 @@ class TestCLI:
             main()
         assert exc_info.value.code == 0
         assert "instrument" in capsys.readouterr().out
+
+
+class TestModeAHoldoutIntegrity:
+    """Tests for ``_check_mode_a_holdout_integrity`` (Stage 4 of Amendment 2.7).
+
+    The function is the validator's belt-and-suspenders pre-flight gate. It
+    queries ``experimental_strategies`` for any row created AFTER the
+    Amendment 2.7 grandfather cutoff (2026-04-08 00:00 UTC) that contains
+    yearly results for the sacred year (2026). If any such row exists for
+    the requested instrument, it raises ``ValueError`` rather than letting
+    the validator promote contaminated work into ``validated_setups``.
+
+    Test strategy: build a real DuckDB file in ``tmp_path`` (the function
+    opens its own read-only connection by path, so an in-memory ``:memory:``
+    handle would not be visible to it). Insert synthetic rows into a minimal
+    ``experimental_strategies`` schema containing only the columns the
+    function queries.
+    """
+
+    SACRED_YEAR_RESULTS = '{"2026": {"trades": 100, "expR": 0.5}}'
+    NON_SACRED_RESULTS = '{"2024": {"trades": 50}, "2025": {"trades": 80}}'
+
+    def _make_db(self, tmp_path: Path) -> Path:
+        """Create a fresh DuckDB file with the minimal experimental_strategies
+        schema the function queries (instrument, created_at, yearly_results).
+
+        We deliberately use a thin schema rather than the full
+        experimental_strategies layout — the function only references three
+        columns, and a thin fixture isolates the test from unrelated schema
+        evolution elsewhere in the validator pipeline.
+        """
+        db_path = tmp_path / "test_validator_holdout.db"
+        with duckdb.connect(str(db_path)) as con:
+            con.execute(
+                """
+                CREATE TABLE experimental_strategies (
+                    instrument VARCHAR,
+                    created_at TIMESTAMPTZ,
+                    yearly_results VARCHAR
+                )
+                """
+            )
+        return db_path
+
+    def _insert(
+        self,
+        db_path: Path,
+        instrument: str,
+        created_at: datetime,
+        yearly_results: str,
+    ) -> None:
+        with duckdb.connect(str(db_path)) as con:
+            con.execute(
+                "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+                [instrument, created_at, yearly_results],
+            )
+
+    def test_nonexistent_db_returns_silently(self, tmp_path):
+        """Fail-open: if gold.db is missing, discovery hasn't run anyway, so
+        the upstream CLI gate would have caught any contamination at entry.
+        Per the function docstring, this is intentional fail-open."""
+        nonexistent = tmp_path / "does_not_exist.db"
+        # Must not raise
+        _check_mode_a_holdout_integrity(nonexistent, "MNQ")
+
+    def test_empty_table_returns_silently(self, tmp_path):
+        """Empty experimental_strategies → zero contamination → no raise."""
+        db_path = self._make_db(tmp_path)
+        _check_mode_a_holdout_integrity(db_path, "MNQ")
+
+    def test_grandfathered_row_returns_silently(self, tmp_path):
+        """A row with sacred-year data but ``created_at`` BEFORE the
+        Amendment 2.7 commit moment is grandfathered (research-provisional
+        per Amendment 2.4) — the function must NOT raise on it."""
+        db_path = self._make_db(tmp_path)
+        # 2026-04-07 23:59:59 UTC — strictly before the 2026-04-08 00:00 cutoff
+        self._insert(
+            db_path,
+            "MNQ",
+            datetime(2026, 4, 7, 23, 59, 59, tzinfo=UTC),
+            self.SACRED_YEAR_RESULTS,
+        )
+        # Must not raise
+        _check_mode_a_holdout_integrity(db_path, "MNQ")
+
+    def test_post_grandfather_no_sacred_year_returns_silently(self, tmp_path):
+        """A row created AFTER the cutoff but with NO sacred-year data is
+        clean — the function must NOT raise on it. This is the common case
+        for any future legitimate discovery run that respected the holdout."""
+        db_path = self._make_db(tmp_path)
+        self._insert(
+            db_path,
+            "MNQ",
+            datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC),
+            self.NON_SACRED_RESULTS,
+        )
+        # Must not raise
+        _check_mode_a_holdout_integrity(db_path, "MNQ")
+
+    def test_post_grandfather_with_sacred_year_raises(self, tmp_path):
+        """A row created AFTER the cutoff containing sacred-year data is the
+        exact contamination Amendment 2.7 forbids. The function MUST raise
+        ValueError citing Amendment 2.7."""
+        db_path = self._make_db(tmp_path)
+        self._insert(
+            db_path,
+            "MNQ",
+            datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC),
+            self.SACRED_YEAR_RESULTS,
+        )
+        with pytest.raises(ValueError, match="Amendment 2.7"):
+            _check_mode_a_holdout_integrity(db_path, "MNQ")
+
+    def test_error_message_cites_canonical_source(self, tmp_path):
+        """The error must point at ``trading_app.holdout_policy`` so the fix
+        lands in the single source of truth, not in scattered code."""
+        db_path = self._make_db(tmp_path)
+        self._insert(
+            db_path,
+            "MNQ",
+            datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC),
+            self.SACRED_YEAR_RESULTS,
+        )
+        with pytest.raises(ValueError, match="trading_app.holdout_policy"):
+            _check_mode_a_holdout_integrity(db_path, "MNQ")
+
+    def test_error_message_suggests_the_fix(self, tmp_path):
+        """The error must tell the operator exactly how to recover —
+        either re-run discovery with --holdout-date or promote from a
+        pre-grandfather DB snapshot."""
+        db_path = self._make_db(tmp_path)
+        self._insert(
+            db_path,
+            "MNQ",
+            datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC),
+            self.SACRED_YEAR_RESULTS,
+        )
+        with pytest.raises(ValueError, match=r"--holdout-date 2026-01-01"):
+            _check_mode_a_holdout_integrity(db_path, "MNQ")
+
+    def test_per_instrument_scoping(self, tmp_path):
+        """The function is per-instrument. A contaminated MNQ row must NOT
+        cause MGC validation to fail — and vice versa."""
+        db_path = self._make_db(tmp_path)
+        self._insert(
+            db_path,
+            "MNQ",
+            datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC),
+            self.SACRED_YEAR_RESULTS,
+        )
+        # MGC has no contaminated rows → must not raise
+        _check_mode_a_holdout_integrity(db_path, "MGC")
+        # Sanity: the same DB does raise for MNQ (the actual contaminated instrument)
+        with pytest.raises(ValueError, match="Amendment 2.7"):
+            _check_mode_a_holdout_integrity(db_path, "MNQ")
+
+    def test_boundary_cutoff_grandfathered(self, tmp_path):
+        """A row at EXACTLY the grandfather cutoff moment must be
+        grandfathered (the function uses strictly-greater-than ``>``).
+        This pins the boundary semantics."""
+        from trading_app.holdout_policy import HOLDOUT_GRANDFATHER_CUTOFF
+        db_path = self._make_db(tmp_path)
+        self._insert(
+            db_path,
+            "MNQ",
+            HOLDOUT_GRANDFATHER_CUTOFF,
+            self.SACRED_YEAR_RESULTS,
+        )
+        # ``created_at == cutoff`` → NOT >, so grandfathered
+        _check_mode_a_holdout_integrity(db_path, "MNQ")
+
+    def test_count_in_error_message(self, tmp_path):
+        """The error message must report the actual contamination count so
+        operators know how big the cleanup is. Insert 3 contaminated rows
+        and verify the count appears in the message."""
+        db_path = self._make_db(tmp_path)
+        for _ in range(3):
+            self._insert(
+                db_path,
+                "MNQ",
+                datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC),
+                self.SACRED_YEAR_RESULTS,
+            )
+        with pytest.raises(ValueError, match=r"refuses to promote 3 MNQ"):
+            _check_mode_a_holdout_integrity(db_path, "MNQ")

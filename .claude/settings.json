@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/stage-gate-guard.py",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/stage-gate-guard.py",
             "timeout": 5
           }
         ]
@@ -53,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/pre-edit-guard.py",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/pre-edit-guard.py",
             "timeout": 5
           }
         ]
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/data-first-guard.py",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/data-first-guard.py",
             "timeout": 3
           }
         ]
@@ -75,7 +75,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/post-edit-pipeline.py",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/post-edit-pipeline.py",
             "timeout": 90
           }
         ]
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/post-edit-schema.py",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/post-edit-schema.py",
             "timeout": 30
           }
         ]
@@ -97,7 +97,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/stage-awareness.py",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/stage-awareness.py",
             "timeout": 3
           }
         ]
@@ -107,7 +107,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/data-first-guard.py",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/data-first-guard.py",
             "timeout": 3
           }
         ]
@@ -119,7 +119,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/completion-notify.py",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/completion-notify.py",
             "timeout": 3
           }
         ]
@@ -131,7 +131,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/completion-notify.py",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/completion-notify.py",
             "timeout": 3
           }
         ]
@@ -143,7 +143,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/post-compact-reinject.py",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/post-compact-reinject.py",
             "timeout": 5
           }
         ]
@@ -155,7 +155,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python .claude/hooks/session-start.py",
+            "command": "python C:/Users/joshd/canompx3/.claude/hooks/session-start.py",
             "timeout": 5
           }
         ]

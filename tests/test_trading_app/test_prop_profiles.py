@@ -327,3 +327,86 @@ class TestCorrectedTierValues:
         from trading_app.prop_profiles import PROP_FIRM_SPECS
 
         assert PROP_FIRM_SPECS["tradeify"].close_time_et == "16:59"
+
+
+# ─── F-5: AccountProfile is_express_funded / is_live_funded fields ───
+# @canonical-source docs/research-input/topstep/topstep_mll_article.md
+# @verbatim "For a $50,000 Express Funded Account, your Maximum Loss Limit
+#            starts at -$2,000 and trails upward as your balance grows.
+#            Once your balance reaches $2,000, the Maximum Loss Limit stays at $0."
+
+
+class TestAccountProfileXfaFlag:
+    """AccountProfile.is_express_funded and is_live_funded (F-5 + F-3 stub)."""
+
+    def test_is_express_funded_default_true(self):
+        """New AccountProfiles default to XFA semantics (matches active deployment)."""
+        from trading_app.prop_profiles import AccountProfile
+
+        prof = AccountProfile(profile_id="test", firm="topstep", account_size=50_000)
+        assert prof.is_express_funded is True
+
+    def test_is_live_funded_default_false(self):
+        """LFA flag is reserved for future LFA-promotion path; default False."""
+        from trading_app.prop_profiles import AccountProfile
+
+        prof = AccountProfile(profile_id="test", firm="topstep", account_size=50_000)
+        assert prof.is_live_funded is False
+
+    def test_active_topstep_profiles_are_xfa(self):
+        """All currently active TopStep profiles in the repo are XFA-shaped."""
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        for prof in ACCOUNT_PROFILES.values():
+            if prof.active and prof.firm == "topstep":
+                assert prof.is_express_funded is True, (
+                    f"Active TopStep profile {prof.profile_id} should be XFA-shaped "
+                    f"(is_express_funded=True). If this is a Trading Combine, set "
+                    f"is_express_funded=False explicitly."
+                )
+
+    def test_freeze_formula_xfa_50k(self):
+        """XFA 50K freeze = max_dd + 100 = $2,100 (NOT $52,100)."""
+        from trading_app.prop_profiles import ACCOUNT_TIERS, AccountProfile
+
+        prof = AccountProfile(profile_id="t", firm="topstep", account_size=50_000, is_express_funded=True)
+        tier = ACCOUNT_TIERS[("topstep", 50_000)]
+        # Mirror the formula in session_orchestrator.py:407-415
+        freeze = (tier.max_dd + 100) if prof.is_express_funded else (prof.account_size + tier.max_dd + 100)
+        assert freeze == 2_100
+
+    def test_freeze_formula_xfa_100k(self):
+        """XFA 100K freeze = $3,100."""
+        from trading_app.prop_profiles import ACCOUNT_TIERS, AccountProfile
+
+        prof = AccountProfile(profile_id="t", firm="topstep", account_size=100_000, is_express_funded=True)
+        tier = ACCOUNT_TIERS[("topstep", 100_000)]
+        freeze = (tier.max_dd + 100) if prof.is_express_funded else (prof.account_size + tier.max_dd + 100)
+        assert freeze == 3_100
+
+    def test_freeze_formula_xfa_150k(self):
+        """XFA 150K freeze = $4,600."""
+        from trading_app.prop_profiles import ACCOUNT_TIERS, AccountProfile
+
+        prof = AccountProfile(profile_id="t", firm="topstep", account_size=150_000, is_express_funded=True)
+        tier = ACCOUNT_TIERS[("topstep", 150_000)]
+        freeze = (tier.max_dd + 100) if prof.is_express_funded else (prof.account_size + tier.max_dd + 100)
+        assert freeze == 4_600
+
+    def test_freeze_formula_tc_50k(self):
+        """Trading Combine 50K freeze = account_size + max_dd + 100 = $52,100."""
+        from trading_app.prop_profiles import ACCOUNT_TIERS, AccountProfile
+
+        prof = AccountProfile(profile_id="t", firm="topstep", account_size=50_000, is_express_funded=False)
+        tier = ACCOUNT_TIERS[("topstep", 50_000)]
+        freeze = (tier.max_dd + 100) if prof.is_express_funded else (prof.account_size + tier.max_dd + 100)
+        assert freeze == 52_100
+
+    def test_freeze_formula_tc_100k(self):
+        """Trading Combine 100K freeze = $103,100."""
+        from trading_app.prop_profiles import ACCOUNT_TIERS, AccountProfile
+
+        prof = AccountProfile(profile_id="t", firm="topstep", account_size=100_000, is_express_funded=False)
+        tier = ACCOUNT_TIERS[("topstep", 100_000)]
+        freeze = (tier.max_dd + 100) if prof.is_express_funded else (prof.account_size + tier.max_dd + 100)
+        assert freeze == 103_100

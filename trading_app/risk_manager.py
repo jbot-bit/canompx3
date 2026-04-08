@@ -30,6 +30,14 @@ class RiskLimits:
     )
     max_equity_drawdown_r: float | None = None  # Multi-day drawdown limit (R from peak). None = disabled.
 
+    # F-1 TopStep Scaling Plan enforcement.
+    # @canonical-source docs/research-input/topstep/topstep_scaling_plan_article.md
+    # @canonical-image docs/research-input/topstep/images/xfa_scaling_chart.png
+    # Set to 50_000 / 100_000 / 150_000 only when the bot is connected to a
+    # TopStep Express Funded Account. Default None disables the check (e.g.
+    # for non-TopStep deployments or Trading Combine practice accounts).
+    topstep_xfa_account_size: int | None = None
+
 
 class RiskManager:
     """
@@ -37,10 +45,12 @@ class RiskManager:
 
     Risk checks are ordered fail-fast:
     1. Circuit breaker (daily loss limit)
-    2. Max concurrent positions
-    3. Max per ORB positions
-    4. Max daily trades
-    5. Drawdown warning (allows entry, logs warning)
+    2. Hedging guard (F-2)
+    3. TopStep Scaling Plan (F-1) — only when topstep_xfa_account_size is set
+    4. Max concurrent positions
+    5. Max per ORB positions
+    6. Max daily trades
+    7. Drawdown warning (allows entry, logs warning)
     """
 
     def __init__(self, limits: RiskLimits, corr_lookup: dict[tuple[str, str], float] | None = None):
@@ -55,6 +65,24 @@ class RiskManager:
         self.cumulative_pnl_r: float = 0.0
         self.equity_high_water_r: float = 0.0
         self._equity_halted: bool = False
+        # F-1 TopStep Scaling Plan: EOD balance for the active XFA. Set by the
+        # orchestrator at session start (and after each EOD rollover) by reading
+        # broker equity from the HWM tracker. None means "not yet known" — the
+        # check fails-closed when balance is required.
+        self._topstep_xfa_eod_balance: float | None = None
+
+    def set_topstep_xfa_eod_balance(self, balance: float) -> None:
+        """Set the latest end-of-day XFA balance for Scaling Plan enforcement.
+
+        @canonical-source docs/research-input/topstep/topstep_scaling_plan_article.md
+        @verbatim "Your maximum number of contracts allowed to trade under the
+                   scaling plan does not increase throughout the trading day."
+
+        Called by the orchestrator at session start (and after each EOD
+        rollover). The check uses this value, NOT the live intraday equity,
+        because the canonical rule prohibits intraday scaling-up.
+        """
+        self._topstep_xfa_eod_balance = balance
 
     def daily_reset(self, trading_day: date) -> None:
         """Reset daily counters for a new trading day.
@@ -77,6 +105,8 @@ class RiskManager:
         daily_pnl_r: float,
         market_state=None,
         orb_minutes: int | None = None,
+        instrument: str | None = None,
+        direction: str | None = None,
     ) -> tuple[bool, str, float]:  # Added float to return type
         suggested_contract_factor = 1.0
 
@@ -93,6 +123,124 @@ class RiskManager:
         if self._halted or daily_pnl_r <= self.limits.max_daily_loss_r:
             self._halted = True
             return False, f"circuit_breaker: daily PnL {daily_pnl_r:.2f}R <= {self.limits.max_daily_loss_r}R", 0.0
+
+        # Check 1b: F-2 same-instrument opposite-direction guard.
+        # @canonical-source docs/research-input/topstep/topstep_cross_account_hedging.md
+        # @verbatim "Cross-account hedging occurs when you hold opposite positions
+        #            across multiple accounts at the same time. This means you're
+        #            simultaneously long and short the same instrument (or highly
+        #            correlated/fungible instruments)."
+        # @verbatim "Yes! You can trade the same instrument across multiple accounts.
+        #            What's prohibited is holding opposite positions simultaneously."
+        # @audit-finding F-2 BLOCKER — refuses entries that would create an opposing
+        # position on the same instrument within the same account. CopyOrderRouter
+        # mirrors trades across copies, so an intra-account hedge would also be a
+        # cross-account hedge → 3rd offense = PERMANENT account closure.
+        #
+        # The check is opt-in (instrument and direction default None for backward
+        # compat). When both are provided, the function scans active_trades for any
+        # ENTERED trade on the SAME instrument with OPPOSITE direction.
+        if instrument is not None and direction is not None:
+            opposite_direction = "short" if direction.lower() == "long" else "long"
+            for t in active_trades:
+                if not hasattr(t, "state") or t.state.value != "ENTERED":
+                    continue
+                # Read instrument from trade.strategy.instrument (the canonical path)
+                # or fall back to a top-level trade.instrument attribute if present.
+                t_instrument = None
+                if hasattr(t, "strategy") and hasattr(t.strategy, "instrument"):
+                    t_instrument = t.strategy.instrument
+                elif hasattr(t, "instrument"):
+                    t_instrument = t.instrument
+                if t_instrument != instrument:
+                    continue
+                t_direction = getattr(t, "direction", None)
+                if t_direction is None:
+                    continue
+                if t_direction.lower() == opposite_direction:
+                    return (
+                        False,
+                        (
+                            f"hedging_guard: cannot enter {direction.upper()} {instrument} — "
+                            f"existing {t_direction.upper()} position on same instrument "
+                            f"({t.strategy_id}). Cross-account hedging is prohibited "
+                            f"(F-2 / TopStep CME Rule 534)."
+                        ),
+                        0.0,
+                    )
+
+        # Check 1c: F-1 TopStep XFA Scaling Plan enforcement.
+        # @canonical-source docs/research-input/topstep/topstep_scaling_plan_article.md
+        # @canonical-image docs/research-input/topstep/images/xfa_scaling_chart.png
+        # @verbatim "Your maximum number of contracts allowed to trade under the
+        #            scaling plan does not increase throughout the trading day. If
+        #            your earnings meet or exceed the required amount to scale up,
+        #            you still need to wait until the following session to trade
+        #            the next Scaling Plan level."
+        # @verbatim "Errors in the Scaling Plan corrected in less than 10 seconds
+        #            will be ignored. If traders leave on too many contracts for
+        #            10 seconds or more, even if only by a few seconds, their
+        #            account may be reviewed."
+        # @audit-finding F-1 BLOCKER — refuses entries that would push the bot's
+        # net mini-equivalent exposure above the day's Scaling Plan tier.
+        #
+        # Only fires when the bot is connected to a TopStep XFA (i.e., when
+        # limits.topstep_xfa_account_size is set). The orchestrator must call
+        # set_topstep_xfa_eod_balance() at session start with the broker's
+        # reported balance — otherwise the check fails-closed (no balance
+        # known → no entries allowed).
+        if self.limits.topstep_xfa_account_size is not None and instrument is not None:
+            from trading_app.topstep_scaling_plan import (
+                lots_for_position,
+                max_lots_for_xfa,
+                total_open_lots,
+            )
+
+            if self._topstep_xfa_eod_balance is None:
+                return (
+                    False,
+                    (
+                        "topstep_scaling_plan: EOD XFA balance unknown — refusing entry. "
+                        "Orchestrator must call set_topstep_xfa_eod_balance() at session start. "
+                        "(F-1 fail-closed)"
+                    ),
+                    0.0,
+                )
+
+            try:
+                day_max = max_lots_for_xfa(
+                    self.limits.topstep_xfa_account_size, self._topstep_xfa_eod_balance
+                )
+            except (KeyError, ValueError) as e:
+                return (
+                    False,
+                    f"topstep_scaling_plan: ladder lookup failed: {e} (F-1 fail-closed)",
+                    0.0,
+                )
+
+            current_open_lots = total_open_lots(active_trades)
+            # The new entry's contract count isn't known here — we conservatively
+            # treat the new position as 1 mini-equivalent at minimum (the smallest
+            # legal entry under the canonical 10:1 ratio is 1 micro = ceil(1/10) = 1
+            # mini-equivalent under our floor convention). The execution engine sizes
+            # the position AFTER this check; if the resulting size pushes us above
+            # day_max, the engine's pre-submit guard catches it. For now we
+            # underestimate by 0 vs 1 lot, which is acceptable because day_max is
+            # the absolute ceiling and we already have 1 lot's slack.
+            new_entry_lots = lots_for_position(instrument, 1)
+            projected = current_open_lots + new_entry_lots
+
+            if projected > day_max:
+                return (
+                    False,
+                    (
+                        f"topstep_scaling_plan: projected {projected} mini-equiv lots > "
+                        f"day_max {day_max} for {self.limits.topstep_xfa_account_size//1000}K XFA "
+                        f"at EOD balance ${self._topstep_xfa_eod_balance:,.2f}. "
+                        f"(F-1 BLOCKER — TopStep Scaling Plan ladder)"
+                    ),
+                    0.0,
+                )
 
         # Check 2: Max concurrent positions (correlation-weighted if available)
         entered = [t for t in active_trades if hasattr(t, "state") and t.state.value == "ENTERED"]

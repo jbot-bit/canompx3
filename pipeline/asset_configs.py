@@ -59,14 +59,17 @@ ASSET_CONFIGS = {
         "orb_active": False,  # 0 validated, NO ORB edge (Mar 2026)
     },
     "MGC": {
-        # Source data is GC (full-size Gold, $100/pt) — same price, stored as symbol='MGC'.
-        # Identical pattern to RTY→M2K, SI→SIL, 6E→M6E. Cost model uses MGC micro specs ($10/pt).
-        "dbn_path": PROJECT_ROOT / "DB" / "GOLD_DB_FULLSIZE",
+        # Real Micro Gold (10oz, $10/pt). Source: MGC.FUT contract series from
+        # 2023-09-11 (MGC contract launch). Pre-launch parent GC data is preserved
+        # under symbol='GC' (see GC config below) — relabeled 2026-04-08 as part of
+        # Phase 2 of canonical-data-redownload (docs/plans/2026-04-07-canonical-data-redownload.md).
+        # Cost model uses MGC micro specs ($10/pt, NOT GC's $100/pt).
+        "dbn_path": PROJECT_ROOT / "data" / "raw" / "databento" / "ohlcv-1m" / "MGC",
         "symbol": "MGC",
         "orb_active": True,
-        "outright_pattern": re.compile(r"^GC[FGHJKMNQUVXZ]\d{1,2}$"),
-        "prefix_len": 2,
-        "minimum_start_date": date(2010, 6, 6),  # Extended via GC.FUT backfill
+        "outright_pattern": re.compile(r"^MGC[FGHJKMNQUVXZ]\d{1,2}$"),
+        "prefix_len": 3,
+        "minimum_start_date": date(2023, 9, 11),  # MGC contract launch date (real micro)
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN",
@@ -81,12 +84,16 @@ ASSET_CONFIGS = {
         ],
     },
     "MNQ": {
-        "dbn_path": PROJECT_ROOT / "DB" / "MNQ_DB",
+        # Real Micro Nasdaq-100 ($2/pt). Source: MNQ.FUT contract series from
+        # 2019-05-06 (MNQ contract launch). Pre-launch parent NQ data is preserved
+        # under symbol='NQ' (see NQ config below) — relabeled 2026-04-08 as part of
+        # Phase 2 of canonical-data-redownload (docs/plans/2026-04-07-canonical-data-redownload.md).
+        "dbn_path": PROJECT_ROOT / "data" / "raw" / "databento" / "ohlcv-1m" / "MNQ",
         "symbol": "MNQ",
         "orb_active": True,
         "outright_pattern": re.compile(r"^MNQ[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
-        "minimum_start_date": date(2010, 6, 6),  # Extended via NQ.FUT backfill
+        "minimum_start_date": date(2019, 5, 6),  # MNQ contract launch date (real micro)
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN",
@@ -126,17 +133,16 @@ ASSET_CONFIGS = {
         ],
     },
     "MES": {
-        # Source data: ES (E-mini S&P 500, $50/pt) pre-Feb 2024, then native MES ($5/pt).
-        # Same price on same exchange. Identical pattern to GC→MGC, RTY→M2K.
-        # Cost model uses MES micro specs ($5/pt).
-        # dbn_path points to MES_DB_2019-2024 which contains both ES and MES contracts;
-        # this config's ^MES pattern selects only native MES outrights (2024 transition).
-        "dbn_path": PROJECT_ROOT / "DB" / "MES_DB_2019-2024",
+        # Real Micro S&P 500 ($5/pt). Source: MES.FUT contract series from
+        # 2019-05-06 (MES contract launch). Pre-launch parent ES data is preserved
+        # under symbol='ES' (see ES config below) — relabeled 2026-04-08 as part of
+        # Phase 2 of canonical-data-redownload (docs/plans/2026-04-07-canonical-data-redownload.md).
+        "dbn_path": PROJECT_ROOT / "data" / "raw" / "databento" / "ohlcv-1m" / "MES",
         "symbol": "MES",
         "orb_active": True,
         "outright_pattern": re.compile(r"^MES[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
-        "minimum_start_date": date(2010, 6, 6),  # Extended via ES.FUT backfill
+        "minimum_start_date": date(2019, 5, 6),  # MES contract launch date (real micro)
         "schema_required": "ohlcv-1m",
         "enabled_sessions": [
             "CME_REOPEN",
@@ -153,11 +159,13 @@ ASSET_CONFIGS = {
         ],
     },
     "ES": {
-        # Source data: ES (E-mini S&P 500, $50/pt) for 2019-2024 backfill.
-        # Same price as MES on same exchange. Stored as symbol='MES', source_symbol='ESH22' etc.
-        # Identical pattern to GC→MGC, NQ→MNQ, RTY→M2K.
+        # Parent E-mini S&P 500 ($50/pt). Source: ES.FUT contract series (E-mini S&P).
+        # Pre-2019-05-06 data is the only historical source for the S&P; post-launch
+        # is preserved here for parent-vs-micro comparisons but discovery uses MES (real micro).
+        # Stored as symbol='ES' (relabeled 2026-04-08 from former 'MES' as part of Phase 2
+        # of canonical-data-redownload). Cost model: PARENT specs ($50/pt), NOT MES specs.
         "dbn_path": PROJECT_ROOT / "DB" / "MES_DB_2019-2024",
-        "symbol": "MES",
+        "symbol": "ES",
         "orb_active": False,
         "outright_pattern": re.compile(r"^ES[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
@@ -244,11 +252,13 @@ ASSET_CONFIGS = {
         ],
     },
     "NQ": {
-        # Source data: NQ (E-mini Nasdaq-100, $20/pt) for 2021-2024 backfill.
-        # Same price as MNQ on same exchange. Stored as symbol='MNQ', source_symbol='NQH22' etc.
-        # Identical pattern to GC→MGC, ES→MES, RTY→M2K.
+        # Parent E-mini Nasdaq-100 ($20/pt). Source: NQ.FUT contract series (E-mini Nasdaq).
+        # Pre-2019-05-06 data is the only historical source for the Nasdaq; post-launch
+        # is preserved here for parent-vs-micro comparisons but discovery uses MNQ (real micro).
+        # Stored as symbol='NQ' (relabeled 2026-04-08 from former 'MNQ' as part of Phase 2
+        # of canonical-data-redownload). Cost model: PARENT specs ($20/pt), NOT MNQ specs.
         "dbn_path": PROJECT_ROOT / "DB" / "NQ_DB_2021-2024",
-        "symbol": "MNQ",
+        "symbol": "NQ",
         "orb_active": False,
         "outright_pattern": re.compile(r"^NQ[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 2,
@@ -267,6 +277,33 @@ ASSET_CONFIGS = {
             "CME_PRECLOSE",
             "NYSE_CLOSE",
             "BRISBANE_1025",
+        ],
+    },
+    "GC": {
+        # Parent full-size Gold ($100/pt, 100oz). Source: GC.FUT contract series.
+        # Pre-2023-09-11 data is the only historical source for gold; post-launch is
+        # preserved here for parent-vs-micro comparisons but discovery uses MGC (real micro).
+        # Stored as symbol='GC' (relabeled 2026-04-08 from former 'MGC' as part of Phase 2
+        # of canonical-data-redownload). Cost model: PARENT specs ($100/pt), NOT MGC specs.
+        # Created 2026-04-08 to close the docstring promise in the MGC config above
+        # (Bloomey review HIGH finding on commit 82e8b60).
+        "dbn_path": PROJECT_ROOT / "DB" / "GOLD_DB_FULLSIZE",
+        "symbol": "GC",
+        "orb_active": False,
+        "outright_pattern": re.compile(r"^GC[FGHJKMNQUVXZ]\d{1,2}$"),
+        "prefix_len": 2,
+        "minimum_start_date": date(2010, 6, 6),  # Extended via GC.FUT backfill
+        "schema_required": "ohlcv-1m",
+        "enabled_sessions": [
+            "CME_REOPEN",
+            "TOKYO_OPEN",
+            "SINGAPORE_OPEN",
+            "LONDON_METALS",
+            "EUROPE_FLOW",
+            "US_DATA_830",
+            "NYSE_OPEN",
+            "US_DATA_1000",
+            "COMEX_SETTLE",
         ],
     },
     "2YY": {
@@ -379,3 +416,50 @@ def list_available_instruments() -> list[str]:
         if cfg["dbn_path"] is not None and cfg["dbn_path"].exists():
             available.append(name)
     return sorted(available)
+
+
+# Single source of truth for the outright contract root prefix.
+# Used by every script that needs to map instrument → vendor parent symbol
+# (Databento `MGC.FUT`, etc.). Replaces parallel hardcoded dicts that drifted
+# from canonical post-Phase-2 (commit 82e8b60, Apr 8 2026).
+_OUTRIGHT_ROOT_RE = re.compile(r"^\^(\w+?)\[")
+
+
+def get_outright_root(instrument: str) -> str:
+    """Return the contract root prefix for an instrument (canonical derivation).
+
+    The root is the prefix shared by every outright contract symbol for the
+    instrument — e.g., `MGC` for `MGCM4`/`MGCZ4`, `RTY` for `RTYH4`/`RTYZ4`
+    (M2K data source). Derived from the existing `outright_pattern` regex
+    on `ASSET_CONFIGS[instrument]`. Single source of truth — no parallel
+    dicts allowed (institutional rigor rule 4 — `.claude/rules/integrity-guardian.md`).
+
+    Examples:
+        get_outright_root("MGC") -> "MGC"   # post-Phase-2 real micro
+        get_outright_root("M2K") -> "RTY"   # micro Russell uses RTY parent data
+        get_outright_root("NQ")  -> "NQ"    # parent contract
+
+    Fail-closed:
+        - Unknown instrument           → ValueError
+        - Non-canonical outright_pattern → ValueError (catches future patterns
+          that don't match the `^<ROOT>[<MONTH_CODES>]\\d+$` shape)
+
+    Consumers (Apr 2026):
+        - scripts/tools/refresh_data.py — Databento backfill download
+        - scripts/databento_daily.py    — daily research-archive refresh
+    """
+    key = instrument.upper()
+    cfg = ASSET_CONFIGS.get(key)
+    if cfg is None:
+        raise ValueError(
+            f"Unknown instrument: {instrument!r}. "
+            f"Supported: {sorted(ASSET_CONFIGS.keys())}"
+        )
+    pattern = cfg["outright_pattern"].pattern
+    match = _OUTRIGHT_ROOT_RE.match(pattern)
+    if match is None:
+        raise ValueError(
+            f"Non-canonical outright_pattern for {key}: {pattern!r}. "
+            f"Expected format: ^<ROOT>[<MONTH_CODES>]\\d+$"
+        )
+    return match.group(1)

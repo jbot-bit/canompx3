@@ -3788,6 +3788,65 @@ def check_no_scratch_db_in_docstrings() -> list[str]:
 # rule from .claude/rules/integrity-guardian.md).
 
 
+def check_canonical_source_annotations() -> list[str]:
+    """Verify @canonical-source annotations point to existing files.
+
+    @canonical-source comments in production code (pipeline/, trading_app/,
+    scripts/) must reference real paths under docs/research-input/ or
+    docs/institutional/literature/. This catches stale citations after
+    canonical sources are renamed, moved, or deleted (e.g. quarterly
+    re-scrape that replaces a help-center article with a new article ID).
+
+    The annotation format expected by this check is:
+        # @canonical-source <relative path from project root>
+
+    Trailing parenthetical comments (article ID, scrape date) are allowed
+    after the path. Examples that match:
+        # @canonical-source docs/research-input/topstep/topstep_dll_article.md
+        # @canonical-source docs/research-input/topstep/topstep_mll_article.md  (8284204, 2026-04-08)
+
+    The check is non-fatal for paths in `tests/` (test fixtures may
+    reference deliberately-fake paths) and ignores files under archive/.
+
+    Established 2026-04-08 by stage 8 of docs/plans/2026-04-08-topstep-canonical-fixes.md.
+    """
+    violations = []
+    pattern = re.compile(r"@canonical-source\s+([^\s]+)")
+    scan_dirs = [PIPELINE_DIR, TRADING_APP_DIR, SCRIPTS_DIR]
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            if "archive" in py_file.parts:
+                continue
+            if py_file.name == "check_drift.py":
+                # Don't scan ourselves — this file references the regex pattern
+                # itself and would self-flag.
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+            for match in pattern.finditer(content):
+                ref = match.group(1).strip().rstrip(",.;:")
+                # Skip placeholder/example refs (start with `<` or contain `example`)
+                if ref.startswith("<") or "example" in ref.lower():
+                    continue
+                # Resolve relative to project root
+                target = (PROJECT_ROOT / ref).resolve()
+                if not target.exists():
+                    line_no = content[: match.start()].count("\n") + 1
+                    try:
+                        rel_path = py_file.relative_to(PROJECT_ROOT).as_posix()
+                    except ValueError:
+                        # Test fixtures may live outside PROJECT_ROOT (tmp_path)
+                        rel_path = py_file.as_posix()
+                    violations.append(
+                        f"{rel_path}:{line_no}: @canonical-source points to missing file: {ref}"
+                    )
+    return violations
+
+
 def check_canonical_orb_utc_window_source() -> list[str]:
     """Only pipeline/dst.py may define `def orb_utc_window(`.
 
@@ -4228,6 +4287,12 @@ CHECKS = [
     (
         "resample_to_5m + _verify_e3_sub_bar_fill canonical home is trading_app.entry_rules",
         check_resample_helpers_in_entry_rules,
+        False,
+        False,
+    ),
+    (
+        "@canonical-source annotations point to existing files",
+        check_canonical_source_annotations,
         False,
         False,
     ),

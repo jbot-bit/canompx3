@@ -101,12 +101,29 @@ def run_nested_discovery(
     end_date: date | None = None,
     orb_minutes_list: list[int] | None = None,
     dry_run: bool = False,
+    holdout_date: date | None = None,
+    unlock_holdout: str | None = None,
 ) -> int:
     """Grid search over nested strategy variants.
 
     Bulk-loads data upfront, then iterates the full grid in Python.
     Returns count of strategies written.
+
+    Mode A holdout enforcement: holdout_date defaults to HOLDOUT_SACRED_FROM
+    (2026-01-01). Post-sacred values raise ValueError unless unlock_holdout
+    matches HOLDOUT_OVERRIDE_TOKEN. See trading_app.holdout_policy.
     """
+    # Mode A holdout enforcement (Amendment 2.7) — function-level gate.
+    # Same chokepoint as run_discovery(). end_date is capped at the effective
+    # holdout to prevent feature leakage from sacred-window data.
+    from trading_app.holdout_policy import enforce_holdout_date
+
+    effective_holdout: date = enforce_holdout_date(holdout_date, override_token=unlock_holdout)
+
+    # Cap end_date at the effective holdout to prevent sacred-window data load.
+    if end_date is None or effective_holdout < end_date:
+        end_date = effective_holdout
+
     if db_path is None:
         db_path = GOLD_DB_PATH
     if orb_minutes_list is None:

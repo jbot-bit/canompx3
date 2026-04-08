@@ -211,6 +211,39 @@ def check_hwm_tracker() -> tuple[bool, str]:
     return (not any_halt), f"DD TRACKER: {msg}"
 
 
+def check_topstep_xfa_aggregate_cap() -> tuple[bool, str]:
+    """Enforce TopStep's 5-XFA simultaneous-active cap.
+
+    @canonical-source docs/research-input/topstep/topstep_xfa_parameters.txt  (article 8284215, scraped 2026-04-08)
+    @verbatim "You can have up to 5 active Express Funded Accounts at the same time."
+    @audit-finding F-6 (MEDIUM — startup gate to prevent future activation accidents)
+
+    Sums `copies` across every TopStep AccountProfile with active=True. Fails fast
+    if the total exceeds 5. Returns OK with a status string otherwise.
+    """
+    try:
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        active_topstep = [p for p in ACCOUNT_PROFILES.values() if p.active and p.firm == "topstep"]
+        total_copies = sum(p.copies for p in active_topstep)
+        cap = 5
+
+        if total_copies > cap:
+            offenders = ", ".join(f"{p.profile_id}(x{p.copies})" for p in active_topstep)
+            return False, (
+                f"BLOCKED: TopStep 5-XFA cap breached — {total_copies} active copies across "
+                f"{len(active_topstep)} profile(s): {offenders}. Disable profiles until total ≤ {cap}."
+            )
+
+        if total_copies == cap:
+            offenders = ", ".join(f"{p.profile_id}(x{p.copies})" for p in active_topstep)
+            return True, f"WARNING: at TopStep 5-XFA cap ({total_copies}/{cap}) — {offenders}"
+
+        return True, f"TopStep XFA aggregate: {total_copies}/{cap} active copies"
+    except Exception as e:  # noqa: BLE001 — startup gate must surface anything
+        return False, f"BLOCKED: TopStep XFA cap check failed: {e}"
+
+
 def check_consistency_rule(profile_id: str | None = None) -> tuple[bool, str]:
     """Check prop firm consistency rule status."""
     try:
@@ -370,6 +403,10 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
     # Manual halt (check first — overrides everything)
     ok, msg = check_manual_halt()
     results.append(("Manual halt", ok, msg))
+
+    # TopStep 5-XFA aggregate cap (F-6 — startup gate, prevents future activation accidents)
+    ok, msg = check_topstep_xfa_aggregate_cap()
+    results.append(("TopStep 5-XFA cap", ok, msg))
 
     with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
         configure_connection(con)

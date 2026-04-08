@@ -495,3 +495,334 @@ class TestApertureAware:
         assert allowed
         # Correlation gives some factor, aperture caps at 0.5
         assert factor <= 0.5
+
+
+# ─── F-2: Same-instrument opposite-direction guard (cross-account hedging) ──
+# @canonical-source docs/research-input/topstep/topstep_cross_account_hedging.md
+# @verbatim "Cross-account hedging occurs when you hold opposite positions across
+#            multiple accounts at the same time. This means you're simultaneously
+#            long and short the same instrument."
+# @verbatim "Yes! You can trade the same instrument across multiple accounts.
+#            What's prohibited is holding opposite positions simultaneously."
+
+
+@dataclass
+class _FakeStrategy:
+    instrument: str
+
+
+@dataclass
+class _HedgeTrade:
+    """Trade fixture with strategy.instrument and direction for F-2 tests."""
+
+    strategy_id: str
+    orb_label: str
+    direction: str  # "long" or "short"
+    strategy: _FakeStrategy
+    state: _State = _State.ENTERED
+
+
+class TestF2HedgingGuard:
+    """F-2: refuse entries opposite an existing same-instrument position."""
+
+    def _make_rm(self) -> RiskManager:
+        limits = RiskLimits(
+            max_concurrent_positions=10,  # generous so we hit the hedge check first
+            max_per_orb_positions=10,
+            max_per_session_positions=10,
+            max_daily_trades=20,
+        )
+        rm = RiskManager(limits)
+        rm.daily_reset(date(2026, 4, 8))
+        return rm
+
+    def _trade(self, strategy_id: str, instrument: str, direction: str, session: str = "NYSE_OPEN") -> _HedgeTrade:
+        return _HedgeTrade(
+            strategy_id=strategy_id,
+            orb_label=session,
+            direction=direction,
+            strategy=_FakeStrategy(instrument=instrument),
+        )
+
+    def test_long_then_short_same_instrument_blocked(self):
+        rm = self._make_rm()
+        active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")]
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="short",
+        )
+        assert allowed is False
+        assert "hedging_guard" in reason
+        assert "MNQ" in reason
+
+    def test_short_then_long_same_instrument_blocked(self):
+        rm = self._make_rm()
+        active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "short")]
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is False
+        assert "hedging_guard" in reason
+
+    def test_long_then_long_same_instrument_allowed(self):
+        rm = self._make_rm()
+        active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is True
+
+    def test_long_mnq_then_short_mgc_allowed(self):
+        """Different instruments → no hedge."""
+        rm = self._make_rm()
+        active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MGC_CME_REOPEN_E2",
+            orb_label="CME_REOPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MGC",
+            direction="short",
+        )
+        assert allowed is True
+
+    def test_long_then_short_after_exit_allowed(self):
+        """Once the long position EXITED, a new short is fine."""
+        rm = self._make_rm()
+        exited = self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")
+        exited.state = _State.EXITED
+        active = [exited]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="short",
+        )
+        assert allowed is True
+
+    def test_no_instrument_disables_check(self):
+        """Backward compat: callers that don't pass instrument get the old behavior."""
+        rm = self._make_rm()
+        active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            # no instrument/direction → check skipped
+        )
+        assert allowed is True
+
+    def test_armed_position_does_not_count(self):
+        """Only ENTERED positions count for hedge detection (ARMED hasn't filled yet)."""
+        rm = self._make_rm()
+        armed = self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long")
+        armed.state = _State.ARMED
+        active = [armed]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="short",
+        )
+        assert allowed is True
+
+    def test_two_existing_positions_block_on_first_match(self):
+        """If multiple longs exist on same instrument, short is blocked."""
+        rm = self._make_rm()
+        active = [
+            self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long"),
+            self._trade("MNQ_TOKYO_OPEN_E2", "MNQ", "long"),
+        ]
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_EUROPE_FLOW_E2",
+            orb_label="EUROPE_FLOW",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="short",
+        )
+        assert allowed is False
+        assert "hedging_guard" in reason
+
+
+# ─── F-1: TopStep XFA Scaling Plan integration with can_enter ──────────
+# @canonical-source docs/research-input/topstep/topstep_scaling_plan_article.md
+# @canonical-image docs/research-input/topstep/images/xfa_scaling_chart.png
+
+
+@dataclass
+class _ContractsTrade:
+    """Trade fixture for F-1 tests — has contracts + strategy.instrument."""
+
+    strategy_id: str
+    orb_label: str
+    direction: str
+    contracts: int
+    strategy: _FakeStrategy
+    state: _State = _State.ENTERED
+
+
+class TestF1ScalingPlanIntegration:
+    """F-1 inside RiskManager.can_enter — uses topstep_xfa_account_size."""
+
+    def _make_rm(self, account_size: int = 50_000) -> RiskManager:
+        limits = RiskLimits(
+            max_concurrent_positions=10,
+            max_per_orb_positions=10,
+            max_per_session_positions=10,
+            max_daily_trades=20,
+            topstep_xfa_account_size=account_size,
+        )
+        rm = RiskManager(limits)
+        rm.daily_reset(date(2026, 4, 8))
+        return rm
+
+    def _trade(self, sid: str, instrument: str, direction: str, contracts: int = 1) -> _ContractsTrade:
+        return _ContractsTrade(
+            strategy_id=sid,
+            orb_label="NYSE_OPEN",
+            direction=direction,
+            contracts=contracts,
+            strategy=_FakeStrategy(instrument=instrument),
+        )
+
+    def test_no_balance_set_fails_closed(self):
+        """If orchestrator hasn't set EOD balance, can_enter must refuse."""
+        rm = self._make_rm()
+        # NOTE: rm._topstep_xfa_eod_balance is intentionally None
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_NYSE_OPEN_E2",
+            orb_label="NYSE_OPEN",
+            active_trades=[],
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is False
+        assert "EOD XFA balance unknown" in reason
+
+    def test_day_one_50k_at_cap_allows_first_two(self):
+        """Day-1 50K XFA: cap=2, current=1 micro = 1 mini-equiv. New 1-micro entry → 2 total ≤ 2 → OK."""
+        rm = self._make_rm(50_000)
+        rm.set_topstep_xfa_eod_balance(0.0)
+        active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long", contracts=1)]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_TOKYO_OPEN_E2",
+            orb_label="TOKYO_OPEN",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",  # same direction → not blocked by F-2
+        )
+        assert allowed is True
+
+    def test_day_one_50k_third_lane_blocked(self):
+        """Day-1 50K XFA: cap=2. 2 active + 1 new = 3 > 2 → blocked by F-1."""
+        rm = self._make_rm(50_000)
+        rm.set_topstep_xfa_eod_balance(0.0)
+        active = [
+            self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long", contracts=1),
+            self._trade("MNQ_TOKYO_OPEN_E2", "MNQ", "long", contracts=1),
+        ]
+        allowed, reason, _ = rm.can_enter(
+            strategy_id="MNQ_EUROPE_FLOW_E2",
+            orb_label="EUROPE_FLOW",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is False
+        assert "topstep_scaling_plan" in reason
+        assert "day_max 2" in reason
+
+    def test_after_2k_profit_5_lanes_allowed(self):
+        """After $2K profit (top tier), 50K XFA cap=5. 4 active + 1 new = 5 ≤ 5 → OK."""
+        rm = self._make_rm(50_000)
+        rm.set_topstep_xfa_eod_balance(2_000.0)
+        active = [
+            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(4)
+        ]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_S5",
+            orb_label="EUROPE_FLOW",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is True
+
+    def test_after_2k_profit_6th_lane_blocked(self):
+        """At top tier (cap=5), 5 active + 1 new = 6 > 5 → blocked."""
+        rm = self._make_rm(50_000)
+        rm.set_topstep_xfa_eod_balance(2_000.0)
+        active = [
+            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(5)
+        ]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_S6",
+            orb_label="EUROPE_FLOW",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is False
+
+    def test_disabled_when_account_size_none(self):
+        """Non-TopStep deployments don't use topstep_xfa_account_size → check skipped."""
+        limits = RiskLimits(
+            max_concurrent_positions=10,
+            max_per_orb_positions=10,
+            max_per_session_positions=10,
+            max_daily_trades=20,
+            # topstep_xfa_account_size left at default None
+        )
+        rm = RiskManager(limits)
+        rm.daily_reset(date(2026, 4, 8))
+        # No set_topstep_xfa_eod_balance call. Should still allow entries.
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_S1",
+            orb_label="NYSE_OPEN",
+            active_trades=[],
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is True
+
+    def test_100k_day1_allows_3_blocks_4(self):
+        """100K XFA Day-1: cap=3. 2 active + 1 new = 3 ≤ 3 OK; 3 active + 1 new = 4 > 3 blocked."""
+        rm = self._make_rm(100_000)
+        rm.set_topstep_xfa_eod_balance(0.0)
+
+        # 3 lots OK
+        active2 = [self._trade(f"S{i}", "MNQ", "long", contracts=1) for i in range(2)]
+        allowed, _, _ = rm.can_enter("S3", "NYSE_OPEN", active2, 0.0, instrument="MNQ", direction="long")
+        assert allowed is True
+
+        # 4 lots blocked
+        active3 = [self._trade(f"S{i}", "MNQ", "long", contracts=1) for i in range(3)]
+        allowed, reason, _ = rm.can_enter("S4", "NYSE_OPEN", active3, 0.0, instrument="MNQ", direction="long")
+        assert allowed is False
+        assert "100K XFA" in reason
