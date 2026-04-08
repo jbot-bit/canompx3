@@ -67,11 +67,42 @@ class CostSpec:
 # INSTRUMENT COST SPECS
 # =============================================================================
 
+# ─── TopStep canonical commissions (round-trip $) ─────────────────────
+# @canonical-source docs/research-input/topstep/topstep_xfa_commissions.md  (article 8284213, scraped 2026-04-08)
+# @verbatim-section "Tradovate (Tradovate/TradingView)" and "Rithmic" tables
+# @verbatim "Fees updated as of May 12th, 2025"
+# @audit-finding F-4 (HIGH — initial code values 8-13% LOW for MNQ/MES vs canonical)
+#
+# Canonical TopStep RT rates by clearing platform:
+#                    Tradovate    Rithmic
+#   MGC   (Gold)     $1.64        $1.72
+#   MNQ   (NQ)       $1.34        $1.42
+#   MES   (ES)       $1.34        $1.42
+#   MCL   (Crude)    $1.64        $1.72
+#   SIL   (Silver)   $2.64        $2.72
+#   M6E   (EUR/USD)  $1.12        $1.20
+#   M2K   (Russell)  $1.34        $1.42
+#   MBT   (Bitcoin)  $5.64        $5.72
+#
+# We use the higher (Rithmic) value as the conservative baseline because:
+#   1. The user's TopStep XFA via ProjectX uses TopstepX's clearing path which is
+#      not separately listed in the article (the dedicated TopstepX commissions
+#      article 14363528 returned 404 on 2026-04-08).
+#   2. Rithmic-based prop firms (Bulenox, Elite Trader Funding) use these rates
+#      directly, so a Rithmic baseline is correct for those deployments too.
+#   3. Conservative cost modeling cannot UNDER-estimate friction → backtest
+#      results are floor-bounded vs reality.
+# Per-firm overrides should be added when Tradeify (Tradovate rates) goes live.
+
 COST_SPECS = {
+    # @canonical-source docs/research-input/topstep/topstep_xfa_commissions.md
+    # @verbatim "Micro Gold (MGC) Rithmic $1.72"
+    # Code value $1.74 is $0.02 above Rithmic (within rounding); keeping for
+    # historical backtest stability and conservative bias. F-4 verified.
     "MGC": CostSpec(
         instrument="MGC",
         point_value=10.0,
-        commission_rt=1.74,
+        commission_rt=1.74,  # canonical Rithmic = $1.72 (within rounding); keep for stability
         spread_doubled=2.00,
         slippage=2.00,
         tick_size=0.10,
@@ -87,19 +118,27 @@ COST_SPECS = {
     #   NYSE_CLOSE: 15.4 extra ticks (robust)
     #   NYSE_OPEN: 17.7 extra ticks (robust)
     # SESSION_SLIPPAGE_MULT exists for live but is NOT used in backtests.
+    # @canonical-source docs/research-input/topstep/topstep_xfa_commissions.md
+    # @verbatim "Micro E-mini NASDAQ 100 (MNQ) Tradovate $1.34 / Rithmic $1.42"
+    # @audit-finding F-4 — bumped from $1.24 to $1.42 (canonical TopStep Rithmic).
+    # Backtest impact: +$0.18/RT × N trades. For active topstep_50k_mnq_auto with
+    # 4 MNQ lanes × ~150 trades/yr ≈ 600 RT/yr → ~$108/yr more friction modeled.
     "MNQ": CostSpec(
         instrument="MNQ",
         point_value=2.0,
-        commission_rt=1.24,
+        commission_rt=1.42,  # canonical TopStep Rithmic (was $1.24 — F-4 fix)
         spread_doubled=0.50,
         slippage=1.00,
         tick_size=0.25,
         min_ticks_floor=10,
     ),
+    # @canonical-source docs/research-input/topstep/topstep_xfa_commissions.md
+    # @verbatim "Micro E-mini S&P (MES) Tradovate $1.34 / Rithmic $1.42"
+    # @audit-finding F-4 — bumped from $1.24 to $1.42 (canonical TopStep Rithmic).
     "MES": CostSpec(
         instrument="MES",
         point_value=5.0,  # $5 per index point
-        commission_rt=1.24,  # Micro contract RT commission
+        commission_rt=1.42,  # canonical TopStep Rithmic (was $1.24 — F-4 fix)
         spread_doubled=1.25,  # 0.25pt spread * $5 * 2 sides (tick = 0.25)
         slippage=1.25,  # 0.25pt slippage * $5 * 2 sides
         tick_size=0.25,  # $0.25/point minimum increment
