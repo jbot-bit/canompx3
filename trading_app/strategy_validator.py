@@ -57,6 +57,27 @@ from trading_app.config import (
     WF_TRADE_COUNT_OVERRIDE,
 )
 from trading_app.db_manager import init_trading_app_schema
+
+# Phase 4 Stage 4.0 (2026-04-08) — institutional criteria gates.
+# Stage 4.0 enforces criteria 1 (hypothesis file presence), 2 (MinBTL bound),
+# 8 (2026 OOS positive, N/A-safe), and 9 (era stability) as pre-flight gates.
+#
+# Criteria 4 (Chordia) and 5 (DSR) are EXPLICITLY DEFERRED to Stage 4.0b
+# for institutional compliance with the locked amendments:
+# - Amendment 2.1: DSR is CROSS-CHECK ONLY until N_eff is formally solved per
+#   Bailey-LdP 2014 Eq. 9. The existing informational DSR block at the
+#   bottom of run_validation already implements this correctly; Stage 4.0
+#   does NOT touch it.
+# - Amendment 2.2: Chordia is BANDED with a 4-tier ladder that requires
+#   composition with BH FDR + WFE + 2026 OOS results. That composition must
+#   fire AFTER the legacy validator's FDR and walkforward phases, so it
+#   cannot be a pre-flight gate. Stage 4.0b will implement the banded rule
+#   as a post-validation check.
+from trading_app.holdout_policy import HOLDOUT_GRANDFATHER_CUTOFF, HOLDOUT_SACRED_FROM
+from trading_app.hypothesis_loader import (
+    HypothesisLoaderError,
+    load_hypothesis_by_sha,
+)
 from trading_app.strategy_discovery import parse_dst_regime
 from trading_app.walkforward import append_walkforward_result
 
@@ -718,6 +739,405 @@ def _walkforward_worker(
     return result
 
 
+# =========================================================================
+# Phase 4 Stage 4.0 — institutional criteria pre-flight gates
+# =========================================================================
+#
+# These gates implement criteria 1, 2, 8, 9 of the locked institutional
+# criteria in docs/institutional/pre_registered_criteria.md. They run BEFORE
+# the existing validate_strategy() per-row pipeline as a pre-flight pass.
+#
+# Criteria 4 (Chordia) and 5 (DSR) are DEFERRED to Stage 4.0b per
+# Amendments 2.1 and 2.2 of the locked criteria file. See the imports-
+# section comment earlier in this file for the full deferral rationale.
+# Short version: Amendment 2.1 makes DSR cross-check only until N_eff is
+# formally solved; Amendment 2.2 makes Chordia a 4-band ladder requiring
+# BH FDR + WFE + 2026 OOS composition, which cannot fire as a pre-flight
+# gate. Stage 4.0b will implement both as post-validation checks.
+#
+# Grandfather skip: rows with created_at <= HOLDOUT_GRANDFATHER_CUTOFF
+# (2026-04-08 00:00:00 UTC) are exempt from these new gates and continue to
+# use the legacy validator path. This protects the 124 existing
+# validated_setups rows from retroactive rejection per Amendment 2.4.
+# Rows with NULL hypothesis_file_sha also bypass — the Stage 4.1 drift
+# check catches post-cutoff bypass at validation-startup time.
+#
+# Gate order: grandfather → C1 → C2 → C9 → C8. C9 fires before C8 because
+# era stability is a pure JSON parse while C8 issues a DuckDB query per
+# row; short-circuit the expensive IO gate whenever a cheaper local gate
+# can reject first.
+#
+# See docs/plans/2026-04-08-phase-4-clean-rediscovery-design.md § Stage 4.0.
+
+
+def _is_phase_4_grandfathered(row_dict: dict) -> bool:
+    """Return True if the experimental row should bypass Phase 4 gates.
+
+    Two conditions trigger bypass; either alone is sufficient:
+
+    1. ``created_at <= HOLDOUT_GRANDFATHER_CUTOFF`` — the row pre-dates the
+       Amendment 2.7 commit (2026-04-08 00:00:00 UTC), so it is one of the
+       124 historical experimental_strategies rows that Amendment 2.4
+       grandfathered as research-provisional. These rows must not be
+       retroactively rejected.
+
+    2. ``hypothesis_file_sha IS NULL`` — the row was created without
+       Phase 4 awareness (legacy code path, synthetic test fixture, or
+       a discovery run that bypassed Stage 4.1's --hypothesis-file
+       requirement). The validator treats this as "not opt-in to Phase 4"
+       and applies the legacy gates only. The Stage 4.1 drift check is
+       the bridge that catches the "post-cutoff bypass" case — it
+       asserts that every post-cutoff experimental row carries a non-null
+       SHA, and fires at validation-startup time, not per-row.
+
+    The distinction matters because the validator must remain compatible
+    with synthetic test fixtures and legacy callers (nested/regime
+    discovery, null seed runs). A row that genuinely opts in to Phase 4
+    by carrying a SHA gets the strict gates; everything else passes
+    through to the legacy path.
+
+    A NULL ``created_at`` is treated as grandfathered (defensive: legacy
+    rows with missing timestamps must not be retroactively rejected).
+    """
+    if row_dict.get("hypothesis_file_sha") is None:
+        return True
+    created_at = row_dict.get("created_at")
+    if created_at is None:
+        return True
+    # DuckDB returns datetime with tzinfo for TIMESTAMPTZ columns. The
+    # cutoff is also tz-aware. Direct comparison is well-defined.
+    if isinstance(created_at, datetime):
+        return created_at <= HOLDOUT_GRANDFATHER_CUTOFF
+    # Defensive: any other type → grandfather (do not retroactively reject)
+    return True
+
+
+def _check_criterion_1_hypothesis_file(row_dict: dict) -> tuple[str | None, str | None]:
+    """Criterion 1: pre-registered hypothesis file present and discoverable.
+
+    Locked text (`docs/institutional/pre_registered_criteria.md`):
+    "Before any discovery run, a pre-registered hypothesis file must exist at
+    `docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml`."
+
+    Implementation:
+    - The experimental row must carry a non-null ``hypothesis_file_sha``
+    - The SHA must resolve to a real file in the registry directory
+    - The file must parse as a valid hypothesis schema
+
+    Returns
+    -------
+    tuple[str | None, str | None]
+        ``(None, None)`` if the criterion passes.
+        ``("REJECTED", "criterion_1: ...")`` if the criterion fails.
+    """
+    sha = row_dict.get("hypothesis_file_sha")
+    if not sha:
+        return (
+            "REJECTED",
+            "criterion_1: experimental row has no hypothesis_file_sha "
+            "(post-cutoff row requires pre-registered hypothesis file)",
+        )
+    try:
+        meta = load_hypothesis_by_sha(sha)
+    except HypothesisLoaderError as exc:
+        return ("REJECTED", f"criterion_1: hypothesis file load error: {exc}")
+    if meta is None:
+        return (
+            "REJECTED",
+            f"criterion_1: hypothesis_file_sha={sha[:12]}... not found in "
+            "docs/audit/hypotheses/ (was the file committed?)",
+        )
+    return (None, None)
+
+
+def _check_criterion_2_minbtl(meta: dict, on_proxy_data: bool = False) -> tuple[str | None, str | None]:
+    """Criterion 2: hypothesis-file declared trial count must satisfy MinBTL.
+
+    Locked bound (Bailey et al 2013 Theorem 1, applied per
+    ``docs/institutional/pre_registered_criteria.md`` Criterion 2):
+    - N <= 300 trials on clean MNQ data
+    - N <= 2,000 trials on proxy-extended data with explicit data-source
+      disclosure
+
+    The discovery routine in Stage 4.1 will pass ``on_proxy_data`` based on
+    whether the hypothesis file's scope includes pre-2024-02-05 trading days
+    (the parent-symbol era for MNQ/MES). For Stage 4.0 the validator defaults
+    to clean-data mode; the cap can be relaxed in a future stage if needed.
+
+    Returns
+    -------
+    tuple[str | None, str | None]
+        ``(None, None)`` if the criterion passes.
+        ``("REJECTED", "criterion_2: ...")`` otherwise.
+    """
+    declared_n = meta.get("total_expected_trials")
+    bound = 2000 if on_proxy_data else 300
+    if declared_n is None:
+        return (
+            "REJECTED",
+            "criterion_2: hypothesis file metadata.total_expected_trials missing",
+        )
+    if declared_n > bound:
+        regime = "proxy-extended" if on_proxy_data else "clean MNQ"
+        return (
+            "REJECTED",
+            f"criterion_2: declared trials={declared_n} exceeds MinBTL bound "
+            f"{bound} for {regime} data (Bailey et al 2013 Theorem 1)",
+        )
+    return (None, None)
+
+
+# Criteria 4 (Chordia) and 5 (DSR) are deferred to Stage 4.0b. See the
+# module-level comment near the imports for the institutional reasoning.
+# Amendment 2.1 (locked) makes Criterion 5 cross-check only; the existing
+# informational DSR block at the bottom of run_validation already writes
+# dsr_score to validated_setups for audit. Amendment 2.2 (locked) makes
+# Criterion 4 a 4-band ladder that requires BH FDR + WFE + 2026 OOS
+# composition and therefore cannot fire as a pre-flight gate.
+
+
+def _check_criterion_8_oos(
+    row_dict: dict, db_path: Path | None
+) -> tuple[str | None, str | None]:
+    """Criterion 8: 2026 out-of-sample positive (with N/A safety).
+
+    Queries ``orb_outcomes`` joined with ``daily_features`` for trading days
+    on or after ``HOLDOUT_SACRED_FROM`` (2026-01-01), applies the candidate's
+    canonical filter via ``ALL_FILTERS[filter_type].matches_row()``, and
+    computes the OOS expectancy-R from matching trades.
+
+    The locked threshold is ``OOS_ExpR >= 0`` AND ``OOS_ExpR >= 0.40 * IS_ExpR``.
+
+    N/A safety: if zero OOS trades exist (e.g., synthetic test DB with no
+    2026 data), the gate returns N/A pass-through. This prevents pre-2026
+    integration tests and null seed runs from regressing.
+
+    Triple-join trap: the join MUST include ``orb_minutes`` to prevent the
+    3x row inflation. Pattern follows ``compute_dst_split`` at validator
+    line 314.
+
+    Reading the sacred 2026 window for VALIDATION is allowed under Mode A;
+    only DISCOVERY writes are forbidden. See ``trading_app.holdout_policy``.
+    """
+    # Lazy import to avoid a circular import at module load time:
+    # trading_app.config is heavy and imports many siblings.
+    from trading_app.config import ALL_FILTERS
+
+    filter_type = row_dict.get("filter_type")
+    if not filter_type:
+        return (
+            "REJECTED",
+            "criterion_8: experimental row missing filter_type (cannot apply OOS filter)",
+        )
+    if filter_type not in ALL_FILTERS:
+        return (
+            "REJECTED",
+            f"criterion_8: filter_type='{filter_type}' not in ALL_FILTERS registry",
+        )
+    filter_obj = ALL_FILTERS[filter_type]
+    instrument = row_dict.get("instrument")
+    orb_label = row_dict.get("orb_label")
+    orb_minutes = row_dict.get("orb_minutes")
+    entry_model = row_dict.get("entry_model")
+    confirm_bars = row_dict.get("confirm_bars")
+    rr_target = row_dict.get("rr_target")
+    is_expr = row_dict.get("expectancy_r")
+    if any(
+        v is None
+        for v in (instrument, orb_label, orb_minutes, entry_model, confirm_bars, rr_target, is_expr)
+    ):
+        return (
+            "REJECTED",
+            "criterion_8: experimental row missing required dimensions for OOS query",
+        )
+    # Re-bind to local typed names so the static checker sees the narrowing
+    # the runtime check above already enforced.
+    orb_label_str: str = str(orb_label)
+    is_expr_f: float = float(is_expr)  # type: ignore[arg-type]
+
+    effective_db = db_path if db_path is not None else GOLD_DB_PATH
+    oos_pnl_r: list[float] = []
+    with duckdb.connect(str(effective_db), read_only=True) as oos_con:
+        # Triple-join with orb_minutes prevents the 3x inflation trap.
+        oos_rows = oos_con.execute(
+            """
+            SELECT o.*, d.*
+            FROM orb_outcomes o
+            JOIN daily_features d
+              ON o.symbol = d.symbol
+             AND o.trading_day = d.trading_day
+             AND o.orb_minutes = d.orb_minutes
+            WHERE o.symbol = ?
+              AND o.orb_label = ?
+              AND o.orb_minutes = ?
+              AND o.entry_model = ?
+              AND o.confirm_bars = ?
+              AND o.rr_target = ?
+              AND o.trading_day >= ?
+            """,
+            [instrument, orb_label, orb_minutes, entry_model, confirm_bars, rr_target, HOLDOUT_SACRED_FROM],
+        ).fetchall()
+        col_names = [desc[0] for desc in oos_con.description]
+
+    # Apply the canonical filter to each joined row. matches_row takes a
+    # daily_features-shaped dict; the joined SELECT * produces a superset
+    # which is fine — extra keys are ignored.
+    for raw_row in oos_rows:
+        joined = dict(zip(col_names, raw_row, strict=False))
+        try:
+            if filter_obj.matches_row(joined, orb_label_str):
+                pnl = joined.get("pnl_r")
+                if pnl is not None:
+                    oos_pnl_r.append(float(pnl))
+        except Exception as exc:
+            # Filter implementation defect: log loud, do not crash the
+            # validator. The row is dropped from the OOS sample.
+            logger.warning(
+                "criterion_8 filter %s.matches_row raised on (%s, %s, %s): %s",
+                filter_type, instrument, orb_label_str, joined.get("trading_day"), exc,
+            )
+            continue
+
+    n_oos = len(oos_pnl_r)
+    if n_oos == 0:
+        # N/A pass-through: absence of OOS data is a measurement
+        # unavailability, not a criterion violation. This protects
+        # synthetic test DBs and null seed runs from false rejection.
+        return (None, None)
+
+    oos_expr = sum(oos_pnl_r) / n_oos
+    if oos_expr < 0:
+        return (
+            "REJECTED",
+            f"criterion_8: OOS ExpR={oos_expr:+.4f} < 0 (N_oos={n_oos})",
+        )
+    if is_expr_f > 0:
+        ratio = oos_expr / is_expr_f
+        if ratio < 0.40:
+            return (
+                "REJECTED",
+                f"criterion_8: OOS/IS ratio={ratio:.3f} < 0.40 "
+                f"(OOS={oos_expr:+.4f} IS={is_expr_f:+.4f} N_oos={n_oos})",
+            )
+    return (None, None)
+
+
+def _check_criterion_9_era_stability(row_dict: dict) -> tuple[str | None, str | None]:
+    """Criterion 9: era stability — no era with ExpR < -0.05 (N >= 50).
+
+    Lifted from informational ``era_dependent`` flag to enforced gate per
+    Stage 4.0. Reads the strategy's ``yearly_results`` JSON, era-bins by
+    (2015-2019, 2020-2022, 2023, 2024-2025, 2026), and rejects if any era
+    has ExpR < -0.05 with at least 50 trades.
+
+    Eras with < 50 trades are exempt (insufficient data to judge).
+    """
+    yearly_raw = row_dict.get("yearly_results")
+    if not yearly_raw:
+        return (None, None)  # no yearly data → cannot evaluate, do not reject
+    try:
+        yearly = json.loads(yearly_raw) if isinstance(yearly_raw, str) else yearly_raw
+    except (json.JSONDecodeError, TypeError):
+        return (None, None)  # corrupt JSON → do not reject from this gate
+    if not isinstance(yearly, dict):
+        return (None, None)
+
+    # Era bins per Criterion 9
+    era_bins = {
+        "2015-2019": range(2015, 2020),
+        "2020-2022": range(2020, 2023),
+        "2023": range(2023, 2024),
+        "2024-2025": range(2024, 2026),
+        "2026": range(2026, 2027),
+    }
+    for era_label, year_range in era_bins.items():
+        n_total = 0
+        r_total = 0.0
+        for y_str, data in yearly.items():
+            try:
+                y = int(y_str)
+            except (TypeError, ValueError):
+                continue
+            if y not in year_range:
+                continue
+            if not isinstance(data, dict):
+                continue
+            trades = data.get("trades", 0) or 0
+            avg_r = data.get("avg_r", 0) or 0
+            n_total += trades
+            r_total += trades * avg_r
+        if n_total >= 50:
+            era_expr = r_total / n_total
+            if era_expr < -0.05:
+                return (
+                    "REJECTED",
+                    f"criterion_9: era {era_label} ExpR={era_expr:+.4f} < -0.05 "
+                    f"(N={n_total})",
+                )
+    return (None, None)
+
+
+def _check_phase_4_pre_flight_gates(
+    row_dict: dict,
+    db_path: Path | None,
+    hypothesis_meta_cache: dict[str, dict],
+) -> tuple[str | None, str | None]:
+    """Apply all Phase 4 Stage 4.0 pre-flight gates to a single experimental row.
+
+    Stage 4.0 enforces Criteria 1 (hypothesis file presence), 2 (MinBTL),
+    9 (era stability), and 8 (2026 OOS positive) in that order. Criteria 4
+    (Chordia) and 5 (DSR) are deferred to Stage 4.0b per Amendments 2.1 and
+    2.2 of the locked criteria file; they do not appear here.
+
+    Returns
+    -------
+    tuple[str | None, str | None]
+        ``(None, None)`` if grandfathered or all Stage 4.0 gates pass.
+        ``("REJECTED", "criterion_N: ...")`` on first gate failure.
+    """
+    if _is_phase_4_grandfathered(row_dict):
+        return (None, None)
+
+    # Criterion 1: hypothesis file presence (C2 depends on the loaded meta)
+    rejection = _check_criterion_1_hypothesis_file(row_dict)
+    if rejection != (None, None):
+        return rejection
+
+    # Load + cache the hypothesis metadata for downstream gates.
+    sha = row_dict["hypothesis_file_sha"]
+    if sha not in hypothesis_meta_cache:
+        meta_loaded = load_hypothesis_by_sha(sha)
+        if meta_loaded is None:
+            # Defensive: criterion_1 already verified this; reaching here
+            # implies a race or test fixture inconsistency.
+            return (
+                "REJECTED",
+                f"criterion_1: hypothesis sha={sha[:12]} disappeared between checks",
+            )
+        hypothesis_meta_cache[sha] = meta_loaded
+    meta = hypothesis_meta_cache[sha]
+
+    # Criterion 2: MinBTL trial count bound (per file, not per row)
+    rejection = _check_criterion_2_minbtl(meta)
+    if rejection != (None, None):
+        return rejection
+
+    # Criterion 9: era stability (cheap, pure JSON parse, no DB access).
+    # Fires before C8 to short-circuit expensive DB work (reviewer HIGH #5 —
+    # gate ordering: cheap local gates before expensive IO gates).
+    rejection = _check_criterion_9_era_stability(row_dict)
+    if rejection != (None, None):
+        return rejection
+
+    # Criterion 8: 2026 OOS positive (N/A safe when no OOS data).
+    # Last in the sequence because it issues a DuckDB read-only query per row.
+    rejection = _check_criterion_8_oos(row_dict, db_path)
+    if rejection != (None, None):
+        return rejection
+
+    return (None, None)
+
+
 def run_validation(
     db_path: Path | None = None,
     instrument: str = "MGC",
@@ -810,8 +1230,14 @@ def run_validation(
     skipped_aliases = 0
     passed_strategy_ids = []
 
-    serial_results = []  # Each: {row_dict, status, notes, regime_waivers, dst_split}
+    serial_results = []  # Each: {row_dict, status, notes, regime_waivers, dst_split, rejection_reason}
     wf_candidates = []  # Survivors needing walkforward
+
+    # Phase 4 Stage 4.0: hypothesis-file metadata cache, populated lazily
+    # as the loop encounters new SHAs. Avoids re-parsing the same YAML
+    # for every row that points at the same hypothesis file.
+    phase_4_hypothesis_cache: dict[str, dict] = {}
+    phase_4_rejected_count = 0
 
     for row in rows:
         row_dict = dict(zip(col_names, row, strict=False))
@@ -825,6 +1251,7 @@ def run_validation(
                     "status": "SKIPPED",
                     "notes": "Alias (non-canonical)",
                     "regime_waivers": [],
+                    "rejection_reason": None,
                     "dst_split": {
                         "winter_n": None,
                         "winter_avg_r": None,
@@ -834,6 +1261,40 @@ def run_validation(
                     },
                 }
             )
+            continue
+
+        # ── Phase 4 Stage 4.0 pre-flight gates ────────────────────────
+        # Apply institutional criteria 1, 2, 8, 9 before the legacy
+        # validate_strategy pipeline. Criteria 4 and 5 are deferred to
+        # Stage 4.0b per Amendments 2.1 (DSR cross-check only) and 2.2
+        # (Chordia banded post-validation). Grandfathered rows (created_at
+        # <= HOLDOUT_GRANDFATHER_CUTOFF OR hypothesis_file_sha IS NULL)
+        # skip these gates and fall through to the legacy validator path.
+        # See _check_phase_4_pre_flight_gates docstring for details.
+        phase_4_status, phase_4_reason = _check_phase_4_pre_flight_gates(
+            row_dict,
+            db_path,
+            phase_4_hypothesis_cache,
+        )
+        if phase_4_status is not None:
+            serial_results.append(
+                {
+                    "row_dict": row_dict,
+                    "status": phase_4_status,
+                    "notes": phase_4_reason,
+                    "regime_waivers": [],
+                    "rejection_reason": phase_4_reason,
+                    "dst_split": {
+                        "winter_n": None,
+                        "winter_avg_r": None,
+                        "summer_n": None,
+                        "summer_avg_r": None,
+                        "verdict": None,
+                    },
+                }
+            )
+            rejected += 1
+            phase_4_rejected_count += 1
             continue
 
         # REGIME strategies (N<100) use min_trades_per_year=5 — sparse years
@@ -1087,6 +1548,12 @@ def run_validation(
                 status = sr["status"]
                 notes = sr["notes"]
                 dst_split = sr["dst_split"]
+                # Phase 4 Stage 4.0: capture the structured criterion-tagged
+                # rejection_reason for Phase 4 gate rejections. Legacy
+                # rejections leave this NULL — Stage 4.4 audit distinguishes
+                # the two via "rejection_reason IS NOT NULL = Phase 4 gate
+                # rejection, criterion N is in the value."
+                rejection_reason = sr.get("rejection_reason")
 
                 if status == "SKIPPED":
                     con.execute(
@@ -1104,7 +1571,8 @@ def run_validation(
                        SET validation_status = ?, validation_notes = ?,
                            dst_winter_n = ?, dst_winter_avg_r = ?,
                            dst_summer_n = ?, dst_summer_avg_r = ?,
-                           dst_verdict = ?
+                           dst_verdict = ?,
+                           rejection_reason = ?
                        WHERE strategy_id = ?""",
                     [
                         status,
@@ -1114,6 +1582,7 @@ def run_validation(
                         dst_split.get("summer_n"),
                         dst_split.get("summer_avg_r"),
                         dst_split.get("verdict"),
+                        rejection_reason,
                         sid,
                     ],
                 )
@@ -1382,9 +1851,11 @@ def run_validation(
                             """UPDATE experimental_strategies
                                SET validation_status = 'REJECTED',
                                    validation_notes = 'Phase FDR: BH adjusted p >= 0.05 (session='
+                                       || ? || ', K=' || ? || ')',
+                                   rejection_reason = 'criterion_3: BH FDR adjusted p >= 0.05 (session='
                                        || ? || ', K=' || ? || ')'
                                WHERE strategy_id = ?""",
-                            [sess_name, str(sess_k), sid],
+                            [sess_name, str(sess_k), sess_name, str(sess_k), sid],
                         )
                     passed -= n_fdr_rejected
                     rejected += n_fdr_rejected

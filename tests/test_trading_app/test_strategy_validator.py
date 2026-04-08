@@ -12,7 +12,13 @@ import pytest
 
 from pipeline.cost_model import get_cost_spec
 from trading_app.strategy_validator import (
+    _check_criterion_1_hypothesis_file,
+    _check_criterion_2_minbtl,
+    _check_criterion_8_oos,
+    _check_criterion_9_era_stability,
     _check_mode_a_holdout_integrity,
+    _check_phase_4_pre_flight_gates,
+    _is_phase_4_grandfathered,
     _parse_cost_ratio_cap_pct,
     _parse_orb_size_bounds,
     classify_regime,
@@ -1011,3 +1017,337 @@ class TestModeAHoldoutIntegrity:
             )
         with pytest.raises(ValueError, match=r"refuses to promote 3 MNQ"):
             _check_mode_a_holdout_integrity(db_path, "MNQ")
+
+
+# =========================================================================
+# Phase 4 Stage 4.0 — institutional criteria gates
+# =========================================================================
+
+
+def _write_test_hypothesis(tmp_path: Path, total_trials: int = 60, with_theory: bool = True) -> tuple[Path, str]:
+    """Helper: write a minimal valid hypothesis YAML and return (path, sha)."""
+    import yaml
+
+    from trading_app.hypothesis_loader import compute_file_sha
+
+    body: dict = {
+        "metadata": {
+            "name": "test_hypothesis",
+            "date_locked": "2026-04-08",
+            "holdout_date": "2026-01-01",
+            "total_expected_trials": total_trials,
+        },
+        "hypotheses": [
+            {
+                "id": 1,
+                "name": "synthetic",
+                "filter": {"type": "NO_FILTER"},
+                "scope": {"sessions": ["NYSE_OPEN"]},
+            }
+        ],
+    }
+    if with_theory:
+        body["hypotheses"][0]["theory_citation"] = (
+            "docs/institutional/literature/synthetic_test.md"
+        )
+    path = tmp_path / "test_hypothesis.yaml"
+    path.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+    return path, compute_file_sha(path)
+
+
+def _phase_4_row(**overrides):
+    """Build a Phase-4-aware row dict. By default has a SHA placeholder.
+
+    Override ``hypothesis_file_sha`` to None to test the legacy bypass path.
+    Override ``created_at`` to control the grandfather predicate.
+    """
+    base = _make_row()
+    base["instrument"] = "MNQ"
+    base["orb_label"] = "NYSE_OPEN"
+    base["entry_model"] = "E2"
+    base["filter_type"] = "NO_FILTER"
+    base["sample_size"] = 200
+    base["sharpe_ratio"] = 0.30
+    base["expectancy_r"] = 0.20
+    base["skewness"] = 0.0
+    base["kurtosis_excess"] = 0.0
+    base["hypothesis_file_sha"] = "0" * 64  # placeholder, overridden in tests
+    base["created_at"] = datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC)  # post-cutoff
+    base.update(overrides)
+    return base
+
+
+class TestPhase4GrandfatherSkip:
+    """The bypass predicate that protects legacy/synthetic rows."""
+
+    def test_pre_cutoff_row_is_grandfathered(self):
+        row = _phase_4_row(created_at=datetime(2026, 4, 7, 23, 59, 0, tzinfo=UTC))
+        assert _is_phase_4_grandfathered(row) is True
+
+    def test_post_cutoff_row_with_sha_is_NOT_grandfathered(self):
+        row = _phase_4_row(
+            created_at=datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC),
+            hypothesis_file_sha="abc" * 21 + "a",
+        )
+        assert _is_phase_4_grandfathered(row) is False
+
+    def test_post_cutoff_row_without_sha_IS_grandfathered(self):
+        # Critical regression test: synthetic test fixtures create post-cutoff
+        # rows without SHAs and rely on the legacy validator path. Phase 4
+        # gates must NOT fire on them.
+        row = _phase_4_row(
+            created_at=datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC),
+            hypothesis_file_sha=None,
+        )
+        assert _is_phase_4_grandfathered(row) is True
+
+    def test_null_created_at_is_grandfathered(self):
+        row = _phase_4_row(created_at=None)
+        assert _is_phase_4_grandfathered(row) is True
+
+    def test_at_exact_cutoff_moment_is_grandfathered(self):
+        # The cutoff is 2026-04-08 00:00:00 UTC. A row created at exactly
+        # that moment is grandfathered (<=, not <).
+        row = _phase_4_row(created_at=datetime(2026, 4, 8, 0, 0, 0, tzinfo=UTC))
+        assert _is_phase_4_grandfathered(row) is True
+
+
+class TestCriterion1HypothesisFile:
+    """Criterion 1: pre-registered hypothesis file presence + load."""
+
+    def test_passes_with_real_committed_file(self, tmp_path, monkeypatch):
+        path, sha = _write_test_hypothesis(tmp_path)
+        monkeypatch.setattr(
+            "trading_app.hypothesis_loader._HYPOTHESIS_DIR", tmp_path
+        )
+        row = _phase_4_row(hypothesis_file_sha=sha)
+        status, reason = _check_criterion_1_hypothesis_file(row)
+        assert status is None
+        assert reason is None
+
+    def test_fails_when_sha_is_none(self):
+        row = _phase_4_row(hypothesis_file_sha=None)
+        status, reason = _check_criterion_1_hypothesis_file(row)
+        assert status == "REJECTED"
+        assert reason is not None
+        assert "criterion_1" in reason
+        assert "no hypothesis_file_sha" in reason
+
+    def test_fails_when_sha_does_not_resolve(self, tmp_path, monkeypatch):
+        # Empty registry directory → SHA cannot be found
+        monkeypatch.setattr(
+            "trading_app.hypothesis_loader._HYPOTHESIS_DIR", tmp_path
+        )
+        row = _phase_4_row(hypothesis_file_sha="0" * 64)
+        status, reason = _check_criterion_1_hypothesis_file(row)
+        assert status == "REJECTED"
+        assert reason is not None
+        assert "criterion_1" in reason
+        assert "not found" in reason
+
+
+class TestCriterion2MinBTL:
+    """Criterion 2: declared trial count must satisfy MinBTL bound."""
+
+    def test_passes_under_clean_data_bound(self, tmp_path, monkeypatch):
+        path, _sha = _write_test_hypothesis(tmp_path, total_trials=200)
+        from trading_app.hypothesis_loader import load_hypothesis_metadata
+
+        meta = load_hypothesis_metadata(path)
+        status, reason = _check_criterion_2_minbtl(meta, on_proxy_data=False)
+        assert status is None
+        assert reason is None
+
+    def test_fails_when_exceeds_clean_data_bound(self, tmp_path):
+        path, _sha = _write_test_hypothesis(tmp_path, total_trials=500)
+        from trading_app.hypothesis_loader import load_hypothesis_metadata
+
+        meta = load_hypothesis_metadata(path)
+        status, reason = _check_criterion_2_minbtl(meta, on_proxy_data=False)
+        assert status == "REJECTED"
+        assert reason is not None
+        assert "criterion_2" in reason
+        assert "300" in reason
+        assert "500" in reason
+
+    def test_passes_under_proxy_data_bound(self, tmp_path):
+        path, _sha = _write_test_hypothesis(tmp_path, total_trials=1500)
+        from trading_app.hypothesis_loader import load_hypothesis_metadata
+
+        meta = load_hypothesis_metadata(path)
+        status, reason = _check_criterion_2_minbtl(meta, on_proxy_data=True)
+        assert status is None
+
+    def test_fails_when_exceeds_proxy_data_bound(self, tmp_path):
+        path, _sha = _write_test_hypothesis(tmp_path, total_trials=2500)
+        from trading_app.hypothesis_loader import load_hypothesis_metadata
+
+        meta = load_hypothesis_metadata(path)
+        status, reason = _check_criterion_2_minbtl(meta, on_proxy_data=True)
+        assert status == "REJECTED"
+        assert reason is not None
+        assert "2000" in reason
+
+
+# NOTE: Criterion 4 (Chordia) and Criterion 5 (DSR) test classes are
+# DEFERRED to Stage 4.0b. Amendment 2.1 of the locked criteria file makes
+# DSR cross-check only (not a hard gate) until N_eff is formally solved
+# per Bailey-LdP 2014 Equation 9. Amendment 2.2 reframes Chordia as a
+# 4-band ladder requiring BH FDR + WFE + 2026 OOS composition, which
+# cannot fire as a pre-flight gate. Both gates will be implemented and
+# tested in Stage 4.0b as post-validation checks. Stage 4.0 intentionally
+# enforces only Criteria 1, 2, 8, 9.
+
+
+class TestCriterion8OOSPositive:
+    """Criterion 8: 2026 OOS positive (with N/A safety)."""
+
+    # Default rr_target on _phase_4_row inherits from _make_row → 2.0
+    _DEFAULT_RR = 2.0
+
+    def _make_synthetic_db(self, db_path: Path, oos_pnls: list[float]) -> Path:
+        """Build a tiny duckdb at the given path with synthetic OOS rows.
+
+        Each call uses a fresh path so tests can build multiple DBs without
+        the table-already-exists error.
+        """
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE orb_outcomes (
+                trading_day DATE, symbol VARCHAR, orb_label VARCHAR,
+                orb_minutes INTEGER, entry_model VARCHAR, confirm_bars INTEGER,
+                rr_target DOUBLE, pnl_r DOUBLE
+            )
+        """)
+        con.execute("""
+            CREATE TABLE daily_features (
+                trading_day DATE, symbol VARCHAR, orb_minutes INTEGER,
+                stub_col INTEGER
+            )
+        """)
+        for i, pnl in enumerate(oos_pnls):
+            day = date(2026, 1, 5 + i)
+            con.execute(
+                "INSERT INTO orb_outcomes VALUES (?, 'MNQ', 'NYSE_OPEN', 5, 'E2', 1, ?, ?)",
+                [day, self._DEFAULT_RR, pnl],
+            )
+            con.execute(
+                "INSERT INTO daily_features VALUES (?, 'MNQ', 5, 1)",
+                [day],
+            )
+        con.close()
+        return db_path
+
+    def test_na_safe_when_no_oos_data(self, tmp_path):
+        # Empty OOS → N/A pass-through
+        db_path = self._make_synthetic_db(tmp_path / "empty.db", oos_pnls=[])
+        row = _phase_4_row(expectancy_r=0.20)
+        status, reason = _check_criterion_8_oos(row, db_path)
+        assert status is None, f"unexpected rejection: {reason}"
+
+    def test_passes_with_positive_oos_above_ratio(self, tmp_path):
+        # OOS expr = (1.0+1.0-0.5+0.5+0.0)/5 = 0.40, IS=0.20, ratio=2.0 > 0.40
+        db_path = self._make_synthetic_db(
+            tmp_path / "above.db", oos_pnls=[1.0, 1.0, -0.5, 0.5, 0.0]
+        )
+        row = _phase_4_row(expectancy_r=0.20)
+        status, reason = _check_criterion_8_oos(row, db_path)
+        assert status is None, f"unexpected rejection: {reason}"
+
+    def test_fails_with_negative_oos(self, tmp_path):
+        db_path = self._make_synthetic_db(
+            tmp_path / "neg.db", oos_pnls=[-1.0, -0.5, -0.3]
+        )
+        row = _phase_4_row(expectancy_r=0.20)
+        status, reason = _check_criterion_8_oos(row, db_path)
+        assert status == "REJECTED"
+        assert reason is not None
+        assert "criterion_8" in reason
+        assert "OOS" in reason
+
+    def test_fails_with_oos_below_ratio(self, tmp_path):
+        # OOS positive but ratio < 0.40
+        db_path = self._make_synthetic_db(
+            tmp_path / "ratio.db", oos_pnls=[0.05, 0.02, 0.03]
+        )
+        row = _phase_4_row(expectancy_r=0.50)
+        # OOS expr ≈ 0.033, IS=0.50, ratio≈0.067 < 0.40
+        status, reason = _check_criterion_8_oos(row, db_path)
+        assert status == "REJECTED"
+        assert reason is not None
+        assert "OOS/IS ratio" in reason
+
+
+class TestCriterion9EraStability:
+    """Criterion 9: era stability lifted from informational to enforced."""
+
+    def test_passes_when_all_eras_above_threshold(self):
+        yearly = json.dumps({
+            "2024": {"trades": 100, "avg_r": 0.20, "wins": 55},
+            "2025": {"trades": 100, "avg_r": 0.18, "wins": 53},
+        })
+        row = _phase_4_row(yearly_results=yearly)
+        status, reason = _check_criterion_9_era_stability(row)
+        assert status is None, reason
+
+    def test_fails_when_era_below_minus_005_with_sufficient_trades(self):
+        # 2020-2022 era: 100 trades, avg_r = -0.10 → fails
+        yearly = json.dumps({
+            "2020": {"trades": 50, "avg_r": -0.10},
+            "2021": {"trades": 50, "avg_r": -0.10},
+            "2024": {"trades": 100, "avg_r": 0.20},
+        })
+        row = _phase_4_row(yearly_results=yearly)
+        status, reason = _check_criterion_9_era_stability(row)
+        assert status == "REJECTED"
+        assert reason is not None
+        assert "criterion_9" in reason
+        assert "2020-2022" in reason
+
+    def test_passes_when_bad_era_has_few_trades(self):
+        # The bad era has only 30 trades total (< 50) → exempt
+        yearly = json.dumps({
+            "2020": {"trades": 15, "avg_r": -0.20},
+            "2021": {"trades": 15, "avg_r": -0.30},
+            "2024": {"trades": 200, "avg_r": 0.20},
+        })
+        row = _phase_4_row(yearly_results=yearly)
+        status, _ = _check_criterion_9_era_stability(row)
+        assert status is None
+
+
+class TestPhase4Orchestrator:
+    """The full pre-flight orchestrator + grandfather skip end-to-end."""
+
+    def test_grandfathered_row_passes_through(self, tmp_path):
+        row = _phase_4_row(
+            created_at=datetime(2026, 4, 7, 23, 59, 0, tzinfo=UTC),
+            hypothesis_file_sha=None,
+        )
+        cache: dict = {}
+        status, reason = _check_phase_4_pre_flight_gates(row, None, cache)
+        assert status is None, reason
+
+    def test_post_cutoff_no_sha_passes_through_legacy(self, tmp_path):
+        # Critical: this is the test_promotes_passing_strategy regression
+        # case. Post-cutoff row with no SHA must NOT be rejected by Phase 4
+        # gates — it falls through to the legacy validator path.
+        row = _phase_4_row(
+            created_at=datetime(2026, 4, 9, 12, 0, 0, tzinfo=UTC),
+            hypothesis_file_sha=None,
+        )
+        cache: dict = {}
+        status, reason = _check_phase_4_pre_flight_gates(row, None, cache)
+        assert status is None, reason
+
+    def test_post_cutoff_invalid_sha_rejects_on_c1(self, tmp_path, monkeypatch):
+        # Empty registry → SHA does not resolve → criterion_1 rejects
+        monkeypatch.setattr(
+            "trading_app.hypothesis_loader._HYPOTHESIS_DIR", tmp_path
+        )
+        row = _phase_4_row(hypothesis_file_sha="abc" * 21 + "a")
+        cache: dict = {}
+        status, reason = _check_phase_4_pre_flight_gates(row, None, cache)
+        assert status == "REJECTED"
+        assert reason is not None
+        assert "criterion_1" in reason

@@ -4000,6 +4000,77 @@ def check_nested_builder_absent() -> list[str]:
     return []
 
 
+def check_phase_4_validator_gates_present() -> list[str]:
+    """Verify the strategy_validator exposes the Phase 4 Stage 4.0 gates.
+
+    Phase 4 Stage 4.0 (2026-04-08) adds pre-flight gates for institutional
+    criteria 1 (hypothesis file presence), 2 (MinBTL bound), 8 (2026 OOS
+    positive, N/A-safe), and 9 (era stability enforced). This drift check
+    asserts the gate functions still exist as module-level callables in
+    ``trading_app/strategy_validator.py`` so a future refactor cannot
+    silently drop them while leaving the locked criteria text in
+    ``docs/institutional/pre_registered_criteria.md`` asserting they are
+    enforced.
+
+    Criteria 4 (Chordia) and 5 (DSR) are DEFERRED to Stage 4.0b and are
+    NOT checked here. Amendment 2.1 (locked) downgraded Criterion 5 to
+    cross-check only until N_eff is formally solved (the existing
+    informational DSR block at the bottom of run_validation already
+    implements this correctly). Amendment 2.2 (locked) reframed Criterion 4
+    as a 4-band ladder that requires BH FDR + WFE + 2026 OOS composition
+    and therefore cannot fire as a pre-flight gate. Stage 4.0b will
+    implement the banded Chordia rule as a post-validation check. Until
+    then, this drift check intentionally does NOT assert those gates exist.
+
+    The check is structural (presence of named functions in the source),
+    not behavioral (does the gate fire correctly). Behavioral coverage is
+    in ``tests/test_trading_app/test_strategy_validator.py``.
+
+    @canonical-source: trading_app/strategy_validator.py
+    @canonical-source: docs/institutional/pre_registered_criteria.md
+    """
+    violations = []
+    validator_path = TRADING_APP_DIR / "strategy_validator.py"
+    if not validator_path.is_file():
+        return [f"strategy_validator.py not found at {validator_path}"]
+    src = validator_path.read_text(encoding="utf-8")
+    required_gates = [
+        "_is_phase_4_grandfathered",
+        "_check_criterion_1_hypothesis_file",
+        "_check_criterion_2_minbtl",
+        "_check_criterion_8_oos",
+        "_check_criterion_9_era_stability",
+        "_check_phase_4_pre_flight_gates",
+    ]
+    for gate in required_gates:
+        if f"def {gate}(" not in src:
+            violations.append(
+                f"strategy_validator.py missing Phase 4 gate function: {gate}. "
+                f"Phase 4 Stage 4.0 enforces this gate per "
+                f"docs/institutional/pre_registered_criteria.md."
+            )
+    # Also assert the orchestrator is wired into run_validation's loop.
+    if "_check_phase_4_pre_flight_gates(" not in src:
+        violations.append(
+            "strategy_validator.py defines _check_phase_4_pre_flight_gates "
+            "but does not invoke it. The orchestrator must be called inside "
+            "the run_validation row loop or the gates are dead code."
+        )
+    # Assert C4 and C5 gate bodies are NOT present — they were removed from
+    # Stage 4.0 to comply with Amendments 2.1 (DSR cross-check only) and
+    # 2.2 (Chordia banded post-validation). If they reappear as pre-flight
+    # reject gates, drift has occurred and Amendment 2.8 is required.
+    for deferred_gate in ("_check_criterion_4_chordia", "_check_criterion_5_dsr"):
+        if f"def {deferred_gate}(" in src:
+            violations.append(
+                f"strategy_validator.py defines {deferred_gate} which is "
+                f"DEFERRED to Stage 4.0b per Amendments 2.1/2.2 of the "
+                f"locked criteria. Restoring it as a pre-flight reject gate "
+                f"requires a new amendment with literature justification."
+            )
+    return violations
+
+
 def check_resample_helpers_in_entry_rules() -> list[str]:
     """resample_to_5m and _verify_e3_sub_bar_fill must be defined in trading_app.entry_rules.
 
@@ -4293,6 +4364,12 @@ CHECKS = [
     (
         "@canonical-source annotations point to existing files",
         check_canonical_source_annotations,
+        False,
+        False,
+    ),
+    (
+        "Phase 4 validator gate functions present (criteria 1, 2, 8, 9; 4 and 5 deferred per Amendments 2.1/2.2)",
+        check_phase_4_validator_gates_present,
         False,
         False,
     ),

@@ -193,6 +193,9 @@ class TestAllFiltersSync:
         "PDR_R125",
         "GAP_R005",
         "GAP_R015",
+        # Pit range filter (F5 deployment, commit 2c12641) — pit_range/atr >= 0.10
+        # routed to CME_REOPEN only via get_filters_for_grid()
+        "PIT_MIN",
         # Cost-ratio + break-speed composites (Apr 2026 break-speed retest)
         "COST_LT08_FAST5",
         "COST_LT08_FAST10",
@@ -255,6 +258,7 @@ class TestAllFiltersSync:
             OrbVolumeFilter,
             OvernightRangeAbsFilter,
             OwnATRPercentileFilter,
+            PitRangeFilter,
             PrevDayRangeNormFilter,
         )
 
@@ -271,6 +275,7 @@ class TestAllFiltersSync:
                     OwnATRPercentileFilter,
                     PrevDayRangeNormFilter,
                     GapNormFilter,
+                    PitRangeFilter,
                 ),
             ):
                 continue

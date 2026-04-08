@@ -581,6 +581,26 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         except duckdb.CatalogException:
             pass  # column already exists
 
+        # Migration: Phase 4 Stage 4.0 (2026-04-08) — institutional criteria gates
+        # Two new columns on experimental_strategies for the locked 12-criteria
+        # enforcement (docs/institutional/pre_registered_criteria.md):
+        # - hypothesis_file_sha: links each row to a committed pre-registered
+        #   hypothesis YAML in docs/audit/hypotheses/. Populated by Phase 4
+        #   Stage 4.1 discovery runs. NULL on all rows created before that
+        #   stage; the validator's grandfather skip protects pre-cutoff rows.
+        # - rejection_reason: structured "criterion_N: <short reason>" tag
+        #   populated by validator gates so Stage 4.4 can produce per-criterion
+        #   breakdown counts. Distinct from the free-form validation_notes.
+        # See docs/plans/2026-04-08-phase-4-clean-rediscovery-design.md.
+        for col, typedef in [
+            ("hypothesis_file_sha", "TEXT"),
+            ("rejection_reason", "TEXT"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE experimental_strategies ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
         # Table 7: validation_run_log (Mar 2026 — Bloomey FIX 8)
         # Tracks rejection rate per phase per validation run for auditability.
         con.execute("""
@@ -745,6 +765,14 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "avg_risk_dollars",
                 "avg_win_dollars",
                 "avg_loss_dollars",
+                # Phase 4 Stage 4.0 columns (migration-added — 2026-04-08)
+                # Links each post-cutoff experimental row to a pre-registered
+                # hypothesis YAML in docs/audit/hypotheses/ (Criterion 1) and
+                # captures the rejection reason as a structured criterion tag
+                # so Stage 4.4 can produce per-criterion breakdown counts.
+                # See docs/plans/2026-04-08-phase-4-clean-rediscovery-design.md.
+                "hypothesis_file_sha",
+                "rejection_reason",
             }
             actual_cols = {row[0] for row in result}
 

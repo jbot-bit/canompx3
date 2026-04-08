@@ -108,3 +108,19 @@ class TestNormApproximations:
     def test_ppf_known_values(self):
         assert abs(_norm_ppf(0.975) - 1.96) < 0.02
         assert abs(_norm_ppf(0.5) - 0.0) < 0.01
+
+
+# NOTE: The compute_dsr_gate wrapper was removed from trading_app/dsr.py
+# as part of Phase 4 Stage 4.0 institutional review. The first-draft
+# implementation had a semantic type confusion (``observed_n`` was passed
+# trade count when the Bailey-LdP 2014 N argument is a strategy-trial
+# count) and a monotonicity-direction error in its docstring (it claimed
+# "never softer than actual sample" when the composition ``min(declared,
+# observed)`` produces a LOOSER gate than pure observed N in realistic
+# cases). Amendment 2.1 of docs/institutional/pre_registered_criteria.md
+# already declares DSR to be cross-check only, so a hard-gate wrapper was
+# out of scope for Stage 4.0 anyway. The existing informational DSR block
+# at the bottom of strategy_validator.run_validation correctly implements
+# Amendment 2.1 by computing and storing dsr_score without gating.
+# Stage 4.0b will revisit DSR enforcement if and when N_eff is formally
+# solved per Bailey-LdP 2014 Equation 9.
