@@ -1,0 +1,69 @@
+# MGC Comprehensive Discovery — Top 5 sessions by ExpR
+# Locked: 2026-04-09T18:00:00+10:00 | Holdout: 2026-01-01 | Mode: A
+# Bailey: N=5, MinBTL=3.22yr < 3.55yr -> PASS (10.4% headroom, tight)
+# E2 CB1 O5. REPLACES 2026-04-09-mgc-final.yaml (selection bias fix).
+#
+# Prior committed file had 3 sessions NOT in the top 5 by ExpR.
+# This file uses strict data-driven top 5 by best G-threshold ExpR
+# from canonical base truth (pre-holdout, N >= 30).
+#
+# MGC is the ONLY uncorrelated instrument (corr ~+0.04 with MNQ).
+# Every validated MGC strategy is a genuine diversification bet.
+# Small N throughout — data-length limited at 3.55 calendar years.
+
+metadata:
+  name: "mgc-comprehensive"
+  date_locked: "2026-04-09T18:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 5
+  testing_mode: "family"
+  data_horizon_years_clean: 3.55
+
+hypotheses:
+  - id: 1
+    name: "MGC CME_REOPEN G6 RR2.0"
+    theory_citation: "Overnight gap microstructure; Ito-Engle-Lin (1992)"
+    economic_basis: "STRONGEST MGC edge. CME daily reopen captures overnight gap absorption + first-session positioning. ExpR +0.331."
+    filter: {type: ORB_G6, column: orb_size_points}
+    scope: {instruments: [MGC], sessions: [CME_REOPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=5 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 2
+    name: "MGC EUROPE_FLOW G6 RR2.0"
+    theory_citation: "London-adjacent gold flow; French-Roll (1986)"
+    economic_basis: "European session gold flow adjacent to London pricing window. ExpR +0.286 at G6. Small N=35."
+    filter: {type: ORB_G6, column: orb_size_points}
+    scope: {instruments: [MGC], sessions: [EUROPE_FLOW], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=5 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 3
+    name: "MGC TOKYO_OPEN G5 RR2.0"
+    theory_citation: "Asian physical gold demand; Baur-Lucey (2010)"
+    economic_basis: "Asian physical gold demand meets futures at Tokyo open. UNFILTERED negative but G5 creates +0.278 via ORB Size = The Edge."
+    filter: {type: ORB_G5, column: orb_size_points}
+    scope: {instruments: [MGC], sessions: [TOKYO_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=5 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 4
+    name: "MGC LONDON_METALS G6 RR2.0"
+    theory_citation: "Lucey & Zhao (2008); Baur & Lucey (2010) Financial Review"
+    economic_basis: "LBMA Gold Price window — global gold pricing venue. Physical demand meets futures. ExpR +0.157 at G6."
+    filter: {type: ORB_G6, column: orb_size_points}
+    scope: {instruments: [MGC], sessions: [LONDON_METALS], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=5 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 5
+    name: "MGC COMEX_SETTLE G6 RR2.0"
+    theory_citation: "O'Hara (1995) Market Microstructure Theory"
+    economic_basis: "COMEX is THE primary US gold futures exchange. Mandatory settlement flow from producers, central bank reserve managers, ETF APs. ExpR +0.132 at G6."
+    filter: {type: ORB_G6, column: orb_size_points}
+    scope: {instruments: [MGC], sessions: [COMEX_SETTLE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=5 family", "WFE < 0.50", "2026 OOS ExpR < 0 (N_oos >= 30)", "Any era N>=50 ExpR < -0.05"]
+
+total_hypothesis_count: 5
+total_expected_trials: 5
