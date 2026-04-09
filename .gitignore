@@ -33,6 +33,8 @@ dbn/
 # Backups
 backups/
 gold.db.bak*
+gold.db.pre-e2-fix.bak
+gold_snap.db
 
 # Generated tools
 pipeline-explorer.html
