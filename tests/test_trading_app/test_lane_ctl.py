@@ -32,7 +32,12 @@ def mock_state(state_dir):
 
 
 PROFILE = "topstep_50k_mnq_auto"
-TEST_SID = "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+# Must reference the ACTUAL lane strategy_id for the target session in the
+# profile's daily_lanes tuple — pause_lane() looks up the strategy_id via
+# (profile, session) and saves under that canonical ID. See the
+# 2026-04-09 portfolio alignment sprint (commit 807555e) for the ghost
+# lane sweep that updated this ID.
+TEST_SID = "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8"
 TEST_SESSION = "COMEX_SETTLE"
 
 
