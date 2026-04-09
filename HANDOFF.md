@@ -6,6 +6,71 @@
 
 ---
 
+## Update (2026-04-09 late — Portfolio Alignment Sprint)
+
+### Headline
+
+Fixed a silent-but-catastrophic drift: all 5 deployed lanes in `topstep_50k_mnq_auto` were GHOSTS — referencing strategy_ids not present in validated_setups or experimental_strategies. The bot was operating with zero current validation backing against real (practice) capital. Swept 2026-04-09 in a focused 2-commit alignment sprint + added drift check 95 to prevent recurrence.
+
+### What was ghost
+
+Prior `topstep_50k_mnq_auto.daily_lanes` (from a 2026-04-03 allocator run that pre-dated the Apr 9 discovery rebuild):
+- MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6 — not in validated_setups, not in experimental_strategies
+- MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12 — same
+- MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 — same
+- MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10 — same
+- MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10 — same
+
+These were from an older discovery run. When the Apr 9 methodology rebuild re-discovered from scratch under the new Pathway B criteria, none of these IDs survived, but `prop_profiles.py` was never updated to match.
+
+### New deployed portfolio (validated_setups backed)
+
+All 5 lanes sourced from the 6-strategy current validated book. Lane selection guided by a decay-aware yearly audit (Bailey et al 2013 era rule):
+
+| # | Strategy ID | Era verdict | 2026 Q1 |
+|---|---|---|---|
+| 1 | MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8 | Decay+Q1 bounce | N=39 ExpR=+0.50 WR=79.5% t=+4.06 |
+| 2 | MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G8 | HOLDING (stable) | N=67 ExpR=+0.21 |
+| 3 | MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8 | HOLDING (improving) | N=62 ExpR=+0.10 |
+| 4 | MNQ_NYSE_OPEN_E2_RR2.0_CB1_ORB_G5 | HOLDING (improving) | N=66 ExpR=+0.08 |
+| 5 | MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G8 | WATCH (sig decay p=0.042) | N=65 ExpR=+0.23 |
+
+**Dropped:** MES CME_PRECLOSE G8 RR1.0 — sig decay (p=0.042, 2020-22 +0.271 vs 2023-25 +0.026) AND 2026 Q1 N=15 (no power to confirm recovery per Carver 20yr bound).
+
+### Drift check 95 added
+
+`pipeline/check_drift.py::check_prop_profiles_validated_alignment` — fires on any lane in an `active=True` profile that doesn't exist in `validated_setups` with `status='active'`. Inactive profiles exempt (re-checked at activation time). 4 TDD tests locked the behavior (pass/missing/retired/inactive-exempt). Check 95 passes against current state. 87/87 non-advisory checks pass (baseline family_rr_locks #59 still pre-existing advisory).
+
+### What this sprint did NOT do (deferred, documented)
+
+- **validation_status vs rejection_reason dual-field sync bug.** Phase 3/4b validator gates set legacy `validation_status='REJECTED'` + `validation_notes` but not the new `rejection_reason` field. 7 of 25 experimental_strategies are in this state. Not urgent — doesn't affect runtime, just makes ad-hoc queries confusing.
+- **Codex-identified shadow candidates** (MGC SINGAPORE_OPEN G4, MGC CME_REOPEN G6, MGC EUROPE_FLOW G6, MGC TOKYO_OPEN G5, MES US_DATA_1000 G5) — forward-hot in 2026 Q1 but failed validation either via cross-instrument FDR or Phase 4b windows. Worth a shadow/provisional tier later. NOT deployed now.
+- **Inactive profile cleanup.** 8 other profiles (topstep_50k_type_a, etc.) also reference ghost lanes but are `active=False` so they don't affect runtime. Drift check 95 skips them intentionally. Clean up at activation time.
+
+### Next session priorities
+
+1. **Do nothing for 2-4 weeks.** Stop refactoring. Let the new portfolio accumulate H2 2026 forward data. TOKYO_OPEN watch decision after 30+ new trades.
+2. **If refactoring needed:** fix the validation_status/rejection_reason sync bug first (clean house), then the Codex shadow candidates.
+3. **Do NOT run another discovery rebuild until Q2 2026 data.** Bailey MinBTL + Carver Table 5 both say you can't learn anything new from 3 months.
+
+### Commits this sprint
+
+- `[TBD]` fix: replace ghost deployed lanes with validated_setups backed (prop_profiles.py)
+- `[TBD]` feat: drift check 95 — prop_profiles ↔ validated_setups alignment guard
+
+### Known issues (pre-existing)
+
+1. Drift check 59 (family_rr_locks) — 1 active family missing. Pre-existing. Run `python scripts/tools/select_family_rr.py` to fix.
+2. Dual-field validation_status/rejection_reason drift — see "did NOT do" section above.
+3. 8 pre-existing test failures unrelated to this sprint (test_trader_logic x3, claude_superpower_brief x2, test_data_era x2, test_pulse_integration x1). Verified unrelated via git stash test.
+
+### Branch state
+
+- Branch: `main`
+- Will be: 15 commits ahead of origin/main after this sprint (need to push)
+
+---
+
 ## Update (2026-04-09 evening — Full Discovery Methodology Overhaul + 6-Strategy Portfolio)
 
 ### Where we are
