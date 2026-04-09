@@ -1,0 +1,221 @@
+metadata:
+  name: mnq-rediscovery-2020-boundary
+  date_locked: "2026-04-09"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 10
+  testing_mode: "family"
+  amendment: "3.1 — rediscovery with WF_START_OVERRIDE=2020-01-01 structural boundary"
+  rationale: >
+    MNQ re-discovery with 2019 micro-contract-launch data excluded per
+    Amendment 3.1 structural boundary. K=10 sessions, one mechanism-grounded
+    combo per session. MinBTL at K=10 = 4.61 years; available data = 6 years
+    (2020-2025). Session selection based on canonical-base-truth audit (Step 1):
+    all sessions with unfiltered ExpR > 0 and a published mechanism for why ORB
+    breakouts should work at that session boundary. Filter (G5 vs G8) and RR
+    (1.0 vs 2.0) chosen per session by mechanism logic, NOT by observed
+    performance: G8 for sessions where size-first adds structural edge
+    (COMEX/EUROPE/TOKYO/NYSE_CLOSE); G5 for sessions where ORBs are already
+    large (NYSE_OPEN/US_DATA/CME_PRECLOSE). RR1.0 for time-limited sessions
+    (CME_PRECLOSE/NYSE_CLOSE/CME_REOPEN); RR2.0 for longer sessions.
+  cumulative_individual_count: 0
+  prior_family_files:
+    - "2026-04-09-mnq-comprehensive.yaml (K=12, USED)"
+    - "This file replaces the comprehensive with 2020+ structural boundary"
+
+hypotheses:
+  - id: 1
+    name: MNQ CME_PRECLOSE settlement rebalancing G8 RR1.0
+    theory_citation: >
+      Crabel (1990) Ch. 3: CME settlement window (14:00-14:15 CT) triggers
+      institutional rebalancing flows. Pre-close ORB breakouts capture
+      directional momentum. Time-limited session favours RR1.0. G8 for
+      minimum cost absorption (ORBs large enough, 97.7% pass rate 2020+).
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_PRECLOSE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    filter:
+      type: ORB_G8
+      column: orb_CME_PRECLOSE_size
+    expected_trial_count: 1
+    kill_criterion: "BH FDR adjusted p >= 0.05 at K=10, OR WFE < 0.50, OR 2026 OOS ExpR < 0"
+
+  - id: 2
+    name: MNQ COMEX_SETTLE mandatory marking G8 RR1.0
+    theory_citation: >
+      O'Hara (1995) Market Microstructure Theory: COMEX settlement creates
+      a mandatory marking event forcing position adjustment. G8 adds +0.012
+      edge over unfiltered (size-first mechanism). RR1.0 for settlement
+      window time constraint.
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    filter:
+      type: ORB_G8
+      column: orb_COMEX_SETTLE_size
+    expected_trial_count: 1
+    kill_criterion: "BH FDR adjusted p >= 0.05 at K=10, OR WFE < 0.50, OR 2026 OOS ExpR < 0"
+
+  - id: 3
+    name: MNQ EUROPE_FLOW cross-border information G8 RR2.0
+    theory_citation: >
+      French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS: information
+      transmission across markets creates momentum at session boundaries.
+      G8 adds +0.024 edge (size-first mechanism for cross-border flow).
+      RR2.0 for longer session window allowing trend extension.
+    scope:
+      instruments: [MNQ]
+      sessions: [EUROPE_FLOW]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    filter:
+      type: ORB_G8
+      column: orb_EUROPE_FLOW_size
+    expected_trial_count: 1
+    kill_criterion: "BH FDR adjusted p >= 0.05 at K=10, OR WFE < 0.50, OR 2026 OOS ExpR < 0"
+
+  - id: 4
+    name: MNQ NYSE_CLOSE MOC/LOC rebalancing G8 RR1.0
+    theory_citation: >
+      Harris (2003) Trading and Exchanges Ch. 16: NYSE close triggers
+      MOC/LOC order imbalance and institutional portfolio rebalancing.
+      G8 adds +0.013 edge. RR1.0 for time-limited close window.
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_CLOSE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    filter:
+      type: ORB_G8
+      column: orb_NYSE_CLOSE_size
+    expected_trial_count: 1
+    kill_criterion: "BH FDR adjusted p >= 0.05 at K=10, OR WFE < 0.50, OR 2026 OOS ExpR < 0"
+
+  - id: 5
+    name: MNQ NYSE_OPEN Crabel commitment G5 RR2.0
+    theory_citation: >
+      Crabel (1990) ch. 3: NYSE open (09:30 ET) is the highest-volume
+      moment in the US equity session. ORB breakouts capture opening-range
+      commitment from institutional order flow. G5 (not G8) because
+      NYSE_OPEN ORBs are already large (99.4% G8 pass) so G8 adds zero
+      edge. RR2.0 for long session window.
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_OPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    filter:
+      type: ORB_G5
+      column: orb_NYSE_OPEN_size
+    expected_trial_count: 1
+    kill_criterion: "BH FDR adjusted p >= 0.05 at K=10, OR WFE < 0.50, OR 2026 OOS ExpR < 0"
+
+  - id: 6
+    name: MNQ TOKYO_OPEN cross-timezone volatility G8 RR2.0
+    theory_citation: >
+      Ito, Engle, Lin (1992) JIE: volatility transmission from Tokyo to
+      Chicago creates directional momentum at GLOBEX Asian open. G8 adds
+      +0.027 edge (strongest size-first gain of any session). RR2.0 for
+      long overnight session window.
+    scope:
+      instruments: [MNQ]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    filter:
+      type: ORB_G8
+      column: orb_TOKYO_OPEN_size
+    expected_trial_count: 1
+    kill_criterion: "BH FDR adjusted p >= 0.05 at K=10, OR WFE < 0.50, OR 2026 OOS ExpR < 0"
+
+  - id: 7
+    name: MNQ US_DATA_1000 macro data reaction G5 RR2.0
+    theory_citation: >
+      Andersen et al (2003) AER; Ederington & Lee (1993) JF: scheduled
+      macro releases at 10:00 ET create directional moves. G5 (not G8)
+      because ORBs are already large (98.5% G8 pass). RR2.0 for extended
+      data-reaction window.
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    filter:
+      type: ORB_G5
+      column: orb_US_DATA_1000_size
+    expected_trial_count: 1
+    kill_criterion: "BH FDR adjusted p >= 0.05 at K=10, OR WFE < 0.50, OR 2026 OOS ExpR < 0"
+
+  - id: 8
+    name: MNQ LONDON_METALS metals open flow G5 RR1.0
+    theory_citation: >
+      LME price discovery spills into COMEX/GLOBEX futures at London
+      metals open. Weaker mechanism than NYSE/CME sessions but structural
+      (metals pricing event). G5 for minimum cost gate. RR1.0 conservative.
+    scope:
+      instruments: [MNQ]
+      sessions: [LONDON_METALS]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    filter:
+      type: ORB_G5
+      column: orb_LONDON_METALS_size
+    expected_trial_count: 1
+    kill_criterion: "BH FDR adjusted p >= 0.05 at K=10, OR WFE < 0.50, OR 2026 OOS ExpR < 0"
+
+  - id: 9
+    name: MNQ CME_REOPEN overnight gap resolution G5 RR1.0
+    theory_citation: >
+      GLOBEX reopen after 17:00 CT maintenance window creates gap
+      resolution flow as overnight positions adjust. Marginal mechanism
+      (gap is often small). G5 minimum gate. RR1.0 conservative.
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_REOPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    filter:
+      type: ORB_G5
+      column: orb_CME_REOPEN_size
+    expected_trial_count: 1
+    kill_criterion: "BH FDR adjusted p >= 0.05 at K=10, OR WFE < 0.50, OR 2026 OOS ExpR < 0"
+
+  - id: 10
+    name: MNQ US_DATA_830 early macro reaction G5 RR1.0
+    theory_citation: >
+      Ederington & Lee (1993) JF: early macro releases (08:30 ET) create
+      directional moves, especially employment + GDP. Marginal for MNQ
+      because NQ is less macro-sensitive than ES. G5 minimum. RR1.0.
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_830]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    filter:
+      type: ORB_G5
+      column: orb_US_DATA_830_size
+    expected_trial_count: 1
+    kill_criterion: "BH FDR adjusted p >= 0.05 at K=10, OR WFE < 0.50, OR 2026 OOS ExpR < 0"
