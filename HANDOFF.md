@@ -27,23 +27,21 @@ These were from an older discovery run. When the Apr 9 methodology rebuild re-di
 
 All 5 lanes sourced from the 6-strategy current validated book. Lane selection guided by a decay-aware yearly audit (Bailey et al 2013 era rule).
 
-Important: the numeric `2026 Q1` snapshot below is a historical selection-time
-note from 2026-04-09 and should NOT be treated as the canonical current live
-stat block. Forward N / WR / ExpR drift over time. Canonical current-state
-sources are:
+Important: the list below is a historical selection-time note from 2026-04-09
+and should NOT be treated as the canonical current live stat block. Forward
+N / WR / ExpR drift over time. Canonical current-state sources are:
 - `gold.db` (`validated_setups`, `orb_outcomes`, strategy_fitness)
 - `trading_app/prop_profiles.py` for deployed-live lanes
 - `docs/plans/2026-04-09-portfolio-tiered.md` for the current audited summary
 
-| # | Strategy ID | Era verdict | 2026 Q1 |
-|---|---|---|---|
-| 1 | MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8 | Decay+Q1 bounce | N=39 ExpR=+0.50 WR=79.5% t=+4.06 |
-| 2 | MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G8 | HOLDING (stable) | N=67 ExpR=+0.21 |
-| 3 | MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8 | HOLDING (improving) | N=62 ExpR=+0.10 |
-| 4 | MNQ_NYSE_OPEN_E2_RR2.0_CB1_ORB_G5 | HOLDING (improving) | N=66 ExpR=+0.08 |
-| 5 | MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G8 | WATCH (sig decay p=0.042) | N=65 ExpR=+0.23 |
+Selection-time live portfolio:
+- `MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8` — selected despite prior decay concerns because live behavior had improved
+- `MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G8` — holding / stable
+- `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8` — holding / improving
+- `MNQ_NYSE_OPEN_E2_RR2.0_CB1_ORB_G5` — holding / improving
+- `MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G8` — watch / probation lane
 
-**Dropped:** MES CME_PRECLOSE G8 RR1.0 — sig decay (p=0.042, 2020-22 +0.271 vs 2023-25 +0.026) AND 2026 Q1 N=15 (no power to confirm recovery per Carver 20yr bound).
+`MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8` remained `validated_setups.status='active'` but was excluded from the deployed-live profile during the alignment sprint. Treat that as a live-book routing choice, not as removal from the structurally validated set.
 
 ### Drift check 95 added
 
@@ -80,6 +78,11 @@ sources are:
 ---
 
 ## Update (2026-04-09 evening — Full Discovery Methodology Overhaul + 6-Strategy Portfolio)
+
+Historical audit-trail section only. Treat the current repo / DB / deployed-live
+state as authoritative over the notes below. Some “next steps” in this section
+have since been completed or superseded by later commits and the portfolio
+alignment sprint above.
 
 ### Where we are
 

@@ -432,9 +432,11 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # four lanes were holding or improving; TOKYO_OPEN was retained on
         # watch/probation for decay risk despite a live bounce.
         #
-        # Dropped: MES CME_PRECLOSE G8 RR1 — sig-decay p=0.042 (2020-22 0.271
-        # vs 2023-25 0.026) AND 2026 Q1 N=15 (no statistical power to confirm
-        # recovery per Carver Table 5 / 20yr bound).
+        # Note on the sixth validated strategy:
+        # MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8 remained structurally validated
+        # in validated_setups but was not included in the deployed-live auto
+        # profile. That is a live-book routing choice, not a claim that the
+        # strategy was removed from the validated set.
         #
         # Enforced by drift check 95 (pipeline/check_drift.py) — every lane in
         # an active profile must exist in validated_setups with status='active'.
@@ -475,8 +477,10 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             "Validated-sourced lanes (2026-04-09 ghost sweep). All lanes "
             "cross-referenced against validated_setups via drift check 95. "
             "Live/forward stats are volatile; query gold.db or the current "
-            "portfolio-tiered doc for the latest snapshot. TOKYO_OPEN remains "
-            "a watch/probation lane from the Apr 9 alignment review."
+            "portfolio-tiered doc for the latest snapshot. This profile "
+            "deploys 5 MNQ lanes from the 6-strategy active validated book; "
+            "TOKYO_OPEN remains a watch/probation lane from the Apr 9 "
+            "alignment review."
         ),
     ),
     # =========================================================================
