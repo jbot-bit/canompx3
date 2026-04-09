@@ -11,8 +11,10 @@ from trading_app.lane_ctl import (
     _load_overrides,
     _save_overrides,
     get_lane_override,
+    get_paused_strategy_ids,
     list_overrides,
     pause_lane,
+    pause_strategy_id,
     resume_lane,
 )
 
@@ -102,6 +104,35 @@ class TestPauseResume:
     def test_pause_unknown_session_exits(self, mock_state):
         with pytest.raises(SystemExit):
             pause_lane(PROFILE, "NONEXISTENT_SESSION")
+
+    def test_pause_strategy_id_creates_override(self, mock_state):
+        created = pause_strategy_id(PROFILE, TEST_SID, reason="sr alarm", source="sr_monitor")
+        assert created is True
+        result = get_lane_override(PROFILE, TEST_SID)
+        assert result is not None
+        assert result["source"] == "sr_monitor"
+
+    def test_pause_strategy_id_idempotent_when_already_paused(self, mock_state):
+        assert pause_strategy_id(PROFILE, TEST_SID, reason="first") is True
+        assert pause_strategy_id(PROFILE, TEST_SID, reason="second") is False
+
+
+class TestPausedIds:
+    def test_get_paused_strategy_ids_empty(self, mock_state):
+        assert get_paused_strategy_ids(PROFILE) == set()
+
+    def test_get_paused_strategy_ids_filters_expired(self, mock_state):
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        tomorrow = (date.today() + timedelta(days=1)).isoformat()
+        _save_overrides(
+            PROFILE,
+            {
+                TEST_SID: {"active": False, "expires": tomorrow},
+                "OLD_SID": {"active": False, "expires": yesterday},
+                "ACTIVE_SID": {"active": True},
+            },
+        )
+        assert get_paused_strategy_ids(PROFILE) == {TEST_SID}
 
 
 class TestListOverrides:

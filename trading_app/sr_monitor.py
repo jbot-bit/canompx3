@@ -8,10 +8,11 @@ This is the Criterion 12 monitor:
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import sys
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import duckdb
@@ -183,9 +184,45 @@ def prepare_monitor_inputs(
     return monitor, stream, baseline_source, stream_source
 
 
-def run_monitor() -> None:
+def apply_alarm_pauses(
+    results: list[dict],
+    *,
+    profile_id: str,
+    pause_days: int,
+    as_of: date,
+) -> int:
+    """Persist pauses for any alarmed lanes via lane_ctl."""
+    from trading_app.lane_ctl import pause_strategy_id
+
+    pauses_applied = 0
+    expires = (as_of + timedelta(days=pause_days)).isoformat()
+    for row in results:
+        if row["status"] != "ALARM":
+            continue
+        reason = (
+            f"SR alarm: stat={row['sr_stat']:.2f} >= thr={row['threshold']:.2f}; "
+            f"baseline={row['baseline_source']}; stream={row['stream_source']}"
+        )
+        applied = pause_strategy_id(
+            profile_id,
+            row["strategy_id"],
+            reason=reason,
+            expires=expires,
+            source="sr_monitor",
+        )
+        if applied:
+            pauses_applied += 1
+            row["pause_applied"] = True
+            row["pause_expires"] = expires
+        else:
+            row["pause_applied"] = False
+    return pauses_applied
+
+
+def run_monitor(*, apply_pauses: bool = False, pause_days: int = 30) -> None:
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     configure_connection(con)
+    profile_id = resolve_profile_id()
 
     threshold = calibrate_sr_threshold(
         TARGET_ARL_DAYS,
@@ -200,6 +237,10 @@ def run_monitor() -> None:
         f"delta={DEFAULT_DELTA:+.1f}σ | q={DEFAULT_VARIANCE_RATIO:.1f} | "
         f"threshold={threshold:.2f}"
     )
+    if apply_pauses:
+        print(f"Alarm action: APPLY lane pauses for {pause_days} days on profile {profile_id}")
+    else:
+        print(f"Alarm action: report only (no lane pause writes)")
     print("=" * 120)
     print(
         f"\n{'Lane':<40} {'N':>4} {'SR':>10} {'Thr':>8} {'Status':<10} "
@@ -244,6 +285,10 @@ def run_monitor() -> None:
             }
         )
 
+    pauses_applied = 0
+    if apply_pauses:
+        pauses_applied = apply_alarm_pauses(results, profile_id=profile_id, pause_days=pause_days, as_of=date.today())
+
     print(f"\n{'=' * 120}")
     print("Status key:")
     print("  CONTINUE  = no SR alarm yet on the monitored stream")
@@ -256,13 +301,39 @@ def run_monitor() -> None:
     print("Stream key:")
     print("  paper_trades      = logged live/shadow execution stream")
     print("  canonical_forward = orb_outcomes shadow fallback only")
+    if apply_pauses:
+        print(f"Pause summary: {pauses_applied} lane override(s) written")
     print("=" * 120)
 
     state_file = STATE_DIR / "sr_state.json"
-    state_file.write_text(json.dumps({"date": str(date.today()), "results": results}, indent=2))
+    state_file.write_text(
+        json.dumps(
+            {
+                "date": str(date.today()),
+                "profile_id": profile_id,
+                "apply_pauses": apply_pauses,
+                "pause_days": pause_days,
+                "results": results,
+            },
+            indent=2,
+        )
+    )
 
     con.close()
 
 
 if __name__ == "__main__":
-    run_monitor()
+    parser = argparse.ArgumentParser(description="Run Shiryaev-Roberts monitor for deployed lanes")
+    parser.add_argument(
+        "--apply-pauses",
+        action="store_true",
+        help="Write lane_ctl pauses for any alarmed lanes",
+    )
+    parser.add_argument(
+        "--pause-days",
+        type=int,
+        default=30,
+        help="Pause duration in days when --apply-pauses is used",
+    )
+    args = parser.parse_args()
+    run_monitor(apply_pauses=args.apply_pauses, pause_days=args.pause_days)

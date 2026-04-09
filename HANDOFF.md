@@ -181,6 +181,74 @@ coverage is still thin. So:
 That distinction matters. Do not claim all deployed lanes have a mature
 50-trade live-paper baseline yet.
 
+## Update (2026-04-10 later again — SR Alarm Lifecycle Wired To Lane Pauses)
+
+### Headline
+
+Extended the Criterion 12 SR monitor from "informational only" into an actual
+operational lifecycle control:
+
+- SR alarms can now write temporary lane pauses
+- `session_orchestrator` now honors persisted lane pauses at startup and entry
+- this is an operational control only, not a structural validation mutation
+
+### Design boundary
+
+This change intentionally does **not**:
+
+- edit `validated_setups`
+- edit `strategy_fitness`
+- bless or reject strategies structurally
+- use 2026/live data for rediscovery
+
+It only changes whether a deployed lane is temporarily tradable.
+
+### What changed
+
+- `trading_app/lane_ctl.py`
+  - added `pause_strategy_id(...)`
+  - added `get_paused_strategy_ids(...)`
+  - updated module contract text: lane overrides now affect
+    `resolve_daily_lanes`, `pre_session_check`, and `session_orchestrator`
+- `trading_app/sr_monitor.py`
+  - added `apply_alarm_pauses(...)`
+  - new CLI flags:
+    - `--apply-pauses`
+    - `--pause-days`
+  - `sr_state.json` now records pause intent metadata alongside results
+- `trading_app/live/session_orchestrator.py`
+  - loads active lane pauses on startup when running a profile portfolio
+  - blocks new entries for paused lanes with explicit `ENTRY_BLOCKED_PAUSED`
+    signal records
+  - keeps orphan/manual-close blocks distinct from SR/manual-review pauses
+
+### Important bug fixed during implementation
+
+The first draft set `_profile_id_for_lane_ctl` inside profile resolution and
+then accidentally reset it to `None` later in `__init__`, which would have made
+the pause loader silently no-op in production. That was corrected before
+commit/verification.
+
+### Verification
+
+- `python3 -m py_compile trading_app/lane_ctl.py trading_app/live/session_orchestrator.py trading_app/sr_monitor.py tests/test_trading_app/test_lane_ctl.py tests/test_trading_app/test_sr_monitor.py tests/test_trading_app/test_session_orchestrator.py`
+- `uv run --frozen --extra dev pytest tests/test_trading_app/test_lane_ctl.py tests/test_trading_app/test_sr_monitor.py -q`
+  - result: `26 passed`
+- `uv run --frozen --extra dev pytest tests/test_trading_app/test_session_orchestrator.py -k "paused_lane_blocks_new_entry_with_pause_reason or load_paused_lane_blocks_from_lane_ctl" -q`
+  - result: `2 passed`
+- `python -m trading_app.sr_monitor`
+  - still shows all 5 deployed lanes at `CONTINUE`
+- `python pipeline/check_drift.py`
+  - still clean: `88 passed, 0 blocking, 7 advisory`
+
+### Important limitation
+
+The full `tests/test_trading_app/test_session_orchestrator.py` file appears to
+hang in unrelated existing async coverage on this branch, so verification for
+the new behavior was narrowed to the new pause-specific tests plus compile,
+runtime SR output, and drift. Do not overstate that as a clean full-file
+orchestrator pass.
+
 ## Update (2026-04-09 late — Portfolio Alignment Sprint)
 
 ### Headline

@@ -1,9 +1,10 @@
 """Lane control — pause/resume/list daily lane overrides.
 
 Overrides are profile-scoped state files in data/state/.
-They affect the manual daily sheet (resolve_daily_lanes) and
-pre_session_check. They do NOT affect session_orchestrator
-(separate code path — documented limitation for Phase 1 manual).
+They affect:
+- the manual daily sheet (`resolve_daily_lanes`)
+- `pre_session_check`
+- `session_orchestrator` startup and entry gating
 
 Usage:
     python -m trading_app.lane_ctl pause SINGAPORE_OPEN --reason "cold streak"
@@ -84,6 +85,35 @@ def pause_lane(
         print(f"  Reason: {reason}")
 
 
+def pause_strategy_id(
+    profile_id: str,
+    strategy_id: str,
+    reason: str = "",
+    expires: str | None = None,
+    source: str = "manual",
+) -> bool:
+    """Pause a lane directly by strategy_id.
+
+    Returns True if a new pause was written, False if the strategy was already paused.
+    """
+    overrides = _load_overrides(profile_id)
+    existing = overrides.get(strategy_id)
+    if existing is not None and not existing.get("active", True):
+        return False
+
+    overrides[strategy_id] = {
+        "active": False,
+        "reason": reason,
+        "since": date.today().isoformat(),
+        "paused_at": datetime.now(UTC).isoformat(),
+        "source": source,
+    }
+    if expires:
+        overrides[strategy_id]["expires"] = expires
+    _save_overrides(profile_id, overrides)
+    return True
+
+
 def resume_lane(profile_id: str, session_name: str) -> None:
     """Resume a paused lane."""
     sid = _find_strategy_id(profile_id, session_name)
@@ -151,6 +181,21 @@ def get_lane_override(profile_id: str, strategy_id: str) -> dict | None:
     if info.get("active", True):
         return None  # Not paused
     return info
+
+
+def get_paused_strategy_ids(profile_id: str, as_of: date | None = None) -> set[str]:
+    """Return currently active paused strategy_ids for a profile."""
+    today = as_of or date.today()
+    overrides = _load_overrides(profile_id)
+    paused: set[str] = set()
+    for strategy_id, info in overrides.items():
+        if info.get("active", True):
+            continue
+        expires = info.get("expires")
+        if expires and date.fromisoformat(expires) < today:
+            continue
+        paused.add(strategy_id)
+    return paused
 
 
 def main():

@@ -120,3 +120,45 @@ def test_prepare_monitor_inputs_falls_back_to_validated_baseline_and_canonical(m
     assert trades == [1.0, -1.0, 0.5]
     assert monitor.expected_r == 0.25
     assert monitor.std_r == 1.5
+
+
+def test_apply_alarm_pauses_only_alarm_rows(monkeypatch):
+    calls = []
+
+    def _fake_pause(profile_id, strategy_id, reason, expires, source):
+        calls.append((profile_id, strategy_id, reason, expires, source))
+        return True
+
+    monkeypatch.setattr("trading_app.lane_ctl.pause_strategy_id", _fake_pause)
+
+    results = [
+        {
+            "strategy_id": "SID_ALARM",
+            "status": "ALARM",
+            "sr_stat": 42.0,
+            "threshold": 31.96,
+            "baseline_source": "validated_backtest",
+            "stream_source": "canonical_forward",
+        },
+        {
+            "strategy_id": "SID_OK",
+            "status": "CONTINUE",
+            "sr_stat": 2.0,
+            "threshold": 31.96,
+            "baseline_source": "validated_backtest",
+            "stream_source": "canonical_forward",
+        },
+    ]
+
+    applied = sr_monitor.apply_alarm_pauses(
+        results,
+        profile_id="topstep_50k_mnq_auto",
+        pause_days=30,
+        as_of=date(2026, 4, 10),
+    )
+
+    assert applied == 1
+    assert len(calls) == 1
+    assert calls[0][0] == "topstep_50k_mnq_auto"
+    assert calls[0][1] == "SID_ALARM"
+    assert calls[0][4] == "sr_monitor"

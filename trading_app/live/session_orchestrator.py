@@ -466,12 +466,14 @@ class SessionOrchestrator:
         # Prop firm close time (ET) — used for post-market buffer and force-flatten
         self._close_hour_et: int | None = None
         self._close_min_et: int | None = None
+        self._profile_id_for_lane_ctl: str | None = None
         if portfolio is not None and portfolio.strategies and portfolio.strategies[0].source == "profile":
             try:
                 from trading_app.prop_profiles import ACCOUNT_PROFILES, get_firm_spec
 
                 for pid, prof in ACCOUNT_PROFILES.items():
                     if portfolio.name == f"profile_{pid}":
+                        self._profile_id_for_lane_ctl = pid
                         firm = get_firm_spec(prof.firm)
                         if firm.close_time_et and firm.close_time_et != "none":
                             parts = firm.close_time_et.split(":")
@@ -490,6 +492,7 @@ class SessionOrchestrator:
         self._poller_active = False  # set True once fill poller runs a cycle
         self._consecutive_engine_errors = 0  # circuit breaker for engine crashes
         self._blocked_strategies: set[str] = set()  # orphan containment — entries blocked until manual clear
+        self._blocked_strategy_reasons: dict[str, str] = {}
 
         # Circuit breaker: blocks order submission after 5 consecutive broker failures
         from trading_app.live.circuit_breaker import CircuitBreaker
@@ -585,8 +588,32 @@ class SessionOrchestrator:
                     len(incomplete),
                 )
 
+        self._load_paused_lane_blocks()
+
         mode = "SIGNAL" if signal_only else ("DEMO" if demo else "LIVE")
         self._notify(f"Session started: {instrument} ({mode})")
+
+    def _block_strategy(self, strategy_id: str, reason: str) -> None:
+        """Add a runtime block with explicit reason."""
+        self._blocked_strategies.add(strategy_id)
+        self._blocked_strategy_reasons[strategy_id] = reason
+
+    def _load_paused_lane_blocks(self) -> None:
+        """Load persisted lane pauses into the runtime block set."""
+        if not self._profile_id_for_lane_ctl:
+            return
+        try:
+            from trading_app.lane_ctl import get_lane_override, get_paused_strategy_ids
+
+            paused_ids = get_paused_strategy_ids(self._profile_id_for_lane_ctl, as_of=self.trading_day)
+            for strategy_id in paused_ids:
+                override = get_lane_override(self._profile_id_for_lane_ctl, strategy_id)
+                reason = override.get("reason", "Paused pending manual review") if override else "Paused pending manual review"
+                self._block_strategy(strategy_id, reason)
+            if paused_ids:
+                log.warning("Loaded %d paused lane blocks from lane_ctl", len(paused_ids))
+        except Exception as e:
+            log.warning("Failed to load paused lane blocks: %s", e)
 
     @staticmethod
     def _build_daily_features_row(trading_day: date, instrument: str, orb_minutes: int = 5) -> dict:
@@ -975,7 +1002,7 @@ class SessionOrchestrator:
             # Prevents doubling up: engine would re-enter the same strategy on the new day
             # while the old position is still open at the broker.
             for r in rollover_orphans:
-                self._blocked_strategies.add(r.strategy_id)
+                self._block_strategy(r.strategy_id, "Orphaned broker position — manual resolution required")
             log.critical("ENTRY BLOCKED for %s until manual orphan resolution", list(self._blocked_strategies))
 
         # Start new trading day
@@ -1384,7 +1411,7 @@ class SessionOrchestrator:
             msg = f"STUCK EXIT: {sid} has no direction — MANUAL CLOSE REQUIRED"
             log.critical(msg)
             self._notify(msg)
-            self._blocked_strategies.add(sid)
+            self._block_strategy(sid, "Stuck exit without direction — manual close required")
             return
 
         exit_spec = self.order_router.build_exit_spec(
@@ -1407,7 +1434,7 @@ class SessionOrchestrator:
             )
             log.critical(msg)
             self._notify(msg)
-            self._blocked_strategies.add(sid)
+            self._block_strategy(sid, "Stuck exit retry failed — manual close required")
             # Reset stale timer to throttle retries — without this, _retry_stuck_exit
             # fires on every bar gap (>180s), generating repeated exit attempts and
             # notification spam. With this, next retry is at least 300s away.
@@ -1432,13 +1459,19 @@ class SessionOrchestrator:
         if event.event_type == "ENTRY":
             # Orphan containment gate (applies to both signal-only and live)
             if event.strategy_id in self._blocked_strategies:
-                msg = (
-                    f"ENTRY BLOCKED — {event.strategy_id} has orphaned position at broker. "
-                    "Resolve orphan before new entries."
-                )
+                reason = self._blocked_strategy_reasons.get(event.strategy_id, "Blocked pending manual review.")
+                if "orphan" in reason.lower() or "manual close" in reason.lower():
+                    msg = (
+                        f"ENTRY BLOCKED — {event.strategy_id} has orphaned position at broker. "
+                        "Resolve orphan before new entries."
+                    )
+                    record_type = "ENTRY_BLOCKED_ORPHAN"
+                else:
+                    msg = f"ENTRY BLOCKED — {event.strategy_id} is paused. {reason}"
+                    record_type = "ENTRY_BLOCKED_PAUSED"
                 log.critical(msg)
                 self._notify(msg)
-                self._write_signal_record({"type": "ENTRY_BLOCKED_ORPHAN", "strategy_id": event.strategy_id})
+                self._write_signal_record({"type": record_type, "strategy_id": event.strategy_id, "reason": reason})
                 return
 
             # ORB cap check — risk management gate (prevents oversized trades).

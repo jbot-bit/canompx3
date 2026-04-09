@@ -209,6 +209,8 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch.journal = MagicMock()  # Trade journal — mocked to avoid DB in tests
     orch._consecutive_engine_errors = 0
     orch._blocked_strategies = set()
+    orch._blocked_strategy_reasons = {}
+    orch._profile_id_for_lane_ctl = None
     orch._orb_caps = {}  # ORB cap map — populated per test
     orch._max_risk_per_trade = None  # Dollar cap — populated per test
     orch._regime_paused = set()  # Regime gate — populated per test
@@ -1009,6 +1011,34 @@ class TestNotifications:
         # Should have been called with KILL SWITCH message
         calls = [str(c) for c in orch._notify.call_args_list]
         assert any("KILL SWITCH" in c for c in calls)
+
+    def test_load_paused_lane_blocks_from_lane_ctl(self):
+        orch = build_orchestrator()
+        orch._profile_id_for_lane_ctl = "topstep_50k_mnq_auto"
+
+        with (
+            patch("trading_app.lane_ctl.get_paused_strategy_ids", return_value={STRATEGY_ID}),
+            patch(
+                "trading_app.lane_ctl.get_lane_override",
+                return_value={"reason": "SR alarm pause"},
+            ),
+        ):
+            orch._load_paused_lane_blocks()
+
+        assert STRATEGY_ID in orch._blocked_strategies
+        assert orch._blocked_strategy_reasons[STRATEGY_ID] == "SR alarm pause"
+
+    async def test_paused_lane_blocks_new_entry_with_pause_reason(self):
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._notify = MagicMock()
+        orch._block_strategy(STRATEGY_ID, "SR alarm pause")
+
+        await orch._handle_event(_entry_event(2360.0))
+
+        calls = [c[0][0] for c in orch._write_signal_record.call_args_list]
+        blocked = [c for c in calls if c.get("type") == "ENTRY_BLOCKED_PAUSED"]
+        assert len(blocked) == 1
+        assert "SR alarm pause" in blocked[0]["reason"]
 
 
 # ---------------------------------------------------------------------------
