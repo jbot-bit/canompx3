@@ -1455,6 +1455,63 @@ class TestCriterion9EraStability:
         status, _ = _check_criterion_9_era_stability(row)
         assert status is None
 
+    # ── Amendment 3.1: wf_start_year era exclusion tests ──────────────
+
+    def test_wf_start_year_excludes_pre_override_data(self):
+        """2019 data excluded when wf_start_year=2020 (MNQ pattern)."""
+        yearly = json.dumps({
+            "2019": {"trades": 56, "avg_r": -0.20},  # Would kill without override
+            "2020": {"trades": 200, "avg_r": 0.15},
+            "2023": {"trades": 200, "avg_r": 0.05},
+            "2024": {"trades": 200, "avg_r": 0.08},
+        })
+        row = _phase_4_row(yearly_results=yearly)
+        # Without override: 2019 era has N=56 >= 50, ExpR=-0.20 → FAIL
+        status_no, _ = _check_criterion_9_era_stability(row)
+        assert status_no == "REJECTED", "Should fail without override"
+        # With override: 2019 excluded → PASS
+        status_yes, reason = _check_criterion_9_era_stability(row, wf_start_year=2020)
+        assert status_yes is None, f"Should pass with 2019 excluded: {reason}"
+
+    def test_wf_start_year_does_not_exclude_override_year_itself(self):
+        """wf_start_year=2020 excludes 2019 but NOT 2020."""
+        yearly = json.dumps({
+            "2019": {"trades": 30, "avg_r": 0.10},
+            "2020": {"trades": 200, "avg_r": -0.10},  # Bad but in-range
+            "2021": {"trades": 200, "avg_r": -0.08},
+            "2022": {"trades": 200, "avg_r": 0.30},
+        })
+        row = _phase_4_row(yearly_results=yearly)
+        # 2020-2022 era: 200*-0.10 + 200*-0.08 + 200*0.30 = 24, /600 = +0.04 → PASS
+        status, reason = _check_criterion_9_era_stability(row, wf_start_year=2020)
+        assert status is None, f"2020 must NOT be excluded: {reason}"
+
+    def test_wf_start_year_mgc_pattern(self):
+        """MGC: wf_start_year=2022 excludes 2020-2021."""
+        yearly = json.dumps({
+            "2020": {"trades": 60, "avg_r": -0.15},
+            "2021": {"trades": 60, "avg_r": -0.12},
+            "2022": {"trades": 100, "avg_r": 0.20},
+            "2023": {"trades": 100, "avg_r": 0.10},
+        })
+        row = _phase_4_row(yearly_results=yearly)
+        # Without override: 2020-2022 era = (60*-0.15+60*-0.12+100*0.20)/220 = +0.0173 → PASS
+        # (This happens to pass even without override due to era binning)
+        # With override=2022: 2020+2021 excluded, 2020-2022 era only has 2022 N=100 → PASS
+        status, reason = _check_criterion_9_era_stability(row, wf_start_year=2022)
+        assert status is None, f"MGC with override should pass: {reason}"
+
+    def test_wf_start_year_none_preserves_default_behavior(self):
+        """None (no override) = original behavior, 2019 data included."""
+        yearly = json.dumps({
+            "2019": {"trades": 56, "avg_r": -0.20},
+            "2024": {"trades": 200, "avg_r": 0.20},
+        })
+        row = _phase_4_row(yearly_results=yearly)
+        status, reason = _check_criterion_9_era_stability(row, wf_start_year=None)
+        assert status == "REJECTED", "Default (None) must include 2019"
+        assert "2015-2019" in reason
+
 
 class TestPhase4Orchestrator:
     """The full pre-flight orchestrator + grandfather skip end-to-end."""

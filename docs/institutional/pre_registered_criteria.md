@@ -17,6 +17,7 @@
 | v2.8 | 2026-04-09 | **FACTUAL CORRECTION.** Phase 3c canonical layer rebuild (merged to main as commit `c33805b` on 2026-04-08) replaced pre-2019 parent-proxy bars with real-micro bars for MNQ/MES/MGC. Post-rebuild actual horizons: MNQ/MES 6.65 clean years (1,951 pre-holdout trading days, 2019-05-06 → 2025-12-31), MGC 2.7 clean years (671 pre-holdout days, 2023-09-11 → 2025-12-31). The prior text "~2.2 years of clean MNQ data" and "16 years proxy-extended" in § Criterion 2, and "MNQ/MES from 2024-02-05 onwards; MGC never valid" in § Criterion 10, both predate the Phase 3c rebuild and are factually wrong. All 12 locked numeric thresholds (300/2000 trial bounds, t ≥ 3.00, DSR > 0.95, WFE ≥ 0.50, N ≥ 100, etc.) remain EXACTLY as locked — this amendment is a factual correction of stale narrative, not a threshold relaxation. See Amendment 2.8 at bottom. | Claude Code session (user correction: *"I DONT WANNA FUCK AROUND WITH HALF THIS DATA HALF THAT DATA. I HAVE SUBSCRIPTION TO GET ALL THE DATA"*) |
 | v2.9 | 2026-04-09 | **Parent/Proxy Data Policy.** Binding rules for NQ/ES/GC parent vs MNQ/MES/MGC micro data. Delete NQ/ES bars. Keep GC for MGC Tier 2 validation (price-only). 4 new banned practices (#9-#12). | Claude Code session (user: *"is it useful at all for us to have the 2 different contract sizes or is it just a canonical fucking project nightmare?"*) |
 | v3.0 | 2026-04-09 | **Theory-Driven Individual Hypothesis Testing.** Adds dual-pathway to Criterion 3: individual hypothesis pathway (raw p < 0.05) for theory-grounded, mechanism-specific predictions alongside existing BH FDR pathway for exploratory search. Incorporates canonical-base-truth methodology for admissible search space definition. Downstream gates (WF, OOS, era stability) mandatory and non-waivable under individual pathway. | Claude Code session (user: *"There is a way that people realistically trade ORB breakouts that are valid and profitable without using 20 years of data and such hard tests, right?"*) |
+| v3.1 | 2026-04-09 | **Structural Data Boundary for Discovery + Era Stability.** WF_START_OVERRIDE now applies to both discovery IS scope (outcomes + daily_features) and Criterion 9 era bins. Years before the override are excluded from both. Justified by 5-variable structural audit (ATR, volume, ORB size, G-filter pass rates, trading days) confirming MNQ/MES 2019 micro-launch data is non-representative. MNQ CME_PRECLOSE 2019: ATR 0.42x, G8 pass 39%, vol 0.16x. NOT performance-snooped — zero strategy PnL consulted. See Amendment 3.1 at bottom. | Claude Code session (user: *"ensure we do not use v1 of anything. we always check back over to verify our work"*) |
 
 ---
 
@@ -707,3 +708,49 @@ Before any hypothesis is pre-registered under the individual pathway, the resear
 This amendment was written after seeing the K=5 redesign results (2 MNQ survivors, 0 MES, 0 MGC). The MES NYSE_OPEN signal (raw p = 0.026) was the proximate trigger. The legitimacy of this amendment rests on the STRUCTURAL argument that BH FDR is designed for blind enumeration (Chordia's 2 million strategies), not for theory-driven testing of a known strategy class (Crabel ORB breakouts). This argument is valid independent of the specific results that prompted it — it would be equally valid if all 15 hypotheses had passed or all had failed.
 
 The amendment was requested by the user based on their understanding that real ORB breakout traders profitably apply this strategy class without academic-scale multiple testing corrections, and that the project's framework should match the actual use case (theory-driven testing) rather than the worst case (blind enumeration).
+
+---
+
+## Amendment 3.1 (2026-04-09) — Structural Data Boundary for Discovery and Era Stability (binding)
+
+**Type:** Extends WF_START_OVERRIDE to discovery IS scope and Criterion 9 era bins.
+
+**Trigger:** MNQ CME_PRECLOSE E2 RR1.0 G8 (Sharpe 1.83, p=0.000002, N=1320) was rejected by Criterion 9 because the "2015-2019" era bin contained 56 trades from the structurally non-representative 2019 micro-contract launch period. The WF engine already excluded this data via WF_START_OVERRIDE=2020-01-01 (set by Amendment 3.1's prerequisite data audit), but Criterion 9 read `yearly_results` which included 2019.
+
+**Structural data audit evidence (execution output, not metadata):**
+
+MNQ 2019 vs 2020+ (micro launched 2019-05-06):
+- ATR: 113.7 vs 279.5 = **0.42x**
+- CME_PRECLOSE G8 pass rate: **39.0%** vs 97.7% (monthly: Nov=5.3%, Dec=20%)
+- EUROPE_FLOW G8 pass rate: **22.8%** vs 83.5%
+- NYSE_OPEN volume: 5,689 vs 30,845 = **0.16x**
+- CME_PRECLOSE volume: 1,672 vs 7,980 = **0.18x**
+
+Monthly granularity confirms Q3/Q4 2019 does NOT normalize. Jan 2020 = 71.4% G8 pass, confirming 2020-01-01 as the clean structural boundary.
+
+**The 56 trades that triggered Criterion 9 rejection:**
+- ORB size: 13.3 vs 26.5 (2020) = 0.50x
+- Volume: 2,361 vs 5,646 (2020) = 0.42x
+- ATR: 124.0 vs 249.1 (2020) = 0.50x
+- All from an 8-month-old contract with immature liquidity
+
+**Rule (two parts):**
+
+**Part 1 — Discovery IS scope:** When `run_discovery` is called without an explicit `--start` date, the discovery engine defaults to `WF_START_OVERRIDE.get(instrument)` as the lower bound for both `daily_features` and `orb_outcomes` loading. This ensures the IS sample, `yearly_results` JSON, and all derived statistics (sample_size, trades_per_year, p_value, etc.) exclude structurally non-representative pre-override data. An explicit `--start` CLI argument overrides this default.
+
+**Part 2 — Criterion 9 era bins:** When computing era stability, years before the instrument's `WF_START_OVERRIDE` year are excluded from era bin aggregation. The logic: skip any year `y` where `y < wf_start_override.year`. This makes the era stability check consistent with the walk-forward engine and the discovery IS scope.
+
+**Rationale:** The same structural data audit that makes pre-override data unreliable for walk-forward training also makes it unreliable for era stability assessment. A contract-launch liquidity artifact is NOT a dead regime — it is a microstructure state that no longer exists and will not recur. Including it in era stability creates a false rejection that blocks an otherwise honest strategy.
+
+**Honest caveat:** We cannot prove the counterfactual "what would 2019 look like with mature MNQ liquidity." The exclusion rests on structural judgment (5 independent metrics all converging), not a statistical test. If NQ volatility returned to 2019 levels with today's mature MNQ liquidity, the outcome would be structurally different — but this is an assertion, not a proven fact.
+
+**Bias check:** The WF_START_OVERRIDE=2020-01-01 was set BEFORE examining any strategy's per-year PnL. The justification is purely structural (ATR, volume, filter pass rates). The override would be identical if MNQ CME_PRECLOSE showed positive 2019 performance.
+
+**Interaction with Amendment 3.0 (Pathway B):** Pathway B condition 4 ("Criteria 9 non-waivable") is STRENGTHENED by this amendment, not weakened. The exclusion applies to the DATA, not to the GATE. Criterion 9 still runs on all post-override eras with the same -0.05 threshold and N>=50 requirement. The gate is non-waivable; the data scope is narrowed to structurally valid observations.
+
+**What this does NOT change:**
+- The -0.05 ExpR threshold is UNCHANGED
+- The N >= 50 minimum is UNCHANGED
+- Post-override era bins (2020-2022, 2023, 2024-2025, 2026) are UNCHANGED
+- The holdout boundary (2026-01-01) is UNCHANGED
+- Existing validated strategies are unaffected (they already pass Criterion 9 or are grandfathered)

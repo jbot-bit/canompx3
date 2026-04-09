@@ -1027,7 +1027,8 @@ def _inject_cross_asset_atrs(con, features, instrument, all_filters):
         logger.info(f"  Injected {col_name} for {injected}/{len(features)} rows")
 
 
-def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models, holdout_date=None):
+def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models,
+                        holdout_date=None, start_date=None):
     """
     Load all non-NULL outcomes in one query per (orb, entry_model).
 
@@ -1035,6 +1036,14 @@ def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models, 
         holdout_date: If set, only load outcomes with trading_day < holdout_date.
             This implements true temporal holdout (F-02 audit fix) — discovery
             only sees pre-holdout data, leaving post-holdout for OOS validation.
+        start_date: If set, only load outcomes with trading_day >= start_date.
+            Used to exclude structurally non-representative early data (e.g.,
+            micro-contract launch period).  Defaults to WF_START_OVERRIDE for
+            the instrument when called from run_discovery without explicit
+            --start CLI override.
+            @research-source: 2026-04-09 structural data audit (ATR, volume,
+              G-filter pass rates confirm pre-2020 MNQ/MES data is non-
+              representative of mature-contract microstructure)
 
     Returns dict keyed by (orb_label, entry_model, rr_target, confirm_bars)
     with value = list of outcome dicts.
@@ -1050,6 +1059,10 @@ def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models, 
                      AND orb_label = ? AND entry_model = ?
                      AND outcome IS NOT NULL"""
             params = [instrument, orb_minutes, orb_label, em]
+
+            if start_date is not None:
+                sql += "\n                     AND trading_day >= ?"
+                params.append(start_date)
 
             if holdout_date is not None:
                 sql += "\n                     AND trading_day < ?"
@@ -1231,8 +1244,28 @@ def run_discovery(
         if holdout_date is not None:
             if effective_end is None or holdout_date < effective_end:
                 effective_end = holdout_date
+
+        # Structural start boundary: when no explicit --start is provided,
+        # default to the instrument's WF_START_OVERRIDE. This ensures the
+        # IS sample used for discovery does NOT include structurally non-
+        # representative contract-launch data (e.g., MNQ/MES 2019 with
+        # ATR 0.42x, volume 0.16x, G8 pass rate 39%).
+        # Applied to BOTH daily_features AND outcomes so stats, filter-day
+        # sets, and yearly_results are all consistent.
+        # @research-source: 2026-04-09 structural data audit, Amendment 3.1
+        effective_start = start_date
+        if effective_start is None:
+            from trading_app.config import WF_START_OVERRIDE
+            wf_override = WF_START_OVERRIDE.get(instrument)
+            if wf_override is not None:
+                effective_start = wf_override
+                logger.info(
+                    f"  STRUCTURAL START: using WF_START_OVERRIDE={wf_override} "
+                    f"for {instrument} (no explicit --start provided)"
+                )
+
         logger.info("Loading daily features...")
-        features = _load_daily_features(con, instrument, orb_minutes, start_date, effective_end)
+        features = _load_daily_features(con, instrument, orb_minutes, effective_start, effective_end)
         logger.info(f"  {len(features)} daily_features rows loaded")
 
         # Build union of all session-specific filters for bulk pre-computation
@@ -1259,6 +1292,7 @@ def run_discovery(
             sessions,
             ENTRY_MODELS,
             holdout_date=holdout_date,
+            start_date=effective_start,
         )
         logger.info(f"  {sum(len(v) for v in outcomes_by_key.values())} outcome rows loaded")
 

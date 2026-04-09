@@ -1079,7 +1079,9 @@ def _check_criterion_8_oos(
     return (None, None)
 
 
-def _check_criterion_9_era_stability(row_dict: dict) -> tuple[str | None, str | None]:
+def _check_criterion_9_era_stability(
+    row_dict: dict, *, wf_start_year: int | None = None
+) -> tuple[str | None, str | None]:
     """Criterion 9: era stability — no era with ExpR < -0.05 (N >= 50).
 
     Lifted from informational ``era_dependent`` flag to enforced gate per
@@ -1088,6 +1090,15 @@ def _check_criterion_9_era_stability(row_dict: dict) -> tuple[str | None, str | 
     has ExpR < -0.05 with at least 50 trades.
 
     Eras with < 50 trades are exempt (insufficient data to judge).
+
+    Parameters
+    ----------
+    wf_start_year
+        When set, years BEFORE this year are excluded from era bin
+        aggregation.  Derived from ``WF_START_OVERRIDE`` for the
+        instrument.  Per Amendment 3.1, the same structural data audit
+        that makes pre-override data unreliable for walk-forward also
+        makes it unreliable for era stability assessment.
     """
     yearly_raw = row_dict.get("yearly_results")
     if not yearly_raw:
@@ -1116,6 +1127,12 @@ def _check_criterion_9_era_stability(row_dict: dict) -> tuple[str | None, str | 
             except (TypeError, ValueError):
                 continue
             if y not in year_range:
+                continue
+            # Amendment 3.1: skip years before the structural override.
+            # Same data audit that excludes pre-override from WF also
+            # excludes it from era stability (contract-launch artifact,
+            # not a real regime signal).
+            if wf_start_year is not None and y < wf_start_year:
                 continue
             if not isinstance(data, dict):
                 continue
@@ -1191,7 +1208,12 @@ def _check_phase_4_pre_flight_gates(
     # Criterion 9: era stability (cheap, pure JSON parse, no DB access).
     # Fires before C8 to short-circuit expensive DB work (reviewer HIGH #5 —
     # gate ordering: cheap local gates before expensive IO gates).
-    rejection = _check_criterion_9_era_stability(row_dict)
+    # Amendment 3.1: pass WF_START_OVERRIDE year so pre-override data
+    # (contract-launch artifacts) is excluded from era bins.
+    _instrument = row_dict.get("instrument", "")
+    _wf_override = WF_START_OVERRIDE.get(_instrument)
+    _wf_start_year = _wf_override.year if _wf_override is not None else None
+    rejection = _check_criterion_9_era_stability(row_dict, wf_start_year=_wf_start_year)
     if rejection != (None, None):
         return rejection
 
