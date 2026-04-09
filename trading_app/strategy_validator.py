@@ -916,7 +916,7 @@ def _check_criterion_2_minbtl(meta: dict, on_proxy_data: bool = False) -> tuple[
 
 
 def _check_criterion_8_oos(
-    row_dict: dict, db_path: Path | None
+    row_dict: dict, db_path: Path | None, *, strict_oos_n: bool = False
 ) -> tuple[str | None, str | None]:
     """Criterion 8: 2026 out-of-sample positive (with N/A safety).
 
@@ -926,6 +926,15 @@ def _check_criterion_8_oos(
     computes the OOS expectancy-R from matching trades.
 
     The locked threshold is ``OOS_ExpR >= 0`` AND ``OOS_ExpR >= 0.40 * IS_ExpR``.
+
+    Parameters
+    ----------
+    strict_oos_n
+        When True (Pathway B / individual testing mode), reject hard if
+        ``N_oos`` is below the minimum threshold instead of silently passing
+        through.  Amendment 3.0 condition 4 forbids "insufficient OOS data
+        exemptions" for Pathway B.  Default False preserves Pathway A
+        legacy permissive behaviour.
 
     N/A safety: if zero OOS trades exist (e.g., synthetic test DB with no
     2026 data), the gate returns N/A pass-through. This prevents pre-2026
@@ -1024,16 +1033,32 @@ def _check_criterion_8_oos(
         # synthetic test DBs and null seed runs from false rejection.
         return (None, None)
 
-    # Minimum OOS sample gate: with < 30 OOS trades, the ExpR estimate
-    # has standard error ~1/sqrt(N) ≈ 0.18+, making the 95% CI span
-    # ~±0.36R. Judging a 6-year strategy on <30 forward trades is
-    # statistically meaningless. Pass-through with advisory note.
-    # This is especially relevant early in a holdout year (e.g., Q1 2026
-    # with only 11 trades for low-frequency sessions like MES CME_PRECLOSE).
-    _OOS_MIN_TRADES = 30
-    if n_oos < _OOS_MIN_TRADES:
-        logger.info(
-            f"  Criterion 8: N_oos={n_oos} < {_OOS_MIN_TRADES} — insufficient for judgment, pass-through"
+    # Minimum OOS sample gate.  N=30 is a CLT heuristic — NOT a Bailey
+    # or Harvey-Liu prescription.  The real institutional fix is a power-
+    # grounded threshold derived from each strategy's IS effect size
+    # (deferred; see docs/plans/2026-04-09-bloomey-pathway-b-fixes-design.md
+    # § "Out-of-scope" item 1).
+    #
+    # Two modes (added per Bloomey review finding A-2):
+    #   strict_oos_n=False (Pathway A / default):  silent pass-through,
+    #     logged at WARNING so the event is auditable.  Preserves legacy
+    #     behaviour for the 124 grandfathered strategies.
+    #   strict_oos_n=True  (Pathway B / individual):  hard REJECT.
+    #     Amendment 3.0 condition 4 forbids "insufficient OOS data
+    #     exemptions" for individual-mode hypotheses.
+    _OOS_MIN_TRADES_CLT_HEURISTIC = 30
+    if n_oos < _OOS_MIN_TRADES_CLT_HEURISTIC:
+        if strict_oos_n:
+            return (
+                "REJECTED",
+                f"criterion_8: N_oos={n_oos} < {_OOS_MIN_TRADES_CLT_HEURISTIC} "
+                f"(Amendment 3.0 condition 4: no insufficient-OOS-data exemptions "
+                f"for Pathway B individual testing mode)",
+            )
+        logger.warning(
+            "  Criterion 8: N_oos=%d < %d — insufficient for judgment, "
+            "pass-through (Pathway A permissive mode)",
+            n_oos, _OOS_MIN_TRADES_CLT_HEURISTIC,
         )
         return (None, None)
 
@@ -1113,6 +1138,8 @@ def _check_phase_4_pre_flight_gates(
     row_dict: dict,
     db_path: Path | None,
     hypothesis_meta_cache: dict[str, dict],
+    *,
+    testing_mode: str = "family",
 ) -> tuple[str | None, str | None]:
     """Apply all Phase 4 Stage 4.0 pre-flight gates to a single experimental row.
 
@@ -1120,6 +1147,13 @@ def _check_phase_4_pre_flight_gates(
     9 (era stability), and 8 (2026 OOS positive) in that order. Criteria 4
     (Chordia) and 5 (DSR) are deferred to Stage 4.0b per Amendments 2.1 and
     2.2 of the locked criteria file; they do not appear here.
+
+    Parameters
+    ----------
+    testing_mode
+        "family" (Pathway A) or "individual" (Pathway B).  When
+        "individual", the C8 gate uses strict mode (hard reject at
+        N_oos < 30 instead of silent pass-through).
 
     Returns
     -------
@@ -1163,7 +1197,11 @@ def _check_phase_4_pre_flight_gates(
 
     # Criterion 8: 2026 OOS positive (N/A safe when no OOS data).
     # Last in the sequence because it issues a DuckDB read-only query per row.
-    rejection = _check_criterion_8_oos(row_dict, db_path)
+    # Pathway B (individual mode) uses strict_oos_n=True: hard reject at N<30
+    # per Amendment 3.0 condition 4 ("no insufficient OOS data exemptions").
+    rejection = _check_criterion_8_oos(
+        row_dict, db_path, strict_oos_n=(testing_mode == "individual")
+    )
     if rejection != (None, None):
         return rejection
 
@@ -1313,6 +1351,7 @@ def run_validation(
             row_dict,
             db_path,
             phase_4_hypothesis_cache,
+            testing_mode=testing_mode,
         )
         if phase_4_status is not None:
             serial_results.append(
@@ -1782,22 +1821,49 @@ def run_validation(
             #     and TOKYO_OPEN with 0 survivors; stratified K restores valid strata)
             if passed_strategy_ids and testing_mode == "individual":
                 # ── Pathway B: Amendment 3.0 individual hypothesis testing ──
-                # Raw p < 0.05 + positive sharpe_ann. No BH FDR.
-                # Downstream gates (WF, OOS, era stability) are non-waivable.
-                logger.info("Pathway B (individual): raw p < 0.05 + positive sharpe_ann gate...")
+                #
+                # Gate sequence (ALL three must pass, per Amendment 3.0):
+                #   Criterion 3 (Pathway B): raw bootstrap p < 0.05 (two-tailed)
+                #   Criterion 3 (direction): sharpe_ann > 0 (rules out significant-
+                #     but-negative strategies; Amendment 3.0 condition 2b)
+                #   Criterion 6: wfe >= MIN_WFE (Pardo walk-forward efficiency
+                #     floor; Amendment 3.0 condition 4 "non-waivable")
+                #
+                # Criteria 8 (2026 OOS) and 9 (era stability) already enforced
+                # in the pre-flight gate stack earlier in the main loop.
+                #
+                # @research-source: docs/institutional/pre_registered_criteria.md
+                #   Amendment 3.0 (2026-04-09) conditions 2b and 4.
+                logger.info(
+                    "Pathway B (individual): raw p < 0.05 + sharpe > 0 + wfe >= %.2f gate...",
+                    MIN_WFE,
+                )
                 n_pathway_b_pass = 0
                 n_pathway_b_rejected = 0
                 pathway_b_rejected_ids = []
                 for sid in passed_strategy_ids:
-                    row = con.execute(
+                    exp_row = con.execute(
                         "SELECT p_value, sharpe_ann FROM experimental_strategies WHERE strategy_id = ?",
                         [sid],
                     ).fetchone()
-                    raw_p = row[0] if row and row[0] is not None else 1.0
-                    sharpe = row[1] if row and row[1] is not None else 0.0
-                    if raw_p < 0.05 and sharpe > 0:
+                    raw_p = exp_row[0] if exp_row and exp_row[0] is not None else 1.0
+                    sharpe = exp_row[1] if exp_row and exp_row[1] is not None else 0.0
+
+                    # WFE gate — mirror the Pathway A fail-closed pattern at
+                    # line ~1905: null WFE → treat as 0.0 → reject.
+                    # @research-source: Pardo "Evaluation and Optimization" Ch.7
+                    #   WFE < 0.50 = lost >50% of edge OOS → likely overfit.
+                    wfe_row = con.execute(
+                        "SELECT wfe FROM validated_setups WHERE strategy_id = ?", [sid]
+                    ).fetchone()
+                    wfe_val = wfe_row[0] if wfe_row and wfe_row[0] is not None else 0.0
+
+                    pass_raw_p = raw_p < 0.05
+                    pass_direction = sharpe > 0
+                    pass_wfe = wfe_val >= MIN_WFE
+
+                    if pass_raw_p and pass_direction and pass_wfe:
                         n_pathway_b_pass += 1
-                        # Update validated_setups with raw p (no FDR adjustment)
                         con.execute(
                             """UPDATE validated_setups
                                SET fdr_significant = TRUE,
@@ -1813,11 +1879,19 @@ def run_validation(
                     else:
                         pathway_b_rejected_ids.append(sid)
                         n_pathway_b_rejected += 1
-                        reason = (
-                            f"criterion_3_pathway_b: raw p={raw_p:.4f} "
-                            f"{'>=0.05' if raw_p >= 0.05 else ''}"
-                            f"{'sharpe_ann<=0' if sharpe <= 0 else ''}"
-                        )
+                        # Tag each failing gate separately so the audit trail
+                        # distinguishes Criterion 3 vs Criterion 6 rejections.
+                        failures: list[str] = []
+                        if not pass_raw_p:
+                            failures.append(f"criterion_3_pathway_b: raw p={raw_p:.4f}>=0.05")
+                        if not pass_direction:
+                            failures.append(f"criterion_3_pathway_b: sharpe_ann={sharpe:.4f}<=0")
+                        if not pass_wfe:
+                            failures.append(
+                                f"criterion_6_pathway_b: wfe={wfe_val:.4f}<{MIN_WFE} "
+                                f"(Amendment 3.0 non-waivable)"
+                            )
+                        reason = "; ".join(failures)
                         con.execute(
                             "DELETE FROM validated_setups WHERE strategy_id = ?", [sid]
                         )
@@ -1835,6 +1909,8 @@ def run_validation(
                     passed_strategy_ids = [
                         s for s in passed_strategy_ids if s not in set(pathway_b_rejected_ids)
                     ]
+                # Reuse n_fdr_rejected so Phase D counters (line ~2066) log
+                # Pathway B rejections. Name is historical, not methodological.
                 n_fdr_rejected = n_pathway_b_rejected
                 logger.info(
                     f"  Pathway B gate: {n_pathway_b_pass} survived, "

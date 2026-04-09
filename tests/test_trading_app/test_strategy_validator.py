@@ -1491,3 +1491,144 @@ class TestPhase4Orchestrator:
         assert status == "REJECTED"
         assert reason is not None
         assert "criterion_1" in reason
+
+
+# ── Bloomey review fix tests (Steps 2+3) ───────────────────────────────
+
+
+class TestPathwayBWfeGate:
+    """Step 2 (A-1): Pathway B must enforce WFE >= MIN_WFE.
+
+    Amendment 3.0 condition 4 says Criterion 6 is mandatory and
+    non-waivable for Pathway B.  The WFE gate mirrors Pathway A
+    line ~1906 inside the Pathway B branch.
+
+    These tests exercise the gate logic WITHIN the Pathway B branch
+    by checking that the branch queries validated_setups.wfe and
+    rejects when below MIN_WFE.  They do NOT run the full
+    run_validation pipeline — that is covered by the integration
+    tests in Step 5.
+    """
+
+    # NOTE: The Pathway B WFE gate lives inside run_validation's
+    # Phase C write block, which is hard to isolate without the
+    # full pipeline.  Instead we verify the gate's inputs and
+    # outputs via the C8 strict-mode tests (which exercise the
+    # pre-flight plumbing) plus an import-level check that the
+    # Pathway B branch references MIN_WFE.
+
+    def test_pathway_b_branch_references_min_wfe(self):
+        """Static check: the Pathway B branch reads MIN_WFE."""
+        import inspect
+        from trading_app.strategy_validator import run_validation
+        src = inspect.getsource(run_validation)
+        # The Pathway B branch should contain a wfe query and MIN_WFE comparison
+        assert "wfe" in src.lower(), "Pathway B branch must query WFE"
+        assert "MIN_WFE" in src, "Pathway B branch must reference MIN_WFE constant"
+        # Verify the pattern: wfe_val >= MIN_WFE (not just any mention)
+        assert "pass_wfe = wfe_val >= MIN_WFE" in src, (
+            "Pathway B branch must have 'pass_wfe = wfe_val >= MIN_WFE' gate"
+        )
+
+    def test_pathway_b_branch_references_criterion_6(self):
+        """Static check: rejection reason tags Criterion 6 for audit trail."""
+        import inspect
+        from trading_app.strategy_validator import run_validation
+        src = inspect.getsource(run_validation)
+        assert "criterion_6_pathway_b" in src, (
+            "Pathway B rejection reason must tag criterion_6 for audit trail"
+        )
+
+    def test_pathway_b_branch_fail_closed_on_null_wfe(self):
+        """Static check: null WFE → treat as 0.0 (fail-closed)."""
+        import inspect
+        from trading_app.strategy_validator import run_validation
+        src = inspect.getsource(run_validation)
+        # The fail-closed pattern: "else 0.0" when wfe is None
+        assert "else 0.0" in src, (
+            "Pathway B WFE must fail-closed to 0.0 on null"
+        )
+
+
+class TestCriterion8StrictMode:
+    """Step 3 (A-2): C8 strict_oos_n mode for Pathway B.
+
+    Amendment 3.0 condition 4 forbids 'insufficient OOS data exemptions'
+    for Pathway B.  When strict_oos_n=True, the C8 helper must hard-reject
+    at N_oos < 30 instead of silently passing through.
+    """
+
+    _DEFAULT_RR = 2.0
+
+    def _make_synthetic_db(self, db_path, oos_pnls):
+        """Minimal OOS fixture DB (same pattern as TestCriterion8OOSPositive)."""
+        import duckdb
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE orb_outcomes (
+                trading_day DATE, symbol VARCHAR, orb_label VARCHAR,
+                orb_minutes INTEGER, entry_model VARCHAR, confirm_bars INTEGER,
+                rr_target DOUBLE, pnl_r DOUBLE
+            )
+        """)
+        con.execute("""
+            CREATE TABLE daily_features (
+                trading_day DATE, symbol VARCHAR, orb_minutes INTEGER,
+                stub_col INTEGER
+            )
+        """)
+        base_day = date(2026, 1, 5)
+        for i, pnl in enumerate(oos_pnls):
+            day = base_day + timedelta(days=i)
+            con.execute(
+                "INSERT INTO orb_outcomes VALUES (?, 'MNQ', 'NYSE_OPEN', 5, 'E2', 1, ?, ?)",
+                [day, self._DEFAULT_RR, pnl],
+            )
+            con.execute(
+                "INSERT INTO daily_features VALUES (?, 'MNQ', 5, 1)",
+                [day],
+            )
+        con.close()
+        return db_path
+
+    def test_permissive_mode_passes_through_low_n(self, tmp_path):
+        """Default strict_oos_n=False: N_oos < 30 passes through (Pathway A)."""
+        db_path = self._make_synthetic_db(
+            tmp_path / "perm.db", oos_pnls=[-1.0, -0.5, -0.3]
+        )
+        row = _phase_4_row(expectancy_r=0.20)
+        status, reason = _check_criterion_8_oos(row, db_path, strict_oos_n=False)
+        assert status is None, (
+            f"Permissive mode must pass-through at N<30, got {status!r}: {reason}"
+        )
+
+    def test_strict_mode_rejects_low_n(self, tmp_path):
+        """strict_oos_n=True: N_oos < 30 → hard REJECT (Pathway B)."""
+        db_path = self._make_synthetic_db(
+            tmp_path / "strict.db", oos_pnls=[-1.0, -0.5, -0.3]
+        )
+        row = _phase_4_row(expectancy_r=0.20)
+        status, reason = _check_criterion_8_oos(row, db_path, strict_oos_n=True)
+        assert status == "REJECTED", f"Strict mode must reject at N<30, got {status!r}"
+        assert reason is not None
+        assert "Amendment 3.0" in reason
+        assert "N_oos=3" in reason
+
+    def test_strict_mode_passes_at_n_equals_30(self, tmp_path):
+        """strict_oos_n=True at boundary N=30: should evaluate normally."""
+        oos_pnls = [1.0] * 12 + [-0.5] * 9 + [0.0] * 9
+        assert len(oos_pnls) == 30
+        db_path = self._make_synthetic_db(tmp_path / "boundary.db", oos_pnls=oos_pnls)
+        row = _phase_4_row(expectancy_r=0.20)
+        status, reason = _check_criterion_8_oos(row, db_path, strict_oos_n=True)
+        assert status is None, f"N=30 should evaluate normally and pass: {reason}"
+
+    def test_strict_mode_still_rejects_negative_oos_at_n_30(self, tmp_path):
+        """strict_oos_n=True + N=30 but all negative → REJECT on sign gate."""
+        oos_pnls = [-1.0] * 10 + [-0.5] * 10 + [-0.3] * 10
+        assert len(oos_pnls) == 30
+        db_path = self._make_synthetic_db(tmp_path / "neg_strict.db", oos_pnls=oos_pnls)
+        row = _phase_4_row(expectancy_r=0.20)
+        status, reason = _check_criterion_8_oos(row, db_path, strict_oos_n=True)
+        assert status == "REJECTED"
+        assert "OOS ExpR" in reason

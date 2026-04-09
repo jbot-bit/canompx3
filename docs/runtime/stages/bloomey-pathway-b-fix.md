@@ -1,5 +1,5 @@
 ---
-stage: IMPLEMENTATION
+mode: IMPLEMENTATION
 slug: bloomey-pathway-b-fix
 task: Fix 5 bloomey-review findings on Amendment 3.0 Pathway B validator work (D-1 binary blobs, A-1 WFE gate, A-2 C8 strict mode, A-3 audit column, D-2 integration tests)
 started: 2026-04-09
