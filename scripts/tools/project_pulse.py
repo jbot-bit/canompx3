@@ -696,15 +696,23 @@ def collect_survival_state() -> tuple[dict | None, list[PulseItem]]:
     return summary, items
 
 
-def collect_sr_state() -> tuple[dict | None, list[PulseItem]]:
+def collect_sr_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
     """Read Criterion 12 SR monitor state from the persisted state file."""
     summary: dict | None = None
     items: list[PulseItem] = []
 
     try:
-        from trading_app.prop_profiles import resolve_profile_id
+        from trading_app.derived_state import (
+            build_code_fingerprint,
+            build_db_identity,
+            build_profile_fingerprint,
+            validate_state_envelope,
+        )
+        from trading_app.prop_profiles import get_profile, get_profile_lane_definitions, resolve_profile_id
 
         profile_id = resolve_profile_id()
+        profile = get_profile(profile_id)
+        lane_ids = [str(lane["strategy_id"]) for lane in get_profile_lane_definitions(profile_id)]
         state_path = PROJECT_ROOT / "data" / "state" / "sr_state.json"
         if not state_path.exists():
             items.append(
@@ -718,9 +726,43 @@ def collect_sr_state() -> tuple[dict | None, list[PulseItem]]:
             return None, items
 
         data = json.loads(state_path.read_text(encoding="utf-8"))
-        state_date = data.get("date")
-        state_profile_id = data.get("profile_id")
-        results = data.get("results", [])
+        valid, reason, envelope = validate_state_envelope(
+            data,
+            expected_schema_version=1,
+            expected_state_type="sr_monitor",
+            current_profile_id=profile_id,
+            current_profile_fingerprint=build_profile_fingerprint(profile),
+            current_lane_ids=lane_ids,
+            current_db_identity=build_db_identity(db_path),
+            current_code_fingerprint=build_code_fingerprint(
+                [
+                    PROJECT_ROOT / "trading_app" / "sr_monitor.py",
+                    PROJECT_ROOT / "trading_app" / "live" / "sr_monitor.py",
+                ]
+            ),
+            today=date.today(),
+        )
+        if not valid or envelope is None:
+            items.append(
+                PulseItem(
+                    category="decaying",
+                    severity="low" if reason == "stale" else "medium",
+                    source="sr_monitor",
+                    summary=(
+                        "Criterion 12 SR state is stale — run `python -m trading_app.sr_monitor`"
+                        if reason == "stale"
+                        else "Criterion 12 SR state mismatched/legacy — rerun `python -m trading_app.sr_monitor`"
+                    ),
+                    detail=reason,
+                )
+            )
+            return None, items
+
+        state_inputs = envelope["canonical_inputs"]
+        freshness = envelope["freshness"]
+        payload = envelope["payload"]
+        state_date = freshness.get("as_of_date")
+        results = payload.get("results", [])
 
         counts: dict[str, int] = {}
         stream_counts: dict[str, int] = {}
@@ -738,24 +780,13 @@ def collect_sr_state() -> tuple[dict | None, list[PulseItem]]:
                 state_age_days = None
 
         summary = {
-            "profile_id": state_profile_id,
+            "profile_id": state_inputs.get("profile_id"),
             "state_date": state_date,
             "state_age_days": state_age_days,
             "counts": counts,
             "stream_counts": stream_counts,
-            "apply_pauses": bool(data.get("apply_pauses")),
+            "apply_pauses": bool(payload.get("apply_pauses")),
         }
-
-        if state_profile_id != profile_id:
-            items.append(
-                PulseItem(
-                    category="broken",
-                    severity="medium",
-                    source="sr_monitor",
-                    summary=f"SR state is for {state_profile_id}, expected {profile_id}",
-                )
-            )
-            return summary, items
 
         alarms = counts.get("ALARM", 0)
         if alarms > 0:
@@ -1471,7 +1502,7 @@ def build_pulse(
 
     deployment_summary, deployment_items = collect_deployment_state(db_path)
     survival_summary, survival_items = collect_survival_state()
-    sr_summary, sr_items = collect_sr_state()
+    sr_summary, sr_items = collect_sr_state(db_path)
     pause_summary, pause_items = collect_pause_state()
     handoff_context, handoff_items = collect_handoff(root)
     worktree_items = collect_worktrees(canonical)

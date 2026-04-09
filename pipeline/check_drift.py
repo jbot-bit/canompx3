@@ -4281,6 +4281,89 @@ def check_prop_profiles_validated_alignment(con=None) -> list[str]:
     return violations
 
 
+def check_shared_profile_fingerprint_canonical() -> list[str]:
+    """Ensure the profile fingerprint helper lives in one canonical runtime module."""
+    violations = []
+
+    derived_state_path = TRADING_APP_DIR / "derived_state.py"
+    account_survival_path = TRADING_APP_DIR / "account_survival.py"
+
+    if not derived_state_path.exists():
+        return ["  trading_app/derived_state.py missing (canonical derived-state helper required)"]
+
+    derived_text = derived_state_path.read_text(encoding="utf-8")
+    account_text = account_survival_path.read_text(encoding="utf-8") if account_survival_path.exists() else ""
+
+    if "def build_profile_fingerprint(" not in derived_text:
+        violations.append("  trading_app/derived_state.py must define build_profile_fingerprint()")
+
+    runtime_defs = 0
+    for path in TRADING_APP_DIR.rglob("*.py"):
+        if path.name == "__init__.py":
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        runtime_defs += text.count("def build_profile_fingerprint(")
+    if runtime_defs != 1:
+        violations.append(f"  Expected exactly one runtime build_profile_fingerprint() definition, found {runtime_defs}")
+
+    if "from trading_app.derived_state import build_profile_fingerprint" not in account_text:
+        violations.append("  trading_app/account_survival.py must import build_profile_fingerprint from trading_app.derived_state")
+
+    return violations
+
+
+def check_sr_state_contract_writer() -> list[str]:
+    """Ensure SR monitor persists a versioned derived-state envelope."""
+    violations = []
+    path = TRADING_APP_DIR / "sr_monitor.py"
+    if not path.exists():
+        return violations
+
+    text = path.read_text(encoding="utf-8")
+    required_tokens = [
+        "build_state_envelope(",
+        "schema_version=1",
+        'state_type="sr_monitor"',
+        "git_head=",
+        'tool="sr_monitor"',
+        "canonical_inputs={",
+        "freshness={",
+        "payload={",
+        '"profile_fingerprint"',
+        '"lane_ids"',
+        '"db_identity"',
+        '"code_fingerprint"',
+    ]
+    for token in required_tokens:
+        if token not in text:
+            violations.append(f"  trading_app/sr_monitor.py missing SR contract token: {token}")
+
+    return violations
+
+
+def check_sr_state_contract_reader() -> list[str]:
+    """Ensure project_pulse validates SR state before trusting it."""
+    violations = []
+    path = SCRIPTS_DIR / "tools" / "project_pulse.py"
+    if not path.exists():
+        return violations
+
+    text = path.read_text(encoding="utf-8")
+    collect_idx = text.find("def collect_sr_state(")
+    if collect_idx == -1:
+        return ["  scripts/tools/project_pulse.py missing collect_sr_state()"]
+
+    collect_text = text[collect_idx : text.find("\ndef ", collect_idx + 1) if text.find("\ndef ", collect_idx + 1) != -1 else None]
+    if "validate_state_envelope(" not in collect_text:
+        violations.append("  project_pulse.collect_sr_state() must validate SR envelope before trusting it")
+    if 'payload.get("results"' not in collect_text:
+        violations.append("  project_pulse.collect_sr_state() must read SR results from validated payload")
+    if 'data.get("results"' in collect_text:
+        violations.append("  project_pulse.collect_sr_state() may not trust top-level data.get('results') directly")
+
+    return violations
+
+
 def check_resample_helpers_in_entry_rules() -> list[str]:
     """resample_to_5m and _verify_e3_sub_bar_fill must be defined in trading_app.entry_rules.
 
@@ -4595,6 +4678,9 @@ CHECKS = [
         False,
         True,
     ),
+    ("Shared profile fingerprint helper is canonical", check_shared_profile_fingerprint_canonical, False, False),
+    ("SR state writer uses derived-state contract envelope", check_sr_state_contract_writer, False, False),
+    ("SR state reader validates envelope before trust", check_sr_state_contract_reader, False, False),
 ]  # end CHECKS
 
 

@@ -578,25 +578,86 @@ class TestControlSummaries:
     def test_sr_state_alarm_item(self) -> None:
         mock_profile_module = MagicMock()
         mock_profile_module.resolve_profile_id.return_value = "topstep_50k_mnq_auto"
+        mock_profile_module.get_profile.return_value = object()
+        mock_profile_module.get_profile_lane_definitions.return_value = [
+            {"strategy_id": "SID_A"},
+            {"strategy_id": "SID_B"},
+        ]
+        mock_derived_state = MagicMock()
+        mock_derived_state.build_profile_fingerprint.return_value = "pfp"
+        mock_derived_state.build_db_identity.return_value = "dbid"
+        mock_derived_state.build_code_fingerprint.return_value = "codeid"
+        mock_derived_state.validate_state_envelope.return_value = (
+            True,
+            None,
+            {
+                "canonical_inputs": {"profile_id": "topstep_50k_mnq_auto"},
+                "freshness": {"as_of_date": "2026-04-10", "max_age_days": 2},
+                "payload": {
+                    "apply_pauses": False,
+                    "results": [
+                        {"status": "ALARM", "stream_source": "paper_trades"},
+                        {"status": "CONTINUE", "stream_source": "canonical_forward"},
+                    ],
+                },
+            },
+        )
         payload = {
-            "date": "2026-04-10",
-            "profile_id": "topstep_50k_mnq_auto",
-            "results": [
-                {"status": "ALARM", "stream_source": "paper_trades"},
-                {"status": "CONTINUE", "stream_source": "canonical_forward"},
-            ],
+            "schema_version": 1,
+            "state_type": "sr_monitor",
+            "generated_at_utc": "2026-04-10T00:00:00+00:00",
+            "git_head": "abc123",
+            "tool": "sr_monitor",
+            "canonical_inputs": {},
+            "freshness": {},
+            "payload": {},
         }
         with (
-            patch.dict("sys.modules", {"trading_app.prop_profiles": mock_profile_module}),
+            patch.dict(
+                "sys.modules",
+                {
+                    "trading_app.prop_profiles": mock_profile_module,
+                    "trading_app.derived_state": mock_derived_state,
+                },
+            ),
             patch.object(project_pulse, "PROJECT_ROOT", Path("/tmp/repo")),
             patch.object(Path, "exists", return_value=True),
             patch.object(Path, "read_text", return_value=json.dumps(payload)),
         ):
-            summary, items = collect_sr_state()
+            summary, items = collect_sr_state(Path("/tmp/repo/gold.db"))
 
         assert summary is not None
         assert summary["counts"]["ALARM"] == 1
         assert any(i.source == "sr_monitor" and i.category == "decaying" for i in items)
+
+    def test_sr_state_mismatch_degrades_without_trusting_payload(self) -> None:
+        mock_profile_module = MagicMock()
+        mock_profile_module.resolve_profile_id.return_value = "topstep_50k_mnq_auto"
+        mock_profile_module.get_profile.return_value = object()
+        mock_profile_module.get_profile_lane_definitions.return_value = [{"strategy_id": "SID_A"}]
+        mock_derived_state = MagicMock()
+        mock_derived_state.build_profile_fingerprint.return_value = "pfp"
+        mock_derived_state.build_db_identity.return_value = "dbid"
+        mock_derived_state.build_code_fingerprint.return_value = "codeid"
+        mock_derived_state.validate_state_envelope.return_value = (False, "profile_fingerprint_mismatch", None)
+
+        with (
+            patch.dict(
+                "sys.modules",
+                {
+                    "trading_app.prop_profiles": mock_profile_module,
+                    "trading_app.derived_state": mock_derived_state,
+                },
+            ),
+            patch.object(project_pulse, "PROJECT_ROOT", Path("/tmp/repo")),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value=json.dumps({"legacy": True})),
+        ):
+            summary, items = collect_sr_state(Path("/tmp/repo/gold.db"))
+
+        assert summary is None
+        assert any(i.source == "sr_monitor" and i.category == "decaying" for i in items)
+        assert any("mismatched/legacy" in i.summary for i in items)
 
     def test_pause_state_reports_paused(self) -> None:
         mock_profile_module = MagicMock()

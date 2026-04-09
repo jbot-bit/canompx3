@@ -15,7 +15,6 @@ Design choices:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import random
 from dataclasses import asdict, dataclass
@@ -28,8 +27,8 @@ from pipeline.cost_model import get_cost_spec, risk_in_dollars
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import apply_tight_stop
+from trading_app.derived_state import build_profile_fingerprint
 from trading_app.prop_profiles import (
-    AccountProfile,
     get_account_tier,
     get_firm_spec,
     get_profile,
@@ -113,34 +112,9 @@ def get_survival_report_path(profile_id: str | None = None) -> Path:
     return STATE_DIR / f"account_survival_{resolved_profile_id}.json"
 
 
-def _build_profile_fingerprint(profile: AccountProfile) -> str:
-    """Fingerprint the survival-relevant profile inputs.
-
-    This blocks stale reports from blessing a changed live book.
-    """
-    payload = {
-        "profile_id": profile.profile_id,
-        "firm": profile.firm,
-        "account_size": profile.account_size,
-        "dd_type": get_firm_spec(profile.firm).dd_type,
-        "stop_multiplier": profile.stop_multiplier,
-        "payout_policy_id": profile.payout_policy_id,
-        "is_express_funded": profile.is_express_funded,
-        "max_risk_per_trade": profile.max_risk_per_trade,
-        "daily_lanes": [
-            {
-                "strategy_id": lane.strategy_id,
-                "instrument": lane.instrument,
-                "orb_label": lane.orb_label,
-                "planned_stop_multiplier": lane.planned_stop_multiplier,
-                "required_fitness": list(lane.required_fitness),
-                "max_orb_size_pts": lane.max_orb_size_pts,
-            }
-            for lane in profile.daily_lanes
-        ],
-    }
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+def _build_profile_fingerprint(profile) -> str:
+    """Backwards-compatible wrapper around the canonical shared helper."""
+    return build_profile_fingerprint(profile)
 
 
 def _quantile(values: list[float], q: float) -> float:

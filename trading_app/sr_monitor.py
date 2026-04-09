@@ -20,9 +20,16 @@ import duckdb
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.derived_state import (
+    build_code_fingerprint,
+    build_db_identity,
+    build_profile_fingerprint,
+    build_state_envelope,
+    get_git_head,
+)
 from trading_app.live.performance_monitor import _compute_std_r
 from trading_app.live.sr_monitor import ShiryaevRobertsMonitor, calibrate_sr_threshold
-from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
+from trading_app.prop_profiles import get_profile, get_profile_lane_definitions, resolve_profile_id
 from trading_app.strategy_fitness import _load_strategy_outcomes
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
@@ -222,104 +229,128 @@ def apply_alarm_pauses(
 def run_monitor(*, apply_pauses: bool = False, pause_days: int = 30) -> None:
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     configure_connection(con)
-    profile_id = resolve_profile_id()
+    try:
+        profile_id = resolve_profile_id()
+        profile = get_profile(profile_id)
+        lanes = _build_lanes()
 
-    threshold = calibrate_sr_threshold(
-        TARGET_ARL_DAYS,
-        delta=DEFAULT_DELTA,
-        variance_ratio=DEFAULT_VARIANCE_RATIO,
-    )
+        threshold = calibrate_sr_threshold(
+            TARGET_ARL_DAYS,
+            delta=DEFAULT_DELTA,
+            variance_ratio=DEFAULT_VARIANCE_RATIO,
+        )
 
-    print("=" * 120)
-    print(f"SHIRYAEV-ROBERTS MONITOR | {date.today()}")
-    print(
-        f"Target ARL≈{TARGET_ARL_DAYS} trading days | "
-        f"delta={DEFAULT_DELTA:+.1f}σ | q={DEFAULT_VARIANCE_RATIO:.1f} | "
-        f"threshold={threshold:.2f}"
-    )
-    if apply_pauses:
-        print(f"Alarm action: APPLY lane pauses for {pause_days} days on profile {profile_id}")
-    else:
-        print(f"Alarm action: report only (no lane pause writes)")
-    print("=" * 120)
-    print(
-        f"\n{'Lane':<40} {'N':>4} {'SR':>10} {'Thr':>8} {'Status':<10} "
-        f"{'Baseline':<28} {'Stream':<18}"
-    )
-    print("-" * 120)
-
-    results = []
-    for strategy_id, params in _build_lanes().items():
-        monitor, trades, baseline_source, stream_source = prepare_monitor_inputs(con, strategy_id, params)
-
-        status = "NO_DATA"
-        alarm_trade = None
-        for i, trade_r in enumerate(trades, 1):
-            if monitor.update(trade_r):
-                status = "ALARM"
-                alarm_trade = i
-                break
-        else:
-            if trades:
-                status = "CONTINUE"
-
+        print("=" * 120)
+        print(f"SHIRYAEV-ROBERTS MONITOR | {date.today()}")
         print(
-            f"{params['label']:<40} {len(trades):>4} {monitor.sr_stat:>10.2f} "
-            f"{monitor.threshold:>8.2f} {status:<10} "
-            f"{baseline_source:<28} {stream_source:<18}"
+            f"Target ARL≈{TARGET_ARL_DAYS} trading days | "
+            f"delta={DEFAULT_DELTA:+.1f}σ | q={DEFAULT_VARIANCE_RATIO:.1f} | "
+            f"threshold={threshold:.2f}"
         )
-
-        results.append(
-            {
-                "strategy_id": strategy_id,
-                "orb_label": params["orb_label"],
-                "n_monitored": len(trades),
-                "sr_stat": round(monitor.sr_stat, 4),
-                "threshold": round(monitor.threshold, 4),
-                "status": status,
-                "alarm_trade": alarm_trade,
-                "baseline_source": baseline_source,
-                "stream_source": stream_source,
-                "expected_r": round(monitor.expected_r, 4),
-                "std_r": round(monitor.std_r, 4),
-            }
+        if apply_pauses:
+            print(f"Alarm action: APPLY lane pauses for {pause_days} days on profile {profile_id}")
+        else:
+            print(f"Alarm action: report only (no lane pause writes)")
+        print("=" * 120)
+        print(
+            f"\n{'Lane':<40} {'N':>4} {'SR':>10} {'Thr':>8} {'Status':<10} "
+            f"{'Baseline':<28} {'Stream':<18}"
         )
+        print("-" * 120)
 
-    pauses_applied = 0
-    if apply_pauses:
-        pauses_applied = apply_alarm_pauses(results, profile_id=profile_id, pause_days=pause_days, as_of=date.today())
+        results = []
+        for strategy_id, params in lanes.items():
+            monitor, trades, baseline_source, stream_source = prepare_monitor_inputs(con, strategy_id, params)
 
-    print(f"\n{'=' * 120}")
-    print("Status key:")
-    print("  CONTINUE  = no SR alarm yet on the monitored stream")
-    print("  ALARM     = SR threshold crossed; strategy should move to suspended/manual review")
-    print("  NO_DATA   = no trades available for monitoring")
-    print("Baseline key:")
-    print("  paper_trades_first_50            = first 50 paper trades define the pre-change baseline")
-    print("  paper_trades_first_50_sigma_fallback = live mean used, sigma fell back to validated baseline")
-    print("  validated_backtest              = validated_setups backtest baseline used")
-    print("Stream key:")
-    print("  paper_trades      = logged live/shadow execution stream")
-    print("  canonical_forward = orb_outcomes shadow fallback only")
-    if apply_pauses:
-        print(f"Pause summary: {pauses_applied} lane override(s) written")
-    print("=" * 120)
+            status = "NO_DATA"
+            alarm_trade = None
+            for i, trade_r in enumerate(trades, 1):
+                if monitor.update(trade_r):
+                    status = "ALARM"
+                    alarm_trade = i
+                    break
+            else:
+                if trades:
+                    status = "CONTINUE"
 
-    state_file = STATE_DIR / "sr_state.json"
-    state_file.write_text(
-        json.dumps(
-            {
-                "date": str(date.today()),
+            print(
+                f"{params['label']:<40} {len(trades):>4} {monitor.sr_stat:>10.2f} "
+                f"{monitor.threshold:>8.2f} {status:<10} "
+                f"{baseline_source:<28} {stream_source:<18}"
+            )
+
+            results.append(
+                {
+                    "strategy_id": strategy_id,
+                    "orb_label": params["orb_label"],
+                    "n_monitored": len(trades),
+                    "sr_stat": round(monitor.sr_stat, 4),
+                    "threshold": round(monitor.threshold, 4),
+                    "status": status,
+                    "alarm_trade": alarm_trade,
+                    "baseline_source": baseline_source,
+                    "stream_source": stream_source,
+                    "expected_r": round(monitor.expected_r, 4),
+                    "std_r": round(monitor.std_r, 4),
+                }
+            )
+
+        pauses_applied = 0
+        if apply_pauses:
+            pauses_applied = apply_alarm_pauses(
+                results,
+                profile_id=profile_id,
+                pause_days=pause_days,
+                as_of=date.today(),
+            )
+
+        print(f"\n{'=' * 120}")
+        print("Status key:")
+        print("  CONTINUE  = no SR alarm yet on the monitored stream")
+        print("  ALARM     = SR threshold crossed; strategy should move to suspended/manual review")
+        print("  NO_DATA   = no trades available for monitoring")
+        print("Baseline key:")
+        print("  paper_trades_first_50            = first 50 paper trades define the pre-change baseline")
+        print("  paper_trades_first_50_sigma_fallback = live mean used, sigma fell back to validated baseline")
+        print("  validated_backtest              = validated_setups backtest baseline used")
+        print("Stream key:")
+        print("  paper_trades      = logged live/shadow execution stream")
+        print("  canonical_forward = orb_outcomes shadow fallback only")
+        if apply_pauses:
+            print(f"Pause summary: {pauses_applied} lane override(s) written")
+        print("=" * 120)
+
+        state_file = STATE_DIR / "sr_state.json"
+        sr_code_paths = [
+            Path(__file__).resolve(),
+            Path(__file__).resolve().parent / "live" / "sr_monitor.py",
+        ]
+        envelope = build_state_envelope(
+            schema_version=1,
+            state_type="sr_monitor",
+            tool="sr_monitor",
+            canonical_inputs={
                 "profile_id": profile_id,
+                "profile_fingerprint": build_profile_fingerprint(profile),
+                "lane_ids": list(lanes.keys()),
+                "db_path": str(GOLD_DB_PATH.resolve()),
+                "db_identity": build_db_identity(GOLD_DB_PATH, con=con),
+                "code_fingerprint": build_code_fingerprint(sr_code_paths),
+            },
+            freshness={
+                "as_of_date": date.today().isoformat(),
+                "max_age_days": 2,
+            },
+            payload={
                 "apply_pauses": apply_pauses,
                 "pause_days": pause_days,
                 "results": results,
             },
-            indent=2,
+            git_head=get_git_head(Path(__file__).resolve().parents[1]),
         )
-    )
-
-    con.close()
+        state_file.write_text(json.dumps(envelope, indent=2), encoding="utf-8")
+    finally:
+        con.close()
 
 
 if __name__ == "__main__":

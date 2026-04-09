@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import duckdb
 from datetime import date, timedelta
 
@@ -162,3 +163,64 @@ def test_apply_alarm_pauses_only_alarm_rows(monkeypatch):
     assert calls[0][0] == "topstep_50k_mnq_auto"
     assert calls[0][1] == "SID_ALARM"
     assert calls[0][4] == "sr_monitor"
+
+
+def test_run_monitor_writes_state_envelope(tmp_path, monkeypatch, capsys):
+    con = duckdb.connect(":memory:")
+    con.execute("CREATE TABLE validated_setups (status VARCHAR)")
+    con.execute("INSERT INTO validated_setups VALUES ('active')")
+    con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, trading_day DATE, pnl_r DOUBLE)")
+    con.execute("CREATE TABLE orb_outcomes (trading_day DATE)")
+    con.execute("INSERT INTO orb_outcomes VALUES (DATE '2026-04-09')")
+    con.execute("CREATE TABLE daily_features (trading_day DATE)")
+    con.execute("INSERT INTO daily_features VALUES (DATE '2026-04-09')")
+
+    monkeypatch.setattr(sr_monitor, "STATE_DIR", tmp_path)
+    monkeypatch.setattr(sr_monitor.duckdb, "connect", lambda *_args, **_kwargs: con)
+    monkeypatch.setattr(sr_monitor, "resolve_profile_id", lambda: "topstep_50k_mnq_auto")
+    monkeypatch.setattr(sr_monitor, "get_profile", lambda _pid: object())
+    monkeypatch.setattr(
+        sr_monitor,
+        "_build_lanes",
+        lambda: {
+            "SID1": {
+                "mu0": 0.2,
+                "sigma": 1.0,
+                "instrument": "MNQ",
+                "orb_label": "NYSE_CLOSE",
+                "orb_minutes": 5,
+                "entry_model": "E2",
+                "rr_target": 1.0,
+                "confirm_bars": 1,
+                "filter_type": "ORB_G8",
+                "label": "L1 NYSE_CLOSE ORB_G8",
+            }
+        },
+    )
+    monkeypatch.setattr(
+        sr_monitor,
+        "prepare_monitor_inputs",
+        lambda _con, _sid, _params: (
+            ShiryaevRobertsMonitor(expected_r=0.2, std_r=1.0, threshold=99.0, delta=-1.0),
+            [0.3, 0.4],
+            "validated_backtest",
+            "paper_trades",
+        ),
+    )
+    monkeypatch.setattr(sr_monitor, "build_profile_fingerprint", lambda _profile: "pfp")
+    monkeypatch.setattr(sr_monitor, "build_code_fingerprint", lambda _paths: "codeid")
+    monkeypatch.setattr(sr_monitor, "get_git_head", lambda _root: "abc123")
+
+    sr_monitor.run_monitor(apply_pauses=False, pause_days=30)
+    capsys.readouterr()
+
+    payload = json.loads((tmp_path / "sr_state.json").read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 1
+    assert payload["state_type"] == "sr_monitor"
+    assert payload["canonical_inputs"]["profile_id"] == "topstep_50k_mnq_auto"
+    assert payload["canonical_inputs"]["profile_fingerprint"] == "pfp"
+    assert payload["canonical_inputs"]["lane_ids"] == ["SID1"]
+    assert payload["canonical_inputs"]["db_identity"]
+    assert payload["canonical_inputs"]["code_fingerprint"] == "codeid"
+    assert payload["freshness"]["max_age_days"] == 2
+    assert payload["payload"]["results"][0]["strategy_id"] == "SID1"

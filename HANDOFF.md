@@ -6,6 +6,141 @@
 
 ---
 
+## Update (2026-04-10 later — Derived State Contract v1 for SR)
+
+### Headline
+
+Implemented **Derived State Contract v1** for Criterion 12 SR state so
+startup/operator reasoning now self-invalidates when upstream profile, lane,
+DB, or code truth changes.
+
+This is a control-surface hardening pass. It does **not** change:
+
+- discovery scope
+- validation outcomes
+- deployment lane selection
+- live execution logic
+
+### Design
+
+New shared helper module:
+
+- `trading_app/derived_state.py`
+
+It centralizes the contract pieces that were previously ad hoc:
+
+- `build_profile_fingerprint(profile)`
+- `build_code_fingerprint(paths)`
+- `build_db_identity(db_path, con=None)`
+- `build_state_envelope(...)`
+- `validate_state_envelope(...)`
+- `get_git_head(...)`
+
+Important design choice:
+
+- Criterion 11 now reuses the shared profile-fingerprint helper
+- SR state is the first full consumer of the derived-state envelope
+- `project_pulse` validates the SR envelope before trusting it
+- SR mismatch/staleness **warns/degrades** pulse state, but does **not** block
+  pre-session in this v1
+
+### SR contract shape
+
+`data/state/sr_state.json` is no longer an ad hoc blob. It is now a versioned
+envelope with:
+
+- `schema_version`
+- `state_type`
+- `generated_at_utc`
+- `git_head`
+- `tool`
+- `canonical_inputs`
+  - `profile_id`
+  - `profile_fingerprint`
+  - `lane_ids`
+  - `db_path`
+  - `db_identity`
+  - `code_fingerprint`
+- `freshness`
+  - `as_of_date`
+  - `max_age_days`
+- `payload`
+  - `apply_pauses`
+  - `pause_days`
+  - `results`
+
+Current v1 policy:
+
+- missing/legacy/mismatched/stale SR state => pulse shows SR as decaying and
+  tells the operator to rerun `python -m trading_app.sr_monitor`
+- Criterion 11 remains the only hard-block derived-state gate in pre-session
+
+### Runtime truth after the change
+
+After rerunning `python -m trading_app.sr_monitor` on `2026-04-10`, the current
+repo state is:
+
+- profile: `topstep_50k_mnq_auto`
+- SR age: `0d`
+- SR counts: `5 CONTINUE / 0 ALARM / 0 NO_DATA`
+- SR stream mix: `canonical_forward=4`, `paper_trades=1`
+- `project_pulse --fast --tool codex` trusts the SR summary again because the
+  envelope now matches current profile, lane, DB, and code identity
+
+### Drift enforcement
+
+Added new structural drift checks:
+
+- shared profile fingerprint helper must remain canonical
+- SR monitor must write the derived-state contract envelope
+- `project_pulse.collect_sr_state()` must validate the envelope before trust
+
+Current drift result:
+
+- `python3 pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 91 checks passed [OK], 0 skipped, 7 advisory`
+
+### Files touched
+
+- `trading_app/derived_state.py`
+- `trading_app/account_survival.py`
+- `trading_app/sr_monitor.py`
+- `scripts/tools/project_pulse.py`
+- `pipeline/check_drift.py`
+- `tests/test_trading_app/test_sr_monitor.py`
+- `tests/test_tools/test_project_pulse.py`
+
+### Verification
+
+- `python3 -m py_compile trading_app/derived_state.py trading_app/account_survival.py trading_app/sr_monitor.py scripts/tools/project_pulse.py pipeline/check_drift.py tests/test_trading_app/test_sr_monitor.py tests/test_tools/test_project_pulse.py`
+- `uv run --frozen --extra dev pytest tests/test_trading_app/test_account_survival.py tests/test_trading_app/test_sr_monitor.py tests/test_tools/test_project_pulse.py tests/test_tools/test_pulse_integration.py tests/test_tools/test_session_preflight.py -q`
+  - result: `95 passed`
+- `python3 -m trading_app.sr_monitor`
+  - rewrote `sr_state.json` in envelope format
+- `python3 scripts/tools/project_pulse.py --fast --tool codex`
+  - live-control block reads the validated SR envelope correctly
+- `python3 scripts/tools/session_preflight.py --context codex-wsl --with-pulse --quiet`
+  - same compact pulse path works from preflight
+
+### Why this matters
+
+This is the missing guardrail for a fast-changing repo:
+
+- stale derived state now self-invalidates instead of being trusted by
+  convention
+- startup remains compact; no heavy payload dumping into session context
+- current truth is checked cheaply from fingerprints/identity fields rather than
+  recomputing heavy logic every time
+
+### Next move
+
+The next sister task is still:
+
+- **Concurrency Guardrails v1**
+  - strengthen Claude/Codex same-branch mutating-session protection
+  - move from warning-only toward fail-closed editing when concurrent mutable
+    claims exist on the same branch
+
 ## Update (2026-04-10 late — Repo Intelligence / Pulse Hardening)
 
 ### Headline
