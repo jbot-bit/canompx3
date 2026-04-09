@@ -1496,6 +1496,39 @@ class TestPhase4Orchestrator:
 # ── Bloomey review fix tests (Steps 2+3) ───────────────────────────────
 
 
+class TestWfStartOverrideAudit:
+    """Structural verification: WF_START_OVERRIDE covers all active instruments
+    with dates justified by the 2026-04-09 data audit (contract launch exclusion).
+
+    NOT a behavioral test — the WF engine already reads WF_START_OVERRIDE
+    and passes it to the worker.  This test verifies the CONFIG VALUES
+    are present and correct, catching drift if someone removes an entry.
+    """
+
+    def test_all_active_instruments_have_override(self):
+        from trading_app.config import WF_START_OVERRIDE
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        for inst in ACTIVE_ORB_INSTRUMENTS:
+            assert inst in WF_START_OVERRIDE, (
+                f"WF_START_OVERRIDE missing {inst} — all active instruments "
+                f"need a justified start date per 2026-04-09 structural audit"
+            )
+
+    def test_override_dates_are_correct(self):
+        from trading_app.config import WF_START_OVERRIDE
+        assert WF_START_OVERRIDE["MNQ"] == date(2020, 1, 1), (
+            "MNQ override must be 2020-01-01 (micro launch 2019 non-representative: "
+            "ATR 0.42x, CME_PRECLOSE G8 39%, vol 0.16x)"
+        )
+        assert WF_START_OVERRIDE["MES"] == date(2020, 1, 1), (
+            "MES override must be 2020-01-01 (micro launch 2019 non-representative: "
+            "ATR 0.52x, NYSE_OPEN G8 10.5%, vol 0.29x)"
+        )
+        assert WF_START_OVERRIDE["MGC"] == date(2022, 1, 1), (
+            "MGC override must be 2022-01-01 (gold <$1800 pre-2022 = tiny ORBs)"
+        )
+
+
 class TestPathwayBWfeGate:
     """Step 2 (A-1): Pathway B must enforce WFE >= MIN_WFE.
 

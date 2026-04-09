@@ -296,6 +296,49 @@ NOISE_FLOOR_BY_INSTRUMENT: dict[str, dict[str, float]] = {
 # ─────────────────────────────────────────────────────────────────────────
 WF_START_OVERRIDE: dict[str, date] = {
     "MGC": date(2022, 1, 1),  # Gold <$1800 pre-2022 = tiny ORBs, G4+ windows invalid
+    # ── MNQ/MES micro contract launch exclusion (2026-04-09 data audit) ────
+    # MNQ and MES micro contracts launched 2019-05-06. Structural data audit
+    # across 5 independent variables confirms 2019 is non-representative:
+    #
+    #   MNQ 2019 vs 2020+:
+    #     ATR:           113.7 vs 279.5 = 0.42x
+    #     CME_PRECLOSE G8 pass: 39.0% vs 97.7% (monthly: Nov=5.3%, Dec=20%)
+    #     EUROPE_FLOW G8 pass:  22.8% vs 83.5%
+    #     COMEX_SETTLE G8 pass: 30.5% vs 93.2%
+    #     NYSE_OPEN volume:     5,689 vs 30,845 = 0.16x
+    #
+    #   MES 2019 vs 2020+:
+    #     ATR:           33.2 vs 63.9 = 0.52x
+    #     NYSE_OPEN G8 pass:    10.5% vs 58.1%
+    #     CME_PRECLOSE G8 pass:  1.2% vs 25.8%
+    #     NYSE_OPEN volume:     6,896 vs 24,055 = 0.29x
+    #
+    # Structural cause: contract-launch thin liquidity + small ORBs. The
+    # absolute G-filter thresholds (G5=5pts, G8=8pts) select fundamentally
+    # different populations in the low-ATR 2019 regime — NOT a data-quality
+    # issue but a structural microstructure difference.
+    #
+    # Monthly validation: Q3/Q4 2019 does NOT normalize (Nov G8=5.3%,
+    # Dec=20% for MNQ CME_PRECLOSE). Jan 2020 = 71.4%, Feb = 72.2% —
+    # clear improvement. 2020-01-01 is the clean boundary.
+    #
+    # Impact on 6 validated strategies: all have 2019 data (2-156 trades).
+    # Net-positive — removes thin/noisy early WF training windows for 4/5
+    # non-NYSE MNQ sessions. NYSE_OPEN (156 trades, 97% G8 pass) loses
+    # valid data but WFE=2.12 has ample margin.
+    #
+    # NOT data-snooped: justification is structural (ATR, volume, filter
+    # pass rates) — zero strategy PnL consulted.
+    #
+    # @research-source data-audit: 2026-04-09 session (5-variable structural analysis)
+    # @revalidated-for E2 event-based sessions (2026-04-09)
+    #
+    # KNOWN GAP (separate task): MES G-filter thresholds (G5=5, G8=8) are
+    # absolute points designed for NQ-scale ORBs. MES CME_PRECLOSE G8 passes
+    # only 25.8% of days even in 2020+. This is a filter-rescaling problem,
+    # NOT fixable by WF_START_OVERRIDE. Tracked separately.
+    "MNQ": date(2020, 1, 1),  # Micro launch 2019-05-06, ATR 0.42x, G8 39% CME_PRECLOSE
+    "MES": date(2020, 1, 1),  # Micro launch 2019-05-06, ATR 0.52x, G8 10.5% NYSE_OPEN
 }
 
 # @research-source Lopez de Prado AFML Ch.2 — information-driven sampling;
