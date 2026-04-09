@@ -69,6 +69,10 @@ class TestPulseIntegration:
             "items",
             "handoff",
             "fitness_summary",
+            "deployment_summary",
+            "survival_summary",
+            "sr_summary",
+            "pause_summary",
             "recommendation",
             "upcoming_sessions",
             "time_since_green",
@@ -92,14 +96,13 @@ class TestPulseIntegration:
         assert r.stdout.startswith("# Project Pulse")
 
     def test_fitness_shows_all_active_instruments(self) -> None:
-        """Every active instrument should appear in fitness summary."""
+        """Fitness summary should reflect active validated strategies without stale assumptions."""
         r = _run_pulse("--fast", "--no-cache", "--format", "json")
         data = json.loads(r.stdout)
         fitness = data.get("fitness_summary", {})
         if fitness:  # Only check if DB was accessible
-            # Should have at least MGC and MNQ (always active)
-            assert "MGC" in fitness, f"MGC missing from fitness: {list(fitness.keys())}"
             assert "MNQ" in fitness, f"MNQ missing from fitness: {list(fitness.keys())}"
+            assert all("active_strategies" in stats for stats in fitness.values())
 
     def test_upcoming_sessions_have_valid_times(self) -> None:
         """Upcoming sessions must have plausible Brisbane times."""

@@ -24,7 +24,7 @@ import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -49,6 +49,8 @@ SKILL_SUGGESTIONS: dict[str, str] = {
     "tests": "/verify quick",
     "handoff": "/orient --full",
     "ralph": "/audit quick",
+    "sr_monitor": "python -m trading_app.sr_monitor",
+    "criterion11": "python -m trading_app.account_survival --profile topstep_50k_mnq_auto",
 }
 
 
@@ -76,6 +78,10 @@ class PulseReport:
     handoff_next_steps: list[str] = field(default_factory=list)
     # Fitness summary (fast proxy or deep)
     fitness_summary: dict | None = None
+    deployment_summary: dict | None = None
+    survival_summary: dict | None = None
+    sr_summary: dict | None = None
+    pause_summary: dict | None = None
     # Trading day context
     upcoming_sessions: list[dict] = field(default_factory=list)
     # Single recommendation
@@ -519,6 +525,310 @@ def collect_fitness_fast(db_path: Path) -> tuple[dict, list[PulseItem]]:
     return summary, items
 
 
+def collect_deployment_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
+    """Summarize deployed-live vs validated-active truth."""
+    summary: dict | None = None
+    items: list[PulseItem] = []
+    if not db_path.exists():
+        return summary, items
+
+    try:
+        import duckdb
+
+        from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
+
+        profile_id = resolve_profile_id()
+        deployed_lanes = get_profile_lane_definitions(profile_id)
+        deployed_ids = [str(lane["strategy_id"]) for lane in deployed_lanes]
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        try:
+            validated_rows = con.execute(
+                """
+                SELECT strategy_id
+                FROM validated_setups
+                WHERE LOWER(status) = 'active'
+                ORDER BY strategy_id
+                """
+            ).fetchall()
+            validated_ids = [str(r[0]) for r in validated_rows]
+        finally:
+            con.close()
+
+        deployed_set = set(deployed_ids)
+        validated_set = set(validated_ids)
+        deployed_not_validated = sorted(deployed_set - validated_set)
+        validated_not_deployed = sorted(validated_set - deployed_set)
+
+        summary = {
+            "profile_id": profile_id,
+            "deployed_count": len(deployed_ids),
+            "validated_active_count": len(validated_ids),
+            "deployed_not_validated": deployed_not_validated,
+            "validated_not_deployed": validated_not_deployed,
+            "deployed_strategy_ids": deployed_ids,
+        }
+
+        if not deployed_ids:
+            items.append(
+                PulseItem(
+                    category="broken",
+                    severity="high",
+                    source="deployment",
+                    summary=f"{profile_id}: 0 deployed daily lanes",
+                )
+            )
+        if deployed_not_validated:
+            items.append(
+                PulseItem(
+                    category="broken",
+                    severity="high",
+                    source="deployment",
+                    summary=(
+                        f"{profile_id}: {len(deployed_not_validated)} deployed lane(s) not in active validated_setups"
+                    ),
+                    detail="\n".join(deployed_not_validated[:5]),
+                )
+            )
+        if validated_not_deployed:
+            items.append(
+                PulseItem(
+                    category="ready",
+                    severity="low",
+                    source="deployment",
+                    summary=(
+                        f"{profile_id}: {len(validated_not_deployed)} active validated lane(s) not deployed-live"
+                    ),
+                    detail="\n".join(validated_not_deployed[:5]),
+                    action="/trade-book",
+                )
+            )
+    except Exception as e:
+        if _is_db_locked(e):
+            items.append(
+                PulseItem(
+                    category="paused",
+                    severity="low",
+                    source="deployment",
+                    summary="DB locked — deployment state check skipped",
+                )
+            )
+        else:
+            items.append(
+                PulseItem(
+                    category="broken",
+                    severity="medium",
+                    source="deployment",
+                    summary=f"Deployment state error: {type(e).__name__}",
+                )
+            )
+
+    return summary, items
+
+
+def collect_survival_state() -> tuple[dict | None, list[PulseItem]]:
+    """Read Criterion 11 gate truth from the canonical helper + persisted report."""
+    summary: dict | None = None
+    items: list[PulseItem] = []
+
+    try:
+        from trading_app.account_survival import check_survival_report_gate, get_survival_report_path
+        from trading_app.prop_profiles import resolve_profile_id
+
+        profile_id = resolve_profile_id()
+        gate_ok, gate_msg = check_survival_report_gate(profile_id=profile_id)
+        report_path = get_survival_report_path(profile_id)
+
+        report_data = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
+        summary_block = report_data.get("summary", {})
+        generated_at = summary_block.get("generated_at_utc")
+        report_age_days = None
+        if generated_at:
+            try:
+                dt = datetime.fromisoformat(str(generated_at))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                report_age_days = max(0, (datetime.now(UTC) - dt).days)
+            except ValueError:
+                report_age_days = None
+
+        summary = {
+            "profile_id": profile_id,
+            "gate_ok": gate_ok,
+            "gate_msg": gate_msg,
+            "as_of_date": summary_block.get("as_of_date"),
+            "generated_at_utc": generated_at,
+            "report_age_days": report_age_days,
+            "operational_pass_probability": summary_block.get("operational_pass_probability"),
+            "n_paths": summary_block.get("n_paths"),
+            "horizon_days": summary_block.get("horizon_days"),
+            "gate_pass": summary_block.get("gate_pass"),
+        }
+
+        if not gate_ok:
+            items.append(
+                PulseItem(
+                    category="broken",
+                    severity="high",
+                    source="criterion11",
+                    summary=gate_msg,
+                )
+            )
+        elif report_age_days is not None and report_age_days >= 14:
+            items.append(
+                PulseItem(
+                    category="decaying",
+                    severity="low",
+                    source="criterion11",
+                    summary=f"Criterion 11 report is {report_age_days}d old — refresh before it hard-blocks",
+                )
+            )
+    except Exception as e:
+        items.append(
+            PulseItem(
+                category="broken",
+                severity="medium",
+                source="criterion11",
+                summary=f"Criterion 11 state error: {type(e).__name__}: {e}",
+            )
+        )
+
+    return summary, items
+
+
+def collect_sr_state() -> tuple[dict | None, list[PulseItem]]:
+    """Read Criterion 12 SR monitor state from the persisted state file."""
+    summary: dict | None = None
+    items: list[PulseItem] = []
+
+    try:
+        from trading_app.prop_profiles import resolve_profile_id
+
+        profile_id = resolve_profile_id()
+        state_path = PROJECT_ROOT / "data" / "state" / "sr_state.json"
+        if not state_path.exists():
+            items.append(
+                PulseItem(
+                    category="decaying",
+                    severity="low",
+                    source="sr_monitor",
+                    summary="Criterion 12 SR state missing — run `python -m trading_app.sr_monitor`",
+                )
+            )
+            return None, items
+
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        state_date = data.get("date")
+        state_profile_id = data.get("profile_id")
+        results = data.get("results", [])
+
+        counts: dict[str, int] = {}
+        stream_counts: dict[str, int] = {}
+        for row in results:
+            status = str(row.get("status", "UNKNOWN"))
+            stream = str(row.get("stream_source", "unknown"))
+            counts[status] = counts.get(status, 0) + 1
+            stream_counts[stream] = stream_counts.get(stream, 0) + 1
+
+        state_age_days = None
+        if state_date:
+            try:
+                state_age_days = max(0, (date.today() - date.fromisoformat(str(state_date))).days)
+            except ValueError:
+                state_age_days = None
+
+        summary = {
+            "profile_id": state_profile_id,
+            "state_date": state_date,
+            "state_age_days": state_age_days,
+            "counts": counts,
+            "stream_counts": stream_counts,
+            "apply_pauses": bool(data.get("apply_pauses")),
+        }
+
+        if state_profile_id != profile_id:
+            items.append(
+                PulseItem(
+                    category="broken",
+                    severity="medium",
+                    source="sr_monitor",
+                    summary=f"SR state is for {state_profile_id}, expected {profile_id}",
+                )
+            )
+            return summary, items
+
+        alarms = counts.get("ALARM", 0)
+        if alarms > 0:
+            items.append(
+                PulseItem(
+                    category="decaying",
+                    severity="high",
+                    source="sr_monitor",
+                    summary=f"Criterion 12 SR has {alarms} ALARM lane(s)",
+                    action="python -m trading_app.sr_monitor --apply-pauses",
+                )
+            )
+        elif state_age_days is not None and state_age_days >= 2:
+            items.append(
+                PulseItem(
+                    category="decaying",
+                    severity="low",
+                    source="sr_monitor",
+                    summary=f"Criterion 12 SR state is {state_age_days}d old",
+                )
+            )
+    except Exception as e:
+        items.append(
+            PulseItem(
+                category="broken",
+                severity="medium",
+                source="sr_monitor",
+                summary=f"SR state error: {type(e).__name__}: {e}",
+            )
+        )
+
+    return summary, items
+
+
+def collect_pause_state() -> tuple[dict | None, list[PulseItem]]:
+    """Read current lane pause overrides."""
+    summary: dict | None = None
+    items: list[PulseItem] = []
+
+    try:
+        from trading_app.lane_ctl import get_paused_strategy_ids
+        from trading_app.prop_profiles import resolve_profile_id
+
+        profile_id = resolve_profile_id()
+        paused = sorted(get_paused_strategy_ids(profile_id))
+        summary = {
+            "profile_id": profile_id,
+            "paused_count": len(paused),
+            "paused_strategy_ids": paused,
+        }
+        if paused:
+            items.append(
+                PulseItem(
+                    category="paused",
+                    severity="low",
+                    source="pauses",
+                    summary=f"{profile_id}: {len(paused)} lane(s) currently paused",
+                    detail="\n".join(paused[:5]),
+                )
+            )
+    except Exception as e:
+        items.append(
+            PulseItem(
+                category="broken",
+                severity="low",
+                source="pauses",
+                summary=f"Pause state error: {type(e).__name__}",
+            )
+        )
+
+    return summary, items
+
+
 def collect_fitness_deep(db_path: Path) -> tuple[dict, list[PulseItem]]:
     """Full fitness: compute rolling FIT/WATCH/DECAY per instrument."""
     summary: dict = {}
@@ -831,7 +1141,7 @@ def collect_worktree_conflicts(canonical: Path) -> list[PulseItem]:
     return items
 
 
-def collect_session_delta(root: Path, canonical: Path) -> list[str]:
+def collect_session_delta(root: Path, canonical: Path, *, tool_name: str = "unknown") -> list[str]:
     """What changed since THIS tool's last session (session continuity fingerprint)."""
     lines: list[str] = []
     # Read the last-session marker
@@ -861,7 +1171,7 @@ def collect_session_delta(root: Path, canonical: Path) -> list[str]:
     # Write current marker
     try:
         marker_path.write_text(
-            json.dumps({"head": current_head, "tool": "claude", "at": datetime.now(UTC).isoformat()}, indent=2),
+            json.dumps({"head": current_head, "tool": tool_name, "at": datetime.now(UTC).isoformat()}, indent=2),
             encoding="utf-8",
         )
     except OSError:
@@ -1085,6 +1395,7 @@ def build_pulse(
     fast: bool = False,
     skip_drift: bool = False,
     skip_tests: bool = False,
+    tool_name: str = "unknown",
 ) -> PulseReport:
     """Build a full pulse report from all collectors.
 
@@ -1158,13 +1469,17 @@ def build_pulse(
     else:
         fitness_summary, fitness_items = collect_fitness_fast(db_path)
 
+    deployment_summary, deployment_items = collect_deployment_state(db_path)
+    survival_summary, survival_items = collect_survival_state()
+    sr_summary, sr_items = collect_sr_state()
+    pause_summary, pause_items = collect_pause_state()
     handoff_context, handoff_items = collect_handoff(root)
     worktree_items = collect_worktrees(canonical)
     conflict_items = collect_worktree_conflicts(canonical)
     git_items = collect_git_state(root)
     action_items = collect_action_queue(canonical)
     ralph_items = collect_ralph_deferred(root)
-    session_delta = collect_session_delta(root, canonical)
+    session_delta = collect_session_delta(root, canonical, tool_name=tool_name)
     upcoming = collect_upcoming_sessions(db_path)
 
     # Flag stale handoff (>2 days old)
@@ -1193,6 +1508,10 @@ def build_pulse(
         + test_items
         + staleness_items
         + fitness_items
+        + deployment_items
+        + survival_items
+        + sr_items
+        + pause_items
         + conflict_items
         + handoff_items
         + worktree_items
@@ -1220,6 +1539,10 @@ def build_pulse(
         handoff_summary=handoff_context.get("summary"),
         handoff_next_steps=handoff_context.get("next_steps", []),
         fitness_summary=fitness_summary,
+        deployment_summary=deployment_summary,
+        survival_summary=survival_summary,
+        sr_summary=sr_summary,
+        pause_summary=pause_summary,
         upcoming_sessions=upcoming,
         time_since_green=time_since_green,
         session_delta=session_delta,
@@ -1279,6 +1602,41 @@ def format_text(report: PulseReport) -> str:
             lines.append(f"  ... +{len(report.handoff_next_steps) - 5} more")
         lines.append("")
 
+    if report.deployment_summary:
+        ds = report.deployment_summary
+        lines.append("Live control:")
+        lines.append(
+            "  "
+            f"Profile {ds.get('profile_id')} | deployed {ds.get('deployed_count', '?')} | "
+            f"active validated {ds.get('validated_active_count', '?')} | "
+            f"validated-only {len(ds.get('validated_not_deployed', []))}"
+        )
+        if report.survival_summary:
+            ss = report.survival_summary
+            op = ss.get("operational_pass_probability")
+            op_str = f"{float(op):.1%}" if isinstance(op, (float, int)) else "?"
+            lines.append(
+                "  "
+                f"C11 {('PASS' if ss.get('gate_ok') else 'BLOCK')} {op_str} | "
+                f"as_of {ss.get('as_of_date') or '?'} | age {ss.get('report_age_days') if ss.get('report_age_days') is not None else '?'}d"
+            )
+        if report.sr_summary:
+            sr = report.sr_summary
+            counts = sr.get("counts", {})
+            streams = sr.get("stream_counts", {})
+            lines.append(
+                "  "
+                f"C12 SR continue={counts.get('CONTINUE', 0)} alarm={counts.get('ALARM', 0)} "
+                f"no_data={counts.get('NO_DATA', 0)} | age {sr.get('state_age_days') if sr.get('state_age_days') is not None else '?'}d"
+            )
+            if streams:
+                stream_parts = [f"{k}:{v}" for k, v in sorted(streams.items())]
+                lines.append(f"  SR streams: {', '.join(stream_parts)}")
+        if report.pause_summary:
+            ps = report.pause_summary
+            lines.append(f"  Paused lanes: {ps.get('paused_count', 0)}")
+        lines.append("")
+
     # Cap display items per category to keep output scannable
     MAX_DISPLAY = {"ready": 5, "unactioned": 5, "paused": 5}
     for cat in CATEGORIES:
@@ -1336,6 +1694,10 @@ def format_json(report: PulseReport) -> str:
             "next_steps": report.handoff_next_steps,
         },
         "fitness_summary": report.fitness_summary,
+        "deployment_summary": report.deployment_summary,
+        "survival_summary": report.survival_summary,
+        "sr_summary": report.sr_summary,
+        "pause_summary": report.pause_summary,
         "upcoming_sessions": report.upcoming_sessions,
         "recommendation": report.recommendation,
         "time_since_green": report.time_since_green,
@@ -1363,6 +1725,34 @@ def format_markdown(report: PulseReport) -> str:
         lines.append("## Next Steps")
         for step in report.handoff_next_steps:
             lines.append(f"- {step}")
+        lines.append("")
+
+    if report.deployment_summary:
+        lines.append("## Live Control")
+        ds = report.deployment_summary
+        lines.append(
+            f"- **Profile**: {ds.get('profile_id')} | deployed={ds.get('deployed_count')} | "
+            f"active_validated={ds.get('validated_active_count')} | "
+            f"validated_only={len(ds.get('validated_not_deployed', []))}"
+        )
+        if report.survival_summary:
+            ss = report.survival_summary
+            op = ss.get("operational_pass_probability")
+            op_str = f"{float(op):.1%}" if isinstance(op, (float, int)) else "?"
+            lines.append(
+                f"- **Criterion 11**: {'PASS' if ss.get('gate_ok') else 'BLOCK'} {op_str} | "
+                f"as_of={ss.get('as_of_date')} | age={ss.get('report_age_days')}d"
+            )
+        if report.sr_summary:
+            sr = report.sr_summary
+            counts = sr.get("counts", {})
+            lines.append(
+                f"- **Criterion 12 SR**: continue={counts.get('CONTINUE', 0)} "
+                f"alarm={counts.get('ALARM', 0)} no_data={counts.get('NO_DATA', 0)} "
+                f"| age={sr.get('state_age_days')}d"
+            )
+        if report.pause_summary:
+            lines.append(f"- **Paused lanes**: {report.pause_summary.get('paused_count', 0)}")
         lines.append("")
 
     for cat in CATEGORIES:
@@ -1401,6 +1791,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fast", action="store_true", help="Serve cached drift/tests, skip if uncached (~3s)")
     parser.add_argument("--skip-drift", action="store_true", help="Skip drift check")
     parser.add_argument("--skip-tests", action="store_true", help="Skip test suite")
+    parser.add_argument("--tool", default="unknown", help="Name of the tool/session writing pulse continuity")
     parser.add_argument("--out", default=None, help="Write output to file instead of stdout")
     parser.add_argument("--root", default=None, help="Override project root")
     return parser
@@ -1418,6 +1809,7 @@ def main(argv: list[str] | None = None) -> int:
         fast=args.fast,
         skip_drift=args.skip_drift,
         skip_tests=args.skip_tests,
+        tool_name=args.tool,
     )
 
     if args.format == "json":

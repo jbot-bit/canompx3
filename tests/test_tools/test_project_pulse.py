@@ -17,11 +17,15 @@ from scripts.tools.project_pulse import (
     _write_expensive_cache,
     build_pulse,
     collect_action_queue,
+    collect_deployment_state,
     collect_drift,
     collect_git_state,
     collect_handoff,
+    collect_pause_state,
     collect_ralph_deferred,
+    collect_sr_state,
     collect_staleness,
+    collect_survival_state,
     collect_tests,
     collect_worktrees,
     format_json,
@@ -403,6 +407,24 @@ def _sample_report() -> PulseReport:
         handoff_summary="Did work",
         handoff_next_steps=["Phase 1: build", "Phase 2: test"],
         fitness_summary={"MGC": {"active_strategies": 573}},
+        deployment_summary={
+            "profile_id": "topstep_50k_mnq_auto",
+            "deployed_count": 5,
+            "validated_active_count": 6,
+            "validated_not_deployed": ["MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8"],
+        },
+        survival_summary={
+            "gate_ok": True,
+            "as_of_date": "2026-04-09",
+            "report_age_days": 1,
+            "operational_pass_probability": 0.8723,
+        },
+        sr_summary={
+            "counts": {"CONTINUE": 5, "ALARM": 0, "NO_DATA": 0},
+            "stream_counts": {"canonical_forward": 4, "paper_trades": 1},
+            "state_age_days": 0,
+        },
+        pause_summary={"paused_count": 0},
         recommendation="Fix: Drift FAILED → /verify",
     )
 
@@ -411,6 +433,7 @@ class TestFormatText:
     def test_contains_all_sections(self) -> None:
         text = format_text(_sample_report())
         assert "PROJECT PULSE" in text
+        assert "Live control:" in text
         assert "FIX NOW" in text
         assert "ACT SOON" in text
         assert "ON DECK" in text
@@ -438,6 +461,9 @@ class TestFormatJson:
         assert data["counts"]["broken"] == 1
         assert data["counts"]["decaying"] == 1
         assert data["handoff"]["tool"] == "Claude"
+        assert data["deployment_summary"]["deployed_count"] == 5
+        assert data["survival_summary"]["gate_ok"] is True
+        assert data["sr_summary"]["counts"]["CONTINUE"] == 5
         assert len(data["items"]) == 4
 
 
@@ -445,6 +471,7 @@ class TestFormatMarkdown:
     def test_markdown_structure(self) -> None:
         md = format_markdown(_sample_report())
         assert md.startswith("# Project Pulse")
+        assert "## Live Control" in md
         assert "## FIX NOW" in md
         assert "## ACT SOON" in md
         assert "## Strategy Fitness" in md
@@ -469,6 +496,10 @@ class TestBuildPulse:
             patch.object(project_pulse, "_run_git", return_value=MagicMock(returncode=0, stdout="")),
             patch.object(project_pulse, "collect_staleness", return_value=[]),
             patch.object(project_pulse, "collect_fitness_fast", return_value=({}, [])),
+            patch.object(project_pulse, "collect_deployment_state", return_value=(None, [])),
+            patch.object(project_pulse, "collect_survival_state", return_value=(None, [])),
+            patch.object(project_pulse, "collect_sr_state", return_value=(None, [])),
+            patch.object(project_pulse, "collect_pause_state", return_value=(None, [])),
             patch.object(project_pulse, "collect_worktrees", return_value=[]),
             patch.object(project_pulse, "collect_action_queue", return_value=[]),
             patch.object(project_pulse, "collect_ralph_deferred", return_value=[]),
@@ -480,6 +511,109 @@ class TestBuildPulse:
         mock_drift.assert_not_called()
         mock_tests.assert_not_called()
         assert isinstance(report, PulseReport)
+
+
+class TestDeploymentState:
+    def test_detects_validated_but_not_deployed(self) -> None:
+        db_path = Path("unused.db")
+        mock_profile_module = MagicMock()
+        mock_profile_module.resolve_profile_id.return_value = "topstep_50k_mnq_auto"
+        mock_profile_module.get_profile_lane_definitions.return_value = [
+            {"strategy_id": "A"},
+            {"strategy_id": "B"},
+        ]
+        with (
+            patch.dict("sys.modules", {"trading_app.prop_profiles": mock_profile_module}),
+            patch("duckdb.connect") as mock_connect,
+            patch.object(Path, "exists", return_value=True),
+        ):
+            mock_con = MagicMock()
+            mock_con.execute.return_value.fetchall.return_value = [("A",), ("B",), ("C",)]
+            mock_connect.return_value = mock_con
+            summary, items = collect_deployment_state(db_path)
+
+        assert summary is not None
+        assert summary["validated_not_deployed"] == ["C"]
+        assert any(i.source == "deployment" and i.category == "ready" for i in items)
+
+
+class TestControlSummaries:
+    def test_survival_state_pass_summary(self) -> None:
+        mock_profile_module = MagicMock()
+        mock_profile_module.resolve_profile_id.return_value = "topstep_50k_mnq_auto"
+        mock_survival_module = MagicMock()
+        mock_survival_module.check_survival_report_gate.return_value = (
+            True,
+            "Criterion 11 pass: operational 87.2%, as_of=2026-04-09, age=1d, paths=10000",
+        )
+        report_payload = {
+            "summary": {
+                "generated_at_utc": "2026-04-09T22:39:14.876962+00:00",
+                "as_of_date": "2026-04-09",
+                "operational_pass_probability": 0.8723,
+                "n_paths": 10000,
+                "horizon_days": 90,
+                "gate_pass": True,
+            }
+        }
+        with (
+            patch.dict(
+                "sys.modules",
+                {
+                    "trading_app.prop_profiles": mock_profile_module,
+                    "trading_app.account_survival": mock_survival_module,
+                },
+            ),
+            patch.object(project_pulse, "PROJECT_ROOT", Path("/tmp/repo")),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value=json.dumps(report_payload)),
+        ):
+            mock_survival_module.get_survival_report_path.return_value = Path("/tmp/repo/data/state/report.json")
+            summary, items = collect_survival_state()
+
+        assert summary is not None
+        assert summary["gate_ok"] is True
+        assert items == []
+
+    def test_sr_state_alarm_item(self) -> None:
+        mock_profile_module = MagicMock()
+        mock_profile_module.resolve_profile_id.return_value = "topstep_50k_mnq_auto"
+        payload = {
+            "date": "2026-04-10",
+            "profile_id": "topstep_50k_mnq_auto",
+            "results": [
+                {"status": "ALARM", "stream_source": "paper_trades"},
+                {"status": "CONTINUE", "stream_source": "canonical_forward"},
+            ],
+        }
+        with (
+            patch.dict("sys.modules", {"trading_app.prop_profiles": mock_profile_module}),
+            patch.object(project_pulse, "PROJECT_ROOT", Path("/tmp/repo")),
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", return_value=json.dumps(payload)),
+        ):
+            summary, items = collect_sr_state()
+
+        assert summary is not None
+        assert summary["counts"]["ALARM"] == 1
+        assert any(i.source == "sr_monitor" and i.category == "decaying" for i in items)
+
+    def test_pause_state_reports_paused(self) -> None:
+        mock_profile_module = MagicMock()
+        mock_profile_module.resolve_profile_id.return_value = "topstep_50k_mnq_auto"
+        mock_lane_ctl = MagicMock()
+        mock_lane_ctl.get_paused_strategy_ids.return_value = {"A", "B"}
+        with patch.dict(
+            "sys.modules",
+            {
+                "trading_app.prop_profiles": mock_profile_module,
+                "trading_app.lane_ctl": mock_lane_ctl,
+            },
+        ):
+            summary, items = collect_pause_state()
+        assert summary is not None
+        assert summary["paused_count"] == 2
+        assert any(i.source == "pauses" and i.category == "paused" for i in items)
 
 
 # ---------------------------------------------------------------------------
@@ -640,6 +774,7 @@ class TestFormatJsonV2:
         assert data["recommendation"] is not None
         assert data["upcoming_sessions"][0]["label"] == "TOKYO"
         assert data["time_since_green"] == "3h ago"
+        assert data["deployment_summary"]["profile_id"] == "topstep_50k_mnq_auto"
         assert "Since last" in data["session_delta"][0]
 
 
@@ -653,7 +788,7 @@ class TestSessionDelta:
         from scripts.tools.project_pulse import collect_session_delta
 
         with patch.object(project_pulse, "_git_head", return_value="abc123"):
-            lines = collect_session_delta(tmp_path, tmp_path)
+            lines = collect_session_delta(tmp_path, tmp_path, tool_name="codex")
         # First run — no prior marker, so no delta
         assert lines == []
         # But marker was written
@@ -661,6 +796,7 @@ class TestSessionDelta:
         assert marker.exists()
         data = json.loads(marker.read_text(encoding="utf-8"))
         assert data["head"] == "abc123"
+        assert data["tool"] == "codex"
 
     def test_detects_new_commits(self, tmp_path: Path) -> None:
         from scripts.tools.project_pulse import collect_session_delta

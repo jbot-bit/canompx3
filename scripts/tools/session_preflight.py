@@ -325,7 +325,9 @@ def main(argv: list[str] | None = None) -> int:
                 sys.path.insert(0, _tools_dir)
             from project_pulse import build_pulse, format_text
 
-            report = build_pulse(root, skip_drift=True, skip_tests=True)
+            context_lower = (args.context or "").lower()
+            tool_name = "codex" if "codex" in context_lower else ("claude" if "claude" in context_lower else "unknown")
+            report = build_pulse(root, skip_drift=True, skip_tests=True, tool_name=tool_name)
             print()
             print(format_text(report))
         except Exception as exc:

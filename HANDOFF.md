@@ -6,6 +6,106 @@
 
 ---
 
+## Update (2026-04-10 late — Repo Intelligence / Pulse Hardening)
+
+### Headline
+
+Hardened the existing `project_pulse` orientation stack into a more canonical
+repo-intelligence surface for Codex/startup use.
+
+This is **not** a new rule system and **not** a discovery/runtime behavior
+change. It is an operator-truth upgrade:
+
+- current deployed-live profile/lane truth
+- current validated-active truth
+- current Criterion 11 gate truth
+- current Criterion 12 SR monitor truth
+- current lane-pause truth
+- truthful Codex/Claude session ownership in the pulse continuity marker
+
+### Design
+
+Kept `scripts/tools/project_pulse.py` as the single synthesis layer rather than
+building a new `.codex` status system.
+
+New pulse summaries:
+
+- `deployment_summary`
+  - source: `trading_app.prop_profiles` + `validated_setups`
+  - shows deployed-live count vs validated-active count
+  - surfaces dangerous mismatch if a deployed lane is no longer validated
+  - surfaces validated-but-not-deployed lanes as `ON DECK`, not as an error
+- `survival_summary`
+  - source: `trading_app.account_survival.check_survival_report_gate()` +
+    persisted `account_survival_<profile>.json`
+  - shows gate pass/block, operational pass probability, `as_of`, and report age
+- `sr_summary`
+  - source: persisted `data/state/sr_state.json`
+  - shows lane counts by `CONTINUE/ALARM/NO_DATA`, stream-source mix, and age
+- `pause_summary`
+  - source: `trading_app.lane_ctl.get_paused_strategy_ids()`
+  - shows active paused-lane count
+
+Also fixed the pulse continuity marker path:
+
+- `collect_session_delta()` no longer hardcodes `tool="claude"`
+- `build_pulse(..., tool_name=...)` now records the actual calling tool
+- `session_preflight.py --with-pulse` now derives `tool_name` from `--context`
+  (`codex-*` -> `codex`, `claude-*` -> `claude`, else `unknown`)
+
+### Current real pulse truth
+
+On the current repo state, the upgraded pulse shows:
+
+- profile: `topstep_50k_mnq_auto`
+- deployed-live: `5`
+- validated-active: `6`
+- validated-only: `1` (`MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8`)
+- Criterion 11: `PASS 87.2%`, `as_of=2026-04-09`
+- Criterion 12 SR: `5 CONTINUE`, `0 ALARM`, `0 NO_DATA`
+- SR stream mix: `canonical_forward=4`, `paper_trades=1`
+- paused lanes: `0`
+
+### Files touched
+
+- `scripts/tools/project_pulse.py`
+- `scripts/tools/session_preflight.py`
+- `tests/test_tools/test_project_pulse.py`
+- `tests/test_tools/test_pulse_integration.py`
+
+### Verification
+
+- `python3 -m py_compile scripts/tools/project_pulse.py tests/test_tools/test_project_pulse.py tests/test_tools/test_pulse_integration.py scripts/tools/session_preflight.py`
+- `uv run --frozen --extra dev pytest tests/test_tools/test_session_preflight.py tests/test_tools/test_project_pulse.py tests/test_tools/test_pulse_integration.py -q`
+  - result: `76 passed`
+- `python3 pipeline/check_drift.py`
+  - result: `88 passed, 0 blocking, 7 advisory`
+- `python3 scripts/tools/session_preflight.py --context codex-wsl --with-pulse --quiet`
+  - pulse prints the new live-control block correctly
+  - `.pulse_last_session.json` now records `tool="codex"` on the Codex path
+
+### Why this matters
+
+This makes Codex-side reasoning materially safer:
+
+- less chance of reasoning from stale docs/comments
+- explicit visibility into structural-vs-live-vs-monitoring truth
+- explicit warning on dangerous mismatches instead of implicit assumptions
+- no false Claude ownership in Codex continuity markers
+
+### Remaining frontier gap
+
+This is a control-plane / orientation upgrade, not the final “smarter model”
+solution.
+
+Highest-signal next move remains:
+
+- **Criterion 11 v2** — path-aware / intraday-aware breach modeling and dynamic
+  scaling over the simulation horizon
+
+That is still the next institutional trading-control upgrade after this pulse
+hardening.
+
 ## Update (2026-04-10 early — Institutional Monitoring + Metadata Hygiene)
 
 ## Update (2026-04-10 later — Criterion 11 Account-Survival Gate Implemented)
