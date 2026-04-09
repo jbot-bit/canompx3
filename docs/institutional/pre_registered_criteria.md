@@ -16,6 +16,7 @@
 | v2.7 | 2026-04-08 | **RESCINDS Amendment 2.6.** Holdout policy corrected to Mode A (holdout-clean) per explicit user correction. 2026-01-01 is the sacred holdout boundary going forward. The 3+ months of real-time 2026 data (2026-01-02 → present) is the accumulating forward OOS record. The 124 existing validated_setups are grandfathered as RESEARCH-PROVISIONAL per Amendment 2.4 — they were discovered with 2026 data in scope and are NOT OOS-clean. Any NEW discovery run must use `--holdout-date 2026-01-01`. See Amendment 2.7 at bottom. | Claude Code session (user correction: *"I THOUGHT WE WERE HOLDING OUT FROM 2026 ONWARDS SO THAT WE HAD 3 MONTHS ALREADY OF TRADES OOS"*) |
 | v2.8 | 2026-04-09 | **FACTUAL CORRECTION.** Phase 3c canonical layer rebuild (merged to main as commit `c33805b` on 2026-04-08) replaced pre-2019 parent-proxy bars with real-micro bars for MNQ/MES/MGC. Post-rebuild actual horizons: MNQ/MES 6.65 clean years (1,951 pre-holdout trading days, 2019-05-06 → 2025-12-31), MGC 2.7 clean years (671 pre-holdout days, 2023-09-11 → 2025-12-31). The prior text "~2.2 years of clean MNQ data" and "16 years proxy-extended" in § Criterion 2, and "MNQ/MES from 2024-02-05 onwards; MGC never valid" in § Criterion 10, both predate the Phase 3c rebuild and are factually wrong. All 12 locked numeric thresholds (300/2000 trial bounds, t ≥ 3.00, DSR > 0.95, WFE ≥ 0.50, N ≥ 100, etc.) remain EXACTLY as locked — this amendment is a factual correction of stale narrative, not a threshold relaxation. See Amendment 2.8 at bottom. | Claude Code session (user correction: *"I DONT WANNA FUCK AROUND WITH HALF THIS DATA HALF THAT DATA. I HAVE SUBSCRIPTION TO GET ALL THE DATA"*) |
 | v2.9 | 2026-04-09 | **Parent/Proxy Data Policy.** Binding rules for NQ/ES/GC parent vs MNQ/MES/MGC micro data. Delete NQ/ES bars. Keep GC for MGC Tier 2 validation (price-only). 4 new banned practices (#9-#12). | Claude Code session (user: *"is it useful at all for us to have the 2 different contract sizes or is it just a canonical fucking project nightmare?"*) |
+| v3.0 | 2026-04-09 | **Theory-Driven Individual Hypothesis Testing.** Adds dual-pathway to Criterion 3: individual hypothesis pathway (raw p < 0.05) for theory-grounded, mechanism-specific predictions alongside existing BH FDR pathway for exploratory search. Incorporates canonical-base-truth methodology for admissible search space definition. Downstream gates (WF, OOS, era stability) mandatory and non-waivable under individual pathway. | Claude Code session (user: *"There is a way that people realistically trade ORB breakouts that are valid and profitable without using 20 years of data and such hard tests, right?"*) |
 
 ---
 
@@ -88,13 +89,17 @@ For 2.7-year MGC (no-backfill), strict Bailey E=1.0 gives N ≤ 4 — too small 
 
 ---
 
-## Criterion 3 — BH FDR significance (filter, not final)
+## Criterion 3 — Statistical significance (dual pathway)
 
 **Source:** `literature/harvey_liu_2015_backtesting.md` + `literature/chordia_et_al_2018_two_million_strategies.md`.
 
-**Rule:** Strategies must pass Benjamini-Hochberg FDR at q = 0.05 computed on the PRE-REGISTERED hypothesis family (NOT the raw brute-force universe).
+**Rule (dual pathway — see Amendment 3.0):**
 
-**Implementation:** Use `fdr_adjusted_p < 0.05` as a FIRST filter. This is necessary but not sufficient for validation.
+**Pathway A — BH FDR (exploratory search):** Strategies must pass Benjamini-Hochberg FDR at q = 0.05 computed on the PRE-REGISTERED hypothesis family. Use when a single hypothesis file tests multiple hypotheses as a family and the researcher intends to select survivors from the set. Implementation: `fdr_adjusted_p < 0.05` as a FIRST filter.
+
+**Pathway B — Individual hypothesis (theory-driven):** A single pre-registered prediction with its own economic theory may be tested at raw p < 0.05 (two-tailed). Use when the hypothesis is a specific mechanism-session-instrument prediction, pre-registered in its own file (or flagged `testing_mode: individual`), with mandatory downstream gates (criteria 6, 8, 9 non-waivable). See Amendment 3.0 for full conditions.
+
+**Which pathway:** The hypothesis file declares `testing_mode: family` (default, Pathway A) or `testing_mode: individual` (Pathway B). Individual mode requires a `theory_citation` on EVERY hypothesis — no theory, no individual testing.
 
 ---
 
@@ -628,3 +633,77 @@ This failure mode is exactly what `.claude/rules/institutional-rigor.md` rule 8 
 1. **Delete NQ and ES bars from gold.db** — one-time cleanup. Run after user confirmation of this amendment.
 2. **MGC Databento backfill** — download MGC bars 2022-06-13 → 2023-09-10 to extend clean micro data to ~3.9yr (N ≤ 7 at E=1.0). Strongly recommended before MGC discovery. Already noted in Amendment 2.8.
 3. **Drift check for parent symbol leakage** — new check that no `orb_outcomes` or `daily_features` row has a symbol matching a known parent symbol list. Queue for next drift check batch.
+
+---
+
+## Amendment 3.0 (2026-04-09) — Theory-Driven Individual Hypothesis Testing (binding)
+
+**Type:** New dual-pathway for Criterion 3 (statistical significance). Adds an individual hypothesis pathway alongside the existing BH FDR pathway.
+
+**Trigger:** The K=5 redesign discovery runs (2026-04-09) showed that mechanism-grounded predictions with raw p-values of 0.02-0.05 (MES NYSE_OPEN, MNQ COMEX_SETTLE) were killed by BH FDR correction when bundled with unrelated sessions. The BH FDR framework was designed for blind enumeration of millions of strategies (Chordia et al 2018); applying it to small, theory-driven hypothesis sets penalizes precisely the researcher behavior the framework was meant to encourage (pre-registration, theory-first design, honest K counting).
+
+**Literature grounding:**
+
+- **Harvey-Liu 2015** (`literature/harvey_liu_2015_backtesting.md`): The BHY haircut scales with the number of strategies tested. At N=1 (single pre-registered prediction), the haircut approaches zero. The framework explicitly rewards theory-driven hypothesis reduction.
+- **Lopez de Prado 2020** (`literature/lopez_de_prado_2020_ml_for_asset_managers.md` §1.2): "Whatever edge you aspire to gain in finance, it can only be justified in terms of someone else making a systematic mistake from which you benefit." Theory-first discovery is the institutional standard — the statistical framework should SUPPORT this, not penalize it.
+- **Bailey et al 2013** (`literature/bailey_et_al_2013_pseudo_mathematics.md`): MinBTL constrains total N. At K=1, MinBTL = 0 (ln(1) = 0) — a single pre-registered hypothesis requires NO minimum backtest length beyond what the researcher deems sufficient for the test's statistical power.
+- **Crabel 1990**: ORB breakouts are a published, well-understood strategy class with a 35-year track record. Testing "does MNQ NYSE_OPEN G5 have positive expectancy?" is NOT blind enumeration — it is testing a specific, theory-grounded prediction about a known strategy class.
+
+### The canonical-base-truth methodology
+
+Before any hypothesis is pre-registered under the individual pathway, the researcher must follow this 5-step methodology:
+
+**Step 1 — Canonical base truth.** For each instrument, identify which sessions have any plausible unfiltered or size-first edge on pre-holdout data only. This is a READ-ONLY audit, not discovery. No deployment decisions are made here.
+
+**Step 2 — Restrict the admissible family set.** Do not let every session inherit every filter family. If a family has no mechanism or no prior structural evidence for that instrument-session, it does not enter the grid. The restriction must be documented BEFORE seeing filtered results.
+
+**Step 3 — Pre-register bundles.** Each bundle is a specific mechanism × session × instrument × filter prediction. Examples: "MGC CME_REOPEN size-first," "MES NYSE_OPEN Crabel-commitment G5," "MNQ EUROPE_FLOW cross-border-flow G5." NOT "run all filters and see."
+
+**Step 4 — Count each bundle honestly.** If you test 5 bundles, your trial count is 5. If inside one bundle you test 8 thresholds and 4 overlays, your real trial count is not 1 — it is 32. The `expected_trial_count` field in the hypothesis YAML must match reality.
+
+**Step 5 — 2026 = forward judgment only.** The holdout tells you whether the pre-registered idea survives. It does not get to choose the idea. No post-hoc hypothesis selection based on holdout results.
+
+### Dual-pathway comparison
+
+| Property | Pathway A: BH FDR (existing) | Pathway B: Individual (new) |
+|---|---|---|
+| **When to use** | Exploratory search, threshold sweeps, multiple overlays | Single mechanism-session prediction with economic theory |
+| **Family K** | All hypotheses in the file | K=1 per hypothesis |
+| **Significance threshold** | BH-adjusted q = 0.05 | Raw p < 0.05 (two-tailed) AND positive Sharpe (direction gate) |
+| **Theory citation** | Recommended | MANDATORY (no theory = Pathway A only) |
+| **Hypothesis file** | Multiple hypotheses, `testing_mode: family` | `testing_mode: individual` flag required |
+| **Criterion 6 (walk-forward)** | Required, waivable with justification | MANDATORY, non-waivable |
+| **Criterion 8 (2026 OOS)** | Required when holdout data available | MANDATORY, non-waivable |
+| **Criterion 9 (era stability)** | Required, regime waivers available | MANDATORY, no regime waivers |
+| **Reporting** | Report FDR-adjusted p | Report raw p + cumulative hypothesis count across ALL individual files |
+| **Abuse safeguard** | FDR correction | All hypotheses (pass + fail) permanently recorded via SHA stamp. Downstream gates non-waivable. |
+
+### Conditions for Pathway B (ALL must be met)
+
+1. **Theory citation required.** Every hypothesis must have a `theory_citation` field referencing published external literature (not repo history, not training memory). The citation must explain WHY this specific instrument at this specific session should exhibit ORB breakout continuation.
+
+2. **One prediction per hypothesis.** No threshold sweeps (testing G4 AND G5 AND G6 within one "individual" hypothesis). Each threshold is a separate prediction if tested.
+
+2b. **Positive direction required.** Raw p < 0.05 is necessary but not sufficient. The strategy must ALSO have positive annualized Sharpe (direction gate). A significantly negative strategy (small p-value but negative Sharpe) fails Pathway B. This prevents the two-tailed p-value from passing strategies that are significantly BAD.
+
+3. **Pre-registered before results.** The hypothesis file must be committed to git before the discovery run. The SHA stamp enforces this.
+
+4. **Downstream gates non-waivable.** Criteria 6 (WFE ≥ 0.50), 8 (2026 OOS positive), and 9 (era stability) are ALL mandatory for Pathway B. No regime waivers, no "insufficient OOS data" exemptions.
+
+5. **All results reported.** Every hypothesis (pass or fail) appears in `experimental_strategies` with the committed SHA. Selective reporting is structurally prevented.
+
+6. **Cumulative count disclosure.** Each individual hypothesis file must note the TOTAL number of individual hypotheses tested across ALL files for that instrument. This is for transparency, not for correction — it lets auditors assess the overall family-wise error rate.
+
+### What this amendment does NOT change
+
+- **Criterion 2 (MinBTL):** Still applies. At K=1, MinBTL = 0, so this is trivially satisfied. The practical constraint becomes data sufficiency for statistical power (N ≥ 100 per Criterion 7).
+- **Criterion 4 (Chordia t):** Still applies. t ≥ 3.00 with theory.
+- **Criterion 5 (DSR):** Still applies as a cross-check.
+- **Criteria 7, 10, 11, 12:** Unchanged.
+- **Pathway A:** Unchanged. BH FDR remains available for exploratory search.
+
+### Contamination disclosure
+
+This amendment was written after seeing the K=5 redesign results (2 MNQ survivors, 0 MES, 0 MGC). The MES NYSE_OPEN signal (raw p = 0.026) was the proximate trigger. The legitimacy of this amendment rests on the STRUCTURAL argument that BH FDR is designed for blind enumeration (Chordia's 2 million strategies), not for theory-driven testing of a known strategy class (Crabel ORB breakouts). This argument is valid independent of the specific results that prompted it — it would be equally valid if all 15 hypotheses had passed or all had failed.
+
+The amendment was requested by the user based on their understanding that real ORB breakout traders profitably apply this strategy class without academic-scale multiple testing corrections, and that the project's framework should match the actual use case (theory-driven testing) rather than the worst case (blind enumeration).
