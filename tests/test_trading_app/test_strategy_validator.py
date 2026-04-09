@@ -4,7 +4,7 @@ Tests for trading_app.strategy_validator module.
 
 import json
 import sys
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import duckdb
@@ -1328,7 +1328,10 @@ class TestCriterion8OOSPositive:
         """Build a tiny duckdb at the given path with synthetic OOS rows.
 
         Each call uses a fresh path so tests can build multiple DBs without
-        the table-already-exists error.
+        the table-already-exists error. Uses ``timedelta`` for day arithmetic
+        so callers can supply arbitrarily long ``oos_pnls`` lists (the
+        ``N_oos >= 30`` gate at validator L1034 requires >=30 rows to exercise
+        the downstream sign and ratio logic).
         """
         con = duckdb.connect(str(db_path))
         con.execute("""
@@ -1344,8 +1347,9 @@ class TestCriterion8OOSPositive:
                 stub_col INTEGER
             )
         """)
+        base_day = date(2026, 1, 5)
         for i, pnl in enumerate(oos_pnls):
-            day = date(2026, 1, 5 + i)
+            day = base_day + timedelta(days=i)
             con.execute(
                 "INSERT INTO orb_outcomes VALUES (?, 'MNQ', 'NYSE_OPEN', 5, 'E2', 1, ?, ?)",
                 [day, self._DEFAULT_RR, pnl],
@@ -1358,25 +1362,43 @@ class TestCriterion8OOSPositive:
         return db_path
 
     def test_na_safe_when_no_oos_data(self, tmp_path):
-        # Empty OOS → N/A pass-through
+        # Empty OOS → N/A pass-through (n_oos == 0 branch)
         db_path = self._make_synthetic_db(tmp_path / "empty.db", oos_pnls=[])
         row = _phase_4_row(expectancy_r=0.20)
         status, reason = _check_criterion_8_oos(row, db_path)
         assert status is None, f"unexpected rejection: {reason}"
 
-    def test_passes_with_positive_oos_above_ratio(self, tmp_path):
-        # OOS expr = (1.0+1.0-0.5+0.5+0.0)/5 = 0.40, IS=0.20, ratio=2.0 > 0.40
+    def test_insufficient_oos_sample_passes_through(self, tmp_path):
+        # 1 <= N_oos < 30 → pass-through via _OOS_MIN_TRADES gate (L1034).
+        # Even a clearly-negative OOS slice must NOT reject when N < 30
+        # because the ExpR estimate is statistically meaningless at that
+        # sample size. This locks the commit ea18c61 behavior.
         db_path = self._make_synthetic_db(
-            tmp_path / "above.db", oos_pnls=[1.0, 1.0, -0.5, 0.5, 0.0]
+            tmp_path / "small_neg.db", oos_pnls=[-1.0, -0.5, -0.3]
         )
+        row = _phase_4_row(expectancy_r=0.20)
+        status, reason = _check_criterion_8_oos(row, db_path)
+        assert status is None, (
+            f"N_oos=3 must pass-through per _OOS_MIN_TRADES gate, got {status!r} "
+            f"with reason={reason!r}"
+        )
+
+    def test_passes_with_positive_oos_above_ratio(self, tmp_path):
+        # N_oos = 30 (meets _OOS_MIN_TRADES gate).
+        # Pattern: 12× 1.0, 9× -0.5, 9× 0.0 → OOS expr = (12 - 4.5) / 30 = 0.25.
+        # IS=0.20 → ratio = 1.25 > 0.40 → passes both sign and ratio gates.
+        oos_pnls = [1.0] * 12 + [-0.5] * 9 + [0.0] * 9
+        assert len(oos_pnls) == 30
+        db_path = self._make_synthetic_db(tmp_path / "above.db", oos_pnls=oos_pnls)
         row = _phase_4_row(expectancy_r=0.20)
         status, reason = _check_criterion_8_oos(row, db_path)
         assert status is None, f"unexpected rejection: {reason}"
 
     def test_fails_with_negative_oos(self, tmp_path):
-        db_path = self._make_synthetic_db(
-            tmp_path / "neg.db", oos_pnls=[-1.0, -0.5, -0.3]
-        )
+        # N_oos = 30 (meets _OOS_MIN_TRADES gate), all negative → sign gate rejects.
+        oos_pnls = [-1.0] * 10 + [-0.5] * 10 + [-0.3] * 10
+        assert len(oos_pnls) == 30
+        db_path = self._make_synthetic_db(tmp_path / "neg.db", oos_pnls=oos_pnls)
         row = _phase_4_row(expectancy_r=0.20)
         status, reason = _check_criterion_8_oos(row, db_path)
         assert status == "REJECTED"
@@ -1385,12 +1407,11 @@ class TestCriterion8OOSPositive:
         assert "OOS" in reason
 
     def test_fails_with_oos_below_ratio(self, tmp_path):
-        # OOS positive but ratio < 0.40
-        db_path = self._make_synthetic_db(
-            tmp_path / "ratio.db", oos_pnls=[0.05, 0.02, 0.03]
-        )
+        # N_oos = 30 (meets _OOS_MIN_TRADES gate), positive but ratio < 0.40.
+        # All rows = 0.05 → OOS expr = 0.05. IS=0.50 → ratio = 0.10 < 0.40.
+        oos_pnls = [0.05] * 30
+        db_path = self._make_synthetic_db(tmp_path / "ratio.db", oos_pnls=oos_pnls)
         row = _phase_4_row(expectancy_r=0.50)
-        # OOS expr ≈ 0.033, IS=0.50, ratio≈0.067 < 0.40
         status, reason = _check_criterion_8_oos(row, db_path)
         assert status == "REJECTED"
         assert reason is not None
