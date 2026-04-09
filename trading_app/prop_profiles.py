@@ -398,51 +398,68 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         account_size=50_000,
         copies=2,  # Start with 1-2 Express, scale to 5 after proving loop
         stop_multiplier=0.75,
-        max_slots=5,  # Allocator recommends 5 lanes
+        max_slots=5,
         active=True,
         allowed_sessions=frozenset(
             {
-                "CME_REOPEN",
-                "SINGAPORE_OPEN",
+                "NYSE_CLOSE",
                 "COMEX_SETTLE",
                 "EUROPE_FLOW",
                 "TOKYO_OPEN",
+                "NYSE_OPEN",
             }
         ),
-        allowed_instruments=frozenset({"MNQ", "MGC"}),
-        # ALLOCATOR-DRIVEN LANES (2026-04-03 rebalance).
-        # Lane selection by lane_allocator.build_allocation() — not manual.
-        # Allocator uses trailing 12mo ExpR, regime gating, family RR locks.
-        # Run: python -m trading_app.lane_allocator to refresh.
-        # Total: 223.1 R/yr from 5 lanes. MGC CME_REOPEN is top lane.
-        # EUROPE_FLOW swapped COST_LT10→LT12 (2026-04-06): +18% R/yr, era-validated.
+        allowed_instruments=frozenset({"MNQ"}),
+        # VALIDATED-SOURCED LANES (2026-04-09 — ghost-lane sweep).
+        #
+        # Prior state (stale, now removed): 5 lanes from a 2026-04-03 allocator
+        # run referencing strategy_ids no longer present in validated_setups
+        # after the Apr 9 discovery rebuild. Bot was operating with zero current
+        # validation backing. Detected in alignment audit 2026-04-09.
+        #
+        # New lane selection (all MNQ, E2 CB1, sourced from validated_setups):
+        #   NYSE_CLOSE G8 RR1 — strongest 2026 Q1 forward
+        #     (N=39 ExpR=+0.50 WR=79.5% t=+4.06 p<0.0001)
+        #   EUROPE_FLOW G8 RR2 — era-HOLDING (2020-22 0.106 vs 2023-25 0.118)
+        #   COMEX_SETTLE G8 RR1 — era-HOLDING (2020-22 0.057 vs 2023-25 0.133)
+        #   NYSE_OPEN G5 RR2 — era-HOLDING (2020-22 0.044 vs 2023-25 0.131)
+        #   TOKYO_OPEN G8 RR2 — WATCH: sig-decay p=0.042 (2020-22 0.157 vs
+        #     2023-25 0.039) but 2026 Q1 bouncing (+0.23 on N=65). Kept on
+        #     probation. Drop if H2 2026 reverts to sub-0.05.
+        #
+        # Dropped: MES CME_PRECLOSE G8 RR1 — sig-decay p=0.042 (2020-22 0.271
+        # vs 2023-25 0.026) AND 2026 Q1 N=15 (no statistical power to confirm
+        # recovery per Carver Table 5 / 20yr bound).
+        #
+        # Enforced by drift check 95 (pipeline/check_drift.py) — every lane in
+        # an active profile must exist in validated_setups with status='active'.
         daily_lanes=(
             DailyLaneSpec(
-                "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
-                "MGC",
-                "CME_REOPEN",
-                max_orb_size_pts=30.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
+                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8",
                 "MNQ",
-                "SINGAPORE_OPEN",
-                max_orb_size_pts=90.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
-                "MNQ",
-                "COMEX_SETTLE",
+                "NYSE_CLOSE",
                 max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
+                "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G8",
                 "MNQ",
                 "EUROPE_FLOW",
                 max_orb_size_pts=120.0,
             ),
             DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
+                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=80.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_NYSE_OPEN_E2_RR2.0_CB1_ORB_G5",
+                "MNQ",
+                "NYSE_OPEN",
+                max_orb_size_pts=80.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G8",
                 "MNQ",
                 "TOKYO_OPEN",
                 max_orb_size_pts=80.0,
@@ -450,9 +467,10 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "Allocator-driven lanes (2026-04-03). 1-2 copies, scale to 5. "
-            "223.1 R/yr from 5 lanes. MGC CME_REOPEN = top (64.4R/yr). "
-            "Refresh: python -m trading_app.lane_allocator"
+            "Validated-sourced lanes (2026-04-09 ghost sweep). 4 HOLDING + 1 "
+            "WATCH. All lanes cross-referenced against validated_setups via "
+            "drift check 95. Dropped MES CME_PRECLOSE (sig decay + N=15 no "
+            "power). TOKYO_OPEN on probation — sig decay p=0.042, monitor H2."
         ),
     ),
     # =========================================================================
