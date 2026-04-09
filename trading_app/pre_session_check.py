@@ -21,6 +21,7 @@ import duckdb
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.account_survival import check_survival_report_gate
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -296,6 +297,14 @@ def check_forward_monitor_freshness() -> tuple[bool, str]:
         return True, "WARN: forward_monitor output unreadable"
 
 
+def check_account_survival(profile_id: str | None = None) -> tuple[bool, str]:
+    """Fail-closed Criterion 11 gate based on the latest persisted report."""
+    try:
+        return check_survival_report_gate(profile_id=profile_id)
+    except Exception as e:
+        return False, f"BLOCKED: Criterion 11 gate failed: {e}"
+
+
 def check_allocation_staleness_gate() -> tuple[bool, str]:
     """Check if lane allocation is stale (>35d warn, >60d block).
 
@@ -420,6 +429,9 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
 
         ok, msg = check_forward_monitor_freshness()
         results.append(("Forward monitor", ok, msg))
+
+        ok, msg = check_account_survival(resolved_profile_id)
+        results.append(("Criterion 11 survival", ok, msg))
 
         # Allocation staleness
         ok, msg = check_allocation_staleness_gate()

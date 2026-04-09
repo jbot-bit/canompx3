@@ -8,6 +8,113 @@
 
 ## Update (2026-04-10 early — Institutional Monitoring + Metadata Hygiene)
 
+## Update (2026-04-10 later — Criterion 11 Account-Survival Gate Implemented)
+
+### Headline
+
+Implemented a real Criterion 11 account-survival Monte Carlo for deployment
+profiles and wired it into `pre_session_check` as a fail-closed gate.
+
+This is a deployment control only. It does **not** change:
+
+- discovery scope
+- validation outcomes
+- lane allocation
+- live order sizing
+
+### Design
+
+New module:
+
+- `trading_app/account_survival.py`
+
+It answers the deployment question:
+
+- given the current `daily_lanes` for one profile, what is the probability a
+  single account copy survives the next 90 trading days under the modeled firm
+  rules?
+
+Current design choices:
+
+- canonical source = `validated_setups` strategy identity +
+  `orb_outcomes`/`daily_features` historical outcomes
+- dependence modeled via **daily portfolio PnL bootstrap**, not independent
+  trade shuffling
+- rules applied:
+  - trailing DD / EOD freeze semantics
+  - daily loss limit
+  - payout-path consistency rule when the profile has one
+  - static Topstep day-1 scaling feasibility check
+- explicit fail-closed stance for `intraday_trailing` accounts
+  - current engine does **not** pretend to model intraday trailing accurately
+  - for those profiles it raises and the gate should stay blocked until an
+    intraday path simulator exists
+
+### Pre-session wiring
+
+`trading_app/pre_session_check.py` now includes:
+
+- `Criterion 11 survival`
+
+It reads the latest persisted report and blocks if:
+
+- no report exists
+- report is unreadable
+- report horizon is not `90d`
+- report used fewer than `10,000` paths
+- report is older than `30` days
+- report fails scaling feasibility
+- report operational survival is `< 70%`
+
+### Current live profile result
+
+Ran the real report for the only active execution profile with daily lanes:
+
+- profile: `topstep_50k_mnq_auto`
+- command:
+  `python -m trading_app.account_survival --profile topstep_50k_mnq_auto --as-of 2026-04-09 --paths 10000 --seed 0`
+
+Result:
+
+- source days: `2023` (`2019-05-07` -> `2026-04-09`)
+- DD survival: `91.9%`
+- operational pass: `91.9%`
+- trailing-DD breach probability: `8.1%`
+- daily-loss breach probability: `0.0%`
+- gate status: `PASS`
+
+Direct gate readback on `2026-04-10`:
+
+- `Criterion 11 pass: operational 91.9%, as_of=2026-04-09, age=1d, paths=10000`
+
+### Verification
+
+- `python3 -m py_compile trading_app/account_survival.py trading_app/pre_session_check.py tests/test_trading_app/test_account_survival.py`
+- `uv run --frozen --extra dev pytest tests/test_trading_app/test_account_survival.py tests/test_trading_app/test_pre_session_check.py -q`
+  - result: `32 passed`
+- `python -m trading_app.account_survival --profile topstep_50k_mnq_auto --as-of 2026-04-09 --paths 10000 --seed 0`
+  - report generated successfully
+- `python3 pipeline/check_drift.py`
+  - result: `88 passed, 0 blocking, 7 advisory`
+
+### Files touched
+
+- `trading_app/account_survival.py`
+- `trading_app/pre_session_check.py`
+- `tests/test_trading_app/test_account_survival.py`
+
+### Important limitation
+
+This is institutionally honest for the currently active EOD-trailing profile,
+but it is **not** yet a universal prop-account survival engine.
+
+Known boundary:
+
+- `intraday_trailing` profiles are fail-closed / unsupported
+- current sizing assumption is the project’s present one-contract daily-lane
+  convention per account copy; if live sizing becomes variable by lane, feed
+  that explicitly into Criterion 11 instead of assuming it
+
 ### Headline
 
 Focused institutional cleanup only. No discovery rerun. Goal was to keep the
