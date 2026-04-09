@@ -2002,3 +2002,38 @@ class TestPathwayBEndToEnd:
         # significance gate ran" which is honest for legacy/test fixtures.
         # The real assertion is that the column EXISTS and is queryable.
         assert pathway is not None, "validated_setups row should exist"
+
+    def test_pathway_a_rejected_rows_backfill_rejection_reason_from_notes(self, tmp_path):
+        """Family-mode rejects must populate rejection_reason even without a structured tag."""
+        sid = "MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER"
+        bad_yearly = json.dumps(
+            {
+                "2022": {"trades": 50, "wins": 28, "total_r": 10.0, "avg_r": 0.2},
+                "2023": {"trades": 50, "wins": 20, "total_r": -5.0, "avg_r": -0.1},
+                "2024": {"trades": 50, "wins": 28, "total_r": 10.0, "avg_r": 0.2},
+            }
+        )
+        db_path = self._setup_db(
+            tmp_path,
+            [_make_row(strategy_id=sid, yearly_results=bad_yearly)],
+            instrument="MGC",
+        )
+
+        passed, rejected = run_validation(
+            db_path=db_path,
+            instrument="MGC",
+            testing_mode="family",
+            enable_walkforward=False,
+        )
+        assert passed == 0 and rejected >= 1
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        notes, reason = con.execute(
+            "SELECT validation_notes, rejection_reason FROM experimental_strategies WHERE strategy_id = ?",
+            [sid],
+        ).fetchone()
+        con.close()
+
+        assert notes is not None
+        assert reason == notes
+        assert "Phase 3" in reason

@@ -1442,6 +1442,7 @@ def run_validation(
                     "status": status,
                     "notes": notes,
                     "regime_waivers": regime_waivers,
+                    "rejection_reason": notes if status == "REJECTED" else None,
                     "dst_split": dst_split,
                 }
             )
@@ -1595,6 +1596,7 @@ def run_validation(
                     "status": status,
                     "notes": notes,
                     "regime_waivers": cand["regime_waivers"],
+                    "rejection_reason": notes if status == "REJECTED" else None,
                     "dst_split": dst_split,
                     "wf_result_dict": wr.get("wf_result"),
                 }

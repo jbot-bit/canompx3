@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.live.performance_monitor import _compute_std_r
+from trading_app.strategy_fitness import _load_strategy_outcomes
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -79,10 +80,63 @@ def _build_lanes() -> dict[str, dict]:
         lanes[strategy_id] = {
             "mu0": bt["mu0"],
             "sigma": bt["sigma"],
+            "instrument": lane["instrument"],
             "orb_label": label,
+            "orb_minutes": lane["orb_minutes"],
+            "entry_model": lane["entry_model"],
+            "rr_target": lane["rr_target"],
+            "confirm_bars": lane["confirm_bars"],
+            "filter_type": lane["filter_type"],
             "label": f"L{i} {label} {lane['filter_type']}{suffix}",
         }
     return lanes
+
+
+def _load_trade_stream(
+    con: duckdb.DuckDBPyConnection,
+    strategy_id: str,
+    params: dict,
+) -> tuple[list[float], str]:
+    """Load the best available forward trade stream for SPRT monitoring.
+
+    Source priority:
+    1. `paper_trades` for actual logged live/shadow execution history
+    2. canonical forward outcomes as a transparent shadow fallback
+
+    Criterion 12 is about the live R stream, so we prefer paper/live logs.
+    The canonical fallback keeps the monitor operational when paper-trade
+    coverage is incomplete, but the source is labeled explicitly.
+    """
+    paper_rows = con.execute(
+        """SELECT pnl_r FROM paper_trades
+           WHERE strategy_id = ? AND pnl_r IS NOT NULL
+           ORDER BY trading_day""",
+        [strategy_id],
+    ).fetchall()
+    paper_trades = [r[0] for r in paper_rows]
+    if paper_trades:
+        return paper_trades, "paper_trades"
+
+    outcomes = _load_strategy_outcomes(
+        con,
+        instrument=params["instrument"],
+        orb_label=params["orb_label"],
+        orb_minutes=params["orb_minutes"],
+        entry_model=params["entry_model"],
+        rr_target=params["rr_target"],
+        confirm_bars=params["confirm_bars"],
+        filter_type=params["filter_type"],
+        start_date=date(2026, 1, 1),
+    )
+    forward_trades = [
+        o["pnl_r"]
+        for o in outcomes
+        if o.get("pnl_r") is not None and o.get("outcome") not in (None, "scratch")
+    ]
+    if forward_trades:
+        return forward_trades, "canonical_forward"
+
+    return [], "none"
 
 
 def compute_sprt(trades: list[float], mu0: float, sigma: float) -> tuple[float, str]:
@@ -132,26 +186,32 @@ def run_monitor():
     print(f"Boundaries: A={A:.3f} (DEGRADED), B={B:.3f} (SIGNAL)")
     print(f"Alpha={ALPHA}, Beta={BETA}")
     print(f"{'=' * 90}")
-    print(f"\n{'Lane':<40} {'N':>4} {'SPRT':>8} {'Lower':>8} {'Upper':>8} {'Status':<12} {'Streak':>6} {'MaxStr':>6}")
-    print("-" * 110)
+    print(
+        f"\n{'Lane':<40} {'N':>4} {'SPRT':>8} {'Lower':>8} {'Upper':>8} "
+        f"{'Status':<12} {'Source':<18} {'Streak':>6} {'MaxStr':>6}"
+    )
+    print("-" * 129)
 
     lanes = _build_lanes()
     results = []
     for strategy_id, params in lanes.items():
-        rows = con.execute(
-            """SELECT pnl_r FROM paper_trades
-               WHERE strategy_id = ? AND pnl_r IS NOT NULL
-               ORDER BY trading_day""",
-            [strategy_id],
-        ).fetchall()
-
-        trades = [r[0] for r in rows]
+        trades, trade_source = _load_trade_stream(con, strategy_id, params)
         n = len(trades)
 
         if n == 0:
-            print(f"{params['label']:<40} {0:>4} {'N/A':>8} {-A:>8.3f} {B:>8.3f} {'NO DATA':<12} {0:>6} {0:>6}")
+            print(
+                f"{params['label']:<40} {0:>4} {'N/A':>8} {-A:>8.3f} {B:>8.3f} "
+                f"{'NO DATA':<12} {trade_source:<18} {0:>6} {0:>6}"
+            )
             results.append(
-                {"strategy_id": strategy_id, "orb_label": params["orb_label"], "n": 0, "sprt": 0, "status": "NO_DATA"}
+                {
+                    "strategy_id": strategy_id,
+                    "orb_label": params["orb_label"],
+                    "n": 0,
+                    "sprt": 0,
+                    "status": "NO_DATA",
+                    "source": trade_source,
+                }
             )
             continue
 
@@ -160,7 +220,7 @@ def run_monitor():
 
         print(
             f"{params['label']:<40} {n:>4} {lr:>+8.3f} {-A:>8.3f} {B:>8.3f} {status:<12} "
-            f"{current_streak:>6} {max_streak:>6}"
+            f"{trade_source:<18} {current_streak:>6} {max_streak:>6}"
         )
 
         # Streak warnings
@@ -178,6 +238,7 @@ def run_monitor():
                 "n": n,
                 "sprt": round(lr, 4),
                 "status": status,
+                "source": trade_source,
                 "current_streak": current_streak,
                 "max_streak": max_streak,
             }
@@ -189,6 +250,9 @@ def run_monitor():
     print("  DEGRADED  = SPRT accepts H1 (lane has no edge) — flag for human review")
     print("  SIGNAL    = SPRT accepts H0 (lane performing as expected)")
     print("  NO DATA   = No trades recorded yet")
+    print("Source key:")
+    print("  paper_trades      = logged live/shadow execution stream")
+    print("  canonical_forward = forward outcome shadow stream from orb_outcomes")
     print(f"{'=' * 90}")
 
     # Save state
