@@ -89,12 +89,24 @@ Claimed 67 total filters in ALL_FILTERS:
 - DOW filter on ORB — no specific citation
 - Cost-friction as pre-trade filter — project-specific operationalization of Chan Ch1
 
-## NEXT SESSION TODO (HIGH EFFORT REQUIRED)
+## AUDIT RESULTS (2026-04-09 high-effort session)
 
-1. **Audit all of today's work** at high effort — verify code changes, data operations, hypothesis files
-2. **Read the actual local PDFs** in resources/ for Crabel, Chan, Aronson, LdP — extract real citations, don't rely on training memory
-3. **Verify the regime infrastructure audit** — read the actual code, don't trust the agent's summary
-4. **Verify the filter universe** — read config.py, confirm the 67 filter count, confirm routing logic
-5. **Design the hypothesis framework properly** — with real lit grounding, proper session/filter/RR matrix per instrument
-6. **Consider gold as REGIME strategy** — MGC may need different approach (not unconditional ORB)
-7. **Address the deployed portfolio gap** — the 5 deployed lanes have zero Mode A evidence
+Audit plan: `docs/plans/2026-04-09-hypothesis-audit-plan.md`
+
+### FIXED
+1. **MGC Bailey year metric** — CRITICAL. Was using trading years (4.01yr), should use calendar years (3.55yr) to match pipeline Sharpe annualization. MGC reduced from N=7 to N=5. Two threshold-variant hypotheses (G6 LONDON_METALS, G5 COMEX_SETTLE) dropped. All Bailey compliance numbers recalculated.
+2. **RR=2.0 justification** — Changed from "Crabel's canonical continuation target" to "practitioner-standard breakout convention" in all 3 files. Crabel book not in resources/; claim was from training memory.
+3. **Amendment version ordering** — v2.8 now appears before v2.9 in changelog table.
+
+### VERIFIED CORRECT (no action needed)
+4. **Filter universe** — 82 filters total (not 67 as low-effort claimed). All hypothesis filter types (ORB_G4-G8, ATR_P70, OVNRNG_50/100) exist in ALL_FILTERS and route correctly to all tested sessions.
+5. **Regime infrastructure** — ATR_P70 exists and routes to MGC/MNQ/MES NYSE_OPEN. Agent claims from low-effort session confirmed against actual code.
+6. **FK-safe DELETE** — Subquery logic is correct. Protects all strategies referenced by validated_setups.promoted_from.
+7. **DST/timezone handling** — Correct project-wide. Sunday trading days (34/year during US DST) are legitimate CME reopen sessions. Only CME_REOPEN fires on Sundays; all hypothesis sessions have NULL. Zero impact on tested hypotheses. Calendar years for Bailey is correct because pipeline uses span_days/365.25 for Sharpe annualization.
+8. **MNQ/MES Bailey compliance** — N=16 at T=6.66 calendar years, headroom 20%. Correct.
+9. **Amendment 2.9 proxy data policy** — Logic sound. NQ/ES to be deleted (deferred). GC kept for MGC Tier 2.
+
+### REMAINING (out of scope for this audit)
+10. **Deployed portfolio gap** — 5 deployed lanes have zero Mode A evidence. Strategic decision for future work, not a bug.
+11. **Crabel PDF extraction** — Book not in resources/. Future work if literature grounding of RR=2.0 is needed.
+12. **NQ/ES bar deletion** — Per Amendment 2.9, deferred pending user confirmation.

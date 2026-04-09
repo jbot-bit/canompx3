@@ -36,7 +36,7 @@
 # Why 1 RR per bundle and 1 entry model per bundle: within-hypothesis
 # parameter sweeps (e.g., testing 5 RR levels per bundle) constitute
 # within-hypothesis optimization per Lopez de Prado 2020 § 1.4.2.
-# Pre-committing to RR=2.0 (Crabel's canonical breakout RR) and E2
+# Pre-committing to RR=2.0 (practitioner-standard breakout RR; Crabel 1990 used EOD exits, RR=2.0 is intraday convention) and E2
 # (TRADING_RULES.md industry-standard stop-market entry) eliminates
 # within-bundle parameter search and keeps each hypothesis a SINGLE
 # pre-registered prediction.
@@ -99,8 +99,8 @@ metadata:
 #   session's initial directional consensus is revealed. Breakouts of
 #   this range are more likely to continue than mean-revert because
 #   large participants have committed capital before the breakout and
-#   will defend their direction. Crabel's canonical RR target for
-#   momentum continuation is 2.0.
+#   will defend their direction. RR=2.0 is the dominant intraday breakout
+#   practitioner convention (Crabel 1990 used EOD exits).
 #
 # Economic mechanism for MNQ at NYSE_OPEN:
 #   US equity index futures concentrate institutional flow at the NYSE
@@ -131,8 +131,8 @@ hypotheses:
       committed two-way commitment in the first 5 minutes. Under
       Crabel's commitment hypothesis, breakouts of this range continue
       with above-chance probability because institutional participants
-      anchored the range. RR=2.0 is Crabel's canonical continuation
-      target. E2 (stop-market at the range boundary + slippage) is the
+      anchored the range. RR=2.0 is the dominant intraday breakout practitioner
+      convention. E2 (stop-market at the range boundary + slippage) is the
       industry-standard honest entry per TRADING_RULES.md with no
       backtest biases.
     filter:

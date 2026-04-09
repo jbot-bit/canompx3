@@ -6,30 +6,45 @@
 # Committing commit SHA: (filled in by pre-commit hook)
 # Holdout mode:          A (Mode A, holdout-clean) per Amendment 2.7
 # Sacred boundary:       2026-01-01 onwards — no discovery may consume this window
-# Data horizon:          4.01 years clean real-micro MGC (2022-06-13 →
-#                        2025-12-31 = 1,010 pre-holdout trading days).
-#                        Extended from 2.70yr (671 days) by Databento
-#                        backfill of MGC micro bars 2022-06-13 to 2023-09-10
-#                        (same contract: CME Micro Gold 10oz, launched
-#                        2022-06-13). No proxy data. Per Amendment 2.9:
-#                        Tier 1 = clean MGC discovery (this file), Tier 2 =
-#                        GC parent validation (price-only) is SEPARATE.
+# Data horizon:          3.55 calendar years clean real-micro MGC
+#                        (2022-06-13 → 2025-12-31 = 1,298 calendar days
+#                        ÷ 365.25). Extended from ~2.3 calendar years by
+#                        Databento backfill of MGC micro bars 2022-06-13
+#                        to 2023-09-10 (same contract: CME Micro Gold
+#                        10oz, launched 2022-06-13). No proxy data. Per
+#                        Amendment 2.9: Tier 1 = clean MGC discovery
+#                        (this file), Tier 2 = GC parent validation
+#                        (price-only) is SEPARATE.
 #
-# Strict Bailey compliance: N=7 trials pre-registered. At E[max_N]=1.0
-# annualized (Bailey 2013 Theorem 1 default), MinBTL = 2·Ln(7)/1.0² =
-# 3.89 years < 4.01 years available → PASS with 3.0% headroom.
-# This is tight but strictly compliant at the most conservative E=1.0.
+# Year metric:           CALENDAR YEARS, matching pipeline Sharpe
+#                        annualization (strategy_discovery.py line 588:
+#                        years_span = span_days / 365.25). Bailey MinBTL
+#                        T must use the same time unit as the Sharpe
+#                        ratio. Trading years (1,039 trading days ÷ 252
+#                        = 4.12yr) is the WRONG metric for this pipeline
+#                        because the pipeline does not use √252
+#                        annualization — it uses √(trades_per_year)
+#                        where trades_per_year = n_traded / calendar_years.
+#                        See docs/plans/2026-04-09-hypothesis-audit-plan.md
+#                        for the full derivation.
 #
-# Prior version (before backfill): N=4 on 2.70yr was MARGINAL FAIL at
-# strict E=1.0. The backfill extends the horizon by 15 months of real
-# MGC micro data, enabling 3 additional hypotheses within strict Bailey.
+# Strict Bailey compliance: N=5 trials pre-registered. At E[max_N]=1.0
+# annualized (Bailey 2013 Theorem 1 default), MinBTL = 2·Ln(5)/1.0² =
+# 3.22 years < 3.55 years available → PASS with 10.4% headroom.
 #
-# Noise floor Sharpe at N=7 on 4.01yr = √(2·Ln(7)/4.01) = 0.985
-# annualized. Candidates must exhibit IS Sharpe > 0.99 to be
-# distinguishable from the expected maximum of a null set of 7
-# strategies on 4.01 years.
+# Prior version (before audit): N=7 on "4.01yr" used trading years
+# (1,010 trading days ÷ 252), which is the WRONG metric. At calendar
+# years (3.55yr), N=7 requires MinBTL = 3.89yr → FAIL. N=6 requires
+# 3.58yr → also FAIL (by 0.03yr). N=5 is the maximum at strict Bailey
+# E=1.0 on 3.55 calendar years. Two threshold-variant hypotheses (G6
+# LONDON_METALS, G5 COMEX_SETTLE) were dropped to reduce from 7 to 5.
 #
-# Theoretical framework: all 7 hypothesis bundles derive from
+# Noise floor Sharpe at N=5 on 3.55yr = √(2·Ln(5)/3.55) = 0.952
+# annualized. Candidates must exhibit IS Sharpe > 0.96 (rounded up
+# for conservatism) to be distinguishable from the expected maximum
+# of a null set of 5 strategies on 3.55 calendar years.
+#
+# Theoretical framework: all 5 hypothesis bundles derive from
 # institutional microstructure literature on precious metals pricing
 # (London gold fix, COMEX settlement mechanics), scheduled macro
 # announcement effects on gold via the real-rate channel, and
@@ -39,19 +54,19 @@
 # `docs/audit/hypotheses/README.md` § Forbidden and
 # `trading_app/hypothesis_loader.py` module docstring § "Bias control".
 #
-# Why N=7 and not more: at E[max_N]=1.0, MinBTL = 2·Ln(N)/1.0². For
-# N=8, MinBTL = 2·Ln(8)/1.0² = 4.16yr > 4.01yr → FAIL. N=7 is the
-# maximum number of pre-registered hypotheses at strict Bailey E=1.0.
+# Why N=5 and not more: at E[max_N]=1.0, MinBTL = 2·Ln(N)/1.0². For
+# N=6, MinBTL = 2·Ln(6)/1.0² = 3.58yr > 3.55yr → FAIL (by 0.03yr).
+# N=5 is the maximum at strict Bailey E=1.0 on 3.55 calendar years.
 #
 # Why 1 RR per bundle and 1 entry model per bundle: within-hypothesis
 # parameter sweeps (e.g., testing 5 RR levels per bundle) constitute
 # within-hypothesis optimization per Lopez de Prado 2020 § 1.4.2.
-# Pre-committing to RR=2.0 (Crabel's canonical breakout RR) and E2
+# Pre-committing to RR=2.0 (practitioner-standard breakout RR; Crabel 1990 used EOD exits, RR=2.0 is intraday convention) and E2
 # (TRADING_RULES.md industry-standard stop-market entry) eliminates
 # within-bundle parameter search and keeps each hypothesis a SINGLE
 # pre-registered prediction.
 #
-# Session selection rationale: with only 4 hypotheses, we select the
+# Session selection rationale: with only 5 hypotheses, we select the
 # sessions with the STRONGEST economic theory for gold specifically.
 # Excluded sessions and reasons:
 #   SINGAPORE_OPEN: 74% double-break for MGC (RESEARCH_RULES exclusion)
@@ -65,38 +80,41 @@ metadata:
   name: "mgc-mode-a-rediscovery"
   purpose: |
     Mode-A-clean MGC discovery run under strict Bailey E=1.0 compliance
-    at the post-backfill 4.01-year clean horizon. Tests 7 literature-
-    grounded hypothesis bundles for the CME Micro Gold futures contract:
-    Crabel opening range at London metals (2 thresholds), COMEX settlement
-    (2 thresholds), US macro data release, NYSE_OPEN with Crabel G5, and
-    ARCH/GARCH volatility regime gating. Pre-registered before any
+    at the post-backfill 3.55-calendar-year clean horizon. Tests 5
+    literature-grounded hypothesis bundles for the CME Micro Gold futures
+    contract:
+    Crabel opening range at London metals, COMEX settlement, US macro data
+    release, NYSE_OPEN with Crabel G5, and ARCH/GARCH volatility regime
+    gating. Pre-registered before any
     discovery code touches data. Each hypothesis is a single-trial
     pre-committed prediction with RR=2.0 (Crabel canonical) and E2
     entry model (industry standard stop-market). No within-hypothesis
     parameter sweeps.
   date_locked: "2026-04-09T00:00:00+10:00"
   holdout_date: "2026-01-01"
-  data_horizon_years_clean: 4.01
-  data_source: "real CME Micro Gold futures 2022-06-13 onwards (1,010 pre-holdout trading days). Backfill 2022-06-13 to 2023-09-10 downloaded 2026-04-09 ($0, Databento Standard). Same contract (10oz micro) from launch. Ingested and rebuilt same day."
+  data_horizon_years_clean: 3.55
+  data_source: "real CME Micro Gold futures 2022-06-13 onwards (1,298 calendar days = 3.55 calendar years, 1,039 trading days). Backfill 2022-06-13 to 2023-09-10 downloaded 2026-04-09 ($0, Databento Standard). Same contract (10oz micro) from launch. Ingested and rebuilt same day."
   bailey_compliance:
-    trials: 7
-    horizon_years: 4.01
+    trials: 5
+    horizon_years: 3.55
+    horizon_metric: "calendar years (1,298 days ÷ 365.25), matching pipeline Sharpe annualization convention"
     e_max_n: 1.0
-    min_btl_required_years: 3.89
-    headroom_pct: 3.0
-    status: "strict Bailey E=1.0 PASS with 3.0% headroom. N=7 is the maximum at this horizon (N=8 requires 4.16yr)."
-    sharpe_noise_floor_annualized: 0.99
+    min_btl_required_years: 3.22
+    headroom_pct: 10.4
+    status: "strict Bailey E=1.0 PASS with 10.4% headroom. N=5 is the maximum at this horizon (N=6 requires 3.58yr > 3.55yr)."
+    sharpe_noise_floor_annualized: 0.96
     interpretation: |
-      Candidates with IS Sharpe > 0.99 annualized at N=7 trials on 4.01
+      Candidates with IS Sharpe > 0.96 annualized (rounded up from
+      computed 0.952 for conservatism) at N=5 trials on 3.55 calendar
       years of clean data are above the Bailey 2013 Theorem 1 noise
       floor and worth evaluating against the remaining criteria
       (BH FDR, Chordia t, WFE, 2026 OOS, era stability). Candidates
       below this threshold are within expected-max-under-null and
       should not be promoted regardless of BH FDR outcome.
-  total_expected_trials: 7
+  total_expected_trials: 5
   amendment_reference:
     - "Amendment 2.7 (Mode A holdout-clean, 2026-01-01 sacred)"
-    - "Amendment 2.9 — MGC two-tier protocol. Tier 1 (this file) = clean MGC discovery with N=7. Tier 2 = GC parent-symbol validation (price-only features) is a separate post-discovery step."
+    - "Amendment 2.9 — MGC two-tier protocol. Tier 1 (this file) = clean MGC discovery with N=5. Tier 2 = GC parent-symbol validation (price-only features) is a separate post-discovery step."
 
 # ---------------------------------------------------------------------------
 # Hypothesis 1 — Crabel opening range G5 at LONDON_METALS
@@ -165,12 +183,12 @@ hypotheses:
       stop_multipliers: [1.0]
     expected_trial_count: 1
     kill_criteria:
-      - "BH FDR q=0.05 fails on the pre-registered 7-hypothesis family (Criterion 3, Harvey-Liu 2015)"
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family (Criterion 3, Harvey-Liu 2015)"
       - "Chordia t-statistic < 3.00 (Criterion 4 with theory, Amendment 2.2)"
       - "Walk-forward efficiency < 0.50 (Criterion 6, LdP 2020)"
       - "2026-01-01 → current OOS ExpR < 0 OR < 0.40 × IS ExpR (Criterion 8, Amendment 2.7)"
       - "Any era with N ≥ 50 and ExpR < -0.05 (Criterion 9)"
-      - "IS Sharpe < 0.99 annualized — within Bailey noise floor at N=7 on 4.01yr"
+      - "IS Sharpe < 0.96 annualized — within Bailey noise floor at N=5 on 3.55yr"
 
   # -------------------------------------------------------------------------
   # Hypothesis 2 — Crabel opening range G6 at COMEX_SETTLE
@@ -215,7 +233,7 @@ hypotheses:
       creates directional imbalance that a breakout entry captures. G6
       selects for sessions where the imbalance exceeds routine settlement
       activity — genuine directional consensus from institutional
-      participants. RR=2.0 per Crabel's canonical continuation target.
+      participants. RR=2.0 per the dominant intraday breakout practitioner convention.
     filter:
       type: ORB_G6
       column: orb_size_points
@@ -228,12 +246,12 @@ hypotheses:
       stop_multipliers: [1.0]
     expected_trial_count: 1
     kill_criteria:
-      - "BH FDR q=0.05 fails on the pre-registered 7-hypothesis family"
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
       - "Chordia t-statistic < 3.00"
       - "Walk-forward efficiency < 0.50"
       - "2026 OOS ExpR < 0 OR < 0.40 × IS ExpR"
       - "Any era with N ≥ 50 and ExpR < -0.05"
-      - "IS Sharpe < 0.99 annualized — within Bailey noise floor at N=7 on 4.01yr"
+      - "IS Sharpe < 0.96 annualized — within Bailey noise floor at N=5 on 3.55yr"
 
   # -------------------------------------------------------------------------
   # Hypothesis 3 — Macro-announcement opening range G5 at US_DATA_830
@@ -282,7 +300,7 @@ hypotheses:
       gold specifically. Breakouts continue as the market completes
       gradual information incorporation. Gold's macro sensitivity makes
       this session theoretically STRONGER for gold than for equity
-      indices. RR=2.0 per Crabel's canonical continuation target.
+      indices. RR=2.0 per the dominant intraday breakout practitioner convention.
     filter:
       type: ORB_G5
       column: orb_size_points
@@ -295,12 +313,12 @@ hypotheses:
       stop_multipliers: [1.0]
     expected_trial_count: 1
     kill_criteria:
-      - "BH FDR q=0.05 fails on the pre-registered 7-hypothesis family"
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
       - "Chordia t-statistic < 3.00"
       - "Walk-forward efficiency < 0.50"
       - "2026 OOS ExpR < 0 OR < 0.40 × IS ExpR"
       - "Any era with N ≥ 50 and ExpR < -0.05"
-      - "IS Sharpe < 0.99 annualized — within Bailey noise floor at N=7 on 4.01yr"
+      - "IS Sharpe < 0.96 annualized — within Bailey noise floor at N=5 on 3.55yr"
 
   # -------------------------------------------------------------------------
   # Hypothesis 4 — Volatility regime ATR_P70 at NYSE_OPEN
@@ -357,100 +375,22 @@ hypotheses:
       stop_multipliers: [1.0]
     expected_trial_count: 1
     kill_criteria:
-      - "BH FDR q=0.05 fails on the pre-registered 7-hypothesis family"
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
       - "Chordia t-statistic < 3.00"
       - "Walk-forward efficiency < 0.50"
       - "2026 OOS ExpR < 0 OR < 0.40 × IS ExpR"
       - "Any era with N ≥ 50 and ExpR < -0.05"
-      - "IS Sharpe < 0.99 annualized — within Bailey noise floor at N=7 on 4.01yr"
+      - "IS Sharpe < 0.96 annualized — within Bailey noise floor at N=5 on 3.55yr"
 
   # -------------------------------------------------------------------------
-  # Hypothesis 5 — Crabel opening range G6 at LONDON_METALS
-  # -------------------------------------------------------------------------
+  # Hypothesis 5 — Crabel opening range G5 at NYSE_OPEN
   #
-  # Same Lucey-Zhao/Baur-Lucey London gold pricing theory as H1.
-  # G6 is one threshold above G5 — tests the monotonic prediction that
-  # stronger initial commitment (larger ORB) produces stronger continuation.
-  # If both G5 and G6 survive, the monotonicity confirms the Crabel thesis.
-  # If only one survives, the optimal threshold for MGC at LONDON_METALS
-  # is identified.
-
-  - id: 5
-    name: "Crabel opening range G6 at LONDON_METALS"
-    theory_citation: "Crabel (1990) ch. 3; Lucey & Zhao (2008); Baur & Lucey (2010)"
-    economic_basis: |
-      G6 threshold variant of hypothesis 1. Tests whether the Crabel
-      commitment effect at London gold open strengthens monotonically
-      with range size. G6 selects for sessions where the London-session
-      opening range represents a LARGER committed positioning imbalance.
-      Under the monotonic prediction, per-trade ExpR should increase
-      (at the cost of fewer qualifying sessions). If G5 passes and G6
-      fails, the commitment threshold for MGC at LONDON_METALS is
-      below G6. If both pass, gold's London-centered pricing mechanism
-      generates strong continuation at both thresholds.
-    filter:
-      type: ORB_G6
-      column: orb_size_points
-    scope:
-      instruments: [MGC]
-      sessions: [LONDON_METALS]
-      rr_targets: [2.0]
-      entry_models: [E2]
-      confirm_bars: [1]
-      stop_multipliers: [1.0]
-    expected_trial_count: 1
-    kill_criteria:
-      - "BH FDR q=0.05 fails on the pre-registered 7-hypothesis family"
-      - "Chordia t-statistic < 3.00"
-      - "Walk-forward efficiency < 0.50"
-      - "2026 OOS ExpR < 0 OR < 0.40 × IS ExpR"
-      - "Any era with N ≥ 50 and ExpR < -0.05"
-      - "IS Sharpe < 0.99 annualized — within Bailey noise floor at N=7 on 4.01yr"
-
-  # -------------------------------------------------------------------------
-  # Hypothesis 6 — Crabel opening range G5 at COMEX_SETTLE
-  # -------------------------------------------------------------------------
-  #
-  # Same O'Hara settlement microstructure theory as H2.
-  # G5 is one threshold below G6 — tests whether the settlement
-  # flow concentration effect extends to a broader set of sessions.
-  # If G5 and G6 both survive, the effect is robust to threshold choice.
-  # If only G6 survives, COMEX settlement needs a higher bar to filter
-  # noise from routine settlement activity.
-
-  - id: 6
-    name: "Crabel opening range G5 at COMEX_SETTLE"
-    theory_citation: "Crabel (1990) ch. 3; O'Hara (1995) Market Microstructure Theory"
-    economic_basis: |
-      G5 threshold variant of hypothesis 2. Tests whether the O'Hara
-      settlement flow concentration effect at COMEX extends to a broader
-      qualifying threshold. G5 captures more sessions than G6, including
-      moderate-imbalance settlement days. If the effect is genuinely
-      driven by institutional settlement flow concentration (not just
-      high-volatility artifact), G5 should still produce positive
-      continuation — the mandatory flow creates directional imbalance
-      at any meaningful range size. RR=2.0 per Crabel's canonical target.
-    filter:
-      type: ORB_G5
-      column: orb_size_points
-    scope:
-      instruments: [MGC]
-      sessions: [COMEX_SETTLE]
-      rr_targets: [2.0]
-      entry_models: [E2]
-      confirm_bars: [1]
-      stop_multipliers: [1.0]
-    expected_trial_count: 1
-    kill_criteria:
-      - "BH FDR q=0.05 fails on the pre-registered 7-hypothesis family"
-      - "Chordia t-statistic < 3.00"
-      - "Walk-forward efficiency < 0.50"
-      - "2026 OOS ExpR < 0 OR < 0.40 × IS ExpR"
-      - "Any era with N ≥ 50 and ExpR < -0.05"
-      - "IS Sharpe < 0.99 annualized — within Bailey noise floor at N=7 on 4.01yr"
-
-  # -------------------------------------------------------------------------
-  # Hypothesis 7 — Crabel opening range G5 at NYSE_OPEN
+  # NOTE: Former hypotheses 5 (G6 LONDON_METALS) and 6 (G5 COMEX_SETTLE)
+  # were DROPPED during the 2026-04-09 high-effort audit to reduce N from
+  # 7 to 5, required by the calendar-year MinBTL correction (3.55yr < 3.89yr
+  # at N=7). Both were threshold variants of H1 and H2 respectively — same
+  # mechanism, different G-threshold. Dropping maximizes distinct theoretical
+  # predictions per trial. See docs/plans/2026-04-09-hypothesis-audit-plan.md.
   # -------------------------------------------------------------------------
   #
   # Theoretical basis:
@@ -472,7 +412,7 @@ hypotheses:
   #   critical test that distinguishes "gold always has NYSE_OPEN edge"
   #   from "gold has NYSE_OPEN edge only in high-vol regimes."
 
-  - id: 7
+  - id: 5
     name: "Crabel opening range G5 at NYSE_OPEN"
     theory_citation: "Crabel (1990) ch. 3; Capie, Mills, Wood (2005) JIMFIM"
     economic_basis: |
@@ -499,18 +439,18 @@ hypotheses:
       stop_multipliers: [1.0]
     expected_trial_count: 1
     kill_criteria:
-      - "BH FDR q=0.05 fails on the pre-registered 7-hypothesis family"
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
       - "Chordia t-statistic < 3.00"
       - "Walk-forward efficiency < 0.50"
       - "2026 OOS ExpR < 0 OR < 0.40 × IS ExpR"
       - "Any era with N ≥ 50 and ExpR < -0.05"
-      - "IS Sharpe < 0.99 annualized — within Bailey noise floor at N=7 on 4.01yr"
+      - "IS Sharpe < 0.96 annualized — within Bailey noise floor at N=5 on 3.55yr"
 
 # ---------------------------------------------------------------------------
 # Budget sanity check
 # ---------------------------------------------------------------------------
 #
-# Trial count: 7 hypotheses × 1 trial each = 7 trials total.
+# Trial count: 5 hypotheses × 1 trial each = 5 trials total.
 #
 # Per-hypothesis trial count:
 #   1 filter_type × 1 session × 1 entry_model (E2)
@@ -519,21 +459,23 @@ hypotheses:
 #
 # MinBTL bound (Bailey et al 2013 Theorem 1):
 #   MinBTL = 2·Ln[N] / E[max_N]²
-#   With N=7 and E[max_N]=1.0 (Bailey default, most conservative):
-#     MinBTL = 2·Ln[7] / 1.0² = 2 · 1.9459 = 3.8918 years
-#   Data horizon: 4.01 years (MGC 2022-06-13 → 2025-12-31, 1010 days)
-#   3.8918 < 4.01 → PASS at strict E=1.0 with 3.0% headroom.
+#   With N=5 and E[max_N]=1.0 (Bailey default, most conservative):
+#     MinBTL = 2·Ln[5] / 1.0² = 2 · 1.6094 = 3.2189 years
+#   Data horizon: 3.55 calendar years (MGC 2022-06-13 to 2025-12-31,
+#     1,298 calendar days ÷ 365.25). Year metric = calendar years,
+#     matching pipeline Sharpe annualization convention.
+#   3.2189 < 3.55 → PASS at strict E=1.0 with 10.4% headroom.
 #
-#   N=8 would require MinBTL = 2·Ln[8] / 1.0² = 4.1589yr > 4.01yr → FAIL.
-#   N=7 is the maximum at strict Bailey E=1.0.
+#   N=6 would require MinBTL = 2·Ln[6] / 1.0² = 3.5835yr > 3.55yr → FAIL.
+#   N=5 is the maximum at strict Bailey E=1.0 on 3.55 calendar years.
 #
-#   Noise floor Sharpe: E_min = √(2·Ln[7] / 4.01) = √(3.8918/4.01)
-#     = √0.9705 = 0.985 annualized.
-#   Candidates with IS Sharpe < 0.99 (rounded up for conservatism) are
-#   within the Bailey noise floor at N=7 and should not be promoted.
+#   Noise floor Sharpe: E_min = √(2·Ln[5] / 3.55) = √(3.2189/3.55)
+#     = √0.9068 = 0.952 annualized.
+#   Candidates with IS Sharpe < 0.96 (rounded up for conservatism) are
+#   within the Bailey noise floor at N=5 and should not be promoted.
 #
 # Locked criterion 2 bound: N ≤ 300 (clean) per pre_registered_criteria v2.8.
-# 7 / 300 = 2.3% of the locked ceiling. The binding constraint is Bailey,
+# 5 / 300 = 1.7% of the locked ceiling. The binding constraint is Bailey,
 # not the operational ceiling.
 #
 # Chordia t-threshold (Amendment 2.2): every hypothesis has a
@@ -542,33 +484,34 @@ hypotheses:
 #
 # No proxy data used. data_source_mode is NOT declared (defaults to clean).
 #
-# Amendment 2.9 two-tier note: if any of these 7 hypotheses PASS Tier 1
+# Amendment 2.9 two-tier note: if any of these 5 hypotheses PASS Tier 1
 # discovery, Tier 2 validation against GC parent-symbol data (price-only
 # features, 2010-2023 coverage) is available as a SEPARATE post-discovery
 # step per Amendment 2.9. Tier 2 is NOT pre-registered in this file and
 # does NOT count toward N.
 
-total_hypothesis_count: 7
-total_expected_trials: 7
+total_hypothesis_count: 5
+total_expected_trials: 5
 
 budget_check:
   mode: "clean"
   max_allowed_clean: 300
   max_allowed_proxy: 2000
-  locked_criterion_2_headroom_pct: 97.7
-  strict_bailey_e_1_0_max_n: 7
-  strict_bailey_e_1_0_status: "PASS with 3.0% headroom"
-  min_btl_required_years: 3.8918
-  data_horizon_years_available: 4.01
-  status: "strict Bailey E=1.0 PASS with 3.0% horizon headroom. N=8 requires 4.16yr — FAIL."
-  sharpe_noise_floor: 0.985
+  locked_criterion_2_headroom_pct: 98.3
+  strict_bailey_e_1_0_max_n: 5
+  strict_bailey_e_1_0_status: "PASS with 10.4% headroom"
+  min_btl_required_years: 3.2189
+  data_horizon_years_available: 3.55
+  data_horizon_metric: "calendar years (1,298 days / 365.25)"
+  status: "strict Bailey E=1.0 PASS with 10.4% horizon headroom. N=6 requires 3.58yr > 3.55yr — FAIL."
+  sharpe_noise_floor: 0.952
 
 # Pre-registration checklist (Criterion 1 compliance)
 #
 # [x] Every hypothesis has a theory_citation (external literature, not repo history)
 # [x] Every hypothesis has an economic_basis explaining WHY the edge should exist
-# [x] Sum of expected_trial_count (7) equals total_expected_trials (7)
-# [x] N=7 passes strict Bailey E=1.0 at actual 4.01yr horizon (3.0% headroom)
+# [x] Sum of expected_trial_count (5) equals total_expected_trials (5)
+# [x] N=5 passes strict Bailey E=1.0 at actual 3.55yr calendar horizon (10.4% headroom)
 # [x] Kill criteria are pre-committed and concrete (not post-hoc)
 # [x] All filter types are pure price-and-range based (no volume, Criterion 10 trivially satisfied)
 # [x] Holdout date = 2026-01-01 per Amendment 2.7 Mode A
@@ -577,8 +520,9 @@ budget_check:
 # [x] Single-RR-per-bundle and single-entry-model-per-bundle eliminate within-hypothesis optimization
 # [x] Amendment 2.9 Tier 1/Tier 2 separation documented (Tier 2 is NOT in this file)
 # [x] Session exclusions documented with data-backed reasons (SINGAPORE, CME_REOPEN, TOKYO all excluded)
-# [x] 3 new hypotheses (H5-H7) extend existing families with monotonicity tests and Crabel-at-NYSE_OPEN
+# [x] H5 (G5 NYSE_OPEN) retained; H5-old (G6 LONDON_METALS) and H6-old (G5 COMEX_SETTLE) dropped as threshold variants
 # [x] Backfill data verified: real MGC contracts, price plausible, 386 trading days, zero gaps
+# [x] Year metric = calendar years, verified against pipeline Sharpe annualization (2026-04-09 audit)
 
 # ---------------------------------------------------------------------------
 # Related files
