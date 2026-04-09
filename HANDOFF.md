@@ -6,6 +6,181 @@
 
 ---
 
+## Update (2026-04-10 early — Institutional Monitoring + Metadata Hygiene)
+
+### Headline
+
+Focused institutional cleanup only. No discovery rerun. Goal was to keep the
+research/deployment/monitoring layers canonical, remove stale metadata smell,
+and ground the monitoring design in the actual literature PDFs under
+`resources/`.
+
+### What was verified
+
+- `validated_setups` remains the structural source of truth: `6` active rows.
+- `topstep_50k_mnq_auto` remains the deployed-live source of truth: `5` MNQ
+  lanes only.
+- `pipeline/check_drift.py` passes clean on the current repo state:
+  `88 passed, 0 blocking, 7 advisory`.
+- Current active validated count rechecked after cleanup: `6`.
+
+### Literature grounding actually read from source PDFs
+
+Read the actual PDFs from `resources/` via direct text extraction from the PDF
+files themselves, not just prior markdown notes:
+
+- `resources/real_time_strategy_monitoring_cusum.pdf`
+- `resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf`
+
+Operational takeaway used here:
+
+- Criterion 12 style monitoring should be based on the live monitored R stream.
+- Shiryaev-Roberts is appropriate for repeated surveillance and preferable to
+  naive one-shot monitoring/CUSUM framing in this setting.
+- 2026 holdout must not be folded back into selection to rescue a failed
+  strategy. Live/hot monitoring is separate from structural validation.
+
+### Monitoring design correction
+
+Problem:
+
+- `scripts/tools/forward_monitor.py` already had usable current-state evidence
+  for all 5 deployed lanes.
+- `trading_app/sprt_monitor.py` was effectively blind on 4/5 lanes because it
+  only read `paper_trades`.
+
+Fix:
+
+- `trading_app/sprt_monitor.py` now uses explicit source priority:
+  1. `paper_trades`
+  2. canonical forward outcomes from `orb_outcomes` via
+     `strategy_fitness._load_strategy_outcomes`
+- The monitor prints and persists the source label:
+  `paper_trades` or `canonical_forward`.
+- This preserves the institutional rule that live/paper execution history is
+  preferred, while keeping the monitor operational when paper coverage is
+  incomplete.
+
+Verification:
+
+- `python -m trading_app.sprt_monitor` now runs successfully.
+- Current monitor output:
+  - `NYSE_CLOSE` `SIGNAL` from `canonical_forward`
+  - `EUROPE_FLOW`, `COMEX_SETTLE`, `NYSE_OPEN`, `TOKYO_OPEN` all `CONTINUE`
+    with source labeled explicitly
+
+### Validator / metadata hygiene correction
+
+Problem:
+
+- `experimental_strategies` had `7` rows with
+  `validation_status='REJECTED'` but `rejection_reason IS NULL`.
+- Those rows still had text in `validation_notes`, so downstream queries could
+  disagree depending on which field they read.
+
+Fix:
+
+- `trading_app/strategy_validator.py` now backfills `rejection_reason` from
+  rejection notes when a row is rejected and the explicit reason was not
+  populated in that code path.
+- Added regression coverage so rejected rows do not silently leave
+  `rejection_reason` empty again.
+- One-time DB cleanup applied to existing rows:
+  `before=7`, `after=0`.
+
+Examples of backfilled historical reasons now queryable directly:
+
+- `MGC_US_DATA_1000_E2_RR1.0_CB1_ORB_G5`:
+  `Phase 4b: Too few positive windows: 50% < 60%`
+- `MGC_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G5`:
+  `Phase 4b: Too few positive windows: 58% < 60%`
+- `MNQ_CME_REOPEN_E2_RR1.0_CB1_ORB_G5`:
+  `Phase 4b: Too few positive windows: 50% < 60%`
+
+### Tests run
+
+- `python3 -m py_compile trading_app/sprt_monitor.py tests/test_trading_app/test_sprt_monitor.py`
+- `uv run --frozen --extra dev pytest tests/test_trading_app/test_sprt_monitor.py tests/test_trading_app/test_strategy_validator.py -q`
+  - result: `126 passed`
+
+### Files touched in this cleanup
+
+- `trading_app/sprt_monitor.py`
+- `trading_app/strategy_validator.py`
+- `tests/test_trading_app/test_sprt_monitor.py`
+- `tests/test_trading_app/test_strategy_validator.py`
+
+### Important interpretation
+
+- This session did **not** weaken validation to bless hot recent data.
+- It cleaned the monitoring/control layer so strategy-level validation and
+  live-regime monitoring stay separate and queryable.
+- If later work introduces true Shiryaev-Roberts monitoring, use the actual PDF
+  above as the starting point, not stale summaries.
+
+## Update (2026-04-10 later — Criterion 12 SR Monitor Implemented)
+
+### Headline
+
+Implemented a real score-function Shiryaev-Roberts monitor grounded in the
+actual Pepelyshev-Polunchenko PDF, without pretending that the daily-reset
+in-memory `PerformanceMonitor` was already Criterion 12 compliant.
+
+### Why this was needed
+
+- `trading_app/live/performance_monitor.py` still uses an in-memory daily-reset
+  CUSUM helper. That is useful operationally, but it is not an honest
+  60-trading-day SR surveillance process.
+- Criterion 12 in `docs/institutional/pre_registered_criteria.md` explicitly
+  requires Shiryaev-Roberts monitoring on the live R stream.
+
+### What was added
+
+- `trading_app/live/sr_monitor.py`
+  - score-function Shiryaev-Roberts recursion (`R_n = (1 + R_{n-1}) e^{S_n}`)
+  - Eq. 17/18 coefficient implementation
+  - Monte Carlo threshold calibration to target ARL ≈ 60 trading days
+- `trading_app/sr_monitor.py`
+  - deployed-lane runner
+  - baseline source priority:
+    1. first 50 `paper_trades` if available
+    2. validated backtest baseline otherwise
+  - monitored stream priority:
+    1. `paper_trades`
+    2. canonical forward outcomes
+  - source labels written explicitly so shadow fallback is never disguised as
+    true live-paper monitoring
+- `tests/test_trading_app/test_sr_monitor.py`
+  - SR alarm behavior
+  - threshold calibration sanity
+  - baseline/stream source behavior
+
+### Verification
+
+- `python3 -m py_compile trading_app/live/sr_monitor.py trading_app/sr_monitor.py tests/test_trading_app/test_sr_monitor.py`
+- `uv run --frozen --extra dev pytest tests/test_trading_app/test_sr_monitor.py tests/test_trading_app/test_cusum_monitor.py tests/test_trading_app/test_performance_monitor.py -q`
+  - result: `19 passed`
+- `python -m trading_app.sr_monitor`
+  - threshold calibrated to `31.96` for target ARL≈60 on the standardized
+    pre-change stream
+  - current deployed-lane output:
+    - all 5 lanes currently `CONTINUE`
+    - `COMEX_SETTLE` is the only lane with enough paper trades to use a true
+      first-50 live baseline right now
+    - the other 4 lanes still use validated backtest baseline +
+      canonical-forward stream fallback
+
+### Important limitation
+
+Criterion 12 is now implemented as a real SR monitor, but current live-paper
+coverage is still thin. So:
+
+- the implementation is institutional-grade
+- the current data coverage is not yet full institutional-grade for every lane
+
+That distinction matters. Do not claim all deployed lanes have a mature
+50-trade live-paper baseline yet.
+
 ## Update (2026-04-09 late — Portfolio Alignment Sprint)
 
 ### Headline

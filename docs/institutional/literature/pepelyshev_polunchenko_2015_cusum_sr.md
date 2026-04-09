@@ -127,7 +127,11 @@ SR on portfolio equity curve, same design. If fires: pause all copies pending in
 
 ### Integration point
 
-A new script `trading_app/live/cusum_monitor.py` implementing the SR procedure, reading recent trades from `paper_trades` or live broker, and writing alerts. Runs as a daily scheduled job.
+Implemented 2026-04-10 as:
+- `trading_app/live/sr_monitor.py` — score-function SR recursion + ARL calibration
+- `trading_app/sr_monitor.py` — deployed-lane runner using `paper_trades` first and canonical-forward fallback second
+
+The legacy `trading_app/live/cusum_monitor.py` remains as an intraday heuristic helper and should not be confused with the binding Criterion 12 monitor.
 
 ---
 

@@ -68,7 +68,7 @@ Amendment 2.7 on 2026-04-08 per explicit user correction.
 | Harvey-Liu 2015 | BHY profitability hurdle: ~7.4% annual at 20yr/300 tests | Marginal |
 | LdP-Bailey 2018 (False Strategy) | K=1000 trials under zero edge → E[max SR] = 3.26 | Our max SR << 3.26 |
 | LdP 2020 (ML for AM) | "Backtests are not a research tool. Theories are." | **We were backtest-driven, not theory-driven** |
-| Pepelyshev-Polunchenko 2015 | SR procedure > CUSUM for multi-cyclic monitoring | Not yet implemented |
+| Pepelyshev-Polunchenko 2015 | SR procedure > CUSUM for multi-cyclic monitoring | Implemented in `trading_app/live/sr_monitor.py` + `trading_app/sr_monitor.py` (2026-04-10); live-paper baseline still falls back to validated backtest stats when <50 paper trades exist |
 
 **Synthesized implication:** The deployed 5 lanes may contain real edge but the discovery methodology was statistically too weak to prove it. The fix is pre-registered hypothesis discovery with a far smaller trial budget (~100-300, not 35,000), applying DSR correctly at the true N, using CPCV for OOS extraction from limited history, and CUSUM/SR monitoring in live deployment.
 
