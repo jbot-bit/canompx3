@@ -1178,6 +1178,7 @@ def run_validation(
     enable_regime_waivers: bool = True,
     workers: int | None = None,
     fdr_k_overrides: dict[str, int] | None = None,
+    testing_mode: str = "family",
 ) -> tuple[int, int]:
     """
     Validate all experimental_strategies and promote passing ones.
@@ -1188,6 +1189,11 @@ def run_validation(
             for null seed testing where the DB only contains one instrument
             but the real pipeline has multiple instruments contributing to K.
             Format: {"CME_PRECLOSE": 3254, "NYSE_OPEN": 5184, ...}
+        testing_mode: "family" (Pathway A, BH FDR) or "individual" (Pathway B,
+            raw p < 0.05 + positive sharpe_ann). Per Amendment 3.0. When
+            "individual", the BH FDR gate is replaced with a raw significance
+            + direction gate. Criteria 6 (WFE), 8 (OOS), 9 (era stability)
+            are non-waivable under individual mode.
 
     Returns (passed_count, rejected_count).
     """
@@ -1761,7 +1767,69 @@ def run_validation(
             #   2026-03-24: scoped to active instruments (killed dead M2K/SIL/etc.)
             #   2026-03-24: stratified by session (global K=78K killed CME_PRECLOSE
             #     and TOKYO_OPEN with 0 survivors; stratified K restores valid strata)
-            if passed_strategy_ids:
+            if passed_strategy_ids and testing_mode == "individual":
+                # ── Pathway B: Amendment 3.0 individual hypothesis testing ──
+                # Raw p < 0.05 + positive sharpe_ann. No BH FDR.
+                # Downstream gates (WF, OOS, era stability) are non-waivable.
+                logger.info("Pathway B (individual): raw p < 0.05 + positive sharpe_ann gate...")
+                n_pathway_b_pass = 0
+                n_pathway_b_rejected = 0
+                pathway_b_rejected_ids = []
+                for sid in passed_strategy_ids:
+                    row = con.execute(
+                        "SELECT p_value, sharpe_ann FROM experimental_strategies WHERE strategy_id = ?",
+                        [sid],
+                    ).fetchone()
+                    raw_p = row[0] if row and row[0] is not None else 1.0
+                    sharpe = row[1] if row and row[1] is not None else 0.0
+                    if raw_p < 0.05 and sharpe > 0:
+                        n_pathway_b_pass += 1
+                        # Update validated_setups with raw p (no FDR adjustment)
+                        con.execute(
+                            """UPDATE validated_setups
+                               SET fdr_significant = TRUE,
+                                   fdr_adjusted_p = ?,
+                                   p_value = ?,
+                                   discovery_date = CASE
+                                       WHEN discovery_date IS NULL THEN ?
+                                       ELSE discovery_date
+                                   END
+                               WHERE strategy_id = ?""",
+                            [raw_p, raw_p, date.today(), sid],
+                        )
+                    else:
+                        pathway_b_rejected_ids.append(sid)
+                        n_pathway_b_rejected += 1
+                        reason = (
+                            f"criterion_3_pathway_b: raw p={raw_p:.4f} "
+                            f"{'>=0.05' if raw_p >= 0.05 else ''}"
+                            f"{'sharpe_ann<=0' if sharpe <= 0 else ''}"
+                        )
+                        con.execute(
+                            "DELETE FROM validated_setups WHERE strategy_id = ?", [sid]
+                        )
+                        con.execute(
+                            """UPDATE experimental_strategies
+                               SET validation_status = 'REJECTED',
+                                   validation_notes = ?,
+                                   rejection_reason = ?
+                               WHERE strategy_id = ?""",
+                            [reason, reason, sid],
+                        )
+                if pathway_b_rejected_ids:
+                    passed -= n_pathway_b_rejected
+                    rejected += n_pathway_b_rejected
+                    passed_strategy_ids = [
+                        s for s in passed_strategy_ids if s not in set(pathway_b_rejected_ids)
+                    ]
+                n_fdr_rejected = n_pathway_b_rejected
+                logger.info(
+                    f"  Pathway B gate: {n_pathway_b_pass} survived, "
+                    f"{n_pathway_b_rejected} REJECTED "
+                    f"(of {n_pathway_b_pass + n_pathway_b_rejected} passed prior phases)"
+                )
+
+            elif passed_strategy_ids:
                 logger.info("Computing FDR correction (Benjamini-Hochberg, stratified K by session)...")
                 active_instruments = ACTIVE_ORB_INSTRUMENTS
                 placeholders = ", ".join(["?"] * len(active_instruments))
@@ -2167,6 +2235,15 @@ def main():
         'Format: {"CME_PRECLOSE": 3254, ...}. Use for null seed testing '
         "where the DB has fewer strategies than the real pipeline.",
     )
+    parser.add_argument(
+        "--testing-mode",
+        type=str,
+        choices=["family", "individual"],
+        default="family",
+        help="Amendment 3.0: 'family' = Pathway A (BH FDR), "
+        "'individual' = Pathway B (raw p < 0.05 + positive sharpe_ann). "
+        "Default: family.",
+    )
     args = parser.parse_args()
 
     exclude = set(args.exclude_years) if args.exclude_years else None
@@ -2211,6 +2288,7 @@ def main():
         enable_regime_waivers=not args.no_regime_waivers,
         workers=args.workers,
         fdr_k_overrides=fdr_k_overrides,
+        testing_mode=args.testing_mode,
     )
 
 

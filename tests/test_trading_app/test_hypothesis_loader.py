@@ -709,3 +709,87 @@ class TestScopePredicate:
     def test_empty_hypotheses_list_raises(self):
         with pytest.raises(HypothesisLoaderError, match="no hypotheses"):
             extract_scope_predicate({"hypotheses": []}, instrument="MNQ")
+
+
+class TestTestingMode:
+    """Amendment 3.0: testing_mode field exposed at top level."""
+
+    def test_individual_mode_surfaced(self, tmp_path):
+        """testing_mode: individual appears in the returned dict at top level."""
+        p = tmp_path / "hyp.yaml"
+        body = {
+            "metadata": {
+                "name": "test_individual",
+                "date_locked": "2026-04-09",
+                "holdout_date": "2026-01-01",
+                "total_expected_trials": 1,
+                "testing_mode": "individual",
+            },
+            "hypotheses": [
+                {
+                    "id": 1,
+                    "name": "single_test",
+                    "theory_citation": "Crabel 1990",
+                    "filter": {"type": "ORB_G5", "column": "orb_size"},
+                    "scope": {"sessions": ["NYSE_OPEN"]},
+                }
+            ],
+        }
+        p.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+        meta = load_hypothesis_metadata(p)
+        assert meta["testing_mode"] == "individual"
+
+    def test_family_mode_default(self, tmp_path):
+        """When testing_mode absent, defaults to 'family'."""
+        p = tmp_path / "hyp.yaml"
+        _write_minimal_hypothesis(p, total_trials=1)
+        meta = load_hypothesis_metadata(p)
+        assert meta["testing_mode"] == "family"
+
+    def test_explicit_family_mode(self, tmp_path):
+        """testing_mode: family explicitly set."""
+        p = tmp_path / "hyp.yaml"
+        body = {
+            "metadata": {
+                "name": "test_family",
+                "date_locked": "2026-04-09",
+                "holdout_date": "2026-01-01",
+                "total_expected_trials": 5,
+                "testing_mode": "family",
+            },
+            "hypotheses": [
+                {
+                    "id": 1,
+                    "name": "h1",
+                    "filter": {"type": "ORB_G5", "column": "orb_size"},
+                    "scope": {"sessions": ["NYSE_OPEN"]},
+                }
+            ],
+        }
+        p.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+        meta = load_hypothesis_metadata(p)
+        assert meta["testing_mode"] == "family"
+
+    def test_individual_requires_theory(self, tmp_path):
+        """testing_mode: individual without theory_citation raises."""
+        p = tmp_path / "hyp.yaml"
+        body = {
+            "metadata": {
+                "name": "test_no_theory",
+                "date_locked": "2026-04-09",
+                "holdout_date": "2026-01-01",
+                "total_expected_trials": 1,
+                "testing_mode": "individual",
+            },
+            "hypotheses": [
+                {
+                    "id": 1,
+                    "name": "no_theory_h",
+                    "filter": {"type": "ORB_G5", "column": "orb_size"},
+                    "scope": {"sessions": ["NYSE_OPEN"]},
+                }
+            ],
+        }
+        p.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+        with pytest.raises(HypothesisLoaderError, match="theory_citation"):
+            load_hypothesis_metadata(p)

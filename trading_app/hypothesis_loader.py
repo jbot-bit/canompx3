@@ -260,6 +260,26 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
             has_theory = True
             break
 
+    # Amendment 3.0: testing_mode — "individual" (Pathway B, raw p < 0.05)
+    # or "family" (Pathway A, BH FDR). Default = "family" for backward compat.
+    testing_mode = metadata.get("testing_mode", "family")
+    if testing_mode not in ("family", "individual"):
+        raise HypothesisLoaderError(
+            f"Hypothesis file {path} metadata.testing_mode must be 'family' or 'individual', "
+            f"got {testing_mode!r}."
+        )
+
+    # Amendment 3.0 condition 1: individual mode requires theory_citation on
+    # EVERY hypothesis — no theory, no Pathway B.
+    if testing_mode == "individual":
+        for i, h in enumerate(hypotheses):
+            if not (isinstance(h, dict) and h.get("theory_citation")):
+                raise HypothesisLoaderError(
+                    f"Hypothesis file {path} uses testing_mode='individual' (Pathway B) but "
+                    f"hypothesis {i + 1} is missing theory_citation. "
+                    f"Amendment 3.0 requires theory_citation on EVERY hypothesis for Pathway B."
+                )
+
     return {
         "sha": compute_file_sha(path),
         "path": str(path),
@@ -267,6 +287,7 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
         "date_locked": metadata["date_locked"],
         "holdout_date": holdout_parsed,
         "total_expected_trials": declared_n,
+        "testing_mode": testing_mode,
         "has_theory": has_theory,
         "hypotheses": hypotheses,
         "metadata": metadata,
