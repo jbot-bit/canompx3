@@ -4206,6 +4206,81 @@ def check_phase_4_sha_integrity(con=None) -> list[str]:
     return violations
 
 
+def check_prop_profiles_validated_alignment(con=None) -> list[str]:
+    """Every DailyLaneSpec in an ``active=True`` AccountProfile must exist in
+    ``validated_setups`` with ``status='active'``.
+
+    Rationale: the 2026-04-09 alignment audit found that all 5 deployed lanes
+    in ``topstep_50k_mnq_auto`` were ghosts — strategy_ids not present in the
+    current validated book. The bot was operating with zero current validation
+    backing against real capital. This check prevents the class of drift from
+    recurring.
+
+    Scope: only profiles with ``active=True`` are audited. Inactive profiles
+    are exempt because they don't affect runtime — they're held as reference
+    templates. A lane in an inactive profile is re-validated at the point of
+    activation (the profile flip to ``active=True`` will re-run the check).
+
+    Fail mode: returns a violation per mismatched lane, naming both the
+    profile and the offending strategy_id so the operator knows where to look.
+    If DB is unavailable, returns a SKIPPED-style violation so the
+    ``requires_db=True`` runner handles it correctly.
+
+    @canonical-source: trading_app/prop_profiles.py
+    @canonical-source: trading_app/validated_setups schema
+    """
+    violations: list[str] = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return [
+                    "  PROP PROFILES ALIGNMENT SKIPPED: gold.db not found — "
+                    "cannot verify deployed lane validation backing"
+                ]
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        for profile_id, profile in sorted(ACCOUNT_PROFILES.items()):
+            if not profile.active:
+                continue
+            for lane in profile.daily_lanes:
+                row = con.execute(
+                    "SELECT status FROM validated_setups WHERE strategy_id = ?",
+                    [lane.strategy_id],
+                ).fetchone()
+                if row is None:
+                    violations.append(
+                        f"  prop_profiles.{profile_id}: lane "
+                        f"{lane.strategy_id!r} is NOT in validated_setups. "
+                        f"Either the strategy was discovered, validated, "
+                        f"and promoted OR the profile references a stale "
+                        f"lane from an older discovery. Run discovery + "
+                        f"validator for the affected strategy or remove the "
+                        f"lane from the profile."
+                    )
+                    continue
+                status = row[0]
+                if status != "active":
+                    violations.append(
+                        f"  prop_profiles.{profile_id}: lane "
+                        f"{lane.strategy_id!r} exists in validated_setups "
+                        f"but status={status!r} (not active). A retired or "
+                        f"suspended strategy cannot back a live lane."
+                    )
+    except Exception as exc:
+        violations.append(f"  PROP PROFILES ALIGNMENT CHECK FAILED: {exc}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 def check_resample_helpers_in_entry_rules() -> list[str]:
     """resample_to_5m and _verify_e3_sub_bar_fill must be defined in trading_app.entry_rules.
 
@@ -4513,6 +4588,12 @@ CHECKS = [
         check_phase_4_sha_integrity,
         False,
         False,
+    ),
+    (
+        "prop_profiles deployed lanes must exist in validated_setups (active=True profiles only)",
+        check_prop_profiles_validated_alignment,
+        False,
+        True,
     ),
 ]  # end CHECKS
 

@@ -1279,3 +1279,130 @@ class TestPhase4ShaIntegrity:
         assert len(violations) == 1  # DISTINCT — one violation for 5 rows
         assert "5 row" in violations[0]
         con.close()
+
+
+class TestPropProfilesValidatedSetupsAlignment:
+    """Drift check #95: every DailyLaneSpec in an ``active=True`` AccountProfile
+    must exist in ``validated_setups`` with ``status='active'``.
+
+    Rationale: the 2026-04-09 alignment audit found that all 5 deployed lanes
+    in ``topstep_50k_mnq_auto`` were GHOSTS — strategy_ids not present in
+    validated_setups or experimental_strategies. The bot was operating with
+    zero current validation backing against real money. This check prevents
+    that class of drift from recurring: if prop_profiles.py references a lane
+    that is not in the current validated book, the check fires before the bot
+    can be launched.
+
+    Inactive profiles (``active=False``) are exempt because they don't affect
+    runtime — they're held as reference templates for future activation. Any
+    lane in an inactive profile is re-validated at the point of activation
+    via this same check (the profile flip to ``active=True`` will re-run the
+    drift check).
+    """
+
+    @staticmethod
+    def _make_validated_setups_db():
+        """In-memory DB with a minimal validated_setups schema containing the
+        two columns the check reads: strategy_id and status."""
+        import duckdb
+
+        con = duckdb.connect(":memory:")
+        con.execute(
+            """
+            CREATE TABLE validated_setups (
+                strategy_id TEXT,
+                status TEXT
+            )
+            """
+        )
+        return con
+
+    def test_all_active_lanes_present_passes(self):
+        """Happy path: every active lane is in validated_setups with status='active'."""
+        from pipeline import check_drift
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        con = self._make_validated_setups_db()
+        # Insert every lane from every active profile with status='active'
+        for profile in ACCOUNT_PROFILES.values():
+            if not profile.active:
+                continue
+            for lane in profile.daily_lanes:
+                con.execute(
+                    "INSERT INTO validated_setups VALUES (?, ?)",
+                    [lane.strategy_id, "active"],
+                )
+        violations = check_drift.check_prop_profiles_validated_alignment(con=con)
+        assert violations == [], f"unexpected violations: {violations}"
+        con.close()
+
+    def test_missing_lane_flagged(self):
+        """A deployed lane absent from validated_setups fires a violation."""
+        from pipeline import check_drift
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        con = self._make_validated_setups_db()
+        # Insert every active lane EXCEPT one chosen victim
+        active_profiles = [p for p in ACCOUNT_PROFILES.values() if p.active]
+        assert active_profiles, "No active profiles — test fixture assumption broken"
+        victim_profile = active_profiles[0]
+        assert victim_profile.daily_lanes, "Active profile has no lanes — test fixture broken"
+        victim_lane = victim_profile.daily_lanes[0]
+        for profile in active_profiles:
+            for lane in profile.daily_lanes:
+                if lane.strategy_id == victim_lane.strategy_id:
+                    continue
+                con.execute(
+                    "INSERT INTO validated_setups VALUES (?, ?)",
+                    [lane.strategy_id, "active"],
+                )
+        violations = check_drift.check_prop_profiles_validated_alignment(con=con)
+        assert len(violations) == 1, f"expected 1 violation, got {len(violations)}: {violations}"
+        assert victim_lane.strategy_id in violations[0]
+        assert victim_profile.profile_id in violations[0]
+        con.close()
+
+    def test_retired_lane_flagged(self):
+        """A deployed lane present in validated_setups but with status='retired'
+        fires a violation — only status='active' counts as backing."""
+        from pipeline import check_drift
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        con = self._make_validated_setups_db()
+        active_profiles = [p for p in ACCOUNT_PROFILES.values() if p.active]
+        assert active_profiles
+        for profile in active_profiles:
+            for i, lane in enumerate(profile.daily_lanes):
+                # First lane gets status='retired', rest get 'active'
+                status = "retired" if i == 0 else "active"
+                con.execute(
+                    "INSERT INTO validated_setups VALUES (?, ?)",
+                    [lane.strategy_id, status],
+                )
+        violations = check_drift.check_prop_profiles_validated_alignment(con=con)
+        assert len(violations) >= 1
+        assert any("retired" in v or "not active" in v for v in violations)
+        con.close()
+
+    def test_inactive_profile_exempt(self):
+        """Inactive profiles are exempt — their lanes may be ghosts without
+        firing a violation."""
+        from pipeline import check_drift
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        con = self._make_validated_setups_db()
+        # Populate only active profile lanes. Inactive profile lanes are
+        # deliberately NOT inserted → they would fire if the check were
+        # scanning them, but should be exempt.
+        for profile in ACCOUNT_PROFILES.values():
+            if not profile.active:
+                continue
+            for lane in profile.daily_lanes:
+                con.execute(
+                    "INSERT INTO validated_setups VALUES (?, ?)",
+                    [lane.strategy_id, "active"],
+                )
+        violations = check_drift.check_prop_profiles_validated_alignment(con=con)
+        # Should pass because only inactive profiles have unbacked lanes
+        assert violations == [], f"inactive profile lanes leaked into check: {violations}"
+        con.close()
