@@ -1,0 +1,195 @@
+# Hypothesis Registry — MES Discovery Redesign (K=5, mechanism-grounded)
+#
+# Locked:        2026-04-09T12:00:00+10:00
+# Author:        Claude Code session (discovery redesign)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  6.66 calendar years (2019-05-06 to 2025-12-31)
+# Year metric:   Calendar years (pipeline Sharpe annualization convention)
+#
+# Bailey: N=5, MinBTL=3.22yr < 6.66yr -> PASS (107% headroom)
+# Noise floor Sharpe: 0.695
+#
+# MES-specific: S&P 500 is THE benchmark equity index — the instrument
+# Crabel's opening-range thesis was originally written about. $5/point,
+# $3.92 friction. Only NYSE_OPEN and US_DATA_1000 have friction < 15%
+# unfiltered. SINGAPORE/TOKYO cost-killed (28-39%). CME_REOPEN TOXIC
+# in winter per TRADING_RULES.
+#
+# Cross-instrument: MNQ/MES ~87% correlated. Results on shared sessions
+# are CONFIRMATION, not independent evidence.
+
+metadata:
+  name: "mes-redesign"
+  purpose: |
+    Mechanism-grounded MES discovery. 5 hypotheses testing Crabel
+    commitment (with monotonic prediction), macro announcement, and
+    cross-border flow on the S&P 500 benchmark micro contract.
+  date_locked: "2026-04-09T12:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.66
+  data_source: "real CME Micro E-mini S&P 500 futures 2019-05-06 onwards"
+  bailey_compliance:
+    trials: 5
+    horizon_years: 6.66
+    horizon_metric: "calendar years"
+    e_max_n: 1.0
+    min_btl_required_years: 3.22
+    headroom_pct: 107
+    status: "strict Bailey E=1.0 PASS"
+    sharpe_noise_floor_annualized: 0.70
+  total_expected_trials: 5
+
+hypotheses:
+  - id: 1
+    name: "Crabel commitment G5 at NYSE_OPEN"
+    theory_citation: "Crabel (1990) ch. 3"
+    economic_basis: |
+      S&P 500 futures are THE benchmark equity index — the instrument
+      Crabel's thesis was written about. NYSE_OPEN concentrates the
+      single largest block of institutional equity flow globally. G5
+      filters for meaningful commitment ($25 per MES contract). Under
+      the commitment hypothesis, breakouts continue because committed
+      capital defends direction.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MES]
+      sessions: [NYSE_OPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 x IS ExpR"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "IS Sharpe < 0.70 annualized"
+
+  - id: 2
+    name: "Crabel commitment G6 at NYSE_OPEN (monotonic prediction)"
+    theory_citation: "Crabel (1990) ch. 3"
+    economic_basis: |
+      Same Crabel mechanism as H1, higher commitment threshold. G6 =
+      $30 committed capital per contract. Tests the monotonic prediction:
+      stronger commitment produces stronger continuation. If G5 passes
+      and G6 fails, the commitment threshold for MES is below G6. If
+      both pass, the thesis is robust across commitment levels.
+    filter:
+      type: ORB_G6
+      column: orb_size_points
+    scope:
+      instruments: [MES]
+      sessions: [NYSE_OPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 x IS ExpR"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "IS Sharpe < 0.70 annualized"
+
+  - id: 3
+    name: "Post-equity macro flow at US_DATA_1000"
+    theory_citation: "Andersen et al (2003) AER; Ederington & Lee (1993) JF"
+    economic_basis: |
+      10:00 AM ET data releases (ISM, Consumer Confidence, JOLTS) arrive
+      into an already-active equity market. S&P 500 as the benchmark
+      reprices immediately. The opening range captures the initial
+      directional consensus on the release. Continuation as the market
+      completes gradual information incorporation.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MES]
+      sessions: [US_DATA_1000]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 x IS ExpR"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "IS Sharpe < 0.70 annualized"
+
+  - id: 4
+    name: "Pre-equity macro announcement at US_DATA_830"
+    theory_citation: "Andersen et al (2003) AER; Ederington & Lee (1993) JF"
+    economic_basis: |
+      08:30 ET macro releases on the benchmark equity index. CPI, NFP,
+      PPI directly move S&P 500 via rate expectations. The opening range
+      captures the initial repricing. Different from US_DATA_1000: this
+      is PRE-equity-open (NYSE not yet active), so the repricing happens
+      in futures only, without cash equity participation.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MES]
+      sessions: [US_DATA_830]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 x IS ExpR"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "IS Sharpe < 0.70 annualized"
+
+  - id: 5
+    name: "Cross-border information spillover at EUROPE_FLOW"
+    theory_citation: "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
+    economic_basis: |
+      European participants trade S&P 500 futures during their session.
+      European macro releases and equity moves (FTSE, DAX) incorporate
+      into US futures prices. Under French-Roll and Hamao-Masulis-Ng,
+      the opening range captures the first tranche of European-to-US
+      price discovery. Included despite MES EUROPE_FLOW having negative
+      unfiltered baseline — the mechanism applies to all equity indices
+      and excluding it would be data-driven contamination.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MES]
+      sessions: [EUROPE_FLOW]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails on the pre-registered 5-hypothesis family"
+      - "Chordia t-statistic < 3.00"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0 OR < 0.40 x IS ExpR"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "IS Sharpe < 0.70 annualized"
+
+total_hypothesis_count: 5
+total_expected_trials: 5
+
+budget_check:
+  mode: "clean"
+  strict_bailey_e_1_0_max_n: 27
+  strict_bailey_e_1_0_status: "PASS with 107% headroom"
+  min_btl_required_years: 3.22
+  data_horizon_years_available: 6.66
+  sharpe_noise_floor: 0.695
