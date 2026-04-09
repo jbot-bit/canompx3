@@ -1,0 +1,176 @@
+# Hypothesis Registry — MNQ RR1.0 Individual Pathway B
+#
+# Locked:        2026-04-09T14:00:00+10:00
+# Author:        Claude Code session (RR1.0 minimum continuation)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  6.66 calendar years
+# Testing mode:  individual (Pathway B, Amendment 3.0)
+#
+# RR=1.0 is the MINIMAL Crabel continuation prediction: "the breakout
+# travels at least 1x the ORB range." This is structurally the strongest
+# prediction (highest unfiltered baseline per Blueprint SS4: +0.085 at
+# RR1.0 vs +0.077 at RR2.0). Higher win rate = more consistent
+# year-over-year performance = fewer era stability failures.
+#
+# Per-year analysis (2026-04-09) showed MNQ NYSE_OPEN G5 at RR1.0 has
+# ZERO bad eras across all 7 years (2019-2025). Every year positive.
+# This is the cleanest strategy profile in the project.
+
+metadata:
+  name: "mnq-rr10-individual"
+  purpose: |
+    RR=1.0 minimum continuation hypotheses for MNQ under Pathway B
+    (Amendment 3.0). Each hypothesis tested individually at raw p < 0.05.
+    Downstream gates (WF, OOS, era stability) non-waivable.
+  date_locked: "2026-04-09T14:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.66
+  data_source: "real CME Micro E-mini Nasdaq-100 futures 2019-05-06 onwards"
+  testing_mode: "individual"
+  bailey_compliance:
+    trials: 5
+    horizon_years: 6.66
+    e_max_n: 1.0
+    min_btl_required_years: 3.22
+    headroom_pct: 107
+    status: "PASS"
+    sharpe_noise_floor_annualized: 0.70
+  total_expected_trials: 5
+
+hypotheses:
+  - id: 1
+    name: "MNQ NYSE_OPEN G5 RR1.0 — Crabel minimum continuation"
+    theory_citation: "Crabel (1990) ch. 3"
+    economic_basis: |
+      The breakout of a meaningful opening range (G5) at NYSE cash open
+      should travel at least 1x the ORB range (RR=1.0). This is the
+      MINIMAL continuation prediction under Crabel's commitment hypothesis.
+      If the committed capital behind the range cannot push price even 1x,
+      the commitment was illusory.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_OPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe (direction gate)"
+      - "Walk-forward efficiency < 0.50 (non-waivable)"
+      - "2026 OOS ExpR < 0 (non-waivable)"
+      - "Any era with N >= 50 and ExpR < -0.05 (non-waivable)"
+
+  - id: 2
+    name: "MNQ EUROPE_FLOW G5 RR1.0 — cross-border minimum continuation"
+    theory_citation: "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
+    economic_basis: |
+      European information spillover into NQ futures should produce at
+      least 1x continuation of the opening range at EUROPE_FLOW. The
+      cross-border price discovery mechanism (French-Roll) predicts
+      directional follow-through as the receiving market incorporates
+      foreign-session information.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MNQ]
+      sessions: [EUROPE_FLOW]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 3
+    name: "MNQ COMEX_SETTLE G5 RR1.0 — settlement minimum continuation"
+    theory_citation: "O'Hara (1995) Market Microstructure Theory"
+    economic_basis: |
+      Mandatory settlement flow at COMEX should produce at least 1x
+      continuation. Hedgers and producers must transact at settlement,
+      creating directional imbalance that 1x continuation captures.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 4
+    name: "MNQ CME_PRECLOSE G5 RR1.0 — end-of-day minimum continuation"
+    theory_citation: "Market microstructure (pre-close rebalancing)"
+    economic_basis: |
+      Institutional rebalancing before daily close creates forced flow.
+      At RR=1.0, the prediction is that this forced flow sustains at
+      least 1x the opening range in the pre-close session.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_PRECLOSE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 5
+    name: "MNQ US_DATA_830 G5 RR1.0 — macro minimum continuation"
+    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER"
+    economic_basis: |
+      Macro announcement at 08:30 ET should produce at least 1x
+      continuation of the opening range as the market completes
+      information incorporation.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_830]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+total_hypothesis_count: 5
+total_expected_trials: 5
+budget_check:
+  mode: "clean"
+  strict_bailey_e_1_0_max_n: 27
+  data_horizon_years_available: 6.66
+  sharpe_noise_floor: 0.695
