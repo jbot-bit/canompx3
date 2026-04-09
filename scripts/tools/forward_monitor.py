@@ -1,8 +1,9 @@
-"""Forward performance monitor with BH correction at m=5.
+"""Forward performance monitor with BH correction across deployed lanes.
 
 For each active lane, maintains a running t-test of forward mean R vs zero.
 Applies Benjamini-Hochberg correction across all monitored lanes.
-Reports power thresholds derived from backtest effect sizes.
+Reports power thresholds derived from the current deployed strategies'
+validated_setups reference stats.
 
 This monitors FORWARD data only. Backtest noise floor p-values measure a
 different thing (permutation null) and should NOT be mixed with forward
@@ -23,31 +24,55 @@ from scipy import stats
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.live.performance_monitor import _compute_std_r
 from trading_app.prop_profiles import get_lane_registry
 from trading_app.strategy_fitness import _load_strategy_outcomes
 
 FORWARD_START = date(2026, 1, 1)
 
-# Backtest stats per lane (from validated_setups — these are reference values for power analysis).
-# These are the ONLY hardcoded values — lane structure comes from prop_profiles.
-_BACKTEST_STATS: dict[str, dict] = {
-    "NYSE_CLOSE": {"backtest_expr": 0.2078, "backtest_std": 0.891},
-    "SINGAPORE_OPEN": {"backtest_expr": 0.1557, "backtest_std": 1.844},
-    "COMEX_SETTLE": {"backtest_expr": 0.1094, "backtest_std": 0.864},
-    "NYSE_OPEN": {"backtest_expr": 0.0933, "backtest_std": 0.956},
-    "TOKYO_OPEN": {"backtest_expr": 0.2832, "backtest_std": 1.42},
-}
+def _load_reference_stats() -> dict[str, dict]:
+    """Load per-strategy reference stats from validated_setups.
+
+    Forward-monitor power analysis must follow the current deployed strategy
+    IDs, not a stale session-name overlay. Expectancy comes directly from the
+    validated row; sigma is the theoretical fixed-R outcome std implied by
+    win_rate, rr_target, and expectancy_r.
+    """
+    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+    configure_connection(con)
+    try:
+        rows = con.execute(
+            """
+            SELECT strategy_id, win_rate, rr_target, expectancy_r
+            FROM validated_setups
+            WHERE LOWER(status) = 'active'
+            """
+        ).fetchall()
+    finally:
+        con.close()
+
+    stats: dict[str, dict] = {}
+    for strategy_id, win_rate, rr_target, expectancy_r in rows:
+        if win_rate is None or rr_target is None or expectancy_r is None:
+            continue
+        stats[strategy_id] = {
+            "backtest_expr": float(expectancy_r),
+            "backtest_std": _compute_std_r(float(win_rate), float(rr_target), float(expectancy_r)),
+        }
+    return stats
 
 
 def _build_lanes() -> list[dict]:
-    """Build lane list from canonical registry + backtest stats overlay."""
+    """Build lane list from canonical registry + validated reference stats."""
     registry = get_lane_registry()
+    reference_stats = _load_reference_stats()
     lanes = []
     for i, (label, lane) in enumerate(sorted(registry.items()), 1):
-        bt = _BACKTEST_STATS.get(label, {"backtest_expr": 0.10, "backtest_std": 1.0})
+        bt = reference_stats.get(lane["strategy_id"], {"backtest_expr": 0.10, "backtest_std": 1.0})
         lanes.append(
             {
                 "name": f"L{i} {label} {lane['filter_type']} RR{lane['rr_target']} O{lane['orb_minutes']}",
+                "strategy_id": lane["strategy_id"],
                 "symbol": lane["instrument"],
                 "orb_label": label,
                 "entry_model": lane["entry_model"],

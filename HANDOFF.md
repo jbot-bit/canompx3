@@ -25,7 +25,15 @@ These were from an older discovery run. When the Apr 9 methodology rebuild re-di
 
 ### New deployed portfolio (validated_setups backed)
 
-All 5 lanes sourced from the 6-strategy current validated book. Lane selection guided by a decay-aware yearly audit (Bailey et al 2013 era rule):
+All 5 lanes sourced from the 6-strategy current validated book. Lane selection guided by a decay-aware yearly audit (Bailey et al 2013 era rule).
+
+Important: the numeric `2026 Q1` snapshot below is a historical selection-time
+note from 2026-04-09 and should NOT be treated as the canonical current live
+stat block. Forward N / WR / ExpR drift over time. Canonical current-state
+sources are:
+- `gold.db` (`validated_setups`, `orb_outcomes`, strategy_fitness)
+- `trading_app/prop_profiles.py` for deployed-live lanes
+- `docs/plans/2026-04-09-portfolio-tiered.md` for the current audited summary
 
 | # | Strategy ID | Era verdict | 2026 Q1 |
 |---|---|---|---|

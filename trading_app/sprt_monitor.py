@@ -27,6 +27,7 @@ import duckdb
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.live.performance_monitor import _compute_std_r
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -37,15 +38,31 @@ BETA = 0.20
 A = math.log((1 - BETA) / ALPHA)  # 2.079 — reject H0 (accept DEGRADED) when LR < -A
 B = math.log((1 - ALPHA) / BETA)  # 1.504 — accept H0 (SIGNAL) when LR > B
 
-# Backtest reference stats per lane (mu0=ExpR, sigma=std of R returns).
-# Lane structure (session names, instruments) derived from prop_profiles canonical source.
-_BACKTEST_STATS: dict[str, dict] = {
-    "NYSE_CLOSE": {"mu0": 0.2078, "sigma": 0.891},
-    "SINGAPORE_OPEN": {"mu0": 0.1587, "sigma": 1.844},
-    "COMEX_SETTLE": {"mu0": 0.1300, "sigma": 0.864},
-    "NYSE_OPEN": {"mu0": 0.0933, "sigma": 0.956},
-    "TOKYO_OPEN": {"mu0": 0.2832, "sigma": 1.42},
-}
+def _load_reference_stats() -> dict[str, dict]:
+    """Load SPRT reference parameters from current active validated rows."""
+    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+    configure_connection(con)
+    try:
+        rows = con.execute(
+            """
+            SELECT strategy_id, win_rate, rr_target, expectancy_r
+            FROM validated_setups
+            WHERE LOWER(status) = 'active'
+            """
+        ).fetchall()
+    finally:
+        con.close()
+
+    stats: dict[str, dict] = {}
+    for strategy_id, win_rate, rr_target, expectancy_r in rows:
+        if win_rate is None or rr_target is None or expectancy_r is None:
+            continue
+        mu0 = float(expectancy_r)
+        stats[strategy_id] = {
+            "mu0": mu0,
+            "sigma": _compute_std_r(float(win_rate), float(rr_target), mu0),
+        }
+    return stats
 
 
 def _build_lanes() -> dict[str, dict]:
@@ -53,10 +70,11 @@ def _build_lanes() -> dict[str, dict]:
 
     lanes = {}
     profile_id = resolve_profile_id()
+    reference_stats = _load_reference_stats()
     for i, lane in enumerate(get_profile_lane_definitions(profile_id), 1):
         label = lane["orb_label"]
         strategy_id = lane["strategy_id"]
-        bt = _BACKTEST_STATS.get(label, {"mu0": 0.10, "sigma": 1.0})
+        bt = reference_stats.get(strategy_id, {"mu0": 0.10, "sigma": 1.0})
         suffix = " (shadow)" if lane.get("shadow_only") else ""
         lanes[strategy_id] = {
             "mu0": bt["mu0"],

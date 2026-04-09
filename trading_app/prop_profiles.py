@@ -418,14 +418,19 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # validation backing. Detected in alignment audit 2026-04-09.
         #
         # New lane selection (all MNQ, E2 CB1, sourced from validated_setups):
-        #   NYSE_CLOSE G8 RR1 — strongest 2026 Q1 forward
-        #     (N=39 ExpR=+0.50 WR=79.5% t=+4.06 p<0.0001)
-        #   EUROPE_FLOW G8 RR2 — era-HOLDING (2020-22 0.106 vs 2023-25 0.118)
-        #   COMEX_SETTLE G8 RR1 — era-HOLDING (2020-22 0.057 vs 2023-25 0.133)
-        #   NYSE_OPEN G5 RR2 — era-HOLDING (2020-22 0.044 vs 2023-25 0.131)
-        #   TOKYO_OPEN G8 RR2 — WATCH: sig-decay p=0.042 (2020-22 0.157 vs
-        #     2023-25 0.039) but 2026 Q1 bouncing (+0.23 on N=65). Kept on
-        #     probation. Drop if H2 2026 reverts to sub-0.05.
+        #   NYSE_CLOSE G8 RR1
+        #   EUROPE_FLOW G8 RR2
+        #   COMEX_SETTLE G8 RR1
+        #   NYSE_OPEN G5 RR2
+        #   TOKYO_OPEN G8 RR2
+        #
+        # IMPORTANT: do not treat comments here as canonical live statistics.
+        # Forward N/WR/ExpR change over time. Query gold.db or
+        # docs/plans/2026-04-09-portfolio-tiered.md for the current snapshot.
+        #
+        # Selection rationale snapshot from the 2026-04-09 alignment sprint:
+        # four lanes were holding or improving; TOKYO_OPEN was retained on
+        # watch/probation for decay risk despite a live bounce.
         #
         # Dropped: MES CME_PRECLOSE G8 RR1 — sig-decay p=0.042 (2020-22 0.271
         # vs 2023-25 0.026) AND 2026 Q1 N=15 (no statistical power to confirm
@@ -467,10 +472,11 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "Validated-sourced lanes (2026-04-09 ghost sweep). 4 HOLDING + 1 "
-            "WATCH. All lanes cross-referenced against validated_setups via "
-            "drift check 95. Dropped MES CME_PRECLOSE (sig decay + N=15 no "
-            "power). TOKYO_OPEN on probation — sig decay p=0.042, monitor H2."
+            "Validated-sourced lanes (2026-04-09 ghost sweep). All lanes "
+            "cross-referenced against validated_setups via drift check 95. "
+            "Live/forward stats are volatile; query gold.db or the current "
+            "portfolio-tiered doc for the latest snapshot. TOKYO_OPEN remains "
+            "a watch/probation lane from the Apr 9 alignment review."
         ),
     ),
     # =========================================================================
