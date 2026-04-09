@@ -1869,6 +1869,11 @@ def run_validation(
                                SET fdr_significant = TRUE,
                                    fdr_adjusted_p = ?,
                                    p_value = ?,
+                                   validation_pathway = 'individual',
+                                   discovery_k = CASE
+                                       WHEN discovery_k IS NULL THEN 1
+                                       ELSE discovery_k
+                                   END,
                                    discovery_date = CASE
                                        WHEN discovery_date IS NULL THEN ?
                                        ELSE discovery_date
@@ -1988,6 +1993,7 @@ def run_validation(
                                SET fdr_significant = ?,
                                    fdr_adjusted_p = ?,
                                    p_value = ?,
+                                   validation_pathway = 'family',
                                    n_trials_at_discovery = CASE
                                        WHEN n_trials_at_discovery IS NULL THEN ?
                                        ELSE n_trials_at_discovery

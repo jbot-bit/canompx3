@@ -601,6 +601,25 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             except duckdb.CatalogException:
                 pass  # column already exists
 
+        # Migration: Bloomey Pathway B audit trail (2026-04-09)
+        # validation_pathway: 'family' (Pathway A / BH FDR), 'individual'
+        #   (Pathway B / raw p < 0.05), or NULL (grandfathered / pre-Amendment 3.0).
+        #   Makes fdr_adjusted_p semantics unambiguous — when pathway='individual'
+        #   the column holds raw p, when pathway='family' it holds BH-adjusted p.
+        #   Added on both tables so the audit trail is available at both stages.
+        # c8_oos_status: 'passed', 'pass_through_no_data',
+        #   'pass_through_insufficient_n', or NULL (not evaluated / grandfathered).
+        #   Makes Criterion 8 pass-through visible in validated_setups audit trail
+        #   per institutional-rigor rule 6 (no silent failures).
+        # @research-source: docs/institutional/pre_registered_criteria.md
+        #   Amendment 3.0 (2026-04-09)
+        for col, typedef in [("validation_pathway", "VARCHAR"), ("c8_oos_status", "VARCHAR")]:
+            for table in ["experimental_strategies", "validated_setups"]:
+                try:
+                    con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typedef}")
+                except duckdb.CatalogException:
+                    pass  # column already exists
+
         # Table 7: validation_run_log (Mar 2026 — Bloomey FIX 8)
         # Tracks rejection rate per phase per validation run for auditability.
         con.execute("""
