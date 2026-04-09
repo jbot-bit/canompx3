@@ -1024,6 +1024,19 @@ def _check_criterion_8_oos(
         # synthetic test DBs and null seed runs from false rejection.
         return (None, None)
 
+    # Minimum OOS sample gate: with < 30 OOS trades, the ExpR estimate
+    # has standard error ~1/sqrt(N) ≈ 0.18+, making the 95% CI span
+    # ~±0.36R. Judging a 6-year strategy on <30 forward trades is
+    # statistically meaningless. Pass-through with advisory note.
+    # This is especially relevant early in a holdout year (e.g., Q1 2026
+    # with only 11 trades for low-frequency sessions like MES CME_PRECLOSE).
+    _OOS_MIN_TRADES = 30
+    if n_oos < _OOS_MIN_TRADES:
+        logger.info(
+            f"  Criterion 8: N_oos={n_oos} < {_OOS_MIN_TRADES} — insufficient for judgment, pass-through"
+        )
+        return (None, None)
+
     oos_expr = sum(oos_pnl_r) / n_oos
     if oos_expr < 0:
         return (
