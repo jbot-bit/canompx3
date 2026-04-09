@@ -305,7 +305,6 @@ def aggregate_rolling_performance(
 def compute_day_of_week_stats(
     db_path: Path,
     family_results: list[FamilyResult],
-    train_months: int,
     instrument: str = "MGC",
 ) -> list[FamilyResult]:
     """Add day-of-week segmentation to STABLE/TRANSITIONING families.
@@ -596,7 +595,7 @@ def main():
     logger.info(f"  {len(families)} unique families")
 
     # Add day-of-week stats for non-degraded families
-    families = compute_day_of_week_stats(db_path, families, args.train_months, args.instrument)
+    families = compute_day_of_week_stats(db_path, families, args.instrument)
 
     if args.report or not args.output:
         print_report(families)

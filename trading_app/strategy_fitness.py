@@ -486,7 +486,6 @@ def _bulk_load_all_features(con, instrument: str) -> dict:
 
 
 def _compute_fitness_from_cache(
-    con,
     strategy_id: str,
     params: dict,
     outcome_cache: dict,
@@ -784,7 +783,6 @@ def compute_portfolio_fitness(
                     score = _compute_fitness_with_con(con, p["strategy_id"], as_of_date, rolling_months)
                 else:
                     score = _compute_fitness_from_cache(
-                        con,
                         p["strategy_id"],
                         p,
                         outcome_cache,
