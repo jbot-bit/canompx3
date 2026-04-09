@@ -15,6 +15,7 @@ Design choices:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
 from dataclasses import asdict, dataclass
@@ -112,6 +113,36 @@ def get_survival_report_path(profile_id: str | None = None) -> Path:
     return STATE_DIR / f"account_survival_{resolved_profile_id}.json"
 
 
+def _build_profile_fingerprint(profile: AccountProfile) -> str:
+    """Fingerprint the survival-relevant profile inputs.
+
+    This blocks stale reports from blessing a changed live book.
+    """
+    payload = {
+        "profile_id": profile.profile_id,
+        "firm": profile.firm,
+        "account_size": profile.account_size,
+        "dd_type": get_firm_spec(profile.firm).dd_type,
+        "stop_multiplier": profile.stop_multiplier,
+        "payout_policy_id": profile.payout_policy_id,
+        "is_express_funded": profile.is_express_funded,
+        "max_risk_per_trade": profile.max_risk_per_trade,
+        "daily_lanes": [
+            {
+                "strategy_id": lane.strategy_id,
+                "instrument": lane.instrument,
+                "orb_label": lane.orb_label,
+                "planned_stop_multiplier": lane.planned_stop_multiplier,
+                "required_fitness": list(lane.required_fitness),
+                "max_orb_size_pts": lane.max_orb_size_pts,
+            }
+            for lane in profile.daily_lanes
+        ],
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def _quantile(values: list[float], q: float) -> float:
     if not values:
         return 0.0
@@ -148,6 +179,7 @@ def _load_lane_daily_pnl(
     strategy_id: str,
     *,
     as_of_date: date,
+    effective_stop_multiplier: float | None = None,
 ) -> dict[date, float]:
     """Load one lane's historical daily PnL in dollars from canonical outcomes."""
     params = _load_strategy_snapshot(con, strategy_id)
@@ -163,7 +195,11 @@ def _load_lane_daily_pnl(
         end_date=as_of_date,
     )
 
-    stop_multiplier = float(params.get("stop_multiplier") or 1.0)
+    stop_multiplier = (
+        float(effective_stop_multiplier)
+        if effective_stop_multiplier is not None
+        else float(params.get("stop_multiplier") or 1.0)
+    )
     if stop_multiplier != 1.0:
         cost_spec = get_cost_spec(params["instrument"])
         outcomes = apply_tight_stop(outcomes, stop_multiplier, cost_spec)
@@ -202,9 +238,18 @@ def _load_profile_daily_scenarios(
         lane_daily: dict[str, dict[date, float]] = {}
         lane_first_days: dict[str, date] = {}
         instruments = sorted({lane["instrument"] for lane in lane_defs})
+        effective_stop_by_strategy = {
+            lane.strategy_id: float(lane.planned_stop_multiplier or profile.stop_multiplier)
+            for lane in profile.daily_lanes
+        }
 
         for lane in lane_defs:
-            daily = _load_lane_daily_pnl(con, lane["strategy_id"], as_of_date=as_of_date)
+            daily = _load_lane_daily_pnl(
+                con,
+                lane["strategy_id"],
+                as_of_date=as_of_date,
+                effective_stop_multiplier=effective_stop_by_strategy.get(lane["strategy_id"]),
+            )
             if not daily:
                 raise ValueError(f"Lane {lane['strategy_id']} has no canonical outcome history")
             lane_daily[lane["strategy_id"]] = daily
@@ -252,6 +297,7 @@ def _load_profile_daily_scenarios(
             "source_days": len(scenarios),
             "lane_ids": [lane["strategy_id"] for lane in lane_defs],
             "instruments": instruments,
+            "profile_fingerprint": _build_profile_fingerprint(profile),
         }
         return scenarios, metadata
     finally:
@@ -445,6 +491,7 @@ def evaluate_profile_survival(
     resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
     profile = get_profile(resolved_profile_id)
     scenarios, metadata = _load_profile_daily_scenarios(resolved_profile_id, as_of_date=as_of_date, db_path=db_path)
+    metadata = {**metadata, "profile_fingerprint": _build_profile_fingerprint(profile)}
     rules = _with_consistency_rule(_build_rules(profile), profile)
     result = simulate_survival(scenarios, rules, horizon_days=horizon_days, n_paths=n_paths, seed=seed)
     operational_pass_probability = round(result["operational_pass_probability"], 4)
@@ -518,6 +565,7 @@ def check_survival_report_gate(
     try:
         payload = json.loads(report_path.read_text())
         summary = payload["summary"]
+        metadata = payload["metadata"]
         as_of_date = date.fromisoformat(summary["as_of_date"])
         report_age_days = (today - as_of_date).days
         operational_pass = float(summary["operational_pass_probability"])
@@ -525,13 +573,19 @@ def check_survival_report_gate(
         n_paths = int(summary["n_paths"])
         scaling_feasible = bool(summary.get("scaling_feasible", False))
         intraday_approximated = bool(summary.get("intraday_approximated", False))
+        profile_fingerprint = str(metadata["profile_fingerprint"])
     except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         return False, f"BLOCKED: unreadable Criterion 11 survival report ({exc})"
+
+    resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
+    current_profile_fingerprint = _build_profile_fingerprint(get_profile(resolved_profile_id))
 
     if horizon_days != 90:
         return False, f"BLOCKED: Criterion 11 report horizon is {horizon_days}d, expected 90d"
     if n_paths < 10_000:
         return False, f"BLOCKED: Criterion 11 report uses {n_paths} paths, expected >= 10000"
+    if profile_fingerprint != current_profile_fingerprint:
+        return False, "BLOCKED: Criterion 11 report does not match the current profile lane/risk definition"
     if report_age_days > max_age_days:
         return (
             False,

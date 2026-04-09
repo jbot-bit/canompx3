@@ -9,11 +9,14 @@ import pytest
 from trading_app.account_survival import (
     DailyScenario,
     SurvivalRules,
+    _build_profile_fingerprint,
+    _load_lane_daily_pnl,
     check_survival_report_gate,
     evaluate_profile_survival,
     get_survival_report_path,
     simulate_survival,
 )
+from trading_app.prop_profiles import get_profile
 
 
 def _rules(
@@ -119,6 +122,7 @@ def test_check_survival_report_gate_blocks_missing_file(tmp_path, monkeypatch):
 
 def test_check_survival_report_gate_enforces_freshness_and_threshold(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    fingerprint = _build_profile_fingerprint(get_profile("topstep_50k_mnq_auto"))
     report_path = get_survival_report_path("topstep_50k_mnq_auto")
     report_path.write_text(
         json.dumps(
@@ -154,7 +158,10 @@ def test_check_survival_report_gate_enforces_freshness_and_threshold(tmp_path, m
                     "median_best_day": 25.0,
                 },
                 "rules": asdict(_rules()),
-                "metadata": {"profile_id": "topstep_50k_mnq_auto"},
+                "metadata": {
+                    "profile_id": "topstep_50k_mnq_auto",
+                    "profile_fingerprint": fingerprint,
+                },
             }
         )
     )
@@ -171,6 +178,7 @@ def test_check_survival_report_gate_enforces_freshness_and_threshold(tmp_path, m
 
 def test_check_survival_report_gate_blocks_low_probability_even_when_fresh(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    fingerprint = _build_profile_fingerprint(get_profile("topstep_50k_mnq_auto"))
     report_path = get_survival_report_path("topstep_50k_mnq_auto")
     report_path.write_text(
         json.dumps(
@@ -206,7 +214,10 @@ def test_check_survival_report_gate_blocks_low_probability_even_when_fresh(tmp_p
                     "median_best_day": 80.0,
                 },
                 "rules": asdict(_rules()),
-                "metadata": {"profile_id": "topstep_50k_mnq_auto"},
+                "metadata": {
+                    "profile_id": "topstep_50k_mnq_auto",
+                    "profile_fingerprint": fingerprint,
+                },
             }
         )
     )
@@ -221,6 +232,61 @@ def test_check_survival_report_gate_blocks_low_probability_even_when_fresh(tmp_p
 
 
 def test_check_survival_report_gate_passes_clean_report(tmp_path, monkeypatch):
+    monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
+    fingerprint = _build_profile_fingerprint(get_profile("topstep_50k_mnq_auto"))
+    report_path = get_survival_report_path("topstep_50k_mnq_auto")
+    report_path.write_text(
+        json.dumps(
+            {
+                "summary": {
+                    "profile_id": "topstep_50k_mnq_auto",
+                    "generated_at_utc": datetime.now(UTC).isoformat(),
+                    "as_of_date": "2026-04-09",
+                    "horizon_days": 90,
+                    "n_paths": 10000,
+                    "seed": 0,
+                    "source_days": 50,
+                    "source_start": "2025-01-01",
+                    "source_end": "2026-04-09",
+                    "dd_survival_probability": 0.92,
+                    "operational_pass_probability": 0.78,
+                    "consistency_pass_probability": None,
+                    "trailing_dd_breach_probability": 0.08,
+                    "daily_loss_breach_probability": 0.01,
+                    "consistency_breach_probability": 0.0,
+                    "scaling_feasible": True,
+                    "intraday_approximated": False,
+                    "min_operational_pass_probability": 0.7,
+                    "gate_pass": True,
+                    "p50_final_balance": 200.0,
+                    "p05_final_balance": -300.0,
+                    "p95_final_balance": 900.0,
+                    "p50_total_pnl": 200.0,
+                    "p05_total_pnl": -300.0,
+                    "p95_total_pnl": 900.0,
+                    "p50_max_dd": 150.0,
+                    "p95_max_dd": 450.0,
+                    "median_best_day": 80.0,
+                },
+                "rules": asdict(_rules()),
+                "metadata": {
+                    "profile_id": "topstep_50k_mnq_auto",
+                    "profile_fingerprint": fingerprint,
+                },
+            }
+        )
+    )
+
+    ok, msg = check_survival_report_gate(
+        "topstep_50k_mnq_auto",
+        today=date(2026, 4, 10),
+    )
+
+    assert ok is True
+    assert "Criterion 11 pass" in msg
+
+
+def test_check_survival_report_gate_blocks_profile_mismatch(tmp_path, monkeypatch):
     monkeypatch.setattr("trading_app.account_survival.STATE_DIR", tmp_path)
     report_path = get_survival_report_path("topstep_50k_mnq_auto")
     report_path.write_text(
@@ -257,7 +323,10 @@ def test_check_survival_report_gate_passes_clean_report(tmp_path, monkeypatch):
                     "median_best_day": 80.0,
                 },
                 "rules": asdict(_rules()),
-                "metadata": {"profile_id": "topstep_50k_mnq_auto"},
+                "metadata": {
+                    "profile_id": "topstep_50k_mnq_auto",
+                    "profile_fingerprint": "stale-fingerprint",
+                },
             }
         )
     )
@@ -267,8 +336,58 @@ def test_check_survival_report_gate_passes_clean_report(tmp_path, monkeypatch):
         today=date(2026, 4, 10),
     )
 
-    assert ok is True
-    assert "Criterion 11 pass" in msg
+    assert ok is False
+    assert "does not match the current profile" in msg
+
+
+def test_load_lane_daily_pnl_uses_effective_profile_stop_multiplier(monkeypatch):
+    monkeypatch.setattr(
+        "trading_app.account_survival._load_strategy_snapshot",
+        lambda _con, _sid: {
+            "instrument": "MNQ",
+            "orb_label": "NYSE_CLOSE",
+            "orb_minutes": 5,
+            "entry_model": "E2",
+            "rr_target": 1.0,
+            "confirm_bars": 1,
+            "filter_type": "ORB_G8",
+            "stop_multiplier": 1.0,
+        },
+    )
+    monkeypatch.setattr(
+        "trading_app.account_survival._load_strategy_outcomes",
+        lambda *_args, **_kwargs: [
+            {
+                "trading_day": date(2026, 1, 2),
+                "outcome": "win",
+                "entry_price": 100.0,
+                "stop_price": 99.0,
+                "pnl_r": 1.0,
+            }
+        ],
+    )
+    monkeypatch.setattr("trading_app.account_survival.get_cost_spec", lambda _instrument: object())
+    monkeypatch.setattr("trading_app.account_survival.risk_in_dollars", lambda *_args, **_kwargs: 100.0)
+
+    def fake_apply_tight_stop(outcomes, stop_multiplier, _cost_spec):
+        assert stop_multiplier == 0.75
+        return [
+            {
+                **outcomes[0],
+                "pnl_r": 0.5,
+            }
+        ]
+
+    monkeypatch.setattr("trading_app.account_survival.apply_tight_stop", fake_apply_tight_stop)
+
+    daily = _load_lane_daily_pnl(
+        con=None,
+        strategy_id="MNQ_TEST",
+        as_of_date=date(2026, 4, 9),
+        effective_stop_multiplier=0.75,
+    )
+
+    assert daily == {date(2026, 1, 2): 50.0}
 
 
 def test_evaluate_profile_survival_writes_report(tmp_path, monkeypatch):
@@ -311,3 +430,4 @@ def test_evaluate_profile_survival_writes_report(tmp_path, monkeypatch):
     assert payload["summary"]["profile_id"] == "topstep_50k_mnq_auto"
     assert payload["summary"]["gate_pass"] is True
     assert payload["metadata"]["source_days"] == 1
+    assert payload["metadata"]["profile_fingerprint"] == _build_profile_fingerprint(get_profile("topstep_50k_mnq_auto"))

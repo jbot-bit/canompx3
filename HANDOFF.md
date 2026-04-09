@@ -115,6 +115,49 @@ Known boundary:
   convention per account copy; if live sizing becomes variable by lane, feed
   that explicitly into Criterion 11 instead of assuming it
 
+### Follow-up review hardening (same day)
+
+Read-only audit of the initial Criterion 11 implementation found two real
+logic issues:
+
+1. the report gate trusted `profile_id` + age only, so a changed profile could
+   still ride on an old passing report
+2. the simulator was using `validated_setups.stop_multiplier` instead of the
+   deployed profile stop, which understated the actual live-book difference for
+   `topstep_50k_mnq_auto` (`validated=1.0x`, deployed profile=`0.75x`)
+
+Fixes applied:
+
+- `trading_app/account_survival.py`
+  - report metadata now includes a deterministic `profile_fingerprint`
+  - gate now fail-closes if the current profile definition does not match the
+    persisted report inputs
+  - lane daily PnL loading now applies the **effective deployed profile stop**
+    (`planned_stop_multiplier` or `profile.stop_multiplier`) instead of blindly
+    trusting the validated row stop
+- `tests/test_trading_app/test_account_survival.py`
+  - added regression coverage for report/profile mismatch blocking
+  - added regression coverage proving the profile stop override is used
+
+Re-verified:
+
+- `python3 -m py_compile trading_app/account_survival.py tests/test_trading_app/test_account_survival.py`
+- `uv run --frozen --extra dev pytest tests/test_trading_app/test_account_survival.py tests/test_trading_app/test_pre_session_check.py -q`
+  - result: `34 passed`
+
+Corrected live result after applying the real deployed `0.75x` stop:
+
+- profile: `topstep_50k_mnq_auto`
+- as_of: `2026-04-09`
+- DD survival: `87.2%`
+- operational pass: `87.2%`
+- trailing-DD breach probability: `12.8%`
+- gate status: still `PASS`
+
+This corrected the earlier `91.9%` number, which had been too optimistic
+because it was effectively simulating the validated `1.0x` stop rather than
+the live deployed stop.
+
 ### Headline
 
 Focused institutional cleanup only. No discovery rerun. Goal was to keep the
