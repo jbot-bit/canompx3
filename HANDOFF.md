@@ -108,7 +108,7 @@ Referenced in Criterion 12 but not implemented. Paper: `resources/real_time_stra
 
 **Tests:**
 - `tests/test_trading_app/test_hypothesis_loader.py` — 4 new TestTestingMode tests
-- 157/157 pass (55 loader + 102 validator)
+- 158/158 pass (55 loader + 103 validator) after commit `149f9d0`. The prior "157/157" claim in this HANDOFF was inaccurate — actual baseline at session end was 155/157 because two `TestCriterion8OOSPositive` fixtures (pre-existing, not touched by Pathway B) were colliding with the `N_oos >= 30` gate added in `ea18c61`. Fixed 2026-04-09 in a /next iteration: the fixtures were resized to 30 rows to exercise the sign/ratio logic, and a new `test_insufficient_oos_sample_passes_through` test locks the sub-threshold pass-through behavior. Validator code unchanged; gate was correct.
 
 ### Database state
 
