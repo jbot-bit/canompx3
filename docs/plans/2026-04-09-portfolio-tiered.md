@@ -2,6 +2,17 @@
 
 **Context:** Full discovery run 2026-04-09 tested 25 bundles across MNQ/MES/MGC. 6 validated via institutional gates. But MORE strategies are PROFITABLE IN 2026 LIVE DATA than passed the institutional gates. The framework killed some winners for fixable reasons (cross-instrument FDR, WF gate thresholds, small historical N).
 
+**Status note (read first):** This is a 2026-04-09 historical ranking / decision
+memo, not the canonical current-state registry. Later commits changed both the
+deployed-live book and some clean-rediscovery conclusions. Use these sources for
+current truth:
+- `gold.db` for `validated_setups`, `experimental_strategies`, and `orb_outcomes`
+- `trading_app/prop_profiles.py` for deployed-live lanes
+- `trading_app/strategy_fitness.py` for current FIT/WATCH/DECAY status
+
+Do not treat the “framework fixes” or “manual trading summary” sections below as
+current instructions without re-checking them against the latest repo state.
+
 This document ranks EVERYTHING by 2026 forward performance for manual trading decisions.
 
 ## TIER 1: Institutionally Validated (automate eligible)

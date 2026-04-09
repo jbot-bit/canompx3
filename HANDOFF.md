@@ -27,6 +27,12 @@ These were from an older discovery run. When the Apr 9 methodology rebuild re-di
 
 All 5 lanes sourced from the 6-strategy current validated book. Lane selection guided by a decay-aware yearly audit (Bailey et al 2013 era rule).
 
+Post-sprint hygiene note: the one active validated row missing provenance metadata
+(`MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8` with `validation_pathway = NULL`) was
+backfilled to `validation_pathway = 'family'` after confirming it came from the
+family-mode MES comprehensive hypothesis run. Active validated rows are now
+metadata-consistent on that field (6/6 = `family`).
+
 Important: the list below is a historical selection-time note from 2026-04-09
 and should NOT be treated as the canonical current live stat block. Forward
 N / WR / ExpR drift over time. Canonical current-state sources are:
@@ -88,7 +94,7 @@ alignment sprint above.
 
 Session redesigned discovery methodology from scratch. 6 validated strategies (up from 1 at session start) + 9 high-conviction near-misses identified.
 
-**Start next session by reading:** `docs/plans/2026-04-09-portfolio-tiered.md`
+**Historical context doc:** `docs/plans/2026-04-09-portfolio-tiered.md`
 
 ### Current validated portfolio (Tier 1 — automate eligible)
 
