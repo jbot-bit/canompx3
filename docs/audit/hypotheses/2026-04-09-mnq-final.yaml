@@ -1,0 +1,71 @@
+# MNQ Final Discovery — 6 mechanism-grounded bundles
+# Locked: 2026-04-09T16:00:00+10:00 | Holdout: 2026-01-01 | Mode: A
+# Bailey: N=6, MinBTL=3.58yr < 6.66yr -> PASS (86% headroom)
+# Each bundle = 1 trial. K=6 for BH FDR. E2 CB1 O5 throughout.
+# RR per session: structural (spike-settle=1.0, continuation=2.0)
+
+metadata:
+  name: "mnq-final"
+  date_locked: "2026-04-09T16:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 6
+  testing_mode: "family"
+  data_horizon_years_clean: 6.66
+
+hypotheses:
+  - id: 1
+    name: "MNQ CME_PRECLOSE G8 RR1.0"
+    theory_citation: "Market microstructure (pre-close rebalancing)"
+    economic_basis: "Forced institutional rebalancing before daily maintenance. Spike-settle dynamics favor RR1.0."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MNQ], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=6 family", "WFE < 0.50", "2026 OOS ExpR < 0", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 2
+    name: "MNQ US_DATA_1000 G5 RR2.0"
+    theory_citation: "Andersen et al (2003) AER; Ederington & Lee (1993) JF"
+    economic_basis: "10:00 AM ET macro releases (ISM, CC). Gradual information incorporation favors RR2.0."
+    filter: {type: ORB_G5, column: orb_size_points}
+    scope: {instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=6 family", "WFE < 0.50", "2026 OOS ExpR < 0", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 3
+    name: "MNQ COMEX_SETTLE G8 RR1.0"
+    theory_citation: "O'Hara (1995) Market Microstructure Theory"
+    economic_basis: "Mandatory settlement flow from hedgers/producers. Settlement = forced spike, favor RR1.0."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MNQ], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=6 family", "WFE < 0.50", "2026 OOS ExpR < 0", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 4
+    name: "MNQ EUROPE_FLOW G8 RR2.0"
+    theory_citation: "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
+    economic_basis: "Cross-border European information spillover. Gradual incorporation favors RR2.0."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=6 family", "WFE < 0.50", "2026 OOS ExpR < 0", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 5
+    name: "MNQ TOKYO_OPEN G8 RR2.0"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: "Asian session momentum. Physical demand flow + meteor shower persistence. Gradual, favors RR2.0."
+    filter: {type: ORB_G8, column: orb_size_points}
+    scope: {instruments: [MNQ], sessions: [TOKYO_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=6 family", "WFE < 0.50", "2026 OOS ExpR < 0", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 6
+    name: "MNQ NYSE_OPEN G5 RR2.0"
+    theory_citation: "Crabel (1990) ch. 3"
+    economic_basis: "Crabel commitment at NYSE cash open. Already validated in prior run. Continuation favors RR2.0."
+    filter: {type: ORB_G5, column: orb_size_points}
+    scope: {instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails on K=6 family", "WFE < 0.50", "2026 OOS ExpR < 0", "Any era N>=50 ExpR < -0.05"]
+
+total_hypothesis_count: 6
+total_expected_trials: 6
