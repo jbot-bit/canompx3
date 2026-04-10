@@ -1,0 +1,285 @@
+# Hypothesis Registry — 2026-04-11 ml-v3-pooled-confluence
+#
+# Locked:                   2026-04-11T00:00:00+10:00
+# Author:                   Claude Code (institutional ML V3 sprint)
+# Committing commit hash:   (filled in by pre-commit hook)
+# Data horizon:             6.65yr clean MNQ/MES real-micro (Phase 3c rebuild)
+# Intended discovery holdout: 2026-01-01 (Mode A sacred boundary)
+# Parent plan:              docs/audit/ml_v3/2026-04-11-stage-0-verification.md
+# Stage 1 commit:           0a99d07c (fail-closed ML gate)
+#
+# ----------------------------------------------------------------------
+# NOTE on template adaptation
+# ----------------------------------------------------------------------
+# This hypothesis file is a MODEL-TRAINING run, not a filter-discovery
+# run. The canonical hypothesis template in
+# docs/institutional/hypothesis_registry_template.md is designed for
+# filter grids (threshold sweeps over pre-registered filter columns).
+# ML V3 uses a different unit of trial: each "trial" is one
+# pre-registered model specification (hyperparameter combination +
+# probability threshold) tested via CPCV on a fixed pooled training
+# set, with a SINGLE final evaluation against the Mode A sacred
+# holdout. The scope and kill_criteria fields still apply and retain
+# the same semantic force:
+#   * scope defines the population (29 validated MNQ+MES strategies,
+#     6 sessions, pooled)
+#   * kill_criteria are pre-registered, no post-hoc relaxation
+#   * expected_trial_count feeds MinBTL
+#
+# The hypothesis_loader.enforce_minbtl_bound canonical function may
+# need a small adapter to load model-training hypothesis files when
+# Stage 3 runs. If that adapter does not yet exist it will be added
+# in Stage 3 as infrastructure (not methodology — the trial budget
+# K=8 is locked here and independent of loader implementation).
+
+metadata:
+  name: "ml-v3-pooled-confluence"
+  purpose: "Test whether a pooled meta-label model over 29 validated MNQ+MES strategies, using 6 theory-grounded pre-break features (including orb_SESSION_volume_norm as the only new confluence addition), produces a positive OOS lift on the Mode A 2026 sacred holdout compared to the unfiltered validated-strategy baseline."
+  date_locked: "2026-04-11T00:00:00+10:00"
+  data_horizon_years_clean: 6.65
+  data_horizon_years_proxy: 0.0  # NOT using GC proxy; MNQ/MES have sufficient clean data
+  holdout_date: "2026-01-01"
+  total_expected_trials: 8
+  testing_mode: "individual"  # Theory-driven pooled meta-label, not brute-force family search
+  data_source_mode: "clean"   # MNQ/MES real-micro 2019-05-06 onwards (Phase 3c canonical)
+  # No data_source_disclosure needed because trial count 8 << 300 clean bound
+
+# ----------------------------------------------------------------------
+# Hypotheses
+# ----------------------------------------------------------------------
+# Under the "one hypothesis file = one experiment" institutional
+# convention, V3 is ONE parent hypothesis with K pre-registered model
+# specs as internal trials. The parent hypothesis is the research
+# question; the trials are the finite space of specifications we
+# commit to testing before seeing any results.
+# ----------------------------------------------------------------------
+
+hypotheses:
+  - id: 1
+    name: "Pooled meta-label over 29 validated MNQ+MES strategies produces positive OOS lift"
+    theory_citation: |
+      - Lopez de Prado 2020 "Machine Learning for Asset Managers"
+        Section 1.2 "Theory Matters": strategies must be supported by
+        theory, not historical simulation. Every feature in this
+        hypothesis has a documented structural mechanism.
+      - Lopez de Prado 2020 Section 1.4.2: CPCV (Combinatorial Purged
+        Cross-Validation) is the explicitly-recommended remedy for
+        short finite-data problems. Our 6.65 years of MNQ/MES clean
+        real-micro data is exactly the scenario CPCV was designed for.
+      - de Prado 2018 AFML Chapter 3 "Labeling": meta-labeling REQUIRES
+        a positive-baseline primary model. Our pooled WR 51.82pct
+        satisfies this precondition for the first time in the project
+        (V2 per-session had 7/12 sessions with negative train-split
+        ExpR, violating this precondition and producing the Phase 0
+        threshold artifact with p=0.35).
+      - Bailey et al 2013 "Pseudo-Mathematics and Financial
+        Charlatanism" Theorem 1: MinBTL bound. With K=8 trials and
+        6.65yr clean data, strict Bailey E[max_N]=1.0 gives
+        2*Ln(8)/1.0^2 = 4.16 years required, well under our 6.65yr.
+        K=8 is conservatively under the 300-trial operational cap.
+      - Bailey-Lopez de Prado 2014 "Deflated Sharpe Ratio" Eq 2: DSR
+        is our Criterion 5 threshold (> 0.95). Applied to the final
+        survivor after CPCV.
+      - Harvey-Liu 2015 "Backtesting": BHY haircut / Chordia t-hurdle
+        (Criterion 4 dual pathway: t >= 3.00 for theory-grounded,
+        t >= 3.79 without theory). This hypothesis IS theory-grounded
+        so the t >= 3.00 threshold applies.
+      - Local literature extracts at docs/institutional/literature/
+        lopez_de_prado_2020_ml_for_asset_managers.md,
+        bailey_et_al_2013_pseudo_mathematics.md,
+        bailey_lopez_de_prado_2014_deflated_sharpe.md
+
+    economic_basis: |
+      The 29 validated strategies in the MNQ+MES pooled universe have
+      positive edge on their respective sessions (pooled WR 51.82pct,
+      ExpR +0.108R over 29,488 trades from 2019-05-06 to 2025-12-31).
+      They are positively baselined by construction (all passed
+      pre-2026 validator gates including BH FDR, WFE, era stability,
+      and Chordia t).
+
+      The hypothesis: a pooled random forest meta-label trained on
+      these positive-baseline trades, using the 5 theory-grounded
+      V2 core features PLUS orb_SESSION_volume_norm (the session-
+      specific ORB-window volume normalised by its 20-day median),
+      can discriminate high-quality from low-quality primary signals
+      at a rate that improves pooled ExpR by at least 0.40 * IS ExpR
+      on the Mode A 2026 sacred holdout (0.043R minimum lift).
+
+      The orb_SESSION_volume_norm feature is NEW to V2/V3. It was
+      excluded from V2's ML_CORE_FEATURES (V2 used only 5 features
+      all derived from ORB size, ATR, gap, pre-velocity, and cross-
+      session flow). The univariate confluence program in March 2026
+      demonstrated that orb_SESSION_volume-class features produce
+      48 BH FDR survivors at q=0.05 with 25/25 walk-forward
+      deployable, establishing that session-volume signals contain
+      real edge. V3 tests whether incorporating this signal into a
+      pooled meta-label model captures that edge in a way V2 missed.
+
+      Crucially, orb_SESSION_volume is computed at ORB close (before
+      the break event) per trading_app/ml/config.py SESSION_FEATURE_
+      SUFFIXES line 77 ("Total ORB-window volume - known at ORB
+      close (pre-break)"). It is therefore pre-break safe and does
+      NOT introduce look-ahead bias. By contrast, rel_vol_{SESSION}
+      is derived from break_bar_volume and is AT-break, not pre-
+      break; it was CONSIDERED and REJECTED as a V3 feature during
+      Stage 0 audit (see docs/audit/ml_v3/2026-04-11-stage-0-
+      verification.md Q4b). This is the single most important
+      institutional-rigour lesson from the V3 sprint preparation:
+      proven filters are not always proven ML features, because the
+      ML architecture determines what information is available at
+      prediction time.
+
+      Pooling across all 29 strategies solves the EPV trap that
+      killed V2 per-session (55 positives / 23 features = EPV 2.4,
+      Peduzzi 1996 requires >= 10). Pooled 15,280 positives / 6
+      features = EPV 2,547 -- well into the statistically comfortable
+      range.
+
+    filter:
+      # V3 is a model-training hypothesis, not a filter-grid hypothesis.
+      # This section is a semantic adapter: "filter" here means "the
+      # set of pre-registered model configurations that will be tested
+      # as trials." The canonical filter-discovery interpretation does
+      # not apply.
+      type: ML_POOLED_META_LABEL
+      column: "N/A (model training, not column filter)"
+      thresholds: [0.50, 0.55, 0.60, 0.65]  # Probability thresholds to sweep
+      model_type: "RandomForestClassifier"
+      features:
+        - orb_size_norm
+        - atr_20_pct
+        - gap_open_points_norm
+        - orb_pre_velocity_norm
+        - prior_sessions_broken
+        - orb_SESSION_volume_norm  # NEW in V3 vs V2
+      hyperparameters:
+        n_estimators: 200
+        max_depth: 6
+        min_samples_leaf: 100
+        max_features: "sqrt"
+        class_weight: "balanced"
+        random_state: 42
+      cpcv:
+        n_groups: 10
+        k_test: 2  # C(10,2) = 45 splits
+        purge_days: 1
+        embargo_days: 1
+      bootstrap:
+        method: "phipson-smyth"
+        permutations: 5000
+        null: "shuffled_labels"
+
+    scope:
+      instruments: [MNQ, MES]
+      sessions:
+        - CME_PRECLOSE  # MNQ 1 + MES 2 strategies
+        - COMEX_SETTLE  # MNQ 8 strategies
+        - EUROPE_FLOW   # MNQ 7 strategies
+        - NYSE_OPEN     # MNQ 6 strategies
+        - TOKYO_OPEN    # MNQ 4 strategies
+        - US_DATA_1000  # MNQ 1 strategy
+      rr_targets: [1.0, 1.5, 2.0]  # All RR targets present in the 29 validated strategies
+      entry_models: [E2]  # All 29 use E2
+      confirm_bars: [1]   # All 29 use CB=1
+      stop_multipliers: [1.0]  # All 29 use S=1.0
+      primary_model_count: 29  # Pooled training universe
+      training_window:
+        start: "2019-05-06"  # MNQ/MES real-micro launch per Phase 3c canonical
+        end: "2025-12-31"    # Just before Mode A holdout
+        trading_days: 1951
+        pooled_trades: 29488
+        pooled_positives: 15280  # 51.82pct baseline WR
+      holdout_window:
+        start: "2026-01-01"  # Mode A sacred boundary
+        end: "present"       # Unknown at lock time; touched ONCE in Stage 3
+        touched: false
+
+    expected_trial_count: 8
+    # Trial enumeration (8 trials = K for BH FDR family):
+    #   trial 1: RF default + threshold 0.50
+    #   trial 2: RF default + threshold 0.55
+    #   trial 3: RF default + threshold 0.60
+    #   trial 4: RF default + threshold 0.65
+    #   trial 5: RF min_samples_leaf=50 + threshold 0.55
+    #   trial 6: RF min_samples_leaf=200 + threshold 0.55
+    #   trial 7: RF max_depth=4 + threshold 0.55 (regularised variant)
+    #   trial 8: RF max_depth=8 + threshold 0.55 (relaxed variant)
+    # No post-hoc expansion. If any trial fails a kill criterion, the
+    # hypothesis is dead at that trial; no replacement trials.
+
+    kill_criteria:
+      - "BH FDR q=0.05 kills all 8 trials on pooled CPCV test (Criterion 3, Pathway A)"
+      - "Best surviving trial has WFE < 0.50 on multi-cut walk-forward (Criterion 6)"
+      - "Best surviving trial has DSR < 0.95 per Bailey-LdP 2014 Eq 2 (Criterion 5, binding)"
+      - "Best surviving trial's pooled 2026 sacred-holdout ExpR < 0.40 * pooled IS ExpR (minimum 0.043R lift, Criterion 8)"
+      - "Any era bin (2019-2022, 2023, 2024-2025) with >= 50 pooled trades shows pooled ExpR < -0.05 (era dependent, Criterion 9)"
+      - "Best surviving trial has Chordia t < 3.00 (theory-supported t-hurdle per dual pathway, Criterion 4)"
+      - "Best surviving trial loses to a 1-line ATR>50th-percentile pooled filter (institutional audit requirement: ML must beat the simplest alternative)"
+      - "Pooled training set has NEGATIVE baseline ExpR after rebuild (sanity check: if training data is somehow negative, halt immediately per de Prado Ch 3 precondition violation)"
+
+# ----------------------------------------------------------------------
+# Budget + pre-registration checklist
+# ----------------------------------------------------------------------
+
+total_hypothesis_count: 1
+total_expected_trials: 8
+
+budget_check:
+  max_allowed_clean: 300  # Operational cap per pre_registered_criteria.md Criterion 2
+  max_allowed_proxy: 2000
+  strict_bailey_e1_bound: 28  # 6.65yr clean MNQ -> Ln(K)/0.5 <= 6.65 -> K <= 28
+  target_trials: 8
+  status: "under budget at 8/28 strict Bailey bound"
+
+minbtl_sanity:
+  formula: "2*Ln(N) / E[max_N]^2 <= available_clean_years"
+  trials_N: 8
+  expected_max_sharpe: 1.0  # Strict Bailey default
+  required_years: 4.16  # 2*Ln(8)/1.0 ~ 4.16
+  available_years: 6.65
+  passes: true
+
+# ----------------------------------------------------------------------
+# Pre-registration checklist
+# ----------------------------------------------------------------------
+
+pre_registration_checklist:
+  theory_citation_present: true
+  economic_basis_present: true
+  trial_count_under_budget: true  # 8 < 300 and 8 < 28 strict
+  kill_criteria_pre_registered: true
+  no_volume_filter_on_parent_proxy: true  # No proxy data used
+  holdout_date_committed: "2026-01-01"
+  commit_before_code_runs: true  # This file is committed before Stage 3
+
+# ----------------------------------------------------------------------
+# Stage 3 execution contract
+# ----------------------------------------------------------------------
+# When Stage 3 runs the experiment, it must:
+#   1. Load this file and verify the git SHA it was committed under
+#   2. Reconstruct the training set from the 29 active validated_setups
+#      (status='active') for MNQ + MES, via triple-join to daily_features
+#      (trading_day + symbol + orb_minutes)
+#   3. Compute the 6 features via trading_app.ml.features.transform_to_features
+#      (same transform used by LiveMLPredictor for training/serving parity)
+#      PLUS the new orb_SESSION_volume_norm feature (to be added to
+#      features.py in Stage 3 as the single feature-pipeline change)
+#   4. Apply LOOKAHEAD_BLACKLIST assertion: drop any row where a blacklisted
+#      column is populated on the feature matrix (defence-in-depth)
+#   5. Split train (< 2026-01-01) / holdout (>= 2026-01-01) STRICTLY
+#   6. Run 8 trials per the enumeration above via CPCV-45
+#   7. For each trial compute: OOS AUC, pooled ExpR lift vs baseline,
+#      5K Phipson-Smyth bootstrap p-value against shuffled-label null,
+#      then apply BH FDR at q=0.05 across the 8-trial family
+#   8. Any survivor -> walk-forward multi-cut (per Criterion 6)
+#   9. Any walk-forward survivor -> DSR (Criterion 5, full Bailey-LdP Eq 2)
+#   10. Any DSR survivor -> era stability check (Criterion 9)
+#   11. Any era-stable survivor -> Chordia t (Criterion 4 dual pathway)
+#   12. Final single survivor -> beat-the-baseline test (ATR>50th filter)
+#   13. FINAL -> single evaluation against the Mode A 2026 sacred holdout
+#   14. Write postmortem at
+#       docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence-postmortem.md
+#       documenting EXACTLY which criterion triggered for each killed trial
+#       and whether the hypothesis as a whole passed or failed.
+# Any deviation from this contract is a protocol violation and the
+# hypothesis must be marked DEAD regardless of numeric results.
