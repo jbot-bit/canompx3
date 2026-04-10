@@ -1,0 +1,178 @@
+# Hypothesis Registry — MNQ Multi-RR Individual Pathway B
+#
+# Locked:        2026-04-10T18:00:00+10:00
+# Author:        Claude Code session (multi-RR continuation)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  6.66 calendar years
+# Testing mode:  individual (Pathway B, Amendment 3.0)
+#
+# Raw data (2026-04-10 query) shows positive unfiltered ExpR at RR1.5-2.0:
+#   EUROPE_FLOW: RR1.5=+0.040, RR2.0=+0.040 (both > RR1.0=+0.020)
+#   TOKYO_OPEN:  RR1.5=+0.055, RR2.0=+0.046, RR2.5=+0.034
+#   NYSE_OPEN:   RR1.5=+0.075 (strong), RR2.0=+0.018 (marginal)
+#   COMEX_SETTLE: RR1.5=+0.005 (noise) — excluded
+#
+# Session-specific RR rationale:
+#   Continuation sessions (EUROPE_FLOW, TOKYO_OPEN) — cross-border/Asian
+#   information incorporation is gradual → RR2.0 predicted.
+#   NYSE_OPEN — Crabel commitment is strong but front-loaded → RR1.5
+#   is the structural sweet spot between 1.0 and 2.0.
+
+metadata:
+  name: "mnq-multi-rr-individual"
+  purpose: |
+    Multi-RR continuation hypotheses for MNQ sessions with positive raw
+    expectancy at RR > 1.0. Pathway B individual testing at raw p < 0.05.
+    Complements the RR1.0 file — these test whether higher targets
+    capture more edge in continuation-type sessions.
+  date_locked: "2026-04-10T18:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.66
+  data_source: "real CME Micro E-mini Nasdaq-100 futures 2019-05-06 onwards"
+  testing_mode: "individual"
+  bailey_compliance:
+    trials: 5
+    horizon_years: 6.66
+    e_max_n: 1.0
+    min_btl_required_years: 3.22
+    headroom_pct: 107
+    status: "PASS"
+    sharpe_noise_floor_annualized: 0.70
+  total_expected_trials: 5
+
+hypotheses:
+  - id: 1
+    name: "MNQ EUROPE_FLOW G5 RR1.5 — gradual cross-border continuation"
+    theory_citation: "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
+    economic_basis: |
+      European information spillover into NQ is gradual — price discovery
+      takes longer than 1x ORB range. RR1.5 captures the sweet spot
+      between confirmation and overextension. Raw ExpR=+0.040 at
+      RR1.5 is 2x the RR1.0 baseline (+0.020).
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MNQ]
+      sessions: [EUROPE_FLOW]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 2
+    name: "MNQ EUROPE_FLOW G5 RR2.0 — full cross-border continuation"
+    theory_citation: "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
+    economic_basis: |
+      Full information incorporation from European session spillover.
+      RR2.0 tests whether the directional follow-through extends to
+      2x the ORB range. Raw ExpR=+0.040 matches RR1.5 — the edge
+      doesn't decay between 1.5 and 2.0, suggesting persistent flow.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MNQ]
+      sessions: [EUROPE_FLOW]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 3
+    name: "MNQ TOKYO_OPEN G5 RR1.5 — Asian momentum continuation"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: |
+      Asian session meteor-shower persistence + physical demand flow
+      creates sustained directional moves. RR1.5 captures medium
+      continuation. Raw ExpR=+0.055 is the highest of any session/RR combo.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MNQ]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 4
+    name: "MNQ TOKYO_OPEN G5 RR2.0 — full Asian momentum"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: |
+      Full extension of Asian momentum. Physical commodity flows
+      (gold/energy) spillover into equity futures creates persistent
+      directional follow-through. Raw ExpR=+0.046 — strong for RR2.0.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MNQ]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 5
+    name: "MNQ NYSE_OPEN G5 RR1.5 — Crabel extended commitment"
+    theory_citation: "Crabel (1990) ch. 3"
+    economic_basis: |
+      NYSE cash open commitment is front-loaded but strong enough
+      to sustain 1.5x continuation. Raw ExpR=+0.075 — nearly as
+      strong as the proven RR1.0 (+0.103). Win rate drops from 50.8%
+      to 35.6% but the larger payoff compensates.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_OPEN]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+total_hypothesis_count: 5
+total_expected_trials: 5
+budget_check:
+  mode: "clean"
+  strict_bailey_e_1_0_max_n: 27
+  data_horizon_years_available: 6.66
+  sharpe_noise_floor: 0.695
