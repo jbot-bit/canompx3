@@ -1615,32 +1615,27 @@ def run_validation(
 
     # ── Phase C: Batch write all results ─────────────────────────────
     n_fdr_rejected = 0  # set by FDR hard gate below; used in Phase D logging
-    processed_orb_minutes = sorted({sr["row_dict"].get("orb_minutes", 5) for sr in serial_results})
-    if not dry_run and processed_orb_minutes:
+    processed_sids = [sr["row_dict"]["strategy_id"] for sr in serial_results]
+    if not dry_run and processed_sids:
         with duckdb.connect(str(db_path)) as con:
             from pipeline.db_config import configure_connection
 
             configure_connection(con, writing=True)
 
-            # Purge stale validated_setups for this instrument + processed
-            # apertures only.  edge_families has no orb_minutes column, so
-            # scope via head_strategy_id → validated_setups FK.
-            placeholders = ", ".join("?" * len(processed_orb_minutes))
+            # Purge validated_setups + edge_families ONLY for strategy_ids
+            # being processed in this run.  Prior code used instrument +
+            # orb_minutes which nuked unrelated strategies (e.g. RR1.0
+            # wiped when validating RR1.5/2.0).  Fix: 2026-04-11.
+            sid_placeholders = ", ".join("?" * len(processed_sids))
             con.execute(
                 f"""DELETE FROM edge_families
-                    WHERE instrument = ?
-                    AND head_strategy_id IN (
-                        SELECT strategy_id FROM validated_setups
-                        WHERE instrument = ?
-                        AND orb_minutes IN ({placeholders})
-                    )""",
-                [instrument, instrument] + processed_orb_minutes,
+                    WHERE head_strategy_id IN ({sid_placeholders})""",
+                processed_sids,
             )
             con.execute(
                 f"""DELETE FROM validated_setups
-                    WHERE instrument = ?
-                    AND orb_minutes IN ({placeholders})""",
-                [instrument] + processed_orb_minutes,
+                    WHERE strategy_id IN ({sid_placeholders})""",
+                processed_sids,
             )
 
             for sr in serial_results:

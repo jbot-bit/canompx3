@@ -2037,3 +2037,108 @@ class TestPathwayBEndToEnd:
         assert notes is not None
         assert reason == notes
         assert "Phase 3" in reason
+
+
+class TestPhaseC_DeleteScope:
+    """Regression: Phase C DELETE must only touch processed strategy_ids.
+
+    Bug (pre-2026-04-11): DELETE used ``instrument + orb_minutes`` scope,
+    wiping *all* validated_setups for that instrument — including strategies
+    NOT being re-validated.  This killed RR1.0 strategies when RR1.5/2.0
+    were validated.
+    """
+
+    def _setup_db_with_preexisting(self, tmp_path, preexisting_sid, new_row):
+        """Create DB with one already-validated strategy + one new unvalidated."""
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
+        con.execute(BARS_1M_SCHEMA)
+        con.execute(BARS_5M_SCHEMA)
+        con.execute(DAILY_FEATURES_SCHEMA)
+        con.close()
+
+        from trading_app.db_manager import init_trading_app_schema
+
+        init_trading_app_schema(db_path=db_path)
+
+        con = duckdb.connect(str(db_path))
+        # Insert the pre-existing strategy as already validated in experimental_strategies
+        pre_row = _make_row(
+            strategy_id=preexisting_sid,
+            rr_target=1.0,
+            validation_status="PASSED",
+            validation_notes="Prior run",
+        )
+        for row in [pre_row, new_row]:
+            cols = list(row.keys())
+            placeholders = ", ".join(["?"] * len(cols))
+            col_str = ", ".join(cols)
+            con.execute(
+                f"INSERT INTO experimental_strategies ({col_str}) VALUES ({placeholders})",
+                list(row.values()),
+            )
+
+        # Simulate prior promotion: insert pre-existing into validated_setups
+        con.execute(
+            """INSERT INTO validated_setups (
+                strategy_id, instrument, orb_label, orb_minutes, rr_target,
+                confirm_bars, entry_model, filter_type, sample_size, win_rate,
+                expectancy_r, years_tested, all_years_positive,
+                stress_test_passed, status
+            ) VALUES (?, 'MGC', 'CME_REOPEN', 5, 1.0, 1, 'E1', 'NO_FILTER',
+                      150, 0.55, 0.54, 3, TRUE, TRUE, 'active')""",
+            [preexisting_sid],
+        )
+        con.commit()
+        con.close()
+        return db_path
+
+    def test_preexisting_validated_survives_new_validation(self, tmp_path):
+        """Pre-existing RR1.0 in validated_setups must survive when RR1.5 is validated."""
+        preexisting_sid = "MGC_CME_REOPEN_E1_RR1.0_CB1_NO_FILTER"
+        new_sid = "MGC_CME_REOPEN_E1_RR1.5_CB1_NO_FILTER"
+        new_row = _make_row(strategy_id=new_sid, rr_target=1.5)
+
+        db_path = self._setup_db_with_preexisting(tmp_path, preexisting_sid, new_row)
+
+        run_validation(db_path=db_path, instrument="MGC", enable_walkforward=False)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        surviving = con.execute(
+            "SELECT strategy_id FROM validated_setups WHERE strategy_id = ?",
+            [preexisting_sid],
+        ).fetchone()
+        total = con.execute("SELECT COUNT(*) FROM validated_setups").fetchone()[0]
+        con.close()
+
+        assert surviving is not None, (
+            f"Pre-existing {preexisting_sid} was deleted by Phase C — "
+            "DELETE scope is too broad (instrument+orb_minutes instead of strategy_id)"
+        )
+        # Pre-existing (RR1.0) + newly promoted (RR1.5) = 2
+        assert total == 2, f"Expected 2 validated strategies, got {total}"
+
+    def test_preexisting_survives_when_new_strategy_rejected(self, tmp_path):
+        """Pre-existing row survives even when new strategy is REJECTED."""
+        preexisting_sid = "MGC_CME_REOPEN_E1_RR1.0_CB1_NO_FILTER"
+        new_sid = "MGC_CME_REOPEN_E1_RR1.5_CB1_NO_FILTER"
+        # sample_size=10 triggers Phase 1 rejection
+        new_row = _make_row(strategy_id=new_sid, rr_target=1.5, sample_size=10)
+
+        db_path = self._setup_db_with_preexisting(tmp_path, preexisting_sid, new_row)
+
+        run_validation(db_path=db_path, instrument="MGC", enable_walkforward=False)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        surviving = con.execute(
+            "SELECT strategy_id FROM validated_setups WHERE strategy_id = ?",
+            [preexisting_sid],
+        ).fetchone()
+        total = con.execute("SELECT COUNT(*) FROM validated_setups").fetchone()[0]
+        con.close()
+
+        assert surviving is not None, "Pre-existing must survive even when new strategy is rejected"
+        # Only the pre-existing survives; the new one was rejected
+        assert total == 1, f"Expected 1 validated strategy (pre-existing only), got {total}"
