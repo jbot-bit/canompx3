@@ -1,0 +1,176 @@
+# MGC Pathway B — Individual Hypothesis Testing (Amendment 3.0)
+#
+# Locked:        2026-04-10T15:30:00+10:00
+# Author:        Claude Code session (discovery execution plan Phase 2)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  3.81 calendar years (2022-06-13 to 2026-04-06)
+# Testing mode:  individual (Pathway B, Amendment 3.0)
+#
+# MGC is Micro Gold — tight data (3.81yr) constrains detection power.
+# LONDON_METALS and CME_REOPEN are the two viable sessions for gold.
+# PDR_R080 and GAP_R005 have strong prior evidence from validated
+# strategies. G5 is the standard ORB size filter.
+# MinBTL for N=5: 2*Ln(5)/1.0^2 = 3.22yr < 3.81yr -> PASS (18% headroom)
+
+metadata:
+  name: "mgc-pathway-b"
+  purpose: |
+    Individual hypothesis testing for MGC under Pathway B (Amendment 3.0).
+    5 hypotheses tested at raw p < 0.05. Downstream gates (WFE >= 0.50,
+    2026 OOS positive, era stability) non-waivable. Short data horizon
+    (3.81yr) means marginal detection power — honest expectation is 0-2
+    survivors.
+  date_locked: "2026-04-10T15:30:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 3.81
+  data_source: "real CME Micro Gold futures 2022-06-13 onwards"
+  testing_mode: "individual"
+  bailey_compliance:
+    trials: 5
+    horizon_years: 3.81
+    e_max_n: 1.0
+    min_btl_required_years: 3.22
+    headroom_pct: 18
+    status: "PASS"
+  total_expected_trials: 5
+
+hypotheses:
+  - id: 1
+    name: "MGC LONDON_METALS G5 RR2.0 — London gold pricing"
+    theory_citation: "O'Hara (1995) Market Microstructure Theory; LBMA Gold Price"
+    economic_basis: |
+      The London gold price fix is the global reference for physical gold
+      transactions. LONDON_METALS session captures the period when London
+      physical market participants set the benchmark price. A meaningful ORB
+      (G5) broken during this session reflects institutional physical-market
+      positioning that should produce 2x continuation.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MGC]
+      sessions: [LONDON_METALS]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe (direction gate)"
+      - "Walk-forward efficiency < 0.50 (non-waivable)"
+      - "2026 OOS ExpR < 0 (non-waivable)"
+      - "Any era with N >= 50 and ExpR < -0.05 (non-waivable)"
+
+  - id: 2
+    name: "MGC LONDON_METALS PDR_R080 RR2.0 — prior day vol persistence"
+    theory_citation: "Andersen, Bollerslev, Diebold, Labys (2003) Econometrica"
+    economic_basis: |
+      Gold volatility is persistent (ABDL 2003). PDR_R080 selects days where
+      the prior day's range was >= 80th percentile, predicting continued
+      elevated activity at LONDON_METALS. Higher prior-day range = more
+      information to incorporate = stronger continuation through 2x.
+    filter:
+      type: PDR_R080
+      column: prev_day_range
+    scope:
+      instruments: [MGC]
+      sessions: [LONDON_METALS]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 3
+    name: "MGC CME_REOPEN GAP_R005 RR2.0 — overnight gap info"
+    theory_citation: "Branch & Ma (2012) JFM; overnight gap literature"
+    economic_basis: |
+      Overnight gaps in gold reflect information accumulated during the
+      Asian/European physical market sessions while CME is closed. GAP_R005
+      selects days with gaps >= 0.5% of prior close. The gap signals
+      directional information that should drive 2x continuation at CME
+      reopen as electronic traders react to the new price level.
+    filter:
+      type: GAP_R005
+      column: gap_pct
+    scope:
+      instruments: [MGC]
+      sessions: [CME_REOPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 4
+    name: "MGC CME_REOPEN G5 RR2.0 — reopen momentum"
+    theory_citation: "Crabel (1990) ch. 3"
+    economic_basis: |
+      CME reopen captures the transition from overnight electronic to full
+      US session. A meaningful ORB (G5) at reopen reflects accumulated
+      positioning from overnight markets. Crabel commitment predicts 2x
+      follow-through as US participants join the direction set by
+      Asian/European flow.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MGC]
+      sessions: [CME_REOPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 5
+    name: "MGC LONDON_METALS G5 RR1.0 — London gold min continuation"
+    theory_citation: "O'Hara (1995) Market Microstructure Theory; LBMA Gold Price"
+    economic_basis: |
+      At RR=1.0, the prediction is minimal: physical-market pricing flow
+      at LONDON_METALS drives at least 1x ORB continuation. This is the
+      strongest baseline prediction for gold — if physical flow cannot
+      push price even 1x the opening range, the signal is noise.
+    filter:
+      type: ORB_G5
+      column: orb_size_points
+    scope:
+      instruments: [MGC]
+      sessions: [LONDON_METALS]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+total_hypothesis_count: 5
+total_expected_trials: 5
+budget_check:
+  mode: "clean"
+  strict_bailey_e_1_0_max_n: 27
+  data_horizon_years_available: 3.81
