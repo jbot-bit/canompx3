@@ -88,6 +88,9 @@ class TestValidatedFiltersRegistered:
         assert len(violations) == 0
 
 
+# ── Active shelf routability ──────────────────────────────────────────
+
+
 class TestActiveValidatedFiltersRoutable:
     """Active shelf must stay inside the canonical session-aware filter grid."""
 

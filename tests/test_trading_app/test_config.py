@@ -20,6 +20,7 @@ from trading_app.config import (
     StrategyFilter,
     VolumeFilter,
     get_filters_for_grid,
+    is_e2_lookahead_filter,
 )
 
 
@@ -770,6 +771,26 @@ class TestDoubleBreakFilterRemoved:
         """ALL_FILTERS registry has no NODBL entries."""
         nodbl_keys = [k for k in ALL_FILTERS if "NODBL" in k or k == "NO_DBL_BREAK"]
         assert nodbl_keys == [], f"ALL_FILTERS has NODBL: {nodbl_keys}"
+
+
+class TestE2LookaheadHelper:
+    """Canonical helper for E2-invalid break-bar-derived filter families."""
+
+    @pytest.mark.parametrize(
+        ("filter_type", "expected"),
+        [
+            ("VOL_RV12_N20", True),
+            ("ATR70_VOL_RV12", True),
+            ("ORB_G8_FAST5", True),
+            ("ORB_G6_CONT", True),
+            ("ORB_G5_NOMON_CONT", True),
+            ("ORB_G5", False),
+            ("OVNRNG_25", False),
+            ("PDR_R105", False),
+        ],
+    )
+    def test_classifies_filter_types(self, filter_type, expected):
+        assert is_e2_lookahead_filter(filter_type) is expected
 
 
 class TestBreakQualityComposites:

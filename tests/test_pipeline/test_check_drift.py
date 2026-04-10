@@ -515,6 +515,7 @@ class TestNoActiveE2LookaheadFilters:
     """Tests for the active-shelf E2 look-ahead contamination check."""
 
     def test_catches_active_e2_break_speed_filter(self, tmp_path, monkeypatch):
+        """An active E2 strategy with a FAST filter must trigger a violation."""
         import duckdb
 
         from pipeline import check_drift

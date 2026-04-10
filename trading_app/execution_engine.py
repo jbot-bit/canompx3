@@ -29,6 +29,7 @@ from trading_app.config import (
     HOLD_HOURS,
     IB_DURATION_MINUTES,
     SESSION_EXIT_MODE,
+    is_e2_lookahead_filter,
 )
 from trading_app.portfolio import (
     Portfolio,
@@ -635,13 +636,8 @@ class ExecutionEngine:
 
             # E2 filter exclusion: skip break-bar-derived filters (look-ahead
             # for stop-market entries that fire before the break bar closes).
-            if strategy.entry_model == "E2":
-                from trading_app.config import E2_EXCLUDED_FILTER_PREFIXES, E2_EXCLUDED_FILTER_SUBSTRINGS
-
-                if strategy.filter_type.startswith(E2_EXCLUDED_FILTER_PREFIXES) or any(
-                    sub in strategy.filter_type for sub in E2_EXCLUDED_FILTER_SUBSTRINGS
-                ):
-                    continue
+            if strategy.entry_model == "E2" and is_e2_lookahead_filter(strategy.filter_type):
+                continue
 
             # Check strategy filter (size, DOW, break speed, etc.)
             filt = ALL_FILTERS.get(strategy.filter_type)

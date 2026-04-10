@@ -1862,7 +1862,7 @@ def check_no_active_e2_lookahead_filters(con=None) -> list[str]:
     violations = []
     _own_con = False
     try:
-        from trading_app.config import E2_EXCLUDED_FILTER_PREFIXES, E2_EXCLUDED_FILTER_SUBSTRINGS
+        from trading_app.config import is_e2_lookahead_filter
 
         if con is None:
             import duckdb
@@ -1885,9 +1885,7 @@ def check_no_active_e2_lookahead_filters(con=None) -> list[str]:
 
         contaminated = []
         for strategy_id, instrument, orb_label, filter_type in rows:
-            if filter_type.startswith(E2_EXCLUDED_FILTER_PREFIXES) or any(
-                sub in filter_type for sub in E2_EXCLUDED_FILTER_SUBSTRINGS
-            ):
+            if is_e2_lookahead_filter(filter_type):
                 contaminated.append((strategy_id, instrument, orb_label, filter_type))
 
         for strategy_id, instrument, orb_label, filter_type in contaminated:

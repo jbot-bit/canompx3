@@ -32,8 +32,6 @@ from pipeline.dst import (
 )
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
-    E2_EXCLUDED_FILTER_PREFIXES,
-    E2_EXCLUDED_FILTER_SUBSTRINGS,
     ENTRY_MODELS,
     SKIP_ENTRY_MODELS,
     STOP_MULTIPLIERS,
@@ -41,6 +39,7 @@ from trading_app.config import (
     VolumeFilter,
     apply_tight_stop,
     get_filters_for_grid,
+    is_e2_lookahead_filter,
 )
 from trading_app.db_manager import compute_trade_day_hash, init_trading_app_schema
 from trading_app.hypothesis_loader import (
@@ -1363,10 +1362,7 @@ def run_discovery(
                     # on the first touch after ORB end, before the break bar
                     # closes — these filter values are unknowable at entry time.
                     # E1 is unaffected (enters after break bar closes).
-                    if em == "E2" and (
-                        filter_key.startswith(E2_EXCLUDED_FILTER_PREFIXES)
-                        or any(sub in filter_key for sub in E2_EXCLUDED_FILTER_SUBSTRINGS)
-                    ):
+                    if em == "E2" and is_e2_lookahead_filter(filter_key):
                         continue
                     # Phase 4 early-exit: skip entry_models not referenced
                     if p4_allowed_entry_models is not None and em not in p4_allowed_entry_models:
