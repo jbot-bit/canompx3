@@ -1,8 +1,8 @@
 {
-  "total_iterations": 154,
-  "last_updated": "2026-04-07",
+  "total_iterations": 156,
+  "last_updated": "2026-04-10",
   "consecutive_low_only": 0,
-  "last_high_finding_iter": 161,
+  "last_high_finding_iter": 163,
   "findings_by_type": {
     "canonical_violation": {
       "found": 53,
@@ -11,8 +11,8 @@
       "fix_rate": 0.75
     },
     "silent_failure": {
-      "found": 35,
-      "fixed": 33,
+      "found": 36,
+      "fixed": 34,
       "deferred": 1,
       "fix_rate": 0.94
     },
@@ -46,15 +46,15 @@
       "deferred": 0,
       "fix_rate": 1.0
     },
-    "falsy_zero": {
+    "security": {
       "found": 3,
       "fixed": 3,
       "deferred": 0,
       "fix_rate": 1.0
     },
-    "security": {
-      "found": 2,
-      "fixed": 2,
+    "falsy_zero": {
+      "found": 3,
+      "fixed": 3,
       "deferred": 0,
       "fix_rate": 1.0
     },
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 12,
-    "MEDIUM": 41,
-    "LOW": 98
+    "MEDIUM": 42,
+    "LOW": 99
   },
   "classifications": {
-    "judgment": 73,
-    "mechanical": 54,
+    "judgment": 74,
+    "mechanical": 55,
     "audit-only": 27
   },
   "files_audited": {
@@ -333,6 +333,11 @@
     "research/research_1015_vs_1000.py": {
       "audit_count": 2,
       "last_iter": 109,
+      "findings": 2
+    },
+    "trading_app/pre_session_check.py": {
+      "audit_count": 2,
+      "last_iter": 163,
       "findings": 2
     },
     "trading_app/live/bot_dashboard.py": {
@@ -1000,11 +1005,6 @@
       "last_iter": 145,
       "findings": 1
     },
-    "trading_app/pre_session_check.py": {
-      "audit_count": 1,
-      "last_iter": 146,
-      "findings": 1
-    },
     "trading_app/live/copy_order_router.py": {
       "audit_count": 1,
       "last_iter": 147,
@@ -1058,6 +1058,16 @@
     "trading_app/live/tradovate/contracts.py": {
       "audit_count": 1,
       "last_iter": 161,
+      "findings": 1
+    },
+    "tests/test_trading_app/test_tradovate.py": {
+      "audit_count": 1,
+      "last_iter": 162,
+      "findings": 1
+    },
+    "tests/test_trading_app/test_projectx_429_retry.py": {
+      "audit_count": 1,
+      "last_iter": 162,
       "findings": 1
     }
   },
@@ -2755,6 +2765,28 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "6e401d1"
+    },
+    {
+      "iter": 162,
+      "date": "2026-04-07",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "tests/test_trading_app/test_tradovate.py + tests/test_trading_app/test_projectx_429_retry.py",
+      "finding_type": "security",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "24b30b6"
+    },
+    {
+      "iter": 163,
+      "date": "2026-04-10",
+      "phase": "fix",
+      "classification": "judgment",
+      "target": "trading_app/pre_session_check.py:314",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "4dc4a35c"
     }
   ]
 }

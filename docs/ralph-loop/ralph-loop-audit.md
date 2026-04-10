@@ -3,15 +3,46 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 162
+## Last iteration: 163
 
-## RALPH AUDIT — Iteration 162
-## Date: 2026-04-07
-## Infrastructure Gates: drift 77/77 PASS, behavioral audit PASS, ruff advisory-only (UP017 in scripts)
+## RALPH AUDIT — Iteration 163
+## Date: 2026-04-10
+## Infrastructure Gates: drift 90/90 PASS (6 pre-existing data violations unrelated to code: checks 59/95 — family_rr_locks + validated_setups lanes, from Mode A Phase 5 pending); behavioral audit FIXED (1 fail-open found and resolved); ruff advisory-only (B905/I001 in scripts/research/gc_proxy_validity.py)
 
 ---
 
-## Iteration 162 — Dead code sweep: unused @patch mock parameters in test files
+## Iteration 163 — check_lane_lifecycle fail-open on exception
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Fail-open | `pre_session_check.py:314` — `check_lane_lifecycle()` returned `(True, "WARN: ...")` on exception, permitting lane to trade when lifecycle state was unreadable | MEDIUM | FIXED 4dc4a35c |
+
+### Audit Notes
+
+- **Finding source:** Behavioral audit check #3 (broad except + success return) caught the pattern.
+- **TRACE:** `check_lane_lifecycle()` (line 309) → `read_lifecycle_state()` raises → `except Exception as e` (line 313) → `return True, f"WARN: ..."` (line 314) → caller sees `ok=True` → lane permitted to trade.
+- **Main orchestration path unaffected:** The real production path at `pre_session_check.py:473` calls `read_lifecycle_state()` directly without try/except — exceptions propagate naturally (fail-closed). Only the public wrapper `check_lane_lifecycle()` had the wrong semantics.
+- **Fix:** Changed line 314 from `return True, f"WARN: lifecycle state unavailable ({e})"` to `return False, f"BLOCKED: lifecycle state unavailable ({e})"`.
+- **Test added:** `test_blocks_when_lifecycle_state_unreadable` — patches `read_lifecycle_state` to raise `OSError`, asserts `ok is False` and `"BLOCKED" in msg`.
+- **Pre-existing drift violations (NOT introduced by this iteration):**
+  - Check 59: 2 active families missing from family_rr_locks — from Mode A Phase 5 (pending `select_family_rr.py` run)
+  - Check 95: 5 lanes in `topstep_50k_mnq_auto` not in validated_setups — from Phase 3c rebuild (strategies pending re-validation)
+  - These were present before this iteration and are operational/data issues, not code defects Ralph should fix.
+
+---
+
+## Broader sweep findings (reported — not fixed this iteration)
+
+| Target | Finding | Severity | Status |
+|--------|---------|----------|--------|
+| `trading_app/rolling_portfolio.py:308` | `train_months` unused function arg in `compute_day_of_week_stats` | LOW | DEFERRED — low severity, dead-code pass |
+| `trading_app/strategy_fitness.py:489` | `con` unused function arg in `_compute_fitness_from_cache` | LOW | DEFERRED — low severity, dead-code pass |
+| `trading_app/strategy_validator.py:239` | `strategy_id` unused function arg | LOW | DEFERRED — low severity, dead-code pass |
+| `scripts/research/gc_proxy_validity.py:19` | Unsorted imports (I001) | LOW | DEFERRED — research script, advisory only |
+
+---
+
+## Prior: Iteration 162 — Dead code sweep: unused @patch mock parameters in test files
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
@@ -19,24 +50,6 @@
 | Dead code / orphan | `test_tradovate.py:459` — `mock_sleep` param unused (patch needed, param not) | LOW | FIXED 24b30b6 |
 | Dead code / orphan | `test_tradovate.py:619-621` — `@patch` decorator unnecessary + `mock_post` param unused; `TradovateAuth.__init__` makes no HTTP calls | LOW | FIXED 24b30b6 |
 | Dead code / orphan | `test_projectx_429_retry.py:58,75,89,104,118,133,145` — 7x `mock_sleep` param unused (patches needed, params not) | LOW | FIXED 24b30b6 |
-
-### Audit Notes
-
-- **test_tradovate.py lines 160, 459:** `@patch("...time.sleep")` is legitimately needed to prevent real sleeps during retry loops in the code under test. The parameter just doesn't need asserting in these tests. Renamed `mock_sleep` → `_mock_sleep` (underscore-prefix convention for "intentionally unused").
-
-- **test_tradovate.py lines 619-621:** `@patch("trading_app.live.tradovate.auth.requests.post")` was unnecessary. Traced: `create_broker_components("tradovate")` calls `TradovateAuth()` which is a pure attribute-assignment constructor (no HTTP). `requests.post` is only called from `get_token()` which this test never invokes. Decorator removed, self-only signature.
-
-- **test_projectx_429_retry.py:** Same `mock_sleep` pattern. 7 functions where the sleep patch prevents real delays but the mock object is not asserted. Note: `test_cancel_retries_on_429_then_succeeds` at line 43 DOES assert `mock_sleep.call_count == 2` — that one was left unchanged. All 7 unused instances renamed to `_mock_sleep`.
-
-- **Broader sweep (reported only — not fixed this iteration):**
-  - `test_pipeline/test_backup.py` — 4x `fake_db` fixture params unused (fixture is needed for side-effects, param name just not referenced)
-  - `test_pipeline/test_pipeline_status.py` — 2x `capsys` unused, 2x `*args/**kwargs` in inner mock functions
-  - `tests/test_trading_app/` — multiple `mock_state` params unused in test_session_orchestrator.py, various fixture params
-  - `pipeline/build_daily_features.py:739-740` — `orb_label`, `orb_minutes` unused function args (no-touch zone adjacent, needs separate review)
-  - `pipeline/dst.py:297,305,337` — `trading_day` unused in 3 fixed-time resolver functions (no-touch zone — report only)
-  - `trading_app/rolling_portfolio.py:308` — `train_months` unused function arg
-  - `trading_app/strategy_fitness.py:489` — `con` unused function arg
-  - `trading_app/strategy_validator.py:239` — `strategy_id` unused function arg
 
 ---
 
@@ -50,20 +63,9 @@
 
 ---
 
-## Prior: Iteration 160 — trading_app/live/broker_connections.py + webhook_server.py + instance_lock.py + strategy_matcher.py
-
-| Sin | Finding | Severity | Status |
-|-----|---------|----------|--------|
-| Silent failure | `connect_all_enabled()` line 207 — bare `except Exception: pass` silently swallowed all auth failures at bot startup | HIGH | FIXED 57ab184 |
-| Canonical violation | `webhook_server.py:165-170` — `validate_entry_model` hardcodes `("E1", "E2")` instead of referencing ENTRY_MODELS | LOW | ACCEPTABLE — deliberately more restrictive than ENTRY_MODELS (blocks E3, which is soft-retired). Correct behavior at time of writing. |
-| Canonical violation | `strategy_matcher.py:55` — hardcodes `symbol = 'MGC'` in SQL query | LOW | ACCEPTABLE — standalone research script, 0 importers, MGC-specific analysis tool |
-| All others | instance_lock.py, broker_connections.py methods, webhook_server.py guards | — | CLEAN |
-
----
-
 ## Files Fully Scanned
 
-> Cumulative list — 240 files fully scanned (no new files added this iteration — test files audited but not added to production scan list).
+> Cumulative list — 241 files fully scanned (pre_session_check.py re-audited iter 163).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -117,7 +119,7 @@
 - trading_app/lane_allocator.py — added iter 143
 - trading_app/live/multi_runner.py — added iter 144
 - trading_app/live/broker_dispatcher.py — added iter 145
-- trading_app/pre_session_check.py — added iter 146
+- trading_app/pre_session_check.py — added iter 146, re-audited iter 163
 - trading_app/live/copy_order_router.py — added iter 147
 - trading_app/live/rithmic/auth.py — added iter 148
 - trading_app/live/bot_dashboard.py — added iter 149
@@ -145,10 +147,11 @@
 - trading_app/live/rithmic/positions.py — added iter 161
 - pipeline/db_config.py — added iter 161
 - pipeline/paths.py — re-audited iter 161 (modified 2026-04-04)
-- **Total: 240 files fully scanned**
+- **Total: 241 files fully scanned**
 
 ## Next iteration targets
-- Priority 1 (unscanned critical): trading_app/config.py — critical (63 importers), modified 2026-04-06; no-touch zone but audit-only pass warranted given recent PitRangeFilter addition
-- Priority 2 (unscanned medium): trading_app/consistency_tracker.py (medium, 2 importers), trading_app/execution_engine.py / entry_rules.py / risk_manager.py (previously scanned but check staleness vs recent modifications)
-- Priority 3: pipeline/asset_configs.py M2K orb_active:True inconsistency — no-touch zone, DEFER to human review
-- Broader dead code: production ARG findings in rolling_portfolio.py:308, strategy_fitness.py:489, strategy_validator.py:239 — low severity, investigate next dead-code pass
+- Priority 1 (unscanned critical): trading_app/config.py — critical (63 importers), no-touch zone but audit-only pass warranted
+- Priority 2 (stale re-audit — modified 2026-04-10): trading_app/strategy_fitness.py (medium, dead arg at line 489), trading_app/strategy_validator.py (medium, dead arg at line 239)
+- Priority 3 (stale re-audit — modified 2026-04-09): trading_app/rolling_portfolio.py (dead arg at line 308)
+- Priority 4 (unscanned medium): trading_app/consistency_tracker.py, trading_app/execution_engine.py, trading_app/entry_rules.py, trading_app/risk_manager.py
+- Note: pre-existing drift violations (checks 59/95) require operational resolution by user — run `python scripts/tools/select_family_rr.py` and re-run validator for Mode A strategies

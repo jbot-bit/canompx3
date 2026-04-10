@@ -1703,3 +1703,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 2 test files only. Zero production code changes.
 - Verification: PASS (65/65 tests, drift 77/77)
 - Commit: 24b30b6
+
+---
+
+## Iteration 163 — 2026-04-10
+- Phase: fix
+- Classification: [judgment]
+- Target: trading_app/pre_session_check.py:314
+- Finding: check_lane_lifecycle() returned (True, "WARN: ...") on exception — fail-open when lifecycle state is unreadable, permitting lane to trade
+- Action: Changed exception return from (True, "WARN: ...") to (False, "BLOCKED: ...") to enforce fail-closed contract. Added test_blocks_when_lifecycle_state_unreadable to cover the exception path. Main orchestration path (line 473) was already fail-closed by exception propagation — not changed.
+- Blast radius: 2 files (pre_session_check.py + test_pre_session_check.py)
+- Verification: PASS (28/28 test_pre_session_check.py)
+- Commit: 4dc4a35c

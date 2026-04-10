@@ -1,10 +1,10 @@
 ## Iteration: 163
-## Target: trading_app/strategy_fitness.py:489, trading_app/rolling_portfolio.py:308
-## Finding: Two dead parameters — `con` unused in `_compute_fitness_from_cache`, `train_months` unused in `compute_day_of_week_stats`
-## Classification: [mechanical]
-## Blast Radius: 2 production files, 2 call sites (strategy_fitness.py:786 + rolling_portfolio.py:599), tests not directly affected
+## Target: trading_app/pre_session_check.py:314
+## Finding: check_lane_lifecycle() returns (True, "WARN: ...") on exception — fail-open when lifecycle state is unreadable, permits lane to trade
+## Classification: [judgment]
+## Blast Radius: 1 production file, 1 test file
 ## Invariants:
-##   1. _compute_fitness_from_cache behavior MUST NOT change (only signature)
-##   2. compute_day_of_week_stats behavior MUST NOT change
-##   3. Call sites must be updated to not pass the removed arguments
-## Diff estimate: 4 lines (2 signature lines + 2 call-site lines)
+##   1. Main orchestration path (line 473-478) must NOT be changed
+##   2. Fix only changes exception return value from True to False in check_lane_lifecycle()
+##   3. All existing test assertions for blocked/stale/pass cases must still pass
+## Diff estimate: 1 line production + ~8 lines test = 9 lines total
