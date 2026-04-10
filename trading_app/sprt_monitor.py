@@ -27,6 +27,7 @@ import duckdb
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.live.performance_monitor import _compute_std_r
 from trading_app.strategy_fitness import _load_strategy_outcomes
 
@@ -126,7 +127,7 @@ def _load_trade_stream(
         rr_target=params["rr_target"],
         confirm_bars=params["confirm_bars"],
         filter_type=params["filter_type"],
-        start_date=date(2026, 1, 1),
+        start_date=HOLDOUT_SACRED_FROM,
     )
     forward_trades = [
         o["pnl_r"]

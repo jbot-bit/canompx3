@@ -20,6 +20,7 @@ import duckdb
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.derived_state import (
     build_code_fingerprint,
     build_db_identity,
@@ -114,7 +115,7 @@ def _load_canonical_forward_trades(
         rr_target=params["rr_target"],
         confirm_bars=params["confirm_bars"],
         filter_type=params["filter_type"],
-        start_date=date(2026, 1, 1),
+        start_date=HOLDOUT_SACRED_FROM,
     )
     return [
         o["pnl_r"]
