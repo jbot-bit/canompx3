@@ -548,6 +548,65 @@ class TestBrokerDispatcher:
         result = dispatcher.submit(spec)
         assert result["order_id"] == 100  # primary still succeeded
 
+    def test_secondary_failure_marks_degraded(self):
+        primary = self._make_router()
+        secondary = self._make_router(account_id=2)
+        primary.submit.return_value = {"order_id": 100, "status": "submitted"}
+        secondary.build_order_spec.side_effect = RuntimeError("secondary down")
+
+        dispatcher = BrokerDispatcher(primary, [secondary])
+        assert not dispatcher.is_degraded
+
+        spec = {
+            "action": "Buy",
+            "_intent": {"direction": "long", "entry_model": "E1", "entry_price": 0, "symbol": "X", "qty": 1},
+        }
+        dispatcher.submit(spec)
+
+        assert dispatcher.is_degraded
+        assert "submit:" in dispatcher.secondary_failure_summary
+        assert "RuntimeError" in dispatcher.secondary_failure_summary
+
+    def test_bracket_cleanup_failure_marks_degraded(self):
+        primary = self._make_router()
+        secondary = self._make_router(account_id=2)
+        primary.cancel_bracket_orders.return_value = 1
+        secondary.cancel_bracket_orders.side_effect = RuntimeError("cancel failed")
+
+        dispatcher = BrokerDispatcher(primary, [secondary])
+        dispatcher.cancel_bracket_orders("MNQM6")
+
+        assert dispatcher.is_degraded
+        assert "cancel_bracket:" in dispatcher.secondary_failure_summary
+
+    def test_update_market_price_failure_marks_degraded(self):
+        primary = self._make_router()
+        secondary = self._make_router(account_id=2)
+        secondary.update_market_price.side_effect = RuntimeError("price update failed")
+
+        dispatcher = BrokerDispatcher(primary, [secondary])
+        dispatcher.update_market_price(100.5)
+
+        assert dispatcher.is_degraded
+        assert "update_market_price:" in dispatcher.secondary_failure_summary
+
+    def test_healthy_dispatcher_not_degraded(self):
+        primary = self._make_router()
+        secondary = self._make_router(account_id=2)
+        primary.submit.return_value = {"order_id": 100}
+        secondary.build_order_spec.return_value = {"adapted": True}
+        secondary.submit.return_value = {"order_id": 200}
+
+        dispatcher = BrokerDispatcher(primary, [secondary])
+        spec = {
+            "action": "Buy",
+            "_intent": {"direction": "long", "entry_model": "E2", "entry_price": 100, "symbol": "X", "qty": 1},
+        }
+        dispatcher.submit(spec)
+
+        assert not dispatcher.is_degraded
+        assert "all secondaries healthy" in dispatcher.secondary_failure_summary
+
     def test_exit_spec_attaches_exit_intent(self):
         primary = self._make_router()
         primary.build_exit_spec.return_value = {"action": "Sell", "orderType": "Market"}

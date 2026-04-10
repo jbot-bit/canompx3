@@ -111,12 +111,30 @@ class MultiInstrumentRunner:
 
         # Report per-instrument results
         failures = 0
+        failed_instruments: list[str] = []
         for inst, result in zip(tasks.keys(), results, strict=True):
             if isinstance(result, Exception):
                 log.error("Orchestrator %s failed: %s", inst, result)
                 failures += 1
+                failed_instruments.append(inst)
             else:
                 log.info("Orchestrator %s completed cleanly", inst)
+
+        # Partial failure: notify operator via surviving orchestrators
+        if 0 < failures < len(tasks):
+            msg = (
+                f"PARTIAL SESSION FAILURE: {failures}/{len(tasks)} orchestrators crashed "
+                f"({', '.join(failed_instruments)}). Surviving instruments continued. "
+                f"CHECK POSITIONS on failed instruments."
+            )
+            log.critical(msg)
+            for inst, orch in self.orchestrators.items():
+                if inst not in failed_instruments:
+                    try:
+                        orch._notify(msg)
+                    except Exception:
+                        pass  # best-effort notification
+                    break  # one notification is enough
 
         # Clean up stop file after ALL feeds have exited
         _STOP_FILE.unlink(missing_ok=True)

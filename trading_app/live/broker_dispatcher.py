@@ -28,6 +28,10 @@ class BrokerDispatcher(BrokerRouter):
         super().__init__(account_id=primary.account_id, auth=primary.auth)
         self.primary = primary
         self.secondaries = secondaries or []
+        # Degraded state tracking — maps router description → failure reason.
+        # Unlike CopyOrderRouter, does NOT block primary (different firms are independent).
+        # Exposed via is_degraded for monitoring/notification by the orchestrator.
+        self._secondary_failures: dict[str, str] = {}
 
     def build_order_spec(self, direction: str, entry_model: str, entry_price: float, symbol: str, qty: int = 1) -> dict:
         return self.primary.build_order_spec(direction, entry_model, entry_price, symbol, qty)
@@ -52,9 +56,12 @@ class BrokerDispatcher(BrokerRouter):
                     sec_result.get("order_id"),
                 )
             except Exception as e:
-                log.error(
-                    "BrokerDispatcher: secondary %s FAILED: %s (primary succeeded, continuing)",
-                    type(router).__name__,
+                key = f"{type(router).__name__}(account={router.account_id})"
+                self._secondary_failures[key] = f"submit: {type(e).__name__}: {e}"
+                log.critical(
+                    "BrokerDispatcher DEGRADED: secondary %s FAILED: %s "
+                    "(primary succeeded, continuing — operator alert required)",
+                    key,
                     e,
                 )
 
@@ -91,10 +98,13 @@ class BrokerDispatcher(BrokerRouter):
         for router in self.secondaries:
             try:
                 router.update_market_price(price)
-            except Exception:
+            except Exception as e:
+                key = f"{type(router).__name__}(account={router.account_id})"
+                self._secondary_failures[key] = f"update_market_price: {type(e).__name__}: {e}"
                 log.warning(
-                    "BrokerDispatcher: secondary %s update_market_price failed",
-                    type(router).__name__,
+                    "BrokerDispatcher: secondary %s update_market_price failed: %s",
+                    key,
+                    e,
                     exc_info=True,
                 )
 
@@ -122,13 +132,29 @@ class BrokerDispatcher(BrokerRouter):
         for router in self.secondaries:
             try:
                 cancelled += router.cancel_bracket_orders(contract_id)
-            except Exception:
-                log.warning(
-                    "BrokerDispatcher: secondary %s bracket cleanup failed",
-                    type(router).__name__,
+            except Exception as e:
+                key = f"{type(router).__name__}(account={router.account_id})"
+                self._secondary_failures[key] = f"cancel_bracket: {type(e).__name__}: {e}"
+                log.critical(
+                    "BrokerDispatcher DEGRADED: secondary %s bracket cleanup failed: %s",
+                    key,
+                    e,
                     exc_info=True,
                 )
         return cancelled
+
+    @property
+    def is_degraded(self) -> bool:
+        """True if any secondary broker has failed an operation this session."""
+        return bool(self._secondary_failures)
+
+    @property
+    def secondary_failure_summary(self) -> str:
+        """Human-readable summary of secondary failures for notifications."""
+        if not self._secondary_failures:
+            return "all secondaries healthy"
+        parts = [f"{k}: {v}" for k, v in self._secondary_failures.items()]
+        return f"{len(self._secondary_failures)} degraded: {'; '.join(parts)}"
 
     @property
     def all_routers(self) -> list[BrokerRouter]:
