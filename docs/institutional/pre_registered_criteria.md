@@ -15,7 +15,8 @@
 | v2.6 | 2026-04-07 | Holdout policy DECLARED — Mode B operative. Pass-2 audit verified the 2026 H1 holdout was consumed per pre-registered protocol on 2026-04-02. New forward-sacred window starts 2026-04-07 (earliest first-look 2026-10-07). Walk-forward continues as OOS discipline for existing discoveries; forward-paper requirement applies to new deployments. See Amendment 2.6 at bottom. | Claude Code session (autonomous decision per user delegation, pass-2 audit verified) |
 | v2.7 | 2026-04-08 | **RESCINDS Amendment 2.6.** Holdout policy corrected to Mode A (holdout-clean) per explicit user correction. 2026-01-01 is the sacred holdout boundary going forward. The 3+ months of real-time 2026 data (2026-01-02 → present) is the accumulating forward OOS record. The 124 existing validated_setups are grandfathered as RESEARCH-PROVISIONAL per Amendment 2.4 — they were discovered with 2026 data in scope and are NOT OOS-clean. Any NEW discovery run must use `--holdout-date 2026-01-01`. See Amendment 2.7 at bottom. | Claude Code session (user correction: *"I THOUGHT WE WERE HOLDING OUT FROM 2026 ONWARDS SO THAT WE HAD 3 MONTHS ALREADY OF TRADES OOS"*) |
 | v2.8 | 2026-04-09 | **FACTUAL CORRECTION.** Phase 3c canonical layer rebuild (merged to main as commit `c33805b` on 2026-04-08) replaced pre-2019 parent-proxy bars with real-micro bars for MNQ/MES/MGC. Post-rebuild actual horizons: MNQ/MES 6.65 clean years (1,951 pre-holdout trading days, 2019-05-06 → 2025-12-31), MGC 2.7 clean years (671 pre-holdout days, 2023-09-11 → 2025-12-31). The prior text "~2.2 years of clean MNQ data" and "16 years proxy-extended" in § Criterion 2, and "MNQ/MES from 2024-02-05 onwards; MGC never valid" in § Criterion 10, both predate the Phase 3c rebuild and are factually wrong. All 12 locked numeric thresholds (300/2000 trial bounds, t ≥ 3.00, DSR > 0.95, WFE ≥ 0.50, N ≥ 100, etc.) remain EXACTLY as locked — this amendment is a factual correction of stale narrative, not a threshold relaxation. See Amendment 2.8 at bottom. | Claude Code session (user correction: *"I DONT WANNA FUCK AROUND WITH HALF THIS DATA HALF THAT DATA. I HAVE SUBSCRIPTION TO GET ALL THE DATA"*) |
-| v2.9 | 2026-04-09 | **Parent/Proxy Data Policy.** Binding rules for NQ/ES/GC parent vs MNQ/MES/MGC micro data. Delete NQ/ES bars. Keep GC for MGC Tier 2 validation (price-only). 4 new banned practices (#9-#12). | Claude Code session (user: *"is it useful at all for us to have the 2 different contract sizes or is it just a canonical fucking project nightmare?"*) |
+| v2.9 | 2026-04-09 | **Parent/Proxy Data Policy.** Binding rules for NQ/ES/GC parent vs MNQ/MES/MGC micro data. Delete NQ/ES bars. Keep GC for MGC Tier 2 validation (price-only). 4 new banned practices (#9-#12). **Partially superseded by Amendment 3.1 (GC proxy expanded to discovery for price-based filters).** | Claude Code session (user: *"is it useful at all for us to have the 2 different contract sizes or is it just a canonical fucking project nightmare?"*) |
+| v3.1 | 2026-04-10 | **Revised Proxy Data Policy.** GC proxy expanded from validation-only to discovery-eligible for price-safe filters (ORB_G, GAP, PDR, ATR, OVNRNG, COST_LT). Volume-unsafe filters remain micro-only. Regime-awareness requirement added. Empirical evidence: 4-gate research (price corr=0.99999, 96% trigger match, 99.5% GAP filter agreement). | Claude Code session (user: *"can we use the gc for our strats or not? it doesn't have to do with price movement does it?"*) |
 | v3.0 | 2026-04-09 | **Theory-Driven Individual Hypothesis Testing.** Adds dual-pathway to Criterion 3: individual hypothesis pathway (raw p < 0.05) for theory-grounded, mechanism-specific predictions alongside existing BH FDR pathway for exploratory search. Incorporates canonical-base-truth methodology for admissible search space definition. Downstream gates (WF, OOS, era stability) mandatory and non-waivable under individual pathway. | Claude Code session (user: *"There is a way that people realistically trade ORB breakouts that are valid and profitable without using 20 years of data and such hard tests, right?"*) |
 | v3.1 | 2026-04-09 | **Structural Data Boundary for Discovery + Era Stability.** WF_START_OVERRIDE now applies to both discovery IS scope (outcomes + daily_features) and Criterion 9 era bins. Years before the override are excluded from both. Justified by 5-variable structural audit (ATR, volume, ORB size, G-filter pass rates, trading days) confirming MNQ/MES 2019 micro-launch data is non-representative. MNQ CME_PRECLOSE 2019: ATR 0.42x, G8 pass 39%, vol 0.16x. NOT performance-snooped — zero strategy PnL consulted. See Amendment 3.1 at bottom. | Claude Code session (user: *"ensure we do not use v1 of anything. we always check back over to verify our work"*) |
 
@@ -754,3 +755,108 @@ Monthly granularity confirms Q3/Q4 2019 does NOT normalize. Jan 2020 = 71.4% G8 
 - Post-override era bins (2020-2022, 2023, 2024-2025, 2026) are UNCHANGED
 - The holdout boundary (2026-01-01) is UNCHANGED
 - Existing validated strategies are unaffected (they already pass Criterion 9 or are grandfathered)
+
+---
+
+## Amendment 3.1 (2026-04-10) — Revised Parent/Proxy Data Policy (supersedes parts of 2.9)
+
+**Type:** Policy revision with empirical evidence. Expands GC proxy from "validation-only" to "discovery-eligible for price-based filters." Adds filter classification and regime-awareness requirement. Does NOT relax MinBTL bounds, holdout policy, or volume-filter restrictions.
+
+**Trigger:** User challenge (2026-04-10): *"can we use the gc for our strats or not? it doesn't have to do with price movement does it?"* Followed by structured 4-gate empirical research on branch `research/gc-proxy-validity`.
+
+**Evidence (from `scripts/research/gc_proxy_validity.py`):**
+
+| Gate | Test | Result | Key metric |
+|---|---|---|---|
+| 1 | Bar-level price identity (1.25M paired bars) | PASS | Price corr=0.99999, range corr=0.984 |
+| 2 | Filter input identity (gap, PDR, range) | PASS | PDR corr=0.993, GAP_R005 agreement=99.5% |
+| 3 | Outcome identity (241K matched trades) | PASS | 100% GC coverage, 96% trigger match |
+| 4 | Adversarial (worst-case divergence) | PASS | 2.2% of days >5pt diff (roll artifacts) |
+
+**Negative control:** Volume correlation = 0.62 (contract counts similar but patterns DIFFERENT, confirming GC/MGC are structurally different instruments for volume-based features).
+
+### What Amendment 2.9 got right (UNCHANGED)
+
+- Volume/OI filters DO NOT transfer (10-100x notional difference). Banned Practice #11 stands.
+- Statistics must be era-split. Banned Practice #10 stands.
+- No silent proxy substitution. Rule 6 and Banned Practice #12 stand.
+- Pipeline protection (Rule 4) stands — parent symbols not in ACTIVE_ORB_INSTRUMENTS.
+- NQ/ES deletion disposition stands (Rule 2, MNQ/MES rows).
+
+### What Amendment 2.9 got wrong (REVISED)
+
+**Rule 1 (old):** "Discovery MUST use clean micro data only."
+**Rule 1 (revised):** Discovery MUST use clean micro data for volume-based filters. Discovery MAY use GC parent data for price-based filters, subject to the conditions below.
+
+**Rule 3 (old):** MGC two-tier protocol — Tier 1 discovery on micro only, Tier 2 validation on GC for price-only.
+**Rule 3 (revised):** MGC two-tier protocol — Tier 1 discovery on micro OR GC proxy (for price-safe filters with disclosure), Tier 2 cross-era validation on GC.
+
+**Banned Practice #9 (old):** "Using parent symbol bars (NQ, ES, GC) in any discovery run for micro instruments."
+**Banned Practice #9 (revised):** "Using parent symbol bars in discovery WITHOUT explicit `data_source_mode: proxy` declaration, filter-class compliance, and regime-awareness disclosure."
+
+### Filter classification (empirically grounded)
+
+**PRICE-SAFE** — can use GC proxy for MGC discovery:
+- ORB size filters: ORB_G4, ORB_G5, ORB_G6, ORB_G8 (and all CONT/DOW/FAST/L12 variants)
+- Gap filters: GAP_R005, GAP_R015
+- Prior day range: PDR_R080, PDR_R105, PDR_R125
+- ATR percentile: ATR_P30, ATR_P50, ATR_P70, ATR70_VOL
+- Overnight range: OVNRNG_10, OVNRNG_25, OVNRNG_50, OVNRNG_100 (and FAST variants)
+- Cost ratio: COST_LT08, COST_LT10, COST_LT12, COST_LT15 (and FAST variants) — threshold scales with ORB size in points, not contract size
+- Direction: DIR_LONG, DIR_SHORT
+- Cross-asset: X_MES_ATR60, X_MES_ATR70, X_MGC_ATR70
+- Baseline: NO_FILTER, PIT_MIN
+
+**VOLUME-UNSAFE** — micro-only, no proxy:
+- ORB volume: ORB_VOL_2K, ORB_VOL_4K, ORB_VOL_8K, ORB_VOL_16K
+- Relative volume: VOL_RV12_N20, VOL_RV15_N20, VOL_RV20_N20, VOL_RV25_N20, VOL_RV30_N20
+
+**Basis:** Price-safe filters use only price-derived inputs (OHLC, range, gap). GC and MGC share identical price discovery (corr=0.99999). Volume-unsafe filters use contract-level volume/OI which differs structurally between parent and micro.
+
+### Regime-awareness requirement (NEW)
+
+GC proxy extends the data horizon back to 2010. However, gold market structure has changed significantly:
+- Gold $1200 (2015): ATR ~22pts, G5 pass rate ~6-13% per session
+- Gold $2700 (2025): ATR ~57pts, G5 pass rate ~58% per session
+- Gold $4800 (2026): ATR ~156pts, G5 pass rate ~100%
+
+**Absolute-threshold filters (G4/G5/G6/G8)** select fundamentally different populations at different price levels. A 5-point ORB at $1200 is 0.42% of price; at $3000 it's 0.17%. Researchers using GC proxy with G-filters MUST:
+1. Report per-era G-filter pass rates
+2. Acknowledge that low-pass-rate eras have low trade counts (wide CIs, not "no edge")
+3. Consider ATR-normalized G thresholds for cross-era comparability (optional, not required)
+
+**Relative/percentile filters (PDR_R*, GAP_R*, OVNRNG_*, ATR_P*)** are regime-robust by construction — they use percentile thresholds that adapt to the price level. These are the PRIMARY value of GC proxy for MGC discovery.
+
+### Conditions for GC proxy discovery
+
+1. Hypothesis file declares `data_source_mode: proxy` with `data_source_disclosure: "GC parent futures 2010-2025"`
+2. Only price-safe filters used (see classification above)
+3. Cost model: use MGC cost specs (not GC) — `COST_SPECS['MGC']`
+4. Era-split required: statistics reported per era (minimum: pre-2020, 2020-2022, 2023+)
+5. G-filter strategies must report per-era pass rates
+6. MinBTL bound: N ≤ 2000 (proxy-extended ceiling, per Criterion 2)
+7. Deployment validation: MUST use MGC micro data only (proxy is for discovery power, not deployment evidence)
+
+### What this enables
+
+- MGC discovery budget expands from N ≤ 4 (2.7yr micro) to N ≤ 2000 (16yr GC proxy) for relative filters
+- PDR_R080, GAP_R005, OVNRNG_50 hypotheses become testable with 16 years of data
+- G-filter hypotheses gain marginal benefit (low pass rates pre-2025, but still more data than 2.7yr)
+- MGC joins MNQ/MES as a fully researchable instrument for price-based edge discovery
+
+### What this does NOT change
+
+- MinBTL bounds (N ≤ 300 clean, N ≤ 2000 proxy) — UNCHANGED
+- Holdout boundary (2026-01-01) — UNCHANGED
+- Volume-filter restrictions — UNCHANGED (micro-only)
+- Pipeline protection (GC not in ACTIVE_ORB_INSTRUMENTS) — UNCHANGED
+- Deployment validation (MGC-only) — UNCHANGED
+- NQ/ES deletion disposition — UNCHANGED
+
+### Deferred action items (from 2.9, updated)
+
+1. ~~Delete NQ and ES bars~~ — still pending, unchanged.
+2. **Build GC orb_outcomes** — required before GC proxy discovery can run. The outcome_builder needs GC in ASSET_CONFIGS with `orb_active: True` (or a research-mode flag).
+3. **Build GC daily_features** — required for filter application on GC data.
+4. **Add GC to COST_SPECS** — with full-size gold specs ($100/pt, ~$57.40 friction) for GC-native cost analysis; MGC cost model used for proxy discovery.
+5. **Write MGC proxy hypothesis files** — using GC data, relative filters, full 16-year horizon.
