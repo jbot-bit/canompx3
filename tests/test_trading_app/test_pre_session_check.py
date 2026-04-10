@@ -320,6 +320,17 @@ class TestLaneLifecycle:
         assert ok is True
         assert "stale/mismatched" in msg
 
+    def test_blocks_when_lifecycle_state_unreadable(self):
+        """Fail-closed: unreadable lifecycle state must block trading, not permit it."""
+        with patch(
+            "trading_app.pre_session_check.read_lifecycle_state",
+            side_effect=OSError("state file missing"),
+        ):
+            ok, msg = check_lane_lifecycle("SID_A", "topstep_50k_mnq_auto")
+        assert ok is False
+        assert "BLOCKED" in msg
+        assert "unavailable" in msg
+
 
 # ─── F-6: TopStep 5-XFA aggregate cap ────────────────────────────────────
 # @canonical-source docs/research-input/topstep/topstep_xfa_parameters.txt

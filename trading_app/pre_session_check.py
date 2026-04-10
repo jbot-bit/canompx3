@@ -311,7 +311,7 @@ def check_lane_lifecycle(strategy_id: str, profile_id: str | None = None) -> tup
     try:
         lifecycle = read_lifecycle_state(profile_id=profile_id)
     except Exception as e:
-        return True, f"WARN: lifecycle state unavailable ({e})"
+        return False, f"BLOCKED: lifecycle state unavailable ({e})"
 
     return _lane_lifecycle_from_lifecycle(lifecycle, strategy_id)
 
