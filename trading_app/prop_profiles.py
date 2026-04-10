@@ -402,71 +402,51 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         active=True,
         allowed_sessions=frozenset(
             {
-                "NYSE_CLOSE",
-                "COMEX_SETTLE",
                 "EUROPE_FLOW",
                 "TOKYO_OPEN",
                 "NYSE_OPEN",
             }
         ),
         allowed_instruments=frozenset({"MNQ"}),
-        # VALIDATED-SOURCED LANES (2026-04-09 — ghost-lane sweep).
+        # VALIDATED-SOURCED LANES (2026-04-10 — multi-RR discovery).
         #
-        # Prior state (stale, now removed): 5 lanes from a 2026-04-03 allocator
-        # run referencing strategy_ids no longer present in validated_setups
-        # after the Apr 9 discovery rebuild. Bot was operating with zero current
-        # validation backing. Detected in alignment audit 2026-04-09.
+        # Sourced from validated_setups after Pathway B individual discovery
+        # (hypothesis file: 2026-04-10-mnq-multi-rr-individual.yaml).
+        # All 5 passed WF, OOS, era stability gates.
         #
-        # New lane selection (all MNQ, E2 CB1, sourced from validated_setups):
-        #   NYSE_CLOSE G8 RR1
-        #   EUROPE_FLOW G8 RR2
-        #   COMEX_SETTLE G8 RR1
-        #   NYSE_OPEN G5 RR2
-        #   TOKYO_OPEN G8 RR2
-        #
-        # IMPORTANT: do not treat comments here as canonical live statistics.
-        # Forward N/WR/ExpR change over time. Query gold.db or
-        # docs/plans/2026-04-09-portfolio-tiered.md for the current snapshot.
-        #
-        # Selection rationale snapshot from the 2026-04-09 alignment sprint:
-        # four lanes were holding or improving; TOKYO_OPEN was retained on
-        # watch/probation for decay risk despite a live bounce.
-        #
-        # Note on the sixth validated strategy:
-        # MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8 remained structurally validated
-        # in validated_setups but was not included in the deployed-live auto
-        # profile. That is a live-book routing choice, not a claim that the
-        # strategy was removed from the validated set.
+        # COMEX_SETTLE excluded: only RR1.0 had edge, and the RR1.0
+        # strategies were wiped by a validator bug (re-run needed to restore).
+        # Re-add COMEX_SETTLE RR1.0 G5 once restored.
         #
         # Enforced by drift check 95 (pipeline/check_drift.py) — every lane in
         # an active profile must exist in validated_setups with status='active'.
         daily_lanes=(
             DailyLaneSpec(
-                "MNQ_NYSE_CLOSE_E2_RR1.0_CB1_ORB_G8",
-                "MNQ",
-                "NYSE_CLOSE",
-                max_orb_size_pts=80.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G8",
+                "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5",
                 "MNQ",
                 "EUROPE_FLOW",
                 max_orb_size_pts=120.0,
             ),
             DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8",
+                "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G5",
                 "MNQ",
-                "COMEX_SETTLE",
-                max_orb_size_pts=80.0,
+                "EUROPE_FLOW",
+                max_orb_size_pts=120.0,
             ),
             DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR2.0_CB1_ORB_G5",
+                "MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_G5",
                 "MNQ",
                 "NYSE_OPEN",
                 max_orb_size_pts=80.0,
             ),
             DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G8",
+                "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G5",
+                "MNQ",
+                "TOKYO_OPEN",
+                max_orb_size_pts=80.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G5",
                 "MNQ",
                 "TOKYO_OPEN",
                 max_orb_size_pts=80.0,
@@ -474,13 +454,11 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "Validated-sourced lanes (2026-04-09 ghost sweep). All lanes "
+            "Multi-RR validated lanes (2026-04-10 discovery). All lanes "
             "cross-referenced against validated_setups via drift check 95. "
-            "Live/forward stats are volatile; query gold.db or the current "
-            "portfolio-tiered doc for the latest snapshot. This profile "
-            "deploys 5 MNQ lanes from the 6-strategy active validated book; "
-            "TOKYO_OPEN remains a watch/probation lane from the Apr 9 "
-            "alignment review."
+            "COMEX_SETTLE RR1.0 pending re-addition after validator bug fix. "
+            "Two EUROPE_FLOW lanes (RR1.5+2.0) and two TOKYO_OPEN lanes "
+            "(RR1.5+2.0) reflect session-specific optimal RR from raw data."
         ),
     ),
     # =========================================================================

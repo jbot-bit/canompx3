@@ -2553,9 +2553,12 @@ def check_cost_model_field_ranges() -> list[str]:
     if root_str not in sys.path:
         sys.path.insert(0, root_str)
     try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
         from pipeline.cost_model import COST_SPECS, SESSION_SLIPPAGE_MULT
 
         for inst, spec in COST_SPECS.items():
+            if inst not in ACTIVE_ORB_INSTRUMENTS:
+                continue  # Skip proxy-only instruments (e.g. GC for MGC discovery)
             # Commission: $0.50 - $10.00 per RT is the sane range for micro futures
             if not (0.50 <= spec.commission_rt <= 10.0):
                 violations.append(f"  {inst}: commission_rt={spec.commission_rt} outside [0.50, 10.00]")
