@@ -54,6 +54,38 @@ provenance work. Do not fake this with inferred dates from shelf metadata.
     - `family_rr_locks` coverage
     - orphaned `hypothesis_file_sha`
 
+### Follow-up hardening (same session)
+
+Added a second, stricter era-discipline guard:
+
+- `pipeline/check_drift.py`
+  - added `check_active_micro_only_filters_after_micro_launch()`
+  - recomputes first traded day for active `requires_micro_data=True` rows from
+    canonical computed facts:
+    - `daily_features`
+    - `orb_outcomes`
+    - canonical filter logic from `trading_app.strategy_discovery`
+    - `pipeline.data_era.micro_launch_day(instrument)`
+  - explicitly does **not** trust `strategy_trade_days` because that table is
+    documented stale for active-shelf audit use
+- `tests/test_pipeline/test_check_drift_db.py`
+  - added coverage for:
+    - post-launch pass
+    - pre-launch violation
+    - missing recomputable trade-day failure
+
+Verification for this follow-up:
+
+- `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_check_drift_db.py -k 'ActiveMicroOnlyFiltersOnRealMicros or ActiveMicroOnlyFiltersAfterMicroLaunch' -q`
+  - result: `7 passed`
+
+Environment note:
+
+- direct `gold.db` opens became intermittently unavailable with
+  `Permission denied` during later verification, so full real-DB drift evidence
+  for the new Stage-3d-style check was blocked by file access, not logic/test
+  failure.
+
 ## Update (2026-04-10 evening — GC proxy branch merged, drift/SR cleanup)
 
 ### Headline

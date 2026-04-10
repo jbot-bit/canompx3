@@ -249,6 +249,147 @@ class TestActiveMicroOnlyFiltersOnRealMicros:
         assert "micro-only filter_type" in violations[1]
 
 
+# ── Active micro-only filters after launch ────────────────────────────
+
+
+class TestActiveMicroOnlyFiltersAfterMicroLaunch:
+    """Micro-only filters must only trade on/after the real micro launch date."""
+
+    MICRO_LAUNCH_SCHEMA = """
+        CREATE TABLE validated_setups (
+            strategy_id VARCHAR PRIMARY KEY,
+            instrument VARCHAR,
+            orb_label VARCHAR,
+            orb_minutes INTEGER,
+            entry_model VARCHAR,
+            confirm_bars INTEGER,
+            filter_type VARCHAR,
+            rr_target DOUBLE,
+            status VARCHAR,
+            win_rate DOUBLE,
+            expectancy_r DOUBLE,
+            fdr_significant BOOLEAN,
+            family_hash VARCHAR,
+            wf_tested BOOLEAN,
+            retired_at TIMESTAMPTZ,
+            retirement_reason VARCHAR
+        );
+
+        CREATE TABLE daily_features (
+            trading_day DATE,
+            symbol VARCHAR,
+            orb_minutes INTEGER,
+            orb_CME_REOPEN_break_dir VARCHAR,
+            orb_CME_REOPEN_volume BIGINT
+        );
+
+        CREATE TABLE orb_outcomes (
+            trading_day DATE,
+            symbol VARCHAR,
+            orb_minutes INTEGER,
+            orb_label VARCHAR,
+            entry_model VARCHAR,
+            confirm_bars INTEGER,
+            rr_target DOUBLE,
+            outcome VARCHAR,
+            pnl_r DOUBLE,
+            mae_r DOUBLE,
+            mfe_r DOUBLE,
+            entry_price DOUBLE,
+            stop_price DOUBLE
+        );
+    """
+
+    def test_passes_when_first_trade_is_after_launch(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            self.MICRO_LAUNCH_SCHEMA,
+            """
+            INSERT INTO validated_setups (
+                strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                confirm_bars, filter_type, rr_target, status, win_rate,
+                expectancy_r, fdr_significant, family_hash, wf_tested,
+                retired_at, retirement_reason
+            ) VALUES (
+                'MNQ_CME_REOPEN_E1_RR1.0_CB1_ORB_VOL_2K', 'MNQ', 'CME_REOPEN', 5, 'E1',
+                1, 'ORB_VOL_2K', 1.0, 'active', 0.55,
+                0.10, TRUE, 'fam8', TRUE,
+                NULL, NULL
+            );
+
+            INSERT INTO daily_features VALUES
+                ('2019-05-06', 'MNQ', 5, 'LONG', 2500);
+
+            INSERT INTO orb_outcomes VALUES
+                ('2019-05-06', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0,
+                 'win', 1.0, 0.2, 1.5, 100.0, 95.0);
+            """,
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_micro_only_filters_after_micro_launch()
+        assert violations == []
+
+    def test_catches_first_trade_before_launch(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            self.MICRO_LAUNCH_SCHEMA,
+            """
+            INSERT INTO validated_setups (
+                strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                confirm_bars, filter_type, rr_target, status, win_rate,
+                expectancy_r, fdr_significant, family_hash, wf_tested,
+                retired_at, retirement_reason
+            ) VALUES (
+                'MNQ_CME_REOPEN_E1_RR1.0_CB1_ORB_VOL_2K', 'MNQ', 'CME_REOPEN', 5, 'E1',
+                1, 'ORB_VOL_2K', 1.0, 'active', 0.55,
+                0.10, TRUE, 'fam9', TRUE,
+                NULL, NULL
+            );
+
+            INSERT INTO daily_features VALUES
+                ('2019-05-03', 'MNQ', 5, 'LONG', 2500);
+
+            INSERT INTO orb_outcomes VALUES
+                ('2019-05-03', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0,
+                 'win', 1.0, 0.2, 1.5, 100.0, 95.0);
+            """,
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_micro_only_filters_after_micro_launch()
+        assert len(violations) == 1
+        assert "before MNQ micro launch 2019-05-06" in violations[0]
+
+    def test_catches_missing_recomputable_trade_days(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            self.MICRO_LAUNCH_SCHEMA,
+            """
+            INSERT INTO validated_setups (
+                strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                confirm_bars, filter_type, rr_target, status, win_rate,
+                expectancy_r, fdr_significant, family_hash, wf_tested,
+                retired_at, retirement_reason
+            ) VALUES (
+                'MNQ_CME_REOPEN_E1_RR1.0_CB1_ORB_VOL_2K', 'MNQ', 'CME_REOPEN', 5, 'E1',
+                1, 'ORB_VOL_2K', 1.0, 'active', 0.55,
+                0.10, TRUE, 'fam10', TRUE,
+                NULL, NULL
+            );
+
+            INSERT INTO daily_features VALUES
+                ('2019-05-06', 'MNQ', 5, 'LONG', 1500);
+
+            INSERT INTO orb_outcomes VALUES
+                ('2019-05-06', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0,
+                 'win', 1.0, 0.2, 1.5, 100.0, 95.0);
+            """,
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_micro_only_filters_after_micro_launch()
+        assert len(violations) == 1
+        assert "no recomputable traded days" in violations[0]
+
+
 # ── Check 35: No E0 in DB ────────────────────────────────────────────
 
 

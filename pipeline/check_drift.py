@@ -2045,6 +2045,122 @@ def check_active_micro_only_filters_on_real_micros(con=None) -> list[str]:
     return violations
 
 
+def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
+    """Recompute first trade day for active micro-only filters from canonical facts.
+
+    This is the precise Stage 3d-style honesty gate that the active shelf can
+    actually support without trusting stale metadata tables. For every active
+    ``validated_setups`` row whose filter declares ``requires_micro_data=True``:
+
+    1. Load the lane's canonical ``daily_features`` rows.
+    2. Recompute filter-eligible trade days using canonical filter logic.
+    3. Intersect with canonical ``orb_outcomes`` for the exact lane.
+    4. Verify the first traded day is on/after ``micro_launch_day(instrument)``.
+
+    The check deliberately ignores ``strategy_trade_days`` because that table is
+    known to be stale and is not authoritative for active-shelf audit work.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.data_era import is_micro, micro_launch_day
+        from trading_app.config import ALL_FILTERS, VolumeFilter
+        from trading_app.strategy_discovery import (
+            _build_filter_day_sets,
+            _compute_relative_volumes,
+            _load_daily_features,
+            _load_outcomes_bulk,
+        )
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, instrument, orb_label, orb_minutes,
+                   entry_model, rr_target, confirm_bars, filter_type
+            FROM validated_setups
+            WHERE status = 'active'
+            ORDER BY instrument, orb_minutes, orb_label, filter_type, strategy_id
+            """
+        ).fetchall()
+
+        micro_rows = []
+        for row in rows:
+            filter_obj = ALL_FILTERS.get(row[7])
+            if filter_obj is None or not filter_obj.requires_micro_data:
+                continue
+            # Non-micro instruments are handled by the instrument-level gate.
+            try:
+                if not is_micro(row[1]):
+                    continue
+            except Exception:
+                continue
+            micro_rows.append(row)
+
+        if not micro_rows:
+            return violations
+
+        lane_cache: dict[tuple[str, int], tuple[dict, dict]] = {}
+        for strategy_id, instrument, orb_label, orb_minutes, entry_model, rr_target, confirm_bars, filter_type in micro_rows:
+            cache_key = (instrument, orb_minutes)
+            if cache_key not in lane_cache:
+                relevant_rows = [r for r in micro_rows if (r[1], r[3]) == cache_key]
+                orb_labels = sorted({r[2] for r in relevant_rows})
+                entry_models = sorted({r[4] for r in relevant_rows})
+                needed_filters = {r[7]: ALL_FILTERS[r[7]] for r in relevant_rows}
+
+                features = _load_daily_features(con, instrument, orb_minutes, None, None)
+                if any(isinstance(f, VolumeFilter) for f in needed_filters.values()):
+                    _compute_relative_volumes(con, features, instrument, orb_labels, needed_filters)
+                filter_days = _build_filter_day_sets(features, orb_labels, needed_filters)
+                grouped_outcomes = _load_outcomes_bulk(
+                    con,
+                    instrument,
+                    orb_minutes,
+                    orb_labels,
+                    entry_models,
+                    holdout_date=None,
+                    start_date=None,
+                )
+                lane_cache[cache_key] = (filter_days, grouped_outcomes)
+
+            filter_days, grouped_outcomes = lane_cache[cache_key]
+            matching_day_set = filter_days.get((filter_type, orb_label), set())
+            grouped = grouped_outcomes.get((orb_label, entry_model, rr_target, confirm_bars), [])
+            traded_days = [o["trading_day"] for o in grouped if o["trading_day"] in matching_day_set]
+
+            if not traded_days:
+                violations.append(
+                    "  validated_setups: active micro-only strategy "
+                    f"{strategy_id} has no recomputable traded days from canonical "
+                    "daily_features/orb_outcomes. Era discipline cannot be proven."
+                )
+                continue
+
+            first_day = min(traded_days)
+            launch_day = micro_launch_day(instrument)
+            if first_day < launch_day:
+                violations.append(
+                    "  validated_setups: active micro-only strategy "
+                    f"{strategy_id} first trades on {first_day} before "
+                    f"{instrument} micro launch {launch_day}. Pre-launch "
+                    "parent/proxy data is invalid for requires_micro_data filters."
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_active_micro_only_filters_after_micro_launch: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 def check_wf_coverage(con=None) -> list[str]:
     """Check #40: WF coverage for MGC/MES (soft gate — WARNING ONLY, never blocks).
 
@@ -4752,6 +4868,12 @@ CHECKS = [
     (
         "Active micro-only filters run only on real-micro instruments",
         check_active_micro_only_filters_on_real_micros,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Active micro-only filters first trade on/after micro launch",
+        check_active_micro_only_filters_after_micro_launch,
         False,
         True,
     ),  # requires_db
