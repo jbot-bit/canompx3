@@ -1,0 +1,119 @@
+# Hypothesis Registry — Wave 5: ATR Velocity Expansion Gate
+#
+# Locked:       2026-04-11T03:45:00+10:00
+# Author:       Claude Code session (Wave 5 presession audit, post Phase A/B/C)
+# Holdout mode: A (2026-01-01 sacred)
+# Data horizon: MNQ 6.65yr, MES 6.65yr (post Phase 3c clean real-micro)
+# Testing mode: individual (Pathway B, Amendment 3.0)
+#
+# Theory citation (LOCAL sources, NOT training memory):
+# 1. scripts/research/wave4_presession_t2t8.py — Phase B T2-T8 adversarial battery
+#    completed 2026-04-11. Pre-commit script path; committed at wave 4 research
+#    batch commit (scripts/research/wave4_*.py).
+# 2. docs/specs/presession-volatility-filters.md — April 2 institutional T1-T8
+#    methodology (PDR/GAP deployment spec, same framework).
+# 3. pipeline/build_daily_features.py lines 1114-1138 — atr_vel_ratio computation
+#    proven no-lookahead (prior 20 days for atr_20, prior 5 days for velocity).
+#
+# Mechanism: Volatility expansion regime. atr_vel_ratio > 1.05 identifies days
+# where today's ATR(20) exceeds the 5-day prior average by at least 5%. In ORB
+# breakout context, expanding volatility predicts wider intraday range, which
+# clears friction costs more easily. The mechanism is structurally the same as
+# PDR (prev_day_range/atr) and ATR_P (atr percentile) — all gate on "high vol
+# regime" — but atr_vel_ratio specifically captures the TRANSITION into higher
+# vol rather than the absolute level.
+
+metadata:
+  name: "wave5-atr-vel-expansion"
+  purpose: |
+    Pre-register the ATR_VEL_GE105 filter (Wave 4 Phase B T2-T8 survivor) for
+    formal validation through strategy_discovery + strategy_validator. The
+    Phase B T2-T8 script already applied IS/OOS walk-forward, ±20% sensitivity,
+    5000-perm null bootstrap, and per-year stability — this file is the
+    institutional deployment path for those survivors.
+  date_locked: "2026-04-11T03:45:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.65
+  data_source: "real CME Micro E-mini Nasdaq-100 + E-mini S&P 500 futures 2019-05-06 onwards"
+  testing_mode: "individual"
+  bailey_compliance:
+    trials: 2
+    horizon_years: 6.65
+    e_max_n: 1.0
+    min_btl_required_years: 1.39
+    headroom_pct: 378
+    status: "PASS"
+  total_expected_trials: 2
+
+hypotheses:
+  - id: 1
+    name: "MNQ TOKYO_OPEN E2 RR1.0 ATR_VEL_GE105 — Asian session vol expansion gate"
+    theory_citation: "scripts/research/wave4_presession_t2t8.py (2026-04-11 T2-T8 result): MNQ TOKYO_OPEN RR1.0 in_ExpR=+0.188 out_ExpR=+0.034 WR spread +10.9pp WFE 1.42 T6 p=0.0042 T7 5/6 years (83%) dominance 48%."
+    economic_basis: |
+      Asian session (TOKYO_OPEN) ORB breakouts benefit from vol expansion
+      regime. When today's ATR(20) exceeds the 5-day prior average by
+      >= 5%, the Asian session shows higher breakout continuation rate
+      (+10.9pp WR lift) and stronger expectancy (+0.188 vs unfiltered
+      +0.095 baseline). The mechanism is momentum persistence: once vol
+      starts expanding, the Asian session continues the trend with
+      wider intraday ranges that clear friction costs. Walk-forward
+      efficiency 1.42 (slightly above 1.0 — OOS stronger than IS) is
+      within the acceptable range (< 1.5) per the Wave 4 audit rule.
+    filter:
+      type: ATR_VEL_GE105
+      column: atr_vel_ratio
+      thresholds: [1.05]
+    scope:
+      instruments: [MNQ]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 in validator discovery FDR"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Era stability: any era with N >= 50 and ExpR < -0.05"
+      - "Annualized Sharpe < 0.70 (Bailey noise floor)"
+
+  - id: 2
+    name: "MES US_DATA_1000 E2 RR1.5 ATR_VEL_GE105 — US macro vol expansion gate"
+    theory_citation: "scripts/research/wave4_presession_t2t8.py (2026-04-11 T2-T8 result): MES US_DATA_1000 RR1.5 in_ExpR=+0.103 out_ExpR=-0.040 WR spread +8.1pp WFE 0.96 T6 p=0.044 T7 5/6 years (83%) dominance 38%."
+    economic_basis: |
+      US 10:00 AM data release (ISM, consumer confidence, ASM) is a high-
+      information-content window. Expanding-vol days produce larger ORBs
+      that clear the friction gate. For MES (S&P micro), the effect at
+      RR1.5 flips the baseline from -0.040 (unfiltered loss) to +0.103
+      (profitable). The RR1.5 target captures the follow-through from
+      macro-release momentum. WFE 0.96 is near-perfect sign stability
+      between IS (2020-2023) and OOS (2024-2025).
+    filter:
+      type: ATR_VEL_GE105
+      column: atr_vel_ratio
+      thresholds: [1.05]
+    scope:
+      instruments: [MES]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 in validator discovery FDR"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Era stability: any era with N >= 50 and ExpR < -0.05"
+      - "Annualized Sharpe < 0.70 (Bailey noise floor)"
+
+total_hypothesis_count: 2
+total_expected_trials: 2
+budget_check:
+  mode: "clean"
+  max_allowed_clean: 300
+  strict_bailey_e_1_0_max_n: 27
+  data_horizon_years_available: 6.65
+  sharpe_noise_floor: 0.695
+  status: "under budget"

@@ -1069,6 +1069,77 @@ class CrossAssetATRFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class ATRVelRatioFilter(StrategyFilter):
+    """Filter by ATR velocity ratio (today's ATR20 / 5-day prior ATR20 average).
+
+    Distinct from ATRVelocityFilter (line ~1793) which is an AVOID filter combining
+    atr_vel_regime=Contracting + ORB compression. This class is a simple numeric
+    threshold gate on atr_vel_ratio — admits days where vol is expanding.
+
+    Reads atr_vel_ratio from daily_features. ratio > 1.0 = vol expanding.
+    Pre-session (no look-ahead): atr_20 uses prior 20 days; atr_vel_ratio uses
+    rows[i-5:i] prior-only slice. Verified in pipeline/build_daily_features.py
+    lines 1114 + 1121-1132.
+
+    Fail-closed: missing data means day is ineligible.
+
+    Wave 4 Phase B T2-T8 validation (2026-04-11):
+    - MNQ TOKYO_OPEN RR1.0: in_ExpR +0.188, WFE 1.42, p=0.0042 (SURVIVES)
+    - MES US_DATA_1000 RR1.5: in_ExpR +0.103, WFE 0.96, p=0.044 (SURVIVES)
+
+    @research-source scripts/research/wave4_presession_t2t8.py
+    @entry-models E2
+    """
+
+    CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
+
+    min_ratio: float = 1.05
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        val = row.get("atr_vel_ratio")
+        if val is None:
+            return False
+        return val >= self.min_ratio
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        if "atr_vel_ratio" not in df.columns:
+            return pd.Series(False, index=df.index)
+        return df["atr_vel_ratio"].notna() & (df["atr_vel_ratio"] >= self.min_ratio)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """ATR velocity expansion gate. Pre-session, resolves at STARTUP."""
+        _ = (orb_label, entry_model)
+        observed = _atom_numeric(row.get("atr_vel_ratio"))
+        missing = observed is None
+        passes = None if missing else observed >= self.min_ratio
+        return [
+            AtomDescription(
+                name=f"ATR velocity ratio >= {self.min_ratio:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="atr_vel_ratio",
+                confidence_tier=self.CONFIDENCE_TIER,
+                observed_value=observed,
+                threshold=self.min_ratio,
+                comparator=">=",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require ATR velocity ratio (today vs 5-day prior ATR) "
+                    f">= {self.min_ratio:g} (volatility expansion gate)."
+                ),
+            )
+        ]
+
+
+@dataclass(frozen=True)
 class OwnATRPercentileFilter(StrategyFilter):
     """Filter by the instrument's own ATR(20) rolling percentile.
 
@@ -2398,6 +2469,18 @@ MGC_VOLUME_FILTERS = {
         description="Own ATR(20) percentile >= 70",
         min_pct=70.0,
     ),
+    # Wave 4 Phase B T2-T8 survivor: ATR velocity ratio (expansion gate)
+    # Tested at 2026-04-11 on post-Phase-3c data. 2/11 shortlist combos survived
+    # full T3+T4+T6+T7 battery with in_ExpR > 0.05 (MNQ TOKYO_OPEN RR1.0,
+    # MES US_DATA_1000 RR1.5). Threshold 1.05 matches existing atr_vel_regime
+    # "Expanding" semantics (pipeline/build_daily_features.py line 1133).
+    # @research-source scripts/research/wave4_presession_t2t8.py
+    # @entry-models E2
+    "ATR_VEL_GE105": ATRVelRatioFilter(
+        filter_type="ATR_VEL_GE105",
+        description="ATR velocity ratio >= 1.05 (expanding vol regime)",
+        min_ratio=1.05,
+    ),
 }
 
 # Cost-ratio filters (Mar 2026): normalized cost screens derived from the
@@ -2893,6 +2976,19 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
     if (instrument in ("MGC", "GC")) and session == "CME_REOPEN":
         for gap_key in ("GAP_R005", "GAP_R015"):
             filters[gap_key] = ALL_FILTERS[gap_key]
+
+    # ATR velocity ratio expansion gate (Wave 4 Phase B — 2026-04-11).
+    # T2-T8 survivors: MNQ TOKYO_OPEN RR1.0 (in_ExpR +0.188, p=0.0042),
+    # MES US_DATA_1000 RR1.5 (in_ExpR +0.103, p=0.044).
+    # Threshold 1.05 matches "Expanding" regime (pipeline/build_daily_features.py:1133).
+    # No lookahead: atr_vel_ratio uses rows[i-5:i] prior-only slice.
+    # @research-source scripts/research/wave4_presession_t2t8.py
+    _atr_vel_validated = {
+        ("MNQ", "TOKYO_OPEN"),
+        ("MES", "US_DATA_1000"),
+    }
+    if (instrument, session) in _atr_vel_validated:
+        filters["ATR_VEL_GE105"] = ALL_FILTERS["ATR_VEL_GE105"]
 
     # Pit range anti-filter: skip dead-pit days at CME_REOPEN (Apr 2026).
     # VALIDATED: 3/3 instruments pass T1-T8, BH FDR at K=320, +17% WR spread.
