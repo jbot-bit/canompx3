@@ -23,6 +23,7 @@ from scripts.tools.project_pulse import (
     collect_handoff,
     collect_pause_state,
     collect_ralph_deferred,
+    collect_session_claims,
     collect_sr_state,
     collect_staleness,
     collect_survival_state,
@@ -125,6 +126,32 @@ class TestCollectGitState:
             items = collect_git_state(tmp_path)
         assert len(items) == 1
         assert "2 git stash" in items[0].summary
+
+
+class TestCollectSessionClaims:
+    def test_reports_safe_parallel_claims(self, tmp_path: Path) -> None:
+        mock_preflight = MagicMock()
+        mock_preflight.list_claims.return_value = [
+            MagicMock(tool="codex", branch="wt-codex-a", mode="mutating"),
+            MagicMock(tool="claude", branch="wt-claude-b", mode="mutating"),
+        ]
+        with patch.dict("sys.modules", {"session_preflight": mock_preflight}):
+            items = collect_session_claims(tmp_path)
+        assert len(items) == 1
+        assert items[0].category == "paused"
+        assert "parallel appears isolated" in items[0].summary
+
+    def test_reports_dangerous_same_branch_mutating_claims(self, tmp_path: Path) -> None:
+        mock_preflight = MagicMock()
+        mock_preflight.list_claims.return_value = [
+            MagicMock(tool="codex", branch="main", mode="mutating"),
+            MagicMock(tool="claude", branch="main", mode="mutating"),
+        ]
+        with patch.dict("sys.modules", {"session_preflight": mock_preflight}):
+            items = collect_session_claims(tmp_path)
+        assert len(items) == 1
+        assert items[0].category == "decaying"
+        assert "dangerous same-branch mutating claims" in items[0].summary
 
 
 # ---------------------------------------------------------------------------
@@ -501,6 +528,7 @@ class TestBuildPulse:
             patch.object(project_pulse, "collect_sr_state", return_value=(None, [])),
             patch.object(project_pulse, "collect_pause_state", return_value=(None, [])),
             patch.object(project_pulse, "collect_worktrees", return_value=[]),
+            patch.object(project_pulse, "collect_session_claims", return_value=[]),
             patch.object(project_pulse, "collect_action_queue", return_value=[]),
             patch.object(project_pulse, "collect_ralph_deferred", return_value=[]),
             patch.object(project_pulse, "collect_drift") as mock_drift,

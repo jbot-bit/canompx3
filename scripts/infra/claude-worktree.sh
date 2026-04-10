@@ -42,9 +42,9 @@ case "$cmd" in
     PREFLIGHT="$WT/scripts/tools/session_preflight.py"
     if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
       if command -v python3 >/dev/null 2>&1; then
-        python3 "$PREFLIGHT" --quiet --context generic --claim claude || true
+        python3 "$PREFLIGHT" --quiet --context generic --claim claude --mode mutating
       elif command -v python >/dev/null 2>&1; then
-        python "$PREFLIGHT" --quiet --context generic --claim claude || true
+        python "$PREFLIGHT" --quiet --context generic --claim claude --mode mutating
       fi
     fi
     exec env CANOMPX3_ROOT="$WT" claude "$@"

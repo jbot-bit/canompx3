@@ -178,15 +178,17 @@ def ensure_managed_worktree(tool_name: str, workstream_name: str, purpose: str |
     return Path(path_value), final_purpose
 
 
-def run_preflight(worktree_path: Path, claim_tool: str, context: str = "generic") -> None:
+def run_preflight(worktree_path: Path, claim_tool: str, context: str = "generic", mode: str = "mutating") -> None:
     preflight = worktree_path / "scripts" / "tools" / "session_preflight.py"
     if not preflight.exists():
         return
-    subprocess.run(
-        pick_python() + [str(preflight), "--quiet", "--context", context, "--claim", claim_tool],
+    result = subprocess.run(
+        pick_python() + [str(preflight), "--quiet", "--context", context, "--claim", claim_tool, "--mode", mode],
         cwd=worktree_path,
         check=False,
     )
+    if result.returncode != 0:
+        raise RuntimeError(f"Session preflight blocked launch for {claim_tool} ({mode})")
 
 
 def find_claude_cli() -> str:
@@ -199,7 +201,7 @@ def find_claude_cli() -> str:
 
 def open_claude_workstream(workstream_name: str, purpose: str | None) -> int:
     worktree_path, _ = ensure_managed_worktree("claude", workstream_name, purpose)
-    run_preflight(worktree_path, claim_tool="claude", context="generic")
+    run_preflight(worktree_path, claim_tool="claude", context="generic", mode="mutating")
     return subprocess.call([find_claude_cli(), "-C", str(worktree_path)])
 
 

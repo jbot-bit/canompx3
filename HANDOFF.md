@@ -6,6 +6,148 @@
 
 ---
 
+## Update (2026-04-10 later — Concurrency Guardrails v1)
+
+### Headline
+
+Implemented **Concurrency Guardrails v1** so Claude/Codex same-branch editing
+is no longer just a warning convention. Mutating launcher paths now fail closed
+when another fresh mutating claim already exists on the same branch.
+
+This is a session/orchestration hardening pass. It does **not** change:
+
+- strategy discovery logic
+- validation truth
+- live trading behavior
+- account survival / SR semantics
+
+### Design
+
+The old model was too weak:
+
+- one global temp claim file
+- no explicit read-only vs mutating distinction
+- no real concurrent-session enforcement
+
+The new model in `scripts/tools/session_preflight.py` is:
+
+- multi-claim storage in a temp claim directory
+- one active claim file per `tool × repo/worktree root`
+- explicit `mode`
+  - `read-only`
+  - `mutating`
+- claim metadata now includes:
+  - `tool`
+  - `branch`
+  - `head_sha`
+  - `started_at`
+  - `pid`
+  - `mode`
+  - `root`
+
+Important policy:
+
+- fresh same-branch concurrent **mutating** claims from another tool now block
+  mutating launch
+- read-only sessions remain non-blocking
+- same-branch read-only vs mutating produces a warning, not a block
+- worktree-separated parallel sessions remain the happy path
+
+### Launcher wiring
+
+Explicit claim modes are now passed by real entrypoints:
+
+- `scripts/infra/codex-project.sh`
+  - `--claim codex --mode mutating`
+- `scripts/infra/codex-project-search.sh`
+  - `--claim codex-search --mode read-only`
+- `scripts/infra/wsl-env.sh`
+  - `--claim wsl-shell --mode read-only`
+- `scripts/infra/claude-worktree.sh`
+  - `--claim claude --mode mutating`
+- `scripts/infra/windows_agent_launch.py`
+  - `run_preflight(..., mode=...)`
+  - Claude launch now raises if preflight blocks
+
+So the mutating launchers now actually enforce the policy instead of just
+printing advisory noise.
+
+### Pulse visibility
+
+Added a thin session-claim summary in `project_pulse`:
+
+- if multiple fresh claims exist on separate branches/worktrees:
+  - one compact `PAUSED` item saying parallel appears isolated
+- if multiple fresh mutating claims exist on the same branch:
+  - one compact `ACT SOON` / high-severity item for dangerous parallel use
+
+No full claim dump is shown in default pulse output.
+
+### Current real-state note
+
+On the current repo state there was only one fresh mutating Codex claim, so the
+new session-claim summary does not appear in the default pulse. That is the
+expected quiet-path behavior.
+
+### Drift enforcement
+
+Added a new structural drift check:
+
+- preflight launchers must pass explicit claim modes
+
+Current result:
+
+- `python3 pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 92 checks passed [OK], 0 skipped, 7 advisory`
+
+### Files touched
+
+- `scripts/tools/session_preflight.py`
+- `scripts/tools/project_pulse.py`
+- `scripts/infra/codex-project.sh`
+- `scripts/infra/codex-project-search.sh`
+- `scripts/infra/wsl-env.sh`
+- `scripts/infra/claude-worktree.sh`
+- `scripts/infra/windows_agent_launch.py`
+- `pipeline/check_drift.py`
+- `tests/test_tools/test_session_preflight.py`
+- `tests/test_tools/test_project_pulse.py`
+- `tests/test_tools/test_windows_agent_launch.py`
+
+### Verification
+
+- `python3 -m py_compile scripts/tools/session_preflight.py scripts/tools/project_pulse.py scripts/infra/windows_agent_launch.py pipeline/check_drift.py tests/test_tools/test_session_preflight.py tests/test_tools/test_project_pulse.py tests/test_tools/test_windows_agent_launch.py`
+- `uv run --frozen --extra dev pytest tests/test_tools/test_session_preflight.py tests/test_tools/test_project_pulse.py tests/test_tools/test_windows_agent_launch.py tests/test_tools/test_pulse_integration.py -q`
+  - result: `94 passed`
+- `python3 -m trading_app.sr_monitor`
+  - reran to refresh SR state after code-fingerprint change so pulse stayed canonical
+- `python3 scripts/tools/project_pulse.py --fast --tool codex`
+  - pulse reads current C11/C12 state cleanly
+- `python3 scripts/tools/session_preflight.py --context codex-wsl --with-pulse --quiet --claim codex --mode mutating`
+  - quiet preflight path still works; blocks are now available when same-branch mutating conflicts exist
+
+### Why this matters
+
+This closes the main cross-tool collaboration gap that remained after the
+derived-state contract work:
+
+- stale repo state is one failure mode
+- concurrent mutable branch use is another
+
+Now the mutating launch path is materially safer:
+
+- same-branch edits by both tools are no longer silently tolerated
+- read-only research/search sessions remain cheap
+- startup remains thin and operator-readable
+
+### Next move
+
+Highest-value next step remains:
+
+- **Criterion 11 v2**
+  - intraday/path-aware breach modeling
+  - dynamic scaling over the simulated horizon
+
 ## Update (2026-04-10 later — Derived State Contract v1 for SR)
 
 ### Headline

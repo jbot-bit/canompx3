@@ -19,7 +19,7 @@ export VIRTUAL_ENV="$VENV"
 export PATH="$VENV/bin:$PATH"
 
 if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
-  "$VENV/bin/python" "$PREFLIGHT" --context codex-wsl --claim wsl-shell || true
+  "$VENV/bin/python" "$PREFLIGHT" --context codex-wsl --claim wsl-shell --mode read-only || true
 fi
 
 source "$VENV/bin/activate"

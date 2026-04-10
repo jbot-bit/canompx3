@@ -26,7 +26,7 @@ if [[ -d "$HOME/.nvm/versions/node" ]]; then
 fi
 
 if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
-  "$VENV/bin/python" "$PREFLIGHT" --quiet --context codex-wsl --claim codex-search || true
+  "$VENV/bin/python" "$PREFLIGHT" --quiet --context codex-wsl --claim codex-search --mode read-only || true
 fi
 
 exec codex \

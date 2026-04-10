@@ -51,12 +51,12 @@ class TestRunPreflight:
 
         with (
             patch.object(windows_agent_launch, "pick_python", return_value=["python"]),
-            patch.object(windows_agent_launch.subprocess, "run") as run_mock,
+            patch.object(windows_agent_launch.subprocess, "run", return_value=type("R", (), {"returncode": 0})()) as run_mock,
         ):
             windows_agent_launch.run_preflight(tmp_path, claim_tool="claude")
 
         run_mock.assert_called_once_with(
-            ["python", str(preflight), "--quiet", "--context", "generic", "--claim", "claude"],
+            ["python", str(preflight), "--quiet", "--context", "generic", "--claim", "claude", "--mode", "mutating"],
             cwd=tmp_path,
             check=False,
         )
@@ -65,6 +65,18 @@ class TestRunPreflight:
         with patch.object(windows_agent_launch.subprocess, "run") as run_mock:
             windows_agent_launch.run_preflight(tmp_path, claim_tool="claude")
         run_mock.assert_not_called()
+
+    def test_raises_when_preflight_blocks(self, tmp_path: Path) -> None:
+        preflight = tmp_path / "scripts" / "tools" / "session_preflight.py"
+        preflight.parent.mkdir(parents=True)
+        preflight.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+
+        with (
+            patch.object(windows_agent_launch, "pick_python", return_value=["python"]),
+            patch.object(windows_agent_launch.subprocess, "run", return_value=type("R", (), {"returncode": 2})()),
+        ):
+            with pytest.raises(RuntimeError, match="Session preflight blocked launch"):
+                windows_agent_launch.run_preflight(tmp_path, claim_tool="claude")
 
 
 class TestFindClaudeCli:
@@ -94,7 +106,7 @@ class TestOpenClaudeWorkstream:
 
         assert exit_code == 0
         ensure_mock.assert_called_once_with("claude", "task-a", "Build / edit")
-        preflight_mock.assert_called_once_with(tmp_path, claim_tool="claude", context="generic")
+        preflight_mock.assert_called_once_with(tmp_path, claim_tool="claude", context="generic", mode="mutating")
         call_mock.assert_called_once_with([r"C:\Users\joshd\.local\bin\claude.exe", "-C", str(tmp_path)])
 
 

@@ -975,6 +975,49 @@ def collect_worktrees(canonical: Path) -> list[PulseItem]:
     return items
 
 
+def collect_session_claims(root: Path) -> list[PulseItem]:
+    """Summarize fresh active session claims without dumping full claim state."""
+    items: list[PulseItem] = []
+    try:
+        from session_preflight import list_claims
+    except Exception:
+        return items
+
+    claims = list_claims(fresh_only=True)
+    if len(claims) <= 1:
+        return items
+
+    mutating_by_branch: dict[str, set[str]] = {}
+    for claim in claims:
+        if claim.mode != "mutating":
+            continue
+        mutating_by_branch.setdefault(claim.branch, set()).add(claim.tool)
+
+    dangerous = {branch: tools for branch, tools in mutating_by_branch.items() if len(tools) > 1}
+    if dangerous:
+        branch, tools = sorted(dangerous.items())[0]
+        items.append(
+            PulseItem(
+                category="decaying",
+                severity="high",
+                source="session_claims",
+                summary=f"Active sessions: dangerous same-branch mutating claims on {branch} ({', '.join(sorted(tools))})",
+            )
+        )
+        return items
+
+    branches = {claim.branch for claim in claims}
+    items.append(
+        PulseItem(
+            category="paused",
+            severity="low",
+            source="session_claims",
+            summary=f"Active sessions: {len(claims)} fresh claims across {len(branches)} branch(es) — parallel appears isolated",
+        )
+    )
+    return items
+
+
 def collect_action_queue(canonical: Path) -> list[PulseItem]:
     """Parse ACTION QUEUE from Claude auto-memory MEMORY.md."""
     items: list[PulseItem] = []
@@ -1506,6 +1549,7 @@ def build_pulse(
     pause_summary, pause_items = collect_pause_state()
     handoff_context, handoff_items = collect_handoff(root)
     worktree_items = collect_worktrees(canonical)
+    claim_items = collect_session_claims(root)
     conflict_items = collect_worktree_conflicts(canonical)
     git_items = collect_git_state(root)
     action_items = collect_action_queue(canonical)
@@ -1543,6 +1587,7 @@ def build_pulse(
         + survival_items
         + sr_items
         + pause_items
+        + claim_items
         + conflict_items
         + handoff_items
         + worktree_items

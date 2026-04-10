@@ -4364,6 +4364,31 @@ def check_sr_state_contract_reader() -> list[str]:
     return violations
 
 
+def check_preflight_launcher_modes() -> list[str]:
+    """Ensure launcher entrypoints pass explicit preflight claim modes."""
+    violations = []
+    required_tokens = {
+        PROJECT_ROOT / "scripts" / "infra" / "codex-project.sh": "--claim codex --mode mutating",
+        PROJECT_ROOT / "scripts" / "infra" / "codex-project-search.sh": "--claim codex-search --mode read-only",
+        PROJECT_ROOT / "scripts" / "infra" / "wsl-env.sh": "--claim wsl-shell --mode read-only",
+        PROJECT_ROOT / "scripts" / "infra" / "claude-worktree.sh": "--claim claude --mode mutating",
+    }
+    for path, token in required_tokens.items():
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        if token not in text:
+            violations.append(f"  {path.relative_to(PROJECT_ROOT)} missing explicit preflight mode token: {token}")
+
+    windows_launcher = PROJECT_ROOT / "scripts" / "infra" / "windows_agent_launch.py"
+    if windows_launcher.exists():
+        text = windows_launcher.read_text(encoding="utf-8")
+        if '"--mode", mode' not in text:
+            violations.append("  scripts/infra/windows_agent_launch.py must pass --mode through run_preflight()")
+
+    return violations
+
+
 def check_resample_helpers_in_entry_rules() -> list[str]:
     """resample_to_5m and _verify_e3_sub_bar_fill must be defined in trading_app.entry_rules.
 
@@ -4681,6 +4706,7 @@ CHECKS = [
     ("Shared profile fingerprint helper is canonical", check_shared_profile_fingerprint_canonical, False, False),
     ("SR state writer uses derived-state contract envelope", check_sr_state_contract_writer, False, False),
     ("SR state reader validates envelope before trust", check_sr_state_contract_reader, False, False),
+    ("Preflight launchers pass explicit claim modes", check_preflight_launcher_modes, False, False),
 ]  # end CHECKS
 
 

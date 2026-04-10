@@ -60,7 +60,7 @@ class TestBuildWarnings:
             warnings = session_preflight.build_warnings(tmp_path, context="codex-wsl")
         assert "WSL context but .venv-wsl/bin/python is missing." in warnings
 
-    def test_warns_on_fresh_same_branch_concurrent_claim(self, tmp_path: Path) -> None:
+    def test_warns_on_same_branch_parallel_read_only_context(self, tmp_path: Path) -> None:
         _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
         claim = session_preflight.SessionClaim(
             tool="claude",
@@ -68,14 +68,21 @@ class TestBuildWarnings:
             head_sha="abc123",
             started_at=datetime.now(UTC).isoformat(),
             pid=123,
+            mode="mutating",
+            root="/other/repo",
         )
         with (
             patch.object(session_preflight, "dirty_files", return_value=[]),
-            patch.object(session_preflight, "read_claim", return_value=claim),
+            patch.object(session_preflight, "list_claims", return_value=[claim]),
             patch.object(session_preflight, "branch_name", return_value="main"),
         ):
-            warnings = session_preflight.build_warnings(tmp_path, context="generic", active_tool="codex")
-        assert any("Concurrent session risk" in warning for warning in warnings)
+            warnings = session_preflight.build_warnings(
+                tmp_path,
+                context="generic",
+                active_tool="codex-search",
+                active_mode="read-only",
+            )
+        assert any("Parallel session present" in warning for warning in warnings)
 
     def test_warns_when_wsl_uses_wrong_interpreter(self, tmp_path: Path) -> None:
         _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
@@ -123,13 +130,15 @@ class TestSessionClaims:
             head_sha="abc123",
             started_at=datetime.now(UTC).isoformat(),
             pid=123,
+            mode="mutating",
+            root=str(tmp_path.resolve()),
         )
         with (
             patch.object(session_preflight, "read_claim", return_value=claim),
             patch.object(session_preflight, "branch_name", return_value="main"),
             patch.object(session_preflight, "head_sha", return_value="abc123"),
         ):
-            ok, warnings = session_preflight.verify_claim(tmp_path, active_tool="codex")
+            ok, warnings = session_preflight.verify_claim(tmp_path, active_tool="codex", claim_path=tmp_path / "claim.json")
         assert ok is True
         assert warnings == []
 
@@ -146,7 +155,7 @@ class TestSessionClaims:
             patch.object(session_preflight, "branch_name", return_value="main"),
             patch.object(session_preflight, "head_sha", return_value="def456"),
         ):
-            ok, warnings = session_preflight.verify_claim(tmp_path, active_tool="codex")
+            ok, warnings = session_preflight.verify_claim(tmp_path, active_tool="codex", claim_path=tmp_path / "claim.json")
         assert ok is False
         assert any("HEAD mismatch" in warning for warning in warnings)
 
@@ -163,9 +172,30 @@ class TestSessionClaims:
             patch.object(session_preflight, "branch_name", return_value="main"),
             patch.object(session_preflight, "head_sha", return_value="abc123"),
         ):
-            ok, warnings = session_preflight.verify_claim(tmp_path, active_tool="codex")
+            ok, warnings = session_preflight.verify_claim(tmp_path, active_tool="codex", claim_path=tmp_path / "claim.json")
         assert ok is False
         assert any("tool mismatch" in warning for warning in warnings)
+
+    def test_build_blockers_for_same_branch_mutating_other_tool(self, tmp_path: Path) -> None:
+        claim = session_preflight.SessionClaim(
+            tool="claude",
+            branch="main",
+            head_sha="abc123",
+            started_at=datetime.now(UTC).isoformat(),
+            pid=123,
+            mode="mutating",
+            root="/other/repo",
+        )
+        with (
+            patch.object(session_preflight, "list_claims", return_value=[claim]),
+            patch.object(session_preflight, "branch_name", return_value="main"),
+        ):
+            blockers = session_preflight.build_blockers(
+                tmp_path,
+                active_tool="codex",
+                active_mode="mutating",
+            )
+        assert any("Concurrent mutating session blocked" in blocker for blocker in blockers)
 
 
 class TestPrintReport:
@@ -186,3 +216,28 @@ class TestPrintReport:
         assert exit_code == 0
         assert "SESSION PREFLIGHT" in out
         assert "clean" in out
+
+    def test_quiet_mode_blocks_mutating_same_branch_conflict(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
+        claim = session_preflight.SessionClaim(
+            tool="claude",
+            branch="main",
+            head_sha="abc123",
+            started_at=datetime.now(UTC).isoformat(),
+            pid=123,
+            mode="mutating",
+            root="/other/repo",
+        )
+        with (
+            patch.object(session_preflight, "dirty_files", return_value=[]),
+            patch.object(session_preflight, "list_claims", return_value=[claim]),
+            patch.object(session_preflight, "branch_name", return_value="main"),
+        ):
+            exit_code = session_preflight.print_report(
+                tmp_path,
+                context="generic",
+                claim_tool="codex",
+                claim_mode="mutating",
+                quiet=True,
+            )
+        assert exit_code == 2
