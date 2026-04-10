@@ -2,12 +2,23 @@
 
 Snapshot for fast project awareness. Confirm changing numbers from code or DB before citing them externally.
 
-Operationally volatile state belongs in `HANDOFF.md`, live code, and canonical docs. This file should stay stable enough to survive across sessions without becoming a second handoff.
+Operationally volatile state belongs in `HANDOFF.md`, live code, and canonical
+docs. This file should stay stable enough to survive across sessions without
+becoming a second handoff.
 
 ## Core Reality
 
 - The repo is beyond basic research scaffolding. Pipeline, discovery, validation, portfolio construction, execution engine, risk manager, paper trading, and broker adapters all exist.
-- The live trading stack is partially built, not fully finished. Core runtime pieces exist, but `ROADMAP.md` still leaves monitoring and alerting as TODO, and `trading_app/live_config.py` marks HOT real-time wiring as dormant/not yet production-ready.
+- The live trading stack is partially built, not fully finished. Core runtime
+  pieces exist, and the operational control layer is materially stronger than it
+  was earlier in the project because current repo state now includes:
+  - project pulse and preflight
+  - derived-state validation for SR monitor state
+  - concurrent Claude/Codex mutating-session guardrails
+  - Criterion 11 deployment gating
+  - Criterion 12 SR monitoring with lane-pause wiring
+- Even with those controls, the repo should still not be described as fully
+  live-ready or fully production-finished.
 - The system uses one canonical `gold.db` at the repo root unless `DUCKDB_PATH` overrides it.
 - Event-based sessions and DST cleanup are complete. Session logic lives in `pipeline/dst.py`.
 - `trading_app/live_config.py` contains deprecated compatibility surfaces. Current live deployment authority is `trading_app/prop_profiles.py`.
@@ -22,8 +33,11 @@ Operationally volatile state belongs in `HANDOFF.md`, live code, and canonical d
 
 ## What Still Matters Operationally
 
-- Finishing the live trading setup/coding remains active work; do not describe the repo as fully live-ready yet.
-- Monitoring and alerting remains an explicit TODO in `ROADMAP.md`.
+- Finishing the live trading setup/coding remains active work; do not describe
+  the repo as fully live-ready yet.
+- Operational controls exist, but lifecycle/state unification is still active
+  work. Do not imply one fully unified control plane unless current canonical
+  code says so.
 - Near-term priorities and research follow-ups can move quickly. Read `HANDOFF.md` before treating any open item as current.
 
 ## Live / Runtime Surfaces

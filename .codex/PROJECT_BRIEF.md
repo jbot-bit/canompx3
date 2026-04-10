@@ -19,6 +19,7 @@ Use this as the fast orientation layer for the repo. It is a summary only. Claud
 - Current shared session state and near-term decisions: `HANDOFF.md`
 - Architecture and command reference: `docs/ARCHITECTURE.md`
 - Planned but not yet built work: `ROADMAP.md`
+- Codex adapter front door: `CODEX.md`
 
 ## Trading Model In One Pass
 
@@ -44,4 +45,5 @@ Use this as the fast orientation layer for the repo. It is a summary only. Claud
 - Claude Code is the canonical authority for project workflow and guardrails.
 - Codex is a thin client on the same project.
 - Do not create a second project state, second database workflow, or competing rule layer.
-- Prefer read-first exploration and validation-heavy implementation.
+- Prefer read-first exploration, validation-heavy implementation, and thin
+  startup context.

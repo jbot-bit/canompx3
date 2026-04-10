@@ -1,23 +1,19 @@
 # Codex Workflows
 
-This file captures the repo-specific workflows Codex should default to after the deeper audit pass.
+This file captures the repo-specific execution defaults Codex should use after
+the thin startup pass.
 
 ## First Principle
 
-Codex is another operator on the same project, not a separate project environment.
-Claude remains the authority for project workflow and guardrails.
+Codex is another operator on the same project, not a separate project
+environment. Claude remains the authority for project workflow and guardrails.
 
-## Orientation Pass
+## When To Open This File
 
-When starting a fresh session or switching into a new repo area, load:
-
-1. `HANDOFF.md`
-2. `.codex/PROJECT_BRIEF.md`
-3. `.codex/CURRENT_STATE.md`
-4. `.codex/NEXT_STEPS.md` if the task is about priorities, planning, or "where are we up to?"
-5. `.codex/OPENAI_CODEX_STANDARDS.md` if the task is about Codex setup quality or repo-wide Codex improvements
-
-Then load the smallest relevant canonical docs for the task itself.
+- Execution defaults are unclear
+- You need repo-specific verification defaults
+- You are choosing between implementation, review, research, or audit routes
+- You are improving the Codex layer itself
 
 ## Preferred Repo-Local Skills
 
@@ -28,7 +24,7 @@ When the task matches, prefer these repo-local skills:
 - `canompx3-audit` for structured audit work
 - `canompx3-research` for research, analysis, and claim scrutiny
 
-## Feature Or Design Work
+## Design / Implementation Routing
 
 Before proposing or implementing any non-trivial change:
 
@@ -60,7 +56,10 @@ For normal code changes:
 - `uv run python scripts/tools/audit_integrity.py` when pipeline or trading logic changed
 - Run targeted tests before broad tests
 
-For large post-edit verification, use the shared logic indexed in `.codex/COMMANDS.md` and `.codex/AGENTS.md`.
+For large post-edit verification, use the shared logic indexed in:
+
+- `.codex/COMMANDS.md`
+- `.codex/AGENTS.md`
 
 ## Review Flows
 
@@ -69,7 +68,7 @@ For large post-edit verification, use the shared logic indexed in `.codex/COMMAN
 - Non-interactive review of current changes: `scripts/infra/codex-review.sh`
 - Heavier coding / review profile: `canompx3_max`
 
-## Current Codex-Native Surfaces Worth Using
+## Codex CLI Surfaces Worth Using
 
 Confirmed from the installed CLI:
 

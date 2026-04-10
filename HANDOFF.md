@@ -6,6 +6,137 @@
 
 ---
 
+## Update (2026-04-10 later — Codex adapter consolidation pass)
+
+### Headline
+
+Consolidated the Codex adapter layer to reduce duplicate startup/routing text
+without adding any new wrappers, registries, or Codex-only workflow surfaces.
+
+This is a documentation/control-plane cleanup only. It does **not** change:
+
+- launch script behavior
+- env split (`.venv` vs `.venv-wsl`)
+- project-scoped Codex config
+- project pulse, preflight, C11, or C12 logic
+- Claude/Codex authority boundaries
+
+### Why this was needed
+
+The Codex side had started to accumulate too many overlapping docs:
+
+- `CODEX.md`
+- `.codex/STARTUP.md`
+- `.codex/WORKFLOWS.md`
+- `.codex/PROJECT_BRIEF.md`
+- `.codex/CURRENT_STATE.md`
+
+The real problem was human/operator complexity, not missing infrastructure.
+
+Correct goal:
+
+- Claude stays boss
+- Codex stays a second POV
+- startup stays thin
+- no repeated full-context loading
+- no Codex-only side project
+
+### What changed
+
+`CODEX.md`
+
+- now acts as the actual front door
+- emphasizes the thin default read set
+- keeps the operator model small:
+  - normal
+  - search
+  - review
+  - worktree
+- points to supporting docs only when needed instead of trying to be a full
+  router and startup file at the same time
+
+`.codex/STARTUP.md`
+
+- reduced to true startup deltas only
+- explicitly says **do not auto-load all of `.codex/` every session**
+- corrected a stale claim: there is **no always-present dedicated Codex stage
+  file**
+- now tells Codex to follow the current repo stage-file convention under
+  `docs/runtime/stages/` if stage tracking is actually required
+
+`.codex/WORKFLOWS.md`
+
+- trimmed to execution defaults, verification defaults, and route selection
+- removed duplicated orientation/startup burden
+
+`.codex/CURRENT_STATE.md`
+
+- updated to reflect current repo reality after the recent control-layer work:
+  - pulse/preflight
+  - derived-state validation
+  - concurrent mutating-session guardrails
+  - C11 gate
+  - C12 SR monitor + lane pauses
+- still states clearly that the repo is **not** fully live-finished
+
+`.codex/PROJECT_BRIEF.md`
+
+- kept as a short repo-orientation surface
+- now explicitly points back to `CODEX.md` as the adapter front door
+
+### Important stale claim removed
+
+Previous `.codex/STARTUP.md` incorrectly claimed:
+
+- `docs/runtime/stages/codex.md`
+
+as a dedicated Codex stage file.
+
+That path does not exist. Search confirmed the stale reference only lived in
+that doc, so it has now been removed from the Codex layer.
+
+### Files touched
+
+- `CODEX.md`
+- `.codex/STARTUP.md`
+- `.codex/WORKFLOWS.md`
+- `.codex/CURRENT_STATE.md`
+- `.codex/PROJECT_BRIEF.md`
+
+### Verification
+
+- reread all touched docs after edit
+- `rg -n "docs/runtime/stages/codex.md" -S . AGENTS.md CODEX.md .codex scripts docs`
+  - result: no matches
+- confirmed no launcher/config edits were made
+- `git status --short`
+  - only the intended doc files modified
+
+### Resulting mental model
+
+Beginner-safe operator model is now intentionally small:
+
+- Claude = canonical authority
+- Codex = second POV / implement / review / verify
+- Windows = `.venv`
+- WSL = `.venv-wsl`
+- Codex entrypoints:
+  - `scripts/infra/codex-project.sh`
+  - `scripts/infra/codex-project-search.sh`
+  - `scripts/infra/codex-review.sh`
+  - `scripts/infra/codex-worktree.sh`
+
+### Next move
+
+Do **not** add more Codex wrappers/docs unless they clearly replace something
+older.
+
+If more setup work is requested, the right next pass is:
+
+- audit remaining Codex-facing docs as `keep / trim / convenience-only`
+- only collapse more surfaces if it further reduces confusion
+- otherwise stop and return to project work
+
 ## Update (2026-04-10 later — Criterion 11 v2 path-aware survival)
 
 ### Headline
