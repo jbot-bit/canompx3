@@ -2472,14 +2472,26 @@ MGC_VOLUME_FILTERS = {
     # Wave 4 Phase B T2-T8 survivor: ATR velocity ratio (expansion gate)
     # Tested at 2026-04-11 on post-Phase-3c data. 2/11 shortlist combos survived
     # full T3+T4+T6+T7 battery with in_ExpR > 0.05 (MNQ TOKYO_OPEN RR1.0,
-    # MES US_DATA_1000 RR1.5). Threshold 1.05 matches existing atr_vel_regime
-    # "Expanding" semantics (pipeline/build_daily_features.py line 1133).
+    # MES US_DATA_1000 RR1.5). Three thresholds registered for Blueprint
+    # Gate 2 sensitivity discipline (>=3 values per dimension).
+    # 1.05 matches existing atr_vel_regime "Expanding" (build_daily_features.py:1133).
+    # 1.10 and 1.15 give tighter selectivity for tuning.
     # @research-source scripts/research/wave4_presession_t2t8.py
     # @entry-models E2
     "ATR_VEL_GE105": ATRVelRatioFilter(
         filter_type="ATR_VEL_GE105",
         description="ATR velocity ratio >= 1.05 (expanding vol regime)",
         min_ratio=1.05,
+    ),
+    "ATR_VEL_GE110": ATRVelRatioFilter(
+        filter_type="ATR_VEL_GE110",
+        description="ATR velocity ratio >= 1.10 (strong expansion gate)",
+        min_ratio=1.10,
+    ),
+    "ATR_VEL_GE115": ATRVelRatioFilter(
+        filter_type="ATR_VEL_GE115",
+        description="ATR velocity ratio >= 1.15 (extreme expansion gate)",
+        min_ratio=1.15,
     ),
 }
 

@@ -139,7 +139,7 @@ class TestAllFilters:
             assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 4 G + 4 COST + 5 VOL_RV + ATR70_VOL + 4 ORB_VOL + 3 ATR_P + 1 ATR_VEL_GE105 = 23 (BASE_GRID_FILTERS)
+        # NO_FILTER + 4 G + 4 COST + 5 VOL_RV + ATR70_VOL + 4 ORB_VOL + 3 ATR_P + 3 ATR_VEL_GE* = 25 (BASE_GRID_FILTERS)
         # + 12 DOW composites (3 DOW x 4 G)
         # + 12 break quality composites (3 BRK x 4 G: FAST5, FAST10, CONT)
         # + 3 M6E pip-scaled size filters (M6E_G4/G6/G8)
@@ -152,9 +152,9 @@ class TestAllFilters:
         # + 8 COST_LT × FAST composites (4 COST × 2 FAST = 8)
         # + 8 OVNRNG × FAST composites (4 OVNRNG × 2 FAST = 8)
         # + 1 PIT_MIN (pit range/atr anti-filter, CME_REOPEN only — Apr 2026)
-        # = 66 + 8 + 8 + 1 = 83
-        # Wave 4 Phase B (2026-04-11): +1 ATR_VEL_GE105 (atr_vel_ratio expansion gate)
-        assert len(ALL_FILTERS) == 83
+        # = 68 + 8 + 8 + 1 = 85
+        # Wave 4 Phase B (2026-04-11): +3 ATR_VEL_GE105/110/115 (atr_vel_ratio sensitivity variants)
+        assert len(ALL_FILTERS) == 85
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
