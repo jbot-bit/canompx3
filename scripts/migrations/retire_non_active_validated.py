@@ -21,8 +21,12 @@ import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.validated_shelf import (
+    DEPLOYMENT_SCOPE_NON_DEPLOYABLE,
+    NON_ACTIVE_INSTRUMENT_RETIREMENT_REASON,
+)
 
-RETIREMENT_REASON = "research-only / non-tradeable instrument (not in ACTIVE_ORB_INSTRUMENTS)"
+RETIREMENT_REASON = NON_ACTIVE_INSTRUMENT_RETIREMENT_REASON
 
 
 def retire_non_active_validated(
@@ -40,6 +44,19 @@ def retire_non_active_validated(
     now_utc = datetime.now(UTC)
 
     try:
+        cols = {
+            row[0]
+            for row in con.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'validated_setups'
+                """
+            ).fetchall()
+        }
+        if "deployment_scope" not in cols:
+            con.execute("ALTER TABLE validated_setups ADD COLUMN deployment_scope VARCHAR")
+
         rows = con.execute(
             f"""
             SELECT instrument, COUNT(*)
@@ -68,12 +85,18 @@ def retire_non_active_validated(
             f"""
             UPDATE validated_setups
             SET status = 'retired',
+                deployment_scope = ?,
                 retired_at = ?,
                 retirement_reason = ?
             WHERE status = 'active'
               AND instrument NOT IN ({placeholders})
             """,
-            [now_utc, RETIREMENT_REASON, *list(ACTIVE_ORB_INSTRUMENTS)],
+            [
+                DEPLOYMENT_SCOPE_NON_DEPLOYABLE,
+                now_utc,
+                RETIREMENT_REASON,
+                *list(ACTIVE_ORB_INSTRUMENTS),
+            ],
         )
 
         con.execute(

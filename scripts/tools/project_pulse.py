@@ -24,11 +24,13 @@ import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+
+from trading_app.validated_shelf import deployable_validated_predicate
 
 # staleness_engine lives in scripts/tools/ (same dir as this file)
 _SCRIPTS_TOOLS_DIR = str(Path(__file__).resolve().parent)
@@ -484,9 +486,10 @@ def collect_fitness_fast(db_path: Path) -> tuple[dict, list[PulseItem]]:
 
         con = duckdb.connect(str(db_path), read_only=True)
         try:
+            deployable_where = deployable_validated_predicate(con)
             rows = con.execute(
-                "SELECT instrument, COUNT(*) as n FROM validated_setups "
-                "WHERE LOWER(status) = 'active' GROUP BY instrument ORDER BY instrument"
+                f"SELECT instrument, COUNT(*) as n FROM validated_setups "
+                f"WHERE {deployable_where} GROUP BY instrument ORDER BY instrument"
             ).fetchall()
             for inst, n in rows:
                 summary[inst] = {"active_strategies": n}
@@ -543,11 +546,12 @@ def collect_deployment_state(db_path: Path) -> tuple[dict | None, list[PulseItem
 
         con = duckdb.connect(str(db_path), read_only=True)
         try:
+            deployable_where = deployable_validated_predicate(con)
             validated_rows = con.execute(
-                """
+                f"""
                 SELECT strategy_id
                 FROM validated_setups
-                WHERE LOWER(status) = 'active'
+                WHERE {deployable_where}
                 ORDER BY strategy_id
                 """
             ).fetchall()
@@ -1062,9 +1066,11 @@ def collect_upcoming_sessions(db_path: Path) -> list[dict]:
                     try:
                         con = duckdb.connect(str(db_path), read_only=True)
                         try:
+                            deployable_where = deployable_validated_predicate(con)
                             for inst in ACTIVE_ORB_INSTRUMENTS:
                                 row = con.execute(
-                                    "SELECT COUNT(*) FROM validated_setups WHERE instrument = ? AND orb_label = ? AND LOWER(status) = 'active'",
+                                    f"SELECT COUNT(*) FROM validated_setups "
+                                    f"WHERE instrument = ? AND orb_label = ? AND {deployable_where}",
                                     [inst, label],
                                 ).fetchone()
                                 if row and row[0] > 0:

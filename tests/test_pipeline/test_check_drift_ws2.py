@@ -15,10 +15,11 @@ from pipeline import check_drift
 
 
 def _patch_dirs(monkeypatch, tmp_path):
-    """Patch PROJECT_ROOT, PIPELINE_DIR, TRADING_APP_DIR, RESEARCH_DIR to tmp_path."""
+    """Patch PROJECT_ROOT, PIPELINE_DIR, TRADING_APP_DIR, SCRIPTS_DIR, RESEARCH_DIR to tmp_path."""
     monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
     monkeypatch.setattr(check_drift, "PIPELINE_DIR", tmp_path / "pipeline")
     monkeypatch.setattr(check_drift, "TRADING_APP_DIR", tmp_path / "trading_app")
+    monkeypatch.setattr(check_drift, "SCRIPTS_DIR", tmp_path / "scripts")
     monkeypatch.setattr(check_drift, "RESEARCH_DIR", tmp_path / "research")
 
 
@@ -658,3 +659,81 @@ class TestMlLookaheadBlacklist:
     def test_current_config_passes(self):
         violations = check_drift.check_ml_lookahead_blacklist()
         assert len(violations) == 0
+
+
+class TestValidatedSetupsWriterAllowlist:
+    """validated_setups writes must stay on canonical allowlist."""
+
+    def test_catches_noncanonical_writer(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(tmp_path / "trading_app" / "rogue_writer.py", "con.execute(\"UPDATE validated_setups SET status = 'active'\")\n")
+        violations = check_drift.check_validated_setups_writer_allowlist()
+        assert len(violations) == 1
+        assert "rogue_writer.py" in violations[0]
+
+    def test_passes_allowlisted_writers(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(
+            tmp_path / "trading_app" / "strategy_validator.py",
+            "con.execute(\"INSERT OR REPLACE INTO validated_setups VALUES (?)\")\n",
+        )
+        _mkfile(
+            tmp_path / "scripts" / "migrations" / "fixup.py",
+            "con.execute(\"UPDATE validated_setups SET status = 'retired'\")\n",
+        )
+        violations = check_drift.check_validated_setups_writer_allowlist()
+        assert violations == []
+
+
+class TestCriticalDeployableShelfConsumers:
+    """Critical readers must use canonical deployable-shelf semantics."""
+
+    def test_catches_raw_active_predicate(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(
+            tmp_path / "trading_app" / "live_config.py",
+            """
+sql = \"\"\"
+SELECT * FROM validated_setups
+WHERE LOWER(status) = 'active'
+\"\"\"
+""",
+        )
+        helper_content = "from trading_app.validated_shelf import deployable_validated_predicate\n"
+        for rel in [
+            tmp_path / "trading_app" / "prop_portfolio.py",
+            tmp_path / "trading_app" / "lane_allocator.py",
+            tmp_path / "trading_app" / "strategy_fitness.py",
+            tmp_path / "trading_app" / "sr_monitor.py",
+            tmp_path / "trading_app" / "sprt_monitor.py",
+            tmp_path / "scripts" / "tools" / "generate_trade_sheet.py",
+            tmp_path / "scripts" / "tools" / "project_pulse.py",
+            tmp_path / "trading_app" / "ai" / "sql_adapter.py",
+        ]:
+            _mkfile(rel, helper_content)
+        violations = check_drift.check_critical_deployable_shelf_consumers()
+        assert any("live_config.py" in v for v in violations)
+
+    def test_passes_helper_or_explicit_scope_usage(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        helper_content = (
+            "from trading_app.validated_shelf import deployable_validated_predicate\n"
+            "predicate = deployable_validated_predicate(con)\n"
+        )
+        for rel in [
+            tmp_path / "trading_app" / "live_config.py",
+            tmp_path / "trading_app" / "prop_portfolio.py",
+            tmp_path / "trading_app" / "lane_allocator.py",
+            tmp_path / "trading_app" / "strategy_fitness.py",
+            tmp_path / "trading_app" / "sr_monitor.py",
+            tmp_path / "trading_app" / "sprt_monitor.py",
+            tmp_path / "scripts" / "tools" / "generate_trade_sheet.py",
+            tmp_path / "scripts" / "tools" / "project_pulse.py",
+        ]:
+            _mkfile(rel, helper_content)
+        _mkfile(
+            tmp_path / "trading_app" / "ai" / "sql_adapter.py",
+            "_DEPLOYABLE = \"LOWER(status) = 'active' AND LOWER(COALESCE(deployment_scope, 'deployable')) = 'deployable'\"\n",
+        )
+        violations = check_drift.check_critical_deployable_shelf_consumers()
+        assert violations == []

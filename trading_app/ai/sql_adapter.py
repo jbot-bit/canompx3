@@ -125,6 +125,10 @@ _SQL_FRICTION_CASE = (
     + " ".join(f"WHEN '{inst}' THEN {spec.total_friction}" for inst, spec in COST_SPECS.items())
     + " END"
 )
+_DEPLOYABLE_VALIDATED_SQL = (
+    "LOWER(status) = 'active' AND "
+    "LOWER(COALESCE(deployment_scope, 'deployable')) = 'deployable'"
+)
 
 
 def _orb_size_filter_sql(filter_type: str | None, orb_label: str) -> str | None:
@@ -225,12 +229,12 @@ _TEMPLATES = {
                COALESCE(stop_multiplier, 1.0) as stop_multiplier,
                strategy_id
         FROM validated_setups
-        WHERE LOWER(status) = 'active'
+        WHERE {_DEPLOYABLE_VALIDATED_SQL}
         {instrument_clause}
         {where_clauses}
         ORDER BY expectancy_r DESC
         LIMIT ?
-    """,
+    """.replace("{_DEPLOYABLE_VALIDATED_SQL}", _DEPLOYABLE_VALIDATED_SQL),
     QueryTemplate.PERFORMANCE_STATS: """
         SELECT orb_label, entry_model, filter_type,
                COUNT(*) as total_strategies,
@@ -239,35 +243,35 @@ _TEMPLATES = {
                AVG(sharpe_ratio) as avg_sharpe,
                MIN(max_drawdown_r) as worst_drawdown
         FROM validated_setups
-        WHERE LOWER(status) = 'active'
+        WHERE {_DEPLOYABLE_VALIDATED_SQL}
         {instrument_clause}
         {where_clauses}
         GROUP BY orb_label, entry_model, filter_type
         ORDER BY avg_expectancy_r DESC
-    """,
+    """.replace("{_DEPLOYABLE_VALIDATED_SQL}", _DEPLOYABLE_VALIDATED_SQL),
     QueryTemplate.VALIDATED_SUMMARY: """
         SELECT orb_label, COUNT(*) as count,
                AVG(win_rate) as avg_wr,
                AVG(expectancy_r) as avg_expr,
                AVG(sharpe_ratio) as avg_sharpe
         FROM validated_setups
-        WHERE LOWER(status) = 'active'
+        WHERE {_DEPLOYABLE_VALIDATED_SQL}
         {instrument_clause}
         GROUP BY orb_label
         ORDER BY orb_label
-    """,
+    """.replace("{_DEPLOYABLE_VALIDATED_SQL}", _DEPLOYABLE_VALIDATED_SQL),
     QueryTemplate.YEARLY_BREAKDOWN: """
         SELECT orb_label, orb_minutes, entry_model, filter_type,
                rr_target, confirm_bars, sample_size, win_rate,
                expectancy_r, sharpe_ratio, max_drawdown_r,
                yearly_results, strategy_id
         FROM validated_setups
-        WHERE LOWER(status) = 'active'
+        WHERE {_DEPLOYABLE_VALIDATED_SQL}
         {instrument_clause}
         {where_clauses}
         ORDER BY expectancy_r DESC
         LIMIT ?
-    """,
+    """.replace("{_DEPLOYABLE_VALIDATED_SQL}", _DEPLOYABLE_VALIDATED_SQL),
     QueryTemplate.TRADE_HISTORY: """
         SELECT trading_day, orb_label, entry_model,
                rr_target, confirm_bars, entry_price, stop_price,
@@ -333,11 +337,11 @@ _TEMPLATES = {
                rr_target, confirm_bars, sample_size,
                expectancy_r, sharpe_ratio
         FROM validated_setups
-        WHERE LOWER(status) = 'active'
+        WHERE {_DEPLOYABLE_VALIDATED_SQL}
         {instrument_clause}
         ORDER BY sharpe_ratio DESC
         LIMIT ?
-    """,
+    """.replace("{_DEPLOYABLE_VALIDATED_SQL}", _DEPLOYABLE_VALIDATED_SQL),
     QueryTemplate.DOUBLE_BREAK_STATS: """
         SELECT
             EXTRACT(YEAR FROM trading_day) as year,

@@ -79,6 +79,7 @@ from trading_app.hypothesis_loader import (
     load_hypothesis_by_sha,
 )
 from trading_app.strategy_discovery import parse_dst_regime
+from trading_app.validated_shelf import validated_shelf_lifecycle
 from trading_app.validation_provenance import StrategyTradeWindowResolver
 from trading_app.walkforward import append_walkforward_result
 
@@ -1764,6 +1765,8 @@ def run_validation(
                             "for promotion provenance"
                         )
 
+                    shelf_lifecycle = validated_shelf_lifecycle(rd["instrument"])
+
                     con.execute(
                         """INSERT OR REPLACE INTO validated_setups
                            (strategy_id, promoted_from, instrument, orb_label,
@@ -1778,6 +1781,7 @@ def run_validation(
                             avg_win_dollars, avg_loss_dollars,
                             first_trade_day, last_trade_day, trade_day_count,
                             validation_run_id, promotion_git_sha, promotion_provenance,
+                            deployment_scope,
                             regime_waivers, regime_waiver_count,
                             dst_winter_n, dst_winter_avg_r,
                             dst_summer_n, dst_summer_avg_r,
@@ -1787,7 +1791,7 @@ def run_validation(
                             oos_exp_r, noise_risk,
                             era_dependent, max_year_pct,
                             p_value, n_trials_at_discovery, fst_hurdle)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             sid,
                             sid,
@@ -1822,6 +1826,7 @@ def run_validation(
                             validation_run_id,
                             promotion_git_sha,
                             "VALIDATOR_NATIVE",
+                            shelf_lifecycle.deployment_scope,
                             json.dumps(regime_waivers) if regime_waivers else None,
                             len(regime_waivers),
                             dst_split.get("winter_n"),
@@ -1845,7 +1850,7 @@ def run_validation(
                             rd.get("fst_hurdle"),
                         ],
                     )
-                    if rd["instrument"] not in ACTIVE_ORB_INSTRUMENTS:
+                    if shelf_lifecycle.retirement_reason is not None:
                         con.execute(
                             """
                             UPDATE validated_setups
@@ -1855,7 +1860,7 @@ def run_validation(
                             """,
                             [
                                 promotion_written_at,
-                                "research-only / non-tradeable instrument (not in ACTIVE_ORB_INSTRUMENTS)",
+                                shelf_lifecycle.retirement_reason,
                                 sid,
                             ],
                         )

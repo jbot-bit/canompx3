@@ -44,6 +44,7 @@ from trading_app.eligibility.builder import (
 )
 from trading_app.prop_profiles import ACCOUNT_PROFILES
 from trading_app.strategy_fitness import compute_fitness
+from trading_app.validated_shelf import deployable_validated_predicate
 
 # Dollar gate: expected $/trade must be >= this multiplier * RT friction.
 # Was LIVE_MIN_EXPECTANCY_DOLLARS_MULT in live_config.py (1.3).
@@ -592,10 +593,11 @@ def collect_opportunities(
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
+        deployable_where = deployable_validated_predicate(con, "vs")
         # Best strategy per session x instrument, respecting family_rr_locks.
         # Join locks to pick the locked RR target per family (no RR snooping).
         rows = con.execute(
-            """
+            f"""
             WITH locked AS (
                 SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.orb_minutes,
                        vs.filter_type, vs.rr_target, vs.stop_multiplier,
@@ -616,7 +618,7 @@ def collect_opportunities(
                   AND vs.rr_target = frl.locked_rr
                 LEFT JOIN experimental_strategies es
                   ON vs.strategy_id = es.strategy_id
-                WHERE LOWER(vs.status) = 'active'
+                WHERE {deployable_where}
                   AND vs.expectancy_r > 0
                   AND vs.sample_size >= 100
                   AND vs.instrument IN (SELECT UNNEST(?::VARCHAR[]))
@@ -693,8 +695,9 @@ def collect_manual_candidates(
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
+        deployable_where = deployable_validated_predicate(con, "vs")
         rows = con.execute(
-            """
+            f"""
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.orb_minutes,
                    vs.filter_type, vs.rr_target, vs.stop_multiplier,
                    vs.win_rate, vs.expectancy_r, vs.sample_size,
@@ -715,7 +718,7 @@ def collect_manual_candidates(
               AND vs.rr_target = frl.locked_rr
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id
-            WHERE LOWER(vs.status) = 'active'
+            WHERE {deployable_where}
               AND vs.expectancy_r > 0
               AND vs.sample_size >= 30
               AND vs.instrument IN (SELECT UNNEST(?::VARCHAR[]))
@@ -1148,11 +1151,12 @@ def _build_filter_universe_rows(db_path: Path, trading_day: date) -> list[dict]:
     routed_counts: dict[str, int] = {}
     con = duckdb.connect(str(db_path), read_only=True)
     try:
+        deployable_where = deployable_validated_predicate(con)
         rows = con.execute(
-            """
+            f"""
             SELECT filter_type, COUNT(*)
             FROM validated_setups
-            WHERE LOWER(status) = 'active'
+            WHERE {deployable_where}
             GROUP BY filter_type
             """
         ).fetchall()

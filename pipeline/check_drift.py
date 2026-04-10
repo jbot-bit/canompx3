@@ -4728,7 +4728,7 @@ def check_phase_4_sha_integrity(con=None) -> list[str]:
 
 def check_prop_profiles_validated_alignment(con=None) -> list[str]:
     """Every DailyLaneSpec in an ``active=True`` AccountProfile must exist in
-    ``validated_setups`` with ``status='active'``.
+    the deployable validated shelf.
 
     Rationale: the 2026-04-09 alignment audit found that all 5 deployed lanes
     in ``topstep_50k_mnq_auto`` were ghosts — strategy_ids not present in the
@@ -4765,13 +4765,22 @@ def check_prop_profiles_validated_alignment(con=None) -> list[str]:
             _own_con = True
 
         from trading_app.prop_profiles import ACCOUNT_PROFILES
+        from trading_app.validated_shelf import validated_setups_has_deployment_scope
+
+        has_scope = validated_setups_has_deployment_scope(con)
+        lane_query = (
+            "SELECT status, LOWER(COALESCE(deployment_scope, 'deployable')) "
+            "FROM validated_setups WHERE strategy_id = ?"
+            if has_scope
+            else "SELECT status, NULL FROM validated_setups WHERE strategy_id = ?"
+        )
 
         for profile_id, profile in sorted(ACCOUNT_PROFILES.items()):
             if not profile.active:
                 continue
             for lane in profile.daily_lanes:
                 row = con.execute(
-                    "SELECT status FROM validated_setups WHERE strategy_id = ?",
+                    lane_query,
                     [lane.strategy_id],
                 ).fetchone()
                 if row is None:
@@ -4785,7 +4794,7 @@ def check_prop_profiles_validated_alignment(con=None) -> list[str]:
                         f"lane from the profile."
                     )
                     continue
-                status = row[0]
+                status, deployment_scope = row
                 if status != "active":
                     violations.append(
                         f"  prop_profiles.{profile_id}: lane "
@@ -4793,11 +4802,94 @@ def check_prop_profiles_validated_alignment(con=None) -> list[str]:
                         f"but status={status!r} (not active). A retired or "
                         f"suspended strategy cannot back a live lane."
                     )
+                    continue
+                if has_scope and deployment_scope != "deployable":
+                    violations.append(
+                        f"  prop_profiles.{profile_id}: lane "
+                        f"{lane.strategy_id!r} exists with deployment_scope="
+                        f"{deployment_scope!r} (not deployable). Live lanes "
+                        f"must point at deployable shelf rows only."
+                    )
     except Exception as exc:
         violations.append(f"  PROP PROFILES ALIGNMENT CHECK FAILED: {exc}")
     finally:
         if _own_con and con is not None:
             con.close()
+    return violations
+
+
+def check_validated_setups_writer_allowlist() -> list[str]:
+    """Only canonical validator/maintenance paths may mutate validated_setups."""
+    violations: list[str] = []
+    allowed_exact = {
+        Path("trading_app/db_manager.py"),
+        Path("trading_app/strategy_validator.py"),
+        Path("trading_app/edge_families.py"),
+        Path("scripts/infra/parallel_rebuild.py"),
+        Path("scripts/infra/revalidate_null_seeds.py"),
+        Path("scripts/tools/backfill_dollar_columns.py"),
+        Path("scripts/tools/migrate_fairness_audit.py"),
+    }
+    allowed_prefixes = (
+        Path("scripts/migrations"),
+    )
+    write_pattern = re.compile(
+        r"\b(?:INSERT(?:\s+OR\s+REPLACE)?\s+INTO|UPDATE|DELETE\s+FROM)\s+validated_setups\b",
+        re.IGNORECASE,
+    )
+
+    for base_dir in (TRADING_APP_DIR, SCRIPTS_DIR):
+        if not base_dir.exists():
+            continue
+        for fpath in sorted(base_dir.rglob("*.py")):
+            rel = fpath.relative_to(PROJECT_ROOT)
+            if rel in allowed_exact or any(str(rel).startswith(str(prefix)) for prefix in allowed_prefixes):
+                continue
+            content = fpath.read_text(encoding="utf-8")
+            for idx, line in enumerate(content.splitlines(), 1):
+                if write_pattern.search(line):
+                    violations.append(
+                        f"  {rel}:{idx}: writes validated_setups outside canonical allowlist"
+                    )
+
+    return violations
+
+
+def check_critical_deployable_shelf_consumers() -> list[str]:
+    """Critical production readers must encode deployable-shelf semantics canonically."""
+    violations: list[str] = []
+    critical_files = [
+        TRADING_APP_DIR / "live_config.py",
+        TRADING_APP_DIR / "prop_portfolio.py",
+        TRADING_APP_DIR / "lane_allocator.py",
+        TRADING_APP_DIR / "strategy_fitness.py",
+        TRADING_APP_DIR / "sr_monitor.py",
+        TRADING_APP_DIR / "sprt_monitor.py",
+        SCRIPTS_DIR / "tools" / "generate_trade_sheet.py",
+        SCRIPTS_DIR / "tools" / "project_pulse.py",
+        TRADING_APP_DIR / "ai" / "sql_adapter.py",
+    ]
+    raw_active_pattern = re.compile(r"(?:LOWER\([^)]*status\)|status)\s*=\s*'active'", re.IGNORECASE)
+
+    for fpath in critical_files:
+        if not fpath.exists():
+            violations.append(f"  {fpath.relative_to(PROJECT_ROOT)} missing")
+            continue
+        rel = fpath.relative_to(PROJECT_ROOT)
+        content = fpath.read_text(encoding="utf-8")
+        uses_helper = "deployable_validated_predicate" in content
+        uses_explicit_scope = "deployment_scope" in content
+        if not (uses_helper or uses_explicit_scope):
+            violations.append(
+                f"  {rel}: critical validated_setups reader lacks canonical deployable-shelf semantics"
+            )
+        if rel != Path("trading_app/ai/sql_adapter.py"):
+            for idx, line in enumerate(content.splitlines(), 1):
+                if raw_active_pattern.search(line):
+                    violations.append(
+                        f"  {rel}:{idx}: raw status='active' predicate in critical shelf reader"
+                    )
+
     return violations
 
 
@@ -5283,6 +5375,18 @@ CHECKS = [
     (
         "Phase 4 discovery SHA integrity (stamped hypothesis_file_sha must reference real file)",
         check_phase_4_sha_integrity,
+        False,
+        False,
+    ),
+    (
+        "validated_setups writes stay on canonical allowlist",
+        check_validated_setups_writer_allowlist,
+        False,
+        False,
+    ),
+    (
+        "critical validated_setups readers use canonical deployable-shelf semantics",
+        check_critical_deployable_shelf_consumers,
         False,
         False,
     ),

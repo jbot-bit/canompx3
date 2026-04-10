@@ -216,6 +216,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 validation_run_id TEXT,
                 promotion_git_sha TEXT,
                 promotion_provenance TEXT DEFAULT 'LEGACY',
+                deployment_scope TEXT DEFAULT 'deployable',
 
                 -- Edge family membership
                 family_hash       TEXT,
@@ -353,11 +354,28 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             ("validation_run_id", "TEXT"),
             ("promotion_git_sha", "TEXT"),
             ("promotion_provenance", "TEXT DEFAULT 'LEGACY'"),
+            ("deployment_scope", "TEXT DEFAULT 'deployable'"),
         ]:
             try:
                 con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
             except duckdb.CatalogException:
                 pass  # column already exists
+
+        # Backfill explicit deployable-shelf scope for legacy rows.
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        placeholders = ", ".join("?" * len(ACTIVE_ORB_INSTRUMENTS))
+        con.execute(
+            f"""
+            UPDATE validated_setups
+            SET deployment_scope = CASE
+                WHEN instrument IN ({placeholders}) THEN 'deployable'
+                ELSE 'non_deployable'
+            END
+            WHERE deployment_scope IS NULL
+            """,
+            list(ACTIVE_ORB_INSTRUMENTS),
+        )
 
         # Migration: add DST regime split columns (Feb 2026)
         dst_cols = [
@@ -857,6 +875,13 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
                 "sharpe_ann",
                 "yearly_results",
                 "execution_spec",
+                "first_trade_day",
+                "last_trade_day",
+                "trade_day_count",
+                "validation_run_id",
+                "promotion_git_sha",
+                "promotion_provenance",
+                "deployment_scope",
                 "family_hash",
                 "is_family_head",
                 "regime_waivers",

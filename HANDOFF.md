@@ -6,6 +6,87 @@
 
 ---
 
+## Update (2026-04-11 — validated shelf lifecycle hardening)
+
+### Headline
+
+Made deployable-shelf semantics explicit and fail-closed:
+
+- added canonical `deployment_scope` on `validated_setups`
+- centralized shelf semantics in `trading_app/validated_shelf.py`
+- migrated critical production readers off ad hoc `status='active'` logic
+- added drift checks for writer sprawl and critical reader semantic drift
+
+### What changed
+
+- `trading_app/validated_shelf.py`
+  - new canonical shelf lifecycle module
+  - exports:
+    - `validated_shelf_lifecycle(instrument)`
+    - `deployable_validated_predicate(con, alias=...)`
+    - deployable/non-deployable scope constants
+- `trading_app/db_manager.py`
+  - `validated_setups` now includes `deployment_scope`
+  - additive migration/backfill sets:
+    - active-instrument rows -> `deployable`
+    - non-active-instrument rows -> `non_deployable`
+- `trading_app/strategy_validator.py`
+  - promotion path now uses canonical lifecycle semantics instead of inline
+    status/reason branching
+- critical readers migrated to canonical deployable-shelf semantics:
+  - `trading_app/live_config.py`
+  - `trading_app/prop_portfolio.py`
+  - `trading_app/lane_allocator.py`
+  - `trading_app/strategy_fitness.py`
+  - `trading_app/sr_monitor.py`
+  - `trading_app/sprt_monitor.py`
+  - `trading_app/ai/sql_adapter.py`
+  - `scripts/tools/generate_trade_sheet.py`
+  - `scripts/tools/project_pulse.py`
+- `pipeline/check_drift.py`
+  - new check: `validated_setups` writes stay on canonical allowlist
+  - new check: critical validated readers use canonical deployable-shelf
+    semantics
+  - prop-profile alignment check now fails if a lane points at an
+    `active` but `non_deployable` row
+- `scripts/migrations/retire_non_active_validated.py`
+  - now stamps `deployment_scope='non_deployable'`
+  - tolerates legacy DBs missing the new column
+- tests added/updated:
+  - `tests/test_trading_app/test_validated_shelf.py`
+  - `tests/test_pipeline/test_check_drift_ws2.py`
+  - `tests/test_trading_app/test_strategy_validator.py`
+  - `tests/test_migrations/test_retire_non_active_validated.py`
+  - `tests/test_app_sync.py`
+
+### Live DB state
+
+- Ran `init_trading_app_schema()` against repo `gold.db`
+- `deployment_scope` is now present on the live shelf DB
+- full drift / integrity / behavioral gates passed after the migration
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check ...`
+  - passed on all touched files
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_validated_shelf.py tests/test_migrations/test_retire_non_active_validated.py tests/test_trading_app/test_strategy_validator.py tests/test_app_sync.py tests/test_pipeline/test_check_drift.py tests/test_pipeline/test_check_drift_ws2.py tests/test_trading_app/test_ai/test_sql_adapter.py -q`
+  - `404 passed`
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_live_config.py tests/test_trading_app/test_prop_portfolio.py tests/tools/test_generate_trade_sheet.py tests/test_trading_app/test_sr_monitor.py -q`
+  - `129 passed`
+- `./.venv-wsl/bin/python scripts/tools/audit_integrity.py`
+  - passed all 10 checks
+- `./.venv-wsl/bin/python scripts/tools/audit_behavioral.py`
+  - passed all 7 checks
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 100 checks passed [OK], 0 skipped, 7 advisory`
+
+### Notes
+
+- This does **not** split deployable and research rows into separate tables.
+  It makes the semantics explicit first, which is the lower-blast-radius move.
+- Durable design note saved at:
+  - `docs/plans/2026-04-11-validated-shelf-lifecycle-hardening.md`
+
 ## Update (2026-04-11 — native promotion provenance hardening)
 
 ### Headline

@@ -768,7 +768,8 @@ class TestRunValidation:
 
         con = duckdb.connect(str(db_path), read_only=True)
         validated = con.execute(
-            "SELECT status, family_hash, is_family_head FROM validated_setups WHERE strategy_id = ?",
+            "SELECT status, deployment_scope, family_hash, is_family_head "
+            "FROM validated_setups WHERE strategy_id = ?",
             [sid],
         ).fetchone()
         family_count = con.execute("SELECT COUNT(*) FROM edge_families WHERE instrument = 'MGC'").fetchone()[0]
@@ -776,8 +777,9 @@ class TestRunValidation:
 
         assert validated is not None
         assert validated[0] == "active"
-        assert validated[1] is not None and validated[1] != ""
-        assert validated[2] is True
+        assert validated[1] == "deployable"
+        assert validated[2] is not None and validated[2] != ""
+        assert validated[3] is True
         assert family_count == 1
 
     def test_rejected_not_in_validated(self, tmp_path):
@@ -2327,7 +2329,8 @@ class TestFdrPoolIncludesCurrentInstrument:
         # silent promotion without any FDR evaluation.
         con = duckdb.connect(str(db_path), read_only=True)
         vs_row = con.execute(
-            "SELECT validation_pathway, fdr_adjusted_p, status, retirement_reason FROM validated_setups "
+            "SELECT validation_pathway, fdr_adjusted_p, status, deployment_scope, retirement_reason "
+            "FROM validated_setups "
             "WHERE strategy_id = ?",
             ["GC_NYSE_OPEN_E2_RR1.0_CB1_ORB_G5"],
         ).fetchone()
@@ -2335,7 +2338,7 @@ class TestFdrPoolIncludesCurrentInstrument:
 
         # If the strategy is in validated_setups, it must have FDR metadata
         if vs_row is not None:
-            pathway, adj_p, status, retirement_reason = vs_row
+            pathway, adj_p, status, deployment_scope, retirement_reason = vs_row
             assert pathway == "family", (
                 "GC Pathway A strategy promoted but validation_pathway != 'family' — "
                 "indicates the FDR block was skipped (silent pass-through bug)"
@@ -2345,4 +2348,5 @@ class TestFdrPoolIncludesCurrentInstrument:
                 "FDR gate did not fire, silent pass-through bug"
             )
             assert status == "retired"
+            assert deployment_scope == "non_deployable"
             assert retirement_reason is not None and "ACTIVE_ORB_INSTRUMENTS" in retirement_reason

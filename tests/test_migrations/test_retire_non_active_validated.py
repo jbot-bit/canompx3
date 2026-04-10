@@ -13,6 +13,7 @@ def _create_test_db():
             strategy_id VARCHAR PRIMARY KEY,
             instrument VARCHAR,
             status VARCHAR,
+            deployment_scope VARCHAR,
             retired_at TIMESTAMPTZ,
             retirement_reason VARCHAR
         )
@@ -29,10 +30,10 @@ def _create_test_db():
     con.execute(
         """
         INSERT INTO validated_setups VALUES
-            ('GC_1', 'GC', 'active', NULL, NULL),
-            ('MCL_1', 'MCL', 'active', NULL, NULL),
-            ('MNQ_1', 'MNQ', 'active', NULL, NULL),
-            ('MES_1', 'MES', 'retired', CURRENT_TIMESTAMP, 'old')
+            ('GC_1', 'GC', 'active', NULL, NULL, NULL),
+            ('MCL_1', 'MCL', 'active', NULL, NULL, NULL),
+            ('MNQ_1', 'MNQ', 'active', 'deployable', NULL, NULL),
+            ('MES_1', 'MES', 'retired', 'deployable', CURRENT_TIMESTAMP, 'old')
         """
     )
     con.execute(
@@ -55,15 +56,16 @@ class TestRetireNonActiveValidated:
 
             retired_rows = con.execute(
                 """
-                SELECT strategy_id, status, retirement_reason, retired_at
+                SELECT strategy_id, status, deployment_scope, retirement_reason, retired_at
                 FROM validated_setups
                 WHERE instrument IN ('GC', 'MCL')
                 ORDER BY strategy_id
                 """
             ).fetchall()
             assert len(retired_rows) == 2
-            for _sid, status, reason, retired_at in retired_rows:
+            for _sid, status, deployment_scope, reason, retired_at in retired_rows:
                 assert status == "retired"
+                assert deployment_scope == "non_deployable"
                 assert reason == RETIREMENT_REASON
                 assert retired_at is not None
 

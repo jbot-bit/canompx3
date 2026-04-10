@@ -652,6 +652,7 @@ class TestSchemaSync:
             "validation_run_id",
             "promotion_git_sha",
             "promotion_provenance",
+            "deployment_scope",
         }
         missing = required - cols
         assert not missing, f"Missing columns in validated_setups: {missing}"

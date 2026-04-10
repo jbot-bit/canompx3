@@ -20,7 +20,6 @@ import duckdb
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.derived_state import (
     build_code_fingerprint,
     build_db_identity,
@@ -28,10 +27,12 @@ from trading_app.derived_state import (
     build_state_envelope,
     get_git_head,
 )
+from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from trading_app.live.performance_monitor import _compute_std_r
 from trading_app.live.sr_monitor import ShiryaevRobertsMonitor, calibrate_sr_threshold
 from trading_app.prop_profiles import get_profile, get_profile_lane_definitions, resolve_profile_id
 from trading_app.strategy_fitness import _load_strategy_outcomes
+from trading_app.validated_shelf import deployable_validated_predicate
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -47,11 +48,12 @@ def _load_reference_stats() -> dict[str, dict]:
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     configure_connection(con)
     try:
+        deployable_where = deployable_validated_predicate(con)
         rows = con.execute(
-            """
+            f"""
             SELECT strategy_id, win_rate, rr_target, expectancy_r
             FROM validated_setups
-            WHERE LOWER(status) = 'active'
+            WHERE {deployable_where}
             """
         ).fetchall()
     finally:
@@ -251,7 +253,7 @@ def run_monitor(*, apply_pauses: bool = False, pause_days: int = 30) -> None:
         if apply_pauses:
             print(f"Alarm action: APPLY lane pauses for {pause_days} days on profile {profile_id}")
         else:
-            print(f"Alarm action: report only (no lane pause writes)")
+            print("Alarm action: report only (no lane pause writes)")
         print("=" * 120)
         print(
             f"\n{'Lane':<40} {'N':>4} {'SR':>10} {'Thr':>8} {'Status':<10} "
