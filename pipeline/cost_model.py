@@ -118,11 +118,11 @@ COST_SPECS = {
     "GC": CostSpec(
         instrument="GC",
         point_value=100.0,   # 100 troy oz * $1/oz per point
-        commission_rt=5.00,  # estimated proportional (not canonical — GC not traded live)
-        spread_doubled=2.00,  # same tick as MGC ($0.10/oz), same spread in points
-        slippage=2.00,        # same tick, similar fill dynamics for 1-lot
-        tick_size=0.10,       # $0.10/oz = $10/tick (vs MGC $1/tick)
-        min_ticks_floor=10,   # 1.0pt = $100 minimum risk
+        commission_rt=17.40,  # 10x MGC ($1.74 * 10). Not canonical — GC not traded live
+        spread_doubled=20.00,  # 2 ticks * $10/tick = $20 (10x MGC's $2). Dollar terms!
+        slippage=20.00,        # 2 ticks * $10/tick = $20 (10x MGC's $2). Dollar terms!
+        tick_size=0.10,        # $0.10/oz = $10/tick (vs MGC $1/tick)
+        min_ticks_floor=10,    # 1.0pt = $100 minimum risk
     ),
     # TODO(remediation-2026-03-25): MNQ slippage model is 1 tick ($0.50).
     # MGC tbbo pilot showed mean=6.75 ticks (vs 1 modeled), std=41.57, max=263.
