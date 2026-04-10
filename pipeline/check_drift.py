@@ -2635,9 +2635,13 @@ def check_daily_features_row_integrity(con=None) -> list[str]:
     violations = []
     _own_con = False
     try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
         from pipeline.build_daily_features import VALID_ORB_MINUTES
 
         expected_rows = len(VALID_ORB_MINUTES)
+        # Only check active instruments — proxy-only symbols (e.g. GC for MGC
+        # discovery) may legitimately have fewer apertures.
+        active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
 
         if con is None:
             import duckdb
@@ -2653,6 +2657,7 @@ def check_daily_features_row_integrity(con=None) -> list[str]:
             FROM (
                 SELECT trading_day, symbol, COUNT(*) as row_count
                 FROM daily_features
+                WHERE symbol IN ({active_syms})
                 GROUP BY trading_day, symbol
                 HAVING COUNT(*) != {expected_rows}
             )

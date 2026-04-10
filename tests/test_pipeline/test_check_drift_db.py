@@ -272,6 +272,18 @@ class TestDailyFeaturesRowIntegrity:
         violations = check_drift.check_daily_features_row_integrity()
         assert len(violations) == 0
 
+    def test_skips_non_active_instruments(self, tmp_path, monkeypatch):
+        """Proxy-only symbols (e.g. GC) with fewer apertures should not flag."""
+        db_path = _create_db(
+            tmp_path,
+            DAILY_FEATURES_SCHEMA,
+            """INSERT INTO daily_features VALUES
+                ('2025-01-01', 'GC', 5)""",
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_daily_features_row_integrity()
+        assert len(violations) == 0
+
 
 # ── Check 58: Data continuity ─────────────────────────────────────────
 
