@@ -157,6 +157,98 @@ class TestActiveValidatedFiltersRoutable:
         assert violations == []
 
 
+# ── Active micro-only filter discipline ───────────────────────────────
+
+
+class TestActiveMicroOnlyFiltersOnRealMicros:
+    """Micro-only filters must never survive on parent/proxy instruments."""
+
+    def test_passes_micro_only_filter_on_real_micro(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            VALIDATED_SCHEMA,
+            """INSERT INTO validated_setups (
+                   strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                   confirm_bars, filter_type, rr_target, status, win_rate,
+                   expectancy_r, fdr_significant, family_hash, wf_tested,
+                   retired_at, retirement_reason
+               ) VALUES (
+                   'MNQ_EUROPE_FLOW_E1_RR1.0_CB1_VOL_RV12_N20', 'MNQ', 'EUROPE_FLOW', 5, 'E1',
+                   1, 'VOL_RV12_N20', 1.0, 'active', 0.55,
+                   0.10, TRUE, 'fam4', TRUE,
+                   NULL, NULL
+               )""",
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_micro_only_filters_on_real_micros()
+        assert violations == []
+
+    def test_catches_micro_only_filter_on_parent_instrument(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            VALIDATED_SCHEMA,
+            """INSERT INTO validated_setups (
+                   strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                   confirm_bars, filter_type, rr_target, status, win_rate,
+                   expectancy_r, fdr_significant, family_hash, wf_tested,
+                   retired_at, retirement_reason
+               ) VALUES (
+                   'GC_EUROPE_FLOW_E1_RR1.0_CB1_VOL_RV12_N20', 'GC', 'EUROPE_FLOW', 5, 'E1',
+                   1, 'VOL_RV12_N20', 1.0, 'active', 0.55,
+                   0.10, TRUE, 'fam5', TRUE,
+                   NULL, NULL
+               )""",
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_micro_only_filters_on_real_micros()
+        assert len(violations) == 1
+        assert "VOL_RV12_N20" in violations[0]
+        assert "GC" in violations[0]
+
+    def test_ignores_retired_parent_violation(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            VALIDATED_SCHEMA,
+            """INSERT INTO validated_setups (
+                   strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                   confirm_bars, filter_type, rr_target, status, win_rate,
+                   expectancy_r, fdr_significant, family_hash, wf_tested,
+                   retired_at, retirement_reason
+               ) VALUES (
+                   'GC_EUROPE_FLOW_E1_RR1.0_CB1_VOL_RV12_N20', 'GC', 'EUROPE_FLOW', 5, 'E1',
+                   1, 'VOL_RV12_N20', 1.0, 'retired', 0.55,
+                   0.10, TRUE, 'fam6', TRUE,
+                   CURRENT_TIMESTAMP, 'retired for test'
+               )""",
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_micro_only_filters_on_real_micros()
+        assert violations == []
+
+    def test_fails_closed_on_unknown_instrument(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            VALIDATED_SCHEMA,
+            """INSERT INTO validated_setups (
+                   strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                   confirm_bars, filter_type, rr_target, status, win_rate,
+                   expectancy_r, fdr_significant, family_hash, wf_tested,
+                   retired_at, retirement_reason
+               ) VALUES (
+                   'XYZ_EUROPE_FLOW_E1_RR1.0_CB1_VOL_RV12_N20', 'XYZ', 'EUROPE_FLOW', 5, 'E1',
+                   1, 'VOL_RV12_N20', 1.0, 'active', 0.55,
+                   0.10, TRUE, 'fam7', TRUE,
+                   NULL, NULL
+               )""",
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_micro_only_filters_on_real_micros()
+        assert len(violations) == 2
+        assert "could not resolve micro-era status" in violations[0]
+        assert "XYZ" in violations[0]
+        assert "micro-only filter_type" in violations[1]
+
+
 # ── Check 35: No E0 in DB ────────────────────────────────────────────
 
 

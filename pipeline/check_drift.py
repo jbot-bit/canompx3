@@ -1969,6 +1969,82 @@ def check_active_validated_filters_routable(con=None) -> list[str]:
     return violations
 
 
+def check_active_micro_only_filters_on_real_micros(con=None) -> list[str]:
+    """Check active shelf rows never use micro-only filters on proxy lanes.
+
+    ``StrategyFilter.requires_micro_data`` is the canonical declaration that a
+    filter's signal is only meaningful on REAL micro contract data. An active
+    ``validated_setups`` row using such a filter must therefore target an
+    instrument where ``pipeline.data_era.is_micro(instrument)`` is True.
+
+    This catches the class of future contamination where a volume-based filter
+    (e.g. rel-vol or ORB-volume) is promoted on GC/NQ/ES parent lanes or dead
+    proxy micros whose bars_1m still come from the parent contract.
+
+    Important limit: this check enforces instrument-level era compatibility
+    only. Precise pre-launch date enforcement still needs per-strategy trading
+    date provenance on the shelf; drift must not pretend that metadata exists
+    when it does not.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.data_era import is_micro
+        from trading_app.config import ALL_FILTERS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, instrument, orb_label, filter_type
+            FROM validated_setups
+            WHERE status = 'active'
+            ORDER BY instrument, orb_label, filter_type, strategy_id
+            """
+        ).fetchall()
+
+        micro_cache: dict[str, bool] = {}
+        for strategy_id, instrument, orb_label, filter_type in rows:
+            filter_obj = ALL_FILTERS.get(filter_type)
+            if filter_obj is None:
+                # Registered-filter drift is handled by check_validated_filters_registered().
+                continue
+            if not filter_obj.requires_micro_data:
+                continue
+
+            if instrument not in micro_cache:
+                try:
+                    micro_cache[instrument] = is_micro(instrument)
+                except Exception as exc:  # noqa: BLE001 - drift boundary, fail-closed
+                    violations.append(
+                        "  validated_setups: could not resolve micro-era status for "
+                        f"{instrument} on strategy {strategy_id}: "
+                        f"{type(exc).__name__}: {exc}"
+                    )
+                    micro_cache[instrument] = False
+
+            if not micro_cache[instrument]:
+                violations.append(
+                    "  validated_setups: active strategy "
+                    f"{strategy_id} uses micro-only filter_type {filter_type!r} "
+                    f"on non-micro instrument {instrument!r} ({orb_label}). "
+                    "requires_micro_data filters are invalid on parent/proxy lanes."
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_active_micro_only_filters_on_real_micros: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 def check_wf_coverage(con=None) -> list[str]:
     """Check #40: WF coverage for MGC/MES (soft gate — WARNING ONLY, never blocks).
 
@@ -4670,6 +4746,12 @@ CHECKS = [
     (
         "Active validated filters remain canonical-routable for their lane",
         check_active_validated_filters_routable,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Active micro-only filters run only on real-micro instruments",
+        check_active_micro_only_filters_on_real_micros,
         False,
         True,
     ),  # requires_db

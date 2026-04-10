@@ -6,6 +6,54 @@
 
 ---
 
+## Update (2026-04-11 — active-shelf micro-data discipline hardening)
+
+### Headline
+
+Added a new fail-closed drift guard so active `validated_setups` rows cannot
+use `requires_micro_data=True` filters on non-real-micro instruments.
+
+### What changed
+
+- `pipeline/check_drift.py`
+  - added `check_active_micro_only_filters_on_real_micros()`
+  - delegates to canonical sources only:
+    - `trading_app.config.ALL_FILTERS[filter_type].requires_micro_data`
+    - `pipeline.data_era.is_micro(instrument)`
+  - registered new drift check:
+    - `Active micro-only filters run only on real-micro instruments`
+- `tests/test_pipeline/test_check_drift_db.py`
+  - added coverage for:
+    - valid micro-only filter on real micro (`MNQ`)
+    - invalid micro-only filter on parent instrument (`GC`)
+    - retired invalid row ignored
+    - unknown instrument fails closed
+
+### Why this matters
+
+This closes the honest instrument-level era gap without inventing provenance we
+do not have. It prevents future promotion of volume/rel-vol style filters on
+parent or proxy lanes even if discovery/runtime routing drifts.
+
+### Important limit
+
+Precise pre-launch date enforcement is still **not** derivable from the current
+`validated_setups` schema. The shelf does **not** store first/last trade day or
+equivalent strategy-level date provenance. So a true Stage 3d-style
+`first_trade_day >= micro_launch_day(instrument)` check still requires schema or
+provenance work. Do not fake this with inferred dates from shelf metadata.
+
+### Verification
+
+- `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_check_drift_db.py -q`
+  - result: `24 passed`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - new check passed on real shelf
+  - drift still fails for pre-existing unrelated issues:
+    - `trading_app/strategy_validator.py` indentation/import break
+    - `family_rr_locks` coverage
+    - orphaned `hypothesis_file_sha`
+
 ## Update (2026-04-10 evening — GC proxy branch merged, drift/SR cleanup)
 
 ### Headline
