@@ -89,6 +89,30 @@ class TestSessionSafetyState:
         s2 = SessionSafetyState("profile_test", "MGC")
         assert s2.kill_switch_fired is False  # Separate file
 
+    def test_daily_pnl_r_persists_same_day(self, state_dir: Path) -> None:
+        """Daily PnL is restored when trading_day matches."""
+        state = SessionSafetyState("profile_test", "MNQ")
+        state.daily_pnl_r = -4.5
+        state.trading_day = "2026-04-10"
+        state.save()
+
+        loaded = SessionSafetyState("profile_test", "MNQ")
+        assert loaded.daily_pnl_r == -4.5
+        assert loaded.trading_day == "2026-04-10"
+
+    def test_daily_pnl_r_stale_day_ignored_by_caller(self, state_dir: Path) -> None:
+        """daily_pnl_r is loaded regardless — caller checks trading_day match."""
+        state = SessionSafetyState("profile_test", "MNQ")
+        state.daily_pnl_r = -6.0
+        state.trading_day = "2026-04-09"  # yesterday
+        state.save()
+
+        loaded = SessionSafetyState("profile_test", "MNQ")
+        # Value is loaded (state doesn't know what day it is)
+        assert loaded.daily_pnl_r == -6.0
+        # But the orchestrator checks: if trading_day != str(self.trading_day), skip
+        assert loaded.trading_day == "2026-04-09"
+
     def test_blocked_strategies_incremental(self, state_dir: Path) -> None:
         state = SessionSafetyState("profile_test", "MNQ")
         state.blocked_strategies["STRAT_A"] = "orphan"

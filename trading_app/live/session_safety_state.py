@@ -5,6 +5,7 @@ Flags persisted:
   - close_time_forced: EOD force-flatten initiated
   - blocked_strategies: strategy IDs blocked due to orphan/stuck-exit containment
   - shadow_failures: CopyOrderRouter divergence state (cross-account hedging)
+  - daily_pnl_r: intraday P&L in R-units (for daily loss circuit breaker recovery)
 
 Pattern: save-on-mutate (atomic write via tmp+replace), load-on-init.
 Follows the same convention as AccountHWMTracker in data/state/.
@@ -35,6 +36,8 @@ class SessionSafetyState:
         self.close_time_forced: bool = False
         self.blocked_strategies: dict[str, str] = {}  # strategy_id → reason
         self.shadow_failures: dict[str, str] = {}  # account_id → failure description
+        self.daily_pnl_r: float = 0.0  # intraday P&L for daily loss circuit breaker
+        self.trading_day: str = ""  # ISO date — daily_pnl_r only valid if matches current day
 
         self._load_state()
 
@@ -47,6 +50,8 @@ class SessionSafetyState:
             self.close_time_forced = bool(data.get("close_time_forced", False))
             self.blocked_strategies = dict(data.get("blocked_strategies", {}))
             self.shadow_failures = dict(data.get("shadow_failures", {}))
+            self.daily_pnl_r = float(data.get("daily_pnl_r", 0.0))
+            self.trading_day = str(data.get("trading_day", ""))
             if self.kill_switch_fired or self.blocked_strategies or self.shadow_failures:
                 log.critical(
                     "CRASH RECOVERY: loaded safety state from %s — "
@@ -68,6 +73,8 @@ class SessionSafetyState:
             "close_time_forced": self.close_time_forced,
             "blocked_strategies": self.blocked_strategies,
             "shadow_failures": self.shadow_failures,
+            "daily_pnl_r": round(self.daily_pnl_r, 4),
+            "trading_day": self.trading_day,
         }
         tmp = self._state_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2))

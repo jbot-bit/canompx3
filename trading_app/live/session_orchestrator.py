@@ -264,6 +264,17 @@ class SessionOrchestrator:
             e2_order_timeout=E2_ORDER_TIMEOUT,
         )
 
+        # Crash recovery: restore daily P&L so RiskManager re-derives halt state.
+        # Only restore if trading_day matches (daily PnL resets each day).
+        _saved_day = self._safety_state.trading_day
+        if _saved_day == str(self.trading_day) and self._safety_state.daily_pnl_r != 0.0:
+            self.engine.daily_pnl_r = self._safety_state.daily_pnl_r
+            log.critical(
+                "CRASH RECOVERY: restored daily_pnl_r=%.2fR from %s",
+                self._safety_state.daily_pnl_r,
+                _saved_day,
+            )
+
         # Contract resolution (needed even in signal-only for front-month lookup)
         contracts = contracts_cls(auth=self.auth, demo=demo)
 
@@ -1286,6 +1297,11 @@ class SessionOrchestrator:
                 order_id_exit=order_id_exit,
                 cusum_alarm=alert is not None,
             )
+
+        # Persist daily P&L for crash recovery (daily loss circuit breaker)
+        self._safety_state.daily_pnl_r = self.engine.daily_pnl_r
+        self._safety_state.trading_day = str(self.trading_day)
+        self._safety_state.save()
 
     async def _submit_bracket(self, event, strategy, entry_price: float) -> None:
         """Submit broker-side stop/target bracket after entry fill. Never raises."""
