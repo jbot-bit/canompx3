@@ -208,13 +208,15 @@ def gate_3(con: duckdb.DuckDBPyConnection) -> dict:
     # and check if entry_price matches. This proves the OUTCOME would
     # be the same on GC data (same price → same stop/target → same result).
 
-    # risk_range = |entry_price - stop_price| = the ORB size for this trade
+    # FIX 1: Use LEFT JOIN to measure coverage (audit finding: silent fail)
+    # FIX 2: Compare entry_price vs GC high/low containment, not just vs open
     row = con.execute("""
         WITH mgc_trades AS (
             SELECT o.trading_day, o.orb_label, o.entry_model, o.rr_target,
                    o.entry_ts, o.entry_price, o.stop_price, o.target_price,
                    o.exit_ts, o.exit_price, o.pnl_r, o.outcome,
-                   ABS(o.entry_price - o.stop_price) AS risk_range
+                   ABS(o.entry_price - o.stop_price) AS risk_range,
+                   CASE WHEN o.entry_price > o.stop_price THEN 1 ELSE 0 END AS is_long
             FROM orb_outcomes o
             WHERE o.symbol = 'MGC'
               AND o.orb_minutes = 5
@@ -222,26 +224,34 @@ def gate_3(con: duckdb.DuckDBPyConnection) -> dict:
               AND o.pnl_r IS NOT NULL
               AND o.trading_day >= ? AND o.trading_day <= ?
         ),
-        gc_at_entry AS (
-            SELECT t.trading_day, t.orb_label, t.entry_model, t.rr_target,
-                   t.entry_price AS mgc_entry, t.pnl_r AS mgc_pnl_r,
-                   t.risk_range AS mgc_risk_range, t.outcome AS mgc_outcome,
-                   b.open AS gc_open, b.high AS gc_high, b.low AS gc_low, b.close AS gc_close
+        with_gc AS (
+            SELECT t.*,
+                   b.open AS gc_open, b.high AS gc_high, b.low AS gc_low, b.close AS gc_close,
+                   CASE WHEN b.ts_utc IS NOT NULL THEN 1 ELSE 0 END AS gc_bar_exists
             FROM mgc_trades t
-            JOIN bars_1m b ON b.ts_utc = t.entry_ts AND b.symbol = 'GC'
+            LEFT JOIN bars_1m b ON b.ts_utc = t.entry_ts AND b.symbol = 'GC'
         )
         SELECT
-            COUNT(*) AS n_matched,
-            CORR(mgc_entry, gc_open) AS entry_price_corr,
-            AVG(ABS(mgc_entry - gc_open)) AS avg_entry_diff,
-            PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY ABS(mgc_entry - gc_open)) AS p99_entry_diff,
-            MAX(ABS(mgc_entry - gc_open)) AS max_entry_diff,
-            SUM(CASE WHEN ABS(mgc_entry - gc_open) <= 0.10 THEN 1 ELSE 0 END)::FLOAT
-              / NULLIF(COUNT(*), 0) AS entry_1tick_pct,
-            AVG(mgc_risk_range) AS avg_mgc_orb_size,
-            SUM(CASE WHEN mgc_outcome = 'win' THEN 1 ELSE 0 END) AS n_win,
-            SUM(CASE WHEN mgc_outcome = 'loss' THEN 1 ELSE 0 END) AS n_loss
-        FROM gc_at_entry
+            COUNT(*) AS n_total,
+            SUM(gc_bar_exists) AS n_matched,
+            -- Coverage: what % of MGC trades have a GC bar?
+            SUM(gc_bar_exists)::FLOAT / COUNT(*) AS coverage_pct,
+            -- Entry price containment (did GC bar contain MGC entry level?)
+            SUM(CASE WHEN gc_bar_exists=1 AND gc_low <= entry_price AND entry_price <= gc_high
+                     THEN 1 ELSE 0 END)::FLOAT / NULLIF(SUM(gc_bar_exists), 0) AS contain_pct,
+            -- Would the trade have triggered on GC?
+            SUM(CASE WHEN gc_bar_exists=1 AND is_long=1 AND gc_high >= entry_price
+                     THEN 1 ELSE 0 END)::FLOAT
+              / NULLIF(SUM(CASE WHEN gc_bar_exists=1 AND is_long=1 THEN 1 ELSE 0 END), 0) AS long_trigger_pct,
+            SUM(CASE WHEN gc_bar_exists=1 AND is_long=0 AND gc_low <= entry_price
+                     THEN 1 ELSE 0 END)::FLOAT
+              / NULLIF(SUM(CASE WHEN gc_bar_exists=1 AND is_long=0 THEN 1 ELSE 0 END), 0) AS short_trigger_pct,
+            AVG(risk_range) AS avg_risk_range,
+            -- Entry price vs GC bar stats (matched only)
+            AVG(CASE WHEN gc_bar_exists=1 THEN ABS(entry_price - gc_open) END) AS avg_entry_vs_open,
+            SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) AS n_win,
+            SUM(CASE WHEN outcome = 'loss' THEN 1 ELSE 0 END) AS n_loss
+        FROM with_gc
     """, [OVERLAP_START, OVERLAP_END]).fetchone()
 
     if row is None or row[0] == 0:
@@ -249,31 +259,35 @@ def gate_3(con: duckdb.DuckDBPyConnection) -> dict:
         return {"verdict": "FAIL — no data"}
 
     labels = [
-        "n_matched", "entry_price_corr", "avg_entry_diff", "p99_entry_diff",
-        "max_entry_diff", "entry_1tick_pct", "avg_mgc_orb_size",
-        "n_win", "n_loss",
+        "n_total", "n_matched", "coverage_pct", "contain_pct",
+        "long_trigger_pct", "short_trigger_pct", "avg_risk_range",
+        "avg_entry_vs_open", "n_win", "n_loss",
     ]
     r = dict(zip(labels, row))
 
-    print(f"  Matched MGC trades with GC bar at entry_ts: {r['n_matched']:,}")
-    print(f"  Entry price correlation:  {r['entry_price_corr']:.8f}")
-    print(f"  Entry price diffs (pts):  avg={r['avg_entry_diff']:.4f}  p99={r['p99_entry_diff']:.2f}  max={r['max_entry_diff']:.2f}")
-    print(f"  Entry within 1 tick:      {r['entry_1tick_pct']:.1%}")
-    print(f"  Avg MGC ORB size:         {r['avg_mgc_orb_size']:.2f} pts")
+    print(f"  Total MGC trades:         {r['n_total']:,}")
+    print(f"  With GC bar at entry_ts:  {r['n_matched']:,} ({r['coverage_pct']:.1%} coverage)")
+    n_missing = r['n_total'] - r['n_matched']
+    print(f"  Missing GC bars:          {n_missing:,} ({n_missing/r['n_total']*100:.1f}%)")
+    print()
+    print(f"  GC bar CONTAINS entry:    {r['contain_pct']:.1%}")
+    print(f"  Long would trigger on GC: {r['long_trigger_pct']:.1%}")
+    print(f"  Short would trigger on GC:{r['short_trigger_pct']:.1%}")
+    print(f"  Avg risk range:           {r['avg_risk_range']:.2f} pts")
+    print(f"  Entry vs GC open diff:    {r['avg_entry_vs_open']:.4f} pts")
     print(f"  Win/Loss split:           {r['n_win']:,} / {r['n_loss']:,}")
     print()
 
-    # Key insight: if entry_price matches, then stop_price and target_price
-    # (which are entry_price ± orb_size × multiplier) would also match.
-    # Therefore pnl_r would be identical.
-    entry_diff_vs_orb = r["avg_entry_diff"] / r["avg_mgc_orb_size"] * 100
-    print(f"  Entry diff as % of ORB size: {entry_diff_vs_orb:.3f}%")
-    print(f"  → Entry diff is {entry_diff_vs_orb:.3f}% of the trade's risk range")
-    print(f"  → pnl_r deviation would be ~{entry_diff_vs_orb:.3f}% per trade")
+    entry_diff_pct = r["avg_entry_vs_open"] / r["avg_risk_range"] * 100
+    print(f"  Entry diff as % of risk:  {entry_diff_pct:.2f}%")
     print()
 
-    passed = r["entry_price_corr"] > 0.999 and entry_diff_vs_orb < 1.0
-    r["entry_diff_pct_of_orb"] = entry_diff_vs_orb
+    # Verdict: coverage > 95% AND trigger rate > 93% AND containment > 90%
+    passed = (r["coverage_pct"] > 0.95
+              and r["contain_pct"] > 0.90
+              and r["long_trigger_pct"] > 0.93
+              and r["short_trigger_pct"] > 0.93)
+    r["entry_diff_pct_of_orb"] = entry_diff_pct
     r["verdict"] = "PASS" if passed else "FAIL"
     print(f"  VERDICT: {r['verdict']}")
     print()
@@ -393,7 +407,7 @@ def main():
         print("=" * 70)
         print(f"  Gate 1 (bar prices):    {g1['verdict']}  range_corr={g1['range_corr']:.6f}")
         print(f"  Gate 2 (filter inputs): {g2['verdict']}  gap_corr={g2['gap_corr']:.6f}  pdr_corr={g2['pdr_corr']:.6f}")
-        print(f"  Gate 3 (outcomes):      {g3['verdict']}  entry_corr={g3.get('entry_price_corr', 'N/A')}")
+        print(f"  Gate 3 (outcomes):      {g3['verdict']}  coverage={g3.get('coverage_pct', 'N/A')}  trigger={g3.get('long_trigger_pct', 'N/A')}")
         print(f"  Gate 4 (adversarial):   {g4['verdict']}  worst={g4['max_diff']:.2f}pts")
         print()
 
@@ -409,7 +423,8 @@ def main():
             print(f"  - {g1['n']:,} paired bars, price correlation > 0.9999")
             print(f"  - Filter inputs (gap, PDR, range) all correlate > 0.98")
             print(f"  - Volume DIFFERENT ({g2['vol_ratio']:.0f}x) confirming negative control")
-            print(f"  - {g3['n_matched']:,} trades verified: entry price diff = {g3['entry_diff_pct_of_orb']:.3f}% of ORB")
+            print(f"  - {g3.get('n_matched', 0):,} trades: {g3.get('coverage_pct', 0):.1%} GC coverage, "
+                  f"{g3.get('long_trigger_pct', 0):.1%} trigger match")
             print()
             print("FILTER CLASSIFICATION:")
             print("  PRICE-SAFE (can use GC proxy):")
