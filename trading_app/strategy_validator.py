@@ -1944,7 +1944,14 @@ def run_validation(
 
             elif passed_strategy_ids:
                 logger.info("Computing FDR correction (Benjamini-Hochberg, stratified K by session)...")
-                active_instruments = ACTIVE_ORB_INSTRUMENTS
+                # Include the current run's instrument in the FDR pool even if
+                # it's not in ACTIVE_ORB_INSTRUMENTS (e.g., GC research runs).
+                # Without this, Pathway A strategies for research instruments
+                # would silently skip FDR entirely — fail-closed gap.
+                # Fix: 2026-04-11.
+                active_instruments = list(ACTIVE_ORB_INSTRUMENTS)
+                if instrument not in active_instruments:
+                    active_instruments.append(instrument)
                 placeholders = ", ".join(["?"] * len(active_instruments))
 
                 # Build per-session p-value pools
@@ -1983,56 +1990,81 @@ def run_validation(
                 n_fdr_rejected = 0
                 fdr_rejected_ids = []
                 _today = date.today()
+                # Build p-value lookup to distinguish NULL-p (legitimately
+                # unFDR-able) from pool-build errors.
+                p_value_by_sid: dict[str, float | None] = {}
+                for sid_r in passed_strategy_ids:
+                    pv_row = con.execute(
+                        "SELECT p_value FROM experimental_strategies WHERE strategy_id = ?",
+                        [sid_r],
+                    ).fetchone()
+                    p_value_by_sid[sid_r] = pv_row[0] if pv_row else None
+
                 for sid in passed_strategy_ids:
                     fdr = fdr_results.get(sid)
-                    if fdr is not None:
-                        # Look up the effective K that was ACTUALLY used for BH on this strategy's session
-                        _sid_session = con.execute(
-                            "SELECT orb_label FROM experimental_strategies WHERE strategy_id = ?",
-                            [sid],
-                        ).fetchone()
-                        _sess_k = effective_k_by_session.get(_sid_session[0], total_k) if _sid_session else total_k
-                        # Freeze discovery_k: only set on first write.
-                        # Subsequent rebuilds update fdr_significant/adjusted_p
-                        # (which may change as the canonical pool grows) but
-                        # preserve the K under which the strategy was originally
-                        # promoted. This maintains audit trail integrity.
-                        # WFE gate: WFE < MIN_WFE → overfit, demote regardless of FDR
-                        # Pardo: WFE < 0.50 = lost >50% of edge OOS → likely overfit
-                        _wfe_row = con.execute(
-                            "SELECT wfe FROM validated_setups WHERE strategy_id = ?", [sid]
-                        ).fetchone()
-                        _wfe = _wfe_row[0] if _wfe_row and _wfe_row[0] is not None else 0.0  # fail-closed
-                        _fdr_sig = fdr["fdr_significant"] and _wfe >= MIN_WFE
-                        if fdr["fdr_significant"] and not _fdr_sig:
-                            logger.info(f"  WFE gate: {sid} demoted (WFE={_wfe:.2f} < {MIN_WFE})")
-
-                        con.execute(
-                            """UPDATE validated_setups
-                               SET fdr_significant = ?,
-                                   fdr_adjusted_p = ?,
-                                   p_value = ?,
-                                   validation_pathway = 'family',
-                                   n_trials_at_discovery = CASE
-                                       WHEN n_trials_at_discovery IS NULL THEN ?
-                                       ELSE n_trials_at_discovery
-                                   END,
-                                   discovery_k = CASE
-                                       WHEN discovery_k IS NULL THEN ?
-                                       ELSE discovery_k
-                                   END,
-                                   discovery_date = CASE
-                                       WHEN discovery_date IS NULL THEN ?
-                                       ELSE discovery_date
-                                   END
-                               WHERE strategy_id = ?""",
-                            [_fdr_sig, fdr["adjusted_p"], fdr["raw_p"], _sess_k, _sess_k, _today, sid],
-                        )
-                        if _fdr_sig:
-                            n_fdr_sig += 1
-                        else:
+                    if fdr is None:
+                        if p_value_by_sid.get(sid) is not None:
+                            # Fail-closed: strategy has a p_value but wasn't
+                            # in the FDR pool. Indicates pool build error
+                            # (e.g., instrument missing). Reject rather than
+                            # silently promote. Fix: 2026-04-11.
+                            logger.warning(
+                                f"  FDR MISSING: {sid} has p_value but no FDR result — "
+                                "pool build error, failing closed."
+                            )
                             fdr_rejected_ids.append(sid)
                             n_fdr_rejected += 1
+                        # If p_value is NULL, strategy legitimately can't be
+                        # FDR-evaluated. Pass through to promotion.
+                        continue
+                    # fdr is not None below — look up the effective K that
+                    # was ACTUALLY used for BH on this strategy's session
+                    _sid_session = con.execute(
+                        "SELECT orb_label FROM experimental_strategies WHERE strategy_id = ?",
+                        [sid],
+                    ).fetchone()
+                    _sess_k = effective_k_by_session.get(_sid_session[0], total_k) if _sid_session else total_k
+                    # Freeze discovery_k: only set on first write.
+                    # Subsequent rebuilds update fdr_significant/adjusted_p
+                    # (which may change as the canonical pool grows) but
+                    # preserve the K under which the strategy was originally
+                    # promoted. This maintains audit trail integrity.
+                    # WFE gate: WFE < MIN_WFE → overfit, demote regardless of FDR
+                    # Pardo: WFE < 0.50 = lost >50% of edge OOS → likely overfit
+                    _wfe_row = con.execute(
+                        "SELECT wfe FROM validated_setups WHERE strategy_id = ?", [sid]
+                    ).fetchone()
+                    _wfe = _wfe_row[0] if _wfe_row and _wfe_row[0] is not None else 0.0  # fail-closed
+                    _fdr_sig = fdr["fdr_significant"] and _wfe >= MIN_WFE
+                    if fdr["fdr_significant"] and not _fdr_sig:
+                        logger.info(f"  WFE gate: {sid} demoted (WFE={_wfe:.2f} < {MIN_WFE})")
+
+                    con.execute(
+                        """UPDATE validated_setups
+                           SET fdr_significant = ?,
+                               fdr_adjusted_p = ?,
+                               p_value = ?,
+                               validation_pathway = 'family',
+                               n_trials_at_discovery = CASE
+                                   WHEN n_trials_at_discovery IS NULL THEN ?
+                                   ELSE n_trials_at_discovery
+                               END,
+                               discovery_k = CASE
+                                   WHEN discovery_k IS NULL THEN ?
+                                   ELSE discovery_k
+                               END,
+                               discovery_date = CASE
+                                   WHEN discovery_date IS NULL THEN ?
+                                   ELSE discovery_date
+                               END
+                           WHERE strategy_id = ?""",
+                        [_fdr_sig, fdr["adjusted_p"], fdr["raw_p"], _sess_k, _sess_k, _today, sid],
+                    )
+                    if _fdr_sig:
+                        n_fdr_sig += 1
+                    else:
+                        fdr_rejected_ids.append(sid)
+                        n_fdr_rejected += 1
 
                 # Hard gate: remove FDR-failing strategies from validated_setups
                 if fdr_rejected_ids:

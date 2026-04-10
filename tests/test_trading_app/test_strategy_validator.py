@@ -2142,3 +2142,88 @@ class TestPhaseC_DeleteScope:
         assert surviving is not None, "Pre-existing must survive even when new strategy is rejected"
         # Only the pre-existing survives; the new one was rejected
         assert total == 1, f"Expected 1 validated strategy (pre-existing only), got {total}"
+
+
+class TestFdrPoolIncludesCurrentInstrument:
+    """Regression: Phase D FDR pool must include the current validator's
+    instrument even if it's not in ACTIVE_ORB_INSTRUMENTS (e.g., GC research).
+
+    Pre-2026-04-11 bug: FDR pool was hardcoded to ACTIVE_ORB_INSTRUMENTS.
+    Running ``--instrument GC`` under Pathway A would silently skip FDR
+    because GC strategies were never in the pool, then fell through the
+    ``fdr is None`` branch as a silent pass. Fail-closed gap.
+    """
+
+    def _setup_gc_db(self, tmp_path, rows):
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        from pipeline.init_db import BARS_1M_SCHEMA, BARS_5M_SCHEMA, DAILY_FEATURES_SCHEMA
+
+        con.execute(BARS_1M_SCHEMA)
+        con.execute(BARS_5M_SCHEMA)
+        con.execute(DAILY_FEATURES_SCHEMA)
+        con.close()
+
+        from trading_app.db_manager import init_trading_app_schema
+
+        init_trading_app_schema(db_path=db_path)
+
+        con = duckdb.connect(str(db_path))
+        for row in rows:
+            cols = list(row.keys())
+            placeholders = ", ".join(["?"] * len(cols))
+            col_str = ", ".join(cols)
+            con.execute(
+                f"INSERT INTO experimental_strategies ({col_str}) VALUES ({placeholders})",
+                list(row.values()),
+            )
+        con.commit()
+        con.close()
+        return db_path
+
+    def test_gc_strategy_included_in_fdr_pool(self, tmp_path):
+        """GC Pathway A strategy must be FDR-evaluated, not silently passed."""
+        row = _make_row(
+            strategy_id="GC_NYSE_OPEN_E2_RR1.0_CB1_ORB_G5",
+            instrument="GC",
+            orb_label="NYSE_OPEN",
+            entry_model="E2",
+            p_value=0.001,  # Required for FDR pool eligibility
+            sharpe_ann=1.5,
+            is_canonical=True,
+        )
+        db_path = self._setup_gc_db(tmp_path, [row])
+
+        # Running with testing_mode="family" (Pathway A) exercises the FDR
+        # pool code path. Pre-fix: pool excludes GC -> silent pass-through.
+        # Post-fix: GC included in pool -> FDR gate applied.
+        run_validation(
+            db_path=db_path,
+            instrument="GC",
+            enable_walkforward=False,
+            testing_mode="family",
+        )
+
+        # After the fix, the strategy should either be in validated_setups
+        # with validation_pathway='family' and a non-null fdr_adjusted_p,
+        # or rejected with criterion_3 (FDR).  What MUST NOT happen is
+        # silent promotion without any FDR evaluation.
+        con = duckdb.connect(str(db_path), read_only=True)
+        vs_row = con.execute(
+            "SELECT validation_pathway, fdr_adjusted_p FROM validated_setups "
+            "WHERE strategy_id = ?",
+            ["GC_NYSE_OPEN_E2_RR1.0_CB1_ORB_G5"],
+        ).fetchone()
+        con.close()
+
+        # If the strategy is in validated_setups, it must have FDR metadata
+        if vs_row is not None:
+            pathway, adj_p = vs_row
+            assert pathway == "family", (
+                "GC Pathway A strategy promoted but validation_pathway != 'family' — "
+                "indicates the FDR block was skipped (silent pass-through bug)"
+            )
+            assert adj_p is not None, (
+                "GC Pathway A strategy promoted with NULL fdr_adjusted_p — "
+                "FDR gate did not fire, silent pass-through bug"
+            )
