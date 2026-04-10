@@ -3,42 +3,58 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 163
+## Last iteration: 164
 
-## RALPH AUDIT — Iteration 163
+## RALPH AUDIT — Iteration 164
 ## Date: 2026-04-10
-## Infrastructure Gates: drift 90/90 PASS (6 pre-existing data violations unrelated to code: checks 59/95 — family_rr_locks + validated_setups lanes, from Mode A Phase 5 pending); behavioral audit FIXED (1 fail-open found and resolved); ruff advisory-only (B905/I001 in scripts/research/gc_proxy_validity.py)
+## Infrastructure Gates: drift 90/90 PASS (6 pre-existing data violations: checks 59/95 — family_rr_locks + validated_setups lanes, from Mode A Phase 5 pending); behavioral audit 7/7 PASS; ruff advisory-only (B905 in scripts/research/gc_proxy_validity.py)
 
 ---
 
-## Iteration 163 — check_lane_lifecycle fail-open on exception
+## Iteration 164 — Stale docstring in _arm_strategies (execution_engine.py)
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Orphan risk | `execution_engine.py:620` — `_arm_strategies` docstring claimed "Phase 2 passes `{"E1"}`" but Phase 2 at line 493 passes `entry_models=None`; misleading comment could cause maintainer confusion | LOW | FIXED cccd21a6 |
+
+### Audit Notes
+
+- **Finding source:** Manual code review during full read of execution_engine.py (1,505 lines).
+- **TRACE:** `_arm_strategies` docstring line 620 → actual Phase 2 call at line 493: `self._arm_strategies(orb, bar)` (no `entry_models` kwarg).
+- **EVIDENCE:** Phase 1.5 at line 482 passes `entry_models=frozenset({"E2"})` — correct. Phase 2 at line 493 passes no `entry_models` (defaults to None). The claim "Phase 2 passes `{"E1"}`" is false. E2 dedup is handled by the `active_trades`/`completed_trades` guard at lines 728-731, not by entry_models filtering.
+- **Fix:** Updated docstring to accurately document Phase 2 behavior and cite the dedup mechanism.
+- **Behavior unchanged:** Docstring only. 45/45 tests pass.
+- **Also scanned:** `trading_app/entry_rules.py` — clean, no findings. Well-structured with correct logic for E1/E2/E3 detect functions.
+
+### Full Seven Sins scan — execution_engine.py
+
+| Sin | Result |
+|-----|--------|
+| Silent failure | None — all exception paths log errors and fail-closed |
+| Fail-open | None — `_arm_strategies` skips unknown filter_type with logger.error; unknown entry_model emits REJECT |
+| Look-ahead bias | None — E2 Phase 1.5 correctly fires before Phase 2; orb_utc_window canonical delegation verified |
+| Cost illusion | None — COST_SPECS used via get_session_cost_spec, to_r_multiple throughout |
+| Canonical violation | None — ACTIVE_ORB_INSTRUMENTS not hardcoded; ALL_FILTERS, SESSION_EXIT_MODE from config |
+| Orphan risk | FIXED — stale docstring (EE-DOCSTRING-164) |
+| Volatile data | None |
+| Async safety | N/A — synchronous module |
+| State persistence gap | N/A — in-memory state only, no disk writes |
+| Contract drift | None — _arm_strategies signature stable; callers verified |
+
+### entry_rules.py full scan — clean
+
+- `detect_confirm`, `detect_break_touch`, `resolve_entry`, `_resolve_e1`, `_resolve_e3`, `_resolve_e2` — all correct
+- E2/E1/E3 path separation properly enforced (E2 raises ValueError if sent to detect_entry_with_confirm_bars)
+- No hardcoded instrument/session lists
+- No look-ahead: confirms use post-orb_break_ts bars only
+
+---
+
+## Prior: Iteration 163 — check_lane_lifecycle fail-open on exception
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
 | Fail-open | `pre_session_check.py:314` — `check_lane_lifecycle()` returned `(True, "WARN: ...")` on exception, permitting lane to trade when lifecycle state was unreadable | MEDIUM | FIXED 4dc4a35c |
-
-### Audit Notes
-
-- **Finding source:** Behavioral audit check #3 (broad except + success return) caught the pattern.
-- **TRACE:** `check_lane_lifecycle()` (line 309) → `read_lifecycle_state()` raises → `except Exception as e` (line 313) → `return True, f"WARN: ..."` (line 314) → caller sees `ok=True` → lane permitted to trade.
-- **Main orchestration path unaffected:** The real production path at `pre_session_check.py:473` calls `read_lifecycle_state()` directly without try/except — exceptions propagate naturally (fail-closed). Only the public wrapper `check_lane_lifecycle()` had the wrong semantics.
-- **Fix:** Changed line 314 from `return True, f"WARN: lifecycle state unavailable ({e})"` to `return False, f"BLOCKED: lifecycle state unavailable ({e})"`.
-- **Test added:** `test_blocks_when_lifecycle_state_unreadable` — patches `read_lifecycle_state` to raise `OSError`, asserts `ok is False` and `"BLOCKED" in msg`.
-- **Pre-existing drift violations (NOT introduced by this iteration):**
-  - Check 59: 2 active families missing from family_rr_locks — from Mode A Phase 5 (pending `select_family_rr.py` run)
-  - Check 95: 5 lanes in `topstep_50k_mnq_auto` not in validated_setups — from Phase 3c rebuild (strategies pending re-validation)
-  - These were present before this iteration and are operational/data issues, not code defects Ralph should fix.
-
----
-
-## Broader sweep findings (reported — not fixed this iteration)
-
-| Target | Finding | Severity | Status |
-|--------|---------|----------|--------|
-| `trading_app/rolling_portfolio.py:308` | `train_months` unused function arg in `compute_day_of_week_stats` | LOW | DEFERRED — low severity, dead-code pass |
-| `trading_app/strategy_fitness.py:489` | `con` unused function arg in `_compute_fitness_from_cache` | LOW | DEFERRED — low severity, dead-code pass |
-| `trading_app/strategy_validator.py:239` | `strategy_id` unused function arg | LOW | DEFERRED — low severity, dead-code pass |
-| `scripts/research/gc_proxy_validity.py:19` | Unsorted imports (I001) | LOW | DEFERRED — research script, advisory only |
 
 ---
 
@@ -48,24 +64,24 @@
 |-----|---------|----------|--------|
 | Dead code / orphan | `test_tradovate.py:160` — `mock_sleep` param unused (patch needed, param not) | LOW | FIXED 24b30b6 |
 | Dead code / orphan | `test_tradovate.py:459` — `mock_sleep` param unused (patch needed, param not) | LOW | FIXED 24b30b6 |
-| Dead code / orphan | `test_tradovate.py:619-621` — `@patch` decorator unnecessary + `mock_post` param unused; `TradovateAuth.__init__` makes no HTTP calls | LOW | FIXED 24b30b6 |
-| Dead code / orphan | `test_projectx_429_retry.py:58,75,89,104,118,133,145` — 7x `mock_sleep` param unused (patches needed, params not) | LOW | FIXED 24b30b6 |
+| Dead code / orphan | `test_tradovate.py:619-621` — `@patch` decorator unnecessary + `mock_post` param unused | LOW | FIXED 24b30b6 |
+| Dead code / orphan | `test_projectx_429_retry.py:58,75,89,104,118,133,145` — 7x `mock_sleep` param unused | LOW | FIXED 24b30b6 |
 
 ---
 
-## Prior: Iteration 161 — trading_app/live/tradovate/contracts.py + rithmic/contracts.py + rithmic/positions.py
+## Prior: Iteration 161 — tradovate/contracts.py + rithmic/contracts.py + rithmic/positions.py
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Silent failure | `tradovate/contracts.py:64` — `resolve_front_month()` returned `""` when API response had no `"name"` or `"contractSymbol"` field; empty string silently passed to order router | MEDIUM | FIXED 6e401d1 |
-| Canonical violation | `rithmic/contracts.py:22-26` — `INSTRUMENT_ROOTS` hardcodes `{"MES","MNQ","MGC"}` | LOW | ACCEPTABLE — translation dict (our symbol → Rithmic root); fallback `INSTRUMENT_ROOTS.get(instrument, instrument)` makes it functionally correct for any instrument where name == root. No safety impact. |
-| Fail-open | `rithmic/positions.py:93-95` — `query_equity()` returns `None` on exception | LOW | ACCEPTABLE — caller `update_equity(None)` in account_hwm_tracker is designed for this (tracks consecutive poll failures, halts after N). `float | None` contract is intentional. |
+| Silent failure | `tradovate/contracts.py:64` — `resolve_front_month()` returned `""` on missing API field | MEDIUM | FIXED 6e401d1 |
+| Canonical violation | `rithmic/contracts.py:22-26` — `INSTRUMENT_ROOTS` hardcodes `{"MES","MNQ","MGC"}` | LOW | ACCEPTABLE (WF-06) |
+| Fail-open | `rithmic/positions.py:93-95` — `query_equity()` returns `None` on exception | LOW | ACCEPTABLE (WF-07) |
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 241 files fully scanned (pre_session_check.py re-audited iter 163).
+> Cumulative list — 243 files fully scanned (execution_engine.py + entry_rules.py added iter 164).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -147,11 +163,12 @@
 - trading_app/live/rithmic/positions.py — added iter 161
 - pipeline/db_config.py — added iter 161
 - pipeline/paths.py — re-audited iter 161 (modified 2026-04-04)
-- **Total: 241 files fully scanned**
+- trading_app/execution_engine.py — added iter 164
+- trading_app/entry_rules.py — added iter 164
+- **Total: 243 files fully scanned**
 
 ## Next iteration targets
-- Priority 1 (unscanned critical): trading_app/config.py — critical (63 importers), no-touch zone but audit-only pass warranted
-- Priority 2 (stale re-audit — modified 2026-04-10): trading_app/strategy_fitness.py (medium, dead arg at line 489), trading_app/strategy_validator.py (medium, dead arg at line 239)
+- Priority 2 (stale re-audit — modified 2026-04-10): trading_app/strategy_fitness.py (medium centrality, dead arg at line 489), trading_app/strategy_validator.py (medium centrality, dead arg at line 239)
 - Priority 3 (stale re-audit — modified 2026-04-09): trading_app/rolling_portfolio.py (dead arg at line 308)
-- Priority 4 (unscanned medium): trading_app/consistency_tracker.py, trading_app/execution_engine.py, trading_app/entry_rules.py, trading_app/risk_manager.py
+- Priority 4 (unscanned medium): trading_app/consistency_tracker.py, trading_app/risk_manager.py
 - Note: pre-existing drift violations (checks 59/95) require operational resolution by user — run `python scripts/tools/select_family_rr.py` and re-run validator for Mode A strategies

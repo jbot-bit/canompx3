@@ -1,7 +1,7 @@
 {
-  "total_iterations": 156,
+  "total_iterations": 157,
   "last_updated": "2026-04-10",
-  "consecutive_low_only": 0,
+  "consecutive_low_only": 1,
   "last_high_finding_iter": 163,
   "findings_by_type": {
     "canonical_violation": {
@@ -28,6 +28,12 @@
       "deferred": 0,
       "fix_rate": 1.0
     },
+    "stale_metadata": {
+      "found": 5,
+      "fixed": 5,
+      "deferred": 0,
+      "fix_rate": 1.0
+    },
     "lint": {
       "found": 5,
       "fixed": 5,
@@ -39,12 +45,6 @@
       "fixed": 3,
       "deferred": 1,
       "fix_rate": 0.75
-    },
-    "stale_metadata": {
-      "found": 4,
-      "fixed": 4,
-      "deferred": 0,
-      "fix_rate": 1.0
     },
     "security": {
       "found": 3,
@@ -117,17 +117,22 @@
     "CRITICAL": 3,
     "HIGH": 12,
     "MEDIUM": 42,
-    "LOW": 99
+    "LOW": 100
   },
   "classifications": {
     "judgment": 74,
-    "mechanical": 55,
+    "mechanical": 56,
     "audit-only": 27
   },
   "files_audited": {
     "execution_engine.py": {
       "audit_count": 6,
       "last_iter": 24,
+      "findings": 4
+    },
+    "trading_app/execution_engine.py": {
+      "audit_count": 5,
+      "last_iter": 164,
       "findings": 4
     },
     "session_orchestrator.py": {
@@ -143,11 +148,6 @@
     "portfolio.py": {
       "audit_count": 4,
       "last_iter": 22,
-      "findings": 3
-    },
-    "trading_app/execution_engine.py": {
-      "audit_count": 4,
-      "last_iter": 50,
       "findings": 3
     },
     "trading_app/live_config.py": {
@@ -2787,6 +2787,17 @@
       "severity": "MEDIUM",
       "verdict": "FIXED",
       "commit": "4dc4a35c"
+    },
+    {
+      "iter": 164,
+      "date": "2026-04-10",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/execution_engine.py:620",
+      "finding_type": "stale_metadata",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "cccd21a6"
     }
   ]
 }

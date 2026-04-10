@@ -1715,3 +1715,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 2 files (pre_session_check.py + test_pre_session_check.py)
 - Verification: PASS (28/28 test_pre_session_check.py)
 - Commit: 4dc4a35c
+
+## Iteration 164 — 2026-04-10
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/execution_engine.py:620
+- Finding: Stale docstring in _arm_strategies claimed "Phase 2 passes {'E1'}" but Phase 2 at line 493 passes entry_models=None; E2 dedup is handled by active_trades/completed_trades guard at lines 728-731, not by entry_models filter
+- Action: Updated docstring to accurately describe Phase 2 behavior and cite the dedup mechanism
+- Blast radius: 1 file (execution_engine.py, docstring only); 2 importers (session_orchestrator.py, paper_trader.py) unaffected
+- Verification: PASS (45/45 test_execution_engine.py)
+- Commit: cccd21a6
