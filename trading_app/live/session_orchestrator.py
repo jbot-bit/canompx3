@@ -32,6 +32,7 @@ from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
 from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live.trade_journal import TradeJournal, generate_trade_id
+from trading_app.ml.config import ML_ENABLED
 from trading_app.ml.predict_live import LiveMLPredictor
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from trading_app.risk_manager import RiskLimits, RiskManager
@@ -238,20 +239,30 @@ class SessionOrchestrator:
             log.info("Risk limits: daily_loss=%.1fR, max_DD=%.1fR", risk_limits.max_daily_loss_r, max_equity_dd_r)
         else:
             log.info("Risk limits: daily_loss=%.1fR, max_DD=DISABLED", risk_limits.max_daily_loss_r)
-        # ML predictor: fail-open if models don't load (won't block trading)
-        try:
+        # ML predictor: three-state gate per trading_app.ml.config.ML_ENABLED.
+        #   ML_ENABLED unset/0 → self._ml_predictor = None, ExecutionEngine takes all trades
+        #   ML_ENABLED=1 + model loads → normal gated trading
+        #   ML_ENABLED=1 + model missing → RuntimeError, refuse to boot (fail-closed)
+        # See docs/runtime/stages/ml-v3-stage-1-fail-closed.md for the design
+        # and docs/audit/ml_v3/2026-04-11-stage-0-verification.md for the motivation.
+        if not ML_ENABLED:
+            self._ml_predictor = None
+            log.info("ML disabled (ML_ENABLED=0) — trades not gated by meta-label predictor")
+        else:
+            # Fail-closed: require_models=True raises RuntimeError if no model
+            # for this instrument. We do NOT catch it — a broken ML init must
+            # prevent startup when the operator explicitly asked for ML.
             self._ml_predictor = LiveMLPredictor(
                 db_path=str(GOLD_DB_PATH),
                 instruments=[instrument],
+                require_models=True,
             )
             ml_info = self._ml_predictor.get_model_info(instrument)
-            if ml_info:
-                log.info("ML predictor loaded: %s", ml_info.get("model_type", "unknown"))
-            else:
-                log.warning("ML predictor: no model for %s — all trades fail-open", instrument)
-        except Exception as e:
-            log.warning("ML predictor init failed: %s — all trades fail-open", e)
-            self._ml_predictor = None
+            log.info(
+                "ML enabled: %s model loaded for %s",
+                ml_info.get("model_type", "unknown") if ml_info else "no",
+                instrument,
+            )
 
         from trading_app.config import E2_ORDER_TIMEOUT
 

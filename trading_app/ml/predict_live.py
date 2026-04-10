@@ -4,13 +4,24 @@ Loads trained meta-label models and predicts P(win) for individual trade
 setups. Used by ExecutionEngine to skip low-confidence trades.
 
 Design principles (per de Prado AIFML, per ML_LIVE_INTEGRATION.md):
-  1. Fail-open — missing model = trade anyway (0.5, True)
+  1. Fail-open BY DEFAULT, fail-closed OPT-IN via require_models=True.
+     - require_models=False (default, backwards-compatible): missing model
+       → predict() returns (0.5, True, 0.5). Tests and research scripts
+       can instantiate freely without needing live .joblib files.
+     - require_models=True (production callers): missing model for any
+       requested instrument → RuntimeError at __init__. Refuses to construct
+       a silently-disabled predictor. Session orchestrator + paper_trader
+       use this mode when trading_app.ml.config.ML_ENABLED is truthy.
   2. Shared feature pipeline — uses transform_to_features() from features.py
      to guarantee training/serving parity
   3. Hybrid per-session models — each session gets its own RF + threshold
      Sessions without a model fall-open (take all trades).
      Falls back to per-instrument model if no hybrid model exists.
   4. Config hash + freshness checks for drift detection
+
+See docs/runtime/stages/ml-v3-stage-1-fail-closed.md for the fail-closed
+design and docs/audit/ml_v3/2026-04-11-stage-0-verification.md for the
+three-state semantics (ML_ENABLED × MODEL_DIR × require_models).
 """
 
 from __future__ import annotations
@@ -73,7 +84,21 @@ class LiveMLPredictor:
         self,
         db_path: str,
         instruments: list[str] | None = None,
+        require_models: bool = False,
     ):
+        """Initialize LiveMLPredictor.
+
+        Args:
+            db_path: Path to gold.db for daily_features lookups.
+            instruments: Instruments to load models for. Defaults to ACTIVE_INSTRUMENTS.
+            require_models: Fail-closed switch. When True, raise RuntimeError
+                if MODEL_DIR does not exist OR if any requested instrument has
+                no loadable model bundle after _load_models() runs. Production
+                callers (session_orchestrator, paper_trader) pass True when
+                trading_app.ml.config.ML_ENABLED is set. Tests and research
+                scripts leave the default False to construct predictors with
+                synthetic bundles or no models at all.
+        """
         self.db_path = str(db_path)
         self.instruments = instruments or list(ACTIVE_INSTRUMENTS)
 
@@ -89,7 +114,35 @@ class LiveMLPredictor:
         self.aperture_mismatch_count: int = 0
         self.rr_mismatch_count: int = 0
 
+        # Fail-closed guard: MODEL_DIR must exist when require_models=True.
+        # Without this, _load_models() silently iterates zero files and leaves
+        # self._models empty — the historical silent fail-open path this stage
+        # eliminates. Research/test callers (require_models=False) skip this.
+        if require_models and not MODEL_DIR.exists():
+            raise RuntimeError(
+                f"LiveMLPredictor(require_models=True) but MODEL_DIR does not exist: "
+                f"{MODEL_DIR}. Expected .joblib model bundles under this directory. "
+                f"Create the directory and populate it with trained models, or set "
+                f"ML_ENABLED=0 in the environment to disable ML gating entirely."
+            )
+
         self._load_models()
+
+        # Fail-closed guard: every requested instrument must have a loaded model.
+        # Partial loads (e.g. 2 instruments requested, 1 model on disk) are
+        # treated as startup failure under require_models=True — refusing to
+        # boot is safer than silently disabling ML for the missing instrument.
+        if require_models:
+            missing = [inst for inst in self.instruments if inst not in self._models]
+            if missing:
+                raise RuntimeError(
+                    f"LiveMLPredictor(require_models=True) but no model loaded "
+                    f"for instruments: {missing}. Expected files at "
+                    f"{MODEL_DIR}/meta_label_<INST>_hybrid.joblib or "
+                    f"{MODEL_DIR}/meta_label_<INST>.joblib. Cannot fail-open "
+                    f"under require_models=True — refusing to construct a "
+                    f"silently-disabled predictor."
+                )
 
     def _load_models(self) -> None:
         """Load model .joblib files for all configured instruments.

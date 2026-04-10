@@ -931,3 +931,132 @@ class TestModelStaleness:
 
         # Model should still be active
         assert "MGC" in predictor._models
+
+
+# ---------------------------------------------------------------------------
+# Fail-closed tests — require_models=True opt-in guard
+# Added 2026-04-11 (ML V3 Stage 1) per
+# docs/runtime/stages/ml-v3-stage-1-fail-closed.md.
+# ---------------------------------------------------------------------------
+
+
+class TestFailClosedRequireModels:
+    """require_models=True: refuse to construct a silently-disabled predictor.
+
+    These tests verify the opt-in fail-closed guard introduced in ML V3 Stage 1.
+    Default (require_models=False) behavior is covered by TestFailOpen above and
+    must continue to work — tests in TestFailOpen exercise the backwards-compat
+    path used by research scripts and the rest of the test suite.
+    """
+
+    def test_require_models_missing_model_dir_raises(self, tmp_path):
+        """MODEL_DIR does not exist on disk → RuntimeError at __init__.
+
+        Stage 0 verification confirmed models/ml/ does not currently exist.
+        Under require_models=True this must fail-closed, not silently skip.
+        """
+        nonexistent = tmp_path / "definitely_not_a_dir"
+        assert not nonexistent.exists()
+
+        with patch("trading_app.ml.predict_live.MODEL_DIR", nonexistent):
+            with pytest.raises(RuntimeError, match="MODEL_DIR does not exist"):
+                LiveMLPredictor(
+                    db_path="dummy.db",
+                    instruments=["MGC"],
+                    require_models=True,
+                )
+
+    def test_require_models_empty_dir_raises(self, tmp_path):
+        """MODEL_DIR exists but has no .joblib files → RuntimeError at __init__.
+
+        This is the case where someone created models/ml/ but never trained.
+        Under require_models=True this must still fail-closed — empty dir
+        is equivalent to "no models."
+        """
+        assert tmp_path.exists()
+        assert list(tmp_path.iterdir()) == []
+
+        with patch("trading_app.ml.predict_live.MODEL_DIR", tmp_path):
+            with pytest.raises(RuntimeError, match="no model loaded for instruments"):
+                LiveMLPredictor(
+                    db_path="dummy.db",
+                    instruments=["MGC"],
+                    require_models=True,
+                )
+
+    def test_require_models_partial_load_raises(self):
+        """Two instruments requested, only one has a model → RuntimeError.
+
+        Semantically covered by test_require_models_empty_dir_raises (both
+        exercise the post-load missing-instrument guard). A true partial-load
+        test would need a real on-disk .joblib fixture for one instrument and
+        nothing for the other, which is out of scope for this stage — the
+        model-bundle schema is complex enough that a synthetic on-disk fixture
+        is its own infrastructure task. Skipped for now, kept as a placeholder
+        so future V3 training runs remember to add proper fixtures.
+        """
+        pytest.skip("Requires real on-disk .joblib fixture — out of scope for Stage 1")
+
+    def test_require_models_false_default_still_fail_open(self, tmp_path):
+        """Default require_models=False keeps backwards-compatible fail-open.
+
+        This is the critical backwards-compatibility guarantee: existing tests
+        and research scripts that construct LiveMLPredictor without require_models
+        must continue to get the old behavior (empty _models dict, no raise,
+        predict() returns fail-open tuples).
+        """
+        nonexistent = tmp_path / "no_such_dir"
+
+        with patch("trading_app.ml.predict_live.MODEL_DIR", nonexistent):
+            # Default require_models=False — no raise
+            predictor = LiveMLPredictor(
+                db_path="dummy.db",
+                instruments=["MGC"],
+            )
+
+        assert predictor._models == {}
+        result = predictor.predict(
+            instrument="MGC",
+            trading_day=date(2025, 12, 1),
+            orb_label="CME_REOPEN",
+            orb_minutes=5,
+            entry_model="E2",
+            rr_target=1.5,
+            confirm_bars=1,
+        )
+        assert result == MLPrediction(p_win=0.5, take=True, threshold=0.5)
+        assert predictor.fail_open_count == 1
+
+    def test_ml_enabled_flag_is_bool_and_respects_env(self, monkeypatch):
+        """ML_ENABLED reads os.environ['ML_ENABLED'] and coerces to bool.
+
+        The flag lives in trading_app.ml.config and is imported by the
+        orchestrator and paper_trader. Verify the parsing is correct so
+        ambiguous values ('yes', 'True', '1', 'on') are recognized.
+        """
+        import importlib
+
+        # Base case: unset → False
+        monkeypatch.delenv("ML_ENABLED", raising=False)
+        import trading_app.ml.config as ml_cfg
+
+        importlib.reload(ml_cfg)
+        assert ml_cfg.ML_ENABLED is False
+
+        # Truthy values
+        for val in ("1", "true", "True", "TRUE", "yes", "on"):
+            monkeypatch.setenv("ML_ENABLED", val)
+            importlib.reload(ml_cfg)
+            assert ml_cfg.ML_ENABLED is True, f"ML_ENABLED={val!r} should be True"
+
+        # Falsy values
+        for val in ("0", "false", "", "no", "off"):
+            monkeypatch.setenv("ML_ENABLED", val)
+            importlib.reload(ml_cfg)
+            assert ml_cfg.ML_ENABLED is False, f"ML_ENABLED={val!r} should be False"
+
+        # Final cleanup: ensure the default unset state is restored so
+        # subsequent tests don't see a polluted ML_ENABLED.
+        monkeypatch.delenv("ML_ENABLED", raising=False)
+        importlib.reload(ml_cfg)
+        assert ml_cfg.ML_ENABLED is False

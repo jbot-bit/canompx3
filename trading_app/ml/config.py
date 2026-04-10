@@ -7,9 +7,28 @@ Add new features here → they propagate to training + live prediction.
 from __future__ import annotations
 
 import hashlib
+import os
 import pathlib
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+# ---------------------------------------------------------------------------
+# Global ML kill switch — canonical ON/OFF for the entire ML gate.
+# ---------------------------------------------------------------------------
+# Policy lives in callers (session_orchestrator, paper_trader), not in
+# LiveMLPredictor itself — unit tests need to construct LiveMLPredictor
+# directly with synthetic bundles regardless of this flag.
+#
+# Callers check ML_ENABLED before instantiating LiveMLPredictor AND pass
+# require_models=True when they do. That combination is fail-closed:
+#   - ML_ENABLED=0 (default): no LiveMLPredictor created, self._ml_predictor=None
+#   - ML_ENABLED=1 + models present: LiveMLPredictor loads and gates trades
+#   - ML_ENABLED=1 + models missing: RuntimeError at orchestrator startup
+#
+# Until ML V3 produces validated .joblib bundles, ML_ENABLED must stay unset.
+# See docs/audit/ml_v3/2026-04-11-stage-0-verification.md for the V3 sprint
+# and docs/runtime/stages/ml-v3-stage-1-fail-closed.md for this guard.
+ML_ENABLED: bool = os.environ.get("ML_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
 
 # ---------------------------------------------------------------------------
 # Feature lists

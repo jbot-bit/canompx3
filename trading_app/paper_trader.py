@@ -267,16 +267,31 @@ def replay_historical(
 
     risk_mgr = RiskManager(risk_limits, corr_lookup=portfolio.corr_lookup)
 
-    # ML predictor (optional — fail-open if models missing)
+    # ML predictor: three-state gate per trading_app.ml.config.ML_ENABLED.
+    # use_ml is a caller-provided request; ML_ENABLED is the global kill switch.
+    # Both must be truthy, AND a model must load, or ml_predictor stays None.
+    # See docs/runtime/stages/ml-v3-stage-1-fail-closed.md for the design.
     ml_predictor = None
     if use_ml:
+        from trading_app.ml.config import ML_ENABLED
         from trading_app.ml.predict_live import LiveMLPredictor
 
-        ml_predictor = LiveMLPredictor(
-            db_path=str(db_path),
-            instruments=[instrument],
-        )
-        logger.info("ML meta-label enabled: %s", ml_predictor.summary())
+        if not ML_ENABLED:
+            logger.warning(
+                "use_ml=True requested but ML_ENABLED=0 — proceeding without ML gate. "
+                "Set ML_ENABLED=1 in environment to enable ML meta-label prediction."
+            )
+        else:
+            # Fail-closed: require_models=True raises RuntimeError if no model
+            # for this instrument. Paper-mode callers that explicitly request
+            # ML must have real models — otherwise the paper results are not
+            # comparable to a future live deployment.
+            ml_predictor = LiveMLPredictor(
+                db_path=str(db_path),
+                instruments=[instrument],
+                require_models=True,
+            )
+            logger.info("ML meta-label enabled: %s", ml_predictor.summary())
 
     # MarketState built per-day below; engine gets it on day start
     market_state = None
