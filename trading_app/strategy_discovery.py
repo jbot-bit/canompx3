@@ -1582,23 +1582,29 @@ def run_discovery(
         n_fdr_sig = sum(1 for v in fdr_results.values() if v.get("fdr_significant"))
         logger.info(f"BH FDR at discovery: {n_fdr_sig}/{len(p_pairs)} significant at q=0.05")
 
-        # ---- Batch write (idempotent: DELETE then INSERT) ----
+        # ---- Batch write (idempotent: DELETE then INSERT OR REPLACE) ----
         if not dry_run:
-            # Remove prior results for this instrument+aperture before writing.
-            # Required because INSERT OR REPLACE only updates written rows —
-            # strategies excluded from the current grid (e.g., E2+CONT after
-            # the look-ahead filter exclusion) would persist as zombies.
-            # FK-safe: skip rows referenced by validated_setups.promoted_from
-            # (grandfathered research-provisional strategies per Amendment 2.4).
-            con.execute(
-                """DELETE FROM experimental_strategies
-                WHERE instrument = ? AND orb_minutes = ?
-                  AND strategy_id NOT IN (
-                      SELECT promoted_from FROM validated_setups
-                      WHERE promoted_from IS NOT NULL
-                  )""",
-                [instrument, orb_minutes],
-            )
+            if hypothesis_sha is None:
+                # LEGACY MODE (no hypothesis file): DELETE all for instrument+
+                # aperture to prevent zombie strategies from grid changes
+                # (e.g., filter removed from config, entry model disabled).
+                # FK-safe: skip rows referenced by validated_setups.promoted_from
+                # (grandfathered research-provisional per Amendment 2.4).
+                con.execute(
+                    """DELETE FROM experimental_strategies
+                    WHERE instrument = ? AND orb_minutes = ?
+                      AND strategy_id NOT IN (
+                          SELECT promoted_from FROM validated_setups
+                          WHERE promoted_from IS NOT NULL
+                      )""",
+                    [instrument, orb_minutes],
+                )
+            # HYPOTHESIS MODE: skip DELETE. Each hypothesis file defines its
+            # own scope — strategies from OTHER files are intentional research
+            # artifacts, not zombies. INSERT OR REPLACE (line ~177) handles
+            # same-ID overwrites. Single-use SHA enforcement prevents accidental
+            # re-runs. This allows multiple hypothesis files to coexist for the
+            # same instrument. Fix: 2026-04-10 (GC proxy + MNQ multi-RR wipe).
             insert_batch = []
             for s in all_strategies:
                 m = s["metrics"]

@@ -2865,12 +2865,18 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         ("MGC", "LONDON_METALS"),
         ("MGC", "EUROPE_FLOW"),
         ("MNQ", "EUROPE_FLOW"),
+        # GC proxy — Amendment 3.1 (2026-04-10). Same underlying as MGC,
+        # same price-based features. PDR is regime-robust (percentile filter).
+        ("GC", "LONDON_METALS"),
+        ("GC", "EUROPE_FLOW"),
+        ("GC", "NYSE_OPEN"),
+        ("GC", "US_DATA_1000"),
     }
     if (instrument, session) in _pdr_validated:
         for pdr_key in ("PDR_R080", "PDR_R105", "PDR_R125"):
             filters[pdr_key] = ALL_FILTERS[pdr_key]
 
-    if instrument == "MGC" and session == "CME_REOPEN":
+    if (instrument in ("MGC", "GC")) and session == "CME_REOPEN":
         for gap_key in ("GAP_R005", "GAP_R015"):
             filters[gap_key] = ALL_FILTERS[gap_key]
 
