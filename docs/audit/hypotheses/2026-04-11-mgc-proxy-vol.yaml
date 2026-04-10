@@ -51,7 +51,7 @@ hypotheses:
       column: atr_pctl
       thresholds: [50]
     scope:
-      instruments: [MGC]
+      instruments: [GC]
       sessions: [TOKYO_OPEN]
       rr_targets: [1.0]
       entry_models: [E2]
@@ -69,7 +69,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism. All sessions tested for honesty."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -78,7 +78,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -87,7 +87,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -96,7 +96,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -105,7 +105,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -114,7 +114,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -123,7 +123,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -132,7 +132,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Same vol-clustering mechanism."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -142,7 +142,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR for continuation."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -151,7 +151,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -160,7 +160,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -169,7 +169,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -178,7 +178,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -187,7 +187,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -196,7 +196,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -205,7 +205,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -214,7 +214,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + higher RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -224,7 +224,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + highest RR for strong continuation."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [TOKYO_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [TOKYO_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -233,7 +233,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + highest RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [LONDON_METALS], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [LONDON_METALS], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -242,7 +242,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + highest RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [EUROPE_FLOW], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -251,7 +251,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + highest RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [CME_REOPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_REOPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -260,7 +260,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + highest RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [US_DATA_830], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_830], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -269,7 +269,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + highest RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -278,7 +278,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + highest RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -287,7 +287,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + highest RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [COMEX_SETTLE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [COMEX_SETTLE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -296,7 +296,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Vol-clustering + highest RR."
     filter: { type: ATR_P50, column: atr_pctl, thresholds: [50] }
-    scope: { instruments: [MGC], sessions: [CME_PRECLOSE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_PRECLOSE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -306,7 +306,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate (P70) for higher selectivity on gold."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [TOKYO_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [TOKYO_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -315,7 +315,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate for gold."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -324,7 +324,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate for gold."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -333,7 +333,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate for gold."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -342,7 +342,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate for gold."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -351,7 +351,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate for gold."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -360,7 +360,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate for gold."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -369,7 +369,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate for gold."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -378,7 +378,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate for gold."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -388,7 +388,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -397,7 +397,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -406,7 +406,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -415,7 +415,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -424,7 +424,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -433,7 +433,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -442,7 +442,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -451,7 +451,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -460,7 +460,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + higher RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -470,7 +470,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + highest RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [TOKYO_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [TOKYO_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -479,7 +479,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + highest RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [LONDON_METALS], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [LONDON_METALS], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -488,7 +488,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + highest RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [EUROPE_FLOW], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -497,7 +497,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + highest RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [CME_REOPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_REOPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -506,7 +506,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + highest RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [US_DATA_830], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_830], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -515,7 +515,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + highest RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -524,7 +524,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + highest RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -533,7 +533,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + highest RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [COMEX_SETTLE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [COMEX_SETTLE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
@@ -542,7 +542,7 @@ hypotheses:
     theory_citation: "Bollerslev (1986) JBES; Engle (1982) Econometrica"
     economic_basis: "Stricter vol gate + highest RR."
     filter: { type: ATR_P70, column: atr_pctl, thresholds: [70] }
-    scope: { instruments: [MGC], sessions: [CME_PRECLOSE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    scope: { instruments: [GC], sessions: [CME_PRECLOSE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
     expected_trial_count: 1
     kill_criteria: ["BH FDR q=0.05 fails at K=54", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
 
