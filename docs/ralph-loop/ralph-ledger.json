@@ -1,14 +1,14 @@
 {
-  "total_iterations": 157,
+  "total_iterations": 158,
   "last_updated": "2026-04-10",
-  "consecutive_low_only": 1,
+  "consecutive_low_only": 2,
   "last_high_finding_iter": 163,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 53,
-      "fixed": 40,
+      "found": 54,
+      "fixed": 41,
       "deferred": 4,
-      "fix_rate": 0.75
+      "fix_rate": 0.76
     },
     "silent_failure": {
       "found": 36,
@@ -117,11 +117,11 @@
     "CRITICAL": 3,
     "HIGH": 12,
     "MEDIUM": 42,
-    "LOW": 100
+    "LOW": 101
   },
   "classifications": {
     "judgment": 74,
-    "mechanical": 56,
+    "mechanical": 57,
     "audit-only": 27
   },
   "files_audited": {
@@ -1068,6 +1068,16 @@
     "tests/test_trading_app/test_projectx_429_retry.py": {
       "audit_count": 1,
       "last_iter": 162,
+      "findings": 1
+    },
+    "trading_app/sprt_monitor.py": {
+      "audit_count": 1,
+      "last_iter": 165,
+      "findings": 1
+    },
+    "trading_app/sr_monitor.py": {
+      "audit_count": 1,
+      "last_iter": 165,
       "findings": 1
     }
   },
@@ -2798,6 +2808,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "cccd21a6"
+    },
+    {
+      "iter": 165,
+      "date": "2026-04-10",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/sprt_monitor.py:129, trading_app/sr_monitor.py:117",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "3898432c"
     }
   ]
 }

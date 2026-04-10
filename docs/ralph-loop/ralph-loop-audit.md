@@ -3,50 +3,60 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 164
+## Last iteration: 165
 
-## RALPH AUDIT — Iteration 164
+## RALPH AUDIT — Iteration 165
 ## Date: 2026-04-10
 ## Infrastructure Gates: drift 90/90 PASS (6 pre-existing data violations: checks 59/95 — family_rr_locks + validated_setups lanes, from Mode A Phase 5 pending); behavioral audit 7/7 PASS; ruff advisory-only (B905 in scripts/research/gc_proxy_validity.py)
 
 ---
 
-## Iteration 164 — Stale docstring in _arm_strategies (execution_engine.py)
+## Iteration 165 — Hardcoded holdout date in sprt_monitor + sr_monitor
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Canonical violation | `sprt_monitor.py:129` — `start_date=date(2026, 1, 1)` hardcoded instead of `HOLDOUT_SACRED_FROM` from `trading_app.holdout_policy` | LOW | FIXED 3898432c |
+| Canonical violation | `sr_monitor.py:117` — same hardcoded literal for the OOS start date in canonical forward outcome fallback | LOW | FIXED 3898432c |
+
+### Audit Notes
+
+- **Finding source:** Seven Sins scan of stale-re-audit targets (strategy_fitness.py, strategy_validator.py, rolling_portfolio.py). The stale "dead arg" targets from the iter 164 next-targets note were already resolved in commit 713c4ab7 (Apr 9). Fresh scan of today's modified files (account_survival.py, sprt_monitor.py via strategy_fitness commit) revealed the holdout literal.
+- **TRACE:** `sprt_monitor.py:129` → `start_date=date(2026, 1, 1)` → `trading_app.holdout_policy.HOLDOUT_SACRED_FROM = date(2026, 1, 1)`. Same for `sr_monitor.py:117`. No caller passes this value — both files use it as the forward-OOS window start for Criterion 12 monitoring. If boundary changes, monitors silently stay frozen.
+- **EVIDENCE:** grep confirmed both literals. `holdout_policy.HOLDOUT_SACRED_FROM = date(2026, 1, 1)` at line 70 of holdout_policy.py.
+- **Fix:** Added `from trading_app.holdout_policy import HOLDOUT_SACRED_FROM` to both files, replaced literals with canonical reference.
+- **Behavior unchanged:** Value identical at runtime. 11/11 tests pass.
+- **Also scanned (Seven Sins):** account_survival.py (209 lines added today) — clean. strategy_validator.py (2-line change today) — rejection_reason field addition correct; schema column exists at db_manager.py:597.
+
+### Full Seven Sins scan — sprt_monitor.py + sr_monitor.py
+
+| Sin | Result |
+|-----|--------|
+| Silent failure | None — both monitors log and continue on lane lookup failures |
+| Fail-open | None — both monitors report NO_DATA status on empty trade streams |
+| Look-ahead bias | None — start_date filter correctly restricts to forward OOS window |
+| Cost illusion | N/A — monitoring only, no P&L computation |
+| Canonical violation | FIXED — holdout date literal (SF-165) |
+| Orphan risk | None |
+| Volatile data | None — strategy counts dynamically loaded from validated_setups |
+| Async safety | N/A — synchronous modules |
+| State persistence gap | N/A — sprt writes state file on every run; sr writes envelope |
+| Contract drift | None — _load_strategy_outcomes callers all use correct kwargs |
+
+### account_survival.py scan — clean (today's big change)
+
+- `_load_lane_trade_paths` correctly uses `entry_ts`/`exit_ts` from updated `_load_strategy_outcomes` SQL (added today in commit 0f7903c7)
+- `_scenario_from_trade_paths` intraday replay logic: correct event ordering with UTC-aware sentinels
+- `simulate_survival` Monte Carlo: fail-closed on empty scenarios; boundary checks on horizon_days and n_paths
+- `check_survival_report_gate`: all 7 blocking conditions fail-closed; reads path_model field correctly
+- No hardcoded instrument lists, no hardcoded constants for DD limits (uses `get_account_tier` + `get_firm_spec`)
+
+---
+
+## Prior: Iteration 164 — Stale docstring in _arm_strategies (execution_engine.py)
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
 | Orphan risk | `execution_engine.py:620` — `_arm_strategies` docstring claimed "Phase 2 passes `{"E1"}`" but Phase 2 at line 493 passes `entry_models=None`; misleading comment could cause maintainer confusion | LOW | FIXED cccd21a6 |
-
-### Audit Notes
-
-- **Finding source:** Manual code review during full read of execution_engine.py (1,505 lines).
-- **TRACE:** `_arm_strategies` docstring line 620 → actual Phase 2 call at line 493: `self._arm_strategies(orb, bar)` (no `entry_models` kwarg).
-- **EVIDENCE:** Phase 1.5 at line 482 passes `entry_models=frozenset({"E2"})` — correct. Phase 2 at line 493 passes no `entry_models` (defaults to None). The claim "Phase 2 passes `{"E1"}`" is false. E2 dedup is handled by the `active_trades`/`completed_trades` guard at lines 728-731, not by entry_models filtering.
-- **Fix:** Updated docstring to accurately document Phase 2 behavior and cite the dedup mechanism.
-- **Behavior unchanged:** Docstring only. 45/45 tests pass.
-- **Also scanned:** `trading_app/entry_rules.py` — clean, no findings. Well-structured with correct logic for E1/E2/E3 detect functions.
-
-### Full Seven Sins scan — execution_engine.py
-
-| Sin | Result |
-|-----|--------|
-| Silent failure | None — all exception paths log errors and fail-closed |
-| Fail-open | None — `_arm_strategies` skips unknown filter_type with logger.error; unknown entry_model emits REJECT |
-| Look-ahead bias | None — E2 Phase 1.5 correctly fires before Phase 2; orb_utc_window canonical delegation verified |
-| Cost illusion | None — COST_SPECS used via get_session_cost_spec, to_r_multiple throughout |
-| Canonical violation | None — ACTIVE_ORB_INSTRUMENTS not hardcoded; ALL_FILTERS, SESSION_EXIT_MODE from config |
-| Orphan risk | FIXED — stale docstring (EE-DOCSTRING-164) |
-| Volatile data | None |
-| Async safety | N/A — synchronous module |
-| State persistence gap | N/A — in-memory state only, no disk writes |
-| Contract drift | None — _arm_strategies signature stable; callers verified |
-
-### entry_rules.py full scan — clean
-
-- `detect_confirm`, `detect_break_touch`, `resolve_entry`, `_resolve_e1`, `_resolve_e3`, `_resolve_e2` — all correct
-- E2/E1/E3 path separation properly enforced (E2 raises ValueError if sent to detect_entry_with_confirm_bars)
-- No hardcoded instrument/session lists
-- No look-ahead: confirms use post-orb_break_ts bars only
 
 ---
 
@@ -62,26 +72,16 @@
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Dead code / orphan | `test_tradovate.py:160` — `mock_sleep` param unused (patch needed, param not) | LOW | FIXED 24b30b6 |
-| Dead code / orphan | `test_tradovate.py:459` — `mock_sleep` param unused (patch needed, param not) | LOW | FIXED 24b30b6 |
+| Dead code / orphan | `test_tradovate.py:160` — `mock_sleep` param unused | LOW | FIXED 24b30b6 |
+| Dead code / orphan | `test_tradovate.py:459` — `mock_sleep` param unused | LOW | FIXED 24b30b6 |
 | Dead code / orphan | `test_tradovate.py:619-621` — `@patch` decorator unnecessary + `mock_post` param unused | LOW | FIXED 24b30b6 |
 | Dead code / orphan | `test_projectx_429_retry.py:58,75,89,104,118,133,145` — 7x `mock_sleep` param unused | LOW | FIXED 24b30b6 |
 
 ---
 
-## Prior: Iteration 161 — tradovate/contracts.py + rithmic/contracts.py + rithmic/positions.py
-
-| Sin | Finding | Severity | Status |
-|-----|---------|----------|--------|
-| Silent failure | `tradovate/contracts.py:64` — `resolve_front_month()` returned `""` on missing API field | MEDIUM | FIXED 6e401d1 |
-| Canonical violation | `rithmic/contracts.py:22-26` — `INSTRUMENT_ROOTS` hardcodes `{"MES","MNQ","MGC"}` | LOW | ACCEPTABLE (WF-06) |
-| Fail-open | `rithmic/positions.py:93-95` — `query_equity()` returns `None` on exception | LOW | ACCEPTABLE (WF-07) |
-
----
-
 ## Files Fully Scanned
 
-> Cumulative list — 243 files fully scanned (execution_engine.py + entry_rules.py added iter 164).
+> Cumulative list — 245 files fully scanned (sprt_monitor.py + sr_monitor.py added iter 165).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -165,10 +165,11 @@
 - pipeline/paths.py — re-audited iter 161 (modified 2026-04-04)
 - trading_app/execution_engine.py — added iter 164
 - trading_app/entry_rules.py — added iter 164
-- **Total: 243 files fully scanned**
+- trading_app/sprt_monitor.py — added iter 165
+- trading_app/sr_monitor.py — added iter 165
+- **Total: 245 files fully scanned**
 
 ## Next iteration targets
-- Priority 2 (stale re-audit — modified 2026-04-10): trading_app/strategy_fitness.py (medium centrality, dead arg at line 489), trading_app/strategy_validator.py (medium centrality, dead arg at line 239)
-- Priority 3 (stale re-audit — modified 2026-04-09): trading_app/rolling_portfolio.py (dead arg at line 308)
-- Priority 4 (unscanned medium): trading_app/consistency_tracker.py, trading_app/risk_manager.py
+- Priority 3 (unscanned medium): trading_app/consistency_tracker.py, trading_app/risk_manager.py
+- Priority 2 (stale re-audit candidates): trading_app/account_survival.py (scanned iter 165, clean), trading_app/strategy_fitness.py (stale dead-arg already fixed in 713c4ab7)
 - Note: pre-existing drift violations (checks 59/95) require operational resolution by user — run `python scripts/tools/select_family_rr.py` and re-run validator for Mode A strategies

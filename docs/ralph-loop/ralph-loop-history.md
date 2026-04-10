@@ -1725,3 +1725,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 1 file (execution_engine.py, docstring only); 2 importers (session_orchestrator.py, paper_trader.py) unaffected
 - Verification: PASS (45/45 test_execution_engine.py)
 - Commit: cccd21a6
+
+---
+
+## Iteration 165 — 2026-04-10
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/sprt_monitor.py:129, trading_app/sr_monitor.py:117
+- Finding: Hardcoded date(2026, 1, 1) for holdout OOS start_date instead of HOLDOUT_SACRED_FROM from trading_app.holdout_policy
+- Action: Added import of HOLDOUT_SACRED_FROM to both files; replaced hardcoded literal with canonical reference in both call sites
+- Blast radius: 2 production files (sprt_monitor.py, sr_monitor.py); 0 callers affected; tests don't mock the constant
+- Verification: PASS — 11/11 tests (test_sprt_monitor + test_sr_monitor); drift 90/90 (6 pre-existing)
+- Commit: 3898432c
