@@ -1,0 +1,280 @@
+# GC Proxy Wave 2 — Regime-Robust Filters on All Viable Sessions
+# Pathway B individual (Amendment 3.0 + 3.1)
+#
+# Locked:        2026-04-10T21:00:00+10:00
+# Holdout mode:  A (2026-01-01 sacred)
+# Data source:   GC parent futures 2010-2026 (proxy for MGC)
+# Testing mode:  individual
+#
+# Wave 1 found: US_DATA_1000 G5 + PDR_R080 are real gold edges.
+# Wave 2 expands: ATR percentiles, OVNRNG, PDR on NYSE_OPEN, US_DATA_830,
+# LONDON_METALS. These are regime-robust (percentile/relative thresholds)
+# and work at any gold price level.
+#
+# Also tests: RR1.5 on US_DATA_1000 (user found MNQ RR1.5 edge in other terminal)
+#
+# Bailey: N=20, MinBTL = 2*ln(20)/1.0^2 = 5.99yr << 15.5yr. PASS.
+# Cumulative across all files: ~43 total, MinBTL = 7.52yr << 15.5yr. PASS.
+
+metadata:
+  name: "gc-proxy-wave2-regime-robust"
+  purpose: |
+    Expand gold proxy exploration with regime-robust filters (ATR percentiles,
+    OVNRNG, PDR) across all viable sessions. Also test RR1.5 on the strongest
+    session (US_DATA_1000) based on MNQ multi-RR findings.
+  date_locked: "2026-04-10T21:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 15.5
+  data_source: "GC parent gold futures 2010-06-07 onwards (proxy for MGC)"
+  data_source_mode: "proxy"
+  data_source_disclosure: "GC full-size gold used as price proxy for MGC per Amendment 3.1."
+  testing_mode: "individual"
+  bailey_compliance:
+    trials: 20
+    horizon_years: 15.5
+    e_max_n: 1.0
+    min_btl_required_years: 5.99
+    headroom_pct: 159
+    status: "PASS"
+  total_expected_trials: 20
+
+hypotheses:
+  # --- US_DATA_1000: strongest gold session, expand filter coverage ---
+
+  - id: 1
+    name: "GC US_DATA_1000 OVNRNG_50 RR1.0 — macro + overnight info"
+    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER; Ito, Engle, Lin (1992) JIE"
+    economic_basis: |
+      High overnight range (above median) signals active Asian/European
+      session that feeds information into the 10:00 ET macro window.
+      Combination of two mechanisms: overnight info accumulation and
+      macro-driven price discovery.
+    filter: {type: OVNRNG_50, column: overnight_range}
+    scope: {instruments: [GC], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 2
+    name: "GC US_DATA_1000 ATR_P50 RR1.0 — macro + vol regime"
+    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER; ABDL (2003) Econometrica"
+    economic_basis: |
+      ATR above 50th percentile selects above-average volatility regimes.
+      Macro releases in volatile environments produce larger directional
+      moves. Percentile threshold adapts to any gold price level.
+    filter: {type: ATR_P50, column: atr_20}
+    scope: {instruments: [GC], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 3
+    name: "GC US_DATA_1000 PDR_R080 RR1.5 — macro + vol persistence + continuation"
+    theory_citation: "ABDV (2003); ABDL (2003)"
+    economic_basis: |
+      RR1.5 tests intermediate continuation — between minimum (1.0) and
+      full (2.0). MNQ multi-RR research found RR1.5 edges on continuation
+      sessions. PDR_R080 already validated at RR1.0 on this session.
+    filter: {type: PDR_R080, column: prev_day_range}
+    scope: {instruments: [GC], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 4
+    name: "GC US_DATA_1000 OVNRNG_50 RR1.5 — macro + overnight + continuation"
+    theory_citation: "ABDV (2003); Ito, Engle, Lin (1992)"
+    economic_basis: |
+      Overnight range + RR1.5 continuation on macro session.
+    filter: {type: OVNRNG_50, column: overnight_range}
+    scope: {instruments: [GC], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  # --- NYSE_OPEN: strongest unfiltered baseline, try regime-robust filters ---
+
+  - id: 5
+    name: "GC NYSE_OPEN OVNRNG_50 RR1.0 — Crabel + overnight info"
+    theory_citation: "Crabel (1990); Ito, Engle, Lin (1992)"
+    economic_basis: |
+      NYSE open commitment + overnight information. High overnight range
+      signals active pre-market that feeds into NYSE open breakout.
+    filter: {type: OVNRNG_50, column: overnight_range}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 6
+    name: "GC NYSE_OPEN ATR_P50 RR1.0 — Crabel + vol regime"
+    theory_citation: "Crabel (1990); ABDL (2003)"
+    economic_basis: |
+      NYSE open in above-average volatility regime. ATR_P50 selects
+      environments where breakout follow-through is more reliable.
+    filter: {type: ATR_P50, column: atr_20}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 7
+    name: "GC NYSE_OPEN OVNRNG_50 RR2.0 — Crabel + overnight + continuation"
+    theory_citation: "Crabel (1990); Ito, Engle, Lin (1992)"
+    economic_basis: |
+      NYSE open + overnight info at 2x continuation. Active overnight
+      markets feed stronger directional conviction at NYSE open.
+    filter: {type: OVNRNG_50, column: overnight_range}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 8
+    name: "GC NYSE_OPEN PDR_R080 RR1.5 — Crabel + vol persistence + continuation"
+    theory_citation: "Crabel (1990); ABDL (2003)"
+    economic_basis: |
+      PDR_R080 on NYSE_OPEN at RR1.5. PDR was tested at RR1.0/2.0 in wave 1.
+      RR1.5 tests the intermediate continuation that worked for MNQ.
+    filter: {type: PDR_R080, column: prev_day_range}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  # --- US_DATA_830: weaker baseline but 16yr data, try filters ---
+
+  - id: 9
+    name: "GC US_DATA_830 PDR_R080 RR1.0 — early macro + vol persistence"
+    theory_citation: "ABDV (2003); ABDL (2003)"
+    economic_basis: |
+      8:30 AM ET macro (NFP, CPI) on high-range-persistence days.
+      Unfiltered baseline weak (+0.06) but PDR may select the active days.
+    filter: {type: PDR_R080, column: prev_day_range}
+    scope: {instruments: [GC], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 10
+    name: "GC US_DATA_830 OVNRNG_50 RR1.0 — early macro + overnight"
+    theory_citation: "ABDV (2003); Ito, Engle, Lin (1992)"
+    economic_basis: |
+      8:30 AM macro with high overnight range. Active overnight signals
+      more information to incorporate at the first US data release.
+    filter: {type: OVNRNG_50, column: overnight_range}
+    scope: {instruments: [GC], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 11
+    name: "GC US_DATA_830 ATR_P50 RR1.0 — early macro + vol regime"
+    theory_citation: "ABDV (2003); ABDL (2003)"
+    economic_basis: |
+      8:30 AM macro in above-average vol regime.
+    filter: {type: ATR_P50, column: atr_20}
+    scope: {instruments: [GC], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  # --- LONDON_METALS: era-dependent, try more regime-robust filters ---
+
+  - id: 12
+    name: "GC LONDON_METALS PDR_R080 RR1.0 — London gold + vol persistence + min continuation"
+    theory_citation: "O'Hara (1995); ABDL (2003)"
+    economic_basis: |
+      PDR_R080 at RR1.0 on London gold. Wave 1 tested RR2.0. Minimum
+      continuation (RR1.0) may be more stable across eras than RR2.0.
+    filter: {type: PDR_R080, column: prev_day_range}
+    scope: {instruments: [GC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 13
+    name: "GC LONDON_METALS OVNRNG_50 RR1.0 — London gold + overnight + min continuation"
+    theory_citation: "O'Hara (1995); Ito, Engle, Lin (1992)"
+    economic_basis: |
+      OVNRNG_50 at RR1.0 on London gold. RR2.0 narrowly failed in wave 1
+      (p=0.089). Minimum continuation may pass.
+    filter: {type: OVNRNG_50, column: overnight_range}
+    scope: {instruments: [GC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 14
+    name: "GC LONDON_METALS ATR_P50 RR2.0 — London gold + vol regime"
+    theory_citation: "O'Hara (1995); ABDL (2003)"
+    economic_basis: |
+      London gold pricing in above-average vol regime.
+    filter: {type: ATR_P50, column: atr_20}
+    scope: {instruments: [GC], sessions: [LONDON_METALS], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 15
+    name: "GC LONDON_METALS NO_FILTER RR1.0 — London gold unfiltered min continuation"
+    theory_citation: "O'Hara (1995)"
+    economic_basis: |
+      Unfiltered London gold at RR1.0. Wave 1 tested RR2.0 only. RR1.0
+      has higher WR and may survive era stability where RR2.0 failed.
+    filter: {type: NO_FILTER, column: null}
+    scope: {instruments: [GC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  # --- EUROPE_FLOW: recent-only edge, try different filters/RR ---
+
+  - id: 16
+    name: "GC EUROPE_FLOW OVNRNG_50 RR1.0 — cross-border + overnight + min continuation"
+    theory_citation: "French & Roll (1986); Ito, Engle, Lin (1992)"
+    economic_basis: |
+      OVNRNG_50 at RR1.0 on European flow. RR2.0 narrowly failed wave 1
+      (p=0.057). Minimum continuation may pass era stability.
+    filter: {type: OVNRNG_50, column: overnight_range}
+    scope: {instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 17
+    name: "GC EUROPE_FLOW NO_FILTER RR1.0 — cross-border unfiltered min continuation"
+    theory_citation: "French & Roll (1986)"
+    economic_basis: |
+      Unfiltered European flow at RR1.0. Wave 1 tested RR2.0 only.
+    filter: {type: NO_FILTER, column: null}
+    scope: {instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 18
+    name: "GC EUROPE_FLOW PDR_R080 RR1.0 — cross-border + vol persistence + min continuation"
+    theory_citation: "French & Roll (1986); ABDL (2003)"
+    economic_basis: |
+      PDR_R080 at RR1.0 on European flow. Wave 1 tested RR2.0 (failed p=0.09).
+    filter: {type: PDR_R080, column: prev_day_range}
+    scope: {instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  # --- COMEX_SETTLE: negative baseline, but test with strong filter ---
+
+  - id: 19
+    name: "GC COMEX_SETTLE PDR_R080 RR1.0 — settlement + vol persistence"
+    theory_citation: "O'Hara (1995); ABDL (2003)"
+    economic_basis: |
+      COMEX settlement has negative unfiltered baseline (-0.105). But
+      PDR_R080 may select the days when forced settlement flow is
+      concentrated enough to produce genuine breakouts. Let the data speak.
+    filter: {type: PDR_R080, column: prev_day_range}
+    scope: {instruments: [GC], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 20
+    name: "GC COMEX_SETTLE OVNRNG_50 RR1.0 — settlement + overnight"
+    theory_citation: "O'Hara (1995); Ito, Engle, Lin (1992)"
+    economic_basis: |
+      COMEX settlement with high overnight range. Negative baseline but
+      testing whether overnight info selects profitable settlement days.
+    filter: {type: OVNRNG_50, column: overnight_range}
+    scope: {instruments: [GC], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+total_hypothesis_count: 20
+total_expected_trials: 20
+budget_check:
+  mode: "proxy"
+  cumulative_with_prior_files: 43
+  strict_bailey_e_1_0_max_n: 2980
+  data_horizon_years_available: 15.5
