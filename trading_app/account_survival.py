@@ -7,8 +7,9 @@ firm's risk rules?"
 
 Design choices:
 - Uses canonical strategy outcomes from `orb_outcomes` + `daily_features`
-- Preserves cross-lane dependence by bootstrapping DAILY portfolio PnL vectors
-- Applies profile/firm rules (trailing DD, DLL, consistency, scaling feasibility)
+- Preserves cross-lane dependence by bootstrapping DAILY trade-path scenarios
+- Replays conservative intraday low/high envelopes from timestamps + MAE/MFE
+- Applies profile/firm rules (trailing DD, DLL, consistency, dynamic scaling)
 - Does not mutate validated strategy truth or live deployment state
 """
 
@@ -37,7 +38,7 @@ from trading_app.prop_profiles import (
 )
 from trading_app.prop_firm_policies import get_payout_policy
 from trading_app.strategy_fitness import _load_strategy_outcomes
-from trading_app.topstep_scaling_plan import max_lots_for_xfa
+from trading_app.topstep_scaling_plan import lots_for_position, max_lots_for_xfa
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -80,9 +81,11 @@ class SurvivalSummary:
     consistency_pass_probability: float | None
     trailing_dd_breach_probability: float
     daily_loss_breach_probability: float
+    scaling_breach_probability: float
     consistency_breach_probability: float
     scaling_feasible: bool
     intraday_approximated: bool
+    path_model: str
     min_operational_pass_probability: float
     gate_pass: bool
     p50_final_balance: float
@@ -104,6 +107,23 @@ class DailyScenario:
     total_pnl_dollars: float
     positive_pnl_dollars: float
     active_lane_count: int
+    min_balance_delta_dollars: float = 0.0
+    max_balance_delta_dollars: float = 0.0
+    max_open_lots: int = 0
+
+
+@dataclass(frozen=True)
+class TradePath:
+    """Canonical per-trade path summary used for conservative intraday replay."""
+
+    trading_day: date
+    strategy_id: str
+    entry_ts: datetime | None
+    exit_ts: datetime | None
+    pnl_dollars: float
+    mae_dollars: float
+    mfe_dollars: float
+    lots: int
 
 
 def get_survival_report_path(profile_id: str | None = None) -> Path:
@@ -156,6 +176,25 @@ def _load_lane_daily_pnl(
     effective_stop_multiplier: float | None = None,
 ) -> dict[date, float]:
     """Load one lane's historical daily PnL in dollars from canonical outcomes."""
+    daily: dict[date, float] = {}
+    for trade in _load_lane_trade_paths(
+        con,
+        strategy_id,
+        as_of_date=as_of_date,
+        effective_stop_multiplier=effective_stop_multiplier,
+    ):
+        daily[trade.trading_day] = daily.get(trade.trading_day, 0.0) + trade.pnl_dollars
+    return daily
+
+
+def _load_lane_trade_paths(
+    con: duckdb.DuckDBPyConnection,
+    strategy_id: str,
+    *,
+    as_of_date: date,
+    effective_stop_multiplier: float | None = None,
+) -> list[TradePath]:
+    """Load one lane's trade history in dollars from canonical outcomes."""
     params = _load_strategy_snapshot(con, strategy_id)
     outcomes = _load_strategy_outcomes(
         con,
@@ -179,7 +218,8 @@ def _load_lane_daily_pnl(
         outcomes = apply_tight_stop(outcomes, stop_multiplier, cost_spec)
 
     cost_spec = get_cost_spec(params["instrument"])
-    daily: dict[date, float] = {}
+    lots = lots_for_position(params["instrument"], 1)
+    trades: list[TradePath] = []
     for outcome in outcomes:
         trading_day = outcome["trading_day"]
         if outcome.get("outcome") not in ("win", "loss"):
@@ -191,8 +231,86 @@ def _load_lane_daily_pnl(
             continue
         risk_dollars = risk_in_dollars(cost_spec, float(entry_price), float(stop_price))
         pnl_dollars = float(pnl_r) * risk_dollars
-        daily[trading_day] = daily.get(trading_day, 0.0) + pnl_dollars
-    return daily
+        mae_r = max(0.0, float(outcome.get("mae_r") or 0.0))
+        mfe_r = max(0.0, float(outcome.get("mfe_r") or 0.0))
+        trades.append(
+            TradePath(
+                trading_day=trading_day,
+                strategy_id=strategy_id,
+                entry_ts=outcome.get("entry_ts"),
+                exit_ts=outcome.get("exit_ts"),
+                pnl_dollars=float(pnl_dollars),
+                mae_dollars=float(mae_r * risk_dollars),
+                mfe_dollars=float(mfe_r * risk_dollars),
+                lots=lots,
+            )
+        )
+    return trades
+
+
+def _scenario_from_trade_paths(trading_day: date, trades: list[TradePath]) -> DailyScenario:
+    """Build one conservative daily replay scenario from per-trade paths."""
+    if not trades:
+        return DailyScenario(
+            trading_day=str(trading_day),
+            total_pnl_dollars=0.0,
+            positive_pnl_dollars=0.0,
+            active_lane_count=0,
+            min_balance_delta_dollars=0.0,
+            max_balance_delta_dollars=0.0,
+            max_open_lots=0,
+        )
+
+    ordered_trades = sorted(
+        trades,
+        key=lambda trade: (
+            trade.entry_ts or datetime.min.replace(tzinfo=UTC),
+            trade.exit_ts or datetime.min.replace(tzinfo=UTC),
+        ),
+    )
+    events: list[tuple[datetime, int, TradePath]] = []
+    for trade in ordered_trades:
+        entry_ts = trade.entry_ts or datetime.min.replace(tzinfo=UTC)
+        exit_ts = trade.exit_ts or entry_ts
+        events.append((entry_ts, 0, trade))
+        events.append((exit_ts, 1, trade))
+    events.sort(key=lambda item: (item[0], item[1]))
+
+    realized_pnl = 0.0
+    open_trades: list[TradePath] = []
+    open_lots = 0
+    max_open_lots = 0
+    min_delta = 0.0
+    max_delta = 0.0
+
+    for _ts, event_type, trade in events:
+        if event_type == 0:
+            open_trades.append(trade)
+            open_lots += trade.lots
+            max_open_lots = max(max_open_lots, open_lots)
+        else:
+            realized_pnl += trade.pnl_dollars
+            for idx, open_trade in enumerate(open_trades):
+                if open_trade is trade:
+                    del open_trades[idx]
+                    break
+            open_lots = max(0, open_lots - trade.lots)
+
+        adverse_open = sum(open_trade.mae_dollars for open_trade in open_trades)
+        favorable_open = sum(open_trade.mfe_dollars for open_trade in open_trades)
+        min_delta = min(min_delta, realized_pnl - adverse_open)
+        max_delta = max(max_delta, realized_pnl + favorable_open, realized_pnl)
+
+    total_pnl = round(sum(trade.pnl_dollars for trade in trades), 2)
+    return DailyScenario(
+        trading_day=str(trading_day),
+        total_pnl_dollars=total_pnl,
+        positive_pnl_dollars=round(max(total_pnl, 0.0), 2),
+        active_lane_count=len(trades),
+        min_balance_delta_dollars=round(min_delta, 2),
+        max_balance_delta_dollars=round(max_delta, 2),
+        max_open_lots=max_open_lots,
+    )
 
 
 def _load_profile_daily_scenarios(
@@ -209,8 +327,8 @@ def _load_profile_daily_scenarios(
     con = duckdb.connect(str(db), read_only=True)
     configure_connection(con)
     try:
-        lane_daily: dict[str, dict[date, float]] = {}
         lane_first_days: dict[str, date] = {}
+        trades_by_day: dict[date, list[TradePath]] = {}
         instruments = sorted({lane["instrument"] for lane in lane_defs})
         effective_stop_by_strategy = {
             lane.strategy_id: float(lane.planned_stop_multiplier or profile.stop_multiplier)
@@ -218,15 +336,18 @@ def _load_profile_daily_scenarios(
         }
 
         for lane in lane_defs:
-            daily = _load_lane_daily_pnl(
+            trade_paths = _load_lane_trade_paths(
                 con,
                 lane["strategy_id"],
                 as_of_date=as_of_date,
                 effective_stop_multiplier=effective_stop_by_strategy.get(lane["strategy_id"]),
             )
+            daily: dict[date, float] = {}
+            for trade in trade_paths:
+                daily[trade.trading_day] = daily.get(trade.trading_day, 0.0) + trade.pnl_dollars
+                trades_by_day.setdefault(trade.trading_day, []).append(trade)
             if not daily:
                 raise ValueError(f"Lane {lane['strategy_id']} has no canonical outcome history")
-            lane_daily[lane["strategy_id"]] = daily
             lane_first_days[lane["strategy_id"]] = min(daily)
 
         common_start = max(lane_first_days.values())
@@ -249,17 +370,7 @@ def _load_profile_daily_scenarios(
 
         scenarios: list[DailyScenario] = []
         for trading_day in calendar_days:
-            lane_values = [daily.get(trading_day, 0.0) for daily in lane_daily.values()]
-            total_pnl = float(sum(lane_values))
-            active_lane_count = sum(1 for value in lane_values if abs(value) > 1e-12)
-            scenarios.append(
-                DailyScenario(
-                    trading_day=str(trading_day),
-                    total_pnl_dollars=round(total_pnl, 2),
-                    positive_pnl_dollars=round(max(total_pnl, 0.0), 2),
-                    active_lane_count=active_lane_count,
-                )
-            )
+            scenarios.append(_scenario_from_trade_paths(trading_day, trades_by_day.get(trading_day, [])))
 
         if not scenarios:
             raise ValueError(f"Profile {profile_id!r} has no common-support daily scenarios")
@@ -337,21 +448,14 @@ def simulate_survival(
     n_paths: int = 10_000,
     seed: int = 0,
 ) -> dict:
-    """Run the profile survival Monte Carlo on daily bootstrapped scenarios."""
+    """Run the profile survival Monte Carlo on conservative daily path scenarios."""
     if not scenarios:
         raise ValueError("At least one daily scenario is required")
     if horizon_days <= 0:
         raise ValueError("horizon_days must be positive")
     if n_paths <= 0:
         raise ValueError("n_paths must be positive")
-    if rules.dd_type == "intraday_trailing":
-        raise ValueError(
-            "Criterion 11 Monte Carlo does not support intraday_trailing accounts yet. "
-            "Daily bootstrap would understate breach risk."
-        )
-
     rng = random.Random(seed)
-    daily_pnls = [s.total_pnl_dollars for s in scenarios]
     best_day_list: list[float] = []
     final_balances: list[float] = []
     total_pnls: list[float] = []
@@ -362,12 +466,8 @@ def simulate_survival(
     consistency_passes = 0
     trailing_dd_breaches = 0
     daily_loss_breaches = 0
+    scaling_breaches = 0
     consistency_breaches = 0
-
-    scaling_feasible = True
-    if rules.topstep_day1_max_lots is not None:
-        min_day1_micro = rules.topstep_day1_max_lots * 10
-        scaling_feasible = rules.contracts_per_trade_micro <= min_day1_micro
 
     for _ in range(n_paths):
         balance = rules.starting_balance
@@ -378,23 +478,41 @@ def simulate_survival(
         positive_profit = 0.0
         best_day = 0.0
         breach_reason: str | None = None
+        scaling_feasible = True
 
         for _day in range(horizon_days):
-            day_pnl = daily_pnls[rng.randrange(len(daily_pnls))]
+            scenario = scenarios[rng.randrange(len(scenarios))]
+            if rules.topstep_day1_max_lots is not None:
+                allowed_lots = max_lots_for_xfa(rules.account_size, max(balance, 0.0))
+                if scenario.max_open_lots > allowed_lots:
+                    breach_reason = "SCALING"
+                    scaling_breaches += 1
+                    scaling_feasible = False
+                    break
+
+            day_pnl = scenario.total_pnl_dollars
             total_pnl += day_pnl
-            balance += day_pnl
 
             if day_pnl > 0:
                 positive_profit += day_pnl
                 if day_pnl > best_day:
                     best_day = day_pnl
 
-            if rules.daily_loss_limit is not None and day_pnl <= -rules.daily_loss_limit:
+            day_min_delta = min(scenario.min_balance_delta_dollars, day_pnl)
+            day_max_delta = max(scenario.max_balance_delta_dollars, day_pnl)
+
+            if rules.daily_loss_limit is not None and day_min_delta <= -rules.daily_loss_limit:
                 breach_reason = "DAILY_LOSS"
                 daily_loss_breaches += 1
                 break
 
-            dd_used = max(0.0, hwm - balance)
+            day_low_balance = balance + day_min_delta
+            dd_reference = hwm
+            if rules.dd_type == "intraday_trailing":
+                day_high_balance = balance + day_max_delta
+                if not frozen and day_high_balance > dd_reference:
+                    dd_reference = day_high_balance
+            dd_used = max(0.0, dd_reference - day_low_balance)
             if dd_used > max_dd_used:
                 max_dd_used = dd_used
 
@@ -403,6 +521,7 @@ def simulate_survival(
                 trailing_dd_breaches += 1
                 break
 
+            balance += day_pnl
             if not frozen and balance > hwm:
                 hwm = balance
                 if rules.freeze_at_balance is not None and hwm >= rules.freeze_at_balance:
@@ -433,9 +552,11 @@ def simulate_survival(
         "consistency_pass_probability": (consistency_passes / n_paths) if rules.consistency_rule is not None else None,
         "trailing_dd_breach_probability": trailing_dd_breaches / n_paths,
         "daily_loss_breach_probability": daily_loss_breaches / n_paths,
+        "scaling_breach_probability": scaling_breaches / n_paths,
         "consistency_breach_probability": consistency_breaches / n_paths,
-        "scaling_feasible": scaling_feasible,
+        "scaling_feasible": scaling_breaches == 0,
         "intraday_approximated": False,
+        "path_model": "trade_path_conservative",
         "p50_final_balance": round(_quantile(final_balances, 0.50), 2),
         "p05_final_balance": round(_quantile(final_balances, 0.05), 2),
         "p95_final_balance": round(_quantile(final_balances, 0.95), 2),
@@ -490,9 +611,11 @@ def evaluate_profile_survival(
         ),
         trailing_dd_breach_probability=round(result["trailing_dd_breach_probability"], 4),
         daily_loss_breach_probability=round(result["daily_loss_breach_probability"], 4),
+        scaling_breach_probability=round(result["scaling_breach_probability"], 4),
         consistency_breach_probability=round(result["consistency_breach_probability"], 4),
         scaling_feasible=result["scaling_feasible"],
         intraday_approximated=result["intraday_approximated"],
+        path_model=result["path_model"],
         min_operational_pass_probability=float(min_survival_probability),
         gate_pass=gate_pass,
         p50_final_balance=result["p50_final_balance"],
@@ -547,6 +670,7 @@ def check_survival_report_gate(
         n_paths = int(summary["n_paths"])
         scaling_feasible = bool(summary.get("scaling_feasible", False))
         intraday_approximated = bool(summary.get("intraday_approximated", False))
+        path_model = str(summary.get("path_model", "daily_close"))
         profile_fingerprint = str(metadata["profile_fingerprint"])
     except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
         return False, f"BLOCKED: unreadable Criterion 11 survival report ({exc})"
@@ -566,10 +690,12 @@ def check_survival_report_gate(
             f"BLOCKED: Criterion 11 report is {report_age_days}d old (> {max_age_days}d). "
             "Re-run account survival.",
         )
+    if path_model != "trade_path_conservative":
+        return False, f"BLOCKED: Criterion 11 report uses unsupported path model {path_model!r}"
     if intraday_approximated:
-        return False, "BLOCKED: Criterion 11 report is marked as intraday approximation"
+        return False, "BLOCKED: Criterion 11 report is marked as unsupported intraday approximation"
     if not scaling_feasible:
-        return False, "BLOCKED: Criterion 11 report fails static scaling-feasibility check"
+        return False, "BLOCKED: Criterion 11 report fails scaling-feasibility check"
     if operational_pass < min_survival_probability:
         return (
             False,
@@ -608,6 +734,7 @@ def _print_summary(summary: SurvivalSummary) -> None:
     print(
         f"Breach rates: trailing_dd={summary.trailing_dd_breach_probability:.1%} | "
         f"daily_loss={summary.daily_loss_breach_probability:.1%} | "
+        f"scaling={summary.scaling_breach_probability:.1%} | "
         f"consistency={summary.consistency_breach_probability:.1%}"
     )
     print(
@@ -619,7 +746,7 @@ def _print_summary(summary: SurvivalSummary) -> None:
         f"${summary.p50_total_pnl:,.0f} / ${summary.p95_total_pnl:,.0f}"
     )
     print(f"Max DD p50/p95 = ${summary.p50_max_dd:,.0f} / ${summary.p95_max_dd:,.0f}")
-    print(f"Scaling feasible (static check) = {summary.scaling_feasible}")
+    print(f"Path model = {summary.path_model} | scaling feasible = {summary.scaling_feasible}")
 
 
 def main() -> None:

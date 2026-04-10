@@ -6,6 +6,143 @@
 
 ---
 
+## Update (2026-04-10 later — Criterion 11 v2 path-aware survival)
+
+### Headline
+
+Implemented **Criterion 11 v2** in `trading_app/account_survival.py`.
+
+This upgrades the deployment gate from a daily-close bootstrap to a
+**conservative trade-path replay** built from canonical trade timestamps plus
+MAE/MFE, and replaces the old static day-1-only Topstep scaling check with
+**dynamic per-day scaling-ladder enforcement** over the full 90-day horizon.
+
+This is a deployment-control upgrade. It does **not** change:
+
+- discovery scope
+- validation outcomes
+- deployed lane selection
+- SR / lifecycle pause semantics
+
+### Design
+
+Old C11 problem:
+
+- daily scenario = one close-to-close PnL number
+- no intraday low/high envelope
+- no real day-by-day scaling-plan enforcement
+- therefore DD/DLL breach risk was understated
+
+New v2 model:
+
+- load canonical trade outcomes per lane
+- preserve the strategy filter by reusing `_load_strategy_outcomes(...)`
+- for each trade, convert `pnl_r`, `mae_r`, `mfe_r` into dollars
+- build one daily scenario from the actual day’s trades
+- replay a conservative intraday envelope:
+  - intraday low = realized PnL + simultaneous adverse excursion of all open trades
+  - intraday high = realized PnL + simultaneous favorable excursion of all open trades
+- track `max_open_lots` intraday from the real trade chronology
+- in simulation:
+  - sample daily path scenarios with replacement
+  - enforce DD/DLL on the intraday envelope, not just the close
+  - enforce Topstep scaling from the **prior EOD balance each simulated day**
+
+Report/gate additions:
+
+- summary now includes:
+  - `scaling_breach_probability`
+  - `path_model = "trade_path_conservative"`
+- gate now requires `path_model == "trade_path_conservative"`
+
+### Important bug found and fixed
+
+While implementing v2, the first real run falsely showed:
+
+- `scaling_breach_probability = 100%`
+- `operational_pass_probability = 0%`
+
+Root cause:
+
+- `trading_app.strategy_fitness._load_strategy_outcomes(...)` was only
+  selecting `trading_day`, `pnl_r`, `mae_r`, `mfe_r`, `entry_price`,
+  `stop_price`
+- it dropped `entry_ts` / `exit_ts`
+- so the new path builder saw every trade as happening at the same synthetic
+  time (`None`), which inflated simultaneous open lots and made scaling fail
+  spuriously
+
+Fix:
+
+- `_load_strategy_outcomes(...)` now also selects:
+  - `entry_ts`
+  - `exit_ts`
+
+After that fix, the live profile’s daily geometry is sane again:
+
+- `max_open_lots` distribution for `topstep_50k_mnq_auto`:
+  - mostly `1`
+  - some `0`
+  - occasional `2`
+  - max `2`
+
+### Current real state
+
+Re-ran:
+
+- `python -m trading_app.account_survival --profile topstep_50k_mnq_auto --as-of 2026-04-09 --paths 10000 --seed 0`
+
+Current canonical result:
+
+- profile: `topstep_50k_mnq_auto`
+- path model: `trade_path_conservative`
+- C11 operational pass: `85.0%`
+- DD survival: `85.0%`
+- trailing DD breach: `15.0%`
+- daily-loss breach: `0.0%`
+- scaling breach: `0.0%`
+- gate: `PASS`
+
+So the prior `87.2%` figure from the daily-close model has been replaced by a
+more realistic conservative path-aware `85.0%`.
+
+### Scope / honesty
+
+This v2 is institutionally stronger than the old daily-close bootstrap, but it
+is still **not tick-true**:
+
+- it uses trade timestamps, MAE, and MFE
+- it does **not** reconstruct the exact within-trade tick order
+- for intraday path stress it intentionally chooses a conservative envelope
+
+That is acceptable for deployment gating because the bias direction is safety-
+first, not permissive.
+
+### Files touched
+
+- `trading_app/account_survival.py`
+- `trading_app/strategy_fitness.py`
+- `tests/test_trading_app/test_account_survival.py`
+
+### Verification
+
+- `python3 -m py_compile trading_app/account_survival.py trading_app/strategy_fitness.py tests/test_trading_app/test_account_survival.py`
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_account_survival.py tests/test_trading_app/test_pre_session_check.py -q`
+  - result: `36 passed`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - result: `NO DRIFT DETECTED: 92 checks passed [OK], 0 skipped, 7 advisory`
+- real gate readback:
+  - `Criterion 11 pass: operational 85.0%, as_of=2026-04-09, age=1d, paths=10000`
+- real pulse:
+  - `C11 PASS 85.0% | as_of 2026-04-09 | age 0d`
+
+### Next move
+
+Highest-value next step after this slice:
+
+- unify C11 / C12 / pause state under one explicit lifecycle-state reader
+- keep the same fail-closed / thin-startup discipline already established
+
 ## Update (2026-04-10 later — Concurrency Guardrails v1)
 
 ### Headline

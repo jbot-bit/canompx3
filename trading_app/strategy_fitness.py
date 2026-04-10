@@ -352,7 +352,7 @@ def _load_strategy_outcomes(
 
     rows = con.execute(
         f"""SELECT trading_day, outcome, pnl_r, mae_r, mfe_r,
-                   entry_price, stop_price
+                   entry_price, stop_price, entry_ts, exit_ts
             FROM orb_outcomes
             WHERE {" AND ".join(where)}
             ORDER BY trading_day""",

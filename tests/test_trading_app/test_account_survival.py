@@ -9,8 +9,10 @@ import pytest
 from trading_app.account_survival import (
     DailyScenario,
     SurvivalRules,
+    TradePath,
     _build_profile_fingerprint,
     _load_lane_daily_pnl,
+    _scenario_from_trade_paths,
     check_survival_report_gate,
     evaluate_profile_survival,
     get_survival_report_path,
@@ -89,23 +91,92 @@ def test_simulate_survival_consistency_breach_blocks_operational_pass():
     assert result["operational_pass_probability"] == 0.0
 
 
-def test_simulate_survival_rejects_intraday_trailing_daily_approximation():
+def test_simulate_survival_intraday_trailing_uses_intraday_high_for_dd():
     scenarios = [
         DailyScenario(
             trading_day="2026-01-02",
-            total_pnl_dollars=25.0,
-            positive_pnl_dollars=25.0,
+            total_pnl_dollars=0.0,
+            positive_pnl_dollars=0.0,
             active_lane_count=1,
+            min_balance_delta_dollars=60.0,
+            max_balance_delta_dollars=120.0,
         )
     ]
-    with pytest.raises(ValueError, match="intraday_trailing"):
-        simulate_survival(
-            scenarios,
-            _rules(dd_type="intraday_trailing"),
-            horizon_days=5,
-            n_paths=10,
-            seed=0,
+    rules = SurvivalRules(
+        profile_id="mffu_50k",
+        firm="mffu",
+        account_size=50_000,
+        dd_type="intraday_trailing",
+        starting_balance=0.0,
+        dd_limit_dollars=50.0,
+        daily_loss_limit=None,
+        consistency_rule=None,
+        freeze_at_balance=None,
+        contracts_per_trade_micro=1,
+        topstep_day1_max_lots=None,
+    )
+
+    result = simulate_survival(scenarios, rules, horizon_days=1, n_paths=4, seed=0)
+
+    assert result["trailing_dd_breach_probability"] == 1.0
+    assert result["operational_pass_probability"] == 0.0
+    assert result["path_model"] == "trade_path_conservative"
+
+
+def test_simulate_survival_scaling_breach_blocks_operational_pass():
+    scenarios = [
+        DailyScenario(
+            trading_day="2026-01-02",
+            total_pnl_dollars=10.0,
+            positive_pnl_dollars=10.0,
+            active_lane_count=3,
+            max_open_lots=3,
         )
+    ]
+
+    result = simulate_survival(
+        scenarios,
+        _rules(topstep_day1_max_lots=2),
+        horizon_days=1,
+        n_paths=8,
+        seed=0,
+    )
+
+    assert result["scaling_breach_probability"] == 1.0
+    assert result["scaling_feasible"] is False
+    assert result["operational_pass_probability"] == 0.0
+
+
+def test_scenario_from_trade_paths_tracks_conservative_intraday_bounds_and_lots():
+    trades = [
+        TradePath(
+            trading_day=date(2026, 1, 2),
+            strategy_id="A",
+            entry_ts=datetime(2026, 1, 2, 10, 0, tzinfo=UTC),
+            exit_ts=datetime(2026, 1, 2, 11, 0, tzinfo=UTC),
+            pnl_dollars=40.0,
+            mae_dollars=20.0,
+            mfe_dollars=60.0,
+            lots=1,
+        ),
+        TradePath(
+            trading_day=date(2026, 1, 2),
+            strategy_id="B",
+            entry_ts=datetime(2026, 1, 2, 10, 30, tzinfo=UTC),
+            exit_ts=datetime(2026, 1, 2, 10, 45, tzinfo=UTC),
+            pnl_dollars=-10.0,
+            mae_dollars=15.0,
+            mfe_dollars=5.0,
+            lots=2,
+        ),
+    ]
+
+    scenario = _scenario_from_trade_paths(date(2026, 1, 2), trades)
+
+    assert scenario.total_pnl_dollars == 30.0
+    assert scenario.min_balance_delta_dollars == -35.0
+    assert scenario.max_balance_delta_dollars == 65.0
+    assert scenario.max_open_lots == 3
 
 
 def test_check_survival_report_gate_blocks_missing_file(tmp_path, monkeypatch):
@@ -142,9 +213,11 @@ def test_check_survival_report_gate_enforces_freshness_and_threshold(tmp_path, m
                     "consistency_pass_probability": None,
                     "trailing_dd_breach_probability": 0.1,
                     "daily_loss_breach_probability": 0.0,
+                    "scaling_breach_probability": 0.0,
                     "consistency_breach_probability": 0.0,
                     "scaling_feasible": True,
                     "intraday_approximated": False,
+                    "path_model": "trade_path_conservative",
                     "min_operational_pass_probability": 0.7,
                     "gate_pass": False,
                     "p50_final_balance": 10.0,
@@ -198,9 +271,11 @@ def test_check_survival_report_gate_blocks_low_probability_even_when_fresh(tmp_p
                     "consistency_pass_probability": None,
                     "trailing_dd_breach_probability": 0.08,
                     "daily_loss_breach_probability": 0.01,
+                    "scaling_breach_probability": 0.0,
                     "consistency_breach_probability": 0.0,
                     "scaling_feasible": True,
                     "intraday_approximated": False,
+                    "path_model": "trade_path_conservative",
                     "min_operational_pass_probability": 0.7,
                     "gate_pass": False,
                     "p50_final_balance": 200.0,
@@ -253,9 +328,11 @@ def test_check_survival_report_gate_passes_clean_report(tmp_path, monkeypatch):
                     "consistency_pass_probability": None,
                     "trailing_dd_breach_probability": 0.08,
                     "daily_loss_breach_probability": 0.01,
+                    "scaling_breach_probability": 0.0,
                     "consistency_breach_probability": 0.0,
                     "scaling_feasible": True,
                     "intraday_approximated": False,
+                    "path_model": "trade_path_conservative",
                     "min_operational_pass_probability": 0.7,
                     "gate_pass": True,
                     "p50_final_balance": 200.0,
@@ -307,9 +384,11 @@ def test_check_survival_report_gate_blocks_profile_mismatch(tmp_path, monkeypatc
                     "consistency_pass_probability": None,
                     "trailing_dd_breach_probability": 0.08,
                     "daily_loss_breach_probability": 0.01,
+                    "scaling_breach_probability": 0.0,
                     "consistency_breach_probability": 0.0,
                     "scaling_feasible": True,
                     "intraday_approximated": False,
+                    "path_model": "trade_path_conservative",
                     "min_operational_pass_probability": 0.7,
                     "gate_pass": True,
                     "p50_final_balance": 200.0,
