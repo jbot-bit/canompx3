@@ -4342,24 +4342,57 @@ def check_sr_state_contract_writer() -> list[str]:
 
 
 def check_sr_state_contract_reader() -> list[str]:
-    """Ensure project_pulse validates SR state before trusting it."""
+    """Ensure the SR state reader validates the envelope before trust."""
     violations = []
-    path = SCRIPTS_DIR / "tools" / "project_pulse.py"
-    if not path.exists():
+    pulse_path = SCRIPTS_DIR / "tools" / "project_pulse.py"
+    lifecycle_path = TRADING_APP_DIR / "lifecycle_state.py"
+    if not pulse_path.exists():
         return violations
 
-    text = path.read_text(encoding="utf-8")
-    collect_idx = text.find("def collect_sr_state(")
+    pulse_text = pulse_path.read_text(encoding="utf-8")
+    collect_idx = pulse_text.find("def collect_sr_state(")
     if collect_idx == -1:
         return ["  scripts/tools/project_pulse.py missing collect_sr_state()"]
 
-    collect_text = text[collect_idx : text.find("\ndef ", collect_idx + 1) if text.find("\ndef ", collect_idx + 1) != -1 else None]
-    if "validate_state_envelope(" not in collect_text:
-        violations.append("  project_pulse.collect_sr_state() must validate SR envelope before trusting it")
-    if 'payload.get("results"' not in collect_text:
-        violations.append("  project_pulse.collect_sr_state() must read SR results from validated payload")
+    collect_text = pulse_text[
+        collect_idx : pulse_text.find("\ndef ", collect_idx + 1) if pulse_text.find("\ndef ", collect_idx + 1) != -1 else None
+    ]
+    uses_shared_reader = "read_criterion12_state" in collect_text
+    validates_locally = "validate_state_envelope(" in collect_text and 'payload.get("results"' in collect_text
+
+    if not validates_locally and not uses_shared_reader:
+        violations.append(
+            "  project_pulse.collect_sr_state() must validate SR envelope directly or delegate to "
+            "trading_app.lifecycle_state.read_criterion12_state()"
+        )
     if 'data.get("results"' in collect_text:
         violations.append("  project_pulse.collect_sr_state() may not trust top-level data.get('results') directly")
+
+    if uses_shared_reader:
+        if not lifecycle_path.exists():
+            violations.append("  trading_app/lifecycle_state.py missing read_criterion12_state()")
+            return violations
+        lifecycle_text = lifecycle_path.read_text(encoding="utf-8")
+        reader_idx = lifecycle_text.find("def read_criterion12_state(")
+        if reader_idx == -1:
+            violations.append("  trading_app.lifecycle_state.read_criterion12_state() missing")
+            return violations
+        reader_text = lifecycle_text[
+            reader_idx
+            : lifecycle_text.find("\ndef ", reader_idx + 1) if lifecycle_text.find("\ndef ", reader_idx + 1) != -1 else None
+        ]
+        if "validate_state_envelope(" not in reader_text:
+            violations.append(
+                "  trading_app.lifecycle_state.read_criterion12_state() must validate SR envelope before trust"
+            )
+        if 'payload.get("results"' not in reader_text:
+            violations.append(
+                "  trading_app.lifecycle_state.read_criterion12_state() must read SR results from validated payload"
+            )
+        if 'data.get("results"' in reader_text:
+            violations.append(
+                "  trading_app.lifecycle_state.read_criterion12_state() may not trust top-level data.get('results') directly"
+            )
 
     return violations
 

@@ -1016,12 +1016,12 @@ class TestNotifications:
         orch = build_orchestrator()
         orch._profile_id_for_lane_ctl = "topstep_50k_mnq_auto"
 
-        with (
-            patch("trading_app.lane_ctl.get_paused_strategy_ids", return_value={STRATEGY_ID}),
-            patch(
-                "trading_app.lane_ctl.get_lane_override",
-                return_value={"reason": "SR alarm pause"},
-            ),
+        with patch(
+            "trading_app.lifecycle_state.read_lifecycle_state",
+            return_value={
+                "blocked_strategy_ids": [STRATEGY_ID],
+                "blocked_reason_by_strategy": {STRATEGY_ID: "SR alarm pause"},
+            },
         ):
             orch._load_paused_lane_blocks()
 

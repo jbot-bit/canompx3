@@ -632,55 +632,29 @@ def collect_survival_state() -> tuple[dict | None, list[PulseItem]]:
     items: list[PulseItem] = []
 
     try:
-        from trading_app.account_survival import check_survival_report_gate, get_survival_report_path
-        from trading_app.prop_profiles import resolve_profile_id
+        from trading_app.lifecycle_state import read_criterion11_state
 
-        profile_id = resolve_profile_id()
-        gate_ok, gate_msg = check_survival_report_gate(profile_id=profile_id)
-        report_path = get_survival_report_path(profile_id)
+        summary = read_criterion11_state()
 
-        report_data = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
-        summary_block = report_data.get("summary", {})
-        generated_at = summary_block.get("generated_at_utc")
-        report_age_days = None
-        if generated_at:
-            try:
-                dt = datetime.fromisoformat(str(generated_at))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=UTC)
-                report_age_days = max(0, (datetime.now(UTC) - dt).days)
-            except ValueError:
-                report_age_days = None
-
-        summary = {
-            "profile_id": profile_id,
-            "gate_ok": gate_ok,
-            "gate_msg": gate_msg,
-            "as_of_date": summary_block.get("as_of_date"),
-            "generated_at_utc": generated_at,
-            "report_age_days": report_age_days,
-            "operational_pass_probability": summary_block.get("operational_pass_probability"),
-            "n_paths": summary_block.get("n_paths"),
-            "horizon_days": summary_block.get("horizon_days"),
-            "gate_pass": summary_block.get("gate_pass"),
-        }
-
-        if not gate_ok:
+        if not summary["gate_ok"]:
             items.append(
                 PulseItem(
                     category="broken",
                     severity="high",
                     source="criterion11",
-                    summary=gate_msg,
+                    summary=str(summary["gate_msg"]),
                 )
             )
-        elif report_age_days is not None and report_age_days >= 14:
+        elif summary["report_age_days"] is not None and summary["report_age_days"] >= 14:
             items.append(
                 PulseItem(
                     category="decaying",
                     severity="low",
                     source="criterion11",
-                    summary=f"Criterion 11 report is {report_age_days}d old — refresh before it hard-blocks",
+                    summary=(
+                        f"Criterion 11 report is {summary['report_age_days']}d old — "
+                        "refresh before it hard-blocks"
+                    ),
                 )
             )
     except Exception as e:
@@ -702,19 +676,10 @@ def collect_sr_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
     items: list[PulseItem] = []
 
     try:
-        from trading_app.derived_state import (
-            build_code_fingerprint,
-            build_db_identity,
-            build_profile_fingerprint,
-            validate_state_envelope,
-        )
-        from trading_app.prop_profiles import get_profile, get_profile_lane_definitions, resolve_profile_id
+        from trading_app.lifecycle_state import read_criterion12_state
 
-        profile_id = resolve_profile_id()
-        profile = get_profile(profile_id)
-        lane_ids = [str(lane["strategy_id"]) for lane in get_profile_lane_definitions(profile_id)]
-        state_path = PROJECT_ROOT / "data" / "state" / "sr_state.json"
-        if not state_path.exists():
+        summary = read_criterion12_state(db_path=db_path)
+        if not summary["available"]:
             items.append(
                 PulseItem(
                     category="decaying",
@@ -725,32 +690,17 @@ def collect_sr_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
             )
             return None, items
 
-        data = json.loads(state_path.read_text(encoding="utf-8"))
-        valid, reason, envelope = validate_state_envelope(
-            data,
-            expected_schema_version=1,
-            expected_state_type="sr_monitor",
-            current_profile_id=profile_id,
-            current_profile_fingerprint=build_profile_fingerprint(profile),
-            current_lane_ids=lane_ids,
-            current_db_identity=build_db_identity(db_path),
-            current_code_fingerprint=build_code_fingerprint(
-                [
-                    PROJECT_ROOT / "trading_app" / "sr_monitor.py",
-                    PROJECT_ROOT / "trading_app" / "live" / "sr_monitor.py",
-                ]
-            ),
-            today=date.today(),
-        )
-        if not valid or envelope is None:
+        if not summary["valid"]:
+            reason = summary.get("reason")
+            is_stale = isinstance(reason, str) and reason.startswith("stale")
             items.append(
                 PulseItem(
                     category="decaying",
-                    severity="low" if reason == "stale" else "medium",
+                    severity="low" if is_stale else "medium",
                     source="sr_monitor",
                     summary=(
                         "Criterion 12 SR state is stale — run `python -m trading_app.sr_monitor`"
-                        if reason == "stale"
+                        if is_stale
                         else "Criterion 12 SR state mismatched/legacy — rerun `python -m trading_app.sr_monitor`"
                     ),
                     detail=reason,
@@ -758,37 +708,7 @@ def collect_sr_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
             )
             return None, items
 
-        state_inputs = envelope["canonical_inputs"]
-        freshness = envelope["freshness"]
-        payload = envelope["payload"]
-        state_date = freshness.get("as_of_date")
-        results = payload.get("results", [])
-
-        counts: dict[str, int] = {}
-        stream_counts: dict[str, int] = {}
-        for row in results:
-            status = str(row.get("status", "UNKNOWN"))
-            stream = str(row.get("stream_source", "unknown"))
-            counts[status] = counts.get(status, 0) + 1
-            stream_counts[stream] = stream_counts.get(stream, 0) + 1
-
-        state_age_days = None
-        if state_date:
-            try:
-                state_age_days = max(0, (date.today() - date.fromisoformat(str(state_date))).days)
-            except ValueError:
-                state_age_days = None
-
-        summary = {
-            "profile_id": state_inputs.get("profile_id"),
-            "state_date": state_date,
-            "state_age_days": state_age_days,
-            "counts": counts,
-            "stream_counts": stream_counts,
-            "apply_pauses": bool(payload.get("apply_pauses")),
-        }
-
-        alarms = counts.get("ALARM", 0)
+        alarms = summary["counts"].get("ALARM", 0)
         if alarms > 0:
             items.append(
                 PulseItem(
@@ -799,13 +719,13 @@ def collect_sr_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
                     action="python -m trading_app.sr_monitor --apply-pauses",
                 )
             )
-        elif state_age_days is not None and state_age_days >= 2:
+        elif summary["state_age_days"] is not None and summary["state_age_days"] >= 2:
             items.append(
                 PulseItem(
                     category="decaying",
                     severity="low",
                     source="sr_monitor",
-                    summary=f"Criterion 12 SR state is {state_age_days}d old",
+                    summary=f"Criterion 12 SR state is {summary['state_age_days']}d old",
                 )
             )
     except Exception as e:
@@ -827,24 +747,17 @@ def collect_pause_state() -> tuple[dict | None, list[PulseItem]]:
     items: list[PulseItem] = []
 
     try:
-        from trading_app.lane_ctl import get_paused_strategy_ids
-        from trading_app.prop_profiles import resolve_profile_id
+        from trading_app.lifecycle_state import read_pause_state
 
-        profile_id = resolve_profile_id()
-        paused = sorted(get_paused_strategy_ids(profile_id))
-        summary = {
-            "profile_id": profile_id,
-            "paused_count": len(paused),
-            "paused_strategy_ids": paused,
-        }
-        if paused:
+        summary = read_pause_state()
+        if summary["paused_strategy_ids"]:
             items.append(
                 PulseItem(
                     category="paused",
                     severity="low",
                     source="pauses",
-                    summary=f"{profile_id}: {len(paused)} lane(s) currently paused",
-                    detail="\n".join(paused[:5]),
+                    summary=f"{summary['profile_id']}: {summary['paused_count']} lane(s) currently paused",
+                    detail="\n".join(summary["paused_strategy_ids"][:5]),
                 )
             )
     except Exception as e:

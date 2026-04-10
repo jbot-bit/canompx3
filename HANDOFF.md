@@ -6,6 +6,135 @@
 
 ---
 
+## Update (2026-04-10 later — unified lifecycle-state reader)
+
+### Headline
+
+Implemented a shared lifecycle-state reader so the live-control path no longer
+has separate ad hoc interpretations of:
+
+- Criterion 11 deployment gate
+- Criterion 12 SR monitor state
+- persisted lane pauses
+
+This is an operational-truth unification pass. It does **not** change:
+
+- discovery scope
+- validator logic
+- account survival math
+- SR math or SR envelope format
+- lane pause storage format
+
+### Design
+
+New module:
+
+- `trading_app/lifecycle_state.py`
+
+It provides one shared interpretation layer:
+
+- `read_criterion11_state(...)`
+- `read_criterion12_state(...)`
+- `read_pause_state(...)`
+- `read_lifecycle_state(...)`
+
+`read_lifecycle_state(...)` returns:
+
+- profile id
+- lane ids
+- C11 summary
+- C12 summary
+- pause summary
+- per-strategy lifecycle state
+- blocked strategy ids
+- blocked reason map
+
+Blocking precedence:
+
+1. explicit pause override
+2. SR `ALARM`
+3. otherwise clear / informational
+
+That means SR alarms are now first-class operational lane blocks in the shared
+reader even if the pause file has not yet been written.
+
+### Consumers updated
+
+`scripts/tools/project_pulse.py`
+
+- now reads C11/C12/pause summaries through `trading_app.lifecycle_state`
+- no longer re-implements SR envelope validation inline
+- drift check was updated so the canonical acceptable patterns are now:
+  - direct validation in pulse
+  - or delegation to `read_criterion12_state(...)`
+
+`trading_app/pre_session_check.py`
+
+- now reads the shared lifecycle snapshot once per run
+- `Criterion 11 survival` comes from that shared snapshot
+- new `Lane lifecycle` row reports:
+  - paused lane = `BLOCKED`
+  - SR alarm lane = `BLOCKED`
+  - valid SR continue/no-data = pass/info
+  - stale/mismatched SR state = warning only
+
+`trading_app/live/session_orchestrator.py`
+
+- `_load_paused_lane_blocks()` now loads lifecycle blocks, not just explicit
+  pause overrides
+- startup/runtime blocking now sees both:
+  - paused lanes
+  - SR-alarmed lanes
+
+### Files touched
+
+- `trading_app/lifecycle_state.py`
+- `trading_app/pre_session_check.py`
+- `trading_app/live/session_orchestrator.py`
+- `scripts/tools/project_pulse.py`
+- `pipeline/check_drift.py`
+- `tests/test_tools/test_project_pulse.py`
+- `tests/test_trading_app/test_pre_session_check.py`
+- `tests/test_trading_app/test_session_orchestrator.py`
+
+### Verification
+
+- `python3 -m py_compile trading_app/lifecycle_state.py trading_app/pre_session_check.py trading_app/live/session_orchestrator.py scripts/tools/project_pulse.py pipeline/check_drift.py tests/test_tools/test_project_pulse.py tests/test_trading_app/test_pre_session_check.py tests/test_trading_app/test_session_orchestrator.py`
+- `./.venv-wsl/bin/python -m pytest tests/test_tools/test_project_pulse.py tests/test_trading_app/test_pre_session_check.py -q`
+  - result: `83 passed`
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_session_orchestrator.py -q -k "load_paused_lane_blocks or paused_lane_blocks_new_entry_with_pause_reason"`
+  - result: `2 passed, 111 deselected`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - result: `NO DRIFT DETECTED: 92 checks passed [OK], 0 skipped, 7 advisory`
+- real pulse:
+  - `./.venv-wsl/bin/python scripts/tools/project_pulse.py --fast --tool codex`
+  - still shows:
+    - `C11 PASS 85.0%`
+    - `C12 SR continue=5 alarm=0 no_data=0`
+    - `Paused lanes: 0`
+- real pre-session:
+  - `./.venv-wsl/bin/python -m trading_app.pre_session_check --profile topstep_50k_mnq_auto --session EUROPE_FLOW`
+  - now includes:
+    - `Lane lifecycle: Criterion 12 SR clear for MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G8`
+
+### Supported Codex launch paths
+
+WSL / supported:
+
+- `scripts/infra/codex-project.sh`
+- `scripts/infra/codex-project-search.sh`
+- `scripts/infra/codex-review.sh`
+- `scripts/infra/codex-worktree.sh open <task>`
+
+Why:
+
+- they activate `.venv-wsl`
+- they run session preflight
+- they pass claim mode for concurrency guardrails
+
+Do not use bare system `python3` as the normal repo path. It can produce false
+broken state because it bypasses `.venv-wsl` and misses repo deps like `duckdb`.
+
 ## Update (2026-04-10 later — Codex adapter consolidation pass)
 
 ### Headline

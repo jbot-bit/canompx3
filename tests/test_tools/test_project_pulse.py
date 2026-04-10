@@ -567,36 +567,20 @@ class TestDeploymentState:
 
 class TestControlSummaries:
     def test_survival_state_pass_summary(self) -> None:
-        mock_profile_module = MagicMock()
-        mock_profile_module.resolve_profile_id.return_value = "topstep_50k_mnq_auto"
-        mock_survival_module = MagicMock()
-        mock_survival_module.check_survival_report_gate.return_value = (
-            True,
-            "Criterion 11 pass: operational 87.2%, as_of=2026-04-09, age=1d, paths=10000",
-        )
-        report_payload = {
-            "summary": {
-                "generated_at_utc": "2026-04-09T22:39:14.876962+00:00",
-                "as_of_date": "2026-04-09",
-                "operational_pass_probability": 0.8723,
-                "n_paths": 10000,
-                "horizon_days": 90,
-                "gate_pass": True,
-            }
+        mock_lifecycle = MagicMock()
+        mock_lifecycle.read_criterion11_state.return_value = {
+            "profile_id": "topstep_50k_mnq_auto",
+            "gate_ok": True,
+            "gate_msg": "Criterion 11 pass: operational 85.0%, as_of=2026-04-09, age=1d, paths=10000",
+            "as_of_date": "2026-04-09",
+            "generated_at_utc": "2026-04-09T22:39:14.876962+00:00",
+            "report_age_days": 1,
+            "operational_pass_probability": 0.85,
+            "n_paths": 10000,
+            "horizon_days": 90,
+            "gate_pass": True,
         }
-        with (
-            patch.dict(
-                "sys.modules",
-                {
-                    "trading_app.prop_profiles": mock_profile_module,
-                    "trading_app.account_survival": mock_survival_module,
-                },
-            ),
-            patch.object(project_pulse, "PROJECT_ROOT", Path("/tmp/repo")),
-            patch.object(Path, "exists", return_value=True),
-            patch.object(Path, "read_text", return_value=json.dumps(report_payload)),
-        ):
-            mock_survival_module.get_survival_report_path.return_value = Path("/tmp/repo/data/state/report.json")
+        with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
             summary, items = collect_survival_state()
 
         assert summary is not None
@@ -604,54 +588,21 @@ class TestControlSummaries:
         assert items == []
 
     def test_sr_state_alarm_item(self) -> None:
-        mock_profile_module = MagicMock()
-        mock_profile_module.resolve_profile_id.return_value = "topstep_50k_mnq_auto"
-        mock_profile_module.get_profile.return_value = object()
-        mock_profile_module.get_profile_lane_definitions.return_value = [
-            {"strategy_id": "SID_A"},
-            {"strategy_id": "SID_B"},
-        ]
-        mock_derived_state = MagicMock()
-        mock_derived_state.build_profile_fingerprint.return_value = "pfp"
-        mock_derived_state.build_db_identity.return_value = "dbid"
-        mock_derived_state.build_code_fingerprint.return_value = "codeid"
-        mock_derived_state.validate_state_envelope.return_value = (
-            True,
-            None,
-            {
-                "canonical_inputs": {"profile_id": "topstep_50k_mnq_auto"},
-                "freshness": {"as_of_date": "2026-04-10", "max_age_days": 2},
-                "payload": {
-                    "apply_pauses": False,
-                    "results": [
-                        {"status": "ALARM", "stream_source": "paper_trades"},
-                        {"status": "CONTINUE", "stream_source": "canonical_forward"},
-                    ],
-                },
-            },
-        )
-        payload = {
-            "schema_version": 1,
-            "state_type": "sr_monitor",
-            "generated_at_utc": "2026-04-10T00:00:00+00:00",
-            "git_head": "abc123",
-            "tool": "sr_monitor",
-            "canonical_inputs": {},
-            "freshness": {},
-            "payload": {},
+        mock_lifecycle = MagicMock()
+        mock_lifecycle.read_criterion12_state.return_value = {
+            "profile_id": "topstep_50k_mnq_auto",
+            "available": True,
+            "valid": True,
+            "state_date": "2026-04-10",
+            "state_age_days": 0,
+            "counts": {"ALARM": 1, "CONTINUE": 1},
+            "stream_counts": {"paper_trades": 1, "canonical_forward": 1},
+            "apply_pauses": False,
+            "status_by_strategy": {"SID_A": "ALARM", "SID_B": "CONTINUE"},
+            "alarm_strategy_ids": ["SID_A"],
+            "no_data_strategy_ids": [],
         }
-        with (
-            patch.dict(
-                "sys.modules",
-                {
-                    "trading_app.prop_profiles": mock_profile_module,
-                    "trading_app.derived_state": mock_derived_state,
-                },
-            ),
-            patch.object(project_pulse, "PROJECT_ROOT", Path("/tmp/repo")),
-            patch.object(Path, "exists", return_value=True),
-            patch.object(Path, "read_text", return_value=json.dumps(payload)),
-        ):
+        with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
             summary, items = collect_sr_state(Path("/tmp/repo/gold.db"))
 
         assert summary is not None
@@ -659,28 +610,19 @@ class TestControlSummaries:
         assert any(i.source == "sr_monitor" and i.category == "decaying" for i in items)
 
     def test_sr_state_mismatch_degrades_without_trusting_payload(self) -> None:
-        mock_profile_module = MagicMock()
-        mock_profile_module.resolve_profile_id.return_value = "topstep_50k_mnq_auto"
-        mock_profile_module.get_profile.return_value = object()
-        mock_profile_module.get_profile_lane_definitions.return_value = [{"strategy_id": "SID_A"}]
-        mock_derived_state = MagicMock()
-        mock_derived_state.build_profile_fingerprint.return_value = "pfp"
-        mock_derived_state.build_db_identity.return_value = "dbid"
-        mock_derived_state.build_code_fingerprint.return_value = "codeid"
-        mock_derived_state.validate_state_envelope.return_value = (False, "profile_fingerprint_mismatch", None)
-
-        with (
-            patch.dict(
-                "sys.modules",
-                {
-                    "trading_app.prop_profiles": mock_profile_module,
-                    "trading_app.derived_state": mock_derived_state,
-                },
-            ),
-            patch.object(project_pulse, "PROJECT_ROOT", Path("/tmp/repo")),
-            patch.object(Path, "exists", return_value=True),
-            patch.object(Path, "read_text", return_value=json.dumps({"legacy": True})),
-        ):
+        mock_lifecycle = MagicMock()
+        mock_lifecycle.read_criterion12_state.return_value = {
+            "profile_id": "topstep_50k_mnq_auto",
+            "available": True,
+            "valid": False,
+            "reason": "profile fingerprint mismatch",
+            "counts": {},
+            "stream_counts": {},
+            "status_by_strategy": {},
+            "alarm_strategy_ids": [],
+            "no_data_strategy_ids": [],
+        }
+        with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
             summary, items = collect_sr_state(Path("/tmp/repo/gold.db"))
 
         assert summary is None
@@ -688,17 +630,13 @@ class TestControlSummaries:
         assert any("mismatched/legacy" in i.summary for i in items)
 
     def test_pause_state_reports_paused(self) -> None:
-        mock_profile_module = MagicMock()
-        mock_profile_module.resolve_profile_id.return_value = "topstep_50k_mnq_auto"
-        mock_lane_ctl = MagicMock()
-        mock_lane_ctl.get_paused_strategy_ids.return_value = {"A", "B"}
-        with patch.dict(
-            "sys.modules",
-            {
-                "trading_app.prop_profiles": mock_profile_module,
-                "trading_app.lane_ctl": mock_lane_ctl,
-            },
-        ):
+        mock_lifecycle = MagicMock()
+        mock_lifecycle.read_pause_state.return_value = {
+            "profile_id": "topstep_50k_mnq_auto",
+            "paused_count": 2,
+            "paused_strategy_ids": ["A", "B"],
+        }
+        with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
             summary, items = collect_pause_state()
         assert summary is not None
         assert summary["paused_count"] == 2

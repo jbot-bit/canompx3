@@ -21,7 +21,7 @@ import duckdb
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.account_survival import check_survival_report_gate
+from trading_app.lifecycle_state import read_lifecycle_state
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -298,11 +298,51 @@ def check_forward_monitor_freshness() -> tuple[bool, str]:
 
 
 def check_account_survival(profile_id: str | None = None) -> tuple[bool, str]:
-    """Fail-closed Criterion 11 gate based on the latest persisted report."""
+    """Fail-closed Criterion 11 gate based on the shared lifecycle reader."""
     try:
-        return check_survival_report_gate(profile_id=profile_id)
+        lifecycle = read_lifecycle_state(profile_id=profile_id)
+        return _account_survival_from_lifecycle(lifecycle)
     except Exception as e:
         return False, f"BLOCKED: Criterion 11 gate failed: {e}"
+
+
+def check_lane_lifecycle(strategy_id: str, profile_id: str | None = None) -> tuple[bool, str]:
+    """Check lane-level operational lifecycle status from the shared reader."""
+    try:
+        lifecycle = read_lifecycle_state(profile_id=profile_id)
+    except Exception as e:
+        return True, f"WARN: lifecycle state unavailable ({e})"
+
+    return _lane_lifecycle_from_lifecycle(lifecycle, strategy_id)
+
+
+def _account_survival_from_lifecycle(lifecycle: dict) -> tuple[bool, str]:
+    """Interpret Criterion 11 from a shared lifecycle snapshot."""
+    c11 = lifecycle["criterion11"]
+    return bool(c11["gate_ok"]), str(c11["gate_msg"])
+
+
+def _lane_lifecycle_from_lifecycle(lifecycle: dict, strategy_id: str) -> tuple[bool, str]:
+    """Interpret lane-level lifecycle status from a shared snapshot."""
+    state = lifecycle["strategy_states"].get(strategy_id, {})
+    c12 = lifecycle["criterion12"]
+    if state.get("blocked"):
+        reason = state.get("block_reason") or "Blocked pending manual review"
+        return False, f"BLOCKED: {strategy_id} — {reason}"
+
+    if c12.get("valid"):
+        sr_status = state.get("sr_status")
+        if sr_status == "CONTINUE":
+            return True, f"Criterion 12 SR clear for {strategy_id}"
+        if sr_status == "NO_DATA":
+            return True, f"Criterion 12 SR has no data yet for {strategy_id}"
+        if sr_status:
+            return True, f"Criterion 12 SR status for {strategy_id}: {sr_status}"
+
+    reason = c12.get("reason")
+    if c12.get("available") and not c12.get("valid"):
+        return True, f"WARN: Criterion 12 SR state stale/mismatched ({reason})"
+    return True, "Criterion 12 SR state unavailable"
 
 
 def check_allocation_staleness_gate() -> tuple[bool, str]:
@@ -430,8 +470,13 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
         ok, msg = check_forward_monitor_freshness()
         results.append(("Forward monitor", ok, msg))
 
-        ok, msg = check_account_survival(resolved_profile_id)
+        lifecycle = read_lifecycle_state(profile_id=resolved_profile_id)
+
+        ok, msg = _account_survival_from_lifecycle(lifecycle)
         results.append(("Criterion 11 survival", ok, msg))
+
+        ok, msg = _lane_lifecycle_from_lifecycle(lifecycle, lane["strategy_id"])
+        results.append(("Lane lifecycle", ok, msg))
 
         # Allocation staleness
         ok, msg = check_allocation_staleness_gate()

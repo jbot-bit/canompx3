@@ -599,21 +599,22 @@ class SessionOrchestrator:
         self._blocked_strategy_reasons[strategy_id] = reason
 
     def _load_paused_lane_blocks(self) -> None:
-        """Load persisted lane pauses into the runtime block set."""
+        """Load operational lifecycle blocks into the runtime block set."""
         if not self._profile_id_for_lane_ctl:
             return
         try:
-            from trading_app.lane_ctl import get_lane_override, get_paused_strategy_ids
+            from trading_app.lifecycle_state import read_lifecycle_state
 
-            paused_ids = get_paused_strategy_ids(self._profile_id_for_lane_ctl, as_of=self.trading_day)
-            for strategy_id in paused_ids:
-                override = get_lane_override(self._profile_id_for_lane_ctl, strategy_id)
-                reason = override.get("reason", "Paused pending manual review") if override else "Paused pending manual review"
+            lifecycle = read_lifecycle_state(profile_id=self._profile_id_for_lane_ctl, today=self.trading_day)
+            blocked_ids = lifecycle["blocked_strategy_ids"]
+            blocked_reasons = lifecycle["blocked_reason_by_strategy"]
+            for strategy_id in blocked_ids:
+                reason = blocked_reasons.get(strategy_id, "Paused pending manual review")
                 self._block_strategy(strategy_id, reason)
-            if paused_ids:
-                log.warning("Loaded %d paused lane blocks from lane_ctl", len(paused_ids))
+            if blocked_ids:
+                log.warning("Loaded %d lifecycle lane blocks", len(blocked_ids))
         except Exception as e:
-            log.warning("Failed to load paused lane blocks: %s", e)
+            log.warning("Failed to load lifecycle lane blocks: %s", e)
 
     @staticmethod
     def _build_daily_features_row(trading_day: date, instrument: str, orb_minutes: int = 5) -> dict:

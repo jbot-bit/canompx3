@@ -14,6 +14,7 @@ from trading_app.pre_session_check import (
     check_daily_equity,
     check_dd_circuit_breaker,
     check_hwm_tracker,
+    check_lane_lifecycle,
     check_manual_halt,
     check_topstep_xfa_aggregate_cap,
 )
@@ -274,6 +275,50 @@ def test_check_consistency_rule_fails_closed_on_ambiguous_active_profiles(monkey
     ok, msg = check_consistency_rule()
     assert ok is False
     assert "Multiple active execution profiles" in msg
+
+
+class TestLaneLifecycle:
+    def test_blocks_paused_strategy(self):
+        lifecycle = {
+            "criterion12": {"available": True, "valid": True},
+            "strategy_states": {
+                "SID_A": {
+                    "blocked": True,
+                    "block_source": "pause",
+                    "block_reason": "Manual pause",
+                }
+            },
+        }
+        with patch("trading_app.pre_session_check.read_lifecycle_state", return_value=lifecycle):
+            ok, msg = check_lane_lifecycle("SID_A", "topstep_50k_mnq_auto")
+        assert ok is False
+        assert "Manual pause" in msg
+
+    def test_blocks_sr_alarm_strategy(self):
+        lifecycle = {
+            "criterion12": {"available": True, "valid": True},
+            "strategy_states": {
+                "SID_A": {
+                    "blocked": True,
+                    "block_source": "sr_alarm",
+                    "block_reason": "Criterion 12 SR ALARM — manual review required",
+                }
+            },
+        }
+        with patch("trading_app.pre_session_check.read_lifecycle_state", return_value=lifecycle):
+            ok, msg = check_lane_lifecycle("SID_A", "topstep_50k_mnq_auto")
+        assert ok is False
+        assert "SR ALARM" in msg
+
+    def test_warns_when_sr_state_is_stale(self):
+        lifecycle = {
+            "criterion12": {"available": True, "valid": False, "reason": "stale state: 3d old > 2d"},
+            "strategy_states": {"SID_A": {"blocked": False, "sr_status": None}},
+        }
+        with patch("trading_app.pre_session_check.read_lifecycle_state", return_value=lifecycle):
+            ok, msg = check_lane_lifecycle("SID_A", "topstep_50k_mnq_auto")
+        assert ok is True
+        assert "stale/mismatched" in msg
 
 
 # ─── F-6: TopStep 5-XFA aggregate cap ────────────────────────────────────
