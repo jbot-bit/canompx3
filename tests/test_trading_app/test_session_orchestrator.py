@@ -210,6 +210,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch._consecutive_engine_errors = 0
     orch._blocked_strategies = set()
     orch._blocked_strategy_reasons = {}
+    orch._safety_state = MagicMock()  # SessionSafetyState — mocked to avoid file I/O
     orch._profile_id_for_lane_ctl = None
     orch._orb_caps = {}  # ORB cap map — populated per test
     orch._max_risk_per_trade = None  # Dollar cap — populated per test

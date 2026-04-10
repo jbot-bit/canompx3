@@ -376,10 +376,14 @@ class SessionOrchestrator:
         # Without this, if feed dies before any bar arrives, watchdog skips forever
         # because it checks `if _last_bar_at is None: continue`.
         self._last_bar_at: datetime | None = datetime.now(UTC)
-        self._kill_switch_fired = False  # one-shot emergency flatten
+        # Crash-recoverable safety state (persisted to data/state/ on every mutation)
+        from trading_app.live.session_safety_state import SessionSafetyState
+
+        self._safety_state = SessionSafetyState(self.portfolio.name, instrument)
+        self._kill_switch_fired = self._safety_state.kill_switch_fired
         self._notifications_broken = False  # set by self-test
         self._bar_count = 0  # total bars received this session
-        self._close_time_forced = False  # one-shot force-flatten at session close
+        self._close_time_forced = self._safety_state.close_time_forced
 
         # DD PROTECTION — TWO LAYERS
         # Layer 1: RiskManager — intraday R-units, resets each session
@@ -493,8 +497,9 @@ class SessionOrchestrator:
         self._stats = SessionStats()  # observability counters
         self._poller_active = False  # set True once fill poller runs a cycle
         self._consecutive_engine_errors = 0  # circuit breaker for engine crashes
-        self._blocked_strategies: set[str] = set()  # orphan containment — entries blocked until manual clear
-        self._blocked_strategy_reasons: dict[str, str] = {}
+        # Restore blocked strategies from crash-recovery state (if any)
+        self._blocked_strategies: set[str] = set(self._safety_state.blocked_strategies.keys())
+        self._blocked_strategy_reasons: dict[str, str] = dict(self._safety_state.blocked_strategies)
 
         # Circuit breaker: blocks order submission after 5 consecutive broker failures
         from trading_app.live.circuit_breaker import CircuitBreaker
@@ -595,10 +600,24 @@ class SessionOrchestrator:
         mode = "SIGNAL" if signal_only else ("DEMO" if demo else "LIVE")
         self._notify(f"Session started: {instrument} ({mode})")
 
+    def _fire_kill_switch(self) -> None:
+        """Trigger emergency flatten. Persisted to survive crashes."""
+        self._kill_switch_fired = True
+        self._safety_state.kill_switch_fired = True
+        self._safety_state.save()
+
+    def _force_close_time(self) -> None:
+        """Trigger EOD force-flatten. Persisted to survive crashes."""
+        self._close_time_forced = True
+        self._safety_state.close_time_forced = True
+        self._safety_state.save()
+
     def _block_strategy(self, strategy_id: str, reason: str) -> None:
-        """Add a runtime block with explicit reason."""
+        """Add a runtime block with explicit reason. Persisted to survive crashes."""
         self._blocked_strategies.add(strategy_id)
         self._blocked_strategy_reasons[strategy_id] = reason
+        self._safety_state.blocked_strategies[strategy_id] = reason
+        self._safety_state.save()
 
     def _load_paused_lane_blocks(self) -> None:
         """Load operational lifecycle blocks into the runtime block set."""
@@ -746,7 +765,7 @@ class SessionOrchestrator:
             self._notify(msg)
             # R2-C5: flatten if positions exist — watchdog alone is insufficient
             if self._positions.active_positions() and not self._kill_switch_fired:
-                self._kill_switch_fired = True
+                self._fire_kill_switch()
                 try:
                     loop = asyncio.get_running_loop()
                     loop.create_task(self._emergency_flatten())
@@ -1080,7 +1099,7 @@ class SessionOrchestrator:
             if mins_to_close is not None and 0 < mins_to_close <= 5.0:
                 active = self._positions.active_positions()
                 if active:
-                    self._close_time_forced = True
+                    self._force_close_time()
                     msg = f"CLOSE TIME FLATTEN: {len(active)} position(s) being closed ({mins_to_close:.0f}min before cutoff)"
                     log.critical(msg)
                     self._notify(msg)
@@ -1113,7 +1132,7 @@ class SessionOrchestrator:
                 )
                 log.critical(msg)
                 self._notify(msg)
-                self._kill_switch_fired = True
+                self._fire_kill_switch()
                 await self._emergency_flatten()
 
             # HWM equity poll (every 10 bars ≈ 10 minutes)
@@ -1125,7 +1144,7 @@ class SessionOrchestrator:
                     if halted:
                         log.critical("HWM DD HALT: %s — triggering kill switch", reason)
                         self._notify(f"ACCOUNT DD LIMIT: {reason}")
-                        self._kill_switch_fired = True
+                        self._fire_kill_switch()
                         await self._emergency_flatten()
                     elif "WARN" in reason:
                         log.warning("HWM: %s", reason)
@@ -2060,7 +2079,7 @@ class SessionOrchestrator:
 
                 gap = (datetime.now(UTC) - self._last_bar_at).total_seconds()
                 if gap > self.KILL_SWITCH_TIMEOUT and self._positions.active_positions():
-                    self._kill_switch_fired = True
+                    self._fire_kill_switch()
                     await self._emergency_flatten()
             except asyncio.CancelledError:
                 raise  # normal shutdown
@@ -2456,6 +2475,18 @@ class SessionOrchestrator:
 
         # Close trade journal — flushes any pending writes
         self.journal.close()
+
+        # Clear crash-recovery state on clean session end.
+        # If blocked strategies or kill switch fired, leave state for next startup.
+        if not self._blocked_strategies and not self._kill_switch_fired:
+            self._safety_state.clear()
+        else:
+            log.warning(
+                "Safety state NOT cleared — kill_switch=%s, blocked=%d. "
+                "State preserved for crash recovery on next startup.",
+                self._kill_switch_fired,
+                len(self._blocked_strategies),
+            )
 
         try:
             run_backfill_for_instrument(self.instrument)
