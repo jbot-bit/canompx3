@@ -1441,7 +1441,8 @@ class SessionOrchestrator:
         sid = record.strategy_id
         log.critical("STUCK EXIT RECOVERY: re-attempting close for %s", sid)
         try:
-            self.auth.refresh_if_needed()
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self.auth.refresh_if_needed)
         except Exception as e:
             log.warning("Auth refresh failed before stuck exit retry for %s: %s", sid, e)
 
@@ -2045,6 +2046,9 @@ class SessionOrchestrator:
             direction = record.direction
             for attempt in range(3):
                 try:
+                    # Sync call intentional: emergency flatten is time-critical.
+                    # Blocking the event loop for ~100ms is acceptable when the
+                    # bot is in KILL_SWITCH state — no other processing matters.
                     self.auth.refresh_if_needed()
                     exit_spec = self.order_router.build_exit_spec(
                         direction=direction,
@@ -2342,7 +2346,9 @@ class SessionOrchestrator:
 
                 if attempt < self.ORCHESTRATOR_MAX_RECONNECTS:
                     try:
-                        self.auth.refresh_if_needed()
+                        await asyncio.get_running_loop().run_in_executor(
+                            None, self.auth.refresh_if_needed
+                        )
                     except Exception as exc:
                         log.warning("Auth refresh failed before reconnect: %s", exc)
 

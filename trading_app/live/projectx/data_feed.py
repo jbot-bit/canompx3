@@ -243,7 +243,9 @@ class ProjectXDataFeed(BrokerFeed):
                 try:
                     while not _STOP_FILE.exists():
                         await asyncio.sleep(2.5)
-                        self.auth.refresh_if_needed()
+                        await asyncio.get_running_loop().run_in_executor(
+                            None, self.auth.refresh_if_needed
+                        )
                         # Liveness check (same logic as pysignalr watcher)
                         if self._last_data_at is not None:
                             gap = (datetime.now(UTC) - self._last_data_at).total_seconds()
