@@ -143,6 +143,19 @@ def _atom_numeric(value: Any) -> float | None:
     return f
 
 
+def is_e2_lookahead_filter(filter_type: str) -> bool:
+    """True iff filter_type depends on break-bar properties unknown at E2 entry.
+
+    Canonical source: E2_EXCLUDED_FILTER_PREFIXES / E2_EXCLUDED_FILTER_SUBSTRINGS
+    (defined later in this module). Discovery, execution, drift checks, and
+    eligibility messaging must all delegate here instead of re-encoding the
+    membership rule.
+    """
+    return filter_type.startswith(E2_EXCLUDED_FILTER_PREFIXES) or any(
+        sub in filter_type for sub in E2_EXCLUDED_FILTER_SUBSTRINGS
+    )
+
+
 def _e2_look_ahead_reason(filter_type: str) -> str | None:
     """Return E2 look-ahead exclusion reason if filter_type is E2-excluded.
 
@@ -163,12 +176,13 @@ def _e2_look_ahead_reason(filter_type: str) -> str | None:
             f"E2 look-ahead: filter_type '{filter_type}' depends on break-bar "
             f"properties unknown at E2 entry placement"
         )
-    for sub in E2_EXCLUDED_FILTER_SUBSTRINGS:
-        if sub in filter_type:
-            return (
-                f"E2 look-ahead: filter_type '{filter_type}' depends on break-bar "
-                f"properties unknown at E2 entry placement (substring '{sub}')"
-            )
+    if is_e2_lookahead_filter(filter_type):
+        for sub in E2_EXCLUDED_FILTER_SUBSTRINGS:
+            if sub in filter_type:
+                return (
+                    f"E2 look-ahead: filter_type '{filter_type}' depends on break-bar "
+                    f"properties unknown at E2 entry placement (substring '{sub}')"
+                )
     return None
 
 
