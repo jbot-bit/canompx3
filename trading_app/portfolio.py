@@ -37,6 +37,7 @@ from trading_app.config import (
     classify_strategy,
     get_excluded_sessions,
 )
+from trading_app.validated_shelf import deployable_validated_predicate, validated_setups_has_deployment_scope
 
 
 def _get_table_names(con: duckdb.DuckDBPyConnection) -> set[str]:
@@ -281,6 +282,7 @@ def load_validated_strategies(
     edge_families table. Falls back to unfiltered if edge_families doesn't exist.
     """
     with duckdb.connect(str(db_path), read_only=True) as con:
+        deployable_where = deployable_validated_predicate(con, alias="vs")
         # Resolve family head filter (post-filter in Python to avoid SQL interpolation)
         head_ids = None
         if family_heads_only:
@@ -293,7 +295,7 @@ def load_validated_strategies(
         # Per-instrument session exclusions (see config.EXCLUDED_FROM_FITNESS)
         excluded_sessions = sorted(get_excluded_sessions(instrument))
         baseline_rows = con.execute(
-            """
+            f"""
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
                    vs.rr_target, vs.confirm_bars, vs.filter_type,
                    vs.expectancy_r, vs.win_rate, vs.sample_size,
@@ -315,7 +317,7 @@ def load_validated_strategies(
               AND vs.orb_minutes = frl.orb_minutes
               AND vs.confirm_bars = frl.confirm_bars
             WHERE vs.instrument = ?
-              AND LOWER(vs.status) = 'active'
+              AND {deployable_where}
               AND vs.expectancy_r >= ?
               AND vs.orb_label NOT IN (SELECT UNNEST(?::VARCHAR[]))
               AND (frl.locked_rr IS NULL OR vs.rr_target = frl.locked_rr)
@@ -766,15 +768,21 @@ def build_profile_portfolio(
     _skip_dd_check = instrument is not None and len(lanes) < len(profile.daily_lanes)
 
     with duckdb.connect(str(db_path), read_only=True) as con:
+        has_deployment_scope = validated_setups_has_deployment_scope(con)
+        deployment_scope_sql = (
+            "COALESCE(deployment_scope, 'deployable')"
+            if has_deployment_scope
+            else "'deployable'"
+        )
         for lane in lanes:
             row = con.execute(
-                """
+                f"""
                 SELECT strategy_id, instrument, orb_label, entry_model,
                        rr_target, confirm_bars, filter_type, orb_minutes,
                        sample_size, win_rate, expectancy_r, sharpe_ratio,
                        max_drawdown_r, median_risk_dollars, avg_risk_dollars,
                        avg_win_dollars, avg_loss_dollars, stop_multiplier,
-                       status, fdr_significant
+                       status, {deployment_scope_sql} AS deployment_scope, fdr_significant
                 FROM validated_setups
                 WHERE strategy_id = ?
                 """,
@@ -808,6 +816,7 @@ def build_profile_portfolio(
                 avg_loss_dollars,
                 stop_mult,
                 status,
+                deployment_scope,
                 fdr_sig,
             ) = row
 
@@ -815,6 +824,11 @@ def build_profile_portfolio(
                 raise RuntimeError(
                     f"BLOCKER: Strategy '{sid}' is RETIRED in validated_setups. "
                     f"Remove from profile '{profile_id}' or re-validate."
+                )
+            if deployment_scope and str(deployment_scope).lower() != "deployable":
+                raise RuntimeError(
+                    f"BLOCKER: Strategy '{sid}' is marked deployment_scope={deployment_scope!r}. "
+                    f"Profiles may only reference deployable shelf rows."
                 )
 
             if not fdr_sig:

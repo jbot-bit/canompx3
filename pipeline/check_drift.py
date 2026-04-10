@@ -4862,10 +4862,17 @@ def check_critical_deployable_shelf_consumers() -> list[str]:
         TRADING_APP_DIR / "live_config.py",
         TRADING_APP_DIR / "prop_portfolio.py",
         TRADING_APP_DIR / "lane_allocator.py",
+        TRADING_APP_DIR / "portfolio.py",
+        TRADING_APP_DIR / "pbo.py",
         TRADING_APP_DIR / "strategy_fitness.py",
         TRADING_APP_DIR / "sr_monitor.py",
         TRADING_APP_DIR / "sprt_monitor.py",
+        TRADING_APP_DIR / "view_strategies.py",
+        SCRIPTS_DIR / "tools" / "build_optimal_profiles.py",
+        SCRIPTS_DIR / "tools" / "generate_profile_lanes.py",
         SCRIPTS_DIR / "tools" / "generate_trade_sheet.py",
+        SCRIPTS_DIR / "tools" / "optimal_lanes.py",
+        SCRIPTS_DIR / "tools" / "pipeline_status.py",
         SCRIPTS_DIR / "tools" / "project_pulse.py",
         TRADING_APP_DIR / "ai" / "sql_adapter.py",
     ]
@@ -4884,11 +4891,18 @@ def check_critical_deployable_shelf_consumers() -> list[str]:
                 f"  {rel}: critical validated_setups reader lacks canonical deployable-shelf semantics"
             )
         if rel != Path("trading_app/ai/sql_adapter.py"):
-            for idx, line in enumerate(content.splitlines(), 1):
-                if raw_active_pattern.search(line):
-                    violations.append(
-                        f"  {rel}:{idx}: raw status='active' predicate in critical shelf reader"
-                    )
+            lines = content.splitlines()
+            for idx, line in enumerate(lines, 1):
+                if not raw_active_pattern.search(line):
+                    continue
+                start = max(0, idx - 6)
+                end = min(len(lines), idx + 5)
+                block = "\n".join(lines[start:end])
+                if "validated_setups" not in block:
+                    continue
+                violations.append(
+                    f"  {rel}:{idx}: raw status='active' predicate in critical shelf reader"
+                )
 
     return violations
 

@@ -30,6 +30,7 @@ from pipeline.build_daily_features import ACTIVE_ORB_MINUTES, VALID_ORB_MINUTES
 from pipeline.db_lock import PipelineLock, PipelineLockError
 from pipeline.init_db import REBUILD_MANIFEST_SCHEMA
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.validated_shelf import deployable_validated_predicate
 
 # Step-to-table mapping for audit logging.
 # Maps each rebuild step to the primary table it writes to.
@@ -131,11 +132,11 @@ PREFLIGHT_RULES: dict[str, dict] = {
         "desc": "experimental_strategies rows for {instrument}",
     },
     "edge_families": {
-        "query": "SELECT COUNT(*) FROM validated_setups WHERE instrument = $1 AND status = 'active'",
+        "query": "SELECT COUNT(*) FROM validated_setups WHERE instrument = $1",
         "params": lambda inst, orb: [inst],
         "fix": _PY
         + " trading_app/strategy_validator.py --instrument {instrument} --min-sample 30 --no-regime-waivers --min-years-positive-pct 0.75",
-        "desc": "active validated_setups for {instrument}",
+        "desc": "deployable validated_setups for {instrument}",
     },
     "family_rr_locks": {
         "query": "SELECT COUNT(*) FROM edge_families WHERE instrument = $1",
@@ -160,11 +161,18 @@ def preflight_check(
         return (True, f"No pre-flight rule for step '{step}'")
 
     rule = PREFLIGHT_RULES[step]
-    params = rule["params"](instrument, orb_minutes)
     desc = rule["desc"].format(instrument=instrument, orb_minutes=orb_minutes)
     fix = rule["fix"].format(instrument=instrument, orb_minutes=orb_minutes)
+    params = rule["params"](instrument, orb_minutes)
+    query = rule["query"]
+    if step == "edge_families":
+        deployable_where = deployable_validated_predicate(con)
+        query = (
+            "SELECT COUNT(*) FROM validated_setups "
+            f"WHERE instrument = $1 AND {deployable_where}"
+        )
 
-    row = con.execute(rule["query"], params).fetchone()
+    row = con.execute(query, params).fetchone()
     count = row[0] if row else 0
 
     if count == 0:
@@ -614,9 +622,10 @@ def staleness_engine(con: duckdb.DuckDBPyConnection, instrument: str) -> dict:
     ).fetchone()
     result["experimental"] = row[0] if row and row[0] is not None else None
 
-    # --- validated_setups (active only) ---
+    # --- validated_setups (deployable shelf only) ---
+    deployable_where = deployable_validated_predicate(con)
     row = con.execute(
-        "SELECT MAX(promoted_at::DATE) FROM validated_setups WHERE instrument = ? AND status = 'active'",
+        f"SELECT MAX(promoted_at::DATE) FROM validated_setups WHERE instrument = ? AND {deployable_where}",
         [instrument],
     ).fetchone()
     result["validated"] = row[0] if row and row[0] is not None else None
@@ -715,7 +724,7 @@ def format_status(instrument: str, status: dict) -> str:
         lines.append(f"  orb_outcomes O{ap:<2}  : {_fmt(d)}{_stale_tag(f'orb_outcomes_O{ap}')}")
     lines.append(f"  orb_outcomes min  : {_fmt(status['orb_outcomes'])}")
     lines.append(f"  experimental      : {_fmt(status['experimental'])}{_stale_tag('experimental_strategies')}")
-    lines.append(f"  validated (active): {_fmt(status['validated'])}{_stale_tag('validated_setups')}")
+    lines.append(f"  validated (deployable): {_fmt(status['validated'])}{_stale_tag('validated_setups')}")
     lines.append(f"  edge_families     : {_fmt(status['edge_families'])}{_stale_tag('edge_families')}")
     lines.append(f"  family_rr_locks   : {_fmt(status['family_rr_locks'])}")
     lines.append(f"  last_rebuild      : {_fmt(status['last_rebuild'])}")

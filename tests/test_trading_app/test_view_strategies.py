@@ -6,12 +6,17 @@ import math
 import sys
 from pathlib import Path
 
+import duckdb
 import pandas as pd
 import pytest
 
 from trading_app.view_strategies import (
     _fmt_signed,
     _safe_float,
+    fetch_families,
+    fetch_summary,
+    fetch_total_count,
+    fetch_unique_trade_count,
     format_families,
     format_summary,
     format_table,
@@ -234,3 +239,61 @@ class TestCLI:
         assert "--db" in out
         assert "--sort" in out
         assert "sharpe_ann" in out
+
+
+def _setup_validated_shelf_db(tmp_path: Path) -> Path:
+    db_path = tmp_path / "view_strategies.db"
+    con = duckdb.connect(str(db_path))
+    con.execute("""
+        CREATE TABLE validated_setups (
+            strategy_id TEXT,
+            orb_label TEXT,
+            entry_model TEXT,
+            confirm_bars INTEGER,
+            rr_target DOUBLE,
+            filter_type TEXT,
+            sample_size INTEGER,
+            win_rate DOUBLE,
+            expectancy_r DOUBLE,
+            sharpe_ratio DOUBLE,
+            sharpe_ann DOUBLE,
+            trades_per_year DOUBLE,
+            max_drawdown_r DOUBLE,
+            years_tested INTEGER,
+            stress_test_passed BOOLEAN,
+            status TEXT,
+            deployment_scope TEXT
+        )
+    """)
+    con.execute("""
+        INSERT INTO validated_setups VALUES
+        (
+            'MNQ_US_DATA_830_E2_RR2.0_CB1_ORB_G5',
+            'US_DATA_830', 'E2', 1, 2.0, 'ORB_G5', 120, 0.54, 0.31,
+            0.40, 1.20, 60.0, 4.5, 5, TRUE, 'active', 'deployable'
+        ),
+        (
+            'GC_US_DATA_830_E2_RR2.0_CB1_ORB_G5',
+            'US_DATA_830', 'E2', 1, 2.0, 'ORB_G5', 120, 0.54, 0.31,
+            0.40, 1.20, 60.0, 4.5, 5, TRUE, 'active', 'non_deployable'
+        )
+    """)
+    con.close()
+    return db_path
+
+
+class TestDeployableShelfSemantics:
+    def test_counts_exclude_non_deployable_active_rows(self, tmp_path):
+        db_path = _setup_validated_shelf_db(tmp_path)
+        assert fetch_total_count(db_path) == 1
+        assert fetch_unique_trade_count(db_path) == 1
+
+    def test_summary_and_family_views_exclude_non_deployable_active_rows(self, tmp_path):
+        db_path = _setup_validated_shelf_db(tmp_path)
+
+        summary = fetch_summary(db_path)
+        families = fetch_families(db_path)
+
+        assert list(summary["count"]) == [1]
+        assert list(summary["unique_trades"]) == [1]
+        assert list(families["filter_variants"]) == [1]

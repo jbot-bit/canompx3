@@ -30,6 +30,7 @@ import duckdb
 import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.validated_shelf import deployable_validated_predicate
 
 # Column aliases for --sort
 SORT_COLUMNS = {
@@ -100,7 +101,7 @@ def fetch_strategies(
         if not _has_table(con, "validated_setups"):
             return pd.DataFrame()
 
-        where = ["status = 'active'"]
+        where = [deployable_validated_predicate(con)]
         params = []
 
         if orb:
@@ -146,8 +147,9 @@ def fetch_summary(db_path: Path) -> pd.DataFrame:
     with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return pd.DataFrame()
+        deployable_where = deployable_validated_predicate(con)
 
-        df = con.execute("""
+        df = con.execute(f"""
             SELECT orb_label,
                    COUNT(*) as count,
                    COUNT(DISTINCT orb_label || '_' || entry_model || '_' ||
@@ -159,7 +161,7 @@ def fetch_summary(db_path: Path) -> pd.DataFrame:
                    ROUND(MAX(sharpe_ann), 3) as best_shann,
                    ROUND(AVG(win_rate) * 100, 1) as avg_wr_pct
             FROM validated_setups
-            WHERE status = 'active'
+            WHERE {deployable_where}
             GROUP BY orb_label
             ORDER BY count DESC
         """).fetchdf()
@@ -167,11 +169,12 @@ def fetch_summary(db_path: Path) -> pd.DataFrame:
 
 
 def fetch_total_count(db_path: Path) -> int:
-    """Total active validated strategies."""
+    """Total deployable validated strategies."""
     with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return 0
-        return con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone()[0]
+        deployable_where = deployable_validated_predicate(con)
+        return con.execute(f"SELECT COUNT(*) FROM validated_setups WHERE {deployable_where}").fetchone()[0]
 
 
 def fetch_unique_trade_count(db_path: Path) -> int:
@@ -179,11 +182,12 @@ def fetch_unique_trade_count(db_path: Path) -> int:
     with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return 0
-        return con.execute("""
+        deployable_where = deployable_validated_predicate(con)
+        return con.execute(f"""
             SELECT COUNT(DISTINCT orb_label || '_' || entry_model || '_' ||
                          CAST(rr_target AS TEXT) || '_' ||
                          CAST(confirm_bars AS TEXT))
-            FROM validated_setups WHERE status = 'active'
+            FROM validated_setups WHERE {deployable_where}
         """).fetchone()[0]
 
 
@@ -193,7 +197,7 @@ def fetch_families(db_path: Path, orb: str | None = None, entry: str | None = No
         if not _has_table(con, "validated_setups"):
             return pd.DataFrame()
 
-        where = ["status = 'active'"]
+        where = [deployable_validated_predicate(con)]
         params = []
         if orb:
             where.append("orb_label = ?")
@@ -342,13 +346,13 @@ def main():
     sort_col = SORT_COLUMNS[args.sort]
 
     if args.summary:
-        logger.info(f"\n=== Validated Strategies: {total} active ({unique} unique trades) ===\n")
+        logger.info(f"\n=== Validated Strategies: {total} deployable ({unique} unique trades) ===\n")
         summary_df = fetch_summary(db_path)
         logger.info(format_summary(summary_df))
         return
 
     if args.family:
-        logger.info(f"\n=== {unique} unique trades ({total} strategy variants) ===\n")
+        logger.info(f"\n=== {unique} unique trades ({total} deployable variants) ===\n")
         families_df = fetch_families(db_path, orb=args.orb, entry=args.entry)
         logger.info(format_families(families_df))
 
@@ -371,7 +375,7 @@ def main():
         filters.append(f"ExpR>={args.min_expr}")
     filter_desc = f" [{', '.join(filters)}]" if filters else ""
 
-    logger.info(f"\n=== Validated Strategies: {total} active ({unique} unique trades){filter_desc} ===")
+    logger.info(f"\n=== Validated Strategies: {total} deployable ({unique} unique trades){filter_desc} ===")
     logger.info(f"Showing top {args.top} by {sort_col}\n")
 
     df = fetch_strategies(

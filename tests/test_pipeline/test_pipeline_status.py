@@ -364,6 +364,24 @@ class TestPreflightCheck:
         assert ok is True
         assert "No pre-flight rule" in msg
 
+    def test_edge_families_preflight_excludes_non_deployable_active_rows(self, tmp_path):
+        """edge_families preflight must count deployable shelf rows only."""
+        db_path, con = _create_test_db(tmp_path)
+        con.execute("""
+            ALTER TABLE validated_setups ADD COLUMN deployment_scope TEXT DEFAULT 'deployable'
+        """)
+        con.execute("""
+            INSERT INTO validated_setups (strategy_id, instrument, status, deployment_scope)
+            VALUES ('GC_bad', 'MGC', 'active', 'non_deployable')
+        """)
+        con.commit()
+
+        ok, msg = preflight_check(con, "MGC", "edge_families")
+        con.close()
+
+        assert ok is False
+        assert "deployable validated_setups" in msg
+
 
 # ---------------------------------------------------------------------------
 # Manifest tests

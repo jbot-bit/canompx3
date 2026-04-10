@@ -87,6 +87,55 @@ Made deployable-shelf semantics explicit and fail-closed:
 - Durable design note saved at:
   - `docs/plans/2026-04-11-validated-shelf-lifecycle-hardening.md`
 
+## Update (2026-04-11 — secondary deployable-shelf reader hardening)
+
+### Headline
+
+Extended canonical deployable-shelf semantics into the next operational reader
+layer so operator tools no longer infer deployability from raw
+`status='active'`.
+
+### What changed
+
+- Migrated additional deployable-shelf readers to
+  `trading_app.validated_shelf.deployable_validated_predicate(...)`:
+  - `trading_app/view_strategies.py`
+  - `trading_app/portfolio.py`
+  - `trading_app/pbo.py`
+  - `scripts/tools/build_optimal_profiles.py`
+  - `scripts/tools/generate_profile_lanes.py`
+  - `scripts/tools/optimal_lanes.py`
+  - `scripts/tools/pipeline_status.py`
+- Hardened `trading_app/portfolio.py`
+  - profile-driven loads now fail closed if a referenced row is marked
+    `deployment_scope != 'deployable'`
+  - legacy minimal schemas without `deployment_scope` still degrade safely
+- Tightened `pipeline/check_drift.py`
+  - check 102 now covers the secondary operational reader set above
+  - raw `status='active'` detection is scoped to nearby `validated_setups`
+    usage so `nested_validated` / other tables do not trip false positives
+- Added regression coverage:
+  - `tests/test_trading_app/test_view_strategies.py`
+  - `tests/test_trading_app/test_portfolio.py`
+  - `tests/test_pipeline/test_pipeline_status.py`
+  - `tests/test_pipeline/test_check_drift_ws2.py`
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check trading_app/view_strategies.py trading_app/portfolio.py trading_app/pbo.py scripts/tools/build_optimal_profiles.py scripts/tools/generate_profile_lanes.py scripts/tools/optimal_lanes.py scripts/tools/pipeline_status.py pipeline/check_drift.py tests/test_pipeline/test_check_drift_ws2.py tests/test_trading_app/test_view_strategies.py tests/test_trading_app/test_portfolio.py tests/test_pipeline/test_pipeline_status.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_view_strategies.py tests/test_trading_app/test_portfolio.py tests/test_pipeline/test_pipeline_status.py tests/test_pipeline/test_check_drift_ws2.py -q`
+  - `184 passed`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 100 checks passed [OK], 0 skipped, 7 advisory`
+
+### Notes
+
+- This slice intentionally avoided the dirty ML / pre-session files being
+  edited in parallel in other terminals.
+- Research/audit/history consumers that intentionally reason about raw
+  lifecycle state were left untouched on purpose.
+
 ## Update (2026-04-11 — native promotion provenance hardening)
 
 ### Headline

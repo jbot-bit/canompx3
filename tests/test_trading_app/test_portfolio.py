@@ -1615,6 +1615,29 @@ class TestFamilyHeadsOnly:
         )
         assert len(results) == 1
 
+    def test_excludes_active_non_deployable_rows(self, tmp_path):
+        """Deployable shelf load must ignore rows marked non_deployable."""
+        strategies = [
+            _make_strategy(strategy_id="MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5", expectancy_r=0.30),
+            _make_strategy(strategy_id="MGC_TOKYO_OPEN_E1_RR2.0_CB2_ORB_G5", orb_label="TOKYO_OPEN", expectancy_r=0.28),
+        ]
+        db_path = _setup_db(tmp_path, strategies)
+
+        con = duckdb.connect(str(db_path))
+        con.execute(
+            """
+            UPDATE validated_setups
+            SET deployment_scope = 'non_deployable'
+            WHERE strategy_id = 'MGC_TOKYO_OPEN_E1_RR2.0_CB2_ORB_G5'
+            """
+        )
+        con.commit()
+        con.close()
+
+        results = load_validated_strategies(db_path, "MGC", 0.10)
+        ids = {r["strategy_id"] for r in results}
+        assert ids == {"MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5"}
+
 
 class TestClassificationWeights:
     """FIX5: CORE=1.0, REGIME=0.5, INVALID=excluded."""
