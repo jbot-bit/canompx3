@@ -1,0 +1,276 @@
+# Hypothesis Registry — MES Recalibrated Size Gate (G8)
+#
+# Locked:        2026-04-11T01:00:00+10:00
+# Author:        Claude Code session (wave 4 lit-grounded discovery)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  6.65 calendar years (MES real micro 2019-05-06 to 2025-12-31)
+# Testing mode:  family (Pathway A, BH FDR at K=24)
+#
+# AUDIT NOTE: ORB_G8 requires orb_height >= 8 ticks.
+# G5 on MES passes 85% NYSE_OPEN — effectively unfiltered.
+# G8 passes 53% NYSE_OPEN, 22% CME_PRECLOSE — meaningful selectivity.
+# G8 is the economically meaningful size gate for MES given its tick value.
+
+metadata:
+  name: "mes-size-recal"
+  purpose: |
+    Test whether recalibrated size gate (G8 instead of G5) improves MES
+    ORB breakout edge. G5 on MES passes 85% NYSE_OPEN, effectively
+    unfiltered. G8 provides genuine selectivity (53% NYSE_OPEN, 22%
+    CME_PRECLOSE) and requires meaningful ORB size relative to MES tick value.
+  date_locked: "2026-04-11T01:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.65
+  data_source: "real CME Micro E-mini S&P 500 futures 2019-05-06 onwards"
+  testing_mode: "family"
+  bailey_compliance:
+    trials: 24
+    horizon_years: 6.65
+    e_max_n: 1.0
+    min_btl_required_years: 6.36
+    headroom_pct: 4.4
+    status: "PASS"
+  total_expected_trials: 24
+
+hypotheses:
+  - id: 1
+    name: "MES TOKYO_OPEN ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) Quantitative Trading ch.1-2; Crabel (1990) opening range theory"
+    economic_basis: |
+      G5 on MES passes 85% of NYSE_OPEN days — effectively unfiltered.
+      G8 provides genuine selectivity by requiring meaningful ORB size
+      relative to MES tick value ($1.25/pt). Larger ORBs have better
+      signal-to-noise and can absorb friction more effectively.
+    filter:
+      type: ORB_G8
+      column: orb_height
+      thresholds: [8]
+    scope:
+      instruments: [MES]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=24"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 2
+    name: "MES SINGAPORE_OPEN ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Same recalibrated size gate mechanism. All sessions tested for honesty."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [SINGAPORE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 3
+    name: "MES LONDON_METALS ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Same recalibrated size gate mechanism."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 4
+    name: "MES EUROPE_FLOW ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Same recalibrated size gate mechanism."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 5
+    name: "MES CME_REOPEN ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Same recalibrated size gate mechanism."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 6
+    name: "MES US_DATA_830 ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Same recalibrated size gate mechanism."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 7
+    name: "MES NYSE_OPEN ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Same recalibrated size gate mechanism."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 8
+    name: "MES US_DATA_1000 ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Same recalibrated size gate mechanism."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 9
+    name: "MES COMEX_SETTLE ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Same recalibrated size gate mechanism."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 10
+    name: "MES NYSE_CLOSE ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Same recalibrated size gate mechanism."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [NYSE_CLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 11
+    name: "MES CME_PRECLOSE ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Same recalibrated size gate mechanism."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 12
+    name: "MES BRISBANE_1025 ORB_G8 RR1.0"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Same recalibrated size gate mechanism."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [BRISBANE_1025], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 13
+    name: "MES TOKYO_OPEN ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR for continuation."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 14
+    name: "MES SINGAPORE_OPEN ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [SINGAPORE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 15
+    name: "MES LONDON_METALS ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 16
+    name: "MES EUROPE_FLOW ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 17
+    name: "MES CME_REOPEN ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 18
+    name: "MES US_DATA_830 ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 19
+    name: "MES NYSE_OPEN ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 20
+    name: "MES US_DATA_1000 ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 21
+    name: "MES COMEX_SETTLE ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 22
+    name: "MES NYSE_CLOSE ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [NYSE_CLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 23
+    name: "MES CME_PRECLOSE ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 24
+    name: "MES BRISBANE_1025 ORB_G8 RR1.5"
+    theory_citation: "Chan (2009) ch.1-2; Crabel (1990)"
+    economic_basis: "Recalibrated size gate + higher RR."
+    filter: { type: ORB_G8, column: orb_height, thresholds: [8] }
+    scope: { instruments: [MES], sessions: [BRISBANE_1025], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+total_hypothesis_count: 24
+total_expected_trials: 24
+budget_check:
+  mode: "clean"
+  max_allowed_clean: 300
+  strict_bailey_e_1_0_max_n: 27
+  data_horizon_years_available: 6.65
+  status: "under budget"

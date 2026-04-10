@@ -1,0 +1,310 @@
+# Hypothesis Registry — MGC Proxy Overnight Range Gate
+#
+# Locked:        2026-04-11T01:00:00+10:00
+# Author:        Claude Code session (wave 4 lit-grounded discovery)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  17.60 calendar years (GC proxy 2010-06-07 to 2025-12-31)
+# Testing mode:  family (Pathway A, BH FDR at K=27)
+#
+# AUDIT NOTE: GC parent gold futures as proxy for MGC micro.
+# Price-safe per Amendment 3.1 (price-based features only).
+# OVNRNG_10 requires overnight_range >= $10 for gold.
+# Passes ~57% of MGC trading days — moderate selectivity.
+# 9 sessions x 3 RR = 27 trials.
+
+metadata:
+  name: "mgc-proxy-overnight"
+  purpose: |
+    Test whether large overnight range (>= $10) predicts stronger MGC
+    ORB breakout edge using GC parent as proxy. Overnight range captures
+    institutional repositioning in gold during off-hours. Threshold
+    calibrated to gold price scale. 57% pass rate provides moderate
+    selectivity while retaining adequate sample size.
+  date_locked: "2026-04-11T01:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 17.60
+  data_source_mode: "proxy"
+  data_source_disclosure: "GC parent gold futures 2010-06-07 onwards as proxy for MGC micro (price-safe per Amendment 3.1)"
+  data_source: "GC parent gold futures 2010-06-07 onwards"
+  testing_mode: "family"
+  bailey_compliance:
+    trials: 27
+    horizon_years: 17.60
+    e_max_n: 1.0
+    min_btl_required_years: 6.59
+    headroom_pct: 62.6
+    status: "PASS"
+  total_expected_trials: 27
+
+hypotheses:
+  # --- OVNRNG_10 x 9 sessions x RR1.0 (ids 1-9) ---
+  - id: 1
+    name: "MGC TOKYO_OPEN OVNRNG_10 RR1.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS overnight price discovery; Crabel (1990) opening range"
+    economic_basis: |
+      Large overnight range (>= $10 gold) signals institutional repositioning
+      during off-hours. Gold trades 23 hours/day on COMEX Globex; significant
+      overnight movement indicates information arrival from Asian/European
+      markets that produces higher-quality ORB breakouts.
+    filter:
+      type: OVNRNG_10
+      column: overnight_range
+      thresholds: [10]
+    scope:
+      instruments: [MGC]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=27"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 2
+    name: "MGC LONDON_METALS OVNRNG_10 RR1.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Same overnight repositioning mechanism. All sessions tested for honesty."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 3
+    name: "MGC EUROPE_FLOW OVNRNG_10 RR1.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Same overnight repositioning mechanism."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 4
+    name: "MGC CME_REOPEN OVNRNG_10 RR1.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Same overnight repositioning mechanism."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 5
+    name: "MGC US_DATA_830 OVNRNG_10 RR1.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Same overnight repositioning mechanism."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 6
+    name: "MGC NYSE_OPEN OVNRNG_10 RR1.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Same overnight repositioning mechanism."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 7
+    name: "MGC US_DATA_1000 OVNRNG_10 RR1.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Same overnight repositioning mechanism."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 8
+    name: "MGC COMEX_SETTLE OVNRNG_10 RR1.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Same overnight repositioning mechanism."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 9
+    name: "MGC CME_PRECLOSE OVNRNG_10 RR1.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Same overnight repositioning mechanism."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  # --- OVNRNG_10 x 9 sessions x RR1.5 (ids 10-18) ---
+  - id: 10
+    name: "MGC TOKYO_OPEN OVNRNG_10 RR1.5"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + higher RR for continuation."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 11
+    name: "MGC LONDON_METALS OVNRNG_10 RR1.5"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + higher RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 12
+    name: "MGC EUROPE_FLOW OVNRNG_10 RR1.5"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + higher RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 13
+    name: "MGC CME_REOPEN OVNRNG_10 RR1.5"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + higher RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 14
+    name: "MGC US_DATA_830 OVNRNG_10 RR1.5"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + higher RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 15
+    name: "MGC NYSE_OPEN OVNRNG_10 RR1.5"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + higher RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 16
+    name: "MGC US_DATA_1000 OVNRNG_10 RR1.5"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + higher RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 17
+    name: "MGC COMEX_SETTLE OVNRNG_10 RR1.5"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + higher RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 18
+    name: "MGC CME_PRECLOSE OVNRNG_10 RR1.5"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + higher RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  # --- OVNRNG_10 x 9 sessions x RR2.0 (ids 19-27) ---
+  - id: 19
+    name: "MGC TOKYO_OPEN OVNRNG_10 RR2.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + highest RR for strong continuation."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [TOKYO_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 20
+    name: "MGC LONDON_METALS OVNRNG_10 RR2.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + highest RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [LONDON_METALS], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 21
+    name: "MGC EUROPE_FLOW OVNRNG_10 RR2.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + highest RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [EUROPE_FLOW], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 22
+    name: "MGC CME_REOPEN OVNRNG_10 RR2.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + highest RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [CME_REOPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 23
+    name: "MGC US_DATA_830 OVNRNG_10 RR2.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + highest RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [US_DATA_830], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 24
+    name: "MGC NYSE_OPEN OVNRNG_10 RR2.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + highest RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 25
+    name: "MGC US_DATA_1000 OVNRNG_10 RR2.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + highest RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 26
+    name: "MGC COMEX_SETTLE OVNRNG_10 RR2.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + highest RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [COMEX_SETTLE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 27
+    name: "MGC CME_PRECLOSE OVNRNG_10 RR2.0"
+    theory_citation: "Barclay & Hendershott (2003) RFS"
+    economic_basis: "Overnight repositioning + highest RR."
+    filter: { type: OVNRNG_10, column: overnight_range, thresholds: [10] }
+    scope: { instruments: [MGC], sessions: [CME_PRECLOSE], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=27", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+total_hypothesis_count: 27
+total_expected_trials: 27
+budget_check:
+  mode: "proxy"
+  max_allowed_proxy: 300
+  strict_bailey_e_1_0_max_n: 27
+  data_horizon_years_available: 17.60
+  status: "under budget"

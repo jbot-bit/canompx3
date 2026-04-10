@@ -1,0 +1,294 @@
+# Hypothesis Registry — MNQ Day-of-Week Effects
+#
+# Locked:        2026-04-11T01:00:00+10:00
+# Author:        Claude Code session (wave 4 lit-grounded discovery)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  6.65 calendar years (MNQ real micro 2019-05-06 to 2025-12-31)
+# Testing mode:  family (Pathway A, BH FDR at K=24)
+#
+# AUDIT NOTE: Two DOW filters tested: ORB_G5_NOFRI (exclude Friday)
+# and ORB_G5_NOMON (exclude Monday). Each across 12 sessions x 1 RR = 24.
+# Friday position-squaring degrades breakout follow-through.
+# Monday gap risk creates noisy opens.
+
+metadata:
+  name: "mnq-dow"
+  purpose: |
+    Test whether day-of-week exclusions (no-Friday, no-Monday) with G5
+    size gate improve MNQ ORB breakout edge. Friday position-squaring
+    and Monday gap risk are well-documented calendar effects in equity
+    futures that may degrade breakout quality on those days.
+  date_locked: "2026-04-11T01:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.65
+  data_source: "real CME Micro E-mini Nasdaq-100 futures 2019-05-06 onwards"
+  testing_mode: "family"
+  bailey_compliance:
+    trials: 24
+    horizon_years: 6.65
+    e_max_n: 1.0
+    min_btl_required_years: 6.36
+    headroom_pct: 4.4
+    status: "PASS"
+  total_expected_trials: 24
+
+hypotheses:
+  - id: 1
+    name: "MNQ TOKYO_OPEN ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE day-of-week effect in stock returns; Cross (1973) FAJ"
+    economic_basis: |
+      Friday position-squaring by institutional traders degrades breakout
+      follow-through. French (1980) documents significant day-of-week effects
+      in equity returns, with Friday showing distinct patterns from
+      portfolio rebalancing and risk reduction ahead of weekends.
+    filter:
+      type: ORB_G5_NOFRI
+      column: orb_height
+      thresholds: [5]
+      dow_exclusion: [5]
+    scope:
+      instruments: [MNQ]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=24"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 2
+    name: "MNQ SINGAPORE_OPEN ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Friday exclusion mechanism. All sessions tested for honesty."
+    filter: { type: ORB_G5_NOFRI, column: orb_height, thresholds: [5], dow_exclusion: [5] }
+    scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 3
+    name: "MNQ LONDON_METALS ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Friday exclusion mechanism."
+    filter: { type: ORB_G5_NOFRI, column: orb_height, thresholds: [5], dow_exclusion: [5] }
+    scope: { instruments: [MNQ], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 4
+    name: "MNQ EUROPE_FLOW ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Friday exclusion mechanism."
+    filter: { type: ORB_G5_NOFRI, column: orb_height, thresholds: [5], dow_exclusion: [5] }
+    scope: { instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 5
+    name: "MNQ CME_REOPEN ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Friday exclusion mechanism."
+    filter: { type: ORB_G5_NOFRI, column: orb_height, thresholds: [5], dow_exclusion: [5] }
+    scope: { instruments: [MNQ], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 6
+    name: "MNQ US_DATA_830 ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Friday exclusion mechanism."
+    filter: { type: ORB_G5_NOFRI, column: orb_height, thresholds: [5], dow_exclusion: [5] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 7
+    name: "MNQ NYSE_OPEN ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Friday exclusion mechanism."
+    filter: { type: ORB_G5_NOFRI, column: orb_height, thresholds: [5], dow_exclusion: [5] }
+    scope: { instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 8
+    name: "MNQ US_DATA_1000 ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Friday exclusion mechanism."
+    filter: { type: ORB_G5_NOFRI, column: orb_height, thresholds: [5], dow_exclusion: [5] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 9
+    name: "MNQ COMEX_SETTLE ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Friday exclusion mechanism."
+    filter: { type: ORB_G5_NOFRI, column: orb_height, thresholds: [5], dow_exclusion: [5] }
+    scope: { instruments: [MNQ], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 10
+    name: "MNQ NYSE_CLOSE ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Friday exclusion mechanism."
+    filter: { type: ORB_G5_NOFRI, column: orb_height, thresholds: [5], dow_exclusion: [5] }
+    scope: { instruments: [MNQ], sessions: [NYSE_CLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 11
+    name: "MNQ CME_PRECLOSE ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Friday exclusion mechanism."
+    filter: { type: ORB_G5_NOFRI, column: orb_height, thresholds: [5], dow_exclusion: [5] }
+    scope: { instruments: [MNQ], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 12
+    name: "MNQ BRISBANE_1025 ORB_G5_NOFRI RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Friday exclusion mechanism."
+    filter: { type: ORB_G5_NOFRI, column: orb_height, thresholds: [5], dow_exclusion: [5] }
+    scope: { instruments: [MNQ], sessions: [BRISBANE_1025], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 13
+    name: "MNQ TOKYO_OPEN ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE; Gibbons & Hess (1981) JB Monday effect"
+    economic_basis: |
+      Monday gap risk creates noisy opens. Weekend information accumulation
+      produces outsized gaps that may trigger false breakouts. Excluding
+      Monday isolates cleaner intraweek breakout dynamics.
+    filter:
+      type: ORB_G5_NOMON
+      column: orb_height
+      thresholds: [5]
+      dow_exclusion: [1]
+    scope:
+      instruments: [MNQ]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=24"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 14
+    name: "MNQ SINGAPORE_OPEN ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Monday exclusion mechanism. All sessions tested for honesty."
+    filter: { type: ORB_G5_NOMON, column: orb_height, thresholds: [5], dow_exclusion: [1] }
+    scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 15
+    name: "MNQ LONDON_METALS ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Monday exclusion mechanism."
+    filter: { type: ORB_G5_NOMON, column: orb_height, thresholds: [5], dow_exclusion: [1] }
+    scope: { instruments: [MNQ], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 16
+    name: "MNQ EUROPE_FLOW ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Monday exclusion mechanism."
+    filter: { type: ORB_G5_NOMON, column: orb_height, thresholds: [5], dow_exclusion: [1] }
+    scope: { instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 17
+    name: "MNQ CME_REOPEN ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Monday exclusion mechanism."
+    filter: { type: ORB_G5_NOMON, column: orb_height, thresholds: [5], dow_exclusion: [1] }
+    scope: { instruments: [MNQ], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 18
+    name: "MNQ US_DATA_830 ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Monday exclusion mechanism."
+    filter: { type: ORB_G5_NOMON, column: orb_height, thresholds: [5], dow_exclusion: [1] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 19
+    name: "MNQ NYSE_OPEN ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Monday exclusion mechanism."
+    filter: { type: ORB_G5_NOMON, column: orb_height, thresholds: [5], dow_exclusion: [1] }
+    scope: { instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 20
+    name: "MNQ US_DATA_1000 ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Monday exclusion mechanism."
+    filter: { type: ORB_G5_NOMON, column: orb_height, thresholds: [5], dow_exclusion: [1] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 21
+    name: "MNQ COMEX_SETTLE ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Monday exclusion mechanism."
+    filter: { type: ORB_G5_NOMON, column: orb_height, thresholds: [5], dow_exclusion: [1] }
+    scope: { instruments: [MNQ], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 22
+    name: "MNQ NYSE_CLOSE ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Monday exclusion mechanism."
+    filter: { type: ORB_G5_NOMON, column: orb_height, thresholds: [5], dow_exclusion: [1] }
+    scope: { instruments: [MNQ], sessions: [NYSE_CLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 23
+    name: "MNQ CME_PRECLOSE ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Monday exclusion mechanism."
+    filter: { type: ORB_G5_NOMON, column: orb_height, thresholds: [5], dow_exclusion: [1] }
+    scope: { instruments: [MNQ], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 24
+    name: "MNQ BRISBANE_1025 ORB_G5_NOMON RR1.0"
+    theory_citation: "French (1980) JFE"
+    economic_basis: "Same Monday exclusion mechanism."
+    filter: { type: ORB_G5_NOMON, column: orb_height, thresholds: [5], dow_exclusion: [1] }
+    scope: { instruments: [MNQ], sessions: [BRISBANE_1025], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+total_hypothesis_count: 24
+total_expected_trials: 24
+budget_check:
+  mode: "clean"
+  max_allowed_clean: 300
+  strict_bailey_e_1_0_max_n: 27
+  data_horizon_years_available: 6.65
+  status: "under budget"

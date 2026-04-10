@@ -1,0 +1,276 @@
+# Hypothesis Registry — MNQ Cross-Asset Volatility Gate
+#
+# Locked:        2026-04-11T01:00:00+10:00
+# Author:        Claude Code session (wave 4 lit-grounded discovery)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  6.65 calendar years (MNQ real micro 2019-05-06 to 2025-12-31)
+# Testing mode:  family (Pathway A, BH FDR at K=24)
+#
+# AUDIT NOTE: X_MES_ATR60 requires MES ATR percentile >= 60.
+# Cross-market vol spillover — when S&P is volatile, Nasdaq breakouts
+# are stronger. Prior validated: US_DATA_1000 X_MES_ATR60 is deployed Lane 5.
+
+metadata:
+  name: "mnq-cross-asset"
+  purpose: |
+    Test whether cross-market volatility (MES ATR pctl >= 60) predicts
+    stronger MNQ ORB breakout edge. When S&P 500 is in a high-vol regime,
+    equity index momentum spillover should produce larger and more
+    directional Nasdaq breakouts across all sessions.
+  date_locked: "2026-04-11T01:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.65
+  data_source: "real CME Micro E-mini Nasdaq-100 futures 2019-05-06 onwards"
+  testing_mode: "family"
+  bailey_compliance:
+    trials: 24
+    horizon_years: 6.65
+    e_max_n: 1.0
+    min_btl_required_years: 6.36
+    headroom_pct: 4.4
+    status: "PASS"
+  total_expected_trials: 24
+
+hypotheses:
+  - id: 1
+    name: "MNQ TOKYO_OPEN X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF value and momentum everywhere; Forbes & Rigobon (2002) JF contagion"
+    economic_basis: |
+      Cross-market volatility spillover: when S&P 500 (MES) is in a high-vol
+      regime (ATR pctl >= 60), equity index momentum transmits across markets.
+      Asness et al (2013) document pervasive value/momentum factors across
+      asset classes. Higher S&P volatility predicts larger, more directional
+      Nasdaq breakouts.
+    filter:
+      type: X_MES_ATR60
+      column: mes_atr_pctl
+      thresholds: [60]
+    scope:
+      instruments: [MNQ]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=24"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 2
+    name: "MNQ SINGAPORE_OPEN X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Same cross-market vol spillover mechanism. All sessions tested for honesty."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 3
+    name: "MNQ LONDON_METALS X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Same cross-market vol spillover mechanism."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 4
+    name: "MNQ EUROPE_FLOW X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Same cross-market vol spillover mechanism."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 5
+    name: "MNQ CME_REOPEN X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Same cross-market vol spillover mechanism."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [CME_REOPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 6
+    name: "MNQ US_DATA_830 X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Same cross-market vol spillover mechanism."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 7
+    name: "MNQ NYSE_OPEN X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Same cross-market vol spillover mechanism."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 8
+    name: "MNQ US_DATA_1000 X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Same cross-market vol spillover mechanism."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 9
+    name: "MNQ COMEX_SETTLE X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Same cross-market vol spillover mechanism."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [COMEX_SETTLE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 10
+    name: "MNQ NYSE_CLOSE X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Same cross-market vol spillover mechanism."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [NYSE_CLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 11
+    name: "MNQ CME_PRECLOSE X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Same cross-market vol spillover mechanism."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [CME_PRECLOSE], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 12
+    name: "MNQ BRISBANE_1025 X_MES_ATR60 RR1.0"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Same cross-market vol spillover mechanism."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [BRISBANE_1025], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 13
+    name: "MNQ TOKYO_OPEN X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR for continuation."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 14
+    name: "MNQ SINGAPORE_OPEN X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 15
+    name: "MNQ LONDON_METALS X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 16
+    name: "MNQ EUROPE_FLOW X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 17
+    name: "MNQ CME_REOPEN X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 18
+    name: "MNQ US_DATA_830 X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 19
+    name: "MNQ NYSE_OPEN X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 20
+    name: "MNQ US_DATA_1000 X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 21
+    name: "MNQ COMEX_SETTLE X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 22
+    name: "MNQ NYSE_CLOSE X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [NYSE_CLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 23
+    name: "MNQ CME_PRECLOSE X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+  - id: 24
+    name: "MNQ BRISBANE_1025 X_MES_ATR60 RR1.5"
+    theory_citation: "Asness, Moskowitz & Pedersen (2013) JF"
+    economic_basis: "Cross-market vol spillover + higher RR."
+    filter: { type: X_MES_ATR60, column: mes_atr_pctl, thresholds: [60] }
+    scope: { instruments: [MNQ], sessions: [BRISBANE_1025], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability"]
+
+total_hypothesis_count: 24
+total_expected_trials: 24
+budget_check:
+  mode: "clean"
+  max_allowed_clean: 300
+  strict_bailey_e_1_0_max_n: 27
+  data_horizon_years_available: 6.65
+  status: "under budget"
