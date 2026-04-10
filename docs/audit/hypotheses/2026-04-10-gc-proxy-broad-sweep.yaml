@@ -1,0 +1,135 @@
+# GC Proxy — Broad Exploratory Sweep
+# Pathway A family testing (BH FDR, Amendment 3.0 + 3.1)
+#
+# Locked:        2026-04-10T18:00:00+10:00
+# Holdout mode:  A (2026-01-01 sacred)
+# Data source:   GC parent futures 2010-2026 (proxy for MGC)
+# Data horizon:  15.5 calendar years
+# Testing mode:  family (BH FDR at q=0.05 across all 10 hypotheses)
+#
+# This file covers the broader search space: G-filters, GAP, COST_LT,
+# secondary sessions. Tested as a family (BH FDR) because these are
+# exploratory, not individually theory-driven.
+#
+# Bailey: N=10, MinBTL = 2*ln(10)/1.0^2 = 4.61yr << 15.5yr. PASS.
+
+metadata:
+  name: "gc-proxy-broad-sweep"
+  purpose: |
+    Exploratory sweep across additional filter families and sessions
+    on 16yr GC proxy data. BH FDR correction across the full family
+    of 10 hypotheses. Includes G-filters (regime-dependent pass rates),
+    GAP, COST_LT, and secondary sessions.
+  date_locked: "2026-04-10T18:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 15.5
+  data_source: "GC parent gold futures 2010-06-07 onwards (proxy for MGC)"
+  data_source_mode: "proxy"
+  data_source_disclosure: "GC full-size gold used as price proxy for MGC per Amendment 3.1."
+  testing_mode: "family"
+  bailey_compliance:
+    trials: 10
+    horizon_years: 15.5
+    e_max_n: 1.0
+    min_btl_required_years: 4.61
+    headroom_pct: 236
+    status: "PASS"
+  total_expected_trials: 10
+
+hypotheses:
+  - id: 1
+    name: "GC NYSE_OPEN G5 RR1.0"
+    theory_citation: "Crabel (1990) ch. 3"
+    economic_basis: "Meaningful ORB size (G5) at NYSE open — Crabel commitment."
+    filter: {type: ORB_G5, column: orb_size_points}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 on K=10 family", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 2
+    name: "GC NYSE_OPEN G5 RR2.0"
+    theory_citation: "Crabel (1990) ch. 3"
+    economic_basis: "G5 ORB size at NYSE open — continuation target."
+    filter: {type: ORB_G5, column: orb_size_points}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 on K=10 family", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 3
+    name: "GC NYSE_OPEN G6 RR2.0"
+    theory_citation: "Crabel (1990) ch. 3"
+    economic_basis: "Stricter ORB size filter — stronger commitment, fewer but higher-quality trades."
+    filter: {type: ORB_G6, column: orb_size_points}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 on K=10 family", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 4
+    name: "GC US_DATA_1000 G5 RR1.0"
+    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER"
+    economic_basis: "Meaningful ORB at macro window — information incorporation."
+    filter: {type: ORB_G5, column: orb_size_points}
+    scope: {instruments: [GC], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 on K=10 family", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 5
+    name: "GC US_DATA_830 unfiltered RR1.0"
+    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER"
+    economic_basis: "8:30 AM ET macro releases (NFP, CPI) — earliest US data session."
+    filter: {type: NO_FILTER, column: null}
+    scope: {instruments: [GC], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 on K=10 family", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 6
+    name: "GC US_DATA_830 PDR_R080 RR1.0"
+    theory_citation: "Andersen, Bollerslev, Diebold, Vega (2003) AER; ABDL (2003)"
+    economic_basis: "8:30 AM macro on high-vol-persistence days."
+    filter: {type: PDR_R080, column: prev_day_range}
+    scope: {instruments: [GC], sessions: [US_DATA_830], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 on K=10 family", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 7
+    name: "GC LONDON_METALS G5 RR2.0"
+    theory_citation: "O'Hara (1995) Market Microstructure Theory"
+    economic_basis: "Meaningful ORB size at London gold pricing — absolute threshold."
+    filter: {type: ORB_G5, column: orb_size_points}
+    scope: {instruments: [GC], sessions: [LONDON_METALS], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 on K=10 family", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 8
+    name: "GC NYSE_OPEN COST_LT10 RR1.0"
+    theory_citation: "Crabel (1990); cost-friction literature"
+    economic_basis: "Cost ratio filter — selects ORBs where friction is manageable."
+    filter: {type: COST_LT10, column: cost_risk_pct}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 on K=10 family", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 9
+    name: "GC EUROPE_FLOW G5 RR2.0"
+    theory_citation: "French & Roll (1986) JFE"
+    economic_basis: "Meaningful ORB at European spillover — absolute threshold."
+    filter: {type: ORB_G5, column: orb_size_points}
+    scope: {instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 on K=10 family", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 10
+    name: "GC TOKYO_OPEN unfiltered RR1.0"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: "Asian session momentum in gold. Weakest baseline (+0.008) but 16yr of data — let the data decide."
+    filter: {type: NO_FILTER, column: null}
+    scope: {instruments: [GC], sessions: [TOKYO_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 on K=10 family", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+total_hypothesis_count: 10
+total_expected_trials: 10
+budget_check:
+  mode: "proxy"
+  strict_bailey_e_1_0_max_n: 2980
+  data_horizon_years_available: 15.5

@@ -1,0 +1,196 @@
+# GC Proxy — Era-Dependent Sessions (LONDON_METALS + EUROPE_FLOW)
+# Pathway B individual hypothesis testing (Amendment 3.0 + 3.1)
+#
+# Locked:        2026-04-10T18:00:00+10:00
+# Holdout mode:  A (2026-01-01 sacred)
+# Data source:   GC parent futures 2010-2026 (proxy for MGC)
+# Data horizon:  15.5 calendar years
+# Testing mode:  individual
+#
+# These sessions show era-dependent edge on GC data:
+# LONDON_METALS: +0.18 (2010-14), +0.01 (2015-19), +0.07 (2020-22), +0.03 (2023-25)
+# EUROPE_FLOW: -0.02 (2010-14), -0.06 (2015-19), +0.10 (2020-22), +0.10 (2023-25)
+#
+# Hypothesis: relative filters (PDR, OVNRNG) may stabilize the edge
+# by selecting days where the mechanism is strongest.
+#
+# Bailey: N=6, MinBTL = 2*ln(6)/1.0^2 = 3.58yr << 15.5yr. PASS.
+
+metadata:
+  name: "gc-proxy-era-dependent"
+  purpose: |
+    Test whether relative filters stabilize era-dependent gold ORB edges
+    at LONDON_METALS and EUROPE_FLOW sessions. These sessions have
+    intermittent positive edge — the question is whether vol persistence
+    (PDR) or overnight information (OVNRNG) selects the profitable regime.
+  date_locked: "2026-04-10T18:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 15.5
+  data_source: "GC parent gold futures 2010-06-07 onwards (proxy for MGC)"
+  data_source_mode: "proxy"
+  data_source_disclosure: "GC full-size gold used as price proxy for MGC per Amendment 3.1."
+  testing_mode: "individual"
+  bailey_compliance:
+    trials: 6
+    horizon_years: 15.5
+    e_max_n: 1.0
+    min_btl_required_years: 3.58
+    headroom_pct: 333
+    status: "PASS"
+  total_expected_trials: 6
+
+hypotheses:
+  - id: 1
+    name: "GC LONDON_METALS unfiltered RR2.0 — London gold pricing"
+    theory_citation: "O'Hara (1995) Market Microstructure Theory; LBMA Gold Price"
+    economic_basis: |
+      London gold price fix is the global reference for physical gold.
+      LONDON_METALS captures the pricing window. 16yr unfiltered baseline
+      +0.074 but era-dependent. RR2.0 targets sustained continuation
+      from institutional physical-market positioning.
+    filter:
+      type: NO_FILTER
+      column: null
+    scope:
+      instruments: [GC]
+      sessions: [LONDON_METALS]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 2
+    name: "GC LONDON_METALS PDR_R080 RR2.0 — London gold + vol persistence"
+    theory_citation: "O'Hara (1995); ABDL (2003) Econometrica"
+    economic_basis: |
+      Vol persistence filter selects days after high-range sessions,
+      where London pricing flow is most active. Hypothesis: the edge
+      that was strong 2010-2014 and faded 2015-2019 was vol-conditional —
+      PDR_R080 should recover it by selecting only high-activity days.
+    filter:
+      type: PDR_R080
+      column: prev_day_range
+    scope:
+      instruments: [GC]
+      sessions: [LONDON_METALS]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 3
+    name: "GC LONDON_METALS OVNRNG_50 RR2.0 — London gold + overnight info"
+    theory_citation: "O'Hara (1995); Ito, Engle, Lin (1992) JIE"
+    economic_basis: |
+      Overnight range reflects information accumulated during Asian
+      physical gold markets. High overnight range (above median) signals
+      active cross-session information flow that London pricing
+      concentrates into directional moves.
+    filter:
+      type: OVNRNG_50
+      column: overnight_range
+    scope:
+      instruments: [GC]
+      sessions: [LONDON_METALS]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 4
+    name: "GC EUROPE_FLOW unfiltered RR2.0 — cross-border info"
+    theory_citation: "French & Roll (1986) JFE; Hamao, Masulis, Ng (1990) RFS"
+    economic_basis: |
+      European information spillover into gold futures. The edge only
+      appears post-2020 — this is either a genuine regime shift (gold's
+      role as inflation hedge activated post-COVID) or noise. 16yr test
+      will show which.
+    filter:
+      type: NO_FILTER
+      column: null
+    scope:
+      instruments: [GC]
+      sessions: [EUROPE_FLOW]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 5
+    name: "GC EUROPE_FLOW PDR_R080 RR2.0 — cross-border + vol persistence"
+    theory_citation: "French & Roll (1986) JFE; ABDL (2003) Econometrica"
+    economic_basis: |
+      High prior-day range + European spillover. If the EUROPE_FLOW edge
+      is vol-conditional (only active when gold is moving), PDR_R080
+      should isolate the signal from the noise of quiet days.
+    filter:
+      type: PDR_R080
+      column: prev_day_range
+    scope:
+      instruments: [GC]
+      sessions: [EUROPE_FLOW]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+  - id: 6
+    name: "GC EUROPE_FLOW OVNRNG_50 RR2.0 — cross-border + overnight info"
+    theory_citation: "French & Roll (1986); Ito, Engle, Lin (1992) JIE"
+    economic_basis: |
+      High overnight range signals active Asian session that feeds
+      information into the European flow. This combines two cross-session
+      mechanisms: Asian overnight activity and European incorporation.
+    filter:
+      type: OVNRNG_50
+      column: overnight_range
+    scope:
+      instruments: [GC]
+      sessions: [EUROPE_FLOW]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 (Pathway B)"
+      - "Negative annualized Sharpe"
+      - "Walk-forward efficiency < 0.50"
+      - "Any era with N >= 50 and ExpR < -0.05"
+
+total_hypothesis_count: 6
+total_expected_trials: 6
+budget_check:
+  mode: "proxy"
+  strict_bailey_e_1_0_max_n: 2980
+  data_horizon_years_available: 15.5
