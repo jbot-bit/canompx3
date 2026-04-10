@@ -29,19 +29,17 @@ import time
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-from pipeline.log import get_logger
-
-logger = get_logger(__name__)
-
 import duckdb
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.audit_log import get_git_sha
 from pipeline.cost_model import get_cost_spec, stress_test_costs
 from pipeline.dst import (
     DST_AFFECTED_SESSIONS,
     classify_dst_verdict,
     is_winter_for_session,
 )
+from pipeline.log import get_logger
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
     CORE_MIN_SAMPLES,
@@ -80,7 +78,10 @@ from trading_app.hypothesis_loader import (
     load_hypothesis_by_sha,
 )
 from trading_app.strategy_discovery import parse_dst_regime
+from trading_app.validation_provenance import StrategyTradeWindowResolver
 from trading_app.walkforward import append_walkforward_result
+
+logger = get_logger(__name__)
 
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
@@ -1616,11 +1617,24 @@ def run_validation(
     # ── Phase C: Batch write all results ─────────────────────────────
     n_fdr_rejected = 0  # set by FDR hard gate below; used in Phase D logging
     processed_sids = [sr["row_dict"]["strategy_id"] for sr in serial_results]
+    validation_run_id = None
     if not dry_run and processed_sids:
+        import uuid
+
+        validation_run_id = (
+            f"{instrument}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        )
         with duckdb.connect(str(db_path)) as con:
             from pipeline.db_config import configure_connection
 
             configure_connection(con, writing=True)
+            promotion_git_sha = get_git_sha()
+            if promotion_git_sha is None:
+                raise RuntimeError(
+                    "Cannot resolve git SHA for promotion provenance; "
+                    "refusing to write native validated_setups rows fail-open."
+                )
+            provenance_resolver = StrategyTradeWindowResolver(con)
 
             # Purge validated_setups + edge_families ONLY for strategy_ids
             # being processed in this run.  Prior code used instrument +
@@ -1729,6 +1743,25 @@ def run_validation(
                     else:
                         noise_risk_val = None  # not computed (live_config treats as fail-closed)
 
+                    trade_window = provenance_resolver.resolve(
+                        instrument=rd["instrument"],
+                        orb_label=rd["orb_label"],
+                        orb_minutes=rd["orb_minutes"],
+                        entry_model=rd.get("entry_model") or "E1",
+                        rr_target=rd["rr_target"],
+                        confirm_bars=rd["confirm_bars"],
+                        filter_type=rd.get("filter_type", ""),
+                    )
+                    if (
+                        trade_window.trade_day_count <= 0
+                        or trade_window.first_trade_day is None
+                        or trade_window.last_trade_day is None
+                    ):
+                        raise RuntimeError(
+                            f"{sid}: cannot recompute canonical trade window "
+                            "for promotion provenance"
+                        )
+
                     con.execute(
                         """INSERT OR REPLACE INTO validated_setups
                            (strategy_id, promoted_from, instrument, orb_label,
@@ -1741,6 +1774,8 @@ def run_validation(
                             yearly_results, status,
                             median_risk_dollars, avg_risk_dollars,
                             avg_win_dollars, avg_loss_dollars,
+                            first_trade_day, last_trade_day, trade_day_count,
+                            validation_run_id, promotion_git_sha, promotion_provenance,
                             regime_waivers, regime_waiver_count,
                             dst_winter_n, dst_winter_avg_r,
                             dst_summer_n, dst_summer_avg_r,
@@ -1750,7 +1785,7 @@ def run_validation(
                             oos_exp_r, noise_risk,
                             era_dependent, max_year_pct,
                             p_value, n_trials_at_discovery, fst_hurdle)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         [
                             sid,
                             sid,
@@ -1779,6 +1814,12 @@ def run_validation(
                             rd.get("avg_risk_dollars"),
                             rd.get("avg_win_dollars"),
                             rd.get("avg_loss_dollars"),
+                            trade_window.first_trade_day,
+                            trade_window.last_trade_day,
+                            trade_window.trade_day_count,
+                            validation_run_id,
+                            promotion_git_sha,
+                            "VALIDATOR_NATIVE",
                             json.dumps(regime_waivers) if regime_waivers else None,
                             len(regime_waivers),
                             dst_split.get("winter_n"),
@@ -2201,9 +2242,12 @@ def run_validation(
         candidates = len(rows) - skipped_aliases
         rejection_rate = 1.0 - (passed / candidates) if candidates > 0 else 1.0
 
-        import uuid
+        if validation_run_id is None:
+            import uuid
 
-        run_id = f"{instrument}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            validation_run_id = (
+                f"{instrument}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            )
 
         with duckdb.connect(str(db_path)) as con:
             from pipeline.db_config import configure_connection
@@ -2221,10 +2265,10 @@ def run_validation(
                     phase1_rejected, phase2_rejected, phase3_rejected,
                     phase4_rejected, phase4c_rejected, phase4d_rejected,
                     phase4b_rejected, phase_fdr_rejected,
-                    final_passed, rejection_rate)
+                   final_passed, rejection_rate)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 [
-                    run_id,
+                    validation_run_id,
                     instrument,
                     candidates,
                     phase_counts["phase1"],
@@ -2241,7 +2285,7 @@ def run_validation(
             )
             con.commit()
         logger.info(
-            f"  Run logged: {run_id} — rejection_rate={rejection_rate:.1%}, "
+            f"  Run logged: {validation_run_id} — rejection_rate={rejection_rate:.1%}, "
             f"P1={phase_counts['phase1']}, P2={phase_counts['phase2']}, "
             f"P2b={phase_counts['phase2b']}, P3={phase_counts['phase3']}, "
             f"P4={phase_counts['phase4']}, P4b={phase_counts['phase4b']}, "

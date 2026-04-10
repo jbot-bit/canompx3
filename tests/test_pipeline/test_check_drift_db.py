@@ -390,6 +390,209 @@ class TestActiveMicroOnlyFiltersAfterMicroLaunch:
         assert "no recomputable traded days" in violations[0]
 
 
+# ── Native promotion provenance discipline ────────────────────────────
+
+
+class TestActiveNativePromotionProvenance:
+    """Native rows must carry populated, linkable promotion provenance."""
+
+    PROVENANCE_SCHEMA = """
+        CREATE TABLE validated_setups (
+            strategy_id VARCHAR PRIMARY KEY,
+            instrument VARCHAR,
+            orb_label VARCHAR,
+            orb_minutes INTEGER,
+            entry_model VARCHAR,
+            confirm_bars INTEGER,
+            filter_type VARCHAR,
+            rr_target DOUBLE,
+            status VARCHAR,
+            promotion_provenance VARCHAR,
+            validation_run_id VARCHAR,
+            promotion_git_sha VARCHAR,
+            first_trade_day DATE,
+            last_trade_day DATE,
+            trade_day_count INTEGER
+        );
+
+        CREATE TABLE validation_run_log (
+            run_id VARCHAR PRIMARY KEY
+        );
+    """
+
+    def test_passes_populated_native_row(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            self.PROVENANCE_SCHEMA,
+            """
+            INSERT INTO validation_run_log VALUES ('run_1');
+            INSERT INTO validated_setups VALUES (
+                'sid1', 'MNQ', 'CME_REOPEN', 5, 'E1', 1, 'NO_FILTER', 1.0,
+                'active', 'VALIDATOR_NATIVE', 'run_1', 'abc123def456',
+                '2024-01-02', '2024-01-03', 2
+            );
+            """,
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_native_promotion_provenance_populated()
+        assert violations == []
+
+    def test_catches_missing_fields(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            self.PROVENANCE_SCHEMA,
+            """
+            INSERT INTO validated_setups VALUES (
+                'sid1', 'MNQ', 'CME_REOPEN', 5, 'E1', 1, 'NO_FILTER', 1.0,
+                'active', 'VALIDATOR_NATIVE', NULL, NULL,
+                NULL, NULL, NULL
+            );
+            """,
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_native_promotion_provenance_populated()
+        assert len(violations) == 1
+        assert "missing promotion provenance fields" in violations[0]
+
+    def test_catches_missing_validation_run(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            self.PROVENANCE_SCHEMA,
+            """
+            INSERT INTO validated_setups VALUES (
+                'sid1', 'MNQ', 'CME_REOPEN', 5, 'E1', 1, 'NO_FILTER', 1.0,
+                'active', 'VALIDATOR_NATIVE', 'missing_run', 'abc123def456',
+                '2024-01-02', '2024-01-03', 2
+            );
+            """,
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_native_promotion_provenance_populated()
+        assert len(violations) == 1
+        assert "missing validation_run_log.run_id" in violations[0]
+
+    def test_catches_legacy_schema_missing_columns(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            """
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                status VARCHAR
+            );
+            CREATE TABLE validation_run_log (
+                run_id VARCHAR PRIMARY KEY
+            );
+            """,
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_native_promotion_provenance_populated()
+        assert len(violations) == 1
+        assert "missing native promotion provenance columns" in violations[0]
+
+
+class TestActiveNativeTradeWindowProvenance:
+    """Stored native trade-window provenance must match canonical recompute."""
+
+    TRADE_WINDOW_SCHEMA = """
+        CREATE TABLE validated_setups (
+            strategy_id VARCHAR PRIMARY KEY,
+            instrument VARCHAR,
+            orb_label VARCHAR,
+            orb_minutes INTEGER,
+            entry_model VARCHAR,
+            confirm_bars INTEGER,
+            filter_type VARCHAR,
+            rr_target DOUBLE,
+            status VARCHAR,
+            promotion_provenance VARCHAR,
+            first_trade_day DATE,
+            last_trade_day DATE,
+            trade_day_count INTEGER
+        );
+
+        CREATE TABLE daily_features (
+            trading_day DATE,
+            symbol VARCHAR,
+            orb_minutes INTEGER,
+            orb_CME_REOPEN_break_dir VARCHAR
+        );
+
+        CREATE TABLE orb_outcomes (
+            trading_day DATE,
+            symbol VARCHAR,
+            orb_minutes INTEGER,
+            orb_label VARCHAR,
+            entry_model VARCHAR,
+            confirm_bars INTEGER,
+            rr_target DOUBLE,
+            outcome VARCHAR,
+            pnl_r DOUBLE,
+            mae_r DOUBLE,
+            mfe_r DOUBLE,
+            entry_price DOUBLE,
+            stop_price DOUBLE
+        );
+    """
+
+    def test_passes_matching_window(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            self.TRADE_WINDOW_SCHEMA,
+            """
+            INSERT INTO validated_setups VALUES (
+                'sid1', 'MNQ', 'CME_REOPEN', 5, 'E1', 1, 'NO_FILTER', 1.0,
+                'active', 'VALIDATOR_NATIVE', '2024-01-02', '2024-01-03', 2
+            );
+            INSERT INTO daily_features VALUES
+                ('2024-01-02', 'MNQ', 5, 'LONG'),
+                ('2024-01-03', 'MNQ', 5, 'LONG');
+            INSERT INTO orb_outcomes VALUES
+                ('2024-01-02', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0),
+                ('2024-01-03', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0);
+            """,
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_native_trade_windows_match_provenance()
+        assert violations == []
+
+    def test_catches_mismatched_window(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            self.TRADE_WINDOW_SCHEMA,
+            """
+            INSERT INTO validated_setups VALUES (
+                'sid1', 'MNQ', 'CME_REOPEN', 5, 'E1', 1, 'NO_FILTER', 1.0,
+                'active', 'VALIDATOR_NATIVE', '2024-01-02', '2024-01-02', 1
+            );
+            INSERT INTO daily_features VALUES
+                ('2024-01-02', 'MNQ', 5, 'LONG'),
+                ('2024-01-03', 'MNQ', 5, 'LONG');
+            INSERT INTO orb_outcomes VALUES
+                ('2024-01-02', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0),
+                ('2024-01-03', 'MNQ', 5, 'CME_REOPEN', 'E1', 1, 1.0, 'win', 1.0, 0.2, 1.5, 100.0, 95.0);
+            """,
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_native_trade_windows_match_provenance()
+        assert len(violations) == 1
+        assert "stored trade window" in violations[0]
+
+    def test_catches_legacy_schema_missing_columns(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            """
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                status VARCHAR
+            );
+            """,
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_native_trade_windows_match_provenance()
+        assert len(violations) == 1
+        assert "missing native trade-window provenance columns" in violations[0]
+
+
 # ── Check 35: No E0 in DB ────────────────────────────────────────────
 
 

@@ -62,6 +62,34 @@ def _get_db_path() -> Path:
     return GOLD_DB_PATH
 
 
+def _table_exists(con, table_name: str) -> bool:
+    """Return True if the table exists in the connected DuckDB database."""
+    row = con.execute(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_name = ?
+        LIMIT 1
+        """,
+        [table_name],
+    ).fetchone()
+    return row is not None
+
+
+def _missing_table_columns(con, table_name: str, required: list[str]) -> list[str]:
+    """Return sorted required columns missing from a table."""
+    rows = con.execute(
+        """
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = ?
+        """,
+        [table_name],
+    ).fetchall()
+    present = {row[0] for row in rows}
+    return sorted(col for col in required if col not in present)
+
+
 # =============================================================================
 # FILES TO CHECK
 # =============================================================================
@@ -2064,13 +2092,8 @@ def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
     _own_con = False
     try:
         from pipeline.data_era import is_micro, micro_launch_day
-        from trading_app.config import ALL_FILTERS, VolumeFilter
-        from trading_app.strategy_discovery import (
-            _build_filter_day_sets,
-            _compute_relative_volumes,
-            _load_daily_features,
-            _load_outcomes_bulk,
-        )
+        from trading_app.config import ALL_FILTERS
+        from trading_app.validation_provenance import StrategyTradeWindowResolver
 
         if con is None:
             import duckdb
@@ -2107,36 +2130,19 @@ def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
         if not micro_rows:
             return violations
 
-        lane_cache: dict[tuple[str, int], tuple[dict, dict]] = {}
+        resolver = StrategyTradeWindowResolver(con)
         for strategy_id, instrument, orb_label, orb_minutes, entry_model, rr_target, confirm_bars, filter_type in micro_rows:
-            cache_key = (instrument, orb_minutes)
-            if cache_key not in lane_cache:
-                relevant_rows = [r for r in micro_rows if (r[1], r[3]) == cache_key]
-                orb_labels = sorted({r[2] for r in relevant_rows})
-                entry_models = sorted({r[4] for r in relevant_rows})
-                needed_filters = {r[7]: ALL_FILTERS[r[7]] for r in relevant_rows}
+            trade_window = resolver.resolve(
+                instrument=instrument,
+                orb_label=orb_label,
+                orb_minutes=orb_minutes,
+                entry_model=entry_model,
+                rr_target=rr_target,
+                confirm_bars=confirm_bars,
+                filter_type=filter_type,
+            )
 
-                features = _load_daily_features(con, instrument, orb_minutes, None, None)
-                if any(isinstance(f, VolumeFilter) for f in needed_filters.values()):
-                    _compute_relative_volumes(con, features, instrument, orb_labels, needed_filters)
-                filter_days = _build_filter_day_sets(features, orb_labels, needed_filters)
-                grouped_outcomes = _load_outcomes_bulk(
-                    con,
-                    instrument,
-                    orb_minutes,
-                    orb_labels,
-                    entry_models,
-                    holdout_date=None,
-                    start_date=None,
-                )
-                lane_cache[cache_key] = (filter_days, grouped_outcomes)
-
-            filter_days, grouped_outcomes = lane_cache[cache_key]
-            matching_day_set = filter_days.get((filter_type, orb_label), set())
-            grouped = grouped_outcomes.get((orb_label, entry_model, rr_target, confirm_bars), [])
-            traded_days = [o["trading_day"] for o in grouped if o["trading_day"] in matching_day_set]
-
-            if not traded_days:
+            if trade_window.trade_day_count <= 0 or trade_window.first_trade_day is None:
                 violations.append(
                     "  validated_setups: active micro-only strategy "
                     f"{strategy_id} has no recomputable traded days from canonical "
@@ -2144,7 +2150,7 @@ def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
                 )
                 continue
 
-            first_day = min(traded_days)
+            first_day = trade_window.first_trade_day
             launch_day = micro_launch_day(instrument)
             if first_day < launch_day:
                 violations.append(
@@ -2155,6 +2161,199 @@ def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
                 )
     except (ImportError, OSError) as e:
         print(f"    SKIP check_active_micro_only_filters_after_micro_launch: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_active_native_promotion_provenance_populated(con=None) -> list[str]:
+    """Native promotion provenance fields must be populated and linkable."""
+    violations = []
+    _own_con = False
+    try:
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        missing_validated_cols = _missing_table_columns(
+            con,
+            "validated_setups",
+            [
+                "status",
+                "promotion_provenance",
+                "validation_run_id",
+                "promotion_git_sha",
+                "first_trade_day",
+                "last_trade_day",
+                "trade_day_count",
+            ],
+        )
+        if missing_validated_cols:
+            violations.append(
+                "  validated_setups: missing native promotion provenance columns "
+                f"{missing_validated_cols}. Run init_trading_app_schema() migration "
+                "before enforcing native provenance drift checks."
+            )
+            return violations
+
+        if not _table_exists(con, "validation_run_log"):
+            violations.append(
+                "  validation_run_log: missing table required for native promotion "
+                "provenance linkage checks."
+            )
+            return violations
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, validation_run_id, promotion_git_sha,
+                   promotion_provenance, first_trade_day, last_trade_day,
+                   trade_day_count
+            FROM validated_setups
+            WHERE status = 'active'
+              AND promotion_provenance = 'VALIDATOR_NATIVE'
+            ORDER BY strategy_id
+            """
+        ).fetchall()
+
+        for sid, run_id, git_sha, provenance, first_day, last_day, trade_day_count in rows:
+            missing = []
+            if run_id in (None, ""):
+                missing.append("validation_run_id")
+            if git_sha in (None, ""):
+                missing.append("promotion_git_sha")
+            if provenance != "VALIDATOR_NATIVE":
+                missing.append("promotion_provenance")
+            if first_day is None:
+                missing.append("first_trade_day")
+            if last_day is None:
+                missing.append("last_trade_day")
+            if trade_day_count is None or trade_day_count <= 0:
+                missing.append("trade_day_count")
+            if missing:
+                violations.append(
+                    f"  validated_setups: active native row {sid} missing "
+                    f"promotion provenance fields: {missing}"
+                )
+                continue
+
+            run_row = con.execute(
+                "SELECT 1 FROM validation_run_log WHERE run_id = ?",
+                [run_id],
+            ).fetchone()
+            if run_row is None:
+                violations.append(
+                    f"  validated_setups: active native row {sid} references "
+                    f"missing validation_run_log.run_id {run_id!r}"
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_active_native_promotion_provenance_populated: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_active_native_trade_windows_match_provenance(con=None) -> list[str]:
+    """Stored native trade-window provenance must match canonical recomputation."""
+    violations = []
+    _own_con = False
+    try:
+        from trading_app.validation_provenance import StrategyTradeWindowResolver
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        missing_validated_cols = _missing_table_columns(
+            con,
+            "validated_setups",
+            [
+                "strategy_id",
+                "instrument",
+                "orb_label",
+                "orb_minutes",
+                "entry_model",
+                "rr_target",
+                "confirm_bars",
+                "filter_type",
+                "status",
+                "promotion_provenance",
+                "first_trade_day",
+                "last_trade_day",
+                "trade_day_count",
+            ],
+        )
+        if missing_validated_cols:
+            violations.append(
+                "  validated_setups: missing native trade-window provenance columns "
+                f"{missing_validated_cols}. Run init_trading_app_schema() migration "
+                "before enforcing canonical provenance drift checks."
+            )
+            return violations
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                   rr_target, confirm_bars, filter_type,
+                   first_trade_day, last_trade_day, trade_day_count
+            FROM validated_setups
+            WHERE status = 'active'
+              AND promotion_provenance = 'VALIDATOR_NATIVE'
+            ORDER BY strategy_id
+            """
+        ).fetchall()
+        if not rows:
+            return violations
+
+        resolver = StrategyTradeWindowResolver(con)
+        for (
+            sid,
+            instrument,
+            orb_label,
+            orb_minutes,
+            entry_model,
+            rr_target,
+            confirm_bars,
+            filter_type,
+            first_day,
+            last_day,
+            trade_day_count,
+        ) in rows:
+            canonical = resolver.resolve(
+                instrument=instrument,
+                orb_label=orb_label,
+                orb_minutes=orb_minutes,
+                entry_model=entry_model,
+                rr_target=rr_target,
+                confirm_bars=confirm_bars,
+                filter_type=filter_type,
+            )
+            if (
+                canonical.first_trade_day != first_day
+                or canonical.last_trade_day != last_day
+                or canonical.trade_day_count != trade_day_count
+            ):
+                violations.append(
+                    "  validated_setups: active native row "
+                    f"{sid} has stored trade window "
+                    f"({first_day}, {last_day}, N={trade_day_count}) but "
+                    f"canonical recompute is "
+                    f"({canonical.first_trade_day}, {canonical.last_trade_day}, "
+                    f"N={canonical.trade_day_count})"
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_active_native_trade_windows_match_provenance: {type(e).__name__}: {e}")
     finally:
         if _own_con and con is not None:
             con.close()
@@ -4874,6 +5073,18 @@ CHECKS = [
     (
         "Active micro-only filters first trade on/after micro launch",
         check_active_micro_only_filters_after_micro_launch,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Active native promotion provenance fields are populated",
+        check_active_native_promotion_provenance_populated,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Active native trade-window provenance matches canonical recomputation",
+        check_active_native_trade_windows_match_provenance,
         False,
         True,
     ),  # requires_db

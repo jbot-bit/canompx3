@@ -64,6 +64,62 @@ def _make_row(**overrides):
     return base
 
 
+def _seed_trade_window_facts(con, row: dict) -> None:
+    """Insert the minimal canonical facts needed for promotion provenance."""
+    instrument = row["instrument"]
+    orb_label = row["orb_label"]
+    orb_minutes = row["orb_minutes"]
+    entry_model = row["entry_model"]
+    confirm_bars = row["confirm_bars"]
+    rr_target = row["rr_target"]
+    filter_type = row["filter_type"]
+
+    trading_day = date(2024, 1, 2)
+    feature_cols = ["trading_day", "symbol", "orb_minutes", f"orb_{orb_label}_break_dir"]
+    feature_vals = [trading_day, instrument, orb_minutes, "LONG"]
+
+    if filter_type.startswith("ORB_G") or filter_type.startswith("ORB_L"):
+        feature_cols.append(f"orb_{orb_label}_size")
+        feature_vals.append(10.0)
+
+    if filter_type.startswith("ORB_VOL_"):
+        feature_cols.append(f"orb_{orb_label}_volume")
+        feature_vals.append(5000)
+
+    if filter_type.startswith("ATR_P"):
+        feature_cols.append("atr_20_pct")
+        feature_vals.append(80.0)
+
+    placeholders = ", ".join(["?"] * len(feature_cols))
+    con.execute(
+        f"INSERT INTO daily_features ({', '.join(feature_cols)}) VALUES ({placeholders})",
+        feature_vals,
+    )
+
+    con.execute(
+        """INSERT INTO orb_outcomes (
+               trading_day, symbol, orb_minutes, orb_label, entry_model,
+               confirm_bars, rr_target, outcome, pnl_r, mae_r, mfe_r,
+               entry_price, stop_price
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        [
+            trading_day,
+            instrument,
+            orb_minutes,
+            orb_label,
+            entry_model,
+            confirm_bars,
+            rr_target,
+            "win",
+            1.0,
+            0.2,
+            1.5,
+            100.0,
+            95.0,
+        ],
+    )
+
+
 class TestValidateStrategy:
     """Tests for the 6-phase validation function."""
 
@@ -659,6 +715,8 @@ class TestRunValidation:
                 f"INSERT INTO experimental_strategies ({col_str}) VALUES ({placeholders})",
                 list(s.values()),
             )
+            if s.get("validation_status") in (None, ""):
+                _seed_trade_window_facts(con, s)
         con.commit()
         con.close()
         return db_path
@@ -675,6 +733,31 @@ class TestRunValidation:
         count = con.execute("SELECT COUNT(*) FROM validated_setups").fetchone()[0]
         con.close()
         assert count == 1
+
+    def test_promotion_provenance_populated(self, tmp_path):
+        """Promoted rows carry native trade-window and run/git provenance."""
+        sid = "MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER"
+        db_path = self._setup_db(tmp_path, [_make_row(strategy_id=sid)])
+
+        run_validation(db_path=db_path, instrument="MGC", enable_walkforward=False)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        row = con.execute(
+            """SELECT first_trade_day, last_trade_day, trade_day_count,
+                      validation_run_id, promotion_git_sha, promotion_provenance
+               FROM validated_setups
+               WHERE strategy_id = ?""",
+            [sid],
+        ).fetchone()
+        con.close()
+
+        assert row is not None
+        assert str(row[0]) == "2024-01-02"
+        assert str(row[1]) == "2024-01-02"
+        assert row[2] == 1
+        assert row[3] is not None and row[3] != ""
+        assert row[4] is not None and row[4] != ""
+        assert row[5] == "VALIDATOR_NATIVE"
 
     def test_rejected_not_in_validated(self, tmp_path):
         """Rejected strategy does NOT appear in validated_setups."""
@@ -1563,8 +1646,9 @@ class TestWfStartOverrideAudit:
     """
 
     def test_all_active_instruments_have_override(self):
-        from trading_app.config import WF_START_OVERRIDE
         from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from trading_app.config import WF_START_OVERRIDE
+
         for inst in ACTIVE_ORB_INSTRUMENTS:
             assert inst in WF_START_OVERRIDE, (
                 f"WF_START_OVERRIDE missing {inst} — all active instruments "
@@ -1610,7 +1694,9 @@ class TestPathwayBWfeGate:
     def test_pathway_b_branch_references_min_wfe(self):
         """Static check: the Pathway B branch reads MIN_WFE."""
         import inspect
+
         from trading_app.strategy_validator import run_validation
+
         src = inspect.getsource(run_validation)
         # The Pathway B branch should contain a wfe query and MIN_WFE comparison
         assert "wfe" in src.lower(), "Pathway B branch must query WFE"
@@ -1623,7 +1709,9 @@ class TestPathwayBWfeGate:
     def test_pathway_b_branch_references_criterion_6(self):
         """Static check: rejection reason tags Criterion 6 for audit trail."""
         import inspect
+
         from trading_app.strategy_validator import run_validation
+
         src = inspect.getsource(run_validation)
         assert "criterion_6_pathway_b" in src, (
             "Pathway B rejection reason must tag criterion_6 for audit trail"
@@ -1632,7 +1720,9 @@ class TestPathwayBWfeGate:
     def test_pathway_b_branch_fail_closed_on_null_wfe(self):
         """Static check: null WFE → treat as 0.0 (fail-closed)."""
         import inspect
+
         from trading_app.strategy_validator import run_validation
+
         src = inspect.getsource(run_validation)
         # The fail-closed pattern: "else 0.0" when wfe is None
         assert "else 0.0" in src, (
@@ -1799,6 +1889,8 @@ class TestPathwayBEndToEnd:
                 f"INSERT INTO experimental_strategies ({col_str}) VALUES ({placeholders})",
                 list(s.values()),
             )
+            if s.get("validation_status") in (None, ""):
+                _seed_trade_window_facts(con, s)
         con.commit()
         con.close()
         return db_path
@@ -2079,6 +2171,8 @@ class TestPhaseC_DeleteScope:
                 f"INSERT INTO experimental_strategies ({col_str}) VALUES ({placeholders})",
                 list(row.values()),
             )
+            if row is new_row:
+                _seed_trade_window_facts(con, row)
 
         # Simulate prior promotion: insert pre-existing into validated_setups
         con.execute(
@@ -2177,6 +2271,8 @@ class TestFdrPoolIncludesCurrentInstrument:
                 f"INSERT INTO experimental_strategies ({col_str}) VALUES ({placeholders})",
                 list(row.values()),
             )
+            if row.get("validation_status") in (None, ""):
+                _seed_trade_window_facts(con, row)
         con.commit()
         con.close()
         return db_path

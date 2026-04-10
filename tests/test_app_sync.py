@@ -646,6 +646,12 @@ class TestSchemaSync:
             "max_drawdown_r",
             "yearly_results",
             "status",
+            "first_trade_day",
+            "last_trade_day",
+            "trade_day_count",
+            "validation_run_id",
+            "promotion_git_sha",
+            "promotion_provenance",
         }
         missing = required - cols
         assert not missing, f"Missing columns in validated_setups: {missing}"

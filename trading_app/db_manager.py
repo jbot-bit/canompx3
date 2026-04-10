@@ -209,6 +209,14 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
                 -- Execution spec (JSON)
                 execution_spec    TEXT,
 
+                -- Promotion-time provenance (Apr 2026 — institutional hardening)
+                first_trade_day   DATE,
+                last_trade_day    DATE,
+                trade_day_count   INTEGER,
+                validation_run_id TEXT,
+                promotion_git_sha TEXT,
+                promotion_provenance TEXT DEFAULT 'LEGACY',
+
                 -- Edge family membership
                 family_hash       TEXT,
                 is_family_head    BOOLEAN     DEFAULT FALSE,
@@ -328,6 +336,23 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
         for col, typedef in [
             ("regime_waivers", "TEXT"),
             ("regime_waiver_count", "INTEGER DEFAULT 0"),
+        ]:
+            try:
+                con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")
+            except duckdb.CatalogException:
+                pass  # column already exists
+
+        # Migration: promotion-time provenance fields (Apr 2026)
+        # These are the provenance fields we can populate honestly today
+        # without the not-yet-implemented dataset_snapshots / research_runs
+        # ledger. Default legacy rows stay visible until backfilled.
+        for col, typedef in [
+            ("first_trade_day", "DATE"),
+            ("last_trade_day", "DATE"),
+            ("trade_day_count", "INTEGER"),
+            ("validation_run_id", "TEXT"),
+            ("promotion_git_sha", "TEXT"),
+            ("promotion_provenance", "TEXT DEFAULT 'LEGACY'"),
         ]:
             try:
                 con.execute(f"ALTER TABLE validated_setups ADD COLUMN {col} {typedef}")

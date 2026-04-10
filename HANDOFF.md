@@ -6,6 +6,86 @@
 
 ---
 
+## Update (2026-04-11 — native promotion provenance hardening)
+
+### Headline
+
+Added native promotion provenance to `validated_setups`, centralized canonical
+trade-window recomputation, and hardened drift so the active shelf can audit
+promotion lineage honestly instead of relying on stale `strategy_trade_days`.
+
+### What changed
+
+- `trading_app/validation_provenance.py`
+  - new canonical `StrategyTradeWindowResolver`
+  - recomputes `first_trade_day`, `last_trade_day`, `trade_day_count` from:
+    - `daily_features`
+    - canonical filter logic from `trading_app.strategy_discovery`
+    - exact-lane `orb_outcomes`
+  - handles composite volume / cross-asset ATR filters
+- `trading_app/db_manager.py`
+  - added `validated_setups` columns:
+    - `first_trade_day`
+    - `last_trade_day`
+    - `trade_day_count`
+    - `validation_run_id`
+    - `promotion_git_sha`
+    - `promotion_provenance`
+  - additive migration is included in `init_trading_app_schema()`
+- `trading_app/strategy_validator.py`
+  - validator now fail-closes on missing git SHA
+  - validator now recomputes canonical trade windows before promotion
+  - native rows are stamped with:
+    - trade-window fields
+    - `validation_run_id`
+    - `promotion_git_sha`
+    - `promotion_provenance='VALIDATOR_NATIVE'`
+- `pipeline/check_drift.py`
+  - micro-launch check now delegates to the canonical resolver
+  - added:
+    - `check_active_native_promotion_provenance_populated()`
+    - `check_active_native_trade_windows_match_provenance()`
+  - hardened legacy-schema behavior:
+    - if `gold.db` has not been migrated yet, drift emits explicit schema
+      violations instead of crashing with `BinderException`
+- tests updated:
+  - `tests/test_app_sync.py`
+  - `tests/test_trading_app/test_db_manager.py` coverage already exercised by suite
+  - `tests/test_trading_app/test_strategy_validator.py`
+  - `tests/test_pipeline/test_check_drift_db.py`
+
+### Live DB state
+
+- Ran `init_trading_app_schema()` against repo `gold.db`
+- Result: additive `validated_setups` provenance columns are now present on the
+  live shelf DB, so the new drift checks run cleanly on real data
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check trading_app/validation_provenance.py trading_app/strategy_validator.py trading_app/db_manager.py pipeline/check_drift.py tests/test_app_sync.py tests/test_pipeline/test_check_drift_db.py tests/test_trading_app/test_strategy_validator.py`
+  - `All checks passed!`
+- `./.venv-wsl/bin/python -m pytest tests/test_app_sync.py tests/test_trading_app/test_db_manager.py tests/test_trading_app/test_strategy_validator.py tests/test_pipeline/test_check_drift_db.py -q`
+  - `229 passed`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 98 checks passed [OK], 0 skipped (DB unavailable), 7 advisory`
+- `./.venv-wsl/bin/python scripts/tools/audit_behavioral.py`
+  - passed all 7 checks
+- `./.venv-wsl/bin/python scripts/tools/audit_integrity.py`
+  - still fails for pre-existing unrelated integrity debt:
+    - `46 validated strategies with NULL family_hash`
+    - `GC: 17 active validated strategies (dead instrument)`
+
+### Notes
+
+- The new provenance path is intentionally honest about current limits:
+  it does **not** pretend `dataset_snapshots` / `research_runs` exist in the DB.
+  It stores only provenance we can populate truthfully today.
+- If another tool touches `validated_setups` promotion logic, re-read:
+  - `trading_app/validation_provenance.py`
+  - `trading_app/strategy_validator.py`
+  - `pipeline/check_drift.py`
+  before modifying anything.
+
 ## Update (2026-04-11 — active-shelf micro-data discipline hardening)
 
 ### Headline
