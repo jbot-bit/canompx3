@@ -32,15 +32,19 @@ from pipeline.dst import (
 )
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import (
+    ALL_FILTERS,
     ENTRY_MODELS,
     SKIP_ENTRY_MODELS,
     STOP_MULTIPLIERS,
+    CompositeFilter,
     CrossAssetATRFilter,
+    DayOfWeekSkipFilter,
     VolumeFilter,
     apply_tight_stop,
     get_filters_for_grid,
     is_e2_lookahead_filter,
 )
+from pipeline.dst import DOW_MISALIGNED_SESSIONS
 from trading_app.db_manager import compute_trade_day_hash, init_trading_app_schema
 from trading_app.hypothesis_loader import (
     HypothesisLoaderError,
@@ -1272,6 +1276,49 @@ def run_discovery(
         for s in sessions:
             all_grid_filters.update(get_filters_for_grid(instrument, s))
 
+        # Phase 4 Stage 4.1b: Hypothesis-mode filter injection.
+        # When a scope predicate is set and declares filter_types that are NOT
+        # in the legacy grid for this instrument, inject them from ALL_FILTERS.
+        # This allows pre-registered hypothesis files to test filter/session
+        # pairs that the legacy grid doesn't enumerate (e.g., GAP_R015 outside
+        # MGC/GC CME_REOPEN, or DOW composites outside LONDON_METALS).
+        #
+        # Safety rules:
+        # - Filter must exist in ALL_FILTERS (unknown string = clean error)
+        # - DOW composites skip sessions in DOW_MISALIGNED_SESSIONS (NYSE_OPEN)
+        # - E2 look-ahead filters still blocked by is_e2_lookahead_filter()
+        # - Per-session injection map respects DOW alignment
+        # - Legacy mode (scope_predicate is None) is unaffected
+        hypothesis_extra_by_session: dict[str, dict] = {s: {} for s in sessions}
+        if scope_predicate is not None:
+            declared_filter_types = scope_predicate.allowed_filter_types()
+            for ft in declared_filter_types:
+                if ft in all_grid_filters:
+                    continue  # already in legacy grid
+                if ft not in ALL_FILTERS:
+                    continue  # unknown — scope predicate will reject anyway
+                filter_obj = ALL_FILTERS[ft]
+                # DOW composite detection: CompositeFilter with DayOfWeekSkipFilter overlay
+                is_dow_composite = (
+                    isinstance(filter_obj, CompositeFilter)
+                    and isinstance(filter_obj.overlay, DayOfWeekSkipFilter)
+                )
+                for s in sessions:
+                    if is_dow_composite and s in DOW_MISALIGNED_SESSIONS:
+                        continue  # DOW misalignment guard
+                    hypothesis_extra_by_session[s][ft] = filter_obj
+                    all_grid_filters[ft] = filter_obj
+            injected_count = sum(len(v) for v in hypothesis_extra_by_session.values())
+            if injected_count > 0:
+                injected_types = sorted({
+                    ft for session_map in hypothesis_extra_by_session.values()
+                    for ft in session_map
+                })
+                logger.info(
+                    f"Phase 4: injected {len(injected_types)} hypothesis filter type(s) "
+                    f"across {injected_count} filter/session combinations: {injected_types}"
+                )
+
         logger.info("Computing relative volumes for volume filters...")
         _compute_relative_volumes(con, features, instrument, sessions, all_grid_filters)
 
@@ -1303,7 +1350,8 @@ def run_discovery(
         all_strategies = []  # list of (strategy_id, filter_key, trade_days, row_data)
         total_combos = 0
         for s in sessions:
-            nf = len(get_filters_for_grid(instrument, s))
+            # Include hypothesis-injected filters for per-session count
+            nf = len(get_filters_for_grid(instrument, s)) + len(hypothesis_extra_by_session.get(s, {}))
             total_combos += nf * len(RR_TARGETS) * len(CONFIRM_BARS_OPTIONS)  # E1 (all CBs)
             total_combos += nf * len(RR_TARGETS) * 2  # E2+E3 CB1 — E3 skipped at runtime (SKIP_ENTRY_MODELS)
             # but counted here for conservative n_trials_at_discovery (higher FST hurdle)
@@ -1342,7 +1390,9 @@ def run_discovery(
             # Phase 4 early-exit: skip sessions not referenced by any hypothesis
             if p4_allowed_sessions is not None and orb_label not in p4_allowed_sessions:
                 continue
-            session_filters = get_filters_for_grid(instrument, orb_label)
+            session_filters = dict(get_filters_for_grid(instrument, orb_label))
+            # Merge hypothesis-injected filters for this session
+            session_filters.update(hypothesis_extra_by_session.get(orb_label, {}))
             for filter_key, strategy_filter in session_filters.items():
                 # Phase 4 early-exit: skip filter_types not referenced by any
                 # hypothesis. strategy_filter.filter_type is the canonical
