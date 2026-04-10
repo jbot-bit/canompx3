@@ -617,7 +617,9 @@ class ExecutionEngine:
             direction: Trade direction. Defaults to orb.break_dir (close-based).
                        Phase 1.5 passes the touch direction for E2.
             entry_models: If provided, only arm strategies with these entry models.
-                          Phase 1.5 passes {"E2"}, Phase 2 passes {"E1"}.
+                          Phase 1.5 passes frozenset({"E2"}). Phase 2 passes None
+                          (no filter); E2 dedup is handled by the active_trades /
+                          completed_trades guard at the bottom of this method.
         """
         resolved_dir = direction or orb.break_dir
         assert resolved_dir is not None
