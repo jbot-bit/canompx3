@@ -6,6 +6,43 @@
 
 ---
 
+## Update (2026-04-10 evening — GC proxy branch merged, drift/SR cleanup)
+
+### Headline
+
+Merged `research/gc-proxy-validity` to main (30 commits, fast-forward). All infrastructure fixes applied. Drift 92/0/7 (all green). SR monitor Windows unicode bug fixed.
+
+### What changed
+
+**Code fixes:**
+- `pipeline/check_drift.py`: Check 57 (daily_features row integrity) scoped to ACTIVE_ORB_INSTRUMENTS — GC proxy data with single aperture no longer flags
+- `pipeline/check_drift.py`: Check 55 (cost model ranges) already scoped to skip proxy instruments (prior commit)
+- `trading_app/sr_monitor.py`: Replaced unicode chars (σ, ≈) with ASCII equivalents for Windows cp1252 console
+- `trading_app/prop_profiles.py`: Profile lanes updated to current multi-RR validated strategies (prior commit)
+- `family_rr_locks` DB table populated (6 rows for 6 families)
+
+**Criterion 11 survival report:** Regenerated. Gate FAILS at 26.2% (68.1% scaling breach). Structural — TopStep 50K Day-1 cap is 2 lots vs 5 bot lanes. Bot is in signal/demo mode. Not a code fix — F-1 scaling plan wiring needed before live.
+
+**SR ALARM on L3 (MNQ NYSE_OPEN ORB_G5 RR1.5):** Edge is NOT decaying (WR 43.7→42.4%, AvgR 0.095→0.093 — stable). Alarm driven by vol regime shift (MNQ ORB median 45.5→88.8 pts, +95%). Status: WATCH, not DECAY.
+
+**GC downstream audit:** 5 GC strategies in validated_setups are correctly excluded from all downstream modules (validator FDR, pulse fitness, profiles, SR monitor) because GC is not in ACTIVE_ORB_INSTRUMENTS. This is by-design — they're proxy research results pending MGC micro cross-validation.
+
+### What's pending (strategic decisions for user)
+
+1. **GC strategies cross-validation** — 5 validated on 16yr GC proxy data. Need hard audit (yearly JSON parsing fix) then MGC micro cross-validation. Handover: `docs/handoffs/2026-04-10-gc-proxy-discovery-handover.md`
+2. **Multi-RR re-run** — Validator DELETE bug wiped old RR1.0 strategies. Need re-run to recover. Handover: `docs/handoffs/2026-04-10-multi-rr-discovery-handover.md`
+3. **MES/MGC = 0 validated** — Coverage gap in portfolio
+4. **L3 NYSE_OPEN WATCH** — Monitor for vol normalization, no code action
+
+### State
+
+- Branch: `main` @ `6fb59854`
+- Drift: 92 pass / 0 fail / 7 advisory
+- Validated strategies: GC=5, MNQ=5 (10 total active)
+- Deployed: 5 MNQ lanes on `topstep_50k_mnq_auto`
+
+---
+
 ## Update (2026-04-10 later — Windows shortcut dedupe)
 
 ### Headline
