@@ -84,6 +84,19 @@ Default Codex entrypoints:
 
 Windows uses `.venv`. WSL uses `.venv-wsl`. Do not cross-wire them.
 
+Windows convenience entrypoints:
+
+- Easiest repo session:
+  - `codex.bat`
+- Isolated task/worktree:
+  - `codex-workstream.bat`
+- Menu/workstream manager:
+  - `ai-workstreams.bat`
+
+For a Windows user, `codex.bat` is the canonical simple path. It launches the
+same WSL project session as `scripts/infra/codex-project.sh` without asking the
+user to remember the repo internals.
+
 ## Supporting Docs
 
 Open these only when the task calls for them:

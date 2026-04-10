@@ -1,15 +1,15 @@
 @echo off
 setlocal
-title Codex Workstream Shortcut
+title Codex Isolated Workstream Shortcut
 cd /d "%~dp0\..\..\.."
 
 set "TASK=%~1"
 if "%TASK%"=="" (
-    set /p "TASK=Codex workstream name: "
+    set /p "TASK=Codex isolated workstream name: "
 )
 
 if "%TASK%"=="" (
-    echo Workstream name required.
+    echo Isolated workstream name required.
     pause
     exit /b 1
 )

@@ -22,6 +22,7 @@ VALID_MODES = {
     "claude",
     "codex",
     "codex-search",
+    "codex-project",
     "handoff",
     "list",
     "close",
@@ -159,6 +160,18 @@ def build_codex_wsl_command(
     return "\n".join(lines)
 
 
+def build_codex_project_wsl_command(root_wsl: str) -> str:
+    import shlex
+
+    return "\n".join(
+        [
+            "set -euo pipefail",
+            f"cd {shlex.quote(root_wsl)}",
+            "exec ./scripts/infra/codex-project.sh --no-alt-screen",
+        ]
+    )
+
+
 def ensure_managed_worktree(tool_name: str, workstream_name: str, purpose: str | None) -> tuple[Path, str | None]:
     saved_purpose = get_existing_purpose(tool_name, workstream_name)
     final_purpose = saved_purpose or purpose
@@ -213,6 +226,11 @@ def open_codex_workstream(workstream_name: str, purpose: str | None, search_mode
         if saved_purpose == "Investigate / search":
             search_mode = True
     return run_wsl(build_codex_wsl_command(root, workstream_name, purpose, search_mode))
+
+
+def open_codex_project() -> int:
+    root = windows_to_wsl(repo_root())
+    return run_wsl(build_codex_project_wsl_command(root))
 
 
 def handoff_workstream(
@@ -685,6 +703,8 @@ def main() -> int:
         if not task:
             return 1
         return open_codex_workstream(task, "Build / edit", False)
+    if args.mode == "codex-project":
+        return open_codex_project()
     if args.mode == "codex-search":
         task = args.task or prompt("Workstream name")
         if not task:

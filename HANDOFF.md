@@ -6,6 +6,83 @@
 
 ---
 
+## Update (2026-04-10 later — Windows Codex entrypoint cleanup)
+
+### Headline
+
+Added one plain Windows convenience entrypoint for Codex repo sessions:
+
+- `codex.bat`
+
+This is intentionally narrow. It fills a real missing path for Windows users who
+just want to open a normal Codex session in this repo without remembering the
+WSL launcher internals.
+
+This pass does **not** add another workstream/menu system. Existing roles stay:
+
+- `codex.bat`
+  - simplest normal repo Codex session
+- `codex-workstream.bat`
+  - isolated task/worktree
+- `ai-workstreams.bat`
+  - workstream/menu launcher
+
+### Design
+
+Windows already had:
+
+- menu/workstream launchers
+- isolated Codex workstream launchers
+
+but no dead-simple "open Codex in this repo now" Windows entrypoint.
+
+To avoid duplicating launch logic:
+
+- `codex.bat` shells into the existing PowerShell launcher
+- the PowerShell launcher dispatches a new `codex-project` mode
+- the Python Windows launcher dispatches that mode into the existing canonical
+  WSL entrypoint:
+  - `scripts/infra/codex-project.sh --no-alt-screen`
+
+So the new path is only a thin Windows convenience wrapper over the current
+canonical WSL launcher.
+
+### Cleanup
+
+Renamed the user-facing wording on `codex-workstream.bat` and the Windows
+shortcut copy so it is clearly an **isolated workstream**, not the default
+everyday entrypoint.
+
+### Files touched
+
+- `codex.bat`
+- `codex-workstream.bat`
+- `scripts/infra/windows-agent-launch.ps1`
+- `scripts/infra/windows_agent_launch.py`
+- `scripts/infra/windows-shortcuts/codex-workstream.bat`
+- `tests/test_tools/test_windows_agent_launch.py`
+- `CODEX.md`
+- `HANDOFF.md`
+
+### Verification
+
+- `python3 -m py_compile scripts/infra/windows_agent_launch.py tests/test_tools/test_windows_agent_launch.py`
+- `./.venv-wsl/bin/python -m pytest tests/test_tools/test_windows_agent_launch.py -q`
+  - result: `15 passed`
+
+### Operator truth
+
+For a beginner Windows user, the canonical easiest path is now:
+
+- open repo folder
+- run `codex.bat`
+
+That launches the same repo-aware WSL Codex session as:
+
+- `scripts/infra/codex-project.sh`
+
+without asking the user to remember the internal launcher structure.
+
 ## Update (2026-04-10 later — unified lifecycle-state reader)
 
 ### Headline
@@ -131,6 +208,15 @@ Why:
 - they activate `.venv-wsl`
 - they run session preflight
 - they pass claim mode for concurrency guardrails
+
+Windows / convenience:
+
+- `codex.bat`
+  - canonical simple path for a normal repo Codex session
+- `codex-workstream.bat`
+  - isolated task/worktree path
+- `ai-workstreams.bat`
+  - menu/workstream manager
 
 Do not use bare system `python3` as the normal repo path. It can produce false
 broken state because it bypasses `.venv-wsl` and misses repo deps like `duckdb`.

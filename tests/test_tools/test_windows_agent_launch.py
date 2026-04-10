@@ -141,6 +141,13 @@ class TestCodexWslCommand:
         assert "exec ./scripts/infra/codex-worktree.sh search task-a -- --no-alt-screen" in command
         assert "CANOMPX3_WORKSTREAM_PURPOSE" not in command
 
+    def test_builds_plain_project_command(self) -> None:
+        command = windows_agent_launch.build_codex_project_wsl_command("/mnt/c/repo")
+
+        assert "set -euo pipefail" in command
+        assert "cd /mnt/c/repo" in command
+        assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
+
 
 class TestOpenCodexWorkstream:
     def test_uses_saved_search_purpose_for_wsl_launch(self) -> None:
@@ -156,6 +163,20 @@ class TestOpenCodexWorkstream:
         command = run_wsl_mock.call_args.args[0]
         assert "exec ./scripts/infra/codex-worktree.sh search task-a -- --no-alt-screen" in command
         assert "export CANOMPX3_WORKSTREAM_PURPOSE='Investigate / search'" in command
+
+
+class TestOpenCodexProject:
+    def test_opens_repo_project_launcher_in_wsl(self) -> None:
+        with (
+            patch.object(windows_agent_launch, "repo_root", return_value=Path(r"C:\repo")),
+            patch.object(windows_agent_launch, "windows_to_wsl", return_value="/mnt/c/repo"),
+            patch.object(windows_agent_launch, "run_wsl", return_value=0) as run_wsl_mock,
+        ):
+            exit_code = windows_agent_launch.open_codex_project()
+
+        assert exit_code == 0
+        command = run_wsl_mock.call_args.args[0]
+        assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
 
 class TestWorkflowCommands:

@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("claude", "codex", "codex-search", "list", "close", "close-pick", "resume", "menu", "prune")]
+    [ValidateSet("claude", "codex", "codex-search", "codex-project", "list", "close", "close-pick", "resume", "menu", "prune")]
     [string]$Mode,
 
     [string]$Task,
