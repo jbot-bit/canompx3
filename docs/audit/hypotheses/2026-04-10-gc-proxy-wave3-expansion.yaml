@@ -1,0 +1,187 @@
+# GC Proxy Wave 3 — Expansion: ATR_P70, RR1.5/2.0, OVNRNG_25
+# Pathway B individual (Amendment 3.0 + 3.1)
+#
+# Locked:        2026-04-10T21:30:00+10:00
+# Holdout mode:  A (2026-01-01 sacred)
+# Data source:   GC parent futures 2010-2026 (proxy for MGC)
+# Testing mode:  individual
+#
+# Wave 2 found: ATR_P50 (N>2000, Sharpe>1.3) and OVNRNG_50 (high ExpR) validated.
+# Wave 3 explores: stricter vol filter (ATR_P70), intermediate continuation (RR1.5),
+# RR2.0 on validated filters, OVNRNG_25 (stricter overnight threshold),
+# and ATR_P50 on secondary sessions.
+#
+# Bailey: N=15, MinBTL = 5.42yr << 15.5yr. Cumulative ~59.
+
+metadata:
+  name: "gc-proxy-wave3-expansion"
+  purpose: |
+    Expand validated filters to additional RR targets and stricter thresholds.
+    ATR_P70 selects top-30% vol days (vs P50 top-50%). OVNRNG_25 selects
+    top-25% overnight range. RR1.5/2.0 test continuation beyond minimum.
+  date_locked: "2026-04-10T21:30:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 15.5
+  data_source: "GC parent gold futures 2010-06-07 onwards (proxy for MGC)"
+  data_source_mode: "proxy"
+  data_source_disclosure: "GC full-size gold used as price proxy for MGC per Amendment 3.1."
+  testing_mode: "individual"
+  bailey_compliance:
+    trials: 15
+    horizon_years: 15.5
+    e_max_n: 1.0
+    min_btl_required_years: 5.42
+    headroom_pct: 186
+    status: "PASS"
+  total_expected_trials: 15
+
+hypotheses:
+  # --- ATR_P70: stricter vol regime (top 30% of days) ---
+
+  - id: 1
+    name: "GC NYSE_OPEN ATR_P70 RR1.0 — Crabel in high vol"
+    theory_citation: "Crabel (1990); ABDL (2003) Econometrica"
+    economic_basis: "ATR above 70th percentile = top 30% volatility days. Breakout follow-through most reliable in elevated vol."
+    filter: {type: ATR_P70, column: atr_20}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 2
+    name: "GC NYSE_OPEN ATR_P70 RR2.0 — Crabel in high vol, continuation"
+    theory_citation: "Crabel (1990); ABDL (2003)"
+    economic_basis: "High vol + 2x continuation. Top 30% vol days have largest directional moves."
+    filter: {type: ATR_P70, column: atr_20}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 3
+    name: "GC US_DATA_1000 ATR_P70 RR1.0 — macro in high vol"
+    theory_citation: "ABDV (2003); ABDL (2003)"
+    economic_basis: "Macro releases in top 30% vol regime produce strongest information incorporation."
+    filter: {type: ATR_P70, column: atr_20}
+    scope: {instruments: [GC], sessions: [US_DATA_1000], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 4
+    name: "GC US_DATA_1000 ATR_P70 RR2.0 — macro in high vol, continuation"
+    theory_citation: "ABDV (2003); ABDL (2003)"
+    economic_basis: "Macro in high vol at 2x continuation."
+    filter: {type: ATR_P70, column: atr_20}
+    scope: {instruments: [GC], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 5
+    name: "GC LONDON_METALS ATR_P70 RR1.0 — London gold in high vol"
+    theory_citation: "O'Hara (1995); ABDL (2003)"
+    economic_basis: "London gold pricing in top 30% vol. Physical gold flow strongest in active markets."
+    filter: {type: ATR_P70, column: atr_20}
+    scope: {instruments: [GC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 6
+    name: "GC LONDON_METALS ATR_P70 RR2.0 — London gold in high vol, continuation"
+    theory_citation: "O'Hara (1995); ABDL (2003)"
+    economic_basis: "London gold pricing in high vol at 2x continuation."
+    filter: {type: ATR_P70, column: atr_20}
+    scope: {instruments: [GC], sessions: [LONDON_METALS], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  # --- RR1.5 and RR2.0 on validated ATR_P50/OVNRNG filters ---
+
+  - id: 7
+    name: "GC NYSE_OPEN ATR_P50 RR1.5 — vol regime intermediate continuation"
+    theory_citation: "Crabel (1990); ABDL (2003)"
+    economic_basis: "ATR_P50 validated at RR1.0 (Sharpe 1.76). Test RR1.5 for stronger continuation."
+    filter: {type: ATR_P50, column: atr_20}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 8
+    name: "GC NYSE_OPEN ATR_P50 RR2.0 — vol regime full continuation"
+    theory_citation: "Crabel (1990); ABDL (2003)"
+    economic_basis: "ATR_P50 at 2x continuation."
+    filter: {type: ATR_P50, column: atr_20}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 9
+    name: "GC US_DATA_1000 ATR_P50 RR2.0 — macro + vol at 2x"
+    theory_citation: "ABDV (2003); ABDL (2003)"
+    economic_basis: "US_DATA_1000 ATR_P50 validated at RR1.0 (Sharpe 1.36). Test 2x continuation."
+    filter: {type: ATR_P50, column: atr_20}
+    scope: {instruments: [GC], sessions: [US_DATA_1000], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 10
+    name: "GC NYSE_OPEN OVNRNG_50 RR1.5 — overnight + intermediate continuation"
+    theory_citation: "Crabel (1990); Ito, Engle, Lin (1992)"
+    economic_basis: "NYSE_OPEN OVNRNG_50 validated at RR1.0 (WFE=1.07). Test RR1.5."
+    filter: {type: OVNRNG_50, column: overnight_range}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  # --- Secondary sessions with validated filters ---
+
+  - id: 11
+    name: "GC LONDON_METALS ATR_P50 RR1.0 — London gold + vol regime"
+    theory_citation: "O'Hara (1995); ABDL (2003)"
+    economic_basis: "ATR_P50 on London gold at minimum continuation."
+    filter: {type: ATR_P50, column: atr_20}
+    scope: {instruments: [GC], sessions: [LONDON_METALS], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 12
+    name: "GC EUROPE_FLOW ATR_P50 RR1.0 — cross-border + vol regime"
+    theory_citation: "French & Roll (1986); ABDL (2003)"
+    economic_basis: "ATR_P50 on European flow at minimum continuation."
+    filter: {type: ATR_P50, column: atr_20}
+    scope: {instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 13
+    name: "GC EUROPE_FLOW ATR_P50 RR2.0 — cross-border + vol at 2x"
+    theory_citation: "French & Roll (1986); ABDL (2003)"
+    economic_basis: "ATR_P50 on European flow at 2x continuation."
+    filter: {type: ATR_P50, column: atr_20}
+    scope: {instruments: [GC], sessions: [EUROPE_FLOW], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  # --- OVNRNG_25 (stricter overnight threshold) ---
+
+  - id: 14
+    name: "GC NYSE_OPEN OVNRNG_25 RR1.0 — strong overnight + Crabel"
+    theory_citation: "Crabel (1990); Ito, Engle, Lin (1992)"
+    economic_basis: "OVNRNG_25 selects top 25% overnight range. Stricter than OVNRNG_50 — more selective, potentially stronger signal."
+    filter: {type: OVNRNG_25, column: overnight_range}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [1.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+  - id: 15
+    name: "GC NYSE_OPEN OVNRNG_25 RR2.0 — strong overnight + Crabel continuation"
+    theory_citation: "Crabel (1990); Ito, Engle, Lin (1992)"
+    economic_basis: "Top 25% overnight range at 2x continuation."
+    filter: {type: OVNRNG_25, column: overnight_range}
+    scope: {instruments: [GC], sessions: [NYSE_OPEN], rr_targets: [2.0], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0]}
+    expected_trial_count: 1
+    kill_criteria: ["Raw p >= 0.05", "Negative Sharpe", "WFE < 0.50", "Any era N>=50 ExpR < -0.05"]
+
+total_hypothesis_count: 15
+total_expected_trials: 15
+budget_check:
+  mode: "proxy"
+  cumulative_with_prior_files: 59
+  data_horizon_years_available: 15.5
