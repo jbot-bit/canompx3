@@ -511,6 +511,128 @@ class TestNoActiveE3:
         assert len(violations) == 0
 
 
+class TestNoActiveE2LookaheadFilters:
+    """Tests for the active-shelf E2 look-ahead contamination check."""
+
+    def test_catches_active_e2_break_speed_filter(self, tmp_path, monkeypatch):
+        import duckdb
+
+        from pipeline import check_drift
+        from pipeline.check_drift import check_no_active_e2_lookahead_filters
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                instrument VARCHAR,
+                orb_label VARCHAR,
+                entry_model VARCHAR,
+                filter_type VARCHAR,
+                status VARCHAR
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+                ('MNQ_NYSE_OPEN_E2_FAST5', 'MNQ', 'NYSE_OPEN', 'E2', 'ORB_G8_FAST5', 'active')
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_no_active_e2_lookahead_filters()
+        assert len(violations) == 1
+        assert "look-ahead filter_type" in violations[0]
+        assert "ORB_G8_FAST5" in violations[0]
+
+    def test_catches_active_e2_relative_volume_filter(self, tmp_path, monkeypatch):
+        """An active E2 strategy with a rel-vol filter must trigger a violation."""
+        import duckdb
+
+        from pipeline import check_drift
+        from pipeline.check_drift import check_no_active_e2_lookahead_filters
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                instrument VARCHAR,
+                orb_label VARCHAR,
+                entry_model VARCHAR,
+                filter_type VARCHAR,
+                status VARCHAR
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+                ('MNQ_CLOSE_E2_VOL', 'MNQ', 'NYSE_CLOSE', 'E2', 'VOL_RV12_N20', 'active')
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_no_active_e2_lookahead_filters()
+        assert len(violations) == 1
+        assert "VOL_RV12_N20" in violations[0]
+
+    def test_passes_active_e1_break_speed_filter(self, tmp_path, monkeypatch):
+        """The same filter family is fine for E1 because the bar has closed."""
+        import duckdb
+
+        from pipeline import check_drift
+        from pipeline.check_drift import check_no_active_e2_lookahead_filters
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                instrument VARCHAR,
+                orb_label VARCHAR,
+                entry_model VARCHAR,
+                filter_type VARCHAR,
+                status VARCHAR
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+                ('MNQ_NYSE_OPEN_E1_FAST5', 'MNQ', 'NYSE_OPEN', 'E1', 'ORB_G8_FAST5', 'active')
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_no_active_e2_lookahead_filters()
+        assert len(violations) == 0
+
+    def test_passes_retired_e2_lookahead_filter(self, tmp_path, monkeypatch):
+        """Retired contamination should not block the active shelf check."""
+        import duckdb
+
+        from pipeline import check_drift
+        from pipeline.check_drift import check_no_active_e2_lookahead_filters
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR PRIMARY KEY,
+                instrument VARCHAR,
+                orb_label VARCHAR,
+                entry_model VARCHAR,
+                filter_type VARCHAR,
+                status VARCHAR
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+                ('MNQ_NYSE_OPEN_E2_FAST5', 'MNQ', 'NYSE_OPEN', 'E2', 'ORB_G8_FAST5', 'retired')
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_no_active_e2_lookahead_filters()
+        assert len(violations) == 0
+
+
 class TestDataYearsDisclosure:
     """Tests for check #41: data years disclosure (warning-only)."""
 

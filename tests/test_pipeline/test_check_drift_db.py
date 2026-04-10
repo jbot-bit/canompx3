@@ -88,6 +88,72 @@ class TestValidatedFiltersRegistered:
         assert len(violations) == 0
 
 
+class TestActiveValidatedFiltersRoutable:
+    """Active shelf must stay inside the canonical session-aware filter grid."""
+
+    def test_passes_routable_active_filter(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            VALIDATED_SCHEMA,
+            """INSERT INTO validated_setups (
+                   strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                   confirm_bars, filter_type, rr_target, status, win_rate,
+                   expectancy_r, fdr_significant, family_hash, wf_tested,
+                   retired_at, retirement_reason
+               ) VALUES (
+                   'MNQ_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G5', 'MNQ', 'EUROPE_FLOW', 5, 'E2',
+                   1, 'ORB_G5', 1.0, 'active', 0.55,
+                   0.10, TRUE, 'fam1', TRUE,
+                   NULL, NULL
+               )""",
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_validated_filters_routable()
+        assert violations == []
+
+    def test_catches_non_routable_active_filter(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            VALIDATED_SCHEMA,
+            """INSERT INTO validated_setups (
+                   strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                   confirm_bars, filter_type, rr_target, status, win_rate,
+                   expectancy_r, fdr_significant, family_hash, wf_tested,
+                   retired_at, retirement_reason
+               ) VALUES (
+                   'MNQ_TOKYO_OPEN_E2_RR1.0_CB1_OVNRNG_25', 'MNQ', 'TOKYO_OPEN', 5, 'E2',
+                   1, 'OVNRNG_25', 1.0, 'active', 0.55,
+                   0.10, TRUE, 'fam2', TRUE,
+                   NULL, NULL
+               )""",
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_validated_filters_routable()
+        assert len(violations) == 1
+        assert "OVNRNG_25" in violations[0]
+        assert "TOKYO_OPEN" in violations[0]
+
+    def test_ignores_retired_non_routable_filter(self, tmp_path, monkeypatch):
+        db_path = _create_db(
+            tmp_path,
+            VALIDATED_SCHEMA,
+            """INSERT INTO validated_setups (
+                   strategy_id, instrument, orb_label, orb_minutes, entry_model,
+                   confirm_bars, filter_type, rr_target, status, win_rate,
+                   expectancy_r, fdr_significant, family_hash, wf_tested,
+                   retired_at, retirement_reason
+               ) VALUES (
+                   'MNQ_TOKYO_OPEN_E2_RR1.0_CB1_OVNRNG_25', 'MNQ', 'TOKYO_OPEN', 5, 'E2',
+                   1, 'OVNRNG_25', 1.0, 'retired', 0.55,
+                   0.10, TRUE, 'fam3', TRUE,
+                   CURRENT_TIMESTAMP, 'retired for test'
+               )""",
+        )
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_active_validated_filters_routable()
+        assert violations == []
+
+
 # ── Check 35: No E0 in DB ────────────────────────────────────────────
 
 

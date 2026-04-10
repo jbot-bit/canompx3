@@ -1848,6 +1848,129 @@ def check_no_active_e3(con=None) -> list[str]:
     return violations
 
 
+def check_no_active_e2_lookahead_filters(con=None) -> list[str]:
+    """Check that active E2 strategies never use break-bar-derived filters.
+
+    E2 stop-market entries fire on first touch after ORB completion, before the
+    break bar closes. Any filter that depends on break-bar properties therefore
+    becomes look-ahead for E2 and must not survive into active
+    ``validated_setups``.
+
+    This check delegates to the same canonical exclusion constants used by
+    discovery and execution so the shelf audit cannot drift from runtime policy.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from trading_app.config import E2_EXCLUDED_FILTER_PREFIXES, E2_EXCLUDED_FILTER_SUBSTRINGS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, instrument, orb_label, filter_type
+            FROM validated_setups
+            WHERE entry_model = 'E2'
+              AND status = 'active'
+            ORDER BY instrument, orb_label, filter_type, strategy_id
+            """
+        ).fetchall()
+
+        contaminated = []
+        for strategy_id, instrument, orb_label, filter_type in rows:
+            if filter_type.startswith(E2_EXCLUDED_FILTER_PREFIXES) or any(
+                sub in filter_type for sub in E2_EXCLUDED_FILTER_SUBSTRINGS
+            ):
+                contaminated.append((strategy_id, instrument, orb_label, filter_type))
+
+        for strategy_id, instrument, orb_label, filter_type in contaminated:
+            violations.append(
+                "  validated_setups: active E2 strategy "
+                f"{strategy_id} uses look-ahead filter_type {filter_type!r} "
+                f"({instrument} {orb_label}). Break-bar-derived filters are "
+                "invalid for E2 and must not survive on the active shelf."
+            )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_no_active_e2_lookahead_filters: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
+def check_active_validated_filters_routable(con=None) -> list[str]:
+    """Check active shelf rows still belong to the canonical session grid.
+
+    The session-aware discovery universe is defined exclusively by
+    ``trading_app.config.get_filters_for_grid(instrument, session)``. An active
+    ``validated_setups`` row whose ``filter_type`` is no longer present in that
+    canonical grid for its `(instrument, orb_label)` lane indicates one of:
+
+    - session-dependent look-ahead contamination, such as OVNRNG on Asian lanes
+    - DOW/session misalignment that escaped routing discipline
+    - stale active rows using filters intentionally removed from the lane
+
+    This delegates to the same canonical router used by discovery instead of
+    re-encoding per-family allowlists in drift.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from trading_app.config import get_filters_for_grid
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations  # Skip if no DB (CI)
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        rows = con.execute(
+            """
+            SELECT strategy_id, instrument, orb_label, filter_type
+            FROM validated_setups
+            WHERE status = 'active'
+            ORDER BY instrument, orb_label, filter_type, strategy_id
+            """
+        ).fetchall()
+
+        lane_cache: dict[tuple[str, str], set[str]] = {}
+        for strategy_id, instrument, orb_label, filter_type in rows:
+            lane = (instrument, orb_label)
+            if lane not in lane_cache:
+                try:
+                    lane_cache[lane] = set(get_filters_for_grid(instrument, orb_label).keys())
+                except Exception as exc:  # noqa: BLE001 - drift boundary, fail-closed
+                    violations.append(
+                        "  validated_setups: could not resolve canonical grid for "
+                        f"{instrument} {orb_label}: {type(exc).__name__}: {exc}"
+                    )
+                    lane_cache[lane] = set()
+                    continue
+            if filter_type not in lane_cache[lane]:
+                violations.append(
+                    "  validated_setups: active strategy "
+                    f"{strategy_id} uses filter_type {filter_type!r} which is not "
+                    f"routable for canonical lane ({instrument}, {orb_label}). "
+                    "Active shelf must remain a subset of get_filters_for_grid()."
+                )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_active_validated_filters_routable: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 def check_wf_coverage(con=None) -> list[str]:
     """Check #40: WF coverage for MGC/MES (soft gate — WARNING ONLY, never blocks).
 
@@ -4540,6 +4663,18 @@ CHECKS = [
     ("No duplicate gold.db at project root", check_stale_scratch_db, False, False),
     ("No old session names in active code", check_old_session_names, False, False),
     ("No active E3 strategies (soft-retired Feb 2026)", check_no_active_e3, False, True),  # requires_db
+    (
+        "No active E2 strategies with look-ahead filter families",
+        check_no_active_e2_lookahead_filters,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "Active validated filters remain canonical-routable for their lane",
+        check_active_validated_filters_routable,
+        False,
+        True,
+    ),  # requires_db
     ("WF coverage for MGC/MES (soft gate)", check_wf_coverage, True, True),  # ADVISORY, requires_db
     ("Data years disclosure (years_tested < 7)", check_data_years_disclosure, True, False),  # ADVISORY only
     (
