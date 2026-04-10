@@ -108,7 +108,7 @@ def check_e0_cb2_contamination(con) -> list[str]:
 
 
 def check_dead_instrument_contamination(con) -> list[str]:
-    """11. No dead instruments in validated_setups."""
+    """11. No non-active instruments on the active validated shelf."""
     violations = []
     r = con.execute(f"""
         SELECT instrument, COUNT(*) FROM validated_setups
@@ -117,7 +117,10 @@ def check_dead_instrument_contamination(con) -> list[str]:
         GROUP BY instrument
     """).fetchall()
     for inst, n in r:
-        violations.append(f"  {inst}: {n} active validated strategies (dead instrument)")
+        violations.append(
+            f"  {inst}: {n} active validated strategies "
+            "(instrument not in ACTIVE_ORB_INSTRUMENTS)"
+        )
     return violations
 
 
@@ -183,7 +186,7 @@ CHECKS = [
     ("5. Old session name check", check_old_session_names),
     ("6. E0 CB2+ contamination", check_e0_cb2_contamination),
     # 7-10 removed: informational only (always returned []). Data in _print_informational().
-    ("11. Dead instrument check", check_dead_instrument_contamination),
+    ("11. Non-active instrument check", check_dead_instrument_contamination),
     ("12. Duplicate strategy IDs", check_duplicate_strategy_ids),
     # 13-14 removed: informational only (always returned []). Data in _print_informational().
     ("15. Win rate sanity", check_win_rate_sanity),

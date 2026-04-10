@@ -300,7 +300,7 @@ class TestE0CB2Contamination:
 
 
 class TestDeadInstrumentContamination:
-    """Check 11: No dead instruments in active validated_setups."""
+    """Check 11: No non-active instruments in active validated_setups."""
 
     def test_catches_dead_instrument(self, tmp_path):
         with _make_con(
@@ -313,6 +313,20 @@ class TestDeadInstrumentContamination:
             violations = audit_integrity.check_dead_instrument_contamination(con)
             assert len(violations) > 0
             assert "MCL" in violations[0]
+            assert "ACTIVE_ORB_INSTRUMENTS" in violations[0]
+
+    def test_catches_research_only_parent(self, tmp_path):
+        with _make_con(
+            tmp_path,
+            inserts="""
+            INSERT INTO validated_setups (strategy_id, instrument, status)
+            VALUES ('s1', 'GC', 'active')
+        """,
+        ) as con:
+            violations = audit_integrity.check_dead_instrument_contamination(con)
+            assert len(violations) > 0
+            assert "GC" in violations[0]
+            assert "ACTIVE_ORB_INSTRUMENTS" in violations[0]
 
     def test_passes_active_instrument(self, tmp_path):
         with _make_con(

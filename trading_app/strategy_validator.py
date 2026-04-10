@@ -55,6 +55,7 @@ from trading_app.config import (
     WF_TRADE_COUNT_OVERRIDE,
 )
 from trading_app.db_manager import init_trading_app_schema
+from trading_app.edge_families import build_edge_families_for_instrument
 
 # Phase 4 Stage 4.0 (2026-04-08) — institutional criteria gates.
 # Stage 4.0 enforces criteria 1 (hypothesis file presence), 2 (MinBTL bound),
@@ -1635,6 +1636,7 @@ def run_validation(
                     "refusing to write native validated_setups rows fail-open."
                 )
             provenance_resolver = StrategyTradeWindowResolver(con)
+            promotion_written_at = datetime.now(UTC)
 
             # Purge validated_setups + edge_families ONLY for strategy_ids
             # being processed in this run.  Prior code used instrument +
@@ -1809,7 +1811,7 @@ def run_validation(
                             rd.get("trades_per_year"),
                             rd.get("sharpe_ann"),
                             yearly,
-                            "active",
+                            "active" if rd["instrument"] in ACTIVE_ORB_INSTRUMENTS else "retired",
                             rd.get("median_risk_dollars"),
                             rd.get("avg_risk_dollars"),
                             rd.get("avg_win_dollars"),
@@ -1843,6 +1845,20 @@ def run_validation(
                             rd.get("fst_hurdle"),
                         ],
                     )
+                    if rd["instrument"] not in ACTIVE_ORB_INSTRUMENTS:
+                        con.execute(
+                            """
+                            UPDATE validated_setups
+                            SET retired_at = ?,
+                                retirement_reason = ?
+                            WHERE strategy_id = ?
+                            """,
+                            [
+                                promotion_written_at,
+                                "research-only / non-tradeable instrument (not in ACTIVE_ORB_INSTRUMENTS)",
+                                sid,
+                            ],
+                        )
 
             # Write walkforward JSONL (batch)
             from trading_app.walkforward import WalkForwardResult
@@ -2140,6 +2156,16 @@ def run_validation(
                     f"  FDR hard gate (stratified, total K={total_k}): "
                     f"{n_fdr_sig} survived, {n_fdr_rejected} REJECTED "
                     f"(of {n_fdr_sig + n_fdr_rejected} passed prior phases)"
+                )
+
+            if instrument in ACTIVE_ORB_INSTRUMENTS:
+                n_families = build_edge_families_for_instrument(con, instrument)
+                logger.info("  Edge families rebuilt for %s: %s families", instrument, n_families)
+            else:
+                con.execute("DELETE FROM edge_families WHERE instrument = ?", [instrument])
+                logger.info(
+                    "  Non-tradeable instrument %s kept off active shelf; edge families cleared",
+                    instrument,
                 )
 
             # ── DSR: Deflated Sharpe Ratio (informational, not a gate) ──

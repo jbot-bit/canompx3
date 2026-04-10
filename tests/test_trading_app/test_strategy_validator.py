@@ -759,6 +759,27 @@ class TestRunValidation:
         assert row[4] is not None and row[4] != ""
         assert row[5] == "VALIDATOR_NATIVE"
 
+    def test_active_promotion_rebuilds_edge_families(self, tmp_path):
+        """Active promotions must leave family_hash/edge_families synchronized."""
+        sid = "MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER"
+        db_path = self._setup_db(tmp_path, [_make_row(strategy_id=sid, sample_size=150)])
+
+        run_validation(db_path=db_path, instrument="MGC", enable_walkforward=False)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        validated = con.execute(
+            "SELECT status, family_hash, is_family_head FROM validated_setups WHERE strategy_id = ?",
+            [sid],
+        ).fetchone()
+        family_count = con.execute("SELECT COUNT(*) FROM edge_families WHERE instrument = 'MGC'").fetchone()[0]
+        con.close()
+
+        assert validated is not None
+        assert validated[0] == "active"
+        assert validated[1] is not None and validated[1] != ""
+        assert validated[2] is True
+        assert family_count == 1
+
     def test_rejected_not_in_validated(self, tmp_path):
         """Rejected strategy does NOT appear in validated_setups."""
         db_path = self._setup_db(tmp_path, [_make_row(sample_size=10)])
@@ -2306,7 +2327,7 @@ class TestFdrPoolIncludesCurrentInstrument:
         # silent promotion without any FDR evaluation.
         con = duckdb.connect(str(db_path), read_only=True)
         vs_row = con.execute(
-            "SELECT validation_pathway, fdr_adjusted_p FROM validated_setups "
+            "SELECT validation_pathway, fdr_adjusted_p, status, retirement_reason FROM validated_setups "
             "WHERE strategy_id = ?",
             ["GC_NYSE_OPEN_E2_RR1.0_CB1_ORB_G5"],
         ).fetchone()
@@ -2314,7 +2335,7 @@ class TestFdrPoolIncludesCurrentInstrument:
 
         # If the strategy is in validated_setups, it must have FDR metadata
         if vs_row is not None:
-            pathway, adj_p = vs_row
+            pathway, adj_p, status, retirement_reason = vs_row
             assert pathway == "family", (
                 "GC Pathway A strategy promoted but validation_pathway != 'family' — "
                 "indicates the FDR block was skipped (silent pass-through bug)"
@@ -2323,3 +2344,5 @@ class TestFdrPoolIncludesCurrentInstrument:
                 "GC Pathway A strategy promoted with NULL fdr_adjusted_p — "
                 "FDR gate did not fire, silent pass-through bug"
             )
+            assert status == "retired"
+            assert retirement_reason is not None and "ACTIVE_ORB_INSTRUMENTS" in retirement_reason

@@ -86,6 +86,72 @@ promotion lineage honestly instead of relying on stale `strategy_trade_days`.
   - `pipeline/check_drift.py`
   before modifying anything.
 
+## Update (2026-04-11 — active shelf integrity cleanup completed)
+
+### Headline
+
+Closed the two outstanding shelf-governance failures end to end:
+
+- active rows with `NULL family_hash`
+- non-active / research-only instruments surviving as `status='active'`
+
+### Code changes
+
+- Added canonical family builder module:
+  - `trading_app/edge_families.py`
+  - `scripts/tools/build_edge_families.py` is now a thin wrapper over the
+    canonical module instead of owning the logic itself
+- Hardened `trading_app/strategy_validator.py`
+  - active instruments now rebuild `edge_families` inside validator writes
+  - non-active instruments are written as `retired`, not `active`
+  - non-active instrument runs also clear any stale `edge_families` rows
+- Added `scripts/migrations/retire_non_active_validated.py`
+  - soft-retires `validated_setups.status='active'` rows whose instrument is
+    not in `ACTIVE_ORB_INSTRUMENTS`
+  - clears `edge_families` rows for those instruments
+- Updated `scripts/tools/audit_integrity.py`
+  - check 11 wording now reflects the true invariant:
+    `non-active instrument check`
+  - this avoids the earlier dishonest wording that treated research-only
+    parents like `GC` as literally "dead instruments"
+
+### Live DB cleanup performed
+
+Ran on repo `gold.db`:
+
+- `./.venv-wsl/bin/python scripts/migrations/retire_non_active_validated.py --db gold.db`
+  - retired `17` active `GC` rows
+- `./.venv-wsl/bin/python scripts/tools/build_edge_families.py --all --db-path gold.db`
+  - rebuilt active-family state
+  - resulting `edge_families` count: `16`
+
+Post-cleanup live shelf:
+
+- active instruments: `MES=2`, `MNQ=27`
+- active `GC`: `0`
+- active rows with `NULL family_hash`: `0`
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check trading_app/edge_families.py scripts/tools/build_edge_families.py trading_app/strategy_validator.py scripts/tools/audit_integrity.py scripts/migrations/retire_non_active_validated.py tests/test_trading_app/test_edge_families.py tests/test_trading_app/test_strategy_validator.py tests/test_tools/test_audit_integrity.py tests/test_migrations/test_retire_non_active_validated.py`
+  - `All checks passed!`
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_edge_families.py tests/test_trading_app/test_strategy_validator.py tests/test_tools/test_audit_integrity.py tests/test_migrations/test_retire_non_active_validated.py -q`
+  - `181 passed`
+- `./.venv-wsl/bin/python scripts/tools/audit_behavioral.py`
+  - passed all 7 checks
+- `./.venv-wsl/bin/python scripts/tools/audit_integrity.py`
+  - `PASSED: all 10 checks clean`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 98 checks passed [OK], 0 skipped, 7 advisory`
+
+### Notes
+
+- There are still many unrelated unstaged workspace edits from other threads.
+  Do not sweep them into this cleanup commit.
+- The important behavioral change is intentional:
+  research-only validation records may still exist in `validated_setups`, but
+  they no longer contaminate the active deployable shelf.
+
 ## Update (2026-04-11 — active-shelf micro-data discipline hardening)
 
 ### Headline
