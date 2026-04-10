@@ -150,11 +150,11 @@ class SessionOrchestrator:
                     self._max_risk_per_trade = prof.max_risk_per_trade
                     log.info("Max risk per trade: $%.0f", self._max_risk_per_trade)
             except Exception:
-                log.warning("Could not load max_risk_per_trade from profile — guard DISABLED")
+                raise  # Fail-closed: profile accounts MUST have working risk cap loading
 
         # Regime gate: load paused strategies from allocator output.
         # Strategies PAUSED by the allocator (session regime COLD) are blocked
-        # at entry time. Fail-open if file missing or corrupt.
+        # at entry time. Fail-closed for profile accounts, fail-open for paper/signal.
         self._regime_paused: set[str] = set()
         try:
             _alloc_path = Path(__file__).resolve().parents[2] / "docs" / "runtime" / "lane_allocation.json"
@@ -171,6 +171,8 @@ class SessionOrchestrator:
             else:
                 log.info("No lane_allocation.json — regime gate disabled")
         except Exception:
+            if _is_profile:
+                raise  # Fail-closed: prop accounts MUST have working regime gate
             log.warning("Failed to load lane_allocation.json — regime gate disabled (fail-open)")
 
         # Execution stack
