@@ -6,6 +6,44 @@
 
 ---
 
+## Update (2026-04-10 later — Windows shortcut dedupe)
+
+### Headline
+
+Removed two dead/confusing Windows shortcut aliases from
+`scripts/infra/windows-shortcuts/`:
+
+- `agent-tasks.bat`
+- `ai-workspaces.bat`
+
+Both were unreferenced one-line aliases to the same workstream menu launcher and
+added no unique behavior.
+
+### What stays
+
+The actual supported Windows launcher surface is unchanged:
+
+- `codex.bat`
+  - simple normal Codex repo session
+- `codex-workstream.bat`
+  - isolated Codex task/worktree
+- `ai-workstreams.bat`
+  - workstream/menu launcher
+
+Shortcut folder still keeps the distinct task-specific helpers:
+
+- `claude-workstream.bat`
+- `codex-search-workstream.bat`
+- `codex-workstream.bat`
+- `workstream-clean.bat`
+- `workstream-finish.bat`
+- `workstream-list.bat`
+
+### Verification
+
+- `rg -n "agent-tasks\\.bat|ai-workspaces\\.bat" -S .`
+  - no remaining references
+
 ## Update (2026-04-10 later — Windows Codex entrypoint cleanup)
 
 ### Headline
