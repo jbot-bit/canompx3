@@ -244,8 +244,8 @@ def run_monitor(*, apply_pauses: bool = False, pause_days: int = 30) -> None:
         print("=" * 120)
         print(f"SHIRYAEV-ROBERTS MONITOR | {date.today()}")
         print(
-            f"Target ARL≈{TARGET_ARL_DAYS} trading days | "
-            f"delta={DEFAULT_DELTA:+.1f}σ | q={DEFAULT_VARIANCE_RATIO:.1f} | "
+            f"Target ARL~{TARGET_ARL_DAYS} trading days | "
+            f"delta={DEFAULT_DELTA:+.1f}sigma | q={DEFAULT_VARIANCE_RATIO:.1f} | "
             f"threshold={threshold:.2f}"
         )
         if apply_pauses:
