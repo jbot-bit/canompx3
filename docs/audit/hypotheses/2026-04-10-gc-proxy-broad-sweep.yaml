@@ -1,7 +1,7 @@
 # GC Proxy — Broad Exploratory Sweep
 # Pathway A family testing (BH FDR, Amendment 3.0 + 3.1)
 #
-# Locked:        2026-04-10T19:30:00+10:00
+# Locked:        2026-04-10T20:30:00+10:00
 # Holdout mode:  A (2026-01-01 sacred)
 # Data source:   GC parent futures 2010-2026 (proxy for MGC)
 # Data horizon:  15.5 calendar years
@@ -20,7 +20,7 @@ metadata:
     on 16yr GC proxy data. BH FDR correction across the full family
     of 10 hypotheses. Includes G-filters (regime-dependent pass rates),
     GAP, COST_LT, and secondary sessions.
-  date_locked: "2026-04-10T19:30:00+10:00"
+  date_locked: "2026-04-10T20:30:00+10:00"
   holdout_date: "2026-01-01"
   data_horizon_years_clean: 15.5
   data_source: "GC parent gold futures 2010-06-07 onwards (proxy for MGC)"
