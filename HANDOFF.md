@@ -136,6 +136,52 @@ layer so operator tools no longer infer deployability from raw
 - Research/audit/history consumers that intentionally reason about raw
   lifecycle state were left untouched on purpose.
 
+## Update (2026-04-11 — operational deployable-shelf reader hardening)
+
+### Headline
+
+Extended canonical deployable-shelf semantics into the remaining clean
+operational allocator / governance readers so live-adjacent tooling no longer
+quietly treats raw `status='active'` as the deployable contract.
+
+### What changed
+
+- Migrated additional operational readers to
+  `trading_app.validated_shelf.deployable_validated_predicate(...)`:
+  - `scripts/tools/score_lanes.py`
+  - `scripts/tools/backtest_allocator.py`
+  - `scripts/tools/forward_monitor.py`
+  - `scripts/tools/generate_promotion_candidates.py`
+  - `scripts/tools/select_family_rr.py`
+  - `scripts/tools/rolling_portfolio_assembly.py`
+  - `trading_app/edge_families.py`
+- Hardened `pipeline/check_drift.py`
+  - check 102 now covers the operational reader cluster above
+  - docstring wording in `backtest_allocator.py` was updated to match the
+    actual deployable-shelf contract so drift stays honest
+- Added behavioral coverage:
+  - `tests/test_trading_app/test_edge_families.py`
+    - family build now proves it excludes rows marked
+      `deployment_scope='non_deployable'`
+- Expanded drift coverage:
+  - `tests/test_pipeline/test_check_drift_ws2.py`
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check scripts/tools/score_lanes.py scripts/tools/backtest_allocator.py scripts/tools/forward_monitor.py scripts/tools/generate_promotion_candidates.py scripts/tools/select_family_rr.py scripts/tools/rolling_portfolio_assembly.py trading_app/edge_families.py pipeline/check_drift.py tests/test_pipeline/test_check_drift_ws2.py tests/test_trading_app/test_edge_families.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_edge_families.py tests/test_pipeline/test_check_drift_ws2.py tests/test_scripts/test_generate_promotion_candidates.py tests/test_rr_selection.py -q`
+  - `110 passed, 9 skipped`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 100 checks passed [OK], 0 skipped, 7 advisory`
+
+### Notes
+
+- This slice stayed off the dirty ML / pre-session files being edited in
+  parallel in other terminals.
+- Raw lifecycle / audit / research consumers were still left untouched on
+  purpose; only live-adjacent operational consumers moved in this pass.
+
 ## Update (2026-04-11 — native promotion provenance hardening)
 
 ### Headline

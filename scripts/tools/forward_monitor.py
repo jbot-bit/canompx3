@@ -27,6 +27,7 @@ from pipeline.paths import GOLD_DB_PATH
 from trading_app.live.performance_monitor import _compute_std_r
 from trading_app.prop_profiles import get_lane_registry
 from trading_app.strategy_fitness import _load_strategy_outcomes
+from trading_app.validated_shelf import deployable_validated_predicate
 
 FORWARD_START = date(2026, 1, 1)
 
@@ -41,11 +42,12 @@ def _load_reference_stats() -> dict[str, dict]:
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     configure_connection(con)
     try:
+        deployable_where = deployable_validated_predicate(con)
         rows = con.execute(
-            """
+            f"""
             SELECT strategy_id, win_rate, rr_target, expectancy_r
             FROM validated_setups
-            WHERE LOWER(status) = 'active'
+            WHERE {deployable_where}
             """
         ).fetchall()
     finally:

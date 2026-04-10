@@ -41,6 +41,7 @@ import duckdb
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.prop_profiles import ACCOUNT_TIERS, PROP_FIRM_SPECS
+from trading_app.validated_shelf import deployable_validated_predicate
 
 # ── Session timing (Brisbane hours, for routing) ─────────────────────────────
 
@@ -200,7 +201,6 @@ def score_lanes(
     # Base query: family heads from validated_setups + edge_families
     where_clauses = [
         "vs.instrument = ?",
-        "vs.status = 'active'",
         "vs.entry_model = 'E2'",
         "vs.confirm_bars = 1",
         "vs.orb_minutes = 5",
@@ -231,9 +231,8 @@ def score_lanes(
         where_clauses = [c for c in where_clauses if "is_family_head" not in c]
         params.extend(sorted(deployed_ids))
 
-    where_sql = " AND ".join(where_clauses)
-
     with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+        where_sql = " AND ".join([deployable_validated_predicate(con, alias="vs"), *where_clauses])
         rows = con.execute(
             f"""
             SELECT vs.strategy_id, vs.orb_label, vs.filter_type, vs.rr_target,

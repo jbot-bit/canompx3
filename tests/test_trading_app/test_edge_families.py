@@ -139,6 +139,33 @@ class TestMedianElection:
         assert family[1] == 0.60
         assert family[2] == 0.60  # median of 1 = itself
 
+    def test_non_deployable_active_rows_are_excluded_from_family_build(self, db_path):
+        from scripts.tools.build_edge_families import build_edge_families
+
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            UPDATE validated_setups
+            SET deployment_scope = 'non_deployable'
+            WHERE strategy_id = 'MGC_CME_REOPEN_E1_RR2.5_CB2_ORB_G5'
+        """)
+        con.commit()
+        con.close()
+
+        build_edge_families(str(db_path), "MGC")
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        counts = con.execute("""
+            SELECT member_count, head_strategy_id
+            FROM edge_families
+            ORDER BY member_count DESC, head_strategy_id
+        """).fetchall()
+        con.close()
+
+        assert counts == [
+            (1, "MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5"),
+            (1, "MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G8"),
+        ]
+
     def test_elect_median_head_function(self):
         from scripts.tools.build_edge_families import _elect_median_head
 

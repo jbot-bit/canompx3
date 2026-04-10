@@ -4,7 +4,7 @@ VALIDATION ONLY: all parameters are from literature (Carver Ch.11-12,
 Chan Ch.7, Pardo Ch.9). Do NOT tune parameters on this backtest.
 Tuning = overfitting the allocator itself.
 
-Strategy pool: fixed (today's validated_setups WHERE status='active').
+Strategy pool: fixed (today's deployable validated shelf).
 Survival bias acknowledged — absolute returns are inflated.
 Relative comparison (adaptive vs static) is valid because both use the same pool.
 
@@ -33,6 +33,7 @@ from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS
 from trading_app.lane_allocator import build_allocation, compute_lane_scores
 from trading_app.prop_profiles import ACCOUNT_PROFILES
+from trading_app.validated_shelf import deployable_validated_predicate
 
 # ── Helpers ────────────────────────────────────────────────────────
 
@@ -60,10 +61,11 @@ def _load_strat_meta(con: duckdb.DuckDBPyConnection) -> dict[str, dict]:
 
     LaneScore omits entry_model — we need it for outcome matching.
     """
-    rows = con.execute("""
+    deployable_where = deployable_validated_predicate(con)
+    rows = con.execute(f"""
         SELECT strategy_id, instrument, orb_label, entry_model,
                rr_target, confirm_bars, filter_type, stop_multiplier
-        FROM validated_setups WHERE status = 'active'
+        FROM validated_setups WHERE {deployable_where}
     """).fetchall()
     meta = {}
     for sid, inst, orb, em, rr, cb, ft, sm in rows:

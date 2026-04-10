@@ -36,6 +36,7 @@ from trading_app.live_config import (
     LIVE_MIN_EXPECTANCY_R,
     LIVE_PORTFOLIO,
 )
+from trading_app.validated_shelf import deployable_validated_predicate
 
 # ── Core query ────────────────────────────────────────────────────────
 
@@ -51,8 +52,9 @@ def find_uncovered_candidates(db_path: Path) -> list[dict]:
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
+        deployable_where = deployable_validated_predicate(con, alias="vs")
         rows = con.execute(
-            """
+            f"""
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
                    vs.filter_type, vs.orb_minutes, vs.rr_target, vs.confirm_bars,
                    vs.sample_size, vs.win_rate, vs.expectancy_r, vs.sharpe_ann,
@@ -68,7 +70,7 @@ def find_uncovered_candidates(db_path: Path) -> list[dict]:
               ON vs.strategy_id = ef.head_strategy_id
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id AND es.is_canonical = TRUE
-            WHERE LOWER(vs.status) = 'active'
+            WHERE {deployable_where}
               AND vs.fdr_significant = TRUE
               AND vs.wf_passed = TRUE
               AND ef.robustness_status = 'ROBUST'

@@ -41,6 +41,7 @@ import pandas as pd
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.stats import jobson_korkie_p as _jobson_korkie_p
 from trading_app.config import ENTRY_MODELS, SKIP_ENTRY_MODELS
+from trading_app.validated_shelf import deployable_validated_predicate
 
 # Jobson-Korkie assumed correlation between same-setup / different-RR return streams.
 # Same ORB break, same entry, different exit target -> high correlation.
@@ -143,13 +144,14 @@ def main():
     placeholders = ", ".join(f"'{em}'" for em in active_models)
 
     con = duckdb.connect(str(db_path), read_only=args.dry_run)
+    deployable_where = deployable_validated_predicate(con)
     df = con.execute(f"""
         SELECT instrument, orb_label, filter_type, entry_model,
                orb_minutes, confirm_bars, rr_target,
                sample_size, win_rate, expectancy_r,
                sharpe_ratio, max_drawdown_r, trades_per_year
         FROM validated_setups
-        WHERE status = 'active' AND entry_model IN ({placeholders})
+        WHERE {deployable_where} AND entry_model IN ({placeholders})
     """).fetchdf()
 
     print(f"Loaded {len(df)} active strategies across {df.groupby(FAMILY_COLS).ngroups} families")
