@@ -108,6 +108,22 @@ COST_SPECS = {
         tick_size=0.10,
         min_ticks_floor=10,
     ),
+    # GC = full-size Gold (100 troy oz, $100/pt). Parent contract of MGC.
+    # Added for Amendment 3.1 (GC proxy for MGC price-based discovery).
+    # Cost specs are 10x MGC by contract multiplier. Commission estimated
+    # proportionally — exact broker commission varies but does NOT affect
+    # pnl_r (R-multiples are price-based). COST_LT thresholds are identical
+    # in points because both numerator and denominator scale by 10x.
+    # @research-source: Amendment 3.1 (pre_registered_criteria.md, 2026-04-10)
+    "GC": CostSpec(
+        instrument="GC",
+        point_value=100.0,   # 100 troy oz * $1/oz per point
+        commission_rt=5.00,  # estimated proportional (not canonical — GC not traded live)
+        spread_doubled=2.00,  # same tick as MGC ($0.10/oz), same spread in points
+        slippage=2.00,        # same tick, similar fill dynamics for 1-lot
+        tick_size=0.10,       # $0.10/oz = $10/tick (vs MGC $1/tick)
+        min_ticks_floor=10,   # 1.0pt = $100 minimum risk
+    ),
     # TODO(remediation-2026-03-25): MNQ slippage model is 1 tick ($0.50).
     # MGC tbbo pilot showed mean=6.75 ticks (vs 1 modeled), std=41.57, max=263.
     # MNQ tbbo pilot has NOT been run yet — research/research_mnq_e2_slippage_pilot.py exists.
