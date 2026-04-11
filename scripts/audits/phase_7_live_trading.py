@@ -17,7 +17,8 @@ from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import PROJECT_ROOT
 from scripts.audits import AuditPhase, Severity, db_connect
 from trading_app.config import ALL_FILTERS, ENTRY_MODELS, EXCLUDED_FROM_FITNESS, get_excluded_sessions
-from trading_app.live_config import LIVE_PORTFOLIO
+from trading_app.prop_profiles import get_active_profile_ids, get_profile_lane_definitions
+from trading_app.validated_shelf import deployable_validated_relation
 
 
 def main():
@@ -36,56 +37,54 @@ def main():
 
 
 def _check_live_config_coherence(audit: AuditPhase, con):
-    """7A — Live Config Coherence."""
+    """7A — Runtime lane coherence against canonical profile + shelf authorities."""
     print("\n--- 7A. Live Config Coherence ---")
 
-    if not LIVE_PORTFOLIO:
-        audit.check_info("LIVE_PORTFOLIO is empty")
+    active_profiles = get_active_profile_ids(require_daily_lanes=False, exclude_self_funded=False)
+    active_profiles_with_lanes = get_active_profile_ids(require_daily_lanes=True, exclude_self_funded=False)
+    if not active_profiles:
+        audit.check_info("No active execution profiles")
         return
 
-    audit.check_info(f"LIVE_PORTFOLIO has {len(LIVE_PORTFOLIO)} specs")
+    audit.check_info(f"Active execution profiles: {len(active_profiles)}")
+    if not active_profiles_with_lanes:
+        audit.check_info("No active profiles with explicit daily lanes")
+        return
 
-    # Tier breakdown
-    tiers = {}
-    for spec in LIVE_PORTFOLIO:
-        tiers.setdefault(spec.tier, []).append(spec)
-    for tier, specs in sorted(tiers.items()):
-        print(f"         {tier}: {len(specs)} specs")
+    lane_defs: list[dict] = []
+    for profile_id in active_profiles_with_lanes:
+        lanes = get_profile_lane_definitions(profile_id)
+        lane_defs.extend(lanes)
+        audit.check_info(f"{profile_id}: {len(lanes)} configured lane(s)")
 
-    # Validate each spec
     catalog_keys = set(SESSION_CATALOG.keys())
     filter_keys = set(ALL_FILTERS.keys())
     entry_set = set(ENTRY_MODELS)
 
-    for spec in LIVE_PORTFOLIO:
+    for lane in lane_defs:
         issues = []
 
-        if spec.orb_label not in catalog_keys:
-            issues.append(f"orb_label '{spec.orb_label}' not in SESSION_CATALOG")
-        if spec.entry_model not in entry_set:
-            issues.append(f"entry_model '{spec.entry_model}' not in ENTRY_MODELS")
-        if spec.filter_type not in filter_keys:
-            issues.append(f"filter_type '{spec.filter_type}' not in ALL_FILTERS")
+        if lane["orb_label"] not in catalog_keys:
+            issues.append(f"orb_label '{lane['orb_label']}' not in SESSION_CATALOG")
+        if lane["entry_model"] not in entry_set:
+            issues.append(f"entry_model '{lane['entry_model']}' not in ENTRY_MODELS")
+        if lane["filter_type"] not in filter_keys:
+            issues.append(f"filter_type '{lane['filter_type']}' not in ALL_FILTERS")
 
         if issues:
-            audit.check_failed(f"{spec.family_id}: {'; '.join(issues)}")
+            audit.check_failed(f"{lane['strategy_id']}: {'; '.join(issues)}")
             audit.add_finding(
                 Severity.HIGH,
                 "CONFIG_DRIFT",
-                claimed=f"{spec.family_id} references valid config values",
+                claimed=f"{lane['strategy_id']} references valid runtime config values",
                 actual="; ".join(issues),
-                evidence="trading_app/live_config.py:LIVE_PORTFOLIO",
+                evidence="trading_app/prop_profiles.py daily_lanes",
                 fix_type="CONFIG_FIX",
             )
 
     # Per-instrument session exclusion checks
-    # EXCLUDED_FROM_FITNESS is now instrument-aware (dict[str, set[str]])
-    # Verify that excluded sessions in LIVE_PORTFOLIO are only for instruments where they have edge
     for inst, excluded_sessions in EXCLUDED_FROM_FITNESS.items():
         for sess in sorted(excluded_sessions):
-            # Check that no LIVE_PORTFOLIO spec uses this excluded (instrument, session) combo
-            # Note: LIVE_PORTFOLIO specs don't carry instrument — they're matched by family
-            # So we just verify the exclusion config is internally consistent
             audit.check_passed(f"{sess} excluded from fitness for {inst}")
 
     # Verify MGC SINGAPORE_OPEN is still excluded (documented: 74% double-break)
@@ -95,29 +94,52 @@ def _check_live_config_coherence(audit: AuditPhase, con):
     else:
         audit.check_failed("SINGAPORE_OPEN NOT excluded from MGC fitness")
 
-    # Verify families exist in validated_setups
+    shelf_relation = deployable_validated_relation(con, alias="vs")
     valid_issues = 0
-    for spec in LIVE_PORTFOLIO:
+    for lane in lane_defs:
         r = con.execute(
-            """
-            SELECT COUNT(*) FROM validated_setups
-            WHERE orb_label = ? AND entry_model = ? AND filter_type = ? AND status = 'active'
+            f"""
+            SELECT instrument, orb_label, entry_model, filter_type
+            FROM {shelf_relation}
+            WHERE vs.strategy_id = ?
         """,
-            [spec.orb_label, spec.entry_model, spec.filter_type],
-        ).fetchone()[0]
-        if r == 0:
+            [lane["strategy_id"]],
+        ).fetchone()
+        if r is None:
             valid_issues += 1
-            audit.check_failed(f"{spec.family_id}: no matching active validated_setups")
+            audit.check_failed(f"{lane['strategy_id']}: no matching deployable validated strategy")
+            continue
+
+        lane_tuple = (
+            lane["instrument"],
+            lane["orb_label"],
+            lane["entry_model"],
+            lane["filter_type"],
+        )
+        shelf_tuple = tuple(r)
+        if lane_tuple != shelf_tuple:
+            valid_issues += 1
+            audit.check_failed(
+                f"{lane['strategy_id']}: profile lane metadata does not match deployable shelf row"
+            )
+            audit.add_finding(
+                Severity.HIGH,
+                "PARITY_VIOLATION",
+                claimed=f"{lane['strategy_id']} lane metadata matches deployable shelf row",
+                actual=f"lane={lane_tuple!r}, shelf={shelf_tuple!r}",
+                evidence="trading_app/prop_profiles.py × deployable_validated_setups",
+                fix_type="CONFIG_FIX",
+            )
 
     if valid_issues == 0:
-        audit.check_passed("All LIVE_PORTFOLIO specs have matching validated_setups")
+        audit.check_passed("All active profile lanes have matching deployable validated strategies")
     else:
         audit.add_finding(
             Severity.HIGH,
             "ORPHAN_STRATEGY",
-            claimed="All live specs have validated strategies",
-            actual=f"{valid_issues} spec(s) without matching validated_setups",
-            evidence="SELECT FROM validated_setups for each LIVE_PORTFOLIO spec",
+            claimed="All active profile lanes resolve to deployable validated strategies",
+            actual=f"{valid_issues} lane(s) missing or mismatched against deployable_validated_setups",
+            evidence="trading_app/prop_profiles.py daily_lanes × deployable_validated_setups",
             fix_type="REBUILD_NEEDED",
         )
 

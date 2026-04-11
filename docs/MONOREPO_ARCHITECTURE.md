@@ -1,5 +1,12 @@
 # Monorepo Architecture
 
+Reference guide only. Document-role registry: `docs/governance/document_authority.md`.
+This file is for monorepo orientation, not live runtime truth. Canonical DB and
+trading/runtime policy live in `CLAUDE.md`, `TRADING_RULES.md`,
+`RESEARCH_RULES.md`, and code-backed registries such as `pipeline/paths.py`,
+`pipeline/asset_configs.py`, `pipeline/dst.py`, `pipeline/cost_model.py`, and
+`pipeline/db_contracts.py`.
+
 Documentation for the canompx3 monorepo — explains service relationships, shared resources, and development conventions across all services.
 
 ## Service Overview
@@ -209,7 +216,7 @@ API service layer providing programmatic access to project resources.
 - `trading_app/nested/` modules handle 15m/30m ORB discovery (data stored in main orb_outcomes with orb_minutes=15/30, not separate tables)
 - `trading_app/regime/schema.py` creates regime schema (regime_strategies, regime_validated tables)
 
-**CRITICAL:** Never run two write processes against the same DuckDB file simultaneously. Canonical DB location is `C:/db/gold.db` (set via `DUCKDB_PATH` in `.env`). All code reads from this single location via `pipeline.paths.GOLD_DB_PATH`.
+**CRITICAL:** Never run two write processes against the same DuckDB file simultaneously. Canonical DB location is `<project>/gold.db` by default, with `DUCKDB_PATH` as the override path. `C:/db/gold.db` is deprecated scratch and not canonical. All code reads from the canonical path via `pipeline.paths.GOLD_DB_PATH`.
 
 ---
 

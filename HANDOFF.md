@@ -219,6 +219,106 @@ so document roles are explicit instead of folklore.
   "Features planned but NOT YET BUILT." marker already satisfies the new drift
   check.
 
+## Update (2026-04-11 — system authority map + live audit runtime wiring)
+
+### Headline
+
+Started the broader project-backbone hardening by doing two things:
+
+- published a whole-project authority/context map so the repo states where
+  truth lives instead of relying on folklore
+- rewired Phase 7 live-readiness audit to use the same runtime authorities the
+  system actually uses (`prop_profiles` + deployable shelf), not deprecated
+  `LIVE_PORTFOLIO`
+
+### What changed
+
+- new governance doc:
+  - `docs/governance/system_authority_map.md`
+  - classifies:
+    - doctrine
+    - canonical registries
+    - command writers
+    - published read models / contracts
+    - derived operational state
+    - audits / verification
+    - plans / history
+    - reference / generated docs
+  - design rule explicitly stated:
+    - **linked truth, not copied truth**
+- expanded document-role registry:
+  - `docs/governance/document_authority.md`
+  - now includes:
+    - `docs/governance/system_authority_map.md`
+    - `docs/ARCHITECTURE.md`
+    - `docs/MONOREPO_ARCHITECTURE.md`
+    - `REPO_MAP.md`
+- marked architecture reference docs as non-authoritative and fixed one active
+  false claim:
+  - `docs/ARCHITECTURE.md`
+    - added "Reference guide only" banner
+  - `docs/MONOREPO_ARCHITECTURE.md`
+    - added "Reference guide only" banner
+    - corrected stale DB claim:
+      - old false claim: canonical DB = `C:/db/gold.db`
+      - correct claim: canonical DB = `<project>/gold.db` by default, with
+        `DUCKDB_PATH` override
+- rewired live audit:
+  - `scripts/audits/phase_7_live_trading.py`
+  - removed dependency on `trading_app.live_config.LIVE_PORTFOLIO`
+  - now sources active runtime lanes from:
+    - `trading_app.prop_profiles.get_active_profile_ids(...)`
+    - `trading_app.prop_profiles.get_profile_lane_definitions(...)`
+  - now validates against:
+    - `deployable_validated_relation(...)`
+  - added parity check so lane metadata must match the deployable shelf row
+- tightened drift:
+  - `pipeline/check_drift.py`
+  - new checks:
+    - 109 `System authority map exists and classifies linked truth surfaces`
+    - 110 `Phase 7 live audit uses canonical runtime authorities`
+  - expanded check 108 document-authority surface coverage
+- added regression coverage:
+  - `tests/test_pipeline/test_check_drift_ws2.py`
+  - `tests/test_audits/test_phase_7_live_trading.py`
+
+### Why this matters
+
+- This is the first whole-project slice aimed at making the repo
+  self-describing.
+- The audit layer now consumes runtime truth instead of checking a dead config
+  path and reporting fake problems.
+- The authority docs now separate binding truth from reference/orientation
+  surfaces more explicitly.
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check pipeline/check_drift.py scripts/audits/phase_7_live_trading.py tests/test_pipeline/test_check_drift_ws2.py tests/test_audits/test_phase_7_live_trading.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_check_drift_ws2.py tests/test_audits/test_phase_7_live_trading.py -q`
+  - `73 passed`
+- `./.venv-wsl/bin/python scripts/audits/run_all.py --phase 7`
+  - passed
+  - old false orphan finding is gone
+  - phase now audits active `prop_profiles` lanes correctly
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - passed structurally with new checks 109/110
+  - final run in this shell completed with:
+    - `NO DRIFT DETECTED: 103 checks passed [OK], 0 skipped (DB unavailable), 7 advisory`
+  - caveat:
+    - the shell logged `gold.db` permission contention at startup, likely from
+      concurrent terminals, so treat the `DB unavailable` note as an
+      environment caveat rather than a code regression
+
+### Notes
+
+- Working tree remains heavily dirty from unrelated parallel work. This slice
+  is intentionally limited to governance/audit files and should be committed
+  selectively.
+- This is not the whole-project fix. It is the first backbone slice:
+  authorities + audit wiring. The next likely step is broader reader
+  classification and `scripts/tools` decomposition planning / enforcement.
+
 ### Headline
 
 Made deployable-shelf semantics explicit and fail-closed:

@@ -1,5 +1,11 @@
 # Architecture & Commands Reference
 
+Reference guide only. Document-role registry: `docs/governance/document_authority.md`.
+Use this file for orientation and common commands, not as proof of live
+runtime truth. Canonical workflow/routing lives in `CLAUDE.md`; trading/live
+doctrine lives in `TRADING_RULES.md`; methodology lives in `RESEARCH_RULES.md`;
+current repo layout comes from `REPO_MAP.md`.
+
 ## Data Flow
 
 ```

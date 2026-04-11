@@ -19,9 +19,13 @@ to mean, and what it is not allowed to mean.
 | `TRADING_RULES.md` | live trading doctrine | live trading semantics, session/entry/filter interpretation, what is currently tradeable | research methodology, future feature plans |
 | `RESEARCH_RULES.md` | research doctrine | methodology, statistical standards, discovery discipline, interpretation discipline | live deployment state, portfolio routing |
 | `docs/institutional/pre_registered_criteria.md` | locked promotion/validation policy | the criteria validated strategies must satisfy | implementation details of how code is written |
+| `docs/governance/system_authority_map.md` | whole-project authority/context map | where major truth surfaces live, how categories relate, what is linked vs derived | live runtime values by itself |
 | `ROADMAP.md` | planning inventory | planned or not-yet-built work only | current implementation truth, live behavior, policy |
 | `HANDOFF.md` | cross-tool baton | current session baton, recent changes, local warnings | durable truth when code or canonical docs disagree |
 | `docs/plans/` | design history and active decisions | durable design decisions and rationale while active and not archived | live runtime truth when code or DB disagree |
+| `docs/ARCHITECTURE.md` | operational reference guide | command reference and orientation when consistent with code | current runtime truth when code/DB disagree |
+| `docs/MONOREPO_ARCHITECTURE.md` | monorepo orientation reference | service inventory and repository navigation | current DB location, canonical runtime policy, live deployment semantics |
+| `REPO_MAP.md` | generated inventory | file/directory layout snapshot generated from the repo | behavior, policy, runtime state |
 
 ## Conflict rules
 
@@ -36,6 +40,9 @@ to mean, and what it is not allowed to mean.
 5. `HANDOFF.md` and `docs/plans/` are context and design surfaces, not
    canonical research truth. They can explain decisions; they do not override
    canonical layers or live code.
+6. `docs/ARCHITECTURE.md`, `docs/MONOREPO_ARCHITECTURE.md`, and `REPO_MAP.md`
+   are reference surfaces. They must point back to canonical code or generated
+   sources and must not drift into pseudo-authority.
 
 ## Maintenance rules
 
