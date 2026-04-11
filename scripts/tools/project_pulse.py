@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project pulse — synthesize project state from 9 signal sources.
+"""Project pulse — synthesize project state from linked repo/runtime signals.
 
 Answers four questions:
   1. Is anything broken?     (drift, tests)

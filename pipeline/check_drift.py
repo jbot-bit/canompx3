@@ -5202,7 +5202,7 @@ CHECKS = [
         False,
         False,
     ),
-    ("Session guard ordering matches ML config", check_session_guard_sync, False, False),
+    ("Session guard ordering canonical source retained after ML removal", check_session_guard_sync, False, False),
     ("Noise floor gate removed — no-op since 2026-03-21 canon lock", check_noise_floor_active, False, False),
     (
         "No validated strategies below entry-model noise floor (per-strategy null, not global max)",

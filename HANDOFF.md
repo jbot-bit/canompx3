@@ -8,6 +8,50 @@
 
 ## Update (2026-04-11 — validated shelf lifecycle hardening)
 
+## Update (2026-04-11 — fresh-POV governance audit cleanup)
+
+### Headline
+
+Fresh audit pass found one process-integrity gap: the repo had already deleted
+the ML subsystem and its drift checks, but the focused drift test file still
+expected dead ML check functions to exist. Drift output also still described
+one no-op check as if it were verifying live ML config sync.
+
+### What changed
+
+- cleaned `tests/test_pipeline/test_check_drift_ws2.py`
+  - removed stale expectations for:
+    - `check_ml_config_canonical_sources()`
+    - `check_ml_lookahead_blacklist()`
+  - replaced with an explicit no-op test for
+    - `check_session_guard_sync()`
+- cleaned `pipeline/check_drift.py`
+  - renamed check 76 description from
+    - `Session guard ordering matches ML config`
+    - to
+    - `Session guard ordering canonical source retained after ML removal`
+- cleaned `scripts/tools/project_pulse.py`
+  - header now says it synthesizes state from linked repo/runtime signals,
+    not a stale fixed count of signal sources
+
+### Why it matters
+
+The codebase was directionally right, but the verification/process layer still
+contained stale claims from the dead ML era. That is exactly the kind of small
+dishonesty that rots institutional quality over time.
+
+This slice does not add new architecture. It removes stale verification
+assumptions so the repo describes what it actually verifies.
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check pipeline/check_drift.py tests/test_pipeline/test_check_drift_ws2.py scripts/tools/project_pulse.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_tools/test_project_pulse.py tests/test_pipeline/test_check_drift_ws2.py -q`
+  - `128 passed`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 97 checks passed [OK], 0 skipped (DB unavailable), 5 advisory`
+
 ## Update (2026-04-11 — code-backed system authority registry + pulse identity)
 
 ### Headline

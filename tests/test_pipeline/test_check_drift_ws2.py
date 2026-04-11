@@ -706,26 +706,15 @@ class TestTradingRulesAuthority:
         assert len(violations) == 0
 
 
-# ── Check 48: ML config canonical sources ─────────────────────────────
+# ── Deprecated ML/session guard seam after ML removal ─────────────────
 
 
-class TestMlConfigCanonicalSources:
-    """Check 48: ML config instruments/features match pipeline sources."""
+class TestSessionGuardSync:
+    """Session guard sync is intentionally a no-op after ML subsystem deletion."""
 
-    def test_current_config_passes(self):
-        violations = check_drift.check_ml_config_canonical_sources()
-        assert len(violations) == 0
-
-
-# ── Check 49: ML lookahead blacklist ──────────────────────────────────
-
-
-class TestMlLookaheadBlacklist:
-    """Check 49: ML features must not include look-ahead columns."""
-
-    def test_current_config_passes(self):
-        violations = check_drift.check_ml_lookahead_blacklist()
-        assert len(violations) == 0
+    def test_deprecated_noop_passes(self):
+        violations = check_drift.check_session_guard_sync()
+        assert violations == []
 
 
 class TestValidatedSetupsWriterAllowlist:
