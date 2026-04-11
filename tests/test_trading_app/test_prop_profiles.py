@@ -17,12 +17,12 @@ from trading_app.prop_profiles import (
     TradingBook,
     TradingBookEntry,
     compute_profit_split_factor,
-    get_active_profile_ids,
     get_account_tier,
-    get_profile_lane_definitions,
+    get_active_profile_ids,
     get_firm_spec,
     get_lane_registry,
     get_profile,
+    get_profile_lane_definitions,
     resolve_profile_id,
 )
 
@@ -86,11 +86,34 @@ class TestAccountProfile:
         assert p.active is True
 
     def test_topstep_primary_auto_profile(self):
+        """Structure-based assertions (not literal count). The primary auto
+        profile evolves as validated lanes come and go; we anchor on the
+        invariants: core ORB_G5 lanes must be present, every lane must be
+        MNQ-only, every lane must carry an ORB cap, and max_slots must
+        equal the actual lane count. C11 Monte Carlo gate is verified at
+        expansion time and lives in the stage ledger, not here.
+        """
         p = get_profile("topstep_50k_mnq_auto")
         assert p.firm == "topstep"
         assert p.account_size == 50_000
         assert p.active is True
-        assert len(p.daily_lanes) == 5  # Allocator-driven primary deployment
+        assert p.max_slots == len(p.daily_lanes), (
+            "max_slots must match actual lane count"
+        )
+        assert all(lane.instrument == "MNQ" for lane in p.daily_lanes)
+        lane_ids = {lane.strategy_id for lane in p.daily_lanes}
+        core = {
+            "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5",
+            "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G5",
+            "MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_G5",
+            "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G5",
+            "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G5",
+        }
+        assert core <= lane_ids, f"core ORB_G5 lanes missing: {core - lane_ids}"
+        for lane in p.daily_lanes:
+            assert lane.max_orb_size_pts is not None, (
+                f"{lane.strategy_id} missing ORB cap"
+            )
 
     def test_tradeify_scaling_profile(self):
         p = get_profile("tradeify_50k")
@@ -203,11 +226,19 @@ class TestDailyLaneSpecOrbCap:
         assert lane.max_orb_size_pts == 150.0
 
     def test_tokyo_open_has_cap(self):
-        """TOKYO_OPEN lane must have max_orb_size_pts set in the primary TopStep profile."""
+        """Every TOKYO_OPEN lane in the primary TopStep profile must carry the
+        same session-level ORB cap. Multi-RR profiles (2026-04-10) put more
+        than one lane on a session; the cap is a session attribute (volatility
+        profile) and must agree across all lanes on that session — consistency
+        is what ``get_lane_registry`` enforces.
+        """
         p = get_profile("topstep_50k_mnq_auto")
         tokyo_lanes = [lane for lane in p.daily_lanes if lane.orb_label == "TOKYO_OPEN"]
-        assert len(tokyo_lanes) == 1
-        assert tokyo_lanes[0].max_orb_size_pts == 80.0
+        assert tokyo_lanes, "expected at least one TOKYO_OPEN lane"
+        caps = {lane.max_orb_size_pts for lane in tokyo_lanes}
+        assert caps == {80.0}, (
+            f"TOKYO_OPEN lanes must all share cap 80.0; got {caps}"
+        )
 
     def test_all_lanes_have_caps(self):
         """All active primary lanes must have max_orb_size_pts set."""
@@ -244,8 +275,35 @@ class TestLaneRegistryOrbCap:
                 assert registry[label]["max_orb_size_pts"] == expected, f"{label} cap mismatch"
 
     def test_duplicate_session_profile_raises_on_session_registry(self):
-        with pytest.raises(ValueError, match="multiple lanes for session"):
+        """get_lane_registry must raise when lanes on the same session
+        disagree on max_orb_size_pts. topstep_50k_type_a has NYSE_OPEN lanes
+        for both MNQ (cap 120) and MES (cap 30), so the session-level cap
+        is not resolvable and the registry must fail closed rather than
+        silently pick one.
+        """
+        with pytest.raises(ValueError, match="inconsistent max_orb_size_pts"):
             get_lane_registry("topstep_50k_type_a")
+
+    def test_consistent_duplicate_sessions_allowed(self):
+        """Multi-RR profiles (multiple lanes on the same session that share
+        the same cap, as in the active topstep_50k_mnq_auto profile after
+        the 2026-04-10 multi-RR discovery) must NOT raise. This is the live
+        bot's ORB-cap loader path and was a latent production bug before
+        2026-04-12 — session_orchestrator.__init__ would crash.
+        """
+        # Live active profile has EUROPE_FLOW×2, TOKYO_OPEN×2, NYSE_OPEN×2
+        # after 2026-04-12 expansion. All session-duplicated lanes share
+        # identical max_orb_size_pts.
+        registry = get_lane_registry("topstep_50k_mnq_auto")
+        assert "EUROPE_FLOW" in registry
+        assert "TOKYO_OPEN" in registry
+        assert "NYSE_OPEN" in registry
+        assert "COMEX_SETTLE" in registry
+        assert "CME_PRECLOSE" in registry
+        assert registry["EUROPE_FLOW"]["max_orb_size_pts"] == 120.0
+        assert registry["TOKYO_OPEN"]["max_orb_size_pts"] == 80.0
+        assert registry["NYSE_OPEN"]["max_orb_size_pts"] == 80.0
+        assert registry["COMEX_SETTLE"]["max_orb_size_pts"] == 80.0
 
     def test_duplicate_session_profile_preserves_all_lane_definitions(self):
         lanes = get_profile_lane_definitions("topstep_50k_type_a")

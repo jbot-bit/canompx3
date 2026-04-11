@@ -398,29 +398,43 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         account_size=50_000,
         copies=2,  # Start with 1-2 Express, scale to 5 after proving loop
         stop_multiplier=0.75,
-        max_slots=5,
+        max_slots=7,
         active=True,
         allowed_sessions=frozenset(
             {
                 "EUROPE_FLOW",
                 "TOKYO_OPEN",
                 "NYSE_OPEN",
+                "COMEX_SETTLE",
+                "CME_PRECLOSE",
             }
         ),
         allowed_instruments=frozenset({"MNQ"}),
-        # VALIDATED-SOURCED LANES (2026-04-10 — multi-RR discovery).
+        # VALIDATED-SOURCED LANES.
         #
-        # Sourced from validated_setups after Pathway B individual discovery
-        # (hypothesis file: 2026-04-10-mnq-multi-rr-individual.yaml).
-        # All 5 passed WF, OOS, era stability gates.
+        # Core (2026-04-10 — multi-RR Pathway B discovery, 5 ORB_G5 lanes):
+        #   hypothesis file 2026-04-10-mnq-multi-rr-individual.yaml. All
+        #   passed WF, OOS, era stability gates.
         #
-        # COMEX_SETTLE excluded: only RR1.0 had edge, and the RR1.0
-        # strategies were wiped by a validator bug (re-run needed to restore).
-        # Re-add COMEX_SETTLE RR1.0 G5 once restored.
+        # Expansion (2026-04-12 — profit expansion stage, 2 new-session lanes):
+        #   Selected from deployable_validated_setups for highest honest
+        #   per-lot EV under family-deduplication and session-diversification
+        #   constraints. Both expansion lanes target BRAND NEW sessions
+        #   (COMEX_SETTLE, CME_PRECLOSE) for pure time-window diversification,
+        #   with distinct families (752, 5e7) that do not overlap the core
+        #   families (358, 01c, 27d).
+        #
+        # Two additional same-session candidates (NYSE_OPEN X_MES_ATR60,
+        # EUROPE_FLOW OVNRNG_100) were evaluated and REJECTED: Monte Carlo
+        # showed they pushed C11 operational pass from 86.2% down to 75.8%
+        # because same-session concurrency with the core ORB_G5 lanes
+        # compounded drawdowns. The 7-lane pure-new-session config actually
+        # IMPROVES C11 to 88.4% while increasing p50 90d PnL by $629/copy.
         #
         # Enforced by drift check 95 (pipeline/check_drift.py) — every lane in
         # an active profile must exist in validated_setups with status='active'.
         daily_lanes=(
+            # --- Core: ORB_G5 (multi-RR, 2026-04-10) ---
             DailyLaneSpec(
                 "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5",
                 "MNQ",
@@ -451,14 +465,40 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "TOKYO_OPEN",
                 max_orb_size_pts=80.0,
             ),
+            # --- Expansion: pure new-session diversification (2026-04-12) ---
+            # COMEX_SETTLE OVNRNG_100: highest ExpR 0.215, Sh 1.70, new session,
+            # new family 752. Cap 80.0 matches this profile's NYSE_OPEN
+            # convention and the pre-existing test_all_registry_lanes_have_caps
+            # assertion (honest deployment 2026-04-03); strategy avg stop is
+            # ~39pts so a 60pt execution stop from an 80-cap is ~2x normal —
+            # tight tail-risk gate.
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=80.0,
+            ),
+            # CME_PRECLOSE X_MES_ATR60: highest Sharpe 1.88, new session,
+            # new family 5e7, cross-asset filter using MES ATR60.
+            DailyLaneSpec(
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60",
+                "MNQ",
+                "CME_PRECLOSE",
+                max_orb_size_pts=120.0,
+            ),
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "Multi-RR validated lanes (2026-04-10 discovery). All lanes "
-            "cross-referenced against validated_setups via drift check 95. "
-            "COMEX_SETTLE RR1.0 pending re-addition after validator bug fix. "
-            "Two EUROPE_FLOW lanes (RR1.5+2.0) and two TOKYO_OPEN lanes "
-            "(RR1.5+2.0) reflect session-specific optimal RR from raw data."
+            "7-lane MNQ-only auto profile. Core 5 ORB_G5 lanes from 2026-04-10 "
+            "multi-RR discovery; expansion 2 pure-new-session lanes from "
+            "2026-04-12 profit expansion (COMEX_SETTLE OVNRNG, CME_PRECLOSE "
+            "X_MES_ATR60). Same-session candidates were evaluated and rejected "
+            "after Monte Carlo showed C11 regression due to concurrent-drawdown "
+            "compounding. C11 operational pass improved from 86.2% to 88.4% "
+            "post-expansion with higher p50 PnL and lower trailing DD breach. "
+            "All lanes cross-referenced against validated_setups via drift "
+            "check 95. See docs/runtime/stages/profit-expansion-topstep-mnq-auto.md "
+            "for full audit trail."
         ),
     ),
     # =========================================================================
@@ -995,21 +1035,42 @@ def get_profile_lane_definitions(profile_id: str | None = None) -> list[dict]:
 
 
 def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
-    """Return a session-keyed lane map for profiles with unique sessions only."""
+    """Return a session-keyed lane map of session-level attributes.
+
+    Multi-RR profiles have multiple lanes per session. The ORB cap
+    (``max_orb_size_pts``) is a session-level attribute — a function of the
+    session's volatility profile, not of the specific strategy — so every
+    lane on the same session must share the same cap. This function returns
+    one representative lane dict per session and fails closed if lanes on
+    the same session disagree on ``max_orb_size_pts``.
+
+    Consumers (``live/session_orchestrator.py`` ORB cap loader,
+    ``scripts/tools/forward_monitor.py`` baseline loader) only read
+    session-level fields; they do not care which specific lane represents
+    the session.
+    """
     registry: dict[str, dict] = {}
-    duplicate_labels: set[str] = set()
+    cap_conflicts: dict[str, set[float | None]] = {}
     for lane in get_profile_lane_definitions(profile_id):
         label = lane["orb_label"]
-        if label in registry:
-            duplicate_labels.add(label)
+        cap = lane.get("max_orb_size_pts")
+        if label not in registry:
+            registry[label] = lane
             continue
-        registry[label] = lane
+        existing_cap = registry[label].get("max_orb_size_pts")
+        if cap != existing_cap:
+            cap_conflicts.setdefault(label, set()).update([existing_cap, cap])
 
-    if duplicate_labels:
-        dupes = ", ".join(sorted(duplicate_labels))
+    if cap_conflicts:
+        details = ", ".join(
+            f"{label}={sorted(caps, key=lambda c: (c is None, c))}"
+            for label, caps in sorted(cap_conflicts.items())
+        )
         raise ValueError(
-            "Profile has multiple lanes for session(s): "
-            f"{dupes}. Use full lane definitions or strategy_id instead of session-only lookup."
+            "Profile has inconsistent max_orb_size_pts across lanes on the "
+            f"same session: {details}. The ORB cap is a session-level "
+            "attribute and must be identical for every lane on a given "
+            "session. Reconcile the DailyLaneSpec entries in prop_profiles.py."
         )
 
     return registry
