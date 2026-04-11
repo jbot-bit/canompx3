@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import subprocess
 import sys
 from pathlib import Path
 
@@ -16,6 +17,37 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Directories to scan (relative to project root)
 SCAN_DIRS = ["pipeline", "trading_app", "scripts", "research", "tests"]
+
+
+def _git_tracked(root: Path) -> set[Path] | None:
+    """Return resolved paths (files + their parent dirs) tracked by git.
+
+    Falls back to None if git is unavailable, so callers can degrade to a
+    raw filesystem walk. Using git as the source of truth keeps gitignored
+    scratch directories (pipeline/checkpoints/, research/output/, etc.) out
+    of the generated map without hand-maintained exclude lists.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "ls-files"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+    tracked: set[Path] = set()
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+        p = (root / line).resolve()
+        tracked.add(p)
+        for parent in p.parents:
+            tracked.add(parent)
+            if parent == root:
+                break
+    return tracked
 
 # Budget limits (lines) per section — auto-truncate if exceeded
 TREE_BUDGET = 50
@@ -116,32 +148,42 @@ def _parse_module(path: Path) -> dict:
     return info
 
 
-def _build_tree(root: Path, scan_dirs: list[str]) -> list[str]:
+def _build_tree(root: Path, scan_dirs: list[str], tracked: set[Path] | None) -> list[str]:
     """Build a directory tree view."""
     lines = []
     for scan_dir in sorted(scan_dirs):
         dirpath = root / scan_dir
         if not dirpath.is_dir():
             continue
-        _walk_tree(dirpath, root, lines, prefix="")
+        _walk_tree(dirpath, root, lines, prefix="", tracked=tracked)
     return lines
 
 
-def _walk_tree(dirpath: Path, root: Path, lines: list[str], prefix: str) -> None:
+def _walk_tree(
+    dirpath: Path,
+    root: Path,
+    lines: list[str],
+    prefix: str,
+    tracked: set[Path] | None,
+) -> None:
     """Recursively build tree lines for a directory."""
     rel = dirpath.relative_to(root).as_posix()
     lines.append(f"{prefix}{rel}/")
     entries = sorted(dirpath.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
-    # Filter out __pycache__, .pyc
+    # Filter out __pycache__, .pyc, and anything git does not track.
     entries = [e for e in entries if e.name != "__pycache__" and not e.name.endswith(".pyc")]
+    if tracked is not None:
+        entries = [e for e in entries if e.resolve() in tracked]
     for entry in entries:
         if entry.is_dir():
-            _walk_tree(entry, root, lines, prefix=prefix + "  ")
+            _walk_tree(entry, root, lines, prefix=prefix + "  ", tracked=tracked)
         else:
             lines.append(f"{prefix}  {entry.name}")
 
 
-def _collect_modules(root: Path, scan_dirs: list[str]) -> list[dict]:
+def _collect_modules(
+    root: Path, scan_dirs: list[str], tracked: set[Path] | None
+) -> list[dict]:
     """Collect and parse all .py files in scan directories."""
     modules = []
     for scan_dir in scan_dirs:
@@ -151,6 +193,8 @@ def _collect_modules(root: Path, scan_dirs: list[str]) -> list[dict]:
         for py_file in sorted(dirpath.rglob("*.py")):
             # Skip __init__.py with zero LOC
             if py_file.name == "__init__.py" and _count_loc(py_file) == 0:
+                continue
+            if tracked is not None and py_file.resolve() not in tracked:
                 continue
             modules.append(_parse_module(py_file))
     return modules
@@ -168,6 +212,7 @@ def _truncate_lines(lines: list[str], budget: int, label: str) -> list[str]:
 def generate_repo_map(root: Path) -> str:
     """Generate the full REPO_MAP.md content."""
     sections = []
+    tracked = _git_tracked(root)
 
     # Header
     sections.append("# REPO_MAP.md")
@@ -179,14 +224,14 @@ def generate_repo_map(root: Path) -> str:
     sections.append("## Directory Tree")
     sections.append("")
     sections.append("```")
-    tree_lines = _build_tree(root, SCAN_DIRS)
+    tree_lines = _build_tree(root, SCAN_DIRS, tracked)
     tree_lines = _truncate_lines(tree_lines, TREE_BUDGET, "entries")
     sections.extend(tree_lines)
     sections.append("```")
     sections.append("")
 
     # Section 2: Module index
-    modules = _collect_modules(root, SCAN_DIRS)
+    modules = _collect_modules(root, SCAN_DIRS, tracked)
 
     sections.append("## Module Index")
     sections.append("")
