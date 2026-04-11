@@ -21,6 +21,11 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 import duckdb
 
+from pipeline.db_contracts import (
+    ACTIVE_VALIDATED_VIEW,
+    DEPLOYABLE_VALIDATED_VIEW,
+    DEPLOYMENT_SCOPE_DEPLOYABLE,
+)
 from pipeline.paths import GOLD_DB_PATH
 
 
@@ -33,6 +38,27 @@ def compute_trade_day_hash(days: list) -> str:
 
     day_str = ",".join(str(d) for d in sorted(days))
     return hashlib.md5(day_str.encode()).hexdigest()
+
+
+def _refresh_validated_shelf_views(con: duckdb.DuckDBPyConnection) -> None:
+    """Publish canonical validated shelf relations as DB views.
+
+    This keeps deployable-shelf semantics structural and queryable from one
+    place instead of forcing every reader to rebuild lifecycle predicates.
+    """
+    con.execute(f"""
+        CREATE OR REPLACE VIEW {ACTIVE_VALIDATED_VIEW} AS
+        SELECT *
+        FROM validated_setups
+        WHERE LOWER(status) = 'active'
+    """)
+    con.execute(f"""
+        CREATE OR REPLACE VIEW {DEPLOYABLE_VALIDATED_VIEW} AS
+        SELECT *
+        FROM {ACTIVE_VALIDATED_VIEW}
+        WHERE LOWER(COALESCE(deployment_scope, '{DEPLOYMENT_SCOPE_DEPLOYABLE}')) =
+              '{DEPLOYMENT_SCOPE_DEPLOYABLE}'
+    """)
 
 
 def init_trading_app_schema(db_path: Path | None = None, force: bool = False) -> None:
@@ -49,6 +75,8 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
     with duckdb.connect(str(db_path)) as con:
         if force:
             logger.warning("WARN: Force mode: Dropping existing trading_app tables...")
+            con.execute(f"DROP VIEW IF EXISTS {DEPLOYABLE_VALIDATED_VIEW}")
+            con.execute(f"DROP VIEW IF EXISTS {ACTIVE_VALIDATED_VIEW}")
             con.execute("DROP TABLE IF EXISTS edge_families")
             con.execute("DROP TABLE IF EXISTS strategy_trade_days")
             con.execute("DROP TABLE IF EXISTS validated_setups_archive")
@@ -685,6 +713,7 @@ def init_trading_app_schema(db_path: Path | None = None, force: bool = False) ->
             )
         """)
 
+        _refresh_validated_shelf_views(con)
         con.commit()
         logger.info("Trading app schema initialized successfully")
 
@@ -713,18 +742,26 @@ def verify_trading_app_schema(db_path: Path | None = None) -> tuple[bool, list[s
             "validation_run_log",
             "paper_trades",
         ]
+        expected_views = [
+            ACTIVE_VALIDATED_VIEW,
+            DEPLOYABLE_VALIDATED_VIEW,
+        ]
 
         # Check tables exist
         result = con.execute("""
-            SELECT table_name
+            SELECT table_name, table_type
             FROM information_schema.tables
             WHERE table_schema = 'main'
         """).fetchall()
-        existing_tables = {row[0] for row in result}
+        existing_tables = {row[0] for row in result if row[1] != "VIEW"}
+        existing_views = {row[0] for row in result if row[1] == "VIEW"}
 
         for table in expected_tables:
             if table not in existing_tables:
                 violations.append(f"Missing table: {table}")
+        for view in expected_views:
+            if view not in existing_views:
+                violations.append(f"Missing view: {view}")
 
         # Check orb_outcomes schema
         if "orb_outcomes" in existing_tables:

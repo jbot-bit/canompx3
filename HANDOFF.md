@@ -8,6 +8,72 @@
 
 ## Update (2026-04-11 — validated shelf lifecycle hardening)
 
+## Update (2026-04-11 — published validated-shelf DB contract)
+
+### Headline
+
+Turned deployable validated-shelf semantics into a published cross-layer DB
+contract instead of leaving them as helper folklore.
+
+### What changed
+
+- added neutral shared contract module:
+  - `pipeline/db_contracts.py`
+  - exports canonical names/helpers for:
+    - `active_validated_setups`
+    - `deployable_validated_setups`
+    - relation SQL helpers for active/deployable shelf reads
+- slimmed `trading_app/validated_shelf.py`
+  - keeps lifecycle semantics
+  - re-exports the neutral published contract so existing trading-app imports
+    keep working
+- hardened `trading_app/db_manager.py`
+  - publishes canonical shelf views with `CREATE OR REPLACE VIEW`
+  - refresh now happens **after** all `validated_setups` migrations
+  - `force=True` now drops dependent shelf views before dropping tables
+  - schema verification now requires the published views
+- migrated generic/central readers onto relation semantics:
+  - `trading_app/view_strategies.py`
+  - `pipeline/dashboard.py`
+- tightened `pipeline/check_drift.py`
+  - critical reader check now recognizes relation helpers
+  - `pipeline/dashboard.py` added to the critical reader set
+- added regression coverage:
+  - `tests/test_trading_app/test_validated_shelf.py`
+  - `tests/test_trading_app/test_db_manager.py`
+  - `tests/test_pipeline/test_dashboard_metrics.py`
+  - `tests/test_pipeline/test_check_drift_ws2.py`
+- design note saved at:
+  - `docs/plans/2026-04-11-published-db-contracts.md`
+
+### Review findings fixed before commit
+
+- initial view publication happened too early; later `ALTER TABLE`s made the
+  published views stale in DuckDB. Fixed by refreshing views at the end of
+  schema init.
+- initial dashboard migration violated the one-way dependency rule by importing
+  `trading_app` from `pipeline/`. Fixed by moving the published DB contract
+  into neutral `pipeline/db_contracts.py`.
+- touched files briefly picked up CRLF churn; normalized back to LF before
+  final review.
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check pipeline/db_contracts.py trading_app/validated_shelf.py trading_app/db_manager.py trading_app/view_strategies.py pipeline/dashboard.py pipeline/check_drift.py tests/test_trading_app/test_validated_shelf.py tests/test_trading_app/test_db_manager.py tests/test_pipeline/test_check_drift_ws2.py tests/test_pipeline/test_dashboard_metrics.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_validated_shelf.py tests/test_trading_app/test_db_manager.py tests/test_trading_app/test_view_strategies.py tests/test_pipeline/test_check_drift_ws2.py tests/test_pipeline/test_dashboard_metrics.py -q`
+  - `104 passed`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 100 checks passed [OK], 0 skipped, 7 advisory`
+
+### Live DB note
+
+- Read-only drift against repo `gold.db` passed.
+- Attempt to run `init_trading_app_schema()` against live `gold.db` failed with
+  `IO Error: Cannot open file .../gold.db: Permission denied`.
+- Interpretation: code and tests are clean; live DB schema refresh still needs a
+  writable `gold.db` handle from an unblocked shell/session.
+
 ### Headline
 
 Made deployable-shelf semantics explicit and fail-closed:

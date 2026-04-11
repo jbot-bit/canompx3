@@ -30,7 +30,7 @@ import duckdb
 import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # Column aliases for --sort
 SORT_COLUMNS = {
@@ -101,7 +101,8 @@ def fetch_strategies(
         if not _has_table(con, "validated_setups"):
             return pd.DataFrame()
 
-        where = [deployable_validated_predicate(con)]
+        shelf_relation = deployable_validated_relation(con, alias="vs")
+        where = []
         params = []
 
         if orb:
@@ -120,7 +121,7 @@ def fetch_strategies(
             where.append("strategy_id LIKE ?")
             params.append(f"%_{direction}")
 
-        where_clause = " AND ".join(where)
+        where_clause = " AND ".join(where) if where else "TRUE"
 
         # Whitelist sort_col to prevent SQL injection via sort parameter
         if sort_col not in _VALID_SORT_COLS:
@@ -132,7 +133,7 @@ def fetch_strategies(
                    rr_target, filter_type, sample_size, win_rate,
                    expectancy_r, sharpe_ratio, sharpe_ann, trades_per_year,
                    max_drawdown_r, years_tested, stress_test_passed
-            FROM validated_setups
+            FROM {shelf_relation}
             WHERE {where_clause}
             ORDER BY {sort_col} {sort_dir}
             LIMIT ?
@@ -147,7 +148,7 @@ def fetch_summary(db_path: Path) -> pd.DataFrame:
     with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return pd.DataFrame()
-        deployable_where = deployable_validated_predicate(con)
+        shelf_relation = deployable_validated_relation(con, alias="vs")
 
         df = con.execute(f"""
             SELECT orb_label,
@@ -160,8 +161,7 @@ def fetch_summary(db_path: Path) -> pd.DataFrame:
                    ROUND(AVG(sharpe_ann), 3) as avg_shann,
                    ROUND(MAX(sharpe_ann), 3) as best_shann,
                    ROUND(AVG(win_rate) * 100, 1) as avg_wr_pct
-            FROM validated_setups
-            WHERE {deployable_where}
+            FROM {shelf_relation}
             GROUP BY orb_label
             ORDER BY count DESC
         """).fetchdf()
@@ -173,8 +173,8 @@ def fetch_total_count(db_path: Path) -> int:
     with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return 0
-        deployable_where = deployable_validated_predicate(con)
-        return con.execute(f"SELECT COUNT(*) FROM validated_setups WHERE {deployable_where}").fetchone()[0]
+        shelf_relation = deployable_validated_relation(con, alias="vs")
+        return con.execute(f"SELECT COUNT(*) FROM {shelf_relation}").fetchone()[0]
 
 
 def fetch_unique_trade_count(db_path: Path) -> int:
@@ -182,12 +182,12 @@ def fetch_unique_trade_count(db_path: Path) -> int:
     with duckdb.connect(str(db_path), read_only=True) as con:
         if not _has_table(con, "validated_setups"):
             return 0
-        deployable_where = deployable_validated_predicate(con)
+        shelf_relation = deployable_validated_relation(con, alias="vs")
         return con.execute(f"""
             SELECT COUNT(DISTINCT orb_label || '_' || entry_model || '_' ||
                          CAST(rr_target AS TEXT) || '_' ||
                          CAST(confirm_bars AS TEXT))
-            FROM validated_setups WHERE {deployable_where}
+            FROM {shelf_relation}
         """).fetchone()[0]
 
 
@@ -197,7 +197,8 @@ def fetch_families(db_path: Path, orb: str | None = None, entry: str | None = No
         if not _has_table(con, "validated_setups"):
             return pd.DataFrame()
 
-        where = [deployable_validated_predicate(con)]
+        shelf_relation = deployable_validated_relation(con, alias="vs")
+        where = []
         params = []
         if orb:
             where.append("orb_label = ?")
@@ -205,7 +206,7 @@ def fetch_families(db_path: Path, orb: str | None = None, entry: str | None = No
         if entry:
             where.append("entry_model = ?")
             params.append(entry)
-        where_clause = " AND ".join(where)
+        where_clause = " AND ".join(where) if where else "TRUE"
 
         df = con.execute(
             f"""
@@ -216,7 +217,7 @@ def fetch_families(db_path: Path, orb: str | None = None, entry: str | None = No
                    MAX(sample_size) as max_n,
                    ROUND(MAX(win_rate) * 100, 1) as best_wr_pct,
                    ROUND(MAX(expectancy_r), 3) as best_expr
-            FROM validated_setups
+            FROM {shelf_relation}
             WHERE {where_clause}
             GROUP BY orb_label, entry_model, rr_target, confirm_bars
             ORDER BY best_shann DESC NULLS LAST

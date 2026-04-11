@@ -26,6 +26,7 @@ from pathlib import Path
 import duckdb
 
 # Add project root to path
+from pipeline.db_contracts import deployable_validated_relation
 from pipeline.paths import DAILY_DBN_DIR, GOLD_DB_PATH
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -345,7 +346,8 @@ def collect_strategy_metrics(db_path: Path) -> dict:
         if "validated_setups" not in tables:
             return result
 
-        count = con.execute("SELECT COUNT(*) FROM validated_setups WHERE status = 'active'").fetchone()[0]
+        shelf_relation = deployable_validated_relation(con, alias="vs")
+        count = con.execute(f"SELECT COUNT(*) FROM {shelf_relation}").fetchone()[0]
         if count == 0:
             return result
 
@@ -356,12 +358,11 @@ def collect_strategy_metrics(db_path: Path) -> dict:
             result["experimental_count"] = con.execute("SELECT COUNT(*) FROM experimental_strategies").fetchone()[0]
 
         # Top 10 by ExpR
-        top = con.execute("""
+        top = con.execute(f"""
             SELECT orb_label, entry_model, confirm_bars, rr_target,
                    filter_type, sample_size, win_rate, expectancy_r,
                    sharpe_ratio, max_drawdown_r
-            FROM validated_setups
-            WHERE status = 'active'
+            FROM {shelf_relation}
             ORDER BY expectancy_r DESC
             LIMIT 10
         """).fetchall()
@@ -382,14 +383,13 @@ def collect_strategy_metrics(db_path: Path) -> dict:
         ]
 
         # Session breakdown
-        sessions = con.execute("""
+        sessions = con.execute(f"""
             SELECT orb_label,
                    COUNT(*) as count,
                    ROUND(AVG(expectancy_r), 3) as avg_expr,
                    ROUND(MAX(expectancy_r), 3) as best_expr,
                    ROUND(AVG(sharpe_ratio), 3) as avg_sharpe
-            FROM validated_setups
-            WHERE status = 'active'
+            FROM {shelf_relation}
             GROUP BY orb_label
             ORDER BY count DESC
         """).fetchall()
@@ -398,9 +398,9 @@ def collect_strategy_metrics(db_path: Path) -> dict:
         ]
 
         # Global bests
-        bests = con.execute("""
+        bests = con.execute(f"""
             SELECT MAX(expectancy_r), MAX(sharpe_ratio)
-            FROM validated_setups WHERE status = 'active'
+            FROM {shelf_relation}
         """).fetchone()
         result["best_expr"] = round(bests[0], 3) if bests[0] else 0
         result["best_sharpe"] = round(bests[1], 3) if bests[1] else 0

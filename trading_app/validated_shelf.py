@@ -10,12 +10,33 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.db_contracts import (
+    ACTIVE_VALIDATED_VIEW,
+    DEPLOYABLE_VALIDATED_VIEW,
+    DEPLOYMENT_SCOPE_DEPLOYABLE,
+    active_validated_relation,
+    deployable_validated_predicate,
+    deployable_validated_relation,
+    validated_setups_has_deployment_scope,
+)
 
-DEPLOYMENT_SCOPE_DEPLOYABLE = "deployable"
 DEPLOYMENT_SCOPE_NON_DEPLOYABLE = "non_deployable"
 NON_ACTIVE_INSTRUMENT_RETIREMENT_REASON = (
     "research-only / non-tradeable instrument (not in ACTIVE_ORB_INSTRUMENTS)"
 )
+__all__ = [
+    "ACTIVE_VALIDATED_VIEW",
+    "DEPLOYABLE_VALIDATED_VIEW",
+    "DEPLOYMENT_SCOPE_DEPLOYABLE",
+    "DEPLOYMENT_SCOPE_NON_DEPLOYABLE",
+    "NON_ACTIVE_INSTRUMENT_RETIREMENT_REASON",
+    "ShelfLifecycle",
+    "active_validated_relation",
+    "deployable_validated_predicate",
+    "deployable_validated_relation",
+    "validated_setups_has_deployment_scope",
+    "validated_shelf_lifecycle",
+]
 
 
 @dataclass(frozen=True)
@@ -38,35 +59,4 @@ def validated_shelf_lifecycle(instrument: str) -> ShelfLifecycle:
         status="retired",
         deployment_scope=DEPLOYMENT_SCOPE_NON_DEPLOYABLE,
         retirement_reason=NON_ACTIVE_INSTRUMENT_RETIREMENT_REASON,
-    )
-
-
-def validated_setups_has_deployment_scope(con) -> bool:
-    """Return True when the connected DB has the deployment_scope column."""
-    row = con.execute(
-        """
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = 'validated_setups'
-          AND column_name = 'deployment_scope'
-        LIMIT 1
-        """
-    ).fetchone()
-    return row is not None
-
-
-def deployable_validated_predicate(con, alias: str = "validated_setups") -> str:
-    """Return SQL predicate for the deployable shelf on this connection.
-
-    Older minimal test schemas may not have ``deployment_scope`` yet. In that
-    case, fall back to the historical contract of ``status='active'``.
-    """
-    prefix = f"{alias}." if alias else ""
-    status_predicate = f"LOWER({prefix}status) = 'active'"
-    if not validated_setups_has_deployment_scope(con):
-        return status_predicate
-    return (
-        f"{status_predicate} AND "
-        f"LOWER(COALESCE({prefix}deployment_scope, '{DEPLOYMENT_SCOPE_DEPLOYABLE}')) = "
-        f"'{DEPLOYMENT_SCOPE_DEPLOYABLE}'"
     )

@@ -4859,6 +4859,7 @@ def check_critical_deployable_shelf_consumers() -> list[str]:
     """Critical production readers must encode deployable-shelf semantics canonically."""
     violations: list[str] = []
     critical_files = [
+        PIPELINE_DIR / "dashboard.py",
         TRADING_APP_DIR / "live_config.py",
         TRADING_APP_DIR / "prop_portfolio.py",
         TRADING_APP_DIR / "lane_allocator.py",
@@ -4891,7 +4892,11 @@ def check_critical_deployable_shelf_consumers() -> list[str]:
             continue
         rel = fpath.relative_to(PROJECT_ROOT)
         content = fpath.read_text(encoding="utf-8")
-        uses_helper = "deployable_validated_predicate" in content
+        uses_helper = (
+            "deployable_validated_predicate" in content
+            or "deployable_validated_relation" in content
+            or "active_validated_relation" in content
+        )
         uses_explicit_scope = "deployment_scope" in content
         if not (uses_helper or uses_explicit_scope):
             violations.append(

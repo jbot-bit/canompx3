@@ -11,6 +11,7 @@ from trading_app.db_manager import (
     init_trading_app_schema,
     verify_trading_app_schema,
 )
+from trading_app.validated_shelf import ACTIVE_VALIDATED_VIEW, DEPLOYABLE_VALIDATED_VIEW
 
 
 @pytest.fixture
@@ -140,6 +141,58 @@ class TestInitSchema:
             """)
 
         con.close()
+
+    def test_creates_canonical_validated_views(self, db_path):
+        init_trading_app_schema(db_path=db_path)
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        rows = con.execute("""
+            SELECT table_name, table_type
+            FROM information_schema.tables
+            WHERE table_schema = 'main'
+              AND table_name IN (?, ?)
+            ORDER BY table_name
+        """, [ACTIVE_VALIDATED_VIEW, DEPLOYABLE_VALIDATED_VIEW]).fetchall()
+        con.close()
+
+        assert rows == [
+            (ACTIVE_VALIDATED_VIEW, "VIEW"),
+            (DEPLOYABLE_VALIDATED_VIEW, "VIEW"),
+        ]
+
+    def test_deployable_view_excludes_non_deployable_active_rows(self, db_path):
+        init_trading_app_schema(db_path=db_path)
+
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            INSERT INTO validated_setups (
+                strategy_id, instrument, orb_label, orb_minutes, rr_target,
+                confirm_bars, entry_model, filter_type, sample_size,
+                win_rate, expectancy_r, years_tested, all_years_positive,
+                stress_test_passed, status, deployment_scope
+            )
+            VALUES
+                ('deployable_s1', 'MNQ', 'US_DATA_830', 5, 2.0, 1, 'E2', 'ORB_G5',
+                 120, 0.54, 0.31, 5, TRUE, TRUE, 'active', 'deployable'),
+                ('research_s1', 'GC', 'US_DATA_830', 5, 2.0, 1, 'E2', 'ORB_G5',
+                 120, 0.54, 0.31, 5, TRUE, TRUE, 'active', 'non_deployable')
+        """)
+        active_ids = [
+            row[0]
+            for row in con.execute(
+                f"SELECT strategy_id FROM {ACTIVE_VALIDATED_VIEW} ORDER BY strategy_id"
+            ).fetchall()
+        ]
+        deployable_ids = [
+            row[0]
+            for row in con.execute(
+                f"SELECT strategy_id FROM {DEPLOYABLE_VALIDATED_VIEW} ORDER BY strategy_id"
+            ).fetchall()
+        ]
+        con.close()
+
+        assert active_ids == ["deployable_s1", "research_s1"]
+        assert deployable_ids == ["deployable_s1"]
 
 
 class TestVerifySchema:

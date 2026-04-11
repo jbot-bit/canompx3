@@ -699,8 +699,9 @@ WHERE LOWER(status) = 'active'
 \"\"\"
 """,
         )
-        helper_content = "from trading_app.validated_shelf import deployable_validated_predicate\n"
+        helper_content = "from trading_app.validated_shelf import deployable_validated_relation\n"
         for rel in [
+            tmp_path / "pipeline" / "dashboard.py",
             tmp_path / "trading_app" / "prop_portfolio.py",
             tmp_path / "trading_app" / "lane_allocator.py",
             tmp_path / "trading_app" / "portfolio.py",
@@ -731,10 +732,11 @@ WHERE LOWER(status) = 'active'
     def test_passes_helper_or_explicit_scope_usage(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
         helper_content = (
-            "from trading_app.validated_shelf import deployable_validated_predicate\n"
-            "predicate = deployable_validated_predicate(con)\n"
+            "from trading_app.validated_shelf import deployable_validated_relation\n"
+            "relation = deployable_validated_relation(con, alias='vs')\n"
         )
         for rel in [
+            tmp_path / "pipeline" / "dashboard.py",
             tmp_path / "trading_app" / "live_config.py",
             tmp_path / "trading_app" / "prop_portfolio.py",
             tmp_path / "trading_app" / "lane_allocator.py",

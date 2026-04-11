@@ -3,10 +3,14 @@
 import duckdb
 
 from trading_app.validated_shelf import (
+    ACTIVE_VALIDATED_VIEW,
+    DEPLOYABLE_VALIDATED_VIEW,
     DEPLOYMENT_SCOPE_DEPLOYABLE,
     DEPLOYMENT_SCOPE_NON_DEPLOYABLE,
     NON_ACTIVE_INSTRUMENT_RETIREMENT_REASON,
+    active_validated_relation,
     deployable_validated_predicate,
+    deployable_validated_relation,
     validated_shelf_lifecycle,
 )
 
@@ -48,5 +52,47 @@ class TestValidatedShelfLifecycle:
                 "LOWER(vs.status) = 'active' AND "
                 "LOWER(COALESCE(vs.deployment_scope, 'deployable')) = 'deployable'"
             )
+        finally:
+            con.close()
+
+    def test_active_relation_falls_back_to_subquery_without_view(self):
+        con = duckdb.connect(":memory:")
+        try:
+            con.execute("CREATE TABLE validated_setups (strategy_id VARCHAR, status VARCHAR)")
+            assert active_validated_relation(con, "vs") == (
+                "(SELECT * FROM validated_setups WHERE LOWER(status) = 'active') AS vs"
+            )
+        finally:
+            con.close()
+
+    def test_deployable_relation_falls_back_to_subquery_without_view(self):
+        con = duckdb.connect(":memory:")
+        try:
+            con.execute(
+                """
+                CREATE TABLE validated_setups (
+                    strategy_id VARCHAR,
+                    status VARCHAR,
+                    deployment_scope VARCHAR
+                )
+                """
+            )
+            assert deployable_validated_relation(con, "vs") == (
+                "(SELECT * FROM validated_setups WHERE "
+                "LOWER(validated_setups.status) = 'active' AND "
+                "LOWER(COALESCE(validated_setups.deployment_scope, 'deployable')) = "
+                "'deployable') AS vs"
+            )
+        finally:
+            con.close()
+
+    def test_relation_prefers_canonical_views_when_present(self):
+        con = duckdb.connect(":memory:")
+        try:
+            con.execute("CREATE TABLE validated_setups (strategy_id VARCHAR, status VARCHAR, deployment_scope VARCHAR)")
+            con.execute(f"CREATE VIEW {ACTIVE_VALIDATED_VIEW} AS SELECT * FROM validated_setups")
+            con.execute(f"CREATE VIEW {DEPLOYABLE_VALIDATED_VIEW} AS SELECT * FROM validated_setups")
+            assert active_validated_relation(con, "avs") == f"{ACTIVE_VALIDATED_VIEW} avs"
+            assert deployable_validated_relation(con, "dvs") == f"{DEPLOYABLE_VALIDATED_VIEW} dvs"
         finally:
             con.close()
