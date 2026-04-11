@@ -305,6 +305,23 @@ Six high-leverage research items identified by cross-referencing all findings. O
 
 ---
 
+## Dashboard Phase 3 — Embedded Chart + Signal Overlay — PARKED (2026-04-11)
+
+**Spec:** `docs/superpowers/specs/2026-04-11-dashboard-embedded-chart-signal-overlay.md` — parked, not scheduled.
+
+TradingView-style interactive chart embedded inside `bot_dashboard.html`, overlaid with ORB box, filter state, entry/stop/target lines, and entry markers. All state driven from existing `bot_state.json` → `lane_cards` (zero new computation). Optional click-to-trade via existing broker adapters.
+
+- **Library chosen:** TradingView Lightweight Charts (Apache 2.0, ~40KB, MIT-licensed alternative to TV Widget/Charting Library)
+- **Mode:** DEPLOYMENT_ANALYTICS only — chart has no research authority, cannot promote strategies
+- **Sub-phases:** 3.1 historical chart (read-only) → 3.2 live chart with signal overlay → 3.3 click-to-trade (hard-gated on F-1 orchestrator wiring)
+- **BLOCKING prerequisites:**
+  1. `bot_state.py:build_state_snapshot()` lane card schema extension: add `orb_high`, `orb_low`, `entry_price`, `stop_price`, `target_price`, `signal_time_utc` (already listed as `dashboard_todo.md` #1)
+  2. Auto-start signal-only session on dashboard startup (`dashboard_todo.md` #5)
+- **Activation criteria:** Wave 4 frozen + Phase 3d audit closed + prereqs closed + Dashboard Phase 1 shipped + user explicit go. See spec § 14.
+- **Rejected alternatives (documented in spec):** TradingView Desktop CDP bridge (fragile, wrong abstraction), TradingView Widget iframe (no custom overlays), Charting Library (deferred to Phase 3.4 if UX ceiling hit), NinjaTrader/Sierra Chart (rejected: re-platforming burden).
+
+---
+
 ## Rules to Enforce (ACTIVE)
 
 ### Strategy Family Isolation
