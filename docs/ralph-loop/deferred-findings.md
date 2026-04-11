@@ -9,7 +9,6 @@
 
 | ID | Iter | Severity | Target | Description | Deferred Reason |
 |----|------|----------|--------|-------------|-----------------|
-| DF-04 | 12 | LOW | rolling_portfolio.py:304 | Dormant `orb_minutes=5` in rolling DOW stats — multi-aperture TODO | Annotated TODO, not blocking |
 
 ## Won't Fix (ACCEPTABLE)
 
@@ -37,3 +36,4 @@
 | DF-08 | 13 | 28 | 43a86ba | live_config.py LIVE_MIN_EXPECTANCY_R + LIVE_MIN_EXPECTANCY_DOLLARS_MULT — @research-source annotations added |
 | DF-11 | 27 | 31 | 9158b77 | Hardcoded ("E1","E2","E3") in rolling_portfolio + paper_trader → canonical ENTRY_MODELS import |
 | DF-02 | 9/11 | 45 | 4c6bc4d | ARMED/CONFIRMING silent exit at session_end — logger.debug() added; no behavior change |
+| DF-04 | 12 | 2026-04-11 | (pending commit) | `compute_day_of_week_stats` now threads `orb_minutes: int = 5` through both the `daily_features` eligibility query and the `orb_outcomes` query (PIPELINE_AUDIT_2026-02-27 F1 sibling bug also fixed). 4 regression tests added. |

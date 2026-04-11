@@ -25,6 +25,7 @@ from trading_app.rolling_portfolio import (
     _window_weight,
     aggregate_rolling_performance,
     classify_stability,
+    compute_day_of_week_stats,
     load_all_rolling_run_labels,
     load_rolling_degraded_counts,
     load_rolling_results,
@@ -482,6 +483,169 @@ class TestPortfolioIntegration:
         counts = load_rolling_degraded_counts(db_path, train_months=12)
         assert "LONDON_METALS_E3_ORB_G6" in counts
         assert counts["LONDON_METALS_E3_ORB_G6"] == 1
+
+
+# =========================================================================
+# compute_day_of_week_stats: orb_minutes threading (DF-04)
+# =========================================================================
+
+
+class TestComputeDayOfWeekStatsOrbMinutes:
+    """Regression coverage for DF-04: orb_minutes must be honored by the
+    daily_features eligibility query, not hardcoded to 5."""
+
+    def _seed_db(self, tmp_path, orb_minutes: int):
+        """Create minimal daily_features + orb_outcomes at the given aperture."""
+        from pipeline.init_db import ORB_LABELS
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        size_col_defs = ", ".join(f"orb_{lbl}_size DOUBLE" for lbl in ORB_LABELS)
+        size_cols = ", ".join(f"orb_{lbl}_size" for lbl in ORB_LABELS)
+        con.execute(
+            f"""
+            CREATE TABLE daily_features (
+                symbol      TEXT,
+                trading_day DATE,
+                orb_minutes INTEGER,
+                {size_col_defs}
+            )
+            """
+        )
+        size_placeholders = ", ".join("?" for _ in ORB_LABELS)
+        for td in ("2026-01-05", "2026-01-06", "2026-01-07"):
+            params = ["MGC", td, orb_minutes] + [5.0] * len(ORB_LABELS)
+            con.execute(
+                f"""
+                INSERT INTO daily_features (symbol, trading_day, orb_minutes, {size_cols})
+                VALUES (?, ?, ?, {size_placeholders})
+                """,
+                params,
+            )
+        con.execute(
+            """
+            CREATE TABLE orb_outcomes (
+                symbol      TEXT,
+                orb_label   TEXT,
+                entry_model TEXT,
+                orb_minutes INTEGER,
+                trading_day DATE,
+                pnl_r       DOUBLE
+            )
+            """
+        )
+        con.execute(
+            """
+            INSERT INTO orb_outcomes VALUES
+            ('MGC', 'CME_REOPEN', 'E1', ?, '2026-01-05', 0.5),
+            ('MGC', 'CME_REOPEN', 'E1', ?, '2026-01-06', -0.2),
+            ('MGC', 'CME_REOPEN', 'E1', ?, '2026-01-07', 0.3)
+            """,
+            [orb_minutes, orb_minutes, orb_minutes],
+        )
+        con.close()
+        return db_path
+
+    def _family(self) -> FamilyResult:
+        return FamilyResult(
+            family_id="CME_REOPEN_E1_NO_FILTER",
+            orb_label="CME_REOPEN",
+            entry_model="E1",
+            filter_type="NO_FILTER",
+            windows_total=1,
+            windows_passed=1,
+            weighted_stability=1.0,
+            classification="STABLE",
+            avg_expectancy_r=0.1,
+            avg_sharpe=1.0,
+            total_sample_size=3,
+            oos_cumulative_r=0.6,
+            double_break_degraded_windows=0,
+        )
+
+    def test_default_orb_minutes_5_finds_5m_rows(self, tmp_path):
+        db_path = self._seed_db(tmp_path, orb_minutes=5)
+        results = compute_day_of_week_stats(db_path, [self._family()], instrument="MGC")
+        assert results[0].day_of_week_stats is not None, (
+            "Default orb_minutes=5 must find the 5m rows"
+        )
+
+    def test_explicit_orb_minutes_15_finds_15m_rows(self, tmp_path):
+        db_path = self._seed_db(tmp_path, orb_minutes=15)
+        results = compute_day_of_week_stats(
+            db_path, [self._family()], instrument="MGC", orb_minutes=15
+        )
+        assert results[0].day_of_week_stats is not None, (
+            "Explicit orb_minutes=15 must reach the daily_features query"
+        )
+
+    def test_mismatched_orb_minutes_returns_empty(self, tmp_path):
+        """Seed 15m data, query with default 5m → no eligible days → no stats."""
+        db_path = self._seed_db(tmp_path, orb_minutes=15)
+        results = compute_day_of_week_stats(db_path, [self._family()], instrument="MGC")
+        assert results[0].day_of_week_stats is None, (
+            "Default orb_minutes=5 must NOT match 15m rows"
+        )
+
+    def test_outcomes_query_filters_aperture_no_contamination(self, tmp_path):
+        """PIPELINE_AUDIT_2026-02-27 F1 sibling bug: orb_outcomes query must
+        filter by orb_minutes, otherwise 5m/15m/30m outcomes for the same
+        trading_day get mixed into a single avg_pnl_r before DOW stats run.
+        """
+        from pipeline.init_db import ORB_LABELS
+
+        db_path = tmp_path / "contam.db"
+        con = duckdb.connect(str(db_path))
+        size_col_defs = ", ".join(f"orb_{lbl}_size DOUBLE" for lbl in ORB_LABELS)
+        size_cols = ", ".join(f"orb_{lbl}_size" for lbl in ORB_LABELS)
+        con.execute(
+            f"""
+            CREATE TABLE daily_features (
+                symbol TEXT, trading_day DATE, orb_minutes INTEGER,
+                {size_col_defs}
+            )
+            """
+        )
+        size_placeholders = ", ".join("?" for _ in ORB_LABELS)
+        params = ["MGC", "2026-01-05", 5] + [5.0] * len(ORB_LABELS)
+        con.execute(
+            f"""
+            INSERT INTO daily_features (symbol, trading_day, orb_minutes, {size_cols})
+            VALUES (?, ?, ?, {size_placeholders})
+            """,
+            params,
+        )
+        con.execute(
+            """
+            CREATE TABLE orb_outcomes (
+                symbol TEXT, orb_label TEXT, entry_model TEXT,
+                orb_minutes INTEGER, trading_day DATE, pnl_r DOUBLE
+            )
+            """
+        )
+        # Same trading_day, different apertures, WILDLY different pnl_r.
+        # If the query doesn't filter by orb_minutes, AVG mixes them.
+        con.execute(
+            """
+            INSERT INTO orb_outcomes VALUES
+            ('MGC', 'CME_REOPEN', 'E1', 5,  '2026-01-05', 1.00),
+            ('MGC', 'CME_REOPEN', 'E1', 15, '2026-01-05', -5.00),
+            ('MGC', 'CME_REOPEN', 'E1', 30, '2026-01-05', -5.00)
+            """
+        )
+        con.close()
+
+        results = compute_day_of_week_stats(db_path, [self._family()], instrument="MGC")
+        stats = results[0].day_of_week_stats
+        assert stats is not None
+        # DuckDB DAYOFWEEK: 2026-01-05 is Monday → 1
+        mon = stats.get("Mon")
+        assert mon is not None, f"expected Mon stat, got {stats}"
+        # With the fix, only the 5m row contributes → exp_r == 1.00.
+        # Without the fix, AVG(1.00, -5.00, -5.00) == -3.0.
+        assert mon["exp_r"] == 1.0, (
+            f"outcomes query is mixing apertures: Mon exp_r={mon['exp_r']}, expected 1.0"
+        )
 
 
 # =========================================================================

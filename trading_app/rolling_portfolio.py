@@ -306,6 +306,7 @@ def compute_day_of_week_stats(
     db_path: Path,
     family_results: list[FamilyResult],
     instrument: str = "MGC",
+    orb_minutes: int = 5,
 ) -> list[FamilyResult]:
     """Add day-of-week segmentation to STABLE/TRANSITIONING families.
 
@@ -317,19 +318,15 @@ def compute_day_of_week_stats(
     from trading_app.config import ALL_FILTERS
 
     with duckdb.connect(str(db_path), read_only=True) as con:
-        # Pre-load daily_features for filter eligibility
+        # Pre-load daily_features for filter eligibility at the requested aperture.
         _size_cols = ", ".join(f"orb_{lbl}_size" for lbl in ORB_LABELS)
-        # TODO(multi-aperture): This hardcodes orb_minutes=5. When rolling
-        # evaluation is extended to 15m/30m ORBs, this must load per
-        # family's actual orb_minutes to get correct filter eligibility.
-        # See Bloomey review iteration 12, finding F1.
         df_features = con.execute(
             f"""
             SELECT trading_day, {_size_cols}
             FROM daily_features
-            WHERE symbol = ? AND orb_minutes = 5
+            WHERE symbol = ? AND orb_minutes = ?
         """,
-            [instrument],
+            [instrument, orb_minutes],
         ).fetchdf()
 
         for fam in family_results:
@@ -366,6 +363,9 @@ def compute_day_of_week_stats(
             # Get trade outcomes filtered to eligible days.
             # orb_outcomes has ~30 rows per day per family (rr_target × confirm_bars),
             # so we aggregate to one avg pnl_r per trading_day to avoid DOW inflation.
+            # Aperture filter is mandatory — without it, 5m/15m/30m outcomes for the
+            # same trading_day get averaged together while eligibility was checked at
+            # only one aperture. See PIPELINE_AUDIT_2026-02-27 F1.
             rows = con.execute(
                 """
                 SELECT DAYOFWEEK(oo.trading_day) as dow,
@@ -375,10 +375,11 @@ def compute_day_of_week_stats(
                 WHERE oo.symbol = ?
                   AND oo.orb_label = ?
                   AND oo.entry_model = ?
+                  AND oo.orb_minutes = ?
                   AND oo.pnl_r IS NOT NULL
                 GROUP BY oo.trading_day
             """,
-                [instrument, fam.orb_label, fam.entry_model],
+                [instrument, fam.orb_label, fam.entry_model, orb_minutes],
             ).fetchall()
 
             # Filter to eligible days only
