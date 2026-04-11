@@ -4980,6 +4980,52 @@ def check_resample_helpers_in_entry_rules() -> list[str]:
     return violations
 
 
+def check_deployable_subset_of_active() -> list[str]:
+    """DEPLOYABLE_ORB_INSTRUMENTS must be a strict subset of ACTIVE_ORB_INSTRUMENTS.
+
+    The canonical taxonomy is that deployable instruments are the subset of
+    active instruments that are expected to have validated strategies on the
+    deployable shelf. Any instrument with deployable_expected=True must first
+    be orb_active=True (otherwise it's not in the run set at all). This
+    invariant is enforced at definition time by deriving DEPLOYABLE from
+    ACTIVE, but we defend-in-depth here so that any future refactor that
+    changes the derivation pattern still preserves the invariant.
+    """
+    from pipeline.asset_configs import (
+        ACTIVE_ORB_INSTRUMENTS,
+        ASSET_CONFIGS,
+        DEPLOYABLE_ORB_INSTRUMENTS,
+    )
+
+    violations = []
+    active_set = set(ACTIVE_ORB_INSTRUMENTS)
+    deployable_set = set(DEPLOYABLE_ORB_INSTRUMENTS)
+    rogue = deployable_set - active_set
+    if rogue:
+        violations.append(
+            f"  DEPLOYABLE_ORB_INSTRUMENTS contains instruments not in "
+            f"ACTIVE_ORB_INSTRUMENTS: {sorted(rogue)}. Every deployable "
+            f"instrument must first be orb_active=True."
+        )
+
+    # A separate failure mode: an instrument carries deployable_expected=True
+    # (default or explicit) but somehow didn't make it into the derived list.
+    # Catches anyone who manually builds DEPLOYABLE_ORB_INSTRUMENTS in the
+    # future and drops a valid entry.
+    expected_deployable = {
+        k
+        for k in active_set
+        if ASSET_CONFIGS[k].get("deployable_expected", True)
+    }
+    missing = expected_deployable - deployable_set
+    if missing:
+        violations.append(
+            f"  DEPLOYABLE_ORB_INSTRUMENTS is missing active instruments whose "
+            f"deployable_expected flag is True: {sorted(missing)}."
+        )
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -5305,6 +5351,7 @@ CHECKS = [
     ("System authority map exists and classifies linked truth surfaces", check_system_authority_map, False, False),
     ("Phase 7 live audit uses canonical runtime authorities", check_live_audit_uses_runtime_authority, False, False),
     ("Project pulse exposes repo identity from canonical authority registry", check_project_pulse_uses_authority_registry, False, False),
+    ("DEPLOYABLE_ORB_INSTRUMENTS is a strict subset of ACTIVE_ORB_INSTRUMENTS", check_deployable_subset_of_active, False, False),
 ]  # end CHECKS
 
 

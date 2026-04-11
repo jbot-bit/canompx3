@@ -236,6 +236,7 @@ class TestCollectStaleness:
         mock_engine = MagicMock(return_value={"stale_steps": ["outcome_builder", "discovery"]})
         mock_asset_configs = MagicMock()
         mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MGC"]
+        mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = ["MGC"]
         mock_pipeline_status = MagicMock(staleness_engine=mock_engine)
         with (
             patch.dict(
@@ -253,6 +254,154 @@ class TestCollectStaleness:
         assert isinstance(items, list)
         # With mocked staleness_engine returning stale steps, we expect a decaying item
         assert any(i.category == "decaying" for i in items)
+
+    def test_research_only_validated_setups_step_suppressed(self, tmp_path: Path) -> None:
+        """Research-only instruments (active but not deployable) must not surface
+        the 'validated_setups' stale step, because the empty shelf is by-design.
+        Any OTHER stale step for the same instrument still alerts."""
+        db_path = tmp_path / "gold.db"
+        db_path.touch()
+        mock_engine = MagicMock(return_value={"stale_steps": ["validated_setups"]})
+        mock_asset_configs = MagicMock()
+        mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MGC"]
+        mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = []  # MGC not deployable
+        mock_pipeline_status = MagicMock(staleness_engine=mock_engine)
+        with (
+            patch.dict(
+                "sys.modules",
+                {
+                    "pipeline.asset_configs": mock_asset_configs,
+                    "pipeline_status": mock_pipeline_status,
+                },
+            ),
+            patch("duckdb.connect") as mock_connect,
+        ):
+            mock_con = MagicMock()
+            mock_connect.return_value = mock_con
+            items = collect_staleness(tmp_path, db_path)
+        # Only stale step was validated_setups → research-only → filtered → no alert
+        assert not any(i.source == "staleness" for i in items)
+
+    def test_research_only_other_steps_still_alert(self, tmp_path: Path) -> None:
+        """For a research-only instrument, non-validated_setups stale steps still
+        surface — only the validated_setups entry is filtered."""
+        db_path = tmp_path / "gold.db"
+        db_path.touch()
+        mock_engine = MagicMock(
+            return_value={"stale_steps": ["validated_setups", "outcome_builder"]}
+        )
+        mock_asset_configs = MagicMock()
+        mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MGC"]
+        mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = []
+        mock_pipeline_status = MagicMock(staleness_engine=mock_engine)
+        with (
+            patch.dict(
+                "sys.modules",
+                {
+                    "pipeline.asset_configs": mock_asset_configs,
+                    "pipeline_status": mock_pipeline_status,
+                },
+            ),
+            patch("duckdb.connect") as mock_connect,
+        ):
+            mock_con = MagicMock()
+            mock_connect.return_value = mock_con
+            items = collect_staleness(tmp_path, db_path)
+        decaying = [i for i in items if i.source == "staleness"]
+        assert len(decaying) == 1
+        # outcome_builder survives the filter; validated_setups does not.
+        assert "outcome_builder" in decaying[0].summary
+        assert "validated_setups" not in decaying[0].summary
+
+    def test_deployable_validated_setups_step_still_alerts(self, tmp_path: Path) -> None:
+        """Deployable instruments still get the validated_setups alert — the
+        filter is ONLY for research-only instruments."""
+        db_path = tmp_path / "gold.db"
+        db_path.touch()
+        mock_engine = MagicMock(return_value={"stale_steps": ["validated_setups"]})
+        mock_asset_configs = MagicMock()
+        mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MES"]
+        mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = ["MES"]
+        mock_pipeline_status = MagicMock(staleness_engine=mock_engine)
+        with (
+            patch.dict(
+                "sys.modules",
+                {
+                    "pipeline.asset_configs": mock_asset_configs,
+                    "pipeline_status": mock_pipeline_status,
+                },
+            ),
+            patch("duckdb.connect") as mock_connect,
+        ):
+            mock_con = MagicMock()
+            mock_connect.return_value = mock_con
+            items = collect_staleness(tmp_path, db_path)
+        decaying = [i for i in items if i.source == "staleness"]
+        assert len(decaying) == 1
+        assert "validated_setups" in decaying[0].summary
+
+
+# ---------------------------------------------------------------------------
+# collect_fitness_fast — deployable vs active scoping
+# ---------------------------------------------------------------------------
+
+
+class TestCollectFitnessFastDeployable:
+    """Ensure fitness_fast alerts iterate DEPLOYABLE_ORB_INSTRUMENTS, not ACTIVE."""
+
+    def test_research_only_empty_shelf_no_alert(self, tmp_path: Path) -> None:
+        """Research-only instrument with empty shelf must NOT produce a
+        '0 active validated strategies' alert."""
+        from scripts.tools.project_pulse import collect_fitness_fast
+
+        db_path = tmp_path / "gold.db"
+        db_path.touch()
+        mock_asset_configs = MagicMock()
+        mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = ["MES", "MNQ"]
+        mock_con = MagicMock()
+        mock_con.execute.return_value.fetchall.return_value = [
+            ("MES", 2),
+            ("MNQ", 27),
+        ]
+        with (
+            patch.dict("sys.modules", {"pipeline.asset_configs": mock_asset_configs}),
+            patch("duckdb.connect", return_value=mock_con),
+            patch.object(
+                project_pulse, "deployable_validated_relation", return_value="vs"
+            ),
+        ):
+            summary, items = collect_fitness_fast(db_path)
+        # MES + MNQ both covered → no alerts. MGC not in DEPLOYABLE → not alerted.
+        assert summary == {
+            "MES": {"active_strategies": 2},
+            "MNQ": {"active_strategies": 27},
+        }
+        assert items == []
+
+    def test_deployable_instrument_empty_shelf_alerts(self, tmp_path: Path) -> None:
+        """A deployable instrument with an empty shelf MUST alert."""
+        from scripts.tools.project_pulse import collect_fitness_fast
+
+        db_path = tmp_path / "gold.db"
+        db_path.touch()
+        mock_asset_configs = MagicMock()
+        mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = ["MES", "MNQ"]
+        mock_con = MagicMock()
+        # Only MES has rows — MNQ is missing entirely
+        mock_con.execute.return_value.fetchall.return_value = [("MES", 2)]
+        with (
+            patch.dict("sys.modules", {"pipeline.asset_configs": mock_asset_configs}),
+            patch("duckdb.connect", return_value=mock_con),
+            patch.object(
+                project_pulse, "deployable_validated_relation", return_value="vs"
+            ),
+        ):
+            summary, items = collect_fitness_fast(db_path)
+        assert summary == {"MES": {"active_strategies": 2}}
+        assert len(items) == 1
+        assert items[0].source == "fitness"
+        assert "MNQ" in items[0].summary
+        assert "0 active validated" in items[0].summary
 
 
 # ---------------------------------------------------------------------------

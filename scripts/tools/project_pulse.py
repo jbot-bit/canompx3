@@ -432,13 +432,20 @@ def collect_staleness(root: Path, db_path: Path) -> list[PulseItem]:
         import duckdb
         from pipeline_status import staleness_engine
 
-        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, DEPLOYABLE_ORB_INSTRUMENTS
 
+        deployable_set = set(DEPLOYABLE_ORB_INSTRUMENTS)
         con = duckdb.connect(str(db_path), read_only=True)
         try:
             for inst in ACTIVE_ORB_INSTRUMENTS:
                 status = staleness_engine(con, inst)
-                stale = status.get("stale_steps", [])
+                stale = list(status.get("stale_steps", []))
+                # For research-only instruments, the validated_setups shelf is
+                # expected empty (insufficient real-micro data horizon for T7
+                # survival). Filter that entry out instead of alerting. Any
+                # OTHER stale step for the same instrument still surfaces.
+                if inst not in deployable_set:
+                    stale = [s for s in stale if s != "validated_setups"]
                 if stale:
                     items.append(
                         PulseItem(
@@ -474,7 +481,13 @@ def collect_staleness(root: Path, db_path: Path) -> list[PulseItem]:
 
 
 def collect_fitness_fast(db_path: Path) -> tuple[dict, list[PulseItem]]:
-    """Fast proxy: count active validated strategies per instrument."""
+    """Fast proxy: count active validated strategies per instrument.
+
+    Alerts only on DEPLOYABLE_ORB_INSTRUMENTS — research-only instruments
+    (e.g. MGC) still appear in the summary dict when they have rows, but
+    an empty deployable shelf for a research-only instrument is by-design
+    expected state, not an alert condition.
+    """
     summary: dict = {}
     items: list[PulseItem] = []
     if not db_path.exists():
@@ -483,7 +496,7 @@ def collect_fitness_fast(db_path: Path) -> tuple[dict, list[PulseItem]]:
     try:
         import duckdb
 
-        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.asset_configs import DEPLOYABLE_ORB_INSTRUMENTS
 
         con = duckdb.connect(str(db_path), read_only=True)
         try:
@@ -494,7 +507,7 @@ def collect_fitness_fast(db_path: Path) -> tuple[dict, list[PulseItem]]:
             ).fetchall()
             for inst, n in rows:
                 summary[inst] = {"active_strategies": n}
-            for inst in ACTIVE_ORB_INSTRUMENTS:
+            for inst in DEPLOYABLE_ORB_INSTRUMENTS:
                 if inst not in summary:
                     items.append(
                         PulseItem(

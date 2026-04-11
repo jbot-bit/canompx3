@@ -12,6 +12,15 @@ Each asset defines:
   micros this is the contract launch date used by `data_era.micro_launch_day`.
 - schema_required: Expected DBN schema (always ohlcv-1m)
 - orb_active: Whether the instrument belongs in the active ORB/live universe
+  (data pipeline, discovery, validator all run on it).
+- deployable_expected: Whether this instrument is expected to have deployable
+  validated strategies in the current data horizon. Defaults to True. Set to
+  False for active-but-research-only instruments where the real-micro data
+  horizon is insufficient for T7 era-discipline to let candidates survive.
+  Consumed by pulse/staleness alerting only — does NOT affect pipeline,
+  discovery, or validator behavior. A research-only instrument still runs
+  through the pipeline end to end; pulse just stops alerting on the
+  by-design empty deployable state.
 - parent_symbol: Canonical parent contract symbol for micros that proxy to
   a full-size instrument, or None for native parents and research-only
   instruments. Consumed by `pipeline.data_era` for PARENT/MICRO
@@ -71,10 +80,18 @@ ASSET_CONFIGS = {
         # backfill data (2022-06-13 to 2023-09-10) was downloaded from Databento.
         # Pre-launch parent GC data is preserved under symbol='GC' (see GC config below).
         # Cost model uses MGC micro specs ($10/pt, NOT GC's $100/pt).
+        #
+        # deployable_expected=False: MGC real-micro horizon is ~3.8yr as of 2026-04,
+        # below T7 era-discipline threshold (needs 5+yr for cross-era stability).
+        # Discovery still runs on MGC proxy data (GC, 16yr) for research; validator
+        # T7 correctly kills the resulting candidates; deployable shelf is expected
+        # empty until real-micro horizon reaches 5+yr (~2027-06). See
+        # memory/gc_mgc_cross_validation_results.md and Amendment 3.1.
         "dbn_path": PROJECT_ROOT / "data" / "raw" / "databento" / "ohlcv-1m" / "MGC",
         "symbol": "MGC",
         "parent_symbol": "GC",  # active micro — GC parent preserved under symbol='GC'
         "orb_active": True,
+        "deployable_expected": False,
         "outright_pattern": re.compile(r"^MGC[FGHJKMNQUVXZ]\d{1,2}$"),
         "prefix_len": 3,
         "minimum_start_date": date(2022, 6, 13),  # CME Micro Gold launch (10oz, first traded 2022-06-13)
@@ -370,6 +387,23 @@ ACTIVE_ORB_INSTRUMENTS = sorted(
     ]
 )
 
+# Active instruments expected to have deployable validated strategies in the
+# current data horizon. Strict subset of ACTIVE_ORB_INSTRUMENTS — every
+# deployable instrument is also active, but not every active instrument is
+# deployable (e.g. MGC is active for research + pipeline + discovery, but its
+# real-micro horizon is insufficient for validator T7 survival).
+#
+# Consumed by pulse and staleness alerting only. Pipeline, discovery, and
+# validator consumers MUST continue to use ACTIVE_ORB_INSTRUMENTS — switching
+# them would silently skip research work on MGC that we actually want running.
+DEPLOYABLE_ORB_INSTRUMENTS = sorted(
+    [
+        k
+        for k in ACTIVE_ORB_INSTRUMENTS
+        if ASSET_CONFIGS[k].get("deployable_expected", True)
+    ]
+)
+
 
 def get_active_instruments() -> list[str]:
     """Return the list of actively traded ORB instruments (sorted copy).
@@ -377,6 +411,17 @@ def get_active_instruments() -> list[str]:
     Use this instead of hardcoding instrument lists. Dead: MCL, SIL, M6E, MBT, M2K.
     """
     return list(ACTIVE_ORB_INSTRUMENTS)
+
+
+def get_deployable_instruments() -> list[str]:
+    """Return the list of instruments expected to have deployable strategies.
+
+    Strict subset of active instruments. Use this in pulse/alerting contexts
+    where empty deployable state should be surfaced as a problem. Use
+    `get_active_instruments()` for pipeline/discovery/validator contexts where
+    research-only instruments (e.g. MGC) still belong in the run set.
+    """
+    return list(DEPLOYABLE_ORB_INSTRUMENTS)
 
 
 def get_asset_config(instrument: str) -> dict:

@@ -5,7 +5,9 @@ import pytest
 from pipeline.asset_configs import (
     ACTIVE_ORB_INSTRUMENTS,
     ASSET_CONFIGS,
+    DEPLOYABLE_ORB_INSTRUMENTS,
     get_active_instruments,
+    get_deployable_instruments,
     get_outright_root,
     list_instruments,
 )
@@ -57,6 +59,52 @@ class TestActiveInstruments:
         assert "ZT" in list_instruments()
         assert "ZT" not in get_active_instruments()
         assert ASSET_CONFIGS["ZT"]["orb_active"] is False
+
+
+class TestDeployableInstruments:
+    """Test the DEPLOYABLE_ORB_INSTRUMENTS canonical subset.
+
+    Active-but-research-only instruments (e.g. MGC, whose real-micro data
+    horizon is insufficient for T7 era-discipline survival) belong in
+    ACTIVE_ORB_INSTRUMENTS (pipeline runs on them) but NOT in
+    DEPLOYABLE_ORB_INSTRUMENTS (pulse/alerting should not flag the
+    by-design empty deployable state).
+    """
+
+    def test_subset_of_active(self):
+        """Every deployable instrument must also be active — strict subset."""
+        assert set(DEPLOYABLE_ORB_INSTRUMENTS) <= set(ACTIVE_ORB_INSTRUMENTS)
+
+    def test_sorted(self):
+        assert list(DEPLOYABLE_ORB_INSTRUMENTS) == sorted(DEPLOYABLE_ORB_INSTRUMENTS)
+
+    def test_helper_returns_copy(self):
+        """Mutating the returned list must NOT affect the module constant."""
+        got = get_deployable_instruments()
+        got.append("FAKE")
+        assert "FAKE" not in DEPLOYABLE_ORB_INSTRUMENTS
+
+    def test_helper_matches_constant(self):
+        assert get_deployable_instruments() == list(DEPLOYABLE_ORB_INSTRUMENTS)
+
+    def test_mgc_active_not_deployable(self):
+        """MGC is research-only: active for pipeline, not deployable for alerts."""
+        assert "MGC" in ACTIVE_ORB_INSTRUMENTS
+        assert "MGC" not in DEPLOYABLE_ORB_INSTRUMENTS
+        assert ASSET_CONFIGS["MGC"].get("deployable_expected") is False
+
+    def test_mes_mnq_both(self):
+        """MES and MNQ are active AND deployable."""
+        for inst in ("MES", "MNQ"):
+            assert inst in ACTIVE_ORB_INSTRUMENTS
+            assert inst in DEPLOYABLE_ORB_INSTRUMENTS
+            # Default True when key is absent; may also be explicitly True.
+            assert ASSET_CONFIGS[inst].get("deployable_expected", True) is True
+
+    def test_dead_instruments_in_neither(self):
+        for dead in ("MCL", "SIL", "M6E", "MBT", "M2K"):
+            assert dead not in ACTIVE_ORB_INSTRUMENTS
+            assert dead not in DEPLOYABLE_ORB_INSTRUMENTS
 
 
 class TestGetOutrightRoot:
