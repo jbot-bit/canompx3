@@ -1549,3 +1549,216 @@ class TestFlushBatchDfColumnAlignment:
             f"Check _BATCH_COLUMNS + INSERT SQL + batch assembly alignment."
         )
         con.close()
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 Stage 4.1b — hypothesis-mode filter injection
+# ---------------------------------------------------------------------------
+
+
+class TestHypothesisFilterInjection:
+    """Tests for _inject_hypothesis_filters, the Phase 4 Stage 4.1b helper
+    extracted from run_discovery.
+
+    Covers acceptance criteria #4 and #5 from the wave4-hypothesis-filter-
+    injection stage file (docs/runtime/stages/wave4-hypothesis-filter-
+    injection.md):
+
+    - criterion #4: hypothesis-declared filter types that are NOT in the
+      legacy grid get injected into ``all_grid_filters`` AND into the
+      per-session map, so bulk pre-computation covers them and the
+      per-session loop picks them up.
+    - criterion #5: DOW composite filters (``ORB_*_NOFRI`` etc.) are NOT
+      injected into sessions in ``DOW_MISALIGNED_SESSIONS`` — Brisbane DOW
+      != exchange DOW at NYSE_OPEN, so a Friday-skip would fire on the
+      wrong exchange-local day there.
+
+    Plus two safety tests for the no-op branches:
+    - filter already in the legacy grid → no-op (prevents double-counting
+      and preserves legacy-mode parity, criterion #3).
+    - filter not in ALL_FILTERS → silent skip (combo enumeration path
+      rejects later via scope_predicate.accepts(), giving a clean
+      zero-combos result instead of a crash).
+    """
+
+    @staticmethod
+    def _build_scope_predicate(filter_types, sessions):
+        """Build a minimal ScopePredicate directly (no YAML path).
+
+        Bypasses hypothesis_loader parsing — we only need the
+        ``allowed_filter_types()`` shape the helper reads. Each filter
+        type gets its own HypothesisScope bundle so the predicate's
+        ``allowed_filter_types()`` returns all of them.
+        """
+        from trading_app.hypothesis_loader import HypothesisScope, ScopePredicate
+
+        hypotheses = tuple(
+            HypothesisScope(
+                filter_type=ft,
+                instruments=frozenset({"MNQ"}),
+                sessions=frozenset(sessions),
+                rr_targets=frozenset({1.0}),
+                entry_models=frozenset({"E2"}),
+                confirm_bars=frozenset({1}),
+                stop_multipliers=frozenset({1.0}),
+                expected_trial_count=10,
+            )
+            for ft in filter_types
+        )
+        return ScopePredicate(
+            hypotheses=hypotheses,
+            instrument="MNQ",
+            total_declared_trials=10 * len(hypotheses),
+        )
+
+    def test_hypothesis_filter_injection_expands_grid(self):
+        """Criterion #4: a declared filter type not in the legacy grid
+        gets injected into all_grid_filters AND into the per-session map
+        for every (non-DOW-misaligned) session."""
+        from trading_app.config import ALL_FILTERS
+        from trading_app.strategy_discovery import _inject_hypothesis_filters
+
+        # GAP_R015 exists in ALL_FILTERS (GapNormFilter, not a DOW composite).
+        # It is routed in get_filters_for_grid() only for MGC/GC CME_REOPEN,
+        # so for MNQ NYSE_OPEN + COMEX_SETTLE it is genuinely "not in grid".
+        assert "GAP_R015" in ALL_FILTERS
+
+        sessions = ["NYSE_OPEN", "COMEX_SETTLE"]
+        all_grid_filters: dict = {}  # empty legacy grid (fresh slate)
+        hypothesis_extra_by_session: dict[str, dict] = {s: {} for s in sessions}
+
+        sp = self._build_scope_predicate(["GAP_R015"], sessions)
+
+        _inject_hypothesis_filters(
+            scope_predicate=sp,
+            sessions=sessions,
+            all_grid_filters=all_grid_filters,
+            hypothesis_extra_by_session=hypothesis_extra_by_session,
+        )
+
+        # Injected into the global grid for bulk pre-computation
+        assert "GAP_R015" in all_grid_filters
+        assert all_grid_filters["GAP_R015"] is ALL_FILTERS["GAP_R015"]
+
+        # AND into every session's per-session map
+        for s in sessions:
+            assert "GAP_R015" in hypothesis_extra_by_session[s], (
+                f"session {s} did not receive the injected GAP_R015"
+            )
+            assert (
+                hypothesis_extra_by_session[s]["GAP_R015"]
+                is ALL_FILTERS["GAP_R015"]
+            )
+
+    def test_hypothesis_filter_injection_respects_dow_misalignment(self):
+        """Criterion #5: DOW composite filters must NOT be injected into
+        sessions in DOW_MISALIGNED_SESSIONS. Brisbane DOW != exchange DOW
+        at NYSE_OPEN (midnight crossing) — a Brisbane-Friday skip at
+        NYSE_OPEN fires on US Thursday, which is off by one day.
+
+        The composite is still registered in ``all_grid_filters`` so bulk
+        pre-computation runs, but the per-session map for NYSE_OPEN is
+        left empty for that filter. Non-misaligned sessions still receive
+        it."""
+        from pipeline.dst import DOW_MISALIGNED_SESSIONS
+        from trading_app.config import (
+            ALL_FILTERS,
+            CompositeFilter,
+            DayOfWeekSkipFilter,
+        )
+        from trading_app.strategy_discovery import _inject_hypothesis_filters
+
+        # Pick any real DOW composite from ALL_FILTERS (e.g. ORB_G5_NOFRI).
+        dow_filter_type = next(
+            ft
+            for ft, obj in ALL_FILTERS.items()
+            if isinstance(obj, CompositeFilter)
+            and isinstance(obj.overlay, DayOfWeekSkipFilter)
+        )
+
+        # Guard: NYSE_OPEN is the canonical DOW-misaligned session. If the
+        # SESSION_CATALOG ever changes to include another, this assertion
+        # catches the drift and the test author can add coverage for it.
+        assert "NYSE_OPEN" in DOW_MISALIGNED_SESSIONS
+
+        sessions = ["NYSE_OPEN", "LONDON_METALS", "EUROPE_FLOW"]
+        all_grid_filters: dict = {}
+        hypothesis_extra_by_session: dict[str, dict] = {s: {} for s in sessions}
+
+        sp = self._build_scope_predicate([dow_filter_type], sessions)
+
+        _inject_hypothesis_filters(
+            scope_predicate=sp,
+            sessions=sessions,
+            all_grid_filters=all_grid_filters,
+            hypothesis_extra_by_session=hypothesis_extra_by_session,
+        )
+
+        # Composite IS in all_grid_filters — bulk pre-computation covers it
+        assert dow_filter_type in all_grid_filters
+
+        # NYSE_OPEN did NOT receive it (misalignment guard)
+        assert dow_filter_type not in hypothesis_extra_by_session["NYSE_OPEN"], (
+            f"DOW composite {dow_filter_type} was injected into NYSE_OPEN "
+            f"despite DOW_MISALIGNED_SESSIONS guard — look-ahead leak risk"
+        )
+
+        # Other (non-misaligned) sessions DID receive it
+        assert dow_filter_type in hypothesis_extra_by_session["LONDON_METALS"]
+        assert dow_filter_type in hypothesis_extra_by_session["EUROPE_FLOW"]
+
+    def test_hypothesis_filter_injection_skips_filters_already_in_grid(self):
+        """Safety: a declared filter type that is already in the legacy
+        grid is a no-op. This preserves criterion #3 — legacy-mode grid
+        behavior must not change in hypothesis mode for filters the
+        legacy grid already covers. Prevents double-counting in the
+        per-session loop's merge step."""
+        from trading_app.config import ALL_FILTERS
+        from trading_app.strategy_discovery import _inject_hypothesis_filters
+
+        sessions = ["NYSE_OPEN"]
+        legacy_filter = ALL_FILTERS["NO_FILTER"]
+        all_grid_filters: dict = {"NO_FILTER": legacy_filter}
+        hypothesis_extra_by_session: dict[str, dict] = {s: {} for s in sessions}
+
+        sp = self._build_scope_predicate(["NO_FILTER"], sessions)
+
+        _inject_hypothesis_filters(
+            scope_predicate=sp,
+            sessions=sessions,
+            all_grid_filters=all_grid_filters,
+            hypothesis_extra_by_session=hypothesis_extra_by_session,
+        )
+
+        # all_grid_filters unchanged (same len, same identity)
+        assert list(all_grid_filters.keys()) == ["NO_FILTER"]
+        assert all_grid_filters["NO_FILTER"] is legacy_filter
+
+        # per-session map NOT written to — the merge in run_discovery's
+        # session loop would otherwise double-count this filter for the
+        # session (once from the legacy grid, once from injection).
+        assert "NO_FILTER" not in hypothesis_extra_by_session["NYSE_OPEN"]
+
+    def test_hypothesis_filter_injection_skips_unknown_filter_type(self):
+        """Safety: if the hypothesis file declares a filter_type string
+        that does not exist in ALL_FILTERS, injection silently skips it.
+        The combo enumeration path's ``scope_predicate.accepts()`` check
+        will reject every combo for that type, producing a clean
+        zero-combos result instead of a KeyError or silent pass-through."""
+        from trading_app.strategy_discovery import _inject_hypothesis_filters
+
+        sessions = ["NYSE_OPEN"]
+        all_grid_filters: dict = {}
+        hypothesis_extra_by_session: dict[str, dict] = {s: {} for s in sessions}
+
+        sp = self._build_scope_predicate(["NONSENSE_FILTER_TYPE"], sessions)
+
+        _inject_hypothesis_filters(
+            scope_predicate=sp,
+            sessions=sessions,
+            all_grid_filters=all_grid_filters,
+            hypothesis_extra_by_session=hypothesis_extra_by_session,
+        )
+
+        assert all_grid_filters == {}
+        assert hypothesis_extra_by_session["NYSE_OPEN"] == {}

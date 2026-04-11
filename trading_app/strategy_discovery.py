@@ -1093,6 +1093,52 @@ def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models,
     return grouped
 
 
+def _inject_hypothesis_filters(
+    *,
+    scope_predicate: ScopePredicate,
+    sessions: list[str],
+    all_grid_filters: dict,
+    hypothesis_extra_by_session: dict[str, dict],
+) -> None:
+    """Phase 4 Stage 4.1b: inject hypothesis-declared filter types into the grid.
+
+    When a hypothesis file's ``ScopePredicate`` declares filter_types that are
+    NOT in the legacy discovery grid for the current instrument, add them to
+    ``all_grid_filters`` (so bulk pre-computation covers them) and to
+    ``hypothesis_extra_by_session`` (so the per-session loop merges them in).
+    Both dicts are mutated in place.
+
+    Safety rules:
+    - Filter must exist in ``ALL_FILTERS``. Unknown strings are silently
+      skipped here; ``scope_predicate.accepts()`` will reject the combo at
+      combo-enumeration time, producing a clean zero-combos result.
+    - DOW composites (``CompositeFilter`` with a ``DayOfWeekSkipFilter``
+      overlay) are skipped for sessions in ``DOW_MISALIGNED_SESSIONS``
+      because Brisbane DOW != exchange DOW at NYSE_OPEN. A Friday-skip
+      would fire on the wrong exchange-local day there.
+    - Filters already present in ``all_grid_filters`` are no-ops — the
+      legacy grid wins, no duplication into the per-session map.
+    - E2 look-ahead filters are still blocked downstream by
+      ``is_e2_lookahead_filter()`` during combo enumeration.
+    """
+    declared_filter_types = scope_predicate.allowed_filter_types()
+    for ft in declared_filter_types:
+        if ft in all_grid_filters:
+            continue  # already in legacy grid
+        if ft not in ALL_FILTERS:
+            continue  # unknown — scope predicate will reject anyway
+        filter_obj = ALL_FILTERS[ft]
+        is_dow_composite = (
+            isinstance(filter_obj, CompositeFilter)
+            and isinstance(filter_obj.overlay, DayOfWeekSkipFilter)
+        )
+        for s in sessions:
+            if is_dow_composite and s in DOW_MISALIGNED_SESSIONS:
+                continue  # DOW misalignment guard
+            hypothesis_extra_by_session[s][ft] = filter_obj
+            all_grid_filters[ft] = filter_obj
+
+
 def run_discovery(
     db_path: Path | None = None,
     instrument: str = "MGC",
@@ -1283,31 +1329,17 @@ def run_discovery(
         # pairs that the legacy grid doesn't enumerate (e.g., GAP_R015 outside
         # MGC/GC CME_REOPEN, or DOW composites outside LONDON_METALS).
         #
-        # Safety rules:
-        # - Filter must exist in ALL_FILTERS (unknown string = clean error)
-        # - DOW composites skip sessions in DOW_MISALIGNED_SESSIONS (NYSE_OPEN)
-        # - E2 look-ahead filters still blocked by is_e2_lookahead_filter()
-        # - Per-session injection map respects DOW alignment
-        # - Legacy mode (scope_predicate is None) is unaffected
+        # Extracted into _inject_hypothesis_filters() for isolated unit testing
+        # — see TestHypothesisFilterInjection in test_strategy_discovery.py.
+        # Legacy mode (scope_predicate is None) is unaffected.
         hypothesis_extra_by_session: dict[str, dict] = {s: {} for s in sessions}
         if scope_predicate is not None:
-            declared_filter_types = scope_predicate.allowed_filter_types()
-            for ft in declared_filter_types:
-                if ft in all_grid_filters:
-                    continue  # already in legacy grid
-                if ft not in ALL_FILTERS:
-                    continue  # unknown — scope predicate will reject anyway
-                filter_obj = ALL_FILTERS[ft]
-                # DOW composite detection: CompositeFilter with DayOfWeekSkipFilter overlay
-                is_dow_composite = (
-                    isinstance(filter_obj, CompositeFilter)
-                    and isinstance(filter_obj.overlay, DayOfWeekSkipFilter)
-                )
-                for s in sessions:
-                    if is_dow_composite and s in DOW_MISALIGNED_SESSIONS:
-                        continue  # DOW misalignment guard
-                    hypothesis_extra_by_session[s][ft] = filter_obj
-                    all_grid_filters[ft] = filter_obj
+            _inject_hypothesis_filters(
+                scope_predicate=scope_predicate,
+                sessions=sessions,
+                all_grid_filters=all_grid_filters,
+                hypothesis_extra_by_session=hypothesis_extra_by_session,
+            )
             injected_count = sum(len(v) for v in hypothesis_extra_by_session.values())
             if injected_count > 0:
                 injected_types = sorted({
