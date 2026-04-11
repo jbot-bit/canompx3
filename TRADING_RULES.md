@@ -2,6 +2,7 @@
 # M2K removed 2026-03-18: null test — 0/18 families survive noise screening
 
 Single source of truth for live trading. All claims verified against gold.db.
+Document-role registry: `docs/governance/document_authority.md`.
 For research deep-dives and data tables, see `docs/RESEARCH_ARCHIVE.md`.
 
 ---

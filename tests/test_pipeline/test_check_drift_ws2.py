@@ -807,3 +807,45 @@ WHERE LOWER(status) = 'active'
         )
         violations = check_drift.check_critical_deployable_shelf_consumers()
         assert violations == []
+
+
+class TestDocumentAuthorityRegistry:
+    def test_catches_missing_registry(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        violations = check_drift.check_document_authority_registry()
+        assert violations == ["  docs/governance/document_authority.md missing"]
+
+    def test_catches_missing_registry_reference(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(tmp_path / "docs" / "governance" / "document_authority.md", "CLAUDE.md\nTRADING_RULES.md\n")
+        _mkfile(tmp_path / "CLAUDE.md", "## Document Authority\n")
+        _mkfile(tmp_path / "TRADING_RULES.md", "Single source of truth for live trading.\n")
+        _mkfile(tmp_path / "RESEARCH_RULES.md", "**Authority:**\n")
+        _mkfile(tmp_path / "ROADMAP.md", "Features planned but NOT YET BUILT.\n")
+        _mkfile(tmp_path / "HANDOFF.md", "Cross-Tool Session Baton\n")
+        violations = check_drift.check_document_authority_registry()
+        assert any("document_authority.md missing registry reference" in v for v in violations)
+
+    def test_passes_with_complete_authority_surface(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(
+            tmp_path / "docs" / "governance" / "document_authority.md",
+            "\n".join(
+                [
+                    "CLAUDE.md",
+                    "TRADING_RULES.md",
+                    "RESEARCH_RULES.md",
+                    "ROADMAP.md",
+                    "HANDOFF.md",
+                    "docs/plans/",
+                    "docs/institutional/pre_registered_criteria.md",
+                ]
+            ),
+        )
+        _mkfile(tmp_path / "CLAUDE.md", "## Document Authority\n")
+        _mkfile(tmp_path / "TRADING_RULES.md", "Single source of truth for live trading.\n")
+        _mkfile(tmp_path / "RESEARCH_RULES.md", "**Authority:**\n")
+        _mkfile(tmp_path / "ROADMAP.md", "Features planned but NOT YET BUILT.\n")
+        _mkfile(tmp_path / "HANDOFF.md", "Cross-Tool Session Baton\n")
+        violations = check_drift.check_document_authority_registry()
+        assert violations == []

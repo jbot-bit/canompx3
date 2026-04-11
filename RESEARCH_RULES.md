@@ -1,6 +1,7 @@
 # Research Rules — Analytical Standards for This Project
 
 **Authority:** Wins for all research methodology, statistical analysis, and trading interpretation decisions.
+Document-role registry: `docs/governance/document_authority.md`.
 **Conflict:** If TRADING_RULES.md says "X works" and this file says "the evidence for X is weak" → this file wins on methodology, TRADING_RULES.md wins on what to trade.
 
 > **Phase 0 literature grounding (2026-04-07).** This file's statistical thresholds are now backed by verbatim PDF extracts in [`docs/institutional/literature/`](docs/institutional/literature/). Specifically:

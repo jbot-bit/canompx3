@@ -4926,6 +4926,49 @@ def check_critical_deployable_shelf_consumers() -> list[str]:
     return violations
 
 
+def check_document_authority_registry() -> list[str]:
+    """Core authority docs must exist and advertise their roles explicitly."""
+    violations: list[str] = []
+
+    registry = PROJECT_ROOT / "docs" / "governance" / "document_authority.md"
+    if not registry.exists():
+        return ["  docs/governance/document_authority.md missing"]
+
+    registry_text = registry.read_text(encoding="utf-8")
+    required_registry_refs = [
+        "CLAUDE.md",
+        "TRADING_RULES.md",
+        "RESEARCH_RULES.md",
+        "ROADMAP.md",
+        "HANDOFF.md",
+        "docs/plans/",
+        "docs/institutional/pre_registered_criteria.md",
+    ]
+    for ref in required_registry_refs:
+        if ref not in registry_text:
+            violations.append(
+                f"  docs/governance/document_authority.md missing registry reference {ref!r}"
+            )
+
+    required_markers = {
+        Path("CLAUDE.md"): "## Document Authority",
+        Path("TRADING_RULES.md"): "Single source of truth for live trading.",
+        Path("RESEARCH_RULES.md"): "**Authority:**",
+        Path("ROADMAP.md"): "Features planned but NOT YET BUILT.",
+        Path("HANDOFF.md"): "Cross-Tool Session Baton",
+    }
+    for rel_path, marker in required_markers.items():
+        doc_path = PROJECT_ROOT / rel_path
+        if not doc_path.exists():
+            violations.append(f"  {rel_path} missing")
+            continue
+        content = doc_path.read_text(encoding="utf-8")
+        if marker not in content:
+            violations.append(f"  {rel_path} missing authority marker {marker!r}")
+
+    return violations
+
+
 def check_shared_profile_fingerprint_canonical() -> list[str]:
     """Ensure the profile fingerprint helper lives in one canonical runtime module."""
     violations = []
@@ -5433,6 +5476,7 @@ CHECKS = [
     ("SR state writer uses derived-state contract envelope", check_sr_state_contract_writer, False, False),
     ("SR state reader validates envelope before trust", check_sr_state_contract_reader, False, False),
     ("Preflight launchers pass explicit claim modes", check_preflight_launcher_modes, False, False),
+    ("Document authority registry exists and core docs advertise their roles", check_document_authority_registry, False, False),
 ]  # end CHECKS
 
 

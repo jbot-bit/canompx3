@@ -174,6 +174,51 @@ relation-first shape for critical shelf readers.
   drift independently from code. That doc-governance layer is still open work
   after the shelf-contract rollout.
 
+## Update (2026-04-11 — document authority registry)
+
+### Headline
+
+Added a first-class authority registry for top-level docs and drift enforcement
+so document roles are explicit instead of folklore.
+
+### What changed
+
+- added `docs/governance/document_authority.md`
+  - defines the role of:
+    - `CLAUDE.md`
+    - `TRADING_RULES.md`
+    - `RESEARCH_RULES.md`
+    - `docs/institutional/pre_registered_criteria.md`
+    - `ROADMAP.md`
+    - `HANDOFF.md`
+    - `docs/plans/`
+  - records conflict and maintenance rules
+- updated top-level authority docs to point at the registry:
+  - `CLAUDE.md`
+  - `TRADING_RULES.md`
+  - `RESEARCH_RULES.md`
+- tightened `pipeline/check_drift.py`
+  - new check 108: document authority registry exists and core docs advertise
+    their roles
+- added drift coverage:
+  - `tests/test_pipeline/test_check_drift_ws2.py`
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check pipeline/check_drift.py tests/test_pipeline/test_check_drift_ws2.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_check_drift_ws2.py -q`
+  - `66 passed`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 101 checks passed [OK], 0 skipped, 7 advisory`
+
+### Notes
+
+- `ROADMAP.md` was already dirty in another terminal. I deliberately did NOT
+  include it in this slice even though the registry names it. The existing
+  "Features planned but NOT YET BUILT." marker already satisfies the new drift
+  check.
+
 ### Headline
 
 Made deployable-shelf semantics explicit and fail-closed:
