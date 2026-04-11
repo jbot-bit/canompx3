@@ -154,7 +154,9 @@ class TestAllFilters:
         # + 1 PIT_MIN (pit range/atr anti-filter, CME_REOPEN only — Apr 2026)
         # = 68 + 8 + 8 + 1 = 85
         # Wave 4 Phase B (2026-04-11): +3 ATR_VEL_GE105/110/115 (atr_vel_ratio sensitivity variants)
-        assert len(ALL_FILTERS) == 85
+        # Wave 5 G5 (2026-04-12): +1 GARCH_VOL_PCT_LT20 (garch_forecast_vol rolling percentile,
+        #   MNQ NYSE_OPEN LOW quintile Phase B survivor, in_ExpR +0.240)
+        assert len(ALL_FILTERS) == 86
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS
@@ -441,6 +443,193 @@ class TestOwnATRPercentileFilter:
             assert isinstance(f, OwnATRPercentileFilter)
             assert f.min_pct == expected_pct
             assert f.filter_type == key
+
+
+class TestGARCHForecastVolPctFilter:
+    """GARCHForecastVolPctFilter gates on GARCH forecast vol rolling percentile.
+
+    Covers Wave 5 G5 deployment — direction="low" variant (MNQ NYSE_OPEN
+    RR1.5 LOW-vol regime, Phase B T2-T8 survivor with in_ExpR +0.240).
+    The class is direction-parameterized so future research findings
+    in the high-vol regime can reuse the same filter class.
+    """
+
+    def test_low_direction_matches_below_threshold(self):
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=20.0, direction="low",
+        )
+        # 15th percentile <= 20th percentile → admit
+        assert f.matches_row({"garch_forecast_vol_pct": 15.0}, "NYSE_OPEN") is True
+
+    def test_low_direction_rejects_above_threshold(self):
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=20.0, direction="low",
+        )
+        # 50th percentile > 20th percentile → reject
+        assert f.matches_row({"garch_forecast_vol_pct": 50.0}, "NYSE_OPEN") is False
+
+    def test_low_direction_boundary_inclusive(self):
+        """At the boundary (pct == pct_threshold), LOW direction admits."""
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=20.0, direction="low",
+        )
+        assert f.matches_row({"garch_forecast_vol_pct": 20.0}, "NYSE_OPEN") is True
+
+    def test_high_direction_matches_above_threshold(self):
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=80.0, direction="high",
+        )
+        # 90th percentile >= 80th percentile → admit
+        assert f.matches_row({"garch_forecast_vol_pct": 90.0}, "LONDON_METALS") is True
+
+    def test_high_direction_rejects_below_threshold(self):
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=80.0, direction="high",
+        )
+        assert f.matches_row({"garch_forecast_vol_pct": 50.0}, "LONDON_METALS") is False
+
+    def test_high_direction_boundary_inclusive(self):
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=80.0, direction="high",
+        )
+        assert f.matches_row({"garch_forecast_vol_pct": 80.0}, "LONDON_METALS") is True
+
+    def test_fail_closed_missing_column(self):
+        """Missing key in row → fail-closed reject. Day is ineligible."""
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=20.0, direction="low",
+        )
+        assert f.matches_row({}, "NYSE_OPEN") is False
+
+    def test_fail_closed_none_value(self):
+        """Explicit None value (warm-up window) → reject."""
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=20.0, direction="low",
+        )
+        assert f.matches_row({"garch_forecast_vol_pct": None}, "NYSE_OPEN") is False
+
+    def test_fail_closed_nan_value(self):
+        """NaN / pd.NA → reject (via _atom_numeric coercion)."""
+        import math
+
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=20.0, direction="low",
+        )
+        assert (
+            f.matches_row({"garch_forecast_vol_pct": math.nan}, "NYSE_OPEN") is False
+        )
+
+    def test_invalid_direction_raises(self):
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        with pytest.raises(ValueError, match="direction must be 'low' or 'high'"):
+            GARCHForecastVolPctFilter(
+                filter_type="TEST", description="test",
+                pct_threshold=20.0, direction="medium",
+            )
+
+    def test_matches_df_low_direction(self):
+        """Vectorized matches_df mirrors matches_row for the low direction."""
+        import pandas as pd
+
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=20.0, direction="low",
+        )
+        df = pd.DataFrame(
+            {
+                "garch_forecast_vol_pct": [5.0, 20.0, 21.0, None, 99.0],
+                # A few other columns so df is realistic
+                "symbol": ["MNQ"] * 5,
+            }
+        )
+        result = f.matches_df(df, "NYSE_OPEN")
+        # Expected: [True, True, False, False, False]
+        assert list(result) == [True, True, False, False, False]
+
+    def test_matches_df_missing_column(self):
+        """Vectorized matches_df returns all-False when column is absent."""
+        import pandas as pd
+
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=20.0, direction="low",
+        )
+        df = pd.DataFrame({"symbol": ["MNQ", "MNQ", "MNQ"]})
+        result = f.matches_df(df, "NYSE_OPEN")
+        assert list(result) == [False, False, False]
+
+    def test_instance_registered_lt20(self):
+        """GARCH_VOL_PCT_LT20 must be in ALL_FILTERS with direction='low'."""
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        assert "GARCH_VOL_PCT_LT20" in ALL_FILTERS
+        f = ALL_FILTERS["GARCH_VOL_PCT_LT20"]
+        assert isinstance(f, GARCHForecastVolPctFilter)
+        assert f.filter_type == "GARCH_VOL_PCT_LT20"
+        assert f.direction == "low"
+        assert f.pct_threshold == 20.0
+
+    def test_describe_low_direction_includes_regime_word(self):
+        """describe() surfaces the low-vol regime explanation."""
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="GARCH_VOL_PCT_LT20", description="test",
+            pct_threshold=20.0, direction="low",
+        )
+        atoms = f.describe({"garch_forecast_vol_pct": 15.0}, "NYSE_OPEN", "E2")
+        assert len(atoms) == 1
+        atom = atoms[0]
+        assert atom.feature_column == "garch_forecast_vol_pct"
+        assert atom.comparator == "<="
+        assert atom.threshold == 20.0
+        assert atom.passes is True
+        assert "low-vol" in atom.explanation
+
+    def test_describe_missing_data_passes_none(self):
+        """describe() returns passes=None + is_data_missing=True on None."""
+        from trading_app.config import GARCHForecastVolPctFilter
+
+        f = GARCHForecastVolPctFilter(
+            filter_type="TEST", description="test",
+            pct_threshold=20.0, direction="low",
+        )
+        atoms = f.describe({"garch_forecast_vol_pct": None}, "NYSE_OPEN", "E2")
+        assert len(atoms) == 1
+        assert atoms[0].is_data_missing is True
+        assert atoms[0].passes is None
 
 
 class TestCombinedATRVolumeFilter:

@@ -329,6 +329,16 @@ CREATE TABLE IF NOT EXISTS daily_features (
     garch_forecast_vol  DOUBLE,
     garch_atr_ratio     DOUBLE,
 
+    -- GARCH forecast vol rolling percentile (Apr 2026 — Wave 5 G5 deployment).
+    -- Rank of today's garch_forecast_vol among prior 252 trading days (0-100).
+    -- Prior-only window, no look-ahead. Min 60 prior days for stable ranking.
+    -- Same pattern as atr_20_pct / overnight_range_pct — regime-adaptive percentile
+    -- avoids the cross-instrument threshold contamination that absolute GARCH cutoffs
+    -- would cause (MNQ Q20 ~0.16 vs MES Q20 ~0.11, etc.).
+    -- @research-source scripts/research/wave4_presession_t2t8.py (2026-04-11): Phase B
+    -- MNQ NYSE_OPEN RR1.5 LOW garch_forecast_vol in_ExpR +0.240 WFE 1.00 p=0.042.
+    garch_forecast_vol_pct  DOUBLE,
+
     -- ORB columns (12 dynamic sessions x 14 columns = 168)
 {orb_block}
 
@@ -489,9 +499,11 @@ def init_db(db_path: Path, force: bool = False):
             pass  # column already exists
 
         # Migration: add GARCH forecast columns (Feb 2026)
+        # + garch_forecast_vol_pct (Apr 2026 — Wave 5 G5 deployment).
         for col, typedef in [
             ("garch_forecast_vol", "DOUBLE"),
             ("garch_atr_ratio", "DOUBLE"),
+            ("garch_forecast_vol_pct", "DOUBLE"),
         ]:
             try:
                 con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} {typedef}")

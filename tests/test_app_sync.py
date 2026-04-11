@@ -214,6 +214,19 @@ class TestAllFiltersSync:
         "OVNRNG_50_FAST10",
         "OVNRNG_100_FAST5",
         "OVNRNG_100_FAST10",
+        # ATR velocity ratio filters (Apr 2026 Wave 5 — commits a877b387 + a7756044).
+        # Absolute-ratio sensitivity variants around the IS-window Q80 (≈1.054).
+        # GE105 is routed in get_filters_for_grid() for MNQ TOKYO_OPEN + MES US_DATA_1000;
+        # GE110/GE115 are accessible via hypothesis-file injection only.
+        "ATR_VEL_GE105",
+        "ATR_VEL_GE110",
+        "ATR_VEL_GE115",
+        # GARCH forecast vol rolling percentile (Apr 2026 Wave 5 G5 deployment).
+        # Phase B T2-T8 survivor: MNQ NYSE_OPEN RR1.5 LOW-vol regime,
+        # in_ExpR +0.240, WFE 1.00, p=0.042. Rolling 252d percentile from
+        # daily_features.garch_forecast_vol_pct — regime-adaptive, handles
+        # cross-instrument distribution variance.
+        "GARCH_VOL_PCT_LT20",
     }
 
     def test_expected_keys(self):
@@ -251,10 +264,12 @@ class TestAllFiltersSync:
     def test_size_filters_have_thresholds(self):
         """Every ORB size filter (or composite with size base) has thresholds."""
         from trading_app.config import (
+            ATRVelRatioFilter,
             CompositeFilter,
             CrossAssetATRFilter,
             DirectionFilter,
             GapNormFilter,
+            GARCHForecastVolPctFilter,
             OrbVolumeFilter,
             OvernightRangeAbsFilter,
             OwnATRPercentileFilter,
@@ -276,6 +291,8 @@ class TestAllFiltersSync:
                     PrevDayRangeNormFilter,
                     GapNormFilter,
                     PitRangeFilter,
+                    ATRVelRatioFilter,
+                    GARCHForecastVolPctFilter,
                 ),
             ):
                 continue

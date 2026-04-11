@@ -1270,6 +1270,117 @@ class OvernightRangeFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class GARCHForecastVolPctFilter(StrategyFilter):
+    """Filter by GARCH(1,1) forecast vol rolling percentile.
+
+    Reads ``garch_forecast_vol_pct`` from ``daily_features`` (rolling 252d
+    percentile, pre-computed in ``pipeline.build_daily_features``).
+    Fail-closed: missing data (None / NaN / pd.NA) means day is ineligible.
+
+    Supports both directions:
+    - ``direction="low"``: admit rows where ``garch_forecast_vol_pct <= pct_threshold``
+      (quieter-than-usual vol regime).
+    - ``direction="high"``: admit rows where ``garch_forecast_vol_pct >= pct_threshold``
+      (noisier-than-usual vol regime).
+
+    Wave 5 G5 deployment target: ``GARCH_VOL_PCT_LT20`` for MNQ × NYSE_OPEN
+    × RR1.5, direction="low" — research finding from
+    ``scripts/research/wave4_presession_t2t8.py`` (Phase B T2-T8 survivor,
+    in_ExpR +0.240, WFE 1.00, p=0.042). Deployed as a rolling percentile
+    rather than an absolute threshold because the ``garch_forecast_vol``
+    distribution varies significantly across instruments (MNQ Q20 ≈ 0.159
+    annualized vs MES Q20 ≈ 0.111) — a single absolute cutoff would either
+    starve MNQ or over-trigger MES.
+
+    Canonical metadata:
+    - VALIDATED_FOR: research-provisional on MNQ (Phase B survivor); other
+      instruments/sessions NOT YET validated.
+    - LAST_REVALIDATED: 2026-04-11 (Wave 4 Phase B T2-T8)
+    - CONFIDENCE_TIER: PLAUSIBLE — Phase B survivor with in_ExpR +0.240 and
+      clean WFE but single-sample discovery; Criterion 8 OOS gate remains
+      the promotion blocker (time-driven).
+
+    @research-source scripts/research/wave4_presession_t2t8.py
+    @revalidated-for 2026-04 Wave 5 Pathway B deployment
+    @entry-models E2 (stop-market breakout)
+    """
+
+    # ── Canonical research metadata (ClassVar) ──────────────────────────
+    CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
+
+    pct_threshold: float = 20.0
+    direction: str = "low"  # "low" → <= threshold, "high" → >= threshold
+
+    def __post_init__(self):
+        if self.direction not in ("low", "high"):
+            raise ValueError(
+                f"GARCHForecastVolPctFilter direction must be 'low' or 'high', "
+                f"got {self.direction!r}"
+            )
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        _ = orb_label
+        val = row.get("garch_forecast_vol_pct")
+        if val is None:
+            return False
+        # pd.NA / NaN handling via _atom_numeric which returns None on missing
+        coerced = _atom_numeric(val)
+        if coerced is None:
+            return False
+        if self.direction == "low":
+            return coerced <= self.pct_threshold
+        return coerced >= self.pct_threshold
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        _ = orb_label
+        import pandas as pd
+
+        if "garch_forecast_vol_pct" not in df.columns:
+            return pd.Series(False, index=df.index)
+        col = df["garch_forecast_vol_pct"]
+        if self.direction == "low":
+            return col.notna() & (col <= self.pct_threshold)
+        return col.notna() & (col >= self.pct_threshold)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """GARCH forecast vol percentile gate. Pre-session, resolves at STARTUP."""
+        _ = (orb_label, entry_model)
+        observed = _atom_numeric(row.get("garch_forecast_vol_pct"))
+        missing = observed is None
+        if missing:
+            passes = None
+        elif self.direction == "low":
+            passes = observed <= self.pct_threshold
+        else:
+            passes = observed >= self.pct_threshold
+        comparator = "<=" if self.direction == "low" else ">="
+        regime_word = "low-vol" if self.direction == "low" else "high-vol"
+        return [
+            AtomDescription(
+                name=f"GARCH forecast vol percentile {comparator} {self.pct_threshold:g}",
+                category="PRE_SESSION",
+                resolves_at="STARTUP",
+                passes=passes,
+                feature_column="garch_forecast_vol_pct",
+                confidence_tier=self.CONFIDENCE_TIER,
+                observed_value=observed,
+                threshold=self.pct_threshold,
+                comparator=comparator,
+                is_data_missing=missing,
+                explanation=(
+                    f"Require GARCH forecast vol rolling percentile "
+                    f"{comparator} {self.pct_threshold:g}% ({regime_word} regime gate)."
+                ),
+            )
+        ]
+
+
+@dataclass(frozen=True)
 class OvernightRangeAbsFilter(StrategyFilter):
     """Filter by absolute overnight range (points).
 
@@ -2492,6 +2603,26 @@ MGC_VOLUME_FILTERS = {
         filter_type="ATR_VEL_GE115",
         description="ATR velocity ratio >= 1.15 (extreme expansion gate)",
         min_ratio=1.15,
+    ),
+    # Wave 4 Phase B T2-T8 survivor #1 (strongest): GARCH(1,1) forecast vol
+    # rolling percentile gate. Tested at 2026-04-11 on post-Phase-3c data.
+    # The MNQ × NYSE_OPEN × RR1.5 LOW-quintile configuration produced in_ExpR
+    # +0.240, WFE 1.00, p=0.042 — the single strongest un-shipped Phase B
+    # result. Deployed as rolling percentile (not absolute threshold) because
+    # the garch_forecast_vol distribution varies significantly across
+    # instruments (MNQ Q20 ≈ 0.159 vs MES Q20 ≈ 0.111) — a fixed absolute
+    # cutoff would fragment cross-instrument behavior and drift with regime.
+    # Only the LT20 ("low-vol") variant is registered for deployment;
+    # research did not find a surviving HIGH-vol configuration at the Phase B
+    # kill-criteria threshold.
+    # @research-source scripts/research/wave4_presession_t2t8.py
+    # @entry-models E2
+    # @revalidated-for 2026-04 Wave 5 Pathway B deployment
+    "GARCH_VOL_PCT_LT20": GARCHForecastVolPctFilter(
+        filter_type="GARCH_VOL_PCT_LT20",
+        description="GARCH forecast vol rolling percentile <= 20 (low-vol regime)",
+        pct_threshold=20.0,
+        direction="low",
     ),
 }
 

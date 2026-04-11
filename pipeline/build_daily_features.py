@@ -541,6 +541,43 @@ def classify_day_type(
     return "BALANCED"
 
 
+def _prior_rank_pct(
+    rows: list[dict],
+    current_index: int,
+    column: str,
+    lookback: int,
+    min_prior: int,
+) -> float | None:
+    """Rolling percentile rank of ``rows[current_index][column]`` among the
+    prior ``lookback`` rows.
+
+    Uses ONLY ``rows[max(0, current_index - lookback):current_index]`` — no
+    look-ahead. Returns None if:
+
+    - the current row's column value is None,
+    - or fewer than ``min_prior`` prior rows have the column populated.
+
+    Pattern is identical to the inline blocks used for ``atr_20_pct`` and
+    ``overnight_range_pct``. Extracted so new rolling-percentile columns
+    (Wave 5 G5 ``garch_forecast_vol_pct``) can be unit-tested in isolation
+    without spinning up a synthetic DuckDB fixture for ``build_daily_features``.
+    Pure function — no side effects.
+    """
+    current = rows[current_index].get(column)
+    if current is None:
+        return None
+    prior_values = [
+        rows[j][column]
+        for j in range(max(0, current_index - lookback), current_index)
+        if rows[j].get(column) is not None
+    ]
+    if len(prior_values) < min_prior:
+        return None
+    sorted_prior = sorted(prior_values)
+    rank = bisect_left(sorted_prior, current)
+    return round(rank / len(sorted_prior) * 100, 2)
+
+
 def compute_garch_forecast(daily_closes: list[float], min_obs: int = 252) -> float | None:
     """
     Fit GARCH(1,1) on trailing daily close-to-close log returns.
@@ -856,6 +893,7 @@ def build_features_for_day(
     row["overnight_range_pct"] = None
     row["garch_forecast_vol"] = None
     row["garch_atr_ratio"] = None
+    row["garch_forecast_vol_pct"] = None
     for _sl in COMPRESSION_SESSIONS:
         row[f"orb_{_sl}_compression_z"] = None
         row[f"orb_{_sl}_compression_tier"] = None
@@ -1166,6 +1204,19 @@ def build_daily_features(
                 sorted_orn = sorted(prior_orns)
                 orn_rank = bisect_left(sorted_orn, orn_today)
                 rows[i]["overnight_range_pct"] = round(orn_rank / len(sorted_orn) * 100, 2)
+
+        # GARCH forecast vol percentile: rank of today's garch_forecast_vol among
+        # prior 252 trading days. Used by GARCHForecastVolPctFilter (Wave 5 G5).
+        # Prior-only window [i-252:i], no look-ahead. Min 60 prior days for stable
+        # ranking — matches atr_20_pct discipline for slower-moving vol signals.
+        # @research-source scripts/research/wave4_presession_t2t8.py (2026-04-11):
+        # Phase B MNQ NYSE_OPEN RR1.5 LOW garch_forecast_vol in_ExpR +0.240
+        # WFE 1.00 p=0.042. Deployed as rolling percentile instead of absolute
+        # threshold to handle cross-instrument distribution variance
+        # (MNQ Q20 ~0.16 vs MES Q20 ~0.11) and regime drift.
+        rows[i]["garch_forecast_vol_pct"] = _prior_rank_pct(
+            rows, i, "garch_forecast_vol", lookback=252, min_prior=60
+        )
 
         # Per-session ORB compression z-score (prior 20 days, no look-ahead).
         # Compression = rolling z-score of (orb_size / atr_20).

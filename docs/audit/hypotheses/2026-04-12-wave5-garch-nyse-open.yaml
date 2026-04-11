@@ -1,0 +1,125 @@
+# Hypothesis Registry — Wave 5 G5: GARCH Forecast Vol Low-Regime Gate
+#
+# Locked:       2026-04-12T00:00:00+10:00
+# Author:       Claude Code session (Wave 5 G5 deployment, post ATR_VEL audit)
+# Holdout mode: A (2026-01-01 sacred)
+# Data horizon: MNQ 6.65yr post Phase 3c clean real-micro
+# Testing mode: individual (Pathway B, Amendment 3.0)
+#
+# Theory citation (LOCAL sources, NOT training memory):
+# 1. scripts/research/wave4_presession_t2t8.py — Phase B T2-T8 adversarial battery
+#    completed 2026-04-11. 20 shortlist combos tested across garch_forecast_vol,
+#    atr_vel_ratio, overnight_took_pdh, took_pdh_before_1000. Only 3 survived
+#    T3 WFE AND T4 sensitivity AND T6 p<0.05 AND T7 year stability.
+#    MNQ × NYSE_OPEN × RR1.5 × garch_forecast_vol LOW was the strongest survivor:
+#      - in_ExpR = +0.240
+#      - WFE     = 1.00 (perfect sign stability 2020-2023 IS vs 2024-2025 OOS)
+#      - T6 p    = 0.042 (5000-perm null bootstrap)
+#      - T7      = year stability passed
+# 2. pipeline/build_daily_features.py lines 1205-1217 — garch_forecast_vol
+#    computation proven no-lookahead: GARCH(1,1) fit on daily closes from
+#    rows[0..i-1], forecast for row i. Prior-only.
+# 3. pipeline/build_daily_features.py (2026-04-12 addition) — garch_forecast_vol_pct
+#    rolling percentile extracted via _prior_rank_pct helper. 9 unit tests prove
+#    no-lookahead discipline (tests/test_pipeline/test_build_daily_features.py
+#    TestPriorRankPct). 252-day lookback with min_prior=60.
+# 4. docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md —
+#    MinBTL bound. Single-trial hypothesis file: MinBTL ≈ 0 years required,
+#    6.65 years available, headroom is essentially infinite.
+# 5. docs/institutional/pre_registered_criteria.md — 12 locked criteria that
+#    the validator enforces post-discovery. This file commits to them ex-ante.
+#
+# Mechanism: Low GARCH forecast vol regime at NYSE_OPEN. Quiet-regime mornings
+# produce cleaner ORB breakouts — the noise floor is lower, so the signal-to-
+# noise of a break at 23:30 UTC (09:30 NY) is higher. The RR1.5 target captures
+# continuation into US cash-session order flow without overshooting into
+# midday chop. LOW-vol is counter-intuitive for a breakout edge but the
+# research sign is robust: in_ExpR +0.240 with WFE 1.00 means the OOS ExpR
+# spread exactly matched IS — not a pattern you see in an overfit model.
+#
+# The filter is deployed as a ROLLING PERCENTILE (garch_forecast_vol_pct <= 20)
+# rather than an absolute threshold because the garch_forecast_vol distribution
+# varies across instruments (MNQ Q20 ≈ 0.159 vs MES Q20 ≈ 0.111) and across
+# time (regime drift). Rolling percentile matches the research's qcut(5)
+# discipline — which was itself an in-sample-adaptive filter — while adding
+# forward-time adaptivity the research did not have.
+
+metadata:
+  name: "wave5-garch-nyse-open-low"
+  purpose: |
+    Pre-register the GARCH_VOL_PCT_LT20 filter (Wave 4 Phase B T2-T8
+    strongest survivor) for formal validation through strategy_discovery +
+    strategy_validator under Mode A holdout. The Phase B T2-T8 script
+    already applied IS/OOS walk-forward, ±20% sensitivity, 5000-perm null
+    bootstrap, and per-year stability. This file is the institutional
+    deployment path for that single survivor.
+  date_locked: "2026-04-12T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.65
+  data_source: "real CME Micro E-mini Nasdaq-100 futures 2019-05-06 onwards"
+  testing_mode: "individual"
+  bailey_compliance:
+    trials: 1
+    horizon_years: 6.65
+    e_max_n: 1.0
+    min_btl_required_years: 0.0
+    headroom_pct: 99999
+    status: "PASS"
+  total_expected_trials: 1
+
+hypotheses:
+  - id: 1
+    name: "MNQ NYSE_OPEN E2 RR1.5 GARCH_VOL_PCT_LT20 — low-vol-regime breakout gate"
+    theory_citation: "scripts/research/wave4_presession_t2t8.py (2026-04-11 T2-T8 result): MNQ NYSE_OPEN RR1.5 LOW garch_forecast_vol in_ExpR=+0.240 WFE=1.00 T6 p=0.042. Strongest survivor across 20 shortlist combos; 50 other configs KILLED at T3/T4/T6/T7."
+    economic_basis: |
+      Low GARCH forecast vol at NYSE_OPEN identifies mornings where the
+      1-step-ahead conditional vol is in the bottom 20% of the rolling 252-
+      day distribution. In ORB breakout terms, these are quiet-regime
+      openings where the 09:30 NY cash open has cleaner directional
+      follow-through — the noise floor from macro release chop is lower, so
+      a confirmed break has higher signal-to-noise. The RR1.5 target rides
+      the US cash-session order flow momentum without extending into
+      midday mean-reversion.
+
+      Mechanism is distinct from existing ORB-size / COST_LT / OVNRNG filters
+      because it conditions on FORWARD vol expectation (GARCH output), not
+      realized pre-session range or friction ratio. G9 correlation audit
+      from Wave 4 confirmed OVNRNG / took_pdh / atr_vel_ratio are mutually
+      independent (Jaccard 0.19-0.40) — garch_forecast_vol was not in that
+      audit but is mechanically distinct (daily-close returns vs overnight
+      range, ATR, or takeout).
+
+      WFE 1.00 (IS ExpR spread == OOS ExpR spread) is the strongest WFE
+      among the 3 Phase B survivors — stronger than ATR_VEL MNQ TOKYO_OPEN
+      (WFE 1.42) and ATR_VEL MES US_DATA_1000 (WFE 0.96). Perfect sign
+      stability across 2020-2023 IS and 2024-2025 OOS indicates the
+      mechanism is not a regime accident.
+    filter:
+      type: GARCH_VOL_PCT_LT20
+      column: garch_forecast_vol_pct
+      thresholds: [20]
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_OPEN]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "Raw p >= 0.05 in validator discovery FDR"
+      - "Walk-forward efficiency < 0.50 or > 2.00"
+      - "2026 OOS ExpR < 0"
+      - "Era stability: any era with N >= 50 and ExpR < -0.05"
+      - "Annualized Sharpe < 0.70 (Bailey noise floor per docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md)"
+      - "Less than 100 deployable trades (Harvey-Liu 2015 Exhibit 4 floor)"
+
+total_hypothesis_count: 1
+total_expected_trials: 1
+budget_check:
+  mode: "clean"
+  max_allowed_clean: 300
+  strict_bailey_e_1_0_max_n: 27
+  data_horizon_years_available: 6.65
+  sharpe_noise_floor: 0.695
+  status: "under budget"

@@ -24,6 +24,7 @@ from pipeline.build_daily_features import (
     ORB_LABELS,
     UTC_TZ,
     _orb_utc_window,
+    _prior_rank_pct,
     _session_utc_window,
     _wilders_rsi,
     build_daily_features,
@@ -477,6 +478,144 @@ class TestGarchForecast:
         closes = [2350.0] * 300
         result = compute_garch_forecast(closes)
         assert result is None
+
+
+# =============================================================================
+# MODULE 4d: Rolling percentile helper (_prior_rank_pct) — Wave 5 G5
+# =============================================================================
+
+
+class TestPriorRankPct:
+    """Tests for _prior_rank_pct — the no-lookahead rolling-percentile helper
+    used by the Wave 5 G5 garch_forecast_vol_pct column.
+
+    The contract: rows[current_index][column] is ranked against
+    rows[max(0, i-lookback):i][column] — STRICTLY prior rows, never the
+    current row or any future row. Returns None if insufficient prior data
+    or the current row's column is None.
+    """
+
+    def test_returns_none_when_current_is_none(self):
+        """Current row with None value → None, regardless of history."""
+        rows = [{"gfv": 0.15} for _ in range(100)]
+        rows[50] = {"gfv": None}
+        assert _prior_rank_pct(rows, 50, "gfv", lookback=20, min_prior=5) is None
+
+    def test_returns_none_when_column_missing(self):
+        """Current row with column key absent → None."""
+        rows = [{"gfv": 0.15} for _ in range(100)]
+        rows[50] = {}  # no 'gfv' key at all
+        assert _prior_rank_pct(rows, 50, "gfv", lookback=20, min_prior=5) is None
+
+    def test_returns_none_when_insufficient_prior_data(self):
+        """Fewer than min_prior prior rows with non-None values → None."""
+        rows = [{"gfv": float(i)} for i in range(100)]
+        # At index 3, only 3 prior rows exist — below min_prior=5
+        assert _prior_rank_pct(rows, 3, "gfv", lookback=50, min_prior=5) is None
+
+    def test_returns_none_when_prior_is_all_nulls(self):
+        """Prior rows exist but all have None values → None."""
+        rows = [{"gfv": None} for _ in range(100)]
+        rows[50] = {"gfv": 0.15}
+        assert _prior_rank_pct(rows, 50, "gfv", lookback=20, min_prior=5) is None
+
+    def test_rank_uses_only_prior_rows(self):
+        """No-look-ahead: current row's value AND all future rows must be
+        excluded from the ranking computation. This is the core discipline —
+        a single look-ahead byte would invalidate the entire signal."""
+        # Construct rows where current index has a MIDDLE value,
+        # prior rows have LOW values (0..9), future rows have HIGH values (100..199).
+        rows = []
+        for i in range(10):
+            rows.append({"gfv": float(i)})  # 0, 1, ..., 9
+        rows.append({"gfv": 50.0})  # current index = 10, value=50
+        for i in range(100, 200):
+            rows.append({"gfv": float(i)})  # 100..199
+
+        # With lookback=10 (all 10 prior), min_prior=5:
+        # prior = [0,1,...,9], current = 50
+        # bisect_left of 50 in [0..9] = 10 (inserted after all)
+        # rank = 10 / 10 * 100 = 100.0
+        result = _prior_rank_pct(rows, 10, "gfv", lookback=10, min_prior=5)
+        assert result == 100.0, (
+            f"expected 100.0 (current above all prior), got {result}. "
+            f"If future rows leaked in, result would be near Q5 (~50/200)"
+        )
+
+    def test_rank_ignores_rows_beyond_lookback(self):
+        """Prior rows outside [i-lookback:i] must be ignored."""
+        # 50 rows of value=0.0 (far in the past)
+        # + 10 rows of value=100.0 (within lookback)
+        # + current row value=50.0
+        rows = [{"gfv": 0.0} for _ in range(50)]
+        rows += [{"gfv": 100.0} for _ in range(10)]
+        rows.append({"gfv": 50.0})  # index 60
+
+        # lookback=10 → only the 10 preceding rows (all 100.0) count
+        # 50.0 < 100.0 so rank = 0
+        result = _prior_rank_pct(rows, 60, "gfv", lookback=10, min_prior=5)
+        assert result == 0.0, (
+            f"expected 0.0 (current below all 10 prior values of 100.0), got {result}. "
+            f"If rows beyond lookback leaked in, result would be ~50.0"
+        )
+
+    def test_rank_skips_none_prior_values(self):
+        """None values within the lookback window should be skipped, but
+        non-None values still counted toward min_prior."""
+        rows = []
+        # 5 non-None values
+        for v in [1.0, 2.0, 3.0, 4.0, 5.0]:
+            rows.append({"gfv": v})
+        # 10 None values (should be skipped)
+        for _ in range(10):
+            rows.append({"gfv": None})
+        rows.append({"gfv": 10.0})  # current index = 15
+
+        # lookback=20 (captures all 15 prior), min_prior=5
+        # prior (non-None) = [1,2,3,4,5]
+        # bisect_left of 10 = 5 (all less than 10)
+        # rank = 5 / 5 * 100 = 100.0
+        result = _prior_rank_pct(rows, 15, "gfv", lookback=20, min_prior=5)
+        assert result == 100.0
+
+    def test_midrange_value_gives_midrange_percentile(self):
+        """Sanity: a value in the middle of the prior distribution gets
+        a middle percentile."""
+        rows = [{"gfv": float(i)} for i in range(100)]  # 0..99
+        rows.append({"gfv": 49.5})  # current index = 100
+
+        # prior = [0..99] (100 values), current = 49.5
+        # bisect_left(49.5, [0..99]) = 50
+        # rank = 50 / 100 * 100 = 50.0
+        result = _prior_rank_pct(rows, 100, "gfv", lookback=100, min_prior=10)
+        assert result == 50.0
+
+    def test_regression_current_row_never_used_in_its_own_rank(self):
+        """The single most important invariant: rows[i]'s own value is
+        NEVER included in the denominator or the rank computation for
+        rows[i][column_pct]. This test constructs a scenario where if
+        the current row were included, it would change the answer."""
+        # Prior = [1.0] * 10 (all identical to current value)
+        # If current were included: rank = bisect_left(1.0, [1.0]*11) = 0 / 11 = 0
+        # If excluded correctly: rank = bisect_left(1.0, [1.0]*10) = 0 / 10 = 0
+        # Those happen to match — let me use a different scenario:
+        # Prior = [2.0] * 10, current = 2.0
+        # Excluded (correct): bisect_left(2.0, [2.0]*10) = 0 / 10 = 0.0
+        # Included (wrong):    bisect_left(2.0, [2.0]*11) = 0 / 11 = 0.0
+        # Still match! That's because bisect_left on equal values returns
+        # the LEFT side. Use an asymmetric case instead:
+        # Prior = [1, 2, 3, 4, 5], current = 3
+        # Excluded: rank = bisect_left(3, [1,2,3,4,5]) = 2, pct = 2/5*100 = 40.0
+        # Included: rank = bisect_left(3, [1,2,3,3,4,5]) = 2, pct = 2/6*100 = 33.33
+        rows = [{"gfv": float(v)} for v in [1.0, 2.0, 3.0, 4.0, 5.0]]
+        rows.append({"gfv": 3.0})  # current index = 5
+
+        result = _prior_rank_pct(rows, 5, "gfv", lookback=10, min_prior=3)
+        # Correct: 40.0 (prior len = 5, rank = 2)
+        assert result == 40.0, (
+            f"expected 40.0 (current excluded), got {result}. "
+            f"If current=3.0 leaked into its own prior, result would be ~33.33."
+        )
 
 
 # =============================================================================
