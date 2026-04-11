@@ -231,30 +231,97 @@ class TestTotalOpenLots:
         assert total_open_lots(active) == 2  # both
 
 
-# ─── Day-1 violation scenario (the audit's core finding) ───────────────
+# ─── Day-1 scenario: 2026-04-11 audit corrected F-1 false alarm ────────
 
 
-class TestDayOneViolationScenario:
-    """The exact scenario the audit (F-1) flagged as a BLOCKER."""
+class TestDayOneScalingPlanAggregation:
+    """Canonical Scaling Plan aggregation — corrected from F-1 false alarm.
 
-    def test_5_simultaneous_lanes_breach_50k_day1(self):
-        """topstep_50k_mnq_auto has 5 lanes × 1 micro each.
-        Day 1: balance=$0 → max 2 lots → 5 simultaneous = 5 lots > 2 = violation.
+    See docs/audit/2026-04-11-criterion-11-f1-false-alarm.md for the full
+    audit. The prior test in this class asserted that 5 separate 1-contract
+    MNQ trades counted as 5 lots against the Day-1 cap. That matched a buggy
+    per-trade ceiling-then-sum aggregation but contradicted the canonical
+    rule (verbatim from topstep_scaling_plan.py):
 
-        Each lane is 1 micro = 1 mini-equivalent (ceiling). 5 lanes = 5 mini-equivalents.
+      "2 lots = 2 minis OR 20 micros OR any combination summing to
+       2 mini-equivalents"
+
+    Under the canonical rule 5 MNQ micros = ceil(5/10) = 1 mini-equivalent
+    lot, well under the 2-lot Day-1 cap on a 50K XFA. The "F-1 BLOCKER"
+    memory claim of "5-lane bot is 2.5x over Day-1 cap" was arithmetically
+    5/2 — the buggy sum divided by the cap, with no independent canonical
+    grounding. The entire F-1 finding was a simulation artifact.
+    """
+
+    def test_5_simultaneous_lanes_within_day1_cap(self):
+        """5 MNQ × 1 micro each concurrent = 5 contracts = 1 lot ≤ 2-lot cap.
+
+        This is the topstep_50k_mnq_auto profile's worst-case concurrency
+        (5 lanes × 1 MNQ micro). Under the canonical rule "20 micros = 2 lots"
+        the 5-micro exposure uses 25% of the Day-1 cap with 75% headroom.
         """
         active = [_Trade(_Strategy("MNQ"), 1) for _ in range(5)]
         total = total_open_lots(active)
         day_max = max_lots_for_xfa(50_000, 0)
-        assert total == 5
+        assert total == 1, (
+            f"canonical: 5 MNQ micros = ceil(5/10) = 1 mini-equivalent lot; got {total}"
+        )
         assert day_max == 2
-        assert total > day_max  # confirmed: this WOULD violate the Scaling Plan
+        assert total <= day_max, "5 MNQ micros must fit within Day-1 cap (2 lots = 20 micros)"
 
-    def test_2_simultaneous_lanes_within_50k_day1(self):
-        """2 simultaneous 1-micro positions = 2 mini-equivalents = at-cap, OK."""
-        active = [_Trade(_Strategy("MNQ"), 1) for _ in range(2)]
+    def test_20_simultaneous_lanes_exactly_at_day1_cap(self):
+        """20 MNQ × 1 micro each = 20 contracts = ceil(20/10) = 2 lots, exactly at cap."""
+        active = [_Trade(_Strategy("MNQ"), 1) for _ in range(20)]
         total = total_open_lots(active)
         day_max = max_lots_for_xfa(50_000, 0)
         assert total == 2
+        assert total == day_max  # exact match — the canonical "20 micros = 2 lots" case
+
+    def test_21_simultaneous_lanes_breach_day1_cap(self):
+        """21 MNQ × 1 micro each = 21 contracts = ceil(21/10) = 3 lots > 2-lot cap."""
+        active = [_Trade(_Strategy("MNQ"), 1) for _ in range(21)]
+        total = total_open_lots(active)
+        day_max = max_lots_for_xfa(50_000, 0)
+        assert total == 3
+        assert total > day_max  # real breach at the canonical boundary
+
+    def test_split_contracts_equivalence(self):
+        """Per-instrument aggregation: same real-world exposure → same lot count.
+
+        Verifies the canonical rule's equivalence: N separate 1-contract
+        trades = 1 trade with N contracts. This equivalence is exactly
+        what the prior buggy per-trade ceiling broke.
+        """
+        five_trades = [_Trade(_Strategy("MNQ"), 1) for _ in range(5)]
+        one_trade = [_Trade(_Strategy("MNQ"), 5)]
+        assert total_open_lots(five_trades) == total_open_lots(one_trade)
+        assert total_open_lots(five_trades) == 1
+
+    def test_mixed_instruments_per_instrument_ceiling(self):
+        """Per-instrument aggregation — 5 MNQ + 5 MES = 1 + 1 = 2 lots.
+
+        The ceiling is applied per instrument group, not on the grand
+        contract total. 5 MNQ → 1 lot; 5 MES → 1 lot; total = 2 lots.
+        (The deferred net-position article may change this if TopStep
+        uses cross-instrument netting, but GROSS per-instrument is the
+        current conservative interpretation.)
+        """
+        active = [
+            *[_Trade(_Strategy("MNQ"), 1) for _ in range(5)],
+            *[_Trade(_Strategy("MES"), 1) for _ in range(5)],
+        ]
+        assert total_open_lots(active) == 2
+
+    def test_2_simultaneous_lanes_well_under_50k_day1(self):
+        """2 MNQ × 1 micro each = 2 contracts = ceil(2/10) = 1 lot ≤ 2-lot cap.
+
+        Canonical aggregation: 2 separate 1-contract MNQ trades = 2 total
+        micros. ceil(2/10) = 1 lot. The prior test in this spot asserted
+        `total == 2` under the buggy per-trade ceiling.
+        """
+        active = [_Trade(_Strategy("MNQ"), 1) for _ in range(2)]
+        total = total_open_lots(active)
+        day_max = max_lots_for_xfa(50_000, 0)
+        assert total == 1
         assert day_max == 2
         assert total <= day_max

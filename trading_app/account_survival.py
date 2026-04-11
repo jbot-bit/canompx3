@@ -114,7 +114,16 @@ class DailyScenario:
 
 @dataclass(frozen=True)
 class TradePath:
-    """Canonical per-trade path summary used for conservative intraday replay."""
+    """Canonical per-trade path summary used for conservative intraday replay.
+
+    `contracts` and `instrument` are the canonical fields for Scaling Plan
+    aggregation. `lots` is kept for legacy readers but MUST NOT be summed
+    across trades to compute concurrent exposure — that is the exact bug
+    that created the F-1 false alarm (see
+    docs/audit/2026-04-11-criterion-11-f1-false-alarm.md). Use
+    `lots_for_position(inst, sum_of_contracts)` on aggregated contracts
+    instead.
+    """
 
     trading_day: date
     strategy_id: str
@@ -124,6 +133,8 @@ class TradePath:
     mae_dollars: float
     mfe_dollars: float
     lots: int
+    contracts: int = 1
+    instrument: str = ""
 
 
 def get_survival_report_path(profile_id: str | None = None) -> Path:
@@ -218,7 +229,11 @@ def _load_lane_trade_paths(
         outcomes = apply_tight_stop(outcomes, stop_multiplier, cost_spec)
 
     cost_spec = get_cost_spec(params["instrument"])
-    lots = lots_for_position(params["instrument"], 1)
+    # `lots` retained for legacy callers but NEVER summed across trades (see
+    # TradePath docstring + F-1 audit). The simulation below aggregates
+    # `contracts` per instrument and applies the ceiling once on the total.
+    contracts_per_trade = 1
+    lots = lots_for_position(params["instrument"], contracts_per_trade)
     trades: list[TradePath] = []
     for outcome in outcomes:
         trading_day = outcome["trading_day"]
@@ -243,6 +258,8 @@ def _load_lane_trade_paths(
                 mae_dollars=float(mae_r * risk_dollars),
                 mfe_dollars=float(mfe_r * risk_dollars),
                 lots=lots,
+                contracts=contracts_per_trade,
+                instrument=params["instrument"],
             )
         )
     return trades
@@ -278,23 +295,41 @@ def _scenario_from_trade_paths(trading_day: date, trades: list[TradePath]) -> Da
 
     realized_pnl = 0.0
     open_trades: list[TradePath] = []
-    open_lots = 0
+    # Track raw contract count per instrument so max_open_lots can be computed
+    # via canonical aggregate-then-ceiling (not buggy ceiling-then-sum). See
+    # docs/audit/2026-04-11-criterion-11-f1-false-alarm.md for the root cause
+    # of the prior over-counting and why per-trade lot aggregation is wrong.
+    open_contracts_by_inst: dict[str, int] = {}
     max_open_lots = 0
     min_delta = 0.0
     max_delta = 0.0
 
+    def _current_total_lots() -> int:
+        return sum(
+            lots_for_position(inst, n)
+            for inst, n in open_contracts_by_inst.items()
+            if n > 0
+        )
+
     for _ts, event_type, trade in events:
         if event_type == 0:
             open_trades.append(trade)
-            open_lots += trade.lots
-            max_open_lots = max(max_open_lots, open_lots)
+            if trade.instrument and trade.contracts > 0:
+                open_contracts_by_inst[trade.instrument] = (
+                    open_contracts_by_inst.get(trade.instrument, 0) + trade.contracts
+                )
+                max_open_lots = max(max_open_lots, _current_total_lots())
         else:
             realized_pnl += trade.pnl_dollars
             for idx, open_trade in enumerate(open_trades):
                 if open_trade is trade:
                     del open_trades[idx]
                     break
-            open_lots = max(0, open_lots - trade.lots)
+            if trade.instrument and trade.contracts > 0:
+                open_contracts_by_inst[trade.instrument] = max(
+                    0,
+                    open_contracts_by_inst.get(trade.instrument, 0) - trade.contracts,
+                )
 
         adverse_open = sum(open_trade.mae_dollars for open_trade in open_trades)
         favorable_open = sum(open_trade.mfe_dollars for open_trade in open_trades)

@@ -148,6 +148,18 @@ def test_simulate_survival_scaling_breach_blocks_operational_pass():
 
 
 def test_scenario_from_trade_paths_tracks_conservative_intraday_bounds_and_lots():
+    """Verify _scenario_from_trade_paths aggregates per-instrument contracts.
+
+    Updated 2026-04-11 for the F-1 false-alarm fix: the scenario now tracks
+    raw contracts per instrument and computes max_open_lots via
+    aggregate-then-ceiling (matching the canonical "20 micros = 2 lots" rule),
+    NOT per-trade ceiling-then-sum. This test uses 10-MNQ and 20-MNQ
+    positions so the concurrent window (10+20=30 MNQ micros) resolves to
+    exactly 3 mini-equivalent lots — the same value the prior test
+    asserted, but for a different (canonical) reason. The prior test
+    asserted lots=1+lots=2 = 3 via simple arithmetic; the canonical rule
+    would give ceil((10+20)/10) = 3 lots for the same real exposure.
+    """
     trades = [
         TradePath(
             trading_day=date(2026, 1, 2),
@@ -158,6 +170,8 @@ def test_scenario_from_trade_paths_tracks_conservative_intraday_bounds_and_lots(
             mae_dollars=20.0,
             mfe_dollars=60.0,
             lots=1,
+            contracts=10,
+            instrument="MNQ",
         ),
         TradePath(
             trading_day=date(2026, 1, 2),
@@ -168,6 +182,8 @@ def test_scenario_from_trade_paths_tracks_conservative_intraday_bounds_and_lots(
             mae_dollars=15.0,
             mfe_dollars=5.0,
             lots=2,
+            contracts=20,
+            instrument="MNQ",
         ),
     ]
 
@@ -176,6 +192,7 @@ def test_scenario_from_trade_paths_tracks_conservative_intraday_bounds_and_lots(
     assert scenario.total_pnl_dollars == 30.0
     assert scenario.min_balance_delta_dollars == -35.0
     assert scenario.max_balance_delta_dollars == 65.0
+    # 10 + 20 = 30 MNQ micros concurrent → ceil(30/10) = 3 mini-equivalent lots
     assert scenario.max_open_lots == 3
 
 

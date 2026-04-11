@@ -23,7 +23,7 @@ This is a re-verification of an initial audit done earlier the same session. The
 
 | ID | Severity | Status | Title | Today's blast radius |
 |---|---|---|---|---|
-| F-1 | 🔴 BLOCKER | OPEN | Scaling Plan Day 1 violation | `topstep_50k_mnq_auto` is currently active and will violate on Day 1 of any new XFA |
+| F-1 | ⚪ RESOLVED | FALSE ALARM (2026-04-11) | Scaling Plan Day 1 violation | Was NOT a real violation — `total_open_lots` had a per-trade ceiling aggregation bug that reported 5 MNQ micros = 5 lots instead of canonical 1 lot. 5-lane bot is at 25% of Day-1 cap. See `docs/audit/2026-04-11-criterion-11-f1-false-alarm.md`. `account_survival` now reports 0.0% scaling breach, gate PASS. |
 | F-2 | 🔴 BLOCKER | OPEN | Single-user / cross-account hedging not detected | Active MNQ lanes can produce opposing positions; CopyOrderRouter mirrors them across copies |
 | F-2b | 🟡 HIGH | OPEN | CopyOrderRouter shadow failures create asymmetric account state | `copy_order_router.py:57-71` logs but does not propagate shadow failures → divergent positions across copies |
 | F-4 | 🟡 HIGH | OPEN | MNQ/MES commissions 8-13% LOW vs canonical Tradovate/Rithmic rates | Backtest understates costs for ALL active MNQ lanes |

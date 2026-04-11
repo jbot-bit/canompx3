@@ -685,11 +685,16 @@ class TestF1ScalingPlanIntegration:
     """F-1 inside RiskManager.can_enter — uses topstep_xfa_account_size."""
 
     def _make_rm(self, account_size: int = 50_000) -> RiskManager:
+        # F-1 cap-boundary tests exercise up to 50+ concurrent MNQ micros
+        # (canonical Day-1 20-micro cap + headroom + the 50-micro tier at
+        # $2K profit). Other risk gates must be relaxed so F-1 is the only
+        # gate under test. max_concurrent_positions is separately tested
+        # in the non-F-1 suite.
         limits = RiskLimits(
-            max_concurrent_positions=10,
-            max_per_orb_positions=10,
-            max_per_session_positions=10,
-            max_daily_trades=20,
+            max_concurrent_positions=100,
+            max_per_orb_positions=100,
+            max_per_session_positions=100,
+            max_daily_trades=200,
             topstep_xfa_account_size=account_size,
         )
         rm = RiskManager(limits)
@@ -720,8 +725,13 @@ class TestF1ScalingPlanIntegration:
         assert allowed is False
         assert "EOD XFA balance unknown" in reason
 
-    def test_day_one_50k_at_cap_allows_first_two(self):
-        """Day-1 50K XFA: cap=2, current=1 micro = 1 mini-equiv. New 1-micro entry → 2 total ≤ 2 → OK."""
+    def test_day_one_50k_small_concurrency_allowed(self):
+        """Day-1 50K XFA: cap = 2 lots = 20 MNQ micros. 1 active + 1 new = 2 micros = 1 lot ≤ 2 → OK.
+
+        Corrected 2026-04-11 from the F-1 false alarm: the canonical rule
+        says 2 lots = 20 micros, so 2 MNQ micros is 1 lot (ceiling), well
+        under cap. See docs/audit/2026-04-11-criterion-11-f1-false-alarm.md.
+        """
         rm = self._make_rm(50_000)
         rm.set_topstep_xfa_eod_balance(0.0)
         active = [self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long", contracts=1)]
@@ -735,16 +745,61 @@ class TestF1ScalingPlanIntegration:
         )
         assert allowed is True
 
-    def test_day_one_50k_third_lane_blocked(self):
-        """Day-1 50K XFA: cap=2. 2 active + 1 new = 3 > 2 → blocked by F-1."""
+    def test_day_one_50k_5_lane_topstep_auto_allowed(self):
+        """topstep_50k_mnq_auto 5-lane scenario is FEASIBLE under canonical rule.
+
+        Day-1 50K XFA cap = 2 lots = 20 MNQ micros. 4 active + 1 new = 5 micros
+        = ceil(5/10) = 1 lot ≤ 2. The prior test in this slot asserted this
+        scenario was blocked — that was the F-1 false alarm (5/2 = 2.5x over
+        cap under the buggy per-trade ceiling aggregation). Corrected
+        2026-04-11 per docs/audit/2026-04-11-criterion-11-f1-false-alarm.md.
+        """
         rm = self._make_rm(50_000)
         rm.set_topstep_xfa_eod_balance(0.0)
         active = [
-            self._trade("MNQ_NYSE_OPEN_E2", "MNQ", "long", contracts=1),
-            self._trade("MNQ_TOKYO_OPEN_E2", "MNQ", "long", contracts=1),
+            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(4)
+        ]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_S5",
+            orb_label="EUROPE_FLOW",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is True  # 5 MNQ micros = 1 lot ≤ 2-lot Day-1 cap
+
+    def test_day_one_50k_exactly_at_cap_20_micros_allowed(self):
+        """Day-1 50K XFA cap = 2 lots = exactly 20 MNQ micros. 19 + 1 = 20 = 2 lots OK."""
+        rm = self._make_rm(50_000)
+        rm.set_topstep_xfa_eod_balance(0.0)
+        active = [
+            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(19)
+        ]
+        allowed, _, _ = rm.can_enter(
+            strategy_id="MNQ_S20",
+            orb_label="EUROPE_FLOW",
+            active_trades=active,
+            daily_pnl_r=0.0,
+            instrument="MNQ",
+            direction="long",
+        )
+        assert allowed is True  # 20 MNQ micros = 2 lots exactly at cap
+
+    def test_day_one_50k_21st_micro_blocked(self):
+        """Day-1 50K XFA: 20 active + 1 new = 21 micros = ceil(21/10) = 3 lots > 2 → BLOCKED.
+
+        Corrected canonical breach: the real Day-1 cap is 20 MNQ micros, not
+        2 MNQ micros. 21 MNQ micros is the first position count that ceilings
+        to 3 lots, which truly exceeds the 2-lot cap.
+        """
+        rm = self._make_rm(50_000)
+        rm.set_topstep_xfa_eod_balance(0.0)
+        active = [
+            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(20)
         ]
         allowed, reason, _ = rm.can_enter(
-            strategy_id="MNQ_EUROPE_FLOW_E2",
+            strategy_id="MNQ_S21",
             orb_label="EUROPE_FLOW",
             active_trades=active,
             daily_pnl_r=0.0,
@@ -755,8 +810,8 @@ class TestF1ScalingPlanIntegration:
         assert "topstep_scaling_plan" in reason
         assert "day_max 2" in reason
 
-    def test_after_2k_profit_5_lanes_allowed(self):
-        """After $2K profit (top tier), 50K XFA cap=5. 4 active + 1 new = 5 ≤ 5 → OK."""
+    def test_after_2k_profit_5_lane_still_allowed(self):
+        """After $2K profit (top tier), 50K XFA cap=5 lots=50 MNQ micros. 4+1 = 5 ≤ 50 OK."""
         rm = self._make_rm(50_000)
         rm.set_topstep_xfa_eod_balance(2_000.0)
         active = [
@@ -772,15 +827,15 @@ class TestF1ScalingPlanIntegration:
         )
         assert allowed is True
 
-    def test_after_2k_profit_6th_lane_blocked(self):
-        """At top tier (cap=5), 5 active + 1 new = 6 > 5 → blocked."""
+    def test_after_2k_profit_51_micros_blocked(self):
+        """Top tier cap=5 lots=50 micros. 50 active + 1 new = 51 = 6 lots > 5 → BLOCKED."""
         rm = self._make_rm(50_000)
         rm.set_topstep_xfa_eod_balance(2_000.0)
         active = [
-            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(5)
+            self._trade(f"MNQ_S{i}", "MNQ", "long", contracts=1) for i in range(50)
         ]
         allowed, _, _ = rm.can_enter(
-            strategy_id="MNQ_S6",
+            strategy_id="MNQ_S51",
             orb_label="EUROPE_FLOW",
             active_trades=active,
             daily_pnl_r=0.0,
@@ -811,18 +866,29 @@ class TestF1ScalingPlanIntegration:
         )
         assert allowed is True
 
-    def test_100k_day1_allows_3_blocks_4(self):
-        """100K XFA Day-1: cap=3. 2 active + 1 new = 3 ≤ 3 OK; 3 active + 1 new = 4 > 3 blocked."""
+    def test_100k_day1_allows_30_blocks_31(self):
+        """100K XFA Day-1: cap = 3 lots = 30 MNQ micros. 30 allowed, 31 blocked.
+
+        Corrected 2026-04-11 from the F-1 false alarm: the canonical Day-1
+        cap on a 100K XFA is 3 lots, which equals 3×10 = 30 MNQ micros.
+        The prior test asserted a 4-micro breach, matching the buggy
+        per-trade ceiling sum (4 micros × 1 = 4 lots > 3) but contradicting
+        the canonical rule. See docs/audit/2026-04-11-criterion-11-f1-false-alarm.md.
+        """
         rm = self._make_rm(100_000)
         rm.set_topstep_xfa_eod_balance(0.0)
 
-        # 3 lots OK
-        active2 = [self._trade(f"S{i}", "MNQ", "long", contracts=1) for i in range(2)]
-        allowed, _, _ = rm.can_enter("S3", "NYSE_OPEN", active2, 0.0, instrument="MNQ", direction="long")
-        assert allowed is True
+        # 30 micros exactly at cap → allowed
+        active29 = [self._trade(f"S{i}", "MNQ", "long", contracts=1) for i in range(29)]
+        allowed, _, _ = rm.can_enter(
+            "S30", "NYSE_OPEN", active29, 0.0, instrument="MNQ", direction="long"
+        )
+        assert allowed is True  # 30 MNQ micros = ceil(30/10) = 3 lots = cap
 
-        # 4 lots blocked
-        active3 = [self._trade(f"S{i}", "MNQ", "long", contracts=1) for i in range(3)]
-        allowed, reason, _ = rm.can_enter("S4", "NYSE_OPEN", active3, 0.0, instrument="MNQ", direction="long")
+        # 31 micros → ceil(31/10) = 4 lots > 3 → blocked
+        active30 = [self._trade(f"S{i}", "MNQ", "long", contracts=1) for i in range(30)]
+        allowed, reason, _ = rm.can_enter(
+            "S31", "NYSE_OPEN", active30, 0.0, instrument="MNQ", direction="long"
+        )
         assert allowed is False
         assert "100K XFA" in reason

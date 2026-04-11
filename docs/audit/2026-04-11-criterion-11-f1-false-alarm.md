@@ -3,8 +3,24 @@
 **Date:** 2026-04-11
 **Auditor:** Claude (session-triggered read-only audit per user directive "audit and improve, no gaps no bias")
 **Trigger:** Pulse BROKEN signal "BLOCKED: Criterion 11 report fails scaling-feasibility check"
-**Status:** FINDINGS READY — fix proposal pending user authorization
-**Scope:** Read-only code audit + numerical verification. No files edited.
+**Status:** **IMPLEMENTED 2026-04-11** — fix shipped with 117/117 tests passing and `account_survival` verifying scaling breach 68.1% → 0.0%, gate FAIL → PASS
+**Scope:** Read-only code audit + numerical verification. Fix implemented in separate commit.
+
+## Resolution summary (2026-04-11)
+
+- **Fixed:** `trading_app/topstep_scaling_plan.py` (`total_open_lots` rewritten to aggregate per-instrument contracts before ceiling; new `project_total_open_lots` helper)
+- **Fixed:** `trading_app/account_survival.py` (`TradePath` gains `contracts` and `instrument` fields; `_scenario_from_trade_paths` event loop tracks per-instrument contracts and computes `max_open_lots` via canonical aggregate-then-ceiling)
+- **Fixed:** `trading_app/risk_manager.py` F-1 projection (uses `project_total_open_lots` instead of `total_open_lots + lots_for_position(inst, 1)`)
+- **Fixed:** `tests/test_trading_app/test_topstep_scaling_plan.py` (contradictory test rewritten; 5 new canonical aggregation tests added)
+- **Fixed:** `tests/test_trading_app/test_risk_manager.py` (4 F-1 tests rewritten with canonical cap values; `_make_rm` fixture relaxed to isolate F-1)
+- **Fixed:** `tests/test_trading_app/test_account_survival.py` (scenario test fixture uses realistic contract counts)
+- **Verified:**
+  - `pytest test_topstep_scaling_plan test_risk_manager test_account_survival` → 117/117 pass
+  - `python -m trading_app.account_survival --profile topstep_50k_mnq_auto`:
+    - Before: gate=FAIL, scaling breach 68.1%, scaling feasible False, DD survival 26.2%
+    - After: gate=PASS, scaling breach 0.0%, scaling feasible True, DD survival 86.2%
+- **Deferred:** `pipeline/check_drift.py` run — parallel Stage 4 ML DELETE process was actively editing that file at the time of this fix. Drift will be re-run after Stage 4 DELETE completes.
+- **F-1 status in `docs/audit/2026-04-08-topstep-canonical-audit.md`:** changed from BLOCKER/OPEN to RESOLVED/FALSE ALARM.
 
 ---
 

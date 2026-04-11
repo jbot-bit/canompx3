@@ -191,9 +191,8 @@ class RiskManager:
         # known → no entries allowed).
         if self.limits.topstep_xfa_account_size is not None and instrument is not None:
             from trading_app.topstep_scaling_plan import (
-                lots_for_position,
                 max_lots_for_xfa,
-                total_open_lots,
+                project_total_open_lots,
             )
 
             if self._topstep_xfa_eod_balance is None:
@@ -218,17 +217,21 @@ class RiskManager:
                     0.0,
                 )
 
-            current_open_lots = total_open_lots(active_trades)
-            # The new entry's contract count isn't known here — we conservatively
-            # treat the new position as 1 mini-equivalent at minimum (the smallest
-            # legal entry under the canonical 10:1 ratio is 1 micro = ceil(1/10) = 1
-            # mini-equivalent under our floor convention). The execution engine sizes
-            # the position AFTER this check; if the resulting size pushes us above
-            # day_max, the engine's pre-submit guard catches it. For now we
-            # underestimate by 0 vs 1 lot, which is acceptable because day_max is
-            # the absolute ceiling and we already have 1 lot's slack.
-            new_entry_lots = lots_for_position(instrument, 1)
-            projected = current_open_lots + new_entry_lots
+            # Project total exposure assuming the new entry lands with 1 contract.
+            # project_total_open_lots aggregates contracts per instrument BEFORE
+            # applying the micro-to-mini ceiling, matching the canonical rule
+            # "2 lots = 20 micros = any combination summing to 2 mini-equivalents".
+            # See docs/audit/2026-04-11-criterion-11-f1-false-alarm.md for the
+            # false-alarm audit that this fix closes.
+            #
+            # Note: the execution engine sizes the actual position AFTER this
+            # check. If a larger size would push exposure above day_max, the
+            # engine's pre-submit guard must re-check with the real contract
+            # count. For the common 1-contract-per-lane case this projection
+            # is exact.
+            projected = project_total_open_lots(
+                active_trades, instrument, new_contracts=1
+            )
 
             if projected > day_max:
                 return (
@@ -237,7 +240,7 @@ class RiskManager:
                         f"topstep_scaling_plan: projected {projected} mini-equiv lots > "
                         f"day_max {day_max} for {self.limits.topstep_xfa_account_size//1000}K XFA "
                         f"at EOD balance ${self._topstep_xfa_eod_balance:,.2f}. "
-                        f"(F-1 BLOCKER — TopStep Scaling Plan ladder)"
+                        f"(F-1 — TopStep Scaling Plan ladder)"
                     ),
                     0.0,
                 )
