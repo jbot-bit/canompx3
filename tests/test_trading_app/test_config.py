@@ -139,7 +139,7 @@ class TestAllFilters:
             assert key not in ALL_FILTERS, f"{key} should not be in ALL_FILTERS"
 
     def test_total_count(self):
-        # NO_FILTER + 4 G + 4 COST + 5 VOL_RV + ATR70_VOL + 4 ORB_VOL + 3 ATR_P + 3 ATR_VEL_GE* = 25 (BASE_GRID_FILTERS)
+        # NO_FILTER + 4 G + 4 COST + 5 VOL_RV + ATR70_VOL + 4 ORB_VOL + 3 ATR_P = 22 (BASE_GRID_FILTERS)
         # + 12 DOW composites (3 DOW x 4 G)
         # + 12 break quality composites (3 BRK x 4 G: FAST5, FAST10, CONT)
         # + 3 M6E pip-scaled size filters (M6E_G4/G6/G8)
@@ -152,10 +152,13 @@ class TestAllFilters:
         # + 8 COST_LT × FAST composites (4 COST × 2 FAST = 8)
         # + 8 OVNRNG × FAST composites (4 OVNRNG × 2 FAST = 8)
         # + 1 PIT_MIN (pit range/atr anti-filter, CME_REOPEN only — Apr 2026)
-        # = 68 + 8 + 8 + 1 = 85
-        # Wave 4 Phase B (2026-04-11): +3 ATR_VEL_GE105/110/115 (atr_vel_ratio sensitivity variants)
-        # Wave 5 G5 (2026-04-12): +1 GARCH_VOL_PCT_LT20 (garch_forecast_vol rolling percentile,
-        #   MNQ NYSE_OPEN LOW quintile Phase B survivor, in_ExpR +0.240)
+        # + 4 hypothesis-scoped filters — in ALL_FILTERS but NOT in BASE_GRID_FILTERS.
+        #   Access via explicit routing or Phase 4 hypothesis-file injection.
+        #     ATR_VEL_GE105 (Wave 4 Phase B, routed to MNQ TOKYO_OPEN + MES US_DATA_1000)
+        #     ATR_VEL_GE110 (sensitivity variant, injection-only)
+        #     ATR_VEL_GE115 (sensitivity variant, injection-only)
+        #     GARCH_VOL_PCT_LT20 (Wave 5 G5, injection-only — MNQ NYSE_OPEN LOW regime)
+        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 4 scoped = 86
         assert len(ALL_FILTERS) == 86
 
     def test_contains_volume_filter(self):
@@ -600,6 +603,45 @@ class TestGARCHForecastVolPctFilter:
         assert f.filter_type == "GARCH_VOL_PCT_LT20"
         assert f.direction == "low"
         assert f.pct_threshold == 20.0
+
+    def test_not_in_base_grid(self):
+        """GARCH_VOL_PCT_LT20 must NOT be in BASE_GRID_FILTERS.
+
+        Accessing GARCH via BASE would leak it into every session of every
+        instrument's legacy discovery grid, violating the 'narrow-scope
+        filters must be explicitly routed' invariant from
+        docs/plans/2026-04-04-new-filter-type-design.md. Correct path:
+        Phase 4 hypothesis-file injection via
+        strategy_discovery._inject_hypothesis_filters().
+        """
+        from trading_app.config import BASE_GRID_FILTERS
+
+        assert "GARCH_VOL_PCT_LT20" not in BASE_GRID_FILTERS, (
+            "GARCH_VOL_PCT_LT20 must NOT be in BASE_GRID_FILTERS — "
+            "narrow-scope filter, hypothesis-injection only"
+        )
+
+    def test_not_in_legacy_grid_for_any_session(self):
+        """Regression: GARCH_VOL_PCT_LT20 must NOT appear in get_filters_for_grid
+        for any MNQ session. Access is hypothesis-injection only.
+
+        If a future edit routes GARCH into a specific (instrument, session)
+        via explicit add, update this test to exclude that pair rather than
+        silently accepting legacy-grid membership.
+        """
+        from trading_app.config import get_filters_for_grid
+
+        mnq_sessions = [
+            "TOKYO_OPEN", "SINGAPORE_OPEN", "BRISBANE_1025", "CME_REOPEN",
+            "LONDON_METALS", "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN",
+            "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+        ]
+        for sess in mnq_sessions:
+            grid = get_filters_for_grid("MNQ", sess)
+            assert "GARCH_VOL_PCT_LT20" not in grid, (
+                f"GARCH_VOL_PCT_LT20 leaked into MNQ {sess} legacy grid — "
+                f"hypothesis-injection only, no explicit routing exists"
+            )
 
     def test_describe_low_direction_includes_regime_word(self):
         """describe() surfaces the low-vol regime explanation."""

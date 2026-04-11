@@ -2580,13 +2580,39 @@ MGC_VOLUME_FILTERS = {
         description="Own ATR(20) percentile >= 70",
         min_pct=70.0,
     ),
+}
+
+
+# =========================================================================
+# HYPOTHESIS-SCOPED FILTERS
+# =========================================================================
+# Filters that are registered in ALL_FILTERS (so hypothesis-file injection
+# and explicit routing can reach them) but are **NOT** members of
+# BASE_GRID_FILTERS. Keeping them out of BASE means the legacy discovery
+# grid is free of narrow-scope filters that would inflate trial counts for
+# non-validated sessions.
+#
+# Access paths:
+#   1. Explicit routing in ``get_filters_for_grid()`` — e.g. ATR_VEL_GE105
+#      is added only for (MNQ, TOKYO_OPEN) and (MES, US_DATA_1000).
+#   2. Phase 4 hypothesis-file injection — ``_inject_hypothesis_filters()``
+#      in ``trading_app/strategy_discovery.py`` pulls declared filter types
+#      from ``ALL_FILTERS`` into the per-session grid for a discovery run.
+#
+# Design grounding: ``docs/plans/2026-04-04-new-filter-type-design.md`` §"Do
+# not add to BASE_GRID_FILTERS unless valid for all sessions and all
+# instruments" + ``.claude/rules/integrity-guardian.md`` §"Never hardcode" +
+# ``docs/plans/2026-04-09-phase4-hypothesis-redesign-findings.md`` § "22
+# BASE_GRID_FILTERS (always included)" invariant.
+# =========================================================================
+_HYPOTHESIS_SCOPED_FILTERS: dict[str, StrategyFilter] = {
     # Wave 4 Phase B T2-T8 survivor: ATR velocity ratio (expansion gate)
     # Tested at 2026-04-11 on post-Phase-3c data. 2/11 shortlist combos survived
     # full T3+T4+T6+T7 battery with in_ExpR > 0.05 (MNQ TOKYO_OPEN RR1.0,
     # MES US_DATA_1000 RR1.5). Three thresholds registered for Blueprint
     # Gate 2 sensitivity discipline (>=3 values per dimension).
     # 1.05 matches existing atr_vel_regime "Expanding" (build_daily_features.py:1133).
-    # 1.10 and 1.15 give tighter selectivity for tuning.
+    # 1.10 and 1.15 give tighter selectivity for tuning (hypothesis-injection only).
     # @research-source scripts/research/wave4_presession_t2t8.py
     # @entry-models E2
     "ATR_VEL_GE105": ATRVelRatioFilter(
@@ -2615,6 +2641,9 @@ MGC_VOLUME_FILTERS = {
     # Only the LT20 ("low-vol") variant is registered for deployment;
     # research did not find a surviving HIGH-vol configuration at the Phase B
     # kill-criteria threshold.
+    # Accessible via Phase 4 hypothesis-file injection only — not routed in
+    # get_filters_for_grid(), so legacy discovery grid is byte-identical
+    # across MNQ/MES sessions with or without this filter registered.
     # @research-source scripts/research/wave4_presession_t2t8.py
     # @entry-models E2
     # @revalidated-for 2026-04 Wave 5 Pathway B deployment
@@ -2946,6 +2975,14 @@ ALL_FILTERS: dict[str, StrategyFilter] = {
         description="pit_range/atr >= 0.10 (skip bottom ~20% dead-pit days)",
         min_ratio=0.10,
     ),
+    # Hypothesis-scoped filters — in ALL_FILTERS (so hypothesis-file injection
+    # and explicit routing can find them) but intentionally NOT in
+    # BASE_GRID_FILTERS. Access paths: explicit routing in get_filters_for_grid()
+    # (e.g. ATR_VEL_GE105 for validated sessions only) OR Phase 4 hypothesis-file
+    # injection via strategy_discovery._inject_hypothesis_filters().
+    # Design grounding: docs/plans/2026-04-04-new-filter-type-design.md §"Do not
+    # add to BASE_GRID_FILTERS unless valid for all sessions and all instruments".
+    **_HYPOTHESIS_SCOPED_FILTERS,
 }
 
 # Calendar skip overlays (NOT in discovery grid — applied at portfolio/paper_trader level)
