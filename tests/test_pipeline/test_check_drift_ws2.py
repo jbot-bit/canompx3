@@ -729,6 +729,46 @@ WHERE LOWER(status) = 'active'
         violations = check_drift.check_critical_deployable_shelf_consumers()
         assert any("live_config.py" in v for v in violations)
 
+    def test_catches_predicate_only_helper_in_critical_reader(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        predicate_content = (
+            "from trading_app.validated_shelf import deployable_validated_predicate\n"
+            "deployable_where = deployable_validated_predicate(con)\n"
+        )
+        _mkfile(tmp_path / "trading_app" / "live_config.py", predicate_content)
+        helper_content = (
+            "from trading_app.validated_shelf import deployable_validated_relation\n"
+            "relation = deployable_validated_relation(con, alias='vs')\n"
+        )
+        for rel in [
+            tmp_path / "pipeline" / "dashboard.py",
+            tmp_path / "trading_app" / "prop_portfolio.py",
+            tmp_path / "trading_app" / "lane_allocator.py",
+            tmp_path / "trading_app" / "portfolio.py",
+            tmp_path / "trading_app" / "pbo.py",
+            tmp_path / "trading_app" / "edge_families.py",
+            tmp_path / "trading_app" / "strategy_fitness.py",
+            tmp_path / "trading_app" / "sr_monitor.py",
+            tmp_path / "trading_app" / "sprt_monitor.py",
+            tmp_path / "trading_app" / "view_strategies.py",
+            tmp_path / "scripts" / "tools" / "backtest_allocator.py",
+            tmp_path / "scripts" / "tools" / "build_optimal_profiles.py",
+            tmp_path / "scripts" / "tools" / "forward_monitor.py",
+            tmp_path / "scripts" / "tools" / "generate_profile_lanes.py",
+            tmp_path / "scripts" / "tools" / "generate_promotion_candidates.py",
+            tmp_path / "scripts" / "tools" / "generate_trade_sheet.py",
+            tmp_path / "scripts" / "tools" / "optimal_lanes.py",
+            tmp_path / "scripts" / "tools" / "pipeline_status.py",
+            tmp_path / "scripts" / "tools" / "project_pulse.py",
+            tmp_path / "scripts" / "tools" / "rolling_portfolio_assembly.py",
+            tmp_path / "scripts" / "tools" / "score_lanes.py",
+            tmp_path / "scripts" / "tools" / "select_family_rr.py",
+            tmp_path / "trading_app" / "ai" / "sql_adapter.py",
+        ]:
+            _mkfile(rel, helper_content)
+        violations = check_drift.check_critical_deployable_shelf_consumers()
+        assert any("must use published relation helper" in v for v in violations)
+
     def test_passes_helper_or_explicit_scope_usage(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
         helper_content = (

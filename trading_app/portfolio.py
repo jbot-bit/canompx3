@@ -37,7 +37,10 @@ from trading_app.config import (
     classify_strategy,
     get_excluded_sessions,
 )
-from trading_app.validated_shelf import deployable_validated_predicate, validated_setups_has_deployment_scope
+from trading_app.validated_shelf import (
+    deployable_validated_relation,
+    validated_setups_has_deployment_scope,
+)
 
 
 def _get_table_names(con: duckdb.DuckDBPyConnection) -> set[str]:
@@ -282,7 +285,7 @@ def load_validated_strategies(
     edge_families table. Falls back to unfiltered if edge_families doesn't exist.
     """
     with duckdb.connect(str(db_path), read_only=True) as con:
-        deployable_where = deployable_validated_predicate(con, alias="vs")
+        shelf_relation = deployable_validated_relation(con, alias="vs")
         # Resolve family head filter (post-filter in Python to avoid SQL interpolation)
         head_ids = None
         if family_heads_only:
@@ -306,7 +309,7 @@ def load_validated_strategies(
                    vs.orb_minutes,
                    COALESCE(vs.stop_multiplier, 1.0) as stop_multiplier,
                    'baseline' as source
-            FROM validated_setups vs
+            FROM {shelf_relation}
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id
             LEFT JOIN family_rr_locks frl
@@ -317,7 +320,6 @@ def load_validated_strategies(
               AND vs.orb_minutes = frl.orb_minutes
               AND vs.confirm_bars = frl.confirm_bars
             WHERE vs.instrument = ?
-              AND {deployable_where}
               AND vs.expectancy_r >= ?
               AND vs.orb_label NOT IN (SELECT UNNEST(?::VARCHAR[]))
               AND (frl.locked_rr IS NULL OR vs.rr_target = frl.locked_rr)

@@ -12,10 +12,9 @@ import duckdb
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-deployable_where = deployable_validated_predicate(con)
 
 # Get #1 strategy per session x instrument, N>=100
 rows = con.execute(f"""
@@ -28,8 +27,8 @@ rows = con.execute(f"""
                COALESCE(median_risk_dollars, 0) as med_risk,
                ROUND(COALESCE(median_risk_dollars, 0) * LEAST(COALESCE(stop_multiplier, 1.0), 0.75), 0) as prop_risk,
                ROW_NUMBER() OVER (PARTITION BY orb_label, instrument ORDER BY expectancy_r DESC) as rn
-        FROM validated_setups
-        WHERE {deployable_where} AND sample_size >= 100
+        FROM {deployable_validated_relation(con)}
+        WHERE sample_size >= 100
     )
     SELECT strategy_id, instrument, orb_label, prop_risk, expr, sample_size, wr, sharpe
     FROM ranked WHERE rn = 1

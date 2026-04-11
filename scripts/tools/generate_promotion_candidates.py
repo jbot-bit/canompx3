@@ -36,7 +36,7 @@ from trading_app.live_config import (
     LIVE_MIN_EXPECTANCY_R,
     LIVE_PORTFOLIO,
 )
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # ── Core query ────────────────────────────────────────────────────────
 
@@ -52,7 +52,7 @@ def find_uncovered_candidates(db_path: Path) -> list[dict]:
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        deployable_where = deployable_validated_predicate(con, alias="vs")
+        shelf_relation = deployable_validated_relation(con, alias="vs")
         rows = con.execute(
             f"""
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
@@ -65,13 +65,12 @@ def find_uncovered_candidates(db_path: Path) -> list[dict]:
                    ef.robustness_status, ef.member_count, ef.pbo,
                    ef.cv_expectancy, ef.trade_tier,
                    es.median_risk_points
-            FROM validated_setups vs
+            FROM {shelf_relation}
             INNER JOIN edge_families ef
               ON vs.strategy_id = ef.head_strategy_id
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id AND es.is_canonical = TRUE
-            WHERE {deployable_where}
-              AND vs.fdr_significant = TRUE
+            WHERE vs.fdr_significant = TRUE
               AND vs.wf_passed = TRUE
               AND ef.robustness_status = 'ROBUST'
               AND vs.expectancy_r >= ?

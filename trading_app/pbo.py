@@ -12,7 +12,7 @@ import logging
 from collections import defaultdict
 from itertools import combinations
 
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 logger = logging.getLogger(__name__)
 
@@ -152,12 +152,12 @@ def compute_family_pbo(
         dict from compute_pbo() — includes pbo, n_splits, n_negative_oos, logit_pbo
     """
     # Get member strategy_ids
-    deployable_where = deployable_validated_predicate(con)
+    shelf_relation = deployable_validated_relation(con)
     members = con.execute(
         f"""SELECT strategy_id, orb_label, orb_minutes, entry_model,
                   rr_target, confirm_bars, filter_type
-           FROM validated_setups
-           WHERE family_hash = ? AND instrument = ? AND {deployable_where}""",
+           FROM {shelf_relation}
+           WHERE family_hash = ? AND instrument = ?""",
         [family_hash, instrument],
     ).fetchall()
 

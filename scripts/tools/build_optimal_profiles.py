@@ -34,7 +34,7 @@ from trading_app.prop_profiles import (
     ACCOUNT_TIERS,
     PROP_FIRM_SPECS,
 )
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # ── Config ──────────────────────────────────────────────────────────────────
 
@@ -202,7 +202,7 @@ def _load_all_candidates(
     candidates = []
 
     with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
-        deployable_where = deployable_validated_predicate(con, alias="vs")
+        shelf_relation = deployable_validated_relation(con, alias="vs")
         rows = con.execute(
             f"""
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.filter_type,
@@ -211,10 +211,9 @@ def _load_all_candidates(
                    vs.median_risk_dollars, vs.stop_multiplier, vs.yearly_results,
                    vs.fdr_adjusted_p, vs.max_drawdown_r, vs.trades_per_year,
                    ef.robustness_status, ef.member_count
-            FROM validated_setups vs
+            FROM {shelf_relation}
             LEFT JOIN edge_families ef ON vs.family_hash = ef.family_hash
-            WHERE {deployable_where}
-              AND vs.entry_model = 'E2'
+            WHERE vs.entry_model = 'E2'
               AND vs.confirm_bars = 1
               AND vs.orb_minutes = 5
               AND vs.sample_size >= ?

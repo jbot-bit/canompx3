@@ -64,6 +64,33 @@ an actual box to put the cards in.
    `validated_setups` migrations complete.
 4. Force rebuilds must drop dependent views before dropping underlying tables.
 
+## Rollout status
+
+Completed in follow-up slices on 2026-04-11:
+
+- core runtime readers now consume `deployable_validated_relation(...)`
+  instead of `validated_setups + deployable predicate`
+- operational/tooling readers that make deployable-shelf decisions now do the
+  same
+- drift check 102 now treats relation helpers as the required contract for
+  critical deployable-shelf readers
+
+Intentional exception:
+
+- `trading_app/ai/sql_adapter.py` may still encode explicit
+  `deployment_scope` logic because it validates/generated SQL rather than
+  acting as an operational shelf reader
+
+Result:
+
+- deployable-shelf semantics now live in one published DB surface plus one
+  neutral helper module
+- critical readers are guarded against backsliding into raw
+  `validated_setups` folklore
+- the remaining raw `validated_setups` reads are easier to classify as
+  historical, research, migration, or audit consumers rather than ambiguous
+  live-adjacent readers
+
 ## Blast radius
 
 Low:
@@ -79,6 +106,8 @@ Not done here:
 - full repo-wide migration of every historical / research reader
 - table split between deployable and research validated rows
 - DB constraint layer beyond published views
+- broader documentation-governance enforcement for canonical docs such as
+  `CLAUDE.md`, `TRADING_RULES.md`, and `ROADMAP.md`
 
 ## Verification bar
 

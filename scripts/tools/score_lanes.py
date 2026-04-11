@@ -41,7 +41,7 @@ import duckdb
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.prop_profiles import ACCOUNT_TIERS, PROP_FIRM_SPECS
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # ── Session timing (Brisbane hours, for routing) ─────────────────────────────
 
@@ -232,7 +232,8 @@ def score_lanes(
         params.extend(sorted(deployed_ids))
 
     with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
-        where_sql = " AND ".join([deployable_validated_predicate(con, alias="vs"), *where_clauses])
+        shelf_relation = deployable_validated_relation(con, alias="vs")
+        where_sql = " AND ".join(where_clauses) if where_clauses else "TRUE"
         rows = con.execute(
             f"""
             SELECT vs.strategy_id, vs.orb_label, vs.filter_type, vs.rr_target,
@@ -241,7 +242,7 @@ def score_lanes(
                    vs.stop_multiplier, vs.yearly_results,
                    vs.fdr_adjusted_p, vs.max_drawdown_r, vs.trades_per_year,
                    ef.robustness_status, ef.trade_tier, ef.member_count, ef.pbo
-            FROM validated_setups vs
+            FROM {shelf_relation}
             LEFT JOIN edge_families ef ON vs.family_hash = ef.family_hash
             WHERE {where_sql}
             ORDER BY vs.expectancy_r DESC

@@ -35,7 +35,7 @@ from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.cost_model import get_cost_spec
 from pipeline.paths import GOLD_DB_PATH
 from research._alt_strategy_utils import compute_strategy_metrics
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -73,7 +73,7 @@ def load_slot_data(db_path, instrument):
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        deployable_where = deployable_validated_predicate(con, alias="vs")
+        shelf_relation = deployable_validated_relation(con, alias="vs")
         # Step 1: Find slot heads (best family per session)
         slot_rows = con.execute(
             f"""
@@ -92,10 +92,9 @@ def load_slot_data(db_path, instrument):
                                     ef.trade_day_count DESC
                        ) AS rn
                 FROM edge_families ef
-                JOIN validated_setups vs ON ef.head_strategy_id = vs.strategy_id
+                JOIN {shelf_relation} ON ef.head_strategy_id = vs.strategy_id
                 WHERE ef.robustness_status IN ('ROBUST', 'WHITELISTED', 'SINGLETON')
                   AND ef.instrument = ?
-                  AND {deployable_where}
             )
             SELECT instrument, session, head_strategy_id,
                    head_expectancy_r, head_sharpe_ann,

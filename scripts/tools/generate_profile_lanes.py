@@ -23,7 +23,7 @@ from trading_app.prop_profiles import (
     ACCOUNT_PROFILES,
     ACCOUNT_TIERS,
 )
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # Profiles to regenerate (inactive with ghosts, excluding topstep_50k which is
 # intentionally conditional with 0 validated alternatives for MGC+TOKYO_OPEN)
@@ -37,9 +37,8 @@ PROFILES_TO_FIX = [
 
 # Validate all lane strategy_ids against validated_setups
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-deployable_where = deployable_validated_predicate(con)
 validated_ids = set(
-    r[0] for r in con.execute(f"SELECT strategy_id FROM validated_setups WHERE {deployable_where}").fetchall()
+    r[0] for r in con.execute(f"SELECT strategy_id FROM {deployable_validated_relation(con)}").fetchall()
 )
 con.close()
 

@@ -30,7 +30,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # staleness_engine lives in scripts/tools/ (same dir as this file)
 _SCRIPTS_TOOLS_DIR = str(Path(__file__).resolve().parent)
@@ -486,10 +486,10 @@ def collect_fitness_fast(db_path: Path) -> tuple[dict, list[PulseItem]]:
 
         con = duckdb.connect(str(db_path), read_only=True)
         try:
-            deployable_where = deployable_validated_predicate(con)
+            shelf_relation = deployable_validated_relation(con)
             rows = con.execute(
-                f"SELECT instrument, COUNT(*) as n FROM validated_setups "
-                f"WHERE {deployable_where} GROUP BY instrument ORDER BY instrument"
+                f"SELECT instrument, COUNT(*) as n FROM {shelf_relation} "
+                "GROUP BY instrument ORDER BY instrument"
             ).fetchall()
             for inst, n in rows:
                 summary[inst] = {"active_strategies": n}
@@ -546,12 +546,11 @@ def collect_deployment_state(db_path: Path) -> tuple[dict | None, list[PulseItem
 
         con = duckdb.connect(str(db_path), read_only=True)
         try:
-            deployable_where = deployable_validated_predicate(con)
+            shelf_relation = deployable_validated_relation(con)
             validated_rows = con.execute(
                 f"""
                 SELECT strategy_id
-                FROM validated_setups
-                WHERE {deployable_where}
+                FROM {shelf_relation}
                 ORDER BY strategy_id
                 """
             ).fetchall()
@@ -1066,11 +1065,11 @@ def collect_upcoming_sessions(db_path: Path) -> list[dict]:
                     try:
                         con = duckdb.connect(str(db_path), read_only=True)
                         try:
-                            deployable_where = deployable_validated_predicate(con)
+                            shelf_relation = deployable_validated_relation(con)
                             for inst in ACTIVE_ORB_INSTRUMENTS:
                                 row = con.execute(
-                                    f"SELECT COUNT(*) FROM validated_setups "
-                                    f"WHERE instrument = ? AND orb_label = ? AND {deployable_where}",
+                                    f"SELECT COUNT(*) FROM {shelf_relation} "
+                                    "WHERE instrument = ? AND orb_label = ?",
                                     [inst, label],
                                 ).fetchone()
                                 if row and row[0] > 0:

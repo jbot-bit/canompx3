@@ -116,6 +116,64 @@ they now consume the deployable shelf as a relation instead of rebuilding it as
 - Raw lifecycle/history consumers were left alone on purpose; not every
   `validated_setups` query should become deployable-shelf-only.
 
+## Update (2026-04-11 — operational readers moved to published shelf relation)
+
+### Headline
+
+Finished the next deployable-shelf rollout layer: remaining operational readers
+now consume the published validated-shelf relation, and drift now requires that
+relation-first shape for critical shelf readers.
+
+### What changed
+
+- migrated these operational readers from
+  `deployable_validated_predicate(...)` to
+  `deployable_validated_relation(...)`:
+  - `trading_app/pbo.py`
+  - `trading_app/edge_families.py`
+  - `trading_app/portfolio.py` (deployable baseline load path only)
+  - `scripts/tools/forward_monitor.py`
+  - `scripts/tools/backtest_allocator.py`
+  - `scripts/tools/build_optimal_profiles.py`
+  - `scripts/tools/generate_profile_lanes.py`
+  - `scripts/tools/optimal_lanes.py`
+  - `scripts/tools/project_pulse.py`
+  - `scripts/tools/select_family_rr.py`
+  - `scripts/tools/score_lanes.py`
+  - `scripts/tools/rolling_portfolio_assembly.py`
+  - `scripts/tools/generate_promotion_candidates.py`
+  - `scripts/tools/pipeline_status.py`
+  - `scripts/tools/generate_trade_sheet.py`
+- tightened `pipeline/check_drift.py`
+  - check 102 now requires published relation helpers for critical
+    deployable-shelf readers
+  - explicit `deployment_scope` logic remains allowed for
+    `trading_app/ai/sql_adapter.py`
+- updated the published-contract design note:
+  - `docs/plans/2026-04-11-published-db-contracts.md`
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check trading_app/pbo.py trading_app/edge_families.py trading_app/portfolio.py scripts/tools/forward_monitor.py scripts/tools/backtest_allocator.py scripts/tools/build_optimal_profiles.py scripts/tools/generate_profile_lanes.py scripts/tools/optimal_lanes.py scripts/tools/project_pulse.py scripts/tools/select_family_rr.py scripts/tools/score_lanes.py scripts/tools/rolling_portfolio_assembly.py scripts/tools/generate_promotion_candidates.py scripts/tools/pipeline_status.py scripts/tools/generate_trade_sheet.py pipeline/check_drift.py tests/test_pipeline/test_check_drift_ws2.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_check_drift_ws2.py tests/test_trading_app/test_portfolio.py tests/test_trading_app/test_pbo.py tests/test_trading_app/test_edge_families.py tests/test_tools/test_project_pulse.py tests/test_pipeline/test_pipeline_status.py tests/tools/test_generate_trade_sheet.py tests/test_scripts/test_generate_promotion_candidates.py tests/test_research/test_portfolio_assembly.py -q`
+  - `316 passed, 9 skipped`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 100 checks passed [OK], 0 skipped, 7 advisory`
+- `./.venv-wsl/bin/python scripts/tools/audit_integrity.py`
+  - passed all 10 checks
+- `./.venv-wsl/bin/python scripts/tools/audit_behavioral.py`
+  - passed all 7 checks
+
+### Notes
+
+- This slice intentionally targeted only readers whose honest semantics are
+  "deployable shelf".
+- Research/history/raw lifecycle readers were not migrated blindly.
+- The user also raised a valid broader complaint: canonical docs can still
+  drift independently from code. That doc-governance layer is still open work
+  after the shelf-contract rollout.
+
 ### Headline
 
 Made deployable-shelf semantics explicit and fail-closed:

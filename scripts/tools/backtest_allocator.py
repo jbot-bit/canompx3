@@ -33,7 +33,7 @@ from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS
 from trading_app.lane_allocator import build_allocation, compute_lane_scores
 from trading_app.prop_profiles import ACCOUNT_PROFILES
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # ── Helpers ────────────────────────────────────────────────────────
 
@@ -61,11 +61,11 @@ def _load_strat_meta(con: duckdb.DuckDBPyConnection) -> dict[str, dict]:
 
     LaneScore omits entry_model — we need it for outcome matching.
     """
-    deployable_where = deployable_validated_predicate(con)
+    shelf_relation = deployable_validated_relation(con)
     rows = con.execute(f"""
         SELECT strategy_id, instrument, orb_label, entry_model,
                rr_target, confirm_bars, filter_type, stop_multiplier
-        FROM validated_setups WHERE {deployable_where}
+        FROM {shelf_relation}
     """).fetchall()
     meta = {}
     for sid, inst, orb, em, rr, cb, ft, sm in rows:

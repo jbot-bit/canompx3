@@ -30,7 +30,7 @@ from pipeline.build_daily_features import ACTIVE_ORB_MINUTES, VALID_ORB_MINUTES
 from pipeline.db_lock import PipelineLock, PipelineLockError
 from pipeline.init_db import REBUILD_MANIFEST_SCHEMA
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # Step-to-table mapping for audit logging.
 # Maps each rebuild step to the primary table it writes to.
@@ -166,10 +166,9 @@ def preflight_check(
     params = rule["params"](instrument, orb_minutes)
     query = rule["query"]
     if step == "edge_families":
-        deployable_where = deployable_validated_predicate(con)
         query = (
-            "SELECT COUNT(*) FROM validated_setups "
-            f"WHERE instrument = $1 AND {deployable_where}"
+            f"SELECT COUNT(*) FROM {deployable_validated_relation(con)} "
+            "WHERE instrument = $1"
         )
 
     row = con.execute(query, params).fetchone()
@@ -623,9 +622,9 @@ def staleness_engine(con: duckdb.DuckDBPyConnection, instrument: str) -> dict:
     result["experimental"] = row[0] if row and row[0] is not None else None
 
     # --- validated_setups (deployable shelf only) ---
-    deployable_where = deployable_validated_predicate(con)
+    shelf_relation = deployable_validated_relation(con)
     row = con.execute(
-        f"SELECT MAX(promoted_at::DATE) FROM validated_setups WHERE instrument = ? AND {deployable_where}",
+        f"SELECT MAX(promoted_at::DATE) FROM {shelf_relation} WHERE instrument = ?",
         [instrument],
     ).fetchone()
     result["validated"] = row[0] if row and row[0] is not None else None

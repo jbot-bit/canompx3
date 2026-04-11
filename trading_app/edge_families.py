@@ -12,7 +12,7 @@ from collections import defaultdict
 
 from trading_app.config import CORE_MIN_SAMPLES, REGIME_MIN_SAMPLES
 from trading_app.db_manager import compute_trade_day_hash
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # Robustness thresholds (Duke Protocol #3c)
 # @research-source build_edge_families calibration — BH FDR-validated strategies only;
@@ -154,13 +154,14 @@ def build_edge_families_for_instrument(con, instrument: str) -> int:
     _migrate_columns(con)
     _ensure_edge_families_table(con)
 
+    shelf_relation = deployable_validated_relation(con, alias="vs")
     strategies = con.execute(
         f"""
         SELECT vs.strategy_id, vs.expectancy_r, vs.sharpe_ann, vs.sample_size,
                es.trade_day_hash, vs.orb_minutes
-        FROM validated_setups vs
+        FROM {shelf_relation}
         LEFT JOIN experimental_strategies es ON vs.strategy_id = es.strategy_id
-        WHERE vs.instrument = ? AND {deployable_validated_predicate(con, alias='vs')}
+        WHERE vs.instrument = ?
         ORDER BY vs.strategy_id
         """,
         [instrument],

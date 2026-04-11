@@ -4884,6 +4884,11 @@ def check_critical_deployable_shelf_consumers() -> list[str]:
         SCRIPTS_DIR / "tools" / "select_family_rr.py",
         TRADING_APP_DIR / "ai" / "sql_adapter.py",
     ]
+    relation_required = {
+        fpath.relative_to(PROJECT_ROOT)
+        for fpath in critical_files
+        if fpath != TRADING_APP_DIR / "ai" / "sql_adapter.py"
+    }
     raw_active_pattern = re.compile(r"(?:LOWER\([^)]*status\)|status)\s*=\s*'active'", re.IGNORECASE)
 
     for fpath in critical_files:
@@ -4892,13 +4897,15 @@ def check_critical_deployable_shelf_consumers() -> list[str]:
             continue
         rel = fpath.relative_to(PROJECT_ROOT)
         content = fpath.read_text(encoding="utf-8")
-        uses_helper = (
-            "deployable_validated_predicate" in content
-            or "deployable_validated_relation" in content
-            or "active_validated_relation" in content
+        uses_relation_helper = (
+            "deployable_validated_relation" in content or "active_validated_relation" in content
         )
         uses_explicit_scope = "deployment_scope" in content
-        if not (uses_helper or uses_explicit_scope):
+        if rel in relation_required and not uses_relation_helper:
+            violations.append(
+                f"  {rel}: critical validated_setups reader must use published relation helper"
+            )
+        elif rel == Path("trading_app/ai/sql_adapter.py") and not (uses_relation_helper or uses_explicit_scope):
             violations.append(
                 f"  {rel}: critical validated_setups reader lacks canonical deployable-shelf semantics"
             )
