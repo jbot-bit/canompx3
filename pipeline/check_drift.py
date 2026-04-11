@@ -17,7 +17,6 @@ Usage:
 
 import re
 import sys
-from datetime import UTC
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent.parent
@@ -982,12 +981,7 @@ _OPTIONAL_DEP_MODULES = {
     "trading_app.live.data_feed",  # websockets
     "trading_app.live.session_orchestrator",  # websockets
     "trading_app.live.webhook_server",  # fastapi
-    "trading_app.ml.cpcv",  # sklearn
-    "trading_app.ml.evaluate",  # joblib
-    "trading_app.ml.evaluate_validated",  # joblib
-    "trading_app.ml.importance",  # sklearn
-    "trading_app.ml.meta_label",  # joblib
-    "trading_app.ml.predict_live",  # joblib
+    # ML subsystem (trading_app.ml.*) removed 2026-04-11 (V1/V2/V3 DEAD)
 }
 
 
@@ -2776,92 +2770,6 @@ def check_trading_rules_authority() -> list[str]:
     return violations
 
 
-def check_ml_config_canonical_sources() -> list[str]:
-    """Check ML config ACTIVE_INSTRUMENTS matches pipeline canonical source,
-    and no features appear in both feature lists and LOOKAHEAD_BLACKLIST."""
-    violations = []
-    try:
-        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
-        from pipeline.dst import SESSION_CATALOG
-        from trading_app.ml.config import (
-            ACTIVE_INSTRUMENTS,
-            GLOBAL_FEATURES,
-            LOOKAHEAD_BLACKLIST,
-            REL_VOL_SESSIONS,
-            SESSION_CHRONOLOGICAL_ORDER,
-            TRADE_CONFIG_FEATURES,
-        )
-
-        # ACTIVE_INSTRUMENTS must be a subset of pipeline instruments
-        # (ML excludes instruments with no validated strategies, e.g. MBT)
-        extra = set(ACTIVE_INSTRUMENTS) - set(ACTIVE_ORB_INSTRUMENTS)
-        if extra:
-            violations.append(f"  ml/config.ACTIVE_INSTRUMENTS has instruments not in pipeline: {extra}")
-
-        # No feature in both GLOBAL_FEATURES and LOOKAHEAD_BLACKLIST
-        overlap = set(GLOBAL_FEATURES) & LOOKAHEAD_BLACKLIST
-        if overlap:
-            violations.append(f"  ml/config: Features in both GLOBAL_FEATURES and LOOKAHEAD_BLACKLIST: {overlap}")
-
-        # No feature in both TRADE_CONFIG and LOOKAHEAD_BLACKLIST
-        overlap2 = set(TRADE_CONFIG_FEATURES) & LOOKAHEAD_BLACKLIST
-        if overlap2:
-            violations.append(
-                f"  ml/config: Features in both TRADE_CONFIG_FEATURES and LOOKAHEAD_BLACKLIST: {overlap2}"
-            )
-
-        # REL_VOL_SESSIONS must match SESSION_CATALOG dynamic entries
-        catalog_dynamic = {name for name, cfg in SESSION_CATALOG.items() if cfg.get("type") == "dynamic"}
-        if set(REL_VOL_SESSIONS) != catalog_dynamic:
-            extra = set(REL_VOL_SESSIONS) - catalog_dynamic
-            missing = catalog_dynamic - set(REL_VOL_SESSIONS)
-            violations.append(
-                f"  ml/config.REL_VOL_SESSIONS mismatch with SESSION_CATALOG: extra={extra}, missing={missing}"
-            )
-
-        # SESSION_CHRONOLOGICAL_ORDER membership must match SESSION_CATALOG dynamic entries.
-        # Order is intentionally manual (Brisbane time order), but the SET must stay in sync.
-        # A missing session causes index=-1 in features.py, silently corrupting cross-session counts.
-        if set(SESSION_CHRONOLOGICAL_ORDER) != catalog_dynamic:
-            extra = set(SESSION_CHRONOLOGICAL_ORDER) - catalog_dynamic
-            missing = catalog_dynamic - set(SESSION_CHRONOLOGICAL_ORDER)
-            violations.append(
-                f"  ml/config.SESSION_CHRONOLOGICAL_ORDER mismatch with SESSION_CATALOG: extra={extra}, missing={missing}"
-            )
-
-    except ImportError as e:
-        print(f"    SKIP check_ml_config_canonical: {e}")
-        return violations
-
-    return violations
-
-
-def check_ml_lookahead_blacklist() -> list[str]:
-    """Check ML LOOKAHEAD_BLACKLIST includes all required outcome targets."""
-    violations = []
-    try:
-        from trading_app.ml.config import LOOKAHEAD_BLACKLIST
-
-        required = {
-            "outcome",
-            "pnl_r",
-            "pnl_dollars",
-            "mae_r",
-            "mfe_r",
-            "double_break",
-            "exit_ts",
-            "exit_price",
-        }
-        missing = required - LOOKAHEAD_BLACKLIST
-        if missing:
-            violations.append(f"  ml/config.LOOKAHEAD_BLACKLIST missing required targets: {missing}")
-    except ImportError as e:
-        print(f"    SKIP (optional dep): {e}")
-        return violations
-
-    return violations
-
-
 def check_audit_columns_populated(con=None) -> list[str]:
     """Check #50: Audit columns (n_trials, fst_hurdle, DSR) must be populated.
 
@@ -2917,94 +2825,6 @@ def check_audit_columns_populated(con=None) -> list[str]:
     finally:
         if _own_con and con is not None:
             con.close()
-    return violations
-
-
-def _find_ml_model_path(model_dir, inst: str):
-    """Find ML model path: prefer hybrid, fall back to per-instrument."""
-    hybrid = model_dir / f"meta_label_{inst}_hybrid.joblib"
-    legacy = model_dir / f"meta_label_{inst}.joblib"
-    if hybrid.exists():
-        return hybrid
-    if legacy.exists():
-        return legacy
-    return None
-
-
-def check_ml_model_files_exist() -> list[str]:
-    """Check ML model .joblib files exist for all active ML instruments."""
-    violations = []
-    try:
-        from trading_app.ml.config import ACTIVE_INSTRUMENTS, MODEL_DIR
-
-        for inst in ACTIVE_INSTRUMENTS:
-            if _find_ml_model_path(MODEL_DIR, inst) is None:
-                violations.append(f"  Missing ML model for {inst} (checked hybrid + legacy)")
-    except ImportError as e:
-        print(f"    SKIP (optional dep): {e}")
-        return violations
-    return violations
-
-
-def check_ml_config_hash_match() -> list[str]:
-    """Check ML model config hashes match current config."""
-    violations = []
-    try:
-        import joblib
-
-        from trading_app.ml.config import (
-            ACTIVE_INSTRUMENTS,
-            MODEL_DIR,
-            compute_config_hash,
-        )
-
-        current_hash = compute_config_hash()
-        for inst in ACTIVE_INSTRUMENTS:
-            path = _find_ml_model_path(MODEL_DIR, inst)
-            if path is None:
-                continue
-            try:
-                bundle = joblib.load(path)
-                model_hash = bundle.get("config_hash")
-                if model_hash and model_hash != current_hash:
-                    violations.append(f"  {inst}: model hash={model_hash}, current={current_hash} — retrain needed")
-            except Exception as e:
-                violations.append(f"  {inst}: failed to load model: {e}")
-    except ImportError as e:
-        print(f"    SKIP (optional dep): {e}")
-        return violations
-    return violations
-
-
-def check_ml_model_freshness() -> list[str]:
-    """Check ML models are < 90 days old."""
-    violations = []
-    try:
-        from datetime import datetime
-
-        import joblib
-
-        from trading_app.ml.config import ACTIVE_INSTRUMENTS, MODEL_DIR
-
-        for inst in ACTIVE_INSTRUMENTS:
-            path = _find_ml_model_path(MODEL_DIR, inst)
-            if path is None:
-                continue
-            try:
-                bundle = joblib.load(path)
-                trained_at_str = bundle.get("trained_at")
-                if not trained_at_str:
-                    violations.append(f"  {inst}: model missing trained_at timestamp")
-                    continue
-                trained_at = datetime.fromisoformat(trained_at_str)
-                age_days = (datetime.now(UTC) - trained_at).days
-                if age_days > 90:
-                    violations.append(f"  {inst}: model is {age_days} days old (>90 day limit)")
-            except Exception as e:
-                violations.append(f"  {inst}: failed to check freshness: {e}")
-    except ImportError as e:
-        print(f"    SKIP (optional dep): {e}")
-        return violations
     return violations
 
 
@@ -3737,61 +3557,13 @@ def check_dead_instruments_doc_sync() -> list[str]:
 
 
 # =============================================================================
-# ML layer Bloomey fixes drift checks (Mar 2026)
+# ML-layer drift checks removed 2026-04-11 (ML V1/V2/V3 DEAD — V3 sprint Stage 4).
+# These previously validated trading_app/ml/ subsystem invariants:
+#   check_ml_evaluate_hybrid_support, check_ml_bundle_full_delta,
+#   check_ml_sharpe_jk_pvalue, check_ml_no_iterrows_filters.
+# All removed with the ML subsystem. See docs/audit/hypotheses/
+# 2026-04-11-ml-v3-pooled-confluence-postmortem.md for the terminal verdict.
 # =============================================================================
-
-
-def check_ml_evaluate_hybrid_support() -> list[str]:
-    """V1 evaluate scripts removed in V2 cleanup (Mar 2026). No-op."""
-    return []
-
-
-def check_ml_bundle_full_delta() -> list[str]:
-    """ML bundles must include total_full_delta_r alongside total_honest_delta_r (White 2000)."""
-    violations = []
-    meta_label = PROJECT_ROOT / "trading_app" / "ml" / "meta_label.py"
-    if not meta_label.exists():
-        violations.append("  meta_label.py: file not found")
-        return violations
-    text = meta_label.read_text(encoding="utf-8")
-    if "total_full_delta_r" not in text:
-        violations.append("  meta_label.py: missing total_full_delta_r computation (White 2000 OOS selection bias fix)")
-    return violations
-
-
-def check_ml_sharpe_jk_pvalue() -> list[str]:
-    """Evaluate scripts must display JK p-value alongside Sharpe delta."""
-    violations = []
-    eval_files = [
-        PROJECT_ROOT / "trading_app" / "ml" / "evaluate.py",
-        PROJECT_ROOT / "trading_app" / "ml" / "evaluate_validated.py",
-    ]
-    for fpath in eval_files:
-        if not fpath.exists():
-            continue
-        text = fpath.read_text(encoding="utf-8")
-        if "jobson_korkie" not in text.lower():
-            violations.append(f"  {fpath.name}: Sharpe delta displayed without Jobson-Korkie p-value")
-    return violations
-
-
-def check_ml_no_iterrows_filters() -> list[str]:
-    """features.py filter application must not use iterrows (vectorized matches_df instead)."""
-    violations = []
-    features = PROJECT_ROOT / "trading_app" / "ml" / "features.py"
-    if not features.exists():
-        return violations
-    text = features.read_text(encoding="utf-8")
-    # Check for iterrows inside the filter application sections
-    in_filter_section = False
-    for i, line in enumerate(text.splitlines(), 1):
-        if "filter eligibility" in line.lower() or "filter_type" in line.lower() and "keep_mask" in line:
-            in_filter_section = True
-        if in_filter_section and ".iterrows()" in line and "matches_row" in line:
-            violations.append(f"  features.py:{i}: iterrows() still used in filter application (should use matches_df)")
-        if in_filter_section and "reset_index" in line:
-            in_filter_section = False
-    return violations
 
 
 # =============================================================================
@@ -3822,21 +3594,12 @@ def check_noise_floor_active() -> list[str]:
 
 
 def check_session_guard_sync() -> list[str]:
-    """Verify pipeline.session_guard._SESSION_ORDER matches trading_app.ml.config.SESSION_CHRONOLOGICAL_ORDER."""
-    violations = []
-    try:
-        from pipeline.session_guard import _SESSION_ORDER
-        from trading_app.ml.config import SESSION_CHRONOLOGICAL_ORDER
-
-        if list(_SESSION_ORDER) != list(SESSION_CHRONOLOGICAL_ORDER):
-            violations.append(
-                f"  session_guard._SESSION_ORDER ({len(_SESSION_ORDER)} items) != "
-                f"ml.config.SESSION_CHRONOLOGICAL_ORDER ({len(SESSION_CHRONOLOGICAL_ORDER)} items). "
-                f"These MUST be identical or look-ahead protection breaks."
-            )
-    except ImportError as e:
-        violations.append(f"  Cannot import session ordering: {e}")
-    return violations
+    """Deprecated 2026-04-11 — previously verified pipeline.session_guard._SESSION_ORDER
+    against trading_app.ml.config.SESSION_CHRONOLOGICAL_ORDER. The ML subsystem was
+    removed in the V3 sprint Stage 4 (V1/V2/V3 all DEAD). session_guard now stands
+    alone as the canonical chronological ordering source. Retained as a no-op for
+    registry stability."""
+    return []
 
 
 def check_noise_floor_compliance(con=None) -> list[str]:
@@ -4977,45 +4740,22 @@ def check_document_authority_registry() -> list[str]:
 
 
 def check_system_authority_map() -> list[str]:
-    """Whole-project authority map must exist and classify linked truth surfaces."""
+    """Whole-project authority map must stay generated from the canonical registry."""
     violations: list[str] = []
 
     authority_map = PROJECT_ROOT / "docs" / "governance" / "system_authority_map.md"
     if not authority_map.exists():
         return ["  docs/governance/system_authority_map.md missing"]
 
+    from pipeline.system_authority import render_system_authority_map
+
     content = authority_map.read_text(encoding="utf-8")
-    required_markers = [
-        "## Design Rule",
-        "**Linked truth, not copied truth.**",
-        "## Surface Taxonomy",
-        "## Canonical Truth Map",
-        "## Enforcement Rules",
-    ]
-    required_refs = [
-        "pipeline/asset_configs.py",
-        "pipeline/cost_model.py",
-        "pipeline/dst.py",
-        "trading_app/config.py",
-        "trading_app/holdout_policy.py",
-        "trading_app/prop_profiles.py",
-        "pipeline/db_contracts.py",
-        "trading_app/lifecycle_state.py",
-        "scripts/audits/",
-        "docs/ARCHITECTURE.md",
-        "docs/MONOREPO_ARCHITECTURE.md",
-        "REPO_MAP.md",
-    ]
-    for marker in required_markers:
-        if marker not in content:
-            violations.append(
-                f"  docs/governance/system_authority_map.md missing marker {marker!r}"
-            )
-    for ref in required_refs:
-        if ref not in content:
-            violations.append(
-                f"  docs/governance/system_authority_map.md missing authority reference {ref!r}"
-            )
+    expected = render_system_authority_map()
+    if content != expected:
+        violations.append(
+            "  docs/governance/system_authority_map.md drifted from pipeline/system_authority.py; "
+            "re-render via scripts/tools/render_system_authority_map.py"
+        )
     return violations
 
 
@@ -5039,6 +4779,29 @@ def check_live_audit_uses_runtime_authority() -> list[str]:
         violations.append(
             "  scripts/audits/phase_7_live_trading.py must validate lanes against deployable_validated_relation()"
         )
+    return violations
+
+
+def check_project_pulse_uses_authority_registry() -> list[str]:
+    """Project pulse must expose repo identity from canonical authority registry + path/config surfaces."""
+    pulse_path = SCRIPTS_DIR / "tools" / "project_pulse.py"
+    if not pulse_path.exists():
+        return ["  scripts/tools/project_pulse.py missing"]
+
+    content = pulse_path.read_text(encoding="utf-8")
+    violations: list[str] = []
+    required_refs = [
+        "collect_system_identity",
+        "pipeline.system_authority",
+        "ACTIVE_ORB_INSTRUMENTS",
+        "GOLD_DB_PATH",
+        "SYSTEM_AUTHORITY_BACKBONE_MODULES",
+    ]
+    for ref in required_refs:
+        if ref not in content:
+            violations.append(
+                f"  scripts/tools/project_pulse.py missing canonical identity reference {ref!r}"
+            )
     return violations
 
 
@@ -5357,22 +5120,12 @@ CHECKS = [
     ),
     ("Cost model completeness (COST_SPECS covers all active instruments)", check_cost_model_completeness, False, False),
     ("TRADING_RULES.md authority values match code", check_trading_rules_authority, False, False),
-    (
-        "ML config canonical sources (instruments, sessions, no blacklist overlap)",
-        check_ml_config_canonical_sources,
-        False,
-        False,
-    ),
-    ("ML lookahead blacklist includes all outcome targets", check_ml_lookahead_blacklist, False, False),
+    # ML drift checks removed 2026-04-11 (ML V1/V2/V3 DEAD — V3 sprint Stage 4):
+    #   check_ml_config_canonical_sources, check_ml_lookahead_blacklist,
+    #   check_ml_model_files_exist, check_ml_config_hash_match,
+    #   check_ml_model_freshness — all validated invariants of a dead subsystem.
+    #   See docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence-postmortem.md.
     ("Audit columns populated (n_trials, fst_hurdle, DSR)", check_audit_columns_populated, False, True),  # requires_db
-    (
-        "ML model files exist for all active instruments",
-        check_ml_model_files_exist,
-        True,
-        False,
-    ),  # advisory: ML frozen (V2 gate), MES/MGC models intentionally absent
-    ("ML model config hashes match current config", check_ml_config_hash_match, True, False),
-    ("ML model freshness < 90 days", check_ml_model_freshness, False, False),
     # ── New checks from deep audit (Mar 2026) ──────────────────────────
     ("Live config spec validity (orb_label, entry_model, filter, tier)", check_live_config_spec_validity, False, False),
     (
@@ -5440,10 +5193,9 @@ CHECKS = [
     ),  # requires_db — advisory: staleness is a pipeline status issue, not code drift
     ("Dead instruments doc sync (docs match DEAD_ORB_INSTRUMENTS)", check_dead_instruments_doc_sync, False, False),
     # ── ML layer Bloomey fixes (Mar 2026) ─────────────────────────
-    ("ML evaluate scripts support hybrid model format", check_ml_evaluate_hybrid_support, False, False),
-    ("ML bundles include total_full_delta_r (White 2000)", check_ml_bundle_full_delta, False, False),
-    ("ML Sharpe deltas include JK p-value", check_ml_sharpe_jk_pvalue, False, False),
-    ("No iterrows in features.py filter application", check_ml_no_iterrows_filters, False, False),
+    # ML-layer drift checks removed 2026-04-11 (ML V1/V2/V3 DEAD):
+    #   check_ml_evaluate_hybrid_support, check_ml_bundle_full_delta,
+    #   check_ml_sharpe_jk_pvalue, check_ml_no_iterrows_filters
     (
         "SQL column convention: pipeline tables use 'symbol', trading app tables use 'instrument'",
         check_symbol_instrument_sql_convention,
@@ -5552,6 +5304,7 @@ CHECKS = [
     ("Document authority registry exists and core docs advertise their roles", check_document_authority_registry, False, False),
     ("System authority map exists and classifies linked truth surfaces", check_system_authority_map, False, False),
     ("Phase 7 live audit uses canonical runtime authorities", check_live_audit_uses_runtime_authority, False, False),
+    ("Project pulse exposes repo identity from canonical authority registry", check_project_pulse_uses_authority_registry, False, False),
 ]  # end CHECKS
 
 

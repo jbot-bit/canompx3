@@ -205,7 +205,6 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     from trading_app.live.circuit_breaker import CircuitBreaker
 
     orch._circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_timeout=30.0)
-    orch._ml_predictor = None  # ML predictor not wired in test fixtures
     orch.journal = MagicMock()  # Trade journal — mocked to avoid DB in tests
     orch._consecutive_engine_errors = 0
     orch._blocked_strategies = set()

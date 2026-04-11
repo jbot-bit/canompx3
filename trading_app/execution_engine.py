@@ -56,7 +56,7 @@ class TradeState(Enum):
 class TradeEvent:
     """Abstract trade event (broker-agnostic)."""
 
-    event_type: str  # "ENTRY", "EXIT", "SCRATCH", "REJECT", "ML_SKIP"
+    event_type: str  # "ENTRY", "EXIT", "SCRATCH", "REJECT"
     strategy_id: str
     timestamp: datetime
     price: float
@@ -195,7 +195,6 @@ class ExecutionEngine:
         market_state=None,
         live_session_costs: bool = True,
         atr_velocity_overlay=None,
-        ml_predictor=None,
         e2_order_timeout: dict[tuple[str, str], float] | None = None,
     ):
         self.portfolio = portfolio
@@ -204,14 +203,12 @@ class ExecutionEngine:
         self.market_state = market_state  # Optional MarketState for scoring
         self._live_session_costs = live_session_costs  # Use session-adjusted slippage
         self.atr_velocity_overlay = atr_velocity_overlay  # Contracting ATR skip overlay
-        self.ml_predictor = ml_predictor  # Optional LiveMLPredictor for P(win) filtering
         # E2 order timeout: {(instrument, session) -> minutes}. After ORB completes,
         # E2 stop-market trigger is skipped if elapsed > timeout. Implements break-speed
         # overlay without a daily_features filter lookup (which is look-ahead for E2).
         # None = no timeout (backward compatible). See config.E2_ORDER_TIMEOUT.
         # @research-source memory/break_speed_signal_retest.md
         self._e2_order_timeout = e2_order_timeout or {}
-        self.ml_skips: int = 0  # Count of ML-skipped trades
 
         # State
         self.trading_day: date | None = None
@@ -360,7 +357,6 @@ class ExecutionEngine:
         self.completed_trades = []
         self.daily_pnl_r = 0.0
         self.daily_trade_count = 0
-        self.ml_skips = 0
         self._bar_count = 0
         self._last_bar = None
         if daily_features_rows is not None:
@@ -689,38 +685,11 @@ class ExecutionEngine:
                 if score is not None and score < MIN_SCORE_THRESHOLD:
                     continue
 
-            # Check ML meta-label P(win) (if predictor available)
-            if self.ml_predictor is not None and self.trading_day is not None:
-                ml_result = self.ml_predictor.predict(
-                    instrument=strategy.instrument,
-                    trading_day=self.trading_day,
-                    orb_label=strategy.orb_label,
-                    orb_minutes=strategy.orb_minutes,
-                    entry_model=strategy.entry_model,
-                    rr_target=strategy.rr_target,
-                    confirm_bars=strategy.confirm_bars,
-                )
-                if not ml_result.take:
-                    logger.debug(
-                        "ML_SKIP: %s on %s — P(win)=%.3f < threshold=%.3f",
-                        strategy.strategy_id,
-                        self.trading_day,
-                        ml_result.p_win,
-                        ml_result.threshold,
-                    )
-                    self.ml_skips += 1
-                    events.append(
-                        TradeEvent(
-                            event_type="ML_SKIP",
-                            strategy_id=strategy.strategy_id,
-                            timestamp=bar["ts_utc"],
-                            price=bar["close"],
-                            direction=direction,
-                            contracts=0,
-                            reason=f"P(win)={ml_result.p_win:.3f}<{ml_result.threshold:.3f}",
-                        )
-                    )
-                    continue
+            # ML meta-label block removed 2026-04-11 (ML V3 sprint Stage 4).
+            # V1/V2/V3 all DEAD — filters are not interchangeable with ML
+            # features (V3 validated this structurally: orb_volume_norm was
+            # the top MDA feature in 2/3 trials but CPCV AUC stayed at 0.50).
+            # See docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence-postmortem.md.
 
             # Check if already have a trade for this strategy today
             if any(t.strategy_id == strategy.strategy_id for t in self.active_trades):

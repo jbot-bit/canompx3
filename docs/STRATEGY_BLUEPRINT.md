@@ -262,6 +262,7 @@ Everything confirmed dead. Do NOT re-test without a fundamentally new approach.
 | ML on PORTFOLIO-LEVEL negative baselines | DEAD | Threshold artifact, bootstrap p=0.35 | Nothing — mathematical trap |
 | ML on PER-SESSION negative baselines | DEAD | V1 was p=0.005 on NYSE_OPEN but EPV=2.4. V2 fixed all 3 FAILs → 0/12 BH survivors | Fundamentally new features or 2x more data |
 | ML V2 meta-labeling (5 features) | DEAD | 10/12 neg baseline, 2 bootstrapped, 0 BH survivors at K=12. NYSE_CLOSE p=0.039 raw, p=0.473 adjusted | 2x data growth or new feature discovery |
+| **ML V3 RR-stratified pooled meta-label (6 features)** | **DEAD — PERMANENT** | **Sprint 2026-04-11.** 29 active MNQ+MES validated strategies, 29,488 pooled trades, positive baseline (WR 51.82%), CPCV-45, Youden-J-calibrated thresholds, 200-perm permutation test. All 3 RR-stratified trials: CPCV AUC ~0.50 (pure noise), Null A p > 0.43, BH FDR adj p > 0.73. **Holdout: ML actively destroyed −$18K across RR=1.0/1.5 strata** (baseline +$16.8K → ML −$1.5K), per-strategy local losses on 9 of 20 tested strategies. Kill criteria C1 (BH FDR), C3/C4 (paired bootstrap lower 95% CI), C8 (dollar lift), C9 (per-strategy local loss) all triggered. `orb_volume_norm` was TOP MDA feature (0.20-0.25) but the model's splits on it did not discriminate — **structural finding: filters are not interchangeable with multivariate ML features** because the extreme-value signal that makes volume-class features produce 48 BH FDR survivors as univariate filters is smoothed away in a multivariate RF. V1/V2/V3 all DEAD across 2 months of institutional audit. ML subsystem deleted Stage 4 (`trading_app/ml/`, tests, 8 drift checks, ExecutionEngine hooks). **Postmortem:** `docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence-postmortem.md`. **Stage 3 commit:** `c80869d9`. **Stage 0 verification:** `docs/audit/ml_v3/2026-04-11-stage-0-verification.md`. | Fundamentally new feature class with theory for why the signal would NOT smooth in a tree ensemble (tick microstructure from L2, order-book imbalance, at-break architecture instead of pre-break). Pre-registration in `docs/audit/hypotheses/` required BEFORE any rebuild. |
 | Calendar blanket skip | DEAD | Mixed results (some days BETTER) | Per-combo only, never blanket |
 | Non-ORB strategies | DEAD | 6 archetypes, 540 tests, 0 survivors | Fundamentally different market model |
 | MCL, SIL, M6E, MBT, M2K ORB | DEAD | 0 validated per instrument | New data source or contract change |
@@ -280,68 +281,41 @@ Full NO-GO table with details: TRADING_RULES.md "What Doesn't Work"
 
 ---
 
-## 6. ML Sub-Pipeline
+## 6. ML Sub-Pipeline — PERMANENTLY DEAD (deleted 2026-04-11)
 
-Separate decision tree for ML meta-labeling. ML is OPTIONAL — raw baselines are tradeable without it.
+**`trading_app/ml/` was deleted in the ML V3 sprint Stage 4 on 2026-04-11.** V1, V2, and V3 all reached the same verdict across two months of institutional audit: pooled meta-labeling over validated ORB strategies does not provide net lift and can actively destroy value.
 
-### When to use ML
-- Baseline exists (positive or negative) and you want per-trade selection
-- Feature signal exists (univariate quartile test shows discrimination)
-- **ML on negative-baseline sessions: WEAK.** NYSE_OPEN O30 RR2.0 survived 5K bootstrap (p=0.019) but with EPV=2.4 (needs ≥10) and is the ONLY survivor out of 7 tested. Three marginal (p=0.05-0.09), three dead. Treat with extreme caution.
-- ML is NOT a replacement for having SOME positive population in the variable space. If the entire instrument × entry model space is negative at every point, ML can't help.
+### Timeline
 
-### ML Methodology — RESOLVED (V2, Mar 27 2026)
+| Version | Date | Methodology | Verdict |
+|---|---|---|---|
+| V1 | Mar 2026 | Per-aperture meta-label, 23 features, 60/20/20 split | DEAD — threshold artifact on negative baselines, bootstrap p=0.35 |
+| V2 | Mar 27 2026 | Per-session 5-feature RF, CPCV, 5K bootstrap, BH FDR K=12 | DEAD — 0/12 BH survivors, EPV=2.4 trap |
+| V3 | Apr 11 2026 | RR-stratified pooled meta-label, 6 features (5 V2 core + orb_volume_norm), pre-registered hypothesis, CPCV-45, 200-perm null | DEAD — 0/3 trials survive, -$18K holdout dollar lift, per-strategy local losses |
 
-All 3 original FAILs fixed in V2 methodology (commit `e7f5512`):
-1. EPV=2.4 → **FIXED** (5 expert-prior features, EPV=1755)
-2. Negative baselines → **FIXED** (Fix E positive baseline gate, de Prado Ch 3.6)
-3. Selection bias → **FIXED** (pre-registration committed before retrain/bootstrap)
+### V3 structural finding
 
-**V2 Result: ML DEAD.** 108 configs tested, 10/12 sessions blocked by negative baseline,
-2 bootstrapped (5000 perms, Phipson & Smyth), 0 BH FDR survivors at K=12.
+The V3 sprint tested the most charitable configuration: pooled across 29 positive-baseline MNQ+MES strategies (51.82% pooled WR), theory-grounded features, pre-registered kill criteria, Mode A sacred holdout. CPCV AUC came out at 0.50 (pure noise) on all 3 RR-stratified trials despite `orb_volume_norm` being the top MDA feature (0.20-0.25 importance). The model uses the feature; the splits do not discriminate.
 
-| Session | Aperture | RR | Delta | p-value (raw) | BH K=12 | Verdict |
-|---------|----------|-----|-------|---------------|---------|---------|
-| US_DATA_1000 | O30 | 1.0 | +0.0R | 0.2150 | n.s. | FAIL |
-| NYSE_CLOSE | O5 | 1.0 | +3.9R | 0.0394 | 0.4728 (n.s.) | FAIL |
+**The structural conclusion:** filters and ML features are not interchangeable. The extreme-value signal that made `orb_volume_norm`/`rel_vol`-class features produce 48 BH FDR survivors as univariate filters in the March 2026 confluence program is smoothed away when they enter a multivariate random forest. This is not a feature-engineering problem to iterate — it is a property of the signal shape in this data.
 
-Pre-registration: `docs/pre-registrations/ml-v2-preregistration.md`
-Config selection: `docs/plans/ml-v2-config-selection.md`
-Bootstrap log: `logs/ml_bootstrap_results.log`
+### Reopen criteria (for a future V4, if ever)
 
-**ML is permanently closed for MNQ ORB breakouts. Raw baselines are the portfolio.**
+A V4 ML sprint would need to satisfy ALL of the following before code is written:
+- Fundamentally new feature class with theory for why the signal would NOT smooth under tree ensembles (tick microstructure from L2, order-book imbalance, at-break architecture rather than pre-break)
+- Pre-registered hypothesis file in `docs/audit/hypotheses/` per Criterion 1 BEFORE any data is touched
+- New dataset (Databento L2 tick pilot, or a different instrument class) — more trades on the current 6 features will not change the verdict
+- Explicit critique of the V3 postmortem showing why the structural finding does not apply
 
-### ML Test Sequence
-```
-1. UNIVARIATE SIGNAL → quartile test per feature × session × RR
-   Kill: no feature shows meaningful spread → ML can't help
-2. TRAIN → 3-way split (60/20/20), per-session RF, E6 noise filter
-   Gates: CPCV AUC ≥ 0.50, Test AUC ≥ 0.52, delta ≥ 0, skip ≤ 85%
-3. BOOTSTRAP → 5000 permutations (Phipson & Smyth corrected p-values)
-   Kill: p > 0.05 → threshold artifact, not skill
-4. REPLAY → paper_trader with --use-ml vs without
-   Kill: ML-filtered worse than raw baseline → configuration error
-5. PAPER TRADE → forward test with kill criteria
-```
+### Canonical record
 
-### ML Variable Coverage Checklist
-Before declaring ML dead for an instrument, verify ALL cells tested:
-- [ ] RR1.0 flat
-- [ ] RR1.5 flat
-- [ ] RR2.0 flat
-- [ ] RR2.0 per-aperture (O5, O15, O30 separately)
-- [ ] Bootstrap on all survivors
+- **Postmortem:** `docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence-postmortem.md`
+- **Stage 0 pre-flight verification:** `docs/audit/ml_v3/2026-04-11-stage-0-verification.md`
+- **Stage 2 pre-registered hypothesis (v2):** `docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence.yaml` (commit `a165ff80`)
+- **Stage 3 execution commit:** `c80869d9`
+- **Memory topic file:** `ml_v3_dead.md`
 
-### ML Features
-→ `from trading_app.ml.config import GLOBAL_FEATURES, SESSION_FEATURE_SUFFIXES, LOOKAHEAD_BLACKLIST`
-
-5 global + 4 session + 4 categorical + 3 cross-session + 6 level proximity = ~22 base features. One-hot encoding expands categoricals. E6 noise filter drops ~20-25 columns (4 prefix patterns × multiple one-hots + 3 exact).
-
-Lookahead blacklist: 35 items. Enforced in `ml/config.py`. Session guard in `pipeline/session_guard.py`.
-
-### Current ML State (VOLATILE — query, don't cite)
-Model on disk: `models/ml/meta_label_MNQ_hybrid.joblib`
-To inspect: `python -c "import joblib; b=joblib.load('models/ml/...'); print(b.keys())"`
+**Do not re-implement any ML path without going through the reopen criteria above. This is a hard NO-GO registered in § 5.**
 
 ---
 
@@ -363,11 +337,8 @@ python -m trading_app.paper_trader --instrument MNQ --raw-baseline --rr-target 1
   --start 2025-01-01 --end 2025-12-31 --quiet
 ```
 
-### ML-Filtered Paper Trading
-```bash
-python -m trading_app.paper_trader --instrument MNQ --raw-baseline --rr-target 2.0 \
-  --orb-minutes 30 --use-ml --start 2025-01-01 --end 2025-12-31 --quiet
-```
+### ML-Filtered Paper Trading — REMOVED
+ML subsystem deleted 2026-04-11 (V1/V2/V3 DEAD). The `--use-ml` flag has no effect. See § 6.
 
 ### Live Signal-Only
 ```bash
@@ -387,7 +358,7 @@ Databento .dbn.zst
   → strategy_discovery.py → experimental_strategies
   → strategy_validator.py → validated_setups (11 rows, all MNQ)
   → build_edge_families.py → edge_families (0 rows — needs rebuild)
-  → [optional] ML meta_label → models/ml/*.joblib
+  # ML meta_label step removed 2026-04-11 (V1/V2/V3 DEAD — see § 5, § 6)
   → portfolio builder    → Portfolio object
   → paper_trader.py      → trade journal
 ```

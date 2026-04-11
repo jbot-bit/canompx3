@@ -972,15 +972,15 @@ def build_multi_rr_portfolio(
 ) -> Portfolio:
     """Build a two-layer multi-RR portfolio from orb_outcomes.
 
-    Layer 1: O5 RR1.0 raw baseline (11 sessions, no ML, no filter).
-    Layer 2: O30 RR2.0 ML-filtered overlay (3 bootstrap-verified sessions).
+    Layer 1: O5 RR1.0 raw baseline (11 sessions, no filter).
+    Layer 2: O30 RR2.0 overlay (3 bootstrap-verified sessions).
 
-    The ML predictor (LiveMLPredictor) filters Layer 2 at runtime — this
-    function just registers the strategies. Sessions without an ML model
-    fail-open (take all trades), which is correct for Layer 1 (O5).
-
-    Layer 2 sessions may have negative O30 RR2.0 baselines — the ML filter
-    provides the edge. include_negative=True for Layer 2.
+    NOTE 2026-04-11: The ML overlay that previously filtered Layer 2 was
+    removed in the ML V3 sprint Stage 4 — V1/V2/V3 all DEAD per
+    docs/audit/hypotheses/2026-04-11-ml-v3-pooled-confluence-postmortem.md.
+    Layer 2 now runs unfiltered. If Layer 2 performance degrades without
+    ML, reconsider whether the bootstrap-verified session list is still
+    valid or whether Layer 2 should be retired.
     """
     if db_path is None:
         db_path = GOLD_DB_PATH
