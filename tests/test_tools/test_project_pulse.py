@@ -27,6 +27,7 @@ from scripts.tools.project_pulse import (
     collect_sr_state,
     collect_staleness,
     collect_survival_state,
+    collect_system_identity,
     collect_tests,
     collect_worktrees,
     format_json,
@@ -423,6 +424,22 @@ def _sample_report() -> PulseReport:
         cache_hit=False,
         git_head="abc123",
         git_branch="main",
+        system_identity={
+            "canonical_repo_root": "/repo",
+            "canonical_db_path": "/repo/gold.db",
+            "selected_db_path": "/repo/gold.db",
+            "db_override_active": False,
+            "live_journal_db_path": "/repo/live_journal.db",
+            "active_orb_instruments": ["MES", "MGC", "MNQ"],
+            "active_profiles": ["topstep_50k_mnq_auto"],
+            "authority_map_doc": "docs/governance/system_authority_map.md",
+            "doctrine_docs": ["CLAUDE.md", "TRADING_RULES.md"],
+            "backbone_modules": ["pipeline/system_authority.py", "pipeline/db_contracts.py"],
+            "published_relations": {
+                "active": "active_validated_setups",
+                "deployable": "deployable_validated_setups",
+            },
+        },
         items=[
             PulseItem("broken", "high", "drift", "Drift FAILED"),
             PulseItem("decaying", "medium", "staleness", "MGC: 2 stale steps"),
@@ -460,6 +477,7 @@ class TestFormatText:
     def test_contains_all_sections(self) -> None:
         text = format_text(_sample_report())
         assert "PROJECT PULSE" in text
+        assert "System identity:" in text
         assert "Live control:" in text
         assert "FIX NOW" in text
         assert "ACT SOON" in text
@@ -485,6 +503,7 @@ class TestFormatJson:
     def test_valid_json(self) -> None:
         output = format_json(_sample_report())
         data = json.loads(output)
+        assert data["system_identity"]["canonical_db_path"] == "/repo/gold.db"
         assert data["counts"]["broken"] == 1
         assert data["counts"]["decaying"] == 1
         assert data["handoff"]["tool"] == "Claude"
@@ -498,10 +517,52 @@ class TestFormatMarkdown:
     def test_markdown_structure(self) -> None:
         md = format_markdown(_sample_report())
         assert md.startswith("# Project Pulse")
+        assert "## System Identity" in md
         assert "## Live Control" in md
         assert "## FIX NOW" in md
         assert "## ACT SOON" in md
         assert "## Strategy Fitness" in md
+
+
+class TestCollectSystemIdentity:
+    def test_collects_linked_system_identity(self) -> None:
+        root = Path("/repo/wt")
+        canonical = Path("/repo")
+        db_path = Path("/repo/gold.db")
+        mock_asset_configs = MagicMock(ACTIVE_ORB_INSTRUMENTS=["MNQ", "MGC"])
+        mock_db_contracts = MagicMock(
+            ACTIVE_VALIDATED_VIEW="active_validated_setups",
+            DEPLOYABLE_VALIDATED_VIEW="deployable_validated_setups",
+        )
+        mock_paths = MagicMock(
+            GOLD_DB_PATH=Path("/repo/gold.db"),
+            LIVE_JOURNAL_DB_PATH=Path("/repo/live_journal.db"),
+        )
+        mock_authority = MagicMock(
+            DOCTRINE_DOCS=("CLAUDE.md", "TRADING_RULES.md"),
+            SYSTEM_AUTHORITY_BACKBONE_MODULES=("pipeline/system_authority.py", "pipeline/db_contracts.py"),
+            SYSTEM_AUTHORITY_MAP_RELATIVE_PATH=Path("docs/governance/system_authority_map.md"),
+        )
+        mock_profiles = MagicMock()
+        mock_profiles.get_active_profile_ids.return_value = ["topstep_50k_mnq_auto"]
+        with patch.dict(
+            "sys.modules",
+            {
+                "pipeline.asset_configs": mock_asset_configs,
+                "pipeline.db_contracts": mock_db_contracts,
+                "pipeline.paths": mock_paths,
+                "pipeline.system_authority": mock_authority,
+                "trading_app.prop_profiles": mock_profiles,
+            },
+        ):
+            summary, items = collect_system_identity(root, canonical, db_path)
+
+        assert items == []
+        assert summary is not None
+        assert summary["canonical_db_path"] == str(Path("/repo/gold.db"))
+        assert summary["active_orb_instruments"] == ["MGC", "MNQ"]
+        assert summary["published_relations"]["deployable"] == "deployable_validated_setups"
+        assert summary["authority_map_doc"] == "docs/governance/system_authority_map.md"
 
 
 # ---------------------------------------------------------------------------
@@ -521,6 +582,7 @@ class TestBuildPulse:
             patch.object(project_pulse, "_git_head", return_value="abc123"),
             patch.object(project_pulse, "_git_branch", return_value="main"),
             patch.object(project_pulse, "_run_git", return_value=MagicMock(returncode=0, stdout="")),
+            patch.object(project_pulse, "collect_system_identity", return_value=({}, [])),
             patch.object(project_pulse, "collect_staleness", return_value=[]),
             patch.object(project_pulse, "collect_fitness_fast", return_value=({}, [])),
             patch.object(project_pulse, "collect_deployment_state", return_value=(None, [])),

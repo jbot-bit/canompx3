@@ -8,6 +8,79 @@
 
 ## Update (2026-04-11 — validated shelf lifecycle hardening)
 
+## Update (2026-04-11 — code-backed system authority registry + pulse identity)
+
+### Headline
+
+Turned the whole-project authority map into a code-backed registry and made
+`project_pulse` expose repo identity from canonical linked sources instead of
+operational folklore only.
+
+### What changed
+
+- added canonical authority registry:
+  - `pipeline/system_authority.py`
+  - owns:
+    - surface taxonomy
+    - canonical truth map
+    - enforcement rules
+    - doctrine/backbone references
+- added generator:
+  - `scripts/tools/render_system_authority_map.py`
+- converted authority map doc to generated output:
+  - `docs/governance/system_authority_map.md`
+- upgraded `scripts/tools/project_pulse.py`
+  - new `collect_system_identity(...)`
+  - pulse now exposes:
+    - canonical repo root
+    - canonical DB path
+    - active ORB instruments
+    - active runtime profiles
+    - published shelf relations
+    - doctrine docs
+    - backbone modules
+- tightened drift:
+  - authority map must now match the canonical renderer
+  - `project_pulse` must keep using canonical authority/path/config surfaces
+- saved design note:
+  - `docs/plans/2026-04-11-system-authority-registry.md`
+
+### Why it matters
+
+Before this slice, the repo had an authority map on paper but not yet a true
+linked backbone. `project_pulse` could say whether the machine was healthy, but
+not what the machine actually was.
+
+Now the project has:
+
+- one code-backed authority registry
+- one generated authority-map doc
+- one operational entrypoint that can tell a fresh session what repo it is in
+  and which surfaces are canonical
+
+This is the next step toward a repo that explains itself without stale human
+folklore.
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check pipeline/system_authority.py scripts/tools/render_system_authority_map.py scripts/tools/project_pulse.py pipeline/check_drift.py tests/test_tools/test_project_pulse.py tests/test_pipeline/test_check_drift_ws2.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_tools/test_project_pulse.py tests/test_pipeline/test_check_drift_ws2.py -k 'GovernanceMaps or project_pulse' -q`
+  - `63 passed, 66 deselected`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 97 checks passed [OK], 0 skipped (DB unavailable), 5 advisory`
+- `./.venv-wsl/bin/python scripts/tools/project_pulse.py --fast --format text`
+  - now prints system identity from linked sources
+
+### Concurrency warning
+
+- `pipeline/check_drift.py` is concurrently dirty in another terminal for the
+  ML-subsystem deletion workstream.
+- When staging/committing this slice, do **not** blindly include the whole file.
+  Stage only the governance hunks for:
+  - generated authority-map verification
+  - project-pulse authority-registry verification
+
 ## Update (2026-04-11 — published validated-shelf DB contract)
 
 ### Headline

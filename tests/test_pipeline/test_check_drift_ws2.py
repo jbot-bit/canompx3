@@ -254,32 +254,13 @@ class TestGovernanceMaps:
         )
         violations = check_drift.check_system_authority_map()
         assert violations
-        assert "Linked truth" in "\n".join(violations) or "authority reference" in "\n".join(violations)
+        assert "drifted from pipeline/system_authority.py" in "\n".join(violations)
 
     def test_system_authority_map_passes_with_required_refs(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(
-            tmp_path / "docs" / "governance" / "system_authority_map.md",
-            """
-## Design Rule
-**Linked truth, not copied truth.**
-## Surface Taxonomy
-## Canonical Truth Map
-## Enforcement Rules
-pipeline/asset_configs.py
-pipeline/cost_model.py
-pipeline/dst.py
-trading_app/config.py
-trading_app/holdout_policy.py
-trading_app/prop_profiles.py
-pipeline/db_contracts.py
-trading_app/lifecycle_state.py
-scripts/audits/
-docs/ARCHITECTURE.md
-docs/MONOREPO_ARCHITECTURE.md
-REPO_MAP.md
-""",
-        )
+        from pipeline.system_authority import render_system_authority_map
+
+        _mkfile(tmp_path / "docs" / "governance" / "system_authority_map.md", render_system_authority_map())
         violations = check_drift.check_system_authority_map()
         assert violations == []
 
@@ -303,6 +284,29 @@ from trading_app.validated_shelf import deployable_validated_relation
 """,
         )
         violations = check_drift.check_live_audit_uses_runtime_authority()
+        assert violations == []
+
+    def test_project_pulse_identity_registry_catches_missing_authority_refs(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(tmp_path / "scripts" / "tools" / "project_pulse.py", "def collect_system_identity():\n    return {}\n")
+        violations = check_drift.check_project_pulse_uses_authority_registry()
+        assert violations
+        assert "pipeline.system_authority" in "\n".join(violations)
+
+    def test_project_pulse_identity_registry_passes_with_canonical_refs(self, tmp_path, monkeypatch):
+        _patch_dirs(monkeypatch, tmp_path)
+        _mkfile(
+            tmp_path / "scripts" / "tools" / "project_pulse.py",
+            """
+from pipeline.system_authority import SYSTEM_AUTHORITY_BACKBONE_MODULES
+from pipeline.paths import GOLD_DB_PATH
+from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+def collect_system_identity():
+    return SYSTEM_AUTHORITY_BACKBONE_MODULES, GOLD_DB_PATH, ACTIVE_ORB_INSTRUMENTS
+""",
+        )
+        violations = check_drift.check_project_pulse_uses_authority_registry()
         assert violations == []
 
 

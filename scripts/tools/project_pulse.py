@@ -73,6 +73,7 @@ class PulseReport:
     git_head: str
     git_branch: str
     items: list[PulseItem] = field(default_factory=list)
+    system_identity: dict | None = None
     # Handoff context (not a categorized item)
     handoff_tool: str | None = None
     handoff_date: str | None = None
@@ -776,6 +777,52 @@ def collect_pause_state() -> tuple[dict | None, list[PulseItem]]:
     return summary, items
 
 
+def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple[dict | None, list[PulseItem]]:
+    """Expose the repo's core identity from linked canonical registries."""
+    items: list[PulseItem] = []
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.db_contracts import ACTIVE_VALIDATED_VIEW, DEPLOYABLE_VALIDATED_VIEW
+        from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
+        from pipeline.system_authority import (
+            DOCTRINE_DOCS,
+            SYSTEM_AUTHORITY_BACKBONE_MODULES,
+            SYSTEM_AUTHORITY_MAP_RELATIVE_PATH,
+        )
+        from trading_app.prop_profiles import get_active_profile_ids
+
+        canonical_db_path = GOLD_DB_PATH.resolve()
+        selected_db_path = db_path.resolve()
+        summary = {
+            "canonical_repo_root": str(canonical.resolve()),
+            "selected_repo_root": str(root.resolve()),
+            "canonical_db_path": str(canonical_db_path),
+            "selected_db_path": str(selected_db_path),
+            "db_override_active": selected_db_path != canonical_db_path,
+            "live_journal_db_path": str(LIVE_JOURNAL_DB_PATH.resolve()),
+            "active_orb_instruments": sorted(ACTIVE_ORB_INSTRUMENTS),
+            "active_profiles": sorted(get_active_profile_ids()),
+            "authority_map_doc": SYSTEM_AUTHORITY_MAP_RELATIVE_PATH.as_posix(),
+            "doctrine_docs": list(DOCTRINE_DOCS),
+            "backbone_modules": list(SYSTEM_AUTHORITY_BACKBONE_MODULES),
+            "published_relations": {
+                "active": ACTIVE_VALIDATED_VIEW,
+                "deployable": DEPLOYABLE_VALIDATED_VIEW,
+            },
+        }
+        return summary, items
+    except Exception as exc:
+        items.append(
+            PulseItem(
+                category="broken",
+                severity="low",
+                source="system_identity",
+                summary=f"System identity error: {type(exc).__name__}: {exc}",
+            )
+        )
+        return None, items
+
+
 def collect_fitness_deep(db_path: Path) -> tuple[dict, list[PulseItem]]:
     """Full fitness: compute rolling FIT/WATCH/DECAY per instrument."""
     summary: dict = {}
@@ -1440,6 +1487,7 @@ def build_pulse(
         )
 
     # --- Cheap collectors: always fresh ---
+    system_identity, identity_items = collect_system_identity(root, canonical, db_path)
     staleness_items = collect_staleness(root, db_path)
 
     # Fitness: deep > cached deep > fast proxy
@@ -1497,7 +1545,8 @@ def build_pulse(
 
     # Collect all items
     all_items = (
-        drift_items
+        identity_items
+        + drift_items
         + test_items
         + staleness_items
         + fitness_items
@@ -1528,6 +1577,7 @@ def build_pulse(
         git_head=head,
         git_branch=_git_branch(root),
         items=all_items,
+        system_identity=system_identity,
         handoff_tool=handoff_context.get("tool"),
         handoff_date=handoff_context.get("date"),
         handoff_summary=handoff_context.get("summary"),
@@ -1586,6 +1636,30 @@ def format_text(report: PulseReport) -> str:
     if report.handoff_summary:
         lines.append(f"Last: {report.handoff_tool or '?'} ({report.handoff_date or '?'})")
         lines.append(f"  {report.handoff_summary}")
+        lines.append("")
+
+    if report.system_identity:
+        identity = report.system_identity
+        relations = identity.get("published_relations", {})
+        doctrine = ", ".join(identity.get("doctrine_docs", []))
+        backbone = ", ".join(identity.get("backbone_modules", []))
+        lines.append("System identity:")
+        lines.append(f"  Root: {identity.get('canonical_repo_root')}")
+        lines.append(f"  Canonical DB: {identity.get('canonical_db_path')}")
+        if identity.get("db_override_active"):
+            lines.append(f"  Active DB override: {identity.get('selected_db_path')}")
+        lines.append(
+            "  "
+            f"Active ORB instruments: {', '.join(identity.get('active_orb_instruments', [])) or 'none'}"
+        )
+        lines.append(f"  Active profiles: {', '.join(identity.get('active_profiles', [])) or 'none'}")
+        lines.append(
+            "  "
+            f"Shelf contracts: {relations.get('active', '?')}, {relations.get('deployable', '?')}"
+        )
+        lines.append(f"  Authority map: {identity.get('authority_map_doc')}")
+        lines.append(f"  Doctrine: {doctrine}")
+        lines.append(f"  Backbone: {backbone}")
         lines.append("")
 
     if report.handoff_next_steps:
@@ -1681,6 +1755,7 @@ def format_json(report: PulseReport) -> str:
         "cache_hit": report.cache_hit,
         "git_head": report.git_head,
         "git_branch": report.git_branch,
+        "system_identity": report.system_identity,
         "handoff": {
             "tool": report.handoff_tool,
             "date": report.handoff_date,
@@ -1709,6 +1784,31 @@ def format_markdown(report: PulseReport) -> str:
     lines.append("")
     lines.append(f"*Generated: {report.generated_at} | Branch: {report.git_branch} | HEAD: {report.git_head}*")
     lines.append("")
+
+    if report.system_identity:
+        identity = report.system_identity
+        relations = identity.get("published_relations", {})
+        lines.append("## System Identity")
+        lines.append(f"- **Canonical repo root**: `{identity.get('canonical_repo_root')}`")
+        lines.append(f"- **Canonical DB**: `{identity.get('canonical_db_path')}`")
+        if identity.get("db_override_active"):
+            lines.append(f"- **Active DB override**: `{identity.get('selected_db_path')}`")
+        lines.append(
+            f"- **Active ORB instruments**: {', '.join(identity.get('active_orb_instruments', [])) or 'none'}"
+        )
+        lines.append(f"- **Active profiles**: {', '.join(identity.get('active_profiles', [])) or 'none'}")
+        lines.append(
+            f"- **Published shelf relations**: `{relations.get('active', '?')}`, "
+            f"`{relations.get('deployable', '?')}`"
+        )
+        lines.append(f"- **Authority map**: `{identity.get('authority_map_doc')}`")
+        lines.append(
+            f"- **Doctrine docs**: {', '.join(f'`{doc}`' for doc in identity.get('doctrine_docs', []))}"
+        )
+        lines.append(
+            f"- **Backbone modules**: {', '.join(f'`{mod}`' for mod in identity.get('backbone_modules', []))}"
+        )
+        lines.append("")
 
     if report.handoff_summary:
         lines.append("## Last Session")
