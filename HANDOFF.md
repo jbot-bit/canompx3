@@ -74,6 +74,48 @@ contract instead of leaving them as helper folklore.
 - Interpretation: code and tests are clean; live DB schema refresh still needs a
   writable `gold.db` handle from an unblocked shell/session.
 
+## Update (2026-04-11 — runtime readers moved to published shelf relation)
+
+### Headline
+
+Extended the published validated-shelf contract into the core runtime readers so
+they now consume the deployable shelf as a relation instead of rebuilding it as
+`validated_setups + predicate`.
+
+### What changed
+
+- migrated these runtime readers from
+  `deployable_validated_predicate(...)` to
+  `deployable_validated_relation(..., alias='vs')`:
+  - `trading_app/live_config.py`
+  - `trading_app/lane_allocator.py`
+  - `trading_app/prop_portfolio.py`
+  - `trading_app/strategy_fitness.py`
+  - `trading_app/sr_monitor.py`
+  - `trading_app/sprt_monitor.py`
+- semantics intentionally unchanged:
+  - still deployable-shelf only
+  - still read-only
+  - still preserve raw-by-id lifecycle reads where that is the honest path
+- one bug caught during migration:
+  - `strategy_fitness.diagnose_portfolio_decay()` needed `WHERE TRUE`
+    fallback after the deployable predicate moved into the relation source
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check trading_app/live_config.py trading_app/lane_allocator.py trading_app/prop_portfolio.py trading_app/strategy_fitness.py trading_app/sr_monitor.py trading_app/sprt_monitor.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_live_config.py tests/test_trading_app/test_lane_allocator.py tests/test_trading_app/test_prop_portfolio.py tests/test_trading_app/test_strategy_fitness.py tests/test_trading_app/test_sr_monitor.py tests/test_trading_app/test_sprt_monitor.py -q`
+  - `149 passed`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 100 checks passed [OK], 0 skipped, 7 advisory`
+
+### Notes
+
+- This slice deliberately targeted runtime consumers only.
+- Raw lifecycle/history consumers were left alone on purpose; not every
+  `validated_setups` query should become deployable-shelf-only.
+
 ### Headline
 
 Made deployable-shelf semantics explicit and fail-closed:

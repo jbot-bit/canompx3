@@ -40,7 +40,7 @@ from trading_app.prop_profiles import (
     get_firm_spec,
 )
 from trading_app.strategy_fitness import compute_fitness  # noqa: F401
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # =========================================================================
 # DD estimation — per-lane from DB, with fallback constants
@@ -830,9 +830,9 @@ def _load_strategies_and_build_books(db_path: Path) -> tuple[dict[str, TradingBo
     configure_connection(con)
     try:
         active_instruments = get_active_instruments()
-        deployable_where = deployable_validated_predicate(con)
+        shelf_relation = deployable_validated_relation(con, alias="vs")
         rows = con.execute(
-            f"SELECT * FROM validated_setups WHERE {deployable_where} AND instrument = ANY($1)",
+            f"SELECT * FROM {shelf_relation} WHERE instrument = ANY($1)",
             [list(active_instruments)],
         ).fetchall()
         columns = [desc[0] for desc in con.description]

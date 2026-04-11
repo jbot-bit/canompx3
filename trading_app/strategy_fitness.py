@@ -34,7 +34,7 @@ from pipeline.init_db import ORB_LABELS
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS, CrossAssetATRFilter, VolumeFilter, apply_tight_stop, get_excluded_sessions
 from trading_app.strategy_discovery import compute_metrics
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # Whitelist for SQL column interpolation safety
 _VALID_ORB_LABELS = set(ORB_LABELS)
@@ -734,7 +734,7 @@ def compute_portfolio_fitness(
     with duckdb.connect(str(db_path), read_only=True) as con:
         # Exclude sessions with no confirmed edge (per-instrument, see config.EXCLUDED_FROM_FITNESS)
         excluded = get_excluded_sessions(instrument)
-        deployable_where = deployable_validated_predicate(con)
+        shelf_relation = deployable_validated_relation(con, alias="vs")
         if excluded:
             excluded_list = sorted(excluded)
             rows = con.execute(
@@ -743,8 +743,8 @@ def compute_portfolio_fitness(
                            COALESCE(stop_multiplier, 1.0) as stop_multiplier,
                            sample_size, win_rate, expectancy_r, sharpe_ratio,
                            max_drawdown_r
-                   FROM validated_setups
-                   WHERE instrument = ? AND {deployable_where}
+                   FROM {shelf_relation}
+                   WHERE instrument = ?
                      AND orb_label NOT IN (SELECT UNNEST(?::VARCHAR[]))
                    ORDER BY strategy_id""",
                 [instrument, excluded_list],
@@ -756,8 +756,8 @@ def compute_portfolio_fitness(
                            COALESCE(stop_multiplier, 1.0) as stop_multiplier,
                            sample_size, win_rate, expectancy_r, sharpe_ratio,
                            max_drawdown_r
-                   FROM validated_setups
-                   WHERE instrument = ? AND {deployable_where}
+                   FROM {shelf_relation}
+                   WHERE instrument = ?
                    ORDER BY strategy_id""",
                 [instrument],
             ).fetchall()
@@ -923,10 +923,9 @@ def diagnose_decay(
     # Get all siblings (same family, excluding self)
     siblings = con.execute(
         f"""
-        SELECT strategy_id FROM validated_setups
+        SELECT strategy_id FROM {deployable_validated_relation(con, alias='vs')}
         WHERE family_hash = ?
           AND strategy_id != ?
-          AND {deployable_validated_predicate(con)}
     """,
         [family_hash, strategy_id],
     ).fetchall()
@@ -1000,7 +999,8 @@ def diagnose_portfolio_decay(
 
     with duckdb.connect(str(db_path), read_only=True) as con:
         # Get all active strategies
-        where = [deployable_validated_predicate(con)]
+        shelf_relation = deployable_validated_relation(con, alias="vs")
+        where = []
         params = []
         if instruments:
             where.append("instrument = ?")
@@ -1026,8 +1026,8 @@ def diagnose_portfolio_decay(
                 where.append(" AND ".join(exc_parts))
 
         rows = con.execute(
-            f"""SELECT strategy_id FROM validated_setups
-               WHERE {" AND ".join(where)}
+            f"""SELECT strategy_id FROM {shelf_relation}
+               WHERE {" AND ".join(where) if where else "TRUE"}
                ORDER BY strategy_id""",
             params,
         ).fetchall()

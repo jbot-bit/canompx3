@@ -36,7 +36,7 @@ from trading_app.rolling_portfolio import (
     load_rolling_validated_strategies,
 )
 from trading_app.strategy_fitness import compute_fitness
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # =========================================================================
 # Live portfolio specification
@@ -223,7 +223,7 @@ def _load_best_regime_variant(
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        deployable_where = deployable_validated_predicate(con, "vs")
+        shelf_relation = deployable_validated_relation(con, alias="vs")
         rows = con.execute(
             f"""
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
@@ -235,7 +235,7 @@ def _load_best_regime_variant(
                    vs.noise_risk, vs.oos_exp_r,
                    es.median_risk_points,
                    1.0 as stop_multiplier
-            FROM validated_setups vs
+            FROM {shelf_relation}
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id
             INNER JOIN family_rr_locks frl
@@ -250,7 +250,6 @@ def _load_best_regime_variant(
               AND vs.orb_label = ?
               AND vs.entry_model = ?
               AND vs.filter_type = ?
-              AND {deployable_where}
               AND vs.expectancy_r >= ?
             ORDER BY vs.fdr_significant DESC NULLS LAST, vs.expectancy_r DESC NULLS LAST
             LIMIT 1
@@ -335,7 +334,7 @@ def _jk_fallback_rr(
         # No ORDER BY sharpe_ratio here — JK filtering + best-pick done in Python
         # to avoid drift check #44 false positive (Sharpe ORDER BY is intentional
         # inside JK-equal set, but check can't distinguish context).
-        deployable_where = deployable_validated_predicate(con, "vs")
+        shelf_relation = deployable_validated_relation(con, alias="vs")
         alt_rows = con.execute(
             f"""
             SELECT vs.strategy_id, vs.instrument, vs.orb_label, vs.entry_model,
@@ -347,7 +346,7 @@ def _jk_fallback_rr(
                    vs.noise_risk, vs.oos_exp_r,
                    es.median_risk_points,
                    1.0 as stop_multiplier
-            FROM validated_setups vs
+            FROM {shelf_relation}
             LEFT JOIN experimental_strategies es
               ON vs.strategy_id = es.strategy_id
             WHERE vs.instrument = ?
@@ -357,7 +356,6 @@ def _jk_fallback_rr(
               AND vs.orb_minutes = ?
               AND vs.confirm_bars = ?
               AND vs.rr_target != ?
-              AND {deployable_where}
               AND vs.expectancy_r >= ?
         """,
             [instrument, orb_label, entry_model, filter_type, orb_min, cb, locked_rr, min_expectancy_r],

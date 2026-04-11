@@ -31,7 +31,7 @@ from pipeline.cost_model import COST_SPECS
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS
-from trading_app.validated_shelf import deployable_validated_predicate
+from trading_app.validated_shelf import deployable_validated_relation
 
 # ---------------------------------------------------------------------------
 # Literature-grounded constants (do NOT tune on backtest — see spec §Parameter Source)
@@ -222,14 +222,13 @@ def compute_lane_scores(
 
     try:
         # Load all active validated strategies
-        deployable_where = deployable_validated_predicate(con)
+        shelf_relation = deployable_validated_relation(con, alias="vs")
         strategies = con.execute(
             f"""
             SELECT strategy_id, instrument, orb_label, entry_model,
                    rr_target, confirm_bars, filter_type, stop_multiplier,
                    sample_size
-            FROM validated_setups
-            WHERE {deployable_where}
+            FROM {shelf_relation}
             ORDER BY instrument, orb_label
             """
         ).fetchall()
