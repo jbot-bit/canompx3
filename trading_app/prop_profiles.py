@@ -398,7 +398,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         account_size=50_000,
         copies=2,  # Start with 1-2 Express, scale to 5 after proving loop
         stop_multiplier=0.75,
-        max_slots=7,
+        max_slots=6,
         active=True,
         allowed_sessions=frozenset(
             {
@@ -406,7 +406,6 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "TOKYO_OPEN",
                 "NYSE_OPEN",
                 "COMEX_SETTLE",
-                "CME_PRECLOSE",
             }
         ),
         allowed_instruments=frozenset({"MNQ"}),
@@ -478,40 +477,40 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "COMEX_SETTLE",
                 max_orb_size_pts=80.0,
             ),
-            # CME_PRECLOSE X_MES_ATR60: highest Sharpe 1.88, new session,
-            # new family 5e7, cross-asset filter using MES ATR60.
-            DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60",
-                "MNQ",
-                "CME_PRECLOSE",
-                max_orb_size_pts=120.0,
-            ),
+            # --- REMOVED 2026-04-12 ---
+            # MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60 was deployed on
+            # 2026-04-12 and failed three locked criteria on its 2026
+            # forward window at N=42:
+            #   C6 WFE = 0.25 (< 0.50 literature threshold)
+            #   C8 OOS ratio = 0.037 / 0.140 = 26% (< 40% threshold)
+            #   C12 Shiryaev-Roberts ALARM on first monitor pass
+            # Per pre_registered_criteria.md C12, SR alarm moves a lane to
+            # suspended pending manual review. Review outcome: REMOVE.
+            # Hypothesis: X_MES_ATR60 cross-asset filter is timing-mismatched
+            # in the 2026 high-vol regime (MNQ ORB median +95%). Consider
+            # re-addition only after a fresh discovery run with explicit
+            # 2026-onward regime conditioning.
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "7-lane MNQ-only auto profile. Core 5 ORB_G5 lanes from 2026-04-10 "
-            "multi-RR discovery; expansion 2 pure-new-session lanes from "
-            "2026-04-12 profit expansion (COMEX_SETTLE OVNRNG, CME_PRECLOSE "
-            "X_MES_ATR60). Same-session candidates were evaluated and rejected "
-            "after Monte Carlo showed C11 regression due to concurrent-drawdown "
-            "compounding. C11 operational pass improved from 86.2% to 88.4% "
-            "post-expansion with higher p50 PnL and lower trailing DD breach. "
+            "6-lane MNQ-only auto profile. Core 5 ORB_G5 lanes from 2026-04-10 "
+            "multi-RR discovery + 1 expansion lane (COMEX_SETTLE OVNRNG_100, "
+            "2026-04-12). "
+            "Literature-grounded review on 2026-04-12 retired "
+            "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60 after three simultaneous "
+            "criterion failures on its 2026 forward window: C6 WFE 0.25 (< 0.50), "
+            "C8 OOS ratio 26% (< 40%), C12 Shiryaev-Roberts ALARM. Hypothesis: "
+            "X_MES_ATR60 cross-asset filter is timing-mismatched in the 2026 "
+            "high-vol regime (MNQ ORB median +95%). "
+            "COMEX_SETTLE OVNRNG_100 remains in WATCH: C6 WFE 0.52, C8 ratio "
+            "53%, SR ALARM at N=58. Both threshold criteria pass barely; the "
+            "SR alarm is the only trigger. Review outcome matches L3 NYSE_OPEN "
+            "standard — reinstated with locked re-check at N>=100: if SR remains "
+            "ALARM AND per-lane 2026 ExpR < 0.40 * IS ExpR OR WFE < 0.50, retire. "
             "All lanes cross-referenced against validated_setups via drift "
-            "check 95. "
-            "WATCH (2026-04-12): both expansion lanes (COMEX_SETTLE OVNRNG_100, "
-            "CME_PRECLOSE X_MES_ATR60) tripped Shiryaev-Roberts ALARM on first "
-            "monitor pass at N=58 and N=42 respectively. Per-lane 2026 forward "
-            "ExpR is still positive (+0.104 and +0.037) but materially below IS "
-            "validation (-52% and -78%). Hypothesis: vol-conditional filters "
-            "(OVNRNG_100, X_MES_ATR60) are timing-mismatched in the 2026 high-vol "
-            "regime where MNQ ORB median doubled. The same regime is BENEFITING "
-            "the unconditional core ORB_G5 lanes (2026 ExpR is +112% to +286% "
-            "over IS for L1/L2/L4/L5). Aggregate C11 already incorporates the "
-            "2026 weakness and still favors the 7-lane config. Re-check trigger: "
-            "after N>=100 monitored trades on each expansion lane, rerun "
-            "`python -m trading_app.sr_monitor`. If SR remains ALARM AND per-lane "
-            "ExpR < +0.05, revert that specific lane. See deferred-findings.md "
-            "ledger entry SR-L6L7 for the full audit trail."
+            "check 95. See deferred-findings.md ledger entries SR-L6L7 and "
+            "L7-RETIRE for the full audit trail including the bias-stripping "
+            "re-audit that flipped the Option B call."
         ),
     ),
     # =========================================================================

@@ -290,20 +290,26 @@ class TestLaneRegistryOrbCap:
         the 2026-04-10 multi-RR discovery) must NOT raise. This is the live
         bot's ORB-cap loader path and was a latent production bug before
         2026-04-12 — session_orchestrator.__init__ would crash.
+
+        Structure-based: the test asserts that the three core multi-RR
+        sessions (EUROPE_FLOW, TOKYO_OPEN) have registry entries and the
+        caps they carry. Which additional single-lane sessions are present
+        (COMEX_SETTLE, CME_PRECLOSE, etc.) varies as profit expansions
+        add and retire lanes, so we don't pin them here.
         """
-        # Live active profile has EUROPE_FLOW×2, TOKYO_OPEN×2, NYSE_OPEN×2
-        # after 2026-04-12 expansion. All session-duplicated lanes share
-        # identical max_orb_size_pts.
         registry = get_lane_registry("topstep_50k_mnq_auto")
         assert "EUROPE_FLOW" in registry
         assert "TOKYO_OPEN" in registry
         assert "NYSE_OPEN" in registry
-        assert "COMEX_SETTLE" in registry
-        assert "CME_PRECLOSE" in registry
         assert registry["EUROPE_FLOW"]["max_orb_size_pts"] == 120.0
         assert registry["TOKYO_OPEN"]["max_orb_size_pts"] == 80.0
         assert registry["NYSE_OPEN"]["max_orb_size_pts"] == 80.0
-        assert registry["COMEX_SETTLE"]["max_orb_size_pts"] == 80.0
+        # Every registry entry must carry a cap regardless of which
+        # sessions are currently deployed.
+        for label, info in registry.items():
+            assert info.get("max_orb_size_pts") is not None, (
+                f"{label} registry entry missing max_orb_size_pts"
+            )
 
     def test_duplicate_session_profile_preserves_all_lane_definitions(self):
         lanes = get_profile_lane_definitions("topstep_50k_type_a")
