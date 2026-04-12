@@ -29,7 +29,7 @@ Generated from `scripts/tools/render_system_authority_map.py` and
 | Category | Purpose | Canonical examples | Mutation rule |
 |---|---|---|---|
 | Doctrine | Human-facing binding rules | `CLAUDE.md`, `TRADING_RULES.md`, `RESEARCH_RULES.md`, `docs/institutional/pre_registered_criteria.md`, `docs/governance/document_authority.md` | Update only when policy or workflow changes |
-| Canonical registries | Stable code truth for changing facts and rules | `pipeline/system_authority.py`, `pipeline/asset_configs.py`, `pipeline/cost_model.py`, `pipeline/dst.py`, `trading_app/config.py`, `trading_app/holdout_policy.py`, `trading_app/prop_profiles.py` | One owned source per concept; no duplicate literals downstream |
+| Canonical registries | Stable code truth for changing facts and rules | `pipeline/system_authority.py`, `pipeline/system_context.py`, `pipeline/asset_configs.py`, `pipeline/cost_model.py`, `pipeline/dst.py`, `trading_app/config.py`, `trading_app/holdout_policy.py`, `trading_app/prop_profiles.py` | One owned source per concept; no duplicate literals downstream |
 | Command writers | The only places allowed to mutate durable state | `pipeline/init_db.py`, `trading_app/db_manager.py`, `trading_app/strategy_validator.py`, `trading_app/edge_families.py`, `scripts/migrations/` | Mutations must go through owned command paths |
 | Published read models / contracts | Stable query surfaces for operational consumers | `pipeline/db_contracts.py`, `trading_app/validated_shelf.py`, `DB views active_validated_setups and deployable_validated_setups`, `scripts/tools/project_pulse.py` | Readers consume these instead of rebuilding semantics ad hoc |
 | Derived operational state | Runtime snapshots and envelopes derived from canonical truth | `trading_app/lifecycle_state.py`, `trading_app/derived_state.py`, `data/state/sr_state.json`, `Criterion 11 survival reports` | Must validate envelope/fingerprint before trust |
@@ -49,6 +49,7 @@ Generated from `scripts/tools/render_system_authority_map.py` and
 | What is deployable on the validated shelf? | `pipeline/db_contracts.py + deployable_validated_setups` |
 | What are the active execution lanes? | `trading_app/prop_profiles.py` |
 | What is the unified operational block/allow state? | `trading_app/lifecycle_state.py` |
+| What is the canonical repo/dev control-plane context? | `pipeline/system_context.py + scripts/tools/system_context.py` |
 | What is planning vs current implementation? | `ROADMAP.md is planning only; code/DB decide current implementation` |
 
 ## Enforcement Rules

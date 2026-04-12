@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -762,40 +764,56 @@ class TestCollectSystemIdentity:
         root = Path("/repo/wt")
         canonical = Path("/repo")
         db_path = Path("/repo/gold.db")
-        mock_asset_configs = MagicMock(ACTIVE_ORB_INSTRUMENTS=["MNQ", "MGC"])
-        mock_db_contracts = MagicMock(
-            ACTIVE_VALIDATED_VIEW="active_validated_setups",
-            DEPLOYABLE_VALIDATED_VIEW="deployable_validated_setups",
-        )
-        mock_paths = MagicMock(
-            GOLD_DB_PATH=Path("/repo/gold.db"),
-            LIVE_JOURNAL_DB_PATH=Path("/repo/live_journal.db"),
-        )
-        mock_authority = MagicMock(
-            DOCTRINE_DOCS=("CLAUDE.md", "TRADING_RULES.md"),
-            SYSTEM_AUTHORITY_BACKBONE_MODULES=("pipeline/system_authority.py", "pipeline/db_contracts.py"),
-            SYSTEM_AUTHORITY_MAP_RELATIVE_PATH=Path("docs/governance/system_authority_map.md"),
-        )
-        mock_profiles = MagicMock()
-        mock_profiles.get_active_profile_ids.return_value = ["topstep_50k_mnq_auto"]
-        with patch.dict(
-            "sys.modules",
-            {
-                "pipeline.asset_configs": mock_asset_configs,
-                "pipeline.db_contracts": mock_db_contracts,
-                "pipeline.paths": mock_paths,
-                "pipeline.system_authority": mock_authority,
-                "trading_app.prop_profiles": mock_profiles,
-            },
+        snapshot = MagicMock()
+        snapshot.git.canonical_root = "/repo"
+        snapshot.git.selected_root = "/repo/wt"
+        snapshot.git.branch = "main"
+        snapshot.git.head_sha = "abc123"
+        snapshot.git.dirty_count = 0
+        snapshot.git.in_linked_worktree = True
+        snapshot.db.canonical_db_path = "/repo/gold.db"
+        snapshot.db.selected_db_path = "/repo/gold.db"
+        snapshot.db.db_override_active = False
+        snapshot.db.live_journal_db_path = "/repo/live_journal.db"
+        snapshot.authority.active_orb_instruments = ["MGC", "MNQ"]
+        snapshot.authority.active_profiles = ["topstep_50k_mnq_auto"]
+        snapshot.authority.authority_map_doc = "docs/governance/system_authority_map.md"
+        snapshot.authority.doctrine_docs = ["CLAUDE.md", "TRADING_RULES.md"]
+        snapshot.authority.backbone_modules = ["pipeline/system_authority.py", "pipeline/system_context.py"]
+        snapshot.authority.published_relations = {
+            "active": "active_validated_setups",
+            "deployable": "deployable_validated_setups",
+        }
+        snapshot.interpreter.context = "codex-wsl"
+        snapshot.interpreter.current_python = "/repo/.venv-wsl/bin/python"
+        snapshot.interpreter.current_prefix = "/repo/.venv-wsl"
+        snapshot.interpreter.expected_python = "/repo/.venv-wsl/bin/python"
+        snapshot.interpreter.expected_prefix = "/repo/.venv-wsl"
+        snapshot.interpreter.matches_expected = True
+        snapshot.active_stages = []
+        snapshot.claims = []
+
+        decision = MagicMock()
+        decision.allowed = True
+        decision.warnings = []
+        decision.applicable_controls = ["pipeline/check_drift.py", "pipeline/system_context.py"]
+
+        with (
+            patch("pipeline.system_context.build_system_context", return_value=snapshot),
+            patch("pipeline.system_context.evaluate_system_policy", return_value=decision),
         ):
             summary, items = collect_system_identity(root, canonical, db_path)
 
         assert items == []
         assert summary is not None
-        assert summary["canonical_db_path"] == str(Path("/repo/gold.db"))
+        assert summary["canonical_db_path"] == "/repo/gold.db"
         assert summary["active_orb_instruments"] == ["MGC", "MNQ"]
         assert summary["published_relations"]["deployable"] == "deployable_validated_setups"
         assert summary["authority_map_doc"] == "docs/governance/system_authority_map.md"
+        assert summary["interpreter"]["current_prefix"] == "/repo/.venv-wsl"
+        assert summary["interpreter"]["expected_prefix"] == "/repo/.venv-wsl"
+        assert summary["interpreter"]["matches_expected"] is True
+        assert summary["policy"]["allowed"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -1264,3 +1282,19 @@ class TestUpcomingSessions:
         with patch.dict("sys.modules", {"pipeline.dst": None}):
             result = collect_upcoming_sessions(tmp_path / "nonexistent.db")
         assert result == []
+
+
+class TestCliBootstrap:
+    def test_script_help_runs_via_direct_path(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+
+        result = subprocess.run(
+            [sys.executable, "scripts/tools/project_pulse.py", "--help"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0
+        assert "Project pulse" in result.stdout

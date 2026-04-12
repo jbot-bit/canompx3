@@ -1275,7 +1275,7 @@ def run_discovery(
         # Scout Risk 3 and Phase A reviewer rationale captured in
         # docs/runtime/stages/phase-4-1-discovery-hypothesis-file.md D-4.
         if hypothesis_sha is not None:
-            check_single_use(hypothesis_sha, con)
+            check_single_use(hypothesis_sha, con, orb_minutes=orb_minutes)
 
         # Determine which sessions to search
         sessions = get_enabled_sessions(instrument)

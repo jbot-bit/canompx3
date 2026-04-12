@@ -36,6 +36,12 @@ REGIME_MIN_TRADES = REGIME_MIN_SAMPLES
 compute_family_hash = compute_trade_day_hash
 
 
+def _stop_multiplier_tag(stop_multiplier: float | None) -> str:
+    """Encode stop multiplier as a stable family-key segment."""
+    sm = 1.0 if stop_multiplier is None else float(stop_multiplier)
+    return f"sm{int(round(sm * 100)):03d}"
+
+
 def classify_family(member_count, avg_shann, cv_expr, min_trades):
     """Classify family robustness status."""
     if member_count >= MIN_FAMILY_SIZE:
@@ -158,7 +164,7 @@ def build_edge_families_for_instrument(con, instrument: str) -> int:
     strategies = con.execute(
         f"""
         SELECT vs.strategy_id, vs.expectancy_r, vs.sharpe_ann, vs.sample_size,
-               es.trade_day_hash, vs.orb_minutes
+               es.trade_day_hash, vs.orb_minutes, vs.stop_multiplier
         FROM {shelf_relation}
         LEFT JOIN experimental_strategies es ON vs.strategy_id = es.strategy_id
         WHERE vs.instrument = ?
@@ -181,7 +187,7 @@ def build_edge_families_for_instrument(con, instrument: str) -> int:
         return 0
 
     hash_map = {}
-    for sid, _expr, _shann, _sample, precomputed_hash, _orb_min in strategies:
+    for sid, _expr, _shann, _sample, precomputed_hash, _orb_min, _stop_multiplier in strategies:
         if precomputed_hash:
             hash_map[sid] = precomputed_hash
             continue
@@ -195,8 +201,8 @@ def build_edge_families_for_instrument(con, instrument: str) -> int:
         hash_map[sid] = compute_family_hash([r[0] for r in days])
 
     families = defaultdict(list)
-    for sid, expr, shann, sample, _precomputed_hash, orb_min in strategies:
-        family_key = f"{instrument}_{orb_min or 5}m_{hash_map[sid]}"
+    for sid, expr, shann, sample, _precomputed_hash, orb_min, stop_multiplier in strategies:
+        family_key = f"{instrument}_{orb_min or 5}m_{_stop_multiplier_tag(stop_multiplier)}_{hash_map[sid]}"
         families[family_key].append((sid, expr, shann, sample))
 
     status_counts = defaultdict(int)

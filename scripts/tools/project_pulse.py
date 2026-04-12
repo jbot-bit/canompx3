@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -28,7 +29,44 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT))
+
+
+def _preferred_repo_python() -> Path | None:
+    if os.name == "nt":
+        candidate = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+    else:
+        candidate = PROJECT_ROOT / ".venv-wsl" / "bin" / "python"
+    return candidate if candidate.exists() else None
+
+
+def _preferred_repo_prefix(expected_python: Path) -> Path:
+    return expected_python.parent.parent.resolve()
+
+
+def _ensure_repo_python() -> None:
+    expected_python = _preferred_repo_python()
+    if expected_python is None:
+        return
+    current_prefix = Path(sys.prefix).resolve()
+    expected_prefix = _preferred_repo_prefix(expected_python)
+    if current_prefix == expected_prefix or os.environ.get("CANOMPX3_BOOTSTRAP_DONE") == "1":
+        return
+
+    env = os.environ.copy()
+    env["CANOMPX3_BOOTSTRAP_DONE"] = "1"
+    env.setdefault("CANOMPX3_BOOTSTRAPPED_FROM", str(Path(sys.executable).resolve()))
+    raise SystemExit(
+        subprocess.call(
+            [str(expected_python), str(Path(__file__).resolve()), *sys.argv[1:]],
+            cwd=str(PROJECT_ROOT),
+            env=env,
+        )
+    )
+
+
+_ensure_repo_python()
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.validated_shelf import deployable_validated_relation
@@ -1003,35 +1041,79 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
     """Expose the repo's core identity from linked canonical registries."""
     items: list[PulseItem] = []
     try:
-        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
-        from pipeline.db_contracts import ACTIVE_VALIDATED_VIEW, DEPLOYABLE_VALIDATED_VIEW
-        from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
-        from pipeline.system_authority import (
-            DOCTRINE_DOCS,
-            SYSTEM_AUTHORITY_BACKBONE_MODULES,
-            SYSTEM_AUTHORITY_MAP_RELATIVE_PATH,
-        )
-        from trading_app.prop_profiles import get_active_profile_ids
+        from pipeline.system_context import build_system_context, evaluate_system_policy, infer_context_name
 
-        canonical_db_path = GOLD_DB_PATH.resolve()
-        selected_db_path = db_path.resolve()
+        context_name = infer_context_name(root, Path(sys.executable))
+
+        snapshot = build_system_context(
+            root,
+            context_name=context_name,
+            active_mode="read-only",
+            db_path=db_path,
+        )
+        decision = evaluate_system_policy(snapshot, "orientation")
         summary = {
-            "canonical_repo_root": str(canonical.resolve()),
-            "selected_repo_root": str(root.resolve()),
-            "canonical_db_path": str(canonical_db_path),
-            "selected_db_path": str(selected_db_path),
-            "db_override_active": selected_db_path != canonical_db_path,
-            "live_journal_db_path": str(LIVE_JOURNAL_DB_PATH.resolve()),
-            "active_orb_instruments": sorted(ACTIVE_ORB_INSTRUMENTS),
-            "active_profiles": sorted(get_active_profile_ids()),
-            "authority_map_doc": SYSTEM_AUTHORITY_MAP_RELATIVE_PATH.as_posix(),
-            "doctrine_docs": list(DOCTRINE_DOCS),
-            "backbone_modules": list(SYSTEM_AUTHORITY_BACKBONE_MODULES),
-            "published_relations": {
-                "active": ACTIVE_VALIDATED_VIEW,
-                "deployable": DEPLOYABLE_VALIDATED_VIEW,
+            "canonical_repo_root": snapshot.git.canonical_root,
+            "selected_repo_root": snapshot.git.selected_root,
+            "canonical_db_path": snapshot.db.canonical_db_path,
+            "selected_db_path": snapshot.db.selected_db_path,
+            "db_override_active": snapshot.db.db_override_active,
+            "live_journal_db_path": snapshot.db.live_journal_db_path,
+            "active_orb_instruments": snapshot.authority.active_orb_instruments,
+            "active_profiles": snapshot.authority.active_profiles,
+            "authority_map_doc": snapshot.authority.authority_map_doc,
+            "doctrine_docs": snapshot.authority.doctrine_docs,
+            "backbone_modules": snapshot.authority.backbone_modules,
+            "published_relations": snapshot.authority.published_relations,
+            "interpreter": {
+                "context": snapshot.interpreter.context,
+                "current_python": snapshot.interpreter.current_python,
+                "current_prefix": snapshot.interpreter.current_prefix,
+                "expected_python": snapshot.interpreter.expected_python,
+                "expected_prefix": snapshot.interpreter.expected_prefix,
+                "matches_expected": snapshot.interpreter.matches_expected,
+            },
+            "git": {
+                "branch": snapshot.git.branch,
+                "head_sha": snapshot.git.head_sha,
+                "dirty_count": snapshot.git.dirty_count,
+                "in_linked_worktree": snapshot.git.in_linked_worktree,
+            },
+            "active_stages": [
+                {
+                    "path": stage.path,
+                    "task": stage.task,
+                    "mode": stage.mode,
+                    "agent": stage.agent,
+                }
+                for stage in snapshot.active_stages
+            ],
+            "fresh_claims": [
+                {
+                    "tool": claim.tool,
+                    "branch": claim.branch,
+                    "mode": claim.mode,
+                    "root": claim.root,
+                }
+                for claim in snapshot.claims
+            ],
+            "policy": {
+                "allowed": decision.allowed,
+                "warnings": [issue.message for issue in decision.warnings],
+                "controls": decision.applicable_controls,
             },
         }
+        for issue in decision.warnings:
+            if issue.code == "wrong_interpreter":
+                items.append(
+                    PulseItem(
+                        category="decaying",
+                        severity="medium",
+                        source="system_identity",
+                        summary="Interpreter mismatch for repo-managed context",
+                        detail=issue.detail,
+                    )
+                )
         return summary, items
     except Exception as exc:
         items.append(

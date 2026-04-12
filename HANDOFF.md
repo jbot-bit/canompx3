@@ -6,6 +6,213 @@
 
 ---
 
+## Update (2026-04-13 — control-plane review hardening: direct-entry shell + venv truth)
+
+### Headline
+
+The new repo/dev control plane needed one more hardening pass after review.
+The design intent was right, but two live-shell gaps remained:
+
+- direct `python3 scripts/tools/session_preflight.py ...` and
+  `python3 scripts/tools/system_context.py ...` did not reliably work from a
+  plain shell
+- interpreter matching used resolved binary equality, which is wrong for UV
+  symlinked venv interpreters and can falsely treat "outside the repo venv" as
+  "inside it"
+
+### Findings
+
+- `scripts/tools/session_preflight.py` and `scripts/tools/system_context.py`
+  initially depended on import-time project modules without a hardened direct
+  script bootstrap
+  - plain `python3 ...` first failed on missing repo module path
+  - after adding `sys.path` bootstrap, it still failed on missing third-party
+    deps because plain `python3` was not in the repo venv
+- `pipeline/system_context.py` originally compared `Path(sys.executable).resolve()`
+  against the resolved repo interpreter path
+  - in this repo, `.venv-wsl/bin/python` is a symlink to the shared UV CPython
+    binary, so resolved-path equality collapses the venv and the base
+    interpreter into the same value
+  - the correct contract is the environment root (`sys.prefix`), not the
+    resolved binary path
+- live `system_context` output also showed fresh test claims from unrelated tmp
+  repos bleeding into the shared claim surface
+  - not a blocker here, but it polluted the canonical snapshot and could become
+    a false signal later
+
+### What changed
+
+- hardened `scripts/tools/session_preflight.py`
+  - direct-script bootstrap now:
+    - adds repo root to `sys.path`
+    - re-execs into the repo-managed interpreter when launched from plain
+      `python3`
+    - preserves and prints `CANOMPX3_BOOTSTRAPPED_FROM` so the original shell
+      interpreter is not hidden
+- hardened `scripts/tools/system_context.py`
+  - same direct-script bootstrap behavior as preflight
+- hardened `pipeline/system_context.py`
+  - interpreter contract now uses repo venv roots / `sys.prefix` for
+    `matches_expected`
+  - `infer_context_name()` now detects context from prefix first, with binary
+    fallback only as a weaker secondary path
+  - `InterpreterContext` now carries:
+    - `current_prefix`
+    - `expected_prefix`
+  - fresh claims are filtered to the current repo anchor (git-common-dir),
+    preventing unrelated tmp/test claims from leaking into live control state
+- updated `scripts/tools/project_pulse.py`
+  - system identity now exposes the prefix-level interpreter truth, matching
+    the actual policy contract
+- added regression coverage for:
+  - direct-path CLI bootstrap (`--help`) for both scripts
+  - prefix-based context detection
+  - unrelated-claim filtering
+
+### Verification
+
+- `./.venv-wsl/bin/python -m py_compile pipeline/system_context.py scripts/tools/system_context.py scripts/tools/session_preflight.py scripts/tools/project_pulse.py tests/test_pipeline/test_system_context.py tests/test_tools/test_session_preflight.py tests/test_tools/test_project_pulse.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_system_context.py tests/test_tools/test_session_preflight.py tests/test_tools/test_project_pulse.py -q`
+  - `94 passed`
+- real direct entrypoints now work from plain shell:
+  - `python3 scripts/tools/session_preflight.py --help`
+  - `python3 scripts/tools/system_context.py --help`
+  - `python3 scripts/tools/project_pulse.py --help`
+- real preflight now shows the bootstrap lineage explicitly:
+  - `python3 scripts/tools/session_preflight.py --context codex-wsl`
+  - output includes:
+    - `Interpreter: /home/joshd/.local/share/uv/python/.../python3.13`
+    - `Bootstrapped from: /usr/bin/python3.12`
+- `scripts/tools/project_pulse.py` now uses the same repo-interpreter bootstrap
+  as the other operator entrypoints, so the direct plain-shell path works too:
+  - `python3 scripts/tools/project_pulse.py --fast --format json`
+- real `system_context` readback now shows correct venv truth and no stray tmp
+  claims:
+  - `current_prefix = .venv-wsl`
+  - `expected_prefix = .venv-wsl`
+  - `matches_expected = true`
+  - claims list contains only the live repo claim
+
+## Update (2026-04-12 — unified repo/dev control plane: canonical system context + policy shell)
+
+### Headline
+
+The repo now has a real shared control-plane layer for repo/dev state instead
+of splitting that truth across preflight heuristics, pulse identity glue, and
+tribal knowledge. Added canonical `pipeline/system_context.py` plus
+`scripts/tools/system_context.py`, then rewired `session_preflight` and
+`project_pulse` to consume that shared context/policy contract.
+
+### What changed
+
+- added `pipeline/system_context.py`
+  - canonical structured snapshot for repo/dev control state:
+    - repo/worktree identity via git plumbing
+    - interpreter/env identity
+    - DB identity
+    - fresh session claims
+    - active stage files / scope locks
+    - authority surfaces
+  - shared policy evaluator for:
+    - `orientation`
+    - `session_start_read_only`
+    - `session_start_mutating`
+  - local decision-log helper for future use
+- added `scripts/tools/system_context.py`
+  - text/json CLI for the canonical system context + policy decision
+- hardened `scripts/tools/session_preflight.py`
+  - now delegates warning/block decisions to `pipeline.system_context`
+  - **mutating sessions with the wrong interpreter are now BLOCKED**
+    instead of merely warned
+  - preserved claim/report surface for existing callers/tests
+- hardened `scripts/tools/project_pulse.py`
+  - system identity now comes from the shared system-context snapshot
+  - pulse carries richer control-plane identity:
+    - interpreter contract
+    - git identity
+    - fresh claims
+    - active stage files
+    - policy summary
+- updated `pipeline/system_authority.py` and regenerated
+  `docs/governance/system_authority_map.md`
+  - `pipeline/system_context.py` is now registered as a canonical backbone
+    module / truth surface
+- added focused regression coverage in:
+  - `tests/test_pipeline/test_system_context.py`
+  - `tests/test_tools/test_session_preflight.py`
+  - `tests/test_tools/test_project_pulse.py`
+
+### Why it matters
+
+Before this slice, the project had several strong point guards but no single
+shared repo/dev shell:
+
+- `session_preflight` had local warning/block logic
+- `project_pulse` rebuilt a separate partial identity view
+- worktree/interpreter/stage/claim truth was not exposed through one canonical
+  contract
+
+Now the repo has the first institutional-grade version of that layer:
+
+- one structured input document
+- one policy decision surface
+- one CLI/read model
+- shared consumers
+
+This follows the same pattern as a lightweight local policy/control plane
+without dragging in a full external policy engine.
+
+### Design notes / flaws found and fixed during implementation
+
+- initial add-file patches for `pipeline/system_context.py`,
+  `scripts/tools/system_context.py`, and the stage file did not actually land
+  in the live worktree even though the patch tool reported success; files were
+  re-created explicitly and verification restarted from scratch
+- first cut misclassified `git status` timeout as "dirty" instead of
+  "observability degraded"
+  - fixed by splitting:
+    - `git_status_unavailable`
+    - `dirty_worktree`
+  - and increasing the git timeout budget from `2s` to `5s` in the shared
+    control-plane module so real repo state is recovered on this large tree
+- first authority-map update did not land in `pipeline/system_authority.py`
+  even though the generated doc was re-rendered
+  - fixed by patching the source registry, then re-rendering the doc again
+
+### Verification
+
+- `./.venv-wsl/bin/python -m py_compile pipeline/system_context.py scripts/tools/system_context.py scripts/tools/session_preflight.py scripts/tools/project_pulse.py tests/test_pipeline/test_system_context.py tests/test_tools/test_session_preflight.py tests/test_tools/test_project_pulse.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_system_context.py tests/test_tools/test_session_preflight.py tests/test_tools/test_project_pulse.py -q`
+  - `88 passed`
+- live `system_context` read:
+  - `./.venv-wsl/bin/python scripts/tools/system_context.py --context codex-wsl --action session_start_mutating --tool codex --mode mutating`
+  - current behavior:
+    - interpreter contract matches
+    - repo dirty count resolves correctly (`298`)
+    - active stage files surfaced
+    - decision = `ALLOW` with warnings, not false blocker
+- live preflight:
+  - `./.venv-wsl/bin/python scripts/tools/session_preflight.py --context codex-wsl --claim codex --mode mutating --quiet`
+  - emits only the expected dirty-tree warning in this dirty checkout; no false
+    interpreter blocker
+- live pulse:
+  - `./.venv-wsl/bin/python scripts/tools/project_pulse.py --fast --format json`
+  - returns successfully through the new shared identity path and now exposes
+    the richer `system_identity` control-plane summary
+
+### Scope left intentionally out of this slice
+
+- no path-level hard blocking against `scope_lock` yet
+  - active stage files are surfaced through the shared context, but edit-intent
+    enforcement still needs a separate wiring pass
+- no rollout into live-trading runtime gates
+  - this slice hardens repo/dev control surfaces first
+- no automatic decision-log writes yet
+  - helper exists, but always-on logging was deferred to avoid adding
+    uncontrolled write noise before the contract settled
+
 ## Update (2026-04-12 — control-state reconciliation + fingerprint symmetry)
 
 ### Headline

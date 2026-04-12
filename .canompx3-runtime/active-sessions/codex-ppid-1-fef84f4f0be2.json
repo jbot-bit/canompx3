@@ -1,0 +1,12 @@
+{
+  "tool": "codex",
+  "branch": "wt-codex-work-capsule",
+  "head_sha": "f8b583d45b4244fc0fa66142b79a0f31e7f3c5ca",
+  "started_at": "2026-04-12T23:20:53.334784+00:00",
+  "pid": 2,
+  "session_owner": "ppid-1",
+  "mode": "mutating",
+  "root": "/mnt/c/Users/joshd/canompx3/.worktrees/tasks/work-capsule",
+  "capsule_path": "docs/runtime/capsules/work-capsule.md",
+  "worktree_name": "work-capsule"
+}

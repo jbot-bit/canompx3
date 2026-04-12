@@ -12,6 +12,8 @@ import logging
 from collections import defaultdict
 from itertools import combinations
 
+from pipeline.cost_model import get_cost_spec
+from trading_app.config import apply_tight_stop
 from trading_app.validated_shelf import deployable_validated_relation
 
 logger = logging.getLogger(__name__)
@@ -155,7 +157,7 @@ def compute_family_pbo(
     shelf_relation = deployable_validated_relation(con)
     members = con.execute(
         f"""SELECT strategy_id, orb_label, orb_minutes, entry_model,
-                  rr_target, confirm_bars, filter_type
+                  rr_target, confirm_bars, filter_type, stop_multiplier
            FROM {shelf_relation}
            WHERE family_hash = ? AND instrument = ?""",
         [family_hash, instrument],
@@ -188,36 +190,25 @@ def compute_family_pbo(
                 )
                 return {"pbo": None, "n_splits": 0, "n_negative_oos": 0, "logit_pbo": None}
 
-    # Bulk-load outcomes for ALL members in one query (eliminates N+1 loop)
-    # Map (orb_label, orb_minutes, entry_model, rr_target, confirm_bars) -> strategy_id
-    member_keys = {}
-    # NOTE: Key collision (same 5-tuple, different filter_type) is structurally
-    # prevented by edge family grouping — different filters → different trade days
-    # → different family_hash. Assertion below guards against future regressions.
-    for sid, _orb_label, orb_minutes, entry_model, rr_target, confirm_bars, _ft in members:
-        key = (_orb_label, orb_minutes, entry_model, rr_target, confirm_bars)
-        if key in member_keys:
-            logger.warning(
-                "PBO key collision in family %s: %s and %s share 5-tuple %s",
-                family_hash,
-                member_keys[key],
-                sid,
-                key,
-            )
-        member_keys[key] = sid
+    # Bulk-load raw outcomes for all member variants once, then apply any
+    # stop-multiplier transforms per strategy id.
+    raw_member_keys = {
+        (_orb_label, orb_minutes, entry_model, rr_target, confirm_bars)
+        for _sid, _orb_label, orb_minutes, entry_model, rr_target, confirm_bars, _ft, _sm in members
+    }
 
-    if not member_keys:
+    if not raw_member_keys:
         return {"pbo": None, "n_splits": 0, "n_negative_oos": 0, "logit_pbo": None}
 
     # Single query with DuckDB multi-column IN (VALUES syntax)
-    values_rows = list(member_keys.keys())
+    values_rows = list(raw_member_keys)
     placeholders = ", ".join(["(?, ?, ?, ?, ?)"] * len(values_rows))
     flat_params = [instrument]
     for row in values_rows:
         flat_params.extend(row)
 
     rows = con.execute(
-        f"""SELECT o.trading_day, o.pnl_r,
+        f"""SELECT o.trading_day, o.pnl_r, o.mae_r, o.entry_price, o.stop_price, o.outcome,
                    o.orb_label, o.orb_minutes, o.entry_model, o.rr_target, o.confirm_bars
             FROM orb_outcomes o
             WHERE o.symbol = ?
@@ -228,18 +219,32 @@ def compute_family_pbo(
         flat_params,
     ).fetchall()
 
-    # Partition results by member key -> strategy_id
-    strategy_pnl = {}
-    for trading_day, pnl_r, _orb_label, orb_minutes, entry_model, rr_target, confirm_bars in rows:
-        # Skip non-eligible days when filter is active
+    raw_outcomes_by_key: dict[tuple, list[dict]] = defaultdict(list)
+    for trading_day, pnl_r, mae_r, entry_price, stop_price, outcome, _orb_label, orb_minutes, entry_model, rr_target, confirm_bars in rows:
         if eligible_days is not None and trading_day not in eligible_days:
             continue
         key = (_orb_label, orb_minutes, entry_model, rr_target, confirm_bars)
-        sid = member_keys.get(key)
-        if sid is not None:
-            if sid not in strategy_pnl:
-                strategy_pnl[sid] = []
-            strategy_pnl[sid].append((trading_day, pnl_r))
+        raw_outcomes_by_key[key].append(
+            {
+                "trading_day": trading_day,
+                "pnl_r": pnl_r,
+                "mae_r": mae_r,
+                "entry_price": entry_price,
+                "stop_price": stop_price,
+                "outcome": outcome,
+            }
+        )
+
+    strategy_pnl = {}
+    cost_spec = get_cost_spec(instrument)
+    for sid, _orb_label, orb_minutes, entry_model, rr_target, confirm_bars, _ft, stop_multiplier in members:
+        key = (_orb_label, orb_minutes, entry_model, rr_target, confirm_bars)
+        outcomes = list(raw_outcomes_by_key.get(key, []))
+        if not outcomes:
+            continue
+        if stop_multiplier is not None and stop_multiplier < 1.0:
+            outcomes = apply_tight_stop(outcomes, float(stop_multiplier), cost_spec)
+        strategy_pnl[sid] = [(o["trading_day"], o["pnl_r"]) for o in outcomes if o.get("pnl_r") is not None]
 
     if len(strategy_pnl) < 2:
         return {"pbo": None, "n_splits": 0, "n_negative_oos": 0, "logit_pbo": None}

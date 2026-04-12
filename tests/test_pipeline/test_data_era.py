@@ -128,8 +128,8 @@ class TestMicroLaunchDay:
         assert micro_launch_day("MES") == ASSET_CONFIGS["MES"]["minimum_start_date"]
 
     def test_mgc_post_phase_2_date(self):
-        """Pin the canonical post-Phase-2 MGC launch: 2023-09-11."""
-        assert micro_launch_day("MGC") == date(2023, 9, 11)
+        """Pin the canonical backfilled MGC micro launch: 2022-06-13."""
+        assert micro_launch_day("MGC") == date(2022, 6, 13)
 
     def test_mnq_mes_post_phase_2_date(self):
         """Pin the canonical post-Phase-2 MNQ/MES launch: 2019-05-06."""
@@ -215,9 +215,9 @@ class TestEraForTradingDay:
     def test_day_before_launch_is_parent(self):
         """trading_day == launch - 1 → PARENT (launch is inclusive)."""
         launch = micro_launch_day("MGC")
-        # launch is 2023-09-11, so 2023-09-10 is before
-        one_day_before = date(2023, 9, 10)
-        assert launch == date(2023, 9, 11)  # sanity check
+        # launch is 2022-06-13, so 2022-06-12 is before
+        one_day_before = date(2022, 6, 12)
+        assert launch == date(2022, 6, 13)  # sanity check
         assert era_for_trading_day("MGC", one_day_before) == "PARENT"
 
     def test_far_pre_launch_is_parent(self):

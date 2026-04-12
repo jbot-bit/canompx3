@@ -4,28 +4,74 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
-import json
 import os
 import shutil
 import subprocess
 import sys
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_ROOT = Path(os.environ.get("CANOMPX3_ROOT", Path.cwd()))
-import tempfile
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-ACTIVE_SESSION_DIR = Path(
-    os.environ.get(
-        "CANOMPX3_ACTIVE_SESSION_DIR",
-        os.path.join(tempfile.gettempdir(), "canompx3-active-sessions"),
+
+def _preferred_repo_python() -> Path | None:
+    if os.name == "nt":
+        candidate = PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+    else:
+        candidate = PROJECT_ROOT / ".venv-wsl" / "bin" / "python"
+    return candidate if candidate.exists() else None
+
+
+def _preferred_repo_prefix(expected_python: Path) -> Path:
+    return expected_python.parent.parent.resolve()
+
+
+def _ensure_repo_python() -> None:
+    expected_python = _preferred_repo_python()
+    if expected_python is None:
+        return
+    current_python = Path(sys.executable).resolve()
+    current_prefix = Path(sys.prefix).resolve()
+    expected_prefix = _preferred_repo_prefix(expected_python)
+    if current_prefix == expected_prefix or os.environ.get("CANOMPX3_BOOTSTRAP_DONE") == "1":
+        return
+
+    env = os.environ.copy()
+    env["CANOMPX3_BOOTSTRAP_DONE"] = "1"
+    env.setdefault("CANOMPX3_BOOTSTRAPPED_FROM", str(current_python))
+    raise SystemExit(
+        subprocess.call(
+            [str(expected_python), str(Path(__file__).resolve()), *sys.argv[1:]],
+            cwd=str(PROJECT_ROOT),
+            env=env,
+        )
     )
+
+
+_ensure_repo_python()
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from pipeline.system_context import (
+    ACTIVE_SESSION_DIR,
+    SessionClaim as SystemSessionClaim,
+    active_claim_path as system_active_claim_path,
+    branch_name as system_branch_name,
+    build_system_context,
+    dirty_files as system_dirty_files,
+    evaluate_system_policy,
+    head_sha as system_head_sha,
+    list_claims as system_list_claims,
+    read_claim as system_read_claim,
+    verify_claim as system_verify_claim,
+    write_active_claim as system_write_active_claim,
+    write_claim as system_write_claim,
 )
-CLAIM_FRESHNESS = timedelta(hours=8)
+
+DEFAULT_ROOT = Path(os.environ.get("CANOMPX3_ROOT", Path.cwd()))
 GIT_TIMEOUT_SECONDS = 2.0
 CLAIM_MODES = {"read-only", "mutating"}
+KNOWN_CONTEXTS = {"generic", "codex-wsl", "claude-windows", "claude-shell", "unknown"}
 
 
 @dataclass(frozen=True)
@@ -35,15 +81,7 @@ class HandoffSnapshot:
     summary: str | None = None
 
 
-@dataclass(frozen=True)
-class SessionClaim:
-    tool: str
-    branch: str
-    head_sha: str
-    started_at: str
-    pid: int
-    mode: str = "read-only"
-    root: str = ""
+SessionClaim = SystemSessionClaim
 
 
 def _run_git(root: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
@@ -70,27 +108,15 @@ def recent_commits(root: Path) -> list[str]:
 
 
 def branch_name(root: Path) -> str:
-    result = _run_git(root, "branch", "--show-current")
-    if result is None or result.returncode != 0:
-        return "unknown"
-    return result.stdout.strip() or "detached"
+    return system_branch_name(root)
 
 
 def head_sha(root: Path) -> str:
-    result = _run_git(root, "rev-parse", "HEAD")
-    if result is None or result.returncode != 0:
-        return "unknown"
-    return result.stdout.strip() or "unknown"
+    return system_head_sha(root)
 
 
 def dirty_files(root: Path) -> list[str]:
-    result = _run_git(root, "status", "--short")
-    if result is None:
-        return ["git status unavailable or timed out"]
-    if result.returncode != 0:
-        message = result.stderr.strip() or result.stdout.strip() or "git status failed"
-        return [message]
-    return [line for line in result.stdout.splitlines() if line.strip()]
+    return system_dirty_files(root)
 
 
 def extract_handoff_snapshot(handoff_path: Path) -> HandoffSnapshot:
@@ -117,19 +143,12 @@ def infer_claim_mode(tool: str | None) -> str:
     return "mutating"
 
 
-def _active_claim_key(root: Path, tool: str) -> str:
-    payload = f"{tool}|{root.resolve()}"
-    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
-    safe_tool = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in tool)
-    return f"{safe_tool}-{digest}.json"
-
-
 def active_claim_path(
     root: Path,
     tool: str,
     claim_dir: Path = ACTIVE_SESSION_DIR,
 ) -> Path:
-    return claim_dir / _active_claim_key(root, tool)
+    return system_active_claim_path(root, tool, claim_dir=claim_dir)
 
 
 def write_claim(
@@ -143,51 +162,20 @@ def write_claim(
 ) -> SessionClaim:
     if mode not in CLAIM_MODES:
         raise ValueError(f"Invalid claim mode: {mode}")
-    claim = SessionClaim(
-        tool=tool,
-        branch=branch,
-        head_sha=head,
-        started_at=datetime.now(UTC).isoformat(),
-        pid=os.getpid(),
-        mode=mode,
-        root=root or "",
-    )
-    claim_path.parent.mkdir(parents=True, exist_ok=True)
-    claim_path.write_text(json.dumps(asdict(claim), indent=2), encoding="utf-8")
-    return claim
+    return system_write_claim(claim_path, tool, branch, head, mode=mode, root=root)
 
 
 def read_claim(claim_path: Path) -> SessionClaim | None:
-    if not claim_path.exists():
+    claim = system_read_claim(claim_path)
+    if claim is None:
         return None
-    try:
-        data = json.loads(claim_path.read_text(encoding="utf-8"))
-        return SessionClaim(
-            tool=str(data["tool"]),
-            branch=str(data["branch"]),
-            head_sha=str(data["head_sha"]),
-            started_at=str(data["started_at"]),
-            pid=int(data["pid"]),
-            mode=str(data.get("mode") or infer_claim_mode(str(data["tool"]))),
-            root=str(data.get("root") or ""),
-        )
-    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
-        return None
+    if not claim.mode:
+        return claim.model_copy(update={"mode": infer_claim_mode(claim.tool)})
+    return claim
 
 
 def list_claims(claim_dir: Path = ACTIVE_SESSION_DIR, *, fresh_only: bool = False) -> list[SessionClaim]:
-    if not claim_dir.exists():
-        return []
-
-    claims: list[SessionClaim] = []
-    for path in sorted(claim_dir.glob("*.json")):
-        claim = read_claim(path)
-        if claim is None:
-            continue
-        if fresh_only and not _claim_is_fresh(claim):
-            continue
-        claims.append(claim)
-    return claims
+    return system_list_claims(claim_dir=claim_dir, fresh_only=fresh_only)
 
 
 def write_active_claim(
@@ -197,24 +185,7 @@ def write_active_claim(
     mode: str,
     claim_dir: Path = ACTIVE_SESSION_DIR,
 ) -> SessionClaim:
-    return write_claim(
-        active_claim_path(root, tool, claim_dir=claim_dir),
-        tool=tool,
-        branch=branch_name(root),
-        head=head_sha(root),
-        mode=mode,
-        root=str(root.resolve()),
-    )
-
-
-def _claim_is_fresh(claim: SessionClaim) -> bool:
-    try:
-        started = datetime.fromisoformat(claim.started_at)
-    except ValueError:
-        return False
-    if started.tzinfo is None:
-        started = started.replace(tzinfo=UTC)
-    return datetime.now(UTC) - started <= CLAIM_FRESHNESS
+    return system_write_active_claim(root, tool=tool, mode=mode, claim_dir=claim_dir)
 
 
 def verify_claim(
@@ -223,57 +194,63 @@ def verify_claim(
     claim_path: Path | None = None,
     claim_dir: Path = ACTIVE_SESSION_DIR,
 ) -> tuple[bool, list[str]]:
-    claim = read_claim(claim_path or active_claim_path(root, active_tool, claim_dir=claim_dir))
-    if claim is None:
-        return True, []
+    return system_verify_claim(root, active_tool=active_tool, claim_path=claim_path, claim_dir=claim_dir)
 
-    warnings: list[str] = []
-    ok = True
-    current_branch = branch_name(root)
-    current_head = head_sha(root)
 
-    if claim.tool != active_tool:
-        warnings.append(f"tool mismatch: claim={claim.tool} current={active_tool}")
-        ok = False
-    if claim.branch != current_branch:
-        warnings.append(f"Branch mismatch: claim={claim.branch} current={current_branch}")
-        ok = False
-    if claim.head_sha != current_head:
-        warnings.append(f"HEAD mismatch: claim={claim.head_sha} current={current_head}")
-        ok = False
-    current_root = str(root.resolve())
-    if claim.root and claim.root != current_root:
-        warnings.append(f"Root mismatch: claim={claim.root} current={current_root}")
-        ok = False
+def _normalize_context(context: str) -> str:
+    return context if context in KNOWN_CONTEXTS else "unknown"
 
-    return ok, warnings
+
+def _policy_action_for_mode(active_mode: str) -> str:
+    return "session_start_mutating" if active_mode == "mutating" else "session_start_read_only"
+
+
+def _format_policy_messages(issues: list[object]) -> list[str]:
+    messages: list[str] = []
+    for issue in issues:
+        message = str(getattr(issue, "message", "")).strip()
+        detail = getattr(issue, "detail", None)
+        if detail:
+            messages.append(f"{message} ({detail})")
+        else:
+            messages.append(message)
+    return messages
+
+
+def _evaluate_preflight_policy(
+    root: Path,
+    *,
+    context: str,
+    active_tool: str | None,
+    active_mode: str,
+    claim_dir: Path,
+) -> tuple[list[str], list[str]]:
+    snapshot = build_system_context(
+        root,
+        context_name=_normalize_context(context),
+        active_tool=active_tool,
+        active_mode=active_mode if active_mode in CLAIM_MODES else "read-only",
+        claim_dir=claim_dir,
+    )
+    decision = evaluate_system_policy(snapshot, _policy_action_for_mode(active_mode))
+    return _format_policy_messages(decision.blockers), _format_policy_messages(decision.warnings)
 
 
 def build_blockers(
     root: Path,
     *,
+    context: str = "generic",
     active_tool: str | None = None,
     active_mode: str = "read-only",
     claim_dir: Path = ACTIVE_SESSION_DIR,
 ) -> list[str]:
-    if not active_tool or active_mode != "mutating":
-        return []
-
-    current_branch = branch_name(root)
-    current_root = str(root.resolve())
-    blockers: list[str] = []
-    for claim in list_claims(claim_dir, fresh_only=True):
-        if claim.tool == active_tool and claim.root == current_root:
-            continue
-        if claim.branch != current_branch:
-            continue
-        if claim.mode != "mutating":
-            continue
-        blockers.append(
-            "Concurrent mutating session blocked: "
-            f"{claim.tool} already holds a fresh mutating claim on branch {claim.branch}. "
-            "Use a worktree or handoff/finish the other session first."
-        )
+    blockers, _warnings = _evaluate_preflight_policy(
+        root,
+        context=context,
+        active_tool=active_tool,
+        active_mode=active_mode,
+        claim_dir=claim_dir,
+    )
     return blockers
 
 
@@ -284,42 +261,13 @@ def build_warnings(
     active_mode: str = "read-only",
     claim_dir: Path = ACTIVE_SESSION_DIR,
 ) -> list[str]:
-    warnings: list[str] = []
-    handoff_path = root / "HANDOFF.md"
-    if not handoff_path.exists():
-        warnings.append("HANDOFF.md missing.")
-
-    if dirty_files(root):
-        warnings.append("Working tree is dirty. Re-read changed files before editing.")
-
-    if "wsl" in context and not (root / ".venv-wsl" / "bin" / "python").exists():
-        warnings.append("WSL context but .venv-wsl/bin/python is missing.")
-    elif "wsl" in context:
-        expected_python = (root / ".venv-wsl" / "bin" / "python").resolve()
-        current_python = Path(sys.executable).resolve()
-        if current_python != expected_python:
-            warnings.append(
-                "WSL context is using the wrong interpreter. "
-                f"current={current_python} expected={expected_python}. "
-                "Use the repo launcher, 'uv run python ...', or '.venv-wsl/bin/python ...'."
-            )
-
-    if active_tool:
-        current_branch = branch_name(root)
-        current_root = str(root.resolve())
-        for claim in list_claims(claim_dir, fresh_only=True):
-            if claim.tool == active_tool and claim.root == current_root:
-                continue
-            if claim.branch != current_branch:
-                continue
-            if active_mode == "read-only" or claim.mode == "read-only":
-                warnings.append(
-                    "Parallel session present on this branch: "
-                    f"{claim.tool} ({claim.mode}) already has a fresh claim on {claim.branch}. "
-                    "Keep this session read-only or move to a worktree before editing."
-                )
-                break
-
+    _blockers, warnings = _evaluate_preflight_policy(
+        root,
+        context=context,
+        active_tool=active_tool,
+        active_mode=active_mode,
+        claim_dir=claim_dir,
+    )
     return warnings
 
 
@@ -332,11 +280,15 @@ def print_report(
     quiet: bool = False,
     claim_dir: Path = ACTIVE_SESSION_DIR,
 ) -> int:
-    blockers = build_blockers(root, active_tool=claim_tool, active_mode=claim_mode, claim_dir=claim_dir)
-    warnings = build_warnings(root, context=context, active_tool=claim_tool, active_mode=claim_mode, claim_dir=claim_dir)
+    blockers, warnings = _evaluate_preflight_policy(
+        root,
+        context=context,
+        active_tool=claim_tool,
+        active_mode=claim_mode,
+        claim_dir=claim_dir,
+    )
 
     if quiet:
-        # Quiet mode: only print warnings, silently write claims
         if blockers:
             for blocker in blockers:
                 print(f"  XX {blocker}")
@@ -375,6 +327,9 @@ def print_report(
     wsl_env = (root / ".venv-wsl" / "bin" / "python").exists()
     print(f"Env: .venv={'yes' if windows_env else 'no'} | .venv-wsl={'yes' if wsl_env else 'no'}")
     print(f"Interpreter: {Path(sys.executable).resolve()}")
+    bootstrap_from = os.environ.get("CANOMPX3_BOOTSTRAPPED_FROM")
+    if bootstrap_from:
+        print(f"Bootstrapped from: {bootstrap_from}")
     python3_path = shutil.which("python3")
     if python3_path:
         print(f"python3 -> {Path(python3_path).resolve()}")
@@ -455,7 +410,7 @@ def main(argv: list[str] | None = None) -> int:
             print()
             print(format_text(report))
         except Exception as exc:
-            print(f"Pulse: unavailable ({type(exc).__name__})")  # Advisory — preflight unaffected
+            print(f"Pulse: unavailable ({type(exc).__name__})")
 
     return exit_code
 

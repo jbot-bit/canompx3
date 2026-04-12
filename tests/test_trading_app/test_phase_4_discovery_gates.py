@@ -32,7 +32,8 @@ def _make_fixture_db() -> duckdb.DuckDBPyConnection:
         CREATE TABLE experimental_strategies (
             strategy_id TEXT,
             hypothesis_file_sha TEXT,
-            created_at TIMESTAMPTZ
+            created_at TIMESTAMPTZ,
+            orb_minutes INTEGER DEFAULT 5
         )
     """)
     return con
@@ -185,7 +186,7 @@ class TestCheckSingleUse:
     def test_sha_already_used_once_fails(self):
         con = _make_fixture_db()
         con.execute(
-            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            "INSERT INTO experimental_strategies (strategy_id, hypothesis_file_sha, created_at) VALUES (?, ?, ?)",
             ["s1", "used_sha", datetime(2026, 4, 8, 10, 0, 0, tzinfo=UTC)],
         )
         with pytest.raises(HypothesisLoaderError, match="already been used"):
@@ -201,15 +202,15 @@ class TestCheckSingleUse:
         second = datetime(2026, 4, 6, 14, 0, 0, tzinfo=UTC)
         third = datetime(2026, 4, 7, 18, 0, 0, tzinfo=UTC)
         con.execute(
-            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            "INSERT INTO experimental_strategies (strategy_id, hypothesis_file_sha, created_at) VALUES (?, ?, ?)",
             ["s1", "multi_use_sha", second],
         )
         con.execute(
-            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            "INSERT INTO experimental_strategies (strategy_id, hypothesis_file_sha, created_at) VALUES (?, ?, ?)",
             ["s2", "multi_use_sha", first],  # earliest
         )
         con.execute(
-            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            "INSERT INTO experimental_strategies (strategy_id, hypothesis_file_sha, created_at) VALUES (?, ?, ?)",
             ["s3", "multi_use_sha", third],
         )
         try:
@@ -231,7 +232,7 @@ class TestCheckSingleUse:
         """Inserting rows with a DIFFERENT SHA must not affect the query."""
         con = _make_fixture_db()
         con.execute(
-            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            "INSERT INTO experimental_strategies (strategy_id, hypothesis_file_sha, created_at) VALUES (?, ?, ?)",
             ["s1", "different_sha", datetime(2026, 4, 8, 10, 0, 0, tzinfo=UTC)],
         )
         # Query a different SHA — should pass
@@ -244,7 +245,7 @@ class TestCheckSingleUse:
         must be treated as a literal string, not executed."""
         con = _make_fixture_db()
         con.execute(
-            "INSERT INTO experimental_strategies VALUES (?, ?, ?)",
+            "INSERT INTO experimental_strategies (strategy_id, hypothesis_file_sha, created_at) VALUES (?, ?, ?)",
             ["s1", "legitimate_sha", datetime(2026, 4, 8, 10, 0, 0, tzinfo=UTC)],
         )
         # The injection string is not in the DB, so this should pass
@@ -258,3 +259,38 @@ class TestCheckSingleUse:
         ).fetchone()
         assert count is not None
         assert count[0] == 1
+
+    def test_different_orb_minutes_does_not_block(self):
+        """A hypothesis file used at orb_minutes=15 must NOT block a run
+        at orb_minutes=30 — they cover disjoint subsets of the family."""
+        con = _make_fixture_db()
+        con.execute(
+            "INSERT INTO experimental_strategies (strategy_id, hypothesis_file_sha, created_at, orb_minutes) "
+            "VALUES (?, ?, ?, ?)",
+            ["s1_O15", "shared_sha", datetime(2026, 4, 13, 9, 0, 0, tzinfo=UTC), 15],
+        )
+        # orb_minutes=30 with same SHA — should pass (different aperture)
+        check_single_use("shared_sha", con, orb_minutes=30)
+
+    def test_same_orb_minutes_still_blocks(self):
+        """A hypothesis file used at orb_minutes=15 MUST block a re-run
+        at the same orb_minutes=15 — that IS a same-aperture re-run."""
+        con = _make_fixture_db()
+        con.execute(
+            "INSERT INTO experimental_strategies (strategy_id, hypothesis_file_sha, created_at, orb_minutes) "
+            "VALUES (?, ?, ?, ?)",
+            ["s1_O15", "shared_sha", datetime(2026, 4, 13, 9, 0, 0, tzinfo=UTC), 15],
+        )
+        with pytest.raises(HypothesisLoaderError, match="already been used"):
+            check_single_use("shared_sha", con, orb_minutes=15)
+
+    def test_legacy_no_orb_minutes_still_blocks_globally(self):
+        """When orb_minutes is None (legacy), ANY row with the SHA blocks."""
+        con = _make_fixture_db()
+        con.execute(
+            "INSERT INTO experimental_strategies (strategy_id, hypothesis_file_sha, created_at, orb_minutes) "
+            "VALUES (?, ?, ?, ?)",
+            ["s1_O15", "sha_legacy", datetime(2026, 4, 13, 9, 0, 0, tzinfo=UTC), 15],
+        )
+        with pytest.raises(HypothesisLoaderError, match="already been used"):
+            check_single_use("sha_legacy", con)

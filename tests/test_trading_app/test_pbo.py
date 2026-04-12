@@ -2,7 +2,9 @@
 
 from datetime import date, timedelta
 
-from trading_app.pbo import compute_pbo
+import duckdb
+
+from trading_app.pbo import compute_family_pbo, compute_pbo
 
 
 def _days(n, start=date(2020, 1, 1)):
@@ -134,3 +136,80 @@ class TestComputePbo:
         assert result["n_splits"] == 70
         assert isinstance(result["pbo"], float)
         assert 0.0 <= result["pbo"] <= 1.0
+
+
+class TestComputeFamilyPbo:
+    def test_tight_stop_family_uses_stop_multiplier_variants(self, monkeypatch, tmp_path):
+        db_path = tmp_path / "pbo.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE validated_setups (
+                strategy_id VARCHAR,
+                instrument VARCHAR,
+                family_hash VARCHAR,
+                orb_label VARCHAR,
+                orb_minutes INTEGER,
+                entry_model VARCHAR,
+                rr_target DOUBLE,
+                confirm_bars INTEGER,
+                filter_type VARCHAR,
+                stop_multiplier DOUBLE,
+                status VARCHAR
+            )
+        """)
+        con.execute("""
+            CREATE TABLE orb_outcomes (
+                symbol VARCHAR,
+                trading_day DATE,
+                pnl_r DOUBLE,
+                mae_r DOUBLE,
+                entry_price DOUBLE,
+                stop_price DOUBLE,
+                outcome VARCHAR,
+                orb_label VARCHAR,
+                orb_minutes INTEGER,
+                entry_model VARCHAR,
+                rr_target DOUBLE,
+                confirm_bars INTEGER
+            )
+        """)
+        con.execute("""
+            INSERT INTO validated_setups VALUES
+            ('MGC_CME_REOPEN_E1_RR2.0_CB1_NO_FILTER_S075', 'MGC', 'fam_stop', 'CME_REOPEN', 5, 'E1', 2.0, 1, 'NO_FILTER', 0.75, 'active'),
+            ('MGC_CME_REOPEN_E1_RR2.5_CB1_NO_FILTER_S075', 'MGC', 'fam_stop', 'CME_REOPEN', 5, 'E1', 2.5, 1, 'NO_FILTER', 0.75, 'active')
+        """)
+        days = _days(20)
+        for td in days:
+            con.execute(
+                """
+                INSERT INTO orb_outcomes VALUES
+                ('MGC', ?, 1.0, 0.9, 100.0, 99.0, 'win', 'CME_REOPEN', 5, 'E1', 2.0, 1),
+                ('MGC', ?, 1.2, 0.9, 100.0, 99.0, 'win', 'CME_REOPEN', 5, 'E1', 2.5, 1)
+            """,
+                [td, td],
+            )
+        con.close()
+
+        calls = []
+
+        def fake_apply_tight_stop(outcomes, stop_multiplier, cost_spec):
+            calls.append((len(outcomes), stop_multiplier, cost_spec))
+            adjusted = []
+            for outcome in outcomes:
+                updated = dict(outcome)
+                updated["pnl_r"] = outcome["pnl_r"] - 0.25
+                adjusted.append(updated)
+            return adjusted
+
+        monkeypatch.setattr("trading_app.pbo.deployable_validated_relation", lambda con: "validated_setups")
+        monkeypatch.setattr("trading_app.pbo.apply_tight_stop", fake_apply_tight_stop)
+        monkeypatch.setattr("trading_app.pbo.get_cost_spec", lambda instrument: object())
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        result = compute_family_pbo(con, "fam_stop", "MGC")
+        con.close()
+
+        assert result["pbo"] is not None
+        assert result["n_splits"] == 70
+        assert len(calls) == 2
+        assert all(stop_multiplier == 0.75 for _n, stop_multiplier, _spec in calls)

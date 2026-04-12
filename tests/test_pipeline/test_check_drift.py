@@ -13,6 +13,7 @@ import pytest
 from pipeline.check_drift import (
     check_apply_iterrows,
     check_config_filter_sync,
+    check_daily_features_row_integrity,
     check_hardcoded_mgc_sql,
     check_holdout_policy_declaration_consistency,
     check_non_bars1m_writes,
@@ -238,6 +239,75 @@ class TestConfigFilterSync:
         assert len(ALL_FILTERS) > 0
         violations = check_config_filter_sync()
         assert len(violations) == 0
+
+
+class TestDailyFeaturesRowIntegrity:
+    """Tests for active-universe daily_features aperture completeness."""
+
+    def test_active_symbol_missing_aperture_is_flagged(self, tmp_path, monkeypatch):
+        import duckdb
+
+        from pipeline import check_drift
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE daily_features (
+                trading_day DATE,
+                symbol VARCHAR,
+                orb_minutes INTEGER
+            )
+        """)
+        con.execute("""
+            INSERT INTO daily_features VALUES
+                ('2026-04-01', 'MNQ', 5),
+                ('2026-04-01', 'MNQ', 15),
+                ('2026-04-01', 'MES', 5),
+                ('2026-04-01', 'MES', 15),
+                ('2026-04-01', 'MES', 30),
+                ('2026-04-01', 'MGC', 5),
+                ('2026-04-01', 'MGC', 15),
+                ('2026-04-01', 'MGC', 30)
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_daily_features_row_integrity()
+        assert len(violations) == 1
+        assert "MNQ" in violations[0]
+
+    def test_proxy_symbol_is_excluded_from_active_integrity_gate(self, tmp_path, monkeypatch):
+        import duckdb
+
+        from pipeline import check_drift
+
+        db_path = tmp_path / "test.db"
+        con = duckdb.connect(str(db_path))
+        con.execute("""
+            CREATE TABLE daily_features (
+                trading_day DATE,
+                symbol VARCHAR,
+                orb_minutes INTEGER
+            )
+        """)
+        con.execute("""
+            INSERT INTO daily_features VALUES
+                ('2026-04-01', 'GC', 5),
+                ('2026-04-02', 'GC', 5),
+                ('2026-04-01', 'MNQ', 5),
+                ('2026-04-01', 'MNQ', 15),
+                ('2026-04-01', 'MNQ', 30),
+                ('2026-04-01', 'MES', 5),
+                ('2026-04-01', 'MES', 15),
+                ('2026-04-01', 'MES', 30),
+                ('2026-04-01', 'MGC', 5),
+                ('2026-04-01', 'MGC', 15),
+                ('2026-04-01', 'MGC', 30)
+        """)
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        assert check_daily_features_row_integrity() == []
 
 
 class TestClaudeMdSizeCap:

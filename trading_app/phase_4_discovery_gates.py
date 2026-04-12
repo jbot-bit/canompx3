@@ -163,15 +163,15 @@ def check_git_cleanliness(path: Path) -> None:
         )
 
 
-def check_single_use(sha: str, con: Any) -> None:
-    """Verify a hypothesis file's SHA has never been used before.
+def check_single_use(sha: str, con: Any, *, orb_minutes: int | None = None) -> None:
+    """Verify a hypothesis file's SHA has never been used for this aperture.
 
     Queries ``experimental_strategies`` for any row carrying the given SHA
-    in the ``hypothesis_file_sha`` column. If any exist, the file has
-    already been used in a discovery run — re-running it without
-    amendment silently doubles the multiple-testing family (a form of
-    data snooping). Registry README's "no amending — supersede only"
-    rule is enforced here at runtime.
+    in the ``hypothesis_file_sha`` column. When ``orb_minutes`` is provided,
+    the check is scoped to rows with matching ``orb_minutes`` — this allows
+    a single hypothesis file covering multiple apertures (e.g., 15m + 30m)
+    to be run in separate CLI invocations without false-positive blocking.
+    Same-aperture re-runs are still caught.
 
     Parameters
     ----------
@@ -183,14 +183,23 @@ def check_single_use(sha: str, con: Any) -> None:
         ``experimental_strategies``. The connection is NOT closed by
         this function — caller's responsibility. Read-only query; the
         connection does not need to be in write mode.
+    orb_minutes
+        When provided, scope the check to rows with this ``orb_minutes``
+        value. This supports multi-aperture hypothesis files where the
+        CLI requires separate ``--orb-minutes`` runs. Rows from a prior
+        run at a DIFFERENT aperture are not treated as a re-run because
+        the scope predicate ensures each run covers a disjoint subset
+        of the hypothesis family — no doubling occurs.
+        When None (legacy behavior), checks ALL rows regardless of
+        aperture — stricter, appropriate for single-aperture files.
 
     Raises
     ------
     HypothesisLoaderError
-        If at least one row exists with ``hypothesis_file_sha = sha``.
-        Error message includes the prior usage count, the earliest
-        prior ``created_at`` timestamp, and a clear instruction to
-        supersede with a new dated hypothesis file.
+        If at least one row exists with matching SHA (and orb_minutes
+        if provided). Error message includes the prior usage count,
+        the earliest prior ``created_at`` timestamp, and a clear
+        instruction to supersede with a new dated hypothesis file.
 
     Notes
     -----
@@ -200,25 +209,33 @@ def check_single_use(sha: str, con: Any) -> None:
     ``duckdb`` at module load time (avoids a circular import risk with
     any future module that needs to call this gate).
 
-    The query itself is parameterized via a positional placeholder to
+    The query itself is parameterized via positional placeholders to
     prevent SQL injection from a malformed SHA string. DuckDB's
     ``execute(sql, [params])`` is the canonical safe pattern.
     """
-    query = """
-        SELECT COUNT(*) AS n, MIN(created_at) AS first_used
-        FROM experimental_strategies
-        WHERE hypothesis_file_sha = ?
-    """
-    row = con.execute(query, [sha]).fetchone()
+    if orb_minutes is not None:
+        query = """
+            SELECT COUNT(*) AS n, MIN(created_at) AS first_used
+            FROM experimental_strategies
+            WHERE hypothesis_file_sha = ? AND orb_minutes = ?
+        """
+        row = con.execute(query, [sha, orb_minutes]).fetchone()
+    else:
+        query = """
+            SELECT COUNT(*) AS n, MIN(created_at) AS first_used
+            FROM experimental_strategies
+            WHERE hypothesis_file_sha = ?
+        """
+        row = con.execute(query, [sha]).fetchone()
     if row is None:
-        # No rows returned — should not happen for a COUNT query, but
-        # treat as "zero prior uses" for safety.
         return
     count, first_used = row[0], row[1]
     if count > 0:
+        scope_msg = f" at orb_minutes={orb_minutes}" if orb_minutes is not None else ""
         raise HypothesisLoaderError(
             f"Hypothesis file SHA {sha[:12]}... has already been used by "
-            f"{count} experimental_strategies row(s) (first at {first_used}). "
+            f"{count} experimental_strategies row(s){scope_msg} "
+            f"(first at {first_used}). "
             f"A pre-registered hypothesis file is single-use by Criterion 2 / "
             f"registry README discipline — re-running it silently doubles the "
             f"multiple-testing family. To run a new discovery with the same "

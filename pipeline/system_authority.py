@@ -28,6 +28,7 @@ DOCTRINE_DOCS: tuple[str, ...] = (
 
 SYSTEM_AUTHORITY_BACKBONE_MODULES: tuple[str, ...] = (
     "pipeline/system_authority.py",
+    "pipeline/system_context.py",
     "pipeline/db_contracts.py",
     "trading_app/holdout_policy.py",
     "trading_app/validated_shelf.py",
@@ -62,6 +63,7 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
         purpose="Stable code truth for changing facts and rules",
         examples=(
             "pipeline/system_authority.py",
+            "pipeline/system_context.py",
             "pipeline/asset_configs.py",
             "pipeline/cost_model.py",
             "pipeline/dst.py",
@@ -153,6 +155,10 @@ CANONICAL_TRUTH_MAP: tuple[CanonicalTruthEntry, ...] = (
     ),
     CanonicalTruthEntry("What are the active execution lanes?", "trading_app/prop_profiles.py"),
     CanonicalTruthEntry("What is the unified operational block/allow state?", "trading_app/lifecycle_state.py"),
+    CanonicalTruthEntry(
+        "What is the canonical repo/dev control-plane context?",
+        "pipeline/system_context.py + scripts/tools/system_context.py",
+    ),
     CanonicalTruthEntry(
         "What is planning vs current implementation?",
         "ROADMAP.md is planning only; code/DB decide current implementation",

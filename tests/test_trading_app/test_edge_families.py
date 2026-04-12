@@ -395,3 +395,45 @@ class TestBuildEdgeFamilies:
 
         result = build_edge_families(str(db_path), "MCL")
         assert result == 0
+
+    def test_stop_multiplier_variants_form_distinct_families(self, db_path):
+        from scripts.tools.build_edge_families import build_edge_families
+
+        con = duckdb.connect(str(db_path))
+        con.execute(
+            """
+            INSERT INTO validated_setups
+            (strategy_id, instrument, orb_label, orb_minutes, rr_target,
+             confirm_bars, entry_model, filter_type, sample_size,
+             win_rate, expectancy_r, sharpe_ann, years_tested,
+             all_years_positive, stress_test_passed, status, stop_multiplier)
+            VALUES (?, 'MGC', 'CME_REOPEN', 5, 2.0, 2, 'E1', 'ORB_G5',
+                    90, 0.50, 0.25, 0.7, 3, TRUE, TRUE, 'active', 0.75)
+        """,
+            ["MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5_S075"],
+        )
+        for d in [date(2024, 1, 2), date(2024, 1, 3), date(2024, 1, 5)]:
+            con.execute("INSERT INTO strategy_trade_days VALUES (?, ?)", ["MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5_S075", d])
+        con.commit()
+        con.close()
+
+        build_edge_families(str(db_path), "MGC")
+
+        con = duckdb.connect(str(db_path), read_only=True)
+        rows = con.execute(
+            """
+            SELECT strategy_id, family_hash
+            FROM validated_setups
+            WHERE strategy_id IN (
+                'MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5',
+                'MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5_S075'
+            )
+            ORDER BY strategy_id
+        """
+        ).fetchall()
+        family_counts = con.execute("SELECT COUNT(*) FROM edge_families WHERE instrument = 'MGC'").fetchone()[0]
+        con.close()
+
+        by_id = {sid: family_hash for sid, family_hash in rows}
+        assert by_id["MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5"] != by_id["MGC_CME_REOPEN_E1_RR2.0_CB2_ORB_G5_S075"]
+        assert family_counts == 3
