@@ -581,13 +581,15 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
     # =========================================================================
     # Phase 2b-MES: TopStep MES automation — instrument diversification
     #
-    # Single MES lane on a separate TopStep Express account. MES provides
-    # TRUE diversification from MNQ (near-zero correlation per
-    # mgc_mnq_correlation.md findings extended to MES).
+    # Single MES lane on a separate TopStep Express account. MES on
+    # CME_PRECLOSE provides session diversification from the MNQ lanes
+    # (no overlapping sessions). MES/MNQ daily returns are correlated
+    # (~0.90 equity indices) but trade-level correlation is lower due
+    # to non-overlapping session times — NOT measured yet.
     #
     # Pre-flight audit (2026-04-12):
     #   - SR pre-flight: CONTINUE (max_SR=11.46, threshold=31.96, N=11 OOS)
-    #   - COST_LT08 is strict subset of ORB_G8 (orb > 9.25 vs >= 8.0) —
+    #   - COST_LT08 is strict subset of ORB_G8 (orb > 9.0 vs >= 8.0) —
     #     deploy ORB_G8 only, NOT both
     #   - 2026 OOS: N=11, mean +0.012R, WR 54.5%, directionally positive
     #   - Year-by-year: 1 negative year (2023, N=12, -0.074 avg_R)
@@ -614,8 +616,8 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             # p=0.00123, WF 5/5 passed, FDR significant.
             # MES P90 ORB size = 11.2pts at CME_PRECLOSE. Cap at 20.0
             # (well above P95=14.5, catches only extreme outliers).
-            # Dollar risk at 0.75x stop on avg qualifying ORB (12.3pts):
-            # 12.3 * 0.75 * $5.0 = $46.20 per trade.
+            # Dollar risk at 0.75x stop on avg qualifying ORB (11.1pts):
+            # 11.1 * 0.75 * $5.0 = $41.63 per trade.
             DailyLaneSpec(
                 "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8",
                 "MES",
@@ -628,7 +630,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             "1-lane MES-only auto profile — instrument diversification from "
             "MNQ. CME_PRECLOSE is the highest-ExpR untapped session (0.173). "
             "ORB_G8 chosen over COST_LT08 because COST_LT08 is a strict "
-            "trade-level subset (orb > 9.25 vs >= 8.0, 100% containment). "
+            "trade-level subset (orb > 9.0 vs >= 8.0, 100% containment). "
             "ORB_G8 has more trades (50/yr vs 34/yr) and higher Sharpe "
             "(1.34 vs 1.25). SR pre-flight CONTINUE at N=11 OOS "
             "(max_SR=11.46, threshold=31.96). 2026 OOS directionally "
