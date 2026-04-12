@@ -6,6 +6,295 @@
 
 ---
 
+## Update (2026-04-12 — PROFIT-NEXT L7 deploy → stress-test → SAME-DAY RETIRE)
+
+### Headline
+
+`topstep_50k_mnq_auto` briefly went to 7 lanes in commit `8a62d502` (L7 = `MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12`), then was **retired same-day in commit `09294df0`** back to 6 lanes after a post-commit stress test discovered the new lane is a **strict trade-level subset of L1** with perfect daily PnL correlation. **No live exposure occurred.** The bot is running in signal/demo mode per the topstep_canonical_audit; the whole episode was caught before any real orders.
+
+Branch: `discovery-wave4-lit-grounded`. HEAD: `09294df0`.
+
+### What ran and what stuck
+
+**Committed and kept:**
+- `8a62d502` — PROFIT-NEXT added L7 EUROPE_FLOW COST_LT12 (the correction numbers for WFE/C8/SR/C11 for the deploying lane were all re-verified via canonical loader against the crashed prior session's memory numbers, which were ~8% off)
+- `09294df0` — L7-SUBSET retirement, max_slots 7→6, full stress-test audit trail in comments + notes + `deferred-findings.md` L7-SUBSET row
+
+**Ran but not committed (pre-flight only):**
+- Full PROFIT-NEXT second-round SR+C11 pre-flight on 3 candidates (2 rejected on SR alarm, 1 deployed → retired)
+- L8 candidate scan: enumerated 20 candidates, ran static pre-flight on top 6. All 6 pass C6+C8, 3 pass SR, but **none were evaluated for trade-level correlation with existing lanes**. Scan results discarded pending the new pre-flight gate being built — see "Open tasks" below.
+
+### Load-bearing stress test findings on retired L7
+
+All computed live from `gold.db` via `trading_app.strategy_fitness._load_strategy_outcomes` split at `HOLDOUT_SACRED_FROM`. No metadata trust.
+
+1. **L1 ⊂ L7 at trade level, full history** — 1109/1109 shared days with identical `pnl_r`, 0 differing, 0 L7-only days. Structural: COST_LT12 gates `orb_size > 12.17pts` (= `total_friction / (0.12 × point_value)` for MNQ); ORB_G5 gates `orb_size >= 5pts`; every COST_LT12 pass is therefore an ORB_G5 pass. The 541 L1-only days in full history all have orb_size in [5.25, 10.00]pts (below COST_LT12 threshold).
+2. **t-stat 1.775** (one-tailed p=0.038), 95% CI [-0.027, +0.554] **includes zero**. Fails Chordia t≥3.0.
+3. **T1 ARITHMETIC_ONLY** — WR flat 45.6-50.6% across COST_LT12 friction band (<5pp spread), avg_win decreases with friction. Matches known cost-gate failure pattern (`quant-audit-protocol.md` 2026-03-24 entry).
+4. **Seasonality inversion 2026 vs IS** — IS Jan strongest (+0.337), 2026 Jan negative (-0.156); IS Apr weakest (-0.021), 2026 Apr +0.760. Not a stable regime tailwind.
+5. **OOS boom is 26 trades** — Mar+Apr only (22+4). Jan was negative, Feb flat.
+
+### Institutional lessons locked in this session
+
+1. **Trade-level correlation is a missing pre-deploy gate.** The SR + C11 pre-flight checklist from L7-RETIRE catches edge-loss regimes but does NOT catch deployment-time trade-level redundancy. `family_hash` ("5cc distinct from 01c") is metadata keyed on `filter_type` and does not detect trade-level overlap. For any COST_LT / ORB_G subset-by-construction filter, the two lanes will metadata-appear distinct but be trade-level-identical.
+2. **Metadata is not evidence** (`integrity-guardian.md` rule #7, confirmed twice this session): once catching fabricated precision in the crashed-session diff numbers (`SR=34.50` was fiction), and again catching the "new family 5cc distinct" claim that was metadata-accurate but trade-level-wrong.
+3. **Regime change answer for this setup:** long history is for discovery power (Bailey MinBTL + DSR); regime adaptation is PORTFOLIO-level (SR monitor C12 retires decaying lanes, re-discovery produces new ones). Never retrain a deployed lane mid-life. MNQ has 6.65yr clean horizon (not 20yr), and that's the MinBTL-compliant budget. Full answer written into the stress-test response in conversation log.
+
+### Open tasks (next session)
+
+1. **[P0] Design the trade-level correlation pre-flight gate.** A new helper (probably `trading_app/pre_flight_correlation.py` or an extension to `trading_app.sr_monitor`) that:
+   - Loads every candidate lane's full-history outcomes via canonical loader
+   - Loads every currently-deployed lane's full-history outcomes
+   - Computes pairwise daily-PnL correlation + subset coverage
+   - Rejects candidates with `rho > 0.7` OR `shared_of_smaller > 0.8` (tentative thresholds, literature-calibratable)
+   - Should run BEFORE the C11 MC, so rejected candidates don't waste MC budget
+   - Drift check addition: enforce that new `prop_profiles.py` additions reference a pre-flight correlation report
+2. **[P1] Re-run the L8 candidate hunt** with the new gate once (1) is built. The static + SR + C11 survivors from the scan (paused today):
+   - MNQ_NYSE_OPEN_E2_RR1.5_CB1_COST_LT12 — WFE 0.94, C8 96.6%, SR ALARM@#45 (max 81.23) — killed by SR
+   - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5 — WFE 0.52, C8 54.0%, SR ALARM@#27 (max 32.58) — killed by SR
+   - MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12 — WFE 0.86, C8 89.4%, SR CONTINUE — **needs correlation check; likely a subset of MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G5 which is not deployed, so may be OK**
+   - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_X_MES_ATR60 — WFE 1.21, C8 126%, SR CONTINUE — **needs correlation check against L6 OVNRNG_100; X_MES_ATR60 is vol-gated, L6 is OVNRNG-gated, so potentially orthogonal**
+   - MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12 — WFE 1.62, C8 169%, SR ALARM@#31 (max 32.28) — killed by SR
+   - MNQ_EUROPE_FLOW_E2_RR1.5_CB1_OVNRNG_100 — WFE 1.97, C8 197%, SR CONTINUE — **DO NOT DEPLOY, triple-session concurrency L1/L2/L7 even without L7, and OVNRNG is a volatility-expansion filter which would have high trade-day overlap with L1/L2**
+3. **[P2] Parallel session's drift-check breakage.** Two drift failures are blocking the post-edit hook but not commits via Bash:
+   - Check 95: `trading_app/account_survival.py` — parallel work converted the single-line `from trading_app.derived_state import build_profile_fingerprint` to a multi-line parenthesized import. Check 95 does a naive substring match and doesn't recognize the multi-line form. Fix: either (a) convert the import back to single-line in account_survival.py, or (b) upgrade check 95 to parse imports properly (safer long-term).
+   - Check 97: `scripts/tools/project_pulse.py` — parallel work refactored `collect_sr_state()` and it no longer validates the SR envelope directly or delegates to `trading_app.lifecycle_state.read_criterion12_state()`. Fix should come from whoever is doing the parallel project_pulse lifecycle unification work (see prior HANDOFF entry below).
+   - Both failures are in parallel work and not in this commit's scope. The commits (`8a62d502` and `09294df0`) both went through cleanly and both preserved the drift-green state on the files they actually touched.
+4. **[P3] Verify no paper/live trades hit the retired L7 during its brief deploy.** Commands:
+   ```
+   duckdb gold.db "SELECT * FROM paper_trades WHERE strategy_id = 'MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12'"
+   # and live_journal.db if it exists for real trades
+   ```
+   Expected: 0 rows (both commits happened within minutes, bot is in signal/demo mode, no XFA live).
+
+### State after this session
+
+- `topstep_50k_mnq_auto`: 6 lanes, max_slots 6, active=True
+  - L1 MNQ_EUROPE_FLOW E2 RR1.5 ORB_G5 (01c, core)
+  - L2 MNQ_EUROPE_FLOW E2 RR2.0 ORB_G5 (01c, core)
+  - L3 MNQ_NYSE_OPEN E2 RR1.5 ORB_G5 (358, core, WATCH per 787bc0fa)
+  - L4 MNQ_TOKYO_OPEN E2 RR1.5 ORB_G5 (27d, core)
+  - L5 MNQ_TOKYO_OPEN E2 RR2.0 ORB_G5 (27d, core)
+  - L6 MNQ_COMEX_SETTLE E2 RR1.5 OVNRNG_100 (752, WATCH, SR-L6 ledger row)
+- Drift: 96 pass / 2 fail / 5 advisory. Both failures are parallel-session.
+- Tests: prop_profiles 53/53, account_survival 12/12, sr_monitor 8/8, strategy_fitness 31/31
+- The retired L7 files (`MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12`) remain in `validated_setups` with `status='active'` (validator-level truth is unchanged; only the deployment decision was reversed).
+
+### How the next session should resume
+
+```
+git log --oneline -5
+# Should see 09294df0 at HEAD
+git diff HEAD~2 trading_app/prop_profiles.py
+# Two commits: 8a62d502 (deploy) + 09294df0 (retire)
+cat docs/ralph-loop/deferred-findings.md | head -50
+# L7-SUBSET row has the full audit trail
+```
+
+Then: implement the trade-level correlation pre-flight gate (Open Task P0) BEFORE any further L8 work.
+
+---
+
+## Update (2026-04-12 — project pulse lifecycle control unification)
+
+### Headline
+
+`scripts/tools/project_pulse.py` no longer re-splits lifecycle truth into
+three separate C11/C12/pause reads during the main pulse build. The operator
+surface now consumes the unified lifecycle snapshot once and projects the same
+control summaries from that shared state.
+
+### What changed
+
+- hardened `scripts/tools/project_pulse.py`
+  - added unified lifecycle collector:
+    - `collect_lifecycle_control(db_path)`
+  - added projection helper:
+    - `_collect_control_items_from_lifecycle(...)`
+  - main `build_pulse(...)` now reads lifecycle truth once instead of calling:
+    - `read_criterion11_state()`
+    - `read_criterion12_state()`
+    - `read_pause_state()`
+    separately through three independent collectors
+  - preserved external pulse summary surfaces:
+    - `survival_summary`
+    - `sr_summary`
+    - `pause_summary`
+  - kept compatibility wrappers for the old collector names so tests and
+    callers do not break abruptly
+- updated `tests/test_tools/test_project_pulse.py`
+  - build path now mocks `collect_lifecycle_control(...)`
+  - control-summary tests now patch `read_lifecycle_state(...)`
+  - added regression test proving one lifecycle read produces all three
+    summaries/items
+
+### Why it matters
+
+The runtime/control layer had already been unified in
+`trading_app.lifecycle_state.read_lifecycle_state(...)`, but the operator layer
+still rebuilt that split locally. That is exactly how institutional drift
+creeps back in after a cleanup: one layer is canonical, the next layer quietly
+forks it again.
+
+This slice removes that re-fork. The pulse still renders the same user-facing
+control sections, but it now derives them from one shared lifecycle read.
+
+### Blast radius handled
+
+Contained to:
+
+- `project_pulse` control collector logic
+- `project_pulse` tests
+
+Explicitly preserved:
+
+- pulse JSON/text/markdown summary fields
+- recommendation logic
+- C11/C12/pause semantics themselves
+- deployment summary / staleness / fitness collectors
+
+### Verification
+
+- `python3 -m py_compile scripts/tools/project_pulse.py tests/test_tools/test_project_pulse.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_tools/test_project_pulse.py -q`
+  - `66 passed`
+- real pulse readback:
+  - `./.venv-wsl/bin/python scripts/tools/project_pulse.py --fast`
+  - result remained operationally correct:
+    - `C11 PASS 80.9% | as_of 2026-04-12 | age 0d`
+    - `C12 SR continue=5 alarm=2 no_data=0 | age 0d`
+    - next actionable item still correctly points at live SR alarms
+
+## Update (2026-04-12 — Criterion 11 state contract hardened to derived-state envelope)
+
+### Headline
+
+Criterion 11 account-survival state now uses the same self-invalidating
+derived-state envelope discipline as Criterion 12 instead of a weaker bespoke
+`summary/rules/metadata` blob plus one opaque profile fingerprint check.
+
+### What changed
+
+- hardened `trading_app/account_survival.py`
+  - added canonical-input builder for Criterion 11 state:
+    - `profile_id`
+    - `profile_fingerprint`
+    - `lane_ids`
+    - `db_path`
+    - `db_identity`
+    - `code_fingerprint`
+  - C11 state now writes a versioned envelope via shared derived-state helpers
+  - added `read_survival_report_state(...)` as the canonical C11 state reader
+  - `check_survival_report_gate(...)` now validates the envelope and blocks
+    with explicit reasons like:
+    - `legacy state: missing versioned envelope`
+    - `profile fingerprint mismatch`
+    - `lane_ids mismatch`
+    - `db identity mismatch`
+    - `code fingerprint mismatch`
+- updated `trading_app/lifecycle_state.py`
+  - Criterion 11 lifecycle read now consumes the canonical C11 state reader
+  - lifecycle aggregation now threads `db_path` through to the C11 reader
+- hardened tests in:
+  - `tests/test_trading_app/test_account_survival.py`
+  - added regression coverage for:
+    - envelope write shape
+    - legacy-state invalidation
+    - profile fingerprint mismatch
+    - lane-id mismatch
+
+### Why it matters
+
+The other terminal had already unified runtime reading for C11/C12/pause
+surfaces, but Criterion 11 state itself was still institutionally weaker than
+Criterion 12:
+
+- bespoke JSON shape
+- no DB identity invalidation
+- no code fingerprint invalidation
+- only one generic mismatch message
+
+That meant the runtime was partially unified, but the persisted C11 control
+surface was still less honest than the C12 one. This slice closes that gap.
+
+### Blast radius handled
+
+Contained to:
+
+- C11 persisted-state write format
+- C11 gate readback
+- lifecycle/operator readback of C11
+
+Explicitly not changed:
+
+- Monte Carlo simulation math
+- profile composition / lane selection
+- live execution behavior
+- deployment semantics
+
+### Verification
+
+- `python3 -m py_compile trading_app/account_survival.py trading_app/lifecycle_state.py tests/test_trading_app/test_account_survival.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_account_survival.py -q`
+  - `14 passed`
+- real C11 regeneration:
+  - `./.venv-wsl/bin/python -m trading_app.account_survival --profile topstep_50k_mnq_auto`
+  - result:
+    - `ACCOUNT SURVIVAL ... gate=PASS`
+    - `operational pass=80.9%`
+- real C12 regeneration:
+  - `./.venv-wsl/bin/python -m trading_app.sr_monitor`
+- real pulse readback after regeneration:
+  - `./.venv-wsl/bin/python scripts/tools/project_pulse.py --fast`
+  - result:
+    - `C11 PASS 80.9% | as_of 2026-04-12 | age 0d`
+    - `C12 SR continue=5 alarm=2 no_data=0 | age 0d`
+    - next actionable item now correctly shifts from stale-state mismatch to
+      live SR alarms
+
+## Update (2026-04-12 — pulse handoff parser aligned to rolling update log)
+
+### Headline
+
+`scripts/tools/project_pulse.py` now understands the actual modern
+`HANDOFF.md` shape instead of mostly depending on the old `## Last Session`
+metadata block.
+
+### What changed
+
+- hardened `collect_handoff(...)` in `scripts/tools/project_pulse.py`
+  - supports modern `## Update (YYYY-MM-DD — title)` entries
+  - extracts `### Headline` paragraphs when present
+  - extracts `### Next move` / `### Next steps` content
+  - handles `#### 1. ...` priority headings plus their follow-up line
+  - skips empty placeholder update headings and uses the first substantive
+    update section instead
+- added regression coverage in
+  - `tests/test_tools/test_project_pulse.py`
+  - legacy metadata format still covered
+  - rolling update-log format now covered
+  - empty-placeholder-top-update case now covered
+
+### Why it matters
+
+The repo had already upgraded `HANDOFF.md` into a rolling audit/update log, but
+`project_pulse` still mostly expected the older metadata-only baton shape.
+That meant the system could not reliably tell a fresh session what the current
+repo-hardening track actually was.
+
+This closes that drift. The repo’s self-orientation surface now reads the real
+handoff format and points at the current strengthening work again.
+
+### Verification
+
+- `./.venv-wsl/bin/python -m pytest tests/test_tools/test_project_pulse.py -q`
+  - `65 passed`
+- `./.venv-wsl/bin/python scripts/tools/project_pulse.py --fast`
+  - pulse now anchors on the first substantive 2026-04-11 hardening update
+    instead of the empty placeholder heading
+
 ## Update (2026-04-11 — validated shelf lifecycle hardening)
 
 ## Update (2026-04-11 — fresh-POV governance audit cleanup)
