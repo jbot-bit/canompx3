@@ -1,0 +1,80 @@
+metadata:
+  name: cross-session-context-audit
+  owner: codex
+  created_at: 2026-04-11
+  testing_mode: family
+  holdout_date: 2026-01-01
+  total_expected_trials: 9
+  scope_note: >
+    Read-only cross-session context audit. Tests whether an earlier resolved
+    session on the same trading day conditions the quality of a later breakout
+    as continuation or reversal state. No external data. No look-ahead. Prior
+    session state must be fully resolved before the target session starts.
+
+hypotheses:
+  - id: 7
+    name: europe-flow-prior-win-aligned-continuation
+    description: >
+      If LONDON_METALS resolved as a win in the same direction as the
+      EUROPE_FLOW breakout, EUROPE_FLOW should outperform the rest.
+    filter:
+      type: PRIOR_WIN_ALIGN
+      prior_session: LONDON_METALS
+    scope:
+      instruments: [MGC, MES, MNQ]
+      sessions: [EUROPE_FLOW]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    kill_criteria:
+      - bh_fdr_q_ge_0_05
+      - is_expr_lift_le_0
+      - oos_expr_lift_le_0
+      - filtered_is_n_lt_30
+      - year_stability_lt_60pct_positive
+
+  - id: 8
+    name: us-data-1000-prior-win-aligned-continuation
+    description: >
+      If NYSE_OPEN resolved as a win in the same direction as the US_DATA_1000
+      breakout, US_DATA_1000 should outperform the rest.
+    filter:
+      type: PRIOR_WIN_ALIGN
+      prior_session: NYSE_OPEN
+    scope:
+      instruments: [MGC, MES, MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    kill_criteria:
+      - bh_fdr_q_ge_0_05
+      - is_expr_lift_le_0
+      - oos_expr_lift_le_0
+      - filtered_is_n_lt_30
+      - year_stability_lt_60pct_positive
+
+  - id: 9
+    name: us-data-1000-prior-loss-opposed-reversal
+    description: >
+      If NYSE_OPEN resolved as a loss opposite to the US_DATA_1000 breakout
+      direction, US_DATA_1000 should outperform the rest as a reversal/cascade
+      state.
+    filter:
+      type: PRIOR_LOSS_OPPOSED
+      prior_session: NYSE_OPEN
+    scope:
+      instruments: [MGC, MES, MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    kill_criteria:
+      - bh_fdr_q_ge_0_05
+      - is_expr_lift_le_0
+      - oos_expr_lift_le_0
+      - filtered_is_n_lt_30
+      - year_stability_lt_60pct_positive
