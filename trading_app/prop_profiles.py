@@ -497,8 +497,21 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             "compounding. C11 operational pass improved from 86.2% to 88.4% "
             "post-expansion with higher p50 PnL and lower trailing DD breach. "
             "All lanes cross-referenced against validated_setups via drift "
-            "check 95. See docs/runtime/stages/profit-expansion-topstep-mnq-auto.md "
-            "for full audit trail."
+            "check 95. "
+            "WATCH (2026-04-12): both expansion lanes (COMEX_SETTLE OVNRNG_100, "
+            "CME_PRECLOSE X_MES_ATR60) tripped Shiryaev-Roberts ALARM on first "
+            "monitor pass at N=58 and N=42 respectively. Per-lane 2026 forward "
+            "ExpR is still positive (+0.104 and +0.037) but materially below IS "
+            "validation (-52% and -78%). Hypothesis: vol-conditional filters "
+            "(OVNRNG_100, X_MES_ATR60) are timing-mismatched in the 2026 high-vol "
+            "regime where MNQ ORB median doubled. The same regime is BENEFITING "
+            "the unconditional core ORB_G5 lanes (2026 ExpR is +112% to +286% "
+            "over IS for L1/L2/L4/L5). Aggregate C11 already incorporates the "
+            "2026 weakness and still favors the 7-lane config. Re-check trigger: "
+            "after N>=100 monitored trades on each expansion lane, rerun "
+            "`python -m trading_app.sr_monitor`. If SR remains ALARM AND per-lane "
+            "ExpR < +0.05, revert that specific lane. See deferred-findings.md "
+            "ledger entry SR-L6L7 for the full audit trail."
         ),
     ),
     # =========================================================================

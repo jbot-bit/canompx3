@@ -9,6 +9,7 @@
 
 | ID | Iter | Severity | Target | Description | Deferred Reason |
 |----|------|----------|--------|-------------|-----------------|
+| SR-L6L7 | n/a | MEDIUM | trading_app/prop_profiles.py topstep_50k_mnq_auto | Both 2026-04-12 expansion lanes (L6 MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100, L7 MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60) tripped Shiryaev-Roberts ALARM on first SR monitor pass at N=58 and N=42 respectively. Per-lane 2026 forward ExpR positive but materially below IS validation: L6 +0.104 vs IS +0.215 (-52%); L7 +0.037 vs IS +0.170 (-78%). Same regime is benefiting core ORB_G5 lanes (+112%/+286% over IS), so the directional asymmetry is consistent with a vol-conditional-filter mismatch in the 2026 high-vol regime (MNQ ORB median +95%). Aggregate C11 still 88.4% (improved from 86.2% baseline) because the diversification benefit from 2 uncorrelated lanes more than offsets the per-lane weakness. | Triaged as WATCH following the same standard as L3 (NYSE_OPEN ORB_G5 RR1.5, in WATCH since 2026-04-10 with the same SR-alarm + still-positive + vol-regime pattern). Re-check trigger: after N>=100 monitored trades per lane, rerun `python -m trading_app.sr_monitor`. Auto-revert per lane if SR remains ALARM AND per-lane ExpR < +0.05. Procedural improvement deferred: add SR-clean check as a pre-flight gate for future profit-expansion stages so this is caught before the prop_profiles commit, not after. |
 
 ## Won't Fix (ACCEPTABLE)
 
