@@ -579,6 +579,64 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         ),
     ),
     # =========================================================================
+    # Phase 2b-MES: TopStep MES automation — instrument diversification
+    #
+    # Single MES lane on a separate TopStep Express account. MES provides
+    # TRUE diversification from MNQ (near-zero correlation per
+    # mgc_mnq_correlation.md findings extended to MES).
+    #
+    # Pre-flight audit (2026-04-12):
+    #   - SR pre-flight: CONTINUE (max_SR=11.46, threshold=31.96, N=11 OOS)
+    #   - COST_LT08 is strict subset of ORB_G8 (orb > 9.25 vs >= 8.0) —
+    #     deploy ORB_G8 only, NOT both
+    #   - 2026 OOS: N=11, mean +0.012R, WR 54.5%, directionally positive
+    #   - Year-by-year: 1 negative year (2023, N=12, -0.074 avg_R)
+    #   - Declining avg_R trend 2020-2025: monitor, insufficient N to diagnose
+    #
+    # Why ORB_G8 over COST_LT08:
+    #   - More trades (50/yr vs 34/yr), more total R (+51.4 vs +38.5)
+    #   - Better for single-lane profile (need frequency)
+    #   - WF 5/5 vs 4/4 (more walk-forward windows tested)
+    #   - Higher Sharpe (1.34 vs 1.25)
+    # =========================================================================
+    "topstep_50k_mes_auto": AccountProfile(
+        profile_id="topstep_50k_mes_auto",
+        firm="topstep",
+        account_size=50_000,
+        copies=1,  # Start with 1 Express — prove MES loop, then scale
+        stop_multiplier=0.75,
+        max_slots=2,  # 1 lane now, room for 1 expansion
+        active=False,  # User activates when TopStep Express account is ready
+        allowed_sessions=frozenset({"CME_PRECLOSE"}),
+        allowed_instruments=frozenset({"MES"}),
+        daily_lanes=(
+            # MES CME_PRECLOSE ORB_G8: ExpR 0.173, Sharpe 1.34, N=287,
+            # p=0.00123, WF 5/5 passed, FDR significant.
+            # MES P90 ORB size = 11.2pts at CME_PRECLOSE. Cap at 20.0
+            # (well above P95=14.5, catches only extreme outliers).
+            # Dollar risk at 0.75x stop on avg qualifying ORB (12.3pts):
+            # 12.3 * 0.75 * $5.0 = $46.20 per trade.
+            DailyLaneSpec(
+                "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8",
+                "MES",
+                "CME_PRECLOSE",
+                max_orb_size_pts=20.0,
+            ),
+        ),
+        payout_policy_id="topstep_express_standard",
+        notes=(
+            "1-lane MES-only auto profile — instrument diversification from "
+            "MNQ. CME_PRECLOSE is the highest-ExpR untapped session (0.173). "
+            "ORB_G8 chosen over COST_LT08 because COST_LT08 is a strict "
+            "trade-level subset (orb > 9.25 vs >= 8.0, 100% containment). "
+            "ORB_G8 has more trades (50/yr vs 34/yr) and higher Sharpe "
+            "(1.34 vs 1.25). SR pre-flight CONTINUE at N=11 OOS "
+            "(max_SR=11.46, threshold=31.96). 2026 OOS directionally "
+            "positive (+0.012 avg R). Declining avg_R trend from 2020 "
+            "peak to monitor — retire if SR fires post-N=50 OOS."
+        ),
+    ),
+    # =========================================================================
     # Phase 2c: Full auto-scaling — TYPE-A (TopStep) and TYPE-B (Tradeify)
     #
     # TYPE-A sessions: US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, CME_REOPEN,
