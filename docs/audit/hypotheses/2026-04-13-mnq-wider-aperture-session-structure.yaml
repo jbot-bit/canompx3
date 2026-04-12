@@ -1,0 +1,344 @@
+# Hypothesis Registry — MNQ Wider Aperture (Session-Structure Mechanism)
+#
+# Locked:        2026-04-13T09:00:00+10:00
+# Author:        Claude Code session (aperture opportunity analysis)
+# Holdout mode:  A (2026-01-01 sacred)
+# Data horizon:  6.65 calendar years (MNQ real micro 2019-05-06 to 2025-12-31)
+# Testing mode:  family (BH FDR at K=24)
+#
+# BLUEPRINT NO-GO AUDIT:
+# Blueprint §5 NO-GO entry: "O15/O30 ORB aperture (as portfolio) |
+# ARITHMETIC_ONLY | Friction artifact"
+# Reopening criterion: "New mechanism hypothesis (not friction/size related)"
+#
+# THIS HYPOTHESIS IS MECHANISM-DISTINCT from the NO-GO:
+# The NO-GO tested whether 15m/30m REPLACES 5m per-trade (answer: no,
+# 0.031R worse). This hypothesis tests whether wider apertures unlock
+# SESSIONS WHERE 5m FAILS — a portfolio-diversification question, not a
+# per-trade-R question. Evidence: SINGAPORE_OPEN has NEGATIVE 5m edge
+# (Sharpe -0.15) but POSITIVE 30m edge (Sharpe +1.01). A friction
+# artifact cannot flip the SIGN of the edge — that is a structural
+# session-mechanism difference. The information-aggregation timescale
+# of Asian sessions differs from US sessions.
+#
+# BIAS PREVENTION:
+# - ALL 12 sessions tested at BOTH 15m and 30m — no cherry-picking
+# - RR fixed at 1.5 (standard mid-grid, not optimized)
+# - Filter grid is the same as wave4 (ORB_G5 baseline)
+# - Unfiltered baselines were observed BEFORE this file was written
+#   but NO filter selection or RR optimization was performed
+# - Kill criteria defined BEFORE any filtered results are seen
+#
+# LOOK-AHEAD CHECK:
+# - daily_features at orb_minutes=15 and orb_minutes=30 contain
+#   orb_{SESSION}_size, break_dir, break_ts — all computed from
+#   bars WITHIN the aperture window (t < entry_time)
+# - No 5m features used to predict 15m/30m outcomes
+# - No cross-aperture leakage in the outcome_builder
+#
+# LITERATURE GROUNDING:
+# - Crabel (1990) "Day Trading with Short Term Price Patterns": the
+#   original ORB methodology tested multiple aperture widths and found
+#   optimal width varies by market structure. FROM TRAINING MEMORY —
+#   not verified against local PDF (no Crabel PDF in resources/).
+# - Chan (2009) "Quantitative Trading" Ch 1-2: regime-conditional
+#   signal behavior. Different market structures produce different
+#   optimal parameters. @canonical-source resources/Quantitative_Trading_Chan_2008.pdf
+# - French & Roll (1986) JFE: information arrival rates differ across
+#   trading sessions. Asian hours have slower information incorporation.
+#   FROM TRAINING MEMORY — not verified against local PDF.
+# - Ito, Engle, Lin (1992) JIE: intraday volatility patterns differ
+#   by timezone/session due to institutional trading flows.
+#   FROM TRAINING MEMORY — not verified against local PDF.
+
+metadata:
+  name: "mnq-wider-aperture-session-structure"
+  purpose: |
+    Test whether 15m and 30m ORB apertures produce tradeable edges on
+    sessions where 5m already works (additive diversification) or on
+    sessions where 5m has no edge (new session access). The mechanism
+    is session-structure information-aggregation timescale: slow-build
+    sessions (Asian, pre-data) need wider apertures to establish a
+    meaningful range, while fast sessions (NYSE_OPEN, COMEX_SETTLE)
+    are fully captured by 5m.
+  date_locked: "2026-04-13T09:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.65
+  data_source: "real CME Micro E-mini Nasdaq-100 futures 2019-05-06 onwards"
+  testing_mode: "family"
+  bailey_compliance:
+    trials: 24
+    horizon_years: 6.65
+    e_max_n: 1.0
+    min_btl_required_years: 6.36
+    headroom_pct: 4.4
+    status: "PASS"
+  total_expected_trials: 24
+
+hypotheses:
+  # 15m aperture — ALL 12 sessions
+  - id: 1
+    name: "MNQ TOKYO_OPEN 15m RR1.5"
+    theory_citation: "Ito, Engle, Lin (1992) JIE; TRADING_RULES.md line 277 VALIDATED finding"
+    economic_basis: |
+      Asian session price discovery takes 10-15 minutes due to lower
+      liquidity and staggered institutional flow from Tokyo/HK/Singapore.
+      The 5m range captures only the initial noise, not the directional
+      commitment. TRADING_RULES.md already VALIDATES this: +0.208R
+      premium on 15m, 90% of pairs improve.
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope:
+      instruments: [MNQ]
+      sessions: [TOKYO_OPEN]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      orb_minutes: [15]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=24"
+      - "Walk-forward efficiency < 0.50"
+      - "2026 OOS ExpR < 0"
+      - "Any era with N >= 50 and ExpR < -0.05"
+      - "T1 WR monotonicity: if WR flat + payoff only rising → ARITHMETIC_ONLY (friction artifact, NO-GO stands)"
+
+  - id: 2
+    name: "MNQ SINGAPORE_OPEN 15m RR1.5"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: "Same slow-build mechanism as TOKYO_OPEN."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 3
+    name: "MNQ EUROPE_FLOW 15m RR1.5"
+    theory_citation: "French & Roll (1986) JFE"
+    economic_basis: "European cross-border flow builds over 10-15 minutes as London desks come online."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 4
+    name: "MNQ LONDON_METALS 15m RR1.5"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: "London metals open is a slow-build session."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 5
+    name: "MNQ US_DATA_1000 15m RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "10:00 AM data release (ISM, consumer confidence) — full market reaction takes 10-15 minutes as algorithms parse and institutional desks reposition."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 6
+    name: "MNQ NYSE_OPEN 15m RR1.5"
+    theory_citation: "Crabel (1990) ch.3 (training memory)"
+    economic_basis: "NYSE cash open — test whether 15m captures the full opening auction range better than 5m."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 7
+    name: "MNQ COMEX_SETTLE 15m RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "COMEX settlement window — test information-aggregation timescale."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 8
+    name: "MNQ CME_PRECLOSE 15m RR1.5"
+    theory_citation: "Bogousslavsky (2016) closing flow"
+    economic_basis: "Pre-close institutional positioning — short session, wider aperture may capture the full flow."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 9
+    name: "MNQ US_DATA_830 15m RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "8:30 AM data release — GDP, CPI, employment. Same data-reaction mechanism as US_DATA_1000."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 10
+    name: "MNQ CME_REOPEN 15m RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "CME reopen after maintenance — test whether the gap-fill takes >5 minutes."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 11
+    name: "MNQ NYSE_CLOSE 15m RR1.5"
+    theory_citation: "Bogousslavsky (2016)"
+    economic_basis: "NYSE close — late-day institutional rebalancing."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [NYSE_CLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 12
+    name: "MNQ BRISBANE_1025 15m RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "Brisbane local session — slow pre-Asian build."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [BRISBANE_1025], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [15] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  # 30m aperture — ALL 12 sessions
+  - id: 13
+    name: "MNQ TOKYO_OPEN 30m RR1.5"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: "Extended Asian price discovery. 30m may capture full equilibrium."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [TOKYO_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 14
+    name: "MNQ SINGAPORE_OPEN 30m RR1.5"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: "Preliminary scan showed NEGATIVE 5m edge but POSITIVE 30m edge (sign flip). This is the strongest test of the session-structure mechanism."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [SINGAPORE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 15
+    name: "MNQ EUROPE_FLOW 30m RR1.5"
+    theory_citation: "French & Roll (1986) JFE"
+    economic_basis: "Extended European build — test if 30m adds beyond 15m."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [EUROPE_FLOW], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 16
+    name: "MNQ LONDON_METALS 30m RR1.5"
+    theory_citation: "Ito, Engle, Lin (1992) JIE"
+    economic_basis: "London metals extended build."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [LONDON_METALS], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 17
+    name: "MNQ US_DATA_1000 30m RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "Extended data-reaction window. Some releases take 30+ minutes to fully price."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_1000], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 18
+    name: "MNQ NYSE_OPEN 30m RR1.5"
+    theory_citation: "Crabel (1990) ch.3 (training memory)"
+    economic_basis: "NYSE 30m range — classic Crabel aperture."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [NYSE_OPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 19
+    name: "MNQ COMEX_SETTLE 30m RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "COMEX settlement — extended window."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [COMEX_SETTLE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 20
+    name: "MNQ CME_PRECLOSE 30m RR1.5"
+    theory_citation: "Bogousslavsky (2016)"
+    economic_basis: "Pre-close 30m — NOTE: CME_PRECLOSE has limited session length, 30m may consume most of it."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [CME_PRECLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 21
+    name: "MNQ US_DATA_830 30m RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "8:30 data release 30m range."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [US_DATA_830], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 22
+    name: "MNQ CME_REOPEN 30m RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "CME reopen 30m range."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [CME_REOPEN], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 23
+    name: "MNQ NYSE_CLOSE 30m RR1.5"
+    theory_citation: "Bogousslavsky (2016)"
+    economic_basis: "NYSE close 30m range."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [NYSE_CLOSE], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+  - id: 24
+    name: "MNQ BRISBANE_1025 30m RR1.5"
+    theory_citation: "Chan (2009) ch.1-2"
+    economic_basis: "Brisbane pre-Asian 30m range."
+    filter: { type: ORB_G5, column: orb_size, thresholds: [5] }
+    scope: { instruments: [MNQ], sessions: [BRISBANE_1025], rr_targets: [1.5], entry_models: [E2], confirm_bars: [1], stop_multipliers: [1.0], orb_minutes: [30] }
+    expected_trial_count: 1
+    kill_criteria: ["BH FDR q=0.05 fails at K=24", "WFE < 0.50", "OOS ExpR < 0", "Era instability", "T1 ARITHMETIC_ONLY"]
+
+total_hypothesis_count: 24
+total_expected_trials: 24
+budget_check:
+  mode: "clean"
+  max_allowed_clean: 300
+  strict_bailey_e_1_0_max_n: 27
+  data_horizon_years_available: 6.65
+  status: "under budget"
+
+# ADDITIONAL CONTROLS (mandatory per this hypothesis):
+#
+# 1. T1 WR MONOTONICITY: every survivor must show WR spread > 5% across
+#    ORB-size quintiles. If WR is flat + only payoff rising, classify as
+#    ARITHMETIC_ONLY and do NOT deploy (NO-GO still applies for friction
+#    artifacts).
+#
+# 2. CORRELATION GATE: every survivor must pass the trade-level
+#    correlation gate (trading_app/lane_correlation.py) against the
+#    deployed 5m portfolio before deployment. rho > 0.70 or same-session
+#    subset > 0.80 = reject.
+#
+# 3. 5m-vs-wider PORTFOLIO SHARPE: after individual screening, build a
+#    combined 5m+survivor portfolio and verify Sharpe improves vs
+#    5m-only. If portfolio Sharpe DECREASES, the survivors add noise
+#    not signal.
+#
+# 4. SIGN-FLIP REQUIREMENT for NO-GO-reopening claims: any session
+#    claimed as "new access via wider aperture" must show NEGATIVE or
+#    near-zero 5m edge AND POSITIVE wider-aperture edge. If 5m is
+#    already positive, wider aperture is NOT opening a new session —
+#    it's an inferior duplicate.
