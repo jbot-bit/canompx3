@@ -29,6 +29,13 @@ from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import apply_tight_stop
 from trading_app.derived_state import build_profile_fingerprint
+from trading_app.derived_state import (
+    build_code_fingerprint,
+    build_db_identity,
+    build_state_envelope,
+    get_git_head,
+    validate_state_envelope,
+)
 from trading_app.prop_profiles import (
     get_account_tier,
     get_firm_spec,
@@ -44,6 +51,8 @@ STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 MIN_SURVIVAL_PROBABILITY = 0.70
 DEFAULT_REPORT_MAX_AGE_DAYS = 30
+CRITERION11_STATE_TYPE = "account_survival"
+CRITERION11_STATE_SCHEMA_VERSION = 1
 
 
 @dataclass(frozen=True)
@@ -146,6 +155,102 @@ def get_survival_report_path(profile_id: str | None = None) -> Path:
 def _build_profile_fingerprint(profile) -> str:
     """Backwards-compatible wrapper around the canonical shared helper."""
     return build_profile_fingerprint(profile)
+
+
+def _criterion11_code_paths() -> list[Path]:
+    return [Path(__file__).resolve()]
+
+
+def _current_survival_canonical_inputs(
+    profile_id: str | None = None,
+    *,
+    db_path: Path | None = None,
+) -> dict[str, object]:
+    """Return the canonical-input contract for Criterion 11 state."""
+    resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
+    profile = get_profile(resolved_profile_id)
+    effective_db_path = (db_path or GOLD_DB_PATH).resolve()
+    lane_ids = [str(lane["strategy_id"]) for lane in get_profile_lane_definitions(resolved_profile_id)]
+    return {
+        "profile_id": resolved_profile_id,
+        "profile_fingerprint": _build_profile_fingerprint(profile),
+        "lane_ids": lane_ids,
+        "db_path": str(effective_db_path),
+        "db_identity": build_db_identity(effective_db_path),
+        "code_fingerprint": build_code_fingerprint(_criterion11_code_paths()),
+    }
+
+
+def read_survival_report_state(
+    profile_id: str | None = None,
+    *,
+    db_path: Path | None = None,
+    today: date | None = None,
+) -> dict[str, object]:
+    """Read and validate the current Criterion 11 derived-state file."""
+    resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
+    report_path = get_survival_report_path(resolved_profile_id)
+    base: dict[str, object] = {
+        "profile_id": resolved_profile_id,
+        "available": report_path.exists(),
+        "valid": False,
+        "reason": None,
+        "summary": {},
+        "rules": {},
+        "metadata": {},
+        "canonical_inputs": {},
+        "freshness": {},
+    }
+    if not report_path.exists():
+        base["reason"] = "missing"
+        return base
+
+    try:
+        raw = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        base["reason"] = f"unreadable: {exc}"
+        return base
+
+    if not isinstance(raw, dict):
+        base["reason"] = "invalid state payload"
+        return base
+
+    if "payload" not in raw or "canonical_inputs" not in raw or "freshness" not in raw:
+        base["summary"] = raw.get("summary", {}) if isinstance(raw.get("summary"), dict) else {}
+        base["rules"] = raw.get("rules", {}) if isinstance(raw.get("rules"), dict) else {}
+        base["metadata"] = raw.get("metadata", {}) if isinstance(raw.get("metadata"), dict) else {}
+        base["reason"] = "legacy state: missing versioned envelope"
+        return base
+
+    current_inputs = _current_survival_canonical_inputs(resolved_profile_id, db_path=db_path)
+    valid, reason, envelope = validate_state_envelope(
+        raw,
+        expected_state_type=CRITERION11_STATE_TYPE,
+        expected_schema_version=CRITERION11_STATE_SCHEMA_VERSION,
+        current_profile_id=str(current_inputs["profile_id"]),
+        current_profile_fingerprint=str(current_inputs["profile_fingerprint"]),
+        current_lane_ids=list(current_inputs["lane_ids"]),
+        current_db_identity=str(current_inputs["db_identity"]),
+        current_code_fingerprint=str(current_inputs["code_fingerprint"]),
+        today=today or date.today(),
+    )
+
+    payload = raw.get("payload", {})
+    base["summary"] = payload.get("summary", {}) if isinstance(payload.get("summary"), dict) else {}
+    base["rules"] = payload.get("rules", {}) if isinstance(payload.get("rules"), dict) else {}
+    base["metadata"] = payload.get("metadata", {}) if isinstance(payload.get("metadata"), dict) else {}
+    base["canonical_inputs"] = raw.get("canonical_inputs", {}) if isinstance(raw.get("canonical_inputs"), dict) else {}
+    base["freshness"] = raw.get("freshness", {}) if isinstance(raw.get("freshness"), dict) else {}
+
+    if not valid or envelope is None:
+        base["reason"] = reason or "invalid state envelope"
+        return base
+
+    base["valid"] = True
+    base["reason"] = None
+    base["canonical_inputs"] = envelope["canonical_inputs"]
+    base["freshness"] = envelope["freshness"]
+    return base
 
 
 def _quantile(values: list[float], q: float) -> float:
@@ -621,7 +726,6 @@ def evaluate_profile_survival(
     resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
     profile = get_profile(resolved_profile_id)
     scenarios, metadata = _load_profile_daily_scenarios(resolved_profile_id, as_of_date=as_of_date, db_path=db_path)
-    metadata = {**metadata, "profile_fingerprint": _build_profile_fingerprint(profile)}
     rules = _with_consistency_rule(_build_rules(profile), profile)
     result = simulate_survival(scenarios, rules, horizon_days=horizon_days, n_paths=n_paths, seed=seed)
     operational_pass_probability = round(result["operational_pass_probability"], 4)
@@ -666,12 +770,28 @@ def evaluate_profile_survival(
 
     if write_state:
         out_path = get_survival_report_path(resolved_profile_id)
-        payload = {
-            "summary": asdict(summary),
-            "rules": asdict(rules),
-            "metadata": metadata,
-        }
-        out_path.write_text(json.dumps(payload, indent=2))
+        envelope = build_state_envelope(
+            schema_version=CRITERION11_STATE_SCHEMA_VERSION,
+            state_type=CRITERION11_STATE_TYPE,
+            tool="account_survival",
+            canonical_inputs=_current_survival_canonical_inputs(resolved_profile_id, db_path=db_path),
+            freshness={
+                "as_of_date": str(as_of_date),
+                "max_age_days": DEFAULT_REPORT_MAX_AGE_DAYS,
+            },
+            payload={
+                "summary": asdict(summary),
+                "rules": asdict(rules),
+                "metadata": {
+                    "source_start": metadata["source_start"],
+                    "source_end": metadata["source_end"],
+                    "source_days": metadata["source_days"],
+                    "instruments": metadata["instruments"],
+                },
+            },
+            git_head=get_git_head(Path(__file__).resolve().parents[1]),
+        )
+        out_path.write_text(json.dumps(envelope, indent=2), encoding="utf-8")
 
     return summary
 
@@ -679,6 +799,7 @@ def evaluate_profile_survival(
 def check_survival_report_gate(
     profile_id: str | None = None,
     *,
+    db_path: Path | None = None,
     today: date | None = None,
     min_survival_probability: float = MIN_SURVIVAL_PROBABILITY,
     max_age_days: int = DEFAULT_REPORT_MAX_AGE_DAYS,
@@ -694,11 +815,17 @@ def check_survival_report_gate(
             f"Run: python -m trading_app.account_survival --profile {report_path.stem.removeprefix('account_survival_')}",
         )
 
+    state = read_survival_report_state(profile_id, db_path=db_path, today=today)
+    if not bool(state["valid"]):
+        reason = str(state.get("reason") or "invalid state")
+        return False, f"BLOCKED: Criterion 11 state {reason}. Re-run account survival."
+
+    summary = state["summary"]
+    if not isinstance(summary, dict):
+        return False, "BLOCKED: Criterion 11 state missing summary payload. Re-run account survival."
+
     try:
-        payload = json.loads(report_path.read_text())
-        summary = payload["summary"]
-        metadata = payload["metadata"]
-        as_of_date = date.fromisoformat(summary["as_of_date"])
+        as_of_date = date.fromisoformat(str(summary["as_of_date"]))
         report_age_days = (today - as_of_date).days
         operational_pass = float(summary["operational_pass_probability"])
         horizon_days = int(summary["horizon_days"])
@@ -706,19 +833,13 @@ def check_survival_report_gate(
         scaling_feasible = bool(summary.get("scaling_feasible", False))
         intraday_approximated = bool(summary.get("intraday_approximated", False))
         path_model = str(summary.get("path_model", "daily_close"))
-        profile_fingerprint = str(metadata["profile_fingerprint"])
-    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
-        return False, f"BLOCKED: unreadable Criterion 11 survival report ({exc})"
-
-    resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
-    current_profile_fingerprint = _build_profile_fingerprint(get_profile(resolved_profile_id))
+    except (KeyError, TypeError, ValueError) as exc:
+        return False, f"BLOCKED: unreadable Criterion 11 survival summary ({exc})"
 
     if horizon_days != 90:
         return False, f"BLOCKED: Criterion 11 report horizon is {horizon_days}d, expected 90d"
     if n_paths < 10_000:
         return False, f"BLOCKED: Criterion 11 report uses {n_paths} paths, expected >= 10000"
-    if profile_fingerprint != current_profile_fingerprint:
-        return False, "BLOCKED: Criterion 11 report does not match the current profile lane/risk definition"
     if report_age_days > max_age_days:
         return (
             False,

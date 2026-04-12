@@ -332,6 +332,8 @@ def _lane_lifecycle_from_lifecycle(lifecycle: dict, strategy_id: str) -> tuple[b
 
     if c12.get("valid"):
         sr_status = state.get("sr_status")
+        if sr_status == "ALARM" and state.get("sr_review_outcome") == "watch":
+            return True, f"Criterion 12 SR reviewed WATCH for {strategy_id}"
         if sr_status == "CONTINUE":
             return True, f"Criterion 12 SR clear for {strategy_id}"
         if sr_status == "NO_DATA":

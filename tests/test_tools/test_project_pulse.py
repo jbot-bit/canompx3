@@ -18,6 +18,7 @@ from scripts.tools.project_pulse import (
     build_pulse,
     collect_action_queue,
     collect_deployment_state,
+    collect_lifecycle_control,
     collect_drift,
     collect_git_state,
     collect_handoff,
@@ -97,6 +98,89 @@ class TestCollectHandoff:
         context, items = collect_handoff(tmp_path)
         assert context["tool"] == "Codex"
         assert items == []
+
+    def test_extracts_current_rolling_update_format(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "HANDOFF.md",
+            "\n".join(
+                [
+                    "## Update (2026-04-11 — Concurrency Guardrails v1)",
+                    "",
+                    "### Headline",
+                    "",
+                    "Implemented same-branch mutating session enforcement.",
+                    "",
+                    "### Next move",
+                    "",
+                    "Highest-value next step remains:",
+                    "",
+                    "- Criterion 11 v2",
+                    "- Derived state contract follow-up",
+                ]
+            ),
+        )
+
+        context, items = collect_handoff(tmp_path)
+
+        assert context["tool"] == "Update log"
+        assert context["date"] == "2026-04-11"
+        assert context["summary"] == "Implemented same-branch mutating session enforcement."
+        assert context["next_steps"] == ["Criterion 11 v2", "Derived state contract follow-up"]
+        assert items == []
+
+    def test_extracts_priority_order_next_steps_from_rolling_update(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "HANDOFF.md",
+            "\n".join(
+                [
+                    "## Update (2026-04-09 evening — Full Discovery Methodology Overhaul + 6-Strategy Portfolio)",
+                    "",
+                    "### Where we are",
+                    "",
+                    "Session redesigned discovery methodology from scratch.",
+                    "",
+                    "### Next steps (priority order)",
+                    "",
+                    "#### 1. Review tiered portfolio doc (IMMEDIATE)",
+                    "Read `docs/plans/2026-04-09-portfolio-tiered.md`.",
+                    "",
+                    "#### 2. Deploy Tier 1 portfolio",
+                    "Update `trading_app/prop_profiles.py` with 6 Tier 1 strategies.",
+                ]
+            ),
+        )
+
+        context, _items = collect_handoff(tmp_path)
+
+        assert context["tool"] == "Update log"
+        assert context["date"] == "2026-04-09"
+        assert context["summary"] == "Full Discovery Methodology Overhaul + 6-Strategy Portfolio"
+        assert context["next_steps"] == [
+            "Review tiered portfolio doc (IMMEDIATE) — Read docs/plans/2026-04-09-portfolio-tiered.md.",
+            "Deploy Tier 1 portfolio — Update trading_app/prop_profiles.py with 6 Tier 1 strategies.",
+        ]
+
+    def test_skips_empty_placeholder_update_and_uses_first_substantive_one(self, tmp_path: Path) -> None:
+        _mkfile(
+            tmp_path / "HANDOFF.md",
+            "\n".join(
+                [
+                    "## Update (2026-04-11 — placeholder)",
+                    "",
+                    "## Update (2026-04-11 — Concurrency Guardrails v1)",
+                    "",
+                    "### Headline",
+                    "",
+                    "Implemented same-branch mutating session enforcement.",
+                ]
+            ),
+        )
+
+        context, _items = collect_handoff(tmp_path)
+
+        assert context["tool"] == "Update log"
+        assert context["date"] == "2026-04-11"
+        assert context["summary"] == "Implemented same-branch mutating session enforcement."
 
 
 # ---------------------------------------------------------------------------
@@ -735,9 +819,7 @@ class TestBuildPulse:
             patch.object(project_pulse, "collect_staleness", return_value=[]),
             patch.object(project_pulse, "collect_fitness_fast", return_value=({}, [])),
             patch.object(project_pulse, "collect_deployment_state", return_value=(None, [])),
-            patch.object(project_pulse, "collect_survival_state", return_value=(None, [])),
-            patch.object(project_pulse, "collect_sr_state", return_value=(None, [])),
-            patch.object(project_pulse, "collect_pause_state", return_value=(None, [])),
+            patch.object(project_pulse, "collect_lifecycle_control", return_value=(None, None, None, [])),
             patch.object(project_pulse, "collect_worktrees", return_value=[]),
             patch.object(project_pulse, "collect_session_claims", return_value=[]),
             patch.object(project_pulse, "collect_action_queue", return_value=[]),
@@ -779,17 +861,21 @@ class TestDeploymentState:
 class TestControlSummaries:
     def test_survival_state_pass_summary(self) -> None:
         mock_lifecycle = MagicMock()
-        mock_lifecycle.read_criterion11_state.return_value = {
-            "profile_id": "topstep_50k_mnq_auto",
-            "gate_ok": True,
-            "gate_msg": "Criterion 11 pass: operational 85.0%, as_of=2026-04-09, age=1d, paths=10000",
-            "as_of_date": "2026-04-09",
-            "generated_at_utc": "2026-04-09T22:39:14.876962+00:00",
-            "report_age_days": 1,
-            "operational_pass_probability": 0.85,
-            "n_paths": 10000,
-            "horizon_days": 90,
-            "gate_pass": True,
+        mock_lifecycle.read_lifecycle_state.return_value = {
+            "criterion11": {
+                "profile_id": "topstep_50k_mnq_auto",
+                "gate_ok": True,
+                "gate_msg": "Criterion 11 pass: operational 85.0%, as_of=2026-04-09, age=1d, paths=10000",
+                "as_of_date": "2026-04-09",
+                "generated_at_utc": "2026-04-09T22:39:14.876962+00:00",
+                "report_age_days": 1,
+                "operational_pass_probability": 0.85,
+                "n_paths": 10000,
+                "horizon_days": 90,
+                "gate_pass": True,
+            },
+            "criterion12": {"available": True, "valid": True, "counts": {"ALARM": 0}, "state_age_days": 0},
+            "pauses": {"paused_count": 0, "paused_strategy_ids": []},
         }
         with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
             summary, items = collect_survival_state()
@@ -800,38 +886,52 @@ class TestControlSummaries:
 
     def test_sr_state_alarm_item(self) -> None:
         mock_lifecycle = MagicMock()
-        mock_lifecycle.read_criterion12_state.return_value = {
-            "profile_id": "topstep_50k_mnq_auto",
-            "available": True,
-            "valid": True,
-            "state_date": "2026-04-10",
-            "state_age_days": 0,
-            "counts": {"ALARM": 1, "CONTINUE": 1},
-            "stream_counts": {"paper_trades": 1, "canonical_forward": 1},
-            "apply_pauses": False,
-            "status_by_strategy": {"SID_A": "ALARM", "SID_B": "CONTINUE"},
-            "alarm_strategy_ids": ["SID_A"],
-            "no_data_strategy_ids": [],
+        mock_lifecycle.read_lifecycle_state.return_value = {
+            "criterion11": {"gate_ok": True, "report_age_days": 0},
+            "criterion12": {
+                "profile_id": "topstep_50k_mnq_auto",
+                "available": True,
+                "valid": True,
+                "state_date": "2026-04-10",
+                "state_age_days": 0,
+                "counts": {"ALARM": 1, "CONTINUE": 1},
+                "stream_counts": {"paper_trades": 1, "canonical_forward": 1},
+                "apply_pauses": False,
+                "status_by_strategy": {"SID_A": "ALARM", "SID_B": "CONTINUE"},
+                "alarm_strategy_ids": ["SID_A"],
+                "no_data_strategy_ids": [],
+            },
+            "strategy_states": {
+                "SID_A": {"sr_status": "ALARM", "sr_review_outcome": None, "paused": False},
+                "SID_B": {"sr_status": "CONTINUE", "paused": False},
+            },
+            "pauses": {"paused_count": 0, "paused_strategy_ids": []},
         }
         with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
             summary, items = collect_sr_state(Path("/tmp/repo/gold.db"))
 
         assert summary is not None
         assert summary["counts"]["ALARM"] == 1
+        assert summary["unresolved_alarm_count"] == 1
         assert any(i.source == "sr_monitor" and i.category == "decaying" for i in items)
 
     def test_sr_state_mismatch_degrades_without_trusting_payload(self) -> None:
         mock_lifecycle = MagicMock()
-        mock_lifecycle.read_criterion12_state.return_value = {
-            "profile_id": "topstep_50k_mnq_auto",
-            "available": True,
-            "valid": False,
-            "reason": "profile fingerprint mismatch",
-            "counts": {},
-            "stream_counts": {},
-            "status_by_strategy": {},
-            "alarm_strategy_ids": [],
-            "no_data_strategy_ids": [],
+        mock_lifecycle.read_lifecycle_state.return_value = {
+            "criterion11": {"gate_ok": True, "report_age_days": 0},
+            "criterion12": {
+                "profile_id": "topstep_50k_mnq_auto",
+                "available": True,
+                "valid": False,
+                "reason": "profile fingerprint mismatch",
+                "counts": {},
+                "stream_counts": {},
+                "status_by_strategy": {},
+                "alarm_strategy_ids": [],
+                "no_data_strategy_ids": [],
+            },
+            "strategy_states": {},
+            "pauses": {"paused_count": 0, "paused_strategy_ids": []},
         }
         with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
             summary, items = collect_sr_state(Path("/tmp/repo/gold.db"))
@@ -842,16 +942,72 @@ class TestControlSummaries:
 
     def test_pause_state_reports_paused(self) -> None:
         mock_lifecycle = MagicMock()
-        mock_lifecycle.read_pause_state.return_value = {
-            "profile_id": "topstep_50k_mnq_auto",
-            "paused_count": 2,
-            "paused_strategy_ids": ["A", "B"],
+        mock_lifecycle.read_lifecycle_state.return_value = {
+            "criterion11": {"gate_ok": True, "report_age_days": 0},
+            "criterion12": {"available": True, "valid": True, "counts": {"ALARM": 0}, "state_age_days": 0},
+            "strategy_states": {},
+            "pauses": {
+                "profile_id": "topstep_50k_mnq_auto",
+                "paused_count": 2,
+                "paused_strategy_ids": ["A", "B"],
+            },
         }
         with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
             summary, items = collect_pause_state()
         assert summary is not None
         assert summary["paused_count"] == 2
         assert any(i.source == "pauses" and i.category == "paused" for i in items)
+
+    def test_collect_lifecycle_control_returns_one_read_for_all_summaries(self) -> None:
+        mock_lifecycle = MagicMock()
+        mock_lifecycle.read_lifecycle_state.return_value = {
+            "criterion11": {"gate_ok": True, "report_age_days": 0},
+            "criterion12": {
+                "available": True,
+                "valid": True,
+                "counts": {"ALARM": 1, "CONTINUE": 2},
+                "state_age_days": 0,
+            },
+            "strategy_states": {
+                "SID_A": {"sr_status": "ALARM", "sr_review_outcome": None, "paused": False},
+                "SID_B": {"sr_status": "CONTINUE", "paused": False},
+            },
+            "pauses": {"profile_id": "topstep_50k_mnq_auto", "paused_count": 1, "paused_strategy_ids": ["SID_A"]},
+        }
+        with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
+            survival, sr, pauses, items = collect_lifecycle_control(Path("/tmp/repo/gold.db"))
+
+        assert survival is not None
+        assert sr is not None
+        assert pauses is not None
+        mock_lifecycle.read_lifecycle_state.assert_called_once()
+        assert any(i.source == "sr_monitor" for i in items)
+        assert any(i.source == "pauses" for i in items)
+
+    def test_reviewed_watch_alarm_is_summarized_but_not_actionable(self) -> None:
+        mock_lifecycle = MagicMock()
+        mock_lifecycle.read_lifecycle_state.return_value = {
+            "criterion11": {"gate_ok": True, "report_age_days": 0},
+            "criterion12": {
+                "available": True,
+                "valid": True,
+                "counts": {"ALARM": 1, "CONTINUE": 2},
+                "state_age_days": 0,
+                "stream_counts": {"canonical_forward": 3},
+            },
+            "strategy_states": {
+                "SID_A": {"sr_status": "ALARM", "sr_review_outcome": "watch", "paused": False},
+                "SID_B": {"sr_status": "CONTINUE", "paused": False},
+            },
+            "pauses": {"profile_id": "topstep_50k_mnq_auto", "paused_count": 0, "paused_strategy_ids": []},
+        }
+        with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
+            summary, items = collect_sr_state(Path("/tmp/repo/gold.db"))
+
+        assert summary is not None
+        assert summary["reviewed_watch_count"] == 1
+        assert summary["unresolved_alarm_count"] == 0
+        assert items == []
 
 
 # ---------------------------------------------------------------------------

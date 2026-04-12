@@ -1028,6 +1028,28 @@ class TestNotifications:
         assert STRATEGY_ID in orch._blocked_strategies
         assert orch._blocked_strategy_reasons[STRATEGY_ID] == "SR alarm pause"
 
+    def test_reviewed_watch_alarm_does_not_load_startup_block(self):
+        orch = build_orchestrator()
+        orch._profile_id_for_lane_ctl = "topstep_50k_mnq_auto"
+
+        with patch(
+            "trading_app.lifecycle_state.read_lifecycle_state",
+            return_value={
+                "blocked_strategy_ids": [],
+                "blocked_reason_by_strategy": {},
+                "strategy_states": {
+                    STRATEGY_ID: {
+                        "sr_status": "ALARM",
+                        "sr_review_outcome": "watch",
+                        "blocked": False,
+                    }
+                },
+            },
+        ):
+            orch._load_paused_lane_blocks()
+
+        assert STRATEGY_ID not in orch._blocked_strategies
+
     async def test_paused_lane_blocks_new_entry_with_pause_reason(self):
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
         orch._notify = MagicMock()

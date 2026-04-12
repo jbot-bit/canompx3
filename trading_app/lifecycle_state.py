@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from pipeline.paths import GOLD_DB_PATH
-from trading_app.account_survival import check_survival_report_gate, get_survival_report_path
+from trading_app.account_survival import check_survival_report_gate, read_survival_report_state
 from trading_app.derived_state import (
     build_code_fingerprint,
     build_db_identity,
@@ -26,6 +26,7 @@ from trading_app.derived_state import (
 )
 from trading_app.lane_ctl import get_lane_override, get_paused_strategy_ids
 from trading_app.prop_profiles import get_profile, get_profile_lane_definitions, resolve_profile_id
+from trading_app.sr_review_registry import get_sr_alarm_review
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SR_STATE_PATH = PROJECT_ROOT / "data" / "state" / "sr_state.json"
@@ -58,35 +59,30 @@ def _age_days_from_date(day: str | None, *, today: date | None = None) -> int | 
 def read_criterion11_state(
     profile_id: str | None = None,
     *,
+    db_path: Path = GOLD_DB_PATH,
     today: date | None = None,
 ) -> dict[str, Any]:
     """Read the current Criterion 11 gate/report state for one profile."""
     resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
-    gate_ok, gate_msg = check_survival_report_gate(profile_id=resolved_profile_id, today=today)
-    report_path = get_survival_report_path(resolved_profile_id)
-
-    report_data: dict[str, Any] = {}
-    if report_path.exists():
-        try:
-            report_data = json.loads(report_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            report_data = {}
-
-    summary = report_data.get("summary", {})
-    generated_at = summary.get("generated_at_utc")
+    state = read_survival_report_state(resolved_profile_id, db_path=db_path, today=today)
+    gate_ok, gate_msg = check_survival_report_gate(profile_id=resolved_profile_id, db_path=db_path, today=today)
+    summary = state.get("summary", {})
+    generated_at = summary.get("generated_at_utc") if isinstance(summary, dict) else None
     return {
         "profile_id": resolved_profile_id,
-        "available": report_path.exists(),
+        "available": state["available"],
+        "valid": state["valid"],
+        "reason": state["reason"],
         "gate_ok": gate_ok,
         "gate_msg": gate_msg,
-        "as_of_date": summary.get("as_of_date"),
+        "as_of_date": summary.get("as_of_date") if isinstance(summary, dict) else None,
         "generated_at_utc": generated_at,
         "report_age_days": _age_days_from_timestamp(generated_at),
-        "operational_pass_probability": summary.get("operational_pass_probability"),
-        "n_paths": summary.get("n_paths"),
-        "horizon_days": summary.get("horizon_days"),
-        "gate_pass": summary.get("gate_pass"),
-        "path_model": summary.get("path_model"),
+        "operational_pass_probability": summary.get("operational_pass_probability") if isinstance(summary, dict) else None,
+        "n_paths": summary.get("n_paths") if isinstance(summary, dict) else None,
+        "horizon_days": summary.get("horizon_days") if isinstance(summary, dict) else None,
+        "gate_pass": summary.get("gate_pass") if isinstance(summary, dict) else None,
+        "path_model": summary.get("path_model") if isinstance(summary, dict) else None,
     }
 
 
@@ -212,7 +208,7 @@ def read_lifecycle_state(
 ) -> dict[str, Any]:
     """Read the unified operational lifecycle truth for one profile."""
     resolved_profile_id = resolve_profile_id(profile_id, active_only=False, exclude_self_funded=False)
-    criterion11 = read_criterion11_state(resolved_profile_id, today=today)
+    criterion11 = read_criterion11_state(resolved_profile_id, db_path=db_path, today=today)
     criterion12 = read_criterion12_state(resolved_profile_id, db_path=db_path, today=today)
     pauses = read_pause_state(resolved_profile_id, as_of=today)
     lane_ids = [str(lane["strategy_id"]) for lane in get_profile_lane_definitions(resolved_profile_id)]
@@ -229,10 +225,19 @@ def read_lifecycle_state(
     for strategy_id in strategy_ids:
         pause_info = pauses["paused_details"].get(strategy_id)
         sr_status = criterion12["status_by_strategy"].get(strategy_id)
+        sr_review = get_sr_alarm_review(resolved_profile_id, strategy_id) if sr_status == "ALARM" else None
         if pause_info is not None:
             blocked = True
             block_source = "pause"
             block_reason = str(pause_info.get("reason") or "Paused pending manual review")
+        elif sr_status == "ALARM" and sr_review is not None and sr_review.outcome == "watch":
+            blocked = False
+            block_source = None
+            block_reason = None
+        elif sr_status == "ALARM" and sr_review is not None and sr_review.outcome == "pause":
+            blocked = True
+            block_source = "sr_review_pause"
+            block_reason = sr_review.summary
         elif sr_status == "ALARM":
             blocked = True
             block_source = "sr_alarm"
@@ -247,6 +252,10 @@ def read_lifecycle_state(
             "pause_reason": pause_info.get("reason") if pause_info else None,
             "pause_source": pause_info.get("source") if pause_info else None,
             "sr_status": sr_status,
+            "sr_review_outcome": sr_review.outcome if sr_review is not None else None,
+            "sr_review_summary": sr_review.summary if sr_review is not None else None,
+            "sr_reviewed_at": sr_review.reviewed_at if sr_review is not None else None,
+            "sr_recheck_trigger": sr_review.recheck_trigger if sr_review is not None else None,
             "blocked": blocked,
             "block_source": block_source,
             "block_reason": block_reason,

@@ -320,6 +320,22 @@ class TestLaneLifecycle:
         assert ok is True
         assert "stale/mismatched" in msg
 
+    def test_reviewed_watch_alarm_is_not_blocked(self):
+        lifecycle = {
+            "criterion12": {"available": True, "valid": True},
+            "strategy_states": {
+                "SID_A": {
+                    "blocked": False,
+                    "sr_status": "ALARM",
+                    "sr_review_outcome": "watch",
+                }
+            },
+        }
+        with patch("trading_app.pre_session_check.read_lifecycle_state", return_value=lifecycle):
+            ok, msg = check_lane_lifecycle("SID_A", "topstep_50k_mnq_auto")
+        assert ok is True
+        assert "reviewed WATCH" in msg
+
     def test_blocks_when_lifecycle_state_unreadable(self):
         """Fail-closed: unreadable lifecycle state must block trading, not permit it."""
         with patch(

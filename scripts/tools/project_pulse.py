@@ -30,6 +30,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from pipeline.paths import GOLD_DB_PATH
 from trading_app.validated_shelf import deployable_validated_relation
 
 # staleness_engine lives in scripts/tools/ (same dir as this file)
@@ -250,6 +251,185 @@ def collect_git_state(root: Path) -> list[PulseItem]:
     return items
 
 
+_UPDATE_HEADER_RE = re.compile(r"^## Update \((\d{4}-\d{2}-\d{2})(?:[^)]*?\s+[—-]\s+(.*?))?\)$")
+
+
+def _strip_handoff_markup(text: str) -> str:
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = text.replace("`", "")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _extract_first_paragraph(lines: list[str], start_index: int) -> str | None:
+    paragraph: list[str] = []
+    started = False
+    for line in lines[start_index:]:
+        stripped = line.strip()
+        if not stripped:
+            if started:
+                break
+            continue
+        if stripped.startswith("#"):
+            if started:
+                break
+            continue
+        paragraph.append(_strip_handoff_markup(stripped))
+        started = True
+    return " ".join(paragraph) if paragraph else None
+
+
+def _parse_rolling_handoff(lines: list[str]) -> dict:
+    """Parse the current rolling-update HANDOFF format."""
+    context: dict = {}
+    update_candidates: list[tuple[int, re.Match[str]]] = []
+    for idx, line in enumerate(lines):
+        match = _UPDATE_HEADER_RE.match(line.strip())
+        if match:
+            update_candidates.append((idx, match))
+
+    if not update_candidates:
+        return context
+
+    selected_lines: list[str] = []
+    selected_match: re.Match[str] | None = None
+    fallback_lines: list[str] = []
+    fallback_match: re.Match[str] | None = None
+
+    for update_index, update_match in update_candidates:
+        update_lines: list[str] = []
+        for line in lines[update_index + 1 :]:
+            if line.startswith("## "):
+                break
+            update_lines.append(line.rstrip())
+
+        if fallback_match is None:
+            fallback_match = update_match
+            fallback_lines = update_lines
+
+        substantive = [
+            ln.strip()
+            for ln in update_lines
+            if ln.strip() and not ln.strip().startswith("### ") and not ln.strip().startswith("#### ")
+        ]
+        if substantive:
+            selected_match = update_match
+            selected_lines = update_lines
+            break
+
+    if selected_match is None:
+        selected_match = fallback_match
+        selected_lines = fallback_lines
+
+    if selected_match is None:
+        return context
+
+    date_str = selected_match.group(1)
+    title = _strip_handoff_markup(selected_match.group(2) or "")
+    headline: str | None = None
+    next_steps: list[str] = []
+
+    for idx, line in enumerate(selected_lines):
+        stripped = line.strip()
+        lower = stripped.lower()
+        if lower == "### headline":
+            headline = _extract_first_paragraph(selected_lines, idx + 1)
+            break
+
+    in_next_steps = False
+    pending_step_heading: str | None = None
+    for line in selected_lines:
+        stripped = line.strip()
+        lower = stripped.lower()
+
+        if lower.startswith("### next move") or lower.startswith("### next steps"):
+            in_next_steps = True
+            pending_step_heading = None
+            continue
+
+        if in_next_steps and stripped.startswith("### "):
+            break
+
+        if not in_next_steps:
+            continue
+
+        if not stripped:
+            if pending_step_heading:
+                next_steps.append(pending_step_heading)
+                pending_step_heading = None
+            continue
+
+        if "highest-value next step" in lower:
+            continue
+
+        if stripped.startswith("#### "):
+            heading = _strip_handoff_markup(stripped.removeprefix("#### ").strip())
+            heading = re.sub(r"^\d+\.\s*", "", heading)
+            pending_step_heading = heading
+            continue
+
+        bullet_match = re.match(r"^(?:[-*]|\d+\.)\s+(.+)$", stripped)
+        if bullet_match:
+            bullet = _strip_handoff_markup(bullet_match.group(1))
+            if pending_step_heading:
+                next_steps.append(f"{pending_step_heading} — {bullet}")
+                pending_step_heading = None
+            else:
+                next_steps.append(bullet)
+            continue
+
+        if pending_step_heading:
+            next_steps.append(f"{pending_step_heading} — {_strip_handoff_markup(stripped)}")
+            pending_step_heading = None
+
+    if pending_step_heading:
+        next_steps.append(pending_step_heading)
+
+    context["tool"] = "Update log"
+    context["date"] = date_str
+    if headline:
+        context["summary"] = headline
+    elif title:
+        context["summary"] = title
+    if next_steps:
+        context["next_steps"] = next_steps
+
+    return context
+
+
+def _parse_legacy_handoff(lines: list[str]) -> dict:
+    """Parse the older metadata-style HANDOFF format."""
+    context: dict = {}
+    next_steps: list[str] = []
+    section: str | None = None
+
+    for line in lines:
+        if line.startswith("## Last Session"):
+            section = "metadata"
+            continue
+        if re.match(r"^## Next Steps", line):
+            section = "next_steps"
+            continue
+        if line.startswith("## "):
+            section = None
+            continue
+
+        if section == "metadata":
+            if line.startswith("- **Tool:** "):
+                context["tool"] = line.removeprefix("- **Tool:** ").strip()
+            elif line.startswith("- **Date:** "):
+                context["date"] = line.removeprefix("- **Date:** ").strip()
+            elif line.startswith("- **Summary:** "):
+                context["summary"] = line.removeprefix("- **Summary:** ").strip()
+        elif section == "next_steps":
+            stripped = line.strip()
+            if stripped and not stripped.startswith("Phases "):
+                next_steps.append(stripped)
+
+    if next_steps:
+        context["next_steps"] = next_steps
+    return context
+
+
 def collect_handoff(root: Path) -> tuple[dict, list[PulseItem]]:
     """Parse HANDOFF.md for context + next steps. Single pass."""
     context: dict = {}
@@ -267,52 +447,34 @@ def collect_handoff(root: Path) -> tuple[dict, list[PulseItem]]:
         return context, items
 
     text = handoff_path.read_text(encoding="utf-8", errors="replace")
-    next_steps: list[str] = []
+    lines = text.splitlines()
     blocker_keywords = {"failure", "broken", "missing", "error", "cannot", "blocked"}
+    context = _parse_rolling_handoff(lines) or _parse_legacy_handoff(lines)
 
     section: str | None = None
-    for line in text.splitlines():
-        # Section headers
-        if line.startswith("## Last Session"):
-            section = "metadata"
-            continue
-        if re.match(r"^## Next Steps", line):
-            section = "next_steps"
-            continue
+    for line in lines:
         if line.startswith("## Blockers") or line.startswith("## Blockers / Warnings"):
             section = "blockers"
             continue
         if line.startswith("## "):
             section = None
             continue
+        if section != "blockers":
+            continue
 
-        # Content within sections
-        if section == "metadata":
-            if line.startswith("- **Tool:** "):
-                context["tool"] = line.removeprefix("- **Tool:** ").strip()
-            elif line.startswith("- **Date:** "):
-                context["date"] = line.removeprefix("- **Date:** ").strip()
-            elif line.startswith("- **Summary:** "):
-                context["summary"] = line.removeprefix("- **Summary:** ").strip()
-        elif section == "next_steps":
-            stripped = line.strip()
-            if stripped and not stripped.startswith("Phases "):
-                next_steps.append(stripped)
-        elif section == "blockers":
-            stripped = line.strip()
-            if stripped.startswith("- "):
-                note = stripped.lstrip("- ")
-                if any(kw in note.lower() for kw in blocker_keywords):
-                    items.append(
-                        PulseItem(
-                            category="broken",
-                            severity="medium",
-                            source="handoff",
-                            summary=note,
-                        )
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            note = stripped.lstrip("- ")
+            if any(kw in note.lower() for kw in blocker_keywords):
+                items.append(
+                    PulseItem(
+                        category="broken",
+                        severity="medium",
+                        source="handoff",
+                        summary=note,
                     )
+                )
 
-    context["next_steps"] = next_steps
     return context, items
 
 
@@ -643,60 +805,62 @@ def collect_deployment_state(db_path: Path) -> tuple[dict | None, list[PulseItem
     return summary, items
 
 
-def collect_survival_state() -> tuple[dict | None, list[PulseItem]]:
-    """Read Criterion 11 gate truth from the canonical helper + persisted report."""
-    summary: dict | None = None
+def _collect_control_items_from_lifecycle(
+    lifecycle: dict,
+) -> tuple[dict | None, dict | None, dict | None, list[PulseItem]]:
+    """Project unified lifecycle truth into pulse summaries and actionable items."""
     items: list[PulseItem] = []
+    survival_summary = lifecycle.get("criterion11")
+    sr_summary = lifecycle.get("criterion12")
+    pause_summary = lifecycle.get("pauses")
+    strategy_states = lifecycle.get("strategy_states", {})
 
-    try:
-        from trading_app.lifecycle_state import read_criterion11_state
-
-        summary = read_criterion11_state()
-
-        if not summary["gate_ok"]:
+    if isinstance(survival_summary, dict):
+        if not survival_summary.get("gate_ok"):
             items.append(
                 PulseItem(
                     category="broken",
                     severity="high",
                     source="criterion11",
-                    summary=str(summary["gate_msg"]),
+                    summary=str(survival_summary.get("gate_msg")),
                 )
             )
-        elif summary["report_age_days"] is not None and summary["report_age_days"] >= 14:
+        elif survival_summary.get("report_age_days") is not None and int(survival_summary["report_age_days"]) >= 14:
             items.append(
                 PulseItem(
                     category="decaying",
                     severity="low",
                     source="criterion11",
                     summary=(
-                        f"Criterion 11 report is {summary['report_age_days']}d old — "
+                        f"Criterion 11 report is {survival_summary['report_age_days']}d old — "
                         "refresh before it hard-blocks"
                     ),
                 )
             )
-    except Exception as e:
-        items.append(
-            PulseItem(
-                category="broken",
-                severity="medium",
-                source="criterion11",
-                summary=f"Criterion 11 state error: {type(e).__name__}: {e}",
-            )
+
+    if isinstance(sr_summary, dict):
+        reviewed_watch_ids = sorted(
+            strategy_id
+            for strategy_id, state in strategy_states.items()
+            if isinstance(state, dict)
+            and state.get("sr_status") == "ALARM"
+            and state.get("sr_review_outcome") == "watch"
         )
+        unresolved_alarm_ids = sorted(
+            strategy_id
+            for strategy_id, state in strategy_states.items()
+            if isinstance(state, dict)
+            and state.get("sr_status") == "ALARM"
+            and state.get("sr_review_outcome") is None
+            and not state.get("paused")
+        )
+        sr_summary = dict(sr_summary)
+        sr_summary["reviewed_watch_strategy_ids"] = reviewed_watch_ids
+        sr_summary["reviewed_watch_count"] = len(reviewed_watch_ids)
+        sr_summary["unresolved_alarm_strategy_ids"] = unresolved_alarm_ids
+        sr_summary["unresolved_alarm_count"] = len(unresolved_alarm_ids)
 
-    return summary, items
-
-
-def collect_sr_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
-    """Read Criterion 12 SR monitor state from the persisted state file."""
-    summary: dict | None = None
-    items: list[PulseItem] = []
-
-    try:
-        from trading_app.lifecycle_state import read_criterion12_state
-
-        summary = read_criterion12_state(db_path=db_path)
-        if not summary["available"]:
+        if not sr_summary.get("available"):
             items.append(
                 PulseItem(
                     category="decaying",
@@ -705,10 +869,9 @@ def collect_sr_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
                     summary="Criterion 12 SR state missing — run `python -m trading_app.sr_monitor`",
                 )
             )
-            return None, items
-
-        if not summary["valid"]:
-            reason = summary.get("reason")
+            sr_summary = None
+        elif not sr_summary.get("valid"):
+            reason = sr_summary.get("reason")
             is_stale = isinstance(reason, str) and reason.startswith("stale")
             items.append(
                 PulseItem(
@@ -720,74 +883,107 @@ def collect_sr_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
                         if is_stale
                         else "Criterion 12 SR state mismatched/legacy — rerun `python -m trading_app.sr_monitor`"
                     ),
-                    detail=reason,
+                    detail=str(reason) if reason is not None else None,
                 )
             )
-            return None, items
+            sr_summary = None
+        else:
+            alarms = int(sr_summary.get("counts", {}).get("ALARM", 0))
+            unresolved_alarms = int(sr_summary.get("unresolved_alarm_count", 0))
+            if unresolved_alarms > 0:
+                items.append(
+                    PulseItem(
+                        category="decaying",
+                        severity="high",
+                        source="sr_monitor",
+                        summary=f"Criterion 12 SR has {unresolved_alarms} unresolved ALARM lane(s)",
+                        action="python -m trading_app.sr_monitor --apply-pauses",
+                    )
+                )
+            elif alarms == 0 and sr_summary.get("state_age_days") is not None and int(sr_summary["state_age_days"]) >= 2:
+                items.append(
+                    PulseItem(
+                        category="decaying",
+                        severity="low",
+                        source="sr_monitor",
+                        summary=f"Criterion 12 SR state is {sr_summary['state_age_days']}d old",
+                    )
+                )
 
-        alarms = summary["counts"].get("ALARM", 0)
-        if alarms > 0:
-            items.append(
-                PulseItem(
-                    category="decaying",
-                    severity="high",
-                    source="sr_monitor",
-                    summary=f"Criterion 12 SR has {alarms} ALARM lane(s)",
-                    action="python -m trading_app.sr_monitor --apply-pauses",
-                )
-            )
-        elif summary["state_age_days"] is not None and summary["state_age_days"] >= 2:
-            items.append(
-                PulseItem(
-                    category="decaying",
-                    severity="low",
-                    source="sr_monitor",
-                    summary=f"Criterion 12 SR state is {summary['state_age_days']}d old",
-                )
-            )
-    except Exception as e:
+    if isinstance(pause_summary, dict) and pause_summary.get("paused_strategy_ids"):
+        paused_ids = [str(x) for x in pause_summary.get("paused_strategy_ids", [])]
         items.append(
             PulseItem(
-                category="broken",
-                severity="medium",
-                source="sr_monitor",
-                summary=f"SR state error: {type(e).__name__}: {e}",
+                category="paused",
+                severity="low",
+                source="pauses",
+                summary=f"{pause_summary['profile_id']}: {pause_summary['paused_count']} lane(s) currently paused",
+                detail="\n".join(paused_ids[:5]),
             )
         )
 
-    return summary, items
+    return survival_summary, sr_summary, pause_summary, items
+
+
+def collect_lifecycle_control(db_path: Path) -> tuple[dict | None, dict | None, dict | None, list[PulseItem]]:
+    """Read unified lifecycle truth once, then project pulse control summaries from it."""
+    try:
+        from trading_app.lifecycle_state import read_lifecycle_state
+
+        lifecycle = read_lifecycle_state(db_path=db_path)
+    except Exception as e:
+        return (
+            None,
+            None,
+            None,
+            [
+                PulseItem(
+                    category="broken",
+                    severity="medium",
+                    source="lifecycle",
+                    summary=f"Lifecycle state error: {type(e).__name__}: {e}",
+                )
+            ],
+        )
+
+    return _collect_control_items_from_lifecycle(lifecycle)
+
+
+def collect_survival_state() -> tuple[dict | None, list[PulseItem]]:
+    """Compatibility wrapper for tests/consumers expecting the C11-only collector."""
+    summary, _sr, _pauses, items = collect_lifecycle_control(GOLD_DB_PATH)
+    return summary, [i for i in items if i.source == "criterion11" or i.source == "lifecycle"]
+
+
+def collect_sr_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
+    """Compatibility wrapper for tests/consumers expecting the C12-only collector."""
+    try:
+        from trading_app.lifecycle_state import read_criterion12_state
+
+        summary = read_criterion12_state(db_path=db_path)
+    except Exception as e:
+        return (
+            None,
+            [
+                PulseItem(
+                    category="broken",
+                    severity="medium",
+                    source="sr_monitor",
+                    summary=f"Criterion 12 state error: {type(e).__name__}: {e}",
+                )
+            ],
+        )
+
+    _survival, lifecycle_summary, _pauses, items = collect_lifecycle_control(db_path)
+    if lifecycle_summary is None:
+        return None, [i for i in items if i.source == "sr_monitor" or i.source == "lifecycle"]
+    return lifecycle_summary, [i for i in items if i.source == "sr_monitor" or i.source == "lifecycle"]
 
 
 def collect_pause_state() -> tuple[dict | None, list[PulseItem]]:
-    """Read current lane pause overrides."""
-    summary: dict | None = None
-    items: list[PulseItem] = []
-
-    try:
-        from trading_app.lifecycle_state import read_pause_state
-
-        summary = read_pause_state()
-        if summary["paused_strategy_ids"]:
-            items.append(
-                PulseItem(
-                    category="paused",
-                    severity="low",
-                    source="pauses",
-                    summary=f"{summary['profile_id']}: {summary['paused_count']} lane(s) currently paused",
-                    detail="\n".join(summary["paused_strategy_ids"][:5]),
-                )
-            )
-    except Exception as e:
-        items.append(
-            PulseItem(
-                category="broken",
-                severity="low",
-                source="pauses",
-                summary=f"Pause state error: {type(e).__name__}",
-            )
-        )
-
-    return summary, items
+    """Compatibility wrapper for tests/consumers expecting the pause-only collector."""
+    _survival, _sr, summary, items = collect_lifecycle_control(GOLD_DB_PATH)
+    return summary, [i for i in items if i.source == "pauses" or i.source == "lifecycle"]
 
 
 def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple[dict | None, list[PulseItem]]:
@@ -1523,9 +1719,7 @@ def build_pulse(
         fitness_summary, fitness_items = collect_fitness_fast(db_path)
 
     deployment_summary, deployment_items = collect_deployment_state(db_path)
-    survival_summary, survival_items = collect_survival_state()
-    sr_summary, sr_items = collect_sr_state(db_path)
-    pause_summary, pause_items = collect_pause_state()
+    survival_summary, sr_summary, pause_summary, lifecycle_items = collect_lifecycle_control(db_path)
     handoff_context, handoff_items = collect_handoff(root)
     worktree_items = collect_worktrees(canonical)
     claim_items = collect_session_claims(root)
@@ -1564,9 +1758,7 @@ def build_pulse(
         + staleness_items
         + fitness_items
         + deployment_items
-        + survival_items
-        + sr_items
-        + pause_items
+        + lifecycle_items
         + claim_items
         + conflict_items
         + handoff_items
@@ -1710,6 +1902,8 @@ def format_text(report: PulseReport) -> str:
                 f"C12 SR continue={counts.get('CONTINUE', 0)} alarm={counts.get('ALARM', 0)} "
                 f"no_data={counts.get('NO_DATA', 0)} | age {sr.get('state_age_days') if sr.get('state_age_days') is not None else '?'}d"
             )
+            if sr.get("reviewed_watch_count"):
+                lines.append(f"  C12 reviewed WATCH alarms: {sr.get('reviewed_watch_count')}")
             if streams:
                 stream_parts = [f"{k}:{v}" for k, v in sorted(streams.items())]
                 lines.append(f"  SR streams: {', '.join(stream_parts)}")
@@ -1858,6 +2052,8 @@ def format_markdown(report: PulseReport) -> str:
                 f"alarm={counts.get('ALARM', 0)} no_data={counts.get('NO_DATA', 0)} "
                 f"| age={sr.get('state_age_days')}d"
             )
+            if sr.get("reviewed_watch_count"):
+                lines.append(f"- **C12 reviewed WATCH alarms**: {sr.get('reviewed_watch_count')}")
         if report.pause_summary:
             lines.append(f"- **Paused lanes**: {report.pause_summary.get('paused_count', 0)}")
         lines.append("")
