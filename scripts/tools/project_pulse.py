@@ -52,6 +52,7 @@ SKILL_SUGGESTIONS: dict[str, str] = {
     "tests": "/verify quick",
     "handoff": "/orient --full",
     "ralph": "/audit quick",
+    "control_state": "python scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto",
     "sr_monitor": "python -m trading_app.sr_monitor",
     "criterion11": "python -m trading_app.account_survival --profile topstep_50k_mnq_auto",
 }
@@ -823,6 +824,10 @@ def _collect_control_items_from_lifecycle(
                     severity="high",
                     source="criterion11",
                     summary=str(survival_summary.get("gate_msg")),
+                    action=(
+                        "python scripts/tools/refresh_control_state.py "
+                        f"--profile {survival_summary.get('profile_id')}"
+                    ),
                 )
             )
         elif survival_summary.get("report_age_days") is not None and int(survival_summary["report_age_days"]) >= 14:
@@ -866,7 +871,11 @@ def _collect_control_items_from_lifecycle(
                     category="decaying",
                     severity="low",
                     source="sr_monitor",
-                    summary="Criterion 12 SR state missing — run `python -m trading_app.sr_monitor`",
+                    summary="Criterion 12 SR state missing — refresh control state",
+                    action=(
+                        "python scripts/tools/refresh_control_state.py "
+                        f"--profile {sr_summary.get('profile_id')}"
+                    ),
                 )
             )
             sr_summary = None
@@ -879,11 +888,15 @@ def _collect_control_items_from_lifecycle(
                     severity="low" if is_stale else "medium",
                     source="sr_monitor",
                     summary=(
-                        "Criterion 12 SR state is stale — run `python -m trading_app.sr_monitor`"
+                        "Criterion 12 SR state is stale — refresh control state"
                         if is_stale
-                        else "Criterion 12 SR state mismatched/legacy — rerun `python -m trading_app.sr_monitor`"
+                        else "Criterion 12 SR state mismatched/legacy — refresh control state"
                     ),
                     detail=str(reason) if reason is not None else None,
+                    action=(
+                        "python scripts/tools/refresh_control_state.py "
+                        f"--profile {sr_summary.get('profile_id')}"
+                    ),
                 )
             )
             sr_summary = None

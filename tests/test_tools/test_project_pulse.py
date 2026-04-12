@@ -884,6 +884,24 @@ class TestControlSummaries:
         assert summary["gate_ok"] is True
         assert items == []
 
+    def test_survival_state_block_recommends_control_state_refresh(self) -> None:
+        mock_lifecycle = MagicMock()
+        mock_lifecycle.read_lifecycle_state.return_value = {
+            "criterion11": {
+                "profile_id": "topstep_50k_mnq_auto",
+                "gate_ok": False,
+                "gate_msg": "BLOCKED: Criterion 11 state code fingerprint mismatch. Re-run account survival.",
+                "reason": "code fingerprint mismatch",
+                "report_age_days": 0,
+            },
+            "criterion12": {"available": True, "valid": True, "counts": {"ALARM": 0}, "state_age_days": 0},
+            "pauses": {"paused_count": 0, "paused_strategy_ids": []},
+        }
+        with patch.dict("sys.modules", {"trading_app.lifecycle_state": mock_lifecycle}):
+            _summary, items = collect_survival_state()
+
+        assert any(i.source == "criterion11" and "refresh_control_state.py" in str(i.action) for i in items)
+
     def test_sr_state_alarm_item(self) -> None:
         mock_lifecycle = MagicMock()
         mock_lifecycle.read_lifecycle_state.return_value = {
@@ -939,6 +957,7 @@ class TestControlSummaries:
         assert summary is None
         assert any(i.source == "sr_monitor" and i.category == "decaying" for i in items)
         assert any("mismatched/legacy" in i.summary for i in items)
+        assert any("refresh_control_state.py" in str(i.action) for i in items if i.source == "sr_monitor")
 
     def test_pause_state_reports_paused(self) -> None:
         mock_lifecycle = MagicMock()

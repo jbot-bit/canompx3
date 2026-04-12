@@ -158,7 +158,11 @@ def _build_profile_fingerprint(profile) -> str:
 
 
 def _criterion11_code_paths() -> list[Path]:
-    return [Path(__file__).resolve()]
+    root = Path(__file__).resolve().parents[1]
+    return [
+        Path(__file__).resolve(),
+        root / "trading_app" / "derived_state.py",
+    ]
 
 
 def _current_survival_canonical_inputs(

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict
 from datetime import UTC, date, datetime
+from pathlib import Path
 
 import pytest
 
@@ -379,6 +380,22 @@ def test_read_survival_report_state_marks_legacy_payload_invalid(tmp_path, monke
     assert state["available"] is True
     assert state["valid"] is False
     assert state["reason"] == "legacy state: missing versioned envelope"
+
+
+def test_current_survival_canonical_inputs_fingerprints_shared_helper(monkeypatch):
+    captured: list[Path] = []
+
+    def fake_build_code_fingerprint(paths):
+        captured.extend(paths)
+        return "code-identity"
+
+    monkeypatch.setattr("trading_app.account_survival.build_code_fingerprint", fake_build_code_fingerprint)
+    monkeypatch.setattr("trading_app.account_survival.build_db_identity", lambda _db_path: "db-identity")
+
+    inputs = _current_survival_canonical_inputs("topstep_50k_mnq_auto", db_path=Path("/tmp/gold.db"))
+
+    assert inputs["code_fingerprint"] == "code-identity"
+    assert any(path.name == "derived_state.py" for path in captured)
 
 
 def test_load_lane_daily_pnl_uses_effective_profile_stop_multiplier(monkeypatch):

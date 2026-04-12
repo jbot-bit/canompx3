@@ -6,6 +6,73 @@
 
 ---
 
+## Update (2026-04-12 — control-state reconciliation + fingerprint symmetry)
+
+### Headline
+
+The derived control surfaces are now easier to keep clean on purpose instead of
+by memory. Added a narrow reconciler at
+`scripts/tools/refresh_control_state.py`, widened the C11/C12 code-fingerprint
+contracts to include the shared `trading_app/derived_state.py` helper, and
+verified the live lifecycle state back to:
+
+- `C11 PASS 86.1% | as_of 2026-04-12 | age 0d`
+- `C12 SR continue=4 alarm=2 no_data=0 | age 0d`
+- `C12 reviewed WATCH alarms: 2`
+- no blocked lanes
+
+### What changed
+
+- added `scripts/tools/refresh_control_state.py`
+  - reads lifecycle before/after
+  - refreshes only invalid/missing C11 and/or C12 surfaces by default
+  - supports `--force`, `--skip-c11`, `--skip-c12`
+  - exits non-zero if refreshed state is still invalid/fail-closed
+- hardened C11 fingerprint scope in `trading_app/account_survival.py`
+  - `_criterion11_code_paths()` now includes `trading_app/derived_state.py`
+- hardened C12 fingerprint scope symmetrically
+  - `trading_app/sr_monitor.py` now hashes:
+    - `trading_app/sr_monitor.py`
+    - `trading_app/live/sr_monitor.py`
+    - `trading_app/derived_state.py`
+  - `trading_app/lifecycle_state.py` reader now validates against that same
+    three-file path set
+- updated `scripts/tools/project_pulse.py`
+  - C11/C12 stale-or-mismatch items now point at the reconciler instead of
+    ad hoc manual reruns
+
+### Why it mattered
+
+The runtime had already been unified, but the operator workflow for keeping
+derived state current was still manual:
+
+- code/profile/db changes could invalidate persisted C11/C12 state
+- pulse would tell the operator to rerun individual commands
+- there was no single fail-closed entrypoint for "make control state true again"
+
+Also, the original code-fingerprint scope for both C11 and C12 missed the
+shared envelope helper. That meant changes in `trading_app/derived_state.py`
+could alter state semantics without invalidating old artifacts.
+
+### Verification
+
+- `python3 -m py_compile trading_app/account_survival.py trading_app/sr_monitor.py trading_app/lifecycle_state.py scripts/tools/project_pulse.py scripts/tools/refresh_control_state.py tests/test_trading_app/test_account_survival.py tests/test_trading_app/test_sr_monitor.py tests/test_trading_app/test_lifecycle_state.py tests/test_tools/test_project_pulse.py tests/test_tools/test_refresh_control_state.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_account_survival.py tests/test_trading_app/test_sr_monitor.py tests/test_trading_app/test_lifecycle_state.py tests/test_tools/test_project_pulse.py tests/test_tools/test_refresh_control_state.py -q`
+  - `95 passed`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 98 checks passed`
+- live state reconciliation:
+  - `./.venv-wsl/bin/python scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto`
+  - post-refresh lifecycle:
+    - C11 valid/pass
+    - C12 valid
+    - blocked lanes = `[]`
+- live pulse readback:
+  - `./.venv-wsl/bin/python scripts/tools/project_pulse.py --fast`
+  - pulse now reports clean control state again, leaving only genuine
+    operational debt (`23` validated-only lanes, `2` reviewed-WATCH alarms)
+
 ## Update (2026-04-12 — PROFIT-NEXT L7 deploy → stress-test → SAME-DAY RETIRE)
 
 ### Headline

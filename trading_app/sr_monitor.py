@@ -43,6 +43,15 @@ DEFAULT_VARIANCE_RATIO = 1.0
 BASELINE_WINDOW = 50
 
 
+def _sr_code_paths() -> list[Path]:
+    root = Path(__file__).resolve().parents[1]
+    return [
+        Path(__file__).resolve(),
+        Path(__file__).resolve().parent / "live" / "sr_monitor.py",
+        root / "trading_app" / "derived_state.py",
+    ]
+
+
 def _load_reference_stats() -> dict[str, dict]:
     """Load validated-setups backtest reference stats for deployed lanes."""
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -323,10 +332,6 @@ def run_monitor(*, apply_pauses: bool = False, pause_days: int = 30) -> None:
         print("=" * 120)
 
         state_file = STATE_DIR / "sr_state.json"
-        sr_code_paths = [
-            Path(__file__).resolve(),
-            Path(__file__).resolve().parent / "live" / "sr_monitor.py",
-        ]
         envelope = build_state_envelope(
             schema_version=1,
             state_type="sr_monitor",
@@ -337,7 +342,7 @@ def run_monitor(*, apply_pauses: bool = False, pause_days: int = 30) -> None:
                 "lane_ids": list(lanes.keys()),
                 "db_path": str(GOLD_DB_PATH.resolve()),
                 "db_identity": build_db_identity(GOLD_DB_PATH, con=con),
-                "code_fingerprint": build_code_fingerprint(sr_code_paths),
+                "code_fingerprint": build_code_fingerprint(_sr_code_paths()),
             },
             freshness={
                 "as_of_date": date.today().isoformat(),

@@ -224,3 +224,10 @@ def test_run_monitor_writes_state_envelope(tmp_path, monkeypatch, capsys):
     assert payload["canonical_inputs"]["code_fingerprint"] == "codeid"
     assert payload["freshness"]["max_age_days"] == 2
     assert payload["payload"]["results"][0]["strategy_id"] == "SID1"
+
+
+def test_sr_code_paths_include_shared_derived_state():
+    paths = sr_monitor._sr_code_paths()
+
+    assert any(path.name == "sr_monitor.py" for path in paths)
+    assert any(path.name == "derived_state.py" for path in paths)

@@ -133,6 +133,7 @@ def read_criterion12_state(
             [
                 PROJECT_ROOT / "trading_app" / "sr_monitor.py",
                 PROJECT_ROOT / "trading_app" / "live" / "sr_monitor.py",
+                PROJECT_ROOT / "trading_app" / "derived_state.py",
             ]
         ),
         today=today or date.today(),
