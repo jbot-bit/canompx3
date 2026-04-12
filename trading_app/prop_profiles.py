@@ -398,7 +398,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         account_size=50_000,
         copies=2,  # Start with 1-2 Express, scale to 5 after proving loop
         stop_multiplier=0.75,
-        max_slots=6,
+        max_slots=7,
         active=True,
         allowed_sessions=frozenset(
             {
@@ -415,20 +415,31 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         #   hypothesis file 2026-04-10-mnq-multi-rr-individual.yaml. All
         #   passed WF, OOS, era stability gates.
         #
-        # Expansion (2026-04-12 — profit expansion stage, 2 new-session lanes):
-        #   Selected from deployable_validated_setups for highest honest
-        #   per-lot EV under family-deduplication and session-diversification
-        #   constraints. Both expansion lanes target BRAND NEW sessions
-        #   (COMEX_SETTLE, CME_PRECLOSE) for pure time-window diversification,
-        #   with distinct families (752, 5e7) that do not overlap the core
-        #   families (358, 01c, 27d).
+        # Expansion (2026-04-12 — profit expansion, 2 lanes net after audits):
+        #   L6 MNQ_COMEX_SETTLE OVNRNG_100 (fam 752, added 2026-04-12 in the
+        #     first expansion round; currently WATCH — C6/C8 barely pass, SR
+        #     in ALARM at N=58, locked re-check at N>=100).
+        #   L7 MNQ_EUROPE_FLOW COST_LT12 (fam 5cc, added 2026-04-12 in the
+        #     PROFIT-NEXT second round; cost-gated filter, new family vs
+        #     L1/L2's 01c).
         #
-        # Two additional same-session candidates (NYSE_OPEN X_MES_ATR60,
-        # EUROPE_FLOW OVNRNG_100) were evaluated and REJECTED: Monte Carlo
-        # showed they pushed C11 operational pass from 86.2% down to 75.8%
-        # because same-session concurrency with the core ORB_G5 lanes
-        # compounded drawdowns. The 7-lane pure-new-session config actually
-        # IMPROVES C11 to 88.4% while increasing p50 90d PnL by $629/copy.
+        # The first expansion round also added MNQ_CME_PRECLOSE X_MES_ATR60
+        # but that lane was RETIRED 2026-04-12 after a literature-grounded
+        # re-audit (C6 WFE 0.25, C8 ratio 26%, SR ALARM — three simultaneous
+        # hard failures). The post-retirement gap left slot 7 open and
+        # triggered the PROFIT-NEXT round.
+        #
+        # PROFIT-NEXT evaluated 3 criterion-passing candidates with strict
+        # SR + C11 pre-flight. 2 rejected, 1 deployed:
+        #   US_DATA_1000 X_MES_ATR60   — WFE 0.64, C8 67%, SR ALARM@#34
+        #   NYSE_OPEN   X_MES_ATR60   — WFE 2.14, C8 213%, SR ALARM@#32
+        #   EUROPE_FLOW COST_LT12     — WFE 2.46, C8 251%, SR CONTINUE (deploy)
+        # Numbers recomputed 2026-04-12 via canonical _load_strategy_outcomes
+        # split at HOLDOUT_SACRED_FROM; SR via trading_app.sr_monitor with
+        # ARL=60d, delta=-1.0 defaults.
+        #
+        # The 7-lane config (5 core + L6 + L7) clears C11 Monte Carlo at
+        # 80.8% operational pass (threshold 70%), 10k paths, seed 42.
         #
         # Enforced by drift check 95 (pipeline/check_drift.py) — every lane in
         # an active profile must exist in validated_setups with status='active'.
@@ -478,39 +489,77 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 max_orb_size_pts=80.0,
             ),
             # --- REMOVED 2026-04-12 ---
-            # MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60 was deployed on
-            # 2026-04-12 and failed three locked criteria on its 2026
-            # forward window at N=42:
-            #   C6 WFE = 0.25 (< 0.50 literature threshold)
-            #   C8 OOS ratio = 0.037 / 0.140 = 26% (< 40% threshold)
-            #   C12 Shiryaev-Roberts ALARM on first monitor pass
-            # Per pre_registered_criteria.md C12, SR alarm moves a lane to
-            # suspended pending manual review. Review outcome: REMOVE.
-            # Hypothesis: X_MES_ATR60 cross-asset filter is timing-mismatched
-            # in the 2026 high-vol regime (MNQ ORB median +95%). Consider
-            # re-addition only after a fresh discovery run with explicit
-            # 2026-onward regime conditioning.
+            # MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60: deployed on
+            # 2026-04-12, failed three locked criteria on its 2026
+            # forward window at N=42 (C6 WFE 0.25, C8 ratio 26%, C12
+            # SR ALARM). Retired after literature-grounded re-audit.
+            # Hypothesis: X_MES_ATR60 cross-asset filter is timing-
+            # mismatched on the CME_PRECLOSE session in the 2026 high-
+            # vol regime. The same filter passes on other sessions
+            # (see NYSE_OPEN expansion below) — session matters more
+            # than filter.
+            #
+            # ABORTED 2026-04-12 (PROFIT-NEXT pre-flight):
+            # MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60 passed the static
+            # criterion screen (IS N=724, C6 WFE 0.64, C8 ratio 66.8%)
+            # but SR pre-flight FIRED at trade #34 of 42 OOS trades —
+            # max SR 215.29 vs threshold 31.96 (6.7x). C12 alarm
+            # disqualifies on its own. Not deployed.
+            #
+            # ABORTED 2026-04-12 (PROFIT-NEXT pre-flight):
+            # MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60 was the strongest-
+            # margin new-family candidate (IS N=720, C6 WFE 2.14, C8
+            # ratio 213%) but SR pre-flight FIRED at trade #32 of 44 OOS
+            # trades — max SR 42.18 vs threshold 31.96. C12 alarm
+            # disqualifies even before the C11 same-session concurrency
+            # penalty with L3 (NYSE_OPEN ORB_G5) is applied. Not deployed.
+            #
+            # --- 2026-04-12 EUROPE_FLOW COST_LT12 expansion (verified) ---
+            # MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12: strongest 2026 forward
+            # margins of every PROFIT-NEXT candidate. IS N=1024, OOS N=63,
+            # OOS ExpR +0.263, OOS WR 54.0%. C6 WFE 2.46, C8 ratio 250.8%
+            # (canonical _load_strategy_outcomes split at HOLDOUT_SACRED_FROM).
+            # SR pre-flight CONTINUE — max SR 22.81 vs threshold 31.96,
+            # never tripped across 63 OOS trades. New family 5cc distinct
+            # from deployed EUROPE_FLOW families (01c for L1/L2). Cost-
+            # gated filter (not vol-conditional) — orthogonal to the
+            # OVNRNG/X_MES_ATR60 regime concerns. Same session as L1/L2
+            # both of which are also booming in 2026 — the concurrency
+            # stacks tailwinds, not correlated drawdowns. 7-lane C11 MC
+            # clears at 80.8% operational pass (seed 42, 10k paths).
+            DailyLaneSpec(
+                "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12",
+                "MNQ",
+                "EUROPE_FLOW",
+                max_orb_size_pts=120.0,
+            ),
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "6-lane MNQ-only auto profile. Core 5 ORB_G5 lanes from 2026-04-10 "
-            "multi-RR discovery + 1 expansion lane (COMEX_SETTLE OVNRNG_100, "
-            "2026-04-12). "
-            "Literature-grounded review on 2026-04-12 retired "
-            "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60 after three simultaneous "
-            "criterion failures on its 2026 forward window: C6 WFE 0.25 (< 0.50), "
-            "C8 OOS ratio 26% (< 40%), C12 Shiryaev-Roberts ALARM. Hypothesis: "
-            "X_MES_ATR60 cross-asset filter is timing-mismatched in the 2026 "
-            "high-vol regime (MNQ ORB median +95%). "
-            "COMEX_SETTLE OVNRNG_100 remains in WATCH: C6 WFE 0.52, C8 ratio "
-            "53%, SR ALARM at N=58. Both threshold criteria pass barely; the "
-            "SR alarm is the only trigger. Review outcome matches L3 NYSE_OPEN "
-            "standard — reinstated with locked re-check at N>=100: if SR remains "
-            "ALARM AND per-lane 2026 ExpR < 0.40 * IS ExpR OR WFE < 0.50, retire. "
+            "7-lane MNQ-only auto profile. Core 5 ORB_G5 lanes from 2026-04-10 "
+            "multi-RR discovery + 2 expansion lanes: L6 COMEX_SETTLE OVNRNG_100 "
+            "(WATCH) and L7 EUROPE_FLOW COST_LT12 (PROFIT-NEXT, verified). "
+            "Literature-grounded audit on 2026-04-12 retired the original "
+            "L7 MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60 add (C6 WFE 0.25, "
+            "C8 ratio 26%, SR ALARM — three simultaneous hard failures). "
+            "PROFIT-NEXT then ran strict SR+C11 pre-flight on every "
+            "remaining criterion-passing candidate: US_DATA_1000 X_MES_ATR60 "
+            "SR alarm@#34 (max SR 215.29); NYSE_OPEN X_MES_ATR60 SR "
+            "alarm@#32 (max SR 42.18); EUROPE_FLOW COST_LT12 SR CONTINUE "
+            "(max SR 22.81 of threshold 31.96, 63 OOS trades, never tripped). "
+            "COST_LT12 has the strongest 2026 forward margins of all three "
+            "candidates (C6 WFE 2.46, C8 ratio 250.8% — canonical OOS/IS "
+            "split at HOLDOUT_SACRED_FROM) and shares EUROPE_FLOW with L1/L2 "
+            "which are also booming in 2026, so the concurrency stacks "
+            "tailwinds not correlated drawdowns. 7-lane C11 Monte Carlo "
+            "operational pass = 80.8% (threshold 70%, 10k paths, seed 42). "
+            "L6 COMEX_SETTLE OVNRNG_100 remains WATCH: C6 WFE 0.52, C8 "
+            "ratio 53%, SR ALARM at N=58 — both threshold criteria pass "
+            "barely; SR is the only trigger. Locked re-check at N>=100: "
+            "retire if SR remains ALARM and (C6 WFE < 0.50 OR C8 ratio < 0.40). "
             "All lanes cross-referenced against validated_setups via drift "
-            "check 95. See deferred-findings.md ledger entries SR-L6L7 and "
-            "L7-RETIRE for the full audit trail including the bias-stripping "
-            "re-audit that flipped the Option B call."
+            "check 95. See deferred-findings.md ledger entries SR-L6, "
+            "L7-RETIRE, and PROFIT-NEXT for the full audit trail."
         ),
     ),
     # =========================================================================
