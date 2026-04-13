@@ -25,7 +25,8 @@ class TestContextRoutingGovernance:
         violations = check_drift.check_context_generated_docs()
 
         assert violations
-        assert "docs/context/README.md missing" in "\n".join(violations)
+        joined = "\n".join(violations).replace("\\", "/")
+        assert "docs/context/README.md missing" in joined
 
     def test_agents_context_router_ref_catches_missing_reference(self, tmp_path: Path, monkeypatch) -> None:
         _patch_dirs(monkeypatch, tmp_path)
