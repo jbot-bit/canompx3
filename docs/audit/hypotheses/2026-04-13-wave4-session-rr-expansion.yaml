@@ -1,0 +1,254 @@
+# Hypothesis Registry — Wave 4 Session + RR Expansion
+#
+# Locked:       2026-04-13T12:00:00+10:00
+# Author:       Claude Code session (Wave 4 continuation)
+# Holdout mode: A (2026-01-01 sacred)
+# Data horizon: MNQ 6.65yr (post Phase 3c clean real-micro)
+#
+# Theory citation (LOCAL sources, NOT training memory):
+# 1. Exploratory survey run 2026-04-13 in this session (see NR7 NO-GO + range audit):
+#    - NYSE_CLOSE E2 CB1 O5 RR1.0 unfiltered baseline: t=2.65, p=0.004, N=805
+#    - NYSE_CLOSE ORB_G8 RR1.0: t=3.29, p=0.0005, N=720, 6/7 years positive
+#    - NYSE_CLOSE COST_LT12 RR1.0: t=1.31, p=0.095, N=703
+#    - NYSE_CLOSE X_MES_ATR60 RR1.0: t=1.37, p=0.085, N=345
+#    - US_DATA_1000 RR2.0 ORB_G5: t=2.75, p=0.003, N=1624, 5/7 years positive
+#    - US_DATA_1000 RR2.0 COST_LT12: t=2.03, p=0.021, N=698
+#    - NYSE_OPEN RR2.0 ORB_G5: t=2.39, p=0.008, N=1596
+#    - NYSE_OPEN RR2.0 X_MES_ATR60: t=1.92, p=0.027, N=684
+#    - LONDON_METALS RR1.5 ORB_G8: t=2.10, p=0.018, N=1489
+#    - LONDON_METALS RR1.0 ORB_G8: t=1.70, p=0.045, N=1489
+# 2. Range feature audit: 91 clean tests. NY_RANGE/DAY_RANGE were lookahead.
+#    No new range features needed. NR7 killed 0/6 Bonferroni.
+# 3. Crabel 1990 "Day Trading with Short Term Price Patterns" — ORB size gate.
+# 4. Chan 2013 "Algorithmic Trading" Ch.7 p.155-168 — breakout momentum.
+#
+# AUDIT FINDINGS (pre-commit):
+# - NYSE_CLOSE RR1.5 baseline NEGATIVE (ExpR=-0.010, t=-0.23). DROPPED.
+# - OVNRNG_100 at NYSE_CLOSE/LONDON_METALS: 1% pass rate. DROPPED.
+# - ORB_G5 at NYSE_CLOSE: 99% pass rate = no-op. DROPPED.
+# - ORB_G5 at LONDON_METALS: 97% pass rate = no-op. DROPPED.
+# - COST_LT12 at LONDON_METALS: 92% pass rate = near no-op. DROPPED.
+# - COST_LT12 at NYSE_OPEN RR2.0: exploratory t=0.15. DROPPED.
+# - X_MES_ATR60 at US_DATA_1000 RR2.0: exploratory t=1.08. DROPPED.
+
+metadata:
+  name: "wave4-session-rr-expansion"
+  purpose: |
+    Extend validated MNQ ORB strategies to NYSE_CLOSE (untapped session),
+    RR2.0 at US_DATA_1000/NYSE_OPEN (proven sessions), and LONDON_METALS
+    (untapped, marginal). Existing filter classes only.
+  date_locked: "2026-04-13T12:00:00+10:00"
+  data_horizon_years_clean: 6.65
+  holdout_date: "2026-01-01"
+  total_expected_trials: 9
+
+hypotheses:
+  - id: 1
+    name: "NYSE_CLOSE ORB size gate"
+    theory_citation: |
+      Crabel 1990 ORB size gate. Exploratory ORB_G8 t=3.29, p=0.0005,
+      N=720, 6/7 years positive. 93% pass rate = real filter.
+    economic_basis: |
+      NYSE_CLOSE at 16:00 ET. MOC institutional rebalancing drives
+      momentum. Larger ORBs signal institutional commitment.
+    filter:
+      type: ORB_G8
+      column: "orb_NYSE_CLOSE_size"
+      thresholds: [8]
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_CLOSE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      orb_minutes: [5]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails"
+      - "DSR < 0.95 (K=9)"
+      - "Era: any N>=50 era with ExpR < -0.05"
+
+  - id: 2
+    name: "NYSE_CLOSE cost gate"
+    theory_citation: |
+      Cost gate proven at 4 sessions (7 active strategies). Exploratory
+      COST_LT12 at NYSE_CLOSE RR1.0: t=1.31, N=703, 80% pass rate.
+    economic_basis: |
+      On low-volatility days, ORB risk is small relative to friction.
+      Cost gate removes these unprofitable days.
+    filter:
+      type: COST_LT12
+      column: "cost_ratio"
+      thresholds: [12]
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_CLOSE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      orb_minutes: [5]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails"
+      - "DSR < 0.95 (K=9)"
+
+  - id: 3
+    name: "NYSE_CLOSE cross-asset vol"
+    theory_citation: |
+      X_MES_ATR60 proven at 3 sessions (6 active strategies). Exploratory
+      at NYSE_CLOSE RR1.0: t=1.37, N=345, 43% pass rate (strong filter).
+    economic_basis: |
+      MES ATR >= 60 selects days with broad equity index volatility.
+      Cross-asset vol regime predicts breakout follow-through.
+    filter:
+      type: X_MES_ATR60
+      column: "mes_atr_20"
+      thresholds: [60]
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_CLOSE]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      orb_minutes: [5]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails"
+      - "DSR < 0.95 (K=9)"
+
+  - id: 4
+    name: "US_DATA_1000 RR2.0 ORB size gate"
+    theory_citation: |
+      US_DATA_1000 has 2 active strategies at RR1.0/1.5. Exploratory
+      RR2.0 ORB_G5: t=2.75, p=0.003, N=1624, 5/7 years positive.
+    economic_basis: |
+      10:00 ET data releases. Edge proven at narrower RR. RR2.0 captures
+      extended post-release trend.
+    filter:
+      type: ORB_G5
+      column: "orb_US_DATA_1000_size"
+      thresholds: [5]
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      orb_minutes: [5]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails"
+      - "DSR < 0.95 (K=9)"
+
+  - id: 5
+    name: "US_DATA_1000 RR2.0 cost gate"
+    theory_citation: |
+      COST_LT12 exploratory at US_DATA_1000 RR2.0: t=2.03, p=0.021, N=698.
+    economic_basis: |
+      Same friction-gate mechanism. At wider RR targets, friction is
+      proportionally smaller but cost gate still removes worst days.
+    filter:
+      type: COST_LT12
+      column: "cost_ratio"
+      thresholds: [12]
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      orb_minutes: [5]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails"
+      - "DSR < 0.95 (K=9)"
+
+  - id: 6
+    name: "NYSE_OPEN RR2.0 ORB size gate"
+    theory_citation: |
+      NYSE_OPEN has 6 active strategies at RR1.0/1.5. Exploratory RR2.0
+      ORB_G5: t=2.39, p=0.008, N=1596.
+    economic_basis: |
+      NYSE open 09:30 ET. Highest volume. Stop cascades per Chan Ch.7.
+      RR2.0 captures continuation of breakout trend.
+    filter:
+      type: ORB_G5
+      column: "orb_NYSE_OPEN_size"
+      thresholds: [5]
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_OPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      orb_minutes: [5]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails"
+      - "DSR < 0.95 (K=9)"
+      - "Correlation with existing RR1.0/1.5 > 0.85"
+
+  - id: 7
+    name: "NYSE_OPEN RR2.0 cross-asset vol"
+    theory_citation: |
+      X_MES_ATR60 exploratory at NYSE_OPEN RR2.0: t=1.92, p=0.027, N=684.
+    economic_basis: |
+      Cross-asset MES volatility selects high-conviction breakout days.
+    filter:
+      type: X_MES_ATR60
+      column: "mes_atr_20"
+      thresholds: [60]
+    scope:
+      instruments: [MNQ]
+      sessions: [NYSE_OPEN]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      orb_minutes: [5]
+      stop_multipliers: [1.0]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails"
+      - "DSR < 0.95 (K=9)"
+      - "Correlation with existing RR1.0/1.5 > 0.85"
+
+  - id: 8
+    name: "LONDON_METALS ORB size gate"
+    theory_citation: |
+      LONDON_METALS 0 active strategies. Exploratory ORB_G8: RR1.5 t=2.10,
+      p=0.018; RR1.0 t=1.70, p=0.045. 87% pass rate. OVN/ATR p=0.011
+      (clean feature, Asia complete before session). Marginal but motivated.
+    economic_basis: |
+      London Metals Exchange open 07:00 UTC. Asian session sets context.
+      ORB_G8 selects days with wider opening range = stronger flow.
+    filter:
+      type: ORB_G8
+      column: "orb_LONDON_METALS_size"
+      thresholds: [8]
+    scope:
+      instruments: [MNQ]
+      sessions: [LONDON_METALS]
+      rr_targets: [1.0, 1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      orb_minutes: [5]
+      stop_multipliers: [1.0]
+    expected_trial_count: 2
+    kill_criteria:
+      - "BH FDR q=0.05 fails across both RR targets"
+      - "DSR < 0.95 (K=9)"
+      - "Era: baseline is marginal, any era failure kills"
+
+total_hypothesis_count: 8
+total_expected_trials: 9
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget (9/300 = 3%)"
+  minbtl_check: "MinBTL = 2*ln(9)/1.0^2 = 4.39 years. Available: 6.65yr. PASSES."
