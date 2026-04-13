@@ -3530,7 +3530,8 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         filters["CROSS_NYSE_MOMENTUM"] = ALL_FILTERS["CROSS_NYSE_MOMENTUM"]
     if instrument == "MNQ" and session == "CME_PRECLOSE":
         filters["VWAP_BP_ALIGNED"] = ALL_FILTERS["VWAP_BP_ALIGNED"]
-        filters["CROSS_COMEX_MOMENTUM"] = ALL_FILTERS["CROSS_COMEX_MOMENTUM"]
+        # CROSS_COMEX_MOMENTUM removed 2026-04-14: holdout-killed
+        # (Criterion 8 OOS negative, era 2023 fails)
     if instrument == "MNQ" and session == "EUROPE_FLOW":
         filters["CROSS_SGP_MOMENTUM"] = ALL_FILTERS["CROSS_SGP_MOMENTUM"]
 
