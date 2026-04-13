@@ -111,10 +111,10 @@ python3 scripts/infra/codex_local_env.py drift --platform wsl
 Windows fallback actions:
 
 ```powershell
-py -3 scripts/infra/codex_local_env.py status --platform windows
-py -3 scripts/infra/codex_local_env.py lint --platform windows
-py -3 scripts/infra/codex_local_env.py tests --platform windows
-py -3 scripts/infra/codex_local_env.py drift --platform windows
+uv run --frozen python scripts/infra/codex_local_env.py status --platform windows
+uv run --frozen python scripts/infra/codex_local_env.py lint --platform windows
+uv run --frozen python scripts/infra/codex_local_env.py tests --platform windows
+uv run --frozen python scripts/infra/codex_local_env.py drift --platform windows
 ```
 
 ## Codex profiles
