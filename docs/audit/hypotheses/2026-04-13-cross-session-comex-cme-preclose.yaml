@@ -51,6 +51,7 @@ hypotheses:
       rr_targets: [1.0]
       entry_models: [E2]
       confirm_bars: [1]
+    theory_citation: "Cross-session momentum — COMEX_SETTLE establishes late-day direction, CME_PRECLOSE inherits. IS p=0.034, 7/8yr positive, symmetric. Codex Round-3 memo + Apr 13 directional alignment scan."
     expected_trial_count: 1
     kill_criteria:
       - "BH FDR q=0.05 fails at K=3"

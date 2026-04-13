@@ -51,6 +51,7 @@ hypotheses:
       rr_targets: [1.0]
       entry_models: [E2]
       confirm_bars: [1]
+    theory_citation: "Cross-session momentum — SINGAPORE_OPEN establishes Asian direction, EUROPE_FLOW inherits across 7hr gap. IS p=0.132, symmetric, stacks with OVNRNG (+0.119R incremental). Apr 13 directional alignment scan."
     expected_trial_count: 1
     kill_criteria:
       - "BH FDR q=0.05 fails at K=3"
