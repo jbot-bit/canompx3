@@ -252,16 +252,9 @@ class SessionOrchestrator:
             e2_order_timeout=E2_ORDER_TIMEOUT,
         )
 
-        # Crash recovery: restore daily P&L so RiskManager re-derives halt state.
-        # Only restore if trading_day matches (daily PnL resets each day).
-        _saved_day = self._safety_state.trading_day
-        if _saved_day == str(self.trading_day) and self._safety_state.daily_pnl_r != 0.0:
-            self.engine.daily_pnl_r = self._safety_state.daily_pnl_r
-            log.critical(
-                "CRASH RECOVERY: restored daily_pnl_r=%.2fR from %s",
-                self._safety_state.daily_pnl_r,
-                _saved_day,
-            )
+        # NOTE: Crash recovery moved after _safety_state init (line ~387).
+        # _safety_state is created later in __init__ because it depends on
+        # self.portfolio.name and instrument which are set above.
 
         # Contract resolution (needed even in signal-only for front-month lookup)
         contracts = contracts_cls(auth=self.auth, demo=demo)
@@ -384,6 +377,17 @@ class SessionOrchestrator:
         self._bar_count = 0  # total bars received this session
         self._bar_persister = BarPersister(instrument, db_path=str(GOLD_DB_PATH))
         self._close_time_forced = self._safety_state.close_time_forced
+
+        # Crash recovery: restore daily P&L so RiskManager re-derives halt state.
+        # Only restore if trading_day matches (daily PnL resets each day).
+        _saved_day = self._safety_state.trading_day
+        if _saved_day == str(self.trading_day) and self._safety_state.daily_pnl_r != 0.0:
+            self.engine.daily_pnl_r = self._safety_state.daily_pnl_r
+            log.critical(
+                "CRASH RECOVERY: restored daily_pnl_r=%.2fR from %s",
+                self._safety_state.daily_pnl_r,
+                _saved_day,
+            )
 
         # DD PROTECTION — TWO LAYERS
         # Layer 1: RiskManager — intraday R-units, resets each session
