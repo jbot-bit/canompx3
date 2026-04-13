@@ -18,8 +18,8 @@ from trading_app.config import (
     OrbSizeFilter,
     PitRangeFilter,
     StrategyFilter,
-    VWAPBreakDirectionFilter,
     VolumeFilter,
+    VWAPBreakDirectionFilter,
     get_filters_for_grid,
     is_e2_lookahead_filter,
 )
@@ -159,8 +159,10 @@ class TestAllFilters:
         #     ATR_VEL_GE110 (sensitivity variant, injection-only)
         #     ATR_VEL_GE115 (sensitivity variant, injection-only)
         #     GARCH_VOL_PCT_LT20 (Wave 5 G5, injection-only — MNQ NYSE_OPEN LOW regime)
-        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 4 scoped = 86
-        assert len(ALL_FILTERS) == 86
+        #     VWAP_MID_ALIGNED (Apr 2026 exhaustive audit, MNQ US_DATA_1000 O15)
+        #     VWAP_BP_ALIGNED (Apr 2026 exhaustive audit, MNQ CME_PRECLOSE O5)
+        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 6 scoped = 88
+        assert len(ALL_FILTERS) == 88
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS

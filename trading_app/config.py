@@ -3330,6 +3330,19 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
     if (instrument, session) in _atr_vel_validated:
         filters["ATR_VEL_GE105"] = ALL_FILTERS["ATR_VEL_GE105"]
 
+    # VWAP break-direction alignment gate (Apr 2026 exhaustive audit).
+    # 425-test cross-family BH FDR K=425: 4 survivors. Session-specific definitions:
+    # - MNQ US_DATA_1000 O15: orb_mid definition (p=0.00008, p=0.0002)
+    # - MNQ CME_PRECLOSE O5: break_price definition (p=0.002, pending C8 OOS)
+    # Not confounded with gap/overnight_range/atr_vel (all |r| < 0.03).
+    # No lookahead: VWAP is pre-session, break_dir known at entry time.
+    # @research-source scripts/tmp/exhaustive_audit.py (2026-04-13)
+    # @entry-models E2
+    if instrument == "MNQ" and session == "US_DATA_1000":
+        filters["VWAP_MID_ALIGNED"] = ALL_FILTERS["VWAP_MID_ALIGNED"]
+    if instrument == "MNQ" and session == "CME_PRECLOSE":
+        filters["VWAP_BP_ALIGNED"] = ALL_FILTERS["VWAP_BP_ALIGNED"]
+
     # Pit range anti-filter: skip dead-pit days at CME_REOPEN (Apr 2026).
     # VALIDATED: 3/3 instruments pass T1-T8, BH FDR at K=320, +17% WR spread.
     # Zero look-ahead: pit closes 21:00 UTC, CME_REOPEN starts 23:00 UTC.
