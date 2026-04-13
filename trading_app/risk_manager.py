@@ -10,8 +10,11 @@ Usage:
     allowed, reason = rm.can_enter(trade, active_trades, daily_pnl_r)
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import date
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -318,14 +321,16 @@ class RiskManager:
 
         # Check 5: Drawdown warning (allow, but record warning)
         if daily_pnl_r <= self.limits.drawdown_warning_r:
-            self._warnings.append(
-                f"drawdown_warning: daily PnL {daily_pnl_r:.2f}R <= {self.limits.drawdown_warning_r}R"
-            )
+            msg = f"drawdown_warning: daily PnL {daily_pnl_r:.2f}R <= {self.limits.drawdown_warning_r}R"
+            self._warnings.append(msg)
+            log.warning("RiskManager [%s]: %s", strategy_id, msg)
 
         # Check 6: Chop awareness (warn only, does not block)
         if market_state is not None and hasattr(market_state, "signals"):
             if market_state.signals.chop_detected:
-                self._warnings.append(f"chop_warning: chop detected for {strategy_id} on {orb_label}")
+                msg = f"chop_warning: chop detected for {strategy_id} on {orb_label}"
+                self._warnings.append(msg)
+                log.warning("RiskManager: %s", msg)
 
         # Check 7: Concurrent same-session different-aperture sizing
         # When an O5 trade is active and O30 enters (or vice versa), suggest half-size
