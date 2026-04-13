@@ -27,6 +27,9 @@ def _preferred_repo_prefix(expected_python: Path) -> Path:
 
 
 def _ensure_repo_python() -> None:
+    """Re-exec into repo venv only for direct script invocations."""
+    if __name__ != "__main__":
+        return
     expected_python = _preferred_repo_python()
     if expected_python is None:
         return

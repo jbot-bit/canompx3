@@ -44,6 +44,15 @@ def _preferred_repo_prefix(expected_python: Path) -> Path:
 
 
 def _ensure_repo_python() -> None:
+    """Re-exec into the repo venv when run as a direct script.
+
+    Only activates for direct ``python project_pulse.py`` invocations
+    (``__name__ == "__main__"``).  When imported as a library (pytest,
+    ``build_brief()``, hooks), the re-exec is skipped — the caller's
+    Python already has the repo on sys.path via the path-insert below.
+    """
+    if __name__ != "__main__":
+        return
     expected_python = _preferred_repo_python()
     if expected_python is None:
         return
@@ -703,8 +712,7 @@ def collect_fitness_fast(db_path: Path) -> tuple[dict, list[PulseItem]]:
         try:
             shelf_relation = deployable_validated_relation(con)
             rows = con.execute(
-                f"SELECT instrument, COUNT(*) as n FROM {shelf_relation} "
-                "GROUP BY instrument ORDER BY instrument"
+                f"SELECT instrument, COUNT(*) as n FROM {shelf_relation} GROUP BY instrument ORDER BY instrument"
             ).fetchall()
             for inst, n in rows:
                 summary[inst] = {"active_strategies": n}
@@ -814,9 +822,7 @@ def collect_deployment_state(db_path: Path) -> tuple[dict | None, list[PulseItem
                     category="ready",
                     severity="low",
                     source="deployment",
-                    summary=(
-                        f"{profile_id}: {len(validated_not_deployed)} active validated lane(s) not deployed-live"
-                    ),
+                    summary=(f"{profile_id}: {len(validated_not_deployed)} active validated lane(s) not deployed-live"),
                     detail="\n".join(validated_not_deployed[:5]),
                     action="/trade-book",
                 )
@@ -863,8 +869,7 @@ def _collect_control_items_from_lifecycle(
                     source="criterion11",
                     summary=str(survival_summary.get("gate_msg")),
                     action=(
-                        "python scripts/tools/refresh_control_state.py "
-                        f"--profile {survival_summary.get('profile_id')}"
+                        f"python scripts/tools/refresh_control_state.py --profile {survival_summary.get('profile_id')}"
                     ),
                 )
             )
@@ -910,10 +915,7 @@ def _collect_control_items_from_lifecycle(
                     severity="low",
                     source="sr_monitor",
                     summary="Criterion 12 SR state missing — refresh control state",
-                    action=(
-                        "python scripts/tools/refresh_control_state.py "
-                        f"--profile {sr_summary.get('profile_id')}"
-                    ),
+                    action=(f"python scripts/tools/refresh_control_state.py --profile {sr_summary.get('profile_id')}"),
                 )
             )
             sr_summary = None
@@ -931,10 +933,7 @@ def _collect_control_items_from_lifecycle(
                         else "Criterion 12 SR state mismatched/legacy — refresh control state"
                     ),
                     detail=str(reason) if reason is not None else None,
-                    action=(
-                        "python scripts/tools/refresh_control_state.py "
-                        f"--profile {sr_summary.get('profile_id')}"
-                    ),
+                    action=(f"python scripts/tools/refresh_control_state.py --profile {sr_summary.get('profile_id')}"),
                 )
             )
             sr_summary = None
@@ -951,7 +950,9 @@ def _collect_control_items_from_lifecycle(
                         action="python -m trading_app.sr_monitor --apply-pauses",
                     )
                 )
-            elif alarms == 0 and sr_summary.get("state_age_days") is not None and int(sr_summary["state_age_days"]) >= 2:
+            elif (
+                alarms == 0 and sr_summary.get("state_age_days") is not None and int(sr_summary["state_age_days"]) >= 2
+            ):
                 items.append(
                     PulseItem(
                         category="decaying",
@@ -1011,7 +1012,7 @@ def collect_sr_state(db_path: Path) -> tuple[dict | None, list[PulseItem]]:
     try:
         from trading_app.lifecycle_state import read_criterion12_state
 
-        summary = read_criterion12_state(db_path=db_path)
+        read_criterion12_state(db_path=db_path)
     except Exception as e:
         return (
             None,
@@ -1041,6 +1042,8 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
     """Expose the repo's core identity from linked canonical registries."""
     items: list[PulseItem] = []
     try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.system_authority import SYSTEM_AUTHORITY_BACKBONE_MODULES
         from pipeline.system_context import build_system_context, evaluate_system_policy, infer_context_name
 
         context_name = infer_context_name(root, Path(sys.executable))
@@ -1052,6 +1055,8 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
             db_path=db_path,
         )
         decision = evaluate_system_policy(snapshot, "orientation")
+        active_orb_instruments = snapshot.authority.active_orb_instruments or sorted(ACTIVE_ORB_INSTRUMENTS)
+        backbone_modules = snapshot.authority.backbone_modules or list(SYSTEM_AUTHORITY_BACKBONE_MODULES)
         summary = {
             "canonical_repo_root": snapshot.git.canonical_root,
             "selected_repo_root": snapshot.git.selected_root,
@@ -1059,11 +1064,10 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
             "selected_db_path": snapshot.db.selected_db_path,
             "db_override_active": snapshot.db.db_override_active,
             "live_journal_db_path": snapshot.db.live_journal_db_path,
-            "active_orb_instruments": snapshot.authority.active_orb_instruments,
-            "active_profiles": snapshot.authority.active_profiles,
+            "active_orb_instruments": active_orb_instruments,
             "authority_map_doc": snapshot.authority.authority_map_doc,
             "doctrine_docs": snapshot.authority.doctrine_docs,
-            "backbone_modules": snapshot.authority.backbone_modules,
+            "backbone_modules": backbone_modules,
             "published_relations": snapshot.authority.published_relations,
             "interpreter": {
                 "context": snapshot.interpreter.context,
@@ -1419,8 +1423,7 @@ def collect_upcoming_sessions(db_path: Path) -> list[dict]:
                             shelf_relation = deployable_validated_relation(con)
                             for inst in ACTIVE_ORB_INSTRUMENTS:
                                 row = con.execute(
-                                    f"SELECT COUNT(*) FROM {shelf_relation} "
-                                    "WHERE instrument = ? AND orb_label = ?",
+                                    f"SELECT COUNT(*) FROM {shelf_relation} WHERE instrument = ? AND orb_label = ?",
                                     [inst, label],
                                 ).fetchone()
                                 if row and row[0] > 0:
@@ -1948,15 +1951,8 @@ def format_text(report: PulseReport) -> str:
         lines.append(f"  Canonical DB: {identity.get('canonical_db_path')}")
         if identity.get("db_override_active"):
             lines.append(f"  Active DB override: {identity.get('selected_db_path')}")
-        lines.append(
-            "  "
-            f"Active ORB instruments: {', '.join(identity.get('active_orb_instruments', [])) or 'none'}"
-        )
-        lines.append(f"  Active profiles: {', '.join(identity.get('active_profiles', [])) or 'none'}")
-        lines.append(
-            "  "
-            f"Shelf contracts: {relations.get('active', '?')}, {relations.get('deployable', '?')}"
-        )
+        lines.append(f"  Active ORB instruments: {', '.join(identity.get('active_orb_instruments', [])) or 'none'}")
+        lines.append(f"  Shelf contracts: {relations.get('active', '?')}, {relations.get('deployable', '?')}")
         lines.append(f"  Authority map: {identity.get('authority_map_doc')}")
         lines.append(f"  Doctrine: {doctrine}")
         lines.append(f"  Backbone: {backbone}")
@@ -2095,21 +2091,13 @@ def format_markdown(report: PulseReport) -> str:
         lines.append(f"- **Canonical DB**: `{identity.get('canonical_db_path')}`")
         if identity.get("db_override_active"):
             lines.append(f"- **Active DB override**: `{identity.get('selected_db_path')}`")
+        lines.append(f"- **Active ORB instruments**: {', '.join(identity.get('active_orb_instruments', [])) or 'none'}")
         lines.append(
-            f"- **Active ORB instruments**: {', '.join(identity.get('active_orb_instruments', [])) or 'none'}"
-        )
-        lines.append(f"- **Active profiles**: {', '.join(identity.get('active_profiles', [])) or 'none'}")
-        lines.append(
-            f"- **Published shelf relations**: `{relations.get('active', '?')}`, "
-            f"`{relations.get('deployable', '?')}`"
+            f"- **Published shelf relations**: `{relations.get('active', '?')}`, `{relations.get('deployable', '?')}`"
         )
         lines.append(f"- **Authority map**: `{identity.get('authority_map_doc')}`")
-        lines.append(
-            f"- **Doctrine docs**: {', '.join(f'`{doc}`' for doc in identity.get('doctrine_docs', []))}"
-        )
-        lines.append(
-            f"- **Backbone modules**: {', '.join(f'`{mod}`' for mod in identity.get('backbone_modules', []))}"
-        )
+        lines.append(f"- **Doctrine docs**: {', '.join(f'`{doc}`' for doc in identity.get('doctrine_docs', []))}")
+        lines.append(f"- **Backbone modules**: {', '.join(f'`{mod}`' for mod in identity.get('backbone_modules', []))}")
         lines.append("")
 
     if report.handoff_summary:
