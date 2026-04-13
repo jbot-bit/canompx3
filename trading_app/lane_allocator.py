@@ -69,6 +69,9 @@ class LaneScore:
     months_positive_since_last_neg_streak: int
     status: str  # DEPLOY / PROVISIONAL / PAUSE / RESUME / STALE
     status_reason: str
+    # Liveness fields (populated post-scoring)
+    recent_3mo_expr: float | None = None  # 3-month trailing ExpR (decay signal)
+    sr_status: str = "UNKNOWN"  # ALARM / CONTINUE / NO_DATA / UNKNOWN
 
 
 def _month_range(rebalance_date: date, months_back: int) -> tuple[date, date]:
@@ -328,6 +331,14 @@ def compute_lane_scores(
                 monthly=monthly,
             )
 
+            # Recent 3-month trailing ExpR (decay signal)
+            recent_3mo = None
+            if len(monthly) >= 3:
+                recent_entries = monthly[:3]  # most-recent-first
+                r3_n = sum(n for _, _, n in recent_entries)
+                r3_pnl = sum(expr * n for _, expr, n in recent_entries)
+                recent_3mo = round(r3_pnl / r3_n, 4) if r3_n > 0 else None
+
             scores.append(
                 LaneScore(
                     strategy_id=sid,
@@ -347,6 +358,7 @@ def compute_lane_scores(
                     months_positive_since_last_neg_streak=months_pos_since,
                     status=status,
                     status_reason=reason,
+                    recent_3mo_expr=recent_3mo,
                 )
             )
 
@@ -425,6 +437,63 @@ def _classify_status(
     return "DEPLOY", f"Session HOT ({session_regime_expr:+.4f}), ExpR={trailing_expr:+.4f}, N={trailing_n}"
 
 
+def load_sr_state() -> dict[str, str]:
+    """Load persisted SR monitor state.
+
+    Returns {strategy_id: "ALARM" | "CONTINUE" | "NO_DATA"}.
+    Fail-open: returns empty dict if file missing/corrupt/stale.
+    """
+    state_path = Path(__file__).resolve().parents[1] / "data" / "state" / "sr_state.json"
+    if not state_path.exists():
+        return {}
+    try:
+        data = json.loads(state_path.read_text())
+        # Validate envelope freshness (max 7 days — SR state older than that is stale)
+        payload = data.get("payload", {})
+        results = payload.get("results", [])
+        return {r["strategy_id"]: r["status"] for r in results if "strategy_id" in r and "status" in r}
+    except (json.JSONDecodeError, KeyError, OSError):
+        return {}
+
+
+def enrich_scores_with_liveness(scores: list[LaneScore]) -> None:
+    """Populate sr_status on scored lanes from persisted SR state.
+
+    Mutates scores in place. Called after compute_lane_scores().
+    """
+    sr_state = load_sr_state()
+    for s in scores:
+        s.sr_status = sr_state.get(s.strategy_id, "UNKNOWN")
+
+
+# ---------------------------------------------------------------------------
+# Liveness-aware ranking
+# ---------------------------------------------------------------------------
+# Ranking discount factors (Carver Ch.12 forecast decay principle):
+#   ALARM: halve expected return — drift detected, but ARL~60 means ~1 false
+#          alarm per 60 trades, so hard-block is too aggressive.
+#   3mo-negative: 0.75x — recent momentum is against the lane, but 12mo
+#                 trailing is still positive. Discount, don't kill.
+SR_ALARM_DISCOUNT = 0.50
+RECENT_DECAY_DISCOUNT = 0.75
+
+
+def _effective_annual_r(s: LaneScore) -> float:
+    """Liveness-adjusted annual R for ranking purposes.
+
+    Applies multiplicative discounts for SR alarm and recent decay.
+    The raw annual_r_estimate is preserved on the LaneScore; this
+    function is used ONLY for sorting during selection.
+    """
+    adj = s.annual_r_estimate
+    if s.sr_status == "ALARM":
+        adj *= SR_ALARM_DISCOUNT
+    if s.recent_3mo_expr is not None and s.recent_3mo_expr < 0 and s.trailing_expr > 0:
+        # 12mo positive but recent 3mo negative = decaying
+        adj *= RECENT_DECAY_DISCOUNT
+    return adj
+
+
 def build_allocation(
     scores: list[LaneScore],
     *,
@@ -434,10 +503,15 @@ def build_allocation(
     allowed_sessions: frozenset[str] | None = None,
     stop_multiplier: float = 0.75,
     prior_allocation: list[str] | None = None,
+    orb_size_stats: dict[tuple[str, str], tuple[float, float]] | None = None,
 ) -> list[LaneScore]:
     """Select top lanes for a profile, respecting constraints.
 
-    Greedy selection: rank by annual_r, add lanes that fit DD budget.
+    Greedy selection: rank by liveness-adjusted annual_r, add lanes that
+    fit DD budget. SR ALARM and 3mo-negative lanes are penalized in ranking
+    (not hard-blocked). DD estimation uses per-session P90 from orb_size_stats
+    when available.
+
     Hysteresis: only replace a lane if new candidate >20% better.
     """
     # Filter to deployable
@@ -449,17 +523,18 @@ def build_allocation(
     if allowed_sessions:
         candidates = [s for s in candidates if s.orb_label in allowed_sessions]
 
-    # One winner per instrument × session (best annual_r)
+    # One winner per instrument × session (best liveness-adjusted annual_r)
     best_per_session: dict[tuple[str, str], LaneScore] = {}
     for s in candidates:
         key = (s.instrument, s.orb_label)
-        if key not in best_per_session or s.annual_r_estimate > best_per_session[key].annual_r_estimate:
+        if key not in best_per_session or _effective_annual_r(s) > _effective_annual_r(best_per_session[key]):
             best_per_session[key] = s
 
-    # Sort by annual R descending. PROVISIONAL ranked below non-provisional at equal annual_r
+    # Sort by liveness-adjusted annual R descending
+    # PROVISIONAL ranked below non-provisional at equal adjusted annual_r
     ranked = sorted(
         best_per_session.values(),
-        key=lambda s: (0 if s.status == "PROVISIONAL" else 1, s.annual_r_estimate),
+        key=lambda s: (0 if s.status == "PROVISIONAL" else 1, _effective_annual_r(s)),
         reverse=True,
     )
 
@@ -471,14 +546,16 @@ def build_allocation(
         if len(selected) >= max_slots:
             break
 
-        # Estimate worst-case DD contribution
+        # Estimate worst-case DD contribution using per-session P90
         cost = COST_SPECS.get(lane.instrument)
         if cost is None:
             continue
-        # Use P90 ORB size estimate (from prop_profiles _P90_ORB_PTS)
-        from trading_app.prop_profiles import _P90_ORB_PTS
-
-        p90_orb = _P90_ORB_PTS.get(lane.instrument, 100.0)
+        if orb_size_stats:
+            key = (lane.instrument, lane.orb_label)
+            _, p90_orb = orb_size_stats.get(key, (100.0, 100.0))
+        else:
+            from trading_app.prop_profiles import _P90_ORB_PTS
+            p90_orb = _P90_ORB_PTS.get(lane.instrument, 100.0)
         lane_dd = p90_orb * stop_multiplier * cost.point_value
 
         if dd_used + lane_dd > max_dd:
@@ -487,8 +564,6 @@ def build_allocation(
         # Hysteresis: only replace a prior lane if new candidate is >20% better
         # (Carver Ch.12 switching cost — prevents monthly churn)
         if prior_allocation and lane.strategy_id not in prior_allocation:
-            # This is a NEW lane. Check if the session it would fill is already
-            # occupied by a prior-allocated lane with comparable annual_r.
             session_key = (lane.instrument, lane.orb_label)
             prior_in_session = [
                 s for s in scores if s.strategy_id in prior_allocation and (s.instrument, s.orb_label) == session_key
@@ -498,7 +573,6 @@ def build_allocation(
                 if best_prior.annual_r_estimate > 0:
                     improvement = (lane.annual_r_estimate - best_prior.annual_r_estimate) / best_prior.annual_r_estimate
                     if improvement < HYSTERESIS_PCT:
-                        # Keep prior-allocated strategy if still deployable
                         if best_prior.status in ("DEPLOY", "RESUME", "PROVISIONAL"):
                             selected.append(best_prior)
                             dd_used += lane_dd

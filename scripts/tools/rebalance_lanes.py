@@ -19,6 +19,7 @@ from trading_app.lane_allocator import (
     _compute_orb_size_stats,
     build_allocation,
     compute_lane_scores,
+    enrich_scores_with_liveness,
     generate_report,
     save_allocation,
 )
@@ -58,6 +59,24 @@ def main() -> None:
     scores = compute_lane_scores(rebalance_date=args.date)
     print(f"Scored {len(scores)} validated strategies")
 
+    # Enrich with SR liveness state
+    enrich_scores_with_liveness(scores)
+    sr_counts = {}
+    for s in scores:
+        sr_counts[s.sr_status] = sr_counts.get(s.sr_status, 0) + 1
+    print(f"SR liveness: {sr_counts}")
+
+    # Compute ORB size stats (per-session avg/P90 from trailing window)
+    orb_stats = _compute_orb_size_stats(args.date)
+    print(f"ORB size stats: {len(orb_stats)} instrument×session combos")
+
+    # Show 3mo decay warnings
+    decaying = [s for s in scores if s.recent_3mo_expr is not None and s.recent_3mo_expr < 0 and s.trailing_expr > 0]
+    if decaying:
+        print(f"3mo decay warnings: {len(decaying)} strategies")
+        for s in decaying[:5]:
+            print(f"  {s.strategy_id}: 12mo={s.trailing_expr:+.4f} 3mo={s.recent_3mo_expr:+.4f}")
+
     # Determine profiles to process
     if args.all_profiles:
         profiles = {pid: p for pid, p in ACCOUNT_PROFILES.items() if p.active}
@@ -92,14 +111,11 @@ def main() -> None:
             allowed_instruments=profile.allowed_instruments,
             allowed_sessions=profile.allowed_sessions,
             stop_multiplier=profile.stop_multiplier,
+            orb_size_stats=orb_stats,
         )
 
         report = generate_report(scores, allocation, args.date, pid)
         print(report)
-
-        # Compute ORB size stats (per-session avg/P90 from trailing window)
-        orb_stats = _compute_orb_size_stats(args.date)
-        print(f"\nORB size stats computed for {len(orb_stats)} instrument×session combos")
 
         # Save allocation
         out_path = save_allocation(scores, allocation, args.date, pid, args.output, orb_size_stats=orb_stats)

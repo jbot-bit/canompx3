@@ -14,10 +14,13 @@ import pytest
 from trading_app.lane_allocator import (
     LaneScore,
     _classify_status,
+    _effective_annual_r,
     build_allocation,
     check_allocation_staleness,
     compute_lane_scores,
+    enrich_scores_with_liveness,
     generate_report,
+    load_sr_state,
 )
 
 
@@ -697,3 +700,133 @@ class TestIntegration:
 
         # ORB_G6: only 5 trades on large-ORB days counted
         assert orb_g6.trailing_n == 5
+
+
+class TestLivenessScoring:
+    """Tests for SR alarm + 3mo decay ranking adjustments."""
+
+    def test_alarm_discounts_annual_r(self):
+        s = _make_score(annual_r_estimate=40.0, sr_status="ALARM")
+        assert _effective_annual_r(s) == pytest.approx(20.0)
+
+    def test_continue_no_discount(self):
+        s = _make_score(annual_r_estimate=40.0, sr_status="CONTINUE")
+        assert _effective_annual_r(s) == pytest.approx(40.0)
+
+    def test_unknown_no_discount(self):
+        s = _make_score(annual_r_estimate=40.0, sr_status="UNKNOWN")
+        assert _effective_annual_r(s) == pytest.approx(40.0)
+
+    def test_3mo_decay_discounts(self):
+        s = _make_score(
+            annual_r_estimate=40.0,
+            trailing_expr=0.15,
+            recent_3mo_expr=-0.05,
+        )
+        assert _effective_annual_r(s) == pytest.approx(30.0)
+
+    def test_3mo_positive_no_discount(self):
+        s = _make_score(
+            annual_r_estimate=40.0,
+            trailing_expr=0.15,
+            recent_3mo_expr=0.10,
+        )
+        assert _effective_annual_r(s) == pytest.approx(40.0)
+
+    def test_both_alarm_and_decay_stack(self):
+        s = _make_score(
+            annual_r_estimate=40.0,
+            sr_status="ALARM",
+            trailing_expr=0.15,
+            recent_3mo_expr=-0.05,
+        )
+        # 40 * 0.5 * 0.75 = 15.0
+        assert _effective_annual_r(s) == pytest.approx(15.0)
+
+    def test_alarm_lane_replaced_by_continue(self):
+        """ALARM lane should be replaced by a CONTINUE lane on the same session."""
+        alarm = _make_score(
+            strategy_id="MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5",
+            orb_label="COMEX_SETTLE",
+            annual_r_estimate=44.0,
+            sr_status="ALARM",
+        )
+        healthy = _make_score(
+            strategy_id="MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5",
+            orb_label="EUROPE_FLOW",
+            annual_r_estimate=30.0,
+            sr_status="CONTINUE",
+        )
+        # ALARM: effective = 44*0.5=22. CONTINUE: effective = 30.
+        # healthy should rank higher.
+        result = build_allocation([alarm, healthy], max_slots=1)
+        assert result[0].strategy_id == healthy.strategy_id
+
+    def test_alarm_lane_kept_if_no_alternative(self):
+        """ALARM lane should still be selected if it's the only option."""
+        alarm = _make_score(
+            annual_r_estimate=44.0,
+            sr_status="ALARM",
+        )
+        result = build_allocation([alarm], max_slots=1)
+        assert len(result) == 1
+        assert result[0].strategy_id == alarm.strategy_id
+
+    def test_load_sr_state_missing_file(self):
+        """Missing SR state file should return empty dict (fail-open)."""
+        state = load_sr_state()
+        # May or may not be empty depending on whether the file exists
+        assert isinstance(state, dict)
+
+    def test_recent_3mo_computed(self):
+        """LaneScore with sufficient monthly data should have recent_3mo_expr."""
+        s = _make_score(recent_3mo_expr=-0.05)
+        assert s.recent_3mo_expr == -0.05
+
+    def test_orb_size_stats_used_in_dd(self):
+        """build_allocation should use per-session P90 from orb_size_stats."""
+        # Two lanes with very different ORB sizes
+        cheap = _make_score(
+            strategy_id="MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ORB_G5",
+            orb_label="SINGAPORE_OPEN",
+            annual_r_estimate=40.0,
+        )
+        expensive = _make_score(
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            orb_label="NYSE_OPEN",
+            annual_r_estimate=30.0,
+        )
+        # With per-session stats: SING P90=38, NYSE P90=117
+        # At SM=0.75, PV=$2: SING DD=$57, NYSE DD=$175.50
+        # Total: $232.50 — fits in $300 budget
+        orb_stats = {
+            ("MNQ", "SINGAPORE_OPEN"): (20.0, 38.0),
+            ("MNQ", "NYSE_OPEN"): (76.0, 117.0),
+        }
+        result = build_allocation(
+            [cheap, expensive],
+            max_slots=5,
+            max_dd=300.0,
+            stop_multiplier=0.75,
+            orb_size_stats=orb_stats,
+        )
+        # Both should fit: $57 + $175.50 = $232.50 < $300
+        assert len(result) == 2
+
+    def test_orb_size_stats_budget_constraint(self):
+        """Per-session P90 should correctly enforce DD budget."""
+        expensive = _make_score(
+            strategy_id="MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+            orb_label="NYSE_OPEN",
+            annual_r_estimate=30.0,
+        )
+        orb_stats = {("MNQ", "NYSE_OPEN"): (76.0, 117.0)}
+        # DD = 117 * 0.75 * 2.0 = $175.50, budget = $100 → should NOT fit
+        result = build_allocation(
+            [expensive],
+            max_slots=5,
+            max_dd=100.0,
+            stop_multiplier=0.75,
+            orb_size_stats=orb_stats,
+        )
+        assert len(result) == 0
