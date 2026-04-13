@@ -1,10 +1,7 @@
-"""
-Persist live 1-minute bars to bars_1m table.
+"""Persist live 1-minute bars to bars_1m table.
 
-Captures bars from the broker feed during live trading and batch-inserts
-them into gold.db after session end. This eliminates the Databento
-dependency for daily bar data — after a ~3 month bootstrap period,
-build_daily_features.py can run entirely from broker-captured bars.
+Captures broker-feed bars during live trading and batch-writes them
+after session end. Eliminates Databento dependency for daily bar data.
 
 Architecture:
   DataFeed -> BarAggregator -> Bar -> SessionOrchestrator._on_bar()
@@ -14,8 +11,8 @@ Architecture:
 
 Safety:
   - Bars collected in memory during session (list append, thread-safe)
-  - Batch INSERT at session end only (no concurrent DuckDB writes)
-  - Deduplication: DELETE existing bars for the time range, then INSERT
+  - Batch write at session end only (no concurrent DuckDB writes)
+  - Idempotent: removes existing bars for time range, then writes new
   - Fail-open: persister failure does NOT block trading
 """
 
