@@ -60,6 +60,7 @@ hypotheses:
 
   - id: 2
     name: "MNQ EUROPE_FLOW CROSS_SGP_MOMENTUM RR1.5 O5"
+    theory_citation: "Same mechanism as H1 at wider RR target. Asian-to-European flow memory."
     filter:
       type: CROSS_SGP_MOMENTUM
     scope:
@@ -76,6 +77,7 @@ hypotheses:
 
   - id: 3
     name: "MNQ EUROPE_FLOW CROSS_SGP_MOMENTUM RR2.0 O5"
+    theory_citation: "Same mechanism as H1 at wider RR target. Asian-to-European flow memory."
     filter:
       type: CROSS_SGP_MOMENTUM
     scope:
