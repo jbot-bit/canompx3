@@ -29,6 +29,7 @@ case "$cmd" in
       echo "Workstream name required." >&2
       exit 2
     fi
+    python3 "$ROOT/scripts/tools/wsl_mount_guard.py" --root "$ROOT"
     shift || true
     if [[ "${1:-}" == "--" ]]; then
       shift

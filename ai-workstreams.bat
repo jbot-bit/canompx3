@@ -43,9 +43,9 @@ goto end
 
 :green_task
 if /I "%~2"=="claude" (
-    call :run_batch claude-green-baseline.bat
+    call :run_mode green-claude
 ) else (
-    call :run_batch codex-green-baseline.bat
+    call :run_mode green-codex
 )
 goto end
 
@@ -77,17 +77,6 @@ if defined CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY (
     goto :eof
 )
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\infra\windows-agent-launch.ps1" -Mode %MODE%
-set "EXITCODE=%ERRORLEVEL%"
-goto :eof
-
-:run_batch
-set "BATCH=%~1"
-if defined CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY (
-    echo BATCH=%BATCH%
-    set "EXITCODE=0"
-    goto :eof
-)
-call "%BATCH%"
 set "EXITCODE=%ERRORLEVEL%"
 goto :eof
 

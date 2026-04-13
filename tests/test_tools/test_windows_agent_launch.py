@@ -123,6 +123,7 @@ class TestCodexWslCommand:
 
         assert "set -euo pipefail" in command
         assert "cd /mnt/c/repo" in command
+        assert "python3 scripts/tools/wsl_mount_guard.py --root /mnt/c/repo" in command
         assert "export UV_PROJECT_ENVIRONMENT=.venv-wsl" in command
         assert "export UV_CACHE_DIR=/tmp/uv-cache" in command
         assert "export UV_PYTHON_INSTALL_DIR=/tmp/uv-python" in command
@@ -148,6 +149,13 @@ class TestCodexWslCommand:
 
         assert "set -euo pipefail" in command
         assert "cd /mnt/c/repo" in command
+        assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
+
+    def test_builds_linux_home_project_command(self) -> None:
+        command = windows_agent_launch.build_codex_project_wsl_command("/mnt/c/repo", use_linux_home=True)
+
+        assert 'ROOT="${CANOMPX3_CODEX_WSL_ROOT:-$HOME/canompx3}"' in command
+        assert 'cd "$ROOT"' in command
         assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
     def test_builds_gold_db_project_command(self) -> None:
@@ -206,47 +214,32 @@ class TestOpenCodexProject:
         command = run_wsl_mock.call_args.args[0]
         assert "exec ./scripts/infra/codex-project-gold-db.sh --no-alt-screen" in command
 
+    def test_opens_linux_home_project_launcher_in_wsl(self) -> None:
+        with (
+            patch.object(windows_agent_launch, "repo_root", return_value=Path(r"C:\repo")),
+            patch.object(windows_agent_launch, "windows_to_wsl", return_value="/mnt/c/repo"),
+            patch.object(windows_agent_launch, "run_wsl", return_value=0) as run_wsl_mock,
+        ):
+            exit_code = windows_agent_launch.open_codex_project_linux_home()
+
+        assert exit_code == 0
+        command = run_wsl_mock.call_args.args[0]
+        assert 'ROOT="${CANOMPX3_CODEX_WSL_ROOT:-$HOME/canompx3}"' in command
+        assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
+
 
 class TestWindowsBatchWrappers:
-    def test_claude_workstream_batch_uses_windows_launcher_claude_mode(self) -> None:
-        batch_path = windows_agent_launch.repo_root() / "claude-workstream.bat"
-        content = batch_path.read_text(encoding="utf-8")
+    def test_codex_batch_is_the_single_smart_codex_entrypoint(self) -> None:
+        content = (windows_agent_launch.repo_root() / "codex.bat").read_text(encoding="utf-8")
 
-        assert '-Mode claude -Task "%TASK%"' in content
-        assert "Claude Isolated Workstream" in content
-
-    def test_codex_workstream_batch_uses_windows_launcher_codex_mode(self) -> None:
-        batch_path = windows_agent_launch.repo_root() / "codex-workstream.bat"
-        content = batch_path.read_text(encoding="utf-8")
-
-        assert '-Mode codex -Task "%TASK%"' in content
-        assert "Codex Isolated Workstream" in content
-
-    def test_claude_green_baseline_batch_targets_clean_worktree(self) -> None:
-        batch_path = windows_agent_launch.repo_root() / "claude-green-baseline.bat"
-        content = batch_path.read_text(encoding="utf-8")
-
-        assert ".worktrees\\tasks\\green-baseline" in content
-        assert "Claude Green Baseline" in content
-        assert "Get-Command claude,claude.exe" in content
-
-    def test_codex_green_baseline_batch_targets_clean_worktree(self) -> None:
-        batch_path = windows_agent_launch.repo_root() / "codex-green-baseline.bat"
-        content = batch_path.read_text(encoding="utf-8")
-
-        assert ".worktrees\\tasks\\green-baseline" in content
-        assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in content
-        assert "Codex Green Baseline" in content
-
-    def test_root_workstream_helper_batches_use_launcher_modes(self) -> None:
-        root = windows_agent_launch.repo_root()
-        list_content = (root / "workstream-list.bat").read_text(encoding="utf-8")
-        finish_content = (root / "workstream-finish.bat").read_text(encoding="utf-8")
-        clean_content = (root / "workstream-clean.bat").read_text(encoding="utf-8")
-
-        assert "-Mode list" in list_content
-        assert "-Mode close-pick" in finish_content
-        assert "-Mode prune" in clean_content
+        assert 'set "MODE=codex-project"' in content
+        assert 'if /I "%ACTION%"=="gold-db" (' in content
+        assert 'if /I "%ACTION%"=="search-gold-db" (' in content
+        assert 'if /I "%ACTION%"=="linux" (' in content
+        assert 'if /I "%ACTION%"=="linux-gold-db" (' in content
+        assert 'if /I "%ACTION%"=="green" (' in content
+        assert 'call "ai-workstreams.bat" codex %*' in content
+        assert 'call "ai-workstreams.bat" search %*' in content
 
     def test_ai_workstreams_batch_supports_smart_shortcuts_and_dry_run(self) -> None:
         content = (windows_agent_launch.repo_root() / "ai-workstreams.bat").read_text(encoding="utf-8")
@@ -261,7 +254,8 @@ class TestWindowsBatchWrappers:
         assert 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\\infra\\windows-workstreams-gui.ps1"' in content
         assert "CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY" in content
         assert "MODE=%MODE% TASK=%TASK%" in content
-        assert "BATCH=%BATCH%" in content
+        assert "call :run_mode green-claude" in content
+        assert "call :run_mode green-codex" in content
         assert "GUI=1" in content
 
     def test_windows_gui_script_supports_button_actions_and_dry_run(self) -> None:
@@ -275,8 +269,8 @@ class TestWindowsBatchWrappers:
         assert 'switch ($Action.ToLowerInvariant())' in content
         assert '"codex" { Invoke-LauncherMode -Mode "codex" -TaskName $Task; exit 0 }' in content
         assert '"claude" { Invoke-LauncherMode -Mode "claude" -TaskName $Task; exit 0 }' in content
-        assert '"green-codex" { Invoke-GreenBatch -BatchPath $codexGreenBat; exit 0 }' in content
-        assert '"green-claude" { Invoke-GreenBatch -BatchPath $claudeGreenBat; exit 0 }' in content
+        assert '"green-codex" { Invoke-LauncherMode -Mode "green-codex"; exit 0 }' in content
+        assert '"green-claude" { Invoke-LauncherMode -Mode "green-claude"; exit 0 }' in content
         assert "CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY" in content
         assert 'Open an isolated AI workstream' in content
 

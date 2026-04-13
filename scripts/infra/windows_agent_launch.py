@@ -25,7 +25,11 @@ VALID_MODES = {
     "codex-search",
     "codex-project",
     "codex-project-gold-db",
+    "codex-project-linux",
+    "codex-project-linux-gold-db",
     "codex-project-search-gold-db",
+    "green-codex",
+    "green-claude",
     "handoff",
     "list",
     "close",
@@ -143,6 +147,7 @@ def build_codex_wsl_command(
     lines = [
         "set -euo pipefail",
         f"cd {shlex.quote(root_wsl)}",
+        f"python3 scripts/tools/wsl_mount_guard.py --root {shlex.quote(root_wsl)}",
         "export JOBLIB_MULTIPROCESSING=0",
         "if ! command -v uv >/dev/null 2>&1; then",
         "  echo 'ERROR: uv is not installed in WSL PATH.' >&2",
@@ -163,12 +168,32 @@ def build_codex_wsl_command(
     return "\n".join(lines)
 
 
-def build_codex_project_wsl_command(root_wsl: str, search_mode: bool = False, enable_gold_db: bool = False) -> str:
+def build_codex_project_wsl_command(
+    root_wsl: str,
+    search_mode: bool = False,
+    enable_gold_db: bool = False,
+    use_linux_home: bool = False,
+) -> str:
     import shlex
 
     script_name = "codex-project-search.sh" if search_mode else "codex-project.sh"
     if enable_gold_db:
         script_name = "codex-project-search-gold-db.sh" if search_mode else "codex-project-gold-db.sh"
+
+    if use_linux_home:
+        return "\n".join(
+            [
+                "set -euo pipefail",
+                'ROOT="${CANOMPX3_CODEX_WSL_ROOT:-$HOME/canompx3}"',
+                'if [[ ! -d "$ROOT" ]]; then',
+                '  echo "ERROR: WSL Codex repo not found at $ROOT." >&2',
+                '  echo "Set CANOMPX3_CODEX_WSL_ROOT or clone canompx3 into ~/canompx3." >&2',
+                "  exit 1",
+                "fi",
+                'cd "$ROOT"',
+                f"exec ./scripts/infra/{script_name} --no-alt-screen",
+            ]
+        )
 
     return "\n".join(
         [
@@ -241,6 +266,35 @@ def open_codex_workstream(workstream_name: str, purpose: str | None, search_mode
 def open_codex_project(search_mode: bool = False, enable_gold_db: bool = False) -> int:
     root = windows_to_wsl(repo_root())
     return run_wsl(build_codex_project_wsl_command(root, search_mode=search_mode, enable_gold_db=enable_gold_db))
+
+
+def open_codex_project_linux_home(search_mode: bool = False, enable_gold_db: bool = False) -> int:
+    root = windows_to_wsl(repo_root())
+    return run_wsl(
+        build_codex_project_wsl_command(
+            root,
+            search_mode=search_mode,
+            enable_gold_db=enable_gold_db,
+            use_linux_home=True,
+        )
+    )
+
+
+def _green_baseline_worktree() -> Path:
+    worktree_path = repo_root() / ".worktrees" / "tasks" / "green-baseline"
+    if not worktree_path.exists():
+        raise RuntimeError(f"Clean green-baseline worktree not found: {worktree_path}")
+    return worktree_path
+
+
+def open_codex_green_baseline() -> int:
+    worktree_path = _green_baseline_worktree()
+    return run_wsl(build_codex_project_wsl_command(windows_to_wsl(worktree_path)))
+
+
+def open_claude_green_baseline() -> int:
+    worktree_path = _green_baseline_worktree()
+    return subprocess.call([find_claude_cli(), "-C", str(worktree_path)])
 
 
 def handoff_workstream(
@@ -717,8 +771,16 @@ def main() -> int:
         return open_codex_project()
     if args.mode == "codex-project-gold-db":
         return open_codex_project(enable_gold_db=True)
+    if args.mode == "codex-project-linux":
+        return open_codex_project_linux_home()
+    if args.mode == "codex-project-linux-gold-db":
+        return open_codex_project_linux_home(enable_gold_db=True)
     if args.mode == "codex-project-search-gold-db":
         return open_codex_project(search_mode=True, enable_gold_db=True)
+    if args.mode == "green-codex":
+        return open_codex_green_baseline()
+    if args.mode == "green-claude":
+        return open_claude_green_baseline()
     if args.mode == "codex-search":
         task = args.task or prompt("Workstream name")
         if not task:

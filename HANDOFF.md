@@ -6,6 +6,148 @@
 
 ---
 
+## Update (2026-04-14 — launcher wrapper cleanup: three human-facing front doors)
+
+### Headline
+
+Cleaned up the Windows batch-wrapper sprawl into three obvious human-facing
+entrypoints:
+
+- `claude.bat`
+- `codex.bat`
+- `ai-workstreams.bat`
+
+### What changed
+
+- `codex.bat` is now the single Codex Windows front door
+  - supports:
+    - default project session
+    - `gold-db`
+    - `search-gold-db`
+    - `linux`
+    - `linux-gold-db`
+    - `green`
+    - `task <name>`
+    - `search <name>`
+  - unknown subcommands now fail with help text instead of silently launching
+    the default mode
+- `claude.bat` is the simple Claude front door
+  - supports:
+    - default Claude Code session
+    - `task <name>`
+    - `green`
+  - unknown subcommands now fail with help text
+- `ai-workstreams.bat` remains the single workstream utility front door
+  - handles:
+    - Claude/Codex task launch
+    - green baseline launch
+    - list/resume/finish/clean
+- green baseline launch moved into the real launcher layer:
+  - `scripts/infra/windows_agent_launch.py`
+  - `scripts/infra/windows-agent-launch.ps1`
+  - `scripts/infra/windows-workstreams-gui.ps1`
+- deleted redundant root wrappers:
+  - `codex-gold-db.bat`
+  - `codex-search-gold-db.bat`
+  - `codex-linux.bat`
+  - `codex-gold-db-linux.bat`
+  - `codex-workstream.bat`
+  - `codex-green-baseline.bat`
+  - `claude-workstream.bat`
+  - `claude-green-baseline.bat`
+  - `workstream-list.bat`
+  - `workstream-finish.bat`
+  - `workstream-clean.bat`
+- updated `CODEX.md` and launcher tests to match the reduced surface area
+
+### Verification
+
+- targeted launcher tests:
+  - `py -3.13 -m pytest tests/test_tools/test_wsl_mount_guard.py tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_windows_agent_launch_light.py -q`
+  - result: `13 passed`
+
+### Practical usage now
+
+1. `claude.bat` for Claude
+2. `codex.bat` for Codex
+3. `ai-workstreams.bat` for worktrees, green baseline, and maintenance actions
+
+---
+
+## Update (2026-04-13 — Codex launcher split: WSL-home path + mount fail-fast)
+
+### Headline
+
+Stopped pretending one `/mnt/c`-backed Codex launcher could be the right answer
+for both Windows and WSL-heavy usage. Launcher layer now follows Microsoft WSL
+guidance more closely:
+
+- Windows-side convenience wrappers can launch a WSL-home clone explicitly
+- existing `/mnt/c` launchers fail fast with a real mount-health message instead
+  of grinding into broken startup behavior
+
+### Why this changed
+
+- Microsoft WSL guidance says performance is best when project files live on the
+  same OS/filesystem as the tools using them:
+  - Linux CLI tools -> Linux filesystem
+  - Windows CLI tools -> Windows filesystem
+- The local failure mode was exactly the bad cross-filesystem case:
+  `/mnt/c` flipping read-only / duplicate mount weirdness under WSL 2 while
+  Codex was doing heavy repo activity.
+
+### What changed
+
+- Added `scripts/tools/wsl_mount_guard.py`
+  - parses `/proc/mounts`
+  - blocks on read-only mounts
+  - blocks on duplicate active mount entries for the repo mountpoint
+  - does real write probes against repo root + git dir
+  - prints concrete recovery steps (`wsl --shutdown`, write-test, move repo to
+    `~/canompx3` if `/mnt/c` remains unstable)
+- Wired the guard into WSL launchers:
+  - `scripts/infra/codex-project.sh`
+  - `scripts/infra/codex-project-search.sh`
+  - `scripts/infra/codex-review.sh`
+  - `scripts/infra/codex-worktree.sh`
+- Windows worktree launcher now runs the mount guard before `uv sync`, so the
+  failure happens before expensive bootstrap churn:
+  - `scripts/infra/windows_agent_launch.py`
+- Added explicit Windows entrypoints for a WSL-home clone:
+  - `codex-linux.bat`
+  - `codex-gold-db-linux.bat`
+  - mode support in:
+    - `scripts/infra/windows-agent-launch.ps1`
+    - `scripts/infra/windows_agent_launch.py`
+  - WSL-home root defaults to `~/canompx3`, override with
+    `CANOMPX3_CODEX_WSL_ROOT`
+- Updated `CODEX.md` to advertise the WSL-home launch path
+
+### Verification
+
+- targeted tests:
+  - `py -3.13 -m pytest tests/test_tools/test_wsl_mount_guard.py tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_windows_agent_launch_light.py -q`
+  - result: `10 passed`
+- existing `tests/test_tools/test_windows_agent_launch.py` was skipped on this
+  machine because it uses `pytest.importorskip("readchar")`; a new lightweight
+  test module was added so launcher command-building still gets real coverage
+  without that dependency
+- drift:
+  - `py -3.13 pipeline/check_drift.py`
+  - **fails for pre-existing baseline issues unrelated to this launcher work**
+    including:
+    - missing optional imports (`exchange_calendars`, `uvicorn`)
+    - existing drift check 18 false positives against `bar_persister.py`
+    - existing provenance drift in check 45 for active validated rows
+
+### Next sensible step
+
+1. Clone/move Codex’s working repo into WSL ext4 (`~/canompx3`)
+2. Use `codex-linux.bat` (or set `CANOMPX3_CODEX_WSL_ROOT`) for normal Codex work
+3. Keep `/mnt/c` launchers only as compatibility path with fast failure
+
+---
+
 ## Update (2026-04-13 — IBS/NR7 retest + NQ mini commission fix + bar persister)
 
 ### Headline

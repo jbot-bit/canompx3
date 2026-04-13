@@ -22,5 +22,11 @@ if /I "%ACTION%"=="task" (
     exit /b 0
 )
 
+if not "%ACTION%"=="" if /I not "%ACTION%"=="task" if /I not "%ACTION%"=="green" if /I not "%ACTION%"=="help" (
+    echo Unknown claude mode: %ACTION%
+    echo Run `claude.bat help` for usage.
+    exit /b 2
+)
+
 :: Default: launch Claude Code CLI in this project
 claude

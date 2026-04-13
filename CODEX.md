@@ -94,19 +94,32 @@ Windows uses `.venv`. WSL uses `.venv-wsl`. Do not cross-wire them.
 
 Windows convenience entrypoints:
 
-- Easiest repo session:
-  - `codex.bat`
-- Data session with `gold-db` MCP:
-  - `codex-gold-db.bat`
-  - `codex-search-gold-db.bat`
-- Isolated task/worktree:
-  - `codex-workstream.bat`
-- Menu/workstream manager:
-  - `ai-workstreams.bat`
+- `claude.bat`
+  - default Claude Code session in this repo
+  - `claude.bat task <name>`
+  - `claude.bat green`
+- `codex.bat`
+  - default project session on the current repo
+  - `codex.bat gold-db`
+  - `codex.bat search-gold-db`
+  - `codex.bat linux`
+  - `codex.bat linux-gold-db`
+  - `codex.bat green`
+  - `codex.bat task <name>`
+  - `codex.bat search <name>`
+- `ai-workstreams.bat`
+  - Claude/Codex workstream launcher and utility menu
+  - list/resume/finish/clean/green flows
 
-For a Windows user, `codex.bat` is the canonical simple path. It launches the
-same WSL project session as `scripts/infra/codex-project.sh` without asking the
-user to remember the repo internals.
+For a Windows user, the human-facing front doors are:
+
+- `claude.bat`
+- `codex.bat`
+- `ai-workstreams.bat`
+
+If you are running Codex inside WSL 2, prefer a clone in the WSL filesystem
+such as `~/canompx3` and launch it via `codex.bat linux`. Set
+`CANOMPX3_CODEX_WSL_ROOT` if the WSL-side clone lives somewhere else.
 
 Default stance: Codex should start minimal. Repo MCPs such as `gold-db` are
 opt-in for sessions that actually need live trading-data queries.

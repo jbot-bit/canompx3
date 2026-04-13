@@ -7,8 +7,6 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $launcherPs1 = Join-Path $repoRoot "scripts\infra\windows-agent-launch.ps1"
-$codexGreenBat = Join-Path $repoRoot "codex-green-baseline.bat"
-$claudeGreenBat = Join-Path $repoRoot "claude-green-baseline.bat"
 
 function Invoke-LauncherMode {
     param(
@@ -37,19 +35,6 @@ function Invoke-LauncherMode {
     Start-Process powershell.exe -ArgumentList $args | Out-Null
 }
 
-function Invoke-GreenBatch {
-    param(
-        [Parameter(Mandatory = $true)][string]$BatchPath
-    )
-
-    if ($env:CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY) {
-        Write-Output ("BATCH=" + [System.IO.Path]::GetFileName($BatchPath))
-        return
-    }
-
-    Start-Process $BatchPath | Out-Null
-}
-
 function Require-Task([System.Windows.Forms.TextBox]$TaskBox) {
     $taskName = $TaskBox.Text.Trim()
     if (-not $taskName) {
@@ -73,8 +58,8 @@ if ($Action) {
         "list" { Invoke-LauncherMode -Mode "list"; exit 0 }
         "finish" { Invoke-LauncherMode -Mode "close-pick"; exit 0 }
         "clean" { Invoke-LauncherMode -Mode "prune"; exit 0 }
-        "green-codex" { Invoke-GreenBatch -BatchPath $codexGreenBat; exit 0 }
-        "green-claude" { Invoke-GreenBatch -BatchPath $claudeGreenBat; exit 0 }
+        "green-codex" { Invoke-LauncherMode -Mode "green-codex"; exit 0 }
+        "green-claude" { Invoke-LauncherMode -Mode "green-claude"; exit 0 }
         default { throw "Unknown GUI action: $Action" }
     }
 }
@@ -172,14 +157,14 @@ $form.Controls.Add($searchBtn)
 
 $greenCodexBtn = New-Button -Text "Green Codex" -X 170 -Y 216
 $greenCodexBtn.Add_Click({
-    Invoke-GreenBatch -BatchPath $codexGreenBat
+    Invoke-LauncherMode -Mode "green-codex"
     $form.Close()
 })
 $form.Controls.Add($greenCodexBtn)
 
 $greenClaudeBtn = New-Button -Text "Green Claude" -X 320 -Y 216
 $greenClaudeBtn.Add_Click({
-    Invoke-GreenBatch -BatchPath $claudeGreenBat
+    Invoke-LauncherMode -Mode "green-claude"
     $form.Close()
 })
 $form.Controls.Add($greenClaudeBtn)

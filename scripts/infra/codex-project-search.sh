@@ -18,6 +18,8 @@ export JOBLIB_MULTIPROCESSING=0
 export VIRTUAL_ENV="$VENV"
 export PATH="$VENV/bin:$PATH"
 
+"$VENV/bin/python" "$ROOT/scripts/tools/wsl_mount_guard.py" --root "$ROOT"
+
 if [[ -d "$HOME/.nvm/versions/node" ]]; then
   NVM_CODEX="$(find "$HOME/.nvm/versions/node" -path '*/bin/codex' -print 2>/dev/null | sort | tail -n1 || true)"
   if [[ -n "$NVM_CODEX" ]]; then
