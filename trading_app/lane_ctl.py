@@ -46,12 +46,15 @@ def _save_overrides(profile_id: str, overrides: dict) -> None:
 
 def _find_strategy_id(profile_id: str, session_name: str) -> str | None:
     """Find the strategy_id for a session in a profile's daily_lanes."""
-    from trading_app.prop_profiles import ACCOUNT_PROFILES
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
     profile = ACCOUNT_PROFILES.get(profile_id)
-    if not profile or not profile.daily_lanes:
+    if not profile:
         return None
-    for lane in profile.daily_lanes:
+    lanes = effective_daily_lanes(profile)
+    if not lanes:
+        return None
+    for lane in lanes:
         if lane.orb_label == session_name:
             return lane.strategy_id
     return None
@@ -138,10 +141,10 @@ def list_overrides(profile_id: str) -> None:
         return
 
     # Check for orphans (strategy_id no longer in profile)
-    from trading_app.prop_profiles import ACCOUNT_PROFILES
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
     profile = ACCOUNT_PROFILES.get(profile_id)
-    valid_sids = {la.strategy_id for la in profile.daily_lanes} if profile and profile.daily_lanes else set()
+    valid_sids = {la.strategy_id for la in effective_daily_lanes(profile)} if profile else set()
 
     today = date.today()
     print(f"\nLane overrides — {profile_id}:")

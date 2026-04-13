@@ -450,10 +450,18 @@ def load_sr_state() -> dict[str, str]:
     try:
         data = json.loads(state_path.read_text())
         # Validate envelope freshness (max 7 days — SR state older than that is stale)
+        freshness = data.get("freshness", {})
+        as_of = freshness.get("as_of_date")
+        if as_of:
+            from datetime import date as _date
+
+            state_date = _date.fromisoformat(as_of)
+            if (date.today() - state_date).days > 7:
+                return {}  # stale — fail-open with empty
         payload = data.get("payload", {})
         results = payload.get("results", [])
         return {r["strategy_id"]: r["status"] for r in results if "strategy_id" in r and "status" in r}
-    except (json.JSONDecodeError, KeyError, OSError):
+    except (json.JSONDecodeError, KeyError, OSError, ValueError):
         return {}
 
 
@@ -686,11 +694,12 @@ def generate_report(
 
     # Diff vs current prop_profiles lanes
     try:
-        from trading_app.prop_profiles import ACCOUNT_PROFILES
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
         profile = ACCOUNT_PROFILES.get(profile_id)
-        if profile and profile.daily_lanes:
-            current_ids = {spec.strategy_id for spec in profile.daily_lanes}
+        current_lanes = effective_daily_lanes(profile) if profile else ()
+        if current_lanes:
+            current_ids = {spec.strategy_id for spec in current_lanes}
             recommended_ids = {s.strategy_id for s in allocation}
             added = recommended_ids - current_ids
             removed = current_ids - recommended_ids
@@ -752,7 +761,7 @@ def generate_report(
     return "\n".join(lines)
 
 
-def _compute_orb_size_stats(
+def compute_orb_size_stats(
     rebalance_date: date,
     db_path: str | Path | None = None,
 ) -> dict[tuple[str, str], tuple[float, float]]:

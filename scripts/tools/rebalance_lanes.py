@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from trading_app.lane_allocator import (
-    _compute_orb_size_stats,
+    compute_orb_size_stats,
     build_allocation,
     compute_lane_scores,
     compute_pairwise_correlation,
@@ -68,7 +68,7 @@ def main() -> None:
     print(f"SR liveness: {sr_counts}")
 
     # Compute ORB size stats (per-session avg/P90 from trailing window)
-    orb_stats = _compute_orb_size_stats(args.date)
+    orb_stats = compute_orb_size_stats(args.date)
     print(f"ORB size stats: {len(orb_stats)} instrument×session combos")
 
     # Show 3mo decay warnings
