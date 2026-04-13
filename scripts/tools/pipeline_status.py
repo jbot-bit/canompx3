@@ -371,6 +371,29 @@ def _get_step_table(step_name: str) -> str:
     return STEP_TABLE_MAP.get(base, "")
 
 
+def _resolve_rebuild_db_path(con: duckdb.DuckDBPyConnection, db_path: str | None) -> str:
+    """Return the DB file path run_rebuild should reconnect to.
+
+    Tests often construct a temporary DB and pass only the live connection.
+    Reconnecting to GOLD_DB_PATH in that case leaks the rebuild onto the real
+    project database and can fail with a lock error. Prefer the explicit
+    db_path when provided; otherwise derive the current connection's main DB
+    path before the connection is closed.
+    """
+    if db_path:
+        return db_path
+
+    try:
+        rows = con.execute("PRAGMA database_list").fetchall()
+        for row in rows:
+            if len(row) >= 3 and row[2]:
+                return str(row[2])
+    except Exception:
+        pass
+
+    return str(GOLD_DB_PATH)
+
+
 def run_rebuild(
     con: duckdb.DuckDBPyConnection,
     instrument: str,
@@ -416,6 +439,7 @@ def run_rebuild(
     if rebuild_id is None:
         rebuild_id = str(uuid.uuid4())
     completed: list[str] = list(resume_completed)  # carry forward previously completed
+    reconnect_db_path = _resolve_rebuild_db_path(con, db_path)
 
     # Write RUNNING manifest
     write_manifest(con, rebuild_id, instrument, "RUNNING", trigger=trigger, steps_completed=completed)
@@ -455,7 +479,7 @@ def run_rebuild(
         try:
             result = subprocess.run(step_cmd, cwd=str(PROJECT_ROOT), timeout=3600)
         except TimeoutExpired:
-            con = duckdb.connect(db_path or str(GOLD_DB_PATH))  # reopen for logging
+            con = duckdb.connect(reconnect_db_path)  # reopen for logging
             print("    TIMED OUT (>3600s)")
             duration = time.monotonic() - step_start
             log_operation(
@@ -475,10 +499,9 @@ def run_rebuild(
 
         # Reopen connection after subprocess released the DB.
         # Retry briefly — Windows may not release the file handle immediately.
-        _db = db_path or str(GOLD_DB_PATH)
         for _attempt in range(5):
             try:
-                con = duckdb.connect(_db)
+                con = duckdb.connect(reconnect_db_path)
                 break
             except duckdb.IOException:
                 if _attempt < 4:

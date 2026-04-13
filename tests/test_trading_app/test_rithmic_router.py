@@ -7,7 +7,7 @@ for submit, cancel, positions, and equity — all without network calls.
 Verified against: async_rithmic 1.5.9 protobuf schema (template fields).
 """
 
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -1070,27 +1070,35 @@ class TestFaultInjection:
         auth._password = "test"
         auth._gateway = "wss://fake:443"
 
-        # Patch at the source module (lazy import inside _ensure_connected)
-        with patch("async_rithmic.RithmicClient") as MockClient:
-            mock_client = MagicMock()
-            MockClient.return_value = mock_client
+        mock_client = MagicMock()
 
-            # Make connect() fail via the async bridge
-            async def fail_connect(**kwargs):
-                raise ConnectionError("refused")
+        # Make connect() fail via the async bridge
+        async def fail_connect(**kwargs):
+            raise ConnectionError("refused")
 
-            mock_client.connect = fail_connect
-            mock_client.accounts = None
+        mock_client.connect = fail_connect
+        mock_client.accounts = None
 
+        fake_async_rithmic = ModuleType("async_rithmic")
+        fake_async_rithmic.RithmicClient = MagicMock(return_value=mock_client)
+        fake_async_rithmic.OrderPlacement = SimpleNamespace(AUTO="AUTO")
+        fake_async_rithmic.SysInfraType = SimpleNamespace(
+            ORDER_PLANT="ORDER_PLANT",
+            PNL_PLANT="PNL_PLANT",
+        )
+
+        # Inject a fake optional dependency so the lazy import succeeds even
+        # when async_rithmic is not installed in the dev environment.
+        with patch.dict("sys.modules", {"async_rithmic": fake_async_rithmic}):
             with pytest.raises(RuntimeError, match="connection failed"):
                 auth._ensure_connected()
 
-            # Verify cleanup happened — no leaked resources
-            assert auth._client is None
-            assert auth._loop is None
-            assert auth._thread is None
-            assert auth._connected is False
-            assert auth._auth_healthy is False
+        # Verify cleanup happened — no leaked resources
+        assert auth._client is None
+        assert auth._loop is None
+        assert auth._thread is None
+        assert auth._connected is False
+        assert auth._auth_healthy is False
 
 
 class TestRithmicRollDateBuffer:

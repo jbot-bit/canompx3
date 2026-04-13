@@ -141,6 +141,11 @@ class PulseReport:
     # Health metrics
     time_since_green: str | None = None
     session_delta: list[str] = field(default_factory=list)
+    work_capsule_summary: dict | None = None
+    system_brief_summary: dict | None = None
+    history_debt_summary: dict | None = None
+    startup_latency_ms: int | None = None
+    orientation_cost_budget: dict | None = None
 
     @property
     def broken(self) -> list[PulseItem]:
@@ -1131,6 +1136,115 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
         return None, items
 
 
+def collect_work_capsule(root: Path) -> tuple[dict | None, list[PulseItem]]:
+    items: list[PulseItem] = []
+    try:
+        from pipeline.work_capsule import evaluate_current_capsule, read_worktree_metadata
+    except Exception as exc:
+        items.append(
+            PulseItem(
+                category="broken",
+                severity="low",
+                source="work_capsule",
+                summary=f"Work capsule read error: {type(exc).__name__}: {exc}",
+            )
+        )
+        return None, items
+
+    managed = read_worktree_metadata(root) is not None
+    summary, issues = evaluate_current_capsule(root)
+    if summary is None and not managed and not issues:
+        return None, items
+
+    for issue in issues:
+        if issue.level == "info":
+            continue
+        detail = issue.detail
+        if issue.level == "blocker":
+            items.append(
+                PulseItem(
+                    category="broken",
+                    severity="high",
+                    source="work_capsule",
+                    summary=issue.message,
+                    detail=detail,
+                )
+            )
+        else:
+            items.append(
+                PulseItem(
+                    category="decaying"
+                    if issue.code not in {"capsule_missing_scope", "capsule_missing_verification"}
+                    else "unactioned",
+                    severity="medium"
+                    if issue.code not in {"capsule_missing_scope", "capsule_missing_verification"}
+                    else "low",
+                    source="work_capsule",
+                    summary=issue.message,
+                    detail=detail,
+                    action="python scripts/tools/work_capsule.py",
+                )
+            )
+    return summary, items
+
+
+def collect_system_brief(root: Path, db_path: Path, tool_name: str) -> tuple[dict | None, list[PulseItem]]:
+    items: list[PulseItem] = []
+    try:
+        from pipeline.system_brief import build_system_brief
+
+        payload = build_system_brief(
+            root,
+            briefing_level="read_only",
+            context_name="codex-wsl" if tool_name == "codex" else "generic",
+            active_tool=tool_name,
+            active_mode="read-only",
+            db_path=db_path,
+        )
+    except Exception as exc:
+        items.append(
+            PulseItem(
+                category="broken",
+                severity="low",
+                source="system_brief",
+                summary=f"System brief read error: {type(exc).__name__}: {exc}",
+            )
+        )
+        return None, items
+
+    summary = {
+        "task_id": payload["task_id"],
+        "briefing_level": payload["briefing_level"],
+        "verification_profile": payload["verification_profile"],
+        "work_capsule_ref": payload["work_capsule_ref"],
+        "blocker_count": len(payload["blocking_issues"]),
+        "warning_count": len(payload["warning_issues"]),
+        "required_live_view_count": len(payload["required_live_views"]),
+        "canonical_owner_count": len(payload["canonical_owners"]),
+    }
+    if payload["blocking_issues"]:
+        items.append(
+            PulseItem(
+                category="broken",
+                severity="medium",
+                source="system_brief",
+                summary=f"System brief has {len(payload['blocking_issues'])} blocker(s)",
+                detail=", ".join(issue["message"] for issue in payload["blocking_issues"][:3]),
+            )
+        )
+    elif payload["warning_issues"]:
+        items.append(
+            PulseItem(
+                category="decaying",
+                severity="low",
+                source="system_brief",
+                summary=f"System brief has {len(payload['warning_issues'])} warning(s)",
+                detail=", ".join(issue["message"] for issue in payload["warning_issues"][:3]),
+            )
+        )
+    return {"summary": summary, "payload": payload}, items
+
+
 def collect_fitness_deep(db_path: Path) -> tuple[dict, list[PulseItem]]:
     """Full fitness: compute rolling FIT/WATCH/DECAY per instrument."""
     summary: dict = {}
@@ -1795,6 +1909,10 @@ def build_pulse(
 
     # --- Cheap collectors: always fresh ---
     system_identity, identity_items = collect_system_identity(root, canonical, db_path)
+    work_capsule_summary, work_capsule_items = collect_work_capsule(root)
+    system_brief_bundle, system_brief_items = collect_system_brief(root, db_path, tool_name or "unknown")
+    system_brief_summary = system_brief_bundle["summary"] if system_brief_bundle else None
+    system_brief_payload = system_brief_bundle["payload"] if system_brief_bundle else None
     staleness_items = collect_staleness(root, db_path)
 
     # Fitness: deep > cached deep > fast proxy
@@ -1851,6 +1969,8 @@ def build_pulse(
     # Collect all items
     all_items = (
         identity_items
+        + work_capsule_items
+        + system_brief_items
         + drift_items
         + test_items
         + staleness_items
@@ -1893,6 +2013,14 @@ def build_pulse(
         upcoming_sessions=upcoming,
         time_since_green=time_since_green,
         session_delta=session_delta,
+        work_capsule_summary=work_capsule_summary,
+        system_brief_summary=system_brief_summary,
+        history_debt_summary={
+            "decision_ref_count": len(system_brief_payload["decision_refs"]) if system_brief_payload else 0,
+            "debt_ref_count": len(system_brief_payload["debt_refs"]) if system_brief_payload else 0,
+        },
+        startup_latency_ms=system_brief_payload["startup_latency_ms"] if system_brief_payload else None,
+        orientation_cost_budget=system_brief_payload["orientation_cost_budget"] if system_brief_payload else None,
     )
 
     # Compute single recommendation after full report is assembled
@@ -1956,6 +2084,24 @@ def format_text(report: PulseReport) -> str:
         lines.append(f"  Authority map: {identity.get('authority_map_doc')}")
         lines.append(f"  Doctrine: {doctrine}")
         lines.append(f"  Backbone: {backbone}")
+        lines.append("")
+
+    if report.system_brief_summary:
+        brief = report.system_brief_summary
+        lines.append("System brief:")
+        lines.append(
+            "  "
+            f"Route {brief.get('task_id')} [{brief.get('briefing_level')}] | "
+            f"owners {brief.get('canonical_owner_count')} | "
+            f"views {brief.get('required_live_view_count')} | "
+            f"blockers {brief.get('blocker_count')} | warnings {brief.get('warning_count')}"
+        )
+        if report.work_capsule_summary:
+            lines.append(f"  Capsule: {report.work_capsule_summary.get('path')}")
+        if report.startup_latency_ms is not None and report.orientation_cost_budget:
+            lines.append(
+                f"  Latency {report.startup_latency_ms}ms / {report.orientation_cost_budget.get('budget_ms')}ms budget"
+            )
         lines.append("")
 
     if report.handoff_next_steps:
@@ -2065,6 +2211,11 @@ def format_json(report: PulseReport) -> str:
         "survival_summary": report.survival_summary,
         "sr_summary": report.sr_summary,
         "pause_summary": report.pause_summary,
+        "work_capsule_summary": report.work_capsule_summary,
+        "system_brief_summary": report.system_brief_summary,
+        "history_debt_summary": report.history_debt_summary,
+        "startup_latency_ms": report.startup_latency_ms,
+        "orientation_cost_budget": report.orientation_cost_budget,
         "upcoming_sessions": report.upcoming_sessions,
         "recommendation": report.recommendation,
         "time_since_green": report.time_since_green,
@@ -2103,6 +2254,23 @@ def format_markdown(report: PulseReport) -> str:
     if report.handoff_summary:
         lines.append("## Last Session")
         lines.append(f"**{report.handoff_tool or '?'}** ({report.handoff_date or '?'}): {report.handoff_summary}")
+        lines.append("")
+
+    if report.system_brief_summary:
+        brief = report.system_brief_summary
+        lines.append("## System Brief")
+        lines.append(
+            f"- **Route**: `{brief.get('task_id')}` [{brief.get('briefing_level')}] | "
+            f"owners={brief.get('canonical_owner_count')} | views={brief.get('required_live_view_count')} | "
+            f"blockers={brief.get('blocker_count')} | warnings={brief.get('warning_count')}"
+        )
+        if report.work_capsule_summary:
+            lines.append(f"- **Work capsule**: `{report.work_capsule_summary.get('path')}`")
+        if report.startup_latency_ms is not None and report.orientation_cost_budget:
+            lines.append(
+                f"- **Startup latency**: {report.startup_latency_ms}ms / "
+                f"{report.orientation_cost_budget.get('budget_ms')}ms budget"
+            )
         lines.append("")
 
     if report.handoff_next_steps:

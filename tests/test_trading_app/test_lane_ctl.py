@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
+from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 from trading_app.lane_ctl import (
     _load_overrides,
     _save_overrides,
@@ -34,13 +35,18 @@ def mock_state(state_dir):
 
 
 PROFILE = "topstep_50k_mnq_auto"
-# Must reference the ACTUAL lane strategy_id for the target session in the
-# profile's daily_lanes tuple — pause_lane() looks up the strategy_id via
-# (profile, session) and saves under that canonical ID. See the
-# 2026-04-09 portfolio alignment sprint (commit 807555e) for the ghost
-# lane sweep that updated this ID.
-TEST_SID = "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_ORB_G8"
 TEST_SESSION = "COMEX_SETTLE"
+
+
+def _strategy_id_for_session(profile_id: str, session_name: str) -> str:
+    profile = ACCOUNT_PROFILES[profile_id]
+    for lane in effective_daily_lanes(profile):
+        if lane.orb_label == session_name:
+            return lane.strategy_id
+    raise AssertionError(f"No lane for {session_name} in profile {profile_id}")
+
+
+TEST_SID = _strategy_id_for_session(PROFILE, TEST_SESSION)
 
 
 class TestLoadSaveOverrides:

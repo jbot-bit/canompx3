@@ -1510,6 +1510,16 @@ class TestPropProfilesValidatedSetupsAlignment:
         )
         return con
 
+    @staticmethod
+    def _runtime_lanes_for_profile(profile):
+        """Mirror the drift check's lane source: daily_lanes, else allocation lanes."""
+        from trading_app.prop_profiles import load_allocation_lanes
+
+        lanes = profile.daily_lanes
+        if not lanes:
+            lanes = load_allocation_lanes(profile.profile_id)
+        return lanes
+
     def test_all_active_lanes_present_passes(self):
         """Happy path: every active lane is in validated_setups with status='active'."""
         from pipeline import check_drift
@@ -1520,7 +1530,7 @@ class TestPropProfilesValidatedSetupsAlignment:
         for profile in ACCOUNT_PROFILES.values():
             if not profile.active:
                 continue
-            for lane in profile.daily_lanes:
+            for lane in self._runtime_lanes_for_profile(profile):
                 con.execute(
                     "INSERT INTO validated_setups VALUES (?, ?)",
                     [lane.strategy_id, "active"],
@@ -1539,10 +1549,11 @@ class TestPropProfilesValidatedSetupsAlignment:
         active_profiles = [p for p in ACCOUNT_PROFILES.values() if p.active]
         assert active_profiles, "No active profiles — test fixture assumption broken"
         victim_profile = active_profiles[0]
-        assert victim_profile.daily_lanes, "Active profile has no lanes — test fixture broken"
-        victim_lane = victim_profile.daily_lanes[0]
+        victim_lanes = self._runtime_lanes_for_profile(victim_profile)
+        assert victim_lanes, "Active profile has no runtime lanes — test fixture broken"
+        victim_lane = victim_lanes[0]
         for profile in active_profiles:
-            for lane in profile.daily_lanes:
+            for lane in self._runtime_lanes_for_profile(profile):
                 if lane.strategy_id == victim_lane.strategy_id:
                     continue
                 con.execute(
@@ -1565,7 +1576,7 @@ class TestPropProfilesValidatedSetupsAlignment:
         active_profiles = [p for p in ACCOUNT_PROFILES.values() if p.active]
         assert active_profiles
         for profile in active_profiles:
-            for i, lane in enumerate(profile.daily_lanes):
+            for i, lane in enumerate(self._runtime_lanes_for_profile(profile)):
                 # First lane gets status='retired', rest get 'active'
                 status = "retired" if i == 0 else "active"
                 con.execute(
@@ -1590,7 +1601,7 @@ class TestPropProfilesValidatedSetupsAlignment:
         for profile in ACCOUNT_PROFILES.values():
             if not profile.active:
                 continue
-            for lane in profile.daily_lanes:
+            for lane in self._runtime_lanes_for_profile(profile):
                 con.execute(
                     "INSERT INTO validated_setups VALUES (?, ?)",
                     [lane.strategy_id, "active"],

@@ -898,6 +898,7 @@ class TestDocumentAuthorityRegistry:
                     "docs/governance/system_authority_map.md",
                     "docs/ARCHITECTURE.md",
                     "docs/MONOREPO_ARCHITECTURE.md",
+                    "docs/context/*.md",
                     "REPO_MAP.md",
                 ]
             ),

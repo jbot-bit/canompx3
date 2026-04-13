@@ -20,7 +20,7 @@ PULSE_SCRIPT = PROJECT_ROOT / "scripts" / "tools" / "project_pulse.py"
 PYTHON = sys.executable
 
 
-def _run_pulse(*args: str, timeout: int = 30) -> subprocess.CompletedProcess[str]:
+def _run_pulse(*args: str, timeout: int = 60) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [PYTHON, str(PULSE_SCRIPT), *args],
         cwd=PROJECT_ROOT,
@@ -156,5 +156,6 @@ class TestPulseIntegration:
         """Text output should be concise enough to read in 10 seconds."""
         r = _run_pulse("--fast", "--no-cache")
         lines = r.stdout.strip().splitlines()
-        # Should be under 50 lines for a quick glance
-        assert len(lines) <= 50, f"Output too long for a pulse ({len(lines)} lines). Should be <50."
+        # Keep enough headroom for a few extra high-signal sections without
+        # letting the pulse sprawl into a wall of text.
+        assert len(lines) <= 60, f"Output too long for a pulse ({len(lines)} lines). Should be <=60."

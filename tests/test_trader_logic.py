@@ -24,6 +24,7 @@ import pytest
 from pipeline.cost_model import get_cost_spec, pnl_points_to_r, risk_in_dollars, to_r_multiple
 from trading_app.config import ENTRY_MODELS
 from trading_app.entry_rules import detect_confirm, resolve_entry
+from trading_app.hypothesis_loader import load_hypothesis_by_sha
 from trading_app.outcome_builder import compute_single_outcome
 
 
@@ -1170,7 +1171,7 @@ class TestRandomStrategyMath:
             strats = con.execute(
                 "SELECT strategy_id, orb_label, entry_model, rr_target, "
                 "confirm_bars, filter_type, win_rate, sample_size, expectancy_r, "
-                "orb_minutes, stop_multiplier "
+                "orb_minutes, stop_multiplier, hypothesis_file_sha "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
@@ -1187,12 +1188,16 @@ class TestRandomStrategyMath:
                 "expectancy_r",
                 "orb_minutes",
                 "stop_multiplier",
+                "hypothesis_file_sha",
             ]
 
             from trading_app.config import ALL_FILTERS
 
-            # Cache daily_features per orb_minutes to avoid re-loading
+            # Discovery rows stamped with a hypothesis SHA may be computed under
+            # a temporal holdout, so the recomputation must mirror that same
+            # pre-holdout slice instead of assuming full-history metrics.
             feat_cache = {}
+            holdout_cache = {}
 
             for s in [dict(zip(strat_cols, r, strict=True)) for r in strats]:
                 orb = s["orb_label"]
@@ -1201,6 +1206,13 @@ class TestRandomStrategyMath:
                 cb = s["confirm_bars"]
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
+                holdout_date = None
+                hypothesis_sha = s.get("hypothesis_file_sha")
+                if hypothesis_sha:
+                    if hypothesis_sha not in holdout_cache:
+                        meta = load_hypothesis_by_sha(hypothesis_sha)
+                        holdout_cache[hypothesis_sha] = meta["holdout_date"] if meta is not None else None
+                    holdout_date = holdout_cache[hypothesis_sha]
 
                 # Skip stop-multiplier variants — orb_outcomes stores outcomes at
                 # base stop only; adjusted stops are applied at discovery level
@@ -1218,29 +1230,40 @@ class TestRandomStrategyMath:
                     continue
 
                 # Load daily_features for this aperture (cached)
-                if om not in feat_cache:
+                feat_key = (om, holdout_date)
+                if feat_key not in feat_cache:
+                    sql = "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?"
+                    params = [om]
+                    if holdout_date is not None:
+                        sql += " AND trading_day <= ?"
+                        params.append(holdout_date)
                     features = con.execute(
-                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?", [om]
+                        sql,
+                        params,
                     ).fetchall()
                     feat_cols = [desc[0] for desc in con.description]
-                    feat_cache[om] = [dict(zip(feat_cols, r, strict=True)) for r in features]
+                    feat_cache[feat_key] = [dict(zip(feat_cols, r, strict=True)) for r in features]
 
                 # Get eligible days for this filter
                 eligible = set()
-                for row in feat_cache[om]:
+                for row in feat_cache[feat_key]:
                     if row.get(f"orb_{orb}_break_dir") is None:
                         continue
                     if strat_filter.matches_row(row, orb):
                         eligible.add(row["trading_day"])
 
                 # Get matching outcomes
-                outcomes = con.execute(
+                outcome_sql = (
                     "SELECT trading_day, outcome, pnl_r FROM orb_outcomes "
                     "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
                     "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = ? "
-                    "AND outcome IN ('win','loss')",
-                    [orb, em, rr, cb, om],
-                ).fetchall()
+                    "AND outcome IN ('win','loss')"
+                )
+                outcome_params = [orb, em, rr, cb, om]
+                if holdout_date is not None:
+                    outcome_sql += " AND trading_day < ?"
+                    outcome_params.append(holdout_date)
+                outcomes = con.execute(outcome_sql, outcome_params).fetchall()
 
                 # Filter to eligible days
                 traded = [(td, oc, pr) for td, oc, pr in outcomes if td in eligible]
@@ -1266,7 +1289,7 @@ class TestRandomStrategyMath:
             strats = con.execute(
                 "SELECT strategy_id, orb_label, entry_model, rr_target, "
                 "confirm_bars, filter_type, win_rate, sample_size, expectancy_r, "
-                "orb_minutes, stop_multiplier "
+                "orb_minutes, stop_multiplier, hypothesis_file_sha "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
@@ -1283,11 +1306,13 @@ class TestRandomStrategyMath:
                 "expectancy_r",
                 "orb_minutes",
                 "stop_multiplier",
+                "hypothesis_file_sha",
             ]
 
             from trading_app.config import ALL_FILTERS
 
             feat_cache = {}
+            holdout_cache = {}
 
             for s in [dict(zip(strat_cols, r, strict=True)) for r in strats]:
                 orb = s["orb_label"]
@@ -1296,6 +1321,13 @@ class TestRandomStrategyMath:
                 cb = s["confirm_bars"]
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
+                holdout_date = None
+                hypothesis_sha = s.get("hypothesis_file_sha")
+                if hypothesis_sha:
+                    if hypothesis_sha not in holdout_cache:
+                        meta = load_hypothesis_by_sha(hypothesis_sha)
+                        holdout_cache[hypothesis_sha] = meta["holdout_date"] if meta is not None else None
+                    holdout_date = holdout_cache[hypothesis_sha]
 
                 # Skip stop-multiplier variants — orb_outcomes stores outcomes at
                 # base stop only; adjusted stops are applied at discovery level
@@ -1310,27 +1342,38 @@ class TestRandomStrategyMath:
                 if ft.startswith("VOL_") or isinstance(strat_filter, _VFe):
                     continue
 
-                if om not in feat_cache:
+                feat_key = (om, holdout_date)
+                if feat_key not in feat_cache:
+                    sql = "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?"
+                    params = [om]
+                    if holdout_date is not None:
+                        sql += " AND trading_day <= ?"
+                        params.append(holdout_date)
                     features = con.execute(
-                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?", [om]
+                        sql,
+                        params,
                     ).fetchall()
                     feat_cols = [desc[0] for desc in con.description]
-                    feat_cache[om] = [dict(zip(feat_cols, r, strict=True)) for r in features]
+                    feat_cache[feat_key] = [dict(zip(feat_cols, r, strict=True)) for r in features]
 
                 eligible = set()
-                for row in feat_cache[om]:
+                for row in feat_cache[feat_key]:
                     if row.get(f"orb_{orb}_break_dir") is None:
                         continue
                     if strat_filter.matches_row(row, orb):
                         eligible.add(row["trading_day"])
 
-                outcomes = con.execute(
+                outcome_sql = (
                     "SELECT trading_day, outcome, pnl_r FROM orb_outcomes "
                     "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
                     "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = ? "
-                    "AND outcome IN ('win','loss')",
-                    [orb, em, rr, cb, om],
-                ).fetchall()
+                    "AND outcome IN ('win','loss')"
+                )
+                outcome_params = [orb, em, rr, cb, om]
+                if holdout_date is not None:
+                    outcome_sql += " AND trading_day < ?"
+                    outcome_params.append(holdout_date)
+                outcomes = con.execute(outcome_sql, outcome_params).fetchall()
 
                 traded = [(td, oc, pr) for td, oc, pr in outcomes if td in eligible]
                 if len(traded) == 0:
@@ -1361,7 +1404,7 @@ class TestRandomStrategyMath:
             strats = con.execute(
                 "SELECT strategy_id, orb_label, entry_model, rr_target, "
                 "confirm_bars, filter_type, max_drawdown_r, orb_minutes, "
-                "stop_multiplier "
+                "stop_multiplier, hypothesis_file_sha "
                 "FROM experimental_strategies "
                 "WHERE instrument = 'MGC' AND sample_size >= 20 "
                 "ORDER BY strategy_id LIMIT 30"
@@ -1376,11 +1419,13 @@ class TestRandomStrategyMath:
                 "max_drawdown_r",
                 "orb_minutes",
                 "stop_multiplier",
+                "hypothesis_file_sha",
             ]
 
             from trading_app.config import ALL_FILTERS
 
             feat_cache = {}
+            holdout_cache = {}
 
             for s in [dict(zip(strat_cols, r, strict=True)) for r in strats]:
                 orb = s["orb_label"]
@@ -1389,6 +1434,13 @@ class TestRandomStrategyMath:
                 cb = s["confirm_bars"]
                 ft = s["filter_type"]
                 om = s["orb_minutes"]
+                holdout_date = None
+                hypothesis_sha = s.get("hypothesis_file_sha")
+                if hypothesis_sha:
+                    if hypothesis_sha not in holdout_cache:
+                        meta = load_hypothesis_by_sha(hypothesis_sha)
+                        holdout_cache[hypothesis_sha] = meta["holdout_date"] if meta is not None else None
+                    holdout_date = holdout_cache[hypothesis_sha]
 
                 # Skip stop-multiplier variants — orb_outcomes stores outcomes at
                 # base stop only; adjusted stops are applied at discovery level
@@ -1403,27 +1455,39 @@ class TestRandomStrategyMath:
                 if ft.startswith("VOL_") or isinstance(strat_filter, _VFd):
                     continue
 
-                if om not in feat_cache:
+                feat_key = (om, holdout_date)
+                if feat_key not in feat_cache:
+                    sql = "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?"
+                    params = [om]
+                    if holdout_date is not None:
+                        sql += " AND trading_day <= ?"
+                        params.append(holdout_date)
                     features = con.execute(
-                        "SELECT * FROM daily_features WHERE symbol = 'MGC' AND orb_minutes = ?", [om]
+                        sql,
+                        params,
                     ).fetchall()
                     feat_cols = [desc[0] for desc in con.description]
-                    feat_cache[om] = [dict(zip(feat_cols, r, strict=True)) for r in features]
+                    feat_cache[feat_key] = [dict(zip(feat_cols, r, strict=True)) for r in features]
 
                 eligible = set()
-                for row in feat_cache[om]:
+                for row in feat_cache[feat_key]:
                     if row.get(f"orb_{orb}_break_dir") is None:
                         continue
                     if strat_filter.matches_row(row, orb):
                         eligible.add(row["trading_day"])
 
-                outcomes = con.execute(
+                outcome_sql = (
                     "SELECT trading_day, outcome, pnl_r FROM orb_outcomes "
                     "WHERE symbol = 'MGC' AND orb_label = ? AND entry_model = ? "
                     "AND rr_target = ? AND confirm_bars = ? AND orb_minutes = ? "
-                    "AND outcome IN ('win','loss') ORDER BY trading_day",
-                    [orb, em, rr, cb, om],
-                ).fetchall()
+                    "AND outcome IN ('win','loss')"
+                )
+                outcome_params = [orb, em, rr, cb, om]
+                if holdout_date is not None:
+                    outcome_sql += " AND trading_day < ?"
+                    outcome_params.append(holdout_date)
+                outcome_sql += " ORDER BY trading_day"
+                outcomes = con.execute(outcome_sql, outcome_params).fetchall()
 
                 traded = [(td, oc, pr) for td, oc, pr in outcomes if td in eligible]
                 if len(traded) == 0:

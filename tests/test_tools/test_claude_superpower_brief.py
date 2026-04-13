@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -47,14 +48,16 @@ class TestClaudeSuperpowerBrief:
             tmp_path / "MEMORY.md",
             "# Memory\n\n## Trading\nnotes\n\n## Tooling\nnotes\n",
         )
-        _mkfile(tmp_path / "memory" / "2026-04-03.md", "today")
-        _mkfile(tmp_path / "memory" / "2026-04-02.md", "yesterday")
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        _mkfile(tmp_path / "memory" / f"{today.isoformat()}.md", "today")
+        _mkfile(tmp_path / "memory" / f"{yesterday.isoformat()}.md", "yesterday")
 
         with patch("scripts.tools.claude_superpower_brief.build_pulse", return_value=_sample_report()):
             brief = build_brief(root=tmp_path, mode="session-start")
 
         assert "SUPERPOWER BRIEF:" in brief
-        assert "Stage: superpower claude — execute" in brief
+        assert "Stage [legacy]: superpower claude — execute" in brief
         assert "Last: Codex (2026-04-03) — Dashboard fix in progress" in brief
         assert "Next: Finish the current integration before taking new work." in brief
         assert "Active step: Verify the Claude hook integration" in brief
@@ -63,7 +66,7 @@ class TestClaudeSuperpowerBrief:
         assert "Paused: 3 uncommitted files" in brief
         assert "Upcoming: LONDON_METALS 17:00 (+5.7h) | CME_REOPEN 08:00 (+20.0h)" in brief
         assert "Memory topics: Trading | Tooling" in brief
-        assert "Recent notes: 2026-04-03.md | 2026-04-02.md" in brief
+        assert f"Recent notes: {today.isoformat()}.md | {yesterday.isoformat()}.md" in brief
 
     def test_post_compact_mode_adds_compact_rule(self, tmp_path: Path) -> None:
         with patch("scripts.tools.claude_superpower_brief.build_pulse", return_value=_sample_report()):
@@ -102,7 +105,7 @@ class TestClaudeSuperpowerBrief:
             brief = build_brief(root=tmp_path, mode="post-compact")
 
         assert "Brief degraded: RuntimeError" in brief
-        assert "Stage: harden hooks — implementation" in brief
+        assert "Stage [legacy]: harden hooks — implementation" in brief
         assert "Last: Codex (2026-04-03) — Added superpower brief" in brief
         assert "Memory topics: Tooling" in brief
         assert "Compact rule: re-check live files before trusting prior context." in brief

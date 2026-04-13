@@ -16,6 +16,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 WORKTREE_ROOT = PROJECT_ROOT / ".worktrees"
 WORKTREE_META = ".canompx3-worktree.json"
+LOCAL_WORKTREE_META = ".canompx3-worktree.local.json"
 TASK_NAMESPACE = "tasks"
 KNOWN_TOOLS = ("claude", "codex")
 SYMLINK_TARGETS = [".venv", ".venv-wsl"]
@@ -241,7 +242,9 @@ def write_metadata(
         "last_actor_tool": last_actor_tool or existing.get("last_actor_tool") or tool,
         "repo_root": str(PROJECT_ROOT),
     }
-    (path / WORKTREE_META).write_text(json.dumps(meta, indent=2), encoding="utf-8")
+    payload = json.dumps(meta, indent=2)
+    (path / WORKTREE_META).write_text(payload, encoding="utf-8")
+    (path / LOCAL_WORKTREE_META).write_text(payload, encoding="utf-8")
 
 
 def read_metadata(path: Path) -> dict[str, str] | None:
@@ -288,6 +291,24 @@ def _ensure_scaffold(path: Path, tool: str, name: str, branch: str, base_ref: st
         state="active",
         last_actor_tool=tool,
     )
+    try:
+        from pipeline.work_capsule import ensure_work_capsule_scaffold
+
+        capsule_path, stage_path = ensure_work_capsule_scaffold(
+            path,
+            tool=tool,
+            name=name,
+            branch=branch,
+            purpose=purpose,
+        )
+        meta = read_metadata(path) or {}
+        meta["capsule_path"] = capsule_path.relative_to(path).as_posix()
+        meta["stage_path"] = stage_path.relative_to(path).as_posix()
+        payload = json.dumps(meta, indent=2)
+        (path / WORKTREE_META).write_text(payload, encoding="utf-8")
+        (path / LOCAL_WORKTREE_META).write_text(payload, encoding="utf-8")
+    except Exception:
+        pass
 
 
 def create_worktree(tool: str, name: str, base_ref: str = "HEAD", purpose: str | None = None) -> Path:

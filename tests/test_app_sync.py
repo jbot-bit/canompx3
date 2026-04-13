@@ -42,6 +42,7 @@ from trading_app.config import (
     OrbSizeFilter,
     StrategyFilter,
     VolumeFilter,
+    VWAPBreakDirectionFilter,
     classify_strategy,
     get_filters_for_grid,
 )
@@ -227,6 +228,11 @@ class TestAllFiltersSync:
         # daily_features.garch_forecast_vol_pct — regime-adaptive, handles
         # cross-instrument distribution variance.
         "GARCH_VOL_PCT_LT20",
+        # VWAP break-direction filters (Apr 2026 hypothesis-scoped validation).
+        # Registered in ALL_FILTERS for hypothesis-file injection / DB compat,
+        # then routed selectively by get_filters_for_grid().
+        "VWAP_MID_ALIGNED",
+        "VWAP_BP_ALIGNED",
     }
 
     def test_expected_keys(self):
@@ -293,6 +299,7 @@ class TestAllFiltersSync:
                     PitRangeFilter,
                     ATRVelRatioFilter,
                     GARCHForecastVolPctFilter,
+                    VWAPBreakDirectionFilter,
                 ),
             ):
                 continue

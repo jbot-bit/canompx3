@@ -215,6 +215,13 @@ refs/
 # Temp path artifacts (mangled Windows paths)
 C*/
 Users*
+!context/
+!context/*.py
+!docs/context/
+!docs/context/*.md
+
+# Local managed-worktree metadata
+.canompx3-worktree.local.json
 
 # Config dir (hypercorn/secret_key — not for VCS)
 config/

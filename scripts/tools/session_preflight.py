@@ -57,17 +57,37 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from pipeline.system_context import (
     ACTIVE_SESSION_DIR,
-    SessionClaim as SystemSessionClaim,
-    active_claim_path as system_active_claim_path,
-    branch_name as system_branch_name,
     build_system_context,
-    dirty_files as system_dirty_files,
     evaluate_system_policy,
+)
+from pipeline.system_context import (
+    SessionClaim as SystemSessionClaim,
+)
+from pipeline.system_context import (
+    active_claim_path as system_active_claim_path,
+)
+from pipeline.system_context import (
+    branch_name as system_branch_name,
+)
+from pipeline.system_context import (
+    dirty_files as system_dirty_files,
+)
+from pipeline.system_context import (
     head_sha as system_head_sha,
+)
+from pipeline.system_context import (
     list_claims as system_list_claims,
+)
+from pipeline.system_context import (
     read_claim as system_read_claim,
+)
+from pipeline.system_context import (
     verify_claim as system_verify_claim,
+)
+from pipeline.system_context import (
     write_active_claim as system_write_active_claim,
+)
+from pipeline.system_context import (
     write_claim as system_write_claim,
 )
 
@@ -279,6 +299,7 @@ def print_report(
     context: str,
     claim_tool: str | None = None,
     claim_mode: str = "read-only",
+    task_text: str | None = None,
     verify_only: bool = False,
     quiet: bool = False,
     claim_dir: Path = ACTIVE_SESSION_DIR,
@@ -326,6 +347,20 @@ def print_report(
         if handoff.summary:
             print(f"  Summary: {handoff.summary}")
 
+    try:
+        from pipeline.system_brief import build_system_brief
+
+        brief = build_system_brief(
+            root,
+            task_text=task_text,
+            briefing_level="mutating" if claim_mode == "mutating" else "read_only",
+            context_name=context,  # type: ignore[arg-type]
+            active_tool=claim_tool,
+            active_mode=claim_mode,
+        )
+    except Exception:
+        brief = None
+
     windows_env = (root / ".venv" / "Scripts" / "python.exe").exists()
     wsl_env = (root / ".venv-wsl" / "bin" / "python").exists()
     print(f"Env: .venv={'yes' if windows_env else 'no'} | .venv-wsl={'yes' if wsl_env else 'no'}")
@@ -350,6 +385,17 @@ def print_report(
             print(f"  - {warning}")
     elif not blockers:
         print("Status: clean")
+
+    if brief is not None:
+        print("System brief:")
+        print(
+            "  "
+            f"{brief['task_id']} [{brief['briefing_level']}] "
+            f"owners={len(brief['canonical_owners'])} views={len(brief['required_live_views'])} "
+            f"blockers={len(brief['blocking_issues'])} warnings={len(brief['warning_issues'])}"
+        )
+        if brief.get("work_capsule_ref"):
+            print(f"  capsule={brief['work_capsule_ref']}")
 
     exit_code = 1 if blockers else 0
     if verify_only and claim_tool:
@@ -379,6 +425,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--context", default="generic", help="Startup context label")
     parser.add_argument("--claim", default=None, help="Write or verify a session claim for this tool")
     parser.add_argument("--mode", choices=sorted(CLAIM_MODES), default=None, help="Claim mode: read-only or mutating")
+    parser.add_argument("--task", default=None, help="Optional task text for system-brief routing")
     parser.add_argument("--verify-claim", action="store_true", help="Verify current HEAD against the stored claim")
     parser.add_argument("--quiet", action="store_true", help="Only print warnings, suppress verbose output")
     parser.add_argument("--with-pulse", action="store_true", help="Append project pulse summary")
@@ -396,6 +443,7 @@ def main(argv: list[str] | None = None) -> int:
         context=args.context,
         claim_tool=args.claim,
         claim_mode=claim_mode,
+        task_text=args.task,
         verify_only=args.verify_claim,
         quiet=args.quiet,
     )
