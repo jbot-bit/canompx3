@@ -248,6 +248,18 @@ class TestWindowsBatchWrappers:
         assert "-Mode close-pick" in finish_content
         assert "-Mode prune" in clean_content
 
+    def test_ai_workstreams_batch_supports_smart_shortcuts_and_dry_run(self) -> None:
+        content = (windows_agent_launch.repo_root() / "ai-workstreams.bat").read_text(encoding="utf-8")
+
+        assert 'if /I "%ACTION%"=="claude" goto claude_task' in content
+        assert 'if /I "%ACTION%"=="codex" goto codex_task' in content
+        assert 'if /I "%ACTION%"=="search" goto search_task' in content
+        assert 'if /I "%ACTION%"=="green" goto green_task' in content
+        assert 'if /I "%ACTION%"=="list" call :run_mode list' in content
+        assert "CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY" in content
+        assert "MODE=%MODE% TASK=%TASK%" in content
+        assert "BATCH=%BATCH%" in content
+
 
 class TestWorkflowCommands:
     def test_handoff_workstream_invokes_manager(self) -> None:
