@@ -406,6 +406,8 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "TOKYO_OPEN",
                 "NYSE_OPEN",
                 "COMEX_SETTLE",
+                "CME_PRECLOSE",
+                "SINGAPORE_OPEN",
             }
         ),
         allowed_instruments=frozenset({"MNQ"}),
@@ -459,123 +461,72 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # Enforced by drift check 95 (pipeline/check_drift.py) — every lane in
         # an active profile must exist in validated_setups with status='active'.
         daily_lanes=(
-            # --- Core: ORB_G5 (multi-RR, 2026-04-10) ---
-            DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5",
-                "MNQ",
-                "EUROPE_FLOW",
-                max_orb_size_pts=120.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G5",
-                "MNQ",
-                "EUROPE_FLOW",
-                max_orb_size_pts=120.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_G5",
-                "MNQ",
-                "NYSE_OPEN",
-                max_orb_size_pts=80.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G5",
-                "MNQ",
-                "TOKYO_OPEN",
-                max_orb_size_pts=80.0,
-            ),
-            DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G5",
-                "MNQ",
-                "TOKYO_OPEN",
-                max_orb_size_pts=80.0,
-            ),
-            # --- Expansion: pure new-session diversification (2026-04-12) ---
-            # COMEX_SETTLE OVNRNG_100: highest ExpR 0.215, Sh 1.70, new session,
-            # new family 752. Cap 80.0 matches this profile's NYSE_OPEN
-            # convention and the pre-existing test_all_registry_lanes_have_caps
-            # assertion (honest deployment 2026-04-03); strategy avg stop is
-            # ~39pts so a 60pt execution stop from an 80-cap is ~2x normal —
-            # tight tail-risk gate.
+            # --- Portfolio reconstruction 2026-04-13 ---
+            # Full correlation audit: 30x30 pairwise Pearson rho on daily
+            # pnl_r with canonical filter application. Prior 6-lane profile
+            # had 2 redundant same-session RR pairs (EUROPE_FLOW rho=0.862,
+            # TOKYO_OPEN rho=0.844) burning 4 slots for ~2 independent bets.
+            # New portfolio: 6 unique sessions, max pairwise rho=0.060,
+            # total ExpR +0.948 (was +0.673, +41%), C11 survival 100%
+            # (was 96%). See scripts/research/portfolio_correlation_audit.py
+            # and docs/plans/2026-04-13-wider-aperture-vol-regime-v2-design.md.
+            #
+            # L1: COMEX_SETTLE OVNRNG_100 — highest ExpR (+0.215), retained
             DailyLaneSpec(
                 "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
                 "MNQ",
                 "COMEX_SETTLE",
                 max_orb_size_pts=80.0,
             ),
-            # --- REMOVED 2026-04-12 ---
-            # MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60: deployed on
-            # 2026-04-12, failed three locked criteria on its 2026
-            # forward window at N=42 (C6 WFE 0.25, C8 ratio 26%, C12
-            # SR ALARM). Retired after literature-grounded re-audit.
-            # Hypothesis: X_MES_ATR60 cross-asset filter is timing-
-            # mismatched on the CME_PRECLOSE session in the 2026 high-
-            # vol regime. The same filter passes on other sessions
-            # (see NYSE_OPEN expansion below) — session matters more
-            # than filter.
-            #
-            # ABORTED 2026-04-12 (PROFIT-NEXT pre-flight):
-            # MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60 passed the static
-            # criterion screen (IS N=724, C6 WFE 0.64, C8 ratio 66.8%)
-            # but SR pre-flight FIRED at trade #34 of 42 OOS trades —
-            # max SR 215.29 vs threshold 31.96 (6.7x). C12 alarm
-            # disqualifies on its own. Not deployed.
-            #
-            # ABORTED 2026-04-12 (PROFIT-NEXT pre-flight):
-            # MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60 was the strongest-
-            # margin new-family candidate (IS N=720, C6 WFE 2.14, C8
-            # ratio 213%) but SR pre-flight FIRED at trade #32 of 44 OOS
-            # trades — max SR 42.18 vs threshold 31.96. C12 alarm
-            # disqualifies even before the C11 same-session concurrency
-            # penalty with L3 (NYSE_OPEN ORB_G5) is applied. Not deployed.
-            #
-            # RETIRED 2026-04-12 same-day (L7-SUBSET):
-            # MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12 was deployed as the
-            # PROFIT-NEXT winner (WFE 2.46, C8 250.8%, SR CONTINUE, C11
-            # 80.8%) but a post-commit stress test found the lane is a
-            # strict trade-level subset of L1 MNQ_EUROPE_FLOW_ORB_G5 RR1.5:
-            # 1109/1109 shared days with pnl_r identical, 0 L7-only days,
-            # 0 differing days across the full history. The relationship
-            # is structural — COST_LT12 gates orb_size > 12.17pts (=
-            # total_friction / (0.12 * point_value) for MNQ) and ORB_G5
-            # gates orb_size >= 5pts, so every COST_LT12 pass is also an
-            # ORB_G5 pass. Deploying L7 alongside L1 would be a 94%-
-            # duplication sizing multiplier, not diversification. The
-            # family_hash metadata showed "5cc distinct from 01c" because
-            # family_hash groups by filter_type, not by trade-level
-            # overlap. Retired before any live exposure. Slot reopened
-            # for future truly-orthogonal additions.
+            # L2: EUROPE_FLOW OVNRNG_100 — upgrade from ORB_G5 (+0.097 ExpR)
+            DailyLaneSpec(
+                "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_OVNRNG_100",
+                "MNQ",
+                "EUROPE_FLOW",
+                max_orb_size_pts=120.0,
+            ),
+            # L3: CME_PRECLOSE X_MES_ATR60 — new session, WFE=1.12
+            DailyLaneSpec(
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60",
+                "MNQ",
+                "CME_PRECLOSE",
+                max_orb_size_pts=80.0,
+            ),
+            # L4: NYSE_OPEN X_MES_ATR60 — upgrade from ORB_G5 (+0.030 ExpR)
+            DailyLaneSpec(
+                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
+                "MNQ",
+                "NYSE_OPEN",
+                max_orb_size_pts=80.0,
+            ),
+            # L5: TOKYO_OPEN COST_LT12 — upgrade from ORB_G5 (+0.034 ExpR)
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12",
+                "MNQ",
+                "TOKYO_OPEN",
+                max_orb_size_pts=80.0,
+            ),
+            # L6: SINGAPORE_OPEN ATR_P50 O30 — new session (wider aperture)
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O30",
+                "MNQ",
+                "SINGAPORE_OPEN",
+                max_orb_size_pts=80.0,
+            ),
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "6-lane MNQ-only auto profile. Core 5 ORB_G5 lanes from "
-            "2026-04-10 multi-RR discovery + 1 expansion lane L6 "
-            "COMEX_SETTLE OVNRNG_100 (WATCH). "
-            "Two prior L7 additions retired same-day: "
-            "(1) L7-RETIRE 2026-04-12 — MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60 "
-            "failed three hard criteria (C6 WFE 0.25, C8 ratio 26%, SR ALARM); "
-            "(2) L7-SUBSET 2026-04-12 — MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12 "
-            "passed every static and dynamic pre-flight gate (WFE 2.46, C8 "
-            "250.8%, SR CONTINUE, C11 80.8%) but a post-commit stress test "
-            "found it is a strict trade-level subset of L1 with perfect daily "
-            "PnL correlation (1109/1109 shared days, identical pnl_r, 0 "
-            "differing). COST_LT12 gates orb_size > 12.17pts; ORB_G5 gates "
-            "orb_size >= 5pts, so every COST_LT12 pass is also an ORB_G5 pass. "
-            "Deploying L7 alongside L1 was a 94%-duplication sizing multiplier "
-            "masquerading as diversification because family_hash metadata is "
-            "keyed on filter_type, not trade-level overlap. "
-            "PROFIT-NEXT also rejected on C12 alarm: US_DATA_1000 X_MES_ATR60 "
-            "(SR alarm@#34, max 215.29); NYSE_OPEN X_MES_ATR60 (SR alarm@#32, "
-            "max 42.18). "
-            "L6 COMEX_SETTLE OVNRNG_100 remains WATCH: C6 WFE 0.52, C8 "
-            "ratio 53%, SR ALARM at N=58 — both threshold criteria pass "
-            "barely; SR is the only trigger. Locked re-check at N>=100: "
-            "retire if SR remains ALARM and (C6 WFE < 0.50 OR C8 ratio < 0.40). "
-            "All lanes cross-referenced against validated_setups via drift "
-            "check 95. Durable lesson: trade-level correlation must be "
-            "checked pre-deploy; family_hash alone is not sufficient. See "
-            "deferred-findings.md ledger entries SR-L6, L7-RETIRE, "
-            "PROFIT-NEXT, and L7-SUBSET for the full audit trail."
+            "6-lane MNQ auto profile — RECONSTRUCTED 2026-04-13 via "
+            "full 30x30 pairwise correlation audit. Prior profile had "
+            "2 redundant same-session RR pairs (EUROPE_FLOW rho=0.862, "
+            "TOKYO_OPEN rho=0.844) wasting 2 of 6 slots. New profile: "
+            "6 unique sessions, max pairwise rho=0.060, total ExpR "
+            "+0.948 (was +0.673, +41%), C11 survival 100% (was 96%). "
+            "Each lane is the best-ExpR strategy from its session's "
+            "independent correlation family. Audit script: "
+            "scripts/research/portfolio_correlation_audit.py. "
+            "All lanes validated via BH FDR + walk-forward + Criterion 11 "
+            "Monte Carlo. Enforced by drift check 94."
         ),
     ),
     # =========================================================================

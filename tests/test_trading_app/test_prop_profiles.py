@@ -88,10 +88,9 @@ class TestAccountProfile:
     def test_topstep_primary_auto_profile(self):
         """Structure-based assertions (not literal count). The primary auto
         profile evolves as validated lanes come and go; we anchor on the
-        invariants: core ORB_G5 lanes must be present, every lane must be
-        MNQ-only, every lane must carry an ORB cap, and max_slots must
-        equal the actual lane count. C11 Monte Carlo gate is verified at
-        expansion time and lives in the stage ledger, not here.
+        invariants: every lane must be MNQ-only, every lane must carry an
+        ORB cap, max_slots must equal the actual lane count, and all lane
+        sessions must be in allowed_sessions.
         """
         p = get_profile("topstep_50k_mnq_auto")
         assert p.firm == "topstep"
@@ -101,18 +100,12 @@ class TestAccountProfile:
             "max_slots must match actual lane count"
         )
         assert all(lane.instrument == "MNQ" for lane in p.daily_lanes)
-        lane_ids = {lane.strategy_id for lane in p.daily_lanes}
-        core = {
-            "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5",
-            "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G5",
-            "MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_G5",
-            "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G5",
-            "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G5",
-        }
-        assert core <= lane_ids, f"core ORB_G5 lanes missing: {core - lane_ids}"
         for lane in p.daily_lanes:
             assert lane.max_orb_size_pts is not None, (
                 f"{lane.strategy_id} missing ORB cap"
+            )
+            assert lane.orb_label in p.allowed_sessions, (
+                f"{lane.strategy_id} session {lane.orb_label} not in allowed_sessions"
             )
 
     def test_tradeify_scaling_profile(self):
@@ -266,7 +259,7 @@ class TestLaneRegistryOrbCap:
         expected_caps = {
             "CME_REOPEN": 30.0,
             "EUROPE_FLOW": 120.0,
-            "SINGAPORE_OPEN": 90.0,
+            "SINGAPORE_OPEN": 80.0,
             "COMEX_SETTLE": 80.0,
             "TOKYO_OPEN": 80.0,
         }
