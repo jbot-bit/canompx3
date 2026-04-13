@@ -161,8 +161,9 @@ class TestAllFilters:
         #     GARCH_VOL_PCT_LT20 (Wave 5 G5, injection-only — MNQ NYSE_OPEN LOW regime)
         #     VWAP_MID_ALIGNED (Apr 2026 exhaustive audit, MNQ US_DATA_1000 O15)
         #     VWAP_BP_ALIGNED (Apr 2026 exhaustive audit, MNQ CME_PRECLOSE O5)
-        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 6 scoped = 88
-        assert len(ALL_FILTERS) == 88
+        #     CROSS_NYSE_MOMENTUM (Apr 2026 cross-session state, MNQ US_DATA_1000)
+        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 7 scoped = 89
+        assert len(ALL_FILTERS) == 89
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS

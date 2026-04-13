@@ -2555,6 +2555,158 @@ class VWAPBreakDirectionFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class CrossSessionMomentumFilter(StrategyFilter):
+    """Filter by cross-session momentum alignment.
+
+    Uses the prior session's break direction AND whether that trade is
+    currently in profit to determine if the current session's breakout
+    direction is supported by institutional flow.
+
+    4-state machine:
+    - TAKE: prior session winning + same direction (confident continuation)
+    - TAKE: prior session losing + opposite direction (reversal after failure)
+    - VETO: prior session winning + opposite direction (breaking against winners)
+    - VETO: prior session losing + same direction (doubling down on losers)
+
+    Zero look-ahead: "currently winning" is computed by comparing the current
+    session's break level (known at entry time) to the prior session's ORB
+    boundary (the E2 entry level). This uses only daily_features columns.
+    99.7% agreement with actual entry_price comparison.
+
+    Fail-closed: missing prior session break_dir or ORB levels = ineligible.
+
+    Phase A screening (2026-04-13): 3/3 BH FDR at K=18 for NYSE_OPEN >
+    US_DATA_1000. IS lift +0.079R, OOS lift +0.526R. MES cross-confirms
+    OOS +0.588R. Look-ahead audited: uses ORB break levels, NOT final outcome.
+
+    @research-source scripts/tmp/directional_context_alignment.py (2026-04-13)
+    @research-source docs/plans/2026-04-11-cross-session-state-round3-memo.md
+    @entry-models E2
+    """
+
+    CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
+
+    prior_session: str = "NYSE_OPEN"
+
+    def _compute_state(self, row: dict, orb_label: str) -> str | None:
+        """Compute the 4-state classification from daily_features columns."""
+        prior_dir = row.get(f"orb_{self.prior_session}_break_dir")
+        current_dir = row.get(f"orb_{orb_label}_break_dir")
+        if prior_dir not in ("long", "short") or current_dir not in ("long", "short"):
+            return None
+
+        # Prior session entry level (E2 enters at ORB boundary)
+        if prior_dir == "long":
+            prior_entry = row.get(f"orb_{self.prior_session}_high")
+        else:
+            prior_entry = row.get(f"orb_{self.prior_session}_low")
+
+        # Current price at break time = break level of current session
+        if current_dir == "long":
+            current_price = row.get(f"orb_{orb_label}_high")
+        else:
+            current_price = row.get(f"orb_{orb_label}_low")
+
+        if prior_entry is None or current_price is None:
+            return None
+
+        # Is prior session currently in profit?
+        if prior_dir == "long":
+            prior_winning = current_price > prior_entry
+        else:
+            prior_winning = current_price < prior_entry
+
+        same_dir = prior_dir == current_dir
+
+        if prior_winning and same_dir:
+            return "TAKE_WIN_ALIGN"
+        elif not prior_winning and not same_dir:
+            return "TAKE_LOSS_OPP"
+        elif prior_winning and not same_dir:
+            return "VETO_WIN_OPP"
+        else:
+            return "VETO_LOSS_ALIGN"
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        state = self._compute_state(row, orb_label)
+        if state is None:
+            return False
+        return state.startswith("TAKE")
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        prior_dir = df.get(f"orb_{self.prior_session}_break_dir")
+        current_dir = df.get(f"orb_{orb_label}_break_dir")
+        if prior_dir is None or current_dir is None:
+            return pd.Series(False, index=df.index)
+
+        is_prior_long = prior_dir == "long"
+        is_prior_short = prior_dir == "short"
+        has_prior = is_prior_long | is_prior_short
+
+        is_curr_long = current_dir == "long"
+        is_curr_short = current_dir == "short"
+        has_curr = is_curr_long | is_curr_short
+
+        prior_hi = df.get(f"orb_{self.prior_session}_high")
+        prior_lo = df.get(f"orb_{self.prior_session}_low")
+        curr_hi = df.get(f"orb_{orb_label}_high")
+        curr_lo = df.get(f"orb_{orb_label}_low")
+
+        if prior_hi is None or prior_lo is None or curr_hi is None or curr_lo is None:
+            return pd.Series(False, index=df.index)
+
+        # Prior entry level
+        prior_entry = prior_hi.where(is_prior_long, prior_lo)
+        # Current price at break
+        current_price = curr_hi.where(is_curr_long, curr_lo)
+
+        has_data = has_prior & has_curr & prior_hi.notna() & curr_hi.notna()
+
+        # Prior winning?
+        prior_winning = (is_prior_long & (current_price > prior_entry)) | (
+            is_prior_short & (current_price < prior_entry)
+        )
+        same_dir = (is_prior_long & is_curr_long) | (is_prior_short & is_curr_short)
+
+        # TAKE states: (winning + same_dir) OR (losing + opposite_dir)
+        take = (prior_winning & same_dir) | (~prior_winning & ~same_dir)
+        return has_data & take
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        _ = entry_model
+        state = self._compute_state(row, orb_label)
+        passes = state is not None and state.startswith("TAKE")
+
+        return [
+            AtomDescription(
+                name=f"Cross-session momentum ({self.prior_session} > {orb_label})",
+                category="INTRA_SESSION",
+                resolves_at="BREAK_DETECTED",
+                passes=passes,
+                feature_column=f"orb_{self.prior_session}_break_dir",
+                confidence_tier=self.CONFIDENCE_TIER,
+                observed_value=state,
+                threshold="TAKE_*",
+                comparator="in",
+                is_data_missing=state is None,
+                explanation=(
+                    f"4-state: {self.prior_session} direction + currently winning "
+                    f"vs {orb_label} break direction. TAKE when aligned momentum "
+                    f"or reversal after failure. VETO when breaking against winners "
+                    f"or doubling down on losers."
+                ),
+            )
+        ]
+
+
+@dataclass(frozen=True)
 class CompositeFilter(StrategyFilter):
     """Chain two filters: base AND overlay must both pass."""
 
@@ -2812,6 +2964,19 @@ _HYPOTHESIS_SCOPED_FILTERS: dict[str, StrategyFilter] = {
         filter_type="VWAP_BP_ALIGNED",
         description="Break price aligned with VWAP for break direction",
         definition="break_price",
+    ),
+    # Cross-session momentum: NYSE_OPEN > US_DATA_1000 (Apr 13 2026).
+    # Phase A screening: 3/3 BH FDR at K=18 (p < 1e-6). OOS lift +0.526R.
+    # MES cross-confirms OOS +0.588R. Look-ahead audited: uses ORB break
+    # levels (99.7% agreement with actual entry prices), NOT final outcome.
+    # Jaccard 0.630 with VWAP_MID_ALIGNED (overlapping but distinct mechanism).
+    # @research-source scripts/tmp/directional_context_alignment.py
+    # @research-source docs/plans/2026-04-11-cross-session-state-round3-memo.md
+    # @entry-models E2
+    "CROSS_NYSE_MOMENTUM": CrossSessionMomentumFilter(
+        filter_type="CROSS_NYSE_MOMENTUM",
+        description="NYSE_OPEN winning + same direction = take; losing + same = veto",
+        prior_session="NYSE_OPEN",
     ),
 }
 
@@ -3340,6 +3505,7 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
     # @entry-models E2
     if instrument == "MNQ" and session == "US_DATA_1000":
         filters["VWAP_MID_ALIGNED"] = ALL_FILTERS["VWAP_MID_ALIGNED"]
+        filters["CROSS_NYSE_MOMENTUM"] = ALL_FILTERS["CROSS_NYSE_MOMENTUM"]
     if instrument == "MNQ" and session == "CME_PRECLOSE":
         filters["VWAP_BP_ALIGNED"] = ALL_FILTERS["VWAP_BP_ALIGNED"]
 
