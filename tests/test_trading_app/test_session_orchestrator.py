@@ -18,6 +18,25 @@ from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live.session_orchestrator import SessionOrchestrator
 
 
+class _ImmediateExecutorLoop:
+    """Test loop proxy that executes threadpool work inline.
+
+    SessionOrchestrator unit tests care about broker/orchestrator behavior, not
+    asyncio's threadpool plumbing. Running executor jobs inline keeps the tests
+    deterministic under the current WSL/Python 3.13 event-loop behavior, where
+    repeated offloads can stall.
+    """
+
+    def __init__(self, loop):
+        self._loop = loop
+
+    async def run_in_executor(self, executor, func, *args):
+        return func(*args)
+
+    def __getattr__(self, name):
+        return getattr(self._loop, name)
+
+
 # ---------------------------------------------------------------------------
 # Global mock: prevent calendar holiday check from blocking tests.
 # Tests may run on actual CME holidays (e.g., Good Friday).
@@ -27,6 +46,20 @@ def _mock_market_calendar():
     with (
         patch("pipeline.market_calendar.is_cme_holiday", return_value=False),
         patch("pipeline.market_calendar.is_early_close", return_value=False),
+    ):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _inline_executor_offloads():
+    real_get_running_loop = asyncio.get_running_loop
+
+    def _get_loop_proxy():
+        return _ImmediateExecutorLoop(real_get_running_loop())
+
+    with patch(
+        "trading_app.live.session_orchestrator.asyncio.get_running_loop",
+        side_effect=_get_loop_proxy,
     ):
         yield
 
@@ -186,6 +219,9 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch.monitor = MagicMock()
     orch.monitor.record_trade.return_value = None
     orch.monitor.daily_summary.return_value = {"n_trades": 0, "total_r": 0.0, "total_slippage_pts": 0.0}
+    orch._bar_persister = MagicMock()
+    orch._bar_persister.append.return_value = None
+    orch._bar_persister.flush_to_db.return_value = 0
     orch._positions = PositionTracker()
     orch._last_bar_at = None
     orch._kill_switch_fired = False
@@ -1151,8 +1187,8 @@ class TestTradingDayRollover:
         orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
         orch._notify = MagicMock()
 
-        # Simulate orphaned strategy
-        orch._blocked_strategies.add(STRATEGY_ID)
+        # Mirror the real rollover containment path: blocked strategy plus reason.
+        orch._block_strategy(STRATEGY_ID, "Orphaned broker position — manual resolution required")
 
         # Engine tries to enter the same strategy on new day
         await orch._handle_event(_entry_event(2360.0))

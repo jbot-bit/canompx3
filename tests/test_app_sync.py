@@ -116,7 +116,8 @@ class TestAllFiltersSync:
     # MES 1000 band filters: ORB_G4_L12/ORB_G5_L12 = 2
     # Cross-asset ATR filters: X_MES_ATR70/X_MES_ATR60/X_MGC_ATR70 = 3
     # + 4 OVNRNG (session-routed, NOT in BASE_GRID_FILTERS)
-    # Total: 22 + 12 + 12 + 3 + 2 + 2 + 3 + 4 = 60
+    # + 3 cross-session momentum filters (Apr 2026 cross-session expansion)
+    # Total: 22 + 12 + 12 + 3 + 2 + 2 + 3 + 4 + 3 = 63, plus later additions below
     EXPECTED_FILTER_KEYS = {
         "NO_FILTER",
         "ORB_G4",
@@ -233,6 +234,10 @@ class TestAllFiltersSync:
         # then routed selectively by get_filters_for_grid().
         "VWAP_MID_ALIGNED",
         "VWAP_BP_ALIGNED",
+        # Cross-session momentum filters (Apr 2026 cross-session expansion).
+        "CROSS_NYSE_MOMENTUM",
+        "CROSS_COMEX_MOMENTUM",
+        "CROSS_SGP_MOMENTUM",
     }
 
     def test_expected_keys(self):
@@ -272,6 +277,7 @@ class TestAllFiltersSync:
         from trading_app.config import (
             ATRVelRatioFilter,
             CompositeFilter,
+            CrossSessionMomentumFilter,
             CrossAssetATRFilter,
             DirectionFilter,
             GapNormFilter,
@@ -289,6 +295,7 @@ class TestAllFiltersSync:
                 (
                     VolumeFilter,
                     DirectionFilter,
+                    CrossSessionMomentumFilter,
                     CrossAssetATRFilter,
                     CostRatioFilter,
                     OrbVolumeFilter,

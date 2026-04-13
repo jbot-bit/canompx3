@@ -364,7 +364,7 @@ class TestEnrichTradesIntegration:
 
     def test_deployed_lanes_resolve_through_canonical_builder(self):
         from pipeline.paths import GOLD_DB_PATH
-        from trading_app.prop_profiles import ACCOUNT_PROFILES
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
         if not Path(GOLD_DB_PATH).exists():
             pytest.skip(f"gold.db not present at {GOLD_DB_PATH}; integration test skipped")
@@ -373,9 +373,10 @@ class TestEnrichTradesIntegration:
         # (avoiding collect_trades's DB roundtrips so this test stays scoped)
         trades = []
         for pid, profile in ACCOUNT_PROFILES.items():
-            if not profile.active or not profile.daily_lanes:
+            lanes = effective_daily_lanes(profile)
+            if not profile.active or not lanes:
                 continue
-            for lane in profile.daily_lanes:
+            for lane in lanes:
                 trades.append({
                     "strategy_id": lane.strategy_id,
                     "instrument": lane.instrument,
@@ -580,7 +581,7 @@ class TestBuildFilterUniverseRows:
 
     def test_deployed_count_matches_active_profile_lane_count(self):
         from pipeline.paths import GOLD_DB_PATH
-        from trading_app.prop_profiles import ACCOUNT_PROFILES
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
         if not Path(GOLD_DB_PATH).exists():
             pytest.skip(f"gold.db not present at {GOLD_DB_PATH}")
@@ -590,8 +591,8 @@ class TestBuildFilterUniverseRows:
 
         expected = 0
         for _pid, profile in ACCOUNT_PROFILES.items():
-            if profile.active and profile.daily_lanes:
-                expected += len(profile.daily_lanes)
+            if profile.active:
+                expected += len(effective_daily_lanes(profile))
 
         assert sum_deployed == expected, (
             f"View B deployed count ({sum_deployed}) does not match "

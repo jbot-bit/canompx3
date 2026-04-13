@@ -278,14 +278,33 @@ def collect_files(manifest: dict) -> dict[str, list[tuple[Path, str]]]:
     base_path = Path(memory_cfg["base_path"])
     pattern = memory_cfg["glob_pattern"]
     memory_files = []
+    seen_memory_keys: set[str] = set()
+
+    def _add_memory_file(path: Path, rel_key: str) -> None:
+        if rel_key in seen_memory_keys:
+            return
+        memory_files.append((path, rel_key))
+        seen_memory_keys.add(rel_key)
+
     if base_path.exists():
         for f in sorted(base_path.glob(pattern)):
             if f.is_file():
-                # Use memory/<filename> as the relative key
-                rel_key = f"memory/{f.name}"
-                memory_files.append((f, rel_key))
+                _add_memory_file(f, f"memory/{f.name}")
     else:
         print(f"  WARNING: memory base_path missing: {base_path}")
+
+    # Repo-local memory remains canonical for this workspace even when the
+    # older external Claude memory path is absent. Keep it in the memory tier
+    # so Pinecone sync never drops long-term/session context on path drift.
+    repo_memory = PROJECT_ROOT / "MEMORY.md"
+    if repo_memory.exists():
+        _add_memory_file(repo_memory, "memory/MEMORY.md")
+    repo_memory_dir = PROJECT_ROOT / "memory"
+    if repo_memory_dir.exists():
+        for f in sorted(repo_memory_dir.glob("*.md")):
+            if f.is_file():
+                _add_memory_file(f, f"memory/{f.name}")
+
     collected["memory"] = memory_files
 
     # --- Research output (bundle into ~10 topic files) ---
