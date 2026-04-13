@@ -6,6 +6,104 @@
 
 ---
 
+## Update (2026-04-13 — automatic Claude/Codex worktree isolation hardening)
+
+### Headline
+
+Turned Claude/Codex isolation into enforced startup policy instead of a
+preference. Mutating sessions are now blocked from the shared repo root and
+from the other tool's managed worktrees, and the default Codex project launcher
+auto-routes into a Codex-owned worktree.
+
+### What changed
+
+- updated `pipeline/system_context.py`
+  - mutating sessions now block on:
+    - shared canonical repo root (`shared_repo_root_mutation`)
+    - unmanaged linked worktrees (`unmanaged_linked_worktree`)
+    - wrong-tool managed worktree ownership (`worktree_tool_mismatch`)
+  - explicit emergency override remains available via:
+    - `CANOMPX3_ALLOW_SHARED_ROOT_MUTATION=1`
+- updated `scripts/tools/worktree_manager.py`
+  - creating/opening a managed worktree now rejects reusing a worktree owned by
+    the other tool; callers must handoff or choose a different name
+- updated `scripts/infra/codex-project.sh`
+  - default mutating Codex launcher now auto-redirects from the shared repo root
+    into a unique managed Codex worktree per launch
+- updated `scripts/infra/codex-project-search.sh`
+  - default Codex search launcher also auto-redirects from the shared repo root
+    into a unique managed Codex search worktree per launch
+- updated `scripts/infra/windows_agent_launch.py`
+  - Windows "codex-project" path now relies on the WSL launcher's per-session
+    worktree generation instead of a shared fixed workstream name
+
+### Verification
+
+- `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_system_context.py tests/test_tools/test_session_preflight.py tests/test_tools/test_worktree_manager.py tests/test_tools/test_windows_agent_launch.py -q`
+  - `59 passed`
+- `./.venv-wsl/bin/python -m ruff check pipeline/system_context.py scripts/tools/worktree_manager.py scripts/infra/windows_agent_launch.py tests/test_pipeline/test_system_context.py tests/test_tools/test_session_preflight.py tests/test_tools/test_worktree_manager.py tests/test_tools/test_windows_agent_launch.py`
+  - pass
+- `./.venv-wsl/bin/python -m ruff format --check pipeline/system_context.py scripts/tools/worktree_manager.py scripts/infra/windows_agent_launch.py tests/test_pipeline/test_system_context.py tests/test_tools/test_session_preflight.py tests/test_tools/test_worktree_manager.py tests/test_tools/test_windows_agent_launch.py`
+  - pass
+
+---
+
+## Update (2026-04-13 — WSL mount recovery + drilldown playbook verified)
+
+### Headline
+
+Recovered a broken `/mnt/c` WSL drvfs mount without losing repo work, then
+finished verification for the new research drilldown-playbook slice.
+
+### What changed
+
+- confirmed the mount failure was environmental, not repo corruption:
+  core repo files and `.venv-wsl` were returning `Input/output error` before
+  remount, then became readable/executable again after remount
+- verified the latest context-routing additions were preserved on disk:
+  - `context/institutional.py`
+  - `context/registry.py`
+  - `scripts/tools/context_resolver.py`
+  - `scripts/tools/context_views.py`
+  - `tests/test_context/test_registry.py`
+  - `tests/test_tools/test_context_resolver.py`
+  - `tests/test_tools/test_context_views.py`
+  - `tests/test_pipeline/test_check_drift_context.py`
+- completed the research drilldown-playbook slice:
+  - `research_investigation` now carries
+    `research_recent_performance_drilldown`
+  - resolver JSON exposes the drilldown playbook
+  - generated docs now include the playbook in
+    `docs/context/institutional-contracts.md` and `docs/context/task-routes.md`
+- ran `ruff format` on:
+  - `context/institutional.py`
+  - `context/registry.py`
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff format --check context/institutional.py context/registry.py scripts/tools/context_views.py scripts/tools/context_resolver.py tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_tools/test_context_views.py tests/test_pipeline/test_check_drift_context.py`
+  - pass
+- `./.venv-wsl/bin/python -m ruff check context/institutional.py context/registry.py scripts/tools/context_views.py scripts/tools/context_resolver.py tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_tools/test_context_views.py tests/test_pipeline/test_check_drift_context.py`
+  - pass
+- `./.venv-wsl/bin/python -m pytest tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_tools/test_context_views.py tests/test_pipeline/test_check_drift_context.py -q`
+  - `23 passed`
+- `./.venv-wsl/bin/python scripts/tools/context_resolver.py --task "Investigate why MES 5m ORB win rate dropped last week." --format json`
+  - pass; returns `research_investigation` with the drilldown playbook present
+- `./.venv-wsl/bin/python scripts/tools/render_context_catalog.py`
+  - regenerated `docs/context/*`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 103 checks passed [OK], 0 skipped (DB unavailable), 5 advisory`
+
+### Environment note
+
+- after the remount, WSL sees repo ownership as `nobody:nogroup`
+- plain `git` from WSL may require:
+  - `git -c safe.directory=/mnt/c/Users/joshd/canompx3 ...`
+- repo contents are readable and executable again; the remaining issue is git
+  trust/ownership presentation, not file loss
+
+---
+
 ## Update (2026-04-13 — portfolio reconstruction + MES expansion dead + MNQ validation)
 
 ### Headline
@@ -150,6 +248,73 @@ Residual gap still worth addressing later:
   - new context-routing / truth-boundary checks passed
   - repo still has one unrelated pre-existing failure:
     - Check 60 `family_rr_locks` coverage
+
+## Update (2026-04-13 — recent-performance investigation context + route de-noising)
+
+### Headline
+
+Closed the main remaining research-routing gap. Investigation tasks now get a
+narrow recent-performance evidence surface owned by
+`trading_app/strategy_fitness.py`, without inventing a fake weekly truth layer
+or leaking research-only views into unrelated live-trading routes.
+
+### What changed
+
+- updated `scripts/tools/context_views.py`
+  - added `recent_performance` view
+  - source owner is `trading_app/strategy_fitness.py`
+  - live state stays compact and evidence-only:
+    - active-instrument reports
+    - summary counts
+    - non-fit strategies
+    - lowest recent Sharpe-30
+    - lowest rolling ExpR
+  - no handoff/session context in this view
+  - centralized view registration via `VIEW_BUILDERS` so parser/drift do not
+    hardcode view names separately
+- updated `context/registry.py`
+  - added `recent_performance_context` live-view definition
+  - `research_investigation` now includes it as a preferred tool
+  - removed `research_context` from shared `trading_runtime` domain live views
+    because it is task-specific, not domain-generic
+  - effect: live-trading routes stop inheriting irrelevant research surfaces
+- updated `pipeline/check_drift.py`
+  - context-view contract check now iterates registered view IDs instead of a
+    hardcoded tuple
+- updated tests
+  - route coverage for `recent_performance_context`
+  - regression check that `live_trading_status` no longer pulls
+    `research_context`
+  - view-builder registration coverage
+  - recent-performance payload coverage
+
+### Logic / design notes
+
+- This is intentionally **not** a "last week performance" doc.
+- `trading_app/weekly_review.py` exists, but it is an operational reporting
+  surface, not the canonical research-fitness owner.
+- The new view therefore stays disciplined:
+  - recent regime evidence comes from `strategy_fitness`
+  - week-specific deep drilldown still belongs to approved MCP/query paths
+- This keeps the routing layer as a projection of owned truth instead of a new
+  analytics engine.
+
+### Verification
+
+- `./.venv-wsl/bin/python scripts/tools/render_context_catalog.py`
+  - regenerated `docs/context/*`
+- `./.venv-wsl/bin/python -m ruff format scripts/tools/context_views.py context/registry.py pipeline/check_drift.py tests/test_tools/test_context_views.py tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py`
+  - pass
+- `./.venv-wsl/bin/python -m ruff check scripts/tools/context_views.py context/registry.py pipeline/check_drift.py tests/test_tools/test_context_views.py tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py`
+  - pass
+- `./.venv-wsl/bin/python -m pytest tests/test_tools/test_context_views.py tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_pipeline/test_check_drift_context.py -q`
+  - `23 passed`
+- `./.venv-wsl/bin/python scripts/tools/context_views.py --view recent_performance --format json`
+  - pass
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `102 checks passed [OK]`
+  - only remaining failure is unrelated pre-existing check 60:
+    `family_rr_locks` coverage
 
 ## Update (2026-04-13 — operator product layer consolidation plan)
 
@@ -331,6 +496,94 @@ Meaning:
 - wire feed/broker/runtime failures into visible operator alerts
 - persist alert history
 - surface stale/degraded runtime more explicitly than heartbeat age alone
+
+### Follow-up implementation (same day)
+
+- completed alerting/runtime-liveness slice:
+  - added `trading_app/live/alert_engine.py`
+    - structured runtime alert classification
+    - JSONL persistence at `data/runtime/operator_alerts.jsonl`
+    - recent-alert summary/count helpers
+  - updated `trading_app/live/session_orchestrator.py`
+    - `_notify()` now persists operator alerts before Telegram delivery/fallback
+  - updated `trading_app/live/bot_dashboard.py`
+    - added `GET /api/alerts`
+    - operator-state payload now includes alert summary/check
+    - dashboard startup no longer blocks on broker auto-connect
+    - `.env` load is now explicit via `PROJECT_ROOT / ".env"` instead of stack-based discovery
+  - updated `trading_app/live/bot_dashboard.html`
+    - added Runtime Alerts panel
+    - escaped alert/operator rendered text for safer UI output
+  - updated tests:
+    - `tests/test_trading_app/test_alert_engine.py`
+    - `tests/test_trading_app/test_bot_dashboard.py`
+    - `tests/test_trading_app/test_session_orchestrator.py`
+
+### Review findings fixed
+
+- fixed operator-card HTML rendering to escape readiness text
+- fixed dashboard startup path so enabled-broker auto-connect runs in a daemon
+  thread instead of blocking app startup
+- fixed dashboard startup `.env` loading to use explicit path resolution, which
+  avoids failures in embedded/manual execution contexts
+
+### Verification
+
+- `python3 -m py_compile trading_app/live/alert_engine.py trading_app/live/bot_dashboard.py trading_app/live/session_orchestrator.py tests/test_trading_app/test_alert_engine.py tests/test_trading_app/test_bot_dashboard.py tests/test_trading_app/test_session_orchestrator.py`
+  - passed
+- `./.venv-wsl/bin/ruff check trading_app/live/alert_engine.py trading_app/live/bot_dashboard.py trading_app/live/session_orchestrator.py tests/test_trading_app/test_alert_engine.py tests/test_trading_app/test_bot_dashboard.py tests/test_trading_app/test_session_orchestrator.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_alert_engine.py tests/test_trading_app/test_bot_dashboard.py -q`
+  - `14 passed`
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_session_orchestrator.py -q -k 'notify_counts_success or notify_persists_operator_alert or notify_counts_failure_and_logs or notify_first_failure_prints_to_stdout'`
+  - `4 passed, 111 deselected`
+- manual smoke inside real dashboard lifespan:
+  - dashboard HTML contains Operator State + Runtime Alerts shells
+  - operator state returned `BLOCKED` with recommended action `Fix Broker Connection`
+  - `/api/alerts` returned recent alert summary
+  - preflight returned structured `5` checks and cached result surfaced in operator state
+
+### Important current limitations
+
+- `fastapi.testclient.TestClient` still behaves oddly in this environment unless
+  smoke is driven via direct handler calls inside the lifespan block; this looks
+  like a harness/environment seam, not a product-path blocker
+
+### Follow-up fix (same day)
+
+- fixed remaining operator gaps:
+  - runtime alerts are now filtered by selected profile on the backend/dashboard path
+  - shared-session pre-session gates now resolve all matching lanes in the chosen session
+
+### What changed
+
+- `trading_app/live/alert_engine.py`
+  - `read_operator_alerts()` now supports `profile` and `mode`
+  - profile filtering normalizes `profile_*` vs bare ids
+- `trading_app/live/bot_dashboard.py`
+  - `_collect_alert_summary()` now accepts filter args
+  - `_build_operator_payload()` now requests alert summary for the selected profile
+  - `/api/alerts` now accepts `profile` and `mode`
+  - Session Gates now report shared-session support rather than ambiguity
+- `trading_app/live/bot_dashboard.html`
+  - `fetchAlerts()` now requests alerts for the running/active profile
+- `trading_app/pre_session_check.py`
+  - added `_resolve_session_lanes()` for canonical session-wide resolution
+  - kept `_resolve_session_lane()` as strict single-lane helper
+  - `run_checks()` now evaluates all lanes in the selected session and records lane metadata in the session log
+
+### Verification
+
+- `python3 -m py_compile trading_app/live/alert_engine.py trading_app/live/bot_dashboard.py trading_app/pre_session_check.py tests/test_trading_app/test_alert_engine.py tests/test_trading_app/test_bot_dashboard.py tests/test_trading_app/test_pre_session_check.py`
+  - passed
+- `./.venv-wsl/bin/ruff check trading_app/live/alert_engine.py trading_app/live/bot_dashboard.py trading_app/pre_session_check.py tests/test_trading_app/test_alert_engine.py tests/test_trading_app/test_bot_dashboard.py tests/test_trading_app/test_pre_session_check.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_alert_engine.py tests/test_trading_app/test_bot_dashboard.py tests/test_trading_app/test_pre_session_check.py -q`
+  - `46 passed`
+- manual smoke:
+  - operator state for `topstep_50k_type_a` now shows `Session Gates` with `status=pass`
+  - profile-filtered alerts for `topstep_50k_type_a` returned `0` matching alerts in current state
+  - patched active-profile smoke for `_resolve_session_lanes('NYSE_OPEN', 'topstep_50k_type_a')` returned `2` lanes: `['MES', 'MNQ']`
 
 ### Follow-up review + manual smoke (same day)
 

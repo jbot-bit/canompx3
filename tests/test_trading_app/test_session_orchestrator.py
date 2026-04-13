@@ -1780,6 +1780,25 @@ class TestObservability:
         assert orch._stats.notifications_sent == 1
         assert orch._stats.notifications_failed == 0
 
+    def test_notify_persists_operator_alert(self):
+        """_notify() writes a structured operator alert for the dashboard."""
+        orch = build_orchestrator()
+        orch._account_name = "profile_topstep_50k_mnq_auto"
+        with (
+            patch("trading_app.live.alert_engine.record_operator_alert") as mock_record,
+            patch("trading_app.live.notifications.notify"),
+        ):
+            orch._notify("FEED STALE: 180s no data (check 2)")
+
+        mock_record.assert_called_once()
+        kwargs = mock_record.call_args.kwargs
+        assert kwargs["message"].startswith("FEED STALE")
+        assert kwargs["instrument"] == "MGC"
+        assert kwargs["profile"] == "profile_topstep_50k_mnq_auto"
+        assert kwargs["mode"] == "DEMO"
+        assert kwargs["source"] == "session_orchestrator"
+        assert kwargs["trading_day"] == "2026-03-07"
+
     def test_notify_counts_failure_and_logs(self):
         """Failed _notify() increments notifications_failed and logs error."""
         orch = build_orchestrator()

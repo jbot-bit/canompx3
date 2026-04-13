@@ -28,6 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pipeline.db_config import configure_connection
 from pipeline.dst import SESSION_CATALOG
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
+from trading_app.live.alert_engine import read_operator_alerts, summarize_operator_alerts
 from trading_app.live.bot_state import read_state
 
 log = logging.getLogger(__name__)
@@ -38,6 +39,25 @@ JOURNAL_PATH = LIVE_JOURNAL_DB_PATH
 STOP_FILE = PROJECT_ROOT / "live_session.stop"
 LOG_DIR = PROJECT_ROOT / "logs"
 BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
+
+
+def _start_broker_connect_background(connection_manager) -> threading.Thread:
+    """Connect enabled brokers without blocking dashboard startup."""
+
+    def _runner() -> None:
+        try:
+            connection_manager.connect_all_enabled()
+        except Exception:
+            log.warning("Background broker auto-connect failed", exc_info=True)
+
+    thread = threading.Thread(
+        target=_runner,
+        name="bot-dashboard-broker-connect",
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -71,13 +91,11 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
                 log.warning("Startup: failed to parse heartbeat %r — keeping state as-is", hb)
 
     # ── Connect brokers ──
-    import asyncio as _aio
-
     from dotenv import load_dotenv as _ld
-    _ld()  # Ensure .env loaded before broker_connections reads os.environ
+    _ld(PROJECT_ROOT / ".env")  # Avoid stack-inspection path discovery in embedded startup contexts
     from trading_app.live.broker_connections import connection_manager
     connection_manager.load()
-    await _aio.to_thread(connection_manager.connect_all_enabled)
+    _start_broker_connect_background(connection_manager)
 
     yield
 
@@ -300,6 +318,417 @@ def _legacy_lanes_to_lane_cards(
 # "NEVER run two write processes against the same DuckDB file simultaneously").
 _bg_processes: dict[str, subprocess.Popen] = {}
 _bg_lock = threading.Lock()
+_preflight_cache: dict[str, dict[str, object]] = {}
+
+
+def _normalize_check_status(raw_status: str) -> str:
+    status = raw_status.strip().upper()
+    if status == "OK":
+        return "pass"
+    if status.startswith("WARN"):
+        return "warn"
+    if status == "SKIPPED":
+        return "warn"
+    if status == "FAILED":
+        return "fail"
+    return "info"
+
+
+def _parse_preflight_output(output: str) -> dict[str, object]:
+    """Parse run_live_session --preflight output into structured checks."""
+    checks: list[dict[str, str]] = []
+    passed = None
+    total = None
+
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+
+        match = re.match(r"^\[(\d+)/(\d+)\]\s+(.+?)\.\.\.\s+(OK|FAILED|WARN(?:INGS?)?|SKIPPED)\s*(.*)$", line)
+        if match:
+            _idx, total_text, name, raw_status, tail = match.groups()
+            total = int(total_text)
+            detail = tail.strip()
+            if detail.startswith(":"):
+                detail = detail[1:].strip()
+            checks.append(
+                {
+                    "name": name.strip(),
+                    "status": _normalize_check_status(raw_status),
+                    "detail": detail or raw_status.title(),
+                }
+            )
+            continue
+
+        summary_match = re.match(r"^Preflight:\s+(\d+)/(\d+)\s+passed$", line)
+        if summary_match:
+            passed = int(summary_match.group(1))
+            total = int(summary_match.group(2))
+
+    has_warn = any(check["status"] == "warn" for check in checks)
+    has_fail = any(check["status"] == "fail" for check in checks)
+    overall = "pass"
+    if has_fail:
+        overall = "fail"
+    elif has_warn:
+        overall = "warn"
+
+    return {
+        "checks": checks,
+        "passed": passed,
+        "total": total,
+        "overall": overall,
+        "has_warnings": has_warn,
+        "has_failures": has_fail,
+    }
+
+
+def _profile_session_ambiguity(profile_id: str | None) -> dict[str, object]:
+    if not profile_id:
+        return {"status": "info", "detail": "No profile selected"}
+
+    try:
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        profile = ACCOUNT_PROFILES.get(profile_id)
+        if profile is None:
+            return {"status": "warn", "detail": f"Unknown profile '{profile_id}'"}
+
+        counts: dict[str, int] = {}
+        for lane in profile.daily_lanes:
+            counts[lane.orb_label] = counts.get(lane.orb_label, 0) + 1
+        duplicates = sorted(name for name, count in counts.items() if count > 1)
+        if duplicates:
+            joined = ", ".join(duplicates)
+            return {
+                "status": "pass",
+                "detail": (
+                    "Shared-session lanes supported "
+                    f"({joined}). Session hard gate will evaluate every lane in the selected session."
+                ),
+            }
+        return {"status": "pass", "detail": "Session gates map cleanly to one lane per session"}
+    except Exception as exc:
+        return {"status": "warn", "detail": f"Could not evaluate session gate compatibility: {exc}"}
+
+
+def _collect_data_status() -> dict[str, object]:
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        results: dict[str, dict[str, object]] = {}
+        with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
+            configure_connection(con)
+            for inst in ACTIVE_ORB_INSTRUMENTS:
+                row = con.execute("SELECT MAX(ts_utc)::DATE FROM bars_1m WHERE symbol = ?", [inst]).fetchone()
+                last_date = row[0] if row and row[0] else None
+                if last_date is None:
+                    gap = 999
+                else:
+                    gap = max(0, (datetime.now(UTC).date() - last_date).days)
+                results[inst] = {
+                    "last_bar_date": str(last_date) if last_date else None,
+                    "gap_days": gap,
+                    "stale": gap > 2,
+                }
+        any_stale = any(info["stale"] for info in results.values())
+        return {"status": "ok", "instruments": results, "any_stale": any_stale}
+    except Exception as exc:
+        return {"status": "error", "instruments": {}, "any_stale": True, "error": str(exc)}
+
+
+def _collect_broker_status() -> dict[str, object]:
+    try:
+        from trading_app.live.broker_connections import connection_manager
+
+        connections = connection_manager.list_connections()
+        enabled = [conn for conn in connections if conn.get("enabled", True)]
+        connected = [conn for conn in enabled if conn.get("status") == "connected"]
+        errors = [conn for conn in enabled if conn.get("status") == "error"]
+        return {
+            "status": "ok",
+            "connections": connections,
+            "enabled_count": len(enabled),
+            "connected_count": len(connected),
+            "error_count": len(errors),
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "connections": [],
+            "enabled_count": 0,
+            "connected_count": 0,
+            "error_count": 1,
+            "error": str(exc),
+        }
+
+
+def _collect_alert_summary(
+    *,
+    limit: int = 25,
+    profile: str | None = None,
+    mode: str | None = None,
+) -> dict[str, object]:
+    try:
+        alerts = read_operator_alerts(limit=limit, profile=profile, mode=mode)
+        summary = summarize_operator_alerts(alerts)
+        return {"status": "ok", "alerts": alerts, **summary}
+    except Exception as exc:
+        return {
+            "status": "error",
+            "alerts": [],
+            "total": 0,
+            "counts": {"critical": 0, "warning": 0, "info": 0},
+            "recent_window_minutes": 30,
+            "recent_counts": {"critical": 0, "warning": 0, "info": 0},
+            "latest": None,
+            "error": str(exc),
+        }
+
+
+def _choose_operator_profile(requested_profile: str | None, state: dict[str, object]) -> str | None:
+    if requested_profile:
+        return requested_profile
+
+    account_name = str(state.get("account_name") or "")
+    if account_name.startswith("profile_"):
+        return account_name.removeprefix("profile_")
+
+    try:
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, get_firm_spec
+
+        for profile in ACCOUNT_PROFILES.values():
+            if profile.active and (get_firm_spec(profile.firm).auto_trading in {"full", "semi"}):
+                return profile.profile_id
+    except Exception:
+        pass
+    return None
+
+
+def _derive_operator_state(
+    *,
+    raw_mode: str,
+    heartbeat_age_s: float,
+    broker_summary: dict[str, object],
+    data_summary: dict[str, object],
+    preflight_summary: dict[str, object] | None,
+) -> tuple[str, str, dict[str, str]]:
+    enabled_count = int(broker_summary.get("enabled_count", 0) or 0)
+    connected_count = int(broker_summary.get("connected_count", 0) or 0)
+    any_stale = bool(data_summary.get("any_stale", True))
+
+    if raw_mode in {"SIGNAL", "DEMO", "LIVE"}:
+        if heartbeat_age_s >= 120:
+            return (
+                "STALE",
+                "Bot heartbeat is stale. Current runtime state cannot be trusted.",
+                {"id": "stop_session", "label": "Stop Session"},
+            )
+        mapped = {
+            "SIGNAL": "RUNNING_ALERTS",
+            "DEMO": "RUNNING_PAPER",
+            "LIVE": "RUNNING_LIVE",
+        }[raw_mode]
+        return (
+            mapped,
+            f"{mapped.replace('RUNNING_', '').replace('_', ' ').title()} session is active.",
+            {"id": "stop_session", "label": "Stop Session"},
+        )
+
+    if enabled_count == 0:
+        return (
+            "BLOCKED",
+            "No broker connection is enabled.",
+            {"id": "open_connections", "label": "Connect Broker"},
+        )
+
+    if connected_count == 0:
+        return (
+            "BLOCKED",
+            "No enabled broker connection is currently connected.",
+            {"id": "open_connections", "label": "Fix Broker Connection"},
+        )
+
+    if any_stale:
+        return (
+            "BLOCKED",
+            "Market data is stale. Refresh data before starting a session.",
+            {"id": "refresh_data", "label": "Refresh Data"},
+        )
+
+    if preflight_summary is None:
+        return (
+            "STOPPED",
+            "System looks healthy, but no recent preflight is cached for this profile.",
+            {"id": "run_preflight", "label": "Run Preflight"},
+        )
+
+    preflight_status = str(preflight_summary.get("status") or "unknown")
+    if preflight_status in {"fail", "error", "timeout"}:
+        return (
+            "BLOCKED",
+            "Most recent preflight failed. Fix failures before starting.",
+            {"id": "run_preflight", "label": "Rerun Preflight"},
+        )
+
+    if preflight_status == "warn":
+        return (
+            "DEGRADED",
+            "Preflight passed with warnings. Review them before starting.",
+            {"id": "run_preflight", "label": "Review Preflight"},
+        )
+
+    return (
+        "READY",
+        "System is ready for a supervised session start.",
+        {"id": "start_signal", "label": "Start Alerts"},
+    )
+
+
+def _build_operator_payload(profile: str | None = None) -> dict[str, object]:
+    state = read_state()
+    raw_mode = str(state.get("mode") or "STOPPED").upper()
+    heartbeat_age_s = float(state.get("heartbeat_age_s") or 9999)
+    if state and "heartbeat_age_s" not in state:
+        hb = state.get("heartbeat_utc")
+        if hb:
+            try:
+                heartbeat_age_s = (datetime.now(UTC) - datetime.fromisoformat(str(hb))).total_seconds()
+            except (TypeError, ValueError):
+                heartbeat_age_s = 9999
+
+    operator_profile = _choose_operator_profile(profile, state)
+    broker_summary = _collect_broker_status()
+    data_summary = _collect_data_status()
+    alert_summary = _collect_alert_summary(profile=operator_profile)
+    preflight_summary = _preflight_cache.get(operator_profile or "")
+    session_gate = _profile_session_ambiguity(operator_profile)
+    top_state, reason, action = _derive_operator_state(
+        raw_mode=raw_mode,
+        heartbeat_age_s=heartbeat_age_s,
+        broker_summary=broker_summary,
+        data_summary=data_summary,
+        preflight_summary=preflight_summary,
+    )
+
+    checks: list[dict[str, str]] = []
+
+    enabled_count = int(broker_summary.get("enabled_count", 0) or 0)
+    connected_count = int(broker_summary.get("connected_count", 0) or 0)
+    broker_detail = (
+        f"{connected_count}/{enabled_count} enabled broker connection(s) connected"
+        if enabled_count
+        else "No broker connections enabled"
+    )
+    broker_status = "pass" if connected_count > 0 else "fail"
+    checks.append({"name": "Broker", "status": broker_status, "detail": broker_detail})
+
+    if data_summary.get("status") == "error":
+        checks.append(
+            {
+                "name": "Data",
+                "status": "fail",
+                "detail": str(data_summary.get("error") or "Data freshness check failed"),
+            }
+        )
+    else:
+        stale_instruments = [
+            name
+            for name, info in dict(data_summary.get("instruments", {})).items()
+            if isinstance(info, dict) and info.get("stale")
+        ]
+        if stale_instruments:
+            checks.append(
+                {
+                    "name": "Data",
+                    "status": "fail",
+                    "detail": f"Stale bars for {', '.join(stale_instruments)}",
+                }
+            )
+        else:
+            checks.append({"name": "Data", "status": "pass", "detail": "Bars are current for active instruments"})
+
+    if preflight_summary is None:
+        checks.append(
+            {
+                "name": "Preflight",
+                "status": "info",
+                "detail": "No cached preflight yet for this profile",
+            }
+        )
+    else:
+        preflight_detail = f"{preflight_summary.get('passed', '?')}/{preflight_summary.get('total', '?')} checks passed"
+        ran_at = preflight_summary.get("ran_at")
+        if ran_at:
+            preflight_detail += f" · last run {ran_at}"
+        checks.append(
+            {
+                "name": "Preflight",
+                "status": str(preflight_summary.get("status") or "info"),
+                "detail": preflight_detail,
+            }
+        )
+
+    checks.append(
+        {
+            "name": "Runtime",
+            "status": "warn" if top_state == "STALE" else "pass" if raw_mode != "STOPPED" else "info",
+            "detail": (
+                f"Heartbeat {heartbeat_age_s:.0f}s old"
+                if raw_mode != "STOPPED"
+                else "No session running"
+            ),
+        }
+    )
+    checks.append(
+        {
+            "name": "Session Gates",
+            "status": str(session_gate.get("status") or "info"),
+            "detail": str(session_gate.get("detail") or ""),
+        }
+    )
+    if alert_summary.get("status") == "error":
+        checks.append(
+            {
+                "name": "Alerts",
+                "status": "warn",
+                "detail": str(alert_summary.get("error") or "Could not read runtime alerts"),
+            }
+        )
+    else:
+        recent_counts = dict(alert_summary.get("recent_counts") or {})
+        latest = alert_summary.get("latest")
+        latest_message = ""
+        if isinstance(latest, dict):
+            latest_message = str(latest.get("message") or "").strip()
+        if raw_mode != "STOPPED" and int(recent_counts.get("critical", 0) or 0) > 0:
+            alert_status = "fail"
+        elif raw_mode != "STOPPED" and int(recent_counts.get("warning", 0) or 0) > 0:
+            alert_status = "warn"
+        elif int(alert_summary.get("total", 0) or 0) > 0:
+            alert_status = "info"
+        else:
+            alert_status = "pass"
+        if latest_message:
+            detail = f"Latest: {latest_message}"
+        else:
+            detail = "No runtime alerts recorded yet"
+        checks.append({"name": "Alerts", "status": alert_status, "detail": detail})
+
+    return {
+        "profile": operator_profile,
+        "raw_mode": raw_mode,
+        "top_state": top_state,
+        "reason": reason,
+        "recommended_action": action,
+        "checks": checks,
+        "heartbeat_age_s": heartbeat_age_s,
+        "preflight": preflight_summary,
+        "broker_summary": broker_summary,
+        "data_summary": data_summary,
+        "alert_summary": alert_summary,
+    }
 
 
 def _ensure_log_dir() -> Path:
@@ -341,6 +770,20 @@ async def api_status():
             state.get("account_name"),
         )
     return state
+
+
+@app.get("/api/operator-state")
+async def api_operator_state(profile: str | None = None):
+    """Operator-grade summary for the dashboard shell."""
+    return _build_operator_payload(profile)
+
+
+@app.get("/api/alerts")
+async def api_alerts(limit: int = 25, profile: str | None = None, mode: str | None = None):
+    """Recent runtime alerts for operator-facing monitoring."""
+    limit = max(1, min(limit, 100))
+    alerts = read_operator_alerts(limit=limit, profile=profile, mode=mode)
+    return {"alerts": alerts, "summary": summarize_operator_alerts(alerts)}
 
 
 @app.get("/api/trades")
@@ -413,10 +856,10 @@ async def action_kill():
 
 
 @app.post("/api/action/preflight")
-async def action_preflight():
+async def action_preflight(profile: str | None = None):
     """Run preflight checks and return output."""
     try:
-        profile = _resolve_profile()
+        profile = profile or _resolve_profile()
         result = subprocess.run(
             [sys.executable, "-m", "scripts.run_live_session", "--profile", profile, "--preflight"],
             capture_output=True,
@@ -425,16 +868,57 @@ async def action_preflight():
             cwd=str(PROJECT_ROOT),
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
+        parsed = _parse_preflight_output(result.stdout + result.stderr)
+        status = "pass" if result.returncode == 0 else "fail"
+        if status == "pass" and bool(parsed.get("has_warnings")):
+            status = "warn"
+        cache_entry = {
+            "status": status,
+            "profile": profile,
+            "ran_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "returncode": result.returncode,
+            **parsed,
+            "output": result.stdout + result.stderr,
+        }
+        _preflight_cache[profile] = cache_entry
         return {
-            "status": "pass" if result.returncode == 0 else "fail",
+            "status": status,
             "output": result.stdout + result.stderr,
             "returncode": result.returncode,
             "profile": profile,
+            "checks": parsed.get("checks", []),
+            "passed": parsed.get("passed"),
+            "total": parsed.get("total"),
+            "overall": parsed.get("overall"),
         }
     except subprocess.TimeoutExpired:
-        return {"status": "timeout", "output": "Preflight timed out after 60s"}
+        cache_entry = {
+            "status": "timeout",
+            "profile": profile or "",
+            "ran_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "checks": [],
+            "passed": 0,
+            "total": None,
+            "overall": "fail",
+            "output": "Preflight timed out after 60s",
+        }
+        if profile:
+            _preflight_cache[profile] = cache_entry
+        return cache_entry
     except Exception as e:
-        return {"status": "error", "output": str(e)}
+        cache_entry = {
+            "status": "error",
+            "profile": profile or "",
+            "ran_at": datetime.now(UTC).isoformat(timespec="seconds"),
+            "checks": [],
+            "passed": 0,
+            "total": None,
+            "overall": "fail",
+            "output": str(e),
+        }
+        if profile:
+            _preflight_cache[profile] = cache_entry
+        return cache_entry
 
 
 @app.get("/api/accounts")
@@ -807,28 +1291,10 @@ async def api_sessions():
 @app.get("/api/data-status")
 async def api_data_status():
     """Data freshness for all active instruments."""
-    try:
-        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
-
-        results = {}
-        with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
-            configure_connection(con)
-            for inst in ACTIVE_ORB_INSTRUMENTS:
-                row = con.execute("SELECT MAX(ts_utc)::DATE FROM bars_1m WHERE symbol = ?", [inst]).fetchone()
-                last_date = row[0] if row and row[0] else None
-                if last_date is None:
-                    gap = 999
-                else:
-                    gap = max(0, (datetime.now(UTC).date() - last_date).days)
-                results[inst] = {
-                    "last_bar_date": str(last_date) if last_date else None,
-                    "gap_days": gap,
-                    "stale": gap > 2,
-                }
-        any_stale = any(r["stale"] for r in results.values())
-        return {"instruments": results, "any_stale": any_stale}
-    except Exception as e:
-        return {"instruments": {}, "any_stale": True, "error": str(e)}
+    data = _collect_data_status()
+    if data.get("status") == "error":
+        return {"instruments": {}, "any_stale": True, "error": data.get("error")}
+    return {"instruments": data.get("instruments", {}), "any_stale": data.get("any_stale", True)}
 
 
 @app.post("/api/action/refresh")

@@ -137,8 +137,12 @@ class TestManagedWorktrees:
 
 class TestCreateClose:
     def test_create_worktree_reuses_existing_path(self, tmp_path: Path) -> None:
-        existing = tmp_path / ".worktrees" / "claude" / "foo"
+        existing = tmp_path / ".worktrees" / "tasks" / "foo"
         existing.mkdir(parents=True)
+        (existing / worktree_manager.WORKTREE_META).write_text(
+            '{"tool":"codex","name":"foo","branch":"wt-codex-foo","base_ref":"HEAD"}',
+            encoding="utf-8",
+        )
         active = [worktree_manager.WorktreeInfo(path=str(existing))]
         with (
             patch.object(worktree_manager, "WORKTREE_ROOT", tmp_path / ".worktrees"),
@@ -150,6 +154,21 @@ class TestCreateClose:
         assert meta["purpose"] == "Build / edit"
         assert meta["tool"] == "codex"
         assert meta["state"] == "active"
+
+    def test_create_worktree_rejects_other_tool_owned_path(self, tmp_path: Path) -> None:
+        existing = tmp_path / ".worktrees" / "tasks" / "foo"
+        existing.mkdir(parents=True)
+        (existing / worktree_manager.WORKTREE_META).write_text(
+            '{"tool":"claude","name":"foo","branch":"wt-claude-foo","base_ref":"HEAD"}',
+            encoding="utf-8",
+        )
+        active = [worktree_manager.WorktreeInfo(path=str(existing))]
+        with (
+            patch.object(worktree_manager, "WORKTREE_ROOT", tmp_path / ".worktrees"),
+            patch.object(worktree_manager, "list_worktrees", return_value=active),
+        ):
+            with pytest.raises(RuntimeError, match="owned by claude"):
+                worktree_manager.create_worktree("codex", "foo")
 
     def test_create_worktree_rejects_stale_existing_path(self, tmp_path: Path) -> None:
         existing = tmp_path / ".worktrees" / "tasks" / "foo"

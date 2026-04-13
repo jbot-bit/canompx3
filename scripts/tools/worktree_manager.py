@@ -307,6 +307,11 @@ def create_worktree(tool: str, name: str, base_ref: str = "HEAD", purpose: str |
                 f"Managed worktree path exists but is not active: {path}. Run prune or remove the stale directory."
             )
         existing = read_metadata(path) or {}
+        existing_tool = str(existing.get("tool") or "").strip()
+        if existing_tool and existing_tool != tool:
+            raise RuntimeError(
+                f"Managed worktree {name!r} is owned by {existing_tool}. Use handoff or choose a different workstream name."
+            )
         branch = str(existing.get("branch") or build_branch_name(tool, name))
         base_ref = str(existing.get("base_ref") or base_ref)
         _ensure_scaffold(path, tool=tool, name=name, branch=branch, base_ref=base_ref, purpose=purpose)

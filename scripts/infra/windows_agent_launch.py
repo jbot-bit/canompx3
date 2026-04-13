@@ -149,7 +149,7 @@ def build_codex_wsl_command(
         "export UV_CACHE_DIR=/tmp/uv-cache",
         "export UV_PYTHON_INSTALL_DIR=/tmp/uv-python",
         "export UV_LINK_MODE=copy",
-        "mkdir -p \"$UV_CACHE_DIR\" \"$UV_PYTHON_INSTALL_DIR\"",
+        'mkdir -p "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"',
         "uv sync --frozen --python 3.13 --group dev",
     ]
     if purpose:

@@ -28,6 +28,7 @@ ACTIVE_SESSION_DIR = Path(
         os.path.join(tempfile.gettempdir(), "canompx3-active-sessions"),
     )
 )
+WORKTREE_META = ".canompx3-worktree.json"
 CLAIM_FRESHNESS = timedelta(hours=8)
 GIT_TIMEOUT_SECONDS = 5.0
 SYSTEM_CONTEXT_SCHEMA_VERSION = 1
@@ -107,7 +108,6 @@ class AuthorityContext(StrictModel):
     doctrine_docs: list[str] = Field(default_factory=list)
     backbone_modules: list[str] = Field(default_factory=list)
     active_orb_instruments: list[str] = Field(default_factory=list)
-    active_profiles: list[str] = Field(default_factory=list)
     published_relations: dict[str, str] = Field(default_factory=dict)
 
 
@@ -462,14 +462,12 @@ def _build_authority_context(db_path: Path) -> AuthorityContext:
         SYSTEM_AUTHORITY_BACKBONE_MODULES,
         SYSTEM_AUTHORITY_MAP_RELATIVE_PATH,
     )
-    from trading_app.prop_profiles import get_active_profile_ids
 
     return AuthorityContext(
         authority_map_doc=SYSTEM_AUTHORITY_MAP_RELATIVE_PATH.as_posix(),
         doctrine_docs=list(DOCTRINE_DOCS),
         backbone_modules=list(SYSTEM_AUTHORITY_BACKBONE_MODULES),
         active_orb_instruments=sorted(ACTIVE_ORB_INSTRUMENTS),
-        active_profiles=sorted(get_active_profile_ids()),
         published_relations={
             "active": ACTIVE_VALIDATED_VIEW,
             "deployable": DEPLOYABLE_VALIDATED_VIEW,
@@ -540,7 +538,11 @@ def build_system_context(
             db_override_active=selected_db != canonical_db,
             live_journal_db_path=str(LIVE_JOURNAL_DB_PATH.resolve()),
         ),
-        claims=[claim for claim in list_claims(claim_dir=claim_dir, fresh_only=True) if _claim_matches_repo(claim, repo_anchor)],
+        claims=[
+            claim
+            for claim in list_claims(claim_dir=claim_dir, fresh_only=True)
+            if _claim_matches_repo(claim, repo_anchor)
+        ],
         active_stages=_list_active_stages(selected_root),
         authority=_build_authority_context(selected_db),
     )
@@ -548,6 +550,17 @@ def build_system_context(
 
 def _issue(level: IssueLevel, code: str, message: str, detail: str | None = None) -> PolicyIssue:
     return PolicyIssue(level=level, code=code, message=message, detail=detail)
+
+
+def _read_managed_worktree_metadata(path: Path) -> dict[str, object] | None:
+    meta_path = path / WORKTREE_META
+    if not meta_path.exists():
+        return None
+    try:
+        data = json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _parallel_claim_issues(snapshot: SystemContext) -> tuple[list[PolicyIssue], list[PolicyIssue]]:
@@ -655,6 +668,40 @@ def evaluate_system_policy(snapshot: SystemContext, action: PolicyAction) -> Pol
                 )
             )
 
+        allow_shared_root = os.environ.get("CANOMPX3_ALLOW_SHARED_ROOT_MUTATION") == "1"
+        if not snapshot.git.in_linked_worktree and not allow_shared_root:
+            blockers.append(
+                _issue(
+                    "blocker",
+                    "shared_repo_root_mutation",
+                    "Mutating session blocked: do not edit from the shared canonical repo root. Open a managed tool worktree instead.",
+                    detail=f"root={snapshot.git.selected_root}",
+                )
+            )
+        elif snapshot.git.in_linked_worktree:
+            meta = _read_managed_worktree_metadata(Path(snapshot.git.selected_root))
+            if meta is None:
+                blockers.append(
+                    _issue(
+                        "blocker",
+                        "unmanaged_linked_worktree",
+                        "Mutating session blocked: linked worktree is not managed by canompx3.",
+                        detail=f"root={snapshot.git.selected_root}",
+                    )
+                )
+            else:
+                owner = str(meta.get("tool") or "").strip()
+                worktree_name = str(meta.get("name") or Path(snapshot.git.selected_root).name)
+                if snapshot.active_tool and owner and owner != snapshot.active_tool:
+                    blockers.append(
+                        _issue(
+                            "blocker",
+                            "worktree_tool_mismatch",
+                            "Mutating session blocked: this managed worktree belongs to a different tool.",
+                            detail=f"owner={owner} active={snapshot.active_tool} worktree={worktree_name}",
+                        )
+                    )
+
         parallel_blockers, parallel_warnings = _parallel_claim_issues(snapshot)
         blockers.extend(parallel_blockers)
         warnings.extend(parallel_warnings)
@@ -741,7 +788,8 @@ def format_system_context_text(snapshot: SystemContext, decision: PolicyDecision
         + (
             f"yes ({snapshot.git.dirty_count})"
             if snapshot.git.dirty
-            else "unknown" if not snapshot.git.status_available
+            else "unknown"
+            if not snapshot.git.status_available
             else f"no ({snapshot.git.dirty_count})"
         ),
         f"Interpreter: {snapshot.interpreter.current_python}",
@@ -755,7 +803,6 @@ def format_system_context_text(snapshot: SystemContext, decision: PolicyDecision
         )
     lines.append(f"Fresh claims: {len(snapshot.claims)}")
     lines.append(f"Active stages: {len(snapshot.active_stages)}")
-    lines.append(f"Active profiles: {', '.join(snapshot.authority.active_profiles) or 'none'}")
     lines.append(f"Active instruments: {', '.join(snapshot.authority.active_orb_instruments) or 'none'}")
     if decision is not None:
         lines.append("")

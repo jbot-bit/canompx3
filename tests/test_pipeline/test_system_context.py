@@ -30,7 +30,6 @@ def _authority_stub() -> AuthorityContext:
         doctrine_docs=["CLAUDE.md", "TRADING_RULES.md"],
         backbone_modules=["pipeline/system_authority.py", "pipeline/system_context.py"],
         active_orb_instruments=["MGC", "MNQ"],
-        active_profiles=["topstep_50k_mnq_auto"],
         published_relations={"active": "active_validated_setups", "deployable": "deployable_validated_setups"},
     )
 
@@ -73,7 +72,9 @@ class TestBuildSystemContext:
             patch.object(system_context, "list_claims", return_value=[claim]),
             patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
         ):
-            snapshot = build_system_context(tmp_path, context_name="generic", active_tool="codex", active_mode="mutating")
+            snapshot = build_system_context(
+                tmp_path, context_name="generic", active_tool="codex", active_mode="mutating"
+            )
 
         assert snapshot.handoff.exists is True
         assert snapshot.git.branch == "main"
@@ -126,7 +127,9 @@ class TestBuildSystemContext:
             patch.object(system_context, "list_claims", return_value=[relevant, unrelated]),
             patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
         ):
-            snapshot = build_system_context(current_root, context_name="generic", active_tool="codex", active_mode="mutating")
+            snapshot = build_system_context(
+                current_root, context_name="generic", active_tool="codex", active_mode="mutating"
+            )
 
         assert [claim.root for claim in snapshot.claims] == [str(current_root)]
 
@@ -161,7 +164,9 @@ class TestEvaluateSystemPolicy:
             patch.object(system_context.sys, "executable", "/usr/bin/python3"),
             patch.object(system_context.sys, "prefix", "/usr"),
         ):
-            snapshot = build_system_context(tmp_path, context_name="codex-wsl", active_tool="codex", active_mode="mutating")
+            snapshot = build_system_context(
+                tmp_path, context_name="codex-wsl", active_tool="codex", active_mode="mutating"
+            )
             decision = evaluate_system_policy(snapshot, "session_start_mutating")
 
         assert decision.allowed is False
@@ -208,6 +213,56 @@ class TestEvaluateSystemPolicy:
 
         assert snapshot.git.dirty is False
         assert any(issue.code == "git_status_unavailable" for issue in decision.warnings)
+
+    def test_mutating_session_blocks_shared_repo_root(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "# HANDOFF\n")
+        _mkfile(tmp_path / ".venv-wsl" / "bin" / "python", "")
+
+        with (
+            patch.object(system_context, "_canonical_repo_root", return_value=(tmp_path, tmp_path / ".git")),
+            patch.object(system_context, "branch_name", return_value="main"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+            patch.object(system_context, "git_status_details", return_value=([], True, None)),
+            patch.object(system_context, "list_claims", return_value=[]),
+            patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
+            patch.object(system_context.sys, "executable", str(tmp_path / ".venv-wsl" / "bin" / "python")),
+            patch.object(system_context.sys, "prefix", str(tmp_path / ".venv-wsl")),
+        ):
+            snapshot = build_system_context(
+                tmp_path, context_name="codex-wsl", active_tool="codex", active_mode="mutating"
+            )
+            decision = evaluate_system_policy(snapshot, "session_start_mutating")
+
+        assert decision.allowed is False
+        assert any(issue.code == "shared_repo_root_mutation" for issue in decision.blockers)
+
+    def test_mutating_session_blocks_other_tool_worktree(self, tmp_path: Path) -> None:
+        worktree = tmp_path / ".worktrees" / "tasks" / "task-a"
+        worktree.mkdir(parents=True)
+        _mkfile(worktree / "HANDOFF.md", "# HANDOFF\n")
+        _mkfile(worktree / ".venv-wsl" / "bin" / "python", "")
+        _mkfile(
+            worktree / ".canompx3-worktree.json",
+            json.dumps({"tool": "claude", "name": "task-a", "branch": "wt-claude-task-a"}),
+        )
+
+        with (
+            patch.object(system_context, "_canonical_repo_root", return_value=(tmp_path, tmp_path / ".git")),
+            patch.object(system_context, "branch_name", return_value="wt-claude-task-a"),
+            patch.object(system_context, "head_sha", return_value="abc123"),
+            patch.object(system_context, "git_status_details", return_value=([], True, None)),
+            patch.object(system_context, "list_claims", return_value=[]),
+            patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
+            patch.object(system_context.sys, "executable", str(worktree / ".venv-wsl" / "bin" / "python")),
+            patch.object(system_context.sys, "prefix", str(worktree / ".venv-wsl")),
+        ):
+            snapshot = build_system_context(
+                worktree, context_name="codex-wsl", active_tool="codex", active_mode="mutating"
+            )
+            decision = evaluate_system_policy(snapshot, "session_start_mutating")
+
+        assert decision.allowed is False
+        assert any(issue.code == "worktree_tool_mismatch" for issue in decision.blockers)
 
 
 class TestVerifyClaim:

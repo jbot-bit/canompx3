@@ -873,6 +873,17 @@ class SessionOrchestrator:
         If notifications were flagged broken by self-test, skips Telegram and logs
         to STDOUT so the session log still captures every event.
         """
+        from trading_app.live.alert_engine import record_operator_alert
+
+        mode = "SIGNAL" if self.signal_only else ("DEMO" if self.demo else "LIVE")
+        record_operator_alert(
+            message=message,
+            instrument=self.instrument,
+            profile=getattr(self, "_account_name", None),
+            mode=mode,
+            source="session_orchestrator",
+            trading_day=str(getattr(self, "trading_day", "")) or None,
+        )
         if self._notifications_broken:
             print(f"[NOTIFY-FALLBACK] {self.instrument}: {message}")
             log.warning("Notification (fallback): %s", message)

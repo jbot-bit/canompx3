@@ -51,7 +51,9 @@ class TestRunPreflight:
 
         with (
             patch.object(windows_agent_launch, "pick_python", return_value=["python"]),
-            patch.object(windows_agent_launch.subprocess, "run", return_value=type("R", (), {"returncode": 0})()) as run_mock,
+            patch.object(
+                windows_agent_launch.subprocess, "run", return_value=type("R", (), {"returncode": 0})()
+            ) as run_mock,
         ):
             windows_agent_launch.run_preflight(tmp_path, claim_tool="claude")
 

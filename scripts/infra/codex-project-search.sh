@@ -6,6 +6,21 @@ ROOT="${CANOMPX3_ROOT:-$DEFAULT_ROOT}"
 VENV="$ROOT/.venv-wsl"
 PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
 
+generate_workstream_name() {
+  local prefix="$1"
+  local stamp
+  stamp="$(date -u +%Y%m%d-%H%M%S)"
+  printf '%s-%s-%s' "$prefix" "$stamp" "$$"
+}
+
+if [[ "$ROOT" == "$DEFAULT_ROOT" && "${CANOMPX3_ALLOW_SHARED_ROOT_MUTATION:-0}" != "1" ]]; then
+  DEFAULT_WORKSTREAM="${CANOMPX3_DEFAULT_CODEX_WORKSTREAM:-$(generate_workstream_name codex-search)}"
+  PURPOSE="${CANOMPX3_WORKSTREAM_PURPOSE:-Investigate / search}"
+  exec env \
+    CANOMPX3_WORKSTREAM_PURPOSE="$PURPOSE" \
+    "$DEFAULT_ROOT/scripts/infra/codex-worktree.sh" search "$DEFAULT_WORKSTREAM" -- "$@"
+fi
+
 if [[ ! -f "$VENV/bin/python" ]]; then
   echo "ERROR: .venv-wsl/bin/python not found." >&2
   echo "Run 'UV_PROJECT_ENVIRONMENT=.venv-wsl uv sync --frozen --python 3.13 --group dev' inside WSL to create the venv." >&2
