@@ -124,6 +124,23 @@ COST_SPECS = {
         tick_size=0.10,        # $0.10/oz = $10/tick (vs MGC $1/tick)
         min_ticks_floor=10,    # 1.0pt = $100 minimum risk
     ),
+    # NQ = E-mini Nasdaq 100 (full-size). 10x MNQ by contract multiplier.
+    # Same price, same tick size, same sessions — only the point value differs.
+    # Commission is a flat per-contract fee, so friction ratio drops ~10x vs MNQ.
+    # Spread/slippage scale linearly with point value (same number of ticks).
+    # @canonical-source docs/research-input/topstep/topstep_xfa_commissions.md
+    # @verbatim "E-mini NASDAQ 100 (NQ) Tradovate $3.22 / Rithmic $4.10"
+    # NQ commission is higher than MNQ ($4.10 vs $1.42) but per-point cost is
+    # $4.10 / $20pt = $0.205/pt vs MNQ $1.42 / $2pt = $0.71/pt — 3.5x cheaper.
+    "NQ": CostSpec(
+        instrument="NQ",
+        point_value=20.0,       # $20 per index point (10x MNQ)
+        commission_rt=4.10,     # canonical TopStep Rithmic (higher than MNQ flat rate)
+        spread_doubled=5.00,    # 10x MNQ's $0.50 (same 1-tick spread, 10x $/tick)
+        slippage=10.00,         # 10x MNQ's $1.00 (same tick-based slippage model)
+        tick_size=0.25,         # Same tick size as MNQ
+        min_ticks_floor=10,     # 10 ticks = 2.5pt = $50 minimum risk
+    ),
     # TODO(remediation-2026-03-25): MNQ slippage model is 1 tick ($0.50).
     # MGC tbbo pilot showed mean=6.75 ticks (vs 1 modeled), std=41.57, max=263.
     # MNQ tbbo pilot has NOT been run yet — research/research_mnq_e2_slippage_pilot.py exists.
@@ -260,6 +277,22 @@ SESSION_SLIPPAGE_MULT = {
         "COMEX_SETTLE": 0.9,  # ~18:25 UTC -- settlement window
         "CME_PRECLOSE": 1.0,  # ~19:45 UTC -- closing session
         "NYSE_CLOSE": 0.9,  # ~20:00 UTC -- NYSE close
+    },
+    # NQ = full-size Nasdaq. Same sessions as MNQ, same or better liquidity.
+    # Using MNQ multipliers as conservative baseline (NQ is the primary contract).
+    "NQ": {
+        "CME_REOPEN": 1.0,
+        "TOKYO_OPEN": 1.0,
+        "BRISBANE_1025": 1.0,
+        "SINGAPORE_OPEN": 0.9,
+        "EUROPE_FLOW": 0.9,
+        "LONDON_METALS": 0.9,
+        "US_DATA_830": 0.8,
+        "NYSE_OPEN": 0.9,
+        "US_DATA_1000": 0.9,
+        "COMEX_SETTLE": 0.9,
+        "CME_PRECLOSE": 1.0,
+        "NYSE_CLOSE": 0.9,
     },
     "MES": {
         "CME_REOPEN": 1.0,  # 23:00 UTC -- ES/MES liquid 24h

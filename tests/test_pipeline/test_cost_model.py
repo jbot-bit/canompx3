@@ -76,7 +76,7 @@ class TestGetCostSpec:
 
     def test_unknown_instrument_raises(self):
         with pytest.raises(ValueError, match="No cost model"):
-            get_cost_spec("NQ")
+            get_cost_spec("FAKE_INSTRUMENT")
 
     def test_list_validated(self):
         instruments = list_validated_instruments()
@@ -308,3 +308,47 @@ class TestMNQCostSpec:
         session = get_session_cost_spec("MNQ", "US_DATA_830")
         assert session.slippage < base.slippage
         assert session.slippage == pytest.approx(base.slippage * 0.8)
+
+
+class TestNQCostSpec:
+    """NQ (E-mini Nasdaq 100) cost model — 10x MNQ by contract multiplier."""
+
+    def test_nq_total_friction(self):
+        """NQ total friction = $4.10 + $5.00 + $10.00 = $19.10."""
+        spec = get_cost_spec("NQ")
+        assert spec.total_friction == pytest.approx(19.10)
+
+    def test_nq_point_value(self):
+        spec = get_cost_spec("NQ")
+        assert spec.point_value == 20.0
+
+    def test_nq_tick_size_matches_mnq(self):
+        nq = get_cost_spec("NQ")
+        mnq = get_cost_spec("MNQ")
+        assert nq.tick_size == mnq.tick_size
+
+    def test_nq_friction_ratio_lower_than_mnq(self):
+        """NQ friction-in-points should be lower than MNQ (commission efficiency)."""
+        nq = get_cost_spec("NQ")
+        mnq = get_cost_spec("MNQ")
+        assert nq.friction_in_points < mnq.friction_in_points
+
+    def test_nq_min_risk_floor_dollars(self):
+        """min_risk_floor = 10 ticks * 0.25 * $20 = $50."""
+        spec = get_cost_spec("NQ")
+        assert spec.min_risk_floor_dollars == pytest.approx(50.0)
+
+    def test_nq_in_validated_list(self):
+        assert "NQ" in list_validated_instruments()
+
+    def test_nq_session_slippage_present(self):
+        """NQ should have session slippage multipliers."""
+        assert "NQ" in SESSION_SLIPPAGE_MULT
+        nq_mults = SESSION_SLIPPAGE_MULT["NQ"]
+        for label in ["NYSE_OPEN", "US_DATA_830", "CME_PRECLOSE"]:
+            assert label in nq_mults
+
+    def test_nq_session_us_data_830_lower(self):
+        base = get_cost_spec("NQ")
+        session = get_session_cost_spec("NQ", "US_DATA_830")
+        assert session.slippage < base.slippage

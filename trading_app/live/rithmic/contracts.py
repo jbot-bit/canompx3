@@ -26,6 +26,7 @@ EXCHANGE_CODE = "CME"
 INSTRUMENT_ROOTS: dict[str, str] = {
     "MES": "MES",
     "MNQ": "MNQ",
+    "NQ": "NQ",
     "MGC": "MGC",
 }
 

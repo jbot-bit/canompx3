@@ -13,6 +13,7 @@ log = logging.getLogger(__name__)
 INSTRUMENT_SEARCH_TERMS: dict[str, list[str]] = {
     "MGC": ["MGC", "Micro Gold"],
     "MNQ": ["MNQ", "Micro Nasdaq", "Micro E-mini Nasdaq"],
+    "NQ": ["NQ", "E-mini Nasdaq", "E-mini NASDAQ 100"],
     "MES": ["MES", "Micro E-mini S&P", "Micro S&P"],
     "M2K": ["M2K", "Micro E-mini Russell", "Micro Russell"],
 }
