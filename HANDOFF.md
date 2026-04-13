@@ -6,6 +6,31 @@
 
 ---
 
+## Update (2026-04-13 — IBS/NR7 retest + NQ mini commission fix + bar persister)
+
+### Headline
+
+IBS/NR7 external claims retested (DEAD). NQ mini commission finding: 77% less
+commission for same exposure. BarPersister shipped. Self-funded economics modeled.
+
+### What changed
+
+- IBS/NR7 retest: 192+96 tests with holdout + BH FDR. Both DEAD. Multi-RR rule added.
+- VWAP filter + RiskManager fix cherry-picked to main.
+- Portfolio reconstruction restored (accidental revert caught).
+- BarPersister: captures bars during sessions (partial, not Databento replacement).
+- Broker research: AMP best for AU ($100 deposit, Rithmic, $1K NQ margin).
+- NQ MINI: 1 NQ = 10 MNQ, commission 58% -> 13% of gross. NET doubles.
+
+### Next Sensible Step
+
+1. Implement NQ symbol mapping (~30 LOC: cost_model + profile + router)
+2. Fix family_rr_locks (1 missing, drift check 60)
+3. AMP account opening ($100 deposit, test Rithmic)
+4. F1 orchestrator wiring (branch ready, merge when live)
+
+---
+
 ## Update (2026-04-13 — Claude: Directional Context Alignment research + infrastructure fixes)
 
 ### Headline
