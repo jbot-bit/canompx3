@@ -107,6 +107,11 @@ class TestAccountProfile:
             assert lane.orb_label in p.allowed_sessions, (
                 f"{lane.strategy_id} session {lane.orb_label} not in allowed_sessions"
             )
+        # No duplicate sessions — reconstruction principle: one lane per session
+        sessions = [lane.orb_label for lane in p.daily_lanes]
+        assert len(sessions) == len(set(sessions)), (
+            f"duplicate sessions in daily_lanes: {sessions}"
+        )
 
     def test_tradeify_scaling_profile(self):
         p = get_profile("tradeify_50k")

@@ -10,7 +10,6 @@ Usage:
 
 from __future__ import annotations
 
-import math
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
@@ -25,7 +24,6 @@ import duckdb
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.lane_correlation import _load_lane_daily_pnl, _pearson
-from trading_app.strategy_fitness import _load_strategy_outcomes
 
 
 # ── Phase 1: Load all validated MNQ strategies ───────────────────────
@@ -112,6 +110,11 @@ def compute_pairwise(
 
 # ── Phase 4: Hierarchical clustering ─────────────────────────────────
 
+def _canonical_key(a: str, b: str) -> tuple[str, str]:
+    """Canonical pair key: alphabetical order."""
+    return (a, b) if a < b else (b, a)
+
+
 def cluster_strategies(
     strategy_ids: list[str],
     pairs: dict[tuple[str, str], PairMetrics],
@@ -120,11 +123,13 @@ def cluster_strategies(
     """Single-linkage clustering: merge if any member has rho > threshold."""
     clusters: list[set[str]] = [{s} for s in strategy_ids]
 
+    # Build O(1) lookup keyed by canonical (alphabetical) pair
+    rho_lookup: dict[tuple[str, str], float] = {}
+    for (a, b), pm in pairs.items():
+        rho_lookup[_canonical_key(a, b)] = pm.rho
+
     def get_rho(a: str, b: str) -> float:
-        for k, v in pairs.items():
-            if set(k) == {a, b}:
-                return v.rho
-        return 0.0
+        return rho_lookup.get(_canonical_key(a, b), 0.0)
 
     changed = True
     while changed:
@@ -166,10 +171,7 @@ def greedy_select(
         passes = True
         for sel in selected:
             sid = sel["strategy_id"]
-            key = tuple(sorted([cid, sid]))
-            pm = pairs.get(key)
-            if pm is None:
-                pm = pairs.get((key[1], key[0]))
+            pm = pairs.get(_canonical_key(cid, sid))
             if pm and pm.rho > rho_limit:
                 passes = False
                 break
@@ -302,8 +304,7 @@ def main():
         for j, b in enumerate(sel_ids):
             if j <= i:
                 continue
-            key = tuple(sorted([a, b]))
-            pm = pairs.get(key) or pairs.get((key[1], key[0]))
+            pm = pairs.get(_canonical_key(a, b))
             rho = pm.rho if pm else 0.0
             marker = " *** OVER 0.70 ***" if rho > 0.70 else ""
             a_s = a.split("_CB1_")[1] if "_CB1_" in a else a[-15:]
