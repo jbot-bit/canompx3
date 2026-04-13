@@ -3,52 +3,66 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 165
+## Last iteration: 166
 
-## RALPH AUDIT — Iteration 165
-## Date: 2026-04-10
-## Infrastructure Gates: drift 90/90 PASS (6 pre-existing data violations: checks 59/95 — family_rr_locks + validated_setups lanes, from Mode A Phase 5 pending); behavioral audit 7/7 PASS; ruff advisory-only (B905 in scripts/research/gc_proxy_validity.py)
+## RALPH AUDIT — Iteration 166
+## Date: 2026-04-14
+## Infrastructure Gates: drift 102/102 PASS (6 pre-existing advisories); behavioral audit 7/7 PASS; ruff advisory-only (B905 in scripts/research/gc_proxy_validity.py)
 
 ---
 
-## Iteration 165 — Hardcoded holdout date in sprt_monitor + sr_monitor
+## Iteration 166 — consistency_tracker uses CAST(entry_time AS DATE) instead of canonical trading_day column
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Canonical violation | `sprt_monitor.py:129` — `start_date=date(2026, 1, 1)` hardcoded instead of `HOLDOUT_SACRED_FROM` from `trading_app.holdout_policy` | LOW | FIXED 3898432c |
-| Canonical violation | `sr_monitor.py:117` — same hardcoded literal for the OOS start date in canonical forward outcome fallback | LOW | FIXED 3898432c |
+| Canonical violation | `consistency_tracker.py:111,213,349` — `CAST(entry_time AS DATE)` used for trade-day grouping instead of the stored `trading_day` column. UTC-cast date differs from Brisbane trading day for trades near midnight UTC (00:00–10:00 UTC = 10:00–20:00 Brisbane). `paper_trades.trading_day DATE NOT NULL` is always populated by the write path. | LOW | FIXED 03238c01 |
 
 ### Audit Notes
 
-- **Finding source:** Seven Sins scan of stale-re-audit targets (strategy_fitness.py, strategy_validator.py, rolling_portfolio.py). The stale "dead arg" targets from the iter 164 next-targets note were already resolved in commit 713c4ab7 (Apr 9). Fresh scan of today's modified files (account_survival.py, sprt_monitor.py via strategy_fitness commit) revealed the holdout literal.
-- **TRACE:** `sprt_monitor.py:129` → `start_date=date(2026, 1, 1)` → `trading_app.holdout_policy.HOLDOUT_SACRED_FROM = date(2026, 1, 1)`. Same for `sr_monitor.py:117`. No caller passes this value — both files use it as the forward-OOS window start for Criterion 12 monitoring. If boundary changes, monitors silently stay frozen.
-- **EVIDENCE:** grep confirmed both literals. `holdout_policy.HOLDOUT_SACRED_FROM = date(2026, 1, 1)` at line 70 of holdout_policy.py.
-- **Fix:** Added `from trading_app.holdout_policy import HOLDOUT_SACRED_FROM` to both files, replaced literals with canonical reference.
-- **Behavior unchanged:** Value identical at runtime. 11/11 tests pass.
-- **Also scanned (Seven Sins):** account_survival.py (209 lines added today) — clean. strategy_validator.py (2-line change today) — rejection_reason field addition correct; schema column exists at db_manager.py:597.
+- **Finding source:** Seven Sins scan of `consistency_tracker.py` (Priority 3 unscanned medium target). Also scanned `risk_manager.py` — clean, no findings.
+- **TRACE:** `consistency_tracker.py:111` → `CAST(entry_time AS DATE)` → UTC date, not Brisbane trading day. `paper_trades` schema (`db_manager.py:341`) has `trading_day DATE NOT NULL`. Write path always sets `trading_day` from the session's Brisbane trading day.
+- **EVIDENCE:** grep confirmed 3 CAST occurrences. `db_manager.py:341` confirms `trading_day DATE NOT NULL`. For a trade at 23:30 UTC (09:30 Brisbane next day), UTC-cast date would attribute the trade to the prior Brisbane day — wrong grouping for the consistency/payout window.
+- **Fix:** Replaced `CAST(entry_time AS DATE) AS trade_date` with `trading_day AS trade_date` (lines 111, 213) and `MAX(CAST(entry_time AS DATE))` with `MAX(trading_day)` (line 349). Updated one minimal test fixture (`test_consistency_no_trades`) to include `trading_day DATE` column.
+- **Behavior unchanged for current data:** All test trades use same-day UTC timestamps (08:00 UTC), so CAST result == trading_day. 11/11 tests pass. 102/102 drift checks pass.
 
-### Full Seven Sins scan — sprt_monitor.py + sr_monitor.py
+### Full Seven Sins scan — consistency_tracker.py
 
 | Sin | Result |
 |-----|--------|
-| Silent failure | None — both monitors log and continue on lane lookup failures |
-| Fail-open | None — both monitors report NO_DATA status on empty trade streams |
-| Look-ahead bias | None — start_date filter correctly restricts to forward OOS window |
-| Cost illusion | N/A — monitoring only, no P&L computation |
-| Canonical violation | FIXED — holdout date literal (SF-165) |
+| Silent failure | None — DB errors propagate; `_has_paper_trades` guards empty table gracefully |
+| Fail-open | None — returns None / IDLE_BREACH on missing data (fail-closed for callers) |
+| Look-ahead bias | N/A — read-only compliance tracker |
+| Cost illusion | N/A — no P&L computation |
+| Canonical violation | FIXED — `CAST(entry_time AS DATE)` replaced with `trading_day` (CT-166) |
+| Orphan risk | None — all functions are wired to callers |
+| Volatile data | None — thresholds come from canonical `prop_firm_policies` |
+| Async safety | N/A — synchronous module |
+| State persistence gap | N/A — stateless read-only module |
+| Contract drift | None — all callers pass correct kwargs |
+
+### Full Seven Sins scan — risk_manager.py (clean)
+
+| Sin | Result |
+|-----|--------|
+| Silent failure | None — no exception handlers; all paths return explicit results |
+| Fail-open | None — all checks return (False, reason, 0.0) on unknown/halted state |
+| Look-ahead bias | N/A — live risk enforcement |
+| Cost illusion | N/A — no P&L computation |
+| Canonical violation | None — F-1/F-2 @canonical-source annotations correct |
 | Orphan risk | None |
-| Volatile data | None — strategy counts dynamically loaded from validated_setups |
-| Async safety | N/A — synchronous modules |
-| State persistence gap | N/A — sprt writes state file on every run; sr writes envelope |
-| Contract drift | None — _load_strategy_outcomes callers all use correct kwargs |
+| Volatile data | None — limits runtime-constructed by orchestrator |
+| Async safety | N/A — synchronous; no async callers |
+| State persistence gap | ACCEPTABLE — multi-day equity state in-memory, documented "Lost on process restart"; Layer 2 AccountHWMTracker provides persistent protection (guarded by verified upstream check at session_orchestrator:403) |
+| Contract drift | None — all 3 can_enter call sites in execution_engine use correct kwargs |
 
-### account_survival.py scan — clean (today's big change)
+---
 
-- `_load_lane_trade_paths` correctly uses `entry_ts`/`exit_ts` from updated `_load_strategy_outcomes` SQL (added today in commit 0f7903c7)
-- `_scenario_from_trade_paths` intraday replay logic: correct event ordering with UTC-aware sentinels
-- `simulate_survival` Monte Carlo: fail-closed on empty scenarios; boundary checks on horizon_days and n_paths
-- `check_survival_report_gate`: all 7 blocking conditions fail-closed; reads path_model field correctly
-- No hardcoded instrument lists, no hardcoded constants for DD limits (uses `get_account_tier` + `get_firm_spec`)
+## Prior: Iteration 165 — Hardcoded holdout date in sprt_monitor + sr_monitor
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Canonical violation | `sprt_monitor.py:129` — `start_date=date(2026, 1, 1)` hardcoded instead of `HOLDOUT_SACRED_FROM` | LOW | FIXED 3898432c |
+| Canonical violation | `sr_monitor.py:117` — same hardcoded literal | LOW | FIXED 3898432c |
 
 ---
 
@@ -56,7 +70,7 @@
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Orphan risk | `execution_engine.py:620` — `_arm_strategies` docstring claimed "Phase 2 passes `{"E1"}`" but Phase 2 at line 493 passes `entry_models=None`; misleading comment could cause maintainer confusion | LOW | FIXED cccd21a6 |
+| Orphan risk | `execution_engine.py:620` — stale docstring | LOW | FIXED cccd21a6 |
 
 ---
 
@@ -64,24 +78,13 @@
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Fail-open | `pre_session_check.py:314` — `check_lane_lifecycle()` returned `(True, "WARN: ...")` on exception, permitting lane to trade when lifecycle state was unreadable | MEDIUM | FIXED 4dc4a35c |
-
----
-
-## Prior: Iteration 162 — Dead code sweep: unused @patch mock parameters in test files
-
-| Sin | Finding | Severity | Status |
-|-----|---------|----------|--------|
-| Dead code / orphan | `test_tradovate.py:160` — `mock_sleep` param unused | LOW | FIXED 24b30b6 |
-| Dead code / orphan | `test_tradovate.py:459` — `mock_sleep` param unused | LOW | FIXED 24b30b6 |
-| Dead code / orphan | `test_tradovate.py:619-621` — `@patch` decorator unnecessary + `mock_post` param unused | LOW | FIXED 24b30b6 |
-| Dead code / orphan | `test_projectx_429_retry.py:58,75,89,104,118,133,145` — 7x `mock_sleep` param unused | LOW | FIXED 24b30b6 |
+| Fail-open | `pre_session_check.py:314` — returned (True, "WARN") on exception | MEDIUM | FIXED 4dc4a35c |
 
 ---
 
 ## Files Fully Scanned
 
-> Cumulative list — 245 files fully scanned (sprt_monitor.py + sr_monitor.py added iter 165).
+> Cumulative list — 247 files fully scanned (consistency_tracker.py + risk_manager.py added iter 166).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -167,9 +170,11 @@
 - trading_app/entry_rules.py — added iter 164
 - trading_app/sprt_monitor.py — added iter 165
 - trading_app/sr_monitor.py — added iter 165
-- **Total: 245 files fully scanned**
+- trading_app/consistency_tracker.py — added iter 166
+- trading_app/risk_manager.py — added iter 166
+- **Total: 247 files fully scanned**
 
 ## Next iteration targets
-- Priority 3 (unscanned medium): trading_app/consistency_tracker.py, trading_app/risk_manager.py
-- Priority 2 (stale re-audit candidates): trading_app/account_survival.py (scanned iter 165, clean), trading_app/strategy_fitness.py (stale dead-arg already fixed in 713c4ab7)
-- Note: pre-existing drift violations (checks 59/95) require operational resolution by user — run `python scripts/tools/select_family_rr.py` and re-run validator for Mode A strategies
+- Priority 2 (stale re-audit candidates): trading_app/prop_profiles.py (modified post iter-142 during profit expansion Apr 12-13), trading_app/strategy_fitness.py (modified post iter-44)
+- Priority 3 (unscanned medium): trading_app/topstep_scaling_plan.py, trading_app/lane_correlation.py
+- Note: pre-existing drift advisories (checks 59/95) require operational resolution by user — run `python scripts/tools/select_family_rr.py` and re-run validator for Mode A strategies

@@ -1,7 +1,7 @@
-## Iteration: 165
-## Target: trading_app/sprt_monitor.py:129, trading_app/sr_monitor.py:117
-## Finding: Hardcoded date(2026, 1, 1) for holdout boundary instead of canonical HOLDOUT_SACRED_FROM
+## Iteration: 166
+## Target: trading_app/consistency_tracker.py:111,213,349
+## Finding: CAST(entry_time AS DATE) used for trade-day grouping instead of canonical trading_day column — UTC-cast date differs from Brisbane trading day for trades near midnight UTC
 ## Classification: [mechanical]
-## Blast Radius: 2 production files (sprt_monitor.py, sr_monitor.py); 0 callers of affected lines; tests don't mock the constant
-## Invariants: No behavior change. Value stays date(2026, 1, 1). Only source of truth changes to canonical import.
-## Diff estimate: 4 lines (2 import lines + 2 usage substitutions)
+## Blast Radius: 1 production file, 1 test file, 2 read-only callers (pre_session_check.py, weekly_review.py — no signature change)
+## Invariants: [1] check_consistency returns same result for same input data; [2] tests still pass; [3] no schema changes
+## Diff estimate: 3 production lines

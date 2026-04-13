@@ -1,12 +1,12 @@
 {
-  "total_iterations": 158,
-  "last_updated": "2026-04-10",
-  "consecutive_low_only": 2,
+  "total_iterations": 159,
+  "last_updated": "2026-04-14",
+  "consecutive_low_only": 3,
   "last_high_finding_iter": 163,
   "findings_by_type": {
     "canonical_violation": {
-      "found": 54,
-      "fixed": 41,
+      "found": 55,
+      "fixed": 42,
       "deferred": 4,
       "fix_rate": 0.76
     },
@@ -117,11 +117,11 @@
     "CRITICAL": 3,
     "HIGH": 12,
     "MEDIUM": 42,
-    "LOW": 101
+    "LOW": 102
   },
   "classifications": {
     "judgment": 74,
-    "mechanical": 57,
+    "mechanical": 58,
     "audit-only": 27
   },
   "files_audited": {
@@ -1078,6 +1078,11 @@
     "trading_app/sr_monitor.py": {
       "audit_count": 1,
       "last_iter": 165,
+      "findings": 1
+    },
+    "trading_app/consistency_tracker.py": {
+      "audit_count": 1,
+      "last_iter": 166,
       "findings": 1
     }
   },
@@ -2819,6 +2824,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "3898432c"
+    },
+    {
+      "iter": 166,
+      "date": "2026-04-14",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/consistency_tracker.py:111,213,349",
+      "finding_type": "canonical_violation",
+      "severity": "LOW",
+      "verdict": "FIXED",
+      "commit": "03238c01"
     }
   ]
 }

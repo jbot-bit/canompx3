@@ -1737,3 +1737,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 2 production files (sprt_monitor.py, sr_monitor.py); 0 callers affected; tests don't mock the constant
 - Verification: PASS — 11/11 tests (test_sprt_monitor + test_sr_monitor); drift 90/90 (6 pre-existing)
 - Commit: 3898432c
+
+---
+
+## Iteration 166 — 2026-04-14
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/consistency_tracker.py:111,213,349
+- Finding: CAST(entry_time AS DATE) used for trade-day grouping in 3 SQL queries instead of canonical trading_day column; UTC-cast date != Brisbane trading day for trades near midnight UTC
+- Action: Replaced CAST(entry_time AS DATE) with trading_day in all 3 SQL sites; updated one minimal test fixture to include trading_day DATE column. Also scanned risk_manager.py — clean, no actionable findings.
+- Blast radius: 2 files (consistency_tracker.py production + test); 2 read-only callers unaffected (pre_session_check.py, weekly_review.py)
+- Verification: PASS — 11/11 test_consistency_tracker.py; drift 102/102
+- Commit: 03238c01
