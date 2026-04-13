@@ -6,9 +6,9 @@ set "PYTHONIOENCODING=utf-8"
 cd /d "%~dp0"
 
 set "ACTION=%~1"
-if "%ACTION%"=="" goto menu
+if "%ACTION%"=="" goto gui
 
-if /I "%ACTION%"=="menu" goto menu
+if /I "%ACTION%"=="menu" goto gui
 if /I "%ACTION%"=="list" call :run_mode list & goto end
 if /I "%ACTION%"=="resume" call :run_mode resume & goto end
 if /I "%ACTION%"=="finish" call :run_mode close-pick & goto end
@@ -22,8 +22,8 @@ set "TASK=%*"
 call :run_task codex "%TASK%"
 goto end
 
-:menu
-call :run_mode menu
+:gui
+call :run_gui
 goto end
 
 :claude_task
@@ -88,6 +88,16 @@ if defined CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY (
     goto :eof
 )
 call "%BATCH%"
+set "EXITCODE=%ERRORLEVEL%"
+goto :eof
+
+:run_gui
+if defined CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY (
+    echo GUI=1
+    set "EXITCODE=0"
+    goto :eof
+)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\infra\windows-workstreams-gui.ps1"
 set "EXITCODE=%ERRORLEVEL%"
 goto :eof
 

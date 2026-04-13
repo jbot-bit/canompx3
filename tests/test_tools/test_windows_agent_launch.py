@@ -251,14 +251,34 @@ class TestWindowsBatchWrappers:
     def test_ai_workstreams_batch_supports_smart_shortcuts_and_dry_run(self) -> None:
         content = (windows_agent_launch.repo_root() / "ai-workstreams.bat").read_text(encoding="utf-8")
 
+        assert 'if "%ACTION%"=="" goto gui' in content
+        assert 'if /I "%ACTION%"=="menu" goto gui' in content
         assert 'if /I "%ACTION%"=="claude" goto claude_task' in content
         assert 'if /I "%ACTION%"=="codex" goto codex_task' in content
         assert 'if /I "%ACTION%"=="search" goto search_task' in content
         assert 'if /I "%ACTION%"=="green" goto green_task' in content
         assert 'if /I "%ACTION%"=="list" call :run_mode list' in content
+        assert 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\\infra\\windows-workstreams-gui.ps1"' in content
         assert "CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY" in content
         assert "MODE=%MODE% TASK=%TASK%" in content
         assert "BATCH=%BATCH%" in content
+        assert "GUI=1" in content
+
+    def test_windows_gui_script_supports_button_actions_and_dry_run(self) -> None:
+        content = (windows_agent_launch.repo_root() / "scripts" / "infra" / "windows-workstreams-gui.ps1").read_text(
+            encoding="utf-8"
+        )
+
+        assert 'param(' in content
+        assert '[string]$Action = ""' in content
+        assert '[string]$Task = ""' in content
+        assert 'switch ($Action.ToLowerInvariant())' in content
+        assert '"codex" { Invoke-LauncherMode -Mode "codex" -TaskName $Task; exit 0 }' in content
+        assert '"claude" { Invoke-LauncherMode -Mode "claude" -TaskName $Task; exit 0 }' in content
+        assert '"green-codex" { Invoke-GreenBatch -BatchPath $codexGreenBat; exit 0 }' in content
+        assert '"green-claude" { Invoke-GreenBatch -BatchPath $claudeGreenBat; exit 0 }' in content
+        assert "CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY" in content
+        assert 'Open an isolated AI workstream' in content
 
 
 class TestWorkflowCommands:
