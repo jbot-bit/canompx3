@@ -6,6 +6,46 @@
 
 ---
 
+## Update (2026-04-13 — caller discipline + drift debt + Codex cleanup)
+
+### Headline
+
+All `.daily_lanes` callers migrated to `effective_daily_lanes()`. Two production
+bugs fixed (pre_session_check DD budget skip, prop_portfolio daily view skip when
+lanes are JSON-sourced). Drift check 103 downgraded to advisory. 49 uncommitted
+Codex/worktree files committed in 4 logical groups.
+
+### Commits (7)
+
+- `1db1129c` — Bloomey B+ findings: public API, SR freshness, caller discipline
+- `40488ece` — **Caller discipline:** 7 files migrated from `.daily_lanes` to `effective_daily_lanes()`. 2 production bugs fixed.
+- `23feef93` — Drift check 103 → advisory (context/ package is untracked Codex WIP)
+- `8d566d1a` — Codex config, launchers, batch scripts
+- `2c99fe99` — Operator alerts recovery (alert_engine, orchestrator, dashboard)
+- `0e446ea3` — Codex WIP: context routing package, system_brief, work_capsule
+- `68808e33` — Remaining tooling/test updates from prior sessions
+
+### Known issues
+
+- **1 pre-existing test fail:** `test_orchestrator::test_orphan_blocks_new_entry` — pause logic mismatch from Codex worktree recovery. Needs investigation.
+- **Codex context/ package is unreviewed.** Check 103 is advisory, not blocking.
+- **Criterion 11 fingerprint stale** — profile changed after allocator wiring. Run `account_survival` to refresh.
+- **Criterion 12 SR state** — only 2/6 lanes have SR data. Run `python -m trading_app.sr_monitor`.
+
+### Drift state
+
+102 pass, 0 fail, 6 advisory. Clean.
+
+### Next session
+
+1. **Fix orchestrator test** — `test_orphan_blocks_new_entry` (pre-existing from Codex recovery)
+2. **Run SR monitor** — `python -m trading_app.sr_monitor` to populate SR state for all 6 lanes
+3. **2-account split mode** — `build_split_allocation()` with DD-balanced interleave (designed, not built)
+4. **US_DATA_1000 decision** — forward data says drop; trailing says keep. Wait another month.
+5. **Review Codex context/ package** — either promote check 103 back to hard or delete the package
+
+---
+
 ## Update (2026-04-13 — allocator-profile wiring + liveness + correlation selection)
 
 ### Headline
