@@ -27,6 +27,7 @@ from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.execution_engine import ExecutionEngine
 from trading_app.live.bar_aggregator import Bar
+from trading_app.live.bar_persister import BarPersister
 from trading_app.live.broker_factory import create_broker_components, get_broker_name
 from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
@@ -381,6 +382,7 @@ class SessionOrchestrator:
         self._kill_switch_fired = self._safety_state.kill_switch_fired
         self._notifications_broken = False  # set by self-test
         self._bar_count = 0  # total bars received this session
+        self._bar_persister = BarPersister(instrument, db_path=str(GOLD_DB_PATH))
         self._close_time_forced = self._safety_state.close_time_forced
 
         # DD PROTECTION — TWO LAYERS
@@ -1099,6 +1101,9 @@ class SessionOrchestrator:
         self._last_bar_at = now
         self._bar_count += 1
         self._stats.bars_received += 1
+
+        # Persist bar for Databento-free daily pipeline
+        self._bar_persister.append(bar)
 
         # Force-flatten within 5 minutes of firm close time (prevents positions at cutoff)
         if not self._close_time_forced and self._close_hour_et is not None:
@@ -2493,6 +2498,11 @@ class SessionOrchestrator:
 
         # Close trade journal — flushes any pending writes
         self.journal.close()
+
+        # Persist captured bars to bars_1m (Databento-free daily pipeline)
+        n_persisted = self._bar_persister.flush_to_db()
+        if n_persisted > 0:
+            log.info("Bar persister: %d bars written to bars_1m", n_persisted)
 
         # Clear crash-recovery state on clean session end.
         # If blocked strategies or kill switch fired, leave state for next startup.
