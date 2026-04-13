@@ -208,12 +208,27 @@ class TestOpenCodexProject:
 
 
 class TestWindowsBatchWrappers:
+    def test_claude_workstream_batch_uses_windows_launcher_claude_mode(self) -> None:
+        batch_path = windows_agent_launch.repo_root() / "claude-workstream.bat"
+        content = batch_path.read_text(encoding="utf-8")
+
+        assert '-Mode claude -Task "%TASK%"' in content
+        assert "Claude Isolated Workstream" in content
+
     def test_codex_workstream_batch_uses_windows_launcher_codex_mode(self) -> None:
         batch_path = windows_agent_launch.repo_root() / "codex-workstream.bat"
         content = batch_path.read_text(encoding="utf-8")
 
         assert '-Mode codex -Task "%TASK%"' in content
         assert "Codex Isolated Workstream" in content
+
+    def test_claude_green_baseline_batch_targets_clean_worktree(self) -> None:
+        batch_path = windows_agent_launch.repo_root() / "claude-green-baseline.bat"
+        content = batch_path.read_text(encoding="utf-8")
+
+        assert ".worktrees\\tasks\\green-baseline" in content
+        assert "Claude Green Baseline" in content
+        assert "Get-Command claude,claude.exe" in content
 
     def test_codex_green_baseline_batch_targets_clean_worktree(self) -> None:
         batch_path = windows_agent_launch.repo_root() / "codex-green-baseline.bat"
@@ -222,6 +237,16 @@ class TestWindowsBatchWrappers:
         assert ".worktrees\\tasks\\green-baseline" in content
         assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in content
         assert "Codex Green Baseline" in content
+
+    def test_root_workstream_helper_batches_use_launcher_modes(self) -> None:
+        root = windows_agent_launch.repo_root()
+        list_content = (root / "workstream-list.bat").read_text(encoding="utf-8")
+        finish_content = (root / "workstream-finish.bat").read_text(encoding="utf-8")
+        clean_content = (root / "workstream-clean.bat").read_text(encoding="utf-8")
+
+        assert "-Mode list" in list_content
+        assert "-Mode close-pick" in finish_content
+        assert "-Mode prune" in clean_content
 
 
 class TestWorkflowCommands:

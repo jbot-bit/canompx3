@@ -73,7 +73,12 @@ def build_branch_name(tool: str, name: str) -> str:
 
 
 def build_worktree_path(tool: str, name: str) -> Path:
-    _ = tool
+    if tool:
+        return WORKTREE_ROOT / TASK_NAMESPACE / slugify(tool) / slugify(name)
+    return WORKTREE_ROOT / TASK_NAMESPACE / slugify(name)
+
+
+def build_generic_worktree_path(name: str) -> Path:
     return WORKTREE_ROOT / TASK_NAMESPACE / slugify(name)
 
 
@@ -82,7 +87,7 @@ def build_legacy_worktree_path(tool: str, name: str) -> Path:
 
 
 def _candidate_worktree_paths(name: str, tool: str | None = None) -> list[Path]:
-    candidates: list[Path] = [build_worktree_path(tool or "", name)]
+    candidates: list[Path] = [build_worktree_path(tool or "", name), build_generic_worktree_path(name)]
     if tool:
         candidates.append(build_legacy_worktree_path(tool, name))
     for known_tool in KNOWN_TOOLS:
@@ -96,11 +101,21 @@ def find_managed_worktree_path(name: str, tool: str | None = None) -> Path | Non
     matches: list[Path] = []
     seen: set[Path] = set()
 
+    def _matches(meta: dict[str, str] | None) -> bool:
+        if meta is None:
+            return False
+        if str(meta.get("name")) != name:
+            return False
+        if tool is not None and str(meta.get("tool")) != tool:
+            return False
+        return True
+
     for path in _candidate_worktree_paths(name, tool):
         meta_path = path / WORKTREE_META
         if meta_path.exists():
+            meta = read_metadata(path)
             resolved = path.resolve()
-            if resolved not in seen:
+            if _matches(meta) and resolved not in seen:
                 matches.append(resolved)
                 seen.add(resolved)
 
@@ -110,13 +125,14 @@ def find_managed_worktree_path(name: str, tool: str | None = None) -> Path | Non
             if path in seen:
                 continue
             meta = read_metadata(path)
-            if meta and str(meta.get("name")) == name:
+            if _matches(meta):
                 matches.append(path)
                 seen.add(path)
 
     if len(matches) > 1:
         joined = ", ".join(str(path) for path in matches)
-        raise RuntimeError(f"Multiple managed worktrees share the name {name!r}: {joined}")
+        scope = f"{tool}:{name}" if tool else repr(name)
+        raise RuntimeError(f"Multiple managed worktrees share the name {scope}: {joined}")
     return matches[0] if matches else None
 
 

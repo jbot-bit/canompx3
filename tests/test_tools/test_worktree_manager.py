@@ -19,7 +19,7 @@ class TestHelpers:
 
     def test_worktree_path(self) -> None:
         path = worktree_manager.build_worktree_path("claude", "Feature A")
-        assert path.parts[-3:] == (".worktrees", "tasks", "feature-a")
+        assert path.parts[-4:] == (".worktrees", "tasks", "claude", "feature-a")
 
 
 class TestParseWorktreeList:
@@ -82,7 +82,7 @@ class TestManagedWorktrees:
 
     def test_read_metadata_for_returns_existing_metadata(self, tmp_path: Path) -> None:
         worktree_root = tmp_path / ".worktrees"
-        managed_path = worktree_root / "tasks" / "task-a"
+        managed_path = worktree_root / "tasks" / "codex" / "task-a"
         managed_path.mkdir(parents=True)
         (managed_path / worktree_manager.WORKTREE_META).write_text(
             '{"tool":"codex","name":"task-a","purpose":"Review / verify"}',
@@ -93,9 +93,9 @@ class TestManagedWorktrees:
         assert meta is not None
         assert meta["purpose"] == "Review / verify"
 
-    def test_read_metadata_for_falls_back_to_legacy_path(self, tmp_path: Path) -> None:
+    def test_read_metadata_for_does_not_cross_tools_on_same_name(self, tmp_path: Path) -> None:
         worktree_root = tmp_path / ".worktrees"
-        managed_path = worktree_root / "claude" / "task-a"
+        managed_path = worktree_root / "tasks" / "task-a"
         managed_path.mkdir(parents=True)
         (managed_path / worktree_manager.WORKTREE_META).write_text(
             '{"tool":"claude","name":"task-a","purpose":"Review / verify"}',
@@ -103,8 +103,7 @@ class TestManagedWorktrees:
         )
         with patch.object(worktree_manager, "WORKTREE_ROOT", worktree_root):
             meta = worktree_manager.read_metadata_for("codex", "task-a")
-        assert meta is not None
-        assert meta["tool"] == "claude"
+        assert meta is None
 
     def test_list_managed_worktrees_sorts_by_last_opened_desc(self, tmp_path: Path) -> None:
         worktree_root = tmp_path / ".worktrees"
@@ -137,7 +136,7 @@ class TestManagedWorktrees:
 
 class TestCreateClose:
     def test_create_worktree_reuses_existing_path(self, tmp_path: Path) -> None:
-        existing = tmp_path / ".worktrees" / "claude" / "foo"
+        existing = tmp_path / ".worktrees" / "tasks" / "codex" / "foo"
         existing.mkdir(parents=True)
         active = [worktree_manager.WorktreeInfo(path=str(existing))]
         with (
@@ -151,8 +150,38 @@ class TestCreateClose:
         assert meta["tool"] == "codex"
         assert meta["state"] == "active"
 
+    def test_create_worktree_same_name_other_tool_gets_separate_path(self, tmp_path: Path) -> None:
+        existing = tmp_path / ".worktrees" / "tasks" / "claude" / "foo"
+        existing.mkdir(parents=True)
+        (existing / worktree_manager.WORKTREE_META).write_text(
+            '{"tool":"claude","name":"foo","branch":"wt-claude-foo","base_ref":"HEAD"}',
+            encoding="utf-8",
+        )
+        active = [worktree_manager.WorktreeInfo(path=str(existing))]
+
+        def fake_run_git(*args: str, cwd: Path = worktree_manager.PROJECT_ROOT) -> subprocess.CompletedProcess[str]:
+            if args == ("worktree", "prune"):
+                return subprocess.CompletedProcess(args, 0, "", "")
+            if args[:3] == ("worktree", "add", "-b"):
+                Path(args[4]).mkdir(parents=True, exist_ok=True)
+                return subprocess.CompletedProcess(args, 0, "", "")
+            raise AssertionError(f"Unexpected git call: {args} cwd={cwd}")
+
+        with (
+            patch.object(worktree_manager, "WORKTREE_ROOT", tmp_path / ".worktrees"),
+            patch.object(worktree_manager, "list_worktrees", return_value=active),
+            patch.object(worktree_manager, "_run_git", side_effect=fake_run_git),
+        ):
+            path = worktree_manager.create_worktree("codex", "foo", purpose="Build / edit")
+
+        assert path == tmp_path / ".worktrees" / "tasks" / "codex" / "foo"
+        assert path != existing
+        meta = json.loads((path / worktree_manager.WORKTREE_META).read_text(encoding="utf-8"))
+        assert meta["tool"] == "codex"
+        assert meta["name"] == "foo"
+
     def test_create_worktree_rejects_stale_existing_path(self, tmp_path: Path) -> None:
-        existing = tmp_path / ".worktrees" / "tasks" / "foo"
+        existing = tmp_path / ".worktrees" / "tasks" / "codex" / "foo"
         existing.mkdir(parents=True)
         with (
             patch.object(worktree_manager, "WORKTREE_ROOT", tmp_path / ".worktrees"),
@@ -183,7 +212,7 @@ class TestCreateClose:
 
 class TestWorkflowOperations:
     def test_handoff_worktree_updates_owner_and_state(self, tmp_path: Path) -> None:
-        wt = tmp_path / ".worktrees" / "tasks" / "foo"
+        wt = tmp_path / ".worktrees" / "tasks" / "claude" / "foo"
         wt.mkdir(parents=True)
         (wt / worktree_manager.WORKTREE_META).write_text(
             json.dumps(
@@ -208,7 +237,7 @@ class TestWorkflowOperations:
         assert meta["last_actor_tool"] == "claude"
 
     def test_ship_worktree_requires_commit_message_when_dirty(self, tmp_path: Path) -> None:
-        wt = tmp_path / ".worktrees" / "tasks" / "foo"
+        wt = tmp_path / ".worktrees" / "tasks" / "codex" / "foo"
         wt.mkdir(parents=True)
         (wt / worktree_manager.WORKTREE_META).write_text(
             '{"tool":"codex","name":"foo","branch":"wt-codex-foo","base_ref":"HEAD"}',
@@ -220,7 +249,7 @@ class TestWorkflowOperations:
                 worktree_manager.ship_worktree(wt)
 
     def test_ship_worktree_commits_merges_and_closes(self, tmp_path: Path) -> None:
-        wt = tmp_path / ".worktrees" / "tasks" / "foo"
+        wt = tmp_path / ".worktrees" / "tasks" / "codex" / "foo"
         wt.mkdir(parents=True)
         (wt / worktree_manager.WORKTREE_META).write_text(
             '{"tool":"codex","name":"foo","branch":"wt-codex-foo","base_ref":"HEAD"}',
