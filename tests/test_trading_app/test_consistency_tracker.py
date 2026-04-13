@@ -87,7 +87,7 @@ class TestConsistency:
         con = duckdb.connect(str(db))
         con.execute("""
             CREATE TABLE paper_trades (
-                entry_time TIMESTAMP, pnl_dollar DOUBLE, instrument VARCHAR, execution_source VARCHAR
+                trading_day DATE, entry_time TIMESTAMP, pnl_dollar DOUBLE, instrument VARCHAR, execution_source VARCHAR
             )
         """)
         con.close()

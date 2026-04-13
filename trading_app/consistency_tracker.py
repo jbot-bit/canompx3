@@ -108,7 +108,7 @@ def check_consistency(
 
         rows = con.execute(
             f"""
-            SELECT CAST(entry_time AS DATE) AS trade_date,
+            SELECT trading_day AS trade_date,
                    SUM(pnl_dollar) AS daily_pnl
             FROM {_PAPER_TRADES_TABLE}
             {where}
@@ -210,7 +210,7 @@ def check_payout_eligibility(
 
         rows = con.execute(
             f"""
-            SELECT CAST(entry_time AS DATE) AS trade_date,
+            SELECT trading_day AS trade_date,
                    SUM(pnl_dollar) AS daily_pnl
             FROM {_PAPER_TRADES_TABLE}
             {where}
@@ -346,7 +346,7 @@ def check_account_idle(
             params.append(instrument)
 
         row = con.execute(
-            f"SELECT MAX(CAST(entry_time AS DATE)) FROM {_PAPER_TRADES_TABLE} {where}",
+            f"SELECT MAX(trading_day) FROM {_PAPER_TRADES_TABLE} {where}",
             params,
         ).fetchone()
 
