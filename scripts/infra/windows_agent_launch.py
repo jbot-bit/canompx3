@@ -25,8 +25,10 @@ VALID_MODES = {
     "codex-search",
     "codex-project",
     "codex-project-gold-db",
+    "codex-project-power",
     "codex-project-linux",
     "codex-project-linux-gold-db",
+    "codex-project-linux-power",
     "codex-project-search-gold-db",
     "green-codex",
     "green-claude",
@@ -173,6 +175,7 @@ def build_codex_project_wsl_command(
     search_mode: bool = False,
     enable_gold_db: bool = False,
     use_linux_home: bool = False,
+    profile: str | None = None,
 ) -> str:
     import shlex
 
@@ -180,10 +183,13 @@ def build_codex_project_wsl_command(
     if enable_gold_db:
         script_name = "codex-project-search-gold-db.sh" if search_mode else "codex-project-gold-db.sh"
 
+    lines = ["set -euo pipefail"]
+    if profile:
+        lines.append(f"export CANOMPX3_CODEX_PROFILE={shlex.quote(profile)}")
+
     if use_linux_home:
-        return "\n".join(
+        lines.extend(
             [
-                "set -euo pipefail",
                 'ROOT="${CANOMPX3_CODEX_WSL_ROOT:-$HOME/canompx3}"',
                 'if [[ ! -d "$ROOT" ]]; then',
                 '  echo "ERROR: WSL Codex repo not found at $ROOT." >&2',
@@ -194,14 +200,15 @@ def build_codex_project_wsl_command(
                 f"exec ./scripts/infra/{script_name} --no-alt-screen",
             ]
         )
+        return "\n".join(lines)
 
-    return "\n".join(
+    lines.extend(
         [
-            "set -euo pipefail",
             f"cd {shlex.quote(root_wsl)}",
             f"exec ./scripts/infra/{script_name} --no-alt-screen",
         ]
     )
+    return "\n".join(lines)
 
 
 def ensure_managed_worktree(tool_name: str, workstream_name: str, purpose: str | None) -> tuple[Path, str | None]:
@@ -268,6 +275,11 @@ def open_codex_project(search_mode: bool = False, enable_gold_db: bool = False) 
     return run_wsl(build_codex_project_wsl_command(root, search_mode=search_mode, enable_gold_db=enable_gold_db))
 
 
+def open_codex_project_power() -> int:
+    root = windows_to_wsl(repo_root())
+    return run_wsl(build_codex_project_wsl_command(root, profile="canompx3_power"))
+
+
 def open_codex_project_linux_home(search_mode: bool = False, enable_gold_db: bool = False) -> int:
     root = windows_to_wsl(repo_root())
     return run_wsl(
@@ -276,6 +288,17 @@ def open_codex_project_linux_home(search_mode: bool = False, enable_gold_db: boo
             search_mode=search_mode,
             enable_gold_db=enable_gold_db,
             use_linux_home=True,
+        )
+    )
+
+
+def open_codex_project_linux_home_power() -> int:
+    root = windows_to_wsl(repo_root())
+    return run_wsl(
+        build_codex_project_wsl_command(
+            root,
+            use_linux_home=True,
+            profile="canompx3_power",
         )
     )
 
@@ -771,10 +794,14 @@ def main() -> int:
         return open_codex_project()
     if args.mode == "codex-project-gold-db":
         return open_codex_project(enable_gold_db=True)
+    if args.mode == "codex-project-power":
+        return open_codex_project_power()
     if args.mode == "codex-project-linux":
         return open_codex_project_linux_home()
     if args.mode == "codex-project-linux-gold-db":
         return open_codex_project_linux_home(enable_gold_db=True)
+    if args.mode == "codex-project-linux-power":
+        return open_codex_project_linux_home_power()
     if args.mode == "codex-project-search-gold-db":
         return open_codex_project(search_mode=True, enable_gold_db=True)
     if args.mode == "green-codex":

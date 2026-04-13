@@ -5,6 +5,7 @@ DEFAULT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROOT="${CANOMPX3_ROOT:-$DEFAULT_ROOT}"
 VENV="$ROOT/.venv-wsl"
 PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
+PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3_search}"
 
 if [[ ! -f "$VENV/bin/python" ]]; then
   echo "ERROR: .venv-wsl/bin/python not found." >&2
@@ -33,7 +34,7 @@ fi
 
 CODEX_ARGS=(
   -C "$ROOT"
-  -p canompx3_search
+  -p "$PROFILE"
   --sandbox workspace-write
   --ask-for-approval on-request
   --search

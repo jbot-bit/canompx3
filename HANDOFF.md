@@ -6,6 +6,85 @@
 
 ---
 
+## Update (2026-04-14 — Codex operator setup: power profile + app local-environment scripts)
+
+### Headline
+
+Closed the loop on the Codex setup layer so the repo now has a practical
+operator model instead of just thin launchers:
+
+- stronger repo-scoped Codex defaults
+- a real `canompx3_power` profile
+- repo-owned setup / cleanup / action scripts for Codex app local environments
+- a short shared reference for using Claude and Codex together without
+  collisions
+
+### What changed
+
+- expanded `.codex/config.toml`
+  - added:
+    - `project_root_markers`
+    - history persistence
+    - longer background terminal poll timeout
+    - TUI notifications
+    - explicit feature flags
+    - native Windows sandbox preference: `elevated`
+  - added profiles:
+    - `canompx3_power`
+    - `canompx3_windows`
+- Codex WSL launchers now respect `CANOMPX3_CODEX_PROFILE`
+  - `scripts/infra/codex-project.sh`
+  - `scripts/infra/codex-project-search.sh`
+- Windows launcher layer gained direct power modes:
+  - `codex.bat power`
+  - `codex.bat linux-power`
+  - backing support in:
+    - `scripts/infra/windows_agent_launch.py`
+    - `scripts/infra/windows-agent-launch.ps1`
+- added Codex app local-environment helpers:
+  - `scripts/infra/codex_local_env.py`
+  - `scripts/infra/codex-app-setup.sh`
+  - `scripts/infra/codex-app-cleanup.sh`
+  - `scripts/infra/codex-app-setup.ps1`
+  - `scripts/infra/codex-app-cleanup.ps1`
+  - these cover:
+    - setup
+    - cleanup
+    - status
+    - lint
+    - tests
+    - drift
+- added operator reference:
+  - `docs/reference/codex-claude-operator-setup.md`
+- updated `CODEX.md` and focused tests
+
+### Practical usage now
+
+- Claude:
+  - `claude.bat`
+- Codex normal:
+  - `codex.bat linux`
+- Codex max-power:
+  - `codex.bat linux-power`
+- Parallel Claude/Codex:
+  - `ai-workstreams.bat`
+- Codex app local-environment commands:
+  - copy from `docs/reference/codex-claude-operator-setup.md`
+
+### Official-source basis
+
+- OpenAI Codex docs say:
+  - prefer WSL2 when the workflow is Linux-native
+  - keep repos under WSL home instead of `/mnt/c/...`
+  - use local environments for setup/actions/cleanup
+  - treat hooks as experimental, with Windows support currently disabled
+
+### Verification
+
+- targeted launcher + local-env tests were added/updated in:
+  - `tests/test_tools/test_codex_local_env.py`
+  - `tests/test_tools/test_windows_agent_launch_light.py`
+
 ## Update (2026-04-14 — launcher wrapper cleanup: three human-facing front doors)
 
 ### Headline
@@ -82,7 +161,7 @@ Stopped pretending one `/mnt/c`-backed Codex launcher could be the right answer
 for both Windows and WSL-heavy usage. Launcher layer now follows Microsoft WSL
 guidance more closely:
 
-- Windows-side convenience wrappers can launch a WSL-home clone explicitly
+- Windows-side front doors can launch a WSL-home clone explicitly
 - existing `/mnt/c` launchers fail fast with a real mount-health message instead
   of grinding into broken startup behavior
 
@@ -113,10 +192,10 @@ guidance more closely:
 - Windows worktree launcher now runs the mount guard before `uv sync`, so the
   failure happens before expensive bootstrap churn:
   - `scripts/infra/windows_agent_launch.py`
-- Added explicit Windows entrypoints for a WSL-home clone:
-  - `codex-linux.bat`
-  - `codex-gold-db-linux.bat`
-  - mode support in:
+- Added WSL-home launch modes in the real launcher layer:
+  - `codex.bat linux`
+  - `codex.bat linux-gold-db`
+  - backing support in:
     - `scripts/infra/windows-agent-launch.ps1`
     - `scripts/infra/windows_agent_launch.py`
   - WSL-home root defaults to `~/canompx3`, override with
@@ -127,7 +206,7 @@ guidance more closely:
 
 - targeted tests:
   - `py -3.13 -m pytest tests/test_tools/test_wsl_mount_guard.py tests/test_tools/test_codex_launcher_scripts.py tests/test_tools/test_windows_agent_launch_light.py -q`
-  - result: `10 passed`
+  - result at this point: `14 passed`
 - existing `tests/test_tools/test_windows_agent_launch.py` was skipped on this
   machine because it uses `pytest.importorskip("readchar")`; a new lightweight
   test module was added so launcher command-building still gets real coverage
@@ -143,7 +222,7 @@ guidance more closely:
 ### Next sensible step
 
 1. Clone/move Codex’s working repo into WSL ext4 (`~/canompx3`)
-2. Use `codex-linux.bat` (or set `CANOMPX3_CODEX_WSL_ROOT`) for normal Codex work
+2. Use `codex.bat linux` (or set `CANOMPX3_CODEX_WSL_ROOT`) for normal Codex work
 3. Keep `/mnt/c` launchers only as compatibility path with fast failure
 
 ---

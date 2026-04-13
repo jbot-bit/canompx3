@@ -2,6 +2,9 @@
 
 profile = "canompx3"
 project_doc_max_bytes = 98304
+project_root_markers = ["AGENTS.md", "CLAUDE.md", "CODEX.md", "uv.lock", ".git"]
+check_for_update_on_startup = true
+background_terminal_max_timeout = 900000
 developer_instructions = """
 Repo-specific Codex startup contract for canompx3:
 - Preferred entrypoints are `scripts/infra/codex-project.sh`, `scripts/infra/codex-project-search.sh`, and `scripts/infra/codex-worktree.sh`; they already run session preflight.
@@ -10,6 +13,28 @@ Repo-specific Codex startup contract for canompx3:
 - Follow `AGENTS.md`, `CLAUDE.md`, and `CODEX.md`; the Claude layer remains canonical and `.codex/` is additive only.
 - Do not mutate `.claude/` or `CLAUDE.md` unless the user explicitly asks.
 """
+
+[history]
+persistence = "save-all"
+
+[windows]
+sandbox = "elevated"
+
+[tui]
+notifications = true
+notification_method = "auto"
+alternate_screen = "auto"
+
+[features]
+apps = true
+codex_hooks = false
+fast_mode = true
+multi_agent = true
+personality = true
+prevent_idle_sleep = true
+shell_snapshot = true
+shell_tool = true
+skill_mcp_dependency_install = true
 
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
@@ -41,6 +66,31 @@ model_reasoning_effort = "high"
 model_reasoning_summary = "concise"
 model_verbosity = "medium"
 web_search = "live"
+
+[profiles.canompx3_power]
+model = "gpt-5.4"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+service_tier = "fast"
+personality = "pragmatic"
+model_reasoning_effort = "xhigh"
+model_reasoning_summary = "detailed"
+model_verbosity = "high"
+web_search = "live"
+
+[profiles.canompx3_windows]
+model = "gpt-5.4"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+service_tier = "fast"
+personality = "pragmatic"
+model_reasoning_effort = "high"
+model_reasoning_summary = "concise"
+model_verbosity = "medium"
+web_search = "cached"
+
+[profiles.canompx3_windows.windows]
+sandbox = "elevated"
 
 [profiles.canompx3_max]
 model = "gpt-5.1-codex-max"

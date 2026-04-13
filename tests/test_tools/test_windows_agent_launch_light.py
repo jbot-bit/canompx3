@@ -35,6 +35,15 @@ def test_build_linux_home_project_command_uses_linux_root() -> None:
     assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
 
+def test_build_power_project_command_exports_power_profile() -> None:
+    module = _load_module()
+
+    command = module.build_codex_project_wsl_command("/mnt/c/repo", profile="canompx3_power")
+
+    assert "export CANOMPX3_CODEX_PROFILE=canompx3_power" in command
+    assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
+
+
 def test_open_codex_project_linux_home_uses_linux_home_builder() -> None:
     module = _load_module()
 
@@ -54,8 +63,12 @@ def test_linux_project_batches_target_linux_modes() -> None:
     root = Path(__file__).resolve().parents[2]
     codex_bat = (root / "codex.bat").read_text(encoding="utf-8")
 
+    assert 'if /I "%ACTION%"=="power" (' in codex_bat
+    assert 'set "MODE=codex-project-power"' in codex_bat
     assert 'if /I "%ACTION%"=="linux" (' in codex_bat
     assert 'set "MODE=codex-project-linux"' in codex_bat
+    assert 'if /I "%ACTION%"=="linux-power" (' in codex_bat
+    assert 'set "MODE=codex-project-linux-power"' in codex_bat
     assert 'if /I "%ACTION%"=="linux-gold-db" (' in codex_bat
     assert 'set "MODE=codex-project-linux-gold-db"' in codex_bat
 

@@ -101,8 +101,10 @@ Windows convenience entrypoints:
 - `codex.bat`
   - default project session on the current repo
   - `codex.bat gold-db`
+  - `codex.bat power`
   - `codex.bat search-gold-db`
   - `codex.bat linux`
+  - `codex.bat linux-power`
   - `codex.bat linux-gold-db`
   - `codex.bat green`
   - `codex.bat task <name>`
@@ -120,6 +122,15 @@ For a Windows user, the human-facing front doors are:
 If you are running Codex inside WSL 2, prefer a clone in the WSL filesystem
 such as `~/canompx3` and launch it via `codex.bat linux`. Set
 `CANOMPX3_CODEX_WSL_ROOT` if the WSL-side clone lives somewhere else.
+
+Codex app local-environment support lives in:
+
+- `scripts/infra/codex_local_env.py`
+- `scripts/infra/codex-app-setup.sh`
+- `scripts/infra/codex-app-cleanup.sh`
+- `scripts/infra/codex-app-setup.ps1`
+- `scripts/infra/codex-app-cleanup.ps1`
+- `docs/reference/codex-claude-operator-setup.md`
 
 Default stance: Codex should start minimal. Repo MCPs such as `gold-db` are
 opt-in for sessions that actually need live trading-data queries.

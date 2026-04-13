@@ -10,10 +10,14 @@ set "MODE=codex-project"
 
 if /I "%ACTION%"=="gold-db" (
     set "MODE=codex-project-gold-db"
+) else if /I "%ACTION%"=="power" (
+    set "MODE=codex-project-power"
 ) else if /I "%ACTION%"=="search-gold-db" (
     set "MODE=codex-project-search-gold-db"
 ) else if /I "%ACTION%"=="linux" (
     set "MODE=codex-project-linux"
+) else if /I "%ACTION%"=="linux-power" (
+    set "MODE=codex-project-linux-power"
 ) else if /I "%ACTION%"=="linux-gold-db" (
     set "MODE=codex-project-linux-gold-db"
 ) else if /I "%ACTION%"=="green" (
@@ -30,8 +34,10 @@ if /I "%ACTION%"=="gold-db" (
     echo Usage:
     echo   codex.bat
     echo   codex.bat gold-db
+    echo   codex.bat power
     echo   codex.bat search-gold-db
     echo   codex.bat linux
+    echo   codex.bat linux-power
     echo   codex.bat linux-gold-db
     echo   codex.bat green
     echo   codex.bat task ^<name^>
@@ -39,7 +45,7 @@ if /I "%ACTION%"=="gold-db" (
     exit /b 0
 )
 
-if not "%ACTION%"=="" if /I not "%ACTION%"=="gold-db" if /I not "%ACTION%"=="search-gold-db" if /I not "%ACTION%"=="linux" if /I not "%ACTION%"=="linux-gold-db" if /I not "%ACTION%"=="green" if /I not "%ACTION%"=="task" if /I not "%ACTION%"=="search" if /I not "%ACTION%"=="help" (
+if not "%ACTION%"=="" if /I not "%ACTION%"=="gold-db" if /I not "%ACTION%"=="power" if /I not "%ACTION%"=="search-gold-db" if /I not "%ACTION%"=="linux" if /I not "%ACTION%"=="linux-power" if /I not "%ACTION%"=="linux-gold-db" if /I not "%ACTION%"=="green" if /I not "%ACTION%"=="task" if /I not "%ACTION%"=="search" if /I not "%ACTION%"=="help" (
     echo Unknown codex mode: %ACTION%
     echo Run `codex.bat help` for usage.
     exit /b 2
