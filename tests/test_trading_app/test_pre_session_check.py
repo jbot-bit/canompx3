@@ -10,7 +10,6 @@ import pytest
 
 from trading_app.pre_session_check import (
     _resolve_session_lane,
-    _resolve_session_lanes,
     check_consistency_rule,
     check_daily_equity,
     check_dd_circuit_breaker,
@@ -265,19 +264,6 @@ def test_resolve_session_lane_ambiguous_profile_requires_strategy_specific_tool(
     ):
         with pytest.raises(ValueError, match="multiple lanes"):
             _resolve_session_lane("NYSE_OPEN", "topstep_50k_type_a")
-
-
-def test_resolve_session_lanes_returns_all_session_matches():
-    with patch.dict(
-        ACCOUNT_PROFILES,
-        {"topstep_50k_type_a": replace(get_profile("topstep_50k_type_a"), active=True)},
-        clear=False,
-    ):
-        profile_id, lanes = _resolve_session_lanes("NYSE_OPEN", "topstep_50k_type_a")
-
-    assert profile_id == "topstep_50k_type_a"
-    assert len(lanes) == 2
-    assert {lane["instrument"] for lane in lanes} == {"MNQ", "MES"}
 
 
 def test_check_consistency_rule_fails_closed_on_ambiguous_active_profiles(monkeypatch):
