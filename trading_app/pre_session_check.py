@@ -29,6 +29,33 @@ STATE_DIR.mkdir(parents=True, exist_ok=True)
 HALT_FILE = STATE_DIR / "halt_trading.json"
 
 
+def check_equity_cooldown(portfolio_name: str, instrument: str) -> tuple[bool, str]:
+    """Check if a mandatory cooling period is active (self-funded equity halt).
+
+    After an equity halt (max DD breached), a 24h cooldown is enforced.
+    This prevents emotional re-entry after a major loss event.
+    """
+    from datetime import datetime, UTC
+
+    from trading_app.live.session_safety_state import SessionSafetyState
+
+    state = SessionSafetyState(portfolio_name, instrument)
+    if not state.cooldown_until:
+        return True, "No cooldown active"
+    try:
+        cooldown_end = datetime.fromisoformat(state.cooldown_until)
+        if datetime.now(UTC) >= cooldown_end:
+            # Cooldown expired — clear it
+            state.cooldown_until = ""
+            state.save()
+            return True, "Cooldown expired (auto-cleared)"
+        remaining = cooldown_end - datetime.now(UTC)
+        hours = remaining.total_seconds() / 3600
+        return False, f"EQUITY COOLDOWN: {hours:.1f}h remaining (until {state.cooldown_until})"
+    except (ValueError, TypeError):
+        return False, "BLOCKED: cooldown_until is set but unparseable — manual inspection needed"
+
+
 def check_manual_halt() -> tuple[bool, str]:
     """Check if the user has manually halted trading for today."""
     if not HALT_FILE.exists():

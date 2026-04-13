@@ -67,8 +67,14 @@ class TestPropFirmAccount:
 
     def test_self_funded_50k(self):
         tier = get_account_tier("self_funded", 50_000)
-        assert tier.max_dd == 5_000  # User-defined risk tolerance
-        assert tier.max_contracts_micro == 500  # Effectively unlimited
+        assert tier.max_dd == 10_000  # 20% of account (bot-enforced)
+        assert tier.max_contracts_micro == 20  # 1 per $2,500
+
+    def test_self_funded_5k(self):
+        tier = get_account_tier("self_funded", 5_000)
+        assert tier.max_dd == 750  # 15% of account (tighter for small)
+        assert tier.max_contracts_micro == 2  # 1 per $2,500
+        assert tier.daily_loss_limit == 250  # 5% of account
 
     def test_unknown_tier_raises(self):
         with pytest.raises(KeyError):

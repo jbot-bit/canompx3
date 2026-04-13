@@ -221,16 +221,20 @@ PROP_FIRM_SPECS: dict[str, PropFirmSpec] = {
     "self_funded": PropFirmSpec(
         name="self_funded",
         display_name="Self-Funded",
-        dd_type="none",
+        dd_type="eod_trailing",  # Bot-enforced trailing DD (no external firm rule)
         profit_split_tiers=((float("inf"), 1.00),),
         consistency_rule=None,
         news_restriction=False,
-        close_time_et="none",
+        close_time_et="16:00",  # Force-flatten 10min before CME hard close (overnight margin guard)
         platform="any",
         min_hold_seconds=None,
         banned_instruments=frozenset(),
         auto_trading="full",
-        notes="Your own capital. DD is temporary, not fatal.",
+        notes=(
+            "Your own capital on NinjaTrader/IBKR. Bot enforces DD limits, "
+            "daily loss, and 24h cooling after equity halt. 0.75x stops for "
+            "survival. Force-flatten at 16:00 ET to avoid overnight margin."
+        ),
     ),
     "bulenox": PropFirmSpec(
         name="bulenox",
@@ -308,9 +312,18 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     ("bulenox", 100_000): PropFirmAccount("bulenox", 100_000, 3_000, 10, 100),
     ("bulenox", 150_000): PropFirmAccount("bulenox", 150_000, 4_500, 15, 150),
     ("bulenox", 250_000): PropFirmAccount("bulenox", 250_000, 5_500, 25, 250),
-    # Self-funded
-    ("self_funded", 30_000): PropFirmAccount("self_funded", 30_000, 3_000, 15, 150),
-    ("self_funded", 50_000): PropFirmAccount("self_funded", 50_000, 5_000, 50, 500),
+    # ─── Self-Funded ──────────────────────────────────────────────────
+    # Bot-enforced DD limits. No external firm rules.
+    # Small accounts (<$10K): 15% max DD (tighter for survival)
+    # Larger accounts (>=$10K): 20% max DD
+    # Daily loss limit: 5% of account across all tiers
+    # Max contracts: 1 MNQ per $2,500, 1 NQ per $25,000
+    # PropFirmAccount(firm, account_size, max_dd, max_mini, max_micro, daily_loss_limit)
+    ("self_funded", 2_500): PropFirmAccount("self_funded", 2_500, 375, 0, 1, 125),
+    ("self_funded", 5_000): PropFirmAccount("self_funded", 5_000, 750, 0, 2, 250),
+    ("self_funded", 10_000): PropFirmAccount("self_funded", 10_000, 1_500, 0, 4, 500),
+    ("self_funded", 25_000): PropFirmAccount("self_funded", 25_000, 5_000, 1, 10, 1_250),
+    ("self_funded", 50_000): PropFirmAccount("self_funded", 50_000, 10_000, 2, 20, 2_500),
 }
 
 

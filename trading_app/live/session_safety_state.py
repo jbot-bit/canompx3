@@ -38,6 +38,7 @@ class SessionSafetyState:
         self.shadow_failures: dict[str, str] = {}  # account_id → failure description
         self.daily_pnl_r: float = 0.0  # intraday P&L for daily loss circuit breaker
         self.trading_day: str = ""  # ISO date — daily_pnl_r only valid if matches current day
+        self.cooldown_until: str = ""  # ISO datetime — mandatory pause after equity halt (self-funded)
 
         self._load_state()
 
@@ -52,6 +53,7 @@ class SessionSafetyState:
             self.shadow_failures = dict(data.get("shadow_failures", {}))
             self.daily_pnl_r = float(data.get("daily_pnl_r", 0.0))
             self.trading_day = str(data.get("trading_day", ""))
+            self.cooldown_until = str(data.get("cooldown_until", ""))
             if self.kill_switch_fired or self.blocked_strategies or self.shadow_failures:
                 log.critical(
                     "CRASH RECOVERY: loaded safety state from %s — "
@@ -75,6 +77,7 @@ class SessionSafetyState:
             "shadow_failures": self.shadow_failures,
             "daily_pnl_r": round(self.daily_pnl_r, 4),
             "trading_day": self.trading_day,
+            "cooldown_until": self.cooldown_until,
         }
         tmp = self._state_file.with_suffix(".tmp")
         tmp.write_text(json.dumps(data, indent=2))
