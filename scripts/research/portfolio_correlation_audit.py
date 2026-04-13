@@ -343,8 +343,7 @@ def main():
                     continue
                 if b not in [s["strategy_id"] for s in strategies]:
                     continue
-                key = tuple(sorted([a, b]))
-                pm = pairs.get(key) or pairs.get((key[1], key[0]))
+                pm = pairs.get(_canonical_key(a, b))
                 rho = pm.rho if pm else 0.0
                 marker = " *** OVER 0.70 ***" if rho > 0.70 else ""
                 sess_a = a.split("_E2_")[0].replace("MNQ_", "")
