@@ -18,6 +18,7 @@ from trading_app.config import (
     OrbSizeFilter,
     PitRangeFilter,
     StrategyFilter,
+    VWAPBreakDirectionFilter,
     VolumeFilter,
     get_filters_for_grid,
     is_e2_lookahead_filter,
@@ -1339,3 +1340,186 @@ class TestRequiresMicroData:
         f = NoFilter()
         with pytest.raises(AttributeError):
             f.requires_micro_data = True  # type: ignore[misc]
+
+
+class TestVWAPBreakDirectionFilter:
+    """Tests for VWAPBreakDirectionFilter — VWAP break-direction alignment."""
+
+    # --- orb_mid definition ---
+
+    def test_orb_mid_long_aligned(self):
+        """Long break with ORB midpoint above VWAP → passes."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_MID_ALIGNED", description="test", definition="orb_mid")
+        row = {
+            "orb_US_DATA_1000_vwap": 100.0,
+            "orb_US_DATA_1000_high": 110.0,
+            "orb_US_DATA_1000_low": 95.0,  # mid = 102.5 > 100
+            "orb_US_DATA_1000_break_dir": "long",
+        }
+        assert f.matches_row(row, "US_DATA_1000") is True
+
+    def test_orb_mid_long_counter(self):
+        """Long break with ORB midpoint below VWAP → blocked."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_MID_ALIGNED", description="test", definition="orb_mid")
+        row = {
+            "orb_NYSE_OPEN_vwap": 100.0,
+            "orb_NYSE_OPEN_high": 102.0,
+            "orb_NYSE_OPEN_low": 95.0,  # mid = 98.5 < 100
+            "orb_NYSE_OPEN_break_dir": "long",
+        }
+        assert f.matches_row(row, "NYSE_OPEN") is False
+
+    def test_orb_mid_short_aligned(self):
+        """Short break with ORB midpoint below VWAP → passes."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_MID_ALIGNED", description="test", definition="orb_mid")
+        row = {
+            "orb_CME_PRECLOSE_vwap": 100.0,
+            "orb_CME_PRECLOSE_high": 99.0,
+            "orb_CME_PRECLOSE_low": 95.0,  # mid = 97.0 < 100
+            "orb_CME_PRECLOSE_break_dir": "short",
+        }
+        assert f.matches_row(row, "CME_PRECLOSE") is True
+
+    def test_orb_mid_short_counter(self):
+        """Short break with ORB midpoint above VWAP → blocked."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_MID_ALIGNED", description="test", definition="orb_mid")
+        row = {
+            "orb_CME_PRECLOSE_vwap": 100.0,
+            "orb_CME_PRECLOSE_high": 105.0,
+            "orb_CME_PRECLOSE_low": 99.0,  # mid = 102.0 > 100
+            "orb_CME_PRECLOSE_break_dir": "short",
+        }
+        assert f.matches_row(row, "CME_PRECLOSE") is False
+
+    # --- break_price definition ---
+
+    def test_bp_long_aligned(self):
+        """Long break with orb_high above VWAP → passes."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_BP_ALIGNED", description="test", definition="break_price")
+        row = {
+            "orb_CME_PRECLOSE_vwap": 100.0,
+            "orb_CME_PRECLOSE_high": 105.0,  # break at 105 > 100
+            "orb_CME_PRECLOSE_low": 95.0,
+            "orb_CME_PRECLOSE_break_dir": "long",
+        }
+        assert f.matches_row(row, "CME_PRECLOSE") is True
+
+    def test_bp_short_aligned(self):
+        """Short break with orb_low below VWAP → passes."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_BP_ALIGNED", description="test", definition="break_price")
+        row = {
+            "orb_CME_PRECLOSE_vwap": 100.0,
+            "orb_CME_PRECLOSE_high": 105.0,
+            "orb_CME_PRECLOSE_low": 95.0,  # break at 95 < 100
+            "orb_CME_PRECLOSE_break_dir": "short",
+        }
+        assert f.matches_row(row, "CME_PRECLOSE") is True
+
+    def test_bp_long_counter(self):
+        """Long break with orb_high below VWAP → blocked."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_BP_ALIGNED", description="test", definition="break_price")
+        row = {
+            "orb_TOKYO_OPEN_vwap": 100.0,
+            "orb_TOKYO_OPEN_high": 99.0,  # break at 99 < 100
+            "orb_TOKYO_OPEN_low": 95.0,
+            "orb_TOKYO_OPEN_break_dir": "long",
+        }
+        assert f.matches_row(row, "TOKYO_OPEN") is False
+
+    # --- fail-closed on missing data ---
+
+    def test_fail_closed_no_vwap(self):
+        """Missing VWAP → fail-closed (no trade)."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_MID_ALIGNED", description="test", definition="orb_mid")
+        row = {
+            "orb_NYSE_OPEN_vwap": None,
+            "orb_NYSE_OPEN_high": 110.0,
+            "orb_NYSE_OPEN_low": 95.0,
+            "orb_NYSE_OPEN_break_dir": "long",
+        }
+        assert f.matches_row(row, "NYSE_OPEN") is False
+
+    def test_fail_closed_no_break_dir(self):
+        """Missing break_dir → fail-closed."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_MID_ALIGNED", description="test", definition="orb_mid")
+        row = {
+            "orb_NYSE_OPEN_vwap": 100.0,
+            "orb_NYSE_OPEN_high": 110.0,
+            "orb_NYSE_OPEN_low": 95.0,
+            "orb_NYSE_OPEN_break_dir": None,
+        }
+        assert f.matches_row(row, "NYSE_OPEN") is False
+
+    def test_fail_closed_no_orb_range(self):
+        """Missing ORB high/low → fail-closed."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_MID_ALIGNED", description="test", definition="orb_mid")
+        row = {
+            "orb_NYSE_OPEN_vwap": 100.0,
+            "orb_NYSE_OPEN_high": None,
+            "orb_NYSE_OPEN_low": None,
+            "orb_NYSE_OPEN_break_dir": "long",
+        }
+        assert f.matches_row(row, "NYSE_OPEN") is False
+
+    def test_fail_closed_break_dir_none_string(self):
+        """break_dir = 'none' (no break) → fail-closed."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_BP_ALIGNED", description="test", definition="break_price")
+        row = {
+            "orb_NYSE_OPEN_vwap": 100.0,
+            "orb_NYSE_OPEN_high": 110.0,
+            "orb_NYSE_OPEN_low": 95.0,
+            "orb_NYSE_OPEN_break_dir": "none",
+        }
+        assert f.matches_row(row, "NYSE_OPEN") is False
+
+    # --- edge cases ---
+
+    def test_exact_equality_fails_closed(self):
+        """ref == VWAP exactly → NOT aligned (strict inequality)."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_MID_ALIGNED", description="test", definition="orb_mid")
+        row = {
+            "orb_NYSE_OPEN_vwap": 100.0,
+            "orb_NYSE_OPEN_high": 105.0,
+            "orb_NYSE_OPEN_low": 95.0,  # mid = 100.0 == VWAP
+            "orb_NYSE_OPEN_break_dir": "long",
+        }
+        assert f.matches_row(row, "NYSE_OPEN") is False
+
+    def test_invalid_definition_raises(self):
+        """Invalid definition string → ValueError at construction."""
+        with pytest.raises(ValueError, match="must be"):
+            VWAPBreakDirectionFilter(filter_type="BAD", description="test", definition="invalid")
+
+    # --- registration ---
+
+    def test_registered_in_all_filters(self):
+        """Both VWAP filters must be in ALL_FILTERS."""
+        assert "VWAP_MID_ALIGNED" in ALL_FILTERS
+        assert "VWAP_BP_ALIGNED" in ALL_FILTERS
+
+    def test_not_in_base_grid(self):
+        """VWAP filters are hypothesis-scoped, not base grid."""
+        from trading_app.config import BASE_GRID_FILTERS
+        assert "VWAP_MID_ALIGNED" not in BASE_GRID_FILTERS
+        assert "VWAP_BP_ALIGNED" not in BASE_GRID_FILTERS
+
+    def test_describe_returns_atoms(self):
+        """describe() returns non-empty atom list with correct category."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_MID_ALIGNED", description="test", definition="orb_mid")
+        row = {
+            "orb_NYSE_OPEN_vwap": 100.0,
+            "orb_NYSE_OPEN_high": 110.0,
+            "orb_NYSE_OPEN_low": 95.0,
+            "orb_NYSE_OPEN_break_dir": "long",
+        }
+        atoms = f.describe(row, "NYSE_OPEN", "E2")
+        assert len(atoms) == 1
+        assert atoms[0].category == "INTRA_SESSION"
+        assert atoms[0].resolves_at == "BREAK_DETECTED"
+        assert atoms[0].passes is True
+
+    def test_frozen(self):
+        """Filter is immutable."""
+        f = VWAPBreakDirectionFilter(filter_type="VWAP_MID_ALIGNED", description="test", definition="orb_mid")
+        with pytest.raises(AttributeError):
+            f.definition = "break_price"  # type: ignore[misc]
