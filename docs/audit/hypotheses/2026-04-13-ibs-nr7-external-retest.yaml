@@ -1,0 +1,94 @@
+# Hypothesis Registry — IBS/NR7 External Claim Verification
+#
+# Locked:       2026-04-13T13:30:00+10:00
+# Author:       Claude Code session (external claim retest)
+# Holdout mode: A (2026-01-01 sacred)
+# Data horizon: MNQ/MES 6.65yr clean (2019-05-06 → 2025-12-31)
+#               MGC 2.70yr clean (2023-09-11 → 2025-12-31)
+#
+# PURPOSE: Formally verify or kill external claims of t=4.65 (IBS) and
+# t=3.13 (NR7) against our pipeline with holdout enforcement and BH FDR.
+# Both features are currently NO-GO in Blueprint SS5 (lines 279-280).
+# Prior test had a specification gap: tested at RR2.0 only.
+#
+# Theory citation:
+#   IBS: Crabel 1990 "Day Trading with Short Term Price Patterns" —
+#        NOT IN LOCAL resources/. Training memory only (UNSUPPORTED per
+#        local grounding rule). Kinlay, Quantified Strategies: IBS
+#        mean-reversion works on equities. Untested on CME micro futures ORB.
+#   NR7: Crabel 1990 — same. NR7 designed for 6.5h equity sessions.
+#        23h CME futures dilute the contraction signal (fire rate 33% vs 14%).
+#
+# PRIOR NO-GO EVIDENCE (Blueprint SS5):
+#   IBS (line 280): "No monotonic quartile effect. Scattered single-quartile
+#       hits noise from 135+ comparisons. E2/CB1, RR2.0."
+#   NR7 (line 279): "NR4 fires 50%, NR7 fires 33%. Lift direction flips
+#       across instruments/sessions. E2/CB1, RR2.0."
+#
+# SPECIFICATION GAP IDENTIFIED:
+#   Prior test was RR2.0 only. IBS is a direction signal (mean-reversion);
+#   RR1.0 (direction-dominant) is the natural specification. Pre-query
+#   shows MNQ CME_PRECLOSE O15 RR1.0 Q1 at t=6.78 in-sample.
+#
+# HOLDOUT PRE-CHECK (not for selection — directional consistency only):
+#   IBS Q1 at CME_PRECLOSE O15 RR1.0: MNQ -0.518 (N=12), MES -0.442 (N=13).
+#   Both REVERSE from in-sample. Tiny N but direction is wrong on both.
+#
+# Kill criteria:
+#   IBS: 0 survivors at BH FDR K=total_tests, OR holdout directionally
+#        inconsistent on top survivor, OR direction flips across >=3 sessions
+#   NR7: Direction flips persist across >=3 sessions per instrument, OR
+#        fire rate >25% (Crabel designed for ~14%)
+
+testing_mode: family
+total_expected_trials: 96
+
+hypotheses:
+  - id: H1_IBS_QUARTILE
+    description: >
+      IBS (prev-day Internal Bar Strength) quartile predicts ORB breakout
+      PnL. Q1 (closed near low, bearish exhaustion) predicts higher next-day
+      breakout returns (mean-reversion mechanism).
+    feature: "(prev_day_close - prev_day_low) / (prev_day_high - prev_day_low)"
+    test_spec: "Quartile split, mean PnL_R per quartile, monotonicity test"
+    instruments: [MNQ, MES, MGC]
+    sessions: all_active
+    apertures: [5, 15]
+    rr_targets: [1.0, 1.5, 2.0]
+    entry_model: E2
+    confirm_bars: 1
+    kill_if: "No session shows monotonic Q1>Q2>Q3>Q4 at BH FDR K"
+
+  - id: H2_IBS_CONTINUOUS
+    description: >
+      Continuous IBS value negatively correlates with ORB PnL_R
+      (lower IBS = higher returns). Tests linear relationship, not
+      just extreme quartiles.
+    feature: "Same as H1"
+    test_spec: "Pearson/Spearman r(IBS, PnL_R) per instrument x session"
+    kill_if: "|r| < 0.05 in all combinations"
+
+  - id: H3_NR7_STANDARD
+    description: >
+      NR7 days (prev-day range is narrowest of last 7) predict higher
+      ORB breakout returns due to contraction-expansion mechanism.
+    feature: "prev_day_range == min(prev_day_range, lag 0..6)"
+    test_spec: "Mean PnL_R lift (NR7=True - baseline), Welch t-test"
+    instruments: [MNQ, MES, MGC]
+    sessions: all_active
+    apertures: [15]
+    rr_targets: [1.0, 1.5, 2.0]
+    entry_model: E2
+    confirm_bars: 1
+    fire_rate_kill: ">25% = structurally wrong for futures"
+    kill_if: "Direction flips across >=3 sessions per instrument"
+
+  - id: H4_NR7_SESSION_RANGE
+    description: >
+      NR7 computed on session-specific ORB size (not daily range) may
+      restore Crabel's intended contraction signal for intraday sessions.
+      Tests the Blueprint reopen condition: "volatility-adjusted NR
+      definition specific to futures."
+    feature: "orb_{session}_size == min(orb_{session}_size, lag 0..6)"
+    test_spec: "Same as H3 but using session ORB size"
+    kill_if: "Same criteria as H3"
