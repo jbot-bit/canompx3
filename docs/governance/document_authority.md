@@ -25,6 +25,7 @@ to mean, and what it is not allowed to mean.
 | `docs/plans/` | design history and active decisions | durable design decisions and rationale while active and not archived | live runtime truth when code or DB disagree |
 | `docs/ARCHITECTURE.md` | operational reference guide | command reference and orientation when consistent with code | current runtime truth when code/DB disagree |
 | `docs/MONOREPO_ARCHITECTURE.md` | monorepo orientation reference | service inventory and repository navigation | current DB location, canonical runtime policy, live deployment semantics |
+| `docs/context/*.md` | generated task-routing orientation | deterministic task-context views when rendered from `context/registry.py` | live runtime truth by itself; policy beyond the canonical doctrine docs |
 | `REPO_MAP.md` | generated inventory | file/directory layout snapshot generated from the repo | behavior, policy, runtime state |
 
 ## Conflict rules

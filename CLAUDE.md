@@ -20,6 +20,31 @@ Canonical registry for document roles: `docs/governance/document_authority.md`.
 
 **Cross-tool state:** `HANDOFF.md` + `docs/plans/` — read on session start. May be stale: repo/DB is truth over docs. `REPO_MAP.md` = auto-generated file inventory. `docs/institutional/HANDOFF.md` — Phase 0 literature grounding status (2026-04-07).
 
+## Task Routing
+
+For non-trivial repo tasks, do not rely on `CLAUDE.md` alone as the task
+router.
+
+Resolve the task first:
+
+`python scripts/tools/context_resolver.py --task "<user request>" --format markdown`
+
+The resolver is the deterministic front door for:
+
+- which doctrine to read
+- which code/data files are canonical
+- which live views to query
+- which surfaces are explicitly not live truth
+- which verification profile applies
+
+If the resolver is unavailable or ambiguous, fall back to:
+
+- `AGENTS.md`
+- `docs/governance/document_authority.md`
+- `docs/governance/system_authority_map.md`
+- `scripts/tools/system_context.py`
+- `scripts/tools/project_pulse.py`
+
 ---
 
 ## Architecture

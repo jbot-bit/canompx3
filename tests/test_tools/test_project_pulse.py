@@ -20,10 +20,10 @@ from scripts.tools.project_pulse import (
     build_pulse,
     collect_action_queue,
     collect_deployment_state,
-    collect_lifecycle_control,
     collect_drift,
     collect_git_state,
     collect_handoff,
+    collect_lifecycle_control,
     collect_pause_state,
     collect_ralph_deferred,
     collect_session_claims,
@@ -373,9 +373,7 @@ class TestCollectStaleness:
         surface — only the validated_setups entry is filtered."""
         db_path = tmp_path / "gold.db"
         db_path.touch()
-        mock_engine = MagicMock(
-            return_value={"stale_steps": ["validated_setups", "outcome_builder"]}
-        )
+        mock_engine = MagicMock(return_value={"stale_steps": ["validated_setups", "outcome_builder"]})
         mock_asset_configs = MagicMock()
         mock_asset_configs.ACTIVE_ORB_INSTRUMENTS = ["MGC"]
         mock_asset_configs.DEPLOYABLE_ORB_INSTRUMENTS = []
@@ -452,9 +450,7 @@ class TestCollectFitnessFastDeployable:
         with (
             patch.dict("sys.modules", {"pipeline.asset_configs": mock_asset_configs}),
             patch("duckdb.connect", return_value=mock_con),
-            patch.object(
-                project_pulse, "deployable_validated_relation", return_value="vs"
-            ),
+            patch.object(project_pulse, "deployable_validated_relation", return_value="vs"),
         ):
             summary, items = collect_fitness_fast(db_path)
         # MES + MNQ both covered → no alerts. MGC not in DEPLOYABLE → not alerted.
@@ -478,9 +474,7 @@ class TestCollectFitnessFastDeployable:
         with (
             patch.dict("sys.modules", {"pipeline.asset_configs": mock_asset_configs}),
             patch("duckdb.connect", return_value=mock_con),
-            patch.object(
-                project_pulse, "deployable_validated_relation", return_value="vs"
-            ),
+            patch.object(project_pulse, "deployable_validated_relation", return_value="vs"),
         ):
             summary, items = collect_fitness_fast(db_path)
         assert summary == {"MES": {"active_strategies": 2}}
@@ -666,7 +660,6 @@ def _sample_report() -> PulseReport:
             "db_override_active": False,
             "live_journal_db_path": "/repo/live_journal.db",
             "active_orb_instruments": ["MES", "MGC", "MNQ"],
-            "active_profiles": ["topstep_50k_mnq_auto"],
             "authority_map_doc": "docs/governance/system_authority_map.md",
             "doctrine_docs": ["CLAUDE.md", "TRADING_RULES.md"],
             "backbone_modules": ["pipeline/system_authority.py", "pipeline/db_contracts.py"],
@@ -776,7 +769,6 @@ class TestCollectSystemIdentity:
         snapshot.db.db_override_active = False
         snapshot.db.live_journal_db_path = "/repo/live_journal.db"
         snapshot.authority.active_orb_instruments = ["MGC", "MNQ"]
-        snapshot.authority.active_profiles = ["topstep_50k_mnq_auto"]
         snapshot.authority.authority_map_doc = "docs/governance/system_authority_map.md"
         snapshot.authority.doctrine_docs = ["CLAUDE.md", "TRADING_RULES.md"]
         snapshot.authority.backbone_modules = ["pipeline/system_authority.py", "pipeline/system_context.py"]

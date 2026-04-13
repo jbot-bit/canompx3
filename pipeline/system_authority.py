@@ -29,6 +29,8 @@ DOCTRINE_DOCS: tuple[str, ...] = (
 SYSTEM_AUTHORITY_BACKBONE_MODULES: tuple[str, ...] = (
     "pipeline/system_authority.py",
     "pipeline/system_context.py",
+    "context/institutional.py",
+    "context/registry.py",
     "pipeline/db_contracts.py",
     "trading_app/holdout_policy.py",
     "trading_app/validated_shelf.py",
@@ -64,6 +66,8 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
         examples=(
             "pipeline/system_authority.py",
             "pipeline/system_context.py",
+            "context/institutional.py",
+            "context/registry.py",
             "pipeline/asset_configs.py",
             "pipeline/cost_model.py",
             "pipeline/dst.py",
@@ -93,6 +97,8 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
             "trading_app/validated_shelf.py",
             "DB views active_validated_setups and deployable_validated_setups",
             "scripts/tools/project_pulse.py",
+            "scripts/tools/context_views.py",
+            "scripts/tools/context_resolver.py",
         ),
         mutation_rule="Readers consume these instead of rebuilding semantics ad hoc",
     ),
@@ -137,6 +143,9 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
             "docs/MONOREPO_ARCHITECTURE.md",
             "REPO_MAP.md",
             "docs/governance/system_authority_map.md",
+            "docs/context/task-routes.md",
+            "docs/context/source-catalog.md",
+            "docs/context/institutional-contracts.md",
         ),
         mutation_rule="Must be marked non-authoritative and kept linked/generated",
     ),
@@ -158,6 +167,18 @@ CANONICAL_TRUTH_MAP: tuple[CanonicalTruthEntry, ...] = (
     CanonicalTruthEntry(
         "What is the canonical repo/dev control-plane context?",
         "pipeline/system_context.py + scripts/tools/system_context.py",
+    ),
+    CanonicalTruthEntry(
+        "What are the project's institutional concepts, decision protocols, and answer contracts?",
+        "context/institutional.py",
+    ),
+    CanonicalTruthEntry(
+        "How should a cold-start agent route task context?",
+        "context/registry.py + scripts/tools/context_resolver.py",
+    ),
+    CanonicalTruthEntry(
+        "What is the current task-scoped live context for research, trading, or verification work?",
+        "scripts/tools/context_views.py",
     ),
     CanonicalTruthEntry(
         "What is planning vs current implementation?",

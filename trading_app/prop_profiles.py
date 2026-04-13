@@ -407,7 +407,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "NYSE_OPEN",
                 "COMEX_SETTLE",
                 "CME_PRECLOSE",
-                "SINGAPORE_OPEN",
+                "US_DATA_1000",
             }
         ),
         allowed_instruments=frozenset({"MNQ"}),

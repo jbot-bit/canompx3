@@ -2125,7 +2125,16 @@ def check_active_micro_only_filters_after_micro_launch(con=None) -> list[str]:
             return violations
 
         resolver = StrategyTradeWindowResolver(con)
-        for strategy_id, instrument, orb_label, orb_minutes, entry_model, rr_target, confirm_bars, filter_type in micro_rows:
+        for (
+            strategy_id,
+            instrument,
+            orb_label,
+            orb_minutes,
+            entry_model,
+            rr_target,
+            confirm_bars,
+            filter_type,
+        ) in micro_rows:
             trade_window = resolver.resolve(
                 instrument=instrument,
                 orb_label=orb_label,
@@ -2198,8 +2207,7 @@ def check_active_native_promotion_provenance_populated(con=None) -> list[str]:
 
         if not _table_exists(con, "validation_run_log"):
             violations.append(
-                "  validation_run_log: missing table required for native promotion "
-                "provenance linkage checks."
+                "  validation_run_log: missing table required for native promotion provenance linkage checks."
             )
             return violations
 
@@ -2231,8 +2239,7 @@ def check_active_native_promotion_provenance_populated(con=None) -> list[str]:
                 missing.append("trade_day_count")
             if missing:
                 violations.append(
-                    f"  validated_setups: active native row {sid} missing "
-                    f"promotion provenance fields: {missing}"
+                    f"  validated_setups: active native row {sid} missing promotion provenance fields: {missing}"
                 )
                 continue
 
@@ -3780,8 +3787,7 @@ def check_holdout_policy_declaration_consistency() -> list[str]:
         import trading_app.holdout_policy as _hp
     except ImportError as e:
         return [
-            f"  HOLDOUT POLICY CANONICAL SOURCE MISSING: {e}. "
-            "Expected trading_app/holdout_policy.py per Amendment 2.7."
+            f"  HOLDOUT POLICY CANONICAL SOURCE MISSING: {e}. Expected trading_app/holdout_policy.py per Amendment 2.7."
         ]
 
     required_exports = ("HOLDOUT_SACRED_FROM", "HOLDOUT_GRANDFATHER_CUTOFF", "enforce_holdout_date")
@@ -3914,16 +3920,31 @@ def check_filter_self_description_coverage() -> list[str]:
     # this drift check must update in lock-step (single source of truth is
     # the enum; this set is the contract-level mirror for pipeline-side
     # validation without a cross-package import).
-    _VALID_CATEGORIES = frozenset({
-        "PRE_SESSION", "INTRA_SESSION", "OVERLAY", "DIRECTIONAL",
-    })
-    _VALID_RESOLVES_AT = frozenset({
-        "STARTUP", "ORB_FORMATION", "BREAK_DETECTED",
-        "CONFIRM_COMPLETE", "TRADE_ENTERED",
-    })
-    _VALID_CONFIDENCE_TIERS = frozenset({
-        "PROVEN", "PLAUSIBLE", "LEGACY", "UNKNOWN",
-    })
+    _VALID_CATEGORIES = frozenset(
+        {
+            "PRE_SESSION",
+            "INTRA_SESSION",
+            "OVERLAY",
+            "DIRECTIONAL",
+        }
+    )
+    _VALID_RESOLVES_AT = frozenset(
+        {
+            "STARTUP",
+            "ORB_FORMATION",
+            "BREAK_DETECTED",
+            "CONFIRM_COMPLETE",
+            "TRADE_ENTERED",
+        }
+    )
+    _VALID_CONFIDENCE_TIERS = frozenset(
+        {
+            "PROVEN",
+            "PLAUSIBLE",
+            "LEGACY",
+            "UNKNOWN",
+        }
+    )
     violations: list[str] = []
     try:
         from trading_app.config import (
@@ -3978,24 +3999,19 @@ def check_filter_self_description_coverage() -> list[str]:
             try:
                 atoms = leaf.describe(sample_row, "CME_REOPEN", "E2")
             except Exception as exc:
-                violations.append(
-                    f"  {filter_type} ({cls_name}): describe() raised "
-                    f"{type(exc).__name__}: {exc}"
-                )
+                violations.append(f"  {filter_type} ({cls_name}): describe() raised {type(exc).__name__}: {exc}")
                 continue
 
             if not isinstance(atoms, list):
                 violations.append(
-                    f"  {filter_type} ({cls_name}): describe() returned "
-                    f"{type(atoms).__name__}, expected list"
+                    f"  {filter_type} ({cls_name}): describe() returned {type(atoms).__name__}, expected list"
                 )
                 continue
 
             # NoFilter is the only filter allowed zero atoms.
             if not atoms and not isinstance(leaf, NoFilter):
                 violations.append(
-                    f"  {filter_type} ({cls_name}): describe() returned empty "
-                    f"list — only NoFilter may have zero atoms"
+                    f"  {filter_type} ({cls_name}): describe() returned empty list — only NoFilter may have zero atoms"
                 )
                 continue
 
@@ -4158,9 +4174,7 @@ def check_canonical_source_annotations() -> list[str]:
                     except ValueError:
                         # Test fixtures may live outside PROJECT_ROOT (tmp_path)
                         rel_path = py_file.as_posix()
-                    violations.append(
-                        f"{rel_path}:{line_no}: @canonical-source points to missing file: {ref}"
-                    )
+                    violations.append(f"{rel_path}:{line_no}: @canonical-source points to missing file: {ref}")
     return violations
 
 
@@ -4227,12 +4241,12 @@ def check_no_silent_break_ts_fallback() -> list[str]:
     """
     violations = []
     forbidden_patterns = [
-        ("if orb_end_utc is not None else break_ts",
-         "silent fallback to break_ts — re-creates Stage 5 lookahead bias"),
-        ("orb_end_utc or break_ts",
-         "shorthand silent fallback to break_ts — re-creates Stage 5 lookahead bias"),
-        ("= break_ts - timedelta(minutes=break_delay)",
-         "L782-style derivation from break_delay_min — re-creates Stage 5 lookahead bias"),
+        ("if orb_end_utc is not None else break_ts", "silent fallback to break_ts — re-creates Stage 5 lookahead bias"),
+        ("orb_end_utc or break_ts", "shorthand silent fallback to break_ts — re-creates Stage 5 lookahead bias"),
+        (
+            "= break_ts - timedelta(minutes=break_delay)",
+            "L782-style derivation from break_delay_min — re-creates Stage 5 lookahead bias",
+        ),
     ]
     target = TRADING_APP_DIR / "outcome_builder.py"
     if not target.exists():
@@ -4249,9 +4263,7 @@ def check_no_silent_break_ts_fallback() -> list[str]:
                 rel: Path | str = target.relative_to(PROJECT_ROOT)
             except ValueError:
                 rel = target  # tmp_path during testing — fall back to absolute
-            violations.append(
-                f"  {rel}:{line_no} — forbidden pattern '{needle}': {reason}"
-            )
+            violations.append(f"  {rel}:{line_no} — forbidden pattern '{needle}': {reason}")
     return violations
 
 
@@ -4433,8 +4445,7 @@ def check_phase_4_sha_integrity(con=None) -> list[str]:
             db_path = _get_db_path()
             if not db_path.exists():
                 return [
-                    "  PHASE 4 SHA INTEGRITY SKIPPED: gold.db not found — "
-                    "cannot verify hypothesis file SHA integrity"
+                    "  PHASE 4 SHA INTEGRITY SKIPPED: gold.db not found — cannot verify hypothesis file SHA integrity"
                 ]
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
@@ -4532,8 +4543,7 @@ def check_prop_profiles_validated_alignment(con=None) -> list[str]:
 
         has_scope = validated_setups_has_deployment_scope(con)
         lane_query = (
-            "SELECT status, LOWER(COALESCE(deployment_scope, 'deployable')) "
-            "FROM validated_setups WHERE strategy_id = ?"
+            "SELECT status, LOWER(COALESCE(deployment_scope, 'deployable')) FROM validated_setups WHERE strategy_id = ?"
             if has_scope
             else "SELECT status, NULL FROM validated_setups WHERE strategy_id = ?"
         )
@@ -4593,9 +4603,7 @@ def check_validated_setups_writer_allowlist() -> list[str]:
         Path("scripts/tools/backfill_dollar_columns.py"),
         Path("scripts/tools/migrate_fairness_audit.py"),
     }
-    allowed_prefixes = (
-        Path("scripts/migrations"),
-    )
+    allowed_prefixes = (Path("scripts/migrations"),)
     write_pattern = re.compile(
         r"\b(?:INSERT(?:\s+OR\s+REPLACE)?\s+INTO|UPDATE|DELETE\s+FROM)\s+validated_setups\b",
         re.IGNORECASE,
@@ -4611,9 +4619,7 @@ def check_validated_setups_writer_allowlist() -> list[str]:
             content = fpath.read_text(encoding="utf-8")
             for idx, line in enumerate(content.splitlines(), 1):
                 if write_pattern.search(line):
-                    violations.append(
-                        f"  {rel}:{idx}: writes validated_setups outside canonical allowlist"
-                    )
+                    violations.append(f"  {rel}:{idx}: writes validated_setups outside canonical allowlist")
 
     return violations
 
@@ -4660,18 +4666,12 @@ def check_critical_deployable_shelf_consumers() -> list[str]:
             continue
         rel = fpath.relative_to(PROJECT_ROOT)
         content = fpath.read_text(encoding="utf-8")
-        uses_relation_helper = (
-            "deployable_validated_relation" in content or "active_validated_relation" in content
-        )
+        uses_relation_helper = "deployable_validated_relation" in content or "active_validated_relation" in content
         uses_explicit_scope = "deployment_scope" in content
         if rel in relation_required and not uses_relation_helper:
-            violations.append(
-                f"  {rel}: critical validated_setups reader must use published relation helper"
-            )
+            violations.append(f"  {rel}: critical validated_setups reader must use published relation helper")
         elif rel == Path("trading_app/ai/sql_adapter.py") and not (uses_relation_helper or uses_explicit_scope):
-            violations.append(
-                f"  {rel}: critical validated_setups reader lacks canonical deployable-shelf semantics"
-            )
+            violations.append(f"  {rel}: critical validated_setups reader lacks canonical deployable-shelf semantics")
         if rel != Path("trading_app/ai/sql_adapter.py"):
             lines = content.splitlines()
             for idx, line in enumerate(lines, 1):
@@ -4682,9 +4682,7 @@ def check_critical_deployable_shelf_consumers() -> list[str]:
                 block = "\n".join(lines[start:end])
                 if "validated_setups" not in block:
                     continue
-                violations.append(
-                    f"  {rel}:{idx}: raw status='active' predicate in critical shelf reader"
-                )
+                violations.append(f"  {rel}:{idx}: raw status='active' predicate in critical shelf reader")
 
     return violations
 
@@ -4709,13 +4707,12 @@ def check_document_authority_registry() -> list[str]:
         "docs/governance/system_authority_map.md",
         "docs/ARCHITECTURE.md",
         "docs/MONOREPO_ARCHITECTURE.md",
+        "docs/context/*.md",
         "REPO_MAP.md",
     ]
     for ref in required_registry_refs:
         if ref not in registry_text:
-            violations.append(
-                f"  docs/governance/document_authority.md missing registry reference {ref!r}"
-            )
+            violations.append(f"  docs/governance/document_authority.md missing registry reference {ref!r}")
 
     required_markers = {
         Path("CLAUDE.md"): "## Document Authority",
@@ -4759,6 +4756,95 @@ def check_system_authority_map() -> list[str]:
     return violations
 
 
+def check_context_routing_registry() -> list[str]:
+    """Task-context registry must resolve to real paths and known domain/profile IDs."""
+    from context.registry import validate_registry
+
+    return [f"  {violation}" for violation in validate_registry()]
+
+
+def check_context_generated_docs() -> list[str]:
+    """Generated context-routing docs must stay in sync with the canonical registry."""
+    from context.registry import (
+        render_institutional_markdown,
+        render_readme_markdown,
+        render_source_catalog_markdown,
+        render_task_routes_markdown,
+    )
+
+    expected_by_path = {
+        PROJECT_ROOT / "docs" / "context" / "README.md": render_readme_markdown(),
+        PROJECT_ROOT / "docs" / "context" / "source-catalog.md": render_source_catalog_markdown(),
+        PROJECT_ROOT / "docs" / "context" / "task-routes.md": render_task_routes_markdown(),
+        PROJECT_ROOT / "docs" / "context" / "institutional-contracts.md": render_institutional_markdown(),
+    }
+    violations: list[str] = []
+    for path, expected in expected_by_path.items():
+        if not path.exists():
+            violations.append(f"  {path.relative_to(PROJECT_ROOT)} missing")
+            continue
+        content = path.read_text(encoding="utf-8")
+        if content != expected:
+            violations.append(
+                f"  {path.relative_to(PROJECT_ROOT)} drifted from context/registry.py; "
+                "re-render via scripts/tools/render_context_catalog.py"
+            )
+    return violations
+
+
+def check_context_view_contracts() -> list[str]:
+    """Generated task views must preserve strict truth-class boundaries."""
+    from scripts.tools.context_views import VIEW_BUILDERS, build_view, validate_view_payload
+
+    violations: list[str] = []
+    db_path = PROJECT_ROOT / "data" / "gold.db"
+    for view in VIEW_BUILDERS:
+        try:
+            payload = build_view(view, PROJECT_ROOT, db_path)
+        except Exception as exc:
+            violations.append(f"  context view {view} failed to build: {type(exc).__name__}: {exc}")
+            continue
+        for violation in validate_view_payload(payload):
+            violations.append(f"  context view {view}: {violation}")
+    return violations
+
+
+def check_agents_mentions_context_resolver() -> list[str]:
+    """AGENTS.md should point cold-start agents to the deterministic context resolver."""
+    agents_path = PROJECT_ROOT / "AGENTS.md"
+    if not agents_path.exists():
+        return ["  AGENTS.md missing"]
+    content = agents_path.read_text(encoding="utf-8")
+    required_refs = [
+        "scripts/tools/context_resolver.py",
+        "docs/governance/document_authority.md",
+        "docs/governance/system_authority_map.md",
+    ]
+    violations: list[str] = []
+    for ref in required_refs:
+        if ref not in content:
+            violations.append(f"  AGENTS.md missing context-routing reference {ref!r}")
+    return violations
+
+
+def check_startup_docs_reference_context_router() -> list[str]:
+    """Startup/orientation docs must point non-trivial tasks at the deterministic router."""
+    docs = {
+        PROJECT_ROOT / "CLAUDE.md": ["scripts/tools/context_resolver.py", "## Task Routing"],
+        PROJECT_ROOT / "CODEX.md": ["scripts/tools/context_resolver.py"],
+    }
+    violations: list[str] = []
+    for path, markers in docs.items():
+        if not path.exists():
+            violations.append(f"  {path.relative_to(PROJECT_ROOT)} missing")
+            continue
+        content = path.read_text(encoding="utf-8")
+        for marker in markers:
+            if marker not in content:
+                violations.append(f"  {path.relative_to(PROJECT_ROOT)} missing context-router marker {marker!r}")
+    return violations
+
+
 def check_live_audit_uses_runtime_authority() -> list[str]:
     """Phase 7 audit must use runtime profile lanes + deployable shelf, not deprecated LIVE_PORTFOLIO."""
     audit_path = SCRIPTS_DIR / "audits" / "phase_7_live_trading.py"
@@ -4768,9 +4854,7 @@ def check_live_audit_uses_runtime_authority() -> list[str]:
     content = audit_path.read_text(encoding="utf-8")
     violations: list[str] = []
     if "LIVE_PORTFOLIO" in content:
-        violations.append(
-            "  scripts/audits/phase_7_live_trading.py still references deprecated LIVE_PORTFOLIO"
-        )
+        violations.append("  scripts/audits/phase_7_live_trading.py still references deprecated LIVE_PORTFOLIO")
     if "get_active_profile_ids" not in content or "get_profile_lane_definitions" not in content:
         violations.append(
             "  scripts/audits/phase_7_live_trading.py must source active runtime lanes from trading_app.prop_profiles"
@@ -4799,9 +4883,7 @@ def check_project_pulse_uses_authority_registry() -> list[str]:
     ]
     for ref in required_refs:
         if ref not in content:
-            violations.append(
-                f"  scripts/tools/project_pulse.py missing canonical identity reference {ref!r}"
-            )
+            violations.append(f"  scripts/tools/project_pulse.py missing canonical identity reference {ref!r}")
     return violations
 
 
@@ -4828,10 +4910,14 @@ def check_shared_profile_fingerprint_canonical() -> list[str]:
         text = path.read_text(encoding="utf-8", errors="replace")
         runtime_defs += text.count("def build_profile_fingerprint(")
     if runtime_defs != 1:
-        violations.append(f"  Expected exactly one runtime build_profile_fingerprint() definition, found {runtime_defs}")
+        violations.append(
+            f"  Expected exactly one runtime build_profile_fingerprint() definition, found {runtime_defs}"
+        )
 
     if "from trading_app.derived_state import build_profile_fingerprint" not in account_text:
-        violations.append("  trading_app/account_survival.py must import build_profile_fingerprint from trading_app.derived_state")
+        violations.append(
+            "  trading_app/account_survival.py must import build_profile_fingerprint from trading_app.derived_state"
+        )
 
     return violations
 
@@ -4879,7 +4965,9 @@ def check_sr_state_contract_reader() -> list[str]:
         return ["  scripts/tools/project_pulse.py missing collect_sr_state()"]
 
     collect_text = pulse_text[
-        collect_idx : pulse_text.find("\ndef ", collect_idx + 1) if pulse_text.find("\ndef ", collect_idx + 1) != -1 else None
+        collect_idx : pulse_text.find("\ndef ", collect_idx + 1)
+        if pulse_text.find("\ndef ", collect_idx + 1) != -1
+        else None
     ]
     uses_shared_reader = "read_criterion12_state" in collect_text
     validates_locally = "validate_state_envelope(" in collect_text and 'payload.get("results"' in collect_text
@@ -4902,8 +4990,9 @@ def check_sr_state_contract_reader() -> list[str]:
             violations.append("  trading_app.lifecycle_state.read_criterion12_state() missing")
             return violations
         reader_text = lifecycle_text[
-            reader_idx
-            : lifecycle_text.find("\ndef ", reader_idx + 1) if lifecycle_text.find("\ndef ", reader_idx + 1) != -1 else None
+            reader_idx : lifecycle_text.find("\ndef ", reader_idx + 1)
+            if lifecycle_text.find("\ndef ", reader_idx + 1) != -1
+            else None
         ]
         if "validate_state_envelope(" not in reader_text:
             violations.append(
@@ -5012,11 +5101,7 @@ def check_deployable_subset_of_active() -> list[str]:
     # (default or explicit) but somehow didn't make it into the derived list.
     # Catches anyone who manually builds DEPLOYABLE_ORB_INSTRUMENTS in the
     # future and drops a valid entry.
-    expected_deployable = {
-        k
-        for k in active_set
-        if ASSET_CONFIGS[k].get("deployable_expected", True)
-    }
+    expected_deployable = {k for k in active_set if ASSET_CONFIGS[k].get("deployable_expected", True)}
     missing = expected_deployable - deployable_set
     if missing:
         violations.append(
@@ -5347,11 +5432,46 @@ CHECKS = [
     ("SR state writer uses derived-state contract envelope", check_sr_state_contract_writer, False, False),
     ("SR state reader validates envelope before trust", check_sr_state_contract_reader, False, False),
     ("Preflight launchers pass explicit claim modes", check_preflight_launcher_modes, False, False),
-    ("Document authority registry exists and core docs advertise their roles", check_document_authority_registry, False, False),
+    (
+        "Document authority registry exists and core docs advertise their roles",
+        check_document_authority_registry,
+        False,
+        False,
+    ),
     ("System authority map exists and classifies linked truth surfaces", check_system_authority_map, False, False),
+    (
+        "Context-routing registry resolves only to valid domains, profiles, views, and files",
+        check_context_routing_registry,
+        False,
+        False,
+    ),
+    ("Generated context-routing docs stay in sync with the registry", check_context_generated_docs, False, False),
+    ("Generated task views preserve strict truth-class boundaries", check_context_view_contracts, False, False),
+    (
+        "AGENTS.md points cold-start agents to the deterministic context router",
+        check_agents_mentions_context_resolver,
+        False,
+        False,
+    ),
+    (
+        "Startup docs point non-trivial tasks at the deterministic context router",
+        check_startup_docs_reference_context_router,
+        False,
+        False,
+    ),
     ("Phase 7 live audit uses canonical runtime authorities", check_live_audit_uses_runtime_authority, False, False),
-    ("Project pulse exposes repo identity from canonical authority registry", check_project_pulse_uses_authority_registry, False, False),
-    ("DEPLOYABLE_ORB_INSTRUMENTS is a strict subset of ACTIVE_ORB_INSTRUMENTS", check_deployable_subset_of_active, False, False),
+    (
+        "Project pulse exposes repo identity from canonical authority registry",
+        check_project_pulse_uses_authority_registry,
+        False,
+        False,
+    ),
+    (
+        "DEPLOYABLE_ORB_INSTRUMENTS is a strict subset of ACTIVE_ORB_INSTRUMENTS",
+        check_deployable_subset_of_active,
+        False,
+        False,
+    ),
 ]  # end CHECKS
 
 

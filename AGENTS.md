@@ -23,6 +23,8 @@ Don't ask permission. Just do it.
 
 - `CLAUDE.md` and `.claude/` are the canonical project intelligence for this workspace
 - `CODEX.md` and `.codex/` are allowed as a separate Codex-only adapter layer, but they must not replace or rename the Claude layer
+- For scoped repo tasks, prefer `python scripts/tools/context_resolver.py --task "<request>"` to get the exact read set and live views for that task.
+- If the resolver is unavailable or ambiguous, fall back to: `AGENTS.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`, `scripts/tools/system_context.py`, and `scripts/tools/project_pulse.py`.
 
 ## Cross-Tool Coordination (Claude Code + Codex)
 

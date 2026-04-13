@@ -2,6 +2,13 @@
 
 The user does NOT type `/skill` commands. Claude invokes skills proactively based on context.
 
+Before routing a non-trivial repo task, prefer the deterministic repo router:
+
+`python scripts/tools/context_resolver.py --task "<user request>" --format markdown`
+
+Use it to scope what should be read first. Skill routing then operates inside
+that scoped context instead of replacing it.
+
 ## Auto-Triggers
 
 Match by INTENT, not exact words. ADHD-friendly — user phrases things casually.

@@ -40,8 +40,13 @@ Default read set:
 7. `CLAUDE.md`
 8. `CODEX.md`
 
-Then load only the smallest extra `.claude/` or `.codex/` docs needed for the
-task.
+Then, for any non-trivial repo task, resolve task context before loading extra
+docs:
+
+- `./.venv-wsl/bin/python scripts/tools/context_resolver.py --task "<user request>" --format markdown`
+
+Then load only the smallest extra `.claude/` or `.codex/` docs the route calls
+for.
 
 ## Authority
 

@@ -2417,6 +2417,144 @@ class PitRangeFilter(StrategyFilter):
 
 
 @dataclass(frozen=True)
+class VWAPBreakDirectionFilter(StrategyFilter):
+    """Filter by VWAP alignment with breakout direction.
+
+    Passes when the breakout direction aligns with the ORB's position
+    relative to pre-session VWAP:
+    - Long break: reference price > VWAP (ORB formed above institutional avg)
+    - Short break: reference price < VWAP (ORB formed below institutional avg)
+
+    Two definitions for the reference price:
+    - 'orb_mid': (orb_high + orb_low) / 2 — center of the ORB range
+    - 'break_price': orb_high (longs) or orb_low (shorts) — the break level itself
+
+    Resolves at break time (INTRA_SESSION): requires break_dir, which is
+    determined when the ORB level is breached. Pre-session VWAP is already
+    known, so the only at-break input is the direction.
+
+    Zero look-ahead: VWAP is pre-session (computed from trading day start to
+    ORB window start, build_daily_features.py lines 990-998). ORB range and
+    break_dir are known at entry time.
+
+    Fail-closed: missing VWAP, ORB range, or break_dir = ineligible day.
+
+    Exhaustive audit (2026-04-13): 425 cross-family tests, K=425 BH FDR.
+    4 survivors — MNQ US_DATA_1000 O15 (orb_mid, p=0.00008/0.0002) and
+    MNQ CME_PRECLOSE O5 (break_price, p=0.002). Not confounded with gap
+    direction (r=-0.011), overnight_range_pct (r=-0.017), or atr_vel_ratio
+    (r=-0.023).
+
+    @research-source scripts/tmp/exhaustive_audit.py (2026-04-13 session)
+    @entry-models E2
+    """
+
+    CONFIDENCE_TIER: ClassVar[str] = "PLAUSIBLE"
+
+    definition: str = "orb_mid"  # 'orb_mid' or 'break_price'
+
+    def __post_init__(self) -> None:
+        if self.definition not in ("orb_mid", "break_price"):
+            raise ValueError(
+                f"VWAPBreakDirectionFilter definition must be 'orb_mid' or "
+                f"'break_price', got '{self.definition}'"
+            )
+
+    def matches_row(self, row: dict, orb_label: str) -> bool:
+        vwap = row.get(f"orb_{orb_label}_vwap")
+        break_dir = row.get(f"orb_{orb_label}_break_dir")
+        if vwap is None or break_dir not in ("long", "short"):
+            return False
+
+        if self.definition == "orb_mid":
+            hi = row.get(f"orb_{orb_label}_high")
+            lo = row.get(f"orb_{orb_label}_low")
+            if hi is None or lo is None:
+                return False
+            ref = (hi + lo) / 2.0
+        else:  # break_price
+            if break_dir == "long":
+                ref = row.get(f"orb_{orb_label}_high")
+            else:
+                ref = row.get(f"orb_{orb_label}_low")
+            if ref is None:
+                return False
+
+        if break_dir == "long":
+            return ref > vwap
+        else:
+            return ref < vwap
+
+    def matches_df(self, df: pd.DataFrame, orb_label: str) -> pd.Series:
+        import pandas as pd
+
+        vwap = df.get(f"orb_{orb_label}_vwap")
+        hi = df.get(f"orb_{orb_label}_high")
+        lo = df.get(f"orb_{orb_label}_low")
+        bd = df.get(f"orb_{orb_label}_break_dir")
+        if vwap is None or hi is None or lo is None or bd is None:
+            return pd.Series(False, index=df.index)
+
+        is_long = bd == "long"
+        is_short = bd == "short"
+        has_break = is_long | is_short
+        has_vwap = vwap.notna()
+
+        if self.definition == "orb_mid":
+            ref = (hi + lo) / 2.0
+        else:
+            ref = hi.where(is_long, lo)
+
+        aligned_long = is_long & (ref > vwap)
+        aligned_short = is_short & (ref < vwap)
+        return has_break & has_vwap & hi.notna() & lo.notna() & (aligned_long | aligned_short)
+
+    def describe(
+        self,
+        row: dict,
+        orb_label: str,
+        entry_model: str,
+    ) -> list[AtomDescription]:
+        """VWAP break-direction alignment gate. Intra-session, resolves at break."""
+        _ = entry_model
+        vwap = _atom_numeric(row.get(f"orb_{orb_label}_vwap"))
+        bd = row.get(f"orb_{orb_label}_break_dir")
+        hi = _atom_numeric(row.get(f"orb_{orb_label}_high"))
+        lo = _atom_numeric(row.get(f"orb_{orb_label}_low"))
+
+        if vwap is None or hi is None or lo is None:
+            observed = None
+            missing = True
+        else:
+            if self.definition == "orb_mid":
+                observed = round((hi + lo) / 2.0, 4)
+            else:
+                observed = hi if bd == "long" else lo
+            missing = False
+
+        passes = self.matches_row(row, orb_label) if not missing else None
+
+        return [
+            AtomDescription(
+                name=f"VWAP {self.definition} aligned with break",
+                category="INTRA_SESSION",
+                resolves_at="BREAK_DETECTED",
+                passes=passes,
+                feature_column=f"orb_{orb_label}_vwap",
+                confidence_tier=self.CONFIDENCE_TIER,
+                observed_value=observed,
+                threshold=vwap,
+                comparator=">" if bd == "long" else "<",
+                is_data_missing=missing,
+                explanation=(
+                    f"Require {self.definition} {'> VWAP (long)' if bd == 'long' else '< VWAP (short)'} "
+                    f"for break-direction alignment with institutional flow."
+                ),
+            )
+        ]
+
+
+@dataclass(frozen=True)
 class CompositeFilter(StrategyFilter):
     """Chain two filters: base AND overlay must both pass."""
 
@@ -2652,6 +2790,28 @@ _HYPOTHESIS_SCOPED_FILTERS: dict[str, StrategyFilter] = {
         description="GARCH forecast vol rolling percentile <= 20 (low-vol regime)",
         pct_threshold=20.0,
         direction="low",
+    ),
+    # VWAP breakout direction alignment filters (Apr 2026 exhaustive audit).
+    # 425-test cross-family BH FDR K=425: 4 survivors.
+    # Two definitions registered — each session-specific combo uses the definition
+    # that survived BH FDR:
+    #   - VWAP_MID_ALIGNED: MNQ US_DATA_1000 O15 (p=0.00008, p=0.0002)
+    #   - VWAP_BP_ALIGNED:  MNQ CME_PRECLOSE O5  (p=0.002, p=0.002)
+    # Not confounded with gap (r=-0.011), overnight_range_pct (r=-0.017),
+    # or atr_vel_ratio (r=-0.023). Pass rates 52-56% (healthy split).
+    # Criterion 8 pre-flight: US_DATA_1000 O15 = 42 OOS days (PASS),
+    # CME_PRECLOSE O5 = 28 OOS days (PENDING — accumulating).
+    # @research-source scripts/tmp/exhaustive_audit.py (2026-04-13 session)
+    # @entry-models E2
+    "VWAP_MID_ALIGNED": VWAPBreakDirectionFilter(
+        filter_type="VWAP_MID_ALIGNED",
+        description="ORB midpoint aligned with VWAP for break direction",
+        definition="orb_mid",
+    ),
+    "VWAP_BP_ALIGNED": VWAPBreakDirectionFilter(
+        filter_type="VWAP_BP_ALIGNED",
+        description="Break price aligned with VWAP for break direction",
+        definition="break_price",
     ),
 }
 
@@ -3169,6 +3329,19 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
     }
     if (instrument, session) in _atr_vel_validated:
         filters["ATR_VEL_GE105"] = ALL_FILTERS["ATR_VEL_GE105"]
+
+    # VWAP break-direction alignment gate (Apr 2026 exhaustive audit).
+    # 425-test cross-family BH FDR K=425: 4 survivors. Session-specific definitions:
+    # - MNQ US_DATA_1000 O15: orb_mid definition (p=0.00008, p=0.0002)
+    # - MNQ CME_PRECLOSE O5: break_price definition (p=0.002, pending C8 OOS)
+    # Not confounded with gap/overnight_range/atr_vel (all |r| < 0.03).
+    # No lookahead: VWAP is pre-session, break_dir known at entry time.
+    # @research-source scripts/tmp/exhaustive_audit.py (2026-04-13)
+    # @entry-models E2
+    if instrument == "MNQ" and session == "US_DATA_1000":
+        filters["VWAP_MID_ALIGNED"] = ALL_FILTERS["VWAP_MID_ALIGNED"]
+    if instrument == "MNQ" and session == "CME_PRECLOSE":
+        filters["VWAP_BP_ALIGNED"] = ALL_FILTERS["VWAP_BP_ALIGNED"]
 
     # Pit range anti-filter: skip dead-pit days at CME_REOPEN (Apr 2026).
     # VALIDATED: 3/3 instruments pass T1-T8, BH FDR at K=320, +17% WR spread.
