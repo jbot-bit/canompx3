@@ -162,8 +162,10 @@ class TestAllFilters:
         #     VWAP_MID_ALIGNED (Apr 2026 exhaustive audit, MNQ US_DATA_1000 O15)
         #     VWAP_BP_ALIGNED (Apr 2026 exhaustive audit, MNQ CME_PRECLOSE O5)
         #     CROSS_NYSE_MOMENTUM (Apr 2026 cross-session state, MNQ US_DATA_1000)
-        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 7 scoped = 89
-        assert len(ALL_FILTERS) == 89
+        #     CROSS_COMEX_MOMENTUM (Apr 2026, MNQ CME_PRECLOSE)
+        #     CROSS_SGP_MOMENTUM (Apr 2026, MNQ EUROPE_FLOW)
+        # = 65 + 4 overnight + 3 PDR + 2 GAP + 8 COST×FAST + 8 OVNRNG×FAST + 1 PIT_MIN + 9 scoped = 91
+        assert len(ALL_FILTERS) == 91
 
     def test_contains_volume_filter(self):
         assert "VOL_RV12_N20" in ALL_FILTERS

@@ -2978,6 +2978,28 @@ _HYPOTHESIS_SCOPED_FILTERS: dict[str, StrategyFilter] = {
         description="NYSE_OPEN winning + same direction = take; losing + same = veto",
         prior_session="NYSE_OPEN",
     ),
+    # Cross-session momentum: COMEX_SETTLE > CME_PRECLOSE (Apr 13 2026).
+    # IS p=0.034 (only IS-significant pair), 7/8 years positive, symmetric
+    # (longs +0.125, shorts +0.126). MES cross-confirms OOS +0.284.
+    # @research-source scripts/tmp/directional_context_alignment.py
+    # @entry-models E2
+    "CROSS_COMEX_MOMENTUM": CrossSessionMomentumFilter(
+        filter_type="CROSS_COMEX_MOMENTUM",
+        description="COMEX_SETTLE winning + same direction = take; losing + same = veto",
+        prior_session="COMEX_SETTLE",
+    ),
+    # Cross-session momentum: SINGAPORE_OPEN > EUROPE_FLOW (Apr 13 2026).
+    # IS p=0.132 (borderline), 6/8 years positive, best directional symmetry
+    # (longs +0.056, shorts +0.099). MES cross-confirms OOS +0.218.
+    # 7hr gap between sessions — institutional flow memory.
+    # Stacks with OVNRNG_100: OVNRNG+CS_TAKE = +0.291R vs OVNRNG alone +0.172R.
+    # @research-source scripts/tmp/directional_context_alignment.py
+    # @entry-models E2
+    "CROSS_SGP_MOMENTUM": CrossSessionMomentumFilter(
+        filter_type="CROSS_SGP_MOMENTUM",
+        description="SINGAPORE_OPEN winning + same direction = take; losing + same = veto",
+        prior_session="SINGAPORE_OPEN",
+    ),
 }
 
 # Cost-ratio filters (Mar 2026): normalized cost screens derived from the
@@ -3508,6 +3530,9 @@ def get_filters_for_grid(instrument: str, session: str) -> dict[str, StrategyFil
         filters["CROSS_NYSE_MOMENTUM"] = ALL_FILTERS["CROSS_NYSE_MOMENTUM"]
     if instrument == "MNQ" and session == "CME_PRECLOSE":
         filters["VWAP_BP_ALIGNED"] = ALL_FILTERS["VWAP_BP_ALIGNED"]
+        filters["CROSS_COMEX_MOMENTUM"] = ALL_FILTERS["CROSS_COMEX_MOMENTUM"]
+    if instrument == "MNQ" and session == "EUROPE_FLOW":
+        filters["CROSS_SGP_MOMENTUM"] = ALL_FILTERS["CROSS_SGP_MOMENTUM"]
 
     # Pit range anti-filter: skip dead-pit days at CME_REOPEN (Apr 2026).
     # VALIDATED: 3/3 instruments pass T1-T8, BH FDR at K=320, +17% WR spread.

@@ -1,0 +1,92 @@
+# Hypothesis Registry — Cross-Session Momentum: SINGAPORE_OPEN > EUROPE_FLOW
+#
+# Locked:       2026-04-13T17:00:00+10:00
+# Author:       Claude Code session (directional context alignment program)
+# Holdout mode: A (2026-01-01 sacred)
+# Data horizon: MNQ 6.65yr post Phase 3c clean real-micro
+# Testing mode: individual (Pathway B, Amendment 3.0)
+#
+# Theory citation (LOCAL sources):
+# 1. scripts/tmp/directional_context_alignment.py Phase A (Apr 13 2026):
+#    IS p=0.132 (borderline). 6/8 years positive.
+# 2. Stress test:
+#    - Direction symmetry: longs +0.056, shorts +0.099 (best of any pair)
+#    - MES cross-confirms OOS +0.218
+#    - OOS MNQ: +0.376 lift (strongest raw OOS after NYSE>USD1000)
+#    - 7hr gap between sessions — tests institutional flow memory
+# 3. Stacking test: OVNRNG_100 alone +0.172R; OVNRNG+CS_TAKE = +0.291R
+#    (genuine incremental value on top of existing deployed filter)
+# 4. Zero look-ahead: break-level proxy, same as NYSE variant.
+# 5. Mechanism: SINGAPORE_OPEN (11:00 Brisbane) establishes Asian direction.
+#    EUROPE_FLOW (18:00 Brisbane) opens 7 hours later. When Singapore
+#    direction held across the gap = stronger institutional conviction.
+
+metadata:
+  name: "cross-session-sgp-europe-flow"
+  purpose: |
+    Pre-register CROSS_SGP_MOMENTUM filter for MNQ EUROPE_FLOW.
+    Best directional symmetry. Stacks with OVNRNG_100 (+0.119R incremental).
+    7hr session gap tests genuine flow memory vs noise.
+  date_locked: "2026-04-13T17:00:00+10:00"
+  holdout_date: "2026-01-01"
+  data_horizon_years_clean: 6.65
+  data_source: "real CME Micro E-mini Nasdaq-100 futures 2019-05-06 onwards"
+  testing_mode: "individual"
+  bailey_compliance:
+    trials: 3
+    min_btl_required_years: 0.01
+    status: "PASS"
+  total_expected_trials: 3
+
+hypotheses:
+  - id: 1
+    name: "MNQ EUROPE_FLOW CROSS_SGP_MOMENTUM RR1.0 O5"
+    filter:
+      type: CROSS_SGP_MOMENTUM
+      prior_session: SINGAPORE_OPEN
+    scope:
+      instruments: [MNQ]
+      sessions: [EUROPE_FLOW]
+      orb_minutes: [5]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=3"
+      - "Walk-forward efficiency < 0.50"
+      - "OOS direction flips"
+
+  - id: 2
+    name: "MNQ EUROPE_FLOW CROSS_SGP_MOMENTUM RR1.5 O5"
+    filter:
+      type: CROSS_SGP_MOMENTUM
+    scope:
+      instruments: [MNQ]
+      sessions: [EUROPE_FLOW]
+      orb_minutes: [5]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=3"
+      - "Walk-forward efficiency < 0.50"
+
+  - id: 3
+    name: "MNQ EUROPE_FLOW CROSS_SGP_MOMENTUM RR2.0 O5"
+    filter:
+      type: CROSS_SGP_MOMENTUM
+    scope:
+      instruments: [MNQ]
+      sessions: [EUROPE_FLOW]
+      orb_minutes: [5]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+    expected_trial_count: 1
+    kill_criteria:
+      - "BH FDR q=0.05 fails at K=3"
+      - "Walk-forward efficiency < 0.50"
+
+total_hypothesis_count: 3
