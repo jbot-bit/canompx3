@@ -90,7 +90,7 @@ class BarPersister:
                 len(rows), self.symbol, ts_min, ts_max,
             )
             return len(rows)
-        except Exception as e:
+        except (duckdb.Error, OSError) as e:
             log.error("BarPersister: flush failed (trading unaffected): %s", e)
             return 0
 
