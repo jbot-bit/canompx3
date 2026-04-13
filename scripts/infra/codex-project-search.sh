@@ -29,10 +29,21 @@ if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
   "$VENV/bin/python" "$PREFLIGHT" --quiet --context codex-wsl --claim codex-search --mode read-only || true
 fi
 
+CODEX_ARGS=(
+  -C "$ROOT"
+  -p canompx3_search
+  --sandbox workspace-write
+  --ask-for-approval on-request
+  --search
+)
+
+if [[ "${CANOMPX3_CODEX_ENABLE_GOLD_DB:-0}" == "1" ]]; then
+  CODEX_ARGS+=(
+    -c 'mcp_servers.gold-db.command="bash"'
+    -c 'mcp_servers.gold-db.args=["scripts/infra/run-gold-db-mcp.sh"]'
+  )
+fi
+
 exec codex \
-  -C "$ROOT" \
-  -p canompx3_search \
-  --sandbox workspace-write \
-  --ask-for-approval on-request \
-  --search \
+  "${CODEX_ARGS[@]}" \
   "$@"

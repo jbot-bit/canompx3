@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -23,6 +24,8 @@ VALID_MODES = {
     "codex",
     "codex-search",
     "codex-project",
+    "codex-project-gold-db",
+    "codex-project-search-gold-db",
     "handoff",
     "list",
     "close",
@@ -160,14 +163,18 @@ def build_codex_wsl_command(
     return "\n".join(lines)
 
 
-def build_codex_project_wsl_command(root_wsl: str) -> str:
+def build_codex_project_wsl_command(root_wsl: str, search_mode: bool = False, enable_gold_db: bool = False) -> str:
     import shlex
+
+    script_name = "codex-project-search.sh" if search_mode else "codex-project.sh"
+    if enable_gold_db:
+        script_name = "codex-project-search-gold-db.sh" if search_mode else "codex-project-gold-db.sh"
 
     return "\n".join(
         [
             "set -euo pipefail",
             f"cd {shlex.quote(root_wsl)}",
-            "exec ./scripts/infra/codex-project.sh --no-alt-screen",
+            f"exec ./scripts/infra/{script_name} --no-alt-screen",
         ]
     )
 
@@ -195,9 +202,12 @@ def run_preflight(worktree_path: Path, claim_tool: str, context: str = "generic"
     preflight = worktree_path / "scripts" / "tools" / "session_preflight.py"
     if not preflight.exists():
         return
+    env = os.environ.copy()
+    env.setdefault("CANOMPX3_SESSION_OWNER", f"launcher-{os.getpid()}")
     result = subprocess.run(
         pick_python() + [str(preflight), "--quiet", "--context", context, "--claim", claim_tool, "--mode", mode],
         cwd=worktree_path,
+        env=env,
         check=False,
     )
     if result.returncode != 0:
@@ -228,9 +238,9 @@ def open_codex_workstream(workstream_name: str, purpose: str | None, search_mode
     return run_wsl(build_codex_wsl_command(root, workstream_name, purpose, search_mode))
 
 
-def open_codex_project() -> int:
+def open_codex_project(search_mode: bool = False, enable_gold_db: bool = False) -> int:
     root = windows_to_wsl(repo_root())
-    return run_wsl(build_codex_project_wsl_command(root))
+    return run_wsl(build_codex_project_wsl_command(root, search_mode=search_mode, enable_gold_db=enable_gold_db))
 
 
 def handoff_workstream(
@@ -705,6 +715,10 @@ def main() -> int:
         return open_codex_workstream(task, "Build / edit", False)
     if args.mode == "codex-project":
         return open_codex_project()
+    if args.mode == "codex-project-gold-db":
+        return open_codex_project(enable_gold_db=True)
+    if args.mode == "codex-project-search-gold-db":
+        return open_codex_project(search_mode=True, enable_gold_db=True)
     if args.mode == "codex-search":
         task = args.task or prompt("Workstream name")
         if not task:

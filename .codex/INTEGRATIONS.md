@@ -27,6 +27,10 @@ Declared in `.mcp.json`:
 Project-scoped Codex MCP declarations also exist in `.codex/config.toml`:
 
 - `openaiDeveloperDocs`
+- `gold-db` is deliberately not attached by default
+  - use `scripts/infra/codex-project-gold-db.sh` or
+    `scripts/infra/codex-project-search-gold-db.sh` when a task actually needs
+    the trading DB via MCP
 
 ## Claude Runtime Surfaces Worth Reusing
 
@@ -73,3 +77,6 @@ Claude and Codex do not share MCP registration automatically.
 ## Practical Rule
 
 If Claude already has a working integration surface for this repo, Codex should point at it rather than creating a competing layer.
+
+Minimal-by-default beats clever-by-default. Optional repo MCPs should be
+attached only for sessions that need them.

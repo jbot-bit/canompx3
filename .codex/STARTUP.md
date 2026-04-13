@@ -15,6 +15,8 @@ matter for Codex specifically.
 
 - `scripts/infra/codex-project.sh`
 - `scripts/infra/codex-project-search.sh`
+- `scripts/infra/codex-project-gold-db.sh`
+- `scripts/infra/codex-project-search-gold-db.sh`
 - `scripts/infra/codex-worktree.sh`
 
 These launchers already run `scripts/tools/session_preflight.py`.

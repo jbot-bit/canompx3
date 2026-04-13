@@ -22,6 +22,9 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
   - `scripts/infra/codex-project.sh`
 - Interactive project session with live web search:
   - `scripts/infra/codex-project-search.sh`
+- Interactive project data session with `gold-db` MCP:
+  - `scripts/infra/codex-project-gold-db.sh`
+  - `scripts/infra/codex-project-search-gold-db.sh`
 - Max-capability review profile:
   - `scripts/infra/codex-review.sh`
 - Review current changes:

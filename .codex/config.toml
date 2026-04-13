@@ -11,10 +11,6 @@ Repo-specific Codex startup contract for canompx3:
 - Do not mutate `.claude/` or `CLAUDE.md` unless the user explicitly asks.
 """
 
-[mcp_servers.gold-db]
-command = "bash"
-args = ["scripts/infra/run-gold-db-mcp.sh"]
-
 [mcp_servers.openaiDeveloperDocs]
 url = "https://developers.openai.com/mcp"
 

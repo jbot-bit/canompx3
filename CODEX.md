@@ -82,6 +82,9 @@ Default Codex entrypoints:
   - `scripts/infra/codex-project.sh`
 - Read-only/search session:
   - `scripts/infra/codex-project-search.sh`
+- Data session with `gold-db` MCP attached explicitly:
+  - `scripts/infra/codex-project-gold-db.sh`
+  - `scripts/infra/codex-project-search-gold-db.sh`
 - Review session:
   - `scripts/infra/codex-review.sh`
 - Parallel isolated task:
@@ -93,6 +96,9 @@ Windows convenience entrypoints:
 
 - Easiest repo session:
   - `codex.bat`
+- Data session with `gold-db` MCP:
+  - `codex-gold-db.bat`
+  - `codex-search-gold-db.bat`
 - Isolated task/worktree:
   - `codex-workstream.bat`
 - Menu/workstream manager:
@@ -101,6 +107,9 @@ Windows convenience entrypoints:
 For a Windows user, `codex.bat` is the canonical simple path. It launches the
 same WSL project session as `scripts/infra/codex-project.sh` without asking the
 user to remember the repo internals.
+
+Default stance: Codex should start minimal. Repo MCPs such as `gold-db` are
+opt-in for sessions that actually need live trading-data queries.
 
 ## Supporting Docs
 

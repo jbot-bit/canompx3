@@ -55,11 +55,13 @@ class TestRunPreflight:
         ):
             windows_agent_launch.run_preflight(tmp_path, claim_tool="claude")
 
-        run_mock.assert_called_once_with(
+        args, kwargs = run_mock.call_args
+        assert args == (
             ["python", str(preflight), "--quiet", "--context", "generic", "--claim", "claude", "--mode", "mutating"],
-            cwd=tmp_path,
-            check=False,
         )
+        assert kwargs["cwd"] == tmp_path
+        assert kwargs["check"] is False
+        assert kwargs["env"]["CANOMPX3_SESSION_OWNER"].startswith("launcher-")
 
     def test_skips_missing_preflight(self, tmp_path: Path) -> None:
         with patch.object(windows_agent_launch.subprocess, "run") as run_mock:
@@ -148,6 +150,20 @@ class TestCodexWslCommand:
         assert "cd /mnt/c/repo" in command
         assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
+    def test_builds_gold_db_project_command(self) -> None:
+        command = windows_agent_launch.build_codex_project_wsl_command(
+            "/mnt/c/repo", enable_gold_db=True
+        )
+
+        assert "exec ./scripts/infra/codex-project-gold-db.sh --no-alt-screen" in command
+
+    def test_builds_gold_db_search_project_command(self) -> None:
+        command = windows_agent_launch.build_codex_project_wsl_command(
+            "/mnt/c/repo", search_mode=True, enable_gold_db=True
+        )
+
+        assert "exec ./scripts/infra/codex-project-search-gold-db.sh --no-alt-screen" in command
+
 
 class TestOpenCodexWorkstream:
     def test_uses_saved_search_purpose_for_wsl_launch(self) -> None:
@@ -177,6 +193,18 @@ class TestOpenCodexProject:
         assert exit_code == 0
         command = run_wsl_mock.call_args.args[0]
         assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
+
+    def test_opens_repo_gold_db_project_launcher_in_wsl(self) -> None:
+        with (
+            patch.object(windows_agent_launch, "repo_root", return_value=Path(r"C:\repo")),
+            patch.object(windows_agent_launch, "windows_to_wsl", return_value="/mnt/c/repo"),
+            patch.object(windows_agent_launch, "run_wsl", return_value=0) as run_wsl_mock,
+        ):
+            exit_code = windows_agent_launch.open_codex_project(enable_gold_db=True)
+
+        assert exit_code == 0
+        command = run_wsl_mock.call_args.args[0]
+        assert "exec ./scripts/infra/codex-project-gold-db.sh --no-alt-screen" in command
 
 
 class TestWorkflowCommands:
