@@ -701,17 +701,11 @@ def verdict(h1_results, h2_results, h3_results, h4_results):
         print(f"    -> VERDICT: DEAD (reopen condition tested and failed)")
 
     print(f"\n  EXTERNAL CLAIMS:")
-    print(f"    t=4.65 (IBS): Reproducible in-sample (we find t=6.78). Killed by holdout.")
-    print(f"    t=3.13 (NR7): Reproducible in-sample at specific combos. Killed by direction flips.")
+    print(f"\n  EXTERNAL CLAIMS:")
+    print(f"    t=4.65 (IBS): We find t=3.89 (N=74, corrected). Killed by holdout.")
+    print(f"    t=3.13 (NR7): 0 BH FDR survivors (corrected). Killed by direction flips.")
     print(f"    Methodology gap: external analysis likely lacked holdout enforcement + BH FDR.")
-
-    print(f"\n  BLUEPRINT UPDATE:")
-    print(f"    Line 279 (NR7): NO CHANGE to verdict. Add: 'Session-range NR7 also tested Apr 2026.'")
-    print(f"    Line 280 (IBS): UPDATE evidence. Prior: 'RR2.0, no monotonic effect.'")
-    print(f"       Corrected: 'RR1.0 shows Q1 t=6.78 in-sample (CME_PRECLOSE O15, cross-instrument")
-    print(f"       confirmed MES t=6.02). HOLDOUT REVERSES on both MNQ and MES. Still DEAD.'")
-    print(f"       Reopen: remove 'new entry model' (not needed — signal exists at RR1.0).")
-    print(f"       New reopen: 'Holdout consistency when more data accumulates (currently N=12).'")
+    print(f"    Note: initial run had 3x N-inflation (missing orb_minutes=5 guard). Fixed.")
 
 
 # ── Main ───────────────────────────────────────────────────────────────

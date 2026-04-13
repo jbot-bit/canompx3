@@ -28,7 +28,8 @@
 # SPECIFICATION GAP IDENTIFIED:
 #   Prior test was RR2.0 only. IBS is a direction signal (mean-reversion);
 #   RR1.0 (direction-dominant) is the natural specification. Pre-query
-#   shows MNQ CME_PRECLOSE O15 RR1.0 Q1 at t=6.78 in-sample.
+#   shows MNQ CME_PRECLOSE O15 RR1.0 Q1 at t=3.89 N=74 in-sample
+#   (initially reported t=6.78 N=222 before fixing 3x N-inflation).
 #
 # HOLDOUT PRE-CHECK (not for selection — directional consistency only):
 #   IBS Q1 at CME_PRECLOSE O15 RR1.0: MNQ -0.518 (N=12), MES -0.442 (N=13).

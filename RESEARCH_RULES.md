@@ -81,7 +81,7 @@ With 5 years of daily data, testing more than ~45 strategy variations guarantees
 - **Current limitation:** Most cross-instrument research uses only 579 overlapping days (Feb 2024 - Feb 2026). This is a single in-sample window. No findings from this window are "validated" until tested on the 10-year rebuild.
 
 ### Multi-RR Testing (Mandatory for Filter Discovery)
-All filter discovery and NO-GO tests MUST test across the full RR grid {1.0, 1.5, 2.0} and both apertures {O5, O15}. Testing at a single RR target gives false reads because RR changes what the test measures: RR1.0 is direction-dominant, RR2.0 is trend-persistence-dominant. A direction signal (e.g., IBS mean-reversion) will appear at RR1.0 and vanish at RR2.0. A momentum signal (e.g., ATR_VEL) will appear at RR2.0 and be weaker at RR1.0. The IBS NO-GO (Apr 2026) was initially declared at RR2.0 only, missing a t=6.78 in-sample signal at RR1.0 — corrected by `verify_external_ibs_nr7.py` (signal exists but holdout-killed).
+All filter discovery and NO-GO tests MUST test across the full RR grid {1.0, 1.5, 2.0} and both apertures {O5, O15}. Testing at a single RR target gives false reads because RR changes what the test measures: RR1.0 is direction-dominant, RR2.0 is trend-persistence-dominant. A direction signal (e.g., IBS mean-reversion) will appear at RR1.0 and vanish at RR2.0. A momentum signal (e.g., ATR_VEL) will appear at RR2.0 and be weaker at RR1.0. The IBS NO-GO (Apr 2026) was initially declared at RR2.0 only, missing a t=3.89 (N=74) in-sample signal at RR1.0 — corrected by `verify_external_ibs_nr7.py` (signal exists but holdout-killed).
 
 ### Sensitivity Analysis (Mandatory for Parameter-Based Findings)
 Before calling any parameterized finding "real," test:
