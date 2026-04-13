@@ -29,6 +29,8 @@ DOCTRINE_DOCS: tuple[str, ...] = (
 SYSTEM_AUTHORITY_BACKBONE_MODULES: tuple[str, ...] = (
     "pipeline/system_authority.py",
     "pipeline/system_context.py",
+    "pipeline/system_brief.py",
+    "pipeline/work_capsule.py",
     "context/institutional.py",
     "context/registry.py",
     "pipeline/db_contracts.py",
@@ -66,6 +68,8 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
         examples=(
             "pipeline/system_authority.py",
             "pipeline/system_context.py",
+            "pipeline/system_brief.py",
+            "pipeline/work_capsule.py",
             "context/institutional.py",
             "context/registry.py",
             "pipeline/asset_configs.py",
@@ -96,6 +100,8 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
             "pipeline/db_contracts.py",
             "trading_app/validated_shelf.py",
             "DB views active_validated_setups and deployable_validated_setups",
+            "scripts/tools/system_brief.py",
+            "scripts/tools/work_capsule.py",
             "scripts/tools/project_pulse.py",
             "scripts/tools/context_views.py",
             "scripts/tools/context_resolver.py",
@@ -128,6 +134,8 @@ SURFACE_TAXONOMY: tuple[SurfaceCategory, ...] = (
         title="Plans / history / baton",
         purpose="Decision history and in-flight context",
         examples=(
+            "docs/runtime/decision-ledger.md",
+            "docs/runtime/debt-ledger.md",
             "docs/plans/",
             "HANDOFF.md",
             "ROADMAP.md",
@@ -167,6 +175,14 @@ CANONICAL_TRUTH_MAP: tuple[CanonicalTruthEntry, ...] = (
     CanonicalTruthEntry(
         "What is the canonical repo/dev control-plane context?",
         "pipeline/system_context.py + scripts/tools/system_context.py",
+    ),
+    CanonicalTruthEntry(
+        "What is the minimal complete startup understanding for the current task?",
+        "pipeline/system_brief.py + scripts/tools/system_brief.py",
+    ),
+    CanonicalTruthEntry(
+        "What is the active task packet for this workstream?",
+        "pipeline/work_capsule.py + scripts/tools/work_capsule.py",
     ),
     CanonicalTruthEntry(
         "What are the project's institutional concepts, decision protocols, and answer contracts?",
