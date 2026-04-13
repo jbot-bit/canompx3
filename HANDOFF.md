@@ -6,6 +6,590 @@
 
 ---
 
+## Update (2026-04-13 — portfolio reconstruction + MES expansion dead + MNQ validation)
+
+### Headline
+
+Full session: MES targeted expansion DEAD (0/28), MNQ wider-aperture validated
+(3 new), discovery branch merged to main, portfolio reconstructed via 30×30
+correlation audit (+41% ExpR, 6/6 independent bets).
+
+### What changed
+
+- **MES targeted expansion** (`1ad39e84`): 28-trial hypothesis (OVNRNG_50,
+  GARCH_VOL_PCT_LT20, COST_LT10, CME_PRECLOSE RR extensions) — 0 positive BH
+  FDR survivors. GARCH_VOL_PCT_LT20 is ANTI-EDGE on MES (8/9 negative, 4
+  significantly so). MES decorrelation play exhausted for current filter universe.
+  MES ceiling = 2 CME_PRECLOSE strategies (G8 + COST_LT08 at RR1.0).
+
+- **MNQ wider-aperture validation** (`b2374d45`): 25 unvalidated MNQ strategies
+  processed. 3 new validated: SINGAPORE_OPEN ATR_P50 O30/O15, US_DATA_1000
+  ORB_G5 O15. Stratified FDR re-evaluation also promoted 6 additional strategies.
+  MNQ: 30 active validated. MES: 2.
+
+- **Branch merge**: `discovery-wave4-lit-grounded` fast-forwarded to main via
+  `git branch -f main HEAD` (no checkout, Codex uncommitted work preserved).
+  Branch deleted.
+
+- **Portfolio reconstruction** (`c29de903`): Full 30×30 pairwise Pearson rho
+  audit on daily pnl_r with canonical filter application. Prior profile wasted
+  2 of 6 slots on redundant same-session RR pairs (EUROPE_FLOW rho=0.862,
+  TOKYO_OPEN rho=0.844 — only 4 independent bets from 6 lanes).
+  New 6-lane portfolio:
+    L1: COMEX_SETTLE OVNRNG_100 RR1.5   ExpR=+0.215 (retained)
+    L2: EUROPE_FLOW OVNRNG_100 RR1.5    ExpR=+0.171 (upgraded from ORB_G5)
+    L3: CME_PRECLOSE X_MES_ATR60 RR1.0  ExpR=+0.170 (new session)
+    L4: NYSE_OPEN X_MES_ATR60 RR1.0     ExpR=+0.137 (upgraded from ORB_G5)
+    L5: TOKYO_OPEN COST_LT12 RR1.5      ExpR=+0.129 (upgraded from ORB_G5)
+    L6: SINGAPORE_OPEN ATR_P50 O30      ExpR=+0.125 (new session, wider aperture)
+  Total ExpR +0.948 (was +0.673, +41%). Max pairwise rho=0.060. 6/6 independent
+  bets. C11 Monte Carlo 100% survival at $2K DD (was 96%). allowed_sessions
+  updated (+CME_PRECLOSE, +SINGAPORE_OPEN). Tests updated (53/53 pass).
+  Audit script: `scripts/research/portfolio_correlation_audit.py`.
+
+### Verification
+
+- Drift check: 94 PASSED (all 6 lanes in validated_setups active)
+- Tests: 53/53 prop_profiles pass
+- Pre-existing failures: check 60 (family_rr_locks 3 missing), check 103
+  (context_views.py arg error) — neither caused by this session
+
+### Codex uncommitted work
+
+13 modified files + 6 new files from Codex sessions (control-plane + context
+resolver). Stage file `docs/runtime/stages/system-control-plane.md` still
+exists. `project_pulse.py` bootstrap raises SystemExit(2) on Windows — NOT
+committed by this session. All Codex work preserved untouched through merge.
+
+### Next Sensible Step
+
+1. **family_rr_locks** — 3 missing families (drift check 60). Quick:
+   `python scripts/tools/select_family_rr.py`
+2. **Codex stage cleanup** — `system-control-plane.md` stage is stale (Apr 12),
+   tests fail on Windows. Decide: commit Codex work on WSL or discard.
+3. **MES profile deployment** — `topstep_50k_mes_auto` exists with 2
+   CME_PRECLOSE lanes. Review fitness before activating.
+4. **Edge families rebuild** — stale after validation promotions. Run
+   `python scripts/tools/build_edge_families.py --instrument MNQ`
+
+---
+
+## Update (2026-04-13 — institutional routing layer + anti-bloat rethink)
+
+### Headline
+
+Reworked the context-routing architecture beyond file routing. The router now
+has explicit institutional ontology, decision protocols, and answer contracts,
+and the task views were re-audited and tightened so they stay small and do not
+become soft authority.
+
+### What changed
+
+- added `context/institutional.py`
+  - canonical registries for:
+    - concepts
+    - decision protocols
+    - answer contracts
+- updated `context/registry.py`
+  - task manifests now reference:
+    - concept IDs
+    - decision protocol IDs
+    - answer contract IDs
+  - resolver payloads/rendered docs now expose these institutional contracts
+  - concept owner paths are validated
+  - investigation routes no longer inherit the full verification live-view
+    bundle by default
+- updated `scripts/tools/context_views.py`
+  - views now render strict sections:
+    - `canonical_state`
+    - `live_operational_state`
+    - `non_authoritative_context`
+  - removed over-broad `system_identity` blobs from task views
+  - replaced them with compact `repo_runtime_context`
+  - removed `signals` / meta-count filler from live sections
+  - validator now rejects:
+    - handoff leakage into canonical/live sections
+    - freeform recommendation/opinion/advice keys
+    - broad filler keys like `signals` and `system_identity`
+- updated generated docs:
+  - added `docs/context/institutional-contracts.md`
+  - regenerated `docs/context/*`
+  - regenerated `docs/governance/system_authority_map.md`
+- updated drift enforcement:
+  - generated institutional contracts doc must stay in sync
+  - task-view truth-class boundaries are checked in drift
+
+### Audit conclusion
+
+The first version of task views was directionally right but still too loose for
+the standard we want:
+
+- it carried over-broad runtime identity into task views
+- it still allowed investigation routes to over-read verification surfaces
+
+Both were tightened in this pass.
+
+Residual gap still worth addressing later:
+
+- `research_context` is now cleaner, but it still does not provide a dedicated
+  recent-performance read model for questions like "why did MES 5m ORB win rate
+  drop last week?" That evidence still depends on `gold_db_mcp`, not a narrow
+  generated view.
+
+### Verification
+
+- `./.venv-wsl/bin/ruff check context/institutional.py context/registry.py scripts/tools/context_views.py scripts/tools/context_resolver.py scripts/tools/render_context_catalog.py pipeline/system_authority.py tests/test_context/test_registry.py tests/test_tools/test_context_views.py tests/test_tools/test_context_resolver.py tests/test_pipeline/test_check_drift_context.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_context/test_registry.py tests/test_tools/test_context_views.py tests/test_tools/test_context_resolver.py tests/test_pipeline/test_check_drift_context.py -q`
+  - `20 passed`
+- `./.venv-wsl/bin/python scripts/tools/render_context_catalog.py`
+  - regenerated `docs/context/*`
+- `./.venv-wsl/bin/python scripts/tools/render_system_authority_map.py`
+  - regenerated authority map
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - new context-routing / truth-boundary checks passed
+  - repo still has one unrelated pre-existing failure:
+    - Check 60 `family_rr_locks` coverage
+
+## Update (2026-04-13 — operator product layer consolidation plan)
+
+### Headline
+
+Closed the "do we need a new app?" question for live trading operations.
+The repo already has the operator shell; the issue is consolidation and
+productization, not missing frontend roots.
+
+### What changed
+
+- added durable plan:
+  - `docs/plans/2026-04-13-operator-product-layer-consolidation-plan.md`
+
+### Decision
+
+Declared canonical operator surfaces:
+
+- `trading_app/live/bot_dashboard.py`
+- `trading_app/live/bot_dashboard.html`
+- `scripts/run_live_session.py`
+- `trading_app/pre_session_check.py`
+
+Explicit anti-duplication rule:
+
+- do **not** create a second dashboard shell
+- do **not** create `ui_v2/`
+- do **not** reintroduce Streamlit for live operations
+- do **not** build a separate operator console
+
+### Why this matters
+
+The dashboard already has:
+
+- account selector
+- profile cards
+- `Alerts` / `Paper` / `Live` buttons
+- preflight button
+- kill button
+- broker connections tab
+
+What is missing is operator-grade trust:
+
+- structured readiness
+- health/liveness visibility
+- alerting
+- restart/stale-state clarity
+- removal of CLI-shaped seams from the user experience
+
+### Next recommended implementation slice
+
+`Dashboard Readiness + Health Consolidation`
+
+Meaning:
+
+- keep the existing dashboard shell
+- upgrade preflight from raw subprocess text to structured readiness state
+- surface broker/feed/process liveness in-app
+- wire alerting into the existing shell
+
+## Update (2026-04-13 — operator UX principles and flows)
+
+### Headline
+
+Locked the UX bar for the operator product layer so the dashboard is designed
+for a new user, an interrupted user, and an ADHD user, not just the builder
+who already knows the hidden rituals.
+
+### What changed
+
+- added durable UX companion spec:
+  - `docs/plans/2026-04-13-operator-ux-principles-and-flows.md`
+
+### Decision
+
+The operator standard is now:
+
+`Open app -> understand state immediately -> take the next safe action`
+
+The app must not rely on:
+
+- terminal knowledge
+- remembered prompts
+- hidden sequencing
+- tribal knowledge
+
+### Build implications
+
+Prioritize:
+
+- structured readiness
+- explicit state model
+- health/liveness visibility
+- alert panel
+- clear mode separation
+
+Do not prioritize:
+
+- chart-first work
+- alternate dashboard shells
+- more docs instead of product behavior
+
+## Update (2026-04-13 — dashboard readiness + operator state slice)
+
+### Headline
+
+Implemented the first operator-product code slice on the existing dashboard
+shell: structured readiness, explicit top-level operator state, and a visible
+"next safe action" layer.
+
+### What changed
+
+- backend: `trading_app/live/bot_dashboard.py`
+  - added structured preflight parsing helper for `run_live_session --preflight`
+  - added in-memory preflight cache per profile
+  - added operator summary helpers:
+    - broker status
+    - data freshness
+    - profile shared-session ambiguity warning
+    - top-level operator state derivation
+  - added `GET /api/operator-state`
+  - updated `POST /api/action/preflight` to:
+    - accept explicit `profile`
+    - return structured checks
+    - cache structured result
+  - refactored `GET /api/data-status` to reuse shared data-status collection
+- frontend: `trading_app/live/bot_dashboard.html`
+  - added new top-of-page Operator State card
+  - shows:
+    - top-level operator state
+    - reason text
+    - selected/running profile
+    - one recommended next action
+    - structured readiness checks
+  - wired operator action button for:
+    - run preflight
+    - open connections tab
+    - refresh data
+    - start alerts
+    - stop session
+  - preflight button now sends explicit profile and refreshes operator state
+  - start/kill flows now refresh operator state
+  - operator state polls every 5s alongside other dashboard data
+- tests: `tests/test_trading_app/test_bot_dashboard.py`
+  - added coverage for:
+    - preflight parsing
+    - operator state derivation
+    - stale-running-session handling
+    - shared-session profile ambiguity warning
+
+### Verification
+
+- `./.venv-wsl/bin/python -m py_compile trading_app/live/bot_dashboard.py tests/test_trading_app/test_bot_dashboard.py`
+  - passed
+- `./.venv-wsl/bin/ruff check trading_app/live/bot_dashboard.py tests/test_trading_app/test_bot_dashboard.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_bot_dashboard.py -q`
+  - `8 passed`
+
+### Important current limitations
+
+- browser/UI was not manually smoke-tested in a real browser this session
+- operator profile selection still follows current dashboard assumptions
+  (`runningProfile` or first active auto profile) rather than a new dedicated
+  operator-profile selector
+- `trading_app.pre_session_check` still has a known shared-session ambiguity for
+  profiles with multiple lanes in the same session; this slice surfaces that as
+  a warning in Operator State, but does **not** solve the underlying hard-gate
+  design yet
+- alert engine / persistent alert panel are still not implemented in code yet
+
+### Next recommended slice
+
+`Dashboard Alerting + Runtime Liveness`
+
+Meaning:
+
+- implement dashboard alert panel
+- wire feed/broker/runtime failures into visible operator alerts
+- persist alert history
+- surface stale/degraded runtime more explicitly than heartbeat age alone
+
+### Follow-up review + manual smoke (same day)
+
+- review finding fixed:
+  - `_choose_operator_profile()` was incorrectly reading `auto_trading` from
+    `AccountProfile` instead of `get_firm_spec(profile.firm).auto_trading`
+  - this could silently degrade fallback operator-profile selection to `None`
+  - fixed and covered by test
+- additional focused verification:
+  - `./.venv-wsl/bin/ruff check trading_app/live/bot_dashboard.py tests/test_trading_app/test_bot_dashboard.py`
+    - passed
+  - `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_bot_dashboard.py -q`
+    - `9 passed`
+- manual HTTP smoke via `fastapi.testclient` against the real app object:
+  - `GET /api/operator-state`
+    - `200`
+    - returned `profile=topstep_50k_mnq_auto`
+    - returned `top_state=BLOCKED`
+    - recommended action `Connect Broker`
+  - `GET /`
+    - `200`
+    - HTML contains Operator State shell / primary action controls
+  - `POST /api/action/preflight?profile=topstep_50k_mnq_auto`
+    - `200`
+    - returned structured preflight with `5` checks
+    - current environment result was `fail`
+  - follow-up `GET /api/operator-state?profile=topstep_50k_mnq_auto`
+    - reflected cached preflight status in Operator State
+
+## Update (2026-04-13 — task-scoped live context views)
+
+### Headline
+
+The router no longer has to lean on broad `project_pulse` output for every
+task. Added narrow generated live views for research, trading, and verification
+work so cold-start agents can load less context with less drift risk.
+
+### What changed
+
+- added `scripts/tools/context_views.py`
+  - `--view research`
+    - holdout policy snapshot
+    - active/deployable instrument lists
+    - fast deployable-shelf fitness summary
+    - narrow handoff/system identity context
+  - `--view trading`
+    - deployment summary
+    - Criterion 11 / Criterion 12 / pauses
+    - upcoming sessions
+    - narrow system identity context
+  - `--view verification`
+    - repo/control state
+    - handoff/session-claim context
+    - canonical verification commands
+- updated `context/registry.py`
+  - registered new live views:
+    - `research_context`
+    - `trading_context`
+    - `verification_context`
+  - routed task manifests toward these narrower views instead of broad
+    `project_pulse` where appropriate
+- updated `pipeline/system_authority.py`
+  - registered `scripts/tools/context_views.py` as a published read model /
+    canonical task-scoped live context surface
+- regenerated:
+  - `docs/context/README.md`
+  - `docs/context/source-catalog.md`
+  - `docs/context/task-routes.md`
+  - `docs/governance/system_authority_map.md`
+- added targeted tests:
+  - `tests/test_tools/test_context_views.py`
+
+### Why this matters
+
+The earlier router worked, but it still pushed some tasks through broad operator
+surfaces that mixed unrelated repo state. That wastes context window and raises
+the chance of accidental over-reading.
+
+This slice keeps the routing layer deterministic while making task reads
+smaller and more specific.
+
+### Verification
+
+- `./.venv-wsl/bin/python -m py_compile scripts/tools/context_views.py context/registry.py pipeline/system_authority.py tests/test_context/test_registry.py tests/test_tools/test_context_views.py tests/test_tools/test_context_resolver.py`
+  - passed
+- `./.venv-wsl/bin/ruff check scripts/tools/context_views.py context/registry.py pipeline/system_authority.py tests/test_context/test_registry.py tests/test_tools/test_context_views.py tests/test_tools/test_context_resolver.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_context/test_registry.py tests/test_tools/test_context_views.py tests/test_tools/test_context_resolver.py tests/test_pipeline/test_check_drift_context.py -q`
+  - `18 passed`
+- `./.venv-wsl/bin/python scripts/tools/render_context_catalog.py`
+  - regenerated `docs/context/*`
+- `./.venv-wsl/bin/python scripts/tools/render_system_authority_map.py`
+  - regenerated authority map
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - context-routing / authority checks passed
+  - repo still has one unrelated pre-existing failure:
+    - Check 60 `family_rr_locks` coverage
+
+## Update (2026-04-13 — context-routing anti-debt hardening)
+
+### Headline
+
+The deterministic context router now has stronger anti-drift contracts. The
+first slice removed raw file duplication from task manifests; this follow-up
+removes raw verification-command duplication and makes natural-language routing
+fail closed on ambiguity.
+
+### What changed
+
+- hardened `context/registry.py`
+  - added shared `VERIFICATION_STEPS`
+  - verification profiles now reference step IDs instead of owning raw command
+    strings
+  - task matching now supports:
+    - `required_terms`
+    - `excluded_terms`
+    - explicit `priority`
+  - resolver selection now fails closed on score ties instead of silently
+    guessing
+  - registry validation now checks that task examples still resolve to their
+    declared manifest IDs
+- hardened `scripts/tools/context_resolver.py`
+  - fallback output now distinguishes:
+    - no deterministic match
+    - ambiguous match
+  - JSON fallback includes candidate routes for debugging/router tuning
+- expanded targeted regression coverage
+  - registry tests now cover:
+    - verification-step expansion
+    - fail-closed ambiguity handling
+    - example-route stability
+  - resolver tests now cover:
+    - expanded verification-step payloads
+    - explicit fallback reason reporting
+- updated durable design doc:
+  - `docs/plans/2026-04-13-self-documenting-context-routing.md`
+
+### Why this matters
+
+Without this pass, two debt vectors remained:
+
+- verification profiles could drift by repeating command strings in multiple
+  places
+- natural-language routing could silently choose the wrong task when two routes
+  looked equally plausible
+
+The router now keeps command ownership single-sourced and prefers fallback over
+false confidence.
+
+### Verification
+
+- `./.venv-wsl/bin/python -m py_compile context/registry.py scripts/tools/context_resolver.py tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_pipeline/test_check_drift_context.py`
+  - passed
+- `./.venv-wsl/bin/ruff check context scripts/tools/context_resolver.py tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_pipeline/test_check_drift_context.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_pipeline/test_check_drift_context.py -q`
+  - `15 passed`
+- `./.venv-wsl/bin/python scripts/tools/render_context_catalog.py`
+  - regenerated `docs/context/*`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - new context-routing checks passed:
+    - 101 registry integrity
+    - 102 generated docs
+    - 103 AGENTS router reference
+    - 104 startup-doc router reference
+  - repo still has one unrelated pre-existing failure:
+    - Check 60 `family_rr_locks` coverage
+
+## Update (2026-04-13 — self-documenting context routing foundation)
+
+### Headline
+
+Started the deterministic task-context routing architecture so cold-start
+agents do not have to reconstruct repo context from folklore or a monolithic
+`CLAUDE.md`.
+
+This first slice is intentionally foundation-only:
+
+- one code-backed routing registry
+- one resolver CLI
+- generated task/source docs
+- drift enforcement so the routing layer does not become a second stale doc
+
+### What changed
+
+- added `context/registry.py`
+  - canonical routing registry for:
+    - domain contexts
+    - live views
+    - verification profiles
+    - task manifests
+  - **anti-debt design rule:** tasks reference domain/profile IDs, not raw file
+    lists, so the task layer does not duplicate path ownership
+- added `scripts/tools/context_resolver.py`
+  - deterministic resolver from:
+    - `--task-id`
+    - or natural-language `--task`
+  - outputs exact doctrine files, canonical files, live views, anti-truth
+    surfaces, and verification profile
+- added `scripts/tools/render_context_catalog.py`
+  - generates:
+    - `docs/context/README.md`
+    - `docs/context/source-catalog.md`
+    - `docs/context/task-routes.md`
+- updated `pipeline/system_authority.py`
+  - registered the routing registry and resolver as canonical authority
+    surfaces
+- updated `docs/governance/document_authority.md`
+  - declared `docs/context/*.md` as generated task-routing orientation surfaces
+- updated `AGENTS.md`
+  - cold-start agents are now pointed at `scripts/tools/context_resolver.py`
+    first, with a deterministic fallback read set
+- added drift enforcement in `pipeline/check_drift.py`
+  - context registry refs must resolve to real files / known IDs
+  - generated context docs must match the registry
+  - `AGENTS.md` must mention the resolver path
+- added targeted regression coverage:
+  - `tests/test_context/test_registry.py`
+  - `tests/test_tools/test_context_resolver.py`
+  - `tests/test_pipeline/test_check_drift_context.py`
+- added durable design note:
+  - `docs/plans/2026-04-13-self-documenting-context-routing.md`
+
+### Why this shape
+
+The first design draft had a debt risk: task manifests repeating raw file paths,
+live views, and verification commands would itself become a stale second
+registry.
+
+The fix was to make:
+
+- domains own source mappings once
+- tasks reference domains and verification profiles by ID only
+- generated docs and the resolver expand IDs into concrete read sets
+
+That keeps the system deterministic without copying truth into multiple layers.
+
+### Verification
+
+- `./.venv-wsl/bin/python -m py_compile context/__init__.py context/registry.py scripts/tools/context_resolver.py scripts/tools/render_context_catalog.py tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_pipeline/test_check_drift_context.py`
+  - passed
+- `./.venv-wsl/bin/ruff check context scripts/tools/context_resolver.py scripts/tools/render_context_catalog.py tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_pipeline/test_check_drift_context.py`
+  - passed
+- `./.venv-wsl/bin/ruff format --check context scripts/tools/context_resolver.py scripts/tools/render_context_catalog.py tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_pipeline/test_check_drift_context.py`
+  - passed
+- `./.venv-wsl/bin/python -m pytest tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_pipeline/test_check_drift_context.py -q`
+  - `9 passed`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - `NO DRIFT DETECTED: 101 checks passed`
+
+### Next proper slice
+
+- broaden the task taxonomy beyond the current seed set
+- add more generated live views for research/trading/data task families
+- gradually refactor startup docs and tool-local rule files to reference the
+  routing layer instead of carrying duplicated routing prose
+- keep doctrine docs human-written, but keep changing state in code/read models
+  only
+
 ## Update (2026-04-13 — control-plane review hardening: direct-entry shell + venv truth)
 
 ### Headline
