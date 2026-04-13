@@ -29,4 +29,5 @@ if not "%ACTION%"=="" if /I not "%ACTION%"=="task" if /I not "%ACTION%"=="green"
 )
 
 :: Default: launch Claude Code CLI in this project
-claude
+:: Use claude.exe explicitly to avoid this .bat calling itself recursively
+claude.exe
