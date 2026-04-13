@@ -867,6 +867,8 @@ class TestBuildPulse:
         mock_lifecycle.assert_not_called()
         mock_upcoming.assert_not_called()
         assert any(item.source == "runtime_snapshot" for item in report.items)
+        assert report.recommendation is not None
+        assert "Refresh:" in report.recommendation
 
     def test_fast_refresh_recomputes_live_snapshot(self, tmp_path: Path) -> None:
         _mkfile(tmp_path / "HANDOFF.md", "## Last Session\n- **Tool:** Test\n- **Date:** 2026-04-13\n- **Summary:** test")
