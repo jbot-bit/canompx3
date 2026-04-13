@@ -116,19 +116,12 @@ def _get_contract(instrument: str) -> str:
     return symbol
 
 
-# ── Lifespan: warm up auth on startup ───────────────────────────────────────
+# ── Lifespan: validate secret, keep broker auth lazy ────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Webhook server starting — demo=%s port=%d", DEMO, PORT)
     if not WEBHOOK_SECRET:
         raise RuntimeError("WEBHOOK_SECRET env var is required — refusing to start without authentication")
-    try:
-        # Warm up auth + account ID in a thread (synchronous HTTP call)
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, _get_account_id)
-        log.info("Auth ready — account_id=%d", _account_id)
-    except Exception as e:
-        log.error("Auth warm-up failed: %s — orders will be rejected until auth resolves", e)
     yield
     log.info("Webhook server shutting down")
 

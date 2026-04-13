@@ -911,6 +911,53 @@ class TestDedup:
 class TestValidatorSkipsAliases:
     """Test that strategy_validator skips non-canonical (alias) strategies."""
 
+    def _seed_trade_window_facts(self, con, row: dict) -> None:
+        """Insert the minimal canonical facts needed for promotion provenance."""
+        instrument = row["instrument"]
+        orb_label = row["orb_label"]
+        orb_minutes = row["orb_minutes"]
+        entry_model = row["entry_model"]
+        confirm_bars = row["confirm_bars"]
+        rr_target = row["rr_target"]
+        filter_type = row["filter_type"]
+
+        trading_day = date(2024, 1, 2)
+        feature_cols = ["trading_day", "symbol", "orb_minutes", f"orb_{orb_label}_break_dir"]
+        feature_vals = [trading_day, instrument, orb_minutes, "LONG"]
+
+        if filter_type.startswith("ORB_G") or filter_type.startswith("ORB_L"):
+            feature_cols.append(f"orb_{orb_label}_size")
+            feature_vals.append(10.0)
+
+        placeholders = ", ".join(["?"] * len(feature_cols))
+        con.execute(
+            f"INSERT OR IGNORE INTO daily_features ({', '.join(feature_cols)}) VALUES ({placeholders})",
+            feature_vals,
+        )
+
+        con.execute(
+            """INSERT OR IGNORE INTO orb_outcomes (
+                   trading_day, symbol, orb_minutes, orb_label, entry_model,
+                   confirm_bars, rr_target, outcome, pnl_r, mae_r, mfe_r,
+                   entry_price, stop_price
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            [
+                trading_day,
+                instrument,
+                orb_minutes,
+                orb_label,
+                entry_model,
+                confirm_bars,
+                rr_target,
+                "win",
+                1.0,
+                0.2,
+                1.5,
+                100.0,
+                95.0,
+            ],
+        )
+
     def _setup_db(self, tmp_path, strategies):
         """Create temp DB with schema + strategies."""
         db_path = tmp_path / "test.db"
@@ -935,6 +982,8 @@ class TestValidatorSkipsAliases:
                 f"INSERT INTO experimental_strategies ({col_str}) VALUES ({placeholders})",
                 list(s.values()),
             )
+            if s.get("validation_status") in (None, ""):
+                self._seed_trade_window_facts(con, s)
         con.commit()
         con.close()
         return db_path

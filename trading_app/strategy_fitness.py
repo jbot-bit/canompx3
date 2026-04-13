@@ -351,9 +351,21 @@ def _load_strategy_outcomes(
         where.append("trading_day <= ?")
         params.append(end_date)
 
+    # Some lightweight test fixtures create a minimal orb_outcomes table that
+    # omits entry/exit timestamp columns. Read whatever is available and alias
+    # missing fields to NULL so the loader works across full and reduced schemas.
+    outcome_columns = {row[1] for row in con.execute("PRAGMA table_info('orb_outcomes')").fetchall()}
+    entry_ts_expr = "entry_ts" if "entry_ts" in outcome_columns else "NULL AS entry_ts"
+    if "exit_ts" in outcome_columns:
+        exit_ts_expr = "exit_ts"
+    elif "ts_exit_ts" in outcome_columns:
+        exit_ts_expr = "ts_exit_ts AS exit_ts"
+    else:
+        exit_ts_expr = "NULL AS exit_ts"
+
     rows = con.execute(
         f"""SELECT trading_day, outcome, pnl_r, mae_r, mfe_r,
-                   entry_price, stop_price, entry_ts, exit_ts
+                   entry_price, stop_price, {entry_ts_expr}, {exit_ts_expr}
             FROM orb_outcomes
             WHERE {" AND ".join(where)}
             ORDER BY trading_day""",
