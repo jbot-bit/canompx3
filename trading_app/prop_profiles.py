@@ -407,33 +407,58 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "NYSE_OPEN",
                 "COMEX_SETTLE",
                 "CME_PRECLOSE",
-                "US_DATA_1000",
+                "SINGAPORE_OPEN",
             }
         ),
         allowed_instruments=frozenset({"MNQ"}),
-        # VALIDATED-SOURCED LANES — history and reconstruction audit trail.
+        # VALIDATED-SOURCED LANES.
         #
-        # V1 (2026-04-10): 5 ORB_G5 lanes (multi-RR) + 1 COMEX_SETTLE OVNRNG_100.
-        # V1 problems: EUROPE_FLOW RR1.5+RR2.0 rho=0.862, TOKYO_OPEN RR1.5+RR2.0
-        #   rho=0.844 — 2 redundant slots, only 4 independent bets from 6 lanes.
-        # V1 retired lanes (2026-04-12): CME_PRECLOSE X_MES_ATR60 (L7-RETIRE:
-        #   forward-window C6 WFE 0.25, C8 26%, SR ALARM at N=42 — IS metrics
-        #   were strong but 2026 forward assessment failed three gates).
-        #   EUROPE_FLOW COST_LT12 (L7-SUBSET: rho=1.000 with ORB_G5, structural).
+        # Core (2026-04-10 — multi-RR Pathway B discovery, 5 ORB_G5 lanes):
+        #   hypothesis file 2026-04-10-mnq-multi-rr-individual.yaml. All
+        #   passed WF, OOS, era stability gates.
         #
-        # V2 (2026-04-13): FULL RECONSTRUCTION via 30x30 correlation audit.
-        #   The L7-RETIRE of CME_PRECLOSE X_MES_ATR60 was an operational
-        #   forward-window assessment (N=42 in early 2026). The IS-validated
-        #   entry (WFE=1.12, N=596, p=5e-6) remained active in validated_setups
-        #   throughout. The 2026-04-13 reconstruction re-selected this strategy
-        #   on IS merit + trade-level decorrelation (rho=0.025 vs COMEX, -0.083
-        #   vs EUROPE). The forward-window weakness is monitored via SR/C12.
+        # Expansion (2026-04-12 — profit expansion, 1 lane net after audits):
+        #   L6 MNQ_COMEX_SETTLE OVNRNG_100 (fam 752, added 2026-04-12 in the
+        #     first expansion round; currently WATCH — C6/C8 barely pass, SR
+        #     in ALARM at N=58, locked re-check at N>=100).
+        #
+        # Two prior L7 additions and one PROFIT-NEXT add have been retired:
+        #
+        # 1. MNQ_CME_PRECLOSE X_MES_ATR60 (added + RETIRED 2026-04-12)
+        #    Literature-grounded re-audit caught C6 WFE 0.25, C8 ratio 26%,
+        #    SR ALARM — three simultaneous hard failures.
+        #
+        # 2. MNQ_EUROPE_FLOW COST_LT12 (added + RETIRED 2026-04-12, L7-SUBSET)
+        #    PROFIT-NEXT round added this under the metadata claim "new
+        #    family 5cc distinct from L1/L2's 01c". Stress-test on the full
+        #    history discovered the claim is wrong AT THE TRADE LEVEL: L7 is
+        #    a strict subset of L1 with perfect daily PnL correlation (+1.000
+        #    on all 1109 shared days, 0 differing, 0 L7-only days). The
+        #    relationship is structural — the hypothesis file itself
+        #    (2026-04-11-mnq-cost-gate.yaml line 10) notes
+        #    "COST_LT12 = G10 equivalent for MNQ". COST_LT12 gates orb_size
+        #    > 12.17pts (= total_friction / (0.12 * point_value)); ORB_G5
+        #    gates orb_size >= 5pts. Every COST_LT12 pass is therefore an
+        #    ORB_G5 pass, so the two lanes trade identical signals on the
+        #    cost-viable days. Deploying L7 alongside L1 was a 94%-duplication
+        #    sizing multiplier, not diversification. Retired same-day before
+        #    any live exposure. See deferred-findings.md entry L7-SUBSET.
+        #
+        # 3. PROFIT-NEXT rejected candidates (static passed, C12 alarmed):
+        #      US_DATA_1000 X_MES_ATR60  — WFE 0.64, C8 67%,  SR ALARM@#34
+        #      NYSE_OPEN   X_MES_ATR60  — WFE 2.14, C8 213%, SR ALARM@#32
         #
         # Durable lesson: trade-level correlation must be checked pre-deploy.
-        # The 2026-04-13 reconstruction implemented this via
-        # scripts/research/portfolio_correlation_audit.py (30x30 matrix).
+        # `family_hash` is metadata (a grouping key on filter_type) and does
+        # not detect trade-level redundancy. A COST_LT / ORB_G subset
+        # relationship will always metadata-appear "distinct family" but be
+        # trade-level-identical. A future pre-flight gate should compute
+        # daily-PnL correlation of every candidate against every existing
+        # lane on the full history and reject rho > ~0.7 or
+        # shared_of_smaller > 0.8. Open task: add as a new drift / pre-flight
+        # rule before the next profit-expansion round.
         #
-        # Enforced by drift check 94 (pipeline/check_drift.py) — every lane in
+        # Enforced by drift check 95 (pipeline/check_drift.py) — every lane in
         # an active profile must exist in validated_setups with status='active'.
         daily_lanes=(
             # --- Portfolio reconstruction 2026-04-13 ---
