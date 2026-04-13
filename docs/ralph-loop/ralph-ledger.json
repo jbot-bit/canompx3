@@ -1,8 +1,8 @@
 {
-  "total_iterations": 158,
-  "last_updated": "2026-04-10",
-  "consecutive_low_only": 2,
-  "last_high_finding_iter": 163,
+  "total_iterations": 159,
+  "last_updated": "2026-04-13",
+  "consecutive_low_only": 0,
+  "last_high_finding_iter": 166,
   "findings_by_type": {
     "canonical_violation": {
       "found": 54,
@@ -11,10 +11,10 @@
       "fix_rate": 0.76
     },
     "silent_failure": {
-      "found": 36,
-      "fixed": 34,
+      "found": 37,
+      "fixed": 35,
       "deferred": 1,
-      "fix_rate": 0.94
+      "fix_rate": 0.95
     },
     "other": {
       "found": 22,
@@ -116,12 +116,12 @@
   "findings_by_severity": {
     "CRITICAL": 3,
     "HIGH": 12,
-    "MEDIUM": 42,
+    "MEDIUM": 43,
     "LOW": 101
   },
   "classifications": {
     "judgment": 74,
-    "mechanical": 57,
+    "mechanical": 58,
     "audit-only": 27
   },
   "files_audited": {
@@ -243,6 +243,11 @@
     "trading_app/mcp_server.py": {
       "audit_count": 2,
       "last_iter": 158,
+      "findings": 2
+    },
+    "trading_app/risk_manager.py": {
+      "audit_count": 2,
+      "last_iter": 166,
       "findings": 2
     },
     "trading_app/strategy_fitness.py": {
@@ -438,11 +443,6 @@
     "trading_app/market_state.py": {
       "audit_count": 1,
       "last_iter": 38,
-      "findings": 1
-    },
-    "trading_app/risk_manager.py": {
-      "audit_count": 1,
-      "last_iter": 39,
       "findings": 1
     },
     "trading_app/entry_rules.py": {
@@ -2819,6 +2819,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "3898432c"
+    },
+    {
+      "iter": 166,
+      "date": "2026-04-13",
+      "phase": "fix",
+      "classification": "mechanical",
+      "target": "trading_app/risk_manager.py:322-331",
+      "finding_type": "silent_failure",
+      "severity": "MEDIUM",
+      "verdict": "FIXED",
+      "commit": "2c3eff2f"
     }
   ]
 }

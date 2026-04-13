@@ -1737,3 +1737,13 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 2 production files (sprt_monitor.py, sr_monitor.py); 0 callers affected; tests don't mock the constant
 - Verification: PASS — 11/11 tests (test_sprt_monitor + test_sr_monitor); drift 90/90 (6 pre-existing)
 - Commit: 3898432c
+
+## Iteration 166 — 2026-04-13
+- Phase: fix
+- Classification: [mechanical]
+- Target: trading_app/risk_manager.py:322-331
+- Finding: RiskManager._warnings accumulated in can_enter() (drawdown_warning + chop_warning) but never logged — silently discarded on daily_reset(). Warnings provided zero operational visibility.
+- Action: Added `import logging` + module-level logger + log.warning() call at each warning append site (drawdown and chop). Warning list still maintained for callers that read it directly.
+- Blast radius: 1 production file (risk_manager.py); session_orchestrator.py and paper_trader.py unchanged (no API change)
+- Verification: PASS — 105/105 tests (test_risk_manager + test_engine_risk_integration + test_market_state); drift 103/103 code checks PASS
+- Commit: 2c3eff2f
