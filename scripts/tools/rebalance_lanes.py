@@ -19,6 +19,7 @@ from trading_app.lane_allocator import (
     _compute_orb_size_stats,
     build_allocation,
     compute_lane_scores,
+    compute_pairwise_correlation,
     enrich_scores_with_liveness,
     generate_report,
     save_allocation,
@@ -104,6 +105,16 @@ def main() -> None:
         tier = ACCOUNT_TIERS.get((profile.firm, profile.account_size))
         max_dd = tier.max_dd if tier else 3000.0
 
+        # Compute pairwise correlation matrix for deployable candidates
+        deployable = [s for s in scores if s.status in ("DEPLOY", "RESUME", "PROVISIONAL")]
+        if profile.allowed_instruments:
+            deployable = [s for s in deployable if s.instrument in profile.allowed_instruments]
+        if profile.allowed_sessions:
+            deployable = [s for s in deployable if s.orb_label in profile.allowed_sessions]
+        print(f"Computing pairwise correlation for {len(deployable)} candidates...")
+        corr_matrix = compute_pairwise_correlation(deployable)
+        print(f"  {len(corr_matrix)} pairs computed")
+
         allocation = build_allocation(
             scores,
             max_slots=profile.max_slots,
@@ -112,6 +123,7 @@ def main() -> None:
             allowed_sessions=profile.allowed_sessions,
             stop_multiplier=profile.stop_multiplier,
             orb_size_stats=orb_stats,
+            correlation_matrix=corr_matrix,
         )
 
         report = generate_report(scores, allocation, args.date, pid)

@@ -12,6 +12,7 @@ import duckdb
 import pytest
 
 from trading_app.lane_allocator import (
+    CORRELATION_REJECT_RHO,
     LaneScore,
     _classify_status,
     _effective_annual_r,
@@ -830,3 +831,75 @@ class TestLivenessScoring:
             orb_size_stats=orb_stats,
         )
         assert len(result) == 0
+
+
+class TestCorrelationAwareSelection:
+    """Tests for correlation-gated greedy lane selection."""
+
+    def test_high_corr_pair_rejected(self):
+        """Two lanes with rho > 0.70 should not both be selected."""
+        a = _make_score(strategy_id="STRAT_A", orb_label="COMEX_SETTLE", annual_r_estimate=44.0)
+        b = _make_score(strategy_id="STRAT_B", orb_label="COMEX_SETTLE", annual_r_estimate=40.0)
+        corr = {("STRAT_A", "STRAT_B"): 0.95}  # highly correlated
+        result = build_allocation([a, b], max_slots=5, correlation_matrix=corr)
+        assert len(result) == 1
+        assert result[0].strategy_id == "STRAT_A"  # higher AnnR wins
+
+    def test_low_corr_pair_accepted(self):
+        """Two lanes with rho < 0.70 should both be selected."""
+        a = _make_score(strategy_id="STRAT_A", orb_label="COMEX_SETTLE", annual_r_estimate=44.0)
+        b = _make_score(strategy_id="STRAT_B", orb_label="EUROPE_FLOW", annual_r_estimate=40.0)
+        corr = {("STRAT_A", "STRAT_B"): 0.15}  # low correlation
+        result = build_allocation([a, b], max_slots=5, correlation_matrix=corr)
+        assert len(result) == 2
+
+    def test_same_session_different_filters_rejected(self):
+        """Same session, different filters with high rho should be deduplicated."""
+        g5 = _make_score(strategy_id="MNQ_COMEX_E2_RR1.5_CB1_ORB_G5", orb_label="COMEX_SETTLE", annual_r_estimate=44.0)
+        lt12 = _make_score(strategy_id="MNQ_COMEX_E2_RR1.5_CB1_COST_LT12", orb_label="COMEX_SETTLE", annual_r_estimate=40.0)
+        # Same-session filters are typically rho ≈ 1.0
+        corr = {("MNQ_COMEX_E2_RR1.5_CB1_COST_LT12", "MNQ_COMEX_E2_RR1.5_CB1_ORB_G5"): 1.0}
+        result = build_allocation([g5, lt12], max_slots=5, correlation_matrix=corr)
+        assert len(result) == 1
+        assert result[0].strategy_id == g5.strategy_id
+
+    def test_three_lanes_one_rejected(self):
+        """With 3 lanes where A-B correlated but A-C and B-C uncorrelated, pick A+C."""
+        a = _make_score(strategy_id="A", annual_r_estimate=50.0)
+        b = _make_score(strategy_id="B", orb_label="EUROPE_FLOW", annual_r_estimate=45.0)
+        c = _make_score(strategy_id="C", orb_label="TOKYO_OPEN", annual_r_estimate=30.0)
+        corr = {
+            ("A", "B"): 0.85,   # A and B correlated → B rejected
+            ("A", "C"): 0.10,   # A and C independent
+            ("B", "C"): 0.05,   # B and C independent
+        }
+        result = build_allocation([a, b, c], max_slots=5, correlation_matrix=corr)
+        assert len(result) == 2
+        sids = {r.strategy_id for r in result}
+        assert sids == {"A", "C"}
+
+    def test_no_corr_matrix_uses_session_fallback(self):
+        """Without correlation matrix, falls back to 1-per-session heuristic."""
+        a = _make_score(strategy_id="A", orb_label="COMEX_SETTLE", annual_r_estimate=44.0)
+        b = _make_score(strategy_id="B", orb_label="COMEX_SETTLE", annual_r_estimate=40.0)
+        # No correlation_matrix → 1-per-session → only A selected
+        result = build_allocation([a, b], max_slots=5)
+        assert len(result) == 1
+        assert result[0].strategy_id == "A"
+
+    def test_corr_threshold_boundary(self):
+        """Exactly at threshold should pass (> not >=)."""
+        a = _make_score(strategy_id="A", annual_r_estimate=44.0)
+        b = _make_score(strategy_id="B", orb_label="EUROPE_FLOW", annual_r_estimate=40.0)
+        corr = {("A", "B"): CORRELATION_REJECT_RHO}  # exactly at threshold
+        result = build_allocation([a, b], max_slots=5, correlation_matrix=corr)
+        # At threshold (not above) → both selected
+        assert len(result) == 2
+
+    def test_missing_pair_in_matrix_defaults_zero(self):
+        """Missing pair in correlation matrix defaults to rho=0 (uncorrelated)."""
+        a = _make_score(strategy_id="A", annual_r_estimate=44.0)
+        b = _make_score(strategy_id="B", orb_label="EUROPE_FLOW", annual_r_estimate=40.0)
+        corr = {}  # empty matrix — all pairs default to 0
+        result = build_allocation([a, b], max_slots=5, correlation_matrix=corr)
+        assert len(result) == 2

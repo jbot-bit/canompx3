@@ -31,6 +31,7 @@ from pipeline.cost_model import COST_SPECS
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS
+from trading_app.lane_correlation import _load_lane_daily_pnl, _pearson
 from trading_app.validated_shelf import deployable_validated_relation
 
 # ---------------------------------------------------------------------------
@@ -494,6 +495,55 @@ def _effective_annual_r(s: LaneScore) -> float:
     return adj
 
 
+CORRELATION_REJECT_RHO = 0.70  # Same as lane_correlation.RHO_REJECT_THRESHOLD
+
+
+def compute_pairwise_correlation(
+    candidates: list[LaneScore],
+    db_path: str | Path | None = None,
+) -> dict[tuple[str, str], float]:
+    """Compute pairwise Pearson rho on filtered daily P&L for candidate strategies.
+
+    Uses the same trailing window as the allocator (all available data through
+    rebalance_date). Returns {(sid_a, sid_b): rho} with canonical key ordering.
+    """
+    db = db_path or GOLD_DB_PATH
+    con = duckdb.connect(str(db), read_only=True)
+    configure_connection(con)
+
+    try:
+        pnl_series: dict[str, dict] = {}
+        for s in candidates:
+            lane = {
+                "instrument": s.instrument,
+                "orb_label": s.orb_label,
+                "orb_minutes": 5,
+                "entry_model": "E2",
+                "rr_target": s.rr_target,
+                "confirm_bars": s.confirm_bars,
+                "filter_type": s.filter_type,
+            }
+            pnl_series[s.strategy_id] = _load_lane_daily_pnl(con, lane)
+
+        sids = [s.strategy_id for s in candidates]
+        pairs: dict[tuple[str, str], float] = {}
+        for i, a in enumerate(sids):
+            for j, b in enumerate(sids):
+                if j <= i:
+                    continue
+                key = (a, b) if a < b else (b, a)
+                shared = sorted(set(pnl_series[a]) & set(pnl_series[b]))
+                if len(shared) >= 5:
+                    xs = [pnl_series[a][d] for d in shared]
+                    ys = [pnl_series[b][d] for d in shared]
+                    pairs[key] = _pearson(xs, ys)
+                else:
+                    pairs[key] = 0.0
+        return pairs
+    finally:
+        con.close()
+
+
 def build_allocation(
     scores: list[LaneScore],
     *,
@@ -504,14 +554,20 @@ def build_allocation(
     stop_multiplier: float = 0.75,
     prior_allocation: list[str] | None = None,
     orb_size_stats: dict[tuple[str, str], tuple[float, float]] | None = None,
+    correlation_matrix: dict[tuple[str, str], float] | None = None,
 ) -> list[LaneScore]:
     """Select top lanes for a profile, respecting constraints.
 
-    Greedy selection: rank by liveness-adjusted annual_r, add lanes that
-    fit DD budget. SR ALARM and 3mo-negative lanes are penalized in ranking
-    (not hard-blocked). DD estimation uses per-session P90 from orb_size_stats
-    when available.
+    Correlation-aware greedy selection: rank by liveness-adjusted annual_r,
+    accept candidate only if pairwise rho < 0.70 with all already-selected
+    lanes. This replaces the old 1-per-session heuristic and naturally
+    deduplicates same-session strategies (rho ≈ 1.0) while also catching
+    cross-session redundancies.
 
+    When correlation_matrix is None, falls back to the 1-per-session
+    heuristic (for unit tests and environments without DB access).
+
+    DD estimation uses per-session P90 from orb_size_stats when available.
     Hysteresis: only replace a lane if new candidate >20% better.
     """
     # Filter to deployable
@@ -523,28 +579,45 @@ def build_allocation(
     if allowed_sessions:
         candidates = [s for s in candidates if s.orb_label in allowed_sessions]
 
-    # One winner per instrument × session (best liveness-adjusted annual_r)
-    best_per_session: dict[tuple[str, str], LaneScore] = {}
-    for s in candidates:
-        key = (s.instrument, s.orb_label)
-        if key not in best_per_session or _effective_annual_r(s) > _effective_annual_r(best_per_session[key]):
-            best_per_session[key] = s
+    if correlation_matrix is not None:
+        # Correlation-aware: all candidates enter ranking, greedy rho gate
+        ranked = sorted(
+            candidates,
+            key=lambda s: (0 if s.status == "PROVISIONAL" else 1, _effective_annual_r(s)),
+            reverse=True,
+        )
+    else:
+        # Fallback: 1 winner per instrument × session (legacy behavior)
+        best_per_session: dict[tuple[str, str], LaneScore] = {}
+        for s in candidates:
+            key = (s.instrument, s.orb_label)
+            if key not in best_per_session or _effective_annual_r(s) > _effective_annual_r(best_per_session[key]):
+                best_per_session[key] = s
+        ranked = sorted(
+            best_per_session.values(),
+            key=lambda s: (0 if s.status == "PROVISIONAL" else 1, _effective_annual_r(s)),
+            reverse=True,
+        )
 
-    # Sort by liveness-adjusted annual R descending
-    # PROVISIONAL ranked below non-provisional at equal adjusted annual_r
-    ranked = sorted(
-        best_per_session.values(),
-        key=lambda s: (0 if s.status == "PROVISIONAL" else 1, _effective_annual_r(s)),
-        reverse=True,
-    )
-
-    # Greedy DD-budget selection
+    # Greedy DD-budget + correlation selection
     selected: list[LaneScore] = []
     dd_used = 0.0
 
     for lane in ranked:
         if len(selected) >= max_slots:
             break
+
+        # Correlation gate: reject if rho > threshold with any selected lane
+        if correlation_matrix is not None:
+            corr_reject = False
+            for sel in selected:
+                key = (lane.strategy_id, sel.strategy_id) if lane.strategy_id < sel.strategy_id else (sel.strategy_id, lane.strategy_id)
+                rho = correlation_matrix.get(key, 0.0)
+                if rho > CORRELATION_REJECT_RHO:
+                    corr_reject = True
+                    break
+            if corr_reject:
+                continue
 
         # Estimate worst-case DD contribution using per-session P90
         cost = COST_SPECS.get(lane.instrument)
@@ -562,7 +635,6 @@ def build_allocation(
             continue
 
         # Hysteresis: only replace a prior lane if new candidate is >20% better
-        # (Carver Ch.12 switching cost — prevents monthly churn)
         if prior_allocation and lane.strategy_id not in prior_allocation:
             session_key = (lane.instrument, lane.orb_label)
             prior_in_session = [
