@@ -4758,19 +4758,25 @@ def check_system_authority_map() -> list[str]:
 
 def check_context_routing_registry() -> list[str]:
     """Task-context registry must resolve to real paths and known domain/profile IDs."""
-    from context.registry import validate_registry
+    try:
+        from context.registry import validate_registry
+    except ImportError:
+        return ["  context/registry.py not found — context package not yet on this branch"]
 
     return [f"  {violation}" for violation in validate_registry()]
 
 
 def check_context_generated_docs() -> list[str]:
     """Generated context-routing docs must stay in sync with the canonical registry."""
-    from context.registry import (
-        render_institutional_markdown,
-        render_readme_markdown,
-        render_source_catalog_markdown,
-        render_task_routes_markdown,
-    )
+    try:
+        from context.registry import (
+            render_institutional_markdown,
+            render_readme_markdown,
+            render_source_catalog_markdown,
+            render_task_routes_markdown,
+        )
+    except ImportError:
+        return ["  context/registry.py not found — context package not yet on this branch"]
 
     expected_by_path = {
         PROJECT_ROOT / "docs" / "context" / "README.md": render_readme_markdown(),
@@ -4794,7 +4800,11 @@ def check_context_generated_docs() -> list[str]:
 
 def check_context_view_contracts() -> list[str]:
     """Generated task views must preserve strict truth-class boundaries."""
-    from scripts.tools.context_views import VIEW_BUILDERS, build_view, validate_view_payload
+    try:
+        from scripts.tools.context_views import VIEW_BUILDERS, build_view, validate_view_payload
+    except (ImportError, ModuleNotFoundError, SystemExit):
+        # SystemExit: context_views.py runs argparse at module level
+        return ["  context_views not importable — context package not yet wired on this branch"]
 
     violations: list[str] = []
     db_path = PROJECT_ROOT / "data" / "gold.db"
