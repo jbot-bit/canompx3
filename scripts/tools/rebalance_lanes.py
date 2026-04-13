@@ -16,6 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from trading_app.lane_allocator import (
+    _compute_orb_size_stats,
     build_allocation,
     compute_lane_scores,
     generate_report,
@@ -96,9 +97,13 @@ def main() -> None:
         report = generate_report(scores, allocation, args.date, pid)
         print(report)
 
+        # Compute ORB size stats (per-session avg/P90 from trailing window)
+        orb_stats = _compute_orb_size_stats(args.date)
+        print(f"\nORB size stats computed for {len(orb_stats)} instrument×session combos")
+
         # Save allocation
-        out_path = save_allocation(scores, allocation, args.date, pid, args.output)
-        print(f"\nAllocation saved to: {out_path}")
+        out_path = save_allocation(scores, allocation, args.date, pid, args.output, orb_size_stats=orb_stats)
+        print(f"Allocation saved to: {out_path}")
 
 
 if __name__ == "__main__":

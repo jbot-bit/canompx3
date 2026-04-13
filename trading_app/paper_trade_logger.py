@@ -68,9 +68,11 @@ def build_lanes(profile_id: str | None = None) -> tuple[LaneDef, ...]:
         else:
             raise RuntimeError("No active profiles found")
 
+    from trading_app.prop_profiles import effective_daily_lanes
+
     profile = ACCOUNT_PROFILES[profile_id]
     lanes = []
-    for spec in profile.daily_lanes:
+    for spec in effective_daily_lanes(profile):
         parsed = parse_strategy_id(spec.strategy_id)
         lane_name = f"{spec.orb_label}_{parsed['filter_type'][:12]}"
         lanes.append(

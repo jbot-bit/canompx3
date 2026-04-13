@@ -17,7 +17,7 @@ from typing import Sequence
 import duckdb
 
 from pipeline.db_config import configure_connection
-from trading_app.prop_profiles import AccountProfile, get_firm_spec
+from trading_app.prop_profiles import AccountProfile, effective_daily_lanes, get_firm_spec
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -42,7 +42,7 @@ def build_profile_fingerprint(profile: AccountProfile) -> str:
                 "required_fitness": list(lane.required_fitness),
                 "max_orb_size_pts": lane.max_orb_size_pts,
             }
-            for lane in profile.daily_lanes
+            for lane in effective_daily_lanes(profile)
         ],
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))

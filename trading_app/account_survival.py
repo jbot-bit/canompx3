@@ -474,9 +474,14 @@ def _load_profile_daily_scenarios(
         lane_first_days: dict[str, date] = {}
         trades_by_day: dict[date, list[TradePath]] = {}
         instruments = sorted({lane["instrument"] for lane in lane_defs})
+        from trading_app.prop_profiles import load_allocation_lanes
+
+        lane_specs = profile.daily_lanes
+        if not lane_specs:
+            lane_specs = load_allocation_lanes(profile.profile_id)
         effective_stop_by_strategy = {
             lane.strategy_id: float(lane.planned_stop_multiplier or profile.stop_multiplier)
-            for lane in profile.daily_lanes
+            for lane in lane_specs
         }
 
         for lane in lane_defs:

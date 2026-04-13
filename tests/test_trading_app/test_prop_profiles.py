@@ -89,18 +89,24 @@ class TestAccountProfile:
         """Structure-based assertions (not literal count). The primary auto
         profile evolves as validated lanes come and go; we anchor on the
         invariants: every lane must be MNQ-only, every lane must carry an
-        ORB cap, max_slots must equal the actual lane count, and all lane
+        ORB cap, effective lanes count <= max_slots, and all lane
         sessions must be in allowed_sessions.
+
+        Since 2026-04-13 this profile uses dynamic lanes loaded from
+        lane_allocation.json via effective_daily_lanes().
         """
+        from trading_app.prop_profiles import effective_daily_lanes
+
         p = get_profile("topstep_50k_mnq_auto")
         assert p.firm == "topstep"
         assert p.account_size == 50_000
         assert p.active is True
-        assert p.max_slots == len(p.daily_lanes), (
-            "max_slots must match actual lane count"
+        lanes = effective_daily_lanes(p)
+        assert len(lanes) <= p.max_slots, (
+            f"effective lane count {len(lanes)} exceeds max_slots {p.max_slots}"
         )
-        assert all(lane.instrument == "MNQ" for lane in p.daily_lanes)
-        for lane in p.daily_lanes:
+        assert all(lane.instrument == "MNQ" for lane in lanes)
+        for lane in lanes:
             assert lane.max_orb_size_pts is not None, (
                 f"{lane.strategy_id} missing ORB cap"
             )
@@ -219,24 +225,27 @@ class TestDailyLaneSpecOrbCap:
         assert lane.max_orb_size_pts == 150.0
 
     def test_tokyo_open_has_cap(self):
-        """Every TOKYO_OPEN lane in the primary TopStep profile must carry the
-        same session-level ORB cap. Multi-RR profiles (2026-04-10) put more
-        than one lane on a session; the cap is a session attribute (volatility
-        profile) and must agree across all lanes on that session — consistency
-        is what ``get_lane_registry`` enforces.
+        """Every TOKYO_OPEN lane in the primary TopStep profile must carry an
+        ORB cap. Since 2026-04-13, caps come from allocator JSON (per-session
+        P90) rather than hardcoded values.
         """
+        from trading_app.prop_profiles import effective_daily_lanes
+
         p = get_profile("topstep_50k_mnq_auto")
-        tokyo_lanes = [lane for lane in p.daily_lanes if lane.orb_label == "TOKYO_OPEN"]
-        assert tokyo_lanes, "expected at least one TOKYO_OPEN lane"
-        caps = {lane.max_orb_size_pts for lane in tokyo_lanes}
-        assert caps == {80.0}, (
-            f"TOKYO_OPEN lanes must all share cap 80.0; got {caps}"
-        )
+        lanes = effective_daily_lanes(p)
+        tokyo_lanes = [lane for lane in lanes if lane.orb_label == "TOKYO_OPEN"]
+        if not tokyo_lanes:
+            pytest.skip("TOKYO_OPEN not in current allocation")
+        for lane in tokyo_lanes:
+            assert lane.max_orb_size_pts is not None, "TOKYO_OPEN missing ORB cap"
+            assert lane.max_orb_size_pts > 0, "TOKYO_OPEN cap must be positive"
 
     def test_all_lanes_have_caps(self):
         """All active primary lanes must have max_orb_size_pts set."""
+        from trading_app.prop_profiles import effective_daily_lanes
+
         p = get_profile("topstep_50k_mnq_auto")
-        for lane in p.daily_lanes:
+        for lane in effective_daily_lanes(p):
             assert lane.max_orb_size_pts is not None, f"{lane.orb_label} missing ORB cap"
             assert lane.max_orb_size_pts > 0, f"{lane.orb_label} cap must be positive"
 
@@ -251,21 +260,19 @@ class TestLaneRegistryOrbCap:
 
     def test_tokyo_open_cap_in_registry(self):
         registry = get_lane_registry()
-        assert registry["TOKYO_OPEN"]["max_orb_size_pts"] == 80.0  # MNQ COST_LT10
+        if "TOKYO_OPEN" in registry:
+            cap = registry["TOKYO_OPEN"]["max_orb_size_pts"]
+            assert cap is not None and cap > 0, "TOKYO_OPEN cap must be positive"
 
     def test_all_registry_lanes_have_caps(self):
-        """All primary active lanes should have ORB caps after honest deployment 2026-04-03."""
+        """All primary active lanes should have ORB caps. Since 2026-04-13,
+        caps are per-session P90 from allocator JSON (not hardcoded flat values).
+        """
         registry = get_lane_registry()
-        expected_caps = {
-            "CME_REOPEN": 30.0,
-            "EUROPE_FLOW": 120.0,
-            "SINGAPORE_OPEN": 80.0,
-            "COMEX_SETTLE": 80.0,
-            "TOKYO_OPEN": 80.0,
-        }
-        for label, expected in expected_caps.items():
-            if label in registry:
-                assert registry[label]["max_orb_size_pts"] == expected, f"{label} cap mismatch"
+        for label, info in registry.items():
+            cap = info.get("max_orb_size_pts")
+            assert cap is not None, f"{label} missing ORB cap"
+            assert cap > 0, f"{label} cap must be positive"
 
     def test_duplicate_session_profile_raises_on_session_registry(self):
         """get_lane_registry must raise when lanes on the same session
@@ -291,18 +298,13 @@ class TestLaneRegistryOrbCap:
         add and retire lanes, so we don't pin them here.
         """
         registry = get_lane_registry("topstep_50k_mnq_auto")
-        assert "EUROPE_FLOW" in registry
-        assert "TOKYO_OPEN" in registry
-        assert "NYSE_OPEN" in registry
-        assert registry["EUROPE_FLOW"]["max_orb_size_pts"] == 120.0
-        assert registry["TOKYO_OPEN"]["max_orb_size_pts"] == 80.0
-        assert registry["NYSE_OPEN"]["max_orb_size_pts"] == 80.0
-        # Every registry entry must carry a cap regardless of which
-        # sessions are currently deployed.
+        # Since 2026-04-13, caps are per-session P90 from allocator JSON.
+        # Assert structure (caps exist and are positive), not exact values.
+        assert len(registry) >= 1, "expected at least one session in registry"
         for label, info in registry.items():
-            assert info.get("max_orb_size_pts") is not None, (
-                f"{label} registry entry missing max_orb_size_pts"
-            )
+            cap = info.get("max_orb_size_pts")
+            assert cap is not None, f"{label} registry entry missing max_orb_size_pts"
+            assert cap > 0, f"{label} cap must be positive"
 
     def test_duplicate_session_profile_preserves_all_lane_definitions(self):
         lanes = get_profile_lane_definitions("topstep_50k_type_a")
@@ -467,3 +469,130 @@ class TestAccountProfileXfaFlag:
         tier = ACCOUNT_TIERS[("topstep", 100_000)]
         freeze = (tier.max_dd + 100) if prof.is_express_funded else (prof.account_size + tier.max_dd + 100)
         assert freeze == 103_100
+
+
+class TestLoadAllocationLanes:
+    """Tests for load_allocation_lanes — dynamic lane loading from JSON."""
+
+    def _write_json(self, tmp_path, data):
+        import json
+
+        path = tmp_path / "lane_allocation.json"
+        path.write_text(json.dumps(data))
+        return path
+
+    def _sample_allocation(self, profile_id="test_profile"):
+        return {
+            "rebalance_date": "2026-04-13",
+            "trailing_window_months": 12,
+            "profile_id": profile_id,
+            "lanes": [
+                {
+                    "strategy_id": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+                    "instrument": "MNQ",
+                    "orb_label": "COMEX_SETTLE",
+                    "rr_target": 1.5,
+                    "filter_type": "OVNRNG_100",
+                    "annual_r": 41.9,
+                    "trailing_expr": 0.282,
+                    "trailing_n": 161,
+                    "trailing_wr": 0.54,
+                    "months_negative": 0,
+                    "session_regime": "HOT",
+                    "status": "DEPLOY",
+                    "status_reason": "Session HOT",
+                    "avg_orb_pts": 32.1,
+                    "p90_orb_pts": 52.9,
+                },
+                {
+                    "strategy_id": "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_OVNRNG_100",
+                    "instrument": "MNQ",
+                    "orb_label": "EUROPE_FLOW",
+                    "rr_target": 1.5,
+                    "filter_type": "OVNRNG_100",
+                    "annual_r": 30.0,
+                    "trailing_expr": 0.15,
+                    "trailing_n": 100,
+                    "trailing_wr": 0.50,
+                    "months_negative": 0,
+                    "session_regime": "HOT",
+                    "status": "DEPLOY",
+                    "status_reason": "Session HOT",
+                },
+                {
+                    "strategy_id": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12",
+                    "instrument": "MNQ",
+                    "orb_label": "TOKYO_OPEN",
+                    "rr_target": 1.5,
+                    "filter_type": "COST_LT12",
+                    "annual_r": 5.0,
+                    "trailing_expr": 0.01,
+                    "trailing_n": 50,
+                    "trailing_wr": 0.48,
+                    "months_negative": 2,
+                    "session_regime": "COLD",
+                    "status": "PAUSE",
+                    "status_reason": "Session COLD",
+                },
+            ],
+            "paused": [],
+            "all_scores_count": 35,
+        }
+
+    def test_happy_path(self, tmp_path):
+        from trading_app.prop_profiles import load_allocation_lanes
+
+        path = self._write_json(tmp_path, self._sample_allocation())
+        lanes = load_allocation_lanes("test_profile", allocation_path=str(path))
+        # Only DEPLOY lanes (PAUSE excluded)
+        assert len(lanes) == 2
+        assert lanes[0].strategy_id == "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+        assert lanes[0].max_orb_size_pts == 52.9  # p90 from JSON
+        assert lanes[1].strategy_id == "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_OVNRNG_100"
+        assert lanes[1].max_orb_size_pts == 120.0  # fallback to _P90_ORB_PTS (no p90 in JSON)
+
+    def test_missing_file(self, tmp_path):
+        from trading_app.prop_profiles import load_allocation_lanes
+
+        lanes = load_allocation_lanes("test_profile", allocation_path=str(tmp_path / "missing.json"))
+        assert lanes == ()
+
+    def test_profile_mismatch(self, tmp_path):
+        from trading_app.prop_profiles import load_allocation_lanes
+
+        path = self._write_json(tmp_path, self._sample_allocation("other_profile"))
+        lanes = load_allocation_lanes("test_profile", allocation_path=str(path))
+        assert lanes == ()
+
+    def test_corrupt_json(self, tmp_path):
+        from trading_app.prop_profiles import load_allocation_lanes
+
+        path = tmp_path / "lane_allocation.json"
+        path.write_text("{invalid json")
+        lanes = load_allocation_lanes("test_profile", allocation_path=str(path))
+        assert lanes == ()
+
+    def test_paused_lanes_excluded(self, tmp_path):
+        from trading_app.prop_profiles import load_allocation_lanes
+
+        path = self._write_json(tmp_path, self._sample_allocation())
+        lanes = load_allocation_lanes("test_profile", allocation_path=str(path))
+        sids = [l.strategy_id for l in lanes]
+        assert "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12" not in sids
+
+    def test_provisional_lanes_included(self, tmp_path):
+        from trading_app.prop_profiles import load_allocation_lanes
+
+        data = self._sample_allocation()
+        data["lanes"][2]["status"] = "PROVISIONAL"
+        path = self._write_json(tmp_path, data)
+        lanes = load_allocation_lanes("test_profile", allocation_path=str(path))
+        assert len(lanes) == 3
+
+    def test_returns_dailylanespec_type(self, tmp_path):
+        from trading_app.prop_profiles import DailyLaneSpec, load_allocation_lanes
+
+        path = self._write_json(tmp_path, self._sample_allocation())
+        lanes = load_allocation_lanes("test_profile", allocation_path=str(path))
+        assert all(isinstance(l, DailyLaneSpec) for l in lanes)
+        assert isinstance(lanes, tuple)

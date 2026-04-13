@@ -13,6 +13,7 @@ imported everywhere, easy to edit.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from trading_app.config import ENTRY_MODELS
 
@@ -398,7 +399,7 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         account_size=50_000,
         copies=2,  # Start with 1-2 Express, scale to 5 after proving loop
         stop_multiplier=0.75,
-        max_slots=6,
+        max_slots=7,
         active=True,
         allowed_sessions=frozenset(
             {
@@ -408,120 +409,31 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
                 "COMEX_SETTLE",
                 "CME_PRECLOSE",
                 "SINGAPORE_OPEN",
+                "US_DATA_1000",
             }
         ),
         allowed_instruments=frozenset({"MNQ"}),
-        # VALIDATED-SOURCED LANES.
+        # DYNAMIC LANES — loaded from docs/runtime/lane_allocation.json
+        # via load_allocation_lanes() at resolve_daily_lanes() time.
         #
-        # Core (2026-04-10 — multi-RR Pathway B discovery, 5 ORB_G5 lanes):
-        #   hypothesis file 2026-04-10-mnq-multi-rr-individual.yaml. All
-        #   passed WF, OOS, era stability gates.
+        # Refresh: python scripts/tools/rebalance_lanes.py --profile topstep_50k_mnq_auto
         #
-        # Expansion (2026-04-12 — profit expansion, 1 lane net after audits):
-        #   L6 MNQ_COMEX_SETTLE OVNRNG_100 (fam 752, added 2026-04-12 in the
-        #     first expansion round; currently WATCH — C6/C8 barely pass, SR
-        #     in ALARM at N=58, locked re-check at N>=100).
+        # Enforced by drift check 94 (pipeline/check_drift.py) — every lane
+        # in the allocation JSON must exist in validated_setups with
+        # status='active'. Staleness enforced by check_allocation_staleness()
+        # in pre_session_check.py (BLOCK after 60 days, WARNING after 35).
         #
-        # Two prior L7 additions and one PROFIT-NEXT add have been retired:
-        #
-        # 1. MNQ_CME_PRECLOSE X_MES_ATR60 (added + RETIRED 2026-04-12)
-        #    Literature-grounded re-audit caught C6 WFE 0.25, C8 ratio 26%,
-        #    SR ALARM — three simultaneous hard failures.
-        #
-        # 2. MNQ_EUROPE_FLOW COST_LT12 (added + RETIRED 2026-04-12, L7-SUBSET)
-        #    PROFIT-NEXT round added this under the metadata claim "new
-        #    family 5cc distinct from L1/L2's 01c". Stress-test on the full
-        #    history discovered the claim is wrong AT THE TRADE LEVEL: L7 is
-        #    a strict subset of L1 with perfect daily PnL correlation (+1.000
-        #    on all 1109 shared days, 0 differing, 0 L7-only days). The
-        #    relationship is structural — the hypothesis file itself
-        #    (2026-04-11-mnq-cost-gate.yaml line 10) notes
-        #    "COST_LT12 = G10 equivalent for MNQ". COST_LT12 gates orb_size
-        #    > 12.17pts (= total_friction / (0.12 * point_value)); ORB_G5
-        #    gates orb_size >= 5pts. Every COST_LT12 pass is therefore an
-        #    ORB_G5 pass, so the two lanes trade identical signals on the
-        #    cost-viable days. Deploying L7 alongside L1 was a 94%-duplication
-        #    sizing multiplier, not diversification. Retired same-day before
-        #    any live exposure. See deferred-findings.md entry L7-SUBSET.
-        #
-        # 3. PROFIT-NEXT rejected candidates (static passed, C12 alarmed):
-        #      US_DATA_1000 X_MES_ATR60  — WFE 0.64, C8 67%,  SR ALARM@#34
-        #      NYSE_OPEN   X_MES_ATR60  — WFE 2.14, C8 213%, SR ALARM@#32
-        #
-        # Durable lesson: trade-level correlation must be checked pre-deploy.
-        # `family_hash` is metadata (a grouping key on filter_type) and does
-        # not detect trade-level redundancy. A COST_LT / ORB_G subset
-        # relationship will always metadata-appear "distinct family" but be
-        # trade-level-identical. A future pre-flight gate should compute
-        # daily-PnL correlation of every candidate against every existing
-        # lane on the full history and reject rho > ~0.7 or
-        # shared_of_smaller > 0.8. Open task: add as a new drift / pre-flight
-        # rule before the next profit-expansion round.
-        #
-        # Enforced by drift check 95 (pipeline/check_drift.py) — every lane in
-        # an active profile must exist in validated_setups with status='active'.
-        daily_lanes=(
-            # --- Portfolio reconstruction 2026-04-13 ---
-            # Full correlation audit: 30x30 pairwise Pearson rho on daily
-            # pnl_r with canonical filter application. Prior 6-lane profile
-            # had 2 redundant same-session RR pairs (EUROPE_FLOW rho=0.862,
-            # TOKYO_OPEN rho=0.844) burning 4 slots for ~2 independent bets.
-            # New portfolio: 6 unique sessions, max pairwise rho=0.060,
-            # total ExpR +0.948 (was +0.673, +41%), C11 survival 100%
-            # (was 96%). See scripts/research/portfolio_correlation_audit.py
-            # and docs/plans/2026-04-13-wider-aperture-vol-regime-v2-design.md.
-            #
-            # L1: COMEX_SETTLE OVNRNG_100 — highest ExpR (+0.215), retained
-            DailyLaneSpec(
-                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
-                "MNQ",
-                "COMEX_SETTLE",
-                max_orb_size_pts=80.0,
-            ),
-            # L2: EUROPE_FLOW OVNRNG_100 — upgrade from ORB_G5 (+0.097 ExpR)
-            DailyLaneSpec(
-                "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_OVNRNG_100",
-                "MNQ",
-                "EUROPE_FLOW",
-                max_orb_size_pts=120.0,
-            ),
-            # L3: CME_PRECLOSE X_MES_ATR60 — new session, WFE=1.12
-            DailyLaneSpec(
-                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60",
-                "MNQ",
-                "CME_PRECLOSE",
-                max_orb_size_pts=80.0,
-            ),
-            # L4: NYSE_OPEN X_MES_ATR60 — upgrade from ORB_G5 (+0.030 ExpR)
-            DailyLaneSpec(
-                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
-                "MNQ",
-                "NYSE_OPEN",
-                max_orb_size_pts=80.0,
-            ),
-            # L5: TOKYO_OPEN COST_LT12 — upgrade from ORB_G5 (+0.034 ExpR)
-            DailyLaneSpec(
-                "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12",
-                "MNQ",
-                "TOKYO_OPEN",
-                max_orb_size_pts=80.0,
-            ),
-            # L6: SINGAPORE_OPEN ATR_P50 O30 — new session (wider aperture)
-            DailyLaneSpec(
-                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O30",
-                "MNQ",
-                "SINGAPORE_OPEN",
-                max_orb_size_pts=80.0,
-            ),
-        ),
+        # Prior hardcoded lanes (2026-04-13 reconstruction) moved to
+        # allocator output. History: 6 unique sessions, max pairwise
+        # rho=0.060. Now 7 sessions with US_DATA_1000 VWAP addition.
+        daily_lanes=(),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "6-lane MNQ auto profile — RECONSTRUCTED 2026-04-13 via "
-            "full 30x30 pairwise correlation audit. Prior profile had "
-            "2 redundant same-session RR pairs (EUROPE_FLOW rho=0.862, "
-            "TOKYO_OPEN rho=0.844) wasting 2 of 6 slots. New profile: "
-            "6 unique sessions, max pairwise rho=0.060, total ExpR "
-            "+0.948 (was +0.673, +41%), C11 survival 100% (was 96%). "
+            "7-lane MNQ auto profile — DYNAMIC (allocator-managed). "
+            "Lanes loaded from lane_allocation.json at runtime. "
+            "Prior 6-lane profile reconstructed 2026-04-13 via "
+            "correlation audit (max rho=0.060, +41% ExpR). "
+            "7th lane: US_DATA_1000 VWAP (ExpR=+0.210, N=701). "
             "Each lane is the best-ExpR strategy from its session's "
             "independent correlation family. Audit script: "
             "scripts/research/portfolio_correlation_audit.py. "
@@ -979,7 +891,7 @@ def get_active_profile_ids(
     for pid, profile in ACCOUNT_PROFILES.items():
         if not profile.active:
             continue
-        if require_daily_lanes and not profile.daily_lanes:
+        if require_daily_lanes and not profile.daily_lanes and not load_allocation_lanes(pid):
             continue
         if exclude_self_funded and profile.firm == "self_funded":
             continue
@@ -999,8 +911,8 @@ def resolve_profile_id(
         profile = get_profile(profile_id)
         if active_only and not profile.active:
             raise ValueError(f"Profile {profile_id!r} is not active")
-        if require_daily_lanes and not profile.daily_lanes:
-            raise ValueError(f"Profile {profile_id!r} has no daily_lanes configured")
+        if require_daily_lanes and not profile.daily_lanes and not load_allocation_lanes(profile_id):
+            raise ValueError(f"Profile {profile_id!r} has no daily_lanes configured and no allocation JSON")
         if exclude_self_funded and profile.firm == "self_funded":
             raise ValueError(f"Profile {profile_id!r} is self-funded and not valid for this command")
         return profile_id
@@ -1094,7 +1006,11 @@ def get_profile_lane_definitions(profile_id: str | None = None) -> list[dict]:
     profile = ACCOUNT_PROFILES[profile_id]
     lane_defs: list[dict] = []
 
-    for lane in profile.daily_lanes:
+    lane_specs = profile.daily_lanes
+    if not lane_specs:
+        lane_specs = load_allocation_lanes(profile.profile_id)
+
+    for lane in lane_specs:
         parsed = parse_strategy_id(lane.strategy_id)
         is_half = lane.planned_stop_multiplier is not None or "0.5x" in lane.execution_notes
         shadow = False
@@ -1175,6 +1091,89 @@ def compute_profit_split_factor(firm_spec: PropFirmSpec, cumulative_profit: floa
             return pct
     # Fallback: last tier
     return firm_spec.profit_split_tiers[-1][1]
+
+
+# =========================================================================
+# Dynamic lane loading from allocator JSON
+# =========================================================================
+
+
+def load_allocation_lanes(
+    profile_id: str,
+    allocation_path: str | Path | None = None,
+) -> tuple[DailyLaneSpec, ...]:
+    """Load allocated lanes for a profile from lane_allocation.json.
+
+    Fail-closed: returns empty tuple on missing file, profile mismatch,
+    corrupt JSON, or any parse error. This ensures resolve_daily_lanes()
+    returns an empty list, which check_allocation_staleness() then blocks.
+    """
+    import json
+
+    if allocation_path:
+        path = Path(allocation_path)
+    else:
+        path = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+
+    if not path.exists():
+        return ()
+
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return ()
+
+    # Profile must match — fail-closed on mismatch
+    if data.get("profile_id") != profile_id:
+        return ()
+
+    lanes_data = data.get("lanes")
+    if not isinstance(lanes_data, list):
+        return ()
+
+    specs: list[DailyLaneSpec] = []
+    for entry in lanes_data:
+        # Only deploy DEPLOY/PROVISIONAL lanes (not PAUSE/STALE)
+        status = entry.get("status", "")
+        if status not in ("DEPLOY", "PROVISIONAL"):
+            continue
+
+        sid = entry.get("strategy_id")
+        inst = entry.get("instrument")
+        orb = entry.get("orb_label")
+        if not all((sid, inst, orb)):
+            continue
+
+        # Use per-session P90 from JSON if available, else fallback to flat _P90_ORB_PTS
+        max_orb = entry.get("p90_orb_pts")
+        if max_orb is None:
+            max_orb = _P90_ORB_PTS.get(inst)
+
+        specs.append(
+            DailyLaneSpec(
+                strategy_id=sid,
+                instrument=inst,
+                orb_label=orb,
+                max_orb_size_pts=max_orb,
+            )
+        )
+
+    return tuple(specs)
+
+
+def effective_daily_lanes(profile: AccountProfile) -> tuple[DailyLaneSpec, ...]:
+    """Return effective lanes for a profile — hardcoded or JSON-sourced.
+
+    This is the SINGLE CANONICAL HELPER for resolving which DailyLaneSpec
+    tuples apply to a profile. All callers that previously read
+    profile.daily_lanes directly should use this instead.
+
+    Returns profile.daily_lanes if populated, otherwise loads from
+    lane_allocation.json. Returns empty tuple if neither source has data.
+    """
+    if profile.daily_lanes:
+        return profile.daily_lanes
+    return load_allocation_lanes(profile.profile_id)
 
 
 # =========================================================================

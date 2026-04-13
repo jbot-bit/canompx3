@@ -331,8 +331,10 @@ def main() -> None:
             sys.exit(1)
         from trading_app.prop_profiles import ACCOUNT_PROFILES
 
+        from trading_app.prop_profiles import effective_daily_lanes
+
         profile = ACCOUNT_PROFILES[args.profile]
-        profile_instruments = sorted({lane.instrument for lane in profile.daily_lanes})
+        profile_instruments = sorted({lane.instrument for lane in effective_daily_lanes(profile)})
 
         if len(profile_instruments) > 1:
             # Multi-instrument profile → route to MultiInstrumentRunner

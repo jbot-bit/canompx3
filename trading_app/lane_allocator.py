@@ -606,44 +606,95 @@ def generate_report(
     return "\n".join(lines)
 
 
+def _compute_orb_size_stats(
+    rebalance_date: date,
+    db_path: str | Path | None = None,
+) -> dict[tuple[str, str], tuple[float, float]]:
+    """Compute trailing ORB size stats per (instrument, session).
+
+    Returns {(instrument, orb_label): (avg_orb_pts, p90_orb_pts)}.
+    Uses 12-month trailing window with zero look-ahead.
+    ORB size = risk_dollars / point_value (at SM=1.0, this equals the ORB range).
+    """
+    db = db_path or GOLD_DB_PATH
+    con = duckdb.connect(str(db), read_only=True)
+    try:
+        start, end = _month_range(rebalance_date, DEPLOY_WINDOW_MONTHS)
+        rows = con.execute(
+            """
+            SELECT symbol, orb_label,
+                   AVG(risk_dollars) as avg_risk_d,
+                   PERCENTILE_CONT(0.90) WITHIN GROUP (ORDER BY risk_dollars) as p90_risk_d
+            FROM orb_outcomes
+            WHERE orb_minutes = 5 AND entry_model = 'E2'
+              AND rr_target = 1.0 AND confirm_bars = 1
+              AND outcome IN ('win', 'loss')
+              AND trading_day >= ? AND trading_day < ?
+            GROUP BY symbol, orb_label
+            """,
+            [start, end],
+        ).fetchall()
+
+        result: dict[tuple[str, str], tuple[float, float]] = {}
+        for sym, orb, avg_d, p90_d in rows:
+            pv = COST_SPECS[sym].point_value if sym in COST_SPECS else 1.0
+            result[(sym, orb)] = (round(avg_d / pv, 1), round(p90_d / pv, 1))
+        return result
+    finally:
+        con.close()
+
+
 def save_allocation(
     scores: list[LaneScore],
     allocation: list[LaneScore],
     rebalance_date: date,
     profile_id: str,
     output_path: str | Path | None = None,
+    orb_size_stats: dict[tuple[str, str], tuple[float, float]] | None = None,
 ) -> Path:
-    """Save allocation to JSON file."""
+    """Save allocation to JSON file.
+
+    orb_size_stats: {(instrument, orb_label): (avg_orb_pts, p90_orb_pts)}.
+    If None, ORB size fields are omitted from the output.
+    """
     path = Path(output_path) if output_path else Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+
+    lanes_data = []
+    for s in allocation:
+        lane = {
+            "strategy_id": s.strategy_id,
+            "instrument": s.instrument,
+            "orb_label": s.orb_label,
+            "rr_target": s.rr_target,
+            "filter_type": s.filter_type,
+            "annual_r": s.annual_r_estimate,
+            "trailing_expr": s.trailing_expr,
+            "trailing_n": s.trailing_n,
+            "trailing_wr": s.trailing_wr,
+            "months_negative": s.months_negative,
+            "session_regime": (
+                "HOT"
+                if s.session_regime_expr and s.session_regime_expr > 0.03
+                else "COLD"
+                if s.session_regime_expr and s.session_regime_expr < -0.03
+                else "FLAT"
+            ),
+            "status": s.status,
+            "status_reason": s.status_reason,
+        }
+        if orb_size_stats:
+            key = (s.instrument, s.orb_label)
+            if key in orb_size_stats:
+                avg_pts, p90_pts = orb_size_stats[key]
+                lane["avg_orb_pts"] = avg_pts
+                lane["p90_orb_pts"] = p90_pts
+        lanes_data.append(lane)
 
     data = {
         "rebalance_date": rebalance_date.isoformat(),
         "trailing_window_months": DEPLOY_WINDOW_MONTHS,
         "profile_id": profile_id,
-        "lanes": [
-            {
-                "strategy_id": s.strategy_id,
-                "instrument": s.instrument,
-                "orb_label": s.orb_label,
-                "rr_target": s.rr_target,
-                "filter_type": s.filter_type,
-                "annual_r": s.annual_r_estimate,
-                "trailing_expr": s.trailing_expr,
-                "trailing_n": s.trailing_n,
-                "trailing_wr": s.trailing_wr,
-                "months_negative": s.months_negative,
-                "session_regime": (
-                    "HOT"
-                    if s.session_regime_expr and s.session_regime_expr > 0.03
-                    else "COLD"
-                    if s.session_regime_expr and s.session_regime_expr < -0.03
-                    else "FLAT"
-                ),
-                "status": s.status,
-                "status_reason": s.status_reason,
-            }
-            for s in allocation
-        ],
+        "lanes": lanes_data,
         "paused": [{"strategy_id": s.strategy_id, "reason": s.status_reason} for s in scores if s.status == "PAUSE"],
         "all_scores_count": len(scores),
     }

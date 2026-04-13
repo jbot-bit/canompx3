@@ -340,9 +340,17 @@ def check_daily_lanes_dd_budget(
 def resolve_daily_lanes(profile: AccountProfile, db_path: Path, trading_day: date) -> list[DailyExecutionLane]:
     """Resolve all pinned daily lanes for a profile, sorted by time.
 
-    Applies lane overrides (pause/resume) from data/state/ if present.
+    When profile.daily_lanes is empty, loads lanes from lane_allocation.json
+    via load_allocation_lanes(). Applies lane overrides (pause/resume) from
+    data/state/ if present.
     """
-    lanes = [_resolve_daily_lane(profile, lane, db_path, trading_day) for lane in profile.daily_lanes]
+    lane_specs = profile.daily_lanes
+    if not lane_specs:
+        from trading_app.prop_profiles import load_allocation_lanes
+
+        lane_specs = load_allocation_lanes(profile.profile_id)
+
+    lanes = [_resolve_daily_lane(profile, lane, db_path, trading_day) for lane in lane_specs]
 
     # Apply lane overrides (pause/resume state file)
     try:

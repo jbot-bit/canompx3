@@ -220,7 +220,9 @@ def _legacy_lanes_to_lane_cards(
 
             profile = ACCOUNT_PROFILES.get(profile_id)
             if profile is not None:
-                for lane in profile.daily_lanes:
+                from trading_app.prop_profiles import effective_daily_lanes
+
+                for lane in effective_daily_lanes(profile):
                     runtime = strategy_runtime.get(lane.strategy_id)
                     session_rows = session_runtime.get(lane.orb_label, [])
                     shared_session_collision = runtime is None and len(session_rows) > 0
@@ -441,14 +443,15 @@ async def action_preflight():
 async def api_accounts():
     """All trading profiles with human-readable names, firm info, and lane summaries."""
     try:
-        from trading_app.prop_profiles import ACCOUNT_PROFILES, get_account_tier, get_firm_spec
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes, get_account_tier, get_firm_spec
 
         accounts = []
         for pid, p in ACCOUNT_PROFILES.items():
             tier = get_account_tier(p.firm, p.account_size)
             firm = get_firm_spec(p.firm)
+            p_lanes = effective_daily_lanes(p)
             lanes_summary = []
-            for lane in p.daily_lanes:
+            for lane in p_lanes:
                 meta = _strategy_meta(lane.strategy_id)
                 session_time = _get_session_time_brisbane(lane.orb_label)
                 rr_target = meta.get("rr_target")
@@ -487,7 +490,7 @@ async def api_accounts():
                     "active": p.active,
                     "auto_trading": firm.auto_trading,
                     "platform": firm.platform,
-                    "lane_count": len(p.daily_lanes),
+                    "lane_count": len(p_lanes),
                     "lanes": lanes_summary,
                     "instruments": sorted(p.allowed_instruments) if p.allowed_instruments else [],
                     "sessions": sorted(p.allowed_sessions) if p.allowed_sessions else [],

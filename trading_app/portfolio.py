@@ -730,10 +730,13 @@ def build_profile_portfolio(
     if profile_id not in ACCOUNT_PROFILES:
         raise ValueError(f"Unknown profile '{profile_id}'. Valid: {sorted(ACCOUNT_PROFILES.keys())}")
 
+    from trading_app.prop_profiles import effective_daily_lanes
+
     profile = ACCOUNT_PROFILES[profile_id]
-    if not profile.daily_lanes:
+    all_lanes = effective_daily_lanes(profile)
+    if not all_lanes:
         raise RuntimeError(
-            f"Profile '{profile_id}' has no daily_lanes defined. "
+            f"Profile '{profile_id}' has no daily_lanes defined and no allocation JSON. "
             f"Cannot build portfolio without explicit strategy lanes."
         )
 
@@ -746,13 +749,13 @@ def build_profile_portfolio(
         account_equity = float(profile.account_size)
 
     # Filter lanes by instrument if specified (multi-instrument profiles)
-    lanes = profile.daily_lanes
+    lanes = all_lanes
     if instrument is not None:
         lanes = tuple(lane for lane in lanes if lane.instrument == instrument)
         if not lanes:
             raise RuntimeError(
                 f"Profile '{profile_id}' has no lanes for instrument '{instrument}'. "
-                f"Available: {sorted({lane.instrument for lane in profile.daily_lanes})}"
+                f"Available: {sorted({lane.instrument for lane in all_lanes})}"
             )
     else:
         # No filter — all lanes must be same instrument
@@ -767,7 +770,7 @@ def build_profile_portfolio(
     strategies: list[PortfolioStrategy] = []
     cost_spec = get_cost_spec(instrument)
 
-    _skip_dd_check = instrument is not None and len(lanes) < len(profile.daily_lanes)
+    _skip_dd_check = instrument is not None and len(lanes) < len(all_lanes)
 
     with duckdb.connect(str(db_path), read_only=True) as con:
         has_deployment_scope = validated_setups_has_deployment_scope(con)

@@ -4548,10 +4548,15 @@ def check_prop_profiles_validated_alignment(con=None) -> list[str]:
             else "SELECT status, NULL FROM validated_setups WHERE strategy_id = ?"
         )
 
+        from trading_app.prop_profiles import load_allocation_lanes
+
         for profile_id, profile in sorted(ACCOUNT_PROFILES.items()):
             if not profile.active:
                 continue
-            for lane in profile.daily_lanes:
+            lanes_to_check = profile.daily_lanes
+            if not lanes_to_check:
+                lanes_to_check = load_allocation_lanes(profile_id)
+            for lane in lanes_to_check:
                 row = con.execute(
                     lane_query,
                     [lane.strategy_id],
