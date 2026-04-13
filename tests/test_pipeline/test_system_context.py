@@ -134,7 +134,9 @@ class TestBuildSystemContext:
 class TestInferContextName:
     def test_detects_codex_wsl_from_prefix_even_when_interpreter_is_symlinked(self, tmp_path: Path) -> None:
         current_python = Path("/usr/bin/python3")
-        current_prefix = Path("/repo/.venv-wsl")
+        # Use a resolved path so the .resolve() inside infer_context_name is a no-op,
+        # avoiding Windows drive-letter mismatch with the unresolved mock value.
+        current_prefix = (tmp_path / ".venv-wsl").resolve()
 
         with patch.object(system_context, "_expected_prefix", side_effect=[current_prefix, None]):
             context_name = system_context.infer_context_name(

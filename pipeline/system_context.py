@@ -347,10 +347,16 @@ def verify_claim(
 def _expected_python(root: Path, context_name: ContextName) -> tuple[Path | None, bool]:
     if context_name == "codex-wsl":
         path = root / ".venv-wsl" / "bin" / "python"
-        return path, path.exists()
+        try:
+            return path, path.exists()
+        except OSError:
+            return path, False
     if context_name in {"claude-windows", "claude-shell"}:
         path = root / ".venv" / "Scripts" / "python.exe"
-        return path, path.exists()
+        try:
+            return path, path.exists()
+        except OSError:
+            return path, False
     return None, False
 
 
