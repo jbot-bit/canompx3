@@ -89,32 +89,32 @@
       "p90_orb_pts": 45.3
     },
     {
-      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15",
+      "strategy_id": "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15",
       "instrument": "MNQ",
       "orb_label": "US_DATA_1000",
       "rr_target": 1.5,
-      "filter_type": "ORB_G5",
-      "annual_r": 16.8,
-      "trailing_expr": 0.0722,
-      "trailing_n": 252,
-      "trailing_wr": 0.444,
+      "filter_type": "VWAP_MID_ALIGNED",
+      "annual_r": 22.1,
+      "trailing_expr": 0.2101,
+      "trailing_n": 140,
+      "trailing_wr": 0.499,
       "months_negative": 0,
       "session_regime": "FLAT",
       "status": "DEPLOY",
-      "status_reason": "Session HOT (+0.0206), ExpR=+0.0722, N=252",
+      "status_reason": "VWAP swap: +22.1 AnnR vs ORB_G5 +18.9, WFE 0.90 vs 0.70, 8/8yr positive. Manual override.",
       "avg_orb_pts": 56.5,
       "p90_orb_pts": 95.0
     }
   ],
   "paused": [
     {
-      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8",
       "reason": "Session regime COLD (-0.0905)"
     },
     {
-      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8",
+      "strategy_id": "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
       "reason": "Session regime COLD (-0.0905)"
     }
   ],
-  "all_scores_count": 35
+  "all_scores_count": 38
 }
