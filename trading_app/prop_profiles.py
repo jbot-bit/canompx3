@@ -1218,7 +1218,8 @@ def validate_dd_budget(profile_id: str | None = None) -> list[str]:
     )
 
     for pid, prof in profiles.items():
-        if not prof.daily_lanes:
+        lanes = effective_daily_lanes(prof)
+        if not lanes:
             continue
         tier = ACCOUNT_TIERS.get((prof.firm, prof.account_size))
         if tier is None:
@@ -1229,7 +1230,7 @@ def validate_dd_budget(profile_id: str | None = None) -> list[str]:
         total_worst_case = 0.0
         lane_risks: list[tuple[str, float]] = []
 
-        for lane in prof.daily_lanes:
+        for lane in lanes:
             inst = lane.instrument
             p90_orb = _P90_ORB_PTS.get(inst, 100.0)
             pv = _PV.get(inst, 2.0)
