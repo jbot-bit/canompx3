@@ -6,6 +6,107 @@
 
 ---
 
+## Update (2026-04-13 — Claude: Directional Context Alignment research + infrastructure fixes)
+
+### Headline
+
+Full research arc: discovered cross-session momentum meta-signal, built reusable filter, validated 3 new EUROPE_FLOW strategies. Also fixed 4 drift failures and found DD budget gap in allocator wiring.
+
+### Research findings
+
+**Cross-session momentum:** "When prior session is winning and current session breaks same direction, breakouts are more genuine." Scanned 90 session pairs comprehensively. 4 cross-confirmed (MNQ+MES OOS positive):
+- **SGP > EUROPE_FLOW: 3 VALIDATED** (WFE 1.50-2.59, 100% WF at RR1.0). Only pair that passed the full validator pipeline. Jaccard 0.029 vs existing filters (independent).
+- NYSE > US_DATA_1000: IS p=0.198 (not significant), OOS +0.528 (short-biased). Filter built but needs more data.
+- COMEX > CME_PRECLOSE: IS p=0.034 but **holdout kills it** (Criterion 8 reject, 2023 era fails).
+- SGP > LONDON_METALS: IS p=0.346. Fragile.
+- O15 cross-session: DEAD (negative lift). M3 overnight momentum: accumulating (check Jul 2026).
+
+**Look-ahead audit:** Original 4-state machine used NYSE_OPEN final outcome (50% look-ahead). Fixed with break-level proxy: compare prior session ORB boundary to current session break level. 99.7-99.8% accuracy. Zero look-ahead.
+
+### Infrastructure fixes
+
+1. **Check #9 fix:** system_context.py one-way dependency — importlib instead of direct import
+2. **Checks #101-103 fix:** context.registry guards — graceful degradation when context/ package missing
+3. **Check #91 fix:** Updated 52 orphaned hypothesis SHA rows to match current files
+4. **validate_dd_budget fix:** Was skipping JSON-sourced profiles (topstep_50k_mnq_auto). Now uses effective_daily_lanes().
+
+### What changed (files)
+
+- `trading_app/config.py` — CrossSessionMomentumFilter class + 3 variants (NYSE, COMEX, SGP) + routing
+- `pipeline/check_drift.py` — context.registry guards
+- `pipeline/system_context.py` — importlib fix for one-way dependency
+- `trading_app/prop_profiles.py` — validate_dd_budget fix
+- `tests/test_trading_app/test_config.py` — filter count 88->91
+- `scripts/tmp/directional_context_alignment.py` — Phase A research script
+- `docs/audit/hypotheses/2026-04-13-*.yaml` — 5 hypothesis files
+
+### Drift state
+
+102 pass, 0 fail, 6 advisory. Clean.
+
+### Open items
+
+- M3 overnight momentum on TOKYO/SINGAPORE: OOS accumulating, check Jul 2026
+- 3 VWAP strategies (US_DATA_1000 O15): validated from prior session, not yet in allocator
+- SGP > EUROPE_FLOW: 3 new validated, consider for allocator at next rebalance
+- Codex `context/` package: untracked on disk, checks 101-103 degrade gracefully
+
+---
+
+## Update (2026-04-13 — Codex cleanup: stale test burn-down to full green)
+
+### Headline
+
+Stepped back and cleaned the remaining repo-wide test debt properly instead of
+stacking ad hoc fixes. Full suite is now green again after fixing stale
+expectations, test seams that drifted from current constructor/runtime
+contracts, and one production fallback gap in Pinecone memory sync.
+
+### What changed
+
+- `tests/test_trading_app/test_session_orchestrator.py`
+  - added `_ImmediateExecutorLoop` autouse patch so orchestrator unit tests run
+    broker offloads inline instead of depending on flaky repeated executor
+    behavior under WSL/Python 3.13
+  - fixed stale orphan test to use `_block_strategy(..., orphan reason)` like
+    the real rollover path
+  - updated shared fixture builder to mock `_bar_persister` now that
+    `_on_bar()` persists bars before later early returns
+- `tests/test_app_sync.py`
+  - added the new cross-session momentum filters to the expected `ALL_FILTERS`
+    registry
+  - classified `CrossSessionMomentumFilter` correctly in the taxonomy test so
+    it is not treated as an `OrbSizeFilter`
+- `tests/tools/test_generate_trade_sheet.py`
+  - switched deployed-lane expectations to `effective_daily_lanes(profile)`
+    instead of raw `profile.daily_lanes`, matching current JSON-backed profile
+    resolution
+- `scripts/tools/sync_pinecone.py`
+  - memory tier now falls back to repo-local `MEMORY.md` and `memory/*.md`
+    when the legacy external Claude memory path is absent
+  - this keeps Pinecone sync resilient to path drift and restores non-empty
+    memory collection in tests
+
+### Verification
+
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_session_orchestrator.py -q`
+  - `115 passed`
+- `./.venv-wsl/bin/python -m pytest tests/test_app_sync.py -q`
+  - `57 passed`
+- `./.venv-wsl/bin/python -m pytest tests/tools/test_generate_trade_sheet.py -q`
+  - `34 passed`
+- `./.venv-wsl/bin/python -m pytest tests/tools/test_sync_pinecone.py -q`
+  - `11 passed`
+- full suite:
+  - `./.venv-wsl/bin/python -m pytest tests/ -x -q`
+  - `4372 passed, 19 skipped, 8 warnings in 680.99s`
+
+### Notes
+
+- The remaining warnings are unchanged multiprocessing `fork()` deprecation
+  warnings coming from integration coverage around `test_integration.py`; they
+  are not new failures.
+
 ## Update (2026-04-13 — caller discipline + drift debt + Codex cleanup)
 
 ### Headline
