@@ -235,11 +235,11 @@ print("CHECK 5: DEPLOYED PORTFOLIO — How many shorts do your 5 lanes take?")
 print("=" * 90)
 print()
 
-from trading_app.prop_profiles import ACCOUNT_PROFILES
+from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
 profile = ACCOUNT_PROFILES.get("topstep_50k_mnq_auto")
 if profile:
-    for lane in profile.daily_lanes:
+    for lane in effective_daily_lanes(profile):
         lane_trades = (
             df_unique[
                 (
@@ -254,7 +254,7 @@ if profile:
         )  # Can't easily parse — use orb_label instead
     # Just count shorts per session in deployed data
     deployed_sessions = set()
-    for lane in profile.daily_lanes:
+    for lane in effective_daily_lanes(profile):
         # Extract session from strategy_id
         parts = lane.strategy_id.split("_")
         # Find session: it's the part after instrument before E1/E2

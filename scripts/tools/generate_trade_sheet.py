@@ -42,7 +42,7 @@ from trading_app.eligibility.builder import (
     build_eligibility_report,
     parse_strategy_id,
 )
-from trading_app.prop_profiles import ACCOUNT_PROFILES
+from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 from trading_app.strategy_fitness import compute_fitness
 from trading_app.validated_shelf import deployable_validated_relation
 
@@ -502,10 +502,11 @@ def collect_trades(trading_day: date, db_path: Path, profile_filter: str | None 
         for pid, profile in ACCOUNT_PROFILES.items():
             if profile_filter and pid != profile_filter:
                 continue
-            if not profile.active or not profile.daily_lanes:
+            lanes = effective_daily_lanes(profile)
+            if not profile.active or not lanes:
                 continue
 
-            for lane in profile.daily_lanes:
+            for lane in lanes:
                 sid = lane.strategy_id
                 instrument = lane.instrument
 
@@ -1168,9 +1169,10 @@ def _build_filter_universe_rows(db_path: Path, trading_day: date) -> list[dict]:
     # path used by View A, so counts stay consistent.
     deployed_counts: dict[str, int] = {}
     for _pid, profile in ACCOUNT_PROFILES.items():
-        if not profile.active or not profile.daily_lanes:
+        lanes = effective_daily_lanes(profile)
+        if not profile.active or not lanes:
             continue
-        for lane in profile.daily_lanes:
+        for lane in lanes:
             try:
                 dims = parse_strategy_id(lane.strategy_id)
             except Exception as exc:  # noqa: BLE001 — adapter boundary, surface loudly
@@ -1409,7 +1411,7 @@ def generate_html(
                     "dll": dll,
                     "dll_str": f"${dll:,}" if dll else "none",
                     "stop": f"{prof.stop_multiplier}x",
-                    "lanes": len(prof.daily_lanes),
+                    "lanes": len(effective_daily_lanes(prof)),
                     "mode": auto_label,
                     "copies": prof.copies,
                     "ev_per_copy": 0.0,

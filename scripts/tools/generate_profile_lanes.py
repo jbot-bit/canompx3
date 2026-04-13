@@ -22,6 +22,7 @@ from trading_app.prop_profiles import (
     _P90_ORB_PTS,
     ACCOUNT_PROFILES,
     ACCOUNT_TIERS,
+    effective_daily_lanes,
 )
 from trading_app.validated_shelf import deployable_validated_relation
 
@@ -69,9 +70,10 @@ def main() -> None:
         print()
 
         # Count current ghosts
-        current_ghosts = [ln for ln in profile.daily_lanes if ln.strategy_id not in validated_ids]
-        current_valid = [ln for ln in profile.daily_lanes if ln.strategy_id in validated_ids]
-        print(f"  Current: {len(profile.daily_lanes)} lanes ({len(current_valid)} valid, {len(current_ghosts)} ghosts)")
+        current_lanes = effective_daily_lanes(profile)
+        current_ghosts = [ln for ln in current_lanes if ln.strategy_id not in validated_ids]
+        current_valid = [ln for ln in current_lanes if ln.strategy_id in validated_ids]
+        print(f"  Current: {len(current_lanes)} lanes ({len(current_valid)} valid, {len(current_ghosts)} ghosts)")
 
         allocation = build_allocation(
             scores,

@@ -33,6 +33,7 @@ from trading_app.prop_profiles import (
     ACCOUNT_PROFILES,
     ACCOUNT_TIERS,
     PROP_FIRM_SPECS,
+    effective_daily_lanes,
 )
 from trading_app.validated_shelf import deployable_validated_relation
 
@@ -442,8 +443,8 @@ def _select_lanes(
 def _get_current_deployed(firm: str) -> dict[tuple[str, str], str]:
     deployed = {}
     for prof in ACCOUNT_PROFILES.values():
-        if prof.firm == firm and prof.active and prof.daily_lanes:
-            for lane in prof.daily_lanes:
+        if prof.firm == firm and prof.active and effective_daily_lanes(prof):
+            for lane in effective_daily_lanes(prof):
                 deployed[(lane.instrument, lane.orb_label)] = lane.strategy_id
     return deployed
 

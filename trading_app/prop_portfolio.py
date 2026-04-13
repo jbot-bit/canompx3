@@ -37,6 +37,7 @@ from trading_app.prop_profiles import (
     TradingBookEntry,
     compute_profit_split_factor,
     get_account_tier,
+    effective_daily_lanes,
     get_firm_spec,
 )
 from trading_app.strategy_fitness import compute_fitness  # noqa: F401
@@ -922,9 +923,9 @@ def main() -> None:
 
     if args.daily:
         if args.profile:
-            # Single profile with pinned daily lanes
+            # Single profile with pinned or JSON-sourced daily lanes
             profile = get_profile(args.profile)
-            if profile.daily_lanes:
+            if effective_daily_lanes(profile):
                 lanes = resolve_daily_lanes(profile, db_path=db_path, trading_day=trading_day)
                 print_daily_lanes(profile, lanes, trading_day, db_path=db_path)
                 return

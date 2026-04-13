@@ -284,6 +284,19 @@ def _resolve_session_lane(session: str, profile_id: str | None = None) -> tuple[
     return resolved_profile_id, matches[0]
 
 
+def _resolve_session_lanes(session: str, profile_id: str | None = None) -> tuple[str, list[dict]]:
+    """Resolve all matching session lanes for the requested profile."""
+    from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
+
+    resolved_profile_id = resolve_profile_id(profile_id)
+    lanes = get_profile_lane_definitions(resolved_profile_id)
+    matches = [lane for lane in lanes if lane["orb_label"] == session]
+    if not matches:
+        valid = ", ".join(sorted({lane["orb_label"] for lane in lanes}))
+        raise ValueError(f"Unknown session '{session}' for profile '{resolved_profile_id}'. Valid: {valid}")
+    return resolved_profile_id, matches
+
+
 def check_forward_monitor_freshness() -> tuple[bool, str]:
     """Check if forward_monitor has been run recently."""
     fm_file = Path(__file__).resolve().parents[1] / "data" / "forward_monitoring" / "latest.json"
@@ -426,12 +439,13 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
     signal → DD budget → lane-specific.
     """
     try:
-        resolved_profile_id, lane = _resolve_session_lane(session, profile_id)
+        resolved_profile_id, lanes = _resolve_session_lanes(session, profile_id)
     except ValueError as e:
         print(f"ERROR: {e}")
         return False
     today = date.today()
     results = []
+    unique_instruments = sorted({lane["instrument"] for lane in lanes})
 
     # Market calendar (check FIRST — holidays override everything)
     try:
@@ -463,8 +477,9 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
         configure_connection(con)
 
         # Data freshness
-        ok, msg = check_data_freshness(con, lane["instrument"])
-        results.append(("Data freshness", ok, msg))
+        for instrument in unique_instruments:
+            ok, msg = check_data_freshness(con, instrument)
+            results.append((f"Data freshness ({instrument})", ok, msg))
 
         ok, msg = check_paper_trades_accessible(con)
         results.append(("Paper trades table", ok, msg))
@@ -477,16 +492,18 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
         ok, msg = _account_survival_from_lifecycle(lifecycle)
         results.append(("Criterion 11 survival", ok, msg))
 
-        ok, msg = _lane_lifecycle_from_lifecycle(lifecycle, lane["strategy_id"])
-        results.append(("Lane lifecycle", ok, msg))
+        for lane in lanes:
+            ok, msg = _lane_lifecycle_from_lifecycle(lifecycle, lane["strategy_id"])
+            results.append((f"Lane lifecycle ({lane['instrument']})", ok, msg))
 
         # Allocation staleness
         ok, msg = check_allocation_staleness_gate()
         results.append(("Allocation staleness", ok, msg))
 
         # Lane mismatch: deployed vs allocator recommendation
-        ok, msg = check_lane_mismatch(session, lane)
-        results.append(("Lane vs recommendation", ok, msg))
+        for lane in lanes:
+            ok, msg = check_lane_mismatch(session, lane)
+            results.append((f"Lane vs recommendation ({lane['instrument']})", ok, msg))
 
         # Account state
         ok, msg = check_hwm_tracker()
@@ -502,8 +519,9 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
         results.append(("Consistency rule", ok, msg))
 
         # Signal
-        ok, msg = check_signal_exists(con, session, lane, today)
-        results.append(("Signal check", ok, msg))
+        for lane in lanes:
+            ok, msg = check_signal_exists(con, session, lane, today)
+            results.append((f"Signal check ({lane['instrument']})", ok, msg))
 
         # Slippage pilot progress
         slip_msg = check_slippage_pilot_progress(con)
@@ -512,10 +530,10 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
     # DD budget check (from daily_lanes)
     try:
         from trading_app.prop_portfolio import check_daily_lanes_dd_budget, resolve_daily_lanes
-        from trading_app.prop_profiles import get_profile
+        from trading_app.prop_profiles import effective_daily_lanes, get_profile
 
         profile = get_profile(resolved_profile_id)
-        if profile.daily_lanes:
+        if effective_daily_lanes(profile):
             resolved = resolve_daily_lanes(profile, db_path=GOLD_DB_PATH, trading_day=today)
             _, total_dd, dd_limit, over = check_daily_lanes_dd_budget(profile, resolved)
             if over:
@@ -534,21 +552,28 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
         results.append(("DD budget", True, f"Cannot check: {e}"))
 
     # Lane 2 enforcement
-    if lane.get("is_half_size"):
-        results.append(("Lane 2 sizing", True, "0.5x MANDATORY — 1 micro lot max"))
+    for lane in lanes:
+        if lane.get("is_half_size"):
+            results.append((f"Lane 2 sizing ({lane['instrument']})", True, "0.5x MANDATORY — 1 micro lot max"))
 
     # Shadow-only check
-    if lane.get("shadow_only"):
-        results.append(("Shadow mode", True, "MGC TOKYO_OPEN: shadow-trade ONLY, no real capital"))
+    for lane in lanes:
+        if lane.get("shadow_only"):
+            results.append((f"Shadow mode ({lane['instrument']})", True, "MGC TOKYO_OPEN: shadow-trade ONLY, no real capital"))
 
     # Print results
     all_pass = True
     print(f"\n{'=' * 70}")
-    print(f"PRE-SESSION CHECK: {resolved_profile_id} | {session} | {today} | {lane['instrument']}")
-    print(f"Strategy: {lane['strategy_id']}")
-    orb_cap = lane.get("max_orb_size_pts")
-    cap_str = f"{orb_cap:.0f} pts" if orb_cap else "NONE"
-    print(f"Filter: {lane['filter_type']} | RR: {lane['rr_target']} | ORB: O{lane['orb_minutes']} | ORB Cap: {cap_str}")
+    print(f"PRE-SESSION CHECK: {resolved_profile_id} | {session} | {today} | {', '.join(unique_instruments)}")
+    print(f"Lanes: {len(lanes)}")
+    for lane in lanes:
+        orb_cap = lane.get("max_orb_size_pts")
+        cap_str = f"{orb_cap:.0f} pts" if orb_cap else "NONE"
+        print(f"Strategy: {lane['strategy_id']}")
+        print(
+            f"  {lane['instrument']} | Filter: {lane['filter_type']} | RR: {lane['rr_target']} | "
+            f"ORB: O{lane['orb_minutes']} | ORB Cap: {cap_str}"
+        )
     print(f"{'=' * 70}")
 
     for name, ok, msg in results:
@@ -565,7 +590,7 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
     print(f"{'=' * 70}")
 
     # Lane 2 confirmation
-    if lane.get("is_half_size") and all_pass:
+    if any(lane.get("is_half_size") for lane in lanes) and all_pass:
         print("\n  ** Lane 2 (SINGAPORE_OPEN RR4.0) is 0.5x sizing. **")
         print("  ** You MUST enter only 1 micro lot. **")
 
@@ -573,6 +598,9 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
     log_data = {
         "date": str(today),
         "session": session,
+        "profile_id": resolved_profile_id,
+        "lane_count": len(lanes),
+        "strategies": [lane["strategy_id"] for lane in lanes],
         "gate": gate,
         "checks": [{"name": n, "pass": o, "detail": m} for n, o, m in results],
         "timestamp": datetime.now(UTC).isoformat(),

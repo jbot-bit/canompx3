@@ -216,12 +216,13 @@ def score_lanes(
     if current_only:
         # Only score strategies currently deployed in any active profile.
         # Deployed lanes may NOT be family heads — drop that filter.
-        from trading_app.prop_profiles import ACCOUNT_PROFILES
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
         deployed_ids = set()
         for prof in ACCOUNT_PROFILES.values():
-            if prof.active and prof.daily_lanes:
-                for lane in prof.daily_lanes:
+            prof_lanes = effective_daily_lanes(prof)
+            if prof.active and prof_lanes:
+                for lane in prof_lanes:
                     if lane.instrument == instrument:
                         deployed_ids.add(lane.strategy_id)
         if not deployed_ids:
