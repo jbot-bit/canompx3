@@ -19,7 +19,7 @@ import re
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PIPELINE_DIR = PROJECT_ROOT / "pipeline"
 TRADING_APP_DIR = PROJECT_ROOT / "trading_app"
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
@@ -992,13 +992,38 @@ def check_all_imports_resolve() -> list[str]:
     module references BEFORE runtime.
     """
     import importlib
+    import importlib.util
 
     violations = []
 
-    # Ensure project root is on sys.path (modules use sys.path.insert)
+    # Ensure project root is first on sys.path. When this script is executed via
+    # `python pipeline/check_drift.py`, sys.path[0] is the `pipeline/` directory
+    # rather than the repo root, and the cwd may also appear as the empty-string
+    # entry. Normalize to absolute paths so sibling packages like `context` and
+    # top-level `pipeline.*` modules resolve deterministically regardless of how
+    # the checker is launched.
     root_str = str(PROJECT_ROOT)
-    if root_str not in sys.path:
-        sys.path.insert(0, root_str)
+    normalized_path = []
+    seen = set()
+    for entry in [root_str, *sys.path]:
+        try:
+            resolved = str(Path(entry or ".").resolve())
+        except OSError:
+            resolved = entry
+        if resolved == root_str or resolved in seen:
+            continue
+        seen.add(resolved)
+        normalized_path.append(entry)
+    sys.path = [root_str, *normalized_path]
+
+    def _repair_package_root(package_name: str) -> None:
+        existing = sys.modules.get(package_name)
+        if existing is not None and not hasattr(existing, "__path__"):
+            sys.modules.pop(package_name, None)
+        importlib.import_module(package_name)
+
+    for package_name in ("context", "pipeline", "trading_app"):
+        _repair_package_root(package_name)
 
     for base_dir in [PIPELINE_DIR, TRADING_APP_DIR]:
         if not base_dir.exists():
@@ -1026,8 +1051,25 @@ def check_all_imports_resolve() -> list[str]:
             try:
                 importlib.import_module(module)
             except Exception as e:
-                err_type = type(e).__name__
-                violations.append(f"  {module}: {err_type}: {str(e)[:100]}")
+                fallback_ok = False
+                existing = sys.modules.get(module)
+                try:
+                    spec = importlib.util.spec_from_file_location(module, fpath)
+                    if spec is not None and spec.loader is not None:
+                        fallback_module = importlib.util.module_from_spec(spec)
+                        sys.modules[module] = fallback_module
+                        spec.loader.exec_module(fallback_module)
+                        fallback_ok = True
+                except Exception:
+                    fallback_ok = False
+                finally:
+                    if existing is not None:
+                        sys.modules[module] = existing
+                    else:
+                        sys.modules.pop(module, None)
+                if not fallback_ok:
+                    err_type = type(e).__name__
+                    violations.append(f"  {module}: {err_type}: {str(e)[:100]}")
 
     return violations
 

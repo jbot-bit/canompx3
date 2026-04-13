@@ -57,17 +57,37 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from pipeline.system_context import (
     ACTIVE_SESSION_DIR,
-    SessionClaim as SystemSessionClaim,
-    active_claim_path as system_active_claim_path,
-    branch_name as system_branch_name,
     build_system_context,
-    dirty_files as system_dirty_files,
     evaluate_system_policy,
+)
+from pipeline.system_context import (
+    SessionClaim as SystemSessionClaim,
+)
+from pipeline.system_context import (
+    active_claim_path as system_active_claim_path,
+)
+from pipeline.system_context import (
+    branch_name as system_branch_name,
+)
+from pipeline.system_context import (
+    dirty_files as system_dirty_files,
+)
+from pipeline.system_context import (
     head_sha as system_head_sha,
+)
+from pipeline.system_context import (
     list_claims as system_list_claims,
+)
+from pipeline.system_context import (
     read_claim as system_read_claim,
+)
+from pipeline.system_context import (
     verify_claim as system_verify_claim,
+)
+from pipeline.system_context import (
     write_active_claim as system_write_active_claim,
+)
+from pipeline.system_context import (
     write_claim as system_write_claim,
 )
 
@@ -290,6 +310,13 @@ def print_report(
         active_mode=claim_mode,
         claim_dir=claim_dir,
     )
+    brief_summary: dict[str, object] | None = None
+    try:
+        from pipeline.system_brief import build_system_brief
+
+        brief_summary = build_system_brief(root, briefing_level="mutating" if claim_mode == "mutating" else "read_only")
+    except Exception:
+        brief_summary = None
 
     if quiet:
         if blockers:
@@ -350,6 +377,17 @@ def print_report(
             print(f"  - {warning}")
     elif not blockers:
         print("Status: clean")
+
+    if brief_summary is not None:
+        print("System brief:")
+        print(
+            "  "
+            f"{brief_summary['task_id']} [{brief_summary['briefing_level']}] "
+            f"owners={len(brief_summary['canonical_owners'])} "
+            f"views={len(brief_summary['required_live_views'])} "
+            f"blockers={len(brief_summary['blocking_issues'])} "
+            f"warnings={len(brief_summary['warning_issues'])}"
+        )
 
     exit_code = 1 if blockers else 0
     if verify_only and claim_tool:

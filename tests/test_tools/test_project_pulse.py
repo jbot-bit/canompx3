@@ -843,6 +843,56 @@ class TestBuildPulse:
         mock_tests.assert_not_called()
         assert isinstance(report, PulseReport)
 
+    def test_fast_mode_without_snapshot_stays_snapshot_only(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "## Last Session\n- **Tool:** Test\n- **Date:** 2026-04-13\n- **Summary:** test")
+        _mkfile(tmp_path / ".git" / "HEAD", "ref: refs/heads/main")
+        db_path = tmp_path / "gold.db"
+        db_path.touch()
+
+        with (
+            patch.object(project_pulse, "_canonical_repo_root", return_value=tmp_path),
+            patch.object(project_pulse, "_git_head", return_value="abc123"),
+            patch.object(project_pulse, "_git_branch", return_value="main"),
+            patch.object(project_pulse, "collect_system_identity_fast", return_value=({}, [])),
+            patch.object(project_pulse, "collect_handoff", return_value=({}, [])),
+            patch.object(project_pulse, "collect_action_queue", return_value=[]),
+            patch.object(project_pulse, "collect_ralph_deferred", return_value=[]),
+            patch.object(project_pulse, "collect_deployment_state") as mock_deployment,
+            patch.object(project_pulse, "collect_lifecycle_control") as mock_lifecycle,
+            patch.object(project_pulse, "collect_upcoming_sessions") as mock_upcoming,
+        ):
+            report = build_pulse(tmp_path, db_path=db_path, fast=True)
+
+        mock_deployment.assert_not_called()
+        mock_lifecycle.assert_not_called()
+        mock_upcoming.assert_not_called()
+        assert any(item.source == "runtime_snapshot" for item in report.items)
+
+    def test_fast_refresh_recomputes_live_snapshot(self, tmp_path: Path) -> None:
+        _mkfile(tmp_path / "HANDOFF.md", "## Last Session\n- **Tool:** Test\n- **Date:** 2026-04-13\n- **Summary:** test")
+        _mkfile(tmp_path / ".git" / "HEAD", "ref: refs/heads/main")
+        db_path = tmp_path / "gold.db"
+        db_path.touch()
+
+        with (
+            patch.object(project_pulse, "_canonical_repo_root", return_value=tmp_path),
+            patch.object(project_pulse, "_git_head", return_value="abc123"),
+            patch.object(project_pulse, "_git_branch", return_value="main"),
+            patch.object(project_pulse, "collect_system_identity_fast", return_value=({}, [])),
+            patch.object(project_pulse, "collect_handoff", return_value=({}, [])),
+            patch.object(project_pulse, "collect_action_queue", return_value=[]),
+            patch.object(project_pulse, "collect_ralph_deferred", return_value=[]),
+            patch.object(project_pulse, "collect_deployment_state", return_value=(None, [])) as mock_deployment,
+            patch.object(project_pulse, "collect_lifecycle_control", return_value=(None, None, None, [])) as mock_lifecycle,
+            patch.object(project_pulse, "collect_upcoming_sessions", return_value=[]) as mock_upcoming,
+        ):
+            report = build_pulse(tmp_path, db_path=db_path, fast=True, refresh=True)
+
+        mock_deployment.assert_called_once()
+        mock_lifecycle.assert_called_once()
+        mock_upcoming.assert_called_once()
+        assert not any(item.source == "runtime_snapshot" for item in report.items)
+
 
 class TestDeploymentState:
     def test_detects_validated_but_not_deployed(self) -> None:

@@ -6,6 +6,75 @@
 
 ---
 
+## Update (2026-04-13 — startup orientation refactor on isolated worktree)
+
+### Headline
+
+Implemented the startup-orientation refactor on isolated branch
+`wt-codex-startup-brain-refactor` so fast startup now reads generated metadata
+and runtime snapshots instead of silently recomputing broad repo/runtime state.
+
+### What changed
+
+- added startup read-model surfaces:
+  - `pipeline/startup_index.py`
+  - `pipeline/system_brief.py`
+  - `pipeline/work_capsule.py`
+  - `pipeline/runtime_snapshot.py`
+- added startup tooling:
+  - `scripts/tools/render_startup_index.py`
+  - `scripts/tools/system_brief.py`
+  - `scripts/tools/work_capsule.py`
+  - `scripts/tools/refresh_runtime_snapshot.py`
+- rewired `scripts/tools/project_pulse.py`
+  - `--fast` now reads a materialized snapshot only
+  - snapshot miss returns an honest startup-packet stub instead of live recompute
+  - explicit recomputation moved to `--refresh`
+- updated `scripts/tools/session_preflight.py`
+  - now prints a compact `System brief:` summary
+- fixed drift script-mode import resolution in `pipeline/check_drift.py`
+- re-rendered generated docs:
+  - `docs/governance/system_authority_map.md`
+
+### Verification
+
+- `./.venv-wsl/bin/python -m ruff check ...`
+  - passed on touched startup surfaces
+- `./.venv-wsl/bin/python -m pytest tests/test_context/test_registry.py tests/test_pipeline/test_system_brief.py tests/test_pipeline/test_work_capsule.py tests/test_tools/test_context_resolver.py tests/test_tools/test_project_pulse.py tests/test_tools/test_pulse_integration.py tests/test_tools/test_session_preflight.py -q`
+  - `114 passed`
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - startup-related failures cleared
+  - still fails on pre-existing DB-backed Check 91 Phase 4 hypothesis SHA integrity rows
+
+### Measured behavior
+
+- `scripts/tools/system_brief.py --format json`
+  - about `0.18s`
+- `scripts/tools/project_pulse.py --fast --no-cache`
+  - about `0.40s`
+  - returns startup packet only, by design
+- `scripts/tools/refresh_runtime_snapshot.py`
+  - about `4.12s`
+- `scripts/tools/project_pulse.py --fast`
+  - about `0.20s` with fresh snapshot
+- `python3 scripts/tools/session_preflight.py --context codex-wsl`
+  - about `2.24s`
+
+### Decision
+
+Fast startup is now defined honestly:
+
+- `--fast` = read generated startup/runtime artifacts
+- `--refresh` = recompute runtime snapshot
+- no hidden live collector fan-out on snapshot miss
+
+### Next sensible step
+
+1. Commit/push the isolated worktree branch if desired.
+2. Treat Phase 4 hypothesis SHA drift as a separate data-integrity task.
+3. If further startup latency work is wanted, slim `session_preflight` off
+   `system_context` policy evaluation rather than re-expanding the fast path.
+
 ## Update (2026-04-13 — portfolio reconstruction + MES expansion dead + MNQ validation)
 
 ### Headline

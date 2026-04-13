@@ -99,6 +99,7 @@ SKILL_SUGGESTIONS: dict[str, str] = {
     "tests": "/verify quick",
     "handoff": "/orient --full",
     "ralph": "/audit quick",
+    "runtime_snapshot": "python scripts/tools/project_pulse.py --fast --refresh",
     "control_state": "python scripts/tools/refresh_control_state.py --profile topstep_50k_mnq_auto",
     "sr_monitor": "python -m trading_app.sr_monitor",
     "criterion11": "python -m trading_app.account_survival --profile topstep_50k_mnq_auto",
@@ -169,6 +170,7 @@ class PulseReport:
 
 GIT_TIMEOUT = 5
 SUBPROCESS_TIMEOUT = 60
+FAST_RUNTIME_SNAPSHOT_MAX_AGE_SECONDS = 900
 
 
 def _run_git(root: Path, *args: str) -> subprocess.CompletedProcess[str] | None:
@@ -1131,6 +1133,70 @@ def collect_system_identity(root: Path, canonical: Path, db_path: Path) -> tuple
         return None, items
 
 
+def collect_system_identity_fast(root: Path, canonical: Path, db_path: Path) -> tuple[dict | None, list[PulseItem]]:
+    """Cheap identity summary for fast startup paths.
+
+    This avoids full control-plane evaluation and repeated git/worktree scans.
+    """
+    items: list[PulseItem] = []
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+        from pipeline.system_authority import (
+            DOCTRINE_DOCS,
+            SYSTEM_AUTHORITY_BACKBONE_MODULES,
+            SYSTEM_AUTHORITY_MAP_RELATIVE_PATH,
+        )
+
+        summary = {
+            "canonical_repo_root": str(canonical),
+            "selected_repo_root": str(root),
+            "canonical_db_path": str(db_path),
+            "selected_db_path": str(db_path),
+            "db_override_active": False,
+            "live_journal_db_path": str(canonical / "live_journal.db"),
+            "active_orb_instruments": sorted(ACTIVE_ORB_INSTRUMENTS),
+            "authority_map_doc": SYSTEM_AUTHORITY_MAP_RELATIVE_PATH.as_posix(),
+            "doctrine_docs": list(DOCTRINE_DOCS),
+            "backbone_modules": list(SYSTEM_AUTHORITY_BACKBONE_MODULES),
+            "published_relations": {
+                "active": "active_validated_setups",
+                "deployable": "deployable_validated_setups",
+            },
+            "interpreter": {
+                "context": "fast-startup",
+                "current_python": sys.executable,
+                "current_prefix": sys.prefix,
+                "expected_python": None,
+                "expected_prefix": None,
+                "matches_expected": None,
+            },
+            "git": {
+                "branch": _git_branch(root),
+                "head_sha": _git_head(root),
+                "dirty_count": 0,
+                "in_linked_worktree": root != canonical,
+            },
+            "active_stages": [],
+            "fresh_claims": [],
+            "policy": {
+                "allowed": True,
+                "warnings": ["Fast path uses materialized/runtime-bounded summary."],
+                "controls": ["pipeline/runtime_snapshot.py", "scripts/tools/project_pulse.py"],
+            },
+        }
+        return summary, items
+    except Exception as exc:
+        items.append(
+            PulseItem(
+                category="broken",
+                severity="low",
+                source="system_identity",
+                summary=f"Fast system identity error: {type(exc).__name__}: {exc}",
+            )
+        )
+        return None, items
+
+
 def collect_fitness_deep(db_path: Path) -> tuple[dict, list[PulseItem]]:
     """Full fitness: compute rolling FIT/WATCH/DECAY per instrument."""
     summary: dict = {}
@@ -1686,6 +1752,213 @@ def _write_expensive_cache(
         pass
 
 
+def _report_to_payload(report: PulseReport) -> dict:
+    return {
+        "generated_at": report.generated_at,
+        "cache_hit": report.cache_hit,
+        "git_head": report.git_head,
+        "git_branch": report.git_branch,
+        "system_identity": report.system_identity,
+        "handoff": {
+            "tool": report.handoff_tool,
+            "date": report.handoff_date,
+            "summary": report.handoff_summary,
+            "next_steps": report.handoff_next_steps,
+        },
+        "fitness_summary": report.fitness_summary,
+        "deployment_summary": report.deployment_summary,
+        "survival_summary": report.survival_summary,
+        "sr_summary": report.sr_summary,
+        "pause_summary": report.pause_summary,
+        "upcoming_sessions": report.upcoming_sessions,
+        "recommendation": report.recommendation,
+        "time_since_green": report.time_since_green,
+        "session_delta": report.session_delta,
+        "items": [asdict(item) for item in report.items],
+    }
+
+
+def _payload_to_report(payload: dict, *, cache_hit: bool) -> PulseReport:
+    handoff = payload.get("handoff", {})
+    items = [PulseItem(**item) for item in payload.get("items", [])]
+    report = PulseReport(
+        generated_at=payload["generated_at"],
+        cache_hit=cache_hit,
+        git_head=payload.get("git_head", "unknown"),
+        git_branch=payload.get("git_branch", "unknown"),
+        items=items,
+        system_identity=payload.get("system_identity"),
+        handoff_tool=handoff.get("tool"),
+        handoff_date=handoff.get("date"),
+        handoff_summary=handoff.get("summary"),
+        handoff_next_steps=handoff.get("next_steps", []),
+        fitness_summary=payload.get("fitness_summary"),
+        deployment_summary=payload.get("deployment_summary"),
+        survival_summary=payload.get("survival_summary"),
+        sr_summary=payload.get("sr_summary"),
+        pause_summary=payload.get("pause_summary"),
+        upcoming_sessions=payload.get("upcoming_sessions", []),
+        recommendation=payload.get("recommendation"),
+        time_since_green=payload.get("time_since_green"),
+        session_delta=payload.get("session_delta", []),
+    )
+    return report
+
+
+def _read_runtime_snapshot_payload(root: Path) -> dict | None:
+    try:
+        from pipeline.runtime_snapshot import read_runtime_snapshot, snapshot_is_fresh
+
+        payload = read_runtime_snapshot(root)
+        if payload is None or not snapshot_is_fresh(payload, max_age_seconds=FAST_RUNTIME_SNAPSHOT_MAX_AGE_SECONDS):
+            return None
+        report_payload = payload.get("report")
+        return report_payload if isinstance(report_payload, dict) else None
+    except Exception:
+        return None
+
+
+def _write_runtime_snapshot_payload(root: Path, report: PulseReport) -> None:
+    try:
+        from pipeline.runtime_snapshot import write_runtime_snapshot
+
+        write_runtime_snapshot(
+            root,
+            {
+                "generated_at": report.generated_at,
+                "report": _report_to_payload(report),
+            },
+        )
+    except OSError:
+        pass
+
+
+def _build_fast_pulse(
+    root: Path,
+    *,
+    canonical: Path,
+    db_path: Path,
+    tool_name: str,
+) -> PulseReport:
+    head = _git_head(root)
+    branch = _git_branch(root)
+    system_identity, identity_items = collect_system_identity_fast(root, canonical, db_path)
+    deployment_summary, deployment_items = collect_deployment_state(db_path)
+    survival_summary, sr_summary, pause_summary, lifecycle_items = collect_lifecycle_control(db_path)
+    handoff_context, handoff_items = collect_handoff(root)
+    action_items = collect_action_queue(canonical)
+    ralph_items = collect_ralph_deferred(root)
+    upcoming = collect_upcoming_sessions(db_path)
+    fitness_summary: dict | None = {}
+    fitness_items: list[PulseItem] = [
+        PulseItem(
+            category="paused",
+            severity="low",
+            source="fitness",
+            summary="Strategy fitness deferred on the default fast path — use refresh/deep when needed",
+        )
+    ]
+
+    handoff_date_str = handoff_context.get("date")
+    if handoff_date_str:
+        try:
+            from datetime import date
+
+            handoff_date = date.fromisoformat(handoff_date_str)
+            days_old = (date.today() - handoff_date).days
+            if days_old >= 2:
+                handoff_items.append(
+                    PulseItem(
+                        category="decaying",
+                        severity="medium" if days_old >= 5 else "low",
+                        source="handoff",
+                        summary=f"Handoff context is {days_old} days old — consider updating",
+                    )
+                )
+        except ValueError:
+            pass
+
+    all_items = identity_items + fitness_items + deployment_items + lifecycle_items + handoff_items + action_items + ralph_items
+    _attach_skill_suggestions(all_items)
+    is_green = not any(i.category in ("broken", "decaying") for i in all_items)
+    time_since_green = _update_time_since_green(root, is_green)
+
+    report = PulseReport(
+        generated_at=datetime.now(UTC).isoformat(),
+        cache_hit=False,
+        git_head=head,
+        git_branch=branch,
+        items=all_items,
+        system_identity=system_identity,
+        handoff_tool=handoff_context.get("tool"),
+        handoff_date=handoff_context.get("date"),
+        handoff_summary=handoff_context.get("summary"),
+        handoff_next_steps=handoff_context.get("next_steps", []),
+        fitness_summary=fitness_summary,
+        deployment_summary=deployment_summary,
+        survival_summary=survival_summary,
+        sr_summary=sr_summary,
+        pause_summary=pause_summary,
+        upcoming_sessions=upcoming,
+        time_since_green=time_since_green,
+        session_delta=[],
+    )
+    report.recommendation = _compute_recommendation(report)
+    return report
+
+
+def _build_fast_snapshot_stub(
+    root: Path,
+    *,
+    canonical: Path,
+    db_path: Path,
+    summary: str,
+) -> PulseReport:
+    """Return an honest fast-path report when no fresh runtime snapshot exists."""
+    head = _git_head(root)
+    branch = _git_branch(root)
+    system_identity, identity_items = collect_system_identity_fast(root, canonical, db_path)
+    handoff_context, handoff_items = collect_handoff(root)
+    action_items = collect_action_queue(canonical)
+    ralph_items = collect_ralph_deferred(root)
+
+    snapshot_items = [
+        PulseItem(
+            category="paused",
+            severity="low",
+            source="runtime_snapshot",
+            summary=summary,
+        )
+    ]
+    all_items = identity_items + snapshot_items + handoff_items + action_items + ralph_items
+    _attach_skill_suggestions(all_items)
+    is_green = not any(i.category in ("broken", "decaying") for i in all_items)
+    time_since_green = _update_time_since_green(root, is_green)
+
+    report = PulseReport(
+        generated_at=datetime.now(UTC).isoformat(),
+        cache_hit=False,
+        git_head=head,
+        git_branch=branch,
+        items=all_items,
+        system_identity=system_identity,
+        handoff_tool=handoff_context.get("tool"),
+        handoff_date=handoff_context.get("date"),
+        handoff_summary=handoff_context.get("summary"),
+        handoff_next_steps=handoff_context.get("next_steps", []),
+        fitness_summary={},
+        deployment_summary=None,
+        survival_summary=None,
+        sr_summary=None,
+        pause_summary=None,
+        upcoming_sessions=[],
+        time_since_green=time_since_green,
+        session_delta=[],
+    )
+    report.recommendation = _compute_recommendation(report)
+    return report
+
+
 # ---------------------------------------------------------------------------
 # Main build
 # ---------------------------------------------------------------------------
@@ -1739,6 +2012,7 @@ def build_pulse(
     no_cache: bool = False,
     deep: bool = False,
     fast: bool = False,
+    refresh: bool = False,
     skip_drift: bool = False,
     skip_tests: bool = False,
     tool_name: str = "unknown",
@@ -1756,6 +2030,21 @@ def build_pulse(
 
     if db_path is None:
         db_path = _resolve_db_path(root, canonical)
+
+    if fast:
+        if refresh:
+            report = _build_fast_pulse(root, canonical=canonical, db_path=db_path, tool_name=tool_name)
+            _write_runtime_snapshot_payload(root, report)
+            return report
+        snapshot_payload = None if no_cache else _read_runtime_snapshot_payload(root)
+        if snapshot_payload is not None:
+            return _payload_to_report(snapshot_payload, cache_hit=True)
+        summary = (
+            "Fast runtime snapshot bypassed via --no-cache — showing startup packet only"
+            if no_cache
+            else "Fast runtime snapshot missing or stale — showing startup packet only; run --refresh for live pulse"
+        )
+        return _build_fast_snapshot_stub(root, canonical=canonical, db_path=db_path, summary=summary)
 
     head = _git_head(root)
 
@@ -2029,14 +2318,17 @@ def format_text(report: PulseReport) -> str:
             lines.append(f"  {s['label']} in {s['hours_away']}h ({s['brisbane_time']} AEST){inst_str}")
         lines.append("")
 
-    if report.fitness_summary:
+    if report.fitness_summary is not None:
         lines.append("Strategy fitness:")
-        for inst, data in sorted(report.fitness_summary.items()):
-            if isinstance(data, dict) and "active_strategies" in data:
-                lines.append(f"  {inst}: {data['active_strategies']} active")
-            elif isinstance(data, dict):
-                parts = [f"{k}={v}" for k, v in data.items() if v]
-                lines.append(f"  {inst}: {', '.join(parts)}")
+        if report.fitness_summary:
+            for inst, data in sorted(report.fitness_summary.items()):
+                if isinstance(data, dict) and "active_strategies" in data:
+                    lines.append(f"  {inst}: {data['active_strategies']} active")
+                elif isinstance(data, dict):
+                    parts = [f"{k}={v}" for k, v in data.items() if v]
+                    lines.append(f"  {inst}: {', '.join(parts)}")
+        else:
+            lines.append("  deferred in default fast mode; use --refresh or --deep for live fitness")
         lines.append("")
 
     # Single recommendation — the most valuable line
@@ -2151,14 +2443,17 @@ def format_markdown(report: PulseReport) -> str:
             lines.append(f"- {severity_tag} {item.summary}".strip())
         lines.append("")
 
-    if report.fitness_summary:
+    if report.fitness_summary is not None:
         lines.append("## Strategy Fitness")
-        for inst, data in sorted(report.fitness_summary.items()):
-            if isinstance(data, dict) and "active_strategies" in data:
-                lines.append(f"- **{inst}**: {data['active_strategies']} active strategies")
-            elif isinstance(data, dict):
-                parts = [f"{k}={v}" for k, v in data.items() if v]
-                lines.append(f"- **{inst}**: {', '.join(parts)}")
+        if report.fitness_summary:
+            for inst, data in sorted(report.fitness_summary.items()):
+                if isinstance(data, dict) and "active_strategies" in data:
+                    lines.append(f"- **{inst}**: {data['active_strategies']} active strategies")
+                elif isinstance(data, dict):
+                    parts = [f"{k}={v}" for k, v in data.items() if v]
+                    lines.append(f"- **{inst}**: {', '.join(parts)}")
+        else:
+            lines.append("- Deferred in default fast mode. Use `--refresh` or `--deep` for live fitness.")
         lines.append("")
 
     return "\n".join(lines)
@@ -2174,7 +2469,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--format", choices=["text", "json", "markdown"], default="text")
     parser.add_argument("--no-cache", action="store_true", help="Force re-run drift+tests")
     parser.add_argument("--deep", action="store_true", help="Full fitness computation (slow)")
-    parser.add_argument("--fast", action="store_true", help="Serve cached drift/tests, skip if uncached (~3s)")
+    parser.add_argument("--fast", action="store_true", help="Read the materialized fast runtime snapshot only")
+    parser.add_argument("--refresh", action="store_true", help="Refresh the fast runtime snapshot before reading it")
     parser.add_argument("--skip-drift", action="store_true", help="Skip drift check")
     parser.add_argument("--skip-tests", action="store_true", help="Skip test suite")
     parser.add_argument("--tool", default="unknown", help="Name of the tool/session writing pulse continuity")
@@ -2193,6 +2489,7 @@ def main(argv: list[str] | None = None) -> int:
         no_cache=args.no_cache,
         deep=args.deep,
         fast=args.fast,
+        refresh=args.refresh,
         skip_drift=args.skip_drift,
         skip_tests=args.skip_tests,
         tool_name=args.tool,
