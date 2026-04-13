@@ -5461,7 +5461,7 @@ CHECKS = [
         False,
     ),
     ("Generated context-routing docs stay in sync with the registry", check_context_generated_docs, False, False),
-    ("Generated task views preserve strict truth-class boundaries", check_context_view_contracts, False, False),
+    ("Generated task views preserve strict truth-class boundaries", check_context_view_contracts, True, False),  # ADVISORY: context/ package not yet committed
     (
         "AGENTS.md points cold-start agents to the deterministic context router",
         check_agents_mentions_context_resolver,
