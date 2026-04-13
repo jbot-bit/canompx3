@@ -86,6 +86,7 @@ def run_ibs_quartile(con):
               AND d.prev_day_high IS NOT NULL
               AND d.prev_day_high != d.prev_day_low
               AND d.symbol = '{inst}'
+              AND d.orb_minutes = 5  -- deduplicate: 3 rows per (day,sym)
         )
         SELECT
             o.orb_label, o.orb_minutes, o.rr_target,
@@ -192,10 +193,12 @@ def run_ibs_continuous(con):
         FROM daily_features d
         JOIN orb_outcomes o ON d.trading_day = o.trading_day
                             AND d.symbol = o.symbol
+                            AND d.orb_minutes = 5  -- deduplicate: 3 rows per (day,sym)
         WHERE d.trading_day < '{HOLDOUT_DATE}'
           AND d.prev_day_high IS NOT NULL
           AND d.prev_day_high != d.prev_day_low
           AND d.symbol = '{inst}'
+          AND d.orb_minutes = 5  -- deduplicate: 3 rows per (day,sym)
           AND o.entry_model = '{ENTRY_MODEL}'
           AND o.confirm_bars = {CONFIRM_BARS}
           AND o.rr_target IN ({','.join(str(r) for r in RR_TARGETS)})
@@ -266,6 +269,7 @@ def run_nr7_standard(con):
             WHERE d.trading_day < '{HOLDOUT_DATE}'
               AND d.prev_day_range IS NOT NULL
               AND d.symbol = '{inst}'
+              AND d.orb_minutes = 5  -- deduplicate: 3 rows per (day,sym)
         )
         SELECT
             o.orb_label, o.rr_target,
@@ -400,6 +404,7 @@ def run_nr7_session_range(con):
                   AND d.{col} IS NOT NULL
                   AND d.{col} > 0
                   AND d.symbol = '{inst}'
+                  AND d.orb_minutes = 5  -- deduplicate: 3 rows per (day,sym)
             )
             SELECT
                 s.is_sess_nr7,
@@ -504,6 +509,7 @@ def run_holdout_check(con):
                   AND d.prev_day_high IS NOT NULL
                   AND d.prev_day_high != d.prev_day_low
                   AND d.symbol = '{inst}'
+                  AND d.orb_minutes = 5  -- deduplicate: 3 rows per (day,sym)
             )
             SELECT
                 i.ibs_q,
@@ -545,6 +551,7 @@ def run_holdout_check(con):
                 ) = 7 THEN TRUE ELSE FALSE END AS is_nr7
             FROM daily_features d
             WHERE d.prev_day_range IS NOT NULL AND d.symbol = 'MES'
+            AND d.orb_minutes = 5  -- deduplicate: 3 rows per (day,sym)
         )
         SELECT
             n.is_nr7,
@@ -593,6 +600,7 @@ def run_confounding(con):
           AND d.prev_day_high IS NOT NULL
           AND d.prev_day_high != d.prev_day_low
           AND d.symbol = 'MNQ'
+          AND d.orb_minutes = 5  -- deduplicate: 3 rows per (day,sym)
     )
     SELECT
         ibs_q,
@@ -627,6 +635,7 @@ def run_confounding(con):
           AND d.prev_day_high IS NOT NULL
           AND d.prev_day_high != d.prev_day_low
           AND d.symbol = 'MNQ'
+          AND d.orb_minutes = 5  -- deduplicate: 3 rows per (day,sym)
     )
     SELECT
         SUM(CASE WHEN is_q1 AND is_ovnrng THEN 1 ELSE 0 END) AS both,
