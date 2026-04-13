@@ -228,6 +228,97 @@
   .error-banner.on { display: block; }
   .stale-indicator { border-left: 3px solid var(--yellow) !important; }
 
+  /* ── OPERATOR STATE ───────────────── */
+  .operator-shell {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    margin-bottom: 12px; overflow: hidden;
+  }
+  .operator-shell-top {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .operator-shell-title { font-size: 13px; font-weight: 700; }
+  .operator-state-badge {
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .operator-state-badge.pass { background: var(--green-soft); color: var(--green); }
+  .operator-state-badge.warn { background: var(--yellow-soft); color: var(--yellow); }
+  .operator-state-badge.fail { background: var(--red-soft); color: var(--red); }
+  .operator-state-badge.info { background: rgba(77,166,255,0.10); color: var(--blue); }
+  .operator-shell-body { padding: 12px 14px; }
+  .operator-summary {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center;
+    margin-bottom: 12px;
+  }
+  .operator-headline { font-size: 16px; font-weight: 700; line-height: 1.25; }
+  .operator-reason { color: var(--text-2); font-size: 12px; margin-top: 4px; line-height: 1.5; }
+  .operator-profile { color: var(--muted); font-size: 11px; margin-top: 6px; }
+  .operator-primary-btn {
+    border-radius: var(--r); border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+    padding: 10px 14px; font-size: 12px; font-weight: 700; cursor: pointer; min-width: 160px;
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  .operator-primary-btn:hover { border-color: var(--border-hi); }
+  .operator-primary-btn.success { border-color: rgba(0,214,143,0.25); color: var(--green); background: var(--green-soft); }
+  .operator-primary-btn.warn { border-color: rgba(255,193,7,0.25); color: var(--yellow); background: var(--yellow-soft); }
+  .operator-primary-btn.danger { border-color: rgba(255,92,92,0.30); color: var(--red); background: var(--red-soft); }
+  .operator-checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+  .operator-check {
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r);
+    padding: 10px 12px;
+  }
+  .operator-check.pass { border-left: 3px solid var(--green); }
+  .operator-check.warn { border-left: 3px solid var(--yellow); }
+  .operator-check.fail { border-left: 3px solid var(--red); }
+  .operator-check.info { border-left: 3px solid var(--blue); }
+  .operator-check-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .operator-check-name { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
+  .operator-check-status { font-size: 10px; color: var(--dim); text-transform: uppercase; font-weight: 700; }
+  .operator-check-detail { font-size: 12px; color: var(--text-2); line-height: 1.45; }
+
+  .alerts-shell {
+    border: 1px solid var(--border); border-radius: 18px;
+    background: linear-gradient(180deg, rgba(11,16,28,0.96), rgba(8,12,22,0.92));
+    box-shadow: var(--shadow-1); overflow: hidden; margin-top: 14px;
+  }
+  .alerts-shell-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 14px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.02);
+  }
+  .alerts-shell-title { font-size: 13px; font-weight: 700; }
+  .alerts-shell-sub { font-size: 11px; color: var(--dim); }
+  .alerts-shell-body { padding: 12px 14px; }
+  .alerts-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .alerts-pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px;
+    border: 1px solid var(--border); font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--text-2); background: rgba(255,255,255,0.03);
+  }
+  .alerts-pill.critical { color: var(--red); border-color: rgba(255,92,92,0.24); background: var(--red-soft); }
+  .alerts-pill.warning { color: var(--yellow); border-color: rgba(255,193,7,0.24); background: var(--yellow-soft); }
+  .alerts-pill.info { color: var(--blue); border-color: rgba(77,166,255,0.24); background: rgba(77,166,255,0.10); }
+  .alerts-list { display: grid; gap: 10px; max-height: 340px; overflow-y: auto; padding-right: 4px; }
+  .alert-row {
+    border: 1px solid var(--border); border-left: 3px solid var(--border-hi);
+    border-radius: 14px; padding: 10px 12px; background: rgba(255,255,255,0.025);
+  }
+  .alert-row.critical { border-left-color: var(--red); background: rgba(255,92,92,0.05); }
+  .alert-row.warning { border-left-color: var(--yellow); background: rgba(255,193,7,0.05); }
+  .alert-row.info { border-left-color: var(--blue); background: rgba(77,166,255,0.05); }
+  .alert-row-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px;
+  }
+  .alert-row-meta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0;
+  }
+  .alert-level { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); }
+  .alert-category { font-size: 11px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .alert-time { font-size: 11px; color: var(--dim); white-space: nowrap; }
+  .alert-message { font-size: 13px; line-height: 1.5; color: var(--text-1); }
+  .alert-context { margin-top: 6px; font-size: 11px; color: var(--text-2); }
+  .alerts-empty { padding: 16px 4px; font-size: 12px; color: var(--dim); }
+
   /* ── ACCOUNT SELECTOR ──────────────── */
   .acct-select {
     padding: 3px 8px; border-radius: var(--r); border: 1px solid var(--border);
@@ -432,6 +523,27 @@
   <!-- ERROR BANNER (equity/auth failures) -->
   <div id="equity-error" class="error-banner"></div>
 
+  <!-- OPERATOR STATE -->
+  <section id="operator-shell" class="operator-shell">
+    <div class="operator-shell-top">
+      <span class="operator-shell-title">Operator State</span>
+      <span id="operator-state-badge" class="operator-state-badge info">Loading</span>
+    </div>
+    <div class="operator-shell-body">
+      <div class="operator-summary">
+        <div>
+          <div id="operator-headline" class="operator-headline">Loading operator state...</div>
+          <div id="operator-reason" class="operator-reason"></div>
+          <div id="operator-profile" class="operator-profile"></div>
+        </div>
+        <button id="operator-primary-action" class="operator-primary-btn" type="button">Run Preflight</button>
+      </div>
+      <div id="operator-checks" class="operator-checks">
+        <div class="operator-check info"><div class="operator-check-detail">Loading readiness checks...</div></div>
+      </div>
+    </div>
+  </section>
+
   <!-- BROKER ACCOUNTS -->
   <section id="broker-accounts-section" class="sec collapsed">
     <div class="sec-hd" onclick="toggleSection('broker')">
@@ -464,6 +576,21 @@
       <div class="sig-no-data">No session running — click Signal on your profile to start monitoring</div>
     </div>
   </div>
+
+  <section id="alerts-shell" class="alerts-shell">
+    <div class="alerts-shell-top">
+      <div>
+        <div class="alerts-shell-title">Runtime Alerts</div>
+        <div id="alerts-shell-sub" class="alerts-shell-sub">Loading recent runtime alerts...</div>
+      </div>
+    </div>
+    <div class="alerts-shell-body">
+      <div id="alerts-summary" class="alerts-summary"></div>
+      <div id="alerts-list" class="alerts-list">
+        <div class="alerts-empty">Loading alerts...</div>
+      </div>
+    </div>
+  </section>
 
   <!-- LIVE SESSION (shows when running) -->
   <section id="session-status-panel" class="live-panel">
@@ -586,12 +713,15 @@ let activeProfileData = null;
 let selectedAccountId = null;  // persisted in localStorage
 let showArchived = false;
 let lastEquityData = null;  // cached for re-renders
+let lastOperatorState = null;
+let lastAlertsData = null;
 
 const $ = id => document.getElementById(id);
 const setText = (id, t) => { const e = $(id); if (e) e.textContent = t; };
 const fmtPrice = v => v == null ? "—" : Number(v).toFixed(2);
 const fmtR = v => v == null ? "—" : `${Number(v) >= 0 ? "+" : ""}${Number(v).toFixed(2)}R`;
 const fmtDollar = v => v == null ? "—" : `$${Number(v).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}`;
+const escapeHtml = v => String(v ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 
 function fmtClock(v, sec = true) {
   if (!v) return "—";
@@ -604,6 +734,18 @@ function getCountdownText(name) { const m = sessionCountdowns[name]; if (m == nu
 function setupLabel(meta) { const p = []; if (meta.entry_model) p.push(meta.entry_model); if (meta.rr_target != null) p.push(`RR${Number(meta.rr_target)}`); if (meta.filter_type) p.push(meta.filter_type); return p.join(" | ") || "—"; }
 function modeClass(m) { return m === "LIVE" ? "live" : m === "DEMO" ? "demo" : m === "SIGNAL" ? "signal" : "stopped"; }
 function laneStatusClass(s) { return s === "IN_TRADE" ? "chip-live" : s === "ARMED" ? "chip-demo" : s === "FLAT" ? "chip-signal" : "chip-manual"; }
+function operatorTone(status) { return status === "READY" || status.startsWith("RUNNING_") ? "pass" : status === "DEGRADED" || status === "STALE" ? "warn" : status === "BLOCKED" || status === "ERROR" ? "fail" : "info"; }
+function operatorButtonTone(actionId) { return actionId === "start_signal" ? "success" : actionId === "stop_session" ? "danger" : actionId === "refresh_data" || actionId === "run_preflight" ? "warn" : ""; }
+function alertTone(level) { return level === "critical" ? "critical" : level === "warning" ? "warning" : "info"; }
+function getProfileRecord(profileId) { return (lastAccountsData || []).find(a => a.profile_id === profileId) || activeProfileData || null; }
+function fmtAlertTime(v) {
+  if (!v) return "—";
+  try {
+    return new Date(v).toLocaleString("en-AU", {hour12: false, month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"});
+  } catch (_) {
+    return "—";
+  }
+}
 
 /* ── Section Toggle ─────────────────── */
 const SEC_MAP = {profiles: "profiles-section", trades: "trades-section", lanes: "live-lanes-panel", specs: "specs-section", broker: "broker-accounts-section"};
@@ -859,6 +1001,146 @@ function showActivity(title, text, tone) {
 }
 function appendActivity(text) { const o = $("activity-output"); o.textContent += `\n${text}`; o.scrollTop = o.scrollHeight; }
 
+async function handleOperatorAction(action, data) {
+  if (!action || !action.id) return;
+
+  if (action.id === "run_preflight") {
+    showActivity("Preflight", "Running checks...", "info");
+    try {
+      const q = new URLSearchParams();
+      if (data?.profile) q.set("profile", data.profile);
+      const d = await (await fetch(`/api/action/preflight?${q.toString()}`, {method: "POST"})).json();
+      const tone = d.status === "pass" ? "success" : d.status === "warn" ? "warning" : "error";
+      showActivity(`Preflight ${String(d.status || "").toUpperCase()}`, d.output || "No output", tone);
+      fetchOperatorState();
+    } catch (e) {
+      showActivity("Preflight", `Failed: ${e.message}`, "error");
+    }
+    return;
+  }
+
+  if (action.id === "open_connections") {
+    switchTab("connections");
+    return;
+  }
+
+  if (action.id === "refresh_data") {
+    $("btn-refresh").click();
+    return;
+  }
+
+  if (action.id === "start_signal") {
+    const acct = getProfileRecord(data?.profile);
+    if (!acct) {
+      showActivity("Start Alerts", "No active profile available to launch.", "error");
+      return;
+    }
+    launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "signal");
+    return;
+  }
+
+  if (action.id === "stop_session") {
+    if (!confirm("Stop session?")) return;
+    try {
+      const d = await (await fetch("/api/action/kill", {method: "POST"})).json();
+      showActivity("Stop Session", d.message || "Stop sent", "warning");
+      setTimeout(fetchOperatorState, 1500);
+    } catch (e) {
+      showActivity("Stop Session", `Failed: ${e.message}`, "error");
+    }
+  }
+}
+
+function renderOperatorState(data) {
+  lastOperatorState = data;
+  const topState = data?.top_state || "ERROR";
+  const tone = operatorTone(topState);
+  const badge = $("operator-state-badge");
+  badge.className = `operator-state-badge ${tone}`;
+  badge.textContent = topState.replace(/_/g, " ");
+
+  setText("operator-headline", topState === "READY" ? "Ready to start" : topState.replace(/_/g, " "));
+  setText("operator-reason", data?.reason || "No operator summary available.");
+  setText("operator-profile", data?.profile ? `Profile: ${data.profile}` : "Profile: none");
+
+  const btn = $("operator-primary-action");
+  const action = data?.recommended_action || null;
+  if (action && action.id) {
+    btn.style.display = "";
+    btn.textContent = action.label || "Continue";
+    btn.className = `operator-primary-btn ${operatorButtonTone(action.id)}`.trim();
+    btn.onclick = () => { handleOperatorAction(action, data); };
+  } else {
+    btn.style.display = "none";
+    btn.onclick = null;
+  }
+
+  const checks = Array.isArray(data?.checks) ? data.checks : [];
+  const wrap = $("operator-checks");
+  if (!checks.length) {
+    wrap.innerHTML = '<div class="operator-check info"><div class="operator-check-detail">No readiness checks available.</div></div>';
+    return;
+  }
+  wrap.innerHTML = checks.map(check => `
+    <div class="operator-check ${check.status || "info"}">
+      <div class="operator-check-top">
+        <span class="operator-check-name">${escapeHtml(check.name || "Check")}</span>
+        <span class="operator-check-status">${escapeHtml(String(check.status || "info").toUpperCase())}</span>
+      </div>
+      <div class="operator-check-detail">${escapeHtml(check.detail || "")}</div>
+    </div>
+  `).join("");
+}
+
+function renderAlerts(data) {
+  lastAlertsData = data;
+  const alerts = Array.isArray(data?.alerts) ? data.alerts : [];
+  const summary = data?.summary || {};
+  const counts = summary?.counts || {};
+  const recentCounts = summary?.recent_counts || {};
+  const recentWindow = Number(summary?.recent_window_minutes || 30);
+  const total = Number(summary?.total || alerts.length || 0);
+  const latest = summary?.latest || alerts[0] || null;
+
+  const sub = $("alerts-shell-sub");
+  if (latest?.timestamp_utc) {
+    sub.textContent = `Newest event ${fmtAlertTime(latest.timestamp_utc)} • ${total} stored`;
+  } else {
+    sub.textContent = "No runtime alerts recorded yet";
+  }
+
+  $("alerts-summary").innerHTML = `
+    <span class="alerts-pill critical">Critical ${Number(counts.critical || 0)}</span>
+    <span class="alerts-pill warning">Warning ${Number(counts.warning || 0)}</span>
+    <span class="alerts-pill info">Info ${Number(counts.info || 0)}</span>
+    <span class="alerts-pill info">Last ${recentWindow}m: ${Number(recentCounts.critical || 0) + Number(recentCounts.warning || 0) + Number(recentCounts.info || 0)}</span>
+  `;
+
+  const list = $("alerts-list");
+  if (!alerts.length) {
+    list.innerHTML = '<div class="alerts-empty">No runtime alerts yet. When the session emits feed, drift, risk, or operator events, they will appear here.</div>';
+    return;
+  }
+
+  list.innerHTML = alerts.map(alert => {
+    const tone = alertTone(String(alert.level || "info"));
+    const ctx = [alert.instrument, alert.mode, alert.profile].filter(Boolean).map(escapeHtml).join(" • ");
+    return `
+      <div class="alert-row ${tone}">
+        <div class="alert-row-top">
+          <div class="alert-row-meta">
+            <span class="alert-level">${escapeHtml(String(alert.level || "info").toUpperCase())}</span>
+            <span class="alert-category">${escapeHtml(String(alert.category || "runtime_event").replace(/_/g, " "))}</span>
+          </div>
+          <span class="alert-time">${fmtAlertTime(alert.timestamp_utc)}</span>
+        </div>
+        <div class="alert-message">${escapeHtml(alert.message || "No message")}</div>
+        ${ctx ? `<div class="alert-context">${ctx}</div>` : ""}
+      </div>
+    `;
+  }).join("");
+}
+
 /* ── Update Status ──────────────────── */
 function updateStatus(state) {
   const mode = state.mode || "STOPPED";
@@ -925,7 +1207,28 @@ async function fetchStatus() {
   try { updateStatus(await (await fetch("/api/status")).json()); }
   catch (_) { setText("summary-mode", "Offline"); $("header-mode-badge").className = "topbar-mode stopped"; updateFavicon("OFFLINE"); }
 }
+async function fetchOperatorState() {
+  try {
+    const q = new URLSearchParams();
+    const profile = runningProfile || activeProfileData?.profile_id;
+    if (profile) q.set("profile", profile);
+    renderOperatorState(await (await fetch(`/api/operator-state?${q.toString()}`)).json());
+  } catch (e) {
+    renderOperatorState({top_state: "ERROR", reason: e.message || "Failed to load operator state", checks: []});
+  }
+}
 async function fetchTrades() { try { renderTrades((await (await fetch("/api/trades")).json()).trades || []); } catch (_) {} }
+async function fetchAlerts() {
+  try {
+    const q = new URLSearchParams({limit: "20"});
+    const profile = runningProfile || activeProfileData?.profile_id;
+    if (profile) q.set("profile", profile);
+    renderAlerts(await (await fetch(`/api/alerts?${q.toString()}`)).json());
+  } catch (e) {
+    renderAlerts({alerts: [], summary: {total: 0, counts: {}, recent_counts: {}, latest: null}});
+    $("alerts-shell-sub").textContent = e.message || "Failed to load runtime alerts";
+  }
+}
 async function fetchAccounts() { try { renderAccounts((await (await fetch("/api/accounts")).json()).accounts || []); } catch (_) { $("accounts-grid").innerHTML = '<div class="empty">Could not load.</div>'; } }
 
 async function fetchSessions() {
@@ -1222,7 +1525,7 @@ async function launchSession(pid, firm, instr, mode) {
   const warn = mode === "live" ? "\n\nREAL MONEY." : mode === "demo" ? "\n\nPaper orders." : "\n\nSignals only.";
   if (!confirm(`Start ${lbl[mode]}?\n\n${firm} | ${instr}\n${pid}${warn}`)) return;
   showActivity(`${lbl[mode]} Start`, `Launching ${pid}...`, mode === "live" ? "error" : "info");
-  try { const d = await (await fetch(`/api/action/start?${new URLSearchParams({profile: pid, mode})}`, {method: "POST"})).json(); appendActivity(d.message || d.status || "No response"); if (d.pid) appendActivity(`PID: ${d.pid}`); }
+  try { const d = await (await fetch(`/api/action/start?${new URLSearchParams({profile: pid, mode})}`, {method: "POST"})).json(); appendActivity(d.message || d.status || "No response"); if (d.pid) appendActivity(`PID: ${d.pid}`); setTimeout(fetchOperatorState, 1000); }
   catch (e) { appendActivity("Error: " + e.message); }
 }
 
@@ -1242,14 +1545,22 @@ $("btn-refresh").addEventListener("click", async () => {
 
 $("btn-preflight").addEventListener("click", async () => {
   showActivity("Preflight", "Running checks...", "info");
-  try { const d = await (await fetch("/api/action/preflight", {method: "POST"})).json(); showActivity(`Preflight ${String(d.status || "").toUpperCase()}`, d.output || "No output", d.status === "pass" ? "success" : "error"); }
+  try {
+    const q = new URLSearchParams();
+    const profile = runningProfile || activeProfileData?.profile_id;
+    if (profile) q.set("profile", profile);
+    const d = await (await fetch(`/api/action/preflight?${q.toString()}`, {method: "POST"})).json();
+    const tone = d.status === "pass" ? "success" : d.status === "warn" ? "warning" : "error";
+    showActivity(`Preflight ${String(d.status || "").toUpperCase()}`, d.output || "No output", tone);
+    fetchOperatorState();
+  }
   catch (e) { appendActivity("Error: " + e.message); }
 });
 
 $("btn-kill").addEventListener("click", async () => {
   if (!confirm("KILL ALL TRADES?\nStops bot, closes positions at market.")) return;
   if (!confirm("SECOND CONFIRMATION: Are you sure?")) return;
-  try { const d = await (await fetch("/api/action/kill", {method: "POST"})).json(); showActivity("Kill", d.message || "Kill sent", "error"); }
+  try { const d = await (await fetch("/api/action/kill", {method: "POST"})).json(); showActivity("Kill", d.message || "Kill sent", "error"); setTimeout(fetchOperatorState, 1000); }
   catch (e) { showActivity("Kill", "Failed: " + e.message, "error"); }
 });
 
@@ -1532,8 +1843,8 @@ restoreSections();
 restoreTab();
 initAccountSelector();
 try { localStorage.removeItem("orb_sections"); } catch (_) {} // migrate old key
-fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity();
-setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000); setInterval(fetchEquity, 30000);
+fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts();
+setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000); setInterval(fetchEquity, 30000); setInterval(fetchOperatorState, 5000); setInterval(fetchAlerts, 5000);
 // Auto-refresh broker list when on Connections tab
 setInterval(() => { if ($("tab-connections")?.classList.contains("active")) fetchBrokerList(); }, 30000);
 </script>

@@ -1,9 +1,19 @@
-"""Focused tests for dashboard metadata and legacy state compatibility."""
+"""Focused tests for dashboard metadata, operator state, and legacy compatibility."""
 
+import asyncio
 from datetime import date
 from types import SimpleNamespace
 
-from trading_app.live.bot_dashboard import _legacy_lanes_to_lane_cards, _strategy_meta
+from trading_app.live import bot_dashboard
+from trading_app.live.bot_dashboard import (
+    _build_operator_payload,
+    _choose_operator_profile,
+    _derive_operator_state,
+    _legacy_lanes_to_lane_cards,
+    _parse_preflight_output,
+    _profile_session_ambiguity,
+    _strategy_meta,
+)
 from trading_app.live.bot_state import build_state_snapshot
 from trading_app.prop_profiles import ACCOUNT_PROFILES
 
@@ -55,8 +65,12 @@ def test_strategy_meta_extracts_human_readable_lane_fields():
 
 def test_legacy_lanes_reconstruct_all_profile_lanes_and_mark_ambiguous_shared_sessions():
     profile = ACCOUNT_PROFILES["topstep_50k_type_a"]
-    mnq_nyse = next(l for l in profile.daily_lanes if l.strategy_id == "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50")
-    mes_nyse = next(l for l in profile.daily_lanes if l.strategy_id == "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12")
+    mnq_nyse = next(
+        lane for lane in profile.daily_lanes if lane.strategy_id == "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50"
+    )
+    mes_nyse = next(
+        lane for lane in profile.daily_lanes if lane.strategy_id == "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12"
+    )
 
     cards = _legacy_lanes_to_lane_cards(
         lanes={
@@ -88,3 +102,164 @@ def test_legacy_lanes_reconstruct_all_profile_lanes_and_mark_ambiguous_shared_se
     assert mes_card["status_detail"] is not None
     assert "cannot disambiguate" in mes_card["status_detail"]
     assert mes_card["session_time_brisbane"] == "23:30"
+
+
+def test_parse_preflight_output_extracts_structured_checks():
+    output = """
+[1/5] Auth check (projectx)... FAILED: bad creds
+[2/5] Portfolio check (MNQ)... OK (6 strategies)
+[3/5] Daily features freshness... WARN: stale by 1 day
+[4/5] Contract resolution... SKIPPED (auth failed)
+[5/5] Component self-tests... OK (all components verified)
+
+Preflight: 2/5 passed
+FIX FAILURES before starting a live session.
+""".strip()
+
+    parsed = _parse_preflight_output(output)
+
+    assert parsed["passed"] == 2
+    assert parsed["total"] == 5
+    assert parsed["overall"] == "fail"
+    assert parsed["has_failures"] is True
+    assert parsed["has_warnings"] is True
+    check_map = {check["name"]: check for check in parsed["checks"]}
+    assert check_map["Auth check (projectx)"]["status"] == "fail"
+    assert check_map["Daily features freshness"]["status"] == "warn"
+    assert check_map["Contract resolution"]["status"] == "warn"
+
+
+def test_derive_operator_state_requires_preflight_before_ready():
+    top_state, reason, action = _derive_operator_state(
+        raw_mode="STOPPED",
+        heartbeat_age_s=9999,
+        broker_summary={"enabled_count": 1, "connected_count": 1},
+        data_summary={"any_stale": False},
+        preflight_summary=None,
+    )
+
+    assert top_state == "STOPPED"
+    assert "preflight" in reason.lower()
+    assert action["id"] == "run_preflight"
+
+
+def test_derive_operator_state_becomes_ready_after_passing_preflight():
+    top_state, _reason, action = _derive_operator_state(
+        raw_mode="STOPPED",
+        heartbeat_age_s=9999,
+        broker_summary={"enabled_count": 1, "connected_count": 1},
+        data_summary={"any_stale": False},
+        preflight_summary={"status": "pass", "passed": 5, "total": 5},
+    )
+
+    assert top_state == "READY"
+    assert action["id"] == "start_signal"
+
+
+def test_derive_operator_state_marks_stale_running_session():
+    top_state, reason, action = _derive_operator_state(
+        raw_mode="LIVE",
+        heartbeat_age_s=180,
+        broker_summary={"enabled_count": 1, "connected_count": 1},
+        data_summary={"any_stale": False},
+        preflight_summary={"status": "pass"},
+    )
+
+    assert top_state == "STALE"
+    assert "stale" in reason.lower()
+    assert action["id"] == "stop_session"
+
+
+def test_profile_session_ambiguity_passes_for_shared_session_profiles():
+    result = _profile_session_ambiguity("topstep_50k_type_a")
+
+    assert result["status"] == "pass"
+    assert "NYSE_OPEN" in result["detail"]
+    assert "supported" in result["detail"]
+
+
+def test_choose_operator_profile_prefers_running_state_then_first_active_auto_profile():
+    assert (
+        _choose_operator_profile(None, {"account_name": "profile_topstep_50k_mes_auto"})
+        == "topstep_50k_mes_auto"
+    )
+    assert _choose_operator_profile(None, {}) == "topstep_50k_mnq_auto"
+
+
+def test_build_operator_payload_includes_recent_alert_check(monkeypatch):
+    monkeypatch.setattr(
+        bot_dashboard,
+        "read_state",
+        lambda: {"mode": "SIGNAL", "heartbeat_age_s": 12, "account_name": "profile_topstep_50k_mnq_auto"},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_broker_status",
+        lambda: {"enabled_count": 1, "connected_count": 1, "status": "ok"},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_data_status",
+        lambda: {"status": "ok", "any_stale": False, "instruments": {}},
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_collect_alert_summary",
+        lambda **_: {
+            "status": "ok",
+            "alerts": [{"message": "FEED STALE: 180s no data (check 2)"}],
+            "total": 1,
+            "counts": {"critical": 0, "warning": 1, "info": 0},
+            "recent_window_minutes": 30,
+            "recent_counts": {"critical": 0, "warning": 1, "info": 0},
+            "latest": {"message": "FEED STALE: 180s no data (check 2)"},
+        },
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "_profile_session_ambiguity",
+        lambda profile_id: {"status": "pass", "detail": f"ok:{profile_id}"},
+    )
+    monkeypatch.setitem(
+        bot_dashboard._preflight_cache,
+        "topstep_50k_mnq_auto",
+        {"status": "pass", "passed": 5, "total": 5},
+    )
+
+    payload = _build_operator_payload("topstep_50k_mnq_auto")
+
+    alerts_check = next(check for check in payload["checks"] if check["name"] == "Alerts")
+    assert alerts_check["status"] == "warn"
+    assert "FEED STALE" in alerts_check["detail"]
+
+
+def test_api_alerts_returns_recent_runtime_alerts(monkeypatch):
+    monkeypatch.setattr(
+        bot_dashboard,
+        "read_operator_alerts",
+        lambda limit=25, profile=None, mode=None: [
+            {
+                "timestamp_utc": "2026-04-13T09:15:00+00:00",
+                "level": "critical",
+                "category": "feed_dead",
+                "message": "FEED DEAD: all reconnect attempts exhausted for MNQ",
+                "profile": profile,
+                "mode": mode,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        bot_dashboard,
+        "summarize_operator_alerts",
+        lambda alerts: {
+            "total": len(alerts),
+            "counts": {"critical": 1, "warning": 0, "info": 0},
+            "recent_window_minutes": 30,
+            "recent_counts": {"critical": 1, "warning": 0, "info": 0},
+            "latest": alerts[0] if alerts else None,
+        },
+    )
+
+    payload = asyncio.run(bot_dashboard.api_alerts(limit=20, profile="topstep_50k_type_a", mode="SIGNAL"))
+    assert payload["alerts"][0]["profile"] == "topstep_50k_type_a"
+    assert payload["alerts"][0]["mode"] == "SIGNAL"
