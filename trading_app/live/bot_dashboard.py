@@ -897,16 +897,31 @@ async def action_preflight(profile: str | None = None):
 
 @app.get("/api/accounts")
 async def api_accounts():
-    """All trading profiles with human-readable names, firm info, and lane summaries."""
-    try:
-        from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes, get_account_tier, get_firm_spec
+    """All trading profiles with human-readable names, firm info, and lane summaries.
 
-        accounts = []
-        for pid, p in ACCOUNT_PROFILES.items():
+    Per-profile build is wrapped in try/except so one misconfigured profile
+    (e.g. an account_size that has no matching tier in ACCOUNT_TIERS) does not
+    nuke the entire endpoint. Broken profiles surface in the 'skipped' array
+    of the response so the UI / operator can see what was excluded and why.
+    """
+    from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes, get_account_tier, get_firm_spec
+
+    accounts = []
+    skipped = []
+    try:
+        profile_items = list(ACCOUNT_PROFILES.items())
+    except Exception as e:
+        return {"accounts": [], "error": f"ACCOUNT_PROFILES unavailable: {e}"}
+
+    for pid, p in profile_items:
+        try:
             tier = get_account_tier(p.firm, p.account_size)
             firm = get_firm_spec(p.firm)
             p_lanes = effective_daily_lanes(p)
             lanes_summary = []
+            for lane in p_lanes:
+                meta = _strategy_meta(lane.strategy_id)
+                session_time = _get_session_time_brisbane(lane.orb_label)
             for lane in p_lanes:
                 meta = _strategy_meta(lane.strategy_id)
                 session_time = _get_session_time_brisbane(lane.orb_label)
@@ -954,9 +969,18 @@ async def api_accounts():
                     "notes": getattr(p, "notes", None) or "",
                 }
             )
-        return {"accounts": accounts}
-    except Exception as e:
-        return {"accounts": [], "error": str(e)}
+        except Exception as e:
+            log.warning("api_accounts: skipping profile %r — %s", pid, e)
+            skipped.append(
+                {
+                    "profile_id": pid,
+                    "firm": getattr(p, "firm", None),
+                    "account_size": getattr(p, "account_size", None),
+                    "error": str(e),
+                }
+            )
+
+    return {"accounts": accounts, "skipped": skipped}
 
 
 # ── Broker connection management ─────────────────────────────────────

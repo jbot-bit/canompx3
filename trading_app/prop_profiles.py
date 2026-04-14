@@ -323,6 +323,7 @@ ACCOUNT_TIERS: dict[tuple[str, int], PropFirmAccount] = {
     ("self_funded", 5_000): PropFirmAccount("self_funded", 5_000, 750, 0, 2, 250),
     ("self_funded", 10_000): PropFirmAccount("self_funded", 10_000, 1_500, 0, 4, 500),
     ("self_funded", 25_000): PropFirmAccount("self_funded", 25_000, 5_000, 1, 10, 1_250),
+    ("self_funded", 30_000): PropFirmAccount("self_funded", 30_000, 6_000, 1, 12, 1_500),
     ("self_funded", 50_000): PropFirmAccount("self_funded", 50_000, 10_000, 2, 20, 2_500),
 }
 
