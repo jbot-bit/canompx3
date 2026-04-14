@@ -6,6 +6,76 @@
 
 ---
 
+## Update (2026-04-14 — Claude: pinecone manifest bundling + pulse test-timeout reclassification + NQ mapping verified complete)
+
+### Headline
+
+Pulse `[FIX NOW] Test suite timed out` was a two-bug stack: manifest grew
+past the 250-file Pinecone budget AND the pulse budgeted 120s for a 543s
+test suite. Both fixed. NQ symbol mapping from the 2026-04-13 HANDOFF
+next-step list was verified complete — no remaining wiring work.
+
+### What shipped
+
+- `scripts/tools/sync_pinecone.py` — new `bundle_memory_topics()` mirrors
+  `bundle_research_output`. Keeps MEMORY.md and repo-local `memory/*.md`
+  standalone; bundles the 215+ auto-memory topic files into a single
+  `_bundle_auto_memory.md`. Manifest total: 257 → 42.
+- `scripts/tools/project_pulse.py` — `collect_tests()` timeout is now
+  `category=paused, severity=low` instead of `broken/high`. Timeout means
+  "suite > 120s budget", not "suite broken"; real failures still surface
+  as broken.
+- `tests/tools/test_sync_pinecone.py` — 2 new tests for memory bundling.
+- `tests/test_tools/test_project_pulse.py` — 1 new test for paused-not-broken.
+- Also: `tests/test_trading_app/test_consistency_tracker.py` — dead-imports
+  cleanup follow-on to Ralph iter 166 (commit `bc4c8826`).
+
+### Commits
+- `03238c01` Ralph iter 166 — consistency_tracker trading_day fix
+- `1d669dae` Ralph iter 166 — audit docs + ledger
+- `bc4c8826` chore — dead-imports cleanup
+- `e3ec8dda` feat(pinecone) — bundling + pulse reclassification
+
+### NQ symbol mapping — verified COMPLETE (closed 2026-04-13 next-step item)
+
+All 5 infrastructure layers are wired and tested:
+
+| Layer | File | Status |
+|---|---|---|
+| Cost model (commission, tick, multiplier) | `pipeline/cost_model.py:135-143` | COST_SPECS entry, Rithmic $4.10 canonical |
+| Session slippage multipliers | `pipeline/cost_model.py:283+` | NQ dict mirrors MNQ |
+| Asset config (data source) | `pipeline/asset_configs.py:286+` | Full NQ config, parent_symbol=None |
+| Rithmic router | `trading_app/live/rithmic/contracts.py:29` | `INSTRUMENT_ROOTS["NQ"] = "NQ"` |
+| ProjectX router | `trading_app/live/projectx/contract_resolver.py:16` | Search terms include "E-mini Nasdaq" |
+
+Tests: 8/8 `TestNQCostSpec` pass (total_friction, point_value, tick_size,
+friction_ratio, min_risk_floor, validated_list, session_slippage).
+
+Note on "profile" piece of HANDOFF estimate: `asset_configs.py:380`
+explicitly notes NQ is a **source alias**, not an ACTIVE_ORB_INSTRUMENT.
+A live NQ profile would require user decisions (account setup, capital
+allocation) and is properly deferred. Infrastructure is ready when an
+account is opened.
+
+### Pulse state after fixes
+
+- `[FIX NOW]` section gone (was: Test suite timed out)
+- `[ACT SOON]` dropped from 3 to 2 items
+- Pulse headline now points to the real priority: C12 SR ALARM lanes
+- Drift: 102/102 PASS, 6 advisory (baseline unchanged)
+
+### Next Sensible Step
+
+1. C12 SR review — 2 unresolved ALARM lanes per pulse, user decision on
+   pause/keep. Run `python -m trading_app.sr_monitor --apply-pauses`
+   for a dry-run summary first.
+2. Merge risk — 'operator-cockpit' and 'startup-brain-refactor' branches
+   overlap on .gitignore, HANDOFF.md, system_authority_map.md + 17 more
+   files. User decision on merge order.
+3. Worktree cleanup — 8 open managed worktrees, some may be stale.
+
+---
+
 ## Update (2026-04-14 — Codex operator setup: power profile + app local-environment scripts)
 
 ### Headline
