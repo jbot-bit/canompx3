@@ -6,6 +6,107 @@
 
 ---
 
+## Update (2026-04-15 evening — dashboard cockpit shipped + 3 smoke rounds + session stopped)
+
+### Headline
+
+Turned the bot dashboard from "MySpace clunky" (user's words) into a state-
+adaptive cockpit. Five UI commits shipped, driven by real smoke tests against
+the running bot — not cosmetic guessing. Also fixed two real bugs that made
+the hero card render mostly-empty even when the bot was healthy.
+
+At the end of the session, stepped back and honestly flagged that further
+polish rounds are past diminishing returns. Dashboard is monitoring glass —
+real trading happens at TopStepX. Recommendation: no more dashboard rounds
+until a specific live-use friction surfaces.
+
+### Dashboard commits (in order)
+
+1. **`51dbe94d`** Tier 3 polish — Inter font, depth, motion, color discipline
+   - Additive CSS override block, no structural changes
+   - Cyan as sole primary accent; green/red reserved for pnl/kill
+   - 14px base, 26px hero metrics, 8px spacing grid, 10/14 radii
+   - Glass topbar, shadows, 180ms ease transitions
+2. **`41104a7a`** Close color-leak gap (code-review A- → A)
+   - Override 6 selector groups still using OLD-palette rgba inline
+3. **`af0c3ca4`** Tier 1 trader-value upgrades
+   - Primary Start/Stop CTA in topbar (context-aware)
+   - Alert hierarchy (CRITICAL sticky panel + Ack dismiss via localStorage)
+   - Broker connection health dot in topbar
+4. **`b7f6fd42`** Cockpit — state-adaptive hero + aggressive collapse
+   - Single hero card: profile + state badge + 4 metrics + NOW + book row
+   - Book row = deployed lanes sorted by time-to-fire, chip state reflects timing
+   - Hero background/glow changes per state (ready/running/in_trade/warn/blocked)
+   - Default-collapse Operator / Alerts / Profiles / Trade Blotter with 1-line summaries
+5. **`5d182d9c`** Smoke round 1 — /api/accounts resilience + 30k self_funded tier
+   - One bad profile (self_funded_tradovate, size=30000 not in ACCOUNT_TIERS)
+     was nuking the entire endpoint → returned `accounts=[]` → hero empty
+   - Wrapped per-profile build in try/except, broken profiles surface in `skipped[]`
+   - Added ('self_funded', 30_000) tier (max_dd=6000, dll=1500, 1 mini / 12 micro)
+6. **`4e225537`** Smoke round 2 — trade lock + hero book + NOW clarity
+   - `/api/trades` caught `duckdb.IOException` → returns `{locked: True, note}`
+     instead of raw error string when session holds live_journal.db
+   - Hero book filters past sessions; armed window tightened 60→30min
+   - Hero NOW becomes "ARMING SESSION in Xm · FILTER" when imminent
+   - Collapsed Operator header now shows "N/M pass · W warn · F fail"
+7. **`b93b9e8f`** Smoke round 3 — lane_card authority + heartbeat warn
+   - Hero NOW + book prefer live `lane_cards[].status` over clock-derived guesses
+   - IN_TRADE chip pulses green with inset glow; hero shows direction + entry + unreal R
+   - Signal-strip panel hidden by default in cockpit (data surfaced in hero)
+   - Stale-heartbeat pill in topbar (amber pulse when heartbeat > 60s + mode != STOPPED)
+
+### Other work this session
+
+- **`77ac51d6`** fix(launcher): use claude.exe explicitly to avoid recursive bat self-call
+- **`9843d61f`** fix(tests): schema-flexible fitness loader + lazy webhook auth + promotion fixtures
+- **`c38dbd65`** feat(nq): NQ full-size Nasdaq symbol mapping (earlier in day)
+- **`e2712126`** fix(tooling): guard .venv-wsl path.exists() against Windows OSError
+- **`0ca84aa9`** fix(tooling): guard context_views/resolver bootstrap against pytest import
+- **`9cc72afa`** fix(tests): normalize path separators in context drift test assertion
+- **`36e92a0e`** fix(safety): narrow bar_persister except to duckdb.Error + OSError
+- **`90470093`** refactor(f1): extract `_apply_broker_reality_check()` — unblocks integration tests
+  (closed HANDOFF Known-gap #4 from prior session; 135 orchestrator tests pass)
+- **`1d8066f6`** chore(stages): close f1-broker-reality-extract stage
+
+### Dashboard status
+
+Bot is running in SIGNAL mode, 6 MNQ lanes, broker connected, 0 trades today.
+Dashboard URL: http://localhost:8080. After the cockpit + smoke rounds:
+- Hero card renders with real data (was mostly empty before round 1 fix)
+- Book row shows upcoming deployed lanes only, sorted by time-to-fire
+- Trade blotter handles journal-lock gracefully instead of crashing
+- Stale-heartbeat warning in topbar if bot freezes
+
+### Known limitations (explicitly not fixed — diminishing returns)
+
+- Operator check objects have no `id`/`title` fields (backend returns detail-only;
+  my cockpit summary uses status + detail, works fine)
+- No "clear all dismissed alerts" button (localStorage cap of 200 keeps it bounded)
+- Trade blotter blank-during-active-session is WAI — journal is exclusively held
+- `days_old` field is None in data-status (cosmetic, doesn't break rendering)
+
+### Next session priorities (user-level, not code)
+
+1. **Bulenox 50K migration** — +$9K/yr/ct incremental per the max-profit audit.
+   Infrastructure built (Rithmic adapter, profile). User action: open account.
+2. **Live XFA flip readiness** — F-1 wiring is done + broker-aware (TC auto-disable
+   shipped `306d16a0` earlier this day + tests `875d0245`). HARD GATE closed. Next
+   step is an actual XFA account, not more code.
+3. **Keep-alive during sessions** — bot currently running fine. Let it run.
+
+**No dashboard rounds recommended** unless a specific live-use friction surfaces.
+Past 3 rounds were ROI-positive; further polish is aesthetic noise.
+
+### Verification at session close
+
+- `git status --short` → clean (one untracked `.lnk` shortcut, not code)
+- `git log origin/main..HEAD` → empty (0 unpushed)
+- HTTP 200 at http://localhost:8080
+- 182 targeted tests pass (bot_dashboard + prop_profiles + risk_manager + engine_risk_integration)
+- Drift: 102 passed, 0 failed, 6 advisory
+
+---
+
 ## Update (2026-04-15 later — work-capsule branch + dir closed, 2 stranded commits verified moot/subsumed)
 
 ### Headline
