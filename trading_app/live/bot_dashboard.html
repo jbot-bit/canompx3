@@ -1164,6 +1164,287 @@
     font-size: var(--fs-small);
     font-style: italic;
   }
+
+  /* ═══════════════════════════════════════════════════════════════
+     COCKPIT — state-adaptive hero + aggressive default-collapse
+     Stage: docs/runtime/stages/dashboard-cockpit.md
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* hide originals that are replaced by hero */
+  .cockpit-hidden { display: none !important; }
+
+  /* collapsed-by-default bodies for operator-shell + alerts-shell */
+  body.cockpit .operator-shell .operator-shell-body,
+  body.cockpit .alerts-shell .alerts-shell-body {
+    display: none;
+  }
+  body.cockpit .operator-shell.open .operator-shell-body,
+  body.cockpit .alerts-shell.open .alerts-shell-body {
+    display: block;
+  }
+  /* clickable headers for collapse/expand */
+  body.cockpit .operator-shell-top,
+  body.cockpit .alerts-shell-top {
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--t) var(--ease);
+  }
+  body.cockpit .operator-shell-top:hover,
+  body.cockpit .alerts-shell-top:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+  /* chevron indicator for collapsed state */
+  body.cockpit .operator-shell-top::after,
+  body.cockpit .alerts-shell-top::after {
+    content: "▸";
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 11px;
+    transition: transform var(--t) var(--ease);
+    opacity: 0.6;
+  }
+  body.cockpit .operator-shell.open .operator-shell-top::after,
+  body.cockpit .alerts-shell.open .alerts-shell-top::after {
+    transform: rotate(90deg);
+  }
+
+  /* HERO CARD ─────────────────────────────────────── */
+  .hero {
+    background: linear-gradient(180deg, rgba(34, 211, 238, 0.025), var(--surface) 40%);
+    border: 1px solid var(--border);
+    border-radius: var(--r-xl);
+    padding: 20px 22px 18px;
+    margin: 14px 0 16px;
+    box-shadow: var(--shadow);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.28), transparent);
+    pointer-events: none;
+  }
+  .hero[data-state="running"] {
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.04), var(--surface) 50%);
+    box-shadow: var(--shadow), inset 0 0 0 1px rgba(16, 185, 129, 0.10);
+  }
+  .hero[data-state="in_trade"] {
+    background: linear-gradient(180deg, rgba(34, 211, 238, 0.06), var(--surface) 50%);
+    box-shadow: var(--shadow), inset 0 0 0 1px rgba(34, 211, 238, 0.15);
+  }
+
+  .hero-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .hero-head-left { display: flex; align-items: center; gap: 14px; }
+  .hero-profile {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.012em;
+    color: var(--text);
+  }
+  .hero-state-badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    background: var(--surface-2);
+    color: var(--muted);
+    transition: all var(--t) var(--ease);
+  }
+  .hero-state-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: currentColor;
+    box-shadow: 0 0 8px currentColor;
+  }
+  .hero[data-state="ready"] .hero-state-badge { color: var(--accent); background: var(--accent-soft); }
+  .hero[data-state="stopped"] .hero-state-badge { color: var(--muted); }
+  .hero[data-state="running"] .hero-state-badge { color: var(--green); background: var(--green-soft); }
+  .hero[data-state="in_trade"] .hero-state-badge { color: var(--accent); background: var(--accent-strong); }
+  .hero[data-state="blocked"] .hero-state-badge,
+  .hero[data-state="error"]   .hero-state-badge { color: var(--red); background: var(--red-soft); }
+  .hero[data-state="warn"]    .hero-state-badge { color: var(--yellow); background: var(--yellow-soft); }
+
+  .hero-head-hint {
+    font-size: var(--fs-small);
+    color: var(--muted);
+    letter-spacing: -0.005em;
+  }
+
+  .hero-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 18px;
+    padding: 4px 0 4px;
+  }
+  .hm { min-width: 0; }
+  .hm-lbl {
+    font-size: var(--fs-label);
+    font-weight: 600;
+    letter-spacing: var(--tracking-label);
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+  .hm-val {
+    font-family: var(--font-mono);
+    font-feature-settings: 'tnum', 'zero';
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .hm-val.sm { font-size: 20px; }
+  .hm-val.positive { color: var(--green); }
+  .hm-val.negative { color: var(--red); }
+  .hm-val.warning  { color: var(--yellow); }
+  .hm-val.muted    { color: var(--muted); }
+  .hm-sub { font-size: var(--fs-micro); color: var(--muted); margin-top: 6px; letter-spacing: -0.005em; min-height: 14px; }
+  .hm-bar-wrap { height: 4px; background: var(--surface-3); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  .hm-bar-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--green), #16a34a); transition: width var(--t-slow) var(--ease), background var(--t) var(--ease); }
+
+  .hero-now {
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: rgba(34, 211, 238, 0.05);
+    border: 1px solid rgba(34, 211, 238, 0.18);
+    border-radius: var(--r);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .hero-now-label {
+    font-size: var(--fs-label);
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    padding-right: 12px;
+    border-right: 1px solid rgba(34, 211, 238, 0.2);
+  }
+  .hero-now-body {
+    color: var(--text);
+    font-size: var(--fs-body);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    flex: 1;
+    min-width: 0;
+  }
+  .hero-now-body .sub { color: var(--muted); }
+  .hero-now-body .mono { font-family: var(--font-mono); font-weight: 700; }
+  .hero-now-body .dir-long  { color: var(--green); font-weight: 700; }
+  .hero-now-body .dir-short { color: var(--red);   font-weight: 700; }
+
+  .hero-book {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 36px;
+  }
+  .hero-book-label {
+    font-size: var(--fs-label);
+    font-weight: 700;
+    letter-spacing: var(--tracking-label);
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  .hero-book-lanes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+  }
+  .book-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px 5px 9px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 11px;
+    color: var(--text-2);
+    transition: all var(--t-fast) var(--ease);
+    white-space: nowrap;
+  }
+  .book-chip:hover { border-color: var(--border-hi); color: var(--text); }
+  .book-chip.next {
+    background: var(--accent-soft);
+    border-color: var(--accent-strong);
+    color: var(--accent);
+  }
+  .book-chip.armed {
+    background: var(--green-soft);
+    border-color: rgba(16, 185, 129, 0.26);
+    color: var(--green);
+  }
+  .book-chip.blocked {
+    background: rgba(239, 68, 68, 0.06);
+    border-color: rgba(239, 68, 68, 0.18);
+    color: #fca5a5;
+    opacity: 0.85;
+  }
+  .book-chip.paused {
+    background: var(--yellow-soft);
+    border-color: rgba(245, 158, 11, 0.22);
+    color: var(--yellow);
+  }
+  .book-chip .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+    opacity: 0.8;
+  }
+  .book-chip .time {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .book-chip.next .time,
+  .book-chip.armed .time { color: currentColor; opacity: 0.75; }
+  .book-empty { color: var(--dim); font-size: var(--fs-small); font-style: italic; }
+
+  /* default-collapse sections in cockpit mode */
+  body.cockpit #profiles-section:not(.user-expanded),
+  body.cockpit #trades-section:not(.user-expanded) {
+    /* rely on existing .collapsed mechanism — set via JS on init */
+  }
+
+  /* Inline summary inside header when a section is collapsed.
+     Populated by JS. The existing sec-badge slot is used where possible. */
+  body.cockpit .cockpit-summary {
+    font-size: var(--fs-micro);
+    color: var(--muted);
+    font-weight: 500;
+    letter-spacing: -0.005em;
+    margin-left: auto;
+    padding-right: 8px;
+  }
+  body.cockpit .cockpit-summary .pos { color: var(--green); }
+  body.cockpit .cockpit-summary .neg { color: var(--red); }
+  body.cockpit .cockpit-summary .warn { color: var(--yellow); }
+  body.cockpit .cockpit-summary .accent { color: var(--accent); }
+  body.cockpit .sec.collapsed .cockpit-summary { display: inline; }
+  body.cockpit .sec:not(.collapsed) .cockpit-summary { display: none; }
+
+  /* responsive — hero collapses to 2x2 at mid breakpoint, 1x4 at narrow */
+  @media (max-width: 1100px) {
+    .hero-metrics { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+    .hm-val { font-size: 26px; }
+  }
+  @media (max-width: 820px) {
+    .hero { padding: 16px 16px 14px; }
+    .hero-metrics { grid-template-columns: 1fr 1fr; }
+    .hero-head { flex-direction: column; align-items: stretch; gap: 8px; }
+    .hm-val { font-size: 22px; }
+    .hero-book { flex-direction: column; align-items: stretch; gap: 8px; }
+  }
 </style>
 </head>
 <body>
@@ -1197,8 +1478,58 @@
   <!-- ═══ DASHBOARD TAB ═══ -->
   <div id="tab-dashboard" class="tab-content active">
 
-  <!-- METRICS STRIP -->
-  <section class="metrics">
+  <!-- ═══ COCKPIT HERO — state-adaptive top card ═══ -->
+  <section id="hero-card" class="hero" data-state="loading">
+    <div class="hero-head">
+      <div class="hero-head-left">
+        <span id="hero-profile" class="hero-profile">—</span>
+        <span id="hero-state-badge" class="hero-state-badge"><span class="hero-state-dot"></span><span id="hero-state-label">Loading</span></span>
+      </div>
+      <div class="hero-head-right">
+        <span id="hero-head-hint" class="hero-head-hint"></span>
+      </div>
+    </div>
+
+    <!-- HERO METRICS — 4-up row -->
+    <div class="hero-metrics">
+      <div class="hm">
+        <div class="hm-lbl">Balance</div>
+        <div id="hero-balance" class="hm-val">—</div>
+        <div id="hero-balance-sub" class="hm-sub"></div>
+      </div>
+      <div class="hm">
+        <div class="hm-lbl">P&amp;L Today</div>
+        <div id="hero-pnl" class="hm-val">—</div>
+        <div id="hero-pnl-sub" class="hm-sub"></div>
+      </div>
+      <div class="hm">
+        <div class="hm-lbl">DD Used</div>
+        <div id="hero-dd" class="hm-val">0%</div>
+        <div class="hm-bar-wrap"><div id="hero-dd-bar" class="hm-bar-fill"></div></div>
+        <div id="hero-dd-sub" class="hm-sub"></div>
+      </div>
+      <div class="hm">
+        <div class="hm-lbl">Next Session</div>
+        <div id="hero-next" class="hm-val sm">—</div>
+        <div id="hero-next-sub" class="hm-sub"></div>
+      </div>
+    </div>
+
+    <!-- HERO NOW — only shows when session running OR position open -->
+    <div id="hero-now" class="hero-now" style="display:none">
+      <div class="hero-now-label">NOW</div>
+      <div id="hero-now-body" class="hero-now-body">—</div>
+    </div>
+
+    <!-- BOOK ROW — deployed lanes sorted by time-to-fire -->
+    <div id="hero-book" class="hero-book">
+      <div class="hero-book-label">Book</div>
+      <div id="hero-book-lanes" class="hero-book-lanes"><span class="book-empty">Loading deployed lanes…</span></div>
+    </div>
+  </section>
+
+  <!-- METRICS STRIP (hidden by cockpit; kept in DOM for responsive fallback + existing JS bindings) -->
+  <section class="metrics cockpit-hidden">
     <div class="metric">
       <div class="metric-lbl">Balance</div>
       <div id="metric-balance" class="metric-val">—</div>
@@ -1271,8 +1602,8 @@
     </div>
   </section>
 
-  <!-- SESSION TIMELINE -->
-  <div id="session-timeline" class="timeline">
+  <!-- SESSION TIMELINE (replaced by hero book row in cockpit mode; hidden via class) -->
+  <div id="session-timeline" class="timeline cockpit-hidden">
     <span class="tl-label">Sessions</span>
     <span class="muted" style="font-size:11px">Loading schedule...</span>
   </div>
@@ -1533,6 +1864,9 @@ function renderAccountSummary(accounts) {
   }
   // Tier 1.1 — active profile may have changed, refresh CTA
   try { updatePrimaryCta(); } catch (_) {}
+  // Cockpit — hero + summaries
+  try { renderHero(); } catch (_) {}
+  try { updateCockpitSummaries(); } catch (_) {}
 }
 
 /* ── Session Timeline ───────────────── */
@@ -1678,15 +2012,23 @@ function renderLiveLanes(lanes) {
 function renderTrades(trades) {
   const tbody = $("trade-log"), summary = $("trade-summary");
   tbody.innerHTML = "";
-  if (!trades.length) { tbody.innerHTML = '<tr><td colspan="8" class="muted">No trades today</td></tr>'; summary.textContent = ""; $("trades-badge").textContent = "0"; return; }
+  if (!trades.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">No trades today</td></tr>';
+    summary.textContent = "";
+    $("trades-badge").textContent = "0";
+    try { updateCockpitSummaries(); } catch (_) {}
+    return;
+  }
   $("trades-badge").textContent = `${trades.length}`;
-  $("trades-section").classList.remove("collapsed");
+  // NOTE: cockpit mode preserves user collapsed state — do not force-expand.
 
   let totalR = 0, openCount = 0;
   for (const t of trades) {
     if (t.actual_r != null) totalR += Number(t.actual_r);
     if (!t.exited_at) openCount++;
     const tr = document.createElement("tr");
+    tr.setAttribute("data-trade", "1");
+    if (t.actual_r != null) tr.setAttribute("data-r", String(t.actual_r));
     const stTxt = t.exited_at ? (t.exit_reason || "Closed") : "Open";
     const stCls = t.exited_at ? "muted" : "blue";
     tr.innerHTML = `
@@ -1704,6 +2046,7 @@ function renderTrades(trades) {
   tr2.innerHTML = `<td colspan="5"></td><td class="r"><strong>Total</strong></td><td class="r m ${totalR >= 0 ? "positive" : "negative"}"><strong>${fmtR(totalR)}</strong></td><td class="muted">${trades.length} trade${trades.length === 1 ? "" : "s"}${openCount ? ` | ${openCount} open` : ""}</td>`;
   tbody.appendChild(tr2);
   summary.textContent = `${trades.length} trade${trades.length === 1 ? "" : "s"}${openCount ? `, ${openCount} open` : ""}`;
+  try { updateCockpitSummaries(); } catch (_) {}
 }
 
 /* ── Activity ───────────────────────── */
@@ -1767,6 +2110,7 @@ async function handleOperatorAction(action, data) {
 
 function renderOperatorState(data) {
   lastOperatorState = data;
+  try { renderHero(); } catch (_) {}
   const topState = data?.top_state || "ERROR";
   const tone = operatorTone(topState);
   const badge = $("operator-state-badge");
@@ -1945,6 +2289,7 @@ function renderAlerts(data) {
   }
 
   list.innerHTML = html || '<div class="alerts-empty">All alerts dismissed or filtered.</div>';
+  try { autoExpandAlertsIfCritical(); } catch (_) {}
 }
 
 /* ── Update Status ──────────────────── */
@@ -1964,6 +2309,8 @@ function updateStatus(state) {
 
   // Tier 1.1 — refresh primary CTA based on new status
   try { updatePrimaryCta(); } catch (_) {}
+  // Cockpit — hero card reflects new status
+  try { renderHero(); } catch (_) {}
 
   const panel = $("session-status-panel");
   if (mode === "STOPPED") { panel.classList.remove("on"); $("live-lanes-panel").classList.add("hidden"); }
@@ -2089,6 +2436,244 @@ function updatePrimaryCta() {
   btn.style.display = "none";
 }
 
+/* ════════════════════════════════════════════════════════════════════
+   COCKPIT — state-adaptive hero + default-collapse summaries
+   Extends Tier 1. Pulls from existing globals:
+     lastEquityData, lastOperatorState, activeProfileData, runningProfile,
+     lastAlertsData, sessionCountdowns, lastAccountsData
+   No new fetch endpoints.
+   ════════════════════════════════════════════════════════════════════ */
+
+let _lastSessionsData = null;
+
+/* derive hero state from current snapshot */
+function _heroDeriveState() {
+  const mode = ($("summary-mode")?.textContent || "Stopped").toString();
+  const op = lastOperatorState?.top_state || "";
+  if (mode === "Stopped" || mode === "Offline" || mode === "—") {
+    if (op === "BLOCKED" || op === "ERROR") return "blocked";
+    if (op === "DEGRADED" || op === "STALE") return "warn";
+    if (op === "READY") return "ready";
+    return "stopped";
+  }
+  if (mode === "LIVE" || mode === "DEMO" || mode === "SIGNAL") return "running";
+  return "stopped";
+}
+
+function _heroStateLabel(state) {
+  return ({
+    loading: "Loading",
+    stopped: "Stopped",
+    ready:   "Ready",
+    warn:    "Warning",
+    blocked: "Blocked",
+    error:   "Error",
+    running: ($("summary-mode")?.textContent || "Running").toString(),
+    in_trade: "In Trade",
+  })[state] || state.toUpperCase();
+}
+
+function renderHero() {
+  const hero = $("hero-card");
+  if (!hero) return;
+
+  // state
+  const state = _heroDeriveState();
+  hero.dataset.state = state;
+  setText("hero-state-label", _heroStateLabel(state));
+
+  // profile label
+  const acct = activeProfileData;
+  if (acct) {
+    const label = `${acct.firm} ${Math.round(acct.account_size/1000)}K · ${(acct.instruments || []).join("+") || "—"}`;
+    setText("hero-profile", label);
+  } else {
+    setText("hero-profile", "No active profile");
+  }
+
+  // Mirror metrics from the existing hidden strip — they share data sources
+  setText("hero-balance", $("metric-balance")?.textContent || "—");
+  setText("hero-balance-sub", $("metric-balance-sub")?.textContent || "");
+
+  const pnlText = $("metric-pnl")?.textContent || "—";
+  const pnlCls = ($("metric-pnl")?.className || "").includes("negative") ? "negative"
+               : ($("metric-pnl")?.className || "").includes("positive") ? "positive" : "muted";
+  const heroPnl = $("hero-pnl");
+  heroPnl.textContent = pnlText;
+  heroPnl.className = `hm-val ${pnlCls}`;
+  setText("hero-pnl-sub", $("metric-pnl-sub")?.textContent || (state === "running" ? "session active" : "no session"));
+
+  const ddText = $("dd-pct")?.textContent || "0%";
+  const ddCls = ($("dd-pct")?.className || "").includes("negative") ? "negative"
+              : ($("dd-pct")?.className || "").includes("warning") ? "warning" : "positive";
+  const heroDd = $("hero-dd");
+  heroDd.textContent = ddText;
+  heroDd.className = `hm-val ${ddCls}`;
+  setText("hero-dd-sub", $("metric-dd-sub")?.textContent || "");
+  const origBar = $("dd-bar");
+  const heroBar = $("hero-dd-bar");
+  if (origBar && heroBar) {
+    heroBar.style.width = origBar.style.width || "0%";
+    heroBar.style.background = origBar.style.background || "";
+  }
+
+  setText("hero-next", $("next-session")?.textContent || "—");
+  setText("hero-next-sub", $("next-session-detail")?.textContent || "");
+
+  // NOW block — show when session running OR an operator check is active.
+  // Phase 1: simple message ("Running · SIGNAL" etc). When position data
+  // surfaces later, expand to show entry/stop/target/unreal R.
+  const nowEl = $("hero-now");
+  if (state === "running") {
+    nowEl.style.display = "";
+    const mode = ($("summary-mode")?.textContent || "").toString();
+    const acctLabel = ($("account-info")?.textContent || "").replace(/^\s*—\s*$/, "");
+    const dailyR = $("daily-pnl")?.textContent || "";
+    const bars = $("bars-count")?.textContent || "0";
+    setText("hero-now-body", "");
+    $("hero-now-body").innerHTML =
+      `<span class="mono">${escapeHtml(mode)}</span> · <span>${escapeHtml(acctLabel || "session")}</span> ` +
+      `<span class="sub">· Daily ${escapeHtml(dailyR)} · ${escapeHtml(bars)} bars</span>`;
+  } else if (state === "blocked" || state === "warn") {
+    nowEl.style.display = "";
+    const reason = lastOperatorState?.reason || _heroStateLabel(state);
+    $("hero-now-body").innerHTML = `<span class="mono">${escapeHtml(_heroStateLabel(state).toUpperCase())}</span> <span class="sub">· ${escapeHtml(String(reason).slice(0, 180))}</span>`;
+  } else {
+    nowEl.style.display = "none";
+  }
+
+  renderHeroBook();
+}
+
+/* Book row: show ONLY the deployed lanes of the active profile,
+   sorted by time-to-fire. Chip state: next / armed / paused / blocked. */
+function renderHeroBook() {
+  const el = $("hero-book-lanes");
+  if (!el) return;
+  const acct = activeProfileData;
+  if (!acct || !Array.isArray(acct.lanes) || acct.lanes.length === 0) {
+    el.innerHTML = '<span class="book-empty">No deployed lanes</span>';
+    return;
+  }
+
+  // Build a {session_name -> minutes_away} map from last sessions fetch
+  const minutesAway = {};
+  if (_lastSessionsData && Array.isArray(_lastSessionsData.sessions)) {
+    for (const s of _lastSessionsData.sessions) minutesAway[s.name] = s.minutes_away;
+  }
+  const nextName = _lastSessionsData?.next?.name || null;
+
+  const chips = acct.lanes.map(l => {
+    const name = l.session || l.orb_label || "—";
+    const mins = minutesAway[name];
+    const shortName = (l.session_short || name).replace(/_/g, " ");
+    let cls = "book-chip";
+    let timeStr = l.session_time_brisbane || "";
+    if (mins != null) {
+      if (mins < -5) { cls += ""; timeStr = "past"; }
+      else if (Math.abs(mins) <= 5 || (mins >= -5 && mins <= 60)) {
+        // Within 1h before or 5m after — armed
+        cls += " armed";
+        timeStr = mins <= 0 ? "now" : (mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`);
+      } else if (name === nextName) {
+        cls += " next";
+        timeStr = mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
+      } else {
+        timeStr = mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
+      }
+    }
+    return `<span class="${cls}" title="${escapeHtml(l.label || shortName)}"><span class="dot"></span><span>${escapeHtml(shortName)}</span><span class="time">${escapeHtml(timeStr)}</span></span>`;
+  });
+
+  el.innerHTML = chips.join("");
+}
+
+/* Collapsed-section 1-line summaries. Populates a span#<sec>-summary
+   inserted into each section's header once on init. */
+function _ensureSummaryHost(sectionId, headerSelector) {
+  const sec = $(sectionId);
+  if (!sec) return null;
+  let host = sec.querySelector(".cockpit-summary");
+  if (host) return host;
+  const header = sec.querySelector(headerSelector);
+  if (!header) return null;
+  host = document.createElement("span");
+  host.className = "cockpit-summary";
+  header.appendChild(host);
+  return host;
+}
+
+function updateCockpitSummaries() {
+  // Profiles — active profile + lane count
+  const profHost = _ensureSummaryHost("profiles-section", ".sec-hd");
+  if (profHost) {
+    const a = activeProfileData;
+    profHost.innerHTML = a
+      ? `<span class="accent">${escapeHtml(a.profile_id || "")}</span> · ${a.lane_count || 0} lanes`
+      : "no active profile";
+  }
+
+  // Trade Blotter — today's trade count + net R
+  const tradeHost = _ensureSummaryHost("trades-section", ".sec-hd");
+  if (tradeHost) {
+    const rows = document.querySelectorAll("#trade-log tr[data-trade]");
+    const n = rows.length;
+    // pnl_r aggregate if present
+    let rSum = 0, rCount = 0;
+    rows.forEach(r => {
+      const rv = parseFloat(r.getAttribute("data-r") || "NaN");
+      if (!Number.isNaN(rv)) { rSum += rv; rCount++; }
+    });
+    if (n === 0) {
+      tradeHost.innerHTML = "no trades today";
+    } else {
+      const cls = rSum > 0 ? "pos" : rSum < 0 ? "neg" : "";
+      const rTxt = rCount ? ` · <span class="${cls}">${rSum >= 0 ? "+" : ""}${rSum.toFixed(2)}R</span>` : "";
+      tradeHost.innerHTML = `${n} trade${n === 1 ? "" : "s"}${rTxt}`;
+    }
+  }
+}
+
+/* Operator shell + alerts shell: click-to-expand */
+function toggleCockpitPanel(id) {
+  const el = $(id);
+  if (!el) return;
+  el.classList.toggle("open");
+}
+
+function initCockpit() {
+  // Activate cockpit mode body class (enables CSS rules)
+  document.body.classList.add("cockpit");
+
+  // Collapse Profiles + Trade Blotter by default
+  const sec = (id) => $(id);
+  ["profiles-section","trades-section"].forEach(id => {
+    const el = sec(id);
+    if (el && !el.classList.contains("collapsed")) el.classList.add("collapsed");
+  });
+
+  // Make operator-shell and alerts-shell header clickable
+  const opTop = document.querySelector("#operator-shell .operator-shell-top");
+  if (opTop) opTop.addEventListener("click", () => toggleCockpitPanel("operator-shell"));
+  const alTop = document.querySelector("#alerts-shell .alerts-shell-top");
+  if (alTop) alTop.addEventListener("click", () => toggleCockpitPanel("alerts-shell"));
+
+  // Auto-expand alerts shell if CRITICAL alerts present (will be re-evaluated in renderAlerts)
+}
+
+/* Auto-expand alerts-shell when critical count > 0 */
+function autoExpandAlertsIfCritical() {
+  const shell = $("alerts-shell");
+  if (!shell) return;
+  const counts = lastAlertsData?.summary?.counts || {};
+  const critical = Number(counts.critical || 0);
+  // Check if there are un-dismissed criticals
+  const alerts = Array.isArray(lastAlertsData?.alerts) ? lastAlertsData.alerts : [];
+  const dismissed = getDismissedAlerts();
+  const critActive = alerts.filter(a => String(a.level || "").toLowerCase() === "critical" && !dismissed.has(alertFingerprint(a))).length;
+  if (critActive > 0) shell.classList.add("open");
+}
+
 /* Tier 1.3 — broker connection health dot in topbar */
 let _lastBrokerHealth = null;
 async function fetchBrokerHealth() {
@@ -2138,6 +2723,7 @@ function renderConnHealthDot(connections, errorMsg) {
 async function fetchSessions() {
   try {
     const data = await (await fetch("/api/sessions")).json();
+    _lastSessionsData = data;
     for (const s of (data.sessions || [])) sessionCountdowns[s.name] = s.minutes_away;
     const tlData = (data.sessions || []).map(s => ({
       name: s.name,
@@ -2146,10 +2732,13 @@ async function fetchSessions() {
       minutes_away: s.minutes_away,
     }));
     renderTimeline(tlData, data.next?.name || "");
-    if (!data.next) { setText("next-session", "No upcoming"); setText("next-session-detail", ""); return; }
-    const next = data.next;
-    setText("next-session", `${next.name} · ${String(next.hour).padStart(2, "0")}:${String(next.minute).padStart(2, "0")}`);
-    setText("next-session-detail", getCountdownText(next.name) || "");
+    if (!data.next) { setText("next-session", "No upcoming"); setText("next-session-detail", ""); }
+    else {
+      const next = data.next;
+      setText("next-session", `${next.name} · ${String(next.hour).padStart(2, "0")}:${String(next.minute).padStart(2, "0")}`);
+      setText("next-session-detail", getCountdownText(next.name) || "");
+    }
+    try { renderHero(); } catch (_) {}
   } catch (_) {}
 }
 
@@ -2307,6 +2896,7 @@ function updateMetricsFromEquity(data) {
   // Update topbar display
   $("topbar-acct").textContent = acct.broker_display || "";
   $("topbar-acct-detail").textContent = acct.name || "";
+  try { renderHero(); } catch (_) {}
 }
 
 function renderAccountSelector(data) {
@@ -2747,6 +3337,7 @@ restoreSections();
 restoreTab();
 initAccountSelector();
 try { localStorage.removeItem("orb_sections"); } catch (_) {} // migrate old key
+initCockpit();
 fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth();
 setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000); setInterval(fetchEquity, 30000); setInterval(fetchOperatorState, 5000); setInterval(fetchAlerts, 5000);
 // Tier 1.3 — broker health dot (topbar) polled regardless of tab
