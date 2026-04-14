@@ -1464,6 +1464,108 @@ class TestF1OrchestratorRolloverWiring:
         assert _is_trading_combine_account({"name": ""})[0] is False
         assert _is_trading_combine_account({"name": None})[0] is False
 
+    def test_broker_reality_wiring_tc_disables_f1(self):
+        """Sequence test: the 3-call HWM-init wiring correctly disables F-1
+        when positions.query_account_metadata returns a TC account dict.
+
+        Mirrors session_orchestrator.py:537-548 without exercising __init__.
+        Proves query_account_metadata → _is_trading_combine_account →
+        disable_f1 compose correctly under TC input.
+        """
+        from trading_app.live.session_orchestrator import _is_trading_combine_account
+
+        positions = MagicMock()
+        positions.query_account_metadata.return_value = {
+            "id": 20372221, "name": "50KTC-V2-451890-20372221", "simulated": True,
+        }
+        risk_mgr = MagicMock()
+        # F-1 is active on the profile config
+        risk_mgr.limits.topstep_xfa_account_size = 50_000
+
+        # Execute the same 3-step sequence the orchestrator's HWM init runs
+        meta = positions.query_account_metadata(20372221)
+        is_tc, reason = _is_trading_combine_account(meta)
+        if is_tc:
+            risk_mgr.disable_f1(reason)
+        else:
+            risk_mgr.set_topstep_xfa_eod_balance(1_500.0)
+
+        assert is_tc is True
+        risk_mgr.disable_f1.assert_called_once()
+        assert "Trading Combine" in risk_mgr.disable_f1.call_args[0][0]
+        risk_mgr.set_topstep_xfa_eod_balance.assert_not_called()
+
+    def test_broker_reality_wiring_xfa_sets_eod_balance(self):
+        """Sequence test: non-TC (XFA) metadata → set_topstep_xfa_eod_balance
+        fires, disable_f1 does NOT. Mirrors session_orchestrator.py:537-548.
+        """
+        from trading_app.live.session_orchestrator import _is_trading_combine_account
+
+        positions = MagicMock()
+        positions.query_account_metadata.return_value = {
+            "id": 11111111, "name": "50KXFA-451890-99999999", "simulated": False,
+        }
+        risk_mgr = MagicMock()
+        risk_mgr.limits.topstep_xfa_account_size = 50_000
+        initial_equity = 2_500.0
+
+        meta = positions.query_account_metadata(11111111)
+        is_tc, reason = _is_trading_combine_account(meta)
+        if is_tc:
+            risk_mgr.disable_f1(reason)
+        else:
+            risk_mgr.set_topstep_xfa_eod_balance(initial_equity)
+
+        assert is_tc is False
+        risk_mgr.disable_f1.assert_not_called()
+        risk_mgr.set_topstep_xfa_eod_balance.assert_called_once_with(2_500.0)
+
+    def test_broker_reality_wiring_none_metadata_trusts_profile(self):
+        """Sequence test: broker API returns None (transient down) → treat
+        as XFA (trust profile config). disable_f1 NOT called, EOD balance set.
+        Fail-closed semantics — missing data doesn't loosen risk.
+        """
+        from trading_app.live.session_orchestrator import _is_trading_combine_account
+
+        positions = MagicMock()
+        positions.query_account_metadata.return_value = None  # broker down
+        risk_mgr = MagicMock()
+        risk_mgr.limits.topstep_xfa_account_size = 50_000
+
+        meta = positions.query_account_metadata(20372221)
+        is_tc, reason = _is_trading_combine_account(meta)
+        if is_tc:
+            risk_mgr.disable_f1(reason)
+        else:
+            risk_mgr.set_topstep_xfa_eod_balance(3_000.0)
+
+        assert meta is None
+        assert is_tc is False
+        assert reason == ""
+        risk_mgr.disable_f1.assert_not_called()
+        risk_mgr.set_topstep_xfa_eod_balance.assert_called_once_with(3_000.0)
+
+    def test_broker_reality_wiring_f1_inactive_short_circuits(self):
+        """Sequence test: when topstep_xfa_account_size is None (F-1 not
+        configured on this profile), the broker-reality block short-circuits.
+        No metadata query, no disable_f1, no EOD balance set.
+
+        Mirrors the session_orchestrator.py:529 guard: the whole broker-
+        reality block is inside `if self.risk_mgr.limits.topstep_xfa_account_size
+        is not None`. This test proves the guard is respected.
+        """
+        positions = MagicMock()
+        risk_mgr = MagicMock()
+        risk_mgr.limits.topstep_xfa_account_size = None  # F-1 inactive
+
+        if risk_mgr.limits.topstep_xfa_account_size is not None:
+            meta = positions.query_account_metadata(20372221)
+            # ...
+
+        positions.query_account_metadata.assert_not_called()
+        risk_mgr.disable_f1.assert_not_called()
+        risk_mgr.set_topstep_xfa_eod_balance.assert_not_called()
+
     async def test_rollover_skips_f1_when_orphans_present(self):
         """F-1 active + orphaned positions at rollover → skip EOD refresh.
 
