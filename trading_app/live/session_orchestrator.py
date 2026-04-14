@@ -91,6 +91,52 @@ def _resolve_topstep_xfa_account_size(prof) -> int | None:
     return account_size
 
 
+def _apply_broker_reality_check(
+    *,
+    positions,
+    order_router,
+    risk_mgr,
+    initial_equity: float,
+    logger=None,
+) -> str:
+    """F-1 broker-reality check + session-start EOD balance seed.
+
+    Call this ONLY when F-1 is active
+    (risk_mgr.limits.topstep_xfa_account_size is not None). Queries broker
+    account metadata via positions.query_account_metadata(account_id):
+
+      - If metadata reveals a Trading Combine account, disable F-1 via
+        risk_mgr.disable_f1(reason). The XFA scaling ladder does not apply
+        to TC accounts.
+      - Otherwise (XFA confirmed OR broker metadata unavailable), seed the
+        session's EOD balance via risk_mgr.set_topstep_xfa_eod_balance(equity).
+        Missing metadata is treated as "trust the profile config" — caller
+        is responsible for having verified F-1 applies before invoking.
+
+    Returns a status code for logging/testing:
+      - "tc"                 Trading Combine detected, F-1 disabled
+      - "xfa"                Non-TC metadata, EOD balance set
+      - "xfa_missing_meta"   Broker returned None, EOD balance set on trust
+
+    This helper is extracted from the HWM-init block so it can be tested as
+    a unit without having to construct a SessionOrchestrator. See
+    TestF1OrchestratorRolloverWiring in test_session_orchestrator.py.
+    """
+    account_id = order_router.account_id if order_router else 0
+    account_meta = positions.query_account_metadata(account_id)
+    is_tc, tc_reason = _is_trading_combine_account(account_meta)
+    if is_tc:
+        risk_mgr.disable_f1(tc_reason)
+        return "tc"
+    risk_mgr.set_topstep_xfa_eod_balance(initial_equity)
+    if logger is not None:
+        logger.info(
+            "F-1 XFA EOD balance set at session start: $%.2f",
+            initial_equity,
+        )
+    return "xfa" if account_meta is not None else "xfa_missing_meta"
+
+
 @dataclass
 class SessionStats:
     """Observability counters — tracks success/failure for every silent-failure component."""
@@ -526,26 +572,17 @@ class SessionOrchestrator:
                                     # F-1 TopStep XFA Scaling Plan: feed session-start EOD balance
                                     # to the risk manager so max_lots_for_xfa can cap today's contract
                                     # count. Guarded on topstep_xfa_account_size being set (F-1 active).
+                                    # Broker-reality check: if the connected account is a Trading
+                                    # Combine (not XFA), F-1 does not apply — disable it based on
+                                    # broker metadata. See _apply_broker_reality_check above.
                                     if self.risk_mgr.limits.topstep_xfa_account_size is not None:
-                                        # Broker-reality check: if the connected account is a
-                                        # Trading Combine (not XFA), F-1 does not apply.
-                                        # Disable it now based on broker metadata, then skip
-                                        # the EOD balance set.
-                                        account_id_for_meta = (
-                                            self.order_router.account_id if self.order_router else 0
+                                        _apply_broker_reality_check(
+                                            positions=self.positions,
+                                            order_router=self.order_router,
+                                            risk_mgr=self.risk_mgr,
+                                            initial_equity=initial_equity,
+                                            logger=log,
                                         )
-                                        account_meta = self.positions.query_account_metadata(
-                                            account_id_for_meta
-                                        )
-                                        is_tc, tc_reason = _is_trading_combine_account(account_meta)
-                                        if is_tc:
-                                            self.risk_mgr.disable_f1(tc_reason)
-                                        else:
-                                            self.risk_mgr.set_topstep_xfa_eod_balance(initial_equity)
-                                            log.info(
-                                                "F-1 XFA EOD balance set at session start: $%.2f",
-                                                initial_equity,
-                                            )
                                 else:
                                     log.warning(
                                         "HWM tracker: broker equity unavailable at startup — will init on first poll"
