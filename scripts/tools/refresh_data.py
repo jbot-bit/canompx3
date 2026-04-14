@@ -244,37 +244,46 @@ def refresh_instrument(instrument: str, dry_run: bool = False, full_rebuild: boo
     fetch_start = last_date + timedelta(days=1)
 
     gap_days = (yesterday - last_date).days
-    if gap_days <= 0:
-        print(f"  Already up to date (last bar: {last_date})")
-        return True
 
-    print(f"  Last bar: {last_date} ({gap_days} days ago)")
-    print(f"  Gap: {fetch_start} to {yesterday}")
+    # Step 1+2: Download + Ingest — only when bars are stale
+    if gap_days > 0:
+        print(f"  Last bar: {last_date} ({gap_days} days ago)")
+        print(f"  Gap: {fetch_start} to {yesterday}")
 
-    # Step 1: Download (api_end is exclusive — fetches through yesterday)
-    out_file = download_dbn(instrument, fetch_start, api_end, dry_run=dry_run)
-    if dry_run:
-        return True
+        out_file = download_dbn(instrument, fetch_start, api_end, dry_run=dry_run)
+        if dry_run:
+            return True
 
-    if out_file is None:
-        print("  FAIL: download returned nothing")
-        return False
+        if out_file is None:
+            print("  FAIL: download returned nothing")
+            return False
 
-    # Step 2: Ingest — if this fails, clean up the downloaded file
-    if not run_ingest(instrument):
-        print(f"  Cleaning up downloaded file after ingest failure: {out_file.name}")
-        try:
-            out_file.unlink(missing_ok=True)
-        except Exception as exc:
-            print(f"  WARNING: could not remove downloaded file {out_file.name}: {exc}")
-        return False
+        if not run_ingest(instrument):
+            print(f"  Cleaning up downloaded file after ingest failure: {out_file.name}")
+            try:
+                out_file.unlink(missing_ok=True)
+            except Exception as exc:
+                print(f"  WARNING: could not remove downloaded file {out_file.name}: {exc}")
+            return False
+
+        build_start = fetch_start
+    else:
+        print(f"  Bars up to date (last bar: {last_date})")
+        if dry_run:
+            return True
+        # Safety net: always (re)build features/outcomes for yesterday even when
+        # bars are current. Protects against out-of-band bar ingestion (e.g. the
+        # live bot's BarPersister writes bars_1m at session end without running
+        # the daily pipeline). Builds are idempotent via DELETE+INSERT.
+        # See docs/runtime/stages/refresh-data-build-decoupling.md.
+        build_start = yesterday
 
     # Step 3: Build downstream artifacts
     # Use canonical ACTIVE_ORB_INSTRUMENTS (not raw orb_active flag — M2K trap)
     if instrument in ACTIVE_ORB_INSTRUMENTS:
-        ok = run_build_steps(instrument, fetch_start, yesterday, full_rebuild=full_rebuild)
+        ok = run_build_steps(instrument, build_start, yesterday, full_rebuild=full_rebuild)
     else:
-        ok = run_research_build_steps(instrument, fetch_start, yesterday)
+        ok = run_research_build_steps(instrument, build_start, yesterday)
 
     if not ok:
         return False
