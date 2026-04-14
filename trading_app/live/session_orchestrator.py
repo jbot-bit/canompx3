@@ -39,6 +39,32 @@ from trading_app.risk_manager import RiskLimits, RiskManager
 log = logging.getLogger(__name__)
 
 
+def _resolve_topstep_xfa_account_size(prof) -> int | None:
+    """Return the TopStep XFA account size for F-1 Scaling Plan enforcement.
+
+    F-1 enforces the TopStep Express Funded Account scaling ladder. It applies
+    ONLY to TopStep XFA accounts (not LFA, not Trading Combine, not other firms).
+    Returns None (F-1 disabled) for any non-XFA profile. Raises RuntimeError
+    fail-closed for a TopStep XFA whose account_size is not a known tier —
+    the alternative would be a KeyError mid-session on the first entry attempt.
+    """
+    if prof is None:
+        return None
+    if getattr(prof, "firm", None) != "topstep":
+        return None
+    if not getattr(prof, "is_express_funded", False):
+        return None
+    from trading_app.topstep_scaling_plan import SCALING_PLAN_LADDER
+
+    account_size = prof.account_size
+    if account_size not in SCALING_PLAN_LADDER:
+        raise RuntimeError(
+            f"FAIL-CLOSED: TopStep XFA profile has unknown account_size={account_size}. "
+            f"Valid XFA sizes: {sorted(SCALING_PLAN_LADDER.keys())}"
+        )
+    return account_size
+
+
 @dataclass
 class SessionStats:
     """Observability counters — tracks success/failure for every silent-failure component."""
@@ -178,8 +204,11 @@ class SessionOrchestrator:
         # Execution stack
         self.cost_spec: CostSpec = get_cost_spec(instrument)
         cost = self.cost_spec
-        # Compute max equity drawdown in R from profile if available
+        # Compute max equity drawdown in R from profile if available.
+        # matched_prof is captured here and reused downstream for F-1 TopStep XFA
+        # scaling plan wiring into RiskLimits, avoiding a duplicate profile lookup.
         max_equity_dd_r = None
+        matched_prof = None
         if portfolio is not None and portfolio.strategies:
             first = portfolio.strategies[0]
             if first.source == "profile":
@@ -198,6 +227,7 @@ class SessionOrchestrator:
                     # Find the profile that generated this portfolio
                     for pid, prof in ACCOUNT_PROFILES.items():
                         if portfolio.name == f"profile_{pid}":
+                            matched_prof = prof
                             tier = get_account_tier(prof.firm, prof.account_size)
                             # strats_with_risk was filtered on `s.median_risk_dollars and
                             # s.median_risk_dollars > 0` above — all values guaranteed non-None
@@ -228,12 +258,23 @@ class SessionOrchestrator:
                         ) from e
                     log.warning("Failed to compute max_equity_drawdown_r from profile: %s", e)
 
+        # F-1 TopStep XFA Scaling Plan: only set when matched profile is a
+        # TopStep Express Funded Account. Returns None (F-1 disabled) for
+        # every other profile. Raises fail-closed for unknown XFA tiers.
+        topstep_xfa_account_size = _resolve_topstep_xfa_account_size(matched_prof)
+
         risk_limits = RiskLimits(
             max_daily_loss_r=-abs(self.portfolio.max_daily_loss_r),
             max_concurrent_positions=self.portfolio.max_concurrent_positions,
             max_equity_drawdown_r=max_equity_dd_r,
+            topstep_xfa_account_size=topstep_xfa_account_size,
         )
         self.risk_mgr = RiskManager(risk_limits)
+        if topstep_xfa_account_size is not None:
+            log.info(
+                "F-1 TopStep XFA Scaling Plan ACTIVE: account_size=$%d",
+                topstep_xfa_account_size,
+            )
         if max_equity_dd_r is not None:
             log.info("Risk limits: daily_loss=%.1fR, max_DD=%.1fR", risk_limits.max_daily_loss_r, max_equity_dd_r)
         else:
@@ -456,6 +497,15 @@ class SessionOrchestrator:
                                             f"Refusing to start session."
                                         )
                                     log.info("HWM tracker: %s", reason)
+                                    # F-1 TopStep XFA Scaling Plan: feed session-start EOD balance
+                                    # to the risk manager so max_lots_for_xfa can cap today's contract
+                                    # count. Guarded on topstep_xfa_account_size being set (F-1 active).
+                                    if self.risk_mgr.limits.topstep_xfa_account_size is not None:
+                                        self.risk_mgr.set_topstep_xfa_eod_balance(initial_equity)
+                                        log.info(
+                                            "F-1 XFA EOD balance set at session start: $%.2f",
+                                            initial_equity,
+                                        )
                                 else:
                                     log.warning(
                                         "HWM tracker: broker equity unavailable at startup — will init on first poll"
@@ -616,15 +666,33 @@ class SessionOrchestrator:
         self._safety_state.close_time_forced = True
         self._safety_state.save()
 
-    def _block_strategy(self, strategy_id: str, reason: str) -> None:
-        """Add a runtime block with explicit reason. Persisted to survive crashes."""
+    def _block_strategy(self, strategy_id: str, reason: str, *, persist: bool = True) -> None:
+        """Add a runtime block with explicit reason.
+
+        Args:
+            strategy_id: Strategy to block.
+            reason: Human-readable reason for the block.
+            persist: If True (default), write to SessionSafetyState for
+                crash recovery. Use False for blocks that are re-derivable
+                at the next session start (e.g. lifecycle-sourced pauses
+                and SR-ALARM reviews read from read_lifecycle_state).
+                Persisting those would cause stale blocks to survive after
+                the underlying review changes (fixed 2026-04-14).
+        """
         self._blocked_strategies.add(strategy_id)
         self._blocked_strategy_reasons[strategy_id] = reason
-        self._safety_state.blocked_strategies[strategy_id] = reason
-        self._safety_state.save()
+        if persist:
+            self._safety_state.blocked_strategies[strategy_id] = reason
+            self._safety_state.save()
 
     def _load_paused_lane_blocks(self) -> None:
-        """Load operational lifecycle blocks into the runtime block set."""
+        """Load operational lifecycle blocks into the runtime block set.
+
+        Lifecycle blocks (pause_strategy_id, SR-ALARM with no WATCH review,
+        Criterion 11 regime fails) are fully re-derived from the canonical
+        registries every session start. They MUST NOT be persisted to the
+        safety-state file — see `_block_strategy(persist=False)` docstring.
+        """
         if not self._profile_id_for_lane_ctl:
             return
         try:
@@ -635,7 +703,7 @@ class SessionOrchestrator:
             blocked_reasons = lifecycle["blocked_reason_by_strategy"]
             for strategy_id in blocked_ids:
                 reason = blocked_reasons.get(strategy_id, "Paused pending manual review")
-                self._block_strategy(strategy_id, reason)
+                self._block_strategy(strategy_id, reason, persist=False)
             if blocked_ids:
                 log.warning("Loaded %d lifecycle lane blocks", len(blocked_ids))
         except Exception as e:
@@ -1077,6 +1145,24 @@ class SessionOrchestrator:
         self.risk_mgr.daily_reset(self.trading_day)
         self._consecutive_engine_errors = 0
         self._close_time_forced = False  # Reset so next day's close-time flatten can fire
+
+        # F-1 TopStep XFA Scaling Plan: refresh EOD balance from broker equity
+        # so today's contract cap reflects yesterday's session close. Canonical
+        # rule prohibits intraday scaling-up, so we use the rollover-time equity
+        # as the authoritative EOD balance for the new trading day.
+        if self.risk_mgr.limits.topstep_xfa_account_size is not None and self.positions is not None:
+            try:
+                eod_equity = self.positions.query_equity(
+                    self.order_router.account_id if self.order_router else 0
+                )
+                if eod_equity is not None:
+                    self.risk_mgr.set_topstep_xfa_eod_balance(eod_equity)
+                    log.info("F-1 XFA EOD balance refreshed at rollover: $%.2f", eod_equity)
+                else:
+                    log.warning("F-1 XFA EOD balance NOT refreshed at rollover (broker equity unavailable)")
+            except Exception as e:
+                log.warning("F-1 XFA EOD balance refresh failed: %s", e)
+
         log.info("New trading day started: %s", self.trading_day)
 
     async def _on_bar(self, bar: Bar) -> None:

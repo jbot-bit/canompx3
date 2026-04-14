@@ -1064,6 +1064,48 @@ class TestNotifications:
         assert STRATEGY_ID in orch._blocked_strategies
         assert orch._blocked_strategy_reasons[STRATEGY_ID] == "SR alarm pause"
 
+    def test_lifecycle_blocks_do_not_persist_to_safety_state(self):
+        """Lifecycle-sourced blocks are re-derived at every session start
+        from the registry. They must NOT be written to the persistent
+        safety-state file — otherwise stale blocks survive after the
+        underlying SR review changes to WATCH. Fixed 2026-04-14."""
+        orch = build_orchestrator()
+        orch._profile_id_for_lane_ctl = "topstep_50k_mnq_auto"
+        # Replace the default MagicMock safety_state with a real dict-backed
+        # stub so we can assert on the persisted collection.
+        orch._safety_state = MagicMock()
+        orch._safety_state.blocked_strategies = {}
+
+        with patch(
+            "trading_app.lifecycle_state.read_lifecycle_state",
+            return_value={
+                "blocked_strategy_ids": [STRATEGY_ID],
+                "blocked_reason_by_strategy": {STRATEGY_ID: "Criterion 12 SR ALARM — manual review required"},
+            },
+        ):
+            orch._load_paused_lane_blocks()
+
+        # Block applied at runtime
+        assert STRATEGY_ID in orch._blocked_strategies
+        # But NOT persisted to safety_state (persist=False path)
+        assert STRATEGY_ID not in orch._safety_state.blocked_strategies
+        # And save() not called for lifecycle-sourced blocks
+        orch._safety_state.save.assert_not_called()
+
+    def test_orphan_block_persists_to_safety_state(self):
+        """Orphan/stuck-exit blocks represent crash recovery (positions the
+        orchestrator found but couldn't resolve). These MUST persist across
+        restarts — the default persist=True path."""
+        orch = build_orchestrator()
+        orch._safety_state = MagicMock()
+        orch._safety_state.blocked_strategies = {}
+
+        orch._block_strategy(STRATEGY_ID, "Orphaned broker position — manual resolution required")
+
+        assert STRATEGY_ID in orch._blocked_strategies
+        assert STRATEGY_ID in orch._safety_state.blocked_strategies
+        orch._safety_state.save.assert_called_once()
+
     def test_reviewed_watch_alarm_does_not_load_startup_block(self):
         orch = build_orchestrator()
         orch._profile_id_for_lane_ctl = "topstep_50k_mnq_auto"
@@ -1321,6 +1363,72 @@ def _make_feed_class(was_stopped: bool = False, crash: Exception | None = None):
                 raise crash
 
     return MockFeed
+
+
+class TestF1OrchestratorRolloverWiring:
+    """F-1 TopStep XFA Scaling Plan: rollover must re-query broker equity and
+    refresh the risk manager's EOD balance so today's contract cap reflects
+    yesterday's session close. Canonical rule prohibits intraday scaling-up.
+    """
+
+    async def test_rollover_refreshes_f1_eod_balance_when_xfa_active(self):
+        """F-1 active → rollover queries equity + sets EOD balance."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._handle_event = AsyncMock()
+        orch.engine.on_trading_day_end.return_value = []
+        orch.trading_day = date(2026, 3, 6)
+
+        # F-1 active
+        orch.risk_mgr.limits.topstep_xfa_account_size = 50_000
+        orch.positions = MagicMock()
+        orch.positions.query_equity = MagicMock(return_value=103_000.0)
+        orch.order_router = MagicMock()
+        orch.order_router.account_id = 20092334
+
+        bar_ts = datetime(2026, 3, 6, 23, 1, tzinfo=UTC)
+        with patch.object(SessionOrchestrator, "_build_daily_features_row", return_value={}):
+            await orch._check_trading_day_rollover(bar_ts)
+
+        orch.risk_mgr.set_topstep_xfa_eod_balance.assert_called_once_with(103_000.0)
+
+    async def test_rollover_skips_f1_eod_balance_when_disabled(self):
+        """F-1 disabled (account_size=None) → rollover must not touch EOD balance."""
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._handle_event = AsyncMock()
+        orch.engine.on_trading_day_end.return_value = []
+        orch.trading_day = date(2026, 3, 6)
+
+        orch.risk_mgr.limits.topstep_xfa_account_size = None
+
+        bar_ts = datetime(2026, 3, 6, 23, 1, tzinfo=UTC)
+        with patch.object(SessionOrchestrator, "_build_daily_features_row", return_value={}):
+            await orch._check_trading_day_rollover(bar_ts)
+
+        orch.risk_mgr.set_topstep_xfa_eod_balance.assert_not_called()
+
+    async def test_rollover_skips_f1_when_broker_equity_unavailable(self):
+        """F-1 active + broker equity None → log warning, no EOD balance update.
+
+        The risk_manager fails-closed on None balance at entry time, so skipping
+        the update preserves the last known good value (or None — check fails
+        closed either way). Explicit skip is cleaner than feeding in None.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._handle_event = AsyncMock()
+        orch.engine.on_trading_day_end.return_value = []
+        orch.trading_day = date(2026, 3, 6)
+
+        orch.risk_mgr.limits.topstep_xfa_account_size = 50_000
+        orch.positions = MagicMock()
+        orch.positions.query_equity = MagicMock(return_value=None)  # broker down
+        orch.order_router = MagicMock()
+        orch.order_router.account_id = 20092334
+
+        bar_ts = datetime(2026, 3, 6, 23, 1, tzinfo=UTC)
+        with patch.object(SessionOrchestrator, "_build_daily_features_row", return_value={}):
+            await orch._check_trading_day_rollover(bar_ts)
+
+        orch.risk_mgr.set_topstep_xfa_eod_balance.assert_not_called()
 
 
 class TestOrchestratorReconnect:
@@ -2480,3 +2588,61 @@ class TestRegimeGate:
         event = _nyse_open_entry(risk_points=100.0)
         await orch._handle_event(event)
         assert len(orch.order_router.submitted) > 0
+
+
+class TestResolveTopStepXFAAccountSize:
+    """F-1 TopStep XFA account size resolution — fail-closed guard against
+    misconfigured profiles that would otherwise KeyError mid-session."""
+
+    def test_topstep_xfa_profile_returns_account_size(self):
+        """Canonical happy path: topstep_50k_mnq_auto → 50_000."""
+        from trading_app.live.session_orchestrator import _resolve_topstep_xfa_account_size
+        from trading_app.prop_profiles import ACCOUNT_PROFILES
+
+        prof = ACCOUNT_PROFILES["topstep_50k_mnq_auto"]
+        assert _resolve_topstep_xfa_account_size(prof) == 50_000
+
+    def test_none_profile_returns_none(self):
+        """No profile resolved → F-1 disabled."""
+        from trading_app.live.session_orchestrator import _resolve_topstep_xfa_account_size
+
+        assert _resolve_topstep_xfa_account_size(None) is None
+
+    def test_non_topstep_firm_returns_none(self):
+        """Non-TopStep firm (e.g., bulenox) → F-1 disabled."""
+        from trading_app.live.session_orchestrator import _resolve_topstep_xfa_account_size
+
+        prof = MagicMock()
+        prof.firm = "bulenox"
+        prof.account_size = 50_000
+        prof.is_express_funded = True
+        assert _resolve_topstep_xfa_account_size(prof) is None
+
+    def test_topstep_non_xfa_returns_none(self):
+        """TopStep LFA (is_express_funded=False) → F-1 disabled.
+
+        F-1 enforces the XFA scaling ladder; LFA accounts are post-payout
+        funded accounts with different rules.
+        """
+        from trading_app.live.session_orchestrator import _resolve_topstep_xfa_account_size
+
+        prof = MagicMock()
+        prof.firm = "topstep"
+        prof.account_size = 50_000
+        prof.is_express_funded = False
+        assert _resolve_topstep_xfa_account_size(prof) is None
+
+    def test_unknown_xfa_size_raises_fail_closed(self):
+        """TopStep XFA with size not in SCALING_PLAN_LADDER → RuntimeError.
+
+        Without this guard, max_lots_for_xfa would raise KeyError on the
+        first entry attempt — opaque runtime failure vs. clear init failure.
+        """
+        from trading_app.live.session_orchestrator import _resolve_topstep_xfa_account_size
+
+        prof = MagicMock()
+        prof.firm = "topstep"
+        prof.account_size = 25_000  # not a valid XFA tier
+        prof.is_express_funded = True
+        with pytest.raises(RuntimeError, match="unknown account_size=25000"):
+            _resolve_topstep_xfa_account_size(prof)

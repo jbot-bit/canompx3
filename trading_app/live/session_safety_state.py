@@ -4,6 +4,12 @@ Flags persisted:
   - kill_switch_fired: emergency flatten triggered (orphaned positions)
   - close_time_forced: EOD force-flatten initiated
   - blocked_strategies: strategy IDs blocked due to orphan/stuck-exit containment
+      NOTE: Only NON-derivable blocks persist here. Lifecycle-sourced blocks
+      (pause_strategy_id, SR-ALARM reviews) are re-derived at each session
+      start by `_load_paused_lane_blocks` in session_orchestrator and should
+      be added via `_block_strategy(..., persist=False)`. Persisting those
+      would cause stale blocks to survive after the underlying review
+      changes (bug fixed 2026-04-14).
   - shadow_failures: CopyOrderRouter divergence state (cross-account hedging)
   - daily_pnl_r: intraday P&L in R-units (for daily loss circuit breaker recovery)
 
@@ -42,6 +48,16 @@ class SessionSafetyState:
 
         self._load_state()
 
+    # Legacy persisted-block reason patterns that are now re-derived from
+    # lifecycle state every session and must NOT survive across restarts.
+    # Added 2026-04-14 as a one-time migration for files written under the
+    # pre-fix persist-everything model.
+    _LEGACY_LIFECYCLE_BLOCK_PATTERNS = (
+        "Criterion 12 SR ALARM",
+        "Criterion 11 regime",
+        "Paused pending manual review",
+    )
+
     def _load_state(self) -> None:
         if not self._state_file.exists():
             return
@@ -49,11 +65,36 @@ class SessionSafetyState:
             data = json.loads(self._state_file.read_text())
             self.kill_switch_fired = bool(data.get("kill_switch_fired", False))
             self.close_time_forced = bool(data.get("close_time_forced", False))
-            self.blocked_strategies = dict(data.get("blocked_strategies", {}))
+
+            raw_blocks = dict(data.get("blocked_strategies", {}))
+            # Migrate: drop lifecycle-sourced blocks that are now re-derived
+            # at session start. Only real crash-recovery blocks (orphan
+            # positions, stuck exits) should persist here.
+            legacy = {
+                sid: reason
+                for sid, reason in raw_blocks.items()
+                if any(pat in str(reason) for pat in self._LEGACY_LIFECYCLE_BLOCK_PATTERNS)
+            }
+            self.blocked_strategies = {
+                sid: reason for sid, reason in raw_blocks.items() if sid not in legacy
+            }
+            if legacy:
+                log.info(
+                    "Dropped %d legacy lifecycle-sourced block(s) from persisted state "
+                    "(now re-derived from lifecycle registry at startup): %s",
+                    len(legacy),
+                    sorted(legacy.keys()),
+                )
+
             self.shadow_failures = dict(data.get("shadow_failures", {}))
             self.daily_pnl_r = float(data.get("daily_pnl_r", 0.0))
             self.trading_day = str(data.get("trading_day", ""))
             self.cooldown_until = str(data.get("cooldown_until", ""))
+
+            # Persist the cleaned state so future loads skip the migration.
+            if legacy:
+                self.save()
+
             if self.kill_switch_fired or self.blocked_strategies or self.shadow_failures:
                 log.critical(
                     "CRASH RECOVERY: loaded safety state from %s — "
