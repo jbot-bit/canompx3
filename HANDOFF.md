@@ -6,6 +6,64 @@
 
 ---
 
+## Update (2026-04-15 — C12 SR alarm review + bot running + session handover)
+
+### Headline
+
+All 3 C12 SR ALARM lanes reviewed autonomously as WATCH (matching L3
+precedent), bot started in signal mode, launcher-chain operational.
+`topstep_50k_mnq_auto` is live-watching all 6 MNQ lanes tonight.
+
+### C12 SR decisions (commit 5ca7c778)
+
+Applied the literature-grounded L3/COMEX_SETTLE precedent ("threshold
+criteria pass, SR alarm is the only trigger → KEEP in WATCH") across
+all 3 currently-alarmed lanes. Data pulled from validated_setups live:
+
+| Lane | WFE | OOS/IS | p | N | Verdict |
+|---|---|---|---|---|---|
+| L3 COMEX_SETTLE OVNRNG_100 RR1.5 | 0.52 | 53% | — | 58 | WATCH (unchanged, 2026-04-12) |
+| L4 NYSE_OPEN ORB_G5 **RR1.0** | 2.14 | **116%** | 0.0003 | 1521 | **WATCH** (new) |
+| L6 US_DATA_1000 VWAP_MID_ALIGNED O15 | 0.90 | 98% | <0.0001 | 701 | **WATCH** (new) |
+
+Registry cleanup: dropped stale `MNQ_NYSE_OPEN_E2_RR1.5_CB1_ORB_G5`
+entry — the allocator swap during 2026-04-13 wiring made the deployed
+lane RR1.0; the RR1.5 review was defending an undeployed sibling.
+
+Recheck triggers added: retire if SR remains ALARM at N≥100 AND
+(WFE < 0.50 OR OOS/IS ratio < 0.40).
+
+### Operational state
+
+- Bot **running** in SIGNAL mode (PID 62440)
+- 6 strategies loaded, **0 blocked**, TopStepX market feed connected
+- Contract: CON.F.US.MNQ.M26 (MNQM6 June 2026)
+- Dashboard: http://localhost:8080
+- Signal-only: no real orders fire; practice account 20092334
+
+### Earlier session work (context for new tools)
+
+- `03238c01` Ralph iter 166 — consistency_tracker trading_day canonical fix
+- `bc4c8826` chore — dead-imports cleanup in test_consistency_tracker
+- `e3ec8dda` feat(pinecone) — bundle 215+ auto-memory topic files into
+  one `_bundle_auto_memory.md`. Manifest 257→42 files, pulse test-timeout
+  reclassified from `[FIX NOW] broken/high` to `[PAUSED] paused/low`.
+  Also closes: previously a spurious FIX NOW fired on every fresh-HEAD
+  run because the 120s budget never fit the real 543s suite.
+- `a54a9022` docs(handoff) — pinecone + NQ mapping verified complete
+
+### Pulse-surfaced priorities for next session
+
+1. Data gap (resolved this session by F-1 wiring commit)
+2. Merge risk: `wt-codex-operator-cockpit` and `wt-codex-startup-brain-refactor`
+   overlap — operator-cockpit is a SUPERSET (verified via `git merge-base
+   --is-ancestor`). Local startup-brain branch deleted; remote preserved.
+3. Worktree cleanup: 8 managed `.worktrees/tasks/*/` directories (~3GB
+   each), 4 dated Apr 7-11 (likely stale). Deferred — disk-reclaim
+   judgment call. Remote branches for each still exist on origin.
+
+---
+
 ## Update (2026-04-14 — F-1 TopStep XFA Scaling Plan wired into orchestrator + refresh_data fix)
 
 ### Headline
