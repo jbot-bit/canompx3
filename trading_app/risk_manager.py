@@ -11,7 +11,7 @@ Usage:
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 
 log = logging.getLogger(__name__)
@@ -86,6 +86,25 @@ class RiskManager:
         because the canonical rule prohibits intraday scaling-up.
         """
         self._topstep_xfa_eod_balance = balance
+
+    def disable_f1(self, reason: str) -> None:
+        """Disable F-1 TopStep XFA Scaling Plan enforcement at runtime.
+
+        Used when the broker reports a non-XFA account (e.g. Trading Combine)
+        despite the profile config claiming XFA. Replaces the immutable
+        RiskLimits with a new frozen instance where topstep_xfa_account_size
+        is None, so can_enter() skips the F-1 check.
+
+        Idempotent. No-op if F-1 is already disabled.
+        """
+        if self.limits.topstep_xfa_account_size is None:
+            return
+        log.warning(
+            "F-1 TopStep XFA Scaling Plan DISABLED by broker-reality check: %s",
+            reason,
+        )
+        self.limits = replace(self.limits, topstep_xfa_account_size=None)
+        self._topstep_xfa_eod_balance = None
 
     def daily_reset(self, trading_day: date) -> None:
         """Reset daily counters for a new trading day.

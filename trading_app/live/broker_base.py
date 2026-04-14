@@ -251,3 +251,12 @@ class BrokerPositions(ABC):
         Used by AccountHWMTracker for cross-session DD tracking.
         """
         return None
+
+    def query_account_metadata(self, account_id: int) -> dict | None:
+        """Return the broker's raw account metadata dict, or None if unavailable.
+
+        Used for broker-reality checks like Trading Combine vs XFA detection
+        (F-1 enforcement). Override in broker-specific classes when the API
+        exposes account metadata (name, type, simulated flag, etc).
+        """
+        return None

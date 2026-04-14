@@ -73,3 +73,30 @@ class ProjectXPositions(BrokerPositions):
         except Exception as e:
             log.warning("Failed to query ProjectX equity: %s", e)
             return None
+
+    def query_account_metadata(self, account_id: int) -> dict | None:
+        """Return the full account metadata dict for account_id, or None on miss.
+
+        Used for broker-reality checks (e.g. Trading Combine vs Express Funded).
+        Observed TopStep fields: id, name, balance, canTrade, isVisible, simulated.
+        TC accounts have 'TC' in the name (e.g. '50KTC-V2-451890-20372221').
+        """
+        try:
+            resp = requests.post(
+                f"{BASE_URL}/api/Account/search",
+                json={"onlyActiveAccounts": True},
+                headers=self.auth.headers(),
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            accounts = data if isinstance(data, list) else data.get("accounts", [])
+            for acct in accounts:
+                acct_id = acct.get("id") or acct.get("accountId")
+                if acct_id is not None and int(acct_id) == account_id:
+                    return dict(acct)
+            log.warning("ProjectX account %d metadata not found", account_id)
+            return None
+        except Exception as e:
+            log.warning("Failed to query ProjectX account metadata: %s", e)
+            return None

@@ -39,6 +39,32 @@ from trading_app.risk_manager import RiskLimits, RiskManager
 log = logging.getLogger(__name__)
 
 
+def _is_trading_combine_account(account_meta: dict | None) -> tuple[bool, str]:
+    """Detect a TopStep Trading Combine (evaluation) account from broker metadata.
+
+    Returns (is_tc, reason). When True, F-1 Scaling Plan must be disabled —
+    the XFA scaling ladder does not apply to TC accounts.
+
+    Observed TopStep TC name pattern: '50KTC-V2-451890-20372221'. The 'TC'
+    marker is the distinguishing signal. XFA accounts are expected to use
+    different naming (e.g. 'XFA' or 'EFA' markers); those fall through as
+    not-TC and F-1 stays governed by the profile config.
+
+    Returns (False, '') when metadata is None — treated as "unknown", profile
+    config is trusted. Caller may log a caution but should not fail-closed
+    unconditionally because the broker API may be transiently unavailable.
+    """
+    if account_meta is None:
+        return False, ""
+    name = account_meta.get("name") or ""
+    # Match "TC" as a whole-token marker (e.g. "50KTC-V2-...") to avoid
+    # false positives on substrings that happen to contain the letters.
+    upper = name.upper()
+    if "TC-" in upper or upper.endswith("TC") or "-TC" in upper:
+        return True, f"Trading Combine marker in account name: {name!r}"
+    return False, ""
+
+
 def _resolve_topstep_xfa_account_size(prof) -> int | None:
     """Return the TopStep XFA account size for F-1 Scaling Plan enforcement.
 
@@ -501,11 +527,25 @@ class SessionOrchestrator:
                                     # to the risk manager so max_lots_for_xfa can cap today's contract
                                     # count. Guarded on topstep_xfa_account_size being set (F-1 active).
                                     if self.risk_mgr.limits.topstep_xfa_account_size is not None:
-                                        self.risk_mgr.set_topstep_xfa_eod_balance(initial_equity)
-                                        log.info(
-                                            "F-1 XFA EOD balance set at session start: $%.2f",
-                                            initial_equity,
+                                        # Broker-reality check: if the connected account is a
+                                        # Trading Combine (not XFA), F-1 does not apply.
+                                        # Disable it now based on broker metadata, then skip
+                                        # the EOD balance set.
+                                        account_id_for_meta = (
+                                            self.order_router.account_id if self.order_router else 0
                                         )
+                                        account_meta = self.positions.query_account_metadata(
+                                            account_id_for_meta
+                                        )
+                                        is_tc, tc_reason = _is_trading_combine_account(account_meta)
+                                        if is_tc:
+                                            self.risk_mgr.disable_f1(tc_reason)
+                                        else:
+                                            self.risk_mgr.set_topstep_xfa_eod_balance(initial_equity)
+                                            log.info(
+                                                "F-1 XFA EOD balance set at session start: $%.2f",
+                                                initial_equity,
+                                            )
                                 else:
                                     log.warning(
                                         "HWM tracker: broker equity unavailable at startup — will init on first poll"

@@ -3,7 +3,7 @@ Tests for trading_app.risk_manager module.
 """
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from enum import Enum
 from pathlib import Path
@@ -892,3 +892,83 @@ class TestF1ScalingPlanIntegration:
         )
         assert allowed is False
         assert "100K XFA" in reason
+
+
+class TestF1DisableRuntimeOverride:
+    """RiskManager.disable_f1 allows the orchestrator to override F-1 off at
+    runtime based on broker-reality (e.g. Trading Combine, not XFA)."""
+
+    def _make_rm_with_xfa(self, account_size=50_000):
+        limits = RiskLimits(
+            max_concurrent_positions=10,
+            max_per_orb_positions=10,
+            max_per_session_positions=10,
+            max_daily_trades=20,
+            topstep_xfa_account_size=account_size,
+        )
+        rm = RiskManager(limits)
+        rm.daily_reset(date(2026, 4, 15))
+        rm.set_topstep_xfa_eod_balance(0.0)
+        return rm
+
+    def test_disable_f1_clears_account_size(self):
+        """After disable_f1, topstep_xfa_account_size is None on limits."""
+        rm = self._make_rm_with_xfa(50_000)
+        assert rm.limits.topstep_xfa_account_size == 50_000
+        rm.disable_f1("Trading Combine account — F-1 does not apply")
+        assert rm.limits.topstep_xfa_account_size is None
+
+    def test_disable_f1_clears_eod_balance(self):
+        """After disable_f1, _topstep_xfa_eod_balance is reset to None."""
+        rm = self._make_rm_with_xfa(50_000)
+        rm.set_topstep_xfa_eod_balance(1_500.0)
+        assert rm._topstep_xfa_eod_balance == 1_500.0
+        rm.disable_f1("broker mismatch")
+        assert rm._topstep_xfa_eod_balance is None
+
+    def test_disable_f1_is_idempotent(self):
+        """Calling disable_f1 when already disabled is a no-op."""
+        limits = RiskLimits(topstep_xfa_account_size=None)
+        rm = RiskManager(limits)
+        rm.disable_f1("first call")
+        rm.disable_f1("second call")  # must not raise
+        assert rm.limits.topstep_xfa_account_size is None
+
+    def _trade(self, sid: str, instrument: str = "MNQ", direction: str = "long", contracts: int = 1):
+        return _ContractsTrade(
+            strategy_id=sid,
+            orb_label="NYSE_OPEN",
+            direction=direction,
+            contracts=contracts,
+            strategy=_FakeStrategy(instrument=instrument),
+        )
+
+    def test_disable_f1_allows_entries_that_f1_would_block(self):
+        """50K XFA Day-1 caps at 2 lots (20 MNQ micros). With 20 active, a
+        21st micro (= 3 lots ceiling) gets blocked by F-1. After disable_f1,
+        the same entry proceeds because the F-1 branch is skipped."""
+        rm = self._make_rm_with_xfa(50_000)
+        # Also relax other gates so only F-1 is under test.
+        rm.limits = replace(
+            rm.limits,
+            max_concurrent_positions=100,
+            max_per_orb_positions=100,
+            max_per_session_positions=100,
+            max_daily_trades=200,
+        )
+        rm.set_topstep_xfa_eod_balance(0.0)  # Day-1 cap = 2 lots
+
+        # 20 active MNQ micros = 2 lots. A 21st micro pushes to ceil(21/10)=3 lots.
+        trades_20 = [self._trade(f"S{i}") for i in range(20)]
+        allowed_before, reason_before, _ = rm.can_enter(
+            "S21", "NYSE_OPEN", trades_20, 0.0, instrument="MNQ", direction="long"
+        )
+        assert allowed_before is False, f"Expected F-1 to block before disable; got reason={reason_before}"
+        assert "XFA" in reason_before
+
+        # Disable F-1 → same entry now allowed
+        rm.disable_f1("broker-reality: Trading Combine")
+        allowed_after, _, _ = rm.can_enter(
+            "S21", "NYSE_OPEN", trades_20, 0.0, instrument="MNQ", direction="long"
+        )
+        assert allowed_after is True

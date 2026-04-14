@@ -1430,6 +1430,40 @@ class TestF1OrchestratorRolloverWiring:
 
         orch.risk_mgr.set_topstep_xfa_eod_balance.assert_not_called()
 
+    def test_is_trading_combine_detects_tc_marker(self):
+        """Account name containing 'TC-' marks it as a Trading Combine."""
+        from trading_app.live.session_orchestrator import _is_trading_combine_account
+
+        is_tc, reason = _is_trading_combine_account({"name": "50KTC-V2-451890-20372221"})
+        assert is_tc is True
+        assert "Trading Combine" in reason
+        assert "50KTC-V2" in reason
+
+    def test_is_trading_combine_handles_none(self):
+        """None metadata → not classifiable, return False (trust profile config)."""
+        from trading_app.live.session_orchestrator import _is_trading_combine_account
+
+        is_tc, reason = _is_trading_combine_account(None)
+        assert is_tc is False
+        assert reason == ""
+
+    def test_is_trading_combine_non_tc_name(self):
+        """An XFA-like account name does NOT match TC detection."""
+        from trading_app.live.session_orchestrator import _is_trading_combine_account
+
+        is_tc, _ = _is_trading_combine_account({"name": "50KXFA-451890-99999999"})
+        assert is_tc is False
+        is_tc2, _ = _is_trading_combine_account({"name": "50KEFA-live-12345"})
+        assert is_tc2 is False
+
+    def test_is_trading_combine_empty_name(self):
+        """Empty or missing name → not classifiable, return False."""
+        from trading_app.live.session_orchestrator import _is_trading_combine_account
+
+        assert _is_trading_combine_account({})[0] is False
+        assert _is_trading_combine_account({"name": ""})[0] is False
+        assert _is_trading_combine_account({"name": None})[0] is False
+
     async def test_rollover_skips_f1_when_orphans_present(self):
         """F-1 active + orphaned positions at rollover → skip EOD refresh.
 
