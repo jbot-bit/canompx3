@@ -1430,6 +1430,39 @@ class TestF1OrchestratorRolloverWiring:
 
         orch.risk_mgr.set_topstep_xfa_eod_balance.assert_not_called()
 
+    async def test_rollover_skips_f1_when_orphans_present(self):
+        """F-1 active + orphaned positions at rollover → skip EOD refresh.
+
+        ProjectX query_equity returns realized balance only. If orphans have
+        unrealized losses, realized under-represents true equity and F-1's cap
+        would be LOOSER than safe. Fail-closed: keep last known good balance.
+        """
+        orch = build_orchestrator(FakeBrokerComponents(fill_price=2350.0))
+        orch._handle_event = AsyncMock()
+        orch.engine.on_trading_day_end.return_value = []
+        orch.trading_day = date(2026, 3, 6)
+
+        # F-1 active
+        orch.risk_mgr.limits.topstep_xfa_account_size = 50_000
+        orch.positions = MagicMock()
+        orch.positions.query_equity = MagicMock(return_value=103_000.0)
+        orch.order_router = MagicMock()
+        orch.order_router.account_id = 20092334
+
+        # Plant an orphan position that would survive the close loop
+        orch._positions.on_entry_sent(STRATEGY_ID, "long", 2350.0, order_id=1)
+        orch._positions.on_entry_filled(STRATEGY_ID, 2350.0)
+
+        bar_ts = datetime(2026, 3, 6, 23, 1, tzinfo=UTC)
+        with patch.object(SessionOrchestrator, "_build_daily_features_row", return_value={}):
+            await orch._check_trading_day_rollover(bar_ts)
+
+        # EOD balance must NOT be refreshed — the realized balance is unsafe
+        # when orphans could carry unrealized losses
+        orch.risk_mgr.set_topstep_xfa_eod_balance.assert_not_called()
+        # And query_equity should not even be called (short-circuit before it)
+        orch.positions.query_equity.assert_not_called()
+
 
 class TestOrchestratorReconnect:
     async def test_clean_stop_no_reconnect(self):

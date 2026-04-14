@@ -1147,21 +1147,41 @@ class SessionOrchestrator:
         self._close_time_forced = False  # Reset so next day's close-time flatten can fire
 
         # F-1 TopStep XFA Scaling Plan: refresh EOD balance from broker equity
-        # so today's contract cap reflects yesterday's session close. Canonical
-        # rule prohibits intraday scaling-up, so we use the rollover-time equity
-        # as the authoritative EOD balance for the new trading day.
+        # so today's contract cap reflects yesterday's session close.
+        #
+        # Canonical rule (topstep_scaling_plan_article.md line 47):
+        # "buying power will increase or decrease based on your end-of-day P&L"
+        #
+        # ProjectX query_equity returns realized balance (cash). When the bot is
+        # FLAT at rollover, realized balance == EOD balance — correct for F-1.
+        # When orphaned positions remain (close loop failed above), realized
+        # balance may UNDER-represent true equity if orphans have unrealized
+        # losses, which would make F-1's cap LOOSER than it should be. That is
+        # not a safe direction. Fail-closed: skip the refresh and keep the last
+        # known good EOD balance. Orphaned strategies are already blocked for
+        # entries via _blocked_strategies, so skipping is safe.
         if self.risk_mgr.limits.topstep_xfa_account_size is not None and self.positions is not None:
-            try:
-                eod_equity = self.positions.query_equity(
-                    self.order_router.account_id if self.order_router else 0
+            active_at_rollover = self._positions.active_positions()
+            if active_at_rollover:
+                log.warning(
+                    "F-1 XFA EOD balance NOT refreshed at rollover: %d active positions "
+                    "(orphans from close loop) — realized balance may be stale; keeping "
+                    "last known good EOD balance. Blocked strategies: %s",
+                    len(active_at_rollover),
+                    sorted(self._blocked_strategies),
                 )
-                if eod_equity is not None:
-                    self.risk_mgr.set_topstep_xfa_eod_balance(eod_equity)
-                    log.info("F-1 XFA EOD balance refreshed at rollover: $%.2f", eod_equity)
-                else:
-                    log.warning("F-1 XFA EOD balance NOT refreshed at rollover (broker equity unavailable)")
-            except Exception as e:
-                log.warning("F-1 XFA EOD balance refresh failed: %s", e)
+            else:
+                try:
+                    eod_equity = self.positions.query_equity(
+                        self.order_router.account_id if self.order_router else 0
+                    )
+                    if eod_equity is not None:
+                        self.risk_mgr.set_topstep_xfa_eod_balance(eod_equity)
+                        log.info("F-1 XFA EOD balance refreshed at rollover: $%.2f", eod_equity)
+                    else:
+                        log.warning("F-1 XFA EOD balance NOT refreshed at rollover (broker equity unavailable)")
+                except Exception as e:
+                    log.warning("F-1 XFA EOD balance refresh failed: %s", e)
 
         log.info("New trading day started: %s", self.trading_day)
 
