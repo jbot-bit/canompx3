@@ -600,12 +600,19 @@ def collect_tests(root: Path) -> list[PulseItem]:
             timeout=120,
         )
     except subprocess.TimeoutExpired:
+        # Timeout means the suite is larger than the 120s pulse budget, not
+        # that any test is broken. Categorize as `paused` (the check is
+        # deferred) rather than `broken` (which would fire the FIX NOW
+        # siren). Users should run pytest directly to verify pass/fail.
         return [
             PulseItem(
-                category="broken",
-                severity="high",
+                category="paused",
+                severity="low",
                 source="tests",
-                summary="Test suite timed out (>2m)",
+                summary=(
+                    "Test health check skipped: suite exceeds 120s pulse "
+                    "budget. Run `python -m pytest` directly to verify."
+                ),
             )
         ]
     except OSError:

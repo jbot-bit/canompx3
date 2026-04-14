@@ -172,6 +172,92 @@ def bundle_research_output(
 
 
 # ---------------------------------------------------------------------------
+# Auto-memory topic bundling (Pinecone 250-file budget)
+# ---------------------------------------------------------------------------
+#
+# The Claude auto-memory directory grows organically via the auto-memory
+# system (~1 new topic file per session). At 200+ files it pushes the
+# Pinecone manifest past the 250-file sync-performance budget. Bundle all
+# topic files into a single `_bundle_auto_memory.md`, keep `MEMORY.md`
+# standalone as the addressable index. Mirrors `bundle_research_output`.
+
+
+def bundle_memory_topics(
+    memory_files: list[tuple[Path, str]],
+) -> list[tuple[Path, str]]:
+    """Bundle auto-memory topic files into a single combined markdown.
+
+    Preserves these standalone (not bundled):
+      - MEMORY.md (the index — needs individual addressability)
+      - Repo-local files under <repo>/memory/ (these are curated, not
+        auto-generated, and usually already few in number)
+
+    Everything else in the memory tier (the 200+ auto-memory topic notes
+    under ~/.claude/projects/.../memory/) gets concatenated into one
+    `_bundle_auto_memory.md` with clear section headers per file.
+
+    Returns new list of (abs_path, rel_key) covering standalone + bundled.
+    """
+    standalone: list[tuple[Path, str]] = []
+    to_bundle: list[tuple[Path, str]] = []
+
+    repo_memory_dir = PROJECT_ROOT / "memory"
+
+    for abs_path, rel_key in memory_files:
+        # Keep MEMORY.md standalone — it's the index.
+        if abs_path.name == "MEMORY.md":
+            standalone.append((abs_path, rel_key))
+            continue
+        # Keep repo-local memory/ files standalone — they're curated.
+        try:
+            if repo_memory_dir in abs_path.parents:
+                standalone.append((abs_path, rel_key))
+                continue
+        except (ValueError, OSError):
+            pass
+        to_bundle.append((abs_path, rel_key))
+
+    if not to_bundle:
+        return standalone
+
+    timestamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    bundle_name = "_bundle_auto_memory.md"
+    bundle_path = TOOLS_DIR / bundle_name
+    rel_key = f"scripts/tools/{bundle_name}"
+
+    lines = [
+        "# Memory Bundle: Auto-Memory Topic Files",
+        "",
+        f"Generated: {timestamp}",
+        f"Files included: {len(to_bundle)}",
+        "",
+        "Topic files from the Claude auto-memory directory, bundled for",
+        "Pinecone sync. See `MEMORY.md` for the authoritative index of",
+        "what each topic covers.",
+        "",
+    ]
+
+    for abs_path, _original_key in sorted(to_bundle, key=lambda x: x[1]):
+        lines.append("---")
+        lines.append("")
+        lines.append(f"## {abs_path.name}")
+        lines.append("")
+        try:
+            content = abs_path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            content = abs_path.read_bytes().decode("utf-8", errors="replace")
+        lines.append(content.rstrip())
+        lines.append("")
+
+    lines.append("---")
+
+    bundle_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"  Bundled {len(to_bundle)} memory topic files -> {bundle_name}")
+
+    return standalone + [(bundle_path, rel_key)]
+
+
+# ---------------------------------------------------------------------------
 # Living file .py → .md conversion (Issue 2: .py rejected)
 # ---------------------------------------------------------------------------
 
@@ -305,7 +391,10 @@ def collect_files(manifest: dict) -> dict[str, list[tuple[Path, str]]]:
             if f.is_file():
                 _add_memory_file(f, f"memory/{f.name}")
 
-    collected["memory"] = memory_files
+    # Bundle auto-memory topic files — keeps tier under the 250-file sync
+    # budget as the auto-memory directory grows organically each session.
+    # MEMORY.md stays standalone as the addressable index.
+    collected["memory"] = bundle_memory_topics(memory_files)
 
     # --- Research output (bundle into ~10 topic files) ---
     research_cfg = tiers["research_output"]

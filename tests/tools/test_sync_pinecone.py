@@ -11,6 +11,7 @@ from scripts.tools.sync_pinecone import (
     STATE_PATH,
     TOOLS_DIR,
     _classify_research_file,
+    bundle_memory_topics,
     bundle_research_output,
     check_basename_conflicts,
     collect_files,
@@ -297,6 +298,88 @@ def test_bundle_research_output(tmp_path, monkeypatch):
         content = abs_path.read_text(encoding="utf-8")
         assert "# Research Bundle:" in content
         assert "Files included:" in content
+
+
+# ---------------------------------------------------------------------------
+# 8b. Auto-memory topic bundling
+# ---------------------------------------------------------------------------
+
+
+def test_bundle_memory_topics(tmp_path, monkeypatch):
+    """Verify auto-memory topic files bundle correctly.
+
+    MEMORY.md and repo-local memory/ files stay standalone; all other topic
+    files get concatenated into a single `_bundle_auto_memory.md`.
+    """
+    import scripts.tools.sync_pinecone as mod
+
+    # Point PROJECT_ROOT at tmp_path so the "repo-local memory/" check
+    # operates against a scratch directory we control.
+    monkeypatch.setattr(mod, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(mod, "TOOLS_DIR", tmp_path)
+
+    # Simulate the external auto-memory directory (not under repo/memory/)
+    external_mem = tmp_path / "external_mem"
+    external_mem.mkdir()
+    memory_index = external_mem / "MEMORY.md"
+    memory_index.write_text("# Memory Index\n", encoding="utf-8")
+    topic_a = external_mem / "user_profile.md"
+    topic_a.write_text("User is a quant.", encoding="utf-8")
+    topic_b = external_mem / "feedback_style.md"
+    topic_b.write_text("Prefer terse.", encoding="utf-8")
+
+    # Simulate a repo-local curated memory file
+    repo_mem_dir = tmp_path / "memory"
+    repo_mem_dir.mkdir()
+    repo_mem = repo_mem_dir / "2026-04-14.md"
+    repo_mem.write_text("Daily note.", encoding="utf-8")
+
+    files = [
+        (memory_index, "memory/MEMORY.md"),
+        (topic_a, "memory/user_profile.md"),
+        (topic_b, "memory/feedback_style.md"),
+        (repo_mem, "memory/2026-04-14.md"),
+    ]
+
+    result = bundle_memory_topics(files)
+
+    # Result: MEMORY.md + repo-local memory/2026-04-14.md + one bundle = 3 entries
+    assert len(result) == 3
+    keys = [k for _, k in result]
+    assert "memory/MEMORY.md" in keys
+    assert "memory/2026-04-14.md" in keys
+    assert any("_bundle_auto_memory.md" in k for k in keys)
+
+    # Verify bundle content covers both topic files and skips MEMORY.md/repo-local
+    bundle_path = next(p for p, k in result if "_bundle_auto_memory.md" in k)
+    content = bundle_path.read_text(encoding="utf-8")
+    assert "# Memory Bundle: Auto-Memory Topic Files" in content
+    assert "## user_profile.md" in content
+    assert "## feedback_style.md" in content
+    assert "User is a quant." in content
+    assert "Prefer terse." in content
+    # MEMORY.md and repo-local daily note must NOT be bundled
+    assert "## MEMORY.md" not in content
+    assert "## 2026-04-14.md" not in content
+
+
+def test_bundle_memory_topics_empty(tmp_path, monkeypatch):
+    """When there are no topic files to bundle, no bundle file is written."""
+    import scripts.tools.sync_pinecone as mod
+
+    monkeypatch.setattr(mod, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(mod, "TOOLS_DIR", tmp_path)
+
+    # Only MEMORY.md — nothing to bundle
+    mem_index = tmp_path / "MEMORY.md"
+    mem_index.write_text("# Index\n", encoding="utf-8")
+
+    result = bundle_memory_topics([(mem_index, "memory/MEMORY.md")])
+
+    assert len(result) == 1
+    assert result[0][1] == "memory/MEMORY.md"
+    # Bundle file should not exist
+    assert not (tmp_path / "_bundle_auto_memory.md").exists()
 
 
 # ---------------------------------------------------------------------------

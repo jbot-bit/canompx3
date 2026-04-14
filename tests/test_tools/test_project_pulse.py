@@ -303,6 +303,19 @@ class TestCollectTests:
         assert len(items) == 1
         assert items[0].category == "broken"
 
+    def test_tests_timeout_is_paused_not_broken(self, tmp_path: Path) -> None:
+        """A suite that exceeds the 120s pulse budget is paused (budget
+        mismatch), not broken. Broken is reserved for real failures."""
+        (tmp_path / "tests").mkdir()
+        from subprocess import TimeoutExpired
+
+        with patch("subprocess.run", side_effect=TimeoutExpired("cmd", 120)):
+            items = collect_tests(tmp_path)
+        assert len(items) == 1
+        assert items[0].category == "paused"
+        assert items[0].severity == "low"
+        assert "skipped" in items[0].summary.lower()
+
 
 # ---------------------------------------------------------------------------
 # collect_staleness
