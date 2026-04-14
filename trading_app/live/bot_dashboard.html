@@ -979,6 +979,191 @@
   /* graceful degradation: if backdrop-filter is unsupported
      (older browsers), the topbar falls back to the solid
      rgba background above, which is intentional */
+
+  /* ═══════════════════════════════════════════════════════════════
+     TIER 1 — Trader-value upgrades
+       1.1 Primary Start/Stop CTA in topbar
+       1.2 Alert hierarchy (critical / warning / info sections + dismiss)
+       1.3 Connection health dot in topbar
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* 1.1 — Primary CTA variants (uses existing .topbar-btn.primary from Tier 3) */
+  #btn-primary-cta.stop {
+    border-color: rgba(239, 68, 68, 0.32);
+    color: #fecaca;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.22), rgba(239, 68, 68, 0.10));
+  }
+  #btn-primary-cta.stop:hover {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.32), rgba(239, 68, 68, 0.18));
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.3), 0 8px 20px rgba(239, 68, 68, 0.18);
+  }
+  #btn-primary-cta .cta-sub {
+    font-weight: 500;
+    font-size: 9.5px;
+    color: var(--muted);
+    margin-left: 6px;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+  #btn-primary-cta.stop .cta-sub { color: rgba(254, 202, 202, 0.65); }
+
+  /* 1.3 — Connection health dot */
+  .conn-health-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--dim);
+    box-shadow: 0 0 0 3px rgba(69, 85, 106, 0.12);
+    transition: all var(--t) var(--ease);
+    cursor: help;
+  }
+  .conn-health-dot.ok {
+    background: var(--green);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15), 0 0 10px rgba(16, 185, 129, 0.5);
+  }
+  .conn-health-dot.warn {
+    background: var(--yellow);
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15), 0 0 10px rgba(245, 158, 11, 0.5);
+  }
+  .conn-health-dot.err {
+    background: var(--red);
+    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15), 0 0 10px rgba(239, 68, 68, 0.5);
+    animation: conn-pulse 2s infinite;
+  }
+  @keyframes conn-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15), 0 0 10px rgba(239, 68, 68, 0.5); }
+    50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.08), 0 0 16px rgba(239, 68, 68, 0.7); }
+  }
+
+  /* 1.2 — Alert hierarchy */
+  .alerts-group {
+    margin-bottom: 14px;
+  }
+  .alerts-group:last-child { margin-bottom: 0; }
+  .alerts-group-hd {
+    display: flex; align-items: center; gap: 8px;
+    font-size: var(--fs-label);
+    font-weight: 700;
+    letter-spacing: var(--tracking-label);
+    color: var(--muted);
+    margin-bottom: 8px;
+    padding: 0 2px;
+  }
+  .alerts-group-hd .count {
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .alerts-group.critical .alerts-group-hd { color: var(--red); }
+  .alerts-group.critical .alerts-group-hd .count { background: var(--red-soft); color: var(--red); }
+  .alerts-group.warning .alerts-group-hd { color: var(--yellow); }
+  .alerts-group.warning .alerts-group-hd .count { background: var(--yellow-soft); color: var(--yellow); }
+  .alerts-group.info .alerts-group-hd { color: var(--muted); }
+  .alerts-group.info .alerts-group-hd .count { background: var(--surface-2); color: var(--muted); }
+  .alerts-group-body {
+    display: grid;
+    gap: 8px;
+  }
+  .alerts-group.critical .alerts-group-body {
+    gap: 10px;
+  }
+  .alerts-group.info .alerts-group-body {
+    max-height: 180px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+  .alerts-group-btn {
+    margin-left: auto;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all var(--t) var(--ease);
+  }
+  .alerts-group-btn:hover {
+    color: var(--text);
+    border-color: var(--border-hi);
+  }
+
+  /* Critical alert rows — prominent */
+  .alert-row.critical {
+    padding: 14px 16px;
+    border-left-width: 3px;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.10), rgba(239, 68, 68, 0.02));
+    box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15);
+    position: relative;
+  }
+  .alert-row.critical .alert-level {
+    color: var(--red);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .alert-row.critical .alert-message {
+    font-size: var(--fs-body);
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .alert-row.critical .alert-dismiss {
+    position: absolute;
+    top: 10px; right: 10px;
+    background: transparent;
+    border: 1px solid rgba(239, 68, 68, 0.26);
+    color: var(--red);
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    cursor: pointer;
+    transition: all var(--t) var(--ease);
+    opacity: 0.65;
+  }
+  .alert-row.critical .alert-dismiss:hover {
+    opacity: 1;
+    background: var(--red-soft);
+  }
+
+  /* Warning alert rows — standard */
+  .alert-row.warning {
+    padding: 10px 14px;
+    border-left-width: 2px;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.06), transparent);
+  }
+
+  /* Info alert rows — compressed */
+  .alert-row.info {
+    padding: 7px 12px;
+    border-left-width: 2px;
+    background: rgba(34, 211, 238, 0.03);
+    font-size: var(--fs-small);
+    opacity: 0.85;
+  }
+  .alert-row.info .alert-message {
+    font-size: var(--fs-small);
+    color: var(--text-2);
+  }
+  .alert-row.info .alert-row-top {
+    margin-bottom: 2px;
+  }
+  .alert-row.info .alert-level {
+    font-size: 9.5px;
+    color: var(--muted);
+  }
+
+  /* Alerts empty state for sub-groups */
+  .alerts-group-empty {
+    padding: 10px 14px;
+    color: var(--dim);
+    font-size: var(--fs-small);
+    font-style: italic;
+  }
 </style>
 </head>
 <body>
@@ -992,11 +1177,13 @@
     <span id="topbar-acct" class="topbar-acct"></span>
     <span id="topbar-acct-detail" class="topbar-acct-detail"></span>
     <span id="header-mode-badge" class="topbar-mode stopped"><span class="dot"></span> <span id="summary-mode">Stopped</span></span>
+    <span id="conn-health-dot" class="conn-health-dot unknown" title="Broker connections: loading..."></span>
     <span id="summary-mode-detail" class="compat-hidden"></span>
     <span id="running-profile" class="compat-hidden">Idle</span>
     <span id="running-profile-detail" class="compat-hidden"></span>
     <span class="topbar-spacer"></span>
-    <button id="btn-preflight" class="topbar-btn primary">Preflight</button>
+    <button id="btn-primary-cta" class="topbar-btn primary" style="display:none" type="button"></button>
+    <button id="btn-preflight" class="topbar-btn">Preflight</button>
     <button id="btn-refresh" class="topbar-btn warn">Refresh</button>
     <button id="btn-kill" class="topbar-btn danger">Kill All</button>
   </header>
@@ -1344,6 +1531,8 @@ function renderAccountSummary(accounts) {
     $("topbar-acct").textContent = "No active profile";
     $("topbar-acct-detail").textContent = "";
   }
+  // Tier 1.1 — active profile may have changed, refresh CTA
+  try { updatePrimaryCta(); } catch (_) {}
 }
 
 /* ── Session Timeline ───────────────── */
@@ -1617,6 +1806,62 @@ function renderOperatorState(data) {
   `).join("");
 }
 
+/* Tier 1.2 — alert dismiss helpers (client-side via localStorage) */
+const ALERT_DISMISS_KEY = "orb_dismissed_alerts";
+const ALERT_DISMISS_MAX = 200;  // cap so localStorage doesn't grow forever
+let showDismissedCritical = false;
+
+function alertFingerprint(alert) {
+  const ts = String(alert?.timestamp_utc || "");
+  const msg = String(alert?.message || "").slice(0, 80);
+  return `${ts}|${msg}`;
+}
+function getDismissedAlerts() {
+  try { return new Set(JSON.parse(localStorage.getItem(ALERT_DISMISS_KEY) || "[]")); }
+  catch (_) { return new Set(); }
+}
+function saveDismissedAlerts(set) {
+  try {
+    const arr = Array.from(set).slice(-ALERT_DISMISS_MAX);
+    localStorage.setItem(ALERT_DISMISS_KEY, JSON.stringify(arr));
+  } catch (_) {}
+}
+function dismissAlert(fp) {
+  const set = getDismissedAlerts();
+  set.add(fp);
+  saveDismissedAlerts(set);
+  if (lastAlertsData) renderAlerts(lastAlertsData);
+}
+function toggleDismissedCritical() {
+  showDismissedCritical = !showDismissedCritical;
+  if (lastAlertsData) renderAlerts(lastAlertsData);
+}
+
+function alertRowHtml(alert, dismissed) {
+  const level = String(alert.level || "info").toLowerCase();
+  const tone = alertTone(level);
+  const ctx = [alert.instrument, alert.mode, alert.profile].filter(Boolean).map(escapeHtml).join(" • ");
+  const fp = alertFingerprint(alert);
+  const fpAttr = escapeHtml(fp).replaceAll("'", "&#39;");
+  const dismissBtn = (tone === "critical" && !dismissed)
+    ? `<button class="alert-dismiss" type="button" onclick="dismissAlert('${fpAttr}')" title="Dismiss">Ack</button>`
+    : "";
+  return `
+    <div class="alert-row ${tone}${dismissed ? " dismissed" : ""}">
+      ${dismissBtn}
+      <div class="alert-row-top">
+        <div class="alert-row-meta">
+          <span class="alert-level">${escapeHtml(String(alert.level || "info").toUpperCase())}</span>
+          <span class="alert-category">${escapeHtml(String(alert.category || "runtime_event").replace(/_/g, " "))}</span>
+        </div>
+        <span class="alert-time">${fmtAlertTime(alert.timestamp_utc)}</span>
+      </div>
+      <div class="alert-message">${escapeHtml(alert.message || "No message")}</div>
+      ${ctx ? `<div class="alert-context">${ctx}</div>` : ""}
+    </div>
+  `;
+}
+
 function renderAlerts(data) {
   lastAlertsData = data;
   const alerts = Array.isArray(data?.alerts) ? data.alerts : [];
@@ -1626,6 +1871,7 @@ function renderAlerts(data) {
   const recentWindow = Number(summary?.recent_window_minutes || 30);
   const total = Number(summary?.total || alerts.length || 0);
   const latest = summary?.latest || alerts[0] || null;
+  const dismissed = getDismissedAlerts();
 
   const sub = $("alerts-shell-sub");
   if (latest?.timestamp_utc) {
@@ -1641,29 +1887,64 @@ function renderAlerts(data) {
     <span class="alerts-pill info">Last ${recentWindow}m: ${Number(recentCounts.critical || 0) + Number(recentCounts.warning || 0) + Number(recentCounts.info || 0)}</span>
   `;
 
+  // Split into severity buckets
+  const buckets = {critical: [], warning: [], info: []};
+  for (const a of alerts) {
+    const lvl = String(a.level || "info").toLowerCase();
+    if (lvl === "critical") buckets.critical.push(a);
+    else if (lvl === "warning" || lvl === "warn") buckets.warning.push(a);
+    else buckets.info.push(a);
+  }
+
+  const critActive = buckets.critical.filter(a => !dismissed.has(alertFingerprint(a)));
+  const critDismissed = buckets.critical.filter(a => dismissed.has(alertFingerprint(a)));
+
   const list = $("alerts-list");
   if (!alerts.length) {
     list.innerHTML = '<div class="alerts-empty">No runtime alerts yet. When the session emits feed, drift, risk, or operator events, they will appear here.</div>';
     return;
   }
 
-  list.innerHTML = alerts.map(alert => {
-    const tone = alertTone(String(alert.level || "info"));
-    const ctx = [alert.instrument, alert.mode, alert.profile].filter(Boolean).map(escapeHtml).join(" • ");
-    return `
-      <div class="alert-row ${tone}">
-        <div class="alert-row-top">
-          <div class="alert-row-meta">
-            <span class="alert-level">${escapeHtml(String(alert.level || "info").toUpperCase())}</span>
-            <span class="alert-category">${escapeHtml(String(alert.category || "runtime_event").replace(/_/g, " "))}</span>
-          </div>
-          <span class="alert-time">${fmtAlertTime(alert.timestamp_utc)}</span>
-        </div>
-        <div class="alert-message">${escapeHtml(alert.message || "No message")}</div>
-        ${ctx ? `<div class="alert-context">${ctx}</div>` : ""}
+  let html = "";
+
+  // Critical section — only render if there are active critical alerts OR user toggled show-dismissed
+  if (critActive.length > 0 || (critDismissed.length > 0 && showDismissedCritical)) {
+    const rows = [
+      ...critActive.map(a => alertRowHtml(a, false)),
+      ...(showDismissedCritical ? critDismissed.map(a => alertRowHtml(a, true)) : []),
+    ].join("");
+    const toggleBtn = critDismissed.length > 0
+      ? `<button class="alerts-group-btn" type="button" onclick="toggleDismissedCritical()">${showDismissedCritical ? "Hide" : "Show"} ${critDismissed.length} dismissed</button>`
+      : "";
+    html += `
+      <div class="alerts-group critical">
+        <div class="alerts-group-hd">Critical<span class="count">${critActive.length}</span>${toggleBtn}</div>
+        <div class="alerts-group-body">${rows || '<div class="alerts-group-empty">No active critical alerts</div>'}</div>
       </div>
     `;
-  }).join("");
+  }
+
+  // Warning section
+  if (buckets.warning.length > 0) {
+    html += `
+      <div class="alerts-group warning">
+        <div class="alerts-group-hd">Warning<span class="count">${buckets.warning.length}</span></div>
+        <div class="alerts-group-body">${buckets.warning.map(a => alertRowHtml(a, false)).join("")}</div>
+      </div>
+    `;
+  }
+
+  // Info section (compressed)
+  if (buckets.info.length > 0) {
+    html += `
+      <div class="alerts-group info">
+        <div class="alerts-group-hd">Info<span class="count">${buckets.info.length}</span></div>
+        <div class="alerts-group-body">${buckets.info.map(a => alertRowHtml(a, false)).join("")}</div>
+      </div>
+    `;
+  }
+
+  list.innerHTML = html || '<div class="alerts-empty">All alerts dismissed or filtered.</div>';
 }
 
 /* ── Update Status ──────────────────── */
@@ -1680,6 +1961,9 @@ function updateStatus(state) {
 
   $("mode-badge").className = `topbar-mode ${modeClass(mode)}`;
   $("mode-badge").textContent = mode;
+
+  // Tier 1.1 — refresh primary CTA based on new status
+  try { updatePrimaryCta(); } catch (_) {}
 
   const panel = $("session-status-panel");
   if (mode === "STOPPED") { panel.classList.remove("on"); $("live-lanes-panel").classList.add("hidden"); }
@@ -1755,6 +2039,101 @@ async function fetchAlerts() {
   }
 }
 async function fetchAccounts() { try { renderAccounts((await (await fetch("/api/accounts")).json()).accounts || []); } catch (_) { $("accounts-grid").innerHTML = '<div class="empty">Could not load.</div>'; } }
+
+/* Tier 1.1 — primary CTA in topbar (Start / Stop context-aware) */
+let _primaryCtaBusy = false;
+function updatePrimaryCta() {
+  const btn = $("btn-primary-cta");
+  if (!btn) return;
+  const mode = (lastOperatorState?.top_state || "").toString();
+  const statusMode = ($("summary-mode")?.textContent || "Stopped").toString();
+  const isRunning = statusMode !== "Stopped" && statusMode !== "Offline" && statusMode !== "—";
+  const acct = activeProfileData;
+
+  if (_primaryCtaBusy) { return; }
+
+  if (isRunning) {
+    btn.style.display = "";
+    btn.className = "topbar-btn primary stop";
+    btn.innerHTML = `Stop <span class="cta-sub">${escapeHtml(statusMode)}</span>`;
+    btn.onclick = async () => {
+      if (!confirm("Stop current session?")) return;
+      _primaryCtaBusy = true;
+      btn.disabled = true;
+      try {
+        const d = await (await fetch("/api/action/kill", {method: "POST"})).json();
+        showActivity("Stop Session", d.message || "Stop sent", "warning");
+        setTimeout(fetchOperatorState, 1500);
+      } catch (e) {
+        showActivity("Stop Session", `Failed: ${e.message}`, "error");
+      } finally {
+        setTimeout(() => { _primaryCtaBusy = false; btn.disabled = false; updatePrimaryCta(); }, 2000);
+      }
+    };
+    return;
+  }
+
+  // Not running — show Start if we have an active profile
+  if (acct && acct.profile_id) {
+    btn.style.display = "";
+    btn.className = "topbar-btn primary";
+    btn.innerHTML = `Start Signal <span class="cta-sub">${escapeHtml(acct.profile_id)}</span>`;
+    btn.onclick = () => {
+      if (_primaryCtaBusy) return;
+      launchSession(acct.profile_id, acct.firm, acct.instruments?.join("+") || "ALL", "signal");
+    };
+    return;
+  }
+
+  // No active profile, no running session — hide
+  btn.style.display = "none";
+}
+
+/* Tier 1.3 — broker connection health dot in topbar */
+let _lastBrokerHealth = null;
+async function fetchBrokerHealth() {
+  try {
+    const d = await (await fetch("/api/broker/list")).json();
+    _lastBrokerHealth = d;
+    renderConnHealthDot(d?.connections || []);
+  } catch (e) {
+    renderConnHealthDot(null, e.message || "failed");
+  }
+}
+function renderConnHealthDot(connections, errorMsg) {
+  const dot = $("conn-health-dot");
+  if (!dot) return;
+  if (errorMsg) {
+    dot.className = "conn-health-dot err";
+    dot.title = `Broker connections: ${errorMsg}`;
+    return;
+  }
+  const list = Array.isArray(connections) ? connections : [];
+  const enabled = list.filter(c => c.enabled !== false);
+  if (enabled.length === 0) {
+    dot.className = "conn-health-dot unknown";
+    dot.title = list.length === 0 ? "No broker connections configured" : "All broker connections disabled";
+    return;
+  }
+  const connected = enabled.filter(c => String(c.status || "").toLowerCase() === "connected");
+  const errored = enabled.filter(c => c.last_error && String(c.status || "").toLowerCase() !== "connected");
+
+  let cls, title;
+  if (connected.length === enabled.length) {
+    cls = "ok";
+    title = `${connected.length}/${enabled.length} broker(s) connected: ${enabled.map(c => c.display_name).join(", ")}`;
+  } else if (errored.length > 0) {
+    cls = "err";
+    const names = errored.map(c => `${c.display_name} (${c.last_error?.slice(0, 60) || "error"})`).join("; ");
+    title = `Broker error: ${names}`;
+  } else {
+    cls = "warn";
+    const disconnected = enabled.filter(c => String(c.status || "").toLowerCase() !== "connected");
+    title = `${connected.length}/${enabled.length} connected. Waiting: ${disconnected.map(c => c.display_name).join(", ")}`;
+  }
+  dot.className = `conn-health-dot ${cls}`;
+  dot.title = title;
+}
 
 async function fetchSessions() {
   try {
@@ -2368,8 +2747,10 @@ restoreSections();
 restoreTab();
 initAccountSelector();
 try { localStorage.removeItem("orb_sections"); } catch (_) {} // migrate old key
-fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts();
+fetchAccounts(); fetchSessions(); fetchStatus(); fetchTrades(); fetchDataStatus(); fetchEquity(); fetchOperatorState(); fetchAlerts(); fetchBrokerHealth();
 setInterval(fetchStatus, 5000); setInterval(fetchTrades, 10000); setInterval(fetchAccounts, 60000); setInterval(fetchDataStatus, 30000); setInterval(fetchSessions, 30000); setInterval(fetchEquity, 30000); setInterval(fetchOperatorState, 5000); setInterval(fetchAlerts, 5000);
+// Tier 1.3 — broker health dot (topbar) polled regardless of tab
+setInterval(fetchBrokerHealth, 30000);
 // Auto-refresh broker list when on Connections tab
 setInterval(() => { if ($("tab-connections")?.classList.contains("active")) fetchBrokerList(); }, 30000);
 </script>
