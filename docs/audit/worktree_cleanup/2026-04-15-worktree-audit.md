@@ -95,3 +95,39 @@ Subset of operator-cockpit. Merging operator-cockpit supersedes this.
 
 - `.worktrees/tasks/audit/gold.db` and peers are hardlinked to canonical `gold.db` — `rm` is safe (reduces link count, doesn't delete data) but use `rm -rf .worktrees/tasks/<name>` only after confirming no running process has those paths open.
 - The two `wt-claude-first-workstream-test` metadata references (in `green-baseline` and `work-capsule` metadata) suggest the metadata writer had a bug. Not load-bearing, but a note for the tool owner.
+
+## Resolution log (2026-04-15 follow-up)
+
+### Completed (safe actions, no user judgment needed)
+
+- ✅ **`wt-codex-green-baseline` branch deleted** (was 62a34c72, 0 commits ahead — verified no unique work).
+- ✅ **5 orphan `.worktrees/tasks/` dirs deleted** (had no matching branch OR branch was just deleted):
+  - audit, audit2, finite-data-reaudit, research-ml-bot-review (no matching branches; per audit §3 unique files were dead ML archaeology + abandoned design alternatives + completed stage files).
+  - green-baseline (branch deleted above).
+  - Disk reclaim: ~200MB unique files (gold.db hardlinks reduced but canonical copy persists).
+
+### Stopped (silent action would be reckless — user judgment needed)
+
+- ❌ **`wt-codex-operator-cockpit`** — `git merge --no-commit --no-ff` produced **9 conflicts**:
+  - `scripts/tools/system_brief.py` (add/add) — work-capsule branch also added this file
+  - `scripts/tools/work_capsule.py` (add/add) — same situation
+  - `tests/test_pipeline/test_system_brief.py` (add/add)
+  - `tests/test_tools/test_windows_agent_launch.py` (content)
+  - `tests/test_trading_app/test_pre_session_check.py` (content)
+  - `tests/test_trading_app/test_session_orchestrator.py` (content)
+  - `trading_app/live/bot_dashboard.html` (content) — overlaps with recently-shipped Tier 1-3 dashboard polish (commits `51dbe94d` / `41104a7a` / `af0c3ca4` / `b7f6fd42`)
+  - `trading_app/live/bot_dashboard.py` (content) — same dashboard overlap
+  - `trading_app/pre_session_check.py` (content)
+  - 5318 insertions / 382 deletions across 55 files. Too large for silent merge.
+  - **User decision required:** rebase manually, three-way-merge selectively, or abandon. The branch and its filesystem dir at `.worktrees/tasks/operator-cockpit/` are PRESERVED for inspection.
+
+- ❌ **`wt-codex-work-capsule` 2 stranded commits** — cherry-pick of `05c8ab56` (drift check 94 hardening) **conflicts with current `pipeline/check_drift.py`**: main has been updated to use the JSON-based `load_allocation_lanes()` system after `05c8ab56` was written, so the original commit's "audit ALL profiles" intent may already be subsumed by the new architecture (see `memory/portfolio_dedup_nogo.md`: "Check 94 validates JSON lanes"). The other stranded commit `d44dd31e` (work capsule shell) overlaps with the operator-cockpit branch's `scripts/tools/work_capsule.py` add/add conflict — these should be resolved together. Branch + dir PRESERVED.
+
+- ❌ **`wt-codex-startup-brain-refactor`** — its 2 commits (`4f777ee8` + `fb597bcb`) are a SUBSET of operator-cockpit. Decision is downstream of operator-cockpit: if cockpit merges, startup-brain is redundant; if cockpit is abandoned, startup-brain might be a smaller-PR alternative. Branch + dir PRESERVED.
+
+### Recommended next user actions
+
+1. Inspect `.worktrees/tasks/operator-cockpit/` filesystem checkout if helpful.
+2. Decide on `wt-codex-operator-cockpit`: rebase + manual conflict resolution, or close as abandoned. The dashboard overlap means rebase will require careful three-way merge against the recently-shipped Tier 1-3 polish.
+3. If cockpit closed, `wt-codex-startup-brain-refactor` becomes deletable.
+4. `wt-codex-work-capsule` `05c8ab56` (drift check 94 hardening): verify the current JSON-based check 94 already audits inactive profiles. If it does, the commit is moot. If not, manually re-implement the inactive-profile audit on top of current code.

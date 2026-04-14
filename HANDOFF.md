@@ -6,6 +6,50 @@
 
 ---
 
+## Update (2026-04-15 final — worktree cleanup: 1 branch + 5 dirs deleted, 3 branches + dirs preserved for user judgment)
+
+### Headline
+
+Acted on the worktree cleanup audit. Did the safe deletes, stopped at
+the unsafe ones, documented the merge-judgment-needed state for next
+session.
+
+### What shipped
+
+- ✅ Deleted local branch `wt-codex-green-baseline` (was 62a34c72, 0
+     commits ahead of main — verified no unique work).
+- ✅ Deleted 5 orphan filesystem dirs from `.worktrees/tasks/`:
+     audit, audit2, finite-data-reaudit, research-ml-bot-review,
+     green-baseline. Disk reclaim ~200MB unique files (gold.db
+     hardlinks reduced; canonical 7.2GB copy persists).
+
+### Stopped — needs your call
+
+- **`wt-codex-operator-cockpit`** (5318 lines, 55 files, 6 commits):
+  `git merge` produced 9 conflicts including freshly-shipped Tier 1-3
+  dashboard polish files (`bot_dashboard.html` + `bot_dashboard.py`).
+  Branch + dir at `.worktrees/tasks/operator-cockpit/` PRESERVED.
+
+- **`wt-codex-work-capsule`** (2 stranded commits): cherry-pick of
+  `05c8ab56` (drift check 94 hardening) conflicts with current
+  `pipeline/check_drift.py` — main has been updated to use JSON-based
+  `load_allocation_lanes()` after the original commit was written, so
+  the intent may already be subsumed (see `memory/portfolio_dedup_nogo.md`:
+  "Check 94 validates JSON lanes"). The other stranded commit `d44dd31e`
+  (work capsule shell) overlaps with the operator-cockpit add/add
+  conflict on `scripts/tools/work_capsule.py`. Resolve together.
+
+- **`wt-codex-startup-brain-refactor`**: subset of operator-cockpit
+  (2 commits both in cockpit). Decision is downstream of cockpit.
+
+### Updated audit
+
+`docs/audit/worktree_cleanup/2026-04-15-worktree-audit.md` now has a
+"Resolution log" section documenting completed actions, stopped actions
+with conflict details, and recommended next user actions.
+
+---
+
 ## Update (2026-04-15 latest — review-cycle close: extract refactor + audit precision)
 
 ### Headline
