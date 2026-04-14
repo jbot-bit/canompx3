@@ -6,6 +6,54 @@
 
 ---
 
+## Update (2026-04-14 — F-1 TopStep XFA Scaling Plan wired into orchestrator + refresh_data fix)
+
+### Headline
+
+Closed the last HARD GATE before live TopStep XFA money: F-1 Scaling Plan
+check is no longer dormant. Session orchestrator now passes
+`topstep_xfa_account_size` to RiskLimits for TopStep XFA profiles and
+refreshes EOD balance at session start + on every trading-day rollover.
+
+Also fixed refresh_data bug that left MES/MNQ missing all daily_features
+for 2026-04-13 (root cause: early return when bars already current
+skipped downstream builds).
+
+### What shipped
+
+- **1053e3dc** `fix(refresh): decouple daily_features build from bar download`
+  - refresh_data.py: always build for yesterday even when gap_days <= 0
+  - 4 regression tests
+- **5fae4d0c** `feat(risk): wire F-1 TopStep XFA Scaling Plan + fix safety
+  lifecycle persistence` (bundled by auto-process)
+  - session_orchestrator.py: `_resolve_topstep_xfa_account_size` helper +
+    3 wiring insertions (RiskLimits arg, HWM init balance call, rollover refresh)
+  - 8 new tests (5 helper + 3 integration)
+  - session_safety_state.py: lifecycle blocks no longer persist (parallel fix)
+
+### Deployment state
+
+`topstep_50k_mnq_auto` still signal/demo on TopStep practice 20092334.
+F-1 is now LIVE-READY. Before flipping to real XFA:
+1. Verify `positions.query_equity(account_id)` returns TopStep EOD balance
+   (previous session-end, not live intraday) — may need broker-side check
+2. Backfill `data/state/account_hwm_*.json` with actual XFA start balance
+
+End-to-end verified: 5 live TopStep profiles → F-1 ACTIVE; bulenox/
+tradeify/self_funded → disabled.
+
+### Data gap resolved
+
+Backfilled 9 daily_features rows (3 instruments × {5,15,30}) for
+2026-04-13. Drift check 58 now clean.
+
+### Verification
+
+- 234 tests pass (F-1 scope + regression)
+- `python -m pipeline.check_drift`: 102 passed, 0 failing, 6 advisory
+
+---
+
 ## Update (2026-04-14 — Claude: pinecone manifest bundling + pulse test-timeout reclassification + NQ mapping verified complete)
 
 ### Headline
