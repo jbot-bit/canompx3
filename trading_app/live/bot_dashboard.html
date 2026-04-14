@@ -894,6 +894,91 @@
 
   /* ── selection ─────────────────────── */
   ::selection { background: var(--accent-strong); color: var(--text); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     COLOR-LEAK FIX — close the 6 selector groups that bypassed tokens
+     (code review finding: Section B MEDIUM. Commit 51dbe94d left
+     ~18 inline rgba values on the OLD palette while tokens moved to
+     the new one. These overrides route them back onto var() tokens.)
+     ═══════════════════════════════════════════════════════════════ */
+
+  /* operator state badge — INFO was hardcoded old blue */
+  .operator-state-badge.info {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* operator primary action button — success/warn/danger */
+  .operator-primary-btn.success {
+    border-color: rgba(16, 185, 129, 0.25);
+    color: var(--green);
+    background: var(--green-soft);
+  }
+  .operator-primary-btn.warn {
+    border-color: rgba(245, 158, 11, 0.25);
+    color: var(--yellow);
+    background: var(--yellow-soft);
+  }
+  .operator-primary-btn.danger {
+    border-color: rgba(239, 68, 68, 0.28);
+    color: var(--red);
+    background: var(--red-soft);
+  }
+
+  /* alerts pills — critical / warning / info */
+  .alerts-pill.critical {
+    color: var(--red);
+    border-color: rgba(239, 68, 68, 0.26);
+    background: var(--red-soft);
+  }
+  .alerts-pill.warning {
+    color: var(--yellow);
+    border-color: rgba(245, 158, 11, 0.26);
+    background: var(--yellow-soft);
+  }
+  .alerts-pill.info {
+    color: var(--accent);
+    border-color: var(--accent-strong);
+    background: var(--accent-soft);
+  }
+
+  /* alert rows — critical / warning / info */
+  .alert-row.critical {
+    border-left-color: var(--red);
+    background: rgba(239, 68, 68, 0.05);
+  }
+  .alert-row.warning {
+    border-left-color: var(--yellow);
+    background: rgba(245, 158, 11, 0.05);
+  }
+  .alert-row.info {
+    border-left-color: var(--accent);
+    background: rgba(34, 211, 238, 0.05);
+  }
+
+  /* signal strip rows */
+  .sig-row-signal { background: rgba(16, 185, 129, 0.05); }
+  .sig-row-armed { background: rgba(34, 211, 238, 0.04); }
+
+  /* connections tab buttons */
+  .conn-btn.danger {
+    color: var(--red);
+    border-color: rgba(239, 68, 68, 0.22);
+  }
+  .add-actions .test-btn {
+    background: var(--surface-2);
+    color: var(--accent);
+    border-color: var(--accent-strong);
+  }
+  .add-actions .save-btn {
+    background: var(--green-soft);
+    color: var(--green);
+    border-color: rgba(16, 185, 129, 0.26);
+  }
+
+  /* graceful degradation: if backdrop-filter is unsupported
+     (older browsers), the topbar falls back to the solid
+     rgba background above, which is intentional */
 </style>
 </head>
 <body>
