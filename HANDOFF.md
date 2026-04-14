@@ -6,6 +6,72 @@
 
 ---
 
+## Update (2026-04-15 latest — review-cycle close: extract refactor + audit precision)
+
+### Headline
+
+Two bloomey reviews this session. First closed B+ → A− with 4 wiring
+tests. Second graded the AUDIT DOCS B (proxy filters used for headline
+DD number, sample-size tiers missing, sequence tests claimed integration
+they didn't have). All 3 follow-up improvements shipped, including the
+proper extract refactor that closes the original integration-test gap.
+
+### What shipped (3 follow-up commits)
+
+- **`90470093`** `refactor(f1): extract _apply_broker_reality_check() —
+  unblocks integration tests`
+  - Module-level helper at session_orchestrator.py:94, kwargs-only
+    signature, returns status code ('tc' / 'xfa' / 'xfa_missing_meta')
+    for testability.
+  - HWM-init call site reduced from 20 lines to a single guarded call.
+  - 4 prior MagicMock pattern tests rewritten as TRUE integration
+    tests calling the extracted helper. 5th test added for
+    order_router=None edge case.
+
+- **`1d8066f6`** `chore(stages): close f1-broker-reality-extract`
+  - Stage acceptance verified: 198/198 tests pass, drift 102/0,
+    no behavior change at call site, 3 outcome branches preserved.
+
+- **`46503338`** `audit(docs): close 3 bloomey review findings`
+  - max-profit audit §6.1: explicit caveat that 2 of 6 lanes used
+    PROXY filters (SINGAPORE_OPEN ATR_P50, US_DATA_1000 VWAP). DD
+    table now shows BOTH 4-lane verified ($2,433) and 6-lane proxied
+    ($3,790) bounds. "Already breaches" reframed to historical-pattern
+    framing.
+  - Both audits: Tier column added to comparison tables. CORE for
+    N≥100 trailing data, REGIME for N=40-70 2026 OOS data, INVALID
+    if N<30. Headline framing now says "CORE-tier evidence" /
+    "REGIME-tier directional" so reader weights claims accordingly.
+
+### Post-review state
+
+- **Audit precision**: B → A− (proxy-filter caveat + tier labels)
+- **Test coverage**: B+ → A− (true integration tests via extracted helper)
+- **Open MEDIUM/HIGH findings from any review this session**: zero.
+
+### Verification (final, unchanged from prior late update)
+
+- 198/198 F-1 scope tests pass (test_session_orchestrator +
+  test_risk_manager + test_projectx_positions)
+- 134/134 test_session_orchestrator.py file ✓
+- drift 102/0 + 6 advisory
+- C11 valid + gate_ok (operational 91.4%); C12 CONTINUE:3 / ALARM:3
+  (all WATCH retained); blocked=[]
+- Bot ready for COMEX_SETTLE 03:30 Bris, no live state changed
+
+### Multi-agent collaboration note
+
+The `90470093` extract refactor was auto-shipped by another
+agent/hook the moment the dashboard-polish stage closed and a new
+`f1-broker-reality-extract` stage opened (matching exactly the MEDIUM
+finding from my first code review). By the time I went to ship the
+refactor manually, it was already done. The auto-pipeline + stage-gate
++ scope_lock architecture handled this cleanly: I was correctly blocked
+from editing session_orchestrator.py while dashboard-polish was active,
+then unblocked the moment it closed.
+
+---
+
 ## Update (2026-04-15 late — audits + honest verdicts + test follow-up)
 
 ### Headline
