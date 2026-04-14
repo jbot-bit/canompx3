@@ -6,6 +6,62 @@
 
 ---
 
+## Update (2026-04-15 — F-1 hardening: orphan guard + TC vs XFA auto-detection)
+
+### Headline
+
+Two F-1 follow-up fixes surfaced and shipped after the primary wiring
+landed. Both address "what happens when broker reality doesn't match
+profile intent" edge cases — the kind that only become visible once you
+actually talk to the broker.
+
+### What shipped
+
+- **`ebc2b30f`** `fix(risk): skip F-1 EOD balance refresh when orphans present at rollover`
+  - If the rollover close loop fails and orphans remain, realized broker
+    balance may UNDER-represent true equity (missing unrealized losses on
+    open positions), producing a LOOSER F-1 cap than safe. Fail-closed:
+    check `_positions.active_positions()` first; if any remain, skip the
+    refresh and keep last known good EOD balance.
+  - Test: `test_rollover_skips_f1_when_orphans_present`
+
+- **`306d16a0`** `feat(risk): detect TC vs XFA broker account and auto-disable F-1 for TC`
+  - Empirical broker check (2026-04-15) surfaced: practice account
+    `20092334` is GONE; current accounts are `20859313` / `21390438`,
+    both `50KTC-V2-...` (Trading Combine, not XFA). `is_express_funded=True`
+    profile would have activated F-1 and fed a $47K TC balance into the
+    XFA scaling ladder.
+  - Added `ProjectXPositions.query_account_metadata()`,
+    `RiskManager.disable_f1(reason)` (idempotent, uses `dataclasses.replace`),
+    `_is_trading_combine_account(meta)` helper. HWM init block now
+    broker-reality-checks and disables F-1 when name contains `TC-`.
+  - 9 new tests across risk_manager + session_orchestrator.
+  - End-to-end verified: both live accounts → F-1 auto-disabled.
+
+- **Orphan test commit** (this update) — `test_projectx_positions.py`:
+  3 unit tests for `query_account_metadata` (mocked HTTP) — found, not
+  found, ConnectionError. Intended to ship with `306d16a0` but was not
+  staged.
+
+### Live-flip readiness — updated
+
+F-1 is now fully broker-aware:
+- Profile says XFA → activates
+- Broker returns TC → auto-disabled with reason log
+- Broker returns orphans at rollover → skip refresh, keep last known good
+- Broker returns equity=None → skip, keep last known good
+
+When the user passes TC and gets a real XFA, detection flips automatically
+the moment the broker returns a non-TC account name. Zero code changes.
+
+### Verification
+
+- 239 F-1 scope tests pass
+- 102/102 drift checks
+- End-to-end live-broker query confirmed `query_equity` + `query_account_metadata`
+
+---
+
 ## Update (2026-04-15 — C12 SR alarm review + bot running + session handover)
 
 ### Headline
