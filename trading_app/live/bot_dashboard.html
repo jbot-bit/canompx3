@@ -1386,6 +1386,13 @@
     border-color: rgba(16, 185, 129, 0.26);
     color: var(--green);
   }
+  .book-chip.in-trade {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.18), rgba(34, 211, 238, 0.12));
+    border-color: rgba(16, 185, 129, 0.4);
+    color: #bbf7d0;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+    animation: conn-pulse 1.8s infinite;
+  }
   .book-chip.blocked {
     background: rgba(239, 68, 68, 0.06);
     border-color: rgba(239, 68, 68, 0.18);
@@ -1433,6 +1440,36 @@
   body.cockpit .sec.collapsed .cockpit-summary { display: inline; }
   body.cockpit .sec:not(.collapsed) .cockpit-summary { display: none; }
 
+  /* stale-heartbeat indicator — amber pulse next to conn dot */
+  .heartbeat-warn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    background: var(--yellow-soft);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: var(--yellow);
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    cursor: help;
+    animation: conn-pulse 2s infinite;
+  }
+  .heartbeat-warn::before {
+    content: '⏱';
+    font-size: 11px;
+  }
+  body.cockpit #signal-strip { display: none; }
+  body.cockpit #signal-strip.force-show { display: block; }
+
+  /* hero IN_TRADE row emphasis */
+  .hero-now.in-trade {
+    background: rgba(16, 185, 129, 0.06);
+    border-color: rgba(16, 185, 129, 0.24);
+  }
+  .hero-now.in-trade .hero-now-label { color: var(--green); border-right-color: rgba(16, 185, 129, 0.22); }
+
   /* responsive — hero collapses to 2x2 at mid breakpoint, 1x4 at narrow */
   @media (max-width: 1100px) {
     .hero-metrics { grid-template-columns: repeat(2, 1fr); gap: 14px; }
@@ -1459,6 +1496,7 @@
     <span id="topbar-acct-detail" class="topbar-acct-detail"></span>
     <span id="header-mode-badge" class="topbar-mode stopped"><span class="dot"></span> <span id="summary-mode">Stopped</span></span>
     <span id="conn-health-dot" class="conn-health-dot unknown" title="Broker connections: loading..."></span>
+    <span id="heartbeat-warn" class="heartbeat-warn" style="display:none" title=""></span>
     <span id="summary-mode-detail" class="compat-hidden"></span>
     <span id="running-profile" class="compat-hidden">Idle</span>
     <span id="running-profile-detail" class="compat-hidden"></span>
@@ -2376,8 +2414,27 @@ function updateStatus(state) {
 
 /* ── Fetchers ───────────────────────── */
 async function fetchStatus() {
-  try { updateStatus(await (await fetch("/api/status")).json()); }
+  try {
+    const data = await (await fetch("/api/status")).json();
+    _lastStatusData = data;
+    updateStatus(data);
+    try { updateHeartbeatWarning(data); } catch (_) {}
+  }
   catch (_) { setText("summary-mode", "Offline"); $("header-mode-badge").className = "topbar-mode stopped"; updateFavicon("OFFLINE"); }
+}
+
+function updateHeartbeatWarning(statusData) {
+  const el = $("heartbeat-warn");
+  if (!el) return;
+  const mode = statusData?.mode || "STOPPED";
+  const age = Number(statusData?.heartbeat_age_s);
+  if (mode === "STOPPED" || mode === "Offline" || !Number.isFinite(age) || age < 60) {
+    el.style.display = "none";
+    return;
+  }
+  el.style.display = "";
+  el.textContent = age < 120 ? `${Math.round(age)}s` : `${Math.round(age/60)}m`;
+  el.title = `Heartbeat ${Math.round(age)}s old — bot may be unresponsive. Check the session terminal.`;
 }
 async function fetchOperatorState() {
   try {
@@ -2466,6 +2523,7 @@ function updatePrimaryCta() {
    ════════════════════════════════════════════════════════════════════ */
 
 let _lastSessionsData = null;
+let _lastStatusData = null;  // cached from fetchStatus so hero can read lane_cards/heartbeat
 
 /* derive hero state from current snapshot */
 function _heroDeriveState() {
@@ -2541,45 +2599,77 @@ function renderHero() {
   setText("hero-next", $("next-session")?.textContent || "—");
   setText("hero-next-sub", $("next-session-detail")?.textContent || "");
 
-  // NOW block — context-aware content:
-  //   running + lane within 30min: "ARMING in Xm — SESSION — FILTER"
-  //   running, no imminent lane: "LIVE · Xbars · heartbeat Xs"
-  //   blocked/warn: operator reason text
-  //   else hidden
+  // NOW block — prefer authoritative lane_card state from /api/status over
+  // clock-derived guesses. Priority:
+  //   IN_TRADE lane → show position (dir/entry/current pnl)
+  //   ARMED  lane   → show session armed for signal
+  //   upcoming within 30m → "ARMING SESSION in Xm — filter"
+  //   running otherwise → "MODE · Xbars · heartbeat"
+  //   blocked/warn  → operator reason
   const nowEl = $("hero-now");
+  // Reset classes before re-applying
+  nowEl.className = "hero-now";
   if (state === "running") {
     nowEl.style.display = "";
     const mode = ($("summary-mode")?.textContent || "").toString();
-    // Find the nearest upcoming deployed lane
-    let imminent = null;
-    if (acct && Array.isArray(acct.lanes) && _lastSessionsData?.sessions) {
-      const m = {};
-      for (const s of _lastSessionsData.sessions) m[s.name] = s.minutes_away;
-      const upcoming = acct.lanes
-        .map(l => ({ lane: l, mins: m[l.session || l.orb_label] ?? 999999 }))
-        .filter(x => x.mins > -5 && x.mins <= 30)
-        .sort((a, b) => a.mins - b.mins);
-      if (upcoming.length > 0) imminent = upcoming[0];
-    }
-    if (imminent) {
-      const l = imminent.lane, mins = imminent.mins;
-      const sessionName = (l.session || l.orb_label || "—").replace(/_/g, " ");
-      const filter = l.filter || "";
-      const when = mins <= 0 ? "NOW" : `in ${mins}m`;
+    const laneCards = (_lastStatusData?.lane_cards) || [];
+
+    // 1. Look for a lane currently IN_TRADE
+    const inTrade = laneCards.find(lc => String(lc.status || "").toUpperCase() === "IN_TRADE");
+    // 2. Look for a lane ARMED (awaiting break)
+    const armed = laneCards.find(lc => String(lc.status || "").toUpperCase() === "ARMED");
+
+    if (inTrade) {
+      nowEl.classList.add("in-trade");
+      const dir = String(inTrade.direction || "").toUpperCase();
+      const dirCls = dir === "LONG" ? "dir-long" : dir === "SHORT" ? "dir-short" : "";
+      const entry = inTrade.entry_price != null ? `@ ${fmtPrice(inTrade.entry_price)}` : "";
+      const pnl = inTrade.current_pnl_r != null
+        ? `<span class="sub">· unreal ${fmtR(inTrade.current_pnl_r)}</span>` : "";
+      const session = (inTrade.session_name || "").replace(/_/g, " ");
       $("hero-now-body").innerHTML =
-        `<span class="mono">ARMING</span> <span>${escapeHtml(sessionName)}</span> <span class="sub">${escapeHtml(when)}</span>` +
+        `<span class="mono">IN TRADE</span> ` +
+        `<span class="${dirCls}">${escapeHtml(inTrade.instrument || "")} ${escapeHtml(dir || "?")}</span> ` +
+        `<span class="mono sub">${escapeHtml(entry)}</span> ${pnl}` +
+        (session ? ` <span class="sub">· ${escapeHtml(session)}</span>` : "");
+    } else if (armed) {
+      const session = (armed.session_name || "").replace(/_/g, " ");
+      const filter = armed.filter_type || "";
+      const entryModel = armed.entry_model || "";
+      $("hero-now-body").innerHTML =
+        `<span class="mono">ARMED</span> <span>${escapeHtml(session)}</span>` +
+        (entryModel ? ` <span class="sub">· ${escapeHtml(entryModel)}</span>` : "") +
         (filter ? ` <span class="sub">· ${escapeHtml(filter)}</span>` : "");
     } else {
-      const bars = $("bars-count")?.textContent || "0";
-      // Heartbeat age from operator-state if available (checks usually contain "Heartbeat Xs old")
-      let hb = "";
-      const hbCheck = (lastOperatorState?.checks || []).find(c => String(c.detail || "").toLowerCase().startsWith("heartbeat"));
-      if (hbCheck?.detail) hb = hbCheck.detail;
-      const dailyR = $("daily-pnl")?.textContent || "";
-      $("hero-now-body").innerHTML =
-        `<span class="mono">${escapeHtml(mode)}</span> <span class="sub">${escapeHtml(bars)} bars</span>` +
-        (dailyR ? ` <span class="sub">· daily ${escapeHtml(dailyR)}</span>` : "") +
-        (hb ? ` <span class="sub">· ${escapeHtml(hb)}</span>` : "");
+      // Fall back to clock-based imminent + generic running state
+      let imminent = null;
+      if (acct && Array.isArray(acct.lanes) && _lastSessionsData?.sessions) {
+        const m = {};
+        for (const s of _lastSessionsData.sessions) m[s.name] = s.minutes_away;
+        const upcoming = acct.lanes
+          .map(l => ({ lane: l, mins: m[l.session || l.orb_label] ?? 999999 }))
+          .filter(x => x.mins > -5 && x.mins <= 30)
+          .sort((a, b) => a.mins - b.mins);
+        if (upcoming.length > 0) imminent = upcoming[0];
+      }
+      if (imminent) {
+        const l = imminent.lane, mins = imminent.mins;
+        const sessionName = (l.session || l.orb_label || "—").replace(/_/g, " ");
+        const filter = l.filter || "";
+        const when = mins <= 0 ? "NOW" : `in ${mins}m`;
+        $("hero-now-body").innerHTML =
+          `<span class="mono">ARMING</span> <span>${escapeHtml(sessionName)}</span> <span class="sub">${escapeHtml(when)}</span>` +
+          (filter ? ` <span class="sub">· ${escapeHtml(filter)}</span>` : "");
+      } else {
+        const bars = Number(_lastStatusData?.bars_received ?? 0);
+        const age = Number(_lastStatusData?.heartbeat_age_s);
+        const ageStr = Number.isFinite(age) ? `${Math.round(age)}s` : "—";
+        const dailyR = $("daily-pnl")?.textContent || "";
+        $("hero-now-body").innerHTML =
+          `<span class="mono">${escapeHtml(mode)}</span> <span class="sub">${bars} bars</span>` +
+          (dailyR ? ` <span class="sub">· daily ${escapeHtml(dailyR)}</span>` : "") +
+          ` <span class="sub">· heartbeat ${escapeHtml(ageStr)}</span>`;
+      }
     }
   } else if (state === "blocked" || state === "warn") {
     nowEl.style.display = "";
@@ -2611,6 +2701,18 @@ function renderHeroBook() {
   }
   const nextName = _lastSessionsData?.next?.name || null;
 
+  // Build {session_name -> live_status} map from lane_cards (authoritative)
+  const liveStatus = {};
+  for (const lc of (_lastStatusData?.lane_cards || [])) {
+    const name = lc.session_name;
+    if (!name) continue;
+    // Prefer IN_TRADE > ARMED > FLAT > WAITING if multiple lanes share session
+    const rank = (s) => ({IN_TRADE: 4, ARMED: 3, FLAT: 2, WAITING: 1}[String(s || "").toUpperCase()] || 0);
+    if (!liveStatus[name] || rank(lc.status) > rank(liveStatus[name])) {
+      liveStatus[name] = String(lc.status || "").toUpperCase();
+    }
+  }
+
   // Filter: hide past sessions (>5min past). Sort ascending by time-to-fire.
   const visible = acct.lanes
     .map(l => ({ lane: l, mins: minutesAway[l.session || l.orb_label] ?? 999999 }))
@@ -2625,10 +2727,18 @@ function renderHeroBook() {
   const chips = visible.map(({ lane: l, mins }) => {
     const name = l.session || l.orb_label || "—";
     const shortName = (l.session_short || name).replace(/_/g, " ");
+    const status = liveStatus[name] || "";
     let cls = "book-chip";
     let timeStr = "";
-    if (mins <= 30) {
-      // Armed window — strong visual cue (≤30min out)
+
+    if (status === "IN_TRADE") {
+      cls += " in-trade armed";
+      timeStr = "live";
+    } else if (status === "ARMED") {
+      cls += " armed";
+      timeStr = "armed";
+    } else if (mins <= 30) {
+      // Clock-derived armed window — strong visual cue (≤30min out)
       cls += " armed";
       timeStr = mins <= 0 ? "now" : `${mins}m`;
     } else if (name === nextName) {
@@ -2637,7 +2747,11 @@ function renderHeroBook() {
     } else {
       timeStr = mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
     }
-    return `<span class="${cls}" title="${escapeHtml(l.label || shortName)}"><span class="dot"></span><span>${escapeHtml(shortName)}</span><span class="time">${escapeHtml(timeStr)}</span></span>`;
+
+    const tip = status
+      ? `${l.label || shortName} — ${status}`
+      : (l.label || shortName);
+    return `<span class="${cls}" title="${escapeHtml(tip)}"><span class="dot"></span><span>${escapeHtml(shortName)}</span><span class="time">${escapeHtml(timeStr)}</span></span>`;
   });
 
   el.innerHTML = chips.join("");
