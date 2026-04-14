@@ -6,17 +6,19 @@
 
 ## 1. Current baseline (1 micro contract per lane, 6 deployed lanes)
 
-Deployed portfolio from `lane_allocation.json` (profile `topstep_50k_mnq_auto`):
+Deployed portfolio from `lane_allocation.json` (profile `topstep_50k_mnq_auto`).
 
-| Window | Total $ | MaxDD $ | Annual $ / contract |
-|---|---:|---:|---:|
-| 2019-05 → 2026-04 (full 6.6yr) | $30,050 | **$2,433** | $4,337/yr |
-| 2021-01 → 2026-04 (post-COVID 5.25yr) | $28,559 | $2,433 | $5,427/yr |
-| 2023-01 → 2026-04 (recent 3.3yr) | $19,974 | $2,433 | $6,115/yr |
-| **2025-04 → 2026-04 (trailing 12mo)** | **$8,641** | $2,433 | **$8,767/yr** |
-| 2026-01 → 2026-04 (OOS, N=70) | $4,759 | $585 | $17,736/yr |
+Sample-size tier convention (per RESEARCH_RULES.md): N<30 = INVALID, N=30-99 = REGIME, N≥100 = CORE. Numbers below are aggregate trade counts across 4 lanes (verified) — proxy lanes excluded; see §6.1.
 
-**Honest number for a fresh account today: ~$8,800/yr per $50K account at 1 contract.** The $17.7K OOS-annualized is tempting but only 3.5 months of data — not reliable.
+| Window | Trades (4-lane) | Tier | Total $ | MaxDD $ | Annual $ / contract |
+|---|---:|:---:|---:|---:|---:|
+| 2019-05 → 2026-04 (full 6.6yr) | 1789 | CORE | $30,050 | **$2,433** | $4,337/yr |
+| 2021-01 → 2026-04 (post-COVID 5.25yr) | 1361 | CORE | $28,559 | $2,433 | $5,427/yr |
+| 2023-01 → 2026-04 (recent 3.3yr) | 845 | CORE | $19,974 | $2,433 | $6,115/yr |
+| **2025-04 → 2026-04 (trailing 12mo)** | 255 | CORE | **$8,641** | $2,433 | **$8,767/yr** |
+| 2026-01 → 2026-04 (OOS) | 70 | REGIME | $4,759 | $585 | $17,736/yr |
+
+**Honest number for a fresh account today: ~$8,800/yr per $50K account at 1 contract** (CORE-tier evidence). The $17.7K OOS-annualized is REGIME-tier (3.5 months, N=70) — directionally encouraging but not a planning number.
 
 The $2,433 max DD occurred in mid-2025 (recent), not the 2020 COVID period. This is not a distant-history artifact. It's the live regime.
 
@@ -65,19 +67,33 @@ No strategy matches the dead-weight rule (`tpy<30 OR (tpy<100 AND ExpR<0.10)`). 
 
 ## 6. The DD ceiling — the actual binding constraint
 
-On 1 micro contract across the deployed 4-lane measurable subset (EUROPE_FLOW/COMEX_SETTLE/NYSE_OPEN/TOKYO_OPEN), portfolio-level historical DD = **$2,433**. TopStep 50K XFA `max_trailing_dd = $2,000`.
+### 6.1 Measurement caveat (read first)
 
-**At 1 contract, we're already above the DD limit.** Historical repeat = account blow-up. Scaling to 2ct+ on TopStep 50K XFA is impossible.
+Two of the six deployed lanes were computed with PROXY filters, not the actual canonical filter logic:
 
-| Scale | Portfolio DD $ | Worst day $ | TopStep 50K verdict |
-|---:|---:|---:|---|
-| 1× | $2,433 | $-567 | **TIGHT — historical breach** |
-| 2× | $4,867 | $-1,135 | BREACH |
-| 3× | $7,300 | $-1,702 | BREACH |
-| 5× | $12,166 | $-2,837 | BREACH |
-| 10× | $24,333 | $-5,673 | BREACH |
+- **SINGAPORE_OPEN ATR_P50_O30**: proxy `daily_features.atr_20_pct >= 50` (an absolute-percent threshold). The real ATR_P50 is a ROLLING percentile. Proxy almost certainly fires on a different day-set than canonical.
+- **US_DATA_1000 VWAP_MID_ALIGNED_O15**: VWAP filter SKIPPED entirely; query takes ALL US_DATA_1000 O15 breaks. This OVERCOUNTS trades on days the real VWAP filter would reject.
 
-F-1 XFA scaling plan (50K): 2 mini-lots Day 1 (=20 micros), 3 at +$1,500 (=30 micros), 5 at +$2,000 (=50 micros). **Position cap is nowhere near binding. DD is the binding constraint.**
+**Honest DD bound:**
+- 4-lane measured (EF/CS/NY/TK with exact filters): **$2,433**
+- 6-lane with proxies (above 4 + SGP_proxy + VWAP-skipped): **$3,790**
+- True 6-lane measurement requires implementing the canonical ATR_P50 percentile predicate and the VWAP_MID_ALIGNED filter in SQL or via `trading_app.config.ALL_FILTERS["..."].matches_df()`. Not done in this audit.
+
+### 6.2 What the numbers say (within the caveat)
+
+Even at the lower bound ($2,433, 4-lane measured), portfolio cumulative DD HISTORICALLY exceeded the TopStep 50K XFA `max_trailing_dd = $2,000`. This is a backtest finding — a fresh April 2026 account did NOT experience the 2025-07 DD; forward-DD is unknown.
+
+**Honest framing:** historical 4-6yr backtest pattern, IF REPEATED in a new account during the corresponding window, would have breached the $2K trailing limit at 1 ct. Scaling 2ct+ would breach in any 6mo+ backtest window with very high probability.
+
+| Scale | Portfolio DD $ (4-lane verified) | Portfolio DD $ (6-lane proxied) | Worst day $ (4-lane) | Forward-DD verdict |
+|---:|---:|---:|---:|---|
+| 1× | $2,433 | $3,790 | $-567 | **TIGHT — historical breach in some windows** |
+| 2× | $4,867 | $7,580 | $-1,135 | BREACH likely |
+| 3× | $7,300 | $11,370 | $-1,702 | BREACH near-certain |
+| 5× | $12,166 | $18,950 | $-2,837 | BREACH near-certain |
+| 10× | $24,333 | $37,900 | $-5,673 | BREACH near-certain |
+
+F-1 XFA scaling plan (50K): 2 mini-lots Day 1 (=20 micros), 3 at +$1,500 (=30 micros), 5 at +$2,000 (=50 micros). **Position cap is nowhere near binding. DD is the binding constraint, even at the lower-bound 4-lane measurement.**
 
 ## 7. The real unlock paths
 

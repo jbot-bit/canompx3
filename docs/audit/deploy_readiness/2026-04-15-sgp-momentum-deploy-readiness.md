@@ -76,14 +76,16 @@ On **ORB_G5 days only** (already captured by deployed L1), partition by SGP stat
 
 ### Head-to-head SGP RR1.5 vs L1 ORB_G5 RR1.5
 
-| Window | Strategy | N | ExpR | Sharpe (daily) | Total R |
-|---|---|---:|---:|---:|---:|
-| Trailing 12mo | L1 ORB_G5 | 252 | 0.189 | 0.163 | **47.5** |
-| Trailing 12mo | SGP RR1.5 | 156 | **0.271** | **0.235** | 42.3 |
-| 2026 OOS | L1 ORB_G5 | 70 | 0.297 | 0.254 | **20.8** |
-| 2026 OOS | SGP RR1.5 | 40 | **0.460** | **0.401** | 18.4 |
+Sample-size tier convention (per RESEARCH_RULES.md): N<30 = INVALID, N=30-99 = REGIME, N≥100 = CORE.
 
-**SGP RR1.5 is GENUINELY BETTER per trade (ExpR +44% trailing, +55% OOS) and better risk-adjusted (Sharpe +44% trailing, +58% OOS). L1 wins on Total R by virtue of taking 1.6× more trades.**
+| Window | Strategy | N | Tier | ExpR | Sharpe (daily) | Total R |
+|---|---|---:|:---:|---:|---:|---:|
+| Trailing 12mo | L1 ORB_G5 | 252 | CORE | 0.189 | 0.163 | **47.5** |
+| Trailing 12mo | SGP RR1.5 | 156 | CORE | **0.271** | **0.235** | 42.3 |
+| 2026 OOS | L1 ORB_G5 | 70 | REGIME | 0.297 | 0.254 | **20.8** |
+| 2026 OOS | SGP RR1.5 | 40 | REGIME | **0.460** | **0.401** | 18.4 |
+
+**SGP RR1.5 is GENUINELY BETTER per trade on the CORE-tier trailing data (ExpR +44%, Sharpe +44%). The OOS comparison is REGIME-tier (N=40-70 over 3.5 months) — directional but not yet a CORE finding. L1 wins Total R because it trades 1.6× more often.**
 
 ### What the allocator does (`trading_app/lane_allocator.py`)
 
