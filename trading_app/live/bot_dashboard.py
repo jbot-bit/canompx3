@@ -762,7 +762,13 @@ async def api_operator_state(profile: str | None = None):
 
 @app.get("/api/trades")
 async def api_trades():
-    """Today's trades from live_journal.db."""
+    """Today's trades from live_journal.db.
+
+    When a live session process holds the journal file exclusively (Windows
+    DuckDB file-lock behaviour), return a graceful locked=True note instead
+    of a raw IOException string. The UI renders a friendly "session writing
+    — refresh after close" message in that case.
+    """
     if not JOURNAL_PATH.exists():
         return {"trades": [], "note": "No journal DB found"}
     try:
@@ -802,6 +808,17 @@ async def api_trades():
                 meta = _strategy_meta(trade.get("strategy_id"), trade.get("trading_day"))
                 trade.update(meta)
             return {"trades": trades}
+    except duckdb.IOException as e:
+        # Live session process holds live_journal.db exclusively (Windows
+        # file-lock behaviour). Return a structured note the UI can render
+        # as a friendly "session active" message rather than a raw error.
+        return {
+            "trades": [],
+            "locked": True,
+            "note": "Live session is writing the journal — blotter refreshes after session close.",
+            "error_type": "file_locked",
+            "error_detail": str(e),
+        }
     except Exception as e:
         return {"trades": [], "error": str(e)}
 

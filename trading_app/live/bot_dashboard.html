@@ -2009,9 +2009,25 @@ function renderLiveLanes(lanes) {
 }
 
 /* ── Render: Trades ─────────────────── */
-function renderTrades(trades) {
+function renderTrades(trades, meta) {
   const tbody = $("trade-log"), summary = $("trade-summary");
   tbody.innerHTML = "";
+  // Locked journal — show friendly message instead of empty table
+  if (meta && meta.locked) {
+    tbody.innerHTML = `<tr><td colspan="8" class="muted">${escapeHtml(meta.note || "Live session is writing the journal — refresh after session close.")}</td></tr>`;
+    summary.textContent = "journal locked";
+    $("trades-badge").textContent = "·";
+    try { updateCockpitSummaries(); } catch (_) {}
+    return;
+  }
+  // Upstream error that isn't a lock
+  if (meta && meta.error && !trades.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="negative">Error: ${escapeHtml(String(meta.error).slice(0, 140))}</td></tr>`;
+    summary.textContent = "error";
+    $("trades-badge").textContent = "!";
+    try { updateCockpitSummaries(); } catch (_) {}
+    return;
+  }
   if (!trades.length) {
     tbody.innerHTML = '<tr><td colspan="8" class="muted">No trades today</td></tr>';
     summary.textContent = "";
@@ -2373,7 +2389,12 @@ async function fetchOperatorState() {
     renderOperatorState({top_state: "ERROR", reason: e.message || "Failed to load operator state", checks: []});
   }
 }
-async function fetchTrades() { try { renderTrades((await (await fetch("/api/trades")).json()).trades || []); } catch (_) {} }
+async function fetchTrades() {
+  try {
+    const data = await (await fetch("/api/trades")).json();
+    renderTrades(data.trades || [], data);
+  } catch (_) {}
+}
 async function fetchAlerts() {
   try {
     const q = new URLSearchParams({limit: "20"});
@@ -2520,20 +2541,46 @@ function renderHero() {
   setText("hero-next", $("next-session")?.textContent || "—");
   setText("hero-next-sub", $("next-session-detail")?.textContent || "");
 
-  // NOW block — show when session running OR an operator check is active.
-  // Phase 1: simple message ("Running · SIGNAL" etc). When position data
-  // surfaces later, expand to show entry/stop/target/unreal R.
+  // NOW block — context-aware content:
+  //   running + lane within 30min: "ARMING in Xm — SESSION — FILTER"
+  //   running, no imminent lane: "LIVE · Xbars · heartbeat Xs"
+  //   blocked/warn: operator reason text
+  //   else hidden
   const nowEl = $("hero-now");
   if (state === "running") {
     nowEl.style.display = "";
     const mode = ($("summary-mode")?.textContent || "").toString();
-    const acctLabel = ($("account-info")?.textContent || "").replace(/^\s*—\s*$/, "");
-    const dailyR = $("daily-pnl")?.textContent || "";
-    const bars = $("bars-count")?.textContent || "0";
-    setText("hero-now-body", "");
-    $("hero-now-body").innerHTML =
-      `<span class="mono">${escapeHtml(mode)}</span> · <span>${escapeHtml(acctLabel || "session")}</span> ` +
-      `<span class="sub">· Daily ${escapeHtml(dailyR)} · ${escapeHtml(bars)} bars</span>`;
+    // Find the nearest upcoming deployed lane
+    let imminent = null;
+    if (acct && Array.isArray(acct.lanes) && _lastSessionsData?.sessions) {
+      const m = {};
+      for (const s of _lastSessionsData.sessions) m[s.name] = s.minutes_away;
+      const upcoming = acct.lanes
+        .map(l => ({ lane: l, mins: m[l.session || l.orb_label] ?? 999999 }))
+        .filter(x => x.mins > -5 && x.mins <= 30)
+        .sort((a, b) => a.mins - b.mins);
+      if (upcoming.length > 0) imminent = upcoming[0];
+    }
+    if (imminent) {
+      const l = imminent.lane, mins = imminent.mins;
+      const sessionName = (l.session || l.orb_label || "—").replace(/_/g, " ");
+      const filter = l.filter || "";
+      const when = mins <= 0 ? "NOW" : `in ${mins}m`;
+      $("hero-now-body").innerHTML =
+        `<span class="mono">ARMING</span> <span>${escapeHtml(sessionName)}</span> <span class="sub">${escapeHtml(when)}</span>` +
+        (filter ? ` <span class="sub">· ${escapeHtml(filter)}</span>` : "");
+    } else {
+      const bars = $("bars-count")?.textContent || "0";
+      // Heartbeat age from operator-state if available (checks usually contain "Heartbeat Xs old")
+      let hb = "";
+      const hbCheck = (lastOperatorState?.checks || []).find(c => String(c.detail || "").toLowerCase().startsWith("heartbeat"));
+      if (hbCheck?.detail) hb = hbCheck.detail;
+      const dailyR = $("daily-pnl")?.textContent || "";
+      $("hero-now-body").innerHTML =
+        `<span class="mono">${escapeHtml(mode)}</span> <span class="sub">${escapeHtml(bars)} bars</span>` +
+        (dailyR ? ` <span class="sub">· daily ${escapeHtml(dailyR)}</span>` : "") +
+        (hb ? ` <span class="sub">· ${escapeHtml(hb)}</span>` : "");
+    }
   } else if (state === "blocked" || state === "warn") {
     nowEl.style.display = "";
     const reason = lastOperatorState?.reason || _heroStateLabel(state);
@@ -2545,8 +2592,9 @@ function renderHero() {
   renderHeroBook();
 }
 
-/* Book row: show ONLY the deployed lanes of the active profile,
-   sorted by time-to-fire. Chip state: next / armed / paused / blocked. */
+/* Book row: show ONLY deployed lanes of the active profile, filtered to
+   UPCOMING + IMMINENT sessions (past lanes hidden). Sorted by time-to-fire.
+   Chip state: armed (≤30min — strong visual) / next (first upcoming) / default. */
 function renderHeroBook() {
   const el = $("hero-book-lanes");
   if (!el) return;
@@ -2556,31 +2604,38 @@ function renderHeroBook() {
     return;
   }
 
-  // Build a {session_name -> minutes_away} map from last sessions fetch
+  // Build {session_name -> minutes_away} map from the last sessions fetch
   const minutesAway = {};
   if (_lastSessionsData && Array.isArray(_lastSessionsData.sessions)) {
     for (const s of _lastSessionsData.sessions) minutesAway[s.name] = s.minutes_away;
   }
   const nextName = _lastSessionsData?.next?.name || null;
 
-  const chips = acct.lanes.map(l => {
+  // Filter: hide past sessions (>5min past). Sort ascending by time-to-fire.
+  const visible = acct.lanes
+    .map(l => ({ lane: l, mins: minutesAway[l.session || l.orb_label] ?? 999999 }))
+    .filter(x => x.mins > -5)
+    .sort((a, b) => a.mins - b.mins);
+
+  if (visible.length === 0) {
+    el.innerHTML = '<span class="book-empty">All of today\u2019s lanes have passed</span>';
+    return;
+  }
+
+  const chips = visible.map(({ lane: l, mins }) => {
     const name = l.session || l.orb_label || "—";
-    const mins = minutesAway[name];
     const shortName = (l.session_short || name).replace(/_/g, " ");
     let cls = "book-chip";
-    let timeStr = l.session_time_brisbane || "";
-    if (mins != null) {
-      if (mins < -5) { cls += ""; timeStr = "past"; }
-      else if (Math.abs(mins) <= 5 || (mins >= -5 && mins <= 60)) {
-        // Within 1h before or 5m after — armed
-        cls += " armed";
-        timeStr = mins <= 0 ? "now" : (mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`);
-      } else if (name === nextName) {
-        cls += " next";
-        timeStr = mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
-      } else {
-        timeStr = mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
-      }
+    let timeStr = "";
+    if (mins <= 30) {
+      // Armed window — strong visual cue (≤30min out)
+      cls += " armed";
+      timeStr = mins <= 0 ? "now" : `${mins}m`;
+    } else if (name === nextName) {
+      cls += " next";
+      timeStr = mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
+    } else {
+      timeStr = mins < 60 ? `${mins}m` : `${Math.floor(mins/60)}h ${mins%60}m`;
     }
     return `<span class="${cls}" title="${escapeHtml(l.label || shortName)}"><span class="dot"></span><span>${escapeHtml(shortName)}</span><span class="time">${escapeHtml(timeStr)}</span></span>`;
   });
@@ -2616,20 +2671,53 @@ function updateCockpitSummaries() {
   // Trade Blotter — today's trade count + net R
   const tradeHost = _ensureSummaryHost("trades-section", ".sec-hd");
   if (tradeHost) {
-    const rows = document.querySelectorAll("#trade-log tr[data-trade]");
-    const n = rows.length;
-    // pnl_r aggregate if present
-    let rSum = 0, rCount = 0;
-    rows.forEach(r => {
-      const rv = parseFloat(r.getAttribute("data-r") || "NaN");
-      if (!Number.isNaN(rv)) { rSum += rv; rCount++; }
-    });
-    if (n === 0) {
-      tradeHost.innerHTML = "no trades today";
+    const badgeText = ($("trades-badge")?.textContent || "").trim();
+    if (badgeText === "·") {
+      tradeHost.innerHTML = `<span class="warn">journal locked — session writing</span>`;
+    } else if (badgeText === "!") {
+      tradeHost.innerHTML = `<span class="neg">load error</span>`;
     } else {
-      const cls = rSum > 0 ? "pos" : rSum < 0 ? "neg" : "";
-      const rTxt = rCount ? ` · <span class="${cls}">${rSum >= 0 ? "+" : ""}${rSum.toFixed(2)}R</span>` : "";
-      tradeHost.innerHTML = `${n} trade${n === 1 ? "" : "s"}${rTxt}`;
+      const rows = document.querySelectorAll("#trade-log tr[data-trade]");
+      const n = rows.length;
+      // pnl_r aggregate if present
+      let rSum = 0, rCount = 0;
+      rows.forEach(r => {
+        const rv = parseFloat(r.getAttribute("data-r") || "NaN");
+        if (!Number.isNaN(rv)) { rSum += rv; rCount++; }
+      });
+      if (n === 0) {
+        tradeHost.innerHTML = "no trades today";
+      } else {
+        const cls = rSum > 0 ? "pos" : rSum < 0 ? "neg" : "";
+        const rTxt = rCount ? ` · <span class="${cls}">${rSum >= 0 ? "+" : ""}${rSum.toFixed(2)}R</span>` : "";
+        tradeHost.innerHTML = `${n} trade${n === 1 ? "" : "s"}${rTxt}`;
+      }
+    }
+  }
+
+  // Operator State — "N/M checks pass" 1-line summary when collapsed
+  const opShell = $("operator-shell");
+  if (opShell && document.body.classList.contains("cockpit")) {
+    let opHost = opShell.querySelector(".cockpit-summary");
+    if (!opHost) {
+      opHost = document.createElement("span");
+      opHost.className = "cockpit-summary";
+      const top = opShell.querySelector(".operator-shell-top");
+      if (top) top.appendChild(opHost);
+    }
+    if (opHost) {
+      const checks = (lastOperatorState?.checks) || [];
+      const pass = checks.filter(c => String(c.status || "").toLowerCase() === "pass").length;
+      const fail = checks.filter(c => ["fail","error","blocked"].includes(String(c.status || "").toLowerCase())).length;
+      const warn = checks.filter(c => ["warn","warning","stale","degraded"].includes(String(c.status || "").toLowerCase())).length;
+      if (checks.length === 0) {
+        opHost.innerHTML = "";
+      } else {
+        const parts = [`<span class="pos">${pass}</span>/${checks.length} pass`];
+        if (warn) parts.push(`<span class="warn">${warn} warn</span>`);
+        if (fail) parts.push(`<span class="neg">${fail} fail</span>`);
+        opHost.innerHTML = parts.join(" · ");
+      }
     }
   }
 }
