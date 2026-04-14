@@ -70,16 +70,62 @@ On **ORB_G5 days only** (already captured by deployed L1), partition by SGP stat
 
 **SGP is a genuine confluence signal — but the value is in filtering existing ORB_G5 trades, not in standalone trading.** Adding it as a parallel lane captures ~0 new edge; stacking it onto ORB_G5 captures +0.075 ExpR/trade.
 
-## 6. Recommendation
+## 6. Recommendation — REVISED 2026-04-15 after honest head-to-head
 
-**KILL the 3 SGP_MOMENTUM lanes as standalone deployment candidates.**
+**Original "KILL" verdict was framed wrong.** Correlation gate analysis was correct, but I missed the trailing-performance head-to-head that the allocator actually uses for deployment decisions. Honest revised picture:
 
-Evidence:
-1. Correlation gate (0.70 threshold) rejects all 3 vs existing L1.
-2. RR1.5 rho = 1.000 — literally the same strategy on overlap days.
-3. RR2.0 has C9 era stability failure (2024 = −0.0617).
-4. Adding them alongside L1 = concentration, not diversification.
-5. 70 SGP-unique days (10 per year) is insufficient to carry a standalone lane.
+### Head-to-head SGP RR1.5 vs L1 ORB_G5 RR1.5
+
+| Window | Strategy | N | ExpR | Sharpe (daily) | Total R |
+|---|---|---:|---:|---:|---:|
+| Trailing 12mo | L1 ORB_G5 | 252 | 0.189 | 0.163 | **47.5** |
+| Trailing 12mo | SGP RR1.5 | 156 | **0.271** | **0.235** | 42.3 |
+| 2026 OOS | L1 ORB_G5 | 70 | 0.297 | 0.254 | **20.8** |
+| 2026 OOS | SGP RR1.5 | 40 | **0.460** | **0.401** | 18.4 |
+
+**SGP RR1.5 is GENUINELY BETTER per trade (ExpR +44% trailing, +55% OOS) and better risk-adjusted (Sharpe +44% trailing, +58% OOS). L1 wins on Total R by virtue of taking 1.6× more trades.**
+
+### What the allocator does (`trading_app/lane_allocator.py`)
+
+Ranks by `annual_r_estimate` (total R × 12/months), greedy selection with rho ≥ 0.70 reject. Per current trailing data:
+- L1 ranks first (47.5 R/yr)
+- L1 selected → fills the EUROPE_FLOW MNQ slot
+- SGP RR1.5 then rejected for rho > 0.70 with selected L1
+
+**The allocator is doing the right thing FOR ITS OBJECTIVE (max Total R within DD budget).** It's not punishing SGP — it's choosing the lane that contributes more total R to the portfolio.
+
+### The real decision (user-level)
+
+This isn't "deploy or kill" — it's a portfolio-construction trade-off:
+
+| Option | Description | Trailing R/yr | OOS R/yr (annualized) | Per-trade quality | Capital efficiency |
+|---|---|---:|---:|---:|---:|
+| **A: Keep L1 (status quo)** | ORB_G5 RR1.5 deployed | 47.5 | 79 | 0.189 ExpR | 252 trades/yr |
+| **B: Swap to SGP RR1.5** | Replace L1 with SGP, retire L1 | 42.3 | 70 | **0.271 ExpR** | 156 trades/yr |
+| **C: Composite (future work)** | New ORB_G5_AND_SGP_TAKE filter, replace L1 | unmeasured | unmeasured | est. 0.106 on 949 trades = ~100R/yr | needs validation |
+| **D: Add SGP as parallel slot** | Both deployed | gate-blocked | gate-blocked | n/a | n/a |
+
+**Trade-offs:**
+
+- **A vs B:** B trades less but wins more per trade. Same-direction signal, just selective. If your bottleneck is **R/year**, A wins by 5–9R/yr. If your bottleneck is **commission drag, slippage, or per-trade Sharpe**, B wins.
+- **A vs C:** C is theoretically the strongest (captures both volume and selectivity) but requires a new validator run + new hypothesis file. Real work, not tonight.
+- **D is dead** by the correlation gate (rho > 0.70 rejects).
+
+### Honest verdict
+
+- **Do NOT auto-deploy** SGP standalone lanes — the gate correctly blocks parallel addition.
+- **CONSIDER manual swap** (Option B): SGP RR1.5 has materially better per-trade quality and 2026 OOS. The Total R cost is small (~5R/yr trailing, ~9R/yr OOS-annualized).
+- **PREFERRED long-term:** Composite filter (Option C) — captures per-trade edge AND keeps trade volume. Requires committing to the validator workflow.
+
+The KILL framing in v1 of this doc was honest about the *gate* but dishonest about the *strategy quality*. SGP_MOMENTUM is a real edge — it's just blocked from deploying because something marginally different already occupies the same slot.
+
+### What I had wrong in v1
+
+1. Treated "correlation gate rejects" as "strategy is bad." Correlation gate rejection is about REDUNDANCY with deployed, not about strategy quality.
+2. Did not run trailing-12mo head-to-head, which is the allocator's decision metric.
+3. Implied "70 SGP-unique days is insufficient" — true if standalone, but irrelevant if comparing to swap.
+4. RR2.0 era-stability failure (2024 = −0.0617) still stands as Criterion 9 fail; that one is a real KILL.
+5. RR1.0 and RR1.5 should be considered "strong but redundant — swap-eligible if user prefers per-trade quality."
 
 **Alternative path — captures the real edge (FUTURE WORK, not tonight):**
 
@@ -112,3 +158,8 @@ Option: add these 70 days' trades to the L1 lane as a fallback trigger ("ORB_G5 
 
 - No deploy. No lane_allocation.json edit. No retirement of the 3 validated_setups rows (they remain research-provisional, status=active).
 - Report committed. MEMORY correction pending user OK.
+
+## 10. Revision log
+
+- **v1 (2026-04-15 ~00:47 Bris):** "KILL all 3" verdict. Methodology checked rho-on-intersection vs canonical gate (correct), but missed trailing-12mo head-to-head and over-reached by framing strategies as "bad" rather than "redundant."
+- **v2 (2026-04-15 ~01:00 Bris):** Revised after user pushback for honesty. Added § 6 trailing comparison (SGP RR1.5 +44% ExpR, +44% Sharpe vs L1 trailing). Repositioned as A/B/C/D portfolio decision. RR2.0 C9 era failure stands; RR1.0/RR1.5 are swap-eligible, not kill-eligible.
