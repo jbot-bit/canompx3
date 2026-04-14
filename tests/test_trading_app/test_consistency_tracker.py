@@ -1,12 +1,9 @@
 """Tests for prop firm consistency rule and payout eligibility trackers."""
 
-from pathlib import Path
-
 import duckdb
 import pytest
 
 from trading_app.consistency_tracker import (
-    check_account_idle,
     check_consistency,
     check_microscalp_compliance,
     check_payout_eligibility,
