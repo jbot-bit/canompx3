@@ -6,6 +6,116 @@
 
 ---
 
+## Update (2026-04-15 late — audits + honest verdicts + test follow-up)
+
+### Headline
+
+A long session covering three parallel tracks: (1) operator hygiene (C11/C12
+refresh, worktree audit), (2) research verdict on SGP_MOMENTUM deployment
+candidates — my first KILL call was framed wrong and self-revised to
+swap-eligible, (3) full Bloomberg-PM capital-allocation audit of the
+38-strategy book. Code review of the F-1 TC/XFA work graded B+ → A− after
+adding 4 wiring sequence tests.
+
+### What shipped (6 commits after the morning F-1 block)
+
+- **`28c4ce59`** `docs(audit): 8-worktree cleanup audit + merge-risk triage`
+  - 4 orphan `.worktrees/tasks/` dirs (no matching branch, all dead ML
+    archaeology per MEMORY V3 DEAD + DELETE).
+  - 3 branches with real work pending user decision:
+    `wt-codex-operator-cockpit` (5 commits), `wt-codex-work-capsule`
+    (2 stranded commits), `wt-codex-startup-brain-refactor` (subset).
+  - 1 empty branch (`wt-codex-green-baseline`) safe to delete.
+  - Report: `docs/audit/worktree_cleanup/2026-04-15-worktree-audit.md`.
+  - No destructive action taken. User merge/abandon call pending.
+
+- **`109187ab`** + **`9f94a076`** `audit(deploy): SGP_MOMENTUM deploy-readiness`
+  - **v1 called KILL. v2 revised to swap-eligible per user pushback.**
+  - Methodology was correct (`lane_correlation.py` rho-on-intersection);
+    narrative framing was wrong (treated gate rejection as "bad strategy"
+    rather than "redundant with deployed L1").
+  - Honest trailing-12mo head-to-head:
+    - L1 ORB_G5 RR1.5: N=252, ExpR=0.189, Sharpe=0.163, **Total 47.5R**
+    - SGP RR1.5:     N=156, **ExpR=0.271, Sharpe=0.235**, Total 42.3R
+    - SGP is +44% ExpR and +44% Sharpe per-trade but L1 wins Total R
+      because it trades 1.6× more often.
+  - 4-option portfolio tradeoff, not binary kill: A keep L1 (status quo,
+    max Total R), B manual swap to SGP RR1.5 (capital efficiency),
+    C composite ORB_G5_AND_SGP_TAKE (theoretical best, needs new validator
+    run), D parallel deploy (DEAD — correlation gate rejects, correctly).
+  - RR2.0 has genuine Criterion 9 era fail (2024 ExpR=−0.062 on N=160),
+    that one IS kill-eligible.
+  - MEMORY.md index + topic file corrected: prior "Jaccard 0.029
+    independent" claim was cherry-picked vs rare-day L3 COMEX_SETTLE.
+  - Report: `docs/audit/deploy_readiness/2026-04-15-sgp-momentum-deploy-readiness.md`
+    (§10 revision log).
+
+- **`294c5360`** `audit(profit): max-profit extraction audit + honest corrections`
+  - Fresh-eyes Bloomberg-PM review of the 38-strategy book. No new
+    research — just capital allocation.
+  - Naive baseline \$40K/yr/ct overstates by **4.09×** due to
+    same-session filter clustering. Honest best-of-cluster \$9K/yr/ct.
+  - Full 6-lane portfolio max DD at 1 ct = **\$3,790** over 6.6yr
+    history, **breaches TopStep 50K XFA \$2K ceiling by 1.9×**.
+    Peak-to-trough mid-2025, recent regime — not distant-history.
+  - **The binding constraint is the firm's DD rule**, not Kelly
+    (we're 80× below), not contract caps (XFA Day 1 allows 20 micros),
+    not correlation (allocator already handles).
+  - Recommendation: migrate off TopStep \$2K DD to Bulenox/Elite
+    (\$2.5K DD) or self-funded AMP via Rithmic (no external ceiling).
+    All infrastructure built. MEMORY's self-funded \$2,929/ct figure
+    is conservative floor; direct OOS compute shows \$17K/yr/ct.
+  - Realistic 12-month path: \$27K/yr (three 50K prop accounts) →
+    \$50-100K/yr with self-funded layer.
+  - Report: `docs/audit/max_profit/2026-04-15-max-profit-extraction-audit.md`.
+
+- **`875d0245`** `test(f1-tc): add 4 HWM-init wiring sequence tests`
+  - Closes MEDIUM finding from bloomey review of `306d16a0`: the 6-line
+    HWM-init wiring (query_account_metadata → _is_trading_combine_account
+    → disable_f1) had unit tests per-piece but no composition test.
+  - 4 new sequence tests under `TestF1OrchestratorRolloverWiring`:
+    TC-disables-F1, XFA-sets-EOD, None-metadata-trusts-profile,
+    F1-inactive-short-circuits.
+  - Via MagicMock composition rather than SessionOrchestrator.__init__
+    (which `build_orchestrator` bypasses and which isn't in the current
+    active stage's scope_lock — `dashboard-polish`). Pattern tests, not
+    location tests. Follow-up: when dashboard stage closes, extract
+    `_apply_broker_reality_check()` and convert to true integration tests.
+  - 134/134 pass in `test_session_orchestrator.py`.
+
+### Operator state (cleared this session)
+
+- **C11 refresh**: `python scripts/tools/refresh_control_state.py` —
+  gate_ok=True, operational pass prob 91.4% at 2026-04-15.
+- **C12 refresh**: 3 CONTINUE + 3 ALARM (L3 COMEX_SETTLE OVNRNG_100,
+  L4 NYSE_OPEN ORB_G5, L6 US_DATA_1000 VWAP_MID_ALIGNED_O15). All 3
+  ALARMs retain WATCH decisions from prior session's autonomous review.
+  blocked=[], apply_pauses=False.
+- **Drift**: 102/0 passed + 6 advisory (twice this session).
+- **Tests**: 193/193 F-1 scope + 134/134 orchestrator file (post-wiring-tests).
+
+### Known gaps & user decisions pending
+
+1. **Worktree cleanup** — merge/abandon decision for 3 branches with
+   real commits. See `docs/audit/worktree_cleanup/`. No action until OK.
+2. **SGP_MOMENTUM portfolio decision** — keep L1 (max Total R) vs swap
+   to SGP RR1.5 (max Sharpe) vs compose (future work). User said "max
+   Total R if I can handle DD" → **Option A: keep L1 (done — no change needed)**.
+3. **Prop firm migration** — Bulenox 50K is the next highest-ROI move
+   per the max-profit audit (+$9K/yr incremental, ~$500 capital). Bot
+   infrastructure already built. User-level business action.
+4. **`_apply_broker_reality_check()` extraction** — deferred because
+   trading_app/live/session_orchestrator.py is not in current active
+   stage's scope_lock. Recovers the full integration test when the
+   dashboard-polish stage closes.
+
+### Live-flip readiness (unchanged from AM session)
+
+Bot operational in signal/demo mode, live-watching 6 MNQ lanes. Next
+session COMEX_SETTLE 03:30 Bris. C11/C12 clean, blocked=[].
+
+---
+
 ## Update (2026-04-15 — F-1 hardening: orphan guard + TC vs XFA auto-detection)
 
 ### Headline
