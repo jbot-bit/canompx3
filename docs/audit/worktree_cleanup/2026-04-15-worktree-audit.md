@@ -121,13 +121,19 @@ Subset of operator-cockpit. Merging operator-cockpit supersedes this.
   - 5318 insertions / 382 deletions across 55 files. Too large for silent merge.
   - **User decision required:** rebase manually, three-way-merge selectively, or abandon. The branch and its filesystem dir at `.worktrees/tasks/operator-cockpit/` are PRESERVED for inspection.
 
-- ❌ **`wt-codex-work-capsule` 2 stranded commits** — cherry-pick of `05c8ab56` (drift check 94 hardening) **conflicts with current `pipeline/check_drift.py`**: main has been updated to use the JSON-based `load_allocation_lanes()` system after `05c8ab56` was written, so the original commit's "audit ALL profiles" intent may already be subsumed by the new architecture (see `memory/portfolio_dedup_nogo.md`: "Check 94 validates JSON lanes"). The other stranded commit `d44dd31e` (work capsule shell) overlaps with the operator-cockpit branch's `scripts/tools/work_capsule.py` add/add conflict — these should be resolved together. Branch + dir PRESERVED.
-
 - ❌ **`wt-codex-startup-brain-refactor`** — its 2 commits (`4f777ee8` + `fb597bcb`) are a SUBSET of operator-cockpit. Decision is downstream of operator-cockpit: if cockpit merges, startup-brain is redundant; if cockpit is abandoned, startup-brain might be a smaller-PR alternative. Branch + dir PRESERVED.
+
+### Completed — second pass (2026-04-15 later, after in-depth verification)
+
+- ✅ **`wt-codex-work-capsule` branch + dir deleted.** Both stranded commits verified subsumed or moot:
+  - **`05c8ab56` (check 94 hardening) — moot.** Problem it targeted (57 stale lanes) was already resolved by allocator wiring (Apr 13, `daily_lanes=()` + JSON consumption per `memory/session_apr13_handoff.md`). Also: the diff is structurally incomplete — it introduces an unused `is_active = profile.active` variable with no `[STALE-INACTIVE]` tagging logic despite the commit message's claim. Cherry-picking would install dead code. The originating sprint (portfolio dedup) is declared NO-GO in `memory/portfolio_dedup_nogo.md`.
+  - **`d44dd31e` (work capsule shell) — subsumed.** `scripts/tools/work_capsule.py` already exists on main via commit `0e446ea3` (codex-wip batch add, independent of d44dd31e). Would have been a pure add/add conflict with no salvageable delta.
+  - Dangling commit SHAs preserved in this doc (lines 67-68) + git reflog (~90 day recovery window) if ever needed.
+  - Verified no worktree registration (`git worktree list` showed only main) — safe to `rm -rf`.
+  - Both `git branch -a --contains 05c8ab56` and `... d44dd31e` returned empty after delete — no other branch holds them.
 
 ### Recommended next user actions
 
 1. Inspect `.worktrees/tasks/operator-cockpit/` filesystem checkout if helpful.
 2. Decide on `wt-codex-operator-cockpit`: rebase + manual conflict resolution, or close as abandoned. The dashboard overlap means rebase will require careful three-way merge against the recently-shipped Tier 1-3 polish.
 3. If cockpit closed, `wt-codex-startup-brain-refactor` becomes deletable.
-4. `wt-codex-work-capsule` `05c8ab56` (drift check 94 hardening): verify the current JSON-based check 94 already audits inactive profiles. If it does, the commit is moot. If not, manually re-implement the inactive-profile audit on top of current code.

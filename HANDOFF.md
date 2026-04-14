@@ -6,6 +6,48 @@
 
 ---
 
+## Update (2026-04-15 later — work-capsule branch + dir closed, 2 stranded commits verified moot/subsumed)
+
+### Headline
+
+Second pass on the worktree cleanup. Deep-verified the two stranded commits
+on `wt-codex-work-capsule` and closed the branch + dir. Zero cherry-picks
+needed — both commits were already obsolete.
+
+### What shipped
+
+- ✅ Deleted local branch `wt-codex-work-capsule` (was 1b47862b).
+- ✅ Deleted `.worktrees/tasks/work-capsule/` dir.
+- ✅ Audit doc `docs/audit/worktree_cleanup/2026-04-15-worktree-audit.md`
+     updated with "Completed — second pass" entry documenting both
+     verifications.
+
+### Verification trail
+
+- **`05c8ab56` (check 94 hardening) — moot.** Problem it targeted (57
+  stale lanes) already fixed by allocator wiring (Apr 13, `daily_lanes=()`
+  + JSON consumption). Separately: diff is incomplete — introduces unused
+  `is_active = profile.active` with no `[STALE-INACTIVE]` tagging despite
+  the commit message claim. Cherry-pick would install dead code. Source
+  sprint (portfolio dedup) already declared NO-GO.
+- **`d44dd31e` (work capsule shell) — subsumed.**
+  `scripts/tools/work_capsule.py` already on main via commit `0e446ea3`
+  (codex-wip batch, independent add).
+- Dangling commit SHAs preserved in audit doc + reflog (~90 day recovery).
+
+### Remaining open worktree decisions (unchanged)
+
+- `wt-codex-operator-cockpit` — still preserved, still needs your call
+  (9 merge conflicts with shipped dashboard polish).
+- `wt-codex-startup-brain-refactor` — still preserved, subset of cockpit.
+
+### Bot state
+
+Unchanged. Ready for COMEX_SETTLE 03:30 Bris. No production code touched.
+TOKYO_OPEN 10:00 also on deck (~1.4h).
+
+---
+
 ## Update (2026-04-15 final — worktree cleanup: 1 branch + 5 dirs deleted, 3 branches + dirs preserved for user judgment)
 
 ### Headline
