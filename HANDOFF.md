@@ -6,6 +6,60 @@
 
 ---
 
+## Update (2026-04-15 very late — 4 stale branches deleted after proper orientation)
+
+### Headline
+
+User flagged that I was ad-hoccing without orienting. Ran `/orient`, checked
+`git branch -a`, discovered 3 local + 1 remote stale branches — all with work
+either obsolete or already cherry-picked to main. Deleted all four locally
+and remotely. Main is now the only branch.
+
+### What was verified
+
+- **`f1-orchestrator-wiring` (3 commits ahead, 5 months stale)**: F-1
+  orchestrator wiring is ALREADY on main via a better canonical
+  implementation (`_resolve_topstep_xfa_account_size()` helper +
+  full test coverage at `test_rollover_refreshes_f1_eod_balance_when_xfa_active`
+  + TC-detection + orphan guards). Branch's inline approach superseded.
+  Profile rebuilds on this branch (Bulenox + TYPE_A) also obsolete — main
+  has newer deployable-shelf-based versions via `e6871bbe` / `c29de903` /
+  `39c39b0a`. One test regression isolated en route (tested-only, fixed
+  on branch, then discarded when branch was deleted — not ported to main
+  because main's test file is correct).
+- **`codex/operator-alerts-session-gates` (9 commits)**: VWAP filter
+  (`c332c1fa`), RiskManager RM-166 warnings fix (`ab50e8ae`), IBS-NR7
+  research (`ca90e6cd`), alert_engine + session gate wiring (`2c99fe99`)
+  ALL cherry-picked to main already. Remaining content is Codex-specific
+  infrastructure (worktree-isolation scripts, Ralph Loop artifacts,
+  `windows_agent_launch.py` refactor) that the user doesn't use anymore.
+- **`codex/operator-alerts-session-gates-clean` (1 commit)**: Dashboard
+  work superseded by main's cockpit refactor (`b7f6fd42` etc). Alert
+  engine file identical to the already-cherry-picked version.
+- **`origin/discovery-wave4-lit-grounded`**: tip `f8b583d4` confirmed
+  as ancestor of current main — fully merged, remote remnant only.
+
+### Current branch state
+
+- `main` only, synced with `origin/main`
+- No open branches
+- No worktrees
+
+### Drift check on main (PYTHONPATH=. python pipeline/check_drift.py)
+
+- 101 PASS, 2 FAIL, 6 advisory
+- Only failure: **Check 91** — 6 orphaned hypothesis SHAs in
+  `experimental_strategies` table referencing hypothesis files that
+  don't exist in `docs/audit/hypotheses/`. Pre-existing research-ledger
+  hygiene issue. Not branch-cleanup related.
+
+### No loose ends left from branch triage
+
+The "messy worktree / stashes / accidental checkouts" during triage
+have all been cleaned up. Main's working tree is clean.
+
+---
+
 ## Update (2026-04-15 late — Topstep scaling reality audit + corrected deployment math)
 
 ### Headline
