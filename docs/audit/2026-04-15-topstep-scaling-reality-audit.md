@@ -211,6 +211,77 @@ From `docs/research-input/topstep/topstep_prohibited_trading_strategies.md`:
 
 ---
 
+## 9b. Full-landscape decision — 2026-04-15 late (supersedes earlier revenue math in this document)
+
+**This section was added after zoom-out from the 3-firm tunnel (TopStep / Bulenox / ETF).** Reference: `memory/prop_firm_complete_comparison_apr1.md` — comprehensive Apr 1 comparison of all 7 automation-friendly futures prop firms. This audit builds the decision layer on top.
+
+### Complete automation-friendly futures firm universe (7 firms)
+
+| Firm | Max accts | Automation status | First-$ tier | Verdict |
+|---|---|---|---|---|
+| **TopStep** | 5 XFA → 1 LFA | Personal API only; VPS BANNED; no 3rd-party EAs | 90/10 flat | **TIER 1 — deploy now** |
+| **Bulenox** | 3 → 11 (unlock) | FULLY PERMITTED, all strategies, Rithmic | 100% first $10K, then 90/10 | **TIER 1 — deploy now** |
+| **MFFU (Rapid)** | 5 sim + 5 DTF = 10 | Allowed "supervised," <200 trades/day, no HFT, "AI-driven bots forbidden" (ambiguous for rules-based) | 90/10 | **TIER 2 — add after Phase 1 proven** |
+| **Elite (ETF)** | 5 Sim-Funded + 5 DTF | Approved-partner-only (TradersPost/Tradovate) | 100% advertised (unclear tiers) | **TIER 3 — defer; MFFU Rapid covers this slot with less integration overhead** |
+| **FundedNext Futures** | 5 funded | EAs + bots permitted, no latency abuse | 80/20 (sources vary) | **TIER 4 — red flags** (fake reviews, retroactive rule changes reported) |
+| **Blueberry Futures** | 3 | EAs allowed, no HFT | 80% → 90% post-qual | **TIER 4 — newer firm, less track record** |
+| **BluSky** | 3 | EAs, bots, copiers allowed | 90/10 | **TIER 4 — disguised weekly caps, $10K sim cap per account** |
+| ~~Tradeify~~ | 5 | Allowed but **exclusivity clause** (bot cannot be used at other firms simultaneously) | 100% first $15K | **DEAD for our multi-firm plan** — exclusivity conflicts with Bulenox/TopStep |
+| ~~Apex~~ | 20 | **BOTS + COPY PROHIBITED** | — | **DEAD** — automation banned |
+| ~~13 other firms~~ | — | All ban automation | — | **DEAD** — see `prop_firm_complete_comparison_apr1.md` blacklist |
+
+### DECISIONS (2026-04-15)
+
+**Decision 1: Phased deployment across 3 prop firms + self-funded lane.**
+
+| Phase | Timeline | Config | Target annual NET |
+|---|---|---|---|
+| **Phase 1** | NOW (0-3mo) | 1-2 × TopStep 50K XFA ($49/mo each, direct API bot) | $5–10K |
+| **Phase 2** | 3-6mo (after Phase 1 proves edge live) | + 3 × Bulenox 50K Master (Rithmic, uncapped after 3rd payout) | $15–25K |
+| **Phase 3** | 6-12mo | + 3–5 × MFFU Rapid 50K (Tradovate API, daily payouts, $100K lifetime sim cap) | $30–50K |
+| **Phase 4** | 12mo+ | + self-funded AMP or EdgeClear @ $50K capital, **trading 1 NQ mini** instead of 10 MNQ (77% commission savings per `memory/mini_vs_micro_commission_fix.md`) | +$35–55K (total $65–105K/yr) |
+
+**Decision 2: ETF is DEFERRED, not primary.** MFFU Rapid covers a similar profile (fast payouts, Tradovate-based, 5 concurrent) without requiring TradersPost integration. ETF's approved-partner-gated automation is engineering overhead that MFFU doesn't impose. Reconsider ETF only if MFFU doesn't work out OR if we need account slots beyond Tier 1-2.
+
+**Decision 3: Tradeify is DEAD for our plan.** Per `memory/prop_firm_automation_verified_apr5.md` + the exclusivity clause identified in `prop_firm_complete_comparison_apr1.md`: Tradeify bots can't run elsewhere simultaneously. Our strategy is multi-firm same-bot, which conflicts. Do NOT revisit unless the exclusivity clause is lifted.
+
+**Decision 4: FundedNext Futures and Blueberry are not in active plan.** FundedNext has credible red flags (fake Trustpilot, retroactive rule changes). Blueberry is too new. Both can be reconsidered at Phase 3-4 if needed but are not essential.
+
+**Decision 5: BluSky is interesting but gated.** Static DD is genuinely safer, but $10K sim cap per account + weekly caps + 3-account ceiling + 4-stage process make it a niche play. Not in Phase 1-3. Revisit at Phase 4 if static-DD becomes essential for a specific use case.
+
+**Decision 6: 50K sizing confirmed.** Already established in this audit. Applies to ALL firms, not just TopStep. The bot at 1ct has identical economics across 50K/100K/150K; larger sizes only matter for LFA tier at TopStep (irrelevant given <1% LFA survival).
+
+**Decision 7: Micros for prop, minis for self-funded.** Per `memory/mini_vs_micro_commission_fix.md`: on 50K prop, forced to micros (DD budget). On self-funded $50K+, switch to 1 NQ mini = 77% commission reduction. Phase 4 specifically targets this.
+
+**Decision 8: 2 concurrent firms via bot by end of Phase 2 (TopStep + Bulenox = 5 accounts), 3 firms by end of Phase 3 (+ 5 MFFU = 10 accounts).** Not the 36-account fantasy. Not even the earlier 28. **10 accounts + self-funded is the target.**
+
+### Realistic revenue ceiling (revised honestly)
+
+| Config | Accounts | Annual NET |
+|---|---|---|
+| Phase 1 (now) | 2 TS | $5–10K |
+| Phase 2 | 2 TS + 3 BX = 5 | $15–25K |
+| Phase 3 | 2 TS + 3 BX + 5 MFFU = 10 | $30–50K |
+| Phase 4 (+ self-funded 1 NQ) | 10 prop + 1 NQ | **$65–105K/yr** |
+| Eventual unlocks (BX to 11, more MFFU) | ~14+ prop + 1 NQ | ~$100–140K/yr |
+
+**Self-funded with 1 NQ mini is the single biggest revenue-per-unit-effort lever** post Phase 4. Don't skip it.
+
+### What we REJECT and why
+
+- **"20+ copy accounts on Topstep alone"** — impossible. Topstep caps at 5 XFA → 1 LFA.
+- **"36-account multi-firm dream"** — Apex is dead (bots banned), so the 20-account slot vanishes. MFFU + ETF are smaller.
+- **"Stack every automation-friendly firm from day one"** — 7 firms × $50K combines × management overhead = chaos. Phased is the only sane path.
+- **"Use all 150K accounts for LFA tier optionality"** — <1% LFA survival rate makes tier size irrelevant. 50K everywhere.
+- **"Switch to minis on prop"** — DD budget blows at 1 NQ = 10 MNQ risk. Micros on prop forced.
+
+### Open engineering questions (gating Phase 3-4)
+
+1. **Tradovate API integration** — prerequisite for MFFU. Memory `deployment_plan_final_apr3.md` says token lifetime fixed (75min) and env vars fixed — may already be mostly built.
+2. **Rithmic API integration** — unlocks both Bulenox AND self-funded AMP/EdgeClear. Single integration for two firms + self lane.
+3. **TopstepX API bot deployment verification** — confirm current practice bot is API-based, not native. Already flagged as gap.
+4. **MFFU "AI-driven bots forbidden" resolution** — verify via support that rules-based algo (our ORB logic) is not classified as AI-driven.
+
 ## 10. Action items feeding into deployment plan
 
 1. **Keep `topstep_50k_mnq_auto` profile at 50K.** 100K/150K offer no cash-flow advantage at 1ct. Consider 100K/150K only for LFA tier optionality later (low-priority).
