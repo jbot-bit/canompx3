@@ -277,10 +277,23 @@ From `docs/research-input/topstep/topstep_prohibited_trading_strategies.md`:
 
 ### Open engineering questions (gating Phase 3-4)
 
-1. **Tradovate API integration** — prerequisite for MFFU. Memory `deployment_plan_final_apr3.md` says token lifetime fixed (75min) and env vars fixed — may already be mostly built.
-2. **Rithmic API integration** — unlocks both Bulenox AND self-funded AMP/EdgeClear. Single integration for two firms + self lane.
-3. **TopstepX API bot deployment verification** — confirm current practice bot is API-based, not native. Already flagged as gap.
-4. **MFFU "AI-driven bots forbidden" resolution** — verify via support that rules-based algo (our ORB logic) is not classified as AI-driven.
+**Architecture verification (2026-04-15 late): ALL THREE broker APIs are already scaffolded in `trading_app/live/`:**
+
+| Integration | Path | Lines | Status |
+|---|---|---|---|
+| **ProjectX (TopstepX)** | `trading_app/live/projectx/` | 1,279 across 6 files | ✅ Canonical TopstepX Gateway API at `https://api.topstepx.com`, JWT auth (24h token + refresh), REST order routing with bracket orders, 429 backoff, environment-configurable via `PROJECTX_USERNAME` / `PROJECTX_API_KEY`. **This closes the "TopstepX API bot deployment verification" gap** — bot uses the canonical TopstepX Gateway API, NOT native-platform screen-scraping. The external concern about "TopstepX native blocks EAs" is not applicable — we use the API, which TopStep explicitly supports for automated trading. |
+| **Tradovate (MFFU)** | `trading_app/live/tradovate/` | 675 across 5 files | ✅ Scaffolded. Auth, order router, contracts, positions all present. Needs MFFU creds + live testing to confirm operational. |
+| **Rithmic (Bulenox + self-funded AMP/EdgeClear)** | `trading_app/live/rithmic/` | 912 across 4 files | ✅ Scaffolded. Single integration covers Bulenox prop AND self-funded brokers. Needs creds + live testing. |
+
+**Broker factory `trading_app/live/broker_factory.py`:** `VALID_BROKERS = ("projectx", "tradovate", "rithmic")`. Default `BROKER=projectx`. Env-switchable. Tradovate/Rithmic reuse ProjectX as the master data feed (smart — only one websocket subscription).
+
+**Revised open questions (now narrower):**
+
+1. **Bulenox / MFFU / self-funded creds + operational testing** — integrations exist, credentials not yet entered for non-TopStep lanes. Smaller lift than a from-scratch build.
+2. **MFFU "AI-driven bots forbidden" resolution** — verify via support contact that rules-based algo (our ORB logic) is not classified as AI-driven.
+3. **Practice → live flip on TopStep** — current bot on practice account 20092334 per memory. Need go/no-go checklist before live deploy (F-1 wiring, forward OOS days, correlation risk).
+4. **Per-firm profile activation in `prop_profiles.py`** — `topstep_50k_mnq_auto` is live; other profiles gated on proving the loop first (comment in code: `active=False, Activate after proving loop on topstep_50k_mnq_auto`).
+5. **F-1 XFA scaling plan wiring** — `RiskLimits.topstep_xfa_account_size` currently None per `memory/` (check 92 in `topstep_scaling_plan.py` dormant). Hard gate before real-XFA live.
 
 ## 10. Action items feeding into deployment plan
 
