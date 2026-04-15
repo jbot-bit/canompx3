@@ -20,10 +20,13 @@ docs/institutional/
 │   ├── harvey_liu_2015_backtesting.md                ← BHY haircut / profitability hurdles
 │   ├── chordia_et_al_2018_two_million_strategies.md  ← t=3.79 threshold
 │   ├── pepelyshev_polunchenko_2015_cusum_sr.md       ← live monitoring
-│   └── lopez_de_prado_2020_ml_for_asset_managers.md  ← theory-first, CPCV
+│   ├── lopez_de_prado_2020_ml_for_asset_managers.md  ← theory-first, CPCV
+│   ├── fitschen_2013_path_of_least_resistance.md     ← intraday trend-follow (commodities + stock indices)
+│   └── carver_2015_volatility_targeting_position_sizing.md ← Kelly-linked sizing + forecast combination for Stage 2+
 ├── finite_data_framework.md                    ← synthesized approach (v1 + v2 amendment note)
 ├── pre_registered_criteria.md                  ← LOCKED thresholds, v2 with 5 Codex amendments
-└── hypothesis_registry_template.md             ← template for pre-registered discovery
+├── hypothesis_registry_template.md             ← template for pre-registered discovery
+└── mechanism_priors.md                         ← LIVE trading-logic / hypothesis-framework doc (added 2026-04-15)
 
 Sibling directories (referenced from here but not part of this tree):
 ├── ../audit/hypotheses/                        ← pre-registered hypothesis files (infra, 0 files)
@@ -69,6 +72,8 @@ Amendment 2.7 on 2026-04-08 per explicit user correction.
 | LdP-Bailey 2018 (False Strategy) | K=1000 trials under zero edge → E[max SR] = 3.26 | Our max SR << 3.26 |
 | LdP 2020 (ML for AM) | "Backtests are not a research tool. Theories are." | **We were backtest-driven, not theory-driven** |
 | Pepelyshev-Polunchenko 2015 | SR procedure > CUSUM for multi-cyclic monitoring | Implemented in `trading_app/live/sr_monitor.py` + `trading_app/sr_monitor.py` (2026-04-10); live-paper baseline still falls back to validated backtest stats when <50 paper trades exist |
+| Fitschen 2013 Ch 3 (added 2026-04-15) | Commodities trend on daily + intraday bars; stock indices trend on intraday (counter-trend on daily); intraday trend-follow beats baseline on hourly data | **Grounds CORE ORB strategy premise** (MNQ/MES/MGC intraday breakout = trend-follow). Does NOT ground level-based filters (prior-day H/L, pivot) — separate literature needed (Dalton/Murphy/Crabel not in `resources/`). |
+| Carver 2015 Ch 9-10 (added 2026-04-15) | Kelly-linked volatility targeting: optimal % vol = expected Sharpe; use Half-Kelly for safety; 0.75× back-tested SR discount; position = (forecast/10) × cash_vol_target / (price × vol × multiplier). | **Unlocks Stage 2+ sophisticated sizing** for our level-based signals. Turns binary filters into continuous forecasts combined via Carver framework. Prop-firm DD maps to ≤25% vol target per Table 20. Does NOT cover target-at-level geometry (Role R5 still needs Dalton/Steidlmayer). |
 
 **Synthesized implication:** The deployed 5 lanes may contain real edge but the discovery methodology was statistically too weak to prove it. The fix is pre-registered hypothesis discovery with a far smaller trial budget (~100-300, not 35,000), applying DSR correctly at the true N, using CPCV for OOS extraction from limited history, and CUSUM/SR monitoring in live deployment.
 
