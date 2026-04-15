@@ -345,8 +345,9 @@ def t6_null_floor(p: Pattern, df: pd.DataFrame, B: int = 1000) -> TestResult:
         return TestResult("T6_null_floor", f"N_on={n_on}", "FAIL", "on-signal N < 30")
 
     # Bootstrap: shuffle feature column, recompute on-signal ExpR
-    pnl = is_df["pnl_r"].values
-    feat = is_df["feature"].values.copy()
+    # Cast to numpy arrays because DuckDB INTEGER (nullable) comes back as IntegerArray
+    pnl = is_df["pnl_r"].astype(float).to_numpy()
+    feat = is_df["feature"].fillna(0).astype(int).to_numpy().copy()
     beats = 0
     for b in range(B):
         rng_b = np.random.default_rng(SEED + b)
