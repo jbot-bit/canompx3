@@ -6,6 +6,54 @@
 
 ---
 
+## Update (2026-04-15 very late — Tier 1 horizon audit DONE, H2 VALIDATED)
+
+### Headline
+
+Executed Tier 1 from prior session handover (`docs/handoffs/2026-04-15-session-handover.md`) — T0-T8 on 5 non-volume horizon candidates from the 14,261-cell comprehensive scan. One VALIDATED, four CONDITIONAL, zero KILLs.
+
+### Result summary
+
+- **H2 VALIDATED (8P/0F):** MNQ COMEX_SETTLE O5 RR1.0 long `garch_forecast_vol_pct >= 70`. WFE=0.59 healthy, 6/6 years positive, bootstrap p=0.001, cross-instrument MES consistent.
+- **H1 CONDITIONAL (7P/1F):** MES LONDON_METALS O30 RR1.5 long `overnight_range_pct >= 80`. Only fail = T3 WFE=1.33 LEAKAGE_SUSPECT (RULE 12) on N_OOS_on=11. Needs thicker OOS.
+- **H3/H4/H5 CONDITIONAL (5-6P/1F):** `is_monday` / `dow_thu` / `ovn_took_pdh_SKIP`. All fail T3 insufficient OOS N only. Calendar/binary — await more forward data.
+
+No DUPLICATE_FILTER, no ARITHMETIC_ONLY, no PARAMETER_SENSITIVE anywhere.
+
+### Files
+
+- `research/t0_t8_audit_horizon_non_volume.py` (NEW)
+- `docs/audit/results/2026-04-15-t0-t8-audit-horizon-non-volume.md` (NEW)
+- `memory/MEMORY.md` index entry at top
+- Commit `0e3170f8`
+
+### Caveats applied
+
+- Look-ahead gates per `backtesting-methodology.md` RULE 1.2 — ovn_* features only on ORB >= 17:00 Brisbane (LONDON_METALS 17:00, COMEX_SETTLE 04:30 next day both clear).
+- Custom T0 excludes cell's own proxy to avoid self-correlation=1.0 trivially failing.
+- Custom T4 feature-class-specific grid (binary features return INFO not FAIL).
+- DSR at honest N_eff NOT re-run — defer per rel_vol v2 lesson (dsr.py default var_sr wrong for comprehensive-scan cells).
+
+### What NOT to do next session
+
+- Do not deploy H2 to capital yet — same DSR/shadow doctrine as rel_vol.
+- Do not run DSR with dsr.py default `var_sr` — calibrate empirically from scan cell distribution first.
+- Do not upgrade H1 WFE=1.33 to "LEAKAGE confirmed" without thicker OOS; thin N_OOS_on=11 makes the flag provisional.
+
+### Next concrete actions
+
+1. **Pre-reg signal-only shadow** for H2 (garch vol forecast on MNQ COMEX_SETTLE). Compute DSR at K={5,12,36,72,300,14261}. Pre-reg file: `docs/audit/hypotheses/2026-04-15-h2-garch-vol-shadow.yaml`.
+2. **Composite candidate:** rel_vol_HIGH_Q3 × garch_vol_pct>=70 on MNQ COMEX_SETTLE O5 RR1.0 long — two orthogonal vol signals (realized-volume vs forecast-vol). Orthogonality check + joint T0-T8.
+3. **Tier 2 next:** composite rel_vol × ovn_range per prior handover.
+4. **Tier 3:** cross-RR family audit of 6 deployed lanes (Stage R-1 from `docs/institutional/regime-and-rr-handling-framework.md`).
+
+### Drift-check state
+
+- 101 passed, 3 failed, 6 advisory.
+- The 3 failures are stale `CROSS_SGP_MOMENTUM` validated_setups trade-window dates (stored 2026-04-10, canonical recompute 2026-04-14). Pre-existing hygiene issue; NOT caused by this work. Research-only, no production code edits, no validated_setups writes.
+
+---
+
 ## Update (2026-04-15 very late — 4 stale branches deleted after proper orientation)
 
 ### Headline
