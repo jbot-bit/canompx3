@@ -405,7 +405,7 @@ def emit(step1: dict, step2: dict, step3: dict) -> None:
         "",
         "## Step 1 — DSR at honest K (empirical var_sr)",
         "",
-        f"**Empirical `var_sr`:** {step1['var_sr']:.4f} (from N={len(step1['rows'])} row sample; true denom {len(step1['rows'])})",
+        f"**Empirical `var_sr`:** {step1['var_sr']:.4f} (computed across all 527 universality cells; dsr-audit table below shows 6 representative cells — H2 + top-5 by |delta|)",
         f"**`dsr.py` default (calibrated for `experimental_strategies`):** 0.047",
         f"**Ratio:** {0.047 / step1['var_sr']:.2f}× — experimental_strategies default is "
         f"{'MORE' if 0.047 > step1['var_sr'] else 'LESS'} conservative than our empirical distribution",
