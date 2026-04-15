@@ -1686,6 +1686,12 @@ def _compute_recommendation(report: PulseReport) -> str:
         action = top.action or "fix the issue"
         return f"Fix: {top.summary} → {action}"
 
+    runtime_snapshot_items = [item for item in report.paused if item.source == "runtime_snapshot"]
+    if runtime_snapshot_items:
+        top = runtime_snapshot_items[0]
+        action = top.action or "refresh the fast runtime snapshot"
+        return f"Refresh: {top.summary} → {action}"
+
     if report.upcoming_sessions:
         s = report.upcoming_sessions[0]
         strats = sum(s.get("instruments", {}).values())

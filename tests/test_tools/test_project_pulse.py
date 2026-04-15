@@ -1076,6 +1076,29 @@ class TestRecommendation:
         assert rec.startswith("Fix:")
         assert "/verify" in rec
 
+    def test_runtime_snapshot_refresh_beats_upcoming_session(self) -> None:
+        from scripts.tools.project_pulse import _compute_recommendation
+
+        report = PulseReport(
+            generated_at="now",
+            cache_hit=False,
+            git_head="abc",
+            git_branch="main",
+            items=[
+                PulseItem(
+                    "paused",
+                    "medium",
+                    "runtime_snapshot",
+                    "Runtime snapshot missing or stale",
+                    action="python scripts/tools/refresh_runtime_snapshot.py",
+                )
+            ],
+            upcoming_sessions=[{"label": "TOKYO_OPEN", "hours_away": 1.5, "instruments": {"MGC": 3}}],
+        )
+        rec = _compute_recommendation(report)
+        assert rec.startswith("Refresh:")
+        assert "refresh_runtime_snapshot.py" in rec
+
     def test_upcoming_session_before_decay(self) -> None:
         from scripts.tools.project_pulse import _compute_recommendation
 
