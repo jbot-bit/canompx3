@@ -6,6 +6,58 @@
 
 ---
 
+## Update (2026-04-15 late — Topstep scaling reality audit + corrected deployment math)
+
+### Headline
+
+User challenged a flawed assumption in my prior scaling answer ("5 XFA + 1 LFA
+concurrent"). Canonical rule is XFA **OR** LFA, never both — LFA promotion is
+mandatory and destroys all XFAs. Rebuilt the whole scaling math around that
+constraint plus fresh multi-firm research. Saved full findings to canonical
+audit + memory so future sessions don't re-introduce the error.
+
+### Key findings (written in full at `docs/audit/2026-04-15-topstep-scaling-reality-audit.md`)
+
+1. **XFA↔LFA is exclusive.** `topstep_live_funded_parameters.md:280` — when LFA issued, all XFAs close. Can't decline promotion. Topstep-alone ceiling is ~$25K/yr across 5 XFA pre-LFA, then LFA takes over with a ~<1% long-term survival rate (external: propfirmapp).
+2. **Multi-firm is the real scaling answer.** Topstep 5 + Bulenox 11 + Apex 20 = 36 concurrent funded accounts legally. Aggregate ceiling ~$180K/yr gross at 1ct/account.
+3. **50K sizing confirmed** for Topstep. At 1ct (only safe contract count — 2ct blows up 88-99% of windows from Apr 7 2025 -$2,320 outlier), economics identical across 50K/100K/150K. LFA tier advantage swamped by <1% LFA survival.
+4. **Bot deployment nuance:** TopstepX native platform may block EAs; TopstepX API explicitly supports bots. Verify current practice-account bot is API-based before live.
+5. **Prohibited-conduct landmines:** "account stacking" (MLL-hop between accounts) explicitly banned — do not adopt "extract and recycle" language. Cross-account hedging also banned. Our same-direction copy pattern is fine.
+
+### Simulation results (1,792 days of 6-live-lane bot PnL)
+
+- Combine pass rate at 50K @ 1ct: 45%, median 47 days, 2.5% MLL-blow rate — safest cell
+- Tail day risk: ONE day in 7yr (Apr 9 2025, $1,949) breached 50K consistency cap at 1ct. Non-issue.
+- Worst loss day: -$2,320 (Apr 7 2025 tariff crash). Single outlier dominates MLL-blow risk.
+- XFA annual survive: 51% at 1ct, 88% with Back2Funded (2 reactivations allowed). Annual net ~$5.6K/XFA → ~$25K for 5 XFA with B2F.
+
+### Saved to project knowledge
+
+- `docs/audit/2026-04-15-topstep-scaling-reality-audit.md` — full canonical audit
+- `memory/topstep_scaling_corrected_apr15.md` — concise memory topic
+- `memory/MEMORY.md` — critical-correction index entry at top
+- This HANDOFF.md entry
+
+### Open research gaps (deferred, not shipped)
+
+1. Scrape Bulenox canonical rules → `docs/research-input/bulenox/`
+2. Scrape Apex canonical rules → `docs/research-input/apex/`
+3. Verify current practice bot uses TopstepX API (not native execution)
+4. Design correlation-risk mitigation for multi-firm deploy (rotation, lane split, or size tapering)
+
+### What NOT to do next session
+
+- Do not re-propose "5 XFA + 1 LFA concurrent" math. Wrong.
+- Do not upgrade `topstep_50k_mnq_auto` to 100K/150K for cash-flow reasons. Economics identical at 1ct.
+- Do not run the bot at >1 MNQ per lane on any XFA/combine without redoing the tail-day analysis. Apr 7 2025 outlier caps it.
+- Do not implement multi-firm deployment before scraping Bulenox/Apex canonical rules.
+
+### Simulator code
+
+Stage 1/2/3 simulators were inline (not committed as scripts). If a second consumer needs the output, promote to `scripts/research/topstep_scaling_sim.py`. Data source: `orb_outcomes` + `validated_setups` + `lane_allocation.json` 2026-04-13 + `_load_strategy_outcomes` canonical loader.
+
+---
+
 ## Update (2026-04-15 evening — dashboard cockpit shipped + 3 smoke rounds + session stopped)
 
 ### Headline

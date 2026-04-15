@@ -8,6 +8,16 @@ Three layers:
 
 Pattern follows COST_SPECS in pipeline/cost_model.py — canonical source of truth,
 imported everywhere, easy to edit.
+
+Scaling constraint (see docs/audit/2026-04-15-topstep-scaling-reality-audit.md):
+TopStep XFA and LFA are MUTUALLY EXCLUSIVE — LFA promotion destroys all XFAs
+(topstep_live_funded_parameters.md:280). Any revenue projection or scaling
+design that treats them as additive (e.g. "5 XFA + 1 LFA concurrent") is wrong.
+50K account sizing confirmed over 100K/150K for current bot at 1 MNQ/lane:
+economics identical across sizes at that contract count, LFA tier advantage
+swamped by <1% LFA long-term survival (external data). Real multi-account
+scale lives across firms (TS 5 + Bulenox 11 + Apex 20 = 36 accounts), not
+Topstep-alone promotion climb.
 """
 
 from __future__ import annotations
