@@ -38,6 +38,23 @@ This reframes LFA from "the real upside" to "a high-failure stage most traders d
 
 ---
 
+## 2b. Revised multi-firm revenue math (post canonical scrape)
+
+**Prior estimate:** ~$180K/yr gross across 36 accounts at $5K/account average.
+**Corrected after Bulenox + Apex canonical research:**
+
+| Firm | Concurrent | Net/account/yr (est.) | Annual net | Risk/caveat |
+|---|---|---|---|---|
+| TopStep | 5 XFA | $5,612 × 0.88 survive (B2F) = ~$4.9K | **~$25K** | Caps at LFA promotion (forced, destroys XFAs) |
+| Bulenox | 3 Master | ~$7–8K (better split: 100% first $10K) | **~$21–24K** | 3-concurrent cap, not 11; 40% consistency on Master |
+| Apex | 20 PA | IF bot allowed unsupervised: ~$6K; if monitored-only: ~$3K | **$60K–$120K** | **Bot policy ambiguous on funded PA** — material risk |
+
+**Honest revised ceiling range: $106K–$169K/yr gross**, depending on Apex automation resolution.
+
+**Apex bot-policy uncertainty is the single biggest variable in this model.** If fully autonomous bot deploy is actually prohibited on Apex PA (not just "must monitor"), the 20-account ceiling collapses to evaluation-only income (non-recurring). If monitored-bot deploy is acceptable (human logs in during session), the full 20 is realistic.
+
+**Resolution requirement: direct verification with Apex support or login to the ZenDesk-blocked canonical docs before committing to a 20-PA Apex deployment plan.**
+
 ## 3. Multi-firm — the real scaling answer
 
 **TopStep alone is capped.** Beyond 5 XFA pre-LFA or 1 LFA post-LFA, there is no further Topstep-only scale.
@@ -49,15 +66,22 @@ Sources:
 - [Cointracts Trade Multiple Prop Firms](https://www.cointracts.com/learning-hub/can-you-trade-multiple-prop-firms-at-once-master-the-copy-trading-rules)
 - [OnlyPropFirms Automated Futures Trading](https://onlypropfirms.com/articles/automated-futures-trading)
 
-### Per-firm account ceilings (per April 2026 external research)
+### Per-firm account ceilings (updated 2026-04-15 after canonical scrape)
 
-| Firm | Max concurrent funded accounts | Bot policy | Notes |
-|---|---|---|---|
-| **TopStep** | 5 XFA pre-LFA (then 1 LFA, XFAs destroyed) | Automated allowed per canonical docs; TopstepX API supported; TopstepX native platform may block EAs (ambiguous) | Built-in Lead→Follower Trade Copier across up to 5 XFAs |
-| **Bulenox** | **11 active Master Accounts** | Bot-friendly (per QuantVPS comparison) | 100% profit split on first $10K, 90% thereafter. Rithmic platform. Rules NOT yet scraped canonically. |
-| **Apex** | **20 accounts simultaneously** | Explicitly supports NinjaTrader/Tradovate copiers, bot automation | Account sizes $25K–$300K. Rules NOT yet scraped canonically. |
+| Firm | Concurrent funded cap | Bot policy | First-$ split tier | Profit split post-tier |
+|---|---|---|---|---|
+| **TopStep** | 5 XFA pre-LFA → 1 LFA (XFAs destroyed at promotion) | Allowed per canonical; TopstepX API explicit support; native platform may block EAs | First $10K: 90% (no separate tier) | 90/10 (post-2026-01-12 traders) |
+| **Bulenox** | **3 Master concurrent** (up to 11 lifetime/eventual via unlock path — external sources vary) | **FULLY PERMITTED — most bot-friendly.** No HFT. | **First $10K: 100%** | 90/10 |
+| **Apex** | **20 Performance Accounts simultaneously** | Partial: bots OK in evaluation, "fully automated" prohibited on funded PA (must monitor); DCA bots + copy-own-accounts explicitly permitted | **First $25K: 100%** | 90/10 |
 
-**Aggregate ceiling across 3 firms: 36 concurrent funded accounts** (32 after Topstep LFA consolidation).
+**Practical aggregate ceiling across 3 firms (post canonical scrape):**
+- **Automated-friendly concurrent: 5 TS + 3 Bulenox + 20 Apex(eval) = 28 accounts during eval phase**
+- **Post-funded concurrent (realistic): 5 TS + 3 Bulenox + 20 Apex(with monitoring) = 28 accounts requiring some human presence**
+- **Eventual ceiling after Bulenox unlocks to full cap: 5 TS + 11 Bulenox + 20 Apex = 36 accounts** (matches original external-source estimate, but gated by time and performance)
+
+**Full canonical detail:**
+- `docs/research-input/bulenox/README.md` — Bulenox rules, pricing, automation policy
+- `docs/research-input/apex/README.md` — Apex rules, payout ladder, automation nuance
 
 ---
 
@@ -166,11 +190,13 @@ From `docs/research-input/topstep/topstep_prohibited_trading_strategies.md`:
 
 ## 9. Open research gaps
 
-1. **Bulenox canonical rule scrape** — currently relying on external summaries. Need: trailing DD exact rules, DLL, payout cadence, prohibited conduct list, bot policy. Target: `docs/research-input/bulenox/`.
-2. **Apex canonical rule scrape** — same. Target: `docs/research-input/apex/`.
-3. **Per-firm combine pricing** by size — scraped Topstep help docs don't give per-size pricing; purchase flow only. Low priority.
+1. ✅ **Bulenox canonical rule scrape — COMPLETED 2026-04-15.** See `docs/research-input/bulenox/README.md`. Key discoveries: **3 Master Accounts concurrent (not 11)**, 100% profit on first $10K, fully bot-permissive, $195/mo subscription at 50K, weekly Wednesday payouts, 40% consistency rule on Master phase, 10 trading days min before first payout.
+2. ✅ **Apex canonical rule scrape — PARTIAL 2026-04-15.** See `docs/research-input/apex/README.md`. Canonical pages blocked by HTTP 403 (ZenDesk); relied on cross-referenced third-party sources. Key: **20 PA concurrent**, 6% profit target flat, 6-step payout ladder with cap removed after step 6, 100% first $25K, static DD post-funded (starting+$100). **BOT POLICY AMBIGUOUS:** "fully automated prohibited on PA" vs "copy-own-accounts permitted" — requires direct verification before funded deploy.
+3. **Apex prohibited-activities canonical verification** — 403-blocked from our fetcher. Must verify via login or direct support contact before live PA bot deployment. Highest-risk gap.
 4. **Topstep LFA typical lifespan** before Shoulder Tap — external "<1% survive long-term" is coarse. Forum-scraping for specific trader trajectories could sharpen.
 5. **TopstepX API bot deployment status verification** — confirm current practice-account bot is API-based, not native execution.
+6. **Exact per-size payout caps** at Bulenox (first-3-payout range values) and Apex (steps 2–5 intermediate values). Third-party sources give ranges, not exact numbers per step.
+7. **Bulenox PDF Terms of Use** — not yet fetched (`https://bulenox.com/wa-data/public/site/data/bulenox.com/Terms_of_Use.pdf`). Likely contains cross-account hedging, account-stacking, and other prohibited-conduct detail.
 
 ---
 
