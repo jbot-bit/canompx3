@@ -6,6 +6,54 @@
 
 ---
 
+## Update (2026-04-15 late-late — Path C complete, H2 book closed, Path A deferred)
+
+### Headline
+
+User picked Path C (close H2/rel_vol book) over Path A (HTF level features — prev-week/month). Three analyses shipped in one pass: DSR at honest K with empirical var_sr, T5 family formalization, composite rel_vol × garch. Book closed with honest verdict; Path A preserved as pre-reg stub for next pickup.
+
+### Three decisions
+
+1. **T5 family PASS.** `garch_vol_pct ≥ 70` is universal — 361/527 combos positive-delta (68.5%), every instrument floor ≥62%. Not a single-cell find.
+2. **DSR ambiguous at honest K.** Empirical var_sr=0.0174 (2.70× SMALLER than dsr.py default — this was the v1 rel_vol mistake going the other way, a reminder the default is calibrated wrong for comprehensive-scan cells). H2 DSR: K=5→0.935 marginal; K=12→0.763; K=36→0.460; K=527→0.049; K=14261→0.001. Same ambiguous band as rel_vol.
+3. **Composite rel_vol × garch has NO synergy.** corr=0.069 (fully orthogonal) but composite ExpR +0.220 < garch-alone +0.263. Synergy −0.043. **rel_vol is SUBSUMED on the H2 cell.** Ship garch alone or not at all.
+
+### Dollar landscape (H2 cell, 5.5 yrs IS)
+
+| Cell (IS) | N | ExpR | $/trade | Total $ |
+|---|---|---|---|---|
+| neither | 374 | −0.022 | $0.28 | $106 |
+| rel-only | 170 | +0.096 | $2.69 | $458 |
+| garch-only | 123 | +0.263 | $17.48 | $2,150 |
+| both | 75 | +0.220 | $31.42 | $2,356 |
+
+BOTH has higher $/trade because joint-fire days correlate with bigger ORB size (bigger risk_dollars) — per-R edge still favors garch-alone.
+
+### Path A DEFERRED (not dead)
+
+Pre-reg stub at `docs/audit/hypotheses/2026-04-15-htf-level-break-pre-reg-stub.md`. Requires pipeline feature-engineering first: `prev_week_high/low/close`, `prev_month_high/low/close`, `weekly_pivot`, `monthly_pivot`. Estimated 2-4h pipeline work + pre-reg design + scan + T0-T8. Literature grounding needs Murphy / Dalton acquisition before full pre-reg.
+
+### Files
+
+- `research/close_h2_book_path_c.py` (NEW)
+- `docs/audit/results/2026-04-15-path-c-h2-closure.md` (NEW)
+- `docs/audit/hypotheses/2026-04-15-htf-level-break-pre-reg-stub.md` (NEW — Path A deferred stub)
+- `memory/MEMORY.md` — new top entry "H2 BOOK CLOSED"
+
+### What NOT to do next session
+
+- Do not deploy H2 (or rel_vol × garch composite) to capital — DSR ambiguous at honest K, no shadow data yet.
+- Do not propose a new `rel_vol × garch AND` filter — already proven subsumed.
+- Do not run Path A without first building `prev_week_*` / `prev_month_*` features and acquiring Murphy/Dalton literature.
+
+### Next concrete actions
+
+1. **Pre-reg signal-only shadow** for garch_vol_pct≥70 on 4 cells (H2 + 3 top universality). File: `docs/audit/hypotheses/<date>-garch-vol-shadow.md`.
+2. **Path A kickoff** — design session to convert stub into full pre-reg. Feature-engineering scoped in pipeline/ first.
+3. **Non-ORB terminal (Phase E)** — run parallel with the prompt given earlier this session; sync when it reports.
+
+---
+
 ## Update (2026-04-15 very late — Tier 1 horizon audit DONE, H2 VALIDATED)
 
 ### Headline
