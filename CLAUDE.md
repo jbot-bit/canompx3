@@ -95,6 +95,18 @@ Discovery uses ONLY canonical layers (`bars_1m`, `daily_features`, `orb_outcomes
 ### Volatile Data Rule
 **NEVER cite changing stats from memory/docs.** Query live: strategy counts → `gold-db` MCP, sessions → `pipeline.dst.SESSION_CATALOG`, costs → `pipeline.cost_model.COST_SPECS`, instruments → `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS`, lanes → `trading_app.prop_profiles.ACCOUNT_PROFILES`, **ORB window timing → `pipeline.dst.orb_utc_window(trading_day, orb_label, orb_minutes)`** (never derive from `break_delay_min`; never fall back to `break_ts`; see `docs/postmortems/2026-04-07-e2-canonical-window-fix.md`).
 
+### Backtesting Methodology (MANDATORY)
+Every backtest / discovery scan MUST follow `.claude/rules/backtesting-methodology.md`:
+- **Feature look-ahead gates** (RULE 1): `session_*` and `overnight_*` features are CONDITIONALLY VALID based on ORB session start time vs feature window close. Implementation: `research/comprehensive_deployed_lane_scan.py::_valid_session_features()` and `::_overnight_lookhead_clean()`.
+- **Comprehensive scope** (RULE 5): 12 sessions × 3 instruments × 3 apertures × 3 RRs = 324 combos. No hand-picking without pre-reg justification.
+- **Multi-framing BH-FDR** (RULE 4): K_global, K_family, K_lane, K_session, K_instrument, K_feature — all reported per cell.
+- **Two-pass testing** (RULE 2): overlay candidates tested both unfiltered AND filtered-within-deployed-filter subset.
+- **Tautology check** (RULE 7): |corr(new_feature, deployed_filter)| > 0.70 → flag.
+- **Extreme fire rate** (RULE 8.1): <5% or >95% → flag.
+- **ARITHMETIC_ONLY** (RULE 8.2): WR flat + ExpR moves → cost-screen not edge.
+- **Red flags** (RULE 12): |t| > 7, Δ_IS > 0.6, uniform same-feature survivors → STOP and investigate.
+Historical failure log: section at bottom of that rule. Append new failures.
+
 ### Research Provenance Rule
 Config values from research need `@research-source`, `@entry-models`, `@revalidated-for`. Drift check #45 enforces.
 

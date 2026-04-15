@@ -54,37 +54,51 @@ SEED = 20260415
 # deployed_filter_key: 'ORB_G5', 'ATR_P50', 'OVNRNG_100', 'VWAP_MID_ALIGNED', None
 # ============================================================================
 
-DEPLOYED_LANES = [
-    ("EUROPE_FLOW", 5, 1.5, "MNQ", "deployed", "ORB_G5"),
-    ("SINGAPORE_OPEN", 30, 1.5, "MNQ", "deployed", "ATR_P50"),
-    ("COMEX_SETTLE", 5, 1.5, "MNQ", "deployed", "OVNRNG_100"),
-    ("NYSE_OPEN", 5, 1.0, "MNQ", "deployed", "ORB_G5"),
-    ("TOKYO_OPEN", 5, 1.5, "MNQ", "deployed", "ORB_G5"),
-    ("US_DATA_1000", 5, 1.5, "MNQ", "deployed", "VWAP_MID_ALIGNED"),
+# All active sessions per pipeline.dst.SESSION_CATALOG (mega script source of truth)
+ALL_SESSIONS = [
+    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
+    "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
+    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE", "BRISBANE_1025",
 ]
+ALL_INSTRUMENTS = ["MNQ", "MES", "MGC"]
+ALL_APERTURES = [5, 15, 30]
+ALL_RRS = [1.0, 1.5, 2.0]
 
-# Beta — MES/MGC twins at same (session, apt, RR, deployed_filter)
-BETA_TWINS = []
-for session, apt, rr, _instr, _tag, filt in DEPLOYED_LANES:
-    for twin_instr in ("MES", "MGC"):
-        BETA_TWINS.append((session, apt, rr, twin_instr, "twin", filt))
+# Deployed lanes — used to tag 'deployed' scope + attach deployed filter
+DEPLOYED_LANE_SPECS = {
+    ("EUROPE_FLOW", 5, 1.5, "MNQ"): "ORB_G5",
+    ("SINGAPORE_OPEN", 30, 1.5, "MNQ"): "ATR_P50",
+    ("COMEX_SETTLE", 5, 1.5, "MNQ"): "OVNRNG_100",
+    ("NYSE_OPEN", 5, 1.0, "MNQ"): "ORB_G5",
+    ("TOKYO_OPEN", 5, 1.5, "MNQ"): "ORB_G5",
+    ("US_DATA_1000", 5, 1.5, "MNQ"): "VWAP_MID_ALIGNED",
+}
 
-# Delta — top non-deployed sessions × 3 instruments (NO filter pre-applied)
-DELTA_LANES = [
-    ("CME_PRECLOSE", 5, 1.5, "MNQ", "non_deployed", None),
-    ("CME_PRECLOSE", 5, 1.5, "MES", "non_deployed", None),
-    ("CME_PRECLOSE", 5, 1.5, "MGC", "non_deployed", None),
-    ("NYSE_CLOSE", 5, 1.5, "MNQ", "non_deployed", None),
-    ("NYSE_CLOSE", 5, 1.5, "MES", "non_deployed", None),
-    ("NYSE_CLOSE", 5, 1.5, "MGC", "non_deployed", None),
-    ("US_DATA_830", 5, 1.5, "MNQ", "non_deployed", None),
-    ("US_DATA_830", 5, 1.5, "MES", "non_deployed", None),
-    ("US_DATA_830", 30, 1.0, "MES", "non_deployed", None),
-    ("BRISBANE_1025", 15, 2.0, "MNQ", "non_deployed", None),
-    ("BRISBANE_1025", 15, 2.0, "MES", "non_deployed", None),
-]
 
-ALL_LANES = DEPLOYED_LANES + BETA_TWINS + DELTA_LANES
+def build_all_lanes() -> list[tuple]:
+    """Generate EVERY (session, apt, rr, instr, scope_tag, filter_key) combo."""
+    lanes = []
+    for session in ALL_SESSIONS:
+        for instr in ALL_INSTRUMENTS:
+            for apt in ALL_APERTURES:
+                for rr in ALL_RRS:
+                    key = (session, apt, rr, instr)
+                    if key in DEPLOYED_LANE_SPECS:
+                        scope = "deployed"
+                        filt = DEPLOYED_LANE_SPECS[key]
+                    elif (session, apt, rr) in {(k[0], k[1], k[2]) for k in DEPLOYED_LANE_SPECS}:
+                        # Twin — same session/apt/rr as a deployed lane, different instrument
+                        scope = "twin"
+                        # Use matching deployed lane's filter
+                        filt = next(v for k, v in DEPLOYED_LANE_SPECS.items() if (k[0], k[1], k[2]) == (session, apt, rr))
+                    else:
+                        scope = "non_deployed"
+                        filt = None
+                    lanes.append((session, apt, rr, instr, scope, filt))
+    return lanes
+
+
+ALL_LANES = build_all_lanes()
 
 OOS_START = HOLDOUT_SACRED_FROM
 OOS_END = pd.Timestamp("2026-04-07").date()
@@ -598,19 +612,78 @@ def scan_lane(
     return rows
 
 
-def bh_fdr(results: pd.DataFrame, alpha: float = 0.05, group_col: str | None = None) -> pd.DataFrame:
-    """Apply BH-FDR either globally (group_col=None) or within groups."""
+def bh_fdr_multi_framing(results: pd.DataFrame, alpha: float = 0.05) -> pd.DataFrame:
+    """Apply BH-FDR at MULTIPLE K framings so each cell can be evaluated at
+    its natural hypothesis-family boundary:
+
+    - K_global       = total cells scanned
+    - K_family       = cells within feature family (volume / volatility / timing / ...)
+    - K_lane         = cells within (session, apt, rr, instrument) — features × directions × passes
+    - K_session      = cells within session (across instruments / apt / rr)
+    - K_instrument   = cells within instrument
+    - K_feature      = cells within a specific feature name across lanes
+
+    Each framing emits a K_<framing> column AND bh_pass_<framing> boolean.
+    Cells can pass at looser framings (per-lane) while failing stricter
+    (global). This is institutional practice per Bailey-LdP 2014 and Harvey-Liu
+    2015: report multiple K framings, no cherry-picking.
+    """
     res = results.copy()
+
+    def _apply_bh(df: pd.DataFrame, group_cols: list[str] | None, suffix: str) -> pd.DataFrame:
+        df = df.copy()
+        if group_cols is None:
+            df = df.sort_values("p_is").reset_index(drop=True)
+            K = len(df)
+            df[f"K_{suffix}"] = K
+            df[f"bh_rank_{suffix}"] = df.index + 1
+            df[f"bh_crit_{suffix}"] = alpha * df[f"bh_rank_{suffix}"] / K
+            df[f"bh_pass_{suffix}"] = df["p_is"] <= df[f"bh_crit_{suffix}"]
+            return df
+        pieces = []
+        for _, grp in df.groupby(group_cols, dropna=False):
+            g = grp.sort_values("p_is").reset_index(drop=True)
+            K = len(g)
+            g[f"K_{suffix}"] = K
+            g[f"bh_rank_{suffix}"] = g.index + 1
+            g[f"bh_crit_{suffix}"] = alpha * g[f"bh_rank_{suffix}"] / K
+            g[f"bh_pass_{suffix}"] = g["p_is"] <= g[f"bh_crit_{suffix}"]
+            pieces.append(g)
+        return pd.concat(pieces, ignore_index=True)
+
+    # Preserve original row identity so we can merge framings
+    res["_row_id"] = range(len(res))
+
+    out = res[["_row_id"] + [c for c in res.columns if c != "_row_id"]].copy()
+    out = _apply_bh(out, None, "global")
+
+    # Each additional framing merges back on _row_id
+    fams = [
+        (["family"], "family"),
+        (["session", "aperture", "rr", "instrument"], "lane"),
+        (["session"], "session"),
+        (["instrument"], "instrument"),
+        (["feature"], "feature"),
+    ]
+    for group_cols, suffix in fams:
+        bh_cols = [f"K_{suffix}", f"bh_rank_{suffix}", f"bh_crit_{suffix}", f"bh_pass_{suffix}"]
+        sub = _apply_bh(res, group_cols, suffix)[["_row_id"] + bh_cols]
+        out = out.merge(sub, on="_row_id", how="left")
+
+    return out.drop(columns=["_row_id"])
+
+
+# Backward-compat shim
+def bh_fdr(results: pd.DataFrame, alpha: float = 0.05, group_col: str | None = None) -> pd.DataFrame:
     if group_col is None:
-        res = res.sort_values("p_is").reset_index(drop=True)
+        res = results.sort_values("p_is").reset_index(drop=True)
         K = len(res)
         res["bh_rank"] = res.index + 1
         res["bh_crit"] = alpha * res["bh_rank"] / K
         res["bh_pass"] = res["p_is"] <= res["bh_crit"]
         return res
-    # Per-group
     pieces = []
-    for _, grp in res.groupby(group_col):
+    for _, grp in results.groupby(group_col):
         g = grp.sort_values("p_is").reset_index(drop=True)
         K = len(g)
         g["bh_rank_family"] = g.index + 1
@@ -626,15 +699,13 @@ def bh_fdr(results: pd.DataFrame, alpha: float = 0.05, group_col: str | None = N
 
 
 def emit(res: pd.DataFrame) -> None:
-    # Apply both global and per-family BH-FDR
-    res = bh_fdr(res, alpha=0.05)  # global
-    res_family = bh_fdr(res, alpha=0.05, group_col="family")
-    # Merge per-family BH pass onto global
-    res = res.merge(
-        res_family[["feature", "direction", "pass_type", "scope", "instrument", "session", "aperture", "rr", "bh_pass_family"]],
-        on=["feature", "direction", "pass_type", "scope", "instrument", "session", "aperture", "rr"],
-        how="left",
-    )
+    # Apply BH-FDR at multiple K framings — each cell tagged with its pass at
+    # every framing (global, family, lane, session, instrument, feature)
+    res = bh_fdr_multi_framing(res, alpha=0.05)
+    # Aliases for backward compat
+    res["bh_pass"] = res["bh_pass_global"]
+    res["bh_crit"] = res["bh_crit_global"]
+    res["bh_rank"] = res["bh_rank_global"]
 
     # Filter: trustworthy cells (not extreme fire, not tautology, not arithmetic-only)
     trustworthy = res[
@@ -658,15 +729,29 @@ def emit(res: pd.DataFrame) -> None:
         & (trustworthy["n_on_is"] >= 50)
     ].copy()
 
+    # BH pass counts at each K framing
+    bh_lane = trustworthy[trustworthy["bh_pass_lane"] == True]
+    bh_session = trustworthy[trustworthy["bh_pass_session"] == True]
+    bh_instr = trustworthy[trustworthy["bh_pass_instrument"] == True]
+    bh_feat = trustworthy[trustworthy["bh_pass_feature"] == True]
+
     lines = [
-        "# Comprehensive Deployed-Lane Scan — Institutional Grade",
+        "# Comprehensive Scan — ALL Sessions × ALL Instruments × ALL Apertures × ALL RRs",
         "",
         "**Date:** 2026-04-15",
         f"**Total cells scanned:** {len(res)}",
         f"**Trustworthy cells** (not extreme-fire, not tautology, not arithmetic-only): {len(trustworthy)}",
         f"**Strict survivors** (|t|>=3 + dir_match + N>=50 + trustworthy): {len(strict)}",
-        f"**BH-FDR global survivors** (q=0.05): {len(bh_global)}",
-        f"**BH-FDR per-family survivors** (q=0.05 within family): {len(bh_family)}",
+        "",
+        "## BH-FDR pass counts at each K framing",
+        "",
+        f"- **K_global** (K={int(trustworthy['K_global'].iloc[0]) if len(trustworthy) else 0}) strictest: {len(bh_global)} pass",
+        f"- **K_family** (within feature-family, avg K~{int(trustworthy['K_family'].mean()) if len(trustworthy) else 0}): {len(bh_family)} pass",
+        f"- **K_lane** (within session+apt+rr+instr, avg K~{int(trustworthy['K_lane'].mean()) if len(trustworthy) else 0}): {len(bh_lane)} pass",
+        f"- **K_session** (within session across instruments, avg K~{int(trustworthy['K_session'].mean()) if len(trustworthy) else 0}): {len(bh_session)} pass",
+        f"- **K_instrument** (within instrument, avg K~{int(trustworthy['K_instrument'].mean()) if len(trustworthy) else 0}): {len(bh_instr)} pass",
+        f"- **K_feature** (within feature across lanes, avg K~{int(trustworthy['K_feature'].mean()) if len(trustworthy) else 0}): {len(bh_feat)} pass",
+        "",
         f"**Promising** (|t|>=2.5 + dir_match + N>=50 + trustworthy): {len(promising)}",
         "",
         "## Scope definitions",
