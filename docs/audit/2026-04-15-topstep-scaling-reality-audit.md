@@ -38,22 +38,25 @@ This reframes LFA from "the real upside" to "a high-failure stage most traders d
 
 ---
 
-## 2b. Revised multi-firm revenue math (post canonical scrape)
+## 2b. Revised multi-firm revenue math (post canonical scrape, Apex removed)
 
-**Prior estimate:** ~$180K/yr gross across 36 accounts at $5K/account average.
-**Corrected after Bulenox + Apex canonical research:**
+**Prior estimate that included Apex:** $106K–$169K/yr across 28 accounts.
+**Corrected after Elite Trader Funding replaces Apex:**
 
 | Firm | Concurrent | Net/account/yr (est.) | Annual net | Risk/caveat |
 |---|---|---|---|---|
 | TopStep | 5 XFA | $5,612 × 0.88 survive (B2F) = ~$4.9K | **~$25K** | Caps at LFA promotion (forced, destroys XFAs) |
-| Bulenox | 3 Master | ~$7–8K (better split: 100% first $10K) | **~$21–24K** | 3-concurrent cap, not 11; 40% consistency on Master |
-| Apex | 20 PA | IF bot allowed unsupervised: ~$6K; if monitored-only: ~$3K | **$60K–$120K** | **Bot policy ambiguous on funded PA** — material risk |
+| Bulenox | 3 Master (up to 11 eventually) | ~$7–8K (better split: 100% first $10K) | **~$21–24K initial, ~$80K at full 11** | 3-concurrent cap initially; unlock path over time |
+| Elite (ETF) | 5 Sim-Funded + 5 DTF (likely separate) | ~$6–8K/Sim-Funded; DTF capped at $25K total payout then forced Live | **$30–65K** (realistic, assumes TradersPost integration live) | Bot must route through approved partner; 23% consistency is tight; DTF has per-account lifetime payout ceiling |
 
-**Honest revised ceiling range: $106K–$169K/yr gross**, depending on Apex automation resolution.
+**Honest revised ceiling ranges:**
+- **Today (no ETF integration):** TS + Bulenox only = **~$46–49K/yr gross** across 8 accounts
+- **After TradersPost integration for ETF:** **~$76–114K/yr gross** across 13 accounts
+- **Eventual (Bulenox fully unlocked + ETF DTF added):** **~$135–170K/yr gross** across up to 26 accounts
 
-**Apex bot-policy uncertainty is the single biggest variable in this model.** If fully autonomous bot deploy is actually prohibited on Apex PA (not just "must monitor"), the 20-account ceiling collapses to evaluation-only income (non-recurring). If monitored-bot deploy is acceptable (human logs in during session), the full 20 is realistic.
+**Biggest single variable:** ETF-authorization path. Without TradersPost or equivalent approved-partner integration, ETF is gated. This is an engineering task on top of the trading bot, not just an operational one.
 
-**Resolution requirement: direct verification with Apex support or login to the ZenDesk-blocked canonical docs before committing to a 20-PA Apex deployment plan.**
+**Revised honest ceiling: ~$135–170K/yr gross** (not $180K), and only after Bulenox unlock path + ETF integration both complete. Near-term: **~$50K/yr** across Topstep + Bulenox alone.
 
 ## 3. Multi-firm — the real scaling answer
 
@@ -68,20 +71,25 @@ Sources:
 
 ### Per-firm account ceilings (updated 2026-04-15 after canonical scrape)
 
+**Apex was DROPPED from this plan.** Per canonical `memory/prop_firm_automation_verified_apr5.md` (scraped Apr 5 2026): *"~~Apex~~ Rithmic NO bots NO copy — DEAD."* The third firm in the multi-firm plan is **Elite Trader Funding (ETF)**, not Apex. Apex research removed from corpus.
+
 | Firm | Concurrent funded cap | Bot policy | First-$ split tier | Profit split post-tier |
 |---|---|---|---|---|
 | **TopStep** | 5 XFA pre-LFA → 1 LFA (XFAs destroyed at promotion) | Allowed per canonical; TopstepX API explicit support; native platform may block EAs | First $10K: 90% (no separate tier) | 90/10 (post-2026-01-12 traders) |
-| **Bulenox** | **3 Master concurrent** (up to 11 lifetime/eventual via unlock path — external sources vary) | **FULLY PERMITTED — most bot-friendly.** No HFT. | **First $10K: 100%** | 90/10 |
-| **Apex** | **20 Performance Accounts simultaneously** | Partial: bots OK in evaluation, "fully automated" prohibited on funded PA (must monitor); DCA bots + copy-own-accounts explicitly permitted | **First $25K: 100%** | 90/10 |
+| **Bulenox** | **3 Master concurrent** (up to 11 lifetime/eventual via unlock path) | **FULLY PERMITTED — most bot-friendly.** "Not forbidden" per canonical. No HFT. | **First $10K: 100%** | 90/10 |
+| **Elite (ETF)** | **5 Sim-Funded + up to 5 DTF** (separate buckets, total 10 possible) | **GATED: approved-partner-only.** Requires TradersPost or Tradovate-native execution; direct Rithmic bot is NOT authorized without express ETF approval. 10-sec min hold. | **100% advertised** (tiers unclear) | — |
 
-**Practical aggregate ceiling across 3 firms (post canonical scrape):**
-- **Automated-friendly concurrent: 5 TS + 3 Bulenox + 20 Apex(eval) = 28 accounts during eval phase**
-- **Post-funded concurrent (realistic): 5 TS + 3 Bulenox + 20 Apex(with monitoring) = 28 accounts requiring some human presence**
-- **Eventual ceiling after Bulenox unlocks to full cap: 5 TS + 11 Bulenox + 20 Apex = 36 accounts** (matches original external-source estimate, but gated by time and performance)
+**Practical aggregate ceiling across 3 firms (correctly sourced, 2026-04-15):**
+- **Immediately bot-deployable today: 5 TS + 3 Bulenox = 8 accounts.** No integration prerequisites; our existing Rithmic/TopstepX API direct bot works on both.
+- **After TradersPost integration for ETF: 5 TS + 3 Bulenox + 5 ETF = 13 accounts.**
+- **Eventual after Bulenox unlock + ETF DTF added: 5 TS + 11 Bulenox + 5 Sim-Funded + 5 DTF = up to 26 accounts.**
+
+**This is materially below my earlier "36 accounts, $180K/yr" estimate.** Real ceiling is smaller: **13–26 concurrent accounts**, not 36. Revenue estimate below revised accordingly.
 
 **Full canonical detail:**
+- `docs/research-input/topstep/` — 20 canonical docs, scraped Apr 8 2026
 - `docs/research-input/bulenox/README.md` — Bulenox rules, pricing, automation policy
-- `docs/research-input/apex/README.md` — Apex rules, payout ladder, automation nuance
+- `docs/research-input/elite/README.md` — ETF 6-plan structure, approved-partner rule, 23% consistency
 
 ---
 
@@ -191,12 +199,15 @@ From `docs/research-input/topstep/topstep_prohibited_trading_strategies.md`:
 ## 9. Open research gaps
 
 1. ✅ **Bulenox canonical rule scrape — COMPLETED 2026-04-15.** See `docs/research-input/bulenox/README.md`. Key discoveries: **3 Master Accounts concurrent (not 11)**, 100% profit on first $10K, fully bot-permissive, $195/mo subscription at 50K, weekly Wednesday payouts, 40% consistency rule on Master phase, 10 trading days min before first payout.
-2. ✅ **Apex canonical rule scrape — PARTIAL 2026-04-15.** See `docs/research-input/apex/README.md`. Canonical pages blocked by HTTP 403 (ZenDesk); relied on cross-referenced third-party sources. Key: **20 PA concurrent**, 6% profit target flat, 6-step payout ladder with cap removed after step 6, 100% first $25K, static DD post-funded (starting+$100). **BOT POLICY AMBIGUOUS:** "fully automated prohibited on PA" vs "copy-own-accounts permitted" — requires direct verification before funded deploy.
-3. **Apex prohibited-activities canonical verification** — 403-blocked from our fetcher. Must verify via login or direct support contact before live PA bot deployment. Highest-risk gap.
-4. **Topstep LFA typical lifespan** before Shoulder Tap — external "<1% survive long-term" is coarse. Forum-scraping for specific trader trajectories could sharpen.
-5. **TopstepX API bot deployment status verification** — confirm current practice-account bot is API-based, not native execution.
-6. **Exact per-size payout caps** at Bulenox (first-3-payout range values) and Apex (steps 2–5 intermediate values). Third-party sources give ranges, not exact numbers per step.
-7. **Bulenox PDF Terms of Use** — not yet fetched (`https://bulenox.com/wa-data/public/site/data/bulenox.com/Terms_of_Use.pdf`). Likely contains cross-account hedging, account-stacking, and other prohibited-conduct detail.
+2. ✅ **Apex removed from plan — Apex is DEAD** per `memory/prop_firm_automation_verified_apr5.md` (Apr 5 scrape: Apex bots NO, copy NO). Research corpus deleted. Do not include Apex in any future scaling plan.
+3. ✅ **Elite Trader Funding (ETF) canonical scrape — COMPLETED 2026-04-15** (replaces Apex slot). See `docs/research-input/elite/README.md`. Key discoveries: **5 Sim-Funded + 5 DTF concurrent** (separate buckets, total 10 possible), **bot-gated via approved partners only** (TradersPost/Tradovate; direct-Rithmic not authorized), **23% consistency rule on funded** (tightest of three firms), no overnight, 10-sec min hold, 6 evaluation plans.
+4. **TradersPost integration feasibility study** — NEW GAP surfaced by ETF research. Prerequisite for ETF deployment. Engineering scope TBD.
+5. **Topstep LFA typical lifespan** before Shoulder Tap — external "<1% survive long-term" is coarse. Forum-scraping for specific trader trajectories could sharpen.
+6. **TopstepX API bot deployment status verification** — confirm current practice-account bot is API-based, not native execution.
+7. **Exact per-size payout caps** at Bulenox (first-3-payout range values). Third-party sources give ranges, not exact numbers per step.
+8. **Bulenox PDF Terms of Use** — not yet fetched (`https://bulenox.com/wa-data/public/site/data/bulenox.com/Terms_of_Use.pdf`). Likely contains cross-account hedging, account-stacking, and other prohibited-conduct detail.
+9. **ETF Sim-Funded vs DTF cap interaction** — whether 5-Sim + 5-DTF are truly separate buckets (total 10) or combined (5 total). Needs direct support verification.
+10. **ETF Live Funded transition rule** — does promotion to Live close Sim-Funded accounts like Topstep LFA does? Unknown.
 
 ---
 
