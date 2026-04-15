@@ -97,6 +97,21 @@ CELLS = [
         session="TOKYO_OPEN", aperture=30, rr=2.0, direction="long",
         feature_name="F6_INSIDE_PDR", expected_sign="negative",
     ),
+    # Cross-RR family check on L1 — does the signal hold at RR1.0 and RR2.0?
+    # This tests RULE: family concordance across RR. Per-RR deployment gate
+    # should require at least 2 of 3 RRs validate to deploy any.
+    LevelCell(
+        name="L1RR10_MGC_LONDON_METALS_O30_RR1.0_long_F2_NEAR_PDL_30",
+        description="Cross-RR check: MGC LONDON_METALS O30 RR1.0 LONG F2_NEAR_PDL_30",
+        session="LONDON_METALS", aperture=30, rr=1.0, direction="long",
+        feature_name="F2_NEAR_PDL_30", expected_sign="positive",
+    ),
+    LevelCell(
+        name="L1RR20_MGC_LONDON_METALS_O30_RR2.0_long_F2_NEAR_PDL_30",
+        description="Cross-RR check: MGC LONDON_METALS O30 RR2.0 LONG F2_NEAR_PDL_30",
+        session="LONDON_METALS", aperture=30, rr=2.0, direction="long",
+        feature_name="F2_NEAR_PDL_30", expected_sign="positive",
+    ),
 ]
 
 

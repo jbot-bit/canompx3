@@ -46,9 +46,20 @@ Confluence AND-gates sound appealing but suffer from:
 
 ### 5. Mechanism > mathematical survivor
 
-A cell that passes BH-FDR but has no mechanism is likely overfitting. Every survivor should have a testable "why" rooted in market structure. Volume finding has clean mechanism: **institutional participation confirmation** (Aronson Ch 6, Carver Ch 9-10, order-flow literature). Level-rejection finding has clean mechanism: **limit orders defending key prior levels** (Dalton, Murphy).
+A cell that passes BH-FDR but has no mechanism is likely overfitting. Every survivor should have a testable "why" rooted in market structure.
 
-No mechanism + BH survivor = investigate harder OR demote to "monitoring only."
+**Empirical validation ≠ mechanism understanding. Treat as orthogonal:**
+- Empirical (T0-T8 + 12 criteria pass) → deployable.
+- Mechanism (we know WHY) → deploy with eyes open, predict decay, defend against arb crowd-out.
+
+A validated cell without mechanism is a **working signal with unknown durability.** Deploy with shorter review cycles, higher Shiryaev-Roberts sensitivity, more frequent re-audits.
+
+**Working hypotheses for our current signals** (clearly labeled):
+- Volume finding → hypothesized as **institutional participation confirmation**. Alternative mechanisms NOT YET RULED OUT: liquidity event, news proxy, volatility proxy (rel_vol ~ atr_vel), day-type proxy, session-concentration artifact. Decomposition tests pending.
+- Level-rejection finding → hypothesized as **limit orders defending key prior levels** (classical S/R). Literature for this is Dalton / Murphy — NOT in `resources/`, training-memory-only until acquired.
+- Break-timing finding → hypothesized as **stop-hunt completion** (immediate breaks = stacked stops). Order-flow literature — NOT in `resources/`.
+
+No mechanism + BH survivor = deploy with caution, instrument the monitoring, decompose the signal with available data. Do NOT demote to "monitoring only" purely for lack of literature.
 
 ### 6. Direction asymmetry hunting — LONG vs SHORT split
 
