@@ -4,6 +4,135 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-17 CME FX ORB pilot executed — NO_GO, do not rescue)
+
+### What was run
+
+- New harness: `research/cme_fx_futures_orb_pilot.py`
+- Hypothesis: `docs/audit/hypotheses/2026-04-16-cme-fx-futures-orb-pilot.yaml`
+- Run note: `docs/plans/2026-04-17-cme-fx-futures-orb-pilot-data-pull-run-note.md`
+- Results: `docs/audit/results/2026-04-17-cme-fx-futures-orb-pilot.md`
+- Raw artifacts:
+  - `research/output/cme_fx_futures_orb_pilot.json`
+  - `research/output/cme_fx_futures_orb_pilot_detail.csv`
+
+### Stage verdict
+
+**The CME FX ORB pilot is NO_GO on the locked surface.**
+
+Load-bearing facts:
+- The raw Databento requests asked for a `180`-day window, but that is **not**
+  the realized pilot sample. Coverage must be measured from decoded raw bars
+  after front-month selection, Brisbane 09:00 trading-day assignment, and
+  complete ORB-window enforcement.
+- Realized eligible-session coverage landed at:
+  - `6J TOKYO_OPEN`: `147` eligible days
+  - `6B`: `145-148` eligible days across the three locked sessions
+  - `6A`: `146-148` eligible days across the three locked sessions
+- All `7 / 7` locked asset-session candidates failed the gate stack.
+- `6J TOKYO_OPEN` was decisively bad:
+  - double-break `79.6%`
+  - fakeout `57.8%`
+  - continuation E2 `41.5%`
+  - E2 ExpR `-0.424R`
+  - friction/risk `31.8%`
+- The least-bad row (`6B US_DATA_1000`) was still not promotable:
+  - double-break `71.4%`
+  - fakeout `42.2%`
+  - continuation E2 `54.4%`
+  - E2 ExpR `-0.221R`
+  - failed cleanliness, economics, and live guardrail anyway
+
+### Locked implementation surface
+
+- ORB aperture: `O5`
+- Economics baseline: `E2 / CB1 / RR1.0`
+- Descriptive companion: `E1 / CB1 / RR1.0`
+- Round-trip friction: locked `$29.10`
+- Input universe: raw pulled `6J / 6B / 6A` DBNs only
+- Contract handling: front-month outright selection via canonical
+  `choose_front_contract()`
+
+### Correct interpretation
+
+- Do **not** use the nominal `180` request window as evidence that the pilot
+  met a larger sample than it actually did.
+- Do **not** extend the data window, widen the session list, swap assets, or
+  optimize economics to rescue this result.
+- The correct read is: realized coverage remained inside the prereg
+  `90-180` trading-day band, and the candidates still failed cleanly on the
+  locked surface, so the pilot stops here.
+
+### Verification notes
+
+- `py_compile` on the new script: PASS
+- Ruff on the new script: PASS
+- Behavioral audit: PASS
+- Integrity audit: PASS
+- Repo-wide `pytest tests/ -x -q`: PASS (`4441 passed, 19 skipped, 3 warnings`)
+- Direct script execution: PASS, wrote JSON/CSV/MD artifacts with
+  `stage_verdict=NO_GO`
+- Drift check: FAIL, **unrelated pre-existing** Check 45 provenance mismatch on
+  three active `MNQ_EUROPE_FLOW_*_CROSS_SGP_MOMENTUM` rows (`2026-04-10`
+  stored vs `2026-04-14` canonical recompute). Not caused by the FX pilot work.
+
+## Update (2026-04-16 A4b executed — NULL_BY_CONSTRUCTION, do not rescue)
+
+### What was run
+
+- New harness: `research/garch_a4b_binding_budget_replay.py`
+- Hypothesis: `docs/audit/hypotheses/2026-04-17-garch-a4b-binding-budget.yaml`
+- Results: `docs/audit/results/2026-04-17-garch-a4b-binding-budget-replay.md`
+- Raw artifact: `research/output/garch_a4b_binding_budget_replay.json`
+
+### Stage verdict
+
+**A4b is NULL_BY_CONSTRUCTION on the locked surface.**
+
+Load-bearing facts:
+- Binding check passed on only `50 / 72` IS rebalance dates = `0.694`, below
+  the locked `>= 0.80` requirement.
+- Candidate underperformed anyway:
+  - baseline annualized `+47.34R`
+  - candidate annualized `+40.04R`
+  - delta `-7.30R/yr`
+  - Sharpe delta `-0.046`
+  - DD ratio `1.133`
+- Destruction shuffle did **not** pass primary rule (good).
+- Positive control (`trailing_expr` rank) also did **not** pass the locked
+  primary rule (so the stage does not justify a "clean allocator utility"
+  claim even aside from the binding failure).
+- 2026 OOS descriptive: base and candidate were identical (`+51.35R`
+  annualized each), so there is no rescue story in holdout either.
+
+### Correct interpretation
+
+- Do **not** tune weights, thresholds, or budget to rescue A4b.
+- Do **not** interpret this as allocator utility evidence.
+- Do **not** promote any garch ranking doctrine from this stage.
+- The proper read is: the chosen scarce-resource surface did not bind often
+  enough after the locked candidate-eligibility rule, and the candidate did
+  not beat the neutral baseline on the dates where it did bind.
+
+### Correct next step
+
+If allocator work continues, redesign the scarce-resource surface first.
+Possible paths:
+- broader candidate eligibility without post-hoc tuning
+- different pre-registered scarce resource than slot count
+- park allocator and reopen higher-EV queued mechanisms instead
+
+### Verification notes
+
+- `py_compile` on the new script: PASS
+- Behavioral audit: PASS
+- Ruff on the new script: PASS
+- Drift check: FAIL, **unrelated pre-existing** Check 45 provenance mismatch on
+  three active `MNQ_EUROPE_FLOW_*_CROSS_SGP_MOMENTUM` rows (`2026-04-10`
+  stored vs `2026-04-14` canonical recompute). Not caused by A4b work.
+- Independent recompute from cached trade histories matched the reported IS
+  totals exactly for both baseline and candidate.
+
 ## Update (2026-04-16 post-crash-3 — carry parked, allocator A4b is next)
 
 ### Decision after skeptical EV audit
