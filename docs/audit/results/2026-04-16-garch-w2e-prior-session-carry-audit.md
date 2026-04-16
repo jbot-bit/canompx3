@@ -107,3 +107,201 @@ Per `integrity-guardian.md` RULE 7: metadata is not evidence. Any validated-setu
 - **Family gate:** a pooled handoff × state is `supported_multi_instrument` only if at least 2 instruments each had a cell-level supported verdict. Single-instrument support is flagged `supported_thin_single_instrument` and should not be treated as universal.
 - **Holdout:** 2026-01-01 boundary is respected. This audit uses the full shelf including post-holdout rows — descriptive only, not promotion.
 - **No deployment doctrine** is derivable from this audit. It is a state-family distinctness check, not a size/route/allocator claim.
+
+---
+
+## Stage conclusion
+
+Prior-session carry is **not validated as a broad hard-gate doctrine** on this
+validated shelf.
+
+The W2e audit tested the strongest form of the carry hypothesis — that a
+binary carry state (prior-win-aligned or prior-win-opposed), conditioned by
+`garch_high`, would produce a reliable take or veto signal across the validated
+shelf. 262 cells, 36 pooled handoffs, 12 prior × 5 target sessions, 2 carry
+states, full bootstrap null, tautology check, fire-rate guard, and per-year
+stability checks. The result is clear enough to close the binary-gate form of
+this question without ambiguity.
+
+### What is dead
+
+**Veto-pair implementation: DEAD on this shelf.**
+
+Every single `PRIOR_WIN_OPPOSED` conjunction produced positive ExpR across
+every handoff. Not one case of the conjunction being more hostile than the base
+or garch-alone. The mechanism hypothesis — that an opposed prior win is hostile
+to the next session's breakout, amplified by high vol — is directly
+contradicted by the data. There is no amount of threshold tuning that rescues a
+mechanism whose sign is universally wrong.
+
+This does not mean opposed-prior states are uninformative in all possible
+formulations. It means the specific binary-veto framing tested here (hard gate
+on `garch_high AND prior_win_opposed`) is not a useful filter at any threshold
+on this shelf.
+
+### What is thin / local only
+
+**NYSE_OPEN → COMEX_SETTLE take-pair: thin local candidate, not generalizable.**
+
+One pooled handoff showed directional support: `NYSE_OPEN → COMEX_SETTLE`,
+`prior_win_align`, `take_pair`. Pooled conjunction ExpR = +0.378 vs base
++0.108. But:
+
+- Only 2 of 9 cells within the pool hit bootstrap p ≤ 0.05 (ORB_G5 RR1.5 at
+  p=0.039, X_MES_ATR60 RR1.5 at p=0.036). The other 7 are directionally
+  aligned but not significant (p = 0.056–0.114).
+- Single instrument only (MNQ). Cross-instrument check is structurally blocked
+  by the validated shelf composition.
+- The RR1.5 specificity is suspicious — RR1.0 and RR2.0 both fail the
+  bootstrap gate on the same handoff.
+- No BH-FDR correction has been applied across the 36 pools.
+
+This is a real directional observation, not noise, but it is not strong enough
+to promote as a standalone gate or even as a confident local feature. It
+belongs in a watchlist, not an implementation queue.
+
+### What remains plausibly useful
+
+The fact that binary carry-as-hard-gate failed does NOT close the broader
+question of whether prior-session context carries informational value.
+
+The specific failure mode matters: the conjunction consistently ADDS to the
+base (most `Δ_conj_vs_base` are positive), but it does not consistently ADD
+to `garch_high` alone (most `Δ_conj_vs_garch` are zero or negative). That
+means:
+
+1. Carry state is positively correlated with garch-favourable days (selection
+   effect — on days when a prior session wins, the market is trending, which
+   is also when garch is high).
+2. The marginal value of carry *after* garch is already conditioning is small
+   to zero in most handoffs.
+3. The rare exceptions (NYSE_OPEN → COMEX_SETTLE) may reflect a genuine
+   US-session momentum cascade, or may reflect that the US afternoon is the
+   highest-N / highest-power portion of the shelf.
+
+This leaves open four softer implementation classes that were never tested here
+and cannot be dismissed by W2e's results:
+
+| Implementation class | What it means | How it differs from the tested gate |
+|---|---|---|
+| **Soft confluence feature** | Carry state enters as one input among several in a score, not a binary pass/fail | Not a gate — does not exclude any trade. Adds directional context to an allocation decision. |
+| **Sizing modifier** | Days with favourable carry get a larger position; unfavourable get smaller, but still trade | Not a gate — all trades taken, but risk budget varies. Requires Carver-style forecast combiner. |
+| **Local family context input** | Carry state used only for specific (prior, target) pairs where local evidence is strongest | Not a broad doctrine — scoped to the 1-2 handoffs where directional support was observed. |
+| **Portfolio context feature** | Prior-session outcome used as an input to a portfolio-level daily state classifier, not per-lane | Not a per-lane feature — informs cross-lane allocation or slot priority. |
+
+None of these are pre-validated. Each would require its own pre-registered
+hypothesis, its own K-budget, and its own pass/fail criteria.
+
+### What is NOT claimed
+
+- Carry is not called "dead" as a research direction. The binary-gate framing
+  is dead; the information channel may not be.
+- The NYSE_OPEN → COMEX_SETTLE finding is not promoted. It is a thin local
+  observation that may or may not survive a dedicated audit.
+- No implementation path is recommended for immediate execution. The ranked
+  options below are a research menu, not a build queue.
+
+---
+
+## Ranked next implementation paths
+
+Ranked by honesty (does it respect the W2e finding?), robustness (how hard is
+it to overfit?), and likely economic value (conditional on working at all).
+
+### Rank 1: Portfolio context feature
+
+**Honesty: HIGH.** This is the most different from what W2e tested. W2e asked
+"does carry help per-lane?"; portfolio context asks "does same-day prior-session
+outcome shift the optimal cross-lane allocation?" Entirely different surface.
+
+**Robustness: MODERATE.** K is small (one feature per portfolio-day, not per
+lane). Overfitting risk is lower than per-lane gating, but the feature is less
+well-defined (requires a portfolio-day join, not a simple row filter).
+
+**Likely value: MODERATE.** If the selection effect is real (prior-win days are
+trending days), this might improve daily slot allocation more than it improves
+any single lane.
+
+**What it requires:** pre-registered hypothesis, daily portfolio-state join
+against `orb_outcomes`, definition of "portfolio prior-session outcome" (at
+least one prior session win? majority? all?), allocation replay similar to A4.
+
+### Rank 2: Sizing modifier (Carver forecast combiner)
+
+**Honesty: HIGH.** Carry becomes a continuous input, not a binary gate. The
+W2e finding that carry adds to base but not to garch suggests it may have value
+as a *distinct* sizing signal — but only if the forecast combiner properly
+weights it against garch rather than double-counting the same regime days.
+
+**Robustness: MODERATE-HIGH.** Carver sizing framework is pre-existing in the
+repo (Phase D spec at `docs/audit/hypotheses/2026-04-15-phase-d-volume-pilot-spec.md`).
+Adding carry as one more forecast input is mechanically clean. But: the
+orthogonality between carry and garch on this shelf is uncertain — W2e's
+selection-effect observation suggests they may be partially collinear.
+
+**Likely value: LOW-MODERATE.** If carry-vs-garch collinearity is high (which
+the data hints at), the sizing modifier adds little independent information.
+Worth testing only after an explicit collinearity audit.
+
+### Rank 3: Local family context input (NYSE_OPEN → COMEX_SETTLE only)
+
+**Honesty: MODERATE.** Respects the W2e finding by restricting scope to the one
+handoff with evidence. Risk: post-hoc selection of the surviving cell is a
+classic overfitting vector. Needs an explicit pre-registered confirmation audit
+with fresh data or held-back OOS.
+
+**Robustness: LOW.** K=1 (one handoff, one state, one direction). Impossible
+to correct for multiple testing meaningfully. The 2/9 cell-level significance
+is marginal.
+
+**Likely value: LOW.** Even if real, it applies to one target session on one
+instrument — bounded upside.
+
+### Rank 4: Soft confluence feature (generic)
+
+**Honesty: MODERATE-LOW.** The danger is that "soft" is vague enough to permit
+re-mining the same data with a different threshold and calling it a new
+hypothesis. The W2e result strongly suggests carry's marginal contribution
+after garch is near zero — making it a bad candidate for a multi-input score
+unless there's a clearly defined way it adds information garch doesn't have.
+
+**Robustness: LOW.** Defining "soft confluence" requires choosing how to encode
+carry (binary? continuous? relative to rolling baseline?), how to weight it
+against garch, and what surface to test on. Each degree of freedom is a trial.
+Without tight pre-registration, this is a data-mining invitation.
+
+**Likely value: LOW.** The data says garch already captures most of the regime
+information that carry is correlated with. A soft score built from carry + garch
+is likely dominated by the garch term.
+
+### Not ranked: Hard gate (any formulation)
+
+**Status: closed by W2e.** Binary carry gating — whether as veto, take, or
+conjunction — does not add to garch on this shelf. Reopening requires a
+structurally different carry definition (not prior-win/loss × direction) or a
+structurally different shelf (new instruments, new sessions, new entry models).
+
+---
+
+## Recommended next research step
+
+**Do not start any carry implementation next.**
+
+W2e's most important finding is the selection effect: carry and garch are
+partially collinear because prior-session wins cluster on trending/vol days.
+Before committing research budget to *any* carry implementation (even the
+portfolio-context path), the correct next step is to **quantify the
+carry-garch collinearity** on the actual daily population — not the per-cell
+tautology check already done, but a day-level correlation between
+"any-prior-session-win" and "garch_high" across the full validated shelf.
+
+If `corr(any_prior_win_today, garch_high_today) > 0.5` on the pooled
+population, then carry is a noisy proxy for garch and no carry implementation
+class will add meaningful independent information. Park the entire carry family.
+
+If `corr < 0.3`, the selection effect is modest and the portfolio-context path
+is worth pre-registering.
+
+This is a single query, not a hypothesis sweep. It should take one script, one
+commit, and should produce a single number that either opens or closes the next
+research door.

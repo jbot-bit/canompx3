@@ -4,6 +4,54 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-16 post-crash — W2e V2 carry audit executed and concluded)
+
+### What happened
+
+Codex V1 wrote W2e as a single-handoff (LONDON_METALS → EUROPE_FLOW, MNQ only)
+audit, then hit its usage limit before running it. User feedback at the cutoff:
+"don't test one lane — lots of variables." Claude Code V2 broadened scope to
+all 12 prior × 5 target × full validated shelf (262 cells, 36 pooled handoffs),
+added bootstrap null, tautology check, fire-rate guard, per-year stability, and
+metadata verification. Also fixed a Python 3.11 f-string syntax bug in
+`garch_partner_state_provenance_audit.py` (root-cause fix, not sidestep).
+
+### Stage verdict
+
+**Prior-session carry is not validated as a broad hard-gate doctrine on this
+validated shelf.**
+
+- **Veto-pair: DEAD.** Every opposed-carry conjunction is positive. Sign wrong
+  universally.
+- **Take-pair: one thin local candidate only.** NYSE_OPEN → COMEX_SETTLE
+  MNQ prior-win-align, 2/9 cells at p ≤ 0.05, single instrument. Not
+  generalizable, not promoted.
+- **V1 seed hypothesis (LM → EF): not supported.** Garch alone beats the
+  conjunction.
+- **Selection effect observed:** carry and garch are partially collinear
+  (prior-win days cluster on trending/vol days).
+
+### What is NOT dead
+
+The binary-gate framing is dead. The information channel may not be. Four
+softer implementation classes remain untested and cannot be dismissed by W2e:
+portfolio context feature (rank 1), sizing modifier (rank 2), local family
+input (rank 3), soft confluence (rank 4).
+
+### Correct next step
+
+Quantify carry-garch collinearity at the day level before committing any
+research budget to carry implementations. Single query: `corr(any_prior_win_today, garch_high_today)` across the full validated shelf. If > 0.5, park entire
+carry family. If < 0.3, pre-register the portfolio-context path.
+
+### Artifacts
+
+- `research/garch_w2e_prior_session_carry_audit.py` (V2, broadened)
+- `docs/audit/results/2026-04-16-garch-w2e-prior-session-carry-audit.md`
+- `docs/plans/2026-04-16-garch-w2e-prior-session-carry-design.md` (BROADENED status)
+- `docs/audit/hypotheses/2026-04-16-garch-w2e-prior-session-carry.yaml` (V2)
+- `research/garch_partner_state_provenance_audit.py` (f-string fix)
+
 ## Update (2026-04-16 ultra-late — unified garch attack plan created)
 
 ### New program entrypoint
