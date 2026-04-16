@@ -4,6 +4,43 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-16 post-crash-2 — carry-encoding exploration executed)
+
+### What was tested
+
+3 continuous carry encodings (E1 most_recent_prior_pnl_r, E2 recency_weighted,
+E3 direction_aware) across 3 session groups (late/mid/early) on the validated
+shelf. Pre-registered at `docs/audit/hypotheses/2026-04-16-carry-encoding-exploration.yaml`.
+
+### Results
+
+- **E1 late_day (COMEX_SETTLE): genuine WR signal.** Prior-session pnl_r
+  predicts target WR — 49.3% when prior stopped out, 63.6% when prior won big.
+  14.3% WR spread. NOT arithmetic-only. But the gradient is two-state (extremes
+  matter, middle is flat), not smoothly monotonic. The 3-quintile "rho=1.000"
+  was a binning artefact of E1's bimodal distribution.
+- **E1 mid_day: ARITHMETIC_ONLY.** WR spread 3.2%. Payoff moves but WR doesn't.
+- **E2 everywhere: flat.** Time-weighting adds nothing. Sensitivity at 1h/4h
+  also flat. Occam confirmed — simplest encoding (E1) wins.
+- **E3 everywhere: flat or inverted.** Direction conditioning dead in continuous
+  form too. Consistent with W2e veto-pair death.
+- **Early_day: sparse** (16% coverage, untestable). Expected.
+- **BH-FDR at K=3:** only E1 passes (p < 0.0167).
+
+### Correct next step
+
+E1 on COMEX_SETTLE is worth a dedicated follow-up as a **two-state feature**
+(prior stopped vs prior won big), not as a continuous quintile feature.
+Pre-register a binary split at prior_pnl_r = 0 in the R7 confluence class.
+E2/E3 parked — no follow-up.
+
+### Artifacts
+
+- `research/carry_encoding_exploration.py`
+- `docs/audit/results/2026-04-16-carry-encoding-exploration.md`
+- `docs/plans/2026-04-16-carry-encoding-exploration-design.md`
+- `docs/audit/hypotheses/2026-04-16-carry-encoding-exploration.yaml`
+
 ## Update (2026-04-16 post-crash — W2e V2 carry audit executed and concluded)
 
 ### What happened
