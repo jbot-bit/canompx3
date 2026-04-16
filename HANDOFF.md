@@ -4,6 +4,54 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-16 post-crash-3 — carry parked, allocator A4b is next)
+
+### Decision after skeptical EV audit
+
+**Carry is parked.** E1 COMEX_SETTLE finding recorded but NOT pursued to T0-T8.
+
+### Rough EV comparison (assumption-dependent)
+
+Option A (finish E1 COMEX_SETTLE T0-T8):
+- ~3 lanes × ~14% of days × ~+0.10R lift = ~18R/yr on TopStep 1-acct → ~$1K/yr
+- P(survives full audit) ~ 40% given thin quintiles, no cross-instrument
+- **EV ≈ $400/yr**
+
+Option C (A4b allocator on validated shelf):
+- Full 38-lane routing, not 3 lanes
+- Upper bound ~$2-5K/yr from dynamic routing
+- P(translates after integer-contract geometry) ~ 30% given A4a null, A2 negative
+- **EV ≈ $900/yr** with wider confidence band, higher ceiling
+
+Gap is 2-3x in favor of allocator. Not 10x. Real but not overwhelming.
+
+### Why pivot anyway
+
+- EV gap favors allocator
+- Allocator affects all 38 validated lanes, carry affects 3
+- 90% of carry value already captured in results MD (decile table + two-state
+  insight + self-review bias check)
+- Momentum bias warning: "we found something, keep going" would mean finishing
+  carry. The data says pivot.
+
+### Explicitly deferred, NOT killed
+
+- E1 COMEX_SETTLE two-state feature (R7 confluence, K=1 follow-up available)
+- W2d broad prior-level conditioning (awaits validated-shelf broadening)
+- HTF Path A features (blocked on prev_week_* / prev_month_* pipeline build)
+
+### Condition to reopen carry
+
+All three must be true:
+1. Allocator work resolved (A4b locked or parked)
+2. R7 confluence framework exists in code (Carver forecast combiner)
+3. No pre-registered mechanism with higher EV in queue
+
+### Next session entry point
+
+Garch A4b binding-budget allocator design. See
+`docs/plans/2026-04-16-garch-a4b-binding-budget-design.md` ACTIVE NEXT DESIGN.
+
 ## Update (2026-04-16 post-crash-2 — carry-encoding exploration executed)
 
 ### What was tested
