@@ -1,0 +1,193 @@
+metadata:
+  name: garch-a4b-binding-budget-allocator
+  owner: claude-code
+  created_at: 2026-04-17
+  predecessor: garch-a4a-portfolio-ranking
+  predecessor_verdict: null_by_construction_budget_did_not_bind
+  design_doc: docs/plans/2026-04-16-garch-a4b-binding-budget-design.md
+  holdout_date: 2026-01-01
+  authority:
+    - docs/institutional/pre_registered_criteria.md
+    - docs/plans/2026-04-16-garch-institutional-attack-plan.md
+
+edge_claim: >
+  A locked pre-entry garch-based composite score, used as a lane-ranking input
+  to the greedy binding-budget allocator, improves allocator utility on the
+  validated replayable shelf vs the neutral literature-grounded baseline. This
+  is an allocator/routing claim (R8), NOT a standalone garch edge claim.
+
+utility_definition:
+  primary: annualized_total_R_on_selected_slots_IS
+  secondary:
+    - sharpe_of_daily_pnl_IS
+    - integer_contract_DD_realized_IS
+    - slot_hit_rate_per_day_IS
+  reporting_only:
+    - 2026_OOS_descriptive_direction_and_effect_ratio
+
+comparator:
+  file: trading_app/lane_allocator.py
+  function: build_allocation
+  contract:
+    inputs:
+      - scores: list[LaneScore] from compute_lane_scores(rebalance_date)
+      - max_slots: int  # binding budget
+      - max_dd: float   # DD budget, profile-derived
+      - correlation_matrix: dict  # from compute_pairwise_correlation
+      - orb_size_stats: dict      # from compute_orb_size_stats
+    output: list[LaneScore]
+    constraints:
+      - trading_day < rebalance_date (zero look-ahead per module docstring L11)
+      - CORRELATION_REJECT_RHO = 0.70 (L506)
+      - HYSTERESIS_PCT = 0.20 (L48, Carver Ch.12)
+      - literature_grounded: Carver Ch 11-12, LdP Ch 12, Chan Ch 7, Pardo Ch 9
+      - deploy_window: DEPLOY_WINDOW_MONTHS = 12
+  why_canonical: >
+    Operates on deployable_validated_relation (L229) = validated replayable
+    shelf. max_slots is an explicit pre-declared binding budget. Ranking by
+    _effective_annual_r is literature-grounded, not garch-scored — making it
+    the correct neutral baseline.
+  why_prop_portfolio_rejected: >
+    trading_app/prop_portfolio.py::select_for_profile is profile/firm-scoped
+    (firm_spec, tier, allowed_sessions, banned_instruments, profit-split).
+    It is the same active-profile universe that A4a used and that was demoted
+    as null-by-construction. Using it again would rebuild the A4a mistake.
+
+baseline:
+  name: BASELINE_LIT_GROUNDED
+  description: >
+    Call build_allocation with its existing literature-grounded inputs and
+    a binding max_slots. No garch score involvement. This is the out-of-box
+    neutral comparator — same ranking key (_effective_annual_r), same
+    correlation gate, same DD budget, same hysteresis.
+  ranking_key: _effective_annual_r(LaneScore)
+
+candidate:
+  name: CANDIDATE_GARCH_RANK
+  description: >
+    Replace the ranking key in the greedy selection with a locked garch-based
+    composite score computed at rebalance_date from pre-entry daily_features.
+    Everything else about build_allocation (budget, correlation gate, DD,
+    hysteresis, deploy-window) is held fixed.
+  score_definition: >
+    locked_garch_composite(rebalance_date, lane) =
+      w1 * trailing_expr_within_garch_high_state
+      + w2 * _effective_annual_r (baseline term, preserved)
+  weights:
+    w1: 0.5
+    w2: 0.5
+    note: >
+      Pre-declared 50/50 to prevent post-hoc tuning. Sensitivity in Stage 2
+      only if Stage 1 passes.
+  lockdown:
+    - weights pre-declared, not tuned during A4b
+    - garch threshold = 70 (forecast_vol_pct) per W2/W2c prior convention
+    - no state variable beyond garch_forecast_vol_pct is permitted in A4b
+
+binding_budget:
+  scarce_resource: max_slots
+  value: 5
+  rationale: >
+    38 validated active lanes, max_slots=5 = binding by 7.6x oversubscription.
+    Correlation gate rho=0.70 further prunes. Pre-declared, not tuned.
+  binding_check_required: true
+  binding_pass_rule: >
+    over ≥80% of monthly rebalance dates in IS, the number of candidate
+    eligible lanes must exceed max_slots * 2. If this fails, the budget is
+    not materially binding and the hypothesis is declared NULL_BY_CONSTRUCTION
+    before any utility comparison.
+
+universe:
+  shelf: validated_replayable_shelf
+  sql_relation: trading_app.validated_shelf.deployable_validated_relation
+  instruments:
+    - MNQ
+    - MES
+    - MGC
+  session_filter: none
+  profile_filter: none  # profile translation happens AFTER A4b, not inside it
+
+evaluation:
+  rebalance_cadence: monthly
+  rebalance_dates_IS:
+    start: 2020-01-01  # respects MinBTL horizon per Amendment 2.8
+    end: 2025-12-31
+  rebalance_dates_OOS_descriptive:
+    start: 2026-01-01
+    end: current
+  per_rebalance_output:
+    - selected_lanes_baseline: list[strategy_id]
+    - selected_lanes_candidate: list[strategy_id]
+    - forward_month_total_R_baseline: float
+    - forward_month_total_R_candidate: float
+    - forward_month_daily_sharpe_baseline: float
+    - forward_month_daily_sharpe_candidate: float
+  aggregation:
+    - sum forward_month_total_R across rebalance dates → annualized_R
+    - pooled daily pnl across forward windows → sharpe_IS
+    - integer-contract DD per rebalance, aggregated → DD_IS
+
+pass_fail:
+  primary_pass_rule: >
+    annualized_R_candidate >= annualized_R_baseline + min_lift
+    AND sharpe_IS_candidate >= sharpe_IS_baseline + 0.05
+    AND DD_IS_candidate <= DD_IS_baseline * 1.20
+    AND binding_budget.binding_check passes
+  min_lift_R_per_year: 20.0
+  min_sharpe_lift: 0.05
+  max_dd_inflation: 1.20
+  selection_churn_cap:
+    rule: >
+      mean(jaccard_distance(selected_baseline_t, selected_candidate_t)) <= 0.50
+      across rebalance dates. Prevents "candidate won by flipping everything."
+  controls:
+    - destruction_shuffle: >
+        shuffle garch_forecast_vol_pct values across days, rerun candidate
+        ranking. Shuffled version MUST fail primary_pass_rule. If it passes,
+        the candidate is data-mined, not real.
+    - positive_control: >
+        use trailing_expr directly as ranking key (known-good). Positive control
+        MUST pass primary_pass_rule vs same baseline.
+
+oos_treatment:
+  rule: descriptive_only
+  holdout_boundary: 2026-01-01 (sacred per pre_registered_criteria v2.7)
+  usage: >
+    After IS evaluation is complete and verdict is locked, the 2026 OOS
+    window is computed once and reported. OOS results MAY falsify a
+    nominal IS pass (kill criterion below) but MAY NOT rescue an IS fail.
+  direction_match_required: true
+  oos_effect_ratio_required: >= 0.40 of IS effect
+
+kill_criteria:
+  - binding_check fails (NULL_BY_CONSTRUCTION)
+  - destruction_shuffle also passes primary rule (data-mined)
+  - positive_control fails (implementation bug in harness)
+  - selection_churn exceeds 0.50 jaccard (winner-takes-all artefact)
+  - OOS direction flips from IS
+  - OOS effect ratio < 0.40
+  - any weight, threshold, or param tuned after first result seen (hard-banned)
+
+scope_hard_boundaries:
+  - no_deployment_claim_from_this_test
+  - no_profile_translation_inside_this_test
+  - no_new_state_variables_beyond_garch_forecast_vol_pct
+  - no_per_session_tuning
+  - no_post_hoc_weight_search
+
+k_budget:
+  total_trials: 1
+  note: >
+    This is a single pre-locked composite vs a single baseline. No sweep.
+    K=1 keeps BH-FDR trivial and MinBTL constraint (Criterion 2) trivially
+    satisfied.
+
+stage_1_outputs:
+  - docs/audit/results/2026-04-17-garch-a4b-binding-budget-replay.md
+  - raw path artifact under research/ (added at implementation time)
+
+stage_2_reserved:
+  note: >
+    Only triggered if Stage 1 passes. Stage 2 is a sensitivity check on w1/w2
+    at ±50%, NOT a new hypothesis. Pre-registered now so it cannot be added
+    as a rescue after a failed Stage 1.
