@@ -239,69 +239,100 @@ Adding carry as one more forecast input is mechanically clean. But: the
 orthogonality between carry and garch on this shelf is uncertain — W2e's
 selection-effect observation suggests they may be partially collinear.
 
-**Likely value: LOW-MODERATE.** If carry-vs-garch collinearity is high (which
-the data hints at), the sizing modifier adds little independent information.
-Worth testing only after an explicit collinearity audit.
+**Likely value: MODERATE.** Collinearity gate confirmed independence (see
+below). Sizing modifier would extract genuine diversification benefit from an
+orthogonal signal — but only if the encoding avoids binary degeneracy.
 
-### Rank 3: Local family context input (NYSE_OPEN → COMEX_SETTLE only)
+### Rank 3 (revised from 4): Soft confluence feature
 
-**Honesty: MODERATE.** Respects the W2e finding by restricting scope to the one
-handoff with evidence. Risk: post-hoc selection of the surviving cell is a
-classic overfitting vector. Needs an explicit pre-registered confirmation audit
-with fresh data or held-back OOS.
+**Honesty: MODERATE.** Upgraded from rank 4 after collinearity gate confirmed
+corr ≈ 0. Confluence with garch would not double-count. But the degeneracy
+problem means the carry encoding must NOT be binary.
+
+**Robustness: LOW-MODERATE.** Each encoding choice is a degree of freedom.
+Needs tight pre-registration to prevent mining.
+
+**Likely value: LOW-MODERATE.** If the encoding solves degeneracy, genuine
+independent information exists. But defining "soft confluence" loosely is a
+data-mining invitation.
+
+### Rank 4 (revised from 3): Local family context input (NYSE_OPEN → COMEX_SETTLE only)
+
+**Honesty: MODERATE.** Unchanged — post-hoc selection of the surviving cell is
+a classic overfitting vector.
 
 **Robustness: LOW.** K=1 (one handoff, one state, one direction). Impossible
-to correct for multiple testing meaningfully. The 2/9 cell-level significance
-is marginal.
+to correct for multiple testing meaningfully.
 
-**Likely value: LOW.** Even if real, it applies to one target session on one
-instrument — bounded upside.
-
-### Rank 4: Soft confluence feature (generic)
-
-**Honesty: MODERATE-LOW.** The danger is that "soft" is vague enough to permit
-re-mining the same data with a different threshold and calling it a new
-hypothesis. The W2e result strongly suggests carry's marginal contribution
-after garch is near zero — making it a bad candidate for a multi-input score
-unless there's a clearly defined way it adds information garch doesn't have.
-
-**Robustness: LOW.** Defining "soft confluence" requires choosing how to encode
-carry (binary? continuous? relative to rolling baseline?), how to weight it
-against garch, and what surface to test on. Each degree of freedom is a trial.
-Without tight pre-registration, this is a data-mining invitation.
-
-**Likely value: LOW.** The data says garch already captures most of the regime
-information that carry is correlated with. A soft score built from carry + garch
-is likely dominated by the garch term.
+**Likely value: LOW.** Even if real, applies to one session on one instrument.
 
 ### Not ranked: Hard gate (any formulation)
 
-**Status: closed by W2e.** Binary carry gating — whether as veto, take, or
-conjunction — does not add to garch on this shelf. Reopening requires a
-structurally different carry definition (not prior-win/loss × direction) or a
-structurally different shelf (new instruments, new sessions, new entry models).
+**Status: closed by W2e.** Binary carry gating does not add to garch on this
+shelf. Reopening requires a structurally different carry definition or a
+structurally different shelf. Degeneracy (not collinearity) is the root cause.
 
 ---
 
-## Recommended next research step
+## Collinearity gate result (executed same session)
 
-**Do not start any carry implementation next.**
+**`corr(any_prior_win, garch_high) = +0.016`** on 5,207 validated-shelf
+(day, symbol, target_session) rows. Near-zero. Carry and garch are almost
+perfectly **orthogonal**.
 
-W2e's most important finding is the selection effect: carry and garch are
-partially collinear because prior-session wins cluster on trending/vol days.
-Before committing research budget to *any* carry implementation (even the
-portfolio-context path), the correct next step is to **quantify the
-carry-garch collinearity** on the actual daily population — not the per-cell
-tautology check already done, but a day-level correlation between
-"any-prior-session-win" and "garch_high" across the full validated shelf.
+Script: `research/garch_carry_collinearity_check.py`.
 
-If `corr(any_prior_win_today, garch_high_today) > 0.5` on the pooled
-population, then carry is a noisy proxy for garch and no carry implementation
-class will add meaningful independent information. Park the entire carry family.
+### What this overturns
 
-If `corr < 0.3`, the selection effect is modest and the portfolio-context path
-is worth pre-registering.
+The W2e working hypothesis was that the conjunction's failure to beat garch-
+alone reflected a selection effect (prior-win days clustering on garch-high
+days). **That is wrong.** The two signals are independent.
 
-This is a single query, not a hypothesis sweep. It should take one script, one
-commit, and should produce a single number that either opens or closes the next
-research door.
+### What actually explains the binary-gate failure
+
+`any_prior_win` rate by target session:
+
+| Target session | any_prior_win rate |
+|---|---|
+| COMEX_SETTLE | 99.8% |
+| EUROPE_FLOW | 96.0% |
+| SINGAPORE_OPEN | 75.9% |
+| TOKYO_OPEN | 8.4% |
+
+For late-day sessions, "has a prior win" is nearly constant — it fires on
+almost every day. A feature that fires 96–100% of the time is not a feature;
+it is background noise. For early-day sessions, it almost never fires — there
+aren't enough resolved priors yet.
+
+Binary gating on carry fails because the signal is **degenerate at both tails
+of the session clock**, not because it is collinear with garch.
+
+### Core blocker for any carry implementation
+
+The blocker is not collinearity (resolved: near-zero). The blocker is
+**degeneracy**: binary carry state is nearly constant for 3 of 4 target
+sessions. Any carry implementation must solve this by encoding carry as a
+continuous or graduated feature, not a binary flag.
+
+Candidate encodings (not pre-registered — research menu only):
+
+1. **Prior-session weighted-pnl**: sum of (prior session pnl_r × weight) where
+   weight decays by recency. Continuous, session-clock-aware.
+2. **Prior-session win-count ratio**: wins / total resolved priors that day.
+   Continuous, bounded [0, 1], but still degenerate for TOKYO_OPEN (0 or 1).
+3. **Most-recent-prior pnl_r**: only the immediately preceding resolved session.
+   Continuous, avoids the accumulation degeneracy.
+4. **Direction-conditioned prior outcome**: prior session outcome × alignment
+   with the target's eventual direction. This is what W2e tested as a binary
+   gate — it would need to be made continuous (e.g., prior pnl_r × sign of
+   direction alignment).
+
+### Recommended next step
+
+Pre-register a carry-encoding exploration that tests **encodings 1 and 3**
+(prior-session weighted-pnl and most-recent-prior pnl_r) as soft features in
+the portfolio-context implementation class. Scope: full validated shelf, same
+chronology rules as W2e, K ≤ 20 (2 encodings × 5 target sessions × 2 garch
+states). This is a feature-encoding study, not a signal-hunting sweep.
+
+Do not start until the pre-registration hypothesis file is committed.
