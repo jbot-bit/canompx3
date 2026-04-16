@@ -1,10 +1,25 @@
 # Garch W2e Prior-Session Carry Design
 
 **Date:** 2026-04-16  
-**Status:** LOCKED DESIGN  
+**Status:** BROADENED_AFTER_USER_FEEDBACK (2026-04-16 post-crash session)  
 **Purpose:** define the next executable `garch` mechanism-family stage after the
 validated-shelf feasibility check demoted broad prior-level conditioning as the
 immediate next branch.
+
+> **2026-04-16 scope broadening note.** The original V1 of this design locked
+> scope to `LONDON_METALS -> EUROPE_FLOW` only, on `MNQ` only. Codex hit its
+> usage limit before running the audit. User feedback arrived immediately
+> before the limit cutoff: *"don't just test 1 session or lane and call it
+> done — there's lots of variables."* That feedback was never applied in V1.
+>
+> V2 (this revision) broadens scope to **all chronologically-admissible same-day
+> session handoffs × the full validated shelf**, enforcing the same dynamic
+> chronology and validated-shelf rules. Institutional reasoning: a 1-handoff
+> × 1-instrument audit is a tunnel-vision artefact — RULE 5 (comprehensive
+> scope) of `.claude/rules/backtesting-methodology.md` requires enumeration
+> of all declared axes. The original narrow design is preserved below as the
+> seed hypothesis; the broadening is an expansion of the test battery, not a
+> new hypothesis. See § 12 "V2 scope broadening" for exact changes.
 
 ---
 
@@ -192,8 +207,77 @@ No deployment or allocator verdict is allowed here.
 
 The next executable research target after `W2c` is:
 
-- **W2e — `LONDON_METALS -> EUROPE_FLOW` prior-session carry conditioned by
-  `garch_high`**
+- **W2e — prior-session carry conditioned by `garch_high`, across all
+  chronologically-admissible same-day session handoffs on the validated shelf**
 
 Broad prior-day level conditioning stays in the explicit queue, but it is no
 longer the immediate next validated-shelf branch.
+
+---
+
+## 12. V2 scope broadening (2026-04-16 post-crash revision)
+
+### 12.1 Why
+
+V1 locked `prior = LONDON_METALS`, `target = EUROPE_FLOW`, `instrument = MNQ`.
+That is one cell of a much larger admissible space. User feedback at the moment
+Codex hit its usage limit: *"there's lots of variables — don't test one lane."*
+
+V1's narrow choice was defensible under "first branch with validated-shelf
+overlap that compiles," but it does not meet the comprehensive-scope bar in
+`.claude/rules/backtesting-methodology.md` RULE 5. Running V1 as-is would have
+produced a single verdict with no family context — no way to tell whether any
+lift is universal across handoffs or an artefact of one pair.
+
+### 12.2 What broadened
+
+| Axis | V1 | V2 |
+|---|---|---|
+| Target session | EUROPE_FLOW only | all 5 validated families (COMEX_SETTLE, EUROPE_FLOW, TOKYO_OPEN, SINGAPORE_OPEN, LONDON_METALS) |
+| Prior session | LONDON_METALS only | any session in `pipeline.dst.SESSION_CATALOG` that resolves before the target (per-row dynamic check) |
+| Instrument | MNQ only | full validated shelf (MNQ, MES, MGC, GC) |
+| Carry states | PRIOR_WIN_ALIGN, PRIOR_WIN_OPPOSED | unchanged — hypothesis unchanged |
+| Threshold | garch_forecast_vol_pct ≥ 70 | unchanged |
+| Chronology | static | unchanged — per-row `prior.exit_ts < target_start_ts` |
+| Validated-shelf rule | validated-only | unchanged |
+| Null test | none | **added** — bootstrap shuffle of carry-state membership on the filtered target population, 1000 iters |
+| Raw sanity | relied on validated metadata | **added** — raw N per cell pulled from canonical `orb_outcomes`, independent of `validated_setups.sample_size` |
+
+### 12.3 What did NOT change
+
+- The pre-registered hypothesis is identical: *garch_high adds value to
+  fully-resolved same-day prior-session carry state on validated shelf cells*.
+- The carry-state definitions (PRIOR_WIN_ALIGN, PRIOR_WIN_OPPOSED) are
+  identical.
+- MIN_TOTAL = 50, MIN_CONJ = 30, 2026 descriptive-only — unchanged.
+- No deployment or allocator verdict allowed — unchanged.
+
+### 12.4 K budget
+
+V2 comprehensive scope produces roughly:
+- 5 target sessions × 8 candidate priors × 4 instruments × 2 states ≈ **320
+  handoff-cells max**.
+
+Real count is smaller because:
+- TOKYO_OPEN target has no admissible priors (first in trading day) → 0 cells.
+- Many instrument/session/prior combos have no shared trading days.
+- Many have N < MIN_TOTAL or N_conj < MIN_CONJ → report `not_testable_here`.
+
+The actual K is computed and reported in the audit output header. BH-FDR is
+applied at the HANDOFF level (K = # admissible handoffs) since each handoff is
+a distinct hypothesis.
+
+### 12.5 Interpretation rule
+
+V2 report verdicts are per-(prior, target, instrument, state). A handoff is
+"supported" only if:
+- `N_conj ≥ 30`
+- `Δ_conj_vs_base`, `Δ_conj_vs_garch`, `Δ_conj_vs_carry` all match
+  expected_role direction
+- bootstrap null p ≤ 0.05 (descriptive, not a promotion gate — because this is
+  state-conditioning not discovery)
+- dir_match across the state's expected role
+
+A handoff **family** (e.g., LONDON_METALS → EUROPE_FLOW across instruments) is
+"supported" only if ≥ 2 instruments independently support. Single-instrument
+support is flagged `thin_handoff_support`.

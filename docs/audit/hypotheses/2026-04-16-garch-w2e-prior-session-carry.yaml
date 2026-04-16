@@ -1,13 +1,23 @@
 metadata:
   name: garch-w2e-prior-session-carry
-  owner: codex
+  owner: codex-v1-then-claude-v2
   created_at: 2026-04-16
+  revised_at: 2026-04-16
+  revision_reason: >
+    V1 locked scope to one handoff (LONDON_METALS -> EUROPE_FLOW) on one
+    instrument (MNQ) and Codex hit its usage limit before running the audit.
+    User feedback arrived immediately before the cutoff: don't test one lane,
+    lots of variables. V2 broadens to all chronologically-admissible same-day
+    handoffs across the full validated shelf with a bootstrap null-floor
+    test. Hypothesis unchanged — scope comprehensive per backtesting RULE 5.
   testing_mode: family
   holdout_date: 2026-01-01
   scope_note: >
-    Narrow validated-shelf cross-session conditioning test. Ask whether
-    garch_high adds value to same-day, fully-resolved prior-session state on
-    the LONDON_METALS -> EUROPE_FLOW handoff. No static session-order inference.
+    Validated-shelf cross-session conditioning test. Ask whether garch_high
+    adds value to same-day, fully-resolved prior-session carry state across
+    ALL chronologically-admissible handoffs and ALL validated instruments.
+    No static session-order inference — per-row dynamic chronology via
+    pipeline.dst.orb_utc_window.
 
 rules:
   canonical_truth_only: true
@@ -17,10 +27,32 @@ rules:
   dynamic_chronology_required: true
   prior_trade_must_be_fully_resolved: true
   raw_recompute_required: true
+  metadata_must_not_be_trusted_blindly: true
+  bootstrap_null_required: true
+  single_instrument_support_flagged_thin: true
 
-target_handoff:
-  prior_session: LONDON_METALS
-  target_session: EUROPE_FLOW
+target_handoffs:
+  prior_sessions_considered:
+    - TOKYO_OPEN
+    - SINGAPORE_OPEN
+    - LONDON_METALS
+    - EUROPE_FLOW
+    - US_DATA_830
+    - NYSE_OPEN
+    - US_DATA_1000
+    - CME_PRECLOSE
+  target_sessions_considered:
+    - TOKYO_OPEN
+    - SINGAPORE_OPEN
+    - LONDON_METALS
+    - EUROPE_FLOW
+    - COMEX_SETTLE
+  chronology_rule: prior.exit_ts < target.orb_utc_window[0]
+  instruments_considered:
+    - MNQ
+    - MES
+    - MGC
+    - GC
 
 admissible_inputs:
   - garch_forecast_vol_pct
@@ -42,36 +74,34 @@ banned_inputs:
 
 family_candidates:
   - id: w2e_h1
-    name: london-metals-win-opposed-hostile-with-garch
+    name: prior-win-opposed-hostile-with-garch
     description: >
-      If the same-day prior LONDON_METALS trade resolved as a win in the
-      direction opposed to the later EUROPE_FLOW breakout, that state may be
+      If the same-day fully-resolved prior trade resolved as a win in the
+      direction opposed to the later target breakout, that state may be
       hostile, and garch_high may amplify that hostility into a stronger veto.
+      Evaluated across every chronologically-admissible prior->target handoff
+      in the validated shelf.
     prior_state:
       type: PRIOR_WIN_OPPOSED
     garch_state:
       type: GARCH_HIGH
       threshold_pct: 70
     expected_role: veto_pair
-    scope:
-      sessions: [EUROPE_FLOW]
-      instruments: [MNQ, GC, MES, MGC]
 
   - id: w2e_h2
-    name: london-metals-win-align-continuation-with-garch
+    name: prior-win-align-continuation-with-garch
     description: >
-      If the same-day prior LONDON_METALS trade resolved as a win aligned with
-      the later EUROPE_FLOW breakout, that state may support continuation, and
-      garch_high may strengthen the take-side conditioning.
+      If the same-day fully-resolved prior trade resolved as a win aligned
+      with the later target breakout, that state may support continuation,
+      and garch_high may strengthen the take-side conditioning. Evaluated
+      across every chronologically-admissible prior->target handoff in the
+      validated shelf.
     prior_state:
       type: PRIOR_WIN_ALIGN
     garch_state:
       type: GARCH_HIGH
       threshold_pct: 70
     expected_role: take_pair
-    scope:
-      sessions: [EUROPE_FLOW]
-      instruments: [MNQ, GC, MES, MGC]
 
 validity_rules:
   require_same_symbol: true
@@ -87,10 +117,17 @@ sample_rules:
   min_conjunction_per_family_state: 30
   if_no_supported_rows: not_testable_here
 
+bootstrap_null:
+  iterations: 1000
+  method: shuffle_carry_state_membership_on_filtered_target_population
+  p_threshold: 0.05
+  role: descriptive_null_floor_not_promotion_gate
+
 comparisons:
   - conjunction_vs_base
   - conjunction_vs_garch_only
   - conjunction_vs_carry_only
+  - conjunction_vs_shuffled_null
 
 verdicts:
   - carry_take_pair
@@ -109,6 +146,8 @@ promotion_gates:
 kill_criteria:
   - static_order_used_instead_of_dynamic_timing
   - prior_trade_not_fully_resolved
-  - scope_widened_due_to_thin_rows
   - descriptive_oos_used_for_promotion
   - deployment_claim_made
+  - single_instrument_support_promoted_without_thin_flag
+  - bootstrap_null_skipped
+  - metadata_trusted_without_raw_query_verification

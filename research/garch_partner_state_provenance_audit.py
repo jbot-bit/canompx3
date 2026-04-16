@@ -457,15 +457,17 @@ def emit(df: pd.DataFrame, summaries: dict[tuple[str, str], pd.DataFrame]) -> No
                 ]
             )
             for _, row in s_df.sort_values(["current_w2", "delta", "support_share_partner_inside_garch"], ascending=[False, False, False]).iterrows():
+                conj_s = "" if pd.isna(row["conj_exp"]) else f"{row['conj_exp']:+.3f}"
+                delta_s = "" if pd.isna(row["delta"]) else f"{row['delta']:+.3f}"
+                pig_s = "" if pd.isna(row["support_share_partner_inside_garch"]) else f"{row['support_share_partner_inside_garch']:.2f}"
+                gip_s = "" if pd.isna(row["support_share_garch_inside_partner"]) else f"{row['support_share_garch_inside_partner']:.2f}"
+                oos_s = "" if pd.isna(row["exp_conj_oos"]) else f"{row['exp_conj_oos']:+.3f}"
+                cw2_s = "yes" if row["current_w2"] else "no"
                 lines.append(
-                    f"| {row['candidate']} | {'yes' if row['current_w2'] else 'no'} | {int(row['cells'])} | "
+                    f"| {row['candidate']} | {cw2_s} | {int(row['cells'])} | "
                     f"{int(row['n_total'])} | {int(row['n_conj'])} | {row['base_exp']:+.3f} | "
-                    f"{'' if pd.isna(row['conj_exp']) else f'{row['conj_exp']:+.3f}'} | "
-                    f"{'' if pd.isna(row['delta']) else f'{row['delta']:+.3f}'} | "
-                    f"{'' if pd.isna(row['support_share_partner_inside_garch']) else f'{row['support_share_partner_inside_garch']:.2f}'} | "
-                    f"{'' if pd.isna(row['support_share_garch_inside_partner']) else f'{row['support_share_garch_inside_partner']:.2f}'} | "
-                    f"{int(row['n_conj_oos'])} | "
-                    f"{'' if pd.isna(row['exp_conj_oos']) else f'{row['exp_conj_oos']:+.3f}'} |"
+                    f"{conj_s} | {delta_s} | {pig_s} | {gip_s} | "
+                    f"{int(row['n_conj_oos'])} | {oos_s} |"
                 )
             lines.append("")
 
