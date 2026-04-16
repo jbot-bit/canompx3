@@ -73,6 +73,36 @@ candidate:
     locked_garch_composite(rebalance_date, lane) =
       w1 * trailing_expr_within_garch_high_state
       + w2 * _effective_annual_r (baseline term, preserved)
+  trailing_expr_within_garch_high_state:
+    definition: >
+      Per-lane mean pnl_r over the trailing DEPLOY_WINDOW_MONTHS=12 window
+      ending at rebalance_date (exclusive), restricted to days where
+      daily_features.garch_forecast_vol_pct >= 70. Uses the exact lane
+      filter via trading_app.config.StrategyFilter.matches_row() (same
+      canonical path used by compute_lane_scores), SM=0.75 adjustment via
+      mae_r applied identically to the baseline trailing_expr. Falls back
+      to NaN (lane excluded from candidate ranking) when N_garch_high < 20.
+    canonical_sql_skeleton: |
+      SELECT AVG(o.pnl_r) AS trailing_expr_garch_high,
+             COUNT(*)     AS n_garch_high
+      FROM orb_outcomes o
+      JOIN daily_features d
+        ON o.trading_day = d.trading_day
+       AND o.symbol = d.symbol
+       AND o.orb_minutes = d.orb_minutes
+      WHERE o.symbol = :instrument
+        AND o.orb_label = :orb_label
+        AND o.orb_minutes = 5
+        AND o.entry_model = :entry_model
+        AND o.confirm_bars = :confirm_bars
+        AND o.rr_target = :rr_target
+        AND o.pnl_r IS NOT NULL
+        AND d.garch_forecast_vol_pct >= 70
+        AND o.trading_day >= :window_start    -- rebalance_date - 12 months
+        AND o.trading_day <  :rebalance_date  -- strict < = zero look-ahead
+        AND <StrategyFilter.matches_row SQL fragment for lane.filter_type>
+    min_sample: 20
+    fallback_on_thin: exclude_lane_from_candidate_ranking_only
   weights:
     w1: 0.5
     w2: 0.5
@@ -109,12 +139,41 @@ universe:
 
 evaluation:
   rebalance_cadence: monthly
+  rebalance_boundary:
+    rule: first_trading_day_of_each_calendar_month_UTC
+    definition: >
+      rebalance_date[m] = MIN(trading_day) FROM orb_outcomes
+        WHERE trading_day >= DATE_TRUNC('month', DATE :m_start).
+      Uses canonical trading_day (Brisbane trading day per pipeline/dst.py)
+      projected to UTC for the query. First rebalance = first trading day
+      of 2020-01. Last IS rebalance = first trading day of 2025-12.
+    look_ahead_rule: >
+      All scoring data must satisfy trading_day < rebalance_date (strict).
+      Matches build_allocation contract (module docstring L11). Rebalance
+      day itself is EXCLUDED from the trailing window and INCLUDED in the
+      forward window.
   rebalance_dates_IS:
     start: 2020-01-01  # respects MinBTL horizon per Amendment 2.8
     end: 2025-12-31
+    expected_count: 72  # 12 months * 6 years
   rebalance_dates_OOS_descriptive:
     start: 2026-01-01
     end: current
+  forward_window:
+    rule: from_rebalance_date_inclusive_to_next_rebalance_date_exclusive
+    definition: >
+      forward_window[m] = [rebalance_date[m], rebalance_date[m+1]).
+      The selected lanes are held for exactly this span, then re-evaluated
+      at the next rebalance. Last IS forward_window ends at rebalance
+      boundary for 2026-01 (the first OOS rebalance), which sits exactly
+      at the holdout boundary 2026-01-01 — no contamination.
+    forward_month_total_R: >
+      Sum over forward_window[m] of 1R-normalized pnl per day per selected
+      lane, 1 contract integer, SM=0.75 applied via mae_r. Pooled across
+      lanes then summed across days within the window.
+    forward_month_daily_sharpe: >
+      Sharpe of daily portfolio pnl over forward_window[m]. Daily pnl =
+      sum across selected lanes fired that day.
   per_rebalance_output:
     - selected_lanes_baseline: list[strategy_id]
     - selected_lanes_candidate: list[strategy_id]
@@ -123,7 +182,8 @@ evaluation:
     - forward_month_daily_sharpe_baseline: float
     - forward_month_daily_sharpe_candidate: float
   aggregation:
-    - sum forward_month_total_R across rebalance dates → annualized_R
+    - sum forward_month_total_R across rebalance dates → total_R_IS
+    - annualized_R_IS = total_R_IS * (252 / total_trading_days_covered)
     - pooled daily pnl across forward windows → sharpe_IS
     - integer-contract DD per rebalance, aggregated → DD_IS
 
