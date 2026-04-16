@@ -1,0 +1,124 @@
+date: 2026-04-16
+title: Garch A4 portfolio-ranking allocator replay
+status: active
+purpose: >
+  Test whether a fixed 1x portfolio-routing policy based on a locked composite
+  pre-entry vol-state score improves profile utility versus baseline lane-order
+  routing when daily eligible lanes exceed the profile slot budget.
+
+authority_chain:
+  - CLAUDE.md
+  - RESEARCH_RULES.md
+  - TRADING_RULES.md
+  - docs/institutional/pre_registered_criteria.md
+  - docs/plans/2026-04-16-garch-deployment-map-proof-plan-reset.md
+  - docs/plans/2026-04-16-deployment-map-incremental-edge-proof-plan.md
+  - docs/plans/2026-04-17-garch-deployment-allocator-architecture.md
+  - docs/plans/2026-04-16-garch-institutional-attack-plan.md
+  - docs/plans/2026-04-16-garch-a4-portfolio-ranking-design.md
+  - docs/audit/hypotheses/2026-04-16-garch-mechanism-hypotheses.md
+
+evidence_tier: deployment_replay_allocator_translation
+mechanism_family: M3_allocator_not_gate
+
+profiles:
+  - topstep_50k_mnq_auto
+  - self_funded_tradovate
+
+baseline:
+  name: BASE_1X_SLOT_ORDER
+  description: >
+    Same exact lane universe, same stop policy, same profile rules, and same
+    daily slot budget as candidate. On collision days, take the first K lanes
+    in fixed baseline lane order.
+
+candidate:
+  name: TRIPLE_MEAN_SLOT_RANK
+  description: >
+    Same exact lane universe, same stop policy, same profile rules, and same
+    daily slot budget as baseline. On collision days, rank eligible lanes by a
+    locked composite score and take the top K at 1x.
+
+score_definition:
+  form: simple_equal_weight_mean
+  components:
+    - garch_forecast_vol_pct
+    - overnight_range_pct
+    - atr_20_pct
+  rationale: >
+    This is the cleanest first-pass M3 composite and reuses the already-audited
+    vol-state inputs from A3 without introducing a new tuned combiner.
+
+budget_model:
+  unit: daily_slot_count
+  value: profile.max_slots
+  contract_policy: fixed_1x_per_selected_lane
+  collision_scope_only: true
+  rationale: >
+    The first A4 pass must express allocator value through routing only. No
+    upsizing, downsizing, or fractional translation is allowed here.
+
+eligibility_rule:
+  description: >
+    For each trading day, use the exact profile lane universe and canonical
+    trade paths. If eligible lanes <= slot budget, candidate and baseline are
+    identical. If eligible lanes > slot budget, candidate and baseline select
+    different subsets according to their fixed ordering rules.
+
+ordering_rules:
+  baseline_order: profile lane order from prop_profiles.py / lane_allocation.json
+  candidate_order: descending composite score
+  tie_breaks:
+    - baseline lane order
+    - strategy_id
+
+fairness_constraints:
+  - Same lane universe
+  - Same historical period
+  - Same stop policy
+  - Same profile/account rules
+  - Same copies / copier arithmetic
+  - Same 1x per selected lane
+  - Same daily slot budget
+  - No session-attribution evidence used for proof
+  - No parameter tuning after first look
+
+required_outputs:
+  - per-account total dollars
+  - copied-account total dollars
+  - annualized Sharpe on daily dollars
+  - max drawdown dollars
+  - worst day dollars
+  - worst 5-day dollars
+  - 90-day survival probability
+  - operational pass probability
+  - collision-day count
+  - pct_days_rerouted
+  - collision-day-only delta dollars
+  - budget utilization rate
+  - top-lane contribution share
+  - top-session contribution share
+
+verification_requirements:
+  - Compile the replay script before execution.
+  - Independently recompute at least one headline candidate result per profile from raw trade paths.
+  - Verify candidate and baseline are identical on non-collision days.
+  - Demote the whole A4 stage if the headline replay totals fail independent recomputation.
+  - Demote any session-level interpretation if attribution does not reconcile exactly.
+
+success_condition: >
+  A4 survives only if the ranking allocator improves the profile's primary
+  objective versus baseline without hidden leverage, without material risk
+  degradation, and without being dominated by one lane or one narrow window.
+
+kill_condition: >
+  Kill or demote A4 if rerouting barely changes the path, if gains are
+  concentrated in a fragile slice, if the candidate loses after concentration
+  and survival are considered, or if the result depends on accounting
+  ambiguity.
+
+next_stage_not_included_here:
+  - forward shadow
+  - production promotion
+  - nonlinear rankers
+  - multi-family score search

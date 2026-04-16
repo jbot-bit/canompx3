@@ -1,0 +1,77 @@
+# Hypothesis Registry — 2026-04-16 garch-additive-sizing-audit
+#
+# Locked: 2026-04-16T22:25:00+10:00
+# Author: Codex main session
+# Purpose: compare garch against ATR / overnight proxies in the same normalized
+#          session-sizing scaffold
+
+metadata:
+  name: "garch-additive-sizing-audit"
+  purpose: "Test whether garch adds portfolio utility beyond ATR and overnight-range proxies under the same clipped session-sizing scaffold."
+  date_locked: "2026-04-16T22:25:00+10:00"
+  holdout_date: "2026-01-01"
+  testing_mode: "family"
+  total_expected_trials: 10
+  theory_summary: |
+    Chan 2008 frames GARCH as a volatility-regime tool. Carver 2015 supports
+    combining forecasts or comparing signal variants inside a common sizing
+    framework. This audit keeps the session scaffold fixed and asks whether
+    garch still earns its place versus ATR and overnight-range proxies.
+
+hypotheses:
+  - id: 1
+    name: "Broad exact-scope additive comparison"
+    theory_citation: >
+      Chan 2008 Ch 7 regime-state logic;
+      Carver 2015 Ch 9-10 forecast comparison inside a common sizing framework
+    economic_basis: |
+      If garch is genuinely additive, a garch-based clipped session-sizing map
+      should outperform or materially complement ATR-only and overnight-only
+      versions on the broad audited tradeable universe.
+    scope:
+      trade_scope: "Broad exact rows from validated_setups + experimental_strategies"
+      maps:
+        - "GARCH_SESSION_CLIPPED"
+        - "ATR_SESSION_CLIPPED"
+        - "OVN_SESSION_CLIPPED"
+        - "GARCH_ATR_MEAN_CLIPPED"
+        - "GARCH_OVN_MEAN_CLIPPED"
+      thresholds:
+        high_pct: 70
+        low_pct: 30
+    expected_trial_count: 5
+    kill_criteria:
+      - "Garch does not beat or materially complement simpler proxies."
+      - "Combined-state versions show no portfolio improvement over single-feature versions."
+
+  - id: 2
+    name: "Validated-scope additive comparison"
+    theory_citation: >
+      Chan 2008 Ch 7;
+      regime-and-rr handling framework R3 / R7 path
+      (docs/institutional/regime-and-rr-handling-framework.md)
+    economic_basis: |
+      The production-relevant question is whether garch keeps additive value on
+      the validated strategy population when ATR and overnight are evaluated in
+      the same operational form.
+    scope:
+      trade_scope: "Validated-only exact rows"
+      maps:
+        - "GARCH_SESSION_CLIPPED"
+        - "ATR_SESSION_CLIPPED"
+        - "OVN_SESSION_CLIPPED"
+        - "GARCH_ATR_MEAN_CLIPPED"
+        - "GARCH_OVN_MEAN_CLIPPED"
+      thresholds:
+        high_pct: 70
+        low_pct: 30
+    expected_trial_count: 5
+    kill_criteria:
+      - "Validated-scope garch loses to the simpler proxy versions."
+      - "Combined-state versions fail to improve take-home or risk-adjusted results."
+
+total_hypothesis_count: 2
+total_expected_trials: 10
+budget_check:
+  max_allowed_clean: 300
+  status: "under budget"

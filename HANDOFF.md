@@ -4,6 +4,680 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-16 ultra-late — unified garch attack plan created)
+
+### New program entrypoint
+
+- [docs/plans/2026-04-16-garch-institutional-attack-plan.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-institutional-attack-plan.md:1)
+
+### Why it exists
+
+The `garch` work had accumulated too many scattered proof, allocator, and
+mechanism notes. This new doc collapses them into one official program with:
+
+- explicit proof boundary
+- explicit data tiers:
+  - canonical discovery truth
+  - validated utility
+  - deployment translation
+  - forward proof
+- locked mechanism families (`M1` to `M4`)
+- required workstream order (`W0` to `W5`)
+- current A-series verdicts:
+  - `A1` operationally verified at headline level
+  - `A2` negative after real translation
+  - `A3` contender, not winner
+- exact next-stage target:
+  - `A4` portfolio-ranking / scarce-risk allocation
+
+### Current doctrine
+
+- Do **not** park `garch`.
+- Do **not** keep treating it like a standalone edge hunt.
+- Do **not** hard-wire production defaults yet.
+- Continue only as an allocator / state-variable program under the new attack
+  plan.
+
+### Immediate next order
+
+1. keep the current session-attribution layer demoted unless exact
+   reconciliation is closed
+2. use the new attack plan as the main design/control doc
+3. next real execution target is an `A4` pre-registered portfolio-ranking /
+   scarce-risk allocation test
+4. no more random filter stacking outside the locked mechanism families
+
+## Update (2026-04-16 ultra-late-plus — A4 portfolio-ranking package locked)
+
+### New artifacts
+
+- [docs/plans/2026-04-16-garch-a4-portfolio-ranking-design.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-a4-portfolio-ranking-design.md:1)
+- [docs/audit/hypotheses/2026-04-16-garch-a4-portfolio-ranking-allocator.yaml](/mnt/c/Users/joshd/canompx3/docs/audit/hypotheses/2026-04-16-garch-a4-portfolio-ranking-allocator.yaml:1)
+
+### What changed
+
+- The attack plan was tightened so `A4` is no longer loosely defined as
+  "scarce-risk allocation."
+- The first pass is now explicitly:
+  - routing-only
+  - fixed `1x`
+  - fixed daily slot budget = `profile.max_slots`
+  - candidate differs from base only on collision days
+  - deterministic baseline order and deterministic candidate tie-breaks
+
+### Locked first-pass candidate
+
+- Mechanism family: `M3_allocator_not_gate`
+- Candidate: `TRIPLE_MEAN_SLOT_RANK`
+- Score:
+  - `mean(garch_forecast_vol_pct, overnight_range_pct, atr_20_pct)`
+- Baseline:
+  - fixed profile lane order under the same slot budget
+
+### Doctrine impact
+
+- This closes the main `A4` design gaps:
+  - scarce-risk unit
+  - collision-day scope
+  - baseline fairness
+  - tie-break determinism
+  - hidden leverage leakage
+  - concentration proof requirements
+- The next concrete implementation target is:
+  - `research/garch_profile_portfolio_ranking_replay.py`
+
+### What NOT to do next
+
+- Do not mix selection and sizing in the first `A4` pass
+- Do not add extra score families inside this hypothesis file
+- Do not treat the broad research grid as the replay universe
+- Do not interpret session contribution as doctrine unless accounting is exact
+
+## Update (2026-04-16 ultra-late-plus-plus — A4a executed, nulled by non-binding budget)
+
+### New artifacts
+
+- [research/garch_profile_portfolio_ranking_replay.py](/mnt/c/Users/joshd/canompx3/research/garch_profile_portfolio_ranking_replay.py:1)
+- [docs/audit/results/2026-04-16-garch-a4-portfolio-ranking-replay-topstep-50k-mnq-auto.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-a4-portfolio-ranking-replay-topstep-50k-mnq-auto.md:1)
+- [docs/audit/results/2026-04-16-garch-a4-portfolio-ranking-replay-self-funded-tradovate.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-a4-portfolio-ranking-replay-self-funded-tradovate.md:1)
+- [docs/plans/2026-04-16-garch-a4b-binding-budget-design.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-a4b-binding-budget-design.md:1)
+
+### Verified read
+
+`A4a` active-profile slot routing is a null by construction.
+
+Raw binding check:
+- `topstep_50k_mnq_auto`: `6` lanes, slot budget `7`, max eligible/day `6`, collision days `0 / 1789`
+- `self_funded_tradovate`: `10` lanes, slot budget `10`, max eligible/day `10`, collision days `0 / 882`
+
+Replay consequence:
+- candidate and baseline are identical on all days
+- both profiles print zero delta
+
+### Doctrine impact
+
+- This does **not** kill allocator research.
+- It kills the assumption that the active profile book is the right first
+  scarcity surface for allocator testing.
+- The corrected next step is now:
+  - audit and lock the neutral comparator on a **binding validated-shelf**
+    surface
+  - only then write the executable `A4b` hypothesis file
+
+### What NOT to do next
+
+- Do not overread `A4a` as evidence that ranking does not matter
+- Do not keep testing allocator ideas on non-binding active books
+- Do not invent a new neutral comparator ad hoc
+
+## Update (2026-04-16 final-final — allocator preflight hardening added)
+
+### Hardened project rules
+
+The program docs now explicitly require allocator preflight before any future
+allocator stage:
+
+- [docs/plans/2026-04-16-garch-institutional-attack-plan.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-institutional-attack-plan.md:1)
+- [docs/plans/2026-04-16-garch-deployment-map-proof-plan-reset.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-deployment-map-proof-plan-reset.md:1)
+
+### New mandatory gates
+
+1. prove the proposed scarcity surface actually binds
+2. name and audit a canonical neutral comparator
+3. show exactly how candidate can change the path
+4. recompute headline results from raw trade paths
+5. kill null-by-construction stages early instead of interpreting them
+
+### Why this matters
+
+This directly hardens the project against the exact `A4a` mistake:
+- profile slot caps were assumed to matter
+- raw check showed they did not
+- the program now forbids that kind of assumption from surviving into replay
+
+## Update (2026-04-16 final-final-plus — full garch program audit added)
+
+### New artifact
+
+- [docs/plans/2026-04-16-garch-program-audit.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-program-audit.md:1)
+
+### What it locks
+
+- `garch` should now be treated as part of a **vol-state family program**, not
+  as a standalone edge hunt
+- the main constraint is not just multiple testing; it is:
+  - weak directional specificity on its own
+  - overlap with ATR / overnight / ATR velocity
+  - wrong economic questions asked on the wrong surfaces
+- pairing `garch` with another signal is valid only when `garch` is used as a
+  **conditioner / confluence state / allocator input**, not random filter soup
+
+### Program order correction
+
+The main attack plan now explicitly inserts:
+1. `W1b` state distinctness / incremental-value audit
+2. `W2` mechanism pairing on the validated shelf
+3. only then allocator translation and profile handling
+
+### Doctrine impact
+
+- Do not keep treating deployment translation as the next universal question
+- Do not keep treating `garch` alone as the full object
+- Next proper research target is a dedicated state distinctness / incremental
+  value audit against adjacent vol-state proxies
+
+## Update (2026-04-16 final-final-plus-plus — state distinctness stage locked)
+
+### New artifacts
+
+- [docs/plans/2026-04-16-garch-state-distinctness-design.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-state-distinctness-design.md:1)
+- [docs/audit/hypotheses/2026-04-16-garch-state-distinctness-audit.yaml](/mnt/c/Users/joshd/canompx3/docs/audit/hypotheses/2026-04-16-garch-state-distinctness-audit.yaml:1)
+
+### What is locked
+
+- Next research question:
+  - is `garch` distinct, complementary, or mostly subsumed by the adjacent
+    vol-state family?
+- Included proxy competitors:
+  - `atr_20_pct`
+  - `overnight_range_pct`
+  - `atr_vel_ratio`
+- Required pairings:
+  - `garch` x `overnight_range_pct`
+  - `garch` x `atr_vel_ratio`
+  - `garch` x `atr_20_pct`
+
+### Doctrine impact
+
+- `overnight_range_pct` and `atr_vel_ratio` are now treated as first-class
+  alternate state mechanisms, not just correlation controls
+- the program now explicitly allows that trapped or constrained profit may be
+  living in:
+  - latent vs realized overnight state
+  - active volatility acceleration into session
+- no further map/deployment work should proceed before this state-distinctness
+  question is answered
+
+## Update (2026-04-16 extra-late — state distinctness audit executed and verified)
+
+### New artifact
+
+- [docs/audit/results/2026-04-16-garch-state-distinctness-audit.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-state-distinctness-audit.md:1)
+- [research/garch_state_distinctness_audit.py](/mnt/c/Users/joshd/canompx3/research/garch_state_distinctness_audit.py:1)
+
+### What was checked before trusting it
+
+- design and hypothesis tightened first:
+  - local-family scope only
+  - no 2026 OOS allowed to decide verdicts
+  - `atr_vel` handled canonically, not with fake `70/30` tails
+  - minimum-support and thin-cell rules added
+- script compile checked with `py_compile`
+- first run failed on a real four-cell verdict bug and was fixed before rerun
+- headline numbers then spot-verified from raw pooled paths:
+  - `COMEX_SETTLE high` pooled `N=13446`, `lift=+0.143675`, `sr_lift=+0.133228`
+  - `TOKYO_OPEN high` `garch x overnight` four-cell table:
+    - `low/low N=913 ExpR=-0.3571`
+    - `low/high N=389 ExpR=-0.3563`
+    - `high/low N=439 ExpR=+0.2057`
+    - `high/high N=1423 ExpR=+0.3520`
+  - `COMEX_SETTLE high` validated local utility summary:
+    - `garch mean_sr_lift=+0.197`
+    - `atr mean_sr_lift=+0.127`
+    - `overnight mean_sr_lift=+0.047`
+
+### Honest read
+
+- `garch` is **not** globally dominant and this stage does **not** prove a
+  deployment doctrine
+- `atr_20_pct` remains the strongest overlap / subsumption risk and did not earn
+  a clean distinctness verdict in the locked families
+- `garch` still looks locally distinct or complementary versus the adjacent
+  vol-state family in several locked families:
+  - `COMEX_SETTLE high`
+  - `EUROPE_FLOW high`
+  - `TOKYO_OPEN high`
+  - `SINGAPORE_OPEN high`
+  - `LONDON_METALS high`
+- `overnight_range_pct` and `atr_vel_ratio` look like the most plausible
+  mechanism partners; this supports the existing shift away from deployment-
+  first and toward mechanism pairing
+- `NYSE_OPEN low` remains mixed / hostile and should not be promoted as a clean
+  favorable family from this stage
+
+### Next correct step
+
+- move to `W2` mechanism pairing on the validated shelf
+- keep it hypothesis-first and narrow:
+  - one mechanism family at a time
+  - most likely first candidates:
+    - latent expansion: `high garch + lower/moderate overnight`
+    - active transition: `high garch + favorable atr_vel state`
+- do **not** return to allocator/profile translation before the first
+  mechanism-pairing result exists
+
+## Update (2026-04-16 ultra-late — W2 mechanism pairing executed and raw-checked)
+
+### New artifacts
+
+- [docs/plans/2026-04-16-garch-w2-mechanism-pairing-design.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-w2-mechanism-pairing-design.md:1)
+- [docs/audit/hypotheses/2026-04-16-garch-w2-mechanism-pairing.yaml](/mnt/c/Users/joshd/canompx3/docs/audit/hypotheses/2026-04-16-garch-w2-mechanism-pairing.yaml:1)
+- [research/garch_w2_mechanism_pairing_audit.py](/mnt/c/Users/joshd/canompx3/research/garch_w2_mechanism_pairing_audit.py:1)
+- [docs/audit/results/2026-04-16-garch-w2-mechanism-pairing-audit.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-w2-mechanism-pairing-audit.md:1)
+
+### What was verified before trusting it
+
+- W2 was locked to `validated_setups` only and exact canonical re-joins
+- compile check run before execution
+- real SQL bug in `rr_target` loader caught and fixed before trusting results
+- headline pooled rows rechecked from raw path functions:
+  - `COMEX_SETTLE_high` `M2`:
+    - `cells=18`
+    - `N_total=8503`
+    - `N_conj=1162`
+    - `base_exp=+0.107822`
+    - `conj_exp=+0.277584`
+    - `partner_inside_garch_support=12/18`
+  - `TOKYO_OPEN_high` `M2`:
+    - `cells=8`
+    - `N_total=4492`
+    - `N_conj=576`
+    - `base_exp=+0.082299`
+    - `conj_exp=+0.282653`
+    - `partner_inside_garch_support=8/8`
+  - `SINGAPORE_OPEN_high` `M1`:
+    - `cells=4`
+    - `N_total=1547`
+    - `N_conj=468`
+    - `base_exp=+0.120994`
+    - `conj_exp=+0.078280`
+    - `partner_inside_garch_support=1/4`
+
+### Honest W2 read
+
+- `M2` active transition (`high garch + atr_vel Expanding`) is the stronger
+  validated-shelf mechanism survivor
+- `M1` latent expansion (`high garch + overnight not high`) did **not** emerge
+  as a broad complementary winner
+- family-level W2 outcomes:
+  - `COMEX_SETTLE_high`
+    - `M1`: `unclear`
+    - `M2`: `complementary_pair`
+  - `EUROPE_FLOW_high`
+    - `M1`: `garch_distinct`
+    - `M2`: `unclear`
+  - `TOKYO_OPEN_high`
+    - `M1`: `garch_distinct`
+    - `M2`: `complementary_pair`
+  - `SINGAPORE_OPEN_high`
+    - `M1`: `garch_distinct`
+    - `M2`: `complementary_pair`
+- `LONDON_METALS_high` had no validated-family rows meeting support in W2, so
+  there is no W2 claim there
+
+### Doctrine impact
+
+- strongest current honest read:
+  - `garch` still looks more useful as a state-family input than as a
+    standalone directional signal
+  - if a pairing is carried forward first, it should be `M2` before `M1`
+- this is still **not** a deployment or allocator promotion
+- next move should remain narrow and honest:
+  - either a tighter validated utility note around `M2`
+  - or a demotion / park decision for `M1`
+
+## Update (2026-04-16 ultra-late-plus — W2b partner-state provenance executed and raw-checked)
+
+### New artifacts
+
+- [docs/plans/2026-04-16-garch-partner-state-provenance-design.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-partner-state-provenance-design.md:1)
+- [docs/audit/hypotheses/2026-04-16-garch-partner-state-provenance.yaml](/mnt/c/Users/joshd/canompx3/docs/audit/hypotheses/2026-04-16-garch-partner-state-provenance.yaml:1)
+- [research/garch_partner_state_provenance_audit.py](/mnt/c/Users/joshd/canompx3/research/garch_partner_state_provenance_audit.py:1)
+- [docs/audit/results/2026-04-16-garch-partner-state-provenance-audit.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-partner-state-provenance-audit.md:1)
+
+### What was checked before trusting it
+
+- design + hypothesis were locked first
+- partner-state scope was kept narrow:
+  - `M1` neighboring overnight representations only
+  - `M2` neighboring ATR-velocity and static ATR-level representations only
+- script compiled before execution
+- headline family comparisons were then raw-recomputed from the joined
+  validated trade paths, including:
+  - `COMEX_SETTLE_high` `ATRVEL_EXPANDING`:
+    - `N_total=8503`
+    - `N_conj=1162`
+    - `base_exp=+0.107822`
+    - `conj_exp=+0.277584`
+    - `support_cells=12/18`
+  - `COMEX_SETTLE_high` `ATR_PCT_GE_70`:
+    - `N_total=8503`
+    - `N_conj=2351`
+    - `base_exp=+0.107822`
+    - `conj_exp=+0.284391`
+    - `support_cells=17/18`
+  - `EUROPE_FLOW_high` `OVN_NOT_HIGH_80`:
+    - `N_total=8206`
+    - `N_conj=1568`
+    - `base_exp=+0.096774`
+    - `conj_exp=+0.094720`
+    - `support_cells=3/16`
+  - `EUROPE_FLOW_high` `OVN_MID_ONLY`:
+    - `N_total=8206`
+    - `N_conj=1360`
+    - `base_exp=+0.096774`
+    - `conj_exp=+0.123233`
+    - `support_cells=8/16`
+
+### Honest read
+
+- `atr_vel_regime == Expanding` remains a defensible M2 representation, but it
+  is not uniquely privileged across all locked families
+- M2 provenance read by family:
+  - `COMEX_SETTLE_high`: `neighbor_stable` — static `ATR_PCT_GE_70` slightly
+    edges the current state
+  - `EUROPE_FLOW_high`: `neighbor_stable`
+  - `TOKYO_OPEN_high`: `neighbor_stable` — current state and
+    `atr_vel_ratio >= 1.05` are effectively identical
+  - `SINGAPORE_OPEN_high`: `alternate_better` — `atr_vel_ratio >= 1.10`
+    beats the current state
+- M1 provenance read is materially weaker:
+  - `COMEX_SETTLE_high`: `neighbor_stable`, with tighter
+    `OVN_NOT_HIGH_60` better than the current `OVN_NOT_HIGH_80`
+  - `EUROPE_FLOW_high`: `alternate_better` — `OVN_MID_ONLY` beats the current
+    representation
+  - `TOKYO_OPEN_high`: `weak_mechanism`
+  - `SINGAPORE_OPEN_high`: `alternate_better` — `OVN_MID_ONLY` beats the
+    current representation
+- honest implication:
+  - keep carrying `M2`
+  - do **not** treat `overnight_range_pct < 80` as the generic M1 doctrine
+  - partner-state encoding matters and should stay local / family-aware
+
+### Review hardening applied
+
+The first W2b implementation had three real methodology issues in
+`research/garch_partner_state_provenance_audit.py`:
+
+1. it over-filtered samples by requiring ATR fields even for overnight-only
+   candidates
+2. it let small valid cells vote equally with large ones in support-share
+   aggregation
+3. it zero-filled missing OOS conjunction rows in descriptive aggregation
+
+These were fixed and the audit was rerun. The headline family verdicts did not
+materially change after the fixes, which strengthens the current read rather
+than overturning it.
+
+### Queue kept explicit
+
+Do not lose these. They are not in W2b and need their own locked stages later:
+
+- prior-day levels (`PDH/PDL/pivot`)
+- prior-day realized range
+- prior-session carry / session-cascade context
+
+## Update (2026-04-16 ultra-late-plus-plus — W2c conservative M2 carry check executed, reviewed, and clarified)
+
+### New artifacts
+
+- [docs/plans/2026-04-16-garch-w2c-m2-validated-utility-design.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-w2c-m2-validated-utility-design.md:1)
+- [docs/audit/hypotheses/2026-04-16-garch-w2c-m2-validated-utility.yaml](/mnt/c/Users/joshd/canompx3/docs/audit/hypotheses/2026-04-16-garch-w2c-m2-validated-utility.yaml:1)
+- [research/garch_w2c_m2_validated_utility_audit.py](/mnt/c/Users/joshd/canompx3/research/garch_w2c_m2_validated_utility_audit.py:1)
+- [docs/audit/results/2026-04-16-garch-w2c-m2-validated-utility-audit.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-w2c-m2-validated-utility-audit.md:1)
+
+### What was checked before trusting it
+
+- design + hypothesis were locked first
+- family-local representation selection was frozen from W2b only:
+  - `COMEX_SETTLE_high` -> `ATRVEL_EXPANDING`
+  - `EUROPE_FLOW_high` -> `ATRVEL_EXPANDING`
+  - `TOKYO_OPEN_high` -> `ATRVEL_EXPANDING`
+  - `SINGAPORE_OPEN_high` -> `ATRVEL_GE_110`
+- script compiled before execution
+- summary values were rechecked from the script build output and raw joined
+  paths
+- the per-cell layer was reviewed after an apparent duplicate surfaced in
+  `SINGAPORE_OPEN_high`; that turned out to be real validated shelf structure
+  (`O15` and `O30` rows), not a grouping bug
+- report was hardened to carry ORB aperture explicitly so future reviews do not
+  have to infer that distinction
+
+### Honest W2c read
+
+- stage verdict: `M2_carry`
+- all four carried local families improved conjunction expectancy over both
+  base and `garch_high` alone:
+  - `COMEX_SETTLE_high`:
+    - base `+0.107822`
+    - `garch_high` `+0.238249`
+    - conjunction `+0.277584`
+    - `Δ conj-garch +0.039335`
+  - `EUROPE_FLOW_high`:
+    - base `+0.096774`
+    - `garch_high` `+0.148081`
+    - conjunction `+0.261281`
+    - `Δ conj-garch +0.113200`
+  - `TOKYO_OPEN_high`:
+    - base `+0.082299`
+    - `garch_high` `+0.140209`
+    - conjunction `+0.282653`
+    - `Δ conj-garch +0.142445`
+  - `SINGAPORE_OPEN_high`:
+    - base `+0.120994`
+    - `garch_high` `+0.144872`
+    - conjunction `+0.406274`
+    - `Δ conj-garch +0.261402`
+
+### Doctrine impact
+
+- `M2` is the current carried mechanism family for `garch`
+- this is still validated utility only:
+  - no deployment claim
+  - no allocator translation
+  - no use of descriptive 2026 OOS as a promotion basis
+- `M1` remains demoted from generic doctrine
+
+### Queue remains explicit
+
+Do not lose these after W2c:
+
+- prior-day levels (`PDH/PDL/pivot`)
+- prior-day realized range
+- prior-session carry / session-cascade context
+
+## Update (2026-04-16 late-late-late — A2 bounded continuous sizing run, negative after translation)
+
+### Headline
+
+`A2` bounded continuous sizing has now been run and headline results were
+independently recomputed from raw trade paths.
+
+Artifacts:
+- [docs/audit/hypotheses/2026-04-16-garch-profile-continuous-sizing-replay.yaml](/mnt/c/Users/joshd/canompx3/docs/audit/hypotheses/2026-04-16-garch-profile-continuous-sizing-replay.yaml:1)
+- [research/garch_profile_continuous_sizing_replay.py](/mnt/c/Users/joshd/canompx3/research/garch_profile_continuous_sizing_replay.py:1)
+- [docs/audit/results/2026-04-16-garch-profile-continuous-sizing-replay-topstep-50k-mnq-auto.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-profile-continuous-sizing-replay-topstep-50k-mnq-auto.md:1)
+- [docs/audit/results/2026-04-16-garch-profile-continuous-sizing-replay-self-funded-tradovate.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-profile-continuous-sizing-replay-self-funded-tradovate.md:1)
+
+### Verified read
+
+- After bounded continuous desired weights are translated into real integer
+  contracts, `A2` does **not** beat `BASE_1X` on either profile.
+- Topstep best A2 headline was still below base:
+  - `HIGH_BOOST_ONLY`: `46,322.9 -> 44,624.0` (`Δ -1,698.9`)
+- Self-funded best A2 headline was also below base:
+  - `HIGH_BOOST_ONLY`: `33,689.6 -> 33,630.1` (`Δ -59.5`)
+- Continuous-to-contract translation is the main issue:
+  - `HIGH_BOOST_ONLY` collapsed completely to `1x` on both profiles (`mean_contracts=1.0`, `changed_pct=0.0`)
+  - `GLOBAL_LINEAR` actually changed trades on Topstep (`mean_contracts=0.773`, `zero_pct=27.4%`, `double_pct=4.7%`) and still underperformed (`Δ -7,476.2`)
+
+### Doctrine impact
+
+- Do **not** assume continuous sizing is better just because the research object is continuous.
+- Under current profile/account granularity, A2 is currently a **negative result**.
+- This strengthens the case that the next proper test is `A3` simple confluence,
+  not more optimism about A2.
+
+## Update (2026-04-16 very late — A3 confluence run completed, mechanism note added)
+
+### Artifacts
+
+- [docs/audit/hypotheses/2026-04-16-garch-a3-confluence-allocator-replay.yaml](/mnt/c/Users/joshd/canompx3/docs/audit/hypotheses/2026-04-16-garch-a3-confluence-allocator-replay.yaml:1)
+- [research/garch_profile_confluence_replay.py](/mnt/c/Users/joshd/canompx3/research/garch_profile_confluence_replay.py:1)
+- [docs/audit/results/2026-04-16-garch-a3-confluence-allocator-replay-topstep-50k-mnq-auto.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-a3-confluence-allocator-replay-topstep-50k-mnq-auto.md:1)
+- [docs/audit/results/2026-04-16-garch-a3-confluence-allocator-replay-self-funded-tradovate.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-a3-confluence-allocator-replay-self-funded-tradovate.md:1)
+- [docs/audit/hypotheses/2026-04-16-garch-mechanism-hypotheses.md](/mnt/c/Users/joshd/canompx3/docs/audit/hypotheses/2026-04-16-garch-mechanism-hypotheses.md:1)
+
+### Verified read
+
+- Simple confluence adds value over `BASE_1X` in some cases, but it does **not**
+  beat the best solo map on either profile.
+- Topstep:
+  - `GARCH_NATIVE_DISCRETE` still best headline: `+55,632.8`
+  - best confluence checked: `GARCH_ATR_NATIVE_DISCRETE` `+51,526.4`
+- Self-funded:
+  - best raw dollars still `OVN_NATIVE_DISCRETE` `+41,363.4`
+  - best confluence compromise checked: `GARCH_OVN_NATIVE_DISCRETE` `+37,353.7`
+- Independent raw recomputes completed for:
+  - Topstep `GARCH_ATR_NATIVE_DISCRETE`: `46,322.9 -> 51,526.4` (`Δ +5,203.5`)
+  - Self-funded `GARCH_OVN_NATIVE_DISCRETE`: `33,689.6 -> 37,353.7` (`Δ +3,664.1`)
+
+### Doctrine impact
+
+- `A3` survives as a real contender, but not as an outright winner yet.
+- Another filter with `garch` can help, but the first clean confluence pass did
+  not unlock a dominant new map.
+- Next non-adhoc step should be portfolio-ranking / scarce-risk allocation,
+  guided by the mechanism note, not more random filter stacking.
+
+## Update (2026-04-16 final — profile-specific incremental-edge proof plan added)
+
+### New proof-plan artifact
+
+- [docs/plans/2026-04-16-deployment-map-incremental-edge-proof-plan.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-deployment-map-incremental-edge-proof-plan.md:1)
+
+### What it does
+
+- Separates **signal edge**, **portfolio allocation edge**, and
+  **profile/risk-constraint edge**
+- Defines the strict claim as:
+  candidate deployment map vs `BASE_1X` on a given profile
+- Sets the correct proof ladder:
+  replay -> locked doctrine -> forward shadow -> promotion decision
+- Makes replay operational evidence only, not edge proof
+
+### Current proof-state summary
+
+Verified:
+- A1 headline replay totals are independently recomputed and usable
+- A2 bounded continuous sizing is negative after real contract translation
+- A3 simple confluence helps versus base in some cases but does not beat the
+  best solo map
+
+Not verified:
+- session-attribution tables as authoritative evidence
+- any claim that a deployment map is already a validated incremental edge
+- any hard profile default encoded into production logic
+
+### Immediate next order
+
+1. keep current doctrine as candidate policy only
+2. if continuing, move to portfolio-ranking / scarce-risk allocation test
+3. do not hard-wire app defaults before forward shadow
+
+## Update (2026-04-16 late-late — skeptical proof-plan reset, allocator-accounting first)
+
+### Headline
+
+The deployment-map work now has a separate skeptical reset document:
+- [docs/plans/2026-04-16-garch-deployment-map-proof-plan-reset.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-deployment-map-proof-plan-reset.md:1)
+
+The key doctrine change is explicit:
+- **allocator-accounting validation first**
+- **edge proof second**
+
+### What is currently safe
+
+- Headline A1 replay totals are independently recomputed from raw trade paths and are usable.
+- Current replay evidence points more to allocator / sizing behavior than to simple `TAKE_HIGH_ONLY` or `SKIP_LOW_ONLY` gating.
+- Two replay defects were found/fixed in `research/garch_profile_policy_surface_replay.py`:
+  1. bad import/object reference for `replace`
+  2. skipped-trade deltas missing from attribution
+
+### What is NOT safe
+
+- Per-session attribution still does **not** reconcile exactly to headline deltas.
+- Therefore session-attribution tables are **not authoritative evidence yet**.
+- Do not make session-level doctrine claims from those tables.
+- Do not claim the edge is proved.
+
+### Immediate next order
+
+1. close or formally demote the attribution layer
+2. freeze only verified A1 headline totals
+3. run `A2` bounded continuous sizing
+4. run `A3` simple confluence allocator
+5. compare `A1` / `A2` / `A3` on the same profile-aware objective hierarchy
+
+## Update (2026-04-16 late — deployment allocator framing corrected, replay cleaned)
+
+### Headline
+
+The `garch` work is now explicitly framed as a **deployment allocator**
+problem, not a hunt for one universal map and not proof of a new standalone
+edge.
+
+### What changed
+
+1. Cleaned the profile replay tool wording and reran both profile reports:
+   - [research/garch_profile_production_replay.py](/mnt/c/Users/joshd/canompx3/research/garch_profile_production_replay.py:1)
+   - [docs/audit/results/2026-04-16-garch-profile-production-replay-topstep-50k-mnq-auto.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-profile-production-replay-topstep-50k-mnq-auto.md:1)
+   - [docs/audit/results/2026-04-16-garch-profile-production-replay-self-funded-tradovate.md](/mnt/c/Users/joshd/canompx3/docs/audit/results/2026-04-16-garch-profile-production-replay-self-funded-tradovate.md:1)
+2. Tightened the main utilization plan so the current discrete replay is treated as the **first operational slice**, not the final answer:
+   - [docs/plans/2026-04-16-garch-institutional-utilization-plan.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-16-garch-institutional-utilization-plan.md:1)
+3. Added a dedicated allocator-architecture design doc grounded in Chan 2008,
+   Carver 2015, mechanism priors, and the regime framework:
+   - [docs/plans/2026-04-17-garch-deployment-allocator-architecture.md](/mnt/c/Users/joshd/canompx3/docs/plans/2026-04-17-garch-deployment-allocator-architecture.md:1)
+
+### Current doctrine
+
+- The replay results remain useful, but they are **A1 discrete allocator**
+  evidence only.
+- Do **not** freeze `GARCH_NATIVE_DISCRETE` / `OVN_NATIVE_DISCRETE` /
+  `GARCH_OVN_NATIVE_DISCRETE` as final doctrine yet.
+- Next stages should compare:
+  - `A1` discrete maps
+  - `A2` bounded continuous sizing
+  - `A3` simple confluence allocator (`garch + overnight + ATR-state`)
+
+### What NOT to do next
+
+- Do not present the current discrete maps as the final economically correct
+  use of `garch`.
+- Do not let deployment replay rewrite research truth.
+- Do not skip the continuous/confluence allocator stages just because profile
+  replay already looks useful.
+
 ---
 
 ## Update (2026-04-15 late-late — Path C complete, H2 book closed, Path A deferred)

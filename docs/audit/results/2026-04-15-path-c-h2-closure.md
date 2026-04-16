@@ -7,38 +7,9 @@
 
 ---
 
-## TL;DR — three decisions out of three
-
-| Question | Answer |
-|----------|--------|
-| Is H2 a single-cell artifact or universal? | **UNIVERSAL.** T5 PASS — 68.5% positive delta across 527 combos, every instrument above 60%. |
-| Does H2 survive DSR at honest K? | **AMBIGUOUS.** At empirical var_sr=0.0174 (2.70× SMALLER than dsr.py default): K=5 DSR=0.935 marginal; K=12 DSR=0.763 fail; K=36 DSR=0.460 fail; K=527 DSR=0.049 fail. |
-| Does rel_vol × garch composite add edge? | **NO. SUBSUMED.** Signals are orthogonal (corr=0.069) but composite ExpR +0.220 < garch-alone +0.263. Synergy −0.043. |
-
-### What this means for deployment
-
-- **garch_vol_pct ≥ 70 alone dominates the composite.** Do not deploy an AND filter. Ship as single-gate signal or not at all.
-- **H2 is not DSR-robust at honest K.** Deploy posture stays: NO CAPITAL, signal-only shadow only.
-- **rel_vol_HIGH_Q3 on this cell is redundant** given garch. Still a real but weaker independent signal elsewhere (see Step 3 IS 4-cell: rel-only +0.096 vs neither −0.022 — a real but smaller effect). Treat rel_vol and garch as two independent confirmation layers, not a joint AND filter.
-- **Dollar landscape on the H2 cell (IS, 5.5 yrs):** neither $0.28/trade → rel-only $2.69/trade → garch-only $17.48/trade → both $31.42/trade. Dollar efficiency of BOTH is 1.8× garch-alone despite LOWER ExpR — because joint-fire days are bigger-risk days (correlated with bigger ORB size). Per-R edge favors garch-alone; per-$ the story is muddier and depends on contract-count allocation.
-
-### Honest caveats
-
-- var_sr calibrated from 527 universality cells — cleaner than `experimental_strategies` but not "all possible strategies ever tested." True var_sr for this experiment could be 0.01-0.05.
-- Composite AND cell bootstrap p=0.079 on IS — marginal significance. OOS BOTH has N=7 — very thin.
-- 2020-2025 backdrop includes COVID-2020 vol + 2022-23 bear. Universality score may be inflated by these regimes; 2026+ low-vol shadow will stress-test.
-
-### Next steps (ranked)
-
-1. **Pre-register signal-only shadow** for `garch_vol_pct ≥ 70` on H2 (MNQ COMEX_SETTLE O5 RR1.0 long). Accumulate 50+ live-mode signal fires; re-audit after 6-12 months.
-2. **Extend same shadow** to top-3 OTHER universality survivors: MGC COMEX_SETTLE O5 RR2.0 long (Δ=+0.311), MGC EUROPE_FLOW O15 RR2.0 long (+0.295), MES TOKYO_OPEN O15 RR2.0 long (+0.286).
-3. **Leave Path C book closed.** Move to Path A (HTF level features) + Phase E non-ORB in parallel.
-
----
-
 ## Step 1 — DSR at honest K (empirical var_sr)
 
-**Empirical `var_sr`:** 0.0174 (from N=6 row sample; true denom 6)
+**Empirical `var_sr`:** 0.0174 (computed across all 527 universality cells; dsr-audit table below shows 6 representative cells — H2 + top-5 by |delta|)
 **`dsr.py` default (calibrated for `experimental_strategies`):** 0.047
 **Ratio:** 2.70× — experimental_strategies default is MORE conservative than our empirical distribution
 

@@ -1,0 +1,77 @@
+date: 2026-04-16
+title: Garch A3 simple confluence allocator replay
+status: active
+purpose: >
+  Test whether simple, pre-committed confluence maps built from
+  garch_forecast_vol_pct, overnight_range_pct, and atr_20_pct improve profile
+  replay outcomes versus solo-score maps, without overclaiming edge proof.
+
+authority_chain:
+  - CLAUDE.md
+  - RESEARCH_RULES.md
+  - TRADING_RULES.md
+  - docs/plans/2026-04-16-garch-deployment-map-proof-plan-reset.md
+  - docs/plans/2026-04-17-garch-deployment-allocator-architecture.md
+
+evidence_tier: deployment_replay_allocator_translation
+
+profiles:
+  - topstep_50k_mnq_auto
+  - self_funded_tradovate
+
+maps:
+  - GARCH_NATIVE_DISCRETE
+  - OVN_NATIVE_DISCRETE
+  - GARCH_OVN_NATIVE_DISCRETE
+  - GARCH_ATR_NATIVE_DISCRETE
+  - TRIPLE_MEAN_NATIVE_DISCRETE
+
+rationale:
+  - GARCH and overnight already showed value in prior replay work.
+  - ATR is a closely related volatility-state proxy that may improve specificity or subsume garch.
+  - Mean-score confluence is an auditable forecast-combination form with less overfit risk than tree models.
+
+rules:
+  - No session-attribution evidence is used at this stage.
+  - No edge-proof claim is allowed from replay alone.
+  - Each map earns its own native session-family scaffold on validated populations.
+  - No parameter tuning after first look.
+
+translation:
+  action_rule: >
+    For each map: 2x if native high-directional support and score >= 70,
+    0x if native low-directional support and score <= 30, else 1x.
+  score_defs:
+    GARCH_NATIVE_DISCRETE: garch_forecast_vol_pct
+    OVN_NATIVE_DISCRETE: overnight_range_pct
+    GARCH_OVN_NATIVE_DISCRETE: mean(garch_forecast_vol_pct, overnight_range_pct)
+    GARCH_ATR_NATIVE_DISCRETE: mean(garch_forecast_vol_pct, atr_20_pct)
+    TRIPLE_MEAN_NATIVE_DISCRETE: mean(garch_forecast_vol_pct, overnight_range_pct, atr_20_pct)
+
+required_outputs:
+  - per-account total dollars
+  - copied-account total dollars
+  - Sharpe
+  - max drawdown dollars
+  - worst day dollars
+  - worst 5-day dollars
+  - max open lots
+  - 90-day survival probability
+  - operational pass probability
+
+verification_requirements:
+  - Compile the replay script before execution.
+  - Independently recompute at least one top confluence map headline result per profile from raw trade paths.
+  - Demote the whole A3 stage if headline replay totals fail independent recomputation.
+
+success_condition: >
+  A3 survives if at least one simple confluence map improves the profile
+  objective hierarchy versus both BASE_1X and the relevant solo-score maps.
+
+kill_condition: >
+  Kill or demote A3 if confluence does not beat solo maps, materially worsens
+  survival, or simply re-labels the same behavior without economic gain.
+
+next_stage_not_included_here:
+  - portfolio-ranking allocator across concurrent same-day opportunities
+  - shadow-mode promotion

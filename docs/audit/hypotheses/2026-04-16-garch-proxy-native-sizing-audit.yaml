@@ -1,0 +1,80 @@
+# Hypothesis Registry — 2026-04-16 garch-proxy-native-sizing-audit
+#
+# Locked: 2026-04-16T23:05:00+10:00
+# Author: Codex main session
+# Purpose: fair proxy-native comparison after the common-scaffold additive test
+
+metadata:
+  name: "garch-proxy-native-sizing-audit"
+  purpose: "Compare garch to ATR / overnight proxies when each score earns its own session-family scaffold under the same locked methodology."
+  date_locked: "2026-04-16T23:05:00+10:00"
+  holdout_date: "2026-01-01"
+  testing_mode: "family"
+  total_expected_trials: 10
+  theory_summary: |
+    A common-scaffold comparison asks which score works best inside the same
+    operational map. A fair proxy-native comparison asks a different question:
+    if each score is allowed to discover its own session-family high/low regime
+    map using the same family audit, which score produces the best normalized
+    portfolio utility? This avoids accidentally advantaging or disadvantaging a
+    proxy by forcing it through another feature's discovered session map.
+
+hypotheses:
+  - id: 1
+    name: "Broad exact-scope native-scaffold comparison"
+    theory_citation: >
+      Chan 2008 Ch 7 regime-state logic;
+      Carver 2015 Ch 9-10 forecast comparison inside a common portfolio sizing
+      framework;
+      Harvey-Liu 2015 family-discipline for multiple tests
+    economic_basis: |
+      If garch contains genuinely distinct information, it should remain
+      competitive when ATR and overnight-range proxies are each allowed to use
+      their own family-discovered session scaffold.
+    scope:
+      trade_scope: "Broad exact rows from validated_setups + experimental_strategies"
+      maps:
+        - "GARCH_SESSION_CLIPPED"
+        - "ATR_SESSION_CLIPPED"
+        - "OVN_SESSION_CLIPPED"
+        - "GARCH_ATR_MEAN_CLIPPED"
+        - "GARCH_OVN_MEAN_CLIPPED"
+      thresholds:
+        high_pct: 70
+        low_pct: 30
+    expected_trial_count: 5
+    kill_criteria:
+      - "Garch loses cleanly to simpler proxies on take-home and risk."
+      - "Combined-state versions fail to improve on the best single-score map."
+
+  - id: 2
+    name: "Validated-scope native-scaffold comparison"
+    theory_citation: >
+      Chan 2008 Ch 7;
+      regime-and-rr handling framework R3 / R7 path
+      (docs/institutional/regime-and-rr-handling-framework.md)
+    economic_basis: |
+      The production-relevant question is whether garch retains value on the
+      validated strategy population when the proxy comparison is made on fair,
+      proxy-native session scaffolds.
+    scope:
+      trade_scope: "Validated-only exact rows"
+      maps:
+        - "GARCH_SESSION_CLIPPED"
+        - "ATR_SESSION_CLIPPED"
+        - "OVN_SESSION_CLIPPED"
+        - "GARCH_ATR_MEAN_CLIPPED"
+        - "GARCH_OVN_MEAN_CLIPPED"
+      thresholds:
+        high_pct: 70
+        low_pct: 30
+    expected_trial_count: 5
+    kill_criteria:
+      - "Validated-scope garch loses to simpler proxies on the fair native test."
+      - "Combined-state versions fail to improve take-home or risk-adjusted results."
+
+total_hypothesis_count: 2
+total_expected_trials: 10
+budget_check:
+  max_allowed_clean: 300
+  status: "under budget"

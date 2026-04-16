@@ -1,0 +1,94 @@
+# Hypothesis Registry — 2026-04-16 garch-g0-preflight
+#
+# Locked: 2026-04-16T21:20:00+10:00
+# Author: Codex main session
+# Purpose: preflight the garch institutional utilization program before any
+#          further economics / classifier work
+
+metadata:
+  name: "garch-g0-preflight"
+  purpose: "Verify the env, data, feature timing, exact population rebuild, holdout boundary, and falsification controls for the garch institutional utilization program."
+  date_locked: "2026-04-16T21:20:00+10:00"
+  holdout_date: "2026-01-01"
+  testing_mode: "family"
+  total_expected_trials: 12
+  theory_summary: |
+    Lopez de Prado 2020 requires theory-first, anti-tweak discipline and
+    explicit falsification. Harvey-Liu 2015 requires honest family definition.
+    Chan 2008 frames GARCH as a volatility-regime tool rather than a static
+    binary setup filter. This preflight locks the object definition before
+    normalized sizing, additive-value, or classifier work begins.
+
+hypotheses:
+  - id: 1
+    name: "Environment and canonical data readiness"
+    theory_citation: >
+      Lopez de Prado 2020 theory-first / no silent contamination
+      (docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md)
+    economic_basis: |
+      If the environment, canonical tables, or required columns are not ready,
+      every downstream conclusion about garch utilization is suspect.
+    scope:
+      checks:
+        - "Python / venv / import preflight"
+        - "orb_outcomes freshness by symbol"
+        - "daily_features freshness by symbol"
+        - "required garch columns present"
+    expected_trial_count: 2
+    kill_criteria:
+      - "Required imports for the current research path fail."
+      - "Required columns are missing."
+      - "Canonical tables are stale or structurally inconsistent."
+
+  - id: 2
+    name: "Feature timing and exact population rebuild"
+    theory_citation: >
+      RESEARCH_RULES.md discovery-layer discipline;
+      Harvey-Liu 2015 family honesty
+    economic_basis: |
+      The utilization program is only valid if the garch feature is prior-only
+      and the current scripts reproduce the exact validated and broad trade
+      populations already audited.
+    scope:
+      checks:
+        - "prior-only functional audit of _prior_rank_pct"
+        - "static audit of compute_garch_forecast and garch_forecast_vol_pct lines"
+        - "validated strategy count in scope"
+        - "validated test count reproduction"
+        - "validated anchor cell reproduction"
+        - "broad in-scope row count reproduction"
+        - "broad build_cells count reproduction"
+        - "broad session-count anchor reproduction"
+        - "holdout boundary consistency across modules"
+    expected_trial_count: 7
+    kill_criteria:
+      - "The feature timing audit contradicts prior-only semantics."
+      - "The validated or broad rebuild does not reproduce the existing audited populations."
+      - "The holdout boundary is inconsistent across modules."
+
+  - id: 3
+    name: "Destruction controls still fail as they should"
+    theory_citation: >
+      Lopez de Prado 2020 falsification discipline;
+      Chan 2008 regime-state logic
+    economic_basis: |
+      The observed garch regime effect should degrade materially when the
+      timing alignment is broken or replaced with a deterministic null feature.
+    scope:
+      controls:
+        - "shuffle-null on current audited cells"
+        - "fixed-lag shifted garch labels"
+        - "deterministic date-hash placebo percentile"
+      fixed_parameters:
+        shift_lag_trades: 21
+        shuffle_count: 100
+    expected_trial_count: 3
+    kill_criteria:
+      - "Shifted or placebo controls preserve the real asymmetry."
+      - "Shuffle-null no longer degrades the real effect."
+
+total_hypothesis_count: 3
+total_expected_trials: 12
+budget_check:
+  max_allowed_clean: 300
+  status: "under budget"

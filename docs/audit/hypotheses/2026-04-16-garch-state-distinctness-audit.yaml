@@ -1,0 +1,140 @@
+date: 2026-04-16
+title: Garch state distinctness and incremental-value audit
+status: active
+purpose: >
+  Determine whether garch_forecast_vol_pct is distinct, complementary, or
+  mostly subsumed by adjacent pre-entry volatility-state proxies, and identify
+  the honest role it may play in later setup-pairing or allocator work.
+
+authority_chain:
+  - CLAUDE.md
+  - RESEARCH_RULES.md
+  - TRADING_RULES.md
+  - docs/institutional/pre_registered_criteria.md
+  - docs/institutional/mechanism_priors.md
+  - docs/institutional/regime-and-rr-handling-framework.md
+  - docs/plans/2026-04-16-garch-program-audit.md
+  - docs/plans/2026-04-16-garch-institutional-attack-plan.md
+  - docs/plans/2026-04-16-garch-state-distinctness-design.md
+
+evidence_tiers:
+  - D1_canonical_distinctness
+  - D2_validated_utility_distinctness
+
+tier_rules:
+  D1_canonical_distinctness:
+    universe: canonical populations from orb_outcomes plus daily_features on the locked family set
+  D2_validated_utility_distinctness:
+    universe: validated_setups_only
+    status: research_provisional_not_production_truth
+
+question: >
+  Relative to atr_20_pct, overnight_range_pct, and atr_vel_ratio, is
+  garch_forecast_vol_pct structurally distinct, economically complementary, or
+  mostly subsumed?
+
+scope_boundary: >
+  This is a local distinctness audit on a locked garch-anchored family set. It
+  does not claim a global winner across the whole book and may not be promoted
+  into deployment doctrine from this stage alone.
+
+sacred_window_rule: >
+  2026 forward / OOS readouts are descriptive only in this stage. They may not
+  be used to choose families, choose partners, or decide the final
+  distinct/complementary/subsumed verdict.
+
+included_proxies:
+  - atr_20_pct
+  - overnight_range_pct
+  - atr_vel_ratio
+
+working_role_priors:
+  garch_forecast_vol_pct: conditional_or_latent_vol_expectation
+  overnight_range_pct: realized_pre_session_expansion
+  atr_vel_ratio: volatility_transition_or_acceleration
+
+main_families:
+  - COMEX_SETTLE_high
+  - EUROPE_FLOW_high
+  - TOKYO_OPEN_high
+  - SINGAPORE_OPEN_high
+  - LONDON_METALS_high
+  - NYSE_OPEN_low
+
+required_blocks:
+  - overlap_table
+  - conditional_sign_persistence
+  - four_cell_mechanism_decomposition
+  - fair_native_utility_comparison
+  - distinctness_verdict
+  - role_implication
+
+required_pairings:
+  - garch_x_overnight_range_pct
+  - garch_x_atr_vel_ratio
+  - garch_x_atr_20_pct
+
+fairness_rules:
+  - No new broad search.
+  - No new sessions beyond the locked family set.
+  - No profile/account geometry in this stage.
+  - No deployment map creation in this stage.
+  - No use of live_config as truth.
+  - No forward-window tuning.
+  - Pairwise correlations are descriptive only, not final verdicts.
+  - atr_vel_ratio must not be forced through fake 70/30 thresholds.
+  - Utility comparison is solo-proxy only in this stage; no new confluence search.
+
+conditioning_rules:
+  atr_20_pct:
+    type: fixed_tail
+    high: ">=80"
+    low: "<=20"
+  overnight_range_pct:
+    type: fixed_tail
+    high: ">=80"
+    low: "<=20"
+  atr_vel_ratio:
+    type: canonical_regime_primary
+    primary: atr_vel_regime
+    values:
+      - Expanding
+      - Stable
+      - Contracting
+    optional_backup: within_family_is_terciles
+
+minimum_support_rules:
+  conditional_strata:
+    thin_label: thin_or_na
+    note: thin strata cannot count for or against final survival
+  four_cell:
+    min_per_cell: 20
+    note: thinner cells are descriptive only and cannot carry a verdict alone
+
+verdict_rule: >
+  Non-unclear verdicts require at least two non-thin evidence blocks among sign
+  persistence, four-cell decomposition, and utility comparison, with no 2026
+  forward data used as the deciding evidence.
+
+outputs_required:
+  - pooled overlap table by family
+  - conditional sign-persistence table by proxy stratum
+  - four-cell decomposition tables for each required pairing
+  - fair utility comparison versus native proxy maps
+  - family-by-family verdict: distinct/complementary/subsumed/unclear
+  - allowed role implication: R3/R7/R8/no_standalone_role
+
+success_condition: >
+  The audit succeeds if it produces an honest family-by-family classification of
+  garch relative to the adjacent vol-state family, with enough evidence to
+  decide the next stage without reverting to random filter stacking.
+
+kill_condition: >
+  Kill or demote the stage if it drifts into new search, mixes deployment
+  translation into the state question, or cannot produce a clean verdict beyond
+  raw pairwise correlations.
+
+next_stage_not_included_here:
+  - mechanism pairing execution
+  - allocator translation
+  - forward shadow

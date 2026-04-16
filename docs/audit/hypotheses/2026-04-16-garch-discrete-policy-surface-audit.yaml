@@ -1,0 +1,80 @@
+# Hypothesis Registry — 2026-04-16 garch-discrete-policy-surface-audit
+#
+# Locked: 2026-04-16T23:58:00+10:00
+# Author: Codex main session
+# Purpose: compare raw discrete trading policies for garch as a deployment input
+
+metadata:
+  name: "garch-discrete-policy-surface-audit"
+  purpose: "Test the main real-action trading policies for garch using canonical raw trade rows rather than stored metadata."
+  date_locked: "2026-04-16T23:58:00+10:00"
+  holdout_date: "2026-01-01"
+  testing_mode: "family"
+  total_expected_trials: 16
+  theory_summary: |
+    Chan 2008 frames GARCH as a current observable volatility regime, not
+    transition alpha. The practical trading question is whether that regime is
+    best used by skipping hostile states, trading only favorable states, sizing
+    up favorable states, or combining both. This audit compares those uses with
+    raw integer action counts on canonical trade rows.
+
+hypotheses:
+  - id: 1
+    name: "Broad exact-scope discrete policy surface"
+    theory_citation: >
+      Chan 2008 Ch 7 regime-state logic;
+      docs/institutional/mechanism_priors.md roles R1 / R3 / R8;
+      docs/institutional/regime-and-rr-handling-framework.md
+    economic_basis: |
+      If garch is a real deployment input, at least some raw discrete trading
+      policies should improve total take-home, drawdown, or survivability on the
+      broad exact-filter tradeable surface without relying on stored summary
+      stats or fractional-weight abstractions.
+    scope:
+      trade_scope: "Broad exact rows from canonical orb_outcomes + daily_features"
+      policies:
+        - "SESSION_TAKE_HIGH_ONLY"
+        - "GLOBAL_TAKE_HIGH_ONLY"
+        - "SESSION_SKIP_LOW_ONLY"
+        - "GLOBAL_SKIP_LOW_ONLY"
+        - "SESSION_HIGH_2X_ONLY"
+        - "GLOBAL_HIGH_2X_ONLY"
+        - "SESSION_CLIPPED_0_1_2"
+        - "GLOBAL_CLIPPED_0_1_2"
+      support_rule: "Session-aware policies only act in sessions with family directional support from raw regime-family audit."
+    expected_trial_count: 8
+    kill_criteria:
+      - "No discrete policy improves portfolio utility versus base."
+      - "Apparent gains come only with materially worse DD or loss clustering."
+
+  - id: 2
+    name: "Validated-scope discrete policy surface"
+    theory_citation: >
+      Same as Hypothesis 1, but restricted to the validated shelf population for
+      the production-relevant question.
+    economic_basis: |
+      A policy can be interesting on the wider tradeable surface yet still fail
+      the actual validated population. The production question must be answered
+      separately on raw validated-scope trades.
+    scope:
+      trade_scope: "Validated-only exact rows from canonical orb_outcomes + daily_features"
+      policies:
+        - "SESSION_TAKE_HIGH_ONLY"
+        - "GLOBAL_TAKE_HIGH_ONLY"
+        - "SESSION_SKIP_LOW_ONLY"
+        - "GLOBAL_SKIP_LOW_ONLY"
+        - "SESSION_HIGH_2X_ONLY"
+        - "GLOBAL_HIGH_2X_ONLY"
+        - "SESSION_CLIPPED_0_1_2"
+        - "GLOBAL_CLIPPED_0_1_2"
+      support_rule: "Session-aware policies only act in sessions with family directional support from raw regime-family audit."
+    expected_trial_count: 8
+    kill_criteria:
+      - "No discrete policy improves validated-scope utility versus base."
+      - "The best policy is unstable OOS or only wins by taking materially more concentrated risk."
+
+total_hypothesis_count: 2
+total_expected_trials: 16
+budget_check:
+  max_allowed_clean: 300
+  status: "under budget"
