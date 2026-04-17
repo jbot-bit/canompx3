@@ -54,16 +54,9 @@ Both deferred items still needed for full C2 closure. The citation convention no
 
 ## IMPORTANT findings
 
-### I1. WFE threshold inconsistency: `>0.50` vs `≥0.50`
-**Docs involved:**
-- `RESEARCH_RULES.md:79` — "WFE > 50% = strategy likely real. < 50% = likely overfit."
-- `pre_registered_criteria.md:144` — locked binding: "WFE ≥ 0.50."
+### I1. ~~WFE threshold inconsistency: `>0.50` vs `≥0.50`~~ — **RESOLVED 2026-04-17**
 
-**Exact conflict:** Strict-greater-than vs greater-or-equal. Boundary case: WFE=0.50 exactly *fails* RESEARCH_RULES but *passes* pre_registered_criteria. `TRADING_RULES.md:74` cites strategies with WFE at 0.52–0.53 that pass both, so no live deployed strategy is currently at the boundary — but the next borderline candidate will hit this ambiguity.
-
-**Which doc should win:** `pre_registered_criteria.md` (the *locked* policy). Per Amendment 2.8 (2026-04-07) the threshold is explicitly `≥ 0.50`.
-
-**Recommended fix:** Update `RESEARCH_RULES.md:79` to cite `≥ 0.50` and link to `pre_registered_criteria.md` Criterion 6 as the binding source. No change to `pre_registered_criteria.md`.
+**Applied fix:** `RESEARCH_RULES.md:80` changed from *"Walk-forward efficiency (WFE) > 50% = strategy likely real. < 50% = likely overfit."* → *"Walk-forward efficiency (WFE) ≥ 0.50 = strategy meets the locked binding threshold (see `docs/institutional/pre_registered_criteria.md` § *Criterion 6 — Walk-forward efficiency*). < 0.50 = likely overfit."* Operator aligned with Criterion 6; stable anchor pointer added. No change to `pre_registered_criteria.md`.
 
 ---
 
@@ -82,44 +75,40 @@ Both deferred items still needed for full C2 closure. The citation convention no
 
 ---
 
-### I3. Significance threshold cited inconsistently across three registered docs
-**Docs involved:**
-- `RESEARCH_RULES.md:65` — "p < 0.005 required for discovery claims (Harvey & Liu 2014)"
-- `pre_registered_criteria.md:69` — "t ≥ 3.79 (Chordia et al 2018)" OR "t ≥ 3.00 (HLZ)"
-- `TRADING_RULES.md:619` — cites a deployed lane with `t=3.34, p=0.0016, p_bh=0.088` as PROMISING (passes t≥3.00, fails t≥3.79, fails BH<0.05)
+### I3. Significance threshold cited inconsistently across three registered docs — **(a) RESOLVED 2026-04-17; (b) + (c) DEFERRED**
 
-**Exact conflict:** Three registered-authority docs cite three different thresholds for the same concept. A lane with `t=3.34` passes the HLZ threshold, fails Chordia-strict, and its `p_bh=0.088` fails the BH cutoff — but the lane is in the deployed book.
+**Original problem (preserved for context):**
+- `RESEARCH_RULES.md:65` cited *"p < 0.005 required for discovery claims (Harvey & Liu 2014)"*
+- `pre_registered_criteria.md:69` defines *"t ≥ 3.79 (Chordia et al 2018)" OR "t ≥ 3.00 (HLZ)"*
+- `TRADING_RULES.md:619` cites a deployed lane with `t=3.34, p=0.0016, p_bh=0.088` as PROMISING (passes t≥3.00, fails t≥3.79)
 
-**Which doc should win:** `pre_registered_criteria.md` is the authority for thresholds. It allows `t ≥ 3.00` *with prior theory* OR `t ≥ 3.79` *without*. If a deployed lane cites `t=3.34`, there must be a documented prior-theory justification.
+**(a) Applied 2026-04-17:** `RESEARCH_RULES.md:65` changed from *"- **p < 0.005:** Required for 'discovery' claims (per Harvey & Liu, 2014)."* → *"- **Discovery claims:** see the binding threshold in `docs/institutional/pre_registered_criteria.md` § *Criterion 4 — Chordia t-statistic threshold*."* RESEARCH_RULES no longer states a separate threshold; it points to the locked binding source.
 
-**Recommended fix:** (a) Replace `RESEARCH_RULES.md:65` "p < 0.005" with an explicit link to `pre_registered_criteria.md` Criterion 4. (b) For each deployed lane in `TRADING_RULES.md` with `t < 3.79`, add a one-line prior-theory citation. (c) Clarify what passes the "PROMISING" bar vs the "VALIDATED" bar.
+**(b) DEFERRED:** Adding prior-theory citations per deployed lane with `t < 3.79` in `TRADING_RULES.md`. This is doctrine wording, not mechanical cleanup — picking the correct theory citation per lane (Crabel 1990, Fitschen 2013, etc.) is a research judgment call. Blanket citations rejected by user 2026-04-17. Own workstream.
 
----
-
-### I4. Strategy status table is a dual source of truth
-**Docs involved:**
-- `RESEARCH_RULES.md:249-269` — "Validated and Deployed" strategy list
-- `TRADING_RULES.md:102-141` — "What Works" + "What Doesn't Work" (incl. 39 NO-GOs)
-
-**Exact conflict:** Both contain strategy-status tables. `RESEARCH_RULES.md` is research methodology (per authority); `TRADING_RULES.md` is live trading doctrine. If a strategy is promoted/retired, which doc gets updated first? Either can go stale without the other noticing.
-
-**Which doc should win:** `TRADING_RULES.md` for *what's currently tradeable*; `RESEARCH_RULES.md` should stop carrying a strategy-list entirely and instead cite `TRADING_RULES.md` + live `validated_setups`.
-
-**Recommended fix:** Delete the validated-and-deployed table from `RESEARCH_RULES.md`. Replace with a one-line pointer: *"For current deployed strategies see `TRADING_RULES.md` § [section]; for live validated_setups run `uv run python scripts/tools/project_pulse.py`."* Live DB wins over both docs per `document_authority.md` conflict rule 1.
+**(c) DEFERRED:** Clarifying what passes the "PROMISING" vs "VALIDATED" bar. Also doctrine wording — requires deciding whether PROMISING is a named tier with a threshold, or only loose shorthand. Own workstream.
 
 ---
 
-### I5. Holdout CONFIRMATION gates buried — cross-doc dependency not obvious
-**Docs involved:**
-- `RESEARCH_RULES.md:26-38` — extensively documents "2026 holdout is sacred"
-- `docs/specs/research_modes_and_lineage.md:59` — declares CONFIRMATION uses dates outside the boundary
-- `pre_registered_criteria.md:150-160` (Criterion 8) — actual gate thresholds: *"OOS direction matches IS AND OOS_ExpR ≥ 0.40 × IS_ExpR"*
+### I4. ~~Strategy status table is a dual source of truth~~ — **ALREADY SATISFIED (verified 2026-04-17)**
 
-**Exact conflict:** The *rule* ("holdout sacred") lives in RESEARCH_RULES; the *threshold* for passing forward-test lives in pre_registered_criteria Criterion 8; the *methodology* lives in the spec. A researcher reading RESEARCH_RULES won't find the pass criteria without following links that aren't prominently placed.
+**Verification:** Re-reading `RESEARCH_RULES.md:244-270` on 2026-04-17 confirmed the file does NOT carry a parallel validated-and-deployed strategy table. Both relevant subsections are already single-line pointers:
+- `RESEARCH_RULES.md:247` — *"### Validated and Deployed — See `TRADING_RULES.md` → Confirmed Edges table."*
+- `RESEARCH_RULES.md:265` — *"### Confirmed NO-GOs (Do Not Revisit) — See `TRADING_RULES.md` → What Doesn't Work table."*
 
-**Which doc should win:** The threshold belongs in `pre_registered_criteria.md`. The *pointer* to it must be in `RESEARCH_RULES.md`.
+The audit's initial characterisation ("Both contain strategy-status tables") was inaccurate — `RESEARCH_RULES.md` already defers to `TRADING_RULES.md` for strategy status. The remaining content in that section (Cross-Instrument Stress Test Finding, Awaiting 10-Year Outcome Rebuild, Re-Validation Trigger) is **research commentary** about methodology-level findings, not a deployed-strategy list.
 
-**Recommended fix:** Add a one-line pointer in `RESEARCH_RULES.md` § Holdout section: *"Pass thresholds: see Criterion 8 in `pre_registered_criteria.md`."* No content duplication.
+No edit applied. I4 closed.
+
+**Follow-up note (not in scope):** The "Awaiting 10-Year Outcome Rebuild" subsection lists 4 items flagged Feb 2024 - Feb 2026. If any have since been validated or killed, that list is stale — but resolving that requires research judgment (query DB, compare to current validated_setups), not mechanical docs cleanup.
+
+---
+
+### I5. ~~Holdout CONFIRMATION gates buried — cross-doc dependency not obvious~~ — **RESOLVED (incidentally) 2026-04-17**
+
+**Status:** Resolved as a side-effect of the C2 citation migration on 2026-04-17.
+
+`RESEARCH_RULES.md:38` (the holdout section) now reads *"...and `docs/institutional/pre_registered_criteria.md` § `Criterion 8 — 2026 out-of-sample positive` (as revised by Amendment 2.7 on 2026-04-08) for the Mode A restoration..."* — exactly the stable-anchor pointer I5 asked for, placed in the holdout section. No further edit required.
 
 ---
 
@@ -159,11 +148,11 @@ Both deferred items still needed for full C2 closure. The citation convention no
 |---|---|---|---|
 | C1 | CRITICAL | `ROADMAP.md` vs `PLAN_24H_EDGE_IMPLEMENTATION.md` (+2 orphan PLAN files) | Delete orphan PLAN files; ROADMAP is sole registered plan |
 | C2 | ~~CRITICAL~~ **PARTIALLY RESOLVED 2026-04-17** | `RESEARCH_RULES.md`, `pre_registered_criteria.md` | Citation convention added + 4 fragile Amendment citations migrated to Criterion anchors. Amendment flattening + drift check deferred. |
-| I1 | IMPORTANT | `RESEARCH_RULES.md` vs `pre_registered_criteria.md` | Align WFE threshold to `≥ 0.50` in both |
+| I1 | ~~IMPORTANT~~ **RESOLVED 2026-04-17** | `RESEARCH_RULES.md:80` | Operator changed `>` → `≥`; Criterion 6 pointer added |
 | I2 | ~~IMPORTANT~~ **RESOLVED 2026-04-17** | `TRADING_RULES.md:74` | Single-line stale-wording fix applied; no doctrine breach (live query confirmed TOKYO_OPEN is CORE, N=918-1487) |
-| I3 | IMPORTANT | 3 registered docs | Unify t-stat citation; document prior-theory justification per deployed lane |
-| I4 | IMPORTANT | `RESEARCH_RULES.md` vs `TRADING_RULES.md` | Delete strategy list from RESEARCH_RULES; single pointer to TRADING_RULES + live DB |
-| I5 | IMPORTANT | `RESEARCH_RULES.md` + Criterion 8 | Add one-line pointer to Criterion 8 in holdout section |
+| I3 | **(a) RESOLVED 2026-04-17; (b)+(c) DEFERRED** | `RESEARCH_RULES.md:65` (done); `TRADING_RULES.md` lane citations (deferred); PROMISING/VALIDATED tier (deferred) | (a) RESEARCH_RULES threshold replaced with Criterion 4 pointer; (b)+(c) doctrine wording, requires research judgment |
+| I4 | ~~IMPORTANT~~ **ALREADY SATISFIED (verified 2026-04-17)** | `RESEARCH_RULES.md:247, 265` | Both subsections already use single-line pointers to TRADING_RULES; no duplication to delete |
+| I5 | ~~IMPORTANT~~ **RESOLVED (incidentally) 2026-04-17** | `RESEARCH_RULES.md:38` | C2 citation migration already placed the Criterion 8 pointer in the holdout section |
 | K1 | CLEANUP | `mechanism_priors.md` vs `edge-finding-playbook.md` | Pick one framing (authority or informational) |
 | K2 | CLEANUP | `finite_data_framework.md` | Reorder: cite Criterion 9 as source, not restate |
 | K3 | CLEANUP | `docs/institutional/HANDOFF.md` | Move SUPERSEDED file to `docs/archive/` |
