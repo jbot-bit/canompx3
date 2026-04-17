@@ -4,6 +4,63 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-18 A4c executed — NULL, do not rescue, queue reset next)
+
+### What was run
+
+- New harness: `research/garch_a4c_routing_selectivity_replay.py`
+- Pre-registration: `docs/audit/hypotheses/2026-04-17-garch-a4c-routing-selectivity.yaml`
+- Design: `docs/plans/2026-04-17-garch-a4c-routing-selectivity-design.md`
+- Audit grounding: `docs/audit/results/2026-04-17-allocator-scarcity-surface-audit.md`
+- Framing commit: `1a721e92`
+- Result: `docs/audit/results/2026-04-17-garch-a4c-routing-selectivity-replay.md`
+- Raw artifact: `research/output/garch_a4c_routing_selectivity_replay.json` (gitignored)
+
+### Stage verdict
+
+**A4c is NULL. Harness is clean. Candidate is second-tier.**
+
+Load-bearing facts:
+
+- Binding preflight PASS on both surfaces: A (raw slots @ 5) bind 0.944, B (rho-survivor @ 3) bind 0.931.
+- **Harness-sanity gate PASS on both surfaces.** Positive control beat primary null by +0.023 R/fill on A and +0.043 R/fill on B (required ≥ 0.01). A4b's throughput-mis-metric bug is NOT present in A4c; the harness discriminates.
+- **Candidate FAIL primary rule on both surfaces (IS):**
+  - Surface A: ΔR/fill +0.0067 (need ≥ 0.01) FAIL, ΔSharpe −0.349 FAIL, DD 1.109 PASS, churn 0.842 FAIL.
+  - Surface B: ΔR/fill +0.032 PASS, ΔSharpe +0.166 PASS, DD 0.581 PASS, churn 0.956 FAIL.
+- **Destruction shuffle correctly failed primary rule on both surfaces** (shuffled R/fill came in below candidate). Candidate is NOT data-mined.
+- **OOS direction flipped on both surfaces:** IS delta +0.0067 / +0.032, OOS delta −0.055 / −0.058. Descriptive-only per pre-reg, so not load-bearing (IS already failed), but confirmatory.
+
+### Churn-rule ambiguity (honest note — not a rescue)
+
+The pre-registered `selection_churn_cap: 0.50 jaccard` was computed in the A4c harness as `mean_jaccard(candidate, primary_null)`. Under random-uniform primary null, jaccard distance to any structured ranker is mechanically ~1.0; the 0.50 cap is unreachable by construction.
+
+The hypothesis YAML did not disambiguate the comparator for the churn rule, and A4b's analogous rule compared candidate vs its lit-grounded baseline (a structured comparator). So the churn check as implemented is not a meaningful kill on A4c's harness.
+
+**Impact on verdict:** On Surface A the candidate failed R/fill and Sharpe independently of churn, so A fails regardless. On Surface B the candidate cleared R/fill + Sharpe + DD and was tripped only by the mechanically-impossible churn rule. However, OOS direction flipped to −0.058 on Surface B, which would have killed a hypothetical B-only pass via the OOS kill criterion (direction_match_required).
+
+**Net:** the framing ambiguity does NOT hide a real edge. Candidate is second-tier on A (beaten by trailing-Sharpe) and fails OOS on B. Real null.
+
+### Correct interpretation
+
+- Do **not** rescue-tune A4c (no weight sweeps, no threshold relaxations, no churn-rule re-definition to save Surface B).
+- Do **not** reopen A4b.
+- Do **not** promote any garch-based routing doctrine from this stage.
+- The A4b composite, tested on a corrected dimension-neutral harness with verified binding surfaces, does not produce usable routing edge.
+
+### Correct next step
+
+**Reset the queue.** Next action is a fresh ranked list of highest-EV open items, NOT more garch allocator work. The garch-family allocator path (A4a / A4b / A4c) has produced three null stages with increasing rigor; declare garch allocator research paused until a meaningfully different mechanism is pre-registered (not a re-weighting of the same composite).
+
+### Verification notes
+
+- `py_compile` on the new replay script: PASS
+- Ruff on new script: PASS
+- Binding preflight re-verified audit finding in-harness (matches `2026-04-17-allocator-scarcity-surface-audit.md` exactly).
+- Destruction shuffle: R/fill came in strictly below candidate on both surfaces, as expected if the candidate's signal is real but modest.
+- OOS windows: 3 rebalance months (2026-01 to 2026-03), 67 trading days.
+
+---
+
 ## Update (2026-04-17 FX ORB CLASS CLOSED — raw NO_GO + filter-rescue BLOCKED)
 
 **FX ORB (6J, 6B, 6A) is closed at class level. Two independent paths tested, both closed.**
