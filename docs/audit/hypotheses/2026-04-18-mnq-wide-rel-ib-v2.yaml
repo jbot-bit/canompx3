@@ -1,0 +1,189 @@
+metadata:
+  name: mnq-wide-rel-ib-v2
+  owner: claude-code
+  created_at: 2026-04-18
+  supersedes: docs/audit/hypotheses/2026-04-18-mes-mnq-wide-rel-ib.yaml (v1, withdrawn — OOS-shaped scope + wrong Rule 7 metric)
+  holdout_date: 2026-01-01
+  authority:
+    - docs/institutional/pre_registered_criteria.md
+    - docs/audit/results/2026-04-18-mes-wide-ib-distinctness-audit.md (v2)
+    - .claude/rules/backtesting-methodology.md (Rule 7 fire correlation canonical metric)
+  triggered_by:
+    - "STRATEGY_BLUEPRINT.md NO-GO registry line 287 reopen flag: MES-specific relative-width filter could be tested as hypothesis-scoped"
+  scope_note: >
+    NO-GO's MES-only narrative (14/16 survivors) did NOT reproduce at O5-only
+    with proper Welch t-test and BH-FDR at K=8. The distinctness signal at O5
+    is MNQ-specific (MNQ CME_PRECLOSE p=0.006, MNQ TOKYO_OPEN p=0.011). MES
+    cells are either marginal (CME_PRECLOSE p=0.066) or non-significant. The
+    NO-GO reopen is honored; the reopen scope is adjusted per reproducible
+    evidence. MES O15 deferred to Stage 2 if Stage 1 passes.
+
+edge_claim: >
+  Within ORB_G5 fires on MNQ CME_PRECLOSE O5 and MNQ TOKYO_OPEN O5, days where
+  the current ORB is wide relative to its 20-day trailing same-session mean
+  (WIDE_REL_1.0X_20D = True) exhibit incremental positive expectancy over the
+  ORB_G5-alone baseline. Mechanism is a plausible extension of Fitschen (2013)
+  Ch 3 intraday trend-follow premise: wider-than-normal ORB signals higher
+  emotion/herding on that session, consistent with stronger trend-follow. This
+  is a filter-addition claim, NOT a new baseline claim, NOT a theory-supported
+  claim per Criterion 4 (hence t >= 3.79 applied).
+
+feature_definition:
+  name: WIDE_REL_1.0X_20D
+  formula: |
+    orb_{session}_size / mean_trailing_20d(orb_{session}_size) >= 1.0
+  trailing_window_rule: |
+    SQL: AVG(orb_size) OVER (ORDER BY trading_day ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING)
+    Strict lag (no current day, no future days). Zero look-ahead.
+  null_handling: >
+    If trailing_20d mean is NULL (fewer than 20 prior same-session days with
+    defined orb_size), lane is ineligible that day. Fail-closed.
+  derivation: >
+    Computed in the research script at test time from canonical
+    daily_features.orb_{session}_size. NOT added to pipeline/build_daily_features.py.
+    NOT added to trading_app/config.py ALL_FILTERS. Filter-class promotion is
+    a Stage 3 action only if Stage 1 passes.
+
+candidate_filter:
+  name: WIDE_REL_1.0X_AND_G5
+  semantics: conjunction — both WIDE_REL_1.0X_20D AND orb_{session}_size >= 5.0
+  role: filter-addition on ORB_G5-baseline MNQ lanes
+
+universe:
+  instruments: [MNQ]
+  exclude_instruments: [MES, MGC]
+  exclude_rationale:
+    MES: "Conditional-lift test at O5 E2 RR1.0 CB1 stop_mult=1.0 did NOT pass p<0.05 on any session after BH-FDR K=8 (best was CME_PRECLOSE p=0.066). Deferred to Stage 2 IF O5 Stage 1 passes on MNQ AND an O15 exploratory run re-establishes MES signal."
+    MGC: "Architecturally dead for ORB per CLAUDE.md NO-GO registry."
+  sessions: [CME_PRECLOSE, TOKYO_OPEN]
+  session_per_instrument:
+    MNQ: [CME_PRECLOSE, TOKYO_OPEN]
+  session_scope_basis: >
+    IS conditional-lift Welch t-test with BH-FDR at K=8. Survivors:
+    MNQ CME_PRECLOSE (Welch t=2.74, p=0.006, BH marginal at rank 1) and
+    MNQ TOKYO_OPEN (Welch t=2.53, p=0.011, BH pass at rank 2). Other 6 combos
+    (4 MES + 2 MNQ in COMEX_SETTLE, EUROPE_FLOW) did not pass.
+  oos_peek_disclosure: >
+    Prior branch research/overnight-2026-04-18 queried 2026+ OOS on 5 cells.
+    MNQ CME_PRECLOSE OOS ExpR was observed at -0.009 (N=27). MNQ TOKYO_OPEN
+    OOS ExpR was observed at +0.088 (N=37). This pre-reg DOES NOT adjust
+    scope based on those OOS observations — scope is set purely from IS
+    distinctness. The disclosure ensures the replay outcome can be
+    interpreted honestly: if CME_PRECLOSE dies on OOS (aligned with prior
+    peek), it is not a data-snooping artifact of this pre-reg because
+    CME_PRECLOSE was INCLUDED in this pre-reg despite the prior peek.
+
+  aperture: O5
+  aperture_excluded: O15
+  aperture_exclusion_reason: >
+    NO-GO mentions O15 also works on MES, but O15 was not tested in this
+    distinctness audit (scope discipline). Deferred to Stage 2 IF Stage 1
+    passes on O5 AND O15 re-audit motivates inclusion.
+
+  entry_model: E2
+  confirm_bars: 1
+  stop_multiplier: 1.0
+  rr_targets: [1.0, 1.5, 2.0]
+
+cell_count:
+  total: 6
+  breakdown:
+    - "MNQ CME_PRECLOSE × {1.0, 1.5, 2.0} = 3"
+    - "MNQ TOKYO_OPEN × {1.0, 1.5, 2.0} = 3"
+
+k_budget:
+  k_family: 6
+  k_lane: 3  # 3 RR per (inst, session) lane
+  minbtl_check: >
+    N=6, 6.65yr clean MNQ data. Bailey et al 2013 MinBTL = 2*ln(6)/E[max_N]^2.
+    At N_trials=6, 2*ln(6)=3.58. Trivially within budget.
+  no_sweeps: true
+
+baseline_per_cell:
+  rule: >
+    For each cell, baseline = same lane with ORB_G5 filter only (no WIDE_REL).
+    Delta = ExpR(WIDE_REL × G5) − ExpR(G5 alone), evaluated IS then OOS.
+
+pass_rule:
+  primary:
+    - "BH-FDR q<0.05 at K=6 family (primary framing)"
+    - "Chordia t >= 3.79 (WITHOUT-theory threshold per Criterion 4; plausible-inference mechanism does not qualify for 3.00 band)"
+    - "Walk-forward efficiency (WFE) >= 0.50 across 5 expanding folds"
+    - "N_OOS >= 30 per cell (canonical _OOS_MIN_TRADES_CLT_HEURISTIC per trading_app/strategy_validator.py:1052)"
+    - "OOS direction match: sign(delta_IS) == sign(delta_OOS)"
+    - "OOS effect ratio: delta_OOS / delta_IS >= 0.40 (Amendment 2.7)"
+  secondary_framing_reported_only:
+    - "BH-FDR K_lane=3 per (instrument, session) lane"
+    - "DSR > 0.95 (informational per Amendment 2.1; NOT a hard gate)"
+
+tautology_guards:
+  rule_7_primary:
+    metric: "|corr(WIDE_REL × G5 fire, deployed_filter fire)| on booleans"
+    threshold: 0.70
+    action_on_breach: "EXCLUDE cell from survivors, no rescue"
+    deployed_filters_to_check_per_lane:
+      MNQ_CME_PRECLOSE: [X_MES_ATR60]  # the one deployed filter on this lane
+      MNQ_TOKYO_OPEN: [COST_LT12, ORB_G5]
+    note: >
+      rho(WIDE_REL × G5 fire, G5 fire) is expected high by construction (G5 is
+      a required conjunction component). That is NOT a tautology issue for
+      Rule 7 purposes — it is baseline subsumption. Rule 7 targets equivalence
+      with OTHER deployed filters on the same lane.
+
+kill_criteria:
+  - "BH-FDR K=6 fails for all cells (NULL_BY_CONSTRUCTION for family)"
+  - "Any cell: OOS direction flips from IS (Amendment 2.7 C8)"
+  - "Any cell: |rho(cell fire, alternative deployed filter fire)| > 0.70 (Rule 7 tautology)"
+  - "Any cell: WFE < 0.50"
+  - "Any cell: Chordia t < 3.79 (without-theory threshold)"
+  - "Any cell: N_OOS < 30"
+  - "Any cell: eff_ratio < 0.40"
+  - "Any parameter tuned after first result seen (threshold, trailing window length, session list, etc.)"
+
+scope_hard_boundaries:
+  - no_new_state_variables_beyond_wide_rel_1_0x_20d
+  - no_aperture_expansion_beyond_O5
+  - no_session_expansion_beyond_declared_list
+  - no_threshold_sweep_on_1_0x
+  - no_trailing_window_sweep_on_20d
+  - no_ml_wrapper
+  - no_composite_with_other_new_filters
+  - no_deployment_claim_without_full_pass
+  - no_t_threshold_relaxation_to_3_00_without_new_literature_citation
+
+stage_1_outputs:
+  - docs/audit/results/2026-04-18-mnq-wide-rel-ib-v2-replay.md
+  - research/wide_rel_ib_pre_reg_replay.py (committed before execution)
+
+stage_2_reserved:
+  trigger_conditions_all_required:
+    - "Stage 1 primary verdict has >= 3 of 6 cells pass all primary criteria"
+    - "User explicit authorization"
+  scope_on_trigger: >
+    Extend to: (a) MES O15 aperture on the same universe, OR
+    (b) MNQ O15 aperture, OR
+    (c) alternative trailing-window length {10d, 30d} on Stage-1-passing cells.
+    K_stage2 additions capped at cells passing Stage 1. NOT a new hypothesis;
+    pre-registered here to prevent post-hoc rescue via aperture/window swap.
+
+mechanism_citation:
+  source: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+  extract_pages: "Ch 3 Tables 3.8 (stocks hourly) and 3.9 (commodities hourly), pp 40-41"
+  directly_supports: "Intraday trend-follow premise for both stock indices and commodities, ORB entry is trend-follow"
+  does_NOT_directly_support: "Wider-than-normal ORB signals stronger trend-follow"
+  inference_step: |
+    From Fitschen's mechanism (emotion-driven herding drives intraday momentum on stocks;
+    value fundamentals drive commodity trend), one can infer: wider-than-normal ORB
+    reflects more emotion/herding on that session, consistent with stronger trend-follow.
+    This is a ONE-STEP INFERENCE, not a directly-tested claim in Fitschen.
+  criterion_4_application: >
+    Plausible-inference mechanism does not qualify for the 'with theory' t >= 3.00
+    threshold per pre_registered_criteria.md Criterion 4. Apply t >= 3.79
+    'without theory' threshold as locked in pass_rule above.
+
+what_this_test_does_NOT_claim:
+  - "Does NOT claim WIDE_REL is a universal filter — MES cells failed distinctness at p<0.05 O5"
+  - "Does NOT claim the mechanism is a directly-tested Fitschen finding — it's a plausible inference"
+  - "Does NOT claim Rule 7 tautology is escapable via conditional-lift — that narrative from v1 is withdrawn"
+  - "Does NOT claim CME_PRECLOSE will pass OOS — prior-branch peek observed negative direction; included in pre-reg anyway for process integrity"
+  - "Does NOT claim MES wide-IB is universally dead — only O5 was tested; O15 deferred"
