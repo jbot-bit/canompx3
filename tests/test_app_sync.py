@@ -797,14 +797,19 @@ class TestImportSync:
         source = inspect.getsource(sa)
         assert "from pipeline.init_db import ORB_LABELS" in source
 
-    def test_grounding_imports_orb_labels(self):
-        """grounding.py derives session list from init_db (not hardcoded)."""
+    def test_grounding_imports_session_catalog(self):
+        """grounding.py derives session list from pipeline.dst.SESSION_CATALOG.
+
+        Post-Stage-2 of claude-api-modernization: grounding uses SESSION_CATALOG
+        (richer — carries DST-aware resolvers + event descriptions) instead of
+        the plain ORB_LABELS list. Canonical source for all session metadata.
+        """
         import inspect
 
         import trading_app.ai.grounding as gr
 
         source = inspect.getsource(gr)
-        assert "from pipeline.init_db import ORB_LABELS" in source
+        assert "from pipeline.dst import" in source and "SESSION_CATALOG" in source
 
 
 # ============================================================================

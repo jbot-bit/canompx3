@@ -13,9 +13,27 @@ from trading_app.ai.corpus import (
     load_corpus,
 )
 
+# Stage 2 of claude-api-modernization: corpus expanded from 4 to 8 entries to
+# include institutional-rigor / research-discipline documents alongside the
+# trading-rule docs.
+EXPECTED_CORPUS_KEYS = {
+    "TRADING_RULES",
+    "TRADE_MANAGEMENT_RULES",
+    "CONFIG",
+    "COST_MODEL",
+    "RESEARCH_RULES",
+    "CLAUDE_MD",
+    "PRE_REGISTERED_CRITERIA",
+    "MECHANISM_PRIORS",
+}
+
 
 class TestCorpusFiles:
     """Verify all canonical files exist on disk."""
+
+    def test_corpus_keys_match_expected(self):
+        """CORPUS_FILES must carry exactly the 8 expected entries."""
+        assert set(CORPUS_FILES.keys()) == EXPECTED_CORPUS_KEYS
 
     def test_all_corpus_files_exist(self):
         for name, info in CORPUS_FILES.items():
