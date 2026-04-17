@@ -62,7 +62,7 @@ When analyzing data or producing research for this project, act as a **systemati
 ### Significance Testing
 - **p < 0.05:** Minimum threshold for noting a result. NOT sufficient for action.
 - **p < 0.01:** Required for any finding you'd recommend trading.
-- **p < 0.005:** Required for "discovery" claims (per Harvey & Liu, 2014).
+- **Discovery claims:** see the binding threshold in `docs/institutional/pre_registered_criteria.md` § *Criterion 4 — Chordia t-statistic threshold*.
 - **Always report exact p-values**, not just "significant" or "not significant."
 - **After grid search / multiple tests:** Apply Benjamini-Hochberg FDR correction. If you tested 50+ combinations, expect 2-3 false positives at p<0.05 even if nothing is real.
 - **BH K selection:** Report both global K (full search space) and the honest instrument/family/decision K where relevant. Use the honest instrument/family/decision K for promotion or portfolio decisions; use global K for conservative full-search headline claims. Never swap K post-hoc to rescue or kill a result.
@@ -77,7 +77,7 @@ With 5 years of daily data, testing more than ~45 strategy variations guarantees
 ### In-Sample vs Out-of-Sample
 - Same data used for discovery AND testing = ONE test, not two.
 - Expected Sharpe decay from in-sample to out-of-sample: ~50-63% (industry benchmark).
-- Walk-forward efficiency (WFE) > 50% = strategy likely real. < 50% = likely overfit.
+- Walk-forward efficiency (WFE) ≥ 0.50 = strategy meets the locked binding threshold (see `docs/institutional/pre_registered_criteria.md` § *Criterion 6 — Walk-forward efficiency*). < 0.50 = likely overfit.
 - **Current limitation:** Most cross-instrument research uses only 579 overlapping days (Feb 2024 - Feb 2026). This is a single in-sample window. No findings from this window are "validated" until tested on the 10-year rebuild.
 
 ### Multi-RR Testing (Mandatory for Filter Discovery)
