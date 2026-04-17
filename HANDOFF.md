@@ -4,6 +4,23 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-17 FX ORB CLASS CLOSED — raw NO_GO + filter-rescue BLOCKED)
+
+**FX ORB (6J, 6B, 6A) is closed at class level. Two independent paths tested, both closed.**
+
+- **Path 1 — Raw E2 NO_FILTER:** NO_GO (7/7 cells failed locked gate stack). Detail below.
+- **Path 2 — Transferable live-book filter rescue (K=14):** BLOCKED_PRE_EXECUTION. Pre-reg at `docs/audit/hypotheses/2026-04-17-fx-live-analogue-transfer-test.yaml`.
+  - Pre-flight on pilot detail CSV showed pre-2026 gated N collapses below thresholds on all 14 cells.
+  - `COST_LT12` fires 0.0-5.7% on FX (structurally broken on cost economics, not underpowered).
+  - Quantile-ported `ORB_G5` / `OVNRNG_100` analogues cannot reach N>=50 at any selective quantile cut on the pilot's pre-2026 window (74 days/cell).
+  - 2-year pre-2026 DBN pull (Option B) declined — two independent failure paths is enough.
+- **Full closure:** `docs/audit/results/2026-04-17-fx-orb-closure.md`.
+- **Hygiene note (tracked separately):** raw pilot's 147-148 day window mixed pre-2026 IS + post-2026 OOS without a Mode A split. NO_GO verdict unaffected; not deployment-grade-citable until re-reported.
+
+**Do not re-open** without a brand-new pre-reg, materially wider data surface, and a mechanistic (not statistical-rescue) rationale.
+
+---
+
 ## Update (2026-04-17 CME FX ORB pilot executed — NO_GO, do not rescue)
 
 ### What was run

@@ -1,0 +1,384 @@
+status:
+  verdict: BLOCKED_PRE_EXECUTION
+  blocked_at: 2026-04-17
+  blocked_by: pre_flight_insufficient_pre_2026_gated_N
+  action: do_not_build_executor; do_not_run; archive_pre_reg_as_closed
+  evidence_summary: >
+    Pre-flight audit of research/output/cme_fx_futures_orb_pilot_detail.csv
+    (Mode-A-clean pre-2026 subset) shows 71-74 eligible days per cell. That is
+    adequate at the raw level but gated N collapses below thresholds for
+    every filter analogue in the K=14 design:
+      - COST_LT12 (Category A, directly transferable): fires on 0.0-5.7% of
+        pre-2026 FX E2 entries across all 7 cells. Five cells at 0% fire,
+        two cells below or at 5% fire rate. FX median cost/risk ratio is
+        30-45% vs the filter's 12% threshold. Filter is structurally broken
+        on FX cost economics, not merely underpowered.
+      - ORB_G5 (Category B, quantile-ported analogue): top-50% quantile cut
+        yields N_on = 35-37 per cell; top-25% yields N_on = 17-18. Neither
+        reaches the pre-registered N>=50 minimum. Only a ~top-70% quantile
+        cut reaches N>=50, which defeats the purpose of a size-selective
+        analogue.
+      - OVNRNG_100 (Category B): same quantile-port constraint as ORB_G5 and
+        also look-ahead-banned for 6J TOKYO_OPEN.
+    14 / 14 cells fail the pre-registered gate stack at the pre-flight stage.
+  recovery_options_considered_and_rejected:
+    relax_N_minimum:
+      considered: true
+      rejected: post-hoc threshold relaxation, pre-reg violation
+    extend_data_window_backwards:
+      considered: true
+      rejected: requires fresh DBN extraction + fresh front-contract roll
+        audit + fresh Brisbane trading-day assignment. That is a new pre-reg,
+        not an amendment. Explicitly filed as Option B and declined by
+        portfolio owner in favor of Option A (close the book).
+    drop_mode_a_sacred_window:
+      considered: true
+      rejected: violates trading_app.holdout_policy Mode A
+  overall_fx_orb_verdict:
+    raw_path: NO_GO (locked by docs/audit/results/2026-04-17-cme-fx-futures-orb-pilot.md)
+    filter_rescue_path: BLOCKED (this document)
+    class_level: FX ORB closed; no executor; no further transfer attempts on
+      these cells under the locked pilot surface
+  hygiene_note_for_prior_pilot:
+    finding: >
+      The raw pilot ran its primary analysis on 147-148 days per cell, which
+      spans 2025-09-18 through 2026-04-06 -- mixing pre-2026 IS and post-2026
+      OOS without reporting them separately under Mode A.
+    implication: >
+      The raw pilot's NO_GO verdict still stands (all 7 cells failed badly on
+      both subsets), but the pilot is NOT deployment-grade-citable until it is
+      re-reported with an explicit pre-2026-only split.
+    action: noted; not rescued by this pre-reg; out of scope for this doc.
+  closure_artifacts:
+    - docs/audit/results/2026-04-17-fx-orb-closure.md
+
+metadata:
+  name: fx-live-analogue-transfer-test
+  owner: claude
+  created_at: 2026-04-17
+  testing_mode: research_only_filter_rescue_test
+  supersedes: none
+  depends_on:
+    - docs/audit/hypotheses/2026-04-16-cme-fx-futures-orb-pilot.yaml
+    - docs/audit/results/2026-04-17-cme-fx-futures-orb-pilot.md
+  scope_note: >
+    Filter-rescue test for the CME FX ORB pilot. Prior pilot established
+    NO_FILTER raw E2 failed 7/7 locked cells (locked, NOT reopened here).
+    This test asks the narrower follow-on question: do the best transferable
+    live-book filters, cloned from MNQ at the same live-universe benchmark
+    sessions the pilot already mapped, rescue any of the 7 FX cells?
+  research_question: >
+    Did FX ORB fail only because NO_FILTER raw E2 was too weak, or does it
+    remain dead even after applying the best TRANSFERABLE live-book filters
+    cloned from each cell's mapped MNQ live analogue?
+
+rules:
+  no_deployment_claim: true
+  no_full_onboarding: true
+  no_reopen_raw_pilot_verdict: true
+  no_post_hoc_session_shopping: true
+  no_post_hoc_filter_shopping: true
+  no_cross_asset_filters: true
+  no_threshold_retuning_after_first_result: true
+  no_window_widening_after_first_result: true
+  no_rescue_if_this_pilot_fails: true
+  pre_2026_logic_only: true
+  data_source_canonical_only: true
+
+universe:
+  venue: CME futures
+  dataset: Databento GLBX.MDP3 (inherits pilot extraction)
+  schema: ohlcv-1m
+  front_month_selection: canonical pipeline.front_contract.choose_front_contract()
+  trading_day_assignment: Brisbane 09:00 local (canonical)
+  orb_window_resolution: canonical pipeline.dst.orb_utc_window()
+  instruments: [6J, 6B, 6A]
+  cells_under_test:
+    - asset: 6J
+      session: TOKYO_OPEN
+      live_analogue_session: TOKYO_OPEN
+      live_analogue_instrument: MNQ
+      mapping_rationale: >
+        Direct session match. Asia-open ORB on the JPY-futures proxy is the
+        cleanest same-session same-mechanism pairing available in the live book.
+    - asset: 6B
+      session: LONDON_METALS
+      live_analogue_session: EUROPE_FLOW
+      live_analogue_instrument: MNQ
+      mapping_rationale: >
+        LONDON_METALS (17:00 Brisbane) and EUROPE_FLOW (18:00 Brisbane) are
+        both European-open ORB family members. Pilot selected EUROPE_FLOW as
+        the mapped live-universe because it is the validated MNQ ORB in that
+        family; no MNQ LONDON_METALS E2 active setups exist.
+    - asset: 6B
+      session: US_DATA_830
+      live_analogue_session: COMEX_SETTLE
+      live_analogue_instrument: MNQ
+      mapping_rationale: >
+        Both are post-US-catalyst ORBs. Pilot matched by catalyst context
+        rather than clock time. MNQ has no validated E2 setups at US_DATA_830
+        directly, so COMEX_SETTLE is the closest validated post-US-catalyst
+        ORB family member.
+    - asset: 6B
+      session: US_DATA_1000
+      live_analogue_session: COMEX_SETTLE
+      live_analogue_instrument: MNQ
+      mapping_rationale: >
+        Pilot deliberately mapped to MNQ COMEX_SETTLE rather than MNQ
+        US_DATA_1000. MNQ's validated US_DATA_1000 E2 setups are all
+        VWAP_MID_ALIGNED, which depends on MNQ pre-session VWAP dynamics that
+        have no clean FX analogue at this session. COMEX_SETTLE represents
+        the same post-US-catalyst ORB family via mechanically transferable
+        filters.
+    - asset: 6A
+      session: LONDON_METALS
+      live_analogue_session: EUROPE_FLOW
+      live_analogue_instrument: MNQ
+      mapping_rationale: Same rationale as 6B LONDON_METALS; European-open ORB family.
+    - asset: 6A
+      session: US_DATA_830
+      live_analogue_session: COMEX_SETTLE
+      live_analogue_instrument: MNQ
+      mapping_rationale: Same rationale as 6B US_DATA_830; post-US-catalyst ORB family.
+    - asset: 6A
+      session: US_DATA_1000
+      live_analogue_session: COMEX_SETTLE
+      live_analogue_instrument: MNQ
+      mapping_rationale: Same rationale as 6B US_DATA_1000; VWAP_MID_ALIGNED has no FX analogue.
+
+analogue_mapping_authority:
+  source: docs/audit/hypotheses/2026-04-16-cme-fx-futures-orb-pilot.yaml::benchmarks.exact_benchmark_map
+  rule: >
+    Cell-to-MNQ-analogue mapping is INHERITED verbatim from the prior pilot.
+    No re-mapping, no session shopping. Using the pilot's already-committed
+    map preserves institutional honesty: we do not get to re-choose analogues
+    after seeing the pilot result.
+
+transferability_policy:
+  definition: >
+    Live-book filters fall into TWO categories relative to FX, and the
+    distinction is load-bearing for how we interpret any positive result:
+      (A) DIRECTLY TRANSFERABLE -- same filter logic, same threshold, applied
+          as-is to FX. Valid because the filter is defined on
+          instrument-agnostic quantities (cost/risk ratio, own-percentile,
+          geometric alignment).
+      (B) QUANTILE-PORTED ANALOGUE -- NOT the same filter as the MNQ original.
+          The MNQ threshold is an absolute-points value calibrated to MNQ's
+          price structure. A new, structurally-analogous filter is constructed
+          for FX by porting the MNQ threshold to the SAME QUANTILE of the FX
+          asset's own pre-2026 distribution. Any positive result is evidence
+          for the ANALOGOUS filter, not for transfer of the literal MNQ filter.
+  category_A_directly_transferable:
+    - filter: COST_LT12
+      class: normalized_ratio
+      port_mode: identity
+      note: >
+        Filter fires on cost/raw_risk percentage. Instrument-agnostic by
+        construction. Same filter math applies untouched to FX.
+  category_B_quantile_ported_analogue:
+    - filter: ORB_G5
+      class: absolute_points_threshold
+      port_mode: same_quantile_on_fx_pre_2026_own_distribution
+      note: >
+        MNQ ORB_G5 = "orb_size >= 5 points". Compute the pre-2026 quantile of
+        MNQ's orb_size at the analogue session where "orb_size >= 5" sits.
+        Port to FX as the SAME quantile of the FX asset's pre-2026 orb_size
+        distribution at the target session. One-time, pre-committed, no
+        re-tuning. Result speaks to ANALOGOUS size-gate logic, not literal
+        MNQ ORB_G5 transfer.
+    - filter: OVNRNG_100
+      class: absolute_points_threshold
+      port_mode: same_quantile_on_fx_pre_2026_own_distribution
+      look_ahead_guard: >
+        overnight_range is computed 09:00-17:00 Brisbane. Filter is BANNED on
+        sessions starting < 17:00 Brisbane (CME_REOPEN, TOKYO_OPEN,
+        BRISBANE_1025, SINGAPORE_OPEN). Automatically excludes 6J TOKYO_OPEN.
+      note: >
+        Same quantile-port logic as ORB_G5. Result speaks to analogous
+        overnight-regime gate, not literal OVNRNG_100 transfer.
+  interpretation_rule: >
+    Category A cells that pass support "the live-book filter transfers to FX."
+    Category B cells that pass support "a structurally-analogous filter, built
+    on FX's own distribution, recovers positive edge." These are different
+    claims. Report them separately in the result MD; do not collapse.
+  explicitly_excluded_filters:
+    - filter: X_MES_ATR60
+      reason: cross_asset_no_fx_analogue (references MES equity ATR)
+    - filter: CROSS_SGP_MOMENTUM
+      reason: cross_asset_no_fx_analogue (references MNQ/MES SINGAPORE_OPEN)
+    - filter: any filter with status == PURGED on its source spec
+      reason: already_retired; re-testing is rescue_fishing
+
+filter_selection_rule:
+  rank_by: expectancy_r (descending)
+  ranked_over: validated_setups rows where
+    instrument == live_analogue_instrument
+    AND orb_label == live_analogue_session
+    AND entry_model == "E2"
+    AND LOWER(status) == "active"
+    AND filter_type NOT IN {X_MES_ATR60, CROSS_SGP_MOMENTUM}
+    AND NOT row_is_purged
+  select_top_n_distinct_filters: 2
+  rr_target_rule: >
+    Use the RR variant of the highest-ExpR row for each selected distinct
+    filter. If 6J TOKYO_OPEN top-ranked filter would be OVNRNG_100 but
+    that filter is look-ahead-banned for the session, skip it and take the
+    next distinct filter.
+  resolved_cell_filters:
+    6J_TOKYO_OPEN:
+      filter_1: {filter: COST_LT12, rr: 1.5, source: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12, expR: 0.1293}
+      filter_2: {filter: ORB_G5,    rr: 1.5, source: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G5,    expR: 0.0945}
+    6B_LONDON_METALS:
+      filter_1: {filter: OVNRNG_100, rr: 1.5, source: MNQ_EUROPE_FLOW_E2_RR1.5_CB1_OVNRNG_100, expR: 0.1714}
+      filter_2: {filter: COST_LT12,  rr: 1.5, source: MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12,  expR: 0.1067}
+    6A_LONDON_METALS:
+      filter_1: {filter: OVNRNG_100, rr: 1.5, source: MNQ_EUROPE_FLOW_E2_RR1.5_CB1_OVNRNG_100, expR: 0.1714}
+      filter_2: {filter: COST_LT12,  rr: 1.5, source: MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12,  expR: 0.1067}
+    6B_US_DATA_830:
+      filter_1: {filter: OVNRNG_100, rr: 1.5, source: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100, expR: 0.2151}
+      filter_2: {filter: ORB_G5,     rr: 1.5, source: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5,     expR: 0.1119}
+    6A_US_DATA_830:
+      filter_1: {filter: OVNRNG_100, rr: 1.5, source: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100, expR: 0.2151}
+      filter_2: {filter: ORB_G5,     rr: 1.5, source: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5,     expR: 0.1119}
+    6B_US_DATA_1000:
+      filter_1: {filter: OVNRNG_100, rr: 1.5, source: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100, expR: 0.2151}
+      filter_2: {filter: ORB_G5,     rr: 1.5, source: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5,     expR: 0.1119}
+    6A_US_DATA_1000:
+      filter_1: {filter: OVNRNG_100, rr: 1.5, source: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100, expR: 0.2151}
+      filter_2: {filter: ORB_G5,     rr: 1.5, source: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5,     expR: 0.1119}
+
+k_budget:
+  headline_gate:
+    framing: K_global
+    k: 14
+    q: 0.10
+    role: pass_fail
+    rule: >
+      K_global=14 is the ONLY promotion gate. A cell passes the multiple-testing
+      portion of the gate stack iff it survives BH-FDR at K_global=14, q=0.10.
+      No alternative framing rescues a K_global failure.
+  diagnostic_framings:
+    role: decision_support_only
+    rule: >
+      These framings are REPORTED in the result MD and used to diagnose the
+      shape of any positive or null result (e.g., "all survivors cluster in
+      6B", "all survivors use OVNRNG analogue"). They do NOT substitute for
+      K_global. They cannot promote a cell that K_global rejected. They CAN
+      flag a filter-homogeneity or instrument-homogeneity artifact even when
+      K_global passes.
+    framings:
+      k_cell: 2
+      k_instrument: {6J: 2, 6B: 6, 6A: 6}
+      k_session: {TOKYO_OPEN: 2, LONDON_METALS: 4, US_DATA_830: 4, US_DATA_1000: 4}
+      k_filter_family: {COST_LT: 3, ORB_G_analogue: 5, OVNRNG_analogue: 6}
+  justification: >
+    K_global=14 is the smallest K that (a) tests two orthogonal filter
+    mechanisms per FX cell, (b) directly answers the "narrow-pilot" critique
+    (single filter per cell is exactly the structural weakness of the raw
+    pilot), (c) stays well inside the Bailey-Lopez de Prado MinBTL budget
+    for the IS horizon, and (d) avoids brute-force cartesian expansion
+    (K=42 over all transferable filters would be the brute-force version
+    and is explicitly rejected). Diagnostic framings are hierarchical
+    support, never a promotion backdoor.
+
+entry_and_execution:
+  entry_model: E2
+  confirm_bars: 1
+  stop_multiplier: 1.0
+  rr_target: 1.5 (locked per cell)
+  aperture: O5 (locked, inherits pilot)
+  break_side: both (long + short) per standard E2 symmetry
+  orb_window_authority: pipeline.dst.orb_utc_window() (NO re-implementation)
+
+cost_model:
+  applies_to: [6J, 6B, 6A]
+  commission_rt_usd: 4.10
+  spread_doubled_usd: 12.50
+  slippage_usd: 12.50
+  total_friction_rt_usd: 29.10
+  inherits_from: docs/audit/hypotheses/2026-04-16-cme-fx-futures-orb-pilot.yaml
+  locked: true
+
+data_window_policy:
+  calibration_window: pre_2026 (strict; trading_day < 2026-01-01)
+  primary_test_window: pre_2026 (same; every gate is evaluated only on pre-2026 trades)
+  descriptive_only_window: 2026-01-01 onwards (reported, not gated)
+  pre_2026_min_sample_per_cell: 50
+  under_sample_rule: cell with N_pre_2026 < 50 reported as INCONCLUSIVE (not PASS, not FAIL)
+
+gate_stack_per_cell:
+  all_gates_required: true
+  gates:
+    - fire_rate_min_pct: 5
+    - fire_rate_max_pct: 95
+    - cost_adjusted_expR_floor: 0.05
+    - lift_vs_prior_pilot_no_filter_baseline_floor: 0.10
+    - bh_fdr_headline:
+        framing: K_global
+        k: 14
+        q: 0.10
+        role: pass_fail (the ONLY multiple-testing gate that can reject a cell)
+    - t0_tautology_max_abs_corr_with_no_filter_outcome: 0.70
+    - n_on_min: 50
+    - arithmetic_only_guard:
+        reject_if_wr_spread_lt_pct: 3
+        reject_if_delta_expR_abs_gt: 0.10
+
+baseline_reference:
+  source: research/output/cme_fx_futures_orb_pilot_detail.csv
+  baseline_per_cell: NO_FILTER raw E2 RR1.0 cost-adjusted ExpR from prior pilot
+  lift_computation: filter_cell_expR - no_filter_cell_expR
+  note: >
+    Pilot's RR1.0 baseline is the reference; this test uses RR1.5 per live
+    analogue. Baseline is re-computed from same underlying bars with RR1.5
+    to make the lift comparison apples-to-apples.
+
+red_flags_that_force_stop:
+  - any single filter-cell shows abs(t) > 7 (per RULE 12)
+  - any single filter-cell shows delta_expR > 0.60 (per RULE 12)
+  - all top survivors use the same filter family (filter-homogeneity artifact)
+  - extreme fire rate (<5% or >95%) on any cell
+  - look-ahead check fails on OVNRNG_100 routing (must not fire on pre-17:00 sessions)
+
+kill_rules:
+  - if 14 / 14 cells fail the full gate stack ->
+      verdict = "FX ORB is dead through filter-rescue path"
+      action = "lock; no further transfer tests on these cells; do not widen sessions or instruments"
+  - if 1-3 cells pass ->
+      verdict = "partial filter rescue"
+      action = "treat as cell-level research finding; require independent OOS before any deployment claim; NOT a class-level rescue"
+  - if 4+ cells pass with BH_global survival ->
+      verdict = "meaningful filter rescue"
+      action = "write postmortem of raw-pilot failure, pre-register a Phase 2 deployment readiness test, NO direct deployment"
+
+go_no_go:
+  go: >
+    At least 4 FX cells pass the full gate stack AND survive K_global=14
+    BH-FDR at q=0.10 AND show non-trivial cost-adjusted lift over the prior
+    pilot's NO_FILTER baseline. Any smaller partial result is research
+    evidence, not a rescue of the class.
+  no_go: >
+    Fewer than 4 cells pass. FX ORB is dead through the transferable
+    filter-rescue path. Lock the verdict. Do not widen sessions, extend
+    windows, swap filters, or retune thresholds.
+
+verification_requirements:
+  pre_run:
+    - pre-reg committed before executor script is written
+    - executor script must py_compile clean
+    - executor script must use canonical pipeline.dst.orb_utc_window
+    - executor script must use canonical pipeline.front_contract.choose_front_contract
+    - executor script must use canonical pipeline.cost_model.get_cost_spec (or inherit locked $29.10)
+    - executor script must reject any filter from excluded list
+  post_run:
+    - raw CSV written to research/output/
+    - result MD written to docs/audit/results/2026-04-17-fx-live-analogue-transfer-test.md
+    - BH-FDR computed at all 5 framings per RULE 4
+    - red-flag scan executed and reported
+    - pressure test: run with a banned filter injected, confirm guard rejects
+
+deliverables:
+  - research/fx_live_analogue_transfer.py (executor, new)
+  - research/output/fx_live_analogue_transfer.json
+  - research/output/fx_live_analogue_transfer_detail.csv
+  - docs/audit/results/2026-04-17-fx-live-analogue-transfer-test.md
