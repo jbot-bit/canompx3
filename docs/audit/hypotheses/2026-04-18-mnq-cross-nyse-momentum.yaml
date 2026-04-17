@@ -1,0 +1,206 @@
+metadata:
+  name: mnq-cross-nyse-momentum
+  owner: claude-code
+  created_at: 2026-04-18
+  holdout_date: 2026-01-01
+  authority:
+    - docs/institutional/pre_registered_criteria.md
+    - docs/audit/results/2026-04-18-mnq-cross-nyse-momentum-distinctness.md
+    - .claude/rules/backtesting-methodology.md (Rule 7 fire correlation; Rule 8 fire-rate bounds)
+    - docs/institutional/literature/fitschen_2013_path_of_least_resistance.md (mechanism baseline — core intraday trend-follow)
+  related_prior_work:
+    - docs/plans/2026-04-11-cross-session-state-round3-memo.md (Round-3 Pack A DESIGNED but never executed; US_DATA_1000 only — NYSE_CLOSE NOT scouted in memo)
+    - trading_app/config.py:2558-2704 (CrossSessionMomentumFilter class + CROSS_NYSE_MOMENTUM registration)
+    - deployed CROSS_SGP_MOMENTUM on MNQ EUROPE_FLOW (3 lanes) as empirical proof-of-concept for the 4-state mechanism class
+
+edge_claim: >
+  The 4-state cross-session momentum mechanism (as deployed via CROSS_SGP_MOMENTUM
+  on MNQ EUROPE_FLOW) extends to NYSE_OPEN as prior session with US_DATA_1000 and
+  NYSE_CLOSE as current sessions on MNQ at O5. TAKE-state days (prior winning
+  aligned OR prior losing opposed) show positive ExpR delta over all-state-valid
+  days at entry models E2 CB=1 stop_mult=1.0. This is a filter-screen claim, NOT
+  a new baseline claim, NOT a theory-supported claim per Criterion 4 (hence
+  t >= 3.79 applied).
+
+candidate_filter:
+  name: CROSS_NYSE_MOMENTUM
+  existing_class: true
+  registry_ref: trading_app/config.py:2976
+  prior_session: NYSE_OPEN
+  semantics: 4-state machine — TAKE on {prior_winning & aligned_direction, prior_losing & opposite_direction}; VETO otherwise
+  no_new_code: >
+    This pre-reg tests an EXISTING filter class. No new filter implementation
+    required. Promotion to deployment (if Stage 1 passes) uses the existing
+    filter_type='CROSS_NYSE_MOMENTUM' via validated_setups.
+
+universe:
+  instruments: [MNQ]
+  exclude_instruments: [MES, MGC]
+  exclude_rationale:
+    MES: "Not in user-declared scope; deferred"
+    MGC: "Architecturally dead for ORB per CLAUDE.md NO-GO registry"
+  sessions: [US_DATA_1000, NYSE_CLOSE]
+  sessions_explicitly_excluded:
+    CME_PRECLOSE:
+      reason: "CROSS_COMEX_MOMENTUM on CME_PRECLOSE already REJECTED in experimental_strategies (avg ExpR +0.180 rejected); multiple filter families (VWAP_BP, wide-rel-IB, OVNRNG via US_DATA_1000) show CME_PRECLOSE OOS-flip pattern post-2026-01-01. Not adding a known-bad session with a new prior-pairing."
+    other_sessions:
+      reason: "Not in user scope; K=6 locked"
+  aperture: O5
+  aperture_rationale: "Matches existing CROSS_SGP_MOMENTUM canonical deployment at O5; NYSE_OPEN's deployed lanes are all O5; natural aperture for the mechanism class"
+  aperture_excluded: [O15]
+  aperture_exclusion_rationale: "NYSE_OPEN has zero deployed O15 lanes; cross-session data at O15 not tested"
+  entry_model: E2
+  confirm_bars: 1
+  stop_multiplier: 1.0
+  rr_targets: [1.0, 1.5, 2.0]
+
+cell_count:
+  total: 6
+  breakdown:
+    - "MNQ US_DATA_1000 × {1.0, 1.5, 2.0} = 3"
+    - "MNQ NYSE_CLOSE × {1.0, 1.5, 2.0} = 3"
+
+k_budget:
+  k_family: 6
+  k_lane: 3  # 3 RR per (instrument, session) lane
+  minbtl_check: >
+    N=6 trials, 6.65yr clean MNQ data. Bailey et al 2013 MinBTL = 2*ln(6)/E[max_N]^2 = 3.58/E[max_N]^2.
+    Trivially within budget.
+  no_sweeps: true
+
+baseline_per_cell:
+  rule: >
+    For each cell, baseline = all days where the 4-state classification is valid
+    (prior NYSE_OPEN data present AND current session data present) at the matching
+    (inst, session, orb_minutes, entry_model, rr, cb, stop_mult). Candidate = TAKE-state
+    subset of those days. Delta = ExpR(CANDIDATE) - ExpR(BASELINE), IS then OOS.
+  is_trades_baseline: "all valid-state days, IS"
+  candidate_delta: "TAKE days - all valid-state days"
+
+distinctness_preflight:
+  rule_7_fire_correlation_measured:
+    MNQ_US_DATA_1000_vs_X_MES_ATR60: -0.0250
+    MNQ_NYSE_CLOSE: "no deployed filters to compare; N/A"
+  rule_7_threshold: 0.70
+  rule_7_verdict: "PASS both lanes"
+  rule_8_1_fire_rate:
+    MNQ_US_DATA_1000: 0.671
+    MNQ_NYSE_CLOSE: 0.559
+    bounds: "5% - 95%"
+    verdict: "PASS both lanes"
+  look_ahead_check: "prior session (NYSE_OPEN ~00:30 Brisbane) strictly precedes current sessions (US_DATA_1000 ~01:00, NYSE_CLOSE ~07:00) within same trading day. Zero look-ahead. VERIFIED."
+
+evaluation:
+  is_window_rule: "trading_day < 2026-01-01 (Mode A sacred boundary)"
+  oos_window_rule: "trading_day >= 2026-01-01"
+  welch_t_test: "two-sample Welch on ExpR(TAKE) vs ExpR(all valid-state days), per cell"
+  wfe_method: >
+    5-fold expanding window on IS. Compute IS_SR and OOS_SR of TAKE-state pnl series.
+    WFE = OOS_SR / IS_SR. Replay may simplify to single-split Sharpe ratio if 5-fold
+    adds no decision value at NULL threshold; must declare simplification explicitly.
+  per_cell_output:
+    - n_take_is, n_all_is
+    - expr_take_is, expr_all_is, delta_is
+    - welch_t_stat_is, p_is
+    - n_take_oos, n_all_oos
+    - expr_take_oos, expr_all_oos, delta_oos
+    - eff_ratio = delta_oos / delta_is
+    - dir_match
+    - wfe
+
+pass_rule:
+  primary_per_cell_all_required:
+    - "BH-FDR q<0.05 at K=6 family (primary framing)"
+    - "Chordia t >= 3.79 (WITHOUT-theory threshold per Criterion 4)"
+    - "Walk-forward efficiency WFE >= 0.50"
+    - "N_OOS (TAKE-state days) >= 30 per cell"
+    - "OOS direction match: sign(delta_IS) == sign(delta_OOS)"
+    - "OOS effect ratio: delta_OOS / delta_IS >= 0.40 AND <= 3.00 (Amendment 2.7 + T3 leakage upper guard — eff > 3.0 flags LEAKAGE_SUSPECT; reject)"
+  secondary_framing_reported_only:
+    - "BH-FDR K_lane=3 per (session) lane"
+    - "DSR > 0.95 (informational per Amendment 2.1; NOT a hard gate)"
+
+tautology_guards:
+  rule_7_primary:
+    metric: "|corr(CROSS_NYSE_MOMENTUM fire, deployed_filter fire)| on booleans"
+    threshold: 0.70
+    action_on_breach: "EXCLUDE cell from survivors, no rescue"
+    pre_computed_values: "Rule 7 distinctness preflight above; all lanes PASS"
+
+kill_criteria:
+  - "BH-FDR K=6 fails for all cells (NULL_BY_CONSTRUCTION for family)"
+  - "Any cell: OOS direction flips from IS (Amendment 2.7 C8)"
+  - "Any cell: eff_ratio < 0.40 OR eff_ratio > 3.00 (LEAKAGE_SUSPECT upper)"
+  - "Any cell: WFE < 0.50"
+  - "Any cell: Chordia t < 3.79 (without-theory threshold)"
+  - "Any cell: N_OOS < 30"
+  - "Any parameter tuned after first result seen (threshold, RR, aperture, session, etc.)"
+
+scope_hard_boundaries:
+  - no_new_state_variables_beyond_existing_cross_nyse_momentum_filter
+  - no_aperture_expansion_beyond_O5
+  - no_session_expansion_beyond_declared_list
+  - no_new_sibling_state_filters_created_from_this_pre_reg
+  - no_ml_wrapper
+  - no_composite_with_other_new_filters
+  - no_deployment_claim_without_full_pass
+  - no_t_threshold_relaxation_to_3_00_without_new_literature_citation
+
+stage_1_outputs:
+  - docs/audit/results/2026-04-18-mnq-cross-nyse-momentum-replay.md
+  - research/cross_nyse_momentum_pre_reg_replay.py (committed before execution)
+
+stage_2_reserved:
+  trigger_conditions_all_required:
+    - "Stage 1 primary verdict has >= 3 of 6 cells pass all primary criteria"
+    - "User explicit authorization"
+  scope_on_trigger: >
+    Extend to: (a) VETO-side filter (CROSS_NYSE_MOMENTUM_VETO as new filter class),
+    (b) MES cross-confirmation on surviving session(s), OR
+    (c) O15 aperture on surviving cells.
+    NOT a new hypothesis; pre-registered here to prevent post-hoc rescue via
+    session/aperture/side swap.
+
+mechanism_citation:
+  primary_source: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+  extract_pages: "Ch 3 Tables 3.8 and 3.9, pp 40-41"
+  directly_supports: "Intraday trend-follow premise for stock indices and commodities"
+  empirical_class_proof: >
+    CROSS_SGP_MOMENTUM deployed on MNQ EUROPE_FLOW (3 validated lanes, ExpR +0.085 to +0.123,
+    OOS ExpR +0.094 to +0.135) is the empirical proof-of-concept for the 4-state
+    cross-session momentum mechanism class.
+  does_NOT_directly_support: >
+    (a) CROSS_NYSE_MOMENTUM on US_DATA_1000 or NYSE_CLOSE specifically — this is
+    mechanism extension to new session pairings.
+    (b) The specific TAKE vs VETO sibling-state logic — the mechanism is memo-level
+    (docs/plans/2026-04-11-cross-session-state-round3-memo.md) not Fitschen-level.
+  criterion_4_application: >
+    Mechanism-class extension with deployed proof-of-concept (CROSS_SGP on EUROPE_FLOW)
+    is closer to theory-supported than pure inference, but the specific session pairing
+    has not been Fitschen-validated. Conservative application per v2 precedent:
+    t >= 3.79 (without-theory threshold).
+
+what_this_test_does_NOT_claim:
+  - "Does NOT claim CROSS_NYSE_MOMENTUM works universally — only tests 2 sessions"
+  - "Does NOT claim memo Apr 11 Round-2 findings are re-validated — memo evidence is informational, not scope-shaping"
+  - "Does NOT claim session pair ordering (NYSE_OPEN -> US_DATA_1000 30min, NYSE_OPEN -> NYSE_CLOSE 6.5h) is equivalently causal — replay may show per-cell differences"
+  - "Does NOT claim VETO-side filter works — only TAKE side is tested. VETO is Stage 2."
+  - "Does NOT claim deployment — requires full pass + validator + allocator correlation gate"
+
+prior_work_acknowledgement:
+  apr_11_memo_findings: |
+    The Apr 11 memo (docs/plans/2026-04-11-cross-session-state-round3-memo.md) found
+    4/4 sibling states significant at K=18 BH FDR for NYSE_OPEN -> US_DATA_1000:
+      TAKE_WIN_ALIGN: IS +0.140 / OOS +0.481 (eff_ratio 3.4x)
+      VETO_WIN_OPP:   IS +0.185 / OOS +0.340 (eff_ratio 1.8x)
+      VETO_LOSS_ALIGN:IS +0.147 / OOS +0.407 (eff_ratio 2.8x)
+      TAKE_LOSS_OPP:  IS +0.129 / OOS +0.285 (eff_ratio 2.2x)
+
+    OOS lifts 1.8-3.4x IS lifts = LEAKAGE_SUSPECT per quant-audit-protocol T3. The
+    memo predates Amendment 2.7 Mode A (2026-01-01 boundary). This pre-reg does
+    NOT use memo's OOS numbers for scope or thresholds; all IS/OOS evaluation in
+    Stage 1 replay uses Mode A boundary. Memo is disclosed for audit trail only.
+
+    Kill_criteria.eff_ratio_upper_bound (3.00) is added specifically to guard
+    against re-seeing the memo's 3.4x pattern — if current Mode A OOS reproduces
+    that, it's flagged LEAKAGE_SUSPECT and killed.
