@@ -32,20 +32,23 @@
 
 ---
 
-### C2. Amendment numbering in `pre_registered_criteria.md` is non-monotonic — cross-references in `RESEARCH_RULES.md` are fragile
-**Docs involved:**
-- `docs/institutional/pre_registered_criteria.md` (registered: locked promotion/validation policy)
-- `RESEARCH_RULES.md` (registered: research methodology doctrine)
+### C2. ~~Amendment numbering non-monotonic — cross-references fragile~~ — **PARTIALLY RESOLVED 2026-04-17**
 
-**Exact conflict:**
-- `RESEARCH_RULES.md:14` cites "v2 with 5 Codex audit amendments"
-- `RESEARCH_RULES.md:38` cites "Amendment 2.7 (2026-04-08)"
-- `pre_registered_criteria.md` header lists 8+ amendments (2.1–2.5 Codex, 2.6–2.8 Mode B/A/rebuild, plus 3.2)
-- Amendment numbering is embedded as subsections (non-top-level), so section anchors are opaque and any renumbering silently breaks cross-refs from RESEARCH_RULES.
+**Status:** Citation convention established + fragile `RESEARCH_RULES.md` citations migrated to stable criterion anchors. Amendment restructuring + drift check deferred.
 
-**Which doc should win:** `pre_registered_criteria.md` is the authority for the criteria themselves; `RESEARCH_RULES.md` must accurately cite them.
+**Applied fixes (2026-04-17):**
+- `docs/institutional/pre_registered_criteria.md` header gained a **Citation convention** note: external docs MUST cite by the stable `## Criterion N` anchors, never by amendment number. Amendment subsections are revision history and their numbering may change.
+- `RESEARCH_RULES.md` — four fragile amendment citations migrated:
+  - `RESEARCH_RULES.md:14` — "(v2 with 5 Codex audit amendments)" → points to the *Version history* + *Amendment procedure* sections; adds the cross-reference convention inline.
+  - `RESEARCH_RULES.md:16` — "See Amendment 2.7 in pre_registered_criteria.md" → "See `Criterion 8 — 2026 out-of-sample positive` (as revised by Amendment 2.7)".
+  - `RESEARCH_RULES.md:38` — "Amendment 2.7 (2026-04-08) for the restoration" → "§ `Criterion 8 — 2026 out-of-sample positive` (as revised by Amendment 2.7 on 2026-04-08)".
+  - `RESEARCH_RULES.md:47` — "research-provisional per Amendment 2.4" → "per the *Applying to current 5 deployed lanes* section (lane classification language codified by Amendment 2.4)".
 
-**Recommended fix:** In `pre_registered_criteria.md`, flatten amendments to a top-level numbered list with stable anchors. In `RESEARCH_RULES.md`, replace version-anchor citations ("Amendment 2.7") with criterion-anchor citations ("Criterion 8 — 2026 forward-test gate"). Add a drift check under `pipeline/check_drift.py` that greps `RESEARCH_RULES.md` for `Amendment \d.\d` and verifies each target still exists in `pre_registered_criteria.md`.
+**Deferred (out of this pass):**
+- Flattening the amendment subsection structure in `pre_registered_criteria.md` to a simpler top-level list. Higher blast radius — needs a review of every inbound citation across `docs/plans/`, `HANDOFF.md`, `docs/audit/hypotheses/`, `docs/handoffs/`, memory files. Own workstream.
+- Drift check in `pipeline/check_drift.py` greppting for `Amendment \d\.\d` citations outside the canonical doc and verifying each target resolves. Code change — explicitly excluded from the docs-only scope.
+
+Both deferred items still needed for full C2 closure. The citation convention note now makes the policy explicit, and the RESEARCH_RULES migration removes the immediate fragility. A future contributor who cites an Amendment instead of a Criterion is now breaking a written rule, not an implicit one.
 
 ---
 
@@ -155,7 +158,7 @@
 | ID | Severity | Docs | Recommended fix (one-liner) |
 |---|---|---|---|
 | C1 | CRITICAL | `ROADMAP.md` vs `PLAN_24H_EDGE_IMPLEMENTATION.md` (+2 orphan PLAN files) | Delete orphan PLAN files; ROADMAP is sole registered plan |
-| C2 | CRITICAL | `RESEARCH_RULES.md` vs `pre_registered_criteria.md` | Flatten amendment numbering; cite by criterion not amendment |
+| C2 | ~~CRITICAL~~ **PARTIALLY RESOLVED 2026-04-17** | `RESEARCH_RULES.md`, `pre_registered_criteria.md` | Citation convention added + 4 fragile Amendment citations migrated to Criterion anchors. Amendment flattening + drift check deferred. |
 | I1 | IMPORTANT | `RESEARCH_RULES.md` vs `pre_registered_criteria.md` | Align WFE threshold to `≥ 0.50` in both |
 | I2 | ~~IMPORTANT~~ **RESOLVED 2026-04-17** | `TRADING_RULES.md:74` | Single-line stale-wording fix applied; no doctrine breach (live query confirmed TOKYO_OPEN is CORE, N=918-1487) |
 | I3 | IMPORTANT | 3 registered docs | Unify t-stat citation; document prior-theory justification per deployed lane |
