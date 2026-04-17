@@ -71,7 +71,7 @@ Example (E1): 10pt ORB + 2pt overshoot = 12pt risk, RR2.0 = 24pt target, 12pt st
 ### ORB Size Filters
 | Code | Meaning | Edge |
 |------|---------|------|
-| NO_FILTER | Take every trade | MGC/MES: LOSES money. MNQ: POSITIVE unfiltered at 5 CORE sessions (CME_PRECLOSE, COMEX_SETTLE, NYSE_OPEN, US_DATA_1000, EUROPE_FLOW) after BH FDR at K=105,627 and WF (WFE 0.53-1.61). TOKYO_OPEN is REGIME-class (WFE=0.53, p=0.010). Audit: 2026-03-24. |
+| NO_FILTER | Take every trade | MGC/MES: LOSES money. MNQ: POSITIVE unfiltered at 5 CORE sessions (CME_PRECLOSE, COMEX_SETTLE, NYSE_OPEN, US_DATA_1000, EUROPE_FLOW) after BH FDR at K=105,627 and WF (WFE 0.53-1.61). TOKYO_OPEN is CORE (active N=918-1487, WFE=0.525-0.823, p=0.001-0.011). Audit: 2026-03-24; TOKYO_OPEN reclassification verified 2026-04-17 via live validated_setups query. |
 | L3/L4/L6/L8 | ORB < N points | LOSES money on 5m ORB. |
 | G4+ | ORB >= 4 points | MGC/MES: breakeven starts here. MNQ: no-op (>99% of MNQ ORBs pass G8). |
 | G5+ | ORB >= 5 points | MGC: solid edge (creates positivity from negative baseline). MNQ: no-op. |
