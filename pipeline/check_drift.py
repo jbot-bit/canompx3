@@ -5126,6 +5126,71 @@ def check_deployable_subset_of_active() -> list[str]:
     return violations
 
 
+def check_canonical_claude_client_source() -> list[str]:
+    """Only `trading_app/ai/claude_client.py` may hardcode Claude model IDs
+    or instantiate `anthropic.Anthropic(...)` directly.
+
+    Stage 4 of the claude-api-modernization refactor (2026-04-17) consolidated
+    model pins and client construction into a single canonical module. This
+    check prevents regressions where a new file hardcodes a Claude model
+    string (e.g. `claude-opus-4-7`) or calls `anthropic.Anthropic()` directly,
+    bypassing `CLAUDE_STRUCTURED_MODEL` / `CLAUDE_REASONING_MODEL` / `get_client()`.
+
+    Allowed: `trading_app/ai/claude_client.py` (canonical home), `check_drift.py`
+    (this file, which references the literal patterns in regex), and `tests/**`
+    (stale-ID fixtures for testing). Scan covers `pipeline/`, `trading_app/`,
+    `scripts/`, `research/`.
+
+    Two offense patterns:
+      1. `claude-(opus|sonnet|haiku)-\\d(?:[\\d-]*\\d)?` — any hardcoded Claude model ID
+         (covers `claude-opus-4-7`, `claude-sonnet-4-5-20250929`, etc.)
+      2. `anthropic.Anthropic(` — any direct client construction
+    """
+    violations = []
+    model_pattern = re.compile(r"claude-(opus|sonnet|haiku)-\d(?:[\d-]*\d)?")
+    client_pattern = re.compile(r"anthropic\.Anthropic\s*\(")
+
+    canonical_file = TRADING_APP_DIR / "ai" / "claude_client.py"
+    scan_dirs = [PIPELINE_DIR, TRADING_APP_DIR, SCRIPTS_DIR, RESEARCH_DIR]
+
+    for scan_dir in scan_dirs:
+        if not scan_dir.exists():
+            continue
+        for py_file in scan_dir.rglob("*.py"):
+            if py_file.resolve() == canonical_file.resolve():
+                continue
+            if py_file.name == "check_drift.py":
+                continue
+            if "archive" in py_file.parts:
+                continue
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                continue
+
+            try:
+                rel: Path | str = py_file.relative_to(PROJECT_ROOT)
+            except ValueError:
+                rel = py_file  # tmp_path during testing — fall back to absolute
+
+            for match in model_pattern.finditer(content):
+                line_no = content[: match.start()].count("\n") + 1
+                violations.append(
+                    f"  {rel}:{line_no} — hardcoded Claude model ID `{match.group(0)}`. "
+                    f"Import CLAUDE_STRUCTURED_MODEL or CLAUDE_REASONING_MODEL from "
+                    f"trading_app.ai.claude_client instead."
+                )
+
+            for match in client_pattern.finditer(content):
+                line_no = content[: match.start()].count("\n") + 1
+                violations.append(
+                    f"  {rel}:{line_no} — direct `anthropic.Anthropic(` instantiation. "
+                    f"Use trading_app.ai.claude_client.get_client() instead."
+                )
+
+    return violations
+
+
 # Each entry: (description, callable, is_advisory).
 # is_advisory=True → prints warnings but never blocks (shown as ADVISORY).
 # Check number is derived from position (1-indexed).
@@ -5484,6 +5549,12 @@ CHECKS = [
     (
         "DEPLOYABLE_ORB_INSTRUMENTS is a strict subset of ACTIVE_ORB_INSTRUMENTS",
         check_deployable_subset_of_active,
+        False,
+        False,
+    ),
+    (
+        "Canonical Claude client source (claude_client.py is the only place for Claude model IDs + anthropic.Anthropic)",
+        check_canonical_claude_client_source,
         False,
         False,
     ),

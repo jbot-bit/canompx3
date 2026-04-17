@@ -1,7 +1,7 @@
 ---
 task: Claude API modernization — canonical client + grounding rebuild + caching + structured outputs
 mode: IMPLEMENTATION
-stage: 3_complete_awaiting_stage_4_go
+stage: 4_complete
 total_stages: 4
 slug: claude-api-modernization
 created: 2026-04-17
@@ -9,6 +9,13 @@ updated: 2026-04-17
 ---
 
 # Claude API Modernization
+
+## Scope Lock
+- pipeline/check_drift.py
+- tests/test_pipeline/test_check_drift.py
+
+## Blast Radius
+- New drift check enforces `trading_app/ai/claude_client.py` as sole source of hardcoded Claude model-ID strings and direct `anthropic.Anthropic(` constructions. Pre-verified 2026-04-17: zero offenders outside canonical module.
 
 ## Why
 The AI subsystem was on retired/aging models (Sonnet 4.0, Sonnet 4.5), hardcoded "MGC-only" trading rules in the grounding prompt despite the live portfolio being multi-instrument (MNQ=36, MES=2), and used manual JSON parsing where `messages.parse()` now exists. Three model pins drifted independently, violating `institutional-rigor.md` rule 4 (canonical sources).
@@ -58,16 +65,14 @@ The AI's system prompt told Claude "you are a trading data analyst for an MGC re
 
 ---
 
-## Stage 4 — planned (not yet executed)
-
-### scope_lock
-- pipeline/check_drift.py
-- tests/test_pipeline/test_check_drift.py
-
-### Blast radius
-- New drift check enforces `trading_app/ai/claude_client.py` as the sole source of:
-  1. Hardcoded Claude model-ID strings (`claude-(opus|sonnet|haiku)-\d` pattern)
-  2. Direct `anthropic.Anthropic(` client constructions
-- All other .py files under `pipeline/`, `trading_app/`, `scripts/`, `research/` must NOT contain either pattern.
-- Pre-check verified 2026-04-17 post-Stage-3: zero offenders outside canonical module. Stage 4 expected to pass clean on first run.
-- Injection-and-verify test follows `test_canonical_orb_utc_window_source` pattern.
+## Stage 4 — complete (2026-04-17)
+- [x] New `check_canonical_claude_client_source` function added to `pipeline/check_drift.py`
+- [x] Registered as Check 109 in CHECKS list
+- [x] Scans `pipeline/`, `trading_app/`, `scripts/`, `research/` for two offense patterns:
+  - Hardcoded Claude model IDs (`claude-(opus|sonnet|haiku)-\d(?:[\d-]*\d)?`)
+  - Direct `anthropic.Anthropic(` constructions
+- [x] Allowlist: `trading_app/ai/claude_client.py` (canonical home), `check_drift.py` (regex literals), `archive/**`, `tests/**` (stale-ID fixtures)
+- [x] Check 109 passes on clean repo (zero offenders — Stages 1-3 migrated every call site)
+- [x] Injection-and-verify test passes: `test_catches_offenders_via_injection` injects a rogue file containing both patterns, asserts both flagged with exact file/line info
+- [x] Drift report: 3 pre-existing (Check 45 SGP_MOMENTUM) + Check 16 hook-env-only; 0 new from Stage 4
+- [x] Task complete: canonical lock established. Future regressions that hardcode a Claude model ID or call `anthropic.Anthropic()` directly outside `claude_client.py` will fail drift.

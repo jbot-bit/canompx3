@@ -1610,3 +1610,52 @@ class TestPropProfilesValidatedSetupsAlignment:
         # Should pass because only inactive profiles have unbacked lanes
         assert violations == [], f"inactive profile lanes leaked into check: {violations}"
         con.close()
+
+
+class TestCanonicalClaudeClientSource:
+    """Stage 4 of claude-api-modernization: lock trading_app/ai/claude_client.py
+    as the sole source of hardcoded Claude model IDs and direct
+    anthropic.Anthropic(...) client constructions.
+    """
+
+    def test_catches_offenders_via_injection(self, tmp_path, monkeypatch):
+        """Inject a file with a hardcoded model ID AND a direct
+        anthropic.Anthropic() construction — both must be flagged.
+
+        Also verify the current repo is clean: before injection, the check
+        returns zero violations (Stages 1-3 migrated every call site).
+        """
+        from pipeline import check_drift
+
+        # Baseline: current repo must be clean.
+        baseline = check_drift.check_canonical_claude_client_source()
+        assert baseline == [], (
+            f"Clean repo expected zero violations. Offenders: {baseline}"
+        )
+
+        # Inject a rogue file with both offending patterns.
+        fake_trading = tmp_path / "trading_app"
+        fake_trading.mkdir()
+        offender = fake_trading / "rogue_ai.py"
+        offender.write_text(
+            'import anthropic\n'
+            '\n'
+            'def bad():\n'
+            '    client = anthropic.Anthropic(api_key="k")\n'
+            '    return client.messages.create(model="claude-opus-4-7", max_tokens=10)\n'
+        )
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", fake_trading)
+        monkeypatch.setattr(check_drift, "PIPELINE_DIR", empty)
+        monkeypatch.setattr(check_drift, "SCRIPTS_DIR", empty)
+        monkeypatch.setattr(check_drift, "RESEARCH_DIR", empty)
+
+        violations = check_drift.check_canonical_claude_client_source()
+        assert len(violations) == 2, f"Expected 2 violations, got {len(violations)}: {violations}"
+        assert any("rogue_ai.py" in v and "claude-opus-4-7" in v for v in violations), (
+            f"Missing model-ID violation: {violations}"
+        )
+        assert any("rogue_ai.py" in v and "anthropic.Anthropic(" in v for v in violations), (
+            f"Missing direct-construction violation: {violations}"
+        )
