@@ -75,18 +75,26 @@ Both deferred items still needed for full C2 closure. The citation convention no
 
 ---
 
-### I3. Significance threshold cited inconsistently across three registered docs — **(a) RESOLVED 2026-04-17; (b) + (c) DEFERRED**
+### I3. Significance threshold cited inconsistently across three registered docs — **(a) + (b) + (c) CLOSED 2026-04-17**
 
 **Original problem (preserved for context):**
 - `RESEARCH_RULES.md:65` cited *"p < 0.005 required for discovery claims (Harvey & Liu 2014)"*
 - `pre_registered_criteria.md:69` defines *"t ≥ 3.79 (Chordia et al 2018)" OR "t ≥ 3.00 (HLZ)"*
-- `TRADING_RULES.md:619` cites a deployed lane with `t=3.34, p=0.0016, p_bh=0.088` as PROMISING (passes t≥3.00, fails t≥3.79)
+- `TRADING_RULES.md:619` cites `t=3.34, p=0.0016, p_bh=0.088` as PROMISING (passes t≥3.00, fails t≥3.79) — on closer inspection this is a **Pending/Inconclusive WATCH item**, not a deployed lane. Audit's original "deployed lane" framing was inaccurate.
 
-**(a) Applied 2026-04-17:** `RESEARCH_RULES.md:65` changed from *"- **p < 0.005:** Required for 'discovery' claims (per Harvey & Liu, 2014)."* → *"- **Discovery claims:** see the binding threshold in `docs/institutional/pre_registered_criteria.md` § *Criterion 4 — Chordia t-statistic threshold*."* RESEARCH_RULES no longer states a separate threshold; it points to the locked binding source.
+**(a) RESOLVED 2026-04-17 (earlier commit):** `RESEARCH_RULES.md:65` changed from *"- **p < 0.005:** Required for 'discovery' claims (per Harvey & Liu, 2014)."* → *"- **Discovery claims:** see the binding threshold in `docs/institutional/pre_registered_criteria.md` § *Criterion 4 — Chordia t-statistic threshold*."* RESEARCH_RULES no longer states a separate threshold; it points to the locked binding source.
 
-**(b) DEFERRED:** Adding prior-theory citations per deployed lane with `t < 3.79` in `TRADING_RULES.md`. This is doctrine wording, not mechanical cleanup — picking the correct theory citation per lane (Crabel 1990, Fitschen 2013, etc.) is a research judgment call. Blanket citations rejected by user 2026-04-17. Own workstream.
+**(b) RESOLVED by scope clarification 2026-04-17 (user call D1):** scoped to `TRADING_RULES.md` Confirmed Edges table only. Re-audit found **zero deployed entries cite a t-statistic at all** (evidence columns use Sharpe, WR, AvgR, walk-forward, not t-stats). There is nothing in the deployed book below the Chordia `t ≥ 3.79` bar that needs a prior-theory citation. The one `t=3.34` instance (L619) is a Pending/WATCH item, not deployed, and per user D3 stays uncited until E2 re-evaluation completes.
 
-**(c) DEFERRED:** Clarifying what passes the "PROMISING" vs "VALIDATED" bar. Also doctrine wording — requires deciding whether PROMISING is a named tier with a threshold, or only loose shorthand. Own workstream.
+**Future-work notes** (logged from user decisions, not current actions):
+- **D2** — if prior-theory citations are ever added, use `@prior-theory:` inline annotation (paralleling existing `@research-source:` convention), not a new column.
+- **D3** — L619 `t=3.34` PROMISING HYPOTHESIS stays uncited until E2 re-evaluation finishes.
+- **D4** — Criterion 4's own enforcement clause (*"Flag non-compliant strategies in a drift check"*) belongs under the C2 backlog (code/drift-check add-on), not this audit.
+
+**(c) RESOLVED as informal 2026-04-17 (user calls D5/D6/D7):** PROMISING / VALIDATED / DEPLOYED are **prose shorthand**, not a formal tier ladder. Per user decision:
+- **D5:** PROMISING stays informal. No numeric threshold is attached.
+- **D6:** no new home for a tier ladder needed. The only formal classification remains the sample-size tier in `RESEARCH_RULES.md:54-58` (INVALID/REGIME/PRELIMINARY/CORE/HIGH-CONFIDENCE).
+- **D7:** VALIDATED vs DEPLOYED stays as-is. The implicit convention (VALIDATED = passes research validator; DEPLOYED = active in live book with risk wiring) will be clarified inline only when the relevant TRADING_RULES section is next touched for another reason.
 
 ---
 
@@ -150,7 +158,7 @@ No edit applied. I4 closed.
 | C2 | ~~CRITICAL~~ **PARTIALLY RESOLVED 2026-04-17** | `RESEARCH_RULES.md`, `pre_registered_criteria.md` | Citation convention added + 4 fragile Amendment citations migrated to Criterion anchors. Amendment flattening + drift check deferred. |
 | I1 | ~~IMPORTANT~~ **RESOLVED 2026-04-17** | `RESEARCH_RULES.md:80` | Operator changed `>` → `≥`; Criterion 6 pointer added |
 | I2 | ~~IMPORTANT~~ **RESOLVED 2026-04-17** | `TRADING_RULES.md:74` | Single-line stale-wording fix applied; no doctrine breach (live query confirmed TOKYO_OPEN is CORE, N=918-1487) |
-| I3 | **(a) RESOLVED 2026-04-17; (b)+(c) DEFERRED** | `RESEARCH_RULES.md:65` (done); `TRADING_RULES.md` lane citations (deferred); PROMISING/VALIDATED tier (deferred) | (a) RESEARCH_RULES threshold replaced with Criterion 4 pointer; (b)+(c) doctrine wording, requires research judgment |
+| I3 | **(a) RESOLVED; (b) RESOLVED-BY-SCOPE; (c) RESOLVED-AS-INFORMAL (all 2026-04-17)** | `RESEARCH_RULES.md:65`; `TRADING_RULES.md` Confirmed Edges scope | (a) Criterion 4 pointer in place; (b) no deployed entry cites a t-stat; (c) PROMISING stays prose shorthand per user decisions D5/D6/D7. D2/D3/D4 logged as future-work notes |
 | I4 | ~~IMPORTANT~~ **ALREADY SATISFIED (verified 2026-04-17)** | `RESEARCH_RULES.md:247, 265` | Both subsections already use single-line pointers to TRADING_RULES; no duplication to delete |
 | I5 | ~~IMPORTANT~~ **RESOLVED (incidentally) 2026-04-17** | `RESEARCH_RULES.md:38` | C2 citation migration already placed the Criterion 8 pointer in the holdout section |
 | K1 | CLEANUP | `mechanism_priors.md` vs `edge-finding-playbook.md` | Pick one framing (authority or informational) |
