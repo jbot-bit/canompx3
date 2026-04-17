@@ -1,4 +1,0 @@
-HEAD: 7aaf256c
-Current branch: main
-Latest task: W2e prior-session carry audit
-Next step: resume from research/garch_w2e_prior_session_carry_audit.py and verify across broader variables, not just one lane/session
