@@ -4,6 +4,8 @@
 **Authority:** Derived from `finite_data_framework.md` and `literature/` extracts in this directory.
 **Revision policy:** This file may be AMENDED only with explicit justification written as a new section. Prior criteria versions remain visible for audit. **No post-hoc relaxation of criteria after discovery results are seen.** Loosening a threshold because "our best strategy just missed" is explicitly banned as a form of selection bias per `literature/lopez_de_prado_bailey_2018_false_strategy.md`.
 
+**Citation convention (added 2026-04-17 per docs authority audit C2):** Cross-references from other documents (RESEARCH_RULES.md, TRADING_RULES.md, handoffs, audit docs) MUST cite by the stable `## Criterion N` anchors, NOT by amendment number. Amendment subsections (`## Amendment X.Y`) are revision history and their numbering may be renumbered, merged, or reorganised — they are not stable cross-reference anchors. When discussing *when* or *why* a criterion was revised, mention the amendment by name inline (e.g. *"Criterion 8, as revised by Amendment 2.7"*), but the load-bearing citation must be the criterion number. Drift check for this convention is tracked as future work per `docs/audit/2026-04-17-docs-authority-overlap-audit.md` § C2.
+
 ---
 
 ## Version history
