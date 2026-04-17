@@ -1,0 +1,254 @@
+metadata:
+  name: phase-d-d1-signal-only-shadow
+  owner: claude
+  created_at: 2026-04-17
+  testing_mode: research_only_signal_shadow
+  supersedes: none
+  depends_on:
+    - docs/audit/hypotheses/2026-04-15-phase-d-volume-pilot-spec.md
+    - docs/audit/results/2026-04-17-phase-d-d0-backtest.md
+    - docs/runtime/stages/phase-d-volume-pilot-d0.md
+  scope_note: >
+    Stage D-1 of the Phase D Volume Pilot. Pure signal-only shadow using
+    parameters LOCKED in D-0. Measures whether the discrete rel_vol size-
+    scaling rule holds predictive power on the Mode A sacred 2026 OOS
+    window. No capital at risk. No sizing deployed. No parameter re-tuning.
+    A one-shot observational read of a pre-committed rule, per Mode A
+    single-use-OOS discipline.
+
+sacred_boundary_discipline:
+  mode: A (per trading_app.holdout_policy.HOLDOUT_SACRED_FROM)
+  mode_a_citation: >
+    docs/institutional/pre_registered_criteria.md locks the 2026-01-01
+    sacred-window policy. Mode A permits exactly ONE pre-registered
+    observational or decision read of the post-2026-01-01 window per
+    hypothesis. Re-reading, re-tuning, or re-running with different
+    thresholds after observing the result is a pre-reg violation.
+  this_is_the_one_shot_read: true
+  re_tuning_after_observation: forbidden
+  capital_at_risk_during_window: none (signal-only shadow, not paper trade)
+  post_review_actions_permitted:
+    - proceed to D-2 (live deployment pre-reg) if gates PASS
+    - halt Phase D permanently if gates FAIL
+    - write postmortem
+  post_review_actions_forbidden:
+    - re-run with different P33 / P67
+    - re-run with different bucket widths
+    - extend the window
+    - split into sub-windows and pick the favorable one
+
+rules:
+  no_sizing_deployment: true
+  no_capital_at_risk: true
+  signal_only: true
+  no_threshold_retuning: true
+  no_window_extension_after_first_result: true
+  no_new_lanes_added_to_shadow: true
+  no_bucket_redefinition: true
+  no_rescue_if_shadow_fails: true
+  stage_4_wip_files_excluded: true
+
+locked_inputs_from_d0:
+  source_commit: 55b6ba89
+  source_result: docs/audit/results/2026-04-17-phase-d-d0-backtest.md
+  p33_rel_vol_comex_settle: 1.0529
+  p67_rel_vol_comex_settle: 1.7880
+  size_buckets:
+    below_p33: 0.5
+    between_p33_p67: 1.0
+    above_p67: 1.5
+  universe:
+    instrument: MNQ
+    session: COMEX_SETTLE
+    aperture_minutes: 5
+    rr_target: 1.5
+    entry_model: E2
+    confirm_bars: 1
+    filter: none (unfiltered E2, same as D-0)
+
+observation_windows:
+  retrospective_read:
+    label: locked_descriptive_oos_read
+    from: 2026-01-01
+    to: 2026-04-16
+    purpose: >
+      One-shot descriptive read of the locked D-0 rule on already-elapsed
+      2026 OOS data. Computed once at D-1 kickoff, written once, never
+      re-run. Counts as part of the Mode A single-shot consumption.
+    computed_at: 2026-04-17 (D-1 kickoff)
+    feeds_final_verdict: true
+  live_shadow:
+    label: shadow_continuation
+    from: 2026-04-17
+    to: 2026-05-15
+    purpose: >
+      Four-week forward observation. Each trading day, record rel_vol,
+      assigned size bucket, actual pnl_r at 1x, counterfactual pnl_r at
+      scaled size. No position changes. No capital deployed.
+    cadence: daily (appended to shadow log)
+    feeds_final_verdict: true
+  combined_verdict_window:
+    label: combined_one_shot_review_universe
+    from: 2026-01-01
+    to: 2026-05-15
+    purpose: >
+      Full D-1 OOS universe. Gates are evaluated ONCE on this combined
+      window at review_date. Retrospective + forward are both load-bearing
+      and both counted toward the final one-shot read; neither is optional
+      and neither can be evaluated on its own to rescue a combined fail.
+
+review_date: 2026-05-15
+review_rule: >
+  Gates are evaluated ONCE at review_date on the combined 2026-01-01 to
+  2026-05-15 universe. Evaluation is final. No second look.
+
+metrics_tracked_per_trade:
+  - trading_day
+  - window_label (retrospective | forward_shadow)
+  - rel_vol_COMEX_SETTLE
+  - size_bucket (0.5 / 1.0 / 1.5)
+  - actual_pnl_r (1x baseline)
+  - counterfactual_pnl_r_scaled (pnl_r * size_bucket)
+  - outcome (win / loss / scratch)
+
+aggregate_metrics_at_review:
+  n_trades_oos: integer
+  n_trades_retrospective: integer
+  n_trades_forward: integer
+  baseline:
+    expR: float
+    sharpe_ann: float
+    max_dd_r: float
+  scaled:
+    expR: float
+    sharpe_ann: float
+    max_dd_r: float
+  derived:
+    sharpe_ratio_scaled_to_baseline: float
+    sharpe_uplift_pct: float
+    corr_size_pnl_oos: float
+  bucket_distribution:
+    frac_below_p33: float
+    frac_between_p33_p67: float
+    frac_above_p67: float
+
+pass_fail_gates:
+  all_required: true
+  primary_oos_sharpe_uplift:
+    rule: sharpe_scaled_oos / sharpe_baseline_oos >= 1.05
+    rationale: >
+      D-0 IS uplift was 54.12%; OOS shrinkage is expected. 1.00x (parity)
+      is too soft for a promotion screen — a 0% OOS uplift on a 54% IS
+      signal would be a major decay warning, not a PASS. 1.15x matches IS
+      and is unrealistically strict for a 4.5-month OOS sample. 1.05x is
+      the middle cut: requires meaningful positive uplift while tolerating
+      realistic OOS shrinkage.
+    on_fail: halt Phase D, postmortem, no D-2
+  primary_oos_expR_lift:
+    rule: expR_scaled_oos - expR_baseline_oos >= 0.03 (R per trade)
+    rationale: >
+      Directional consistency check. Scaled must at minimum preserve edge
+      direction at ~half the IS lift magnitude (IS delta was +0.046R).
+    on_fail: halt Phase D, postmortem, no D-2
+  secondary_corr_signal_preserves:
+    rule: corr(size_bucket, pnl_r) > 0.00 on OOS
+    rationale: predictor direction must not flip sign
+    on_fail: halt Phase D, postmortem, no D-2
+  secondary_bucket_distribution:
+    rule: >
+      each of the three buckets fires on 20%-50% of OOS days (IS was
+      33% / 34% / 33%; tolerance band allows modest regime drift)
+    rationale: detect rel_vol distribution drift vs IS calibration
+    on_fail: >
+      not automatic halt, but triggers a mandatory Shiryaev-Roberts drift
+      audit before D-2 decision; D-2 blocked until audit completes
+  secondary_minimum_N_oos:
+    rule: n_trades_oos >= 60
+    rationale: >
+      expected ~90 trades across 4.5-month combined window at ~247
+      trades/year rate; 60 is the floor for statistically meaningful OOS
+      Sharpe comparison. Retrospective alone (Jan 1 - Apr 16) should
+      deliver ~70 trades; forward shadow adds ~20.
+    on_fail: >
+      shadow is INCONCLUSIVE, not PASS or FAIL. Window does not extend.
+      Phase D pauses pending user decision: abandon or pre-register V2
+      with a longer shadow window.
+
+kill_rules:
+  any_primary_fails: halt Phase D; no D-2; write postmortem; do NOT rerun
+  retune_attempt: >
+    forbidden; any attempt to change P33 / P67 after observing results is
+    a pre-reg violation and voids this document
+  capital_deployment_during_shadow: >
+    forbidden; capital gates on D-2 pre-reg, not this document
+
+tautology_and_look_ahead_guards:
+  rel_vol_feature_provenance: >
+    pipeline/build_daily_features.py computes rel_vol_{session} as
+    break_bar_volume / rolling-20-day-median of same-minute volume. The
+    warning text in that file confirms "No look-ahead: history uses only
+    bars before today." D-1 reads the column as stored; does not
+    re-compute.
+  tautology_check_at_review:
+    rule: abs_corr_size_vs_overnight_range < 0.70
+    rationale: same T0 guard used in D-0 (passed at 0.0672)
+    on_fail: >
+      result flagged but does not automatically void the gate; review_note
+      appended
+
+scope_lock_files:
+  pre_reg: docs/audit/hypotheses/2026-04-17-phase-d-d1-signal-only-shadow.yaml
+  retrospective_script: research/phase_d_volume_sizing_pilot_d1_retrospective.py (NEW)
+  shadow_log_csv: docs/audit/results/phase-d-d1-shadow-log.csv (accumulates)
+  review_writer_script: research/phase_d_volume_sizing_pilot_d1_review.py (NEW; run once on 2026-05-15)
+  final_result: docs/audit/results/2026-05-15-phase-d-d1-verdict.md (NEW at review)
+
+explicitly_out_of_scope:
+  - pipeline/ modifications (none)
+  - trading_app/ modifications (none)
+  - any changes to currently-deployed lane at MNQ COMEX_SETTLE
+  - Stage 4 claude-api-modernization WIP files
+    (pipeline/check_drift.py, tests/test_pipeline/test_check_drift.py,
+     docs/runtime/stages/claude-api-modernization.md)
+    - these belong to a parallel session on main and must not be included
+    in any D-1 commit
+  - any lane other than MNQ COMEX_SETTLE O5 RR1.5 E2 CB1
+  - any aperture other than O5
+  - any RR other than 1.5
+  - any entry model other than E2
+  - any new rel_vol threshold definition
+  - DSR at multi-K framings (deferred to D-2 promotion review if D-1 PASSES)
+  - Shiryaev-Roberts monitor wiring (deferred to D-2)
+
+verification_requirements:
+  at_kickoff_2026_04_17:
+    - pre-reg committed to docs/audit/hypotheses/
+    - retrospective script py_compile + ruff clean
+    - retrospective read written once to shadow log
+    - no code paths under pipeline/ or trading_app/ touched
+    - confirm daily_features.rel_vol_COMEX_SETTLE populated daily in 2026
+    - confirm no accidental read of any data < 2026-01-01 in the OOS
+      aggregation (fail-closed guard)
+  daily_during_shadow:
+    - append one row per new MNQ COMEX_SETTLE E2 trade day to shadow log
+    - no pass/fail evaluation during shadow - observation only
+  at_review_2026_05_15:
+    - review script runs once, produces verdict MD
+    - all gates evaluated on locked rules above
+    - PASS -> user decides on D-2 pre-reg drafting
+    - FAIL -> Phase D halts, postmortem filed, no D-2
+    - INCONCLUSIVE -> Phase D pauses, user decides
+
+deliverables:
+  - docs/audit/hypotheses/2026-04-17-phase-d-d1-signal-only-shadow.yaml
+  - research/phase_d_volume_sizing_pilot_d1_retrospective.py
+  - docs/audit/results/phase-d-d1-shadow-log.csv
+  - research/phase_d_volume_sizing_pilot_d1_review.py
+  - docs/audit/results/2026-05-15-phase-d-d1-verdict.md
+
+do_not_re_open_unless:
+  - brand-new D-1 V2 pre-registration is filed
+  - V2 must not reuse 2026-01-01 to 2026-05-15 as its observation window
+    (that window will have been consumed by this D-1)
+  - V2 must cite an economic / mechanistic reason for reopening, not a
+    statistical rescue argument
