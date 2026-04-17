@@ -1,0 +1,153 @@
+metadata:
+  name: mes-mnq-wide-rel-ib-tokyo-comex
+  owner: claude-code
+  created_at: 2026-04-18
+  holdout_date: 2026-01-01
+  authority:
+    - docs/institutional/pre_registered_criteria.md
+    - docs/audit/results/2026-04-18-mes-wide-ib-distinctness-audit.md
+  triggered_by:
+    - "STRATEGY_BLUEPRINT.md NO-GO registry line 287 reopen flag: MES-specific relative-width filter could be tested as hypothesis-scoped"
+  supersedes_scope_claim:
+    - "NO-GO (Apr 2026) implied MES-only; distinctness audit 2026-04-18 proved MNQ TOKYO_OPEN also has conditional signal, but OOS direction kills CME_PRECLOSE on both instruments"
+
+edge_claim: >
+  Within ORB_G5 fires, days where the current ORB is wide relative to its 20-day
+  trailing same-session mean (relative_width >= 1.0) exhibit incremental positive
+  expectancy over ORB_G5-alone baseline on TOKYO_OPEN (MES + MNQ) and MES
+  COMEX_SETTLE. Mechanism is a session-local size regime signal distinct from
+  (a) absolute ORB size (ORB_G5/G8 — partial correlation via shared numerator
+  but uncorrelated at daily vol level) and (b) daily vol regime (atr_20_pct rho
+  = -0.001). This is a filter-addition claim, NOT a new baseline claim.
+
+feature_definition:
+  name: WIDE_REL_1.0X_20D
+  formula: |
+    orb_{session}_size / mean_trailing_20d(orb_{session}_size) >= 1.0
+  trailing_window_rule: >
+    ROWS BETWEEN 20 PRECEDING AND 1 PRECEDING — strict lag, zero look-ahead
+  null_handling: >
+    If trailing_20d mean is NULL (fewer than 20 prior same-session days with
+    defined orb_size), lane is ineligible that day. Fail-closed.
+  derivation: >
+    Computed in the research script at test time from canonical
+    daily_features.orb_{session}_size. Not added to pipeline/build_daily_features.py.
+
+candidate_filter:
+  name: WIDE_REL_1.0X_AND_G5
+  semantics: conjunction — both WIDE_REL_1.0X_20D AND orb_{session}_size >= 5.0
+  role: filter-addition on ORB_G5-baseline lanes
+
+universe:
+  instruments: [MES, MNQ]
+  exclude_instrument: [MGC]  # architecturally dead per CLAUDE.md
+  sessions: [TOKYO_OPEN, COMEX_SETTLE]
+  session_per_instrument:
+    MES: [TOKYO_OPEN, COMEX_SETTLE]
+    MNQ: [TOKYO_OPEN]
+  explicitly_excluded_sessions:
+    CME_PRECLOSE:
+      reason: "OOS direction flip on both instruments in 2026-04-18 pre-check (IS +0.15/+0.20 → OOS −0.31/−0.01). Same archetype as VWAP_BP CME_PRECLOSE kill. Not rescued."
+    EUROPE_FLOW:
+      reason: "Baseline negative at E2 RR1.0 on MES; WIDE_REL adds nothing on MNQ"
+  aperture: O5
+  aperture_excluded: O15
+  aperture_exclusion_reason: "O15 cited in NO-GO but not tested in distinctness audit; deferred to Stage 2 if Stage 1 passes"
+  entry_model: E2
+  confirm_bars: 1
+  stop_multiplier: 1.0
+  rr_targets: [1.0, 1.5, 2.0]
+
+cell_count:
+  total: 9
+  breakdown:
+    - "MES TOKYO_OPEN × {1.0, 1.5, 2.0} = 3"
+    - "MES COMEX_SETTLE × {1.0, 1.5, 2.0} = 3 (PROBE — N_OOS=27 at RR1.0, below 30)"
+    - "MNQ TOKYO_OPEN × {1.0, 1.5, 2.0} = 3"
+
+k_budget:
+  k_family: 9
+  minbtl_check: "N=9, 6.65yr clean MNQ data, 6+yr clean MES data. Trivially satisfied."
+  no_sweeps: true
+
+baseline_per_cell:
+  rule: >
+    For each cell, baseline = same lane with ORB_G5 filter only (no WIDE_REL).
+    Delta = ExpR(WIDE_REL × G5) − ExpR(G5 alone).
+
+pass_rule:
+  primary:
+    - "BH-FDR q<0.05 at K=9 family (primary framing)"
+    - "Chordia t >= 3.00 (with theory) on delta vs G5-only baseline"
+    - "Walk-forward efficiency (WFE) >= 0.50 across 5 expanding folds"
+    - "N_OOS >= 30 per cell"
+    - "OOS direction match: sign(delta_IS) == sign(delta_OOS)"
+    - "OOS effect ratio: delta_OOS / delta_IS >= 0.40"
+  secondary_framing_reported_only:
+    - "BH-FDR K_lane per (instrument, session) 3-cell set"
+    - "DSR > 0.95 (informational only, not a gate)"
+
+tautology_guards:
+  rule: "Kill cell if |rho(cell_firing, alternative_filter_firing)| > 0.70 for any canonical deployed filter on the same lane"
+  alternatives_to_check:
+    - name: ORB_G5_alone
+      purpose: "Not strictly a tautology — this is the conditioning baseline. Reported for audit."
+    - name: X_MES_ATR60
+      purpose: "Vol-regime tautology check; MNQ TOKYO_OPEN has this deployed at RR=1.0 and RR=1.5"
+    - name: COST_LT12
+      purpose: "Cost-gate tautology check; MNQ TOKYO_OPEN and EUROPE_FLOW have this deployed"
+  hard_kill_rho_threshold: 0.70
+  note: "rho(WIDE_REL×G5 firing, G5 alone) is near 1.0 by construction (G5 is required component of WIDE_REL×G5). Exclude from tautology list; conditional-lift test is the correct distinctness check."
+
+kill_criteria:
+  - "BH-FDR K=9 fails for all cells (NULL_BY_CONSTRUCTION for family)"
+  - "Any cell: OOS direction flips from IS"
+  - "Any cell: |rho with deployed alternative filter on same lane| > 0.70"
+  - "Any cell: WFE < 0.50"
+  - "Any cell: Chordia t < 3.00"
+  - "Any cell: N_OOS < 30"
+  - "Any parameter tuned after first result seen (threshold, trailing window length, etc.)"
+
+scope_hard_boundaries:
+  - no_new_state_variables_beyond_wide_rel_1_0x_20d
+  - no_aperture_expansion_beyond_O5
+  - no_session_expansion_beyond_declared_list
+  - no_threshold_sweep_on_1_0x
+  - no_trailing_window_sweep_on_20d
+  - no_ml_wrapper
+  - no_composite_with_other_new_filters
+  - no_deployment_claim_without_full_pass
+
+stage_1_outputs:
+  - docs/audit/results/2026-04-18-mes-mnq-wide-rel-ib-replay.md
+  - research/wide_rel_ib_pre_reg_replay.py (committed to research/ before execution)
+
+stage_2_reserved:
+  trigger: Stage 1 verdict has >= 5 of 9 cells pass all primary criteria
+  scope: >
+    Test O15 aperture on the same universe (instruments, sessions) that passed
+    Stage 1, with the same WIDE_REL definition adapted to O15. K_stage2 = number
+    of Stage-1-passing-cells (capped at 9). NOT a new hypothesis; pre-registered
+    here to prevent post-hoc rescue via aperture swap.
+
+mechanism_note: |
+  Why this could still fail despite distinctness:
+
+  1. Session-local size regime could be a weak signal that disappears under
+     Chordia t >= 3.00 when properly BH-FDR'd at K=9. Rho=0.71-0.75 with
+     absolute size is high; the conditional lift test survives, but the
+     narrow band of pure incremental signal (~+0.10 to +0.15R within G5 fires)
+     might not clear a strict t-test.
+
+  2. Forward accumulation may flip direction on TOKYO_OPEN the way it did on
+     CME_PRECLOSE. N_OOS is still relatively thin.
+
+  3. The "size regime vs daily vol regime" conceptual distinction could collapse
+     under rigorous tautology testing against newer features (e.g., session
+     compression_z, pre_velocity) not checked here.
+
+  4. MES has structurally thinner data than MNQ. Cells may survive IS but fail
+     WFE on 5-fold expanding window due to fold-size constraints.
+
+  Expected realistic outcome: 2-4 of 9 cells pass. If so, 1-2 new deployable
+  lanes after allocator correlation gate.
