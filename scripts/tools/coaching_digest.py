@@ -4,6 +4,14 @@
 Reads broker_trades.jsonl, trader_profile.json, and daily_features.
 Generates coaching digest + profile update patch.
 
+Stage 3 of claude-api-modernization:
+  - Canonical `claude_client` (Opus 4.7 reasoning model)
+  - `messages.parse(output_format=DigestResponseSchema)` — no more regex
+    markdown-fencing, no raw JSON parsing
+  - Adaptive thinking (coaching is reasoning-heavy)
+  - Typed Anthropic exceptions (RateLimitError / APIStatusError / APIConnectionError)
+    replace the bare `except Exception` silent-failure path
+
 Usage:
     python scripts/tools/coaching_digest.py                    # today's session
     python scripts/tools/coaching_digest.py --date 2026-03-06  # specific date
@@ -11,27 +19,33 @@ Usage:
 
 import argparse
 import json
+import logging
 import os
-import re
 import sys
 from datetime import date
 from pathlib import Path
+
+import anthropic
+from pydantic import BaseModel, Field
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 os.chdir(PROJECT_ROOT)
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
 
-from scripts.tools.coaching_prompts import (
+from scripts.tools.coaching_prompts import (  # noqa: E402
     BEHAVIORAL_PATTERNS,
     COACHING_RULES,
     EMOTION_CATEGORIES,
     TENDLER_FRAMEWORK,
     TRADE_GRADING_RUBRIC,
 )
+from trading_app.ai.claude_client import CLAUDE_REASONING_MODEL, get_client  # noqa: E402
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 DATA_DIR = PROJECT_ROOT / "data"
 PROFILE_PATH = DATA_DIR / "trader_profile.json"
@@ -50,25 +64,82 @@ You are a trading performance coach grounded in Tendler's Mental Game of Trading
 
 {EMOTION_CATEGORIES}
 
-{COACHING_RULES}
+{COACHING_RULES}"""
 
-RESPOND WITH VALID JSON ONLY — no markdown fencing, no commentary outside the JSON."""
 
-DIGEST_SCHEMA = """{
-  "digest": {
-    "summary": "1-2 sentence session summary",
-    "trade_grades": [{"trade_id": "...", "grade": "A|B|C|D|F", "zone": "A-game|B-game|C-game", "reason": "..."}],
-    "patterns_observed": [{"name": "revenge_spiral|overconfidence_cascade|fear_of_losing|...", "emotion": "greed|fear|tilt|confidence|discipline", "severity": 1-10, "evidence": "..."}],
-    "coaching_note": "2-3 paragraphs of specific coaching feedback with interventions",
-    "metrics": {"trades": N, "win_rate": 0.XX, "gross_pnl": X, "fees": X, "net_pnl": X, "a_game_pct": 0.XX, "c_game_pct": 0.XX}
-  },
-  "profile_patch": {
-    "inchworm": {"c_game_patterns": ["..."], "b_game_patterns": ["..."], "a_game_indicators": ["..."]},
-    "strengths": [{"trait": "...", "confidence": 0.0-1.0, "evidence_count": N}],
-    "growth_edges": [{"trait": "...", "confidence": 0.0-1.0, "evidence_count": N}],
-    "behavioral_patterns": [{"pattern": "...", "emotion": "greed|fear|tilt|confidence|discipline", "trigger": "...", "frequency": "...", "avg_cost_r": X}]
-  }
-}"""
+# ---------------------------------------------------------------------------
+# Structured output schema
+# ---------------------------------------------------------------------------
+
+
+class _StrictModel(BaseModel):
+    """Base model enforcing closed schema — required for Claude structured outputs."""
+
+    model_config = {"extra": "forbid"}
+
+
+class TradeGrade(_StrictModel):
+    trade_id: str
+    grade: str  # A | B | C | D | F
+    zone: str   # A-game | B-game | C-game
+    reason: str
+
+
+class PatternObserved(_StrictModel):
+    name: str
+    emotion: str
+    severity: int
+    evidence: str
+
+
+class Metrics(_StrictModel):
+    trades: int
+    win_rate: float
+    gross_pnl: float
+    fees: float
+    net_pnl: float
+    a_game_pct: float
+    c_game_pct: float
+
+
+class Digest(_StrictModel):
+    summary: str
+    trade_grades: list[TradeGrade] = Field(default_factory=list)
+    patterns_observed: list[PatternObserved] = Field(default_factory=list)
+    coaching_note: str
+    metrics: Metrics
+
+
+class Inchworm(_StrictModel):
+    c_game_patterns: list[str] = Field(default_factory=list)
+    b_game_patterns: list[str] = Field(default_factory=list)
+    a_game_indicators: list[str] = Field(default_factory=list)
+
+
+class TraitEntry(_StrictModel):
+    trait: str
+    confidence: float
+    evidence_count: int
+
+
+class BehavioralPatternEntry(_StrictModel):
+    pattern: str
+    emotion: str
+    trigger: str
+    frequency: str
+    avg_cost_r: float
+
+
+class ProfilePatch(_StrictModel):
+    inchworm: Inchworm = Field(default_factory=Inchworm)
+    strengths: list[TraitEntry] = Field(default_factory=list)
+    growth_edges: list[TraitEntry] = Field(default_factory=list)
+    behavioral_patterns: list[BehavioralPatternEntry] = Field(default_factory=list)
+
+
+class DigestResponseSchema(_StrictModel):
+    digest: Digest
+    profile_patch: ProfilePatch = Field(default_factory=ProfilePatch)
 
 
 # ---------------------------------------------------------------------------
@@ -124,36 +195,11 @@ def build_digest_prompt(profile: dict, trades: list[dict], trading_rules_excerpt
         parts.append(f"## Trading Rules\n{trading_rules_excerpt[:2000]}")
     parts.append(f"## Current Trader Profile\n```json\n{json.dumps(profile, indent=2)}\n```")
     parts.append(f"## Today's Trades\n```json\n{json.dumps(trades, indent=2)}\n```")
-    parts.append(f"## Required Output Schema\n```json\n{DIGEST_SCHEMA}\n```")
-    parts.append("Generate the digest and profile patch now. JSON only.")
+    parts.append(
+        "Generate the session digest and profile patch. "
+        "Respond with the structured digest object — no prose wrapper."
+    )
     return "\n\n".join(parts)
-
-
-# ---------------------------------------------------------------------------
-# Response parsing
-# ---------------------------------------------------------------------------
-
-
-def parse_digest_response(raw: str) -> tuple[dict, dict]:
-    """Parse Claude's response into (digest, profile_patch).
-
-    Raises ValueError if response is not valid JSON or missing required keys.
-    """
-    # Strip markdown fencing if present
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
-        cleaned = re.sub(r"\n?```\s*$", "", cleaned)
-
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Claude returned invalid JSON: {cleaned[:200]}") from exc
-
-    if "digest" not in data:
-        raise ValueError(f"Claude response missing 'digest' key. Got keys: {list(data.keys())}")
-
-    return data["digest"], data.get("profile_patch", {})
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +214,6 @@ def apply_profile_patch(profile: dict, patch: dict) -> None:
 
     changed = False
 
-    # Merge list fields (strengths, growth_edges, behavioral_patterns)
     for list_field in ("strengths", "growth_edges", "behavioral_patterns"):
         if list_field not in patch:
             continue
@@ -185,14 +230,12 @@ def apply_profile_patch(profile: dict, patch: dict) -> None:
                 existing.append(new_item)
             changed = True
 
-    # Merge dict fields (inchworm, emotional_profile) — shallow merge of sub-keys
     for dict_field in ("inchworm", "emotional_profile"):
         if dict_field not in patch:
             continue
         existing = profile.setdefault(dict_field, {})
         for key, value in patch[dict_field].items():
             if isinstance(value, list) and isinstance(existing.get(key), list):
-                # Deduplicate list values (e.g. c_game_patterns)
                 combined = existing[key] + [v for v in value if v not in existing[key]]
                 existing[key] = combined
             else:
@@ -209,13 +252,12 @@ def apply_profile_patch(profile: dict, patch: dict) -> None:
 
 
 def generate_digest(trades: list[dict], *, profile_path: Path = PROFILE_PATH) -> dict | None:
-    """Generate a coaching digest via Claude API. Returns the digest dict or None on failure."""
-    try:
-        import anthropic
-    except ImportError:
-        print("ERROR: anthropic package not installed. Run: pip install anthropic")
-        return None
+    """Generate a coaching digest via Claude API.
 
+    Returns the digest dict (already enriched with metadata) or None on
+    recoverable failure. All error paths are explicit and logged — no bare
+    `except Exception`.
+    """
     profile = load_trader_profile(path=profile_path)
     rules_excerpt = ""
     if TRADING_RULES_PATH.exists():
@@ -224,30 +266,45 @@ def generate_digest(trades: list[dict], *, profile_path: Path = PROFILE_PATH) ->
     user_prompt = build_digest_prompt(profile, trades, rules_excerpt)
 
     try:
-        client = anthropic.Anthropic()
-        response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+        client = get_client()
+    except ValueError as exc:
+        logger.error("ANTHROPIC_API_KEY missing: %s", exc)
+        return None
+
+    try:
+        response = client.messages.parse(
+            model=CLAUDE_REASONING_MODEL,
             max_tokens=4096,
+            thinking={"type": "adaptive"},
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
+            output_format=DigestResponseSchema,
+            cache_control={"type": "ephemeral"},
         )
-    except Exception as exc:
-        print(f"ERROR: Claude API call failed: {exc}")
+    except anthropic.BadRequestError as exc:
+        logger.error("Claude BadRequestError (malformed request or schema): %s", exc)
+        return None
+    except anthropic.AuthenticationError as exc:
+        logger.error("Claude AuthenticationError (bad API key): %s", exc)
+        return None
+    except anthropic.RateLimitError as exc:
+        logger.warning("Claude RateLimitError — digest skipped: %s", exc)
+        return None
+    except anthropic.APIStatusError as exc:
+        logger.error("Claude APIStatusError (status=%s): %s", exc.status_code, exc)
+        return None
+    except anthropic.APIConnectionError as exc:
+        logger.warning("Claude APIConnectionError — digest skipped: %s", exc)
         return None
 
-    raw_text = response.content[0].text
-    try:
-        digest, patch = parse_digest_response(raw_text)
-    except ValueError as exc:
-        print(f"ERROR: Failed to parse Claude response: {exc}")
-        return None
+    parsed: DigestResponseSchema = response.parsed_output
+    digest = parsed.digest.model_dump()
+    patch = parsed.profile_patch.model_dump()
 
-    # Apply profile patch
     version_before = profile.get("version", 1)
     apply_profile_patch(profile, patch)
     save_trader_profile(profile, path=profile_path)
 
-    # Enrich digest with metadata
     digest["date"] = trades[0]["entry_time"][:10] if trades else date.today().isoformat()
     digest["accounts"] = list({t.get("account_name", "") for t in trades})
     digest["profile_version_before"] = version_before
@@ -269,13 +326,13 @@ def save_digest(digest: dict, *, path: Path = DIGESTS_PATH) -> None:
 
 
 def main():
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     parser = argparse.ArgumentParser(description="Generate coaching digest")
     parser.add_argument("--date", help="Date to analyze (YYYY-MM-DD), default today")
     args = parser.parse_args()
 
     target_date = args.date or date.today().isoformat()
 
-    # Load trades for the target date
     if not TRADES_PATH.exists():
         print(f"No trades file at {TRADES_PATH}. Run trade_matcher.py first.")
         return

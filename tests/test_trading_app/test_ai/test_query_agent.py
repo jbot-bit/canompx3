@@ -1,6 +1,10 @@
-"""Tests for trading_app.ai.query_agent."""
+"""Tests for trading_app.ai.query_agent.
 
-import json
+Stage 3 of claude-api-modernization: migrated to canonical `claude_client`,
+`messages.parse()` for Pass 1 intent extraction, adaptive thinking for Pass 2
+interpretation, prompt caching on the grounding prompt.
+"""
+
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -10,8 +14,6 @@ from trading_app.ai.query_agent import (
     QueryResult,
     _generate_warnings,
 )
-from trading_app.config import CORE_MIN_SAMPLES as _CORE_MIN
-from trading_app.config import REGIME_MIN_SAMPLES as _REGIME_MIN
 
 
 class TestGenerateWarnings:
@@ -38,7 +40,6 @@ class TestGenerateWarnings:
     def test_core_sample_no_warning(self):
         df = pd.DataFrame({"filter_type": ["ORB_G4"], "sample_size": [150]})
         warnings = _generate_warnings(df)
-        # No sample-size warnings for CORE strategies
         assert not any("INVALID" in w for w in warnings)
         assert not any("REGIME" in w for w in warnings)
 
@@ -67,6 +68,7 @@ class TestQueryResult:
 
 class TestQueryAgentInit:
     def test_missing_api_key_raises(self):
+        """QueryAgent delegates API-key check to claude_client.get_client()."""
         with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
                 from trading_app.ai.query_agent import QueryAgent
@@ -74,81 +76,212 @@ class TestQueryAgentInit:
                 QueryAgent(db_path="dummy.db", api_key=None)
 
 
+def _make_mock_agent():
+    """Construct QueryAgent with mocked I/O, no real API calls."""
+    from trading_app.ai.query_agent import QueryAgent
+
+    agent = QueryAgent.__new__(QueryAgent)
+    agent.db_path = "dummy.db"
+    agent.corpus = {
+        "CONFIG": "test",
+        "COST_MODEL": "test",
+        "TRADING_RULES": "test",
+        "TRADE_MANAGEMENT_RULES": "test",
+        "RESEARCH_RULES": "test",
+        "CLAUDE_MD": "test",
+        "PRE_REGISTERED_CRITERIA": "test",
+        "MECHANISM_PRIORS": "test",
+    }
+    agent.adapter = MagicMock()
+    agent.schema_summary = "bars_1m: ts_utc, symbol"
+    agent.db_stats = "bars_1m: 1000 rows"
+    agent.client = MagicMock()
+    return agent
+
+
 class TestQueryAgentIntentExtraction:
-    """Test intent extraction with mocked Anthropic client."""
+    """Test Pass 1 (intent extraction) via mocked messages.parse()."""
 
     @pytest.fixture
     def mock_agent(self):
-        """Create agent with mocked dependencies (no real API calls)."""
-        from trading_app.ai.query_agent import QueryAgent
+        return _make_mock_agent()
 
-        agent = QueryAgent.__new__(QueryAgent)
-        agent.db_path = "dummy.db"
-        agent.api_key = "test-key"
-        agent.corpus = {
-            "CONFIG": "test",
-            "COST_MODEL": "test",
-            "CANONICAL_LOGIC": "test",
-            "TRADE_MANAGEMENT_RULES": "test",
-        }
-        agent.adapter = MagicMock()
-        agent.schema_summary = "bars_1m: ts_utc, symbol"
-        agent.db_stats = "bars_1m: 1000 rows"
-        agent.client = MagicMock()
+    def _mock_parse_response(self, *, template, parameters=None, explanation=""):
+        """Build a response matching the shape returned by messages.parse()."""
+        from trading_app.ai.query_agent import QueryIntentSchema, QueryParameters
 
-        return agent
-
-    def test_extract_intent_valid_json(self, mock_agent):
-        """Mock Claude returning valid JSON intent."""
         mock_response = MagicMock()
-        mock_response.content = [
-            MagicMock(
-                text='{"template": "strategy_lookup", "parameters": {"orb_label": "CME_REOPEN"}, "explanation": "test"}'
-            )
-        ]
-        mock_agent.client.messages.create.return_value = mock_response
+        mock_response.parsed_output = QueryIntentSchema(
+            template=template,
+            parameters=QueryParameters(**(parameters or {})),
+            explanation=explanation,
+        )
+        return mock_response
 
+    def test_extract_intent_valid_schema(self, mock_agent):
+        mock_agent.client.messages.parse.return_value = self._mock_parse_response(
+            template="strategy_lookup",
+            parameters={"orb_label": "CME_REOPEN"},
+            explanation="lookup",
+        )
         intent = mock_agent._extract_intent("show CME_REOPEN strategies")
         assert intent is not None
         assert intent.template.value == "strategy_lookup"
         assert intent.parameters["orb_label"] == "CME_REOPEN"
 
-    def test_extract_intent_null_template(self, mock_agent):
-        """Mock Claude saying no template fits."""
+    def test_extract_intent_null_template_returns_none(self, mock_agent):
+        mock_agent.client.messages.parse.return_value = self._mock_parse_response(
+            template=None, explanation="cannot answer"
+        )
+        assert mock_agent._extract_intent("what is the meaning of life?") is None
+
+    def test_extract_intent_uses_structured_model(self, mock_agent):
+        """Pass 1 pins to Sonnet 4.6 (CLAUDE_STRUCTURED_MODEL)."""
+        from trading_app.ai.claude_client import CLAUDE_STRUCTURED_MODEL
+
+        mock_agent.client.messages.parse.return_value = self._mock_parse_response(
+            template="table_counts"
+        )
+        mock_agent._extract_intent("how many rows?")
+
+        call_kwargs = mock_agent.client.messages.parse.call_args.kwargs
+        assert call_kwargs["model"] == CLAUDE_STRUCTURED_MODEL
+
+    def test_extract_intent_applies_cache_control(self, mock_agent):
+        """Grounding system prompt is a stable, large prefix — must be cached."""
+        mock_agent.client.messages.parse.return_value = self._mock_parse_response(
+            template="table_counts"
+        )
+        mock_agent._extract_intent("how many rows?")
+
+        call_kwargs = mock_agent.client.messages.parse.call_args.kwargs
+        assert "cache_control" in call_kwargs
+        assert call_kwargs["cache_control"] == {"type": "ephemeral"}
+
+    def test_extract_intent_passes_no_temperature(self, mock_agent):
+        """`temperature` is removed from Opus 4.7; Sonnet 4.6 is forward-compatible.
+
+        We never pass temperature — structured outputs give us determinism via
+        schema validation rather than sampling knobs.
+        """
+        mock_agent.client.messages.parse.return_value = self._mock_parse_response(
+            template="table_counts"
+        )
+        mock_agent._extract_intent("how many rows?")
+
+        call_kwargs = mock_agent.client.messages.parse.call_args.kwargs
+        assert "temperature" not in call_kwargs
+
+    def test_extract_intent_invalid_template_returns_none(self, mock_agent):
+        """If Claude returns a template not in QueryTemplate enum, fail-soft None."""
+        mock_agent.client.messages.parse.return_value = self._mock_parse_response(
+            template="nonexistent_template_name"
+        )
+        assert mock_agent._extract_intent("garbled") is None
+
+
+class TestQueryAgentInterpretation:
+    """Test Pass 2 (result interpretation) via mocked messages.create()."""
+
+    @pytest.fixture
+    def mock_agent(self):
+        return _make_mock_agent()
+
+    def _mock_create_response(self, text: str):
         mock_response = MagicMock()
-        mock_response.content = [MagicMock(text='{"template": null, "parameters": {}, "explanation": "cannot answer"}')]
+        block = MagicMock()
+        block.type = "text"
+        block.text = text
+        mock_response.content = [block]
+        return mock_response
+
+    def test_interpret_uses_reasoning_model(self, mock_agent):
+        """Pass 2 pins to Opus 4.7 (CLAUDE_REASONING_MODEL)."""
+        from trading_app.ai.claude_client import CLAUDE_REASONING_MODEL
+
+        mock_agent.client.messages.create.return_value = self._mock_create_response(
+            "The data shows 3 CORE strategies."
+        )
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        mock_agent._interpret_results("what does it say?", df)
+
+        call_kwargs = mock_agent.client.messages.create.call_args.kwargs
+        assert call_kwargs["model"] == CLAUDE_REASONING_MODEL
+
+    def test_interpret_uses_adaptive_thinking(self, mock_agent):
+        """Interpretation is reasoning-heavy; adaptive thinking is required."""
+        mock_agent.client.messages.create.return_value = self._mock_create_response(
+            "..."
+        )
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        mock_agent._interpret_results("q", df)
+
+        call_kwargs = mock_agent.client.messages.create.call_args.kwargs
+        assert call_kwargs.get("thinking") == {"type": "adaptive"}
+
+    def test_interpret_passes_no_temperature(self, mock_agent):
+        """Opus 4.7 rejects `temperature`."""
+        mock_agent.client.messages.create.return_value = self._mock_create_response(
+            "..."
+        )
+        df = pd.DataFrame({"x": [1, 2, 3]})
+        mock_agent._interpret_results("q", df)
+
+        call_kwargs = mock_agent.client.messages.create.call_args.kwargs
+        assert "temperature" not in call_kwargs
+
+    def test_interpret_extracts_text_from_content_blocks(self, mock_agent):
+        """With adaptive thinking, content may be [ThinkingBlock, ..., TextBlock].
+
+        The method must pick the text block, not rely on content[0].
+        """
+        mock_response = MagicMock()
+        thinking_block = MagicMock()
+        thinking_block.type = "thinking"
+        thinking_block.thinking = "reasoning..."
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "The answer is 42."
+        mock_response.content = [thinking_block, text_block]
         mock_agent.client.messages.create.return_value = mock_response
 
-        intent = mock_agent._extract_intent("what is the meaning of life?")
-        assert intent is None
+        df = pd.DataFrame({"x": [1]})
+        result = mock_agent._interpret_results("q", df)
+        assert result == "The answer is 42."
 
-    def test_extract_intent_code_block(self, mock_agent):
-        """Mock Claude wrapping JSON in code block."""
-        mock_response = MagicMock()
-        mock_response.content = [
-            MagicMock(text='```json\n{"template": "table_counts", "parameters": {}, "explanation": "row counts"}\n```')
-        ]
-        mock_agent.client.messages.create.return_value = mock_response
+    def test_interpret_empty_df_short_circuits(self, mock_agent):
+        result = mock_agent._interpret_results("q", pd.DataFrame())
+        assert "No results" in result
+        mock_agent.client.messages.create.assert_not_called()
 
-        intent = mock_agent._extract_intent("how many rows?")
-        assert intent is not None
-        assert intent.template.value == "table_counts"
 
-    def test_full_query_flow(self, mock_agent):
-        """Test full query with mocked API and adapter."""
-        # Mock intent extraction
-        intent_response = MagicMock()
-        intent_response.content = [
-            MagicMock(text='{"template": "validated_summary", "parameters": {}, "explanation": "summary"}')
-        ]
+class TestFullQueryFlow:
+    """End-to-end flow through parse → execute → create."""
 
-        # Mock interpretation
-        interp_response = MagicMock()
-        interp_response.content = [MagicMock(text="There are 312 validated strategies across 4 sessions.")]
+    @pytest.fixture
+    def mock_agent(self):
+        return _make_mock_agent()
 
-        mock_agent.client.messages.create.side_effect = [intent_response, interp_response]
+    def test_full_flow_happy_path(self, mock_agent):
+        from trading_app.ai.query_agent import QueryIntentSchema, QueryParameters
 
-        # Mock adapter execution
+        # Pass 1: intent via messages.parse
+        parse_response = MagicMock()
+        parse_response.parsed_output = QueryIntentSchema(
+            template="validated_summary",
+            parameters=QueryParameters(),
+            explanation="summary",
+        )
+        mock_agent.client.messages.parse.return_value = parse_response
+
+        # Pass 2: interpretation via messages.create
+        create_response = MagicMock()
+        text_block = MagicMock()
+        text_block.type = "text"
+        text_block.text = "There are 312 validated strategies across 4 sessions."
+        create_response.content = [text_block]
+        mock_agent.client.messages.create.return_value = create_response
+
         mock_agent.adapter.execute.return_value = pd.DataFrame(
             {
                 "orb_label": ["CME_REOPEN", "TOKYO_OPEN", "LONDON_METALS", "US_DATA_830"],

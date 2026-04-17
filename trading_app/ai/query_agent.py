@@ -1,18 +1,31 @@
 """
 Main AI query interface. Two-pass design:
 
-  User question -> Pass 1: Claude extracts QueryIntent
+  User question -> Pass 1: Sonnet 4.6 extracts QueryIntent via messages.parse()
                 -> SQL adapter executes safely
-                -> Pass 2: Claude interprets results
+                -> Pass 2: Opus 4.7 interprets results with adaptive thinking
                 -> Returns explanation + data + warnings
+
+Stage 3 of claude-api-modernization:
+  - Model pins come from canonical `claude_client` (Sonnet 4.6 / Opus 4.7)
+  - Pass 1 uses `messages.parse(output_format=QueryIntentSchema)` — no more
+    manual JSON / markdown-fence recovery hacks
+  - Pass 2 uses adaptive thinking + content-block filtering
+  - `cache_control={"type": "ephemeral"}` on grounding prompt (~10× cheaper
+    for repeat calls within the 5-minute cache window)
+  - API-key check delegated to canonical `get_client()`
 """
 
-import json
-import os
 from dataclasses import dataclass, field
 
 import pandas as pd
+from pydantic import BaseModel, Field
 
+from trading_app.ai.claude_client import (
+    CLAUDE_REASONING_MODEL,
+    CLAUDE_STRUCTURED_MODEL,
+    get_client,
+)
 from trading_app.ai.corpus import get_db_stats, get_schema_definitions, load_corpus
 from trading_app.ai.grounding import build_grounding_prompt, build_interpretation_prompt
 from trading_app.ai.sql_adapter import (
@@ -22,9 +35,39 @@ from trading_app.ai.sql_adapter import (
 )
 from trading_app.config import generate_strategy_warnings
 
-# Pinned model version for all AI query passes.
-# Update here when the model is rotated — one place, both passes stay in sync.
-_AI_MODEL = "claude-sonnet-4-5-20250929"
+
+class QueryParameters(BaseModel):
+    """Typed, closed schema for query parameters — enables strict structured outputs.
+
+    Every optional field corresponds to a recognized parameter name. Extra
+    parameters are rejected at validation time. Claude populates only the
+    subset relevant to each question.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    orb_label: str | None = None
+    entry_model: str | None = None
+    filter_type: str | None = None
+    direction: str | None = None
+    min_sample_size: int | None = None
+    limit: int | None = None
+    table_name: str | None = None
+    instrument: str | None = None
+
+
+class QueryIntentSchema(BaseModel):
+    """Pydantic schema for Pass 1 structured output.
+
+    `template=None` is a valid response — signals "no template fits this question".
+    Converted to the internal `QueryIntent` dataclass for sql_adapter compatibility.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    template: str | None = None
+    parameters: QueryParameters = Field(default_factory=QueryParameters)
+    explanation: str = ""
 
 
 @dataclass
@@ -44,29 +87,39 @@ def _generate_warnings(df: pd.DataFrame) -> list[str]:
     return generate_strategy_warnings(df)
 
 
+def _extract_text_block(response) -> str:
+    """Pick the text content from a response.
+
+    With adaptive thinking enabled, `content` becomes
+    `[ThinkingBlock, ..., TextBlock]` — relying on `content[0].text` silently
+    returns thinking output instead of the model's answer.
+    """
+    for block in response.content:
+        if getattr(block, "type", None) == "text":
+            return block.text.strip()
+    return ""
+
+
 class QueryAgent:
     """AI-powered query interface to the trading database."""
 
     def __init__(self, db_path: str, api_key: str | None = None):
         self.db_path = db_path
-        self.api_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY required. Pass api_key or set env var.")
+
+        # API-key resolution and client construction delegated to the canonical
+        # module. Raises `ValueError("ANTHROPIC_API_KEY required...")` when no
+        # key is available.
+        self.client = get_client(api_key=api_key)
 
         self.corpus = load_corpus()
         self.adapter = SQLAdapter(db_path)
         self.schema_summary = get_schema_definitions(db_path)
         self.db_stats = get_db_stats(db_path)
 
-        import anthropic
-
-        self.client = anthropic.Anthropic(api_key=self.api_key)
-
     def query(self, question: str) -> QueryResult:
         """Main entry point. Ask a question in plain English."""
         result = QueryResult(query=question)
 
-        # Pass 1: Extract intent
         intent = self._extract_intent(question)
         result.intent = intent
 
@@ -78,7 +131,6 @@ class QueryAgent:
             )
             return result
 
-        # Execute query
         try:
             df = self.adapter.execute(intent)
             result.data = df
@@ -87,65 +139,55 @@ class QueryAgent:
             result.warnings.append("Query failed -- check parameters.")
             return result
 
-        # Generate auto-warnings
         result.warnings = _generate_warnings(df)
-
-        # Determine grounding references
         result.grounding_refs = self._get_grounding_refs(intent)
-
-        # Pass 2: Interpret results
         result.explanation = self._interpret_results(question, df)
 
         return result
 
     def _extract_intent(self, question: str) -> QueryIntent | None:
-        """Pass 1: Use Claude to extract query intent from natural language."""
+        """Pass 1: structured-output intent extraction via Sonnet 4.6.
+
+        Uses `messages.parse()` with a Pydantic schema — Claude's response
+        is validated against `QueryIntentSchema` before we see it. No manual
+        JSON parsing, no markdown-fence recovery, no sampling parameters.
+        """
         system_prompt = build_grounding_prompt(self.corpus, self.schema_summary)
 
-        response = self.client.messages.create(
-            model=_AI_MODEL,
+        response = self.client.messages.parse(
+            model=CLAUDE_STRUCTURED_MODEL,
             max_tokens=500,
-            temperature=0.0,
             system=system_prompt,
             messages=[{"role": "user", "content": question}],
+            output_format=QueryIntentSchema,
+            cache_control={"type": "ephemeral"},
         )
 
-        text = response.content[0].text.strip()
-
-        # Parse JSON response
-        try:
-            parsed = json.loads(text)
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown code block
-            if "```" in text:
-                json_str = text.split("```")[1]
-                if json_str.startswith("json"):
-                    json_str = json_str[4:]
-                parsed = json.loads(json_str.strip())
-            else:
-                return None
-
-        template_name = parsed.get("template")
-        if template_name is None:
+        schema: QueryIntentSchema = response.parsed_output
+        if schema.template is None:
             return None
 
         try:
-            template = QueryTemplate(template_name)
+            template_enum = QueryTemplate(schema.template)
         except ValueError:
             return None
 
         return QueryIntent(
-            template=template,
-            parameters=parsed.get("parameters", {}),
-            explanation=parsed.get("explanation", ""),
+            template=template_enum,
+            parameters=schema.parameters.model_dump(exclude_none=True),
+            explanation=schema.explanation,
         )
 
     def _interpret_results(self, question: str, df: pd.DataFrame) -> str:
-        """Pass 2: Use Claude to interpret query results."""
+        """Pass 2: reasoning interpretation via Opus 4.7 + adaptive thinking.
+
+        Adaptive thinking replaces the removed `budget_tokens` parameter. The
+        response `content` list may include a `ThinkingBlock` before the text
+        block, so we filter explicitly rather than index `content[0]`.
+        """
         if df.empty:
             return "No results found for this query."
 
-        # Summarize data for the prompt
         data_summary = df.to_string(index=False, max_rows=50)
         if len(df) > 50:
             data_summary += f"\n... ({len(df)} total rows, showing first 50)"
@@ -153,20 +195,19 @@ class QueryAgent:
         prompt = build_interpretation_prompt(self.corpus, question, data_summary)
 
         response = self.client.messages.create(
-            model=_AI_MODEL,
-            max_tokens=1000,
-            temperature=0.0,
+            model=CLAUDE_REASONING_MODEL,
+            max_tokens=2000,
+            thinking={"type": "adaptive"},
             messages=[{"role": "user", "content": prompt}],
         )
 
-        return response.content[0].text.strip()
+        return _extract_text_block(response)
 
     def _get_grounding_refs(self, intent: QueryIntent) -> list[str]:
         """Determine which canonical docs are relevant to this query."""
         refs = []
         template = intent.template
 
-        # Cost model is always relevant for R-multiple queries
         if template in (
             QueryTemplate.STRATEGY_LOOKUP,
             QueryTemplate.PERFORMANCE_STATS,
@@ -177,12 +218,12 @@ class QueryAgent:
             refs.append("trading_app/config.py")
 
         if template == QueryTemplate.REGIME_COMPARE:
-            refs.append("CANONICAL_LOGIC.txt")
+            refs.append("TRADING_RULES.md")
 
         if template in (QueryTemplate.VALIDATED_SUMMARY, QueryTemplate.CORRELATION):
             refs.append("trading_app/config.py")
 
         if template == QueryTemplate.ORB_SIZE_DIST:
-            refs.append("CANONICAL_LOGIC.txt")
+            refs.append("TRADING_RULES.md")
 
         return refs
