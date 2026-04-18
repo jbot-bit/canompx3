@@ -1,8 +1,8 @@
-# MGC Mode A rediscovery — ORB_G5 long RR1.5 K=4 scan
+# MGC Mode A rediscovery — ORB_G5 SHORT RR1.5 K=4 scan
 
-**Generated:** 2026-04-18T22:47:40+00:00
-**Pre-reg:** `docs/audit/hypotheses/2026-04-19-mgc-mode-a-rediscovery-orbg5-v1.yaml` (LOCKED, commit_sha=e227ceb3)
-**Script:** `research/mgc_mode_a_rediscovery_orbg5_v1_scan.py`
+**Generated:** 2026-04-18T23:01:37+00:00
+**Pre-reg:** `docs/audit/hypotheses/2026-04-19-mgc-mode-a-rediscovery-orbg5-short-v1.yaml` (LOCKED, commit_sha=4ac0b688)
+**Script:** `research/mgc_mode_a_rediscovery_orbg5_short_v1_scan.py`
 **IS window:** `trading_day < 2026-01-01` (Mode A)
 
 ## Summary
@@ -58,7 +58,7 @@ Cells: 4 | CONTINUE: 0 | KILL: 4
 
 ## Decision
 
-**Verdict: KILL per pre-reg K1.** Zero of 4 cells pass all gate clauses. MGC ORB_G5 long RR1.5 on the 4 pre-registered sessions does NOT yield a Pathway A Chordia-validated edge on 3.5-year Mode A IS. Honest negative evidence on MGC cross-instrument-mirror hypothesis. Pre-reg explicitly anticipated this outcome; baselines (approx_t 0.23-1.47) predicted a KILL. No re-runs with different thresholds.
+**Verdict: KILL per pre-reg K1.** Zero of 4 cells pass all gate clauses. MGC ORB_G5 SHORT RR1.5 on the 4 pre-registered sessions does NOT yield a Pathway A Chordia-validated edge on 3.5-year Mode A IS. Honest negative evidence on MGC short-direction cross-instrument-mirror hypothesis. Pre-reg explicitly anticipated this outcome; baselines (approx_t -0.31 to 0.77) predicted a KILL. No re-runs with different thresholds.
 
 ## Reproduction
 

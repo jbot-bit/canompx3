@@ -1,8 +1,8 @@
-# MES broader Mode A rediscovery — K=6 scan
+# MES comprehensive Mode A Pathway A feature scan — K=40
 
-**Generated:** 2026-04-18T22:55:11+00:00
-**Pre-reg:** `docs/audit/hypotheses/2026-04-19-mes-broader-mode-a-rediscovery-v1.yaml` LOCKED (commit 66964b74)
-**Script:** `research/mes_broader_mode_a_rediscovery_v1_scan.py`
+**Generated:** 2026-04-18T23:01:58+00:00
+**Pre-reg:** `docs/audit/hypotheses/2026-04-19-mes-comprehensive-mode-a-feature-v1.yaml` LOCKED (commit d8ad96f2)
+**Script:** `research/mes_comprehensive_mode_a_feature_v1_scan.py`
 **IS:** `trading_day < 2026-01-01`
 
 ## Summary: 40 cells | CONTINUE: 0 | KILL: 40

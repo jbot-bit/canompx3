@@ -302,11 +302,11 @@ def render(cells: list[CellResult]) -> str:
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
     n_cont = sum(1 for c in cells if c.verdict == "CONTINUE")
     lines: list[str] = []
-    lines.append("# MGC Mode A rediscovery — ORB_G5 long RR1.5 K=4 scan")
+    lines.append("# MGC Mode A rediscovery — ORB_G5 SHORT RR1.5 K=4 scan")
     lines.append("")
     lines.append(f"**Generated:** {ts}")
-    lines.append(f"**Pre-reg:** `docs/audit/hypotheses/2026-04-19-mgc-mode-a-rediscovery-orbg5-v1.yaml` (LOCKED, commit_sha=e227ceb3)")
-    lines.append(f"**Script:** `research/mgc_mode_a_rediscovery_orbg5_v1_scan.py`")
+    lines.append(f"**Pre-reg:** `docs/audit/hypotheses/2026-04-19-mgc-mode-a-rediscovery-orbg5-short-v1.yaml` (LOCKED, commit_sha=4ac0b688)")
+    lines.append(f"**Script:** `research/mgc_mode_a_rediscovery_orbg5_short_v1_scan.py`")
     lines.append(f"**IS window:** `trading_day < {HOLDOUT_SACRED_FROM}` (Mode A)")
     lines.append("")
     lines.append("## Summary")
@@ -380,7 +380,7 @@ def render(cells: list[CellResult]) -> str:
     lines.append("## Decision")
     lines.append("")
     if n_cont == 0 and k2_ok:
-        lines.append("**Verdict: KILL per pre-reg K1.** Zero of 4 cells pass all gate clauses. MGC ORB_G5 long RR1.5 on the 4 pre-registered sessions does NOT yield a Pathway A Chordia-validated edge on 3.5-year Mode A IS. Honest negative evidence on MGC cross-instrument-mirror hypothesis. Pre-reg explicitly anticipated this outcome; baselines (approx_t 0.23-1.47) predicted a KILL. No re-runs with different thresholds.")
+        lines.append("**Verdict: KILL per pre-reg K1.** Zero of 4 cells pass all gate clauses. MGC ORB_G5 SHORT RR1.5 on the 4 pre-registered sessions does NOT yield a Pathway A Chordia-validated edge on 3.5-year Mode A IS. Honest negative evidence on MGC short-direction cross-instrument-mirror hypothesis. Pre-reg explicitly anticipated this outcome; baselines (approx_t -0.31 to 0.77) predicted a KILL. No re-runs with different thresholds.")
     elif n_cont >= 1 and k2_ok:
         lines.append(f"**Verdict: CONTINUE on {n_cont} cell(s).** Candidates for committee review.")
     else:
