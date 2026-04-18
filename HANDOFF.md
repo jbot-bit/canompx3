@@ -4,6 +4,39 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-18 Codex operator hardening — Codex-only surfaces, Claude untouched)
+
+### What changed
+
+- Codex operator docs were tightened around a strict boundary: Claude remains
+  canonical; Codex is second boss; no mutation of `CLAUDE.md`, `.claude/`,
+  `claude.bat`, or Claude-owned settings/hooks without explicit user request.
+- New handbook added:
+  - `docs/reference/codex-operator-handbook.md`
+- New Codex-only automation templates added:
+  - `.codex/AUTOMATIONS.md`
+- Codex setup docs updated to reflect:
+  - WSL-home clone + Codex app as primary path
+  - native Windows Codex as fallback-only
+  - new `doctor` app action
+- Codex local-environment helper now supports:
+  - `python3 scripts/infra/codex_local_env.py doctor --platform wsl`
+  - `uv run --frozen python scripts/infra/codex_local_env.py doctor --platform windows`
+
+### Scope boundary
+
+- No Claude-layer files or Claude launch surfaces were changed.
+- No `.claude/` files were changed.
+- No shared workflow rules were weakened.
+
+### Why it matters
+
+- Codex now has a cleaner, more explicit operator contract that does not
+  compete with the Claude layer.
+- WSL/app-first usage is documented and health-checkable from repo-owned
+  tooling.
+- Maintenance automation guidance exists, but remains report-only by design.
+
 ## Update (2026-04-18 governance — merge side-effect recorded, branch discipline tightened)
 
 ### What happened
@@ -177,9 +210,10 @@ Load-bearing facts:
 - Repo-wide `pytest tests/ -x -q`: PASS (`4441 passed, 19 skipped, 3 warnings`)
 - Direct script execution: PASS, wrote JSON/CSV/MD artifacts with
   `stage_verdict=NO_GO`
-- Drift check: FAIL, **unrelated pre-existing** Check 45 provenance mismatch on
+- Drift check: FAIL at time of run, **unrelated pre-existing** Check 45 provenance mismatch on
   three active `MNQ_EUROPE_FLOW_*_CROSS_SGP_MOMENTUM` rows (`2026-04-10`
   stored vs `2026-04-14` canonical recompute). Not caused by the FX pilot work.
+  **RESOLVED 2026-04-18 via commit `1a0a4a24`** — canonical refresh tool shipped + migration run; 3 SGP rows now at `2026-04-14, N=1021`. Check 45 now PASSES. Drift state: `103 passed, 0 failed, 6 advisory`.
 
 ## Update (2026-04-16 A4b executed — NULL_BY_CONSTRUCTION, do not rescue)
 
@@ -232,9 +266,10 @@ Possible paths:
 - `py_compile` on the new script: PASS
 - Behavioral audit: PASS
 - Ruff on the new script: PASS
-- Drift check: FAIL, **unrelated pre-existing** Check 45 provenance mismatch on
+- Drift check: FAIL at time of run, **unrelated pre-existing** Check 45 provenance mismatch on
   three active `MNQ_EUROPE_FLOW_*_CROSS_SGP_MOMENTUM` rows (`2026-04-10`
   stored vs `2026-04-14` canonical recompute). Not caused by A4b work.
+  **RESOLVED 2026-04-18 via commit `1a0a4a24`** — canonical refresh tool shipped + migration run; 3 SGP rows now at `2026-04-14, N=1021`. Check 45 now PASSES. Drift state: `103 passed, 0 failed, 6 advisory`.
 - Independent recompute from cached trade histories matched the reported IS
   totals exactly for both baseline and candidate.
 
@@ -1139,7 +1174,7 @@ No DUPLICATE_FILTER, no ARITHMETIC_ONLY, no PARAMETER_SENSITIVE anywhere.
 ### Drift-check state
 
 - 101 passed, 3 failed, 6 advisory.
-- The 3 failures are stale `CROSS_SGP_MOMENTUM` validated_setups trade-window dates (stored 2026-04-10, canonical recompute 2026-04-14). Pre-existing hygiene issue; NOT caused by this work. Research-only, no production code edits, no validated_setups writes.
+- The 3 failures are stale `CROSS_SGP_MOMENTUM` validated_setups trade-window dates (stored 2026-04-10, canonical recompute 2026-04-14). Pre-existing hygiene issue; NOT caused by this work. Research-only, no production code edits, no validated_setups writes. **RESOLVED 2026-04-18 via commit `1a0a4a24`** — canonical refresh tool shipped + migration run; rows now at `2026-04-14, N=1021`. Check 45 now PASSES.
 
 ---
 

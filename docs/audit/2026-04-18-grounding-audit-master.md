@@ -170,10 +170,19 @@ Files: `docs/audit/hypotheses/phase-d-carver-forecast-combiner.md`, `docs/audit/
 `PLAN_codex.md` C1 cleanup edit on 2026-04-17. Non-canonical, no runtime gate.
 **Reason excluded:** docs-governance at non-canonical surface.
 
-### NFFU-5 — Check 45 drift on `MNQ_EUROPE_FLOW_*_CROSS_SGP_MOMENTUM`
+### NFFU-5 — Check 45 drift on `MNQ_EUROPE_FLOW_*_CROSS_SGP_MOMENTUM` — **RESOLVED 2026-04-18 via commit `1a0a4a24`**
 
-Pre-existing drift finding flagged in HANDOFF.md (2026-04-10 stored vs 2026-04-14 canonical recompute on 3 active validated lanes). Adjacent to cross-NYSE momentum work but outside priority scope for this sweep.
-**Recommendation:** fold into next regen sweep. Not contaminated into this audit per user directive.
+**Original finding:** pre-existing drift flagged in HANDOFF.md (2026-04-10 stored vs 2026-04-14 canonical recompute on 3 active validated lanes). Adjacent to cross-NYSE momentum work but outside priority scope for the original sweep.
+
+**Investigation (2026-04-18 sweep 3):** classified as stale annotation — the drift was real as of 2026-04-17 runs (A4b, A4c, FX-pilot all flagged it) but resolved on 2026-04-18 at 12:13 via commit `1a0a4a24 fix(check-45): canonical refresh tool for stale validated_setups trade windows`. That commit shipped `scripts/migrations/backfill_validated_trade_windows.py` using the same `StrategyTradeWindowResolver` the check uses. Migration was executed: 3 SGP rows updated from `(2019-05-08, 2026-04-10, N=1020)` → `(2019-05-08, 2026-04-14, N=1021)`. Post-fix drift state per commit message: `103 passed, 0 failed, 6 advisory`.
+
+**Current state (verified 2026-04-18 PM):**
+- All 3 rows have `last_trade_day = 2026-04-14, trade_day_count = 1021`.
+- `check_active_native_trade_windows_match_provenance()` returns 0 violations.
+
+**Root-cause analysis:** not corruption, not false positive — architectural snapshot-vs-live pattern. `validated_setups.{first_trade_day, last_trade_day, trade_day_count}` are snapshots written at validation time; they drift when new trading days are ingested without an explicit refresh. Canonical resolver always computes from `orb_outcomes`. `1a0a4a24` shipped the refresh tool (7 TDD tests covering dry-run, live, idempotent re-run, retired/legacy exclusion, strategy-id scoping, main exit code).
+
+**Status:** RESOLVED. No further action on NFFU-5.
 
 ### NFFU-6 — Phase D D-1 contract-locked work (PD1–PD7) — **QUARANTINE LIFTED 2026-04-18 sweep 2**
 
