@@ -53,11 +53,7 @@ Pre-2026 eligible days per cell: 71 - 74. Adequate at raw level, fails under any
 
 ## Decision rule followed
 
-Per project decision rule on pre-flight blockers:
-
-> If multiple cells are structurally too thin, kill as pre-reg blocker.
-
-14 of 14 qualifies. Closed.
+14 of 14 pre-registered cells fail the gate stack at pre-flight under Mode A. No cell can reach N ≥ 50 without relaxing the pre-registered minimum, extending the data window (which would require a new pre-reg, not an amendment), or dropping Mode A (sacred-window violation). Structural thinness at this magnitude is doctrine-grounded as a kill under `.claude/rules/backtesting-methodology.md` Rule 5 (comprehensive scope — narrowing allowed only with pre-reg justification) and Rule 8.1 (extreme fire rate — rare-event gating requires pre-registered justification, not post-hoc widening). Neither applies here. Closed.
 
 ## Why no Option B (2-year pre-2026 data pull)
 

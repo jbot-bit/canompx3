@@ -297,7 +297,7 @@ Prior versions remain visible permanently for audit.
 **Problem identified by Codex:**
 - `trading_app/strategy_validator.py:583-589` and `:1400-1453` explicitly removed DSR and False Strategy Theorem as hard gates because `N_eff` (the effective number of independent trials for adjusting the DSR formula) remains unresolved.
 - The adversarial audit `docs/plans/2026-03-18-adversarial-review-findings.md:47-58` confirms DSR is informational, not binding, pending ONC (Optimal Number of Clusters) for N_eff estimation.
-- Current DB state: `0 / 124` validated_setups have `dsr_score > 0.95`. Max `dsr_score = 0.1198`. A policy that makes DSR binding while the repo computes DSR against an unknown N_eff is a policy that rejects every strategy the repo has ever produced — including ones that may be valid.
+- Current DB state (**snapshot at 2026-03-18 — historical rationale for Amendment 2.1; for current state run live query against `validated_setups.dsr_score`**): `0 / 124` validated_setups have `dsr_score > 0.95`. Max `dsr_score = 0.1198`. A policy that makes DSR binding while the repo computes DSR against an unknown N_eff is a policy that rejects every strategy the repo has ever produced — including ones that may be valid.
 
 **Amended statement:** DSR is a CROSS-CHECK, not a hard gate, until `N_eff` is formally solved in-repo.
 - Every candidate strategy must have its DSR computed and reported in the audit write-up.

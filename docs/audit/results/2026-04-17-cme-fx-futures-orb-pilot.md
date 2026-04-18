@@ -12,6 +12,10 @@ Coverage audit:
 - Raw request metadata claimed a `180`-day pull window, but that is not the realized eligible-session sample.
 - Actual candidate coverage is measured from decoded raw bars after front-month filtering, Brisbane 09:00 trading-day assignment, and complete ORB-window enforcement.
 
+Benchmark provenance (per-cell tables below):
+- **Live benchmark** (`MNQ TOKYO_OPEN / EUROPE_FLOW / COMEX_SETTLE` E2 ExpR): sourced from same-window recomputation on the canonical `orb_outcomes` table at the corresponding MNQ (session, O5, E2, RR1.0) combination over the FX pilot's coverage window. `@canonical-source`: `gold.db` `orb_outcomes` joined to `daily_features` (orb_minutes=5), same 2025-09-18 → 2026-04-06 window as the pilot for fair delta comparison. Not from `validated_setups` or `strategy_fitness` — deliberately a same-window recompute, not a deployment-grade cross-cite.
+- **Dead benchmark** (`M6E TOKYO_OPEN` / `M6E broad ORB family mean`): sourced from the prior dead-FX ORB scan on the M6E family, captured before M6E was retired from `ACTIVE_ORB_INSTRUMENTS` (see `pipeline.asset_configs`). Family-mean figures aggregate `M6E TOKYO_OPEN`, `M6E LONDON_METALS`, `M6E US_DATA_830`, `M6E US_DATA_1000`, `M6E EUROPE_FLOW` on O5 E2 RR1.0. Not deployment-grade-citable — used here as a floor/sanity reference only.
+
 ## 6J TOKYO_OPEN
 
 - Verdict: **NO_GO**
