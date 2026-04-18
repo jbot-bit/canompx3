@@ -5,7 +5,34 @@ slug: phase-d-d0-rel-vol-sizing-mnq-comex-settle
 title: "Phase D D-0 — rel_vol size-scaling pilot on MNQ COMEX_SETTLE O5 RR1.5 OVNRNG_100"
 owner: "josh / claude-code"
 parent_spec: "docs/audit/hypotheses/2026-04-15-phase-d-volume-pilot-spec.md"
-testing_mode: family
+testing_mode: individual
+pathway: B_individual
+pathway_source: "docs/institutional/pre_registered_criteria.md Amendment 3.0 (2026-04-09)"
+
+post_run_correction_2026_04_18:
+  corrected: true
+  correction_scope: "DOCUMENTATION_ONLY"
+  substantive_rules_modified: false
+  what_changed:
+    - "testing_mode: family -> individual (Pathway B)"
+    - "evidence_base_multi_framing_k renamed to upstream_discovery_provenance to clarify K=14,261 was the upstream scan's K, not D-0's own K"
+    - "methodology_rules_applied Rule 4 entry clarified — Rule 4 applies to the upstream scan, not D-0 (which is K=1 individual)"
+    - "added d0_testing_discipline section making K=1 explicit"
+    - "added theory_citation to H1"
+    - "added Pathway B mandatory downstream gates (C6/C8/C9 non-waivable) at D-1/D-2 stages"
+  what_did_NOT_change:
+    - "H1 pass metric (Sharpe uplift >= 15%)"
+    - "H1 kill threshold (< 10%)"
+    - "decision_rule.continue_to_d1_if / park_if / kill_if"
+    - "K1, K2 kill criteria"
+    - "bucket schema 0.5x / 1.0x / 1.5x"
+    - "P33/P67 calibration rules"
+    - "any threshold the backtest used to compute its KILL verdict"
+  verdict_immutability:
+    d0_verdict: "KILL (df05b861)"
+    reason: "Sharpe uplift +7.33% < 10% threshold; decision fired against pre-committed thresholds unchanged by this correction."
+  reviewer: "claude-code"
+  triggered_by: "user flagged that 14,261 was upstream provenance K, not D-0's own K"
 
 authority:
   primary:
@@ -85,21 +112,43 @@ primary_schema:
     - "Carver 2015 Systematic Trading Ch 9-10 (position sizing per vol regime)"
     - "rel_vol_HIGH_Q3 passed backtesting-methodology.md Rule 4 multi-framing BH-FDR in comprehensive scan 2026-04-15"
 
-evidence_base_multi_framing_k:
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY — justifies why D-0 exists; NOT D-0's own multiple-testing K"
   source: "docs/audit/results/2026-04-15-comprehensive-deployed-lane-scan.md"
-  k_global: {k: 14261, survivors: 13}
-  k_family: {k_avg: 2550, survivors: 127}
-  k_lane: {k_avg: 56, survivors: 163}
-  rule_4_compliance: "All three K framings reported per backtesting-methodology.md Rule 4"
+  upstream_scan_k_framings:
+    k_global: {k: 14261, survivors: 13}
+    k_family: {k_avg: 2550, survivors: 127}
+    k_lane: {k_avg: 56, survivors: 163}
+  upstream_rule_4_compliance: "Upstream scan reported multi-framing K per backtesting-methodology.md Rule 4"
   note: >
-    D-0 evidence base rests on BH-family and BH-lane survival of rel_vol_HIGH_Q3
-    across 5 independent (instrument, session) combos, not on K_global alone.
-    Per Rule 4, K_family is the natural hypothesis unit for this mechanism
-    (Harvey-Liu 2015). K_global=14,261 is confirmatory, not sole justification.
+    The upstream comprehensive-deployed-lane-scan (2026-04-15) discovered that
+    rel_vol_HIGH_Q3 passes BH-family and BH-lane across 5 independent
+    (instrument, session) combos, surviving at K_global=14,261 with 13 survivors.
+    This is the PROVENANCE for choosing rel_vol as D-0's size-scaling feature.
+    It is NOT D-0's own K. D-0 is Pathway B individual with K=1 (see d0_testing_discipline).
+
+d0_testing_discipline:
+  pathway: "B_individual"
+  k: 1
+  rationale: >
+    D-0 tests ONE pre-registered prediction (H1: 0.5x/1.0x/1.5x rel_vol size-scaling
+    beats constant 1.0x by Sharpe >= 15% on this lane). This is not a family scan.
+    Per pre_registered_criteria.md Amendment 3.0 Pathway B:
+    single pre-registered prediction + economic theory + mandatory downstream gates.
+  significance_threshold:
+    raw_p: "p < 0.05 (Pathway B raw)"
+    effect_size: "Sharpe uplift >= 15% (stricter than raw p; binding pass gate)"
+    note: "The effect-size threshold is the operative bar; raw p is Pathway B floor."
+  mandatory_downstream_gates_non_waivable:
+    - "C6 WFE >= 0.50 (applied at D-1 before shadow)"
+    - "C8 OOS ExpR positive (applied at D-1 after shadow accumulates OOS)"
+    - "C9 era stability (no era ExpR < -0.05 at N >= 50) (applied at D-1)"
+  theory_citation: "Carver 2015 Systematic Trading Ch 9-10 (volatility-targeted position sizing)"
 
 hypotheses:
   - id: H1
     type: primary
+    theory_citation: "Carver 2015 Systematic Trading Ch 9-10 (vol-targeted position sizing + forecast combination)"
     statement: >
       Applying the locked 0.5x / 1.0x / 1.5x rel_vol_COMEX_SETTLE size-scaling
       schema to the MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 lane improves IS
@@ -109,6 +158,10 @@ hypotheses:
       metric: "sharpe_uplift_pct"
       formula: "100 * (sharpe_sized - sharpe_baseline) / abs(sharpe_baseline)"
       threshold_gte: 15.0
+    pathway_b_floor:
+      raw_p_threshold: 0.05
+      note: "Pathway B individual raw p<0.05 is the significance floor; the 15% effect-size threshold is stricter and is the operative pass gate."
+    counted_against_trial_budget: true
 
   - id: H2
     type: secondary_descriptive_only
@@ -168,7 +221,12 @@ methodology_rules_applied:
   - rule: "RULE 3 sacred holdout"
     application: "IS-only for D-0 per Mode A (HOLDOUT_SACRED_FROM=2026-01-01)."
   - rule: "RULE 4 multi-framing BH-FDR"
-    application: "K_global, K_family, K_lane all reported in evidence_base_multi_framing_k; mechanism rests on BH-family survival, not K_global alone."
+    application: >
+      Applies to the UPSTREAM discovery scan, not to D-0 itself. Upstream scan
+      (2026-04-15 comprehensive-deployed-lane-scan) reported K_global / K_family /
+      K_lane multi-framing. D-0 is Pathway B individual (K=1) per Amendment 3.0;
+      Rule 4 multi-framing does NOT apply to D-0's own test — D-0 runs one
+      hypothesis against a pre-committed effect-size threshold.
   - rule: "RULE 6 feature audit"
     application: "first_complete_time=ORB session end; pure computation from ORB bars; no post-entry data."
   - rule: "RULE 8.2 arithmetic-only guard"

@@ -18,6 +18,10 @@ You will be given (user supplies or you must ask):
 2. Parent spec path (if this pre-reg is a child of a larger spec)
 3. Hypothesis statement, numeric pass threshold, numeric kill threshold
 4. Data scope (instrument, session, orb_minutes, entry_model, rr_target, confirm_bars, filter_type if any)
+5. **Pathway declaration:** A (family / BH FDR q<0.05) or B (individual / theory-driven / raw p<0.05 + downstream C6/C8/C9 gates). Per `pre_registered_criteria.md` Amendment 3.0.
+   - Pathway A if multiple hypotheses share this file and the researcher picks survivors — sets `testing_mode: family`.
+   - Pathway B if ONE theory-driven prediction — sets `testing_mode: individual` and requires `theory_citation` on every hypothesis.
+   - Confirmatory pilots on already-discovered signals (e.g., Phase D D-N) are almost always Pathway B K=1.
 
 If any of these are missing, demand them. Do not guess.
 
@@ -33,7 +37,7 @@ NON-NEGOTIABLE OUTPUT RULES
    - Exact deployed strategy_id from `validated_setups` if the lane is already deployed
 3. Every threshold must be a number, not a variable name. If a threshold depends on a rule file (e.g. BH-FDR q<0.05, WFE ≥ 0.50, Chordia t ≥ 3.0 or 3.79), cite the rule file and inline the number.
 4. Every claim resting on prior evidence must cite a committed file path (docs/audit/results/…, docs/institutional/literature/…, docs/audit/hypotheses/…). Memory and handoff citations are disallowed.
-5. Multi-framing K (backtesting-methodology.md Rule 4) must be reported if the evidence base is a multiple-testing scan. Single K is insufficient.
+5. Multi-framing K (backtesting-methodology.md Rule 4) applies to the TEST THIS PRE-REG DEFINES, not to upstream scans that generated the hypothesis. If the pre-reg is Pathway A family, report K_global / K_family / K_lane of the current test. If Pathway B individual (K=1), do not claim multi-framing K applies to this pre-reg — put upstream scan K values under `upstream_discovery_provenance` with explicit `role: PROVENANCE_ONLY` label so no reader mistakes them for the current test's K.
 6. Trial budget must include the MinBTL bound check (backtesting-methodology.md Rule 4.2, Bailey et al 2013): `MinBTL = 2·ln(N_trials) / E[max_N]²`. Commit N_trials before run.
 7. Kill criteria must be numeric. "Reconsider" or "investigate" is not a kill criterion.
 8. Feature temporal alignment must be declared per backtesting-methodology.md Rule 6:
@@ -73,6 +77,8 @@ Write to `docs/audit/hypotheses/YYYY-MM-DD-<slug>.yaml` or `.md`. Instruct the u
 OUTPUT SCHEMA (minimum)
 The pre-reg file must include these sections (YAML keys):
 - version, status=PRE_REGISTERED_DRAFT, date, slug, title, owner, parent_spec
+- **testing_mode**: "family" | "individual" (Pathway A or B; Amendment 3.0)
+- **pathway**: "A_family" | "B_individual" (mirror of testing_mode, human-readable)
 - authority: primary[], notes[]
 - reproducibility: repo_root, commit_sha (TO_FILL_AFTER_COMMIT), committed_required_before_run: true
 - scope: all verified dimensions
@@ -80,13 +86,14 @@ The pre-reg file must include these sections (YAML keys):
 - feature_definition: feature_name, column_source, canonical_source_of_truth, trade_time_knowable (bool), first_complete_time, temporal_alignment_note, lookhead_check
 - calibration: quantile_source / threshold_source, lock_policy
 - primary_schema or hypothesis_definition (whichever applies)
-- evidence_base_multi_framing_k (if scan-based)
-- hypotheses: each with id, type (primary / secondary_descriptive_only), statement, pass_metric (metric + formula + threshold_gte / threshold_lt), counted_against_trial_budget (bool)
+- **upstream_discovery_provenance** (if the hypothesis was motivated by a prior scan): role: "PROVENANCE_ONLY", source, upstream_scan_k_framings (if any), note explicitly stating these K values are not the current test's K.
+- **testing_discipline** (for Pathway B only): pathway: "B_individual", k: 1, significance_threshold (raw_p + effect_size), mandatory_downstream_gates_non_waivable (C6/C8/C9 per Amendment 3.0), theory_citation.
+- hypotheses: each with id, type (primary / secondary_descriptive_only), **theory_citation** (required for Pathway B), statement, pass_metric (metric + formula + threshold_gte / threshold_lt), counted_against_trial_budget (bool)
 - baseline (if comparative)
-- trial_budget: primary_selection_trials, schema_locked_before_any_metric, minbtl_bound (formula + N_trials + within_cap + cap_reference)
+- trial_budget: primary_selection_trials (1 for Pathway B individual), schema_locked_before_any_metric, minbtl_bound (formula + N_trials + within_cap + cap_reference)
 - kill_criteria: each with id, metric, threshold, action
 - decision_rule: continue_if, park_if, kill_if
-- methodology_rules_applied: each rule with application: "how this pre-reg complies"
+- methodology_rules_applied: each rule with application: "how this pre-reg complies". If a rule applies to upstream scan only (e.g., Rule 4 multi-framing for Pathway B pilots), SAY SO EXPLICITLY.
 - outputs_required_after_run: concrete list the script must emit
 - execution_gate: allowed_now, forbidden_now
 - not_done_by_this_pre_reg: explicit non-claims
@@ -131,6 +138,10 @@ Paste the prompt above, supply these 4 inputs, and the output is a committed pre
 | Unfilled placeholders committed | OUTPUT RULE 1 + PRE-COMMIT SELF-TEST |
 | Thresholds cited from memory/training | OUTPUT RULE 3-4 + "Memory and handoff citations are disallowed" |
 | Single-K headline (Rule 4 violation) | OUTPUT RULE 5 |
+| Upstream scan K confused with current-test K | OUTPUT RULE 5 + `upstream_discovery_provenance.role: PROVENANCE_ONLY` schema |
+| Pathway A/B not declared | INPUT CONTRACT item 5 + SCHEMA `testing_mode` + `pathway` fields |
+| Pathway B without theory_citation | SCHEMA `hypotheses[].theory_citation` required |
+| Pathway B without C6/C8/C9 downstream gate declaration | SCHEMA `testing_discipline.mandatory_downstream_gates_non_waivable` |
 | MinBTL budget un-computed | OUTPUT RULE 6 |
 | Vague kill criteria | FORBIDDEN + OUTPUT RULE 7 |
 | Look-ahead features | OUTPUT RULE 8 |
