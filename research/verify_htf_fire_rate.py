@@ -44,12 +44,16 @@ if str(PROJECT_ROOT) not in sys.path:
 import duckdb
 
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 
 
 INSTRUMENTS = ("MNQ", "MES")
 SESSIONS = ("TOKYO_OPEN", "EUROPE_FLOW", "NYSE_OPEN")
 ORB_MINUTES = 15
-HOLDOUT_BOUNDARY = "2026-01-01"
+# Holdout boundary sourced from trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+# (imported above) so this script stays synchronised with the canonical Mode A
+# sacred-window declaration. Passed as a parameter binding below, not
+# string-interpolated into SQL.
 
 # DERIVATION — week_took_pwh_to_date / week_took_pwl_to_date are derived at
 # scan time as a window over daily_high / daily_low keyed by
@@ -65,7 +69,7 @@ WITH df AS (
            DATE_TRUNC('week', trading_day)::DATE AS week_key
     FROM daily_features
     WHERE symbol = ? AND orb_minutes = ?
-      AND trading_day < '{holdout}'
+      AND trading_day < ?
 ),
 flags AS (
     SELECT df.*,
@@ -129,9 +133,9 @@ def main() -> int:
     with duckdb.connect(str(db), read_only=True) as con:
         for sym in INSTRUMENTS:
             for sess in SESSIONS:
-                sql = FIRE_RATE_SQL.format(sess=sess, holdout=HOLDOUT_BOUNDARY)
+                sql = FIRE_RATE_SQL.format(sess=sess)
                 try:
-                    row = con.execute(sql, [sym, ORB_MINUTES]).fetchone()
+                    row = con.execute(sql, [sym, ORB_MINUTES, HOLDOUT_SACRED_FROM]).fetchone()
                 except duckdb.Error as e:
                     print(f"{sym:<6} {sess:<14} ERROR: {e}")
                     any_bad = True

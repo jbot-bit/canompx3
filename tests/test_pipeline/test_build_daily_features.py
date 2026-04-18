@@ -1323,3 +1323,54 @@ class TestHTFLevelFields:
         _apply_htf_level_fields(rows)
         assert rows[0]["prev_month_high"] is None
         assert rows[0]["prev_month_low"] is None
+
+    def test_week_spans_month_boundary_no_contamination(self):
+        """Fri Jan 31 and Sun Feb 2 live in the SAME ISO week (Mon Jan 27)
+        but DIFFERENT calendar months. Feb 3 Mon must see:
+          - prev_week = full ISO week incl. Sunday Feb 2 in February
+          - prev_month = January ONLY (Sunday Feb 2 excluded)
+        """
+        from pipeline.build_daily_features import (
+            _apply_htf_level_fields,
+            _htf_prior_month_key,
+            _htf_week_key,
+        )
+
+        # Sanity: Sunday Feb 2 2025 -> week_key Mon Jan 27 2025; month_key Feb 1 2025.
+        assert date(2025, 2, 2).weekday() == 6
+        assert _htf_week_key(date(2025, 2, 2)) == date(2025, 1, 27)
+        assert _htf_week_key(date(2025, 2, 3)) == date(2025, 2, 3)
+        assert _htf_prior_month_key(date(2025, 2, 3)) == date(2025, 1, 1)
+
+        rows = [
+            # January rows Mon-Fri in the week that will cross into February
+            self._make_row(date(2025, 1, 27), 50.0, 60.0, 48.0, 55.0),  # Mon — Jan open
+            self._make_row(date(2025, 1, 28), 55.0, 62.0, 50.0, 58.0),
+            self._make_row(date(2025, 1, 29), 58.0, 65.0, 52.0, 60.0),
+            self._make_row(date(2025, 1, 30), 60.0, 70.0, 55.0, 64.0),  # Jan high in this run
+            self._make_row(date(2025, 1, 31), 64.0, 68.0, 45.0, 50.0),  # Fri — Jan low + Jan close
+            # February Sunday — in the same ISO week but a new month.
+            # Intentionally extreme values: if these leak into January's
+            # prev_month aggregate, this test catches it.
+            self._make_row(date(2025, 2, 2), 50.0, 999.0, 1.0, 999.0),  # Sun — Feb row
+            # Target row: Monday Feb 3 — reads prev_week (full ISO week incl. Sun Feb 2)
+            # and prev_month (January only).
+            self._make_row(date(2025, 2, 3), 999.0, 1000.0, 990.0, 995.0),
+        ]
+        _apply_htf_level_fields(rows)
+
+        feb3 = rows[6]
+
+        # prev_week SHOULD include Sunday Feb 2 (same ISO week).
+        assert feb3["prev_week_high"] == 999.0, "Sun Feb 2 high must be in ISO week agg"
+        assert feb3["prev_week_low"] == 1.0, "Sun Feb 2 low must be in ISO week agg"
+        assert feb3["prev_week_open"] == 50.0, "Mon Jan 27 open is week-first"
+        assert feb3["prev_week_close"] == 999.0, "Sun Feb 2 close is week-last"
+
+        # prev_month SHOULD be January only — Sun Feb 2 EXCLUDED.
+        assert feb3["prev_month_high"] == 70.0, "Jan high (Jan 30) — NOT Feb 2's 999"
+        assert feb3["prev_month_low"] == 45.0, "Jan low (Jan 31) — NOT Feb 2's 1.0"
+        assert feb3["prev_month_open"] == 50.0, "Jan 27 Monday open is Jan-first"
+        assert feb3["prev_month_close"] == 50.0, "Jan 31 Friday close is Jan-last"
+        assert feb3["prev_month_range"] == 25.0
+        assert feb3["prev_month_mid"] == 57.5
