@@ -3,7 +3,9 @@ metadata:
   slug: 2026-04-18-htf-path-a-prev-month-v1
   owner: canompx3
   created_at: 2026-04-18
-  status: DRAFT   # prereg-writer gate self-review required before LOCKED
+  status: LOCKED  # locked 2026-04-18 after fire-rate precheck in-band on all 12 cells
+                  # + scan script research/htf_path_a_prev_month_v1_scan.py committed.
+                  # committed_sha: TO_FILL_AFTER_COMMIT per research-truth-protocol §2a.
   testing_mode: family       # Pathway A per Criterion 3 Amendment 3.0
   pathway: A                 # BH-FDR family search (no local Pathway A extract)
   chordia_threshold_basis: Criterion_4_no_theory
