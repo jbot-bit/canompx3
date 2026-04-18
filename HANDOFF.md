@@ -4,6 +4,29 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-18 medium-frequency futures kernel — MNQ narrow formal pass pre-registered)
+
+### What changed
+
+- Added pre-registered narrow research contract:
+  - `docs/audit/hypotheses/2026-04-18-mf-futures-mnq-supported-surface.yaml`
+
+### Why this exists
+
+- The Phase 4 readout identified `MNQ` as the cleanest next candidate, but the
+  repo needed an explicit lock file before any further formal interpretation.
+- This contract freezes:
+  - `MNQ` only
+  - current Phase 3/4 supported surface only
+  - current cost / history / walk-forward settings
+  - explicit kill / continue bars
+
+### Important boundary
+
+- This is still not a deployment pre-reg.
+- It is a narrow research-only contract that exists to prevent scope drift and
+  post-hoc broadening after the Phase 4 triage readout.
+
 ## Update (2026-04-18 Codex operator hardening — Codex-only surfaces, Claude untouched)
 
 ### What changed
