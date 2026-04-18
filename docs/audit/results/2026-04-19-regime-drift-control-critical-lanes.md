@@ -1,6 +1,6 @@
 # Regime-drift control on 4 CRITICAL committee lanes — 2026-04-19
 
-**Generated:** 2026-04-18T22:37:03+00:00
+**Generated:** 2026-04-18T23:56:22+00:00
 **Script:** `research/regime_drift_control_critical_lanes.py`
 **IS boundary:** `trading_day < 2026-01-01` (Mode A)
 

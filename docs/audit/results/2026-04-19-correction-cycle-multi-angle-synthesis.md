@@ -16,7 +16,7 @@ This doc opens those four angles.
 
 ---
 
-## Angle 1 — MES K=40 cross-direction ATR_P70 inverse signal (NEW FINDING)
+## Angle 1 — MES K=40 cross-direction ATR_P70 inverse signal (NEW HYPOTHESIS — pre-reg required before any "finding" claim)
 
 Looking at the 5 × ATR_P70 × 2-direction cells in the MES K=40 scan (commit `76475a34`):
 

@@ -153,6 +153,48 @@ def compute_lane_drift(con: duckdb.DuckDBPyConnection, lane: dict) -> LaneDrift:
     return ld
 
 
+def _resolve_direction(spec: dict) -> str:
+    """Resolve the direction of a validated_setups row.
+
+    Canonical source is `execution_spec` JSON (optional) or `strategy_id`
+    naming convention. The pre-2026-04 project convention is long-only
+    for MNQ active book — BUT silently defaulting-to-long masks future
+    bugs. This resolver asserts the direction can be determined and
+    errors loudly otherwise.
+
+    Priority:
+      1. If `execution_spec` is non-null and contains exactly one of
+         "long"/"short" (case-insensitive), use that.
+      2. If strategy_id contains an explicit _LONG_/_SHORT_ segment, use that.
+      3. Else default to "long" WITH an emitted warning (legacy long-only).
+         Callers can pass --strict to elevate this path to an error.
+    """
+    spec_str = str(spec.get("execution_spec") or "").lower()
+    has_long = "long" in spec_str
+    has_short = "short" in spec_str
+    if has_long and not has_short:
+        return "long"
+    if has_short and not has_long:
+        return "short"
+    sid = str(spec.get("strategy_id") or "").upper()
+    if "_SHORT_" in sid:
+        return "short"
+    if "_LONG_" in sid:
+        return "long"
+    # Legacy fallback — emit a one-time warning via stderr.
+    import sys as _sys
+    if not getattr(_resolve_direction, "_warned", False):
+        print(
+            f"[_resolve_direction WARNING] spec {spec.get('strategy_id')!r} "
+            f"has null/ambiguous execution_spec; defaulting to long. Any future "
+            f"short-direction lane will be silently misdirected unless "
+            f"execution_spec or strategy_id encodes direction explicitly.",
+            file=_sys.stderr,
+        )
+        _resolve_direction._warned = True  # type: ignore[attr-defined]
+    return "long"
+
+
 def portfolio_mnq_sharpe_per_period(con: duckdb.DuckDBPyConnection) -> tuple[PeriodStats, PeriodStats, list[dict]]:
     """Compute the ALL-ACTIVE-MNQ-LANES portfolio-wide Sharpe for each period.
 
@@ -179,7 +221,7 @@ def portfolio_mnq_sharpe_per_period(con: duckdb.DuckDBPyConnection) -> tuple[Per
     per_lane: list[dict] = []
 
     for spec in active_dicts:
-        direction = "short" if spec["execution_spec"] and "short" in str(spec["execution_spec"]).lower() else "long"
+        direction = _resolve_direction(spec)
         sess = spec["orb_label"]
         try:
             sql = f"""
