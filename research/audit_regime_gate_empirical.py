@@ -152,9 +152,16 @@ def _load_pool(
     canonical filter's `matches_df` (checks `orb_{label}_break_dir`); no
     direction WHERE clause is applied here.
     """
+    # NB: do NOT drop `symbol` from the projection — some canonical filters
+    # (CostRatioFilter aka COST_LT*) require `symbol` in `matches_df` to
+    # look up per-instrument COST_SPECS. A prior `EXCLUDE (trading_day,
+    # symbol, orb_minutes)` clause here silently made COST_LT* return
+    # all-False and produced spurious FILT_EMPTY verdicts. Only `o.pnl_r`
+    # is selected from the outcomes side, so `d.*` alone introduces no
+    # ambiguous column names.
     return con.execute(
         """
-        SELECT o.pnl_r, d.* EXCLUDE (trading_day, symbol, orb_minutes)
+        SELECT o.pnl_r, d.*
         FROM orb_outcomes o
         JOIN daily_features d
           ON o.trading_day = d.trading_day
