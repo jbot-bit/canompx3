@@ -117,35 +117,66 @@ CELLS = [
     },
 ]
 
-RESULT_PATH = (
+RESULT_PATH_FULL_SAMPLE = (
     PROJECT_ROOT
     / "docs/audit/results/2026-04-19-rel-vol-cross-scan-overlap-decomposition.md"
 )
+RESULT_PATH_IS_ONLY = (
+    PROJECT_ROOT
+    / "docs/audit/results/2026-04-19-rel-vol-cross-scan-overlap-decomposition-is-only-quantile.md"
+)
+
 
 # =============================================================================
-# FIRE MASK COMPUTATION
+# FIRE MASK COMPUTATION — supports full-sample (matches audited scan) or
+# IS-only (look-ahead-corrected) quantile
 # =============================================================================
 
 
-def compute_fire_days(cell: dict) -> set[date]:
+def _bucket_high_is_only(rel_vol: np.ndarray, is_mask: np.ndarray, pct: float) -> np.ndarray:
+    """67th percentile computed on IS rows only; then applied to ALL rows.
+
+    Fire-bit still computed over the whole cell; only the threshold changes.
+    This is the look-ahead-corrected version: the IS-only quantile is the
+    quantile a real-time trader could have known at the IS boundary.
+    """
+    is_vals = rel_vol[is_mask]
+    is_vals = is_vals[~np.isnan(is_vals)]
+    if len(is_vals) < 20:
+        return np.zeros(len(rel_vol), dtype=int)
+    thresh = np.nanpercentile(is_vals, pct)
+    return np.where(np.isnan(rel_vol), 0, (rel_vol > thresh).astype(int))
+
+
+def compute_fire_days(cell: dict, quantile_method: str = "full_sample") -> set[date]:
     """Return the set of IS trading_days where rel_vol_HIGH_Q3 fires AND
     the cell's direction matches the ORB break direction.
 
-    Uses load_lane() + bucket_high() from comprehensive_deployed_lane_scan to
-    guarantee the fire mask matches the audited scan exactly. bucket_high's
-    67th percentile is computed over the full cell distribution (IS+OOS), per
-    the audited scan's own convention; we do NOT second-guess that here.
+    quantile_method:
+      - "full_sample" (default): 67th percentile on IS+OOS together.
+        Matches the 2026-04-15 audited scan's bucket_high convention.
+        Inherited look-ahead — IS fires depend on OOS distribution.
+      - "is_only": 67th percentile on IS only. Look-ahead-corrected.
+        Threshold is what a real-time trader would have known at each
+        IS boundary. Strict honest methodology.
     """
     df = load_lane(cell["session"], cell["apt"], cell["rr"], cell["instrument"])
     if len(df) == 0:
         return set()
 
-    # rel_vol_HIGH_Q3 fire mask, replicated from
-    # comprehensive_deployed_lane_scan._build_filters:
-    if df["rel_vol"].notna().any():
-        fire_all = bucket_high(df["rel_vol"], 67)
+    rel_vol = df["rel_vol"].astype(float).to_numpy()
+    is_mask = df["is_is"].to_numpy().astype(bool)
+
+    if quantile_method == "full_sample":
+        # Replicate comprehensive_deployed_lane_scan._build_filters exactly
+        if not np.any(~np.isnan(rel_vol)):
+            fire_all = np.zeros(len(df), dtype=int)
+        else:
+            fire_all = bucket_high(df["rel_vol"], 67)
+    elif quantile_method == "is_only":
+        fire_all = _bucket_high_is_only(rel_vol, is_mask, 67)
     else:
-        fire_all = np.zeros(len(df), dtype=int)
+        raise ValueError(f"quantile_method must be 'full_sample' or 'is_only', got {quantile_method!r}")
 
     # Direction match (cell fires only on days where ORB broke in cell's
     # direction — the scan filters the test population to matching direction).
@@ -434,11 +465,14 @@ def render(cells: list[CellDecomp], pair_df: pd.DataFrame, align: pd.DataFrame,
 # =============================================================================
 
 
-def main() -> int:
-    print("Loading fire masks for 5 BH-global rel_vol_HIGH_Q3 cells...")
+def _run(quantile_method: str, result_path: Path) -> tuple[float, float, int]:
+    """Run the decomposition with the given quantile method. Returns
+    (meff, max_jaccard, union_fire_days) for the summary."""
+    print(f"=== quantile_method = {quantile_method!r} ===")
+    print(f"Loading fire masks for 5 BH-global rel_vol_HIGH_Q3 cells ({quantile_method})...")
     cells: list[CellDecomp] = []
     for spec in CELLS:
-        fire = compute_fire_days(spec)
+        fire = compute_fire_days(spec, quantile_method=quantile_method)
         cells.append(
             CellDecomp(
                 id=spec["id"],
@@ -460,18 +494,60 @@ def main() -> int:
     multi = multi_way_overlap(align)
     corr = pairwise_correlation(align)
     meff, eigs = nyholt_meff(corr)
+    max_jac = float(pair_df["Jaccard"].max()) if len(pair_df) else 0.0
 
     print()
     print(f"Union trading_days with any fire: {len(align)}")
     print(f"Multi-way distribution: {multi}")
     print(f"Nyholt Meff = {meff:.3f} (m={len(cells)})")
-    print(f"Max pairwise Jaccard = {pair_df['Jaccard'].max():.3f}")
+    print(f"Max pairwise Jaccard = {max_jac:.3f}")
 
-    RESULT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    RESULT_PATH.write_text(
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    result_path.write_text(
         render(cells, pair_df, align, multi, corr, meff, eigs), encoding="utf-8"
     )
-    print(f"\nWrote {RESULT_PATH.relative_to(PROJECT_ROOT)}")
+    print(f"Wrote {result_path.relative_to(PROJECT_ROOT)}\n")
+    return meff, max_jac, len(align)
+
+
+def main() -> int:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--quantile-method",
+        choices=["full_sample", "is_only", "both"],
+        default="both",
+        help=(
+            "'full_sample' replicates the 2026-04-15 scan's convention "
+            "(percentile over IS+OOS together, inherited look-ahead). "
+            "'is_only' computes the 67th percentile on IS only, applied to "
+            "all rows (look-ahead-corrected). 'both' (default) runs both "
+            "and produces two result documents for direct comparison."
+        ),
+    )
+    args = ap.parse_args()
+
+    results: dict[str, tuple[float, float, int]] = {}
+    if args.quantile_method in ("full_sample", "both"):
+        results["full_sample"] = _run("full_sample", RESULT_PATH_FULL_SAMPLE)
+    if args.quantile_method in ("is_only", "both"):
+        results["is_only"] = _run("is_only", RESULT_PATH_IS_ONLY)
+
+    if len(results) == 2:
+        print("=== Sensitivity comparison ===")
+        full_meff, full_jac, full_n = results["full_sample"]
+        is_meff, is_jac, is_n = results["is_only"]
+        print(f"full_sample: Meff={full_meff:.3f} max_J={full_jac:.3f} N_fire_days={full_n}")
+        print(f"is_only    : Meff={is_meff:.3f} max_J={is_jac:.3f} N_fire_days={is_n}")
+        print(f"delta_Meff = {is_meff - full_meff:+.3f}")
+        print(f"delta_maxJ = {is_jac - full_jac:+.3f}")
+        print()
+        if abs(is_jac - full_jac) < 0.05 and abs(is_meff - full_meff) < 0.2:
+            print("Finding is ROBUST — IS-only quantile produces similar structure.")
+        elif is_jac < 0.25 and full_jac > 0.40:
+            print("Finding COLLAPSES under look-ahead correction — K_eff=4 claim was upstream-quantile artifact.")
+        else:
+            print("Intermediate — document and interpret carefully.")
     return 0
 
 
