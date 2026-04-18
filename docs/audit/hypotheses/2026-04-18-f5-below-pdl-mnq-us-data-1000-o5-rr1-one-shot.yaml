@@ -1,0 +1,320 @@
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: 2026-04-18
+slug: f5-below-pdl-mnq-us-data-1000-o5-rr1-one-shot
+title: >
+  F5_BELOW_PDL long MNQ US_DATA_1000 O5 RR1.0 — one-shot IS/OOS validator
+  (Pathway B K=1 confirmatory)
+owner: claude
+
+parent_spec: docs/audit/results/2026-04-15-mega-deployed-sessions-only.md
+
+testing_mode: individual
+pathway: B_individual
+
+authority:
+  primary:
+    - .claude/rules/backtesting-methodology.md
+    - .claude/rules/research-truth-protocol.md
+    - docs/institutional/pre_registered_criteria.md
+    - trading_app/holdout_policy.py
+    - docs/prompts/prereg-writer-prompt.md
+  notes:
+    - >
+      Authored under the 2026-04-18 prereg-writer-prompt gate
+      (research-truth-protocol.md § Phase 0 Literature Grounding 2a).
+    - >
+      Pathway B individual K=1 confirmatory read on a single upstream mega-scan
+      survivor cell. No family enumeration in this pre-reg. No multi-framing K.
+
+reproducibility:
+  repo_root: C:/Users/joshd/canompx3-f5
+  worktree_branch: research/f5-below-pdl-stage1
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+  db_path_policy: >
+    Validator uses pipeline.paths.GOLD_DB_PATH. On canompx3-f5 worktree the DB
+    is absent and the runner MUST invoke with DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db
+    environment override (per memory phase_d_daily_runbook).
+
+scope:
+  instrument: MNQ
+  session: US_DATA_1000
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  direction: long
+  filter_name: F5_BELOW_PDL
+  filter_formula: "(orb_US_DATA_1000_high + orb_US_DATA_1000_low) / 2.0 < prev_day_low"
+  filter_location_in_live_code: NOT_YET_DEPLOYED
+  deployed_strategy_id: null
+  universe_definition: >
+    orb_outcomes rows matching instrument/session/aperture/entry_model/confirm_bars/rr_target
+    with pnl_r IS NOT NULL AND atr_20>0 AND prev_day_high/low/close IS NOT NULL
+    AND orb_US_DATA_1000_break_dir IN ('long','short'); restricted to break_dir='long'
+    to align with upstream mega-scan survivor cell.
+
+data_policy:
+  is_window:
+    from: 2019-05-07
+    to_exclusive: 2026-01-01
+    source: trading_day range present in gold.db for this cell
+  oos_window:
+    from: 2026-01-01
+    to_exclusive: 2026-04-18
+    source: Mode A sacred window per HOLDOUT_SACRED_FROM=2026-01-01
+    upper_bound_rationale: >
+      Pre-reg lock date; validator must not read data >= 2026-04-18 to preserve
+      one-shot discipline for any future re-pre-reg of the forward window.
+  holdout_rule:
+    constant_source: trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+    locked_boundary: 2026-01-01
+  tuning_against_oos: false
+  oos_is_single_shot: true
+  oos_prior_consumption_note: >
+    The 2026-04-15 mega scan (research/mega_deployed_sessions_only.py)
+    loaded OOS rows but reported Δ_OOS=nan for this cell (no published OOS
+    verdict; Welch-t N<30 short-circuit at line 151). No deployment decision
+    rested on that read. This pre-reg is the FIRST registered single-shot
+    OOS evaluation for this cell; its verdict is final.
+
+feature_definition:
+  feature_name: F5_BELOW_PDL
+  column_source: computed in-validator (not in daily_features; derived from orb_US_DATA_1000_{high,low} + prev_day_low)
+  canonical_source_of_truth:
+    - research/mega_deployed_sessions_only.py:132
+    - research/prior_day_features_orb.py:170
+  trade_time_knowable: true
+  first_complete_time: ORB end (09:05 US ET for US_DATA_1000 O5; prev_day_low is prior-day close)
+  temporal_alignment_note: >
+    orb_mid is fixed at ORB-end (5 min after session open). prev_day_low is
+    prior-day session's low — written to daily_features at end of prior trading
+    day and never mutated intraday.
+  lookhead_check:
+    rule_ref: .claude/rules/backtesting-methodology.md Rule 6.1
+    category: SAFE
+    rationale: both inputs fixed before E2 CB1 entry on the current day
+
+calibration:
+  threshold_source: binary predicate (< prev_day_low); no tunable parameter
+  lock_policy: no threshold tuning allowed post-observation (there is no threshold to tune)
+
+hypothesis_definition:
+  primary_id: H_F5_PDL_001
+  primary_statement: >
+    Among MNQ US_DATA_1000 O5 E2 CB1 RR1.0 long breaks, the subset where
+    orb_mid < prev_day_low at ORB-end retains positive per-trade expectancy on
+    2026 OOS consistent with IS direction and ≥40% of IS effect size.
+  primary_pass_metric:
+    metric: ExpR_on_OOS
+    formula: mean(pnl_r) over rows where F5_BELOW_PDL=1 AND direction=long AND trading_day in OOS window
+    threshold_gte: 0.0
+    eff_ratio_threshold_gte: 0.40
+    sign_match_required: true
+  primary_counted_against_trial_budget: true
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  source: docs/audit/results/2026-04-15-mega-deployed-sessions-only.md:26
+  source_script: research/mega_deployed_sessions_only.py
+  upstream_scan_k_framings:
+    K_scan_total_cells: 432
+    K_family_level: 14_signals_x_2_directions
+    note: >
+      These are the mega-scan's K values, not the K of this pre-reg. This
+      pre-reg tests K=1 locked hypothesis (Pathway B individual). Do NOT use
+      upstream K to evaluate this pre-reg's gates.
+  upstream_metrics_locked_for_eff_ratio:
+    N_on_IS: 136
+    ExpR_on_IS: 0.3258
+    ExpR_off_IS: -0.0112
+    delta_IS: 0.3370
+    welch_t: 4.0176
+    welch_p: 0.000084
+    WR_on_IS: 0.6912
+    SD_on_IS: 0.8909
+    drift_check_file: docs/audit/results/2026-04-18-f5-below-pdl-is-drift-check.md
+
+testing_discipline:
+  pathway: B_individual
+  k: 1
+  significance_threshold:
+    raw_p_lt: 0.05
+    effect_size_minimum_eff_ratio: 0.40
+  mandatory_downstream_gates_non_waivable:
+    - C6_WFE_ge_0_50
+    - C8_OOS_direction_and_eff_ratio
+    - C9_no_negative_era_below_minus_0_05
+  theory_citation:
+    - file: docs/institutional/mechanism_priors.md
+      line: "161 (F5 BELOW_PDL LONG US_DATA_1000 MNQ → positive, Stage 1 candidate)"
+    - file: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+      relevance: >
+        Intraday trend-follow premise for equity-index futures; level-break
+        continuation (ORB breakout from below-PDL state → upside reclaim) is
+        consistent with Fitschen's path-of-least-resistance framing.
+      with_theory_claim: false
+      chordia_threshold_invoked: t >= 3.79 without-theory bar (Criterion 4)
+
+hypotheses:
+  - id: H_F5_PDL_001
+    type: primary
+    theory_citation: docs/institutional/mechanism_priors.md:161 + fitschen_2013_path_of_least_resistance.md
+    statement: >
+      On 2026-01-01..2026-04-18 OOS, MNQ US_DATA_1000 O5 E2 CB1 RR1.0 long
+      breaks with orb_mid < prev_day_low at ORB-end retain ExpR >= 0 and
+      sign consistent with the IS edge (+0.3258), with OOS effect at least
+      40% of IS effect (ExpR_on_OOS >= 0.1303).
+    pass_metric:
+      metric: ExpR_on_OOS
+      formula: mean(pnl_r) where F5_BELOW_PDL=1 AND direction=long
+      threshold_gte: 0.0
+      threshold_lt_kill: 0.0
+      eff_ratio_rule: ExpR_on_OOS / ExpR_on_IS  (IS=+0.3258)
+      eff_ratio_threshold_gte: 0.40
+    counted_against_trial_budget: true
+
+  - id: H_F5_PDL_002
+    type: secondary_descriptive_only
+    theory_citation: same as H_F5_PDL_001
+    statement: >
+      OOS bootstrap permutation p-value (B=10000, block=5) vs zero on the
+      on-signal long subset is < 0.10.
+    pass_metric:
+      metric: bootstrap_p_vs_zero
+      formula: >
+        moving-block bootstrap (block=5) of pnl_r_on_OOS; p = (count_below_or_eq_zero+1)/(B+1)
+      threshold_lt: 0.10
+    counted_against_trial_budget: false
+
+baseline:
+  metric: ExpR_off_OOS
+  formula: mean(pnl_r) where F5_BELOW_PDL=0 AND direction=long AND trading_day in OOS window
+  role: descriptive (for delta reporting); NOT a gate
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2"
+    N_trials: 1
+    E_max_N_years_needed: 0
+    within_cap: true
+    cap_reference: >
+      Pathway B individual K=1 is trivially within Bailey et al 2013 MinBTL
+      bound (see docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md).
+      No family enumeration in this pre-reg.
+
+kill_criteria:
+  - id: K1_primary_OOS_negative
+    metric: ExpR_on_OOS
+    threshold: "< 0"
+    action: KILL — declare H_F5_PDL_001 DEAD; postmortem; do NOT wire F5 filter into trading_app.config.
+  - id: K2_eff_ratio_below_40pct
+    metric: ExpR_on_OOS / ExpR_on_IS
+    threshold: "< 0.40"
+    action: KILL — decayed effect size beyond Criterion 8 floor; do NOT deploy.
+  - id: K3_direction_flip
+    metric: sign(ExpR_on_OOS)
+    threshold: "!= sign(ExpR_on_IS=+0.3258)"  # i.e. negative OOS
+    action: KILL — structural reversal, not thin-sample noise.
+  - id: K4_no_on_signal_fires
+    metric: N_on_OOS
+    threshold: "< 5"
+    action: PARK — shadow for at least 6 months before any re-read; not a deployment-eligible verdict either way. Does not kill but forbids capital deployment.
+
+decision_rule:
+  continue_if: >
+    ALL of the following true: ExpR_on_OOS >= 0 AND eff_ratio >= 0.40 AND
+    sign(ExpR_on_OOS) == sign(ExpR_on_IS) AND N_on_OOS >= 5. In that case,
+    verdict is PASS and user may decide whether to advance to implementation
+    pre-reg. Implementation is NOT authorised by this pre-reg alone.
+  park_if: >
+    N_on_OOS < 5 AND no other kill trigger fires. Verdict = UNDERPOWERED;
+    deployment forbidden; shadow forward 6+ months before any re-read.
+  kill_if: >
+    ExpR_on_OOS < 0 OR eff_ratio < 0.40 OR sign flip vs IS. Verdict = KILL;
+    F5_BELOW_PDL on this exact lane is declared DEAD; postmortem required.
+
+methodology_rules_applied:
+  - rule: .claude/rules/backtesting-methodology.md Rule 1 (feature temporal alignment)
+    application: >
+      F5_BELOW_PDL inputs (orb_mid, prev_day_low) are both fixed before E2 CB1 entry.
+      Rule 6.1 SAFE category.
+  - rule: .claude/rules/backtesting-methodology.md Rule 3 (IS/OOS discipline)
+    application: >
+      IS < 2026-01-01, OOS >= 2026-01-01 AND < 2026-04-18. No IS/OOS bleed.
+      dir_match required.
+  - rule: .claude/rules/backtesting-methodology.md Rule 4 (multi-framing K)
+    application: >
+      NOT APPLICABLE to this pre-reg. This is Pathway B K=1. Upstream scan
+      K values appear under upstream_discovery_provenance as PROVENANCE_ONLY.
+  - rule: .claude/rules/backtesting-methodology.md Rule 6 (trade-time knowability)
+    application: >
+      Both inputs knowable at ORB end (< entry_ts of first E2 CB1 bar break).
+  - rule: .claude/rules/backtesting-methodology.md Rule 7 (tautology check T0)
+    application: >
+      F5_BELOW_PDL on MNQ US_DATA_1000 does not duplicate any deployed filter
+      on this lane. The deployed filter for MNQ US_DATA_1000 is VWAP_MID_ALIGNED
+      (per docs/runtime/lane_allocation.json) — orthogonal class (VWAP vs PDL).
+      T0 correlation to VWAP_MID_ALIGNED fire-column will be computed and
+      reported as informational; |corr|<0.70 expected but not gated here.
+  - rule: .claude/rules/backtesting-methodology.md Rule 8 (extreme fire rate)
+    application: >
+      IS fire rate = 136/881 = 15.4% — within [5%, 95%]. No extreme-fire flag.
+  - rule: .claude/rules/backtesting-methodology.md Rule 9 (data source discipline)
+    application: >
+      Validator reads canonical orb_outcomes + daily_features with triple-join
+      (trading_day, symbol, orb_minutes). No derived-layer reads. No CTE that
+      omits orb_minutes filter.
+  - rule: .claude/rules/backtesting-methodology.md Rule 12 (red flags)
+    application: >
+      IS |t|=4.02 within expected range (3-5 for real 20-year-clean signals).
+      Δ_IS=+0.337 well under the 0.6 flag. No uniform same-feature survivors
+      concern (K=1).
+
+outputs_required_after_run:
+  - docs/audit/results/2026-04-18-f5-below-pdl-one-shot-validator.md
+  - verdict row: PASS | KILL | UNDERPOWERED
+  - N_on_OOS, ExpR_on_OOS, ExpR_off_OOS, WR_on_OOS, SD_on_OOS, Δ_OOS
+  - bootstrap_p_OOS (B=10000, block=5)
+  - eff_ratio = ExpR_on_OOS / ExpR_on_IS
+  - per-fire log: trading_day, entry_price, stop_price, target_price, pnl_r, outcome
+  - T0 correlation to VWAP_MID_ALIGNED fire vector (informational)
+
+execution_gate:
+  allowed_now:
+    - read IS window for drift check (already done; see companion MD)
+    - read OOS window ONCE via the one-shot validator script
+    - emit the output MD above
+  forbidden_now:
+    - modify pipeline/, trading_app/, scripts/ production code
+    - wire F5_BELOW_PDL into trading_app.config ALL_FILTERS
+    - modify allocator / routing / lane_allocation.json
+    - test other RR targets (1.5, 2.0) — upstream scan found them positive but they are out of scope
+    - test other instruments (MES, MGC) — out of scope
+    - test other sessions — out of scope
+    - re-run the validator after seeing the result
+    - tune any threshold after seeing the result (there is no threshold to tune)
+
+not_done_by_this_pre_reg:
+  - no capital-deployment decision
+  - no HTF level feature scope expansion
+  - no cross-RR concordance analysis
+  - no allocator integration
+  - no sizing scheme (Carver forecast-combiner out of scope)
+  - no Shiryaev-Roberts live-drift monitor wiring
+  - no DSR multi-K framings (Pathway B K=1 does not require)
+  - no re-scoring of 2026-04-15 mega scan
+
+scope_lock_files:
+  pre_reg: docs/audit/hypotheses/2026-04-18-f5-below-pdl-mnq-us-data-1000-o5-rr1-one-shot.yaml
+  is_drift_check: docs/audit/results/2026-04-18-f5-below-pdl-is-drift-check.md
+  validator_script: research/f5_below_pdl_mnq_us_data_1000_o5_rr1_one_shot.py
+  validator_output: docs/audit/results/2026-04-18-f5-below-pdl-one-shot-validator.md
+
+do_not_re_open_unless:
+  - brand-new pre-reg is filed under a DIFFERENT slug
+  - the new pre-reg must not reuse the 2026-01-01..2026-04-18 window (it is consumed here)
+  - reopen must cite a NEW mechanism claim, not a statistical rescue argument
