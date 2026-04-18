@@ -175,7 +175,7 @@ Combined across both HTF families (prev-week v1 + prev-month v1 = K=48 pre-regis
 
 **Closure criteria before any further HTF-level-break pre-reg:**
 - a structurally new mechanism story distinct from "liquidity sweep" (prev-week) and "calendar-institutional rebalancing" (prev-month), OR
-- at least one Pathway-A-qualifying literature extract added to `docs/institutional/literature/` (Dalton Markets in Profile, Murphy Technical Analysis, or Chan Algorithmic Trading Ch 4) that would allow Criterion 4 t ≥ 3.00 with-theory rather than t ≥ 3.79 no-theory, AND
+- at least one Pathway-A-qualifying literature extract added to `docs/institutional/literature/` on level-based S/R mechanisms. Candidate sources: Dalton *Mind Over Markets*, Murphy *Technical Analysis of the Financial Markets*. Both are absent from `resources/` and require acquisition. Chan *Algorithmic Trading* Ch 4 was previously listed here; on 2026-04-19 verification of the book's TOC (see `docs/institutional/literature/chan_2013_toc_determination.md`) it was confirmed to be "Mean Reversion of Stocks and ETFs" — a category error for level-break grounding, and is removed from this list. AND
 - an explicit statement of how the new mechanism differs from the two killed families and why the new literature raises the prior above 30% genuine
 
 **Not in closure scope (not a reopen):**
