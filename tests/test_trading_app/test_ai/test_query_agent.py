@@ -279,6 +279,49 @@ class TestSDKSurfaceGuards:
                 f"_extract_intent call shape invalid against anthropic SDK: {exc}"
             )
 
+    def test_messages_create_thinking_adaptive_shape(self):
+        """Validate Pass-2 (_interpret_results) kwargs against real SDK sig.
+
+        Symmetric guard to test_extract_intent_call_shape_binds_to_real_sdk —
+        covers client.messages.create() in _interpret_results (query_agent.py
+        lines ~196-202) so a future kwarg change on Pass-2 can't regress the
+        same MagicMock-hides-TypeError failure mode.
+        """
+        import inspect
+
+        from anthropic.resources.messages import Messages
+        from anthropic.types.thinking_config_adaptive_param import (
+            ThinkingConfigAdaptiveParam,
+        )
+
+        from trading_app.ai.claude_client import CLAUDE_REASONING_MODEL
+
+        # The exact kwargs _interpret_results passes to messages.create().
+        # `thinking_param` is pulled out so its type stays a plain dict[str,str]
+        # for the TypedDict-conformance assertion below (pyright can't narrow
+        # heterogenous dict values after packing into a single kwargs dict).
+        thinking_param: dict[str, str] = {"type": "adaptive"}
+        our_kwargs = dict(
+            model=CLAUDE_REASONING_MODEL,
+            max_tokens=2000,
+            thinking=thinking_param,
+            messages=[{"role": "user", "content": "sentinel-interpret"}],
+        )
+
+        sig = inspect.signature(Messages.create)
+        try:
+            sig.bind(None, **our_kwargs)
+        except TypeError as exc:
+            pytest.fail(
+                f"_interpret_results call shape invalid against anthropic SDK: {exc}"
+            )
+
+        # Confirm the thinking shape satisfies the TypedDict contract —
+        # the 'type' literal must be 'adaptive', which is a Required field.
+        required_keys = set(ThinkingConfigAdaptiveParam.__required_keys__)
+        missing = required_keys - set(thinking_param.keys())
+        assert not missing, f"thinking dict missing required keys: {missing}"
+
 
 class TestQueryAgentInterpretation:
     """Test Pass 2 (result interpretation) via mocked messages.create()."""
