@@ -4,6 +4,53 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-19 validated shelf vs live deployment audit)
+
+### What changed
+
+- Added result memo:
+  - `docs/audit/results/2026-04-19-validated-shelf-vs-live-deployment-audit.md`
+- Added dormant-profile activation-readiness scan:
+  - `docs/audit/results/2026-04-19-dormant-profile-activation-readiness-scan.md`
+- Hardened the dormant-profile rebuild support tool:
+  - `scripts/tools/generate_profile_lanes.py`
+  - `tests/test_tools/test_generate_profile_lanes.py`
+
+### Core finding
+
+- Current profit bottleneck is deployment translation quality, not lack of
+  validated edge.
+- Only one profile is active today (`topstep_50k_mnq_auto`), and its effective
+  six-lane set matches the allocator exactly.
+- Most inactive profiles are not activation-ready because their hardcoded
+  `daily_lanes` point to strategy IDs that no longer exist on the current
+  deployable shelf.
+
+### Operational implication
+
+- Do not treat the dormant profile surface as ready optionality.
+- The next high-EV move is a profile-inventory rebuild against
+  `deployable_validated_setups` + current allocator outputs, not another broad
+  edge hunt.
+- The rebuild tool now explicitly distinguishes:
+  - ghost-lane cleanup
+  - still-valid incumbent lanes that are being displaced by current allocator
+    ranking
+- Do **not** silently reinterpret the current tool as a hysteresis-preserving
+  patch generator. A deeper incumbent-preservation rewrite touches allocator
+  semantics and needs its own audit.
+- Readiness scan result:
+  - `topstep_50k` has no current rebuild
+  - `topstep_50k_mes_auto` stays blocked by cold session regime
+  - most rebuildable inactive profiles collapse to an `MNQ`-heavy session
+    cluster
+  - the common displaced incumbent is
+    `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100` (`SR=ALARM`)
+- Next correct move:
+  - rewrite stale inactive profiles from current generated `DailyLaneSpec`
+    suggestions
+  - keep them inactive until account-by-account activation review
+
 ## Update (2026-04-19 post-result sanity pass — canonical reusable prompt added)
 
 ### What changed
