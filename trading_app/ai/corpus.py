@@ -75,10 +75,13 @@ CORPUS_FILES = {
 def load_corpus() -> dict[str, str]:
     """Read all canonical docs into memory.
 
-    Returns dict mapping document name to file contents.
-    Missing files are skipped with a warning in the value.
+    Missing HIGH-priority files are logged and replaced with a sentinel string.
+    Missing CRITICAL-priority files raise RuntimeError — fail-closed per
+    integrity-guardian.md § 3, because degraded grounding can produce
+    confidently-wrong answers, which is strictly worse than a hard abort.
     """
     corpus = {}
+    missing_critical: list[str] = []
     for name, info in CORPUS_FILES.items():
         fpath = PROJECT_ROOT / info["path"]
         if fpath.exists():
@@ -86,6 +89,15 @@ def load_corpus() -> dict[str, str]:
         else:
             logger.warning("Corpus file missing: %s (%s)", info["path"], name)
             corpus[name] = f"[MISSING: {fpath}]"
+            if info.get("priority") == "CRITICAL":
+                missing_critical.append(f"{name} ({info['path']})")
+    if missing_critical:
+        raise RuntimeError(
+            "CRITICAL corpus files missing: "
+            + ", ".join(missing_critical)
+            + ". Fail-closed per integrity-guardian.md § 3 — grounding must not "
+            "run with missing critical docs."
+        )
     return corpus
 
 

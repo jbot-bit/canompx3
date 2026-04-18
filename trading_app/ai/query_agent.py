@@ -16,10 +16,13 @@ Stage 3 of claude-api-modernization:
   - API-key check delegated to canonical `get_client()`
 """
 
+import logging
 from dataclasses import dataclass, field
 
 import pandas as pd
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 from trading_app.ai.claude_client import (
     CLAUDE_REASONING_MODEL,
@@ -97,6 +100,11 @@ def _extract_text_block(response) -> str:
     for block in response.content:
         if getattr(block, "type", None) == "text":
             return block.text.strip()
+    logger.warning(
+        "Claude response contained no TextBlock (types=%s). Returning empty "
+        "string — check max_tokens, thinking budget, or tool-use path.",
+        [getattr(b, "type", None) for b in response.content],
+    )
     return ""
 
 

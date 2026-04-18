@@ -65,6 +65,24 @@ class TestLoadCorpus:
         assert result["TEST_DOC"].startswith("[MISSING:")
         assert any("nonexistent_file_ralph_test.md" in r.message for r in caplog.records)
 
+    def test_critical_missing_raises(self):
+        """load_corpus() MUST fail-closed when a CRITICAL file is missing."""
+        fake_files = {
+            "CRITICAL_DOC": {
+                "path": "nonexistent_critical_doc.md",
+                "priority": "CRITICAL",
+                "description": "test",
+            },
+            "HIGH_DOC": {
+                "path": "nonexistent_high_doc.md",
+                "priority": "HIGH",
+                "description": "test",
+            },
+        }
+        with patch("trading_app.ai.corpus.CORPUS_FILES", fake_files):
+            with pytest.raises(RuntimeError, match="CRITICAL corpus files missing"):
+                load_corpus()
+
     def test_load_corpus_returns_dict(self):
         corpus = load_corpus()
         assert isinstance(corpus, dict)
