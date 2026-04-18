@@ -29,11 +29,18 @@ Cross-reference with Phase 3a (Mode-B inputs):
 
 Non-tied selection delta vs raw under Mode-A: `dsr=11, combo=11`
 
-**RANKING_MATERIAL_PRESERVED** — Mode-A DSR rank still flips selection vs raw (`dsr=11` slots, `combo=11` slots).
+**RANKING_MATERIAL_PRESERVED-WITH-PARTIAL-AGREEMENT** — Mode-A DSR rank still flips selection vs raw (`dsr=11` slots, `combo=11` slots), but the Mode-A selection set is NOT identical to the Mode-B (Phase 3a) selection set:
 
-Direction overlap: of the lanes Phase 3a flipped under DSR, `9` of `9` are ALSO flipped under Mode-A. The remaining `0` were Mode-B artifacts; the patch's true selection delta is the Mode-A set.
+- `sel_dsr` overlap with Phase 3a: `6 of 7` = 86%
+- `sel_combo` overlap with Phase 3a: `4 of 6` = 67%
 
-**A2b-2 K1 prerequisite SATISFIED** — Stage-2 may proceed pending user approval of patch shape (A/B/C/D in scope §11).
+**The broad shape holds across both runs** — OVNRNG_100, VWAP_MID_ALIGNED, and ATR_P50_O30 are systematically promoted in both Mode-B and Mode-A; ORB_G5 lanes are systematically demoted in both. **Specific lane variants shift** between the two regimes (e.g., NYSE_OPEN under Mode-A `sel_dsr` picks RR1.5/COST_LT12 instead of Phase 3a's RR1.0/ORB_G5; same session, different filter+RR — within the family of high-DSR alternatives).
+
+The 67% overlap on `sel_combo` is meaningful disagreement: the multiplicative score `annual_r × DSR` is more sensitive to the underlying Sharpe values, so Mode-A correction shifts more lanes there than under DSR-alone ranking.
+
+Direction overlap on FLIPPED lanes (lanes either added or removed vs raw): of the lanes Phase 3a flipped under DSR, `9` of `9` are ALSO flipped under Mode-A. The remaining `0` were Mode-B artifacts; the patch's flip-direction is robust.
+
+**A2b-2 K1 prerequisite SATISFIED** — direction confirmed; Stage-2 may proceed pending user approval of patch shape (A/B/C/D in scope §11). Note the ~30% selection-instability across the two runs argues for additional caution at first-rebalance gate K6.
 
 ## Per-lane Mode-A DSR table
 

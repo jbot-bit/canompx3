@@ -209,6 +209,14 @@ def selection_under_objective(
     replicate the selection logic by sorting and feeding the resulting score
     order directly. For Phase 3a we monkey-patch the module attribute briefly
     (single-process, immediate restore) to keep canonical delegation.
+
+    FRAGILITY NOTE: this pattern relies on Python's late-binding of module
+    globals — `build_allocation` resolves `_effective_annual_r` through the
+    module's __dict__ at call time. If a future refactor changes the call
+    site to a top-of-file import (`from trading_app.lane_allocator import
+    _effective_annual_r as _eff`), this monkey-patch silently no-ops and
+    Phase 3a/3b would compute against the canonical raw ranker without
+    error. Acceptable for one-shot research; would be unsafe in production.
     """
     import trading_app.lane_allocator as la_mod
 

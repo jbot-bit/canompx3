@@ -253,6 +253,11 @@ def compute_mode_a_dsr_inputs(
 def selection_under_objective(
     scores, *, score_fn, profile, max_dd, pairs, orb_stats
 ) -> set[str]:
+    # FRAGILITY NOTE: monkey-patch relies on Python late-binding of module
+    # globals — build_allocation resolves _effective_annual_r through the
+    # module __dict__ at call time. If a future refactor changes that to a
+    # top-of-file import alias, this no-ops silently. Acceptable for
+    # one-shot research; identical pattern lives in Phase 3a script.
     import trading_app.lane_allocator as la_mod
 
     original = la_mod._effective_annual_r
