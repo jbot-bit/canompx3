@@ -109,9 +109,11 @@ For 2.7-year MGC (no-backfill), strict Bailey E=1.0 gives N ≤ 4 — too small 
 
 ## Criterion 4 — Chordia t-statistic threshold
 
-**Source:** `literature/chordia_et_al_2018_two_million_strategies.md`.
+**Sources:**
+- `literature/chordia_et_al_2018_two_million_strategies.md` (grounds t ≥ 3.79 without-theory verbatim).
+- `literature/harvey_liu_zhu_2015_cross_section.md` (STUB — grounds t ≥ 3.00 with-theory via one-step-removed reference through Chordia p5; full PDF re-ground pending per audit IMP-1).
 
-**Rule:** After BH-FDR passes, compute the implied t-statistic for the strategy's mean return. Require t ≥ 3.00 (Harvey-Liu-Zhu 2015) for strategies with strong pre-registered economic theory support. Require t ≥ 3.79 (Chordia et al 2018) for strategies without such theoretical support.
+**Rule:** After BH-FDR passes, compute the implied t-statistic for the strategy's mean return. Require t ≥ 3.00 (Harvey-Liu-Zhu 2015 — currently indirect Tier 1 via Chordia et al 2018 p5 quote, see stub at `literature/harvey_liu_zhu_2015_cross_section.md`) for strategies with strong pre-registered economic theory support. Require t ≥ 3.79 (Chordia et al 2018, verbatim Tier 1 at `literature/chordia_et_al_2018_two_million_strategies.md:20`) for strategies without such theoretical support. **Promote t ≥ 3.00 grounding from INDIRECT to DIRECT before any 3.00 ≤ t < 3.79 with-theory candidate is accepted.**
 
 **Enforcement:** Computed from stored `expectancy_r`, `sample_size`, and returns standard deviation. Flag non-compliant strategies in a drift check.
 
