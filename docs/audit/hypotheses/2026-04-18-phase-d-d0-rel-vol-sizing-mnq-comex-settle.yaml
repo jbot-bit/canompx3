@@ -22,8 +22,9 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "b6918d8d"
   committed_required_before_run: true
+  commit_sha_note: "SHA of the commit that first wrote this pre-reg. Any edit requires a new pre-reg file with a new date slug; this file is append-only."
 
 scope:
   instrument: "MNQ"
