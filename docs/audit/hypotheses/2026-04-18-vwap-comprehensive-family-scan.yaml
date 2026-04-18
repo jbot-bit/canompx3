@@ -1,0 +1,286 @@
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: 2026-04-18
+slug: vwap-comprehensive-family-scan
+title: "VWAP family comprehensive scan — all 12 sessions × 3 instruments × 3 apertures × 3 RR × 2 directions × 2 VWAP variants"
+owner: research-session-2026-04-18
+parent_spec: docs/audit/hypotheses/2026-04-15-comprehensive-deployed-lane-gap-audit.md
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - .claude/rules/backtesting-methodology.md
+    - .claude/rules/research-truth-protocol.md
+    - docs/institutional/pre_registered_criteria.md
+    - docs/STRATEGY_BLUEPRINT.md
+  notes:
+    - "Family scan over the VWAP_MID_ALIGNED + VWAP_BP_ALIGNED filter family. Same pattern as the 2026-04-15 comprehensive deployed-lane scan, restricted to the 2 VWAP filter variants. Multi-framing BH-FDR per Rule 4. No writes to experimental_strategies/validated_setups; survivors require separate Pathway B pre-reg before deployment."
+    - "Closes the gap surfaced 2026-04-18 in the surface audit: the 2026-04-15 comprehensive scan did not include any VWAP feature, so 10 of 12 sessions × 2 VWAP variants are honestly untested at family level."
+
+reproducibility:
+  repo_root: C:/Users/joshd/canompx3
+  commit_sha: TO_FILL_AFTER_COMMIT
+  committed_required_before_run: true
+
+scope:
+  instruments: [MNQ, MES, MGC]
+  instruments_source: pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS
+  sessions: [CME_REOPEN, TOKYO_OPEN, SINGAPORE_OPEN, LONDON_METALS, EUROPE_FLOW, US_DATA_830, NYSE_OPEN, US_DATA_1000, COMEX_SETTLE, CME_PRECLOSE, NYSE_CLOSE, BRISBANE_1025]
+  sessions_source: pipeline.dst.SESSION_CATALOG
+  apertures_min: [5, 15, 30]
+  rr_targets: [1.0, 1.5, 2.0]
+  directions: [long, short]
+  entry_model: E2
+  confirm_bars: 1
+  filters_under_test:
+    - filter_type: VWAP_MID_ALIGNED
+      filter_class: trading_app.config.VWAPBreakDirectionFilter
+      definition: orb_mid
+      registry_key_source: trading_app.config.ALL_FILTERS["VWAP_MID_ALIGNED"]
+    - filter_type: VWAP_BP_ALIGNED
+      filter_class: trading_app.config.VWAPBreakDirectionFilter
+      definition: break_price
+      registry_key_source: trading_app.config.ALL_FILTERS["VWAP_BP_ALIGNED"]
+  cells_total: 1296
+  cells_total_formula: "12 sessions × 3 instruments × 3 apertures × 3 RR × 2 directions × 2 filter variants = 1296"
+  data_source: orb_outcomes JOIN daily_features ON (trading_day, symbol, orb_minutes) per .claude/rules/daily-features-joins.md
+  enabled_session_caveats:
+    - "MGC: per pipeline.asset_configs.ASSET_CONFIGS['MGC']['enabled_sessions'], MGC excludes CME_PRECLOSE / NYSE_CLOSE / BRISBANE_1025. Cells for these will return N=0 and auto-skip."
+    - "MES: enabled_sessions excludes BRISBANE_1025. Cell will return N=0 and auto-skip."
+    - "MGC SINGAPORE_OPEN: blueprint NO-GO (74% double-break structurally mean-reverting). Cell will be reported but explicitly flagged."
+  expected_skips_count: 12  # MGC × {CME_PRECLOSE, NYSE_CLOSE, BRISBANE_1025} × 3 apt × 3 RR × 2 dir × 2 var = 108; MES × BRISBANE_1025 = 36; MGC SINGAPORE_OPEN flagged = 36; etc. Reported in result doc.
+
+data_policy:
+  is_window:
+    start: pipeline.bars_1m_min
+    end_exclusive: 2026-01-01
+  oos_window:
+    start: 2026-01-01
+    end_exclusive: 2026-04-18
+  oos_consumption: ONE_SHOT_FAMILY_SCAN
+  holdout_rule:
+    constant_source: trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+    locked_boundary: 2026-01-01
+  tuning_against_oos: false
+  no_calibration_against_oos: true
+
+feature_definition:
+  - feature_name: VWAP_MID_ALIGNED
+    column_source: orb_{label}_vwap (per-orb-aperture; populated by pipeline.build_daily_features Module 7)
+    canonical_source_of_truth: pipeline/build_daily_features.py:983-998
+    trade_time_knowable: true
+    first_complete_time: ORB window start (orb_start_utc); compute uses bars with ts_utc < orb_start
+    temporal_alignment_note: "Pre-session VWAP from trading_day start to orb_start_utc. Strict less-than = no ORB-period bars included. Filter resolves at break detection (INTRA_SESSION) — VWAP is already known by then."
+    lookhead_check: "RULE 6.1 SAFE — explicit verification: build code at pipeline/build_daily_features.py:989 uses pre_mask = (bars_df['ts_utc'] >= td_start) & (bars_df['ts_utc'] < orb_start). Filter at trading_app/config.py:2463-2486 reads orb_{label}_vwap and orb_{label}_break_dir, both known at entry."
+    filter_logic: "long => orb_mid > vwap; short => orb_mid < vwap. orb_mid = (orb_high + orb_low) / 2."
+  - feature_name: VWAP_BP_ALIGNED
+    column_source: orb_{label}_vwap (same column as VWAP_MID_ALIGNED)
+    canonical_source_of_truth: pipeline/build_daily_features.py:983-998
+    trade_time_knowable: true
+    first_complete_time: ORB window start
+    temporal_alignment_note: same as VWAP_MID_ALIGNED
+    lookhead_check: same as VWAP_MID_ALIGNED
+    filter_logic: "long => orb_high > vwap; short => orb_low < vwap. break_price = orb_high (long) or orb_low (short)."
+
+calibration:
+  required: false
+  notes: "Both filters are deterministic binary predicates against existing populated columns. No quantile calibration, no threshold sweep."
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  source: docs/audit/results/2026-04-15-comprehensive-deployed-lane-scan.md (parent comprehensive scan that did NOT include VWAP features) AND docs/audit/results/2026-04-13-vwap-discovery-rerun-results.md (prior 425-test cross-family that surfaced 4 BH FDR survivors with VWAP)
+  upstream_scan_k_framings:
+    comprehensive_scan_k_global: 14261
+    comprehensive_scan_k_family_volume: 2550
+    vwap_prior_audit_k: 425
+    note: "These K values are upstream provenance only. They are NOT this scan's K. This scan's binding K framings are listed under hypotheses[].pass_metric and trial_budget."
+
+hypotheses:
+  - id: H1_family
+    type: primary
+    statement: "At least 3 cells in the VWAP family scan survive the family-level gate (BH-FDR K_family q < 0.05 + dir_match + N_IS >= 50 + |t_IS| >= 3.0 (with theory citation) + per-year IS positivity >= 4/7) on 2026-04-18 OOS data."
+    theory_citation: "Mechanism = institutional-execution-bias continuation. When the ORB break direction aligns with the relationship of break-price (or orb_mid) to pre-session VWAP, institutional execution flow continues the move. Empirical precedent: deployed L6 lane MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15 is BH K=36000 validated and currently LIVE per docs/audit/results/2026-04-18-c12-alarmed-lanes-review.md (KEEP verdict). Microstructure literature (VWAP execution bias, e.g., Berkowitz/Logue/Noser benchmark execution literature) is conceptually grounded but NOT extracted to docs/institutional/literature/ — counted as Pathway B-grade theory citation; family scan still uses Chordia t>=3.0 (with theory) per pre_registered_criteria.md Criterion 4."
+    pass_metric:
+      metric: count of cells passing all sub-gates
+      formula: "n_cells where (BH-FDR K_family q < 0.05) AND (sign(ExpR_OOS) == sign(ExpR_IS)) AND (N_IS >= 50) AND (|t_IS_cluster_robust| >= 3.0) AND (years_positive_IS >= 4/7)"
+      threshold_gte: 3
+    counted_against_trial_budget: true
+  - id: H2_family_strict
+    type: secondary_descriptive_only
+    statement: "Same as H1 but using Chordia strict t >= 3.79 (no-theory hurdle). Reported as a transparency ribbon."
+    theory_citation: "N/A — descriptive ribbon"
+    pass_metric:
+      metric: count of cells passing strict gate
+      formula: "n_cells where (BH-FDR K_family q < 0.05) AND (sign(ExpR_OOS) == sign(ExpR_IS)) AND (N_IS >= 50) AND (|t_IS_cluster_robust| >= 3.79) AND (years_positive_IS >= 4/7)"
+      threshold_gte: 1  # descriptive only
+    counted_against_trial_budget: false
+  - id: H3_l6_positive_control
+    type: secondary_descriptive_only
+    statement: "The cell (MNQ, US_DATA_1000, O15, RR1.5, long, VWAP_MID_ALIGNED) re-validates: ExpR_IS within ±0.02 of the C12 review value +0.2101, t_IS positive, dir_match true. Sanity check that the scan harness reproduces a known-live result."
+    theory_citation: "Positive control — same lane is currently LIVE."
+    pass_metric:
+      metric: ExpR_IS within ±0.02 of +0.2101 AND dir_match true
+      formula: "abs(ExpR_IS - 0.2101) < 0.02 AND sign(ExpR_OOS) == +1"
+      threshold_gte: 1
+    counted_against_trial_budget: false
+
+baseline:
+  required: true
+  description: "Per cell, compute baseline (filter NOT applied) and on-signal (filter applied) ExpR/N over IS and OOS. Δ = on - off. dir_match compares sign(Δ_IS) vs sign(Δ_OOS)."
+
+trial_budget:
+  primary_selection_trials: 1296
+  primary_selection_trials_breakdown: "12 sessions × 3 instruments × 3 apertures × 3 RR × 2 directions × 2 VWAP variants"
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL_years = 2 * ln(N_trials) / E[max_N]^2 per Bailey et al 2013"
+    n_trials: 1296
+    ln_n_trials: 7.167
+    E_max_N_squared_estimate: "Per-cell N typically 100-1500 over 7 IS years. E[max_N] over the family is bounded by max-cell N_IS ~ 1500. E[max_N]^2 ~ 2.25e6 (trade-units squared)."
+    within_cap: true
+    cap_reference: "pre_registered_criteria.md Criterion 2 caps brute-force enumeration at N <= 300 for discovery writes to experimental_strategies. This pre-reg does NOT write to experimental_strategies (research-only family scan) — same precedent as 2026-04-15 comprehensive scan (K=14261 cells, also research-only, no writes)."
+
+multi_framing_K:
+  K_global: 1296
+  K_family_VWAP_MID_ALIGNED: 648
+  K_family_VWAP_BP_ALIGNED: 648
+  K_lane_max: 12  # 1 lane × 3 RR × 2 dir × 2 var per (session, instrument, apt) cell
+  K_session_max: 108  # 1 session × 3 instr × 3 apt × 3 RR × 2 dir × 2 var
+  K_instrument_max: 432  # 1 instr × 12 sess × 3 apt × 3 RR × 2 dir × 2 var
+  K_feature_max: 648  # 1 var × 12 sess × 3 instr × 3 apt × 3 RR × 2 dir
+  reporting_rule: "All 6 framings reported per cell with bool flags for BH-FDR pass at each. Promotion candidacy uses K_family OR K_lane per backtesting-methodology.md Rule 4.1."
+
+t0_tautology_pre_screen:
+  rule: "On the deployed Alpha cells (currently L6 = MNQ US_DATA_1000 O15 RR1.5 VWAP_MID_ALIGNED long), compute correlation of VWAP filter fire vs deployed-other-lane filter fires (ORB_G5, OVNRNG_100, COST_LT12, X_MES_ATR60). Flag any |corr| > 0.70 as tautology and exclude from survivors."
+  also: "Compute correlation of VWAP_MID_ALIGNED vs VWAP_BP_ALIGNED fire on the same cell. Expected very high (~0.9+) since they share VWAP column. This is by-design redundancy not tautology with deployed; report as informational."
+
+trustworthy_cell_gates:
+  - id: G1_extreme_fire
+    rule: "fire_rate < 0.05 OR fire_rate > 0.95 -> flag as 'extreme_fire', exclude from survivors"
+  - id: G2_arithmetic_only
+    rule: "|wr_spread_on_off| < 0.03 AND |delta_IS| > 0.10 -> flag as 'arithmetic_only', exclude from survivors"
+  - id: G3_tautology
+    rule: "any deployed-filter |corr| > 0.70 -> flag 'tautology', exclude"
+  - id: G4_min_sample
+    rule: "N_IS_on < 50 -> exclude from survivors (cell still reported in baseline table)"
+
+bootstrap:
+  required: true
+  rule: "moving-block bootstrap, block=5, B=10000, fixed mask (resample pnl array; mask kept fixed). Per-cell. Report bootstrap_p alongside Welch t. Bootstrap p < 0.10 binding for survivor classification."
+  reference: "research/oneshot_utils.py block_bootstrap_p (canonical implementation post-2026-04-18 hardening per docs/audit/results/2026-04-18-f5-below-pdl-one-shot-validator.md addendum)"
+
+per_year_stability:
+  required: true
+  rule: "IS years 2019-2025 (7 years available). Cell passes per-year stability if >= 4/7 years have ExpR_on > 0 with N >= 5 trades-on per year. Reported per-cell."
+
+kill_criteria:
+  - id: K1_family_zero_survivors
+    metric: count of H1 survivors
+    threshold_lt: 1
+    action: "VWAP family marked DOCTRINE-CLOSED for now. Update HANDOFF.md with kill verdict. Recommend non-VWAP next path (HTF Phase A build per surface map)."
+  - id: K2_l6_positive_control_fails
+    metric: H3_l6_positive_control pass count
+    threshold_lt: 1
+    action: "HARNESS BUG. Halt the entire scan; rebuild scan script. Do NOT use any survivors from this run."
+  - id: K3_excessive_extreme_fire
+    metric: fraction of cells flagged extreme_fire
+    threshold_gte: 0.50
+    action: "Filter is degenerate at this scope (>50% cells either always-fire or never-fire). Halt and re-design. Likely scope-error not signal."
+  - id: K4_oos_window_empty
+    metric: number of OOS trades total across the scan
+    threshold_lt: 100
+    action: "OOS sample insufficient — cells will report dir_match unreliably. Halt; do not consume OOS this session."
+
+decision_rule:
+  continue_if: "H1 survivors >= 3"
+  continue_action: "Recommend NEXT family test = rel_vol × VWAP cross-factor 2-way scan in next session. Each H1 survivor cell that also passes T0 tautology and N_IS >= 100 is candidate for separate Pathway B pre-reg + validator pass."
+  park_if: "H1 survivors == 1 OR 2"
+  park_action: "Document the 1-2 survivors as 'promising but family-level under-power'. Defer per-cell Pathway B until next discovery cycle. Do NOT deploy."
+  kill_if: "H1 survivors == 0"
+  kill_action: "K1 fires. VWAP family DOCTRINE-CLOSED. Move to next surface-map item (HTF Phase A build, per recommendation in surface map)."
+
+methodology_rules_applied:
+  - rule: backtesting-methodology.md Rule 1 (feature temporal alignment)
+    application: "VWAP feature is RULE 6.1 SAFE per code audit at pipeline/build_daily_features.py:989 (strict pre-orb-window mask). No conditional-validity gate needed since the column compute window strictly precedes ORB."
+  - rule: backtesting-methodology.md Rule 2 (filter application timing)
+    application: "Filter applied at break-detection per VWAPBreakDirectionFilter.matches_row. Uses only entry-time-known fields. Single-pass for all cells (deployed L6 cell is sanity-control H3, not two-pass overlay)."
+  - rule: backtesting-methodology.md Rule 3 (IS/OOS discipline)
+    application: "Mode A sacred holdout enforced via trading_app.holdout_policy.HOLDOUT_SACRED_FROM. No threshold tuning on OOS. dir_match required."
+  - rule: backtesting-methodology.md Rule 4 (multi-framing BH-FDR)
+    application: "All 6 K framings (global/family/lane/session/instrument/feature) reported per cell. Promotion candidacy uses K_family OR K_lane."
+  - rule: backtesting-methodology.md Rule 5 (comprehensive scope)
+    application: "All 12 sessions × 3 instruments × 3 apertures × 3 RR × 2 directions × 2 filter variants enumerated. No hand-picking. Data-availability auto-skips reported in coverage table."
+  - rule: backtesting-methodology.md Rule 6 (trade-time-knowability)
+    application: "Both filters audited as RULE 6.1 SAFE in feature_definition section."
+  - rule: backtesting-methodology.md Rule 7 (T0 tautology)
+    application: "Pre-screen against deployed-filter fires per t0_tautology_pre_screen section."
+  - rule: backtesting-methodology.md Rule 8 (extreme fire + arithmetic-only)
+    application: "G1 + G2 in trustworthy_cell_gates."
+  - rule: backtesting-methodology.md Rule 9 (data source discipline)
+    application: "Triple-join (trading_day, symbol, orb_minutes) on orb_outcomes ⨝ daily_features per .claude/rules/daily-features-joins.md. Canonical layers only."
+  - rule: backtesting-methodology.md Rule 10 (pre-reg before discovery)
+    application: "This file is the pre-reg. No writes to experimental_strategies/validated_setups."
+  - rule: backtesting-methodology.md Rule 11 (audit trail)
+    application: "Result doc to be committed at docs/audit/results/2026-04-18-vwap-comprehensive-family-scan.md. Script committed to research/vwap_comprehensive_family_scan.py."
+  - rule: backtesting-methodology.md Rule 12 (red flags)
+    application: "If any cell shows |t| > 7 OR Δ_IS > 0.6, halt and audit before reporting as survivor. Documented in result doc per finding."
+  - rule: backtesting-methodology.md Rule 13 (pressure test)
+    application: "Positive control (H3 = L6 lane re-validation) is the pressure test. If L6 IS ExpR doesn't match the C12 +0.2101 baseline within ±0.02, harness is broken (K2 kill)."
+
+implementation_integrity_checklist:
+  - id: I1_thresholds_frozen_pre_run
+    rule: "All thresholds (theta? N/A here; t-hurdles, BH q, fire-rate cuts, kill counts) frozen in this YAML before scan execution"
+  - id: I2_no_oos_in_calibration
+    rule: "No OOS data used for any threshold or quantile selection"
+  - id: I3_filter_at_entry_not_retro
+    rule: "Filter applied via row-level matches_row at entry simulation, not retroactively"
+  - id: I4_trade_count_invariants
+    rule: "N_on + N_off = N_total per cell. Reported per cell."
+  - id: I5_triple_join_correct
+    rule: "JOIN on (trading_day, symbol, orb_minutes) per daily-features-joins.md"
+  - id: I6_one_shot_oos_lock
+    rule: "Script refuses to re-run if docs/audit/results/2026-04-18-vwap-comprehensive-family-scan.md already exists"
+  - id: I7_canonical_imports
+    rule: "GOLD_DB_PATH from pipeline.paths; HOLDOUT_SACRED_FROM from trading_app.holdout_policy; SESSION_CATALOG from pipeline.dst; ACTIVE_ORB_INSTRUMENTS from pipeline.asset_configs; ALL_FILTERS from trading_app.config"
+
+outputs_required_after_run:
+  - schema verification summary (column existence + non-null counts)
+  - Phase 1 admissibility verdict for VWAP_MID_ALIGNED + VWAP_BP_ALIGNED
+  - cells attempted vs cells tested vs cells skipped (data unavailable)
+  - per-cell baseline table (N_IS_off, ExpR_IS_off, N_OOS_off, ExpR_OOS_off)
+  - per-cell on-signal table (N_IS_on, ExpR_IS_on, fire%, t, p, BH_global, BH_family, BH_lane, BH_session, BH_instrument, BH_feature, dir_match, bootstrap_p, years_positive_IS)
+  - flagged cells table (extreme_fire, arithmetic_only, tautology) with reason
+  - strict survivors table (all H1 sub-gates passed)
+  - secondary survivors at H2 strict t>=3.79
+  - H3 positive control verdict (PASS or HARNESS_BUG)
+  - red-flag audit (any |t|>7 or Δ_IS>0.6 cells)
+  - blunt verdict: SURVIVED SCRUTINY / DID NOT SURVIVE / CAVEATS / NEXT STEPS
+  - decision-rule firing (continue/park/kill)
+
+execution_gate:
+  allowed_now:
+    - read-only canonical queries against orb_outcomes + daily_features
+    - py_compile check on the scan script
+    - dry-run mode (no file writes to result md)
+  forbidden_now:
+    - any write to experimental_strategies, validated_setups, edge_families, live_config
+    - any modification of filter logic in trading_app/config.py
+    - any modification of feature compute in pipeline/build_daily_features.py
+    - threshold tuning post-result
+    - direction flip post-result
+    - K-budget expansion post-result
+    - re-run if result md exists
+
+not_done_by_this_pre_reg:
+  - this is NOT a deployment decision; survivors require Pathway B pre-reg before any deployment
+  - this is NOT an HTF / first-touch / cross-instrument / 3-way / Carver-sizing test
+  - this is NOT a build-spec for new pipeline features (none required)
+  - this does NOT consume the OOS window for non-VWAP families (they remain Mode-A clean)
+
+post_run_actions:
+  - commit result md
+  - update HANDOFF.md with one-line verdict
+  - if K1 (family kill) fires: log VWAP family closure in HANDOFF + memory; recommend HTF Phase A build as next session focus
+  - if continue_if fires: write a separate cross-factor pre-reg for rel_vol × VWAP for next session
