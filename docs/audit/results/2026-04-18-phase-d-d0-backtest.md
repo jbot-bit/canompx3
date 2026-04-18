@@ -1,6 +1,19 @@
 # Phase D D-0 Backtest — MNQ COMEX_SETTLE O5 RR1.5 OVNRNG_100 rel_vol size-scaling
 
-**Pre-registration:** `docs/audit/hypotheses/2026-04-18-phase-d-d0-rel-vol-sizing-mnq-comex-settle.yaml` (commit `b6918d8d`)
+## Post-run framing correction (2026-04-18, documentation only — commit 93a8e53a)
+
+Two framing errors were caught post-run and fixed in the pre-reg without altering any substantive rule:
+
+- D-0 is **Pathway B individual (K=1)** per `docs/institutional/pre_registered_criteria.md` Amendment 3.0. The pre-reg originally declared `testing_mode: family` — now corrected to `individual` with `theory_citation` on H1 (Carver 2015 Ch 9-10).
+- **K=14,261 is upstream-scan provenance** (2026-04-15 comprehensive-deployed-lane-scan), not D-0's own K. Renamed from `evidence_base_multi_framing_k` → `upstream_discovery_provenance` with `role: PROVENANCE_ONLY`.
+
+The backtest used no K in any computation. The KILL verdict below (+7.33% Sharpe uplift < 10% threshold) fired against pre-committed thresholds unchanged by the correction and is immutable.
+
+See pre-reg `post_run_correction_2026_04_18` section for full change log.
+
+---
+
+**Pre-registration:** `docs/audit/hypotheses/2026-04-18-phase-d-d0-rel-vol-sizing-mnq-comex-settle.yaml` (commit `b6918d8d`; framing-corrected `93a8e53a`)
 **Run UTC:** 2026-04-18T02:52:27.339072+00:00
 **Holdout sacred from:** 2026-01-01
 **Scope:** {"instrument": "MNQ", "orb_label": "COMEX_SETTLE", "orb_minutes": 5, "rr_target": 1.5, "entry_model": "E2", "confirm_bars": 1, "filter_type": "OVNRNG_100"}
