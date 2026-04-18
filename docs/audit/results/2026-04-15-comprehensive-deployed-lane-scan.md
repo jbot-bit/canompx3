@@ -5,6 +5,18 @@
 **Trustworthy cells** (not extreme-fire, not tautology, not arithmetic-only): 13635
 **Strict survivors** (|t|>=3 + dir_match + N>=50 + trustworthy): 102
 
+> **Follow-up 2026-04-19** — the five non-twin `rel_vol_HIGH_Q3` BH-global cells
+> (MES TOKYO long / MES COMEX short / MNQ COMEX short / MGC LONDON short /
+> MNQ SINGAPORE short) are NOT five independent draws. Pairwise overlap
+> decomposition shows MES COMEX short and MNQ COMEX short share 67% of their
+> fire days (Jaccard 0.491) — they are effectively one signal, not two.
+> Effective K for the family collapses from 5 to ≈4. See
+> `docs/audit/results/2026-04-19-rel-vol-cross-scan-overlap-decomposition.md`
+> and `research/rel_vol_cross_scan_overlap_decomposition.py`. The other 9
+> pairs are Jaccard 0.06–0.13, approximately independent. DSR / BH-FDR
+> downstream reports that treated these 5 cells as independent family
+> members should be re-reviewed at K_eff ≈ 4.
+
 ## BH-FDR pass counts at each K framing
 
 - **K_global** (K=14261) strictest: 13 pass
