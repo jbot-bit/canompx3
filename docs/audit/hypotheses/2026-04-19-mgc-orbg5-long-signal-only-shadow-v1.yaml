@@ -1,0 +1,91 @@
+version: 1
+status: LOCKED
+date: 2026-04-19
+slug: mgc-orbg5-long-signal-only-shadow-v1
+title: "MGC ORB_G5 long RR1.5 — signal-only shadow (park underpowered positives)"
+owner: claude
+parent_spec: "docs/audit/hypotheses/2026-04-19-mgc-mode-a-rediscovery-orbg5-v1.yaml"
+parent_result: "docs/audit/results/2026-04-19-mgc-mode-a-rediscovery-orbg5-v1-scan.md"
+
+testing_mode: shadow_record
+pathway: shadow_only
+deployment: NONE
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+  notes:
+    - "This is NOT a new discovery pre-reg. It parks known underpowered positives from the Pathway A family kill (commit a8208674) for future re-evaluation when MGC data accumulates."
+    - "No capital deployed. No validated_setups or experimental_strategies writes. Shadow recording = observation only."
+
+motivation: |
+  Phase 6 (commit a8208674) FAMILY-KILLED the K=4 Pathway A hypothesis:
+  MGC ORB_G5 long RR1.5 across 4 sessions. All 4 cells fail t >= 3.00.
+  HOWEVER, all 4 cells have POSITIVE Mode A IS ExpR:
+    LONDON_METALS N=41 ExpR+0.179 t=0.98
+    COMEX_SETTLE  N=33 ExpR+0.047 t=0.23
+    US_DATA_1000  N=133 ExpR+0.067 t=0.66
+    EUROPE_FLOW   N=26 ExpR+0.338 t=1.47
+  Underpowered by MGC native horizon (2022-06-13 onwards = ~3.5 years IS).
+  Literature (Fitschen Ch 3 p.41) predicts commodity intraday trend-follow
+  with range filter. Per backtesting-methodology.md RULE 2 and
+  pre_registered_criteria.md locked criteria, a positive-ExpR cell that
+  misses t>=3.00 solely on N is not evidence AGAINST the mechanism —
+  it's evidence of underpower. The honest treatment is shadow-record,
+  not kill.
+
+scope_of_shadow_record:
+  instrument: MGC
+  sessions_recorded:
+    - LONDON_METALS
+    - COMEX_SETTLE
+    - US_DATA_1000
+    - EUROPE_FLOW
+  direction: long
+  orb_minutes: 5
+  entry_model: E2
+  rr_target: 1.5
+  filter: ORB_G5
+  filter_delegation: "research.filter_utils.filter_signal(df, 'ORB_G5', orb_label)"
+
+shadow_record_mechanism:
+  type: "READ-ONLY — no live order, no position"
+  what_is_recorded:
+    - "Each trading day from 2026-04-19 forward, per session: did ORB_G5 fire? If yes, simulate the RR1.5 long trade using canonical orb_outcomes. Record the simulated pnl_r."
+    - "Weekly append to docs/audit/tracking/mgc-orbg5-long-shadow-YYYY-WW.csv"
+  recorder_tool:
+    existing: false
+    future_build: "Design doc added to docs/plans/2026-04-19-overnight-deferred-phases-design-docs.md as Phase 15 (shadow-recorder infrastructure). Build blocks capital deployment, not research parking."
+
+reopen_criteria:
+  permanent_kill_if:
+    - condition: "Forward OOS 24 months accumulated (2026-04-19 through 2028-04-19), N_forward per cell >= 60, and Σ ExpR_forward per cell <= 0 on every cell."
+      action: "PERMANENT KILL — commit an errata on parent_spec noting forward-OOS falsified the positive-ExpR direction."
+  reopen_full_pathwayA_if:
+    - condition: "ANY cell reaches N_cumulative_IS_plus_forward >= 200 with Σ ExpR > 0.08 AND per-year positive >= 4 out of observed years."
+      action: "Write a new Pathway A pre-reg (not a re-run of the Phase 6 pre-reg — new commit SHA, new LOCK). Re-test with Chordia t >= 3.00 strict gate."
+
+decision_rule:
+  continue: "Shadow-record only. No deployment."
+  no_deployment_until: "Full Pathway A re-run on accumulated data passes all 6 gate clauses."
+  do_not_do:
+    - "Do NOT write to validated_setups."
+    - "Do NOT write to experimental_strategies."
+    - "Do NOT claim 'edge' from shadow record alone — Pathway A re-test required."
+
+blast_radius:
+  upstream_docs_referenced:
+    - "docs/audit/hypotheses/2026-04-19-mgc-mode-a-rediscovery-orbg5-v1.yaml (parent spec)"
+    - "docs/audit/results/2026-04-19-mgc-mode-a-rediscovery-orbg5-v1-scan.md (parent result — KILL verdict)"
+  downstream_docs_updated:
+    - "None at pre-reg time. Weekly shadow CSVs will be committed to docs/audit/tracking/ once shadow-recorder infra is built."
+  production_code_touched: "NONE. Doc-only pre-reg."
+  db_writes: "NONE."
+
+not_done_by_this_pre_reg:
+  - "No capital deployment. No validated_setups row. No experimental_strategies row."
+  - "No shadow-recorder code. Weekly CSVs are aspirational until Phase-15 design doc approved and built."
+  - "Does NOT test GC proxy extension (16yr). Separate pre-reg if pursued."
+  - "Does NOT test MGC short direction. Separate pre-reg (see 2026-04-19-mgc-orbg5-short-rediscovery-v1 when/if written)."
