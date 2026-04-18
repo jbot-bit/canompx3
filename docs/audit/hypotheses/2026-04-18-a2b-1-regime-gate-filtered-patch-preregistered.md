@@ -1,10 +1,36 @@
 # A2b-1 — regime-gate filtered patch — scope (Stage-1)
 
 - phase: A2b-1 / Phase 2 of `docs/plans/2026-04-18-multi-phase-audit-roadmap.md`
-- status: **SCOPE — awaiting user approval before Stage-2 implementation**
+- status: **PAUSED — deferred behind A2b-2 (see PAUSE NOTE below)**
 - author: audit/a2b-1-regime-gate-phase2
 - created: 2026-04-18
 - revised: 2026-04-18 (post adversarial re-audit; see §10a)
+- paused: 2026-04-18 (post Phase 3a; see top PAUSE NOTE)
+
+---
+
+## PAUSE NOTE (binding, 2026-04-18)
+
+This A2b-1 scope is **PAUSED, not killed.** Phase 3a empirical comparison
+(`docs/audit/results/2026-04-18-dsr-ranking-empirical-verification.md`)
+showed that A2b-2 (DSR ranking) is `RANKING_MATERIAL` (4-5 of 6 deployed
+lanes flip under DSR ranking) while A2b-1 is `BUG_COSMETIC` (0 SIGN_FLIP,
+0 FILT_EMPTY after fix). `session_regime_expr` only feeds the binary
+DEPLOY/PAUSE gate; it does not influence ranking. A2b-2 changes selection
+directly, so the EV reordering puts A2b-2 ahead.
+
+**A2b-1 returns to active when any of:**
+- A2b-2 ships and SR monitor signals a regime flip on a deployed lane
+- A future rebalance produces a `SIGN_FLIP` between UNFILT and FILT_LANE on a profile-eligible lane (Phase 2a re-run)
+- User requests A2b-1 promoted ahead of A2b-3 for any reason
+
+**Reference for the pivot decision:**
+- Roadmap addendum: `docs/plans/2026-04-18-multi-phase-audit-roadmap.md` § Addendum 2026-04-18 — empirical-driven pivot
+- Active phase: `docs/audit/hypotheses/2026-04-18-a2b-2-dsr-ranking-preregistered.md` (next)
+
+The body below is preserved verbatim as the locked scope for when A2b-1 returns to active.
+
+---
 - parent scope: `docs/audit/hypotheses/2026-04-18-a2b-portfolio-optimization-audit-scope.md`
 - upstream empirical: `docs/audit/results/2026-04-18-regime-gate-empirical-verification.md` (Phase 2a)
 - upstream adversarial: `docs/audit/results/2026-04-18-portfolio-audit-adversarial-reopen.md`

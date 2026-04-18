@@ -1,9 +1,36 @@
 # Multi-Phase Audit Roadmap — Post-Adversarial-Audit
 
 **Date:** 2026-04-18
+**Last revised:** 2026-04-18 (Phase 2a + Phase 3a empirical addendum — see top section)
 **Authority:** supersedes the single-action framing in `docs/audit/results/2026-04-18-portfolio-audit-adversarial-reopen.md` § Next actions
 **Scope:** all remaining work surfaced by the adversarial portfolio audit + A2b Stage-1 scope doc, sequenced with dependencies + parallel tracks + kill criteria
-**Method:** 6 design iterations before commit
+**Method:** 6 design iterations before commit; revised after empirical Phase 2a/3a evidence
+
+---
+
+## Addendum 2026-04-18 — empirical-driven pivot (BINDING)
+
+The original main-line ordering (A2a → A2b-1 → A2b-2 → A2b-3 → Q1) was committed BEFORE empirical precursor audits ran. Phase 2a (regime gate) and Phase 3a (DSR ranking) are now complete and the evidence reorders priority:
+
+| Phase | Empirical verdict | Source MD | Reorder |
+|---|---|---|---|
+| A2a (Phase 1) | 0 TRUE_UNLOCK — allocator gates work as designed | `docs/audit/results/2026-04-18-allocator-rho-audit-excluded-lanes.md` | DONE |
+| A2b-1 (Phase 2a) | **BUG_COSMETIC** — 0 SIGN_FLIP, 0 FILT_EMPTY (after fix `99d59aa3`). `session_regime_expr` only feeds binary DEPLOY/PAUSE; no ranking impact. | `docs/audit/results/2026-04-18-regime-gate-empirical-verification.md` | **PAUSED** — defensive only; revisit after A2b-2 |
+| A2b-2 (Phase 3a) | **RANKING_MATERIAL** — DSR rank flips 7 selection slots vs raw rank; combo (annual_r × DSR) flips 6. False Strategy Theorem applies to current ranking. | `docs/audit/results/2026-04-18-dsr-ranking-empirical-verification.md` | **PROMOTED to active main-line phase** |
+
+**New main-line order (binding):**
+
+```
+A2a (DONE) → A2b-2 (active, Stage-1 scope next) → A2b-3 → A2b-1 (deferred, possibly as FILT_LANE) → Q1
+```
+
+**Reasoning:**
+- A2b-1 BUG_COSMETIC → 0 EV on current rebalance under any variant. Defensive-only patch.
+- A2b-2 RANKING_MATERIAL → 4-5 of 6 deployed lanes would change under DSR; this is where ranking-related EV actually lives.
+- A2b-3 (sizing) is legitimately downstream of ranking — apply Half-Kelly to the lanes the ranker actually selects, not to lanes that may swap out.
+- A2b-1 deferral is "PAUSED not killed" — if A2b-2 lands and SR monitor signals a regime flip on a deployed lane, A2b-1 (likely as `FILT_LANE`) returns to active.
+
+This addendum supersedes any conflict in the main-line table below; the table below is preserved as-original for audit trail.
 
 **Principle:** each phase gets its OWN full plan-iterate-design cycle. This roadmap is the gate, not the execution. It orders the phases and defines dependencies; it does NOT prescribe implementation details for any single phase.
 
