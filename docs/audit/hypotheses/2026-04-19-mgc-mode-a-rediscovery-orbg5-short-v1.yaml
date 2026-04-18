@@ -1,0 +1,255 @@
+version: 1
+status: DRAFT
+date: 2026-04-19
+slug: mgc-mode-a-rediscovery-orbg5-short-v1
+title: "MGC Mode A rediscovery — ORB_G5 size filter × 4 sessions SHORT RR1.5 (K=4)"
+owner: claude
+parent_spec: null
+sibling_spec: "docs/audit/hypotheses/2026-04-19-mgc-mode-a-rediscovery-orbg5-v1.yaml (long-direction sibling)"
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/prompts/prereg-writer-prompt.md"
+  notes:
+    - "Pathway A — Chordia t >= 3.00 with theory (Fitschen Ch 3 p.41 commodity intraday trend-follow, symmetric to long sibling)."
+    - "Canonical filter delegation via research.filter_utils.filter_signal. ORB_G5 resolves to OrbSizeQuintileFilter."
+    - "Mode A: trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01)."
+    - "Scope chosen symmetric to the long sibling (same 4 sessions) to avoid post-hoc session-picking. No cell was selected based on positive short-baseline after data inspection."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: null
+  committed_required_before_run: true
+
+scope:
+  instruments:
+    - id: MGC
+      source: "pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS"
+      verification: "MGC is in ACTIVE_ORB_INSTRUMENTS. Native data starts 2022-06-13 — 3.5 years IS."
+  sessions:
+    - LONDON_METALS
+    - COMEX_SETTLE
+    - US_DATA_1000
+    - EUROPE_FLOW
+  session_rationale: |
+    Same 4 sessions as long sibling (2026-04-19-mgc-mode-a-rediscovery-orbg5-v1).
+    Choice locked to sibling scope, NOT re-selected based on short-baseline inspection.
+    This eliminates the hazard of 'picked the sessions where short looked best' post-hoc.
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  direction: short
+  rr_target: 1.5
+  filter_type: ORB_G5
+  filter_source: "trading_app.config.ALL_FILTERS['ORB_G5']"
+  filter_reference_code: "trading_app/config.py (OrbSizeQuintileFilter)"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+    effective_coverage: "2022-06-13 through 2025-12-31 (~3.5 years; MGC native)"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM (descriptive only; never used to select or tune)"
+    policy: "Mode A sacred."
+  tuning_against_oos: false
+
+feature_definition:
+  feature_name: ORB_G5
+  canonical_source_of_truth: "trading_app.config.ALL_FILTERS['ORB_G5']"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'ORB_G5', orb_label)"
+  trade_time_knowable: true
+  first_complete_time: "ORB window close."
+  lookahead_check: "PASS — no post-ORB-close data used."
+  rule_category: "§ 6.1 safe (always trade-time-knowable)"
+
+primary_schema:
+  family_cells:
+    - id: H1_LONDON_METALS
+      instrument: MGC
+      session: LONDON_METALS
+    - id: H2_COMEX_SETTLE
+      instrument: MGC
+      session: COMEX_SETTLE
+    - id: H3_US_DATA_1000
+      instrument: MGC
+      session: US_DATA_1000
+    - id: H4_EUROPE_FLOW
+      instrument: MGC
+      session: EUROPE_FLOW
+  k_family: 4
+  k_global: 4
+  k_lane: 4
+  k_session: 4
+  k_instrument: 4
+  primary_promotion_gate: "K_family BH-FDR q < 0.05"
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  note: |
+    Closes the short-direction audit gap left by Phase 6 (long-only).
+    Sibling spec family-killed (commit a8208674). This pre-reg tests
+    whether MGC has a short-direction edge not tested in Phase 6.
+    Pre-scan baselines (2026-04-19, Mode A IS, ORB_G5 short on rr=1.5):
+      LONDON_METALS N=32 ExpR+0.157 approx_t 0.77
+      COMEX_SETTLE  N=20 ExpR-0.078 approx_t -0.31
+      US_DATA_1000  N=123 ExpR+0.036 approx_t 0.35
+      EUROPE_FLOW   N=29 ExpR+0.115 approx_t 0.54
+    All approx_t well below Chordia 3.00. Pre-reg explicitly anticipates
+    KILL; writing it is the honest audit step, not an over-optimistic
+    hypothesis. Symmetric session scope with long sibling eliminates
+    post-hoc cherry-pick hazard.
+
+hypotheses:
+  - id: H1_LONDON_METALS
+    type: primary
+    theory_citation:
+      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      extract: "Table 3.9 (p.41) commodity intraday trend-follow. Symmetric to long direction — Fitschen framework grounds both sides."
+    statement: "MGC LONDON_METALS O5 RR1.5 short ORB-G5 breakouts produce positive Mode A IS ExpR materially above the unfiltered baseline (-0.155)."
+    pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
+    gate:
+      - "bh_pass_family (q_family < 0.05)"
+      - "abs(t_IS) >= 3.00"
+      - "N_IS_on >= 100"
+      - "years_positive_IS >= 3 (absolute over 4 full years 2022-2025; N<10 years excluded)"
+      - "bootstrap_p < 0.10 (moving-block centered-H0, block=5, B=10000)"
+      - "ExpR_on_IS > 0"
+    counted_against_trial_budget: true
+  - id: H2_COMEX_SETTLE
+    type: primary
+    theory_citation:
+      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      extract: "Same as H1."
+    statement: "Same as H1 for COMEX_SETTLE. Unfiltered baseline -0.195."
+    pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
+    gate:
+      - "bh_pass_family (q_family < 0.05)"
+      - "abs(t_IS) >= 3.00"
+      - "N_IS_on >= 100"
+      - "years_positive_IS >= 3"
+      - "bootstrap_p < 0.10"
+      - "ExpR_on_IS > 0"
+    counted_against_trial_budget: true
+  - id: H3_US_DATA_1000
+    type: primary
+    theory_citation:
+      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      extract: "Same as H1."
+    statement: "Same as H1 for US_DATA_1000. Unfiltered baseline -0.049."
+    pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
+    gate:
+      - "bh_pass_family (q_family < 0.05)"
+      - "abs(t_IS) >= 3.00"
+      - "N_IS_on >= 100"
+      - "years_positive_IS >= 3"
+      - "bootstrap_p < 0.10"
+      - "ExpR_on_IS > 0"
+    counted_against_trial_budget: true
+  - id: H4_EUROPE_FLOW
+    type: primary
+    theory_citation:
+      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      extract: "Same as H1."
+    statement: "Same as H1 for EUROPE_FLOW. Unfiltered baseline -0.138."
+    pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
+    gate:
+      - "bh_pass_family (q_family < 0.05)"
+      - "abs(t_IS) >= 3.00"
+      - "N_IS_on >= 100"
+      - "years_positive_IS >= 3"
+      - "bootstrap_p < 0.10"
+      - "ExpR_on_IS > 0"
+    counted_against_trial_budget: true
+
+baseline:
+  mode_a_is_canonical:
+    MGC_LONDON_METALS_O5_RR1.5_short_unfiltered: {N: 448, ExpR: -0.1548}
+    MGC_COMEX_SETTLE_O5_RR1.5_short_unfiltered: {N: 416, ExpR: -0.1948}
+    MGC_US_DATA_1000_O5_RR1.5_short_unfiltered: {N: 384, ExpR: -0.0490}
+    MGC_EUROPE_FLOW_O5_RR1.5_short_unfiltered: {N: 424, ExpR: -0.1375}
+    MGC_LONDON_METALS_O5_RR1.5_short_ORB_G5_on: {N: 32, ExpR_on: 0.1568, Delta_IS: 0.3116, approx_t: 0.77}
+    MGC_COMEX_SETTLE_O5_RR1.5_short_ORB_G5_on: {N: 20, ExpR_on: -0.0781, Delta_IS: 0.1167, approx_t: -0.31}
+    MGC_US_DATA_1000_O5_RR1.5_short_ORB_G5_on: {N: 123, ExpR_on: 0.0359, Delta_IS: 0.0849, approx_t: 0.35}
+    MGC_EUROPE_FLOW_O5_RR1.5_short_ORB_G5_on: {N: 29, ExpR_on: 0.1147, Delta_IS: 0.2522, approx_t: 0.54}
+  computation_date: 2026-04-19
+
+trial_budget:
+  primary_selection_trials: 4
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2"
+    N_trials: 4
+    within_cap: true
+
+kill_criteria:
+  - id: K1
+    metric: "Number of H1-H4 that pass all 6 gate clauses"
+    threshold: 0
+    action: "PERMANENT KILL — MGC ORB_G5 short on 4 sessions does not yield Pathway A edge. No re-runs."
+  - id: K2
+    metric: "Baseline sanity smoke-test"
+    threshold: 0.001
+    action: "SMOKE FAIL — harness-implementation discrepancy."
+  - id: K3
+    metric: "Any cell tautology/extreme_fire/arithmetic_only"
+    threshold: 1
+    action: "FLAG — exclude from survivors per RULE 8."
+
+decision_rule:
+  continue_if: "At least 1 of H1-H4 passes all 6 gate clauses AND no K2 smoke fail AND cell not K3-flagged."
+  park_if: "At least 1 cell passes BH-FDR family but fails EXACTLY ONE of {bootstrap_p, years_positive} with N_IS_on >= 100."
+  kill_if: "K1 fires OR K2 smoke fail."
+
+methodology_rules_applied:
+  - rule: "backtesting-methodology.md RULE 1 — look-ahead"
+    application: "ORB_G5 is trade-time-knowable at entry by construction."
+  - rule: "backtesting-methodology.md RULE 3 — IS/OOS discipline"
+    application: "Strict Mode A IS."
+  - rule: "backtesting-methodology.md RULE 4 — multi-framing BH-FDR"
+    application: "K_family = K_global = 4."
+  - rule: "research-truth-protocol.md § Canonical filter delegation"
+    application: "filter_signal applied canonically."
+  - rule: "prereg-writer-prompt.md § Pathway A filter-mechanism specificity"
+    application: "Within-class refinement. Fitschen grounds class; ORB_G5 refines size."
+
+outputs_required_after_run:
+  - "Per-cell N_on_IS, ExpR_on_IS, WR_on_IS, std_on_IS, t_IS, raw_p_IS."
+  - "Per-cell bootstrap_p (moving-block, block=5, B=10000, seed=42)."
+  - "Per-cell T0 tautology corr against orb_size, atr_20, overnight_range."
+  - "Per-cell fire_rate, extreme_fire flag, arithmetic_only flag."
+  - "BH-FDR q_family per cell."
+  - "Per-year breakdown 2022-2025."
+  - "OOS descriptive stats — NOT used to select."
+  - "Result doc: docs/audit/results/2026-04-19-mgc-mode-a-rediscovery-orbg5-short-v1-scan.md"
+
+execution_gate:
+  allowed_now:
+    - "Stamp commit_sha, transition to LOCKED in follow-up commit."
+    - "Run the scan AFTER commit_sha stamped."
+  forbidden_now:
+    - "Running before commit_sha stamped."
+    - "Modifying any gate threshold after first run."
+    - "Widening family post-run."
+
+blast_radius:
+  upstream_docs_referenced:
+    - "Sibling long spec (2026-04-19-mgc-mode-a-rediscovery-orbg5-v1.yaml)"
+  downstream_docs_created:
+    - "docs/audit/results/2026-04-19-mgc-mode-a-rediscovery-orbg5-short-v1-scan.md (on run)"
+  production_code_touched: "NONE."
+  db_writes: "NONE. Read-only scan."
+  gold_db_read_only: true
+
+not_done_by_this_pre_reg:
+  - "Does NOT test GC proxy extension."
+  - "Does NOT test other filter classes."
+  - "Does NOT test RR=1.0 or 2.0."
+  - "Does NOT write to validated_setups or experimental_strategies."
