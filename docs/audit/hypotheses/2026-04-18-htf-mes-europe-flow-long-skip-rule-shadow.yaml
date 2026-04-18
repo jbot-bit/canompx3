@@ -3,7 +3,8 @@ metadata:
   slug: 2026-04-18-htf-mes-europe-flow-long-skip-rule-shadow
   owner: canompx3
   created_at: 2026-04-18
-  status: DRAFT  # prereg-writer gate self-review required before LOCKED
+  status: LOCKED  # locked 2026-04-18 after v3 audit hardening + recorder + empty ledger
+                  # committed_sha placeholder TO_FILL_AFTER_COMMIT per research-truth-protocol §2a
   testing_mode: research_only_signal_shadow
   pathway: A                          # no local Pathway-A-qualifying extract for level-fade
   supersedes: none
