@@ -1,9 +1,10 @@
 # A2b-2 — DSR ranking patch — scope (Stage-1)
 
 - phase: A2b-2 / Phase 3 of `docs/plans/2026-04-18-multi-phase-audit-roadmap.md`
-- status: **SCOPE — awaiting user approval before Stage-2 implementation**
+- status: **SCOPE — Shape E PICKED (see §11 update); Stage-2 awaits final user OK**
 - author: audit/a2b-1-regime-gate-phase2 (branch retained for thread continuity; A2b-1 paused)
 - created: 2026-04-18 (post Phase 3a empirical, post A2b-1 PAUSED pivot)
+- shape picked: 2026-04-18 (post Phase 3b + final code-review pass; see §11)
 - upstream empirical: `docs/audit/results/2026-04-18-dsr-ranking-empirical-verification.md`
 - parent scope: `docs/audit/hypotheses/2026-04-18-a2b-portfolio-optimization-audit-scope.md`
 - pivot rationale: `docs/plans/2026-04-18-multi-phase-audit-roadmap.md` § Addendum 2026-04-18
@@ -183,16 +184,74 @@ Honest re-check after Phase 3a evidence:
 
 Conclusion: A2b-2 is the right next phase given Phase 3a's RANKING_MATERIAL verdict, with Shape A and Phase 3b prerequisite as the disciplined patch shape.
 
-## 11. User approval gate
+## 11. User approval gate — UPDATED 2026-04-18 post Phase 3b + final code-review
 
-**Stage-2 (implementation) holds until user picks one (or proposes a fourth shape):**
+### History of options
 
-A. **Proceed with Shape A (annual_r × DSR + floor)**, run Phase 3b first per K1, then Stage-2.
-B. **Defer A2b-2** — skip ahead to A2b-3 (Half-Kelly sizing); revisit later. (Honest tradeoff: A2b-3 sizing on the wrong-selected lanes is lower EV than fixing selection first.)
-C. **Promote Shape B (DSR-only)** — strictest Bailey-LdP interpretation; requires explicit doctrine update declaring DSR primary objective.
-D. **Promote Shape C (raw + DSR floor gate)** — minimum-disruption variant; ranks unchanged, lanes only filtered out by DSR floor.
+The original gate offered four shapes:
 
-If the user picks A and Phase 3b confirms, Stage-2 begins. If Phase 3b reverses the verdict, this scope is rewritten before any code change.
+A. **annual_r × DSR + floor** (multiplicative discount; recommended at scope time)
+B. **DSR-only ranking** (strictest Bailey-LdP)
+C. **raw + DSR floor gate** (binary filter)
+D. **defer A2b-2 entirely** (skip to A2b-3 Half-Kelly)
+
+Phase 3b satisfied the K1 binding prerequisite (Mode-A direction confirmed; selection still flips). The final code-review pass surfaced an honesty issue with the verdict label ("RANKING_MATERIAL_PRESERVED" → "PRESERVED-WITH-PARTIAL-AGREEMENT", 86%/67% overlap with Phase 3a). On reflection, the four-shape menu had a hidden assumption: that the empirical evidence forces a behavioral patch. It does not.
+
+### Re-analysis: what the empirical state actually proves
+
+The Phase 3a/3b finding (4-of-6 deployed lanes have DSR_canonical < 0.013) is **consistent with two opposing interpretations**:
+
+1. **"DSR is right"** — current ranker selects noise lanes; expect mean reversion; ship Shape A or B to redirect.
+2. **"DSR is wrong here"** — N_eff=21 (edge_families) overstates true selection bias OR var_sr is computed across noisy strategies that don't reflect the actual trial space; current ranker is fine; ship nothing.
+
+Neither interpretation is fast-disambiguatable from the current data. Forward observation is the only adjudicator. Shapes A/B commit to interpretation #1 prematurely; Shape D wastes the audit work; Shape C is incoherent across its calibration range (default floor=0.05 catastrophically filters 4-5 of 6 deployed lanes since most have DSR < 0.05; low floor ≈ no-op).
+
+### Shape E (NEW) — diagnostic-only DSR exposure — PICKED
+
+- Add `LaneScore.dsr_score`, `LaneScore.sr0_at_rebalance` fields, populate via canonical `compute_sr0`/`compute_dsr` in `compute_lane_scores`.
+- Surface `dsr_score`, `sr0`, `n_eff_at_rebalance`, `var_sr_em` per lane in `lane_allocation.json`.
+- `_effective_annual_r` UNCHANGED — selection and live deployment unchanged.
+- `regime-check` skill output gains DSR column next to `trailing_expr` (small skill edit, not a production-code change).
+
+**Why Shape E is the institutionally correct call:**
+
+1. Honors `dsr.py` line 35 ("DSR is INFORMATIONAL, not a hard gate") literally — DSR becomes visible without becoming an objective.
+2. Zero deployment risk — current 6 deployed lanes unchanged; no first-rebalance gate (K6) required because no flips can happen.
+3. Makes the Phase 3a/3b signal LIVE — every future rebalance records DSR alongside selection, building longitudinal evidence to disambiguate interpretation #1 vs #2.
+4. Preserves optionality — if 6+ months of forward data shows low-DSR deployed lanes underperforming high-DSR alternatives, Shape A becomes empirically justified at that point (not before).
+5. Smallest patch that uses the audit work — ~30 lines of production code + 2 tests vs Shape A's ~80 lines + 6 tests + binding K1/K6 gates. MIN_DSR_FLOOR magic constant is removed from the hot path entirely (not needed in Shape E).
+6. Addresses the binary "DSR-right vs DSR-wrong" epistemic state honestly: instrument it; let forward data decide.
+
+**Honest tradeoff for Shape E:**
+- Doesn't act on Phase 3a/3b's directional finding NOW. Defers the Shape A/B strategic decision until forward evidence accumulates.
+- Could be characterized as kicking the can. Counter: Shape E IS a decision — to act on instrumentation rather than theory. The wrong move would be ignoring the audit (Shape D) or committing to one theory without evidence (Shapes A/B).
+
+### Shape E Stage-2 specification (smaller than original A/B/C scope)
+
+Files in scope (`scope_lock` for Stage-2):
+- `trading_app/lane_allocator.py` — add 2 fields to `LaneScore`, populate in `compute_lane_scores`, write to `save_allocation` JSON output. NO change to `_effective_annual_r`. NO change to `build_allocation`.
+- `tests/test_trading_app/test_lane_allocator.py` — 2 new tests:
+  - `test_dsr_score_populated_in_lane_score` — `compute_lane_scores` produces `LaneScore.dsr_score` in [0, 1] for every scored lane via canonical compute.
+  - `test_save_allocation_writes_dsr_diagnostic_fields` — `lane_allocation.json` post-patch contains `dsr_score`, `sr0`, `n_eff_at_rebalance`, `var_sr_em` per lane.
+- `.claude/skills/regime-check/SKILL.md` — add DSR column to output template (skill content edit, no Python).
+
+Out of scope (deferred until forward data justifies):
+- Modifying `_effective_annual_r` — that's a future Shape A patch IF Shape E's instrumentation generates evidence
+- DSR drift check (originally K6 of Shape A) — moot under Shape E (no behavioral change)
+- First-rebalance interactive flip-confirmation gate — moot under Shape E (no flips)
+- N_eff sensitivity policy — diagnostic version records DSR at multiple bands in `lane_allocation.json`; the policy choice is deferred
+
+Kill criteria for Shape E Stage-2 (4 K, narrower than original A's 6):
+- K1: Existing test regression (lane_allocator + drift check must remain green)
+- K2: Phase 1 reproduction must still match `lane_allocation.json` (with PASS_TIED tolerance)
+- K3: Backward compat — `LaneScore` field additions must default to `None` so any external code that constructs `LaneScore` directly doesn't break
+- K4: New JSON fields must not break `prop_profiles.AccountProfile.consume(lane_allocation.json)` consumers (verify via test or by running the consumer post-patch)
+
+### Final user gate
+
+**Stage-2 implementation begins ONLY after explicit user OK on this Shape E spec.**
+
+If user wants Shape A/B/C/D instead: this scope is rewritten and the original options return to play. If user accepts Shape E: Stage-2 work begins with the 30-line patch + 2 tests + skill edit.
 
 ## 12. Provenance
 
