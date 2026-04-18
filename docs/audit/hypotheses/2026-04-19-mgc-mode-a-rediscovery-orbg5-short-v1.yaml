@@ -1,5 +1,5 @@
 version: 1
-status: DRAFT
+status: LOCKED
 date: 2026-04-19
 slug: mgc-mode-a-rediscovery-orbg5-short-v1
 title: "MGC Mode A rediscovery — ORB_G5 size filter × 4 sessions SHORT RR1.5 (K=4)"
@@ -24,7 +24,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: null
+  commit_sha: "4ac0b688"
   committed_required_before_run: true
 
 scope:
