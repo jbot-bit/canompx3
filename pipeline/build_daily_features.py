@@ -578,6 +578,135 @@ def _prior_rank_pct(
     return round(rank / len(sorted_prior) * 100, 2)
 
 
+def _htf_week_key(td: date) -> date:
+    """Monday-anchor week key for a trading_day date.
+
+    Matches DuckDB DATE_TRUNC('week', trading_day) semantics: Monday is the
+    anchor; Sunday (weekday()==6) binds to the ENDING Mon-Sun week (anchor
+    Monday is 6 days prior). Verified empirically against DuckDB 2026-04-18.
+    """
+    return td - timedelta(days=td.weekday())
+
+
+def _htf_prior_month_key(td: date) -> date:
+    """First-of-prior-calendar-month key for a trading_day date."""
+    cur_month_first = td.replace(day=1)
+    if cur_month_first.month == 1:
+        return date(cur_month_first.year - 1, 12, 1)
+    return date(cur_month_first.year, cur_month_first.month - 1, 1)
+
+
+def _apply_htf_level_fields(rows: list[dict]) -> None:
+    """Populate prev_week_* and prev_month_* HTF level fields on every row.
+
+    Canonical single source of truth for HTF level aggregation. Called by
+    build_daily_features() and by scripts/backfill_htf_levels.py.
+
+    Semantics:
+      - Monday-anchor week via ``_htf_week_key`` (DATE_TRUNC('week') equivalent).
+      - Calendar-month anchor via ``.replace(day=1)``.
+      - Fields reference only FULLY COMPLETED prior period; first N rows per
+        history produce NULL values until their prior period closes.
+      - Running per-key aggregate dicts built by walking ``rows`` in order
+        (``rows`` must already be sorted by ``trading_day`` ascending, which
+        ``build_daily_features()`` guarantees).
+      - No look-ahead: aggregates contain only rows walked BEFORE the current
+        index on each iteration.
+      - Pure structural aggregation from ``daily_open/high/low/close`` already
+        populated on each row. Price-safe (no volume input).
+
+    Mutates ``rows`` in place. Any row missing ``daily_high`` or ``daily_low``
+    is skipped for aggregate contribution (keeps the running aggregate honest).
+    """
+    week_aggs: dict[date, dict] = {}
+    month_aggs: dict[date, dict] = {}
+
+    for row in rows:
+        td = row.get("trading_day")
+        if not isinstance(td, date):
+            continue
+
+        cur_week = _htf_week_key(td)
+        prior_week = cur_week - timedelta(days=7)
+        cur_month = td.replace(day=1)
+        prior_month = _htf_prior_month_key(td)
+
+        # Initialise to None so repeated calls don't leak stale values.
+        row["prev_week_high"] = None
+        row["prev_week_low"] = None
+        row["prev_week_open"] = None
+        row["prev_week_close"] = None
+        row["prev_week_range"] = None
+        row["prev_week_mid"] = None
+        row["prev_month_high"] = None
+        row["prev_month_low"] = None
+        row["prev_month_open"] = None
+        row["prev_month_close"] = None
+        row["prev_month_range"] = None
+        row["prev_month_mid"] = None
+
+        wk = week_aggs.get(prior_week)
+        if wk is not None and wk.get("high") is not None and wk.get("low") is not None:
+            row["prev_week_high"] = wk["high"]
+            row["prev_week_low"] = wk["low"]
+            row["prev_week_open"] = wk.get("open")
+            row["prev_week_close"] = wk.get("close")
+            row["prev_week_range"] = round(wk["high"] - wk["low"], 4)
+            row["prev_week_mid"] = round((wk["high"] + wk["low"]) / 2.0, 4)
+
+        mo = month_aggs.get(prior_month)
+        if mo is not None and mo.get("high") is not None and mo.get("low") is not None:
+            row["prev_month_high"] = mo["high"]
+            row["prev_month_low"] = mo["low"]
+            row["prev_month_open"] = mo.get("open")
+            row["prev_month_close"] = mo.get("close")
+            row["prev_month_range"] = round(mo["high"] - mo["low"], 4)
+            row["prev_month_mid"] = round((mo["high"] + mo["low"]) / 2.0, 4)
+
+        today_open = row.get("daily_open")
+        today_high = row.get("daily_high")
+        today_low = row.get("daily_low")
+        today_close = row.get("daily_close")
+        if today_high is None or today_low is None:
+            continue
+
+        if cur_week not in week_aggs:
+            week_aggs[cur_week] = {
+                "open": today_open,
+                "high": today_high,
+                "low": today_low,
+                "close": today_close,
+            }
+        else:
+            wk_agg = week_aggs[cur_week]
+            if wk_agg.get("open") is None and today_open is not None:
+                wk_agg["open"] = today_open
+            if today_high > wk_agg["high"]:
+                wk_agg["high"] = today_high
+            if today_low < wk_agg["low"]:
+                wk_agg["low"] = today_low
+            if today_close is not None:
+                wk_agg["close"] = today_close
+
+        if cur_month not in month_aggs:
+            month_aggs[cur_month] = {
+                "open": today_open,
+                "high": today_high,
+                "low": today_low,
+                "close": today_close,
+            }
+        else:
+            mo_agg = month_aggs[cur_month]
+            if mo_agg.get("open") is None and today_open is not None:
+                mo_agg["open"] = today_open
+            if today_high > mo_agg["high"]:
+                mo_agg["high"] = today_high
+            if today_low < mo_agg["low"]:
+                mo_agg["low"] = today_low
+            if today_close is not None:
+                mo_agg["close"] = today_close
+
+
 def compute_garch_forecast(daily_closes: list[float], min_obs: int = 252) -> float | None:
     """
     Fit GARCH(1,1) on trailing daily close-to-close log returns.
@@ -919,6 +1048,20 @@ def build_features_for_day(
     row["overnight_took_pdh"] = None
     row["overnight_took_pdl"] = None
     row["day_type"] = None
+
+    # HTF prev-week / prev-month level fields (post-pass: Monday-anchor + calendar month)
+    row["prev_week_high"] = None
+    row["prev_week_low"] = None
+    row["prev_week_open"] = None
+    row["prev_week_close"] = None
+    row["prev_week_range"] = None
+    row["prev_week_mid"] = None
+    row["prev_month_high"] = None
+    row["prev_month_low"] = None
+    row["prev_month_open"] = None
+    row["prev_month_close"] = None
+    row["prev_month_range"] = None
+    row["prev_month_mid"] = None
 
     # Module 4: Session stats
     session_stats = compute_session_stats(bars_df, trading_day)
@@ -1320,6 +1463,11 @@ def build_daily_features(
             rows[i].get("daily_close"),
             rows[i].get("atr_20"),
         )
+
+    # Post-pass: HTF prev-week / prev-month level aggregates.
+    # Single source of truth: _apply_htf_level_fields() — also used by the
+    # one-shot backfill at scripts/backfill_htf_levels.py.
+    _apply_htf_level_fields(rows)
 
     # Post-pass: relative volume per session.
     #

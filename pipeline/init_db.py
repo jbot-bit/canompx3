@@ -296,6 +296,27 @@ CREATE TABLE IF NOT EXISTS daily_features (
     prev_day_direction  TEXT,
     gap_type            TEXT,
 
+    -- Prior-week HTF level fields (post-pass: Monday-anchor via DATE_TRUNC('week'))
+    -- Aggregated over fully-closed prior Mon-Sun calendar week (Sunday trading_day
+    -- rows group with the ENDING Mon-Sun week per DuckDB DATE_TRUNC semantics).
+    -- NULL until a fully-completed prior week exists. Price-safe (no volume input).
+    prev_week_high      DOUBLE,
+    prev_week_low       DOUBLE,
+    prev_week_open      DOUBLE,
+    prev_week_close     DOUBLE,
+    prev_week_range     DOUBLE,
+    prev_week_mid       DOUBLE,
+
+    -- Prior-month HTF level fields (post-pass: calendar-month anchor).
+    -- Aggregated over fully-closed prior calendar month. NULL until prior month exists.
+    -- Price-safe (no volume input).
+    prev_month_high     DOUBLE,
+    prev_month_low      DOUBLE,
+    prev_month_open     DOUBLE,
+    prev_month_close    DOUBLE,
+    prev_month_range    DOUBLE,
+    prev_month_mid      DOUBLE,
+
     -- Pre-session activity (same-day: Asia window + pre-1000 window)
     overnight_high           DOUBLE,
     overnight_low            DOUBLE,
@@ -552,6 +573,27 @@ def init_db(db_path: Path, force: bool = False):
             logger.info("  Migration: added pit_range_atr column to daily_features")
         except duckdb.CatalogException:
             pass  # column already exists
+
+        # Migration: add HTF prev-week / prev-month level columns (Apr 2026 — Path A)
+        for col in [
+            "prev_week_high",
+            "prev_week_low",
+            "prev_week_open",
+            "prev_week_close",
+            "prev_week_range",
+            "prev_week_mid",
+            "prev_month_high",
+            "prev_month_low",
+            "prev_month_open",
+            "prev_month_close",
+            "prev_month_range",
+            "prev_month_mid",
+        ]:
+            try:
+                con.execute(f"ALTER TABLE daily_features ADD COLUMN {col} DOUBLE")
+                logger.info(f"  Migration: added {col} column to daily_features")
+            except duckdb.CatalogException:
+                pass  # column already exists
 
         con.execute(PROSPECTIVE_SIGNALS_SCHEMA)
         logger.info("  prospective_signals: created (or already exists)")

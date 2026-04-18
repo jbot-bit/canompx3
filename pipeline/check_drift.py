@@ -3012,6 +3012,114 @@ def check_daily_features_row_integrity(con=None) -> list[str]:
     return violations
 
 
+def check_htf_levels_integrity(con=None) -> list[str]:
+    """Verify prev_week_* and prev_month_* agree with canonical SQL aggregation.
+
+    Canonical semantics: Monday-anchor via DuckDB DATE_TRUNC('week', ...),
+    calendar-month anchor via DATE_TRUNC('month', ...). Prior period only.
+
+    For every row where prev_week_high is NOT NULL, confirms:
+      stored prev_week_high == MAX(daily_high) over prior Mon-Sun week
+      stored prev_week_low  == MIN(daily_low)  over prior Mon-Sun week
+      stored prev_month_high == MAX(daily_high) over prior calendar month
+      stored prev_month_low  == MIN(daily_low)  over prior calendar month
+
+    Skips rows where the prior period is absent (first rows of each instrument's
+    history are legitimately NULL). Divergence raises a violation.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
+        bad = con.execute(
+            f"""
+            WITH df AS (
+                SELECT symbol,
+                       trading_day,
+                       daily_high,
+                       daily_low,
+                       DATE_TRUNC('week', trading_day)::DATE AS week_key,
+                       DATE_TRUNC('month', trading_day)::DATE AS month_key,
+                       prev_week_high,
+                       prev_week_low,
+                       prev_month_high,
+                       prev_month_low
+                FROM daily_features
+                WHERE symbol IN ({active_syms})
+                  AND orb_minutes = 5
+            ),
+            week_aggs AS (
+                SELECT symbol,
+                       week_key,
+                       MAX(daily_high) AS wh,
+                       MIN(daily_low)  AS wl
+                FROM df
+                GROUP BY symbol, week_key
+            ),
+            month_aggs AS (
+                SELECT symbol,
+                       month_key,
+                       MAX(daily_high) AS mh,
+                       MIN(daily_low)  AS ml
+                FROM df
+                GROUP BY symbol, month_key
+            )
+            SELECT df.symbol,
+                   df.trading_day,
+                   df.prev_week_high, w.wh,
+                   df.prev_week_low,  w.wl,
+                   df.prev_month_high, m.mh,
+                   df.prev_month_low,  m.ml
+            FROM df
+            LEFT JOIN week_aggs w
+                   ON w.symbol = df.symbol
+                  AND w.week_key = df.week_key - INTERVAL '7 days'
+            LEFT JOIN month_aggs m
+                   ON m.symbol = df.symbol
+                  AND m.month_key = CASE
+                        WHEN EXTRACT(MONTH FROM df.month_key) = 1
+                            THEN MAKE_DATE(CAST(EXTRACT(YEAR FROM df.month_key) AS INT) - 1, 12, 1)
+                        ELSE MAKE_DATE(CAST(EXTRACT(YEAR FROM df.month_key) AS INT),
+                                       CAST(EXTRACT(MONTH FROM df.month_key) AS INT) - 1, 1)
+                  END
+            WHERE (df.prev_week_high IS NOT NULL AND w.wh IS NOT NULL
+                   AND ROUND(df.prev_week_high, 4) != ROUND(w.wh, 4))
+               OR (df.prev_week_low IS NOT NULL AND w.wl IS NOT NULL
+                   AND ROUND(df.prev_week_low, 4) != ROUND(w.wl, 4))
+               OR (df.prev_month_high IS NOT NULL AND m.mh IS NOT NULL
+                   AND ROUND(df.prev_month_high, 4) != ROUND(m.mh, 4))
+               OR (df.prev_month_low IS NOT NULL AND m.ml IS NOT NULL
+                   AND ROUND(df.prev_month_low, 4) != ROUND(m.ml, 4))
+            LIMIT 20
+            """
+        ).fetchall()
+        for row in bad:
+            sym, td = row[0], row[1]
+            violations.append(
+                f"  {sym} {td}: HTF level divergence "
+                f"(stored pwh={row[2]} / canonical={row[3]}, "
+                f"pwl={row[4]} / {row[5]}, "
+                f"pmh={row[6]} / {row[7]}, pml={row[8]} / {row[9]})"
+            )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_htf_levels_integrity: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 def check_data_continuity(con=None) -> list[str]:
     """Check #58: Warn on unexpected gaps in trading days per instrument.
 
@@ -5354,6 +5462,12 @@ CHECKS = [
     (
         "Daily features row integrity (one row per aperture per trading_day × symbol)",
         check_daily_features_row_integrity,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "HTF level fields match canonical week/month SQL aggregation",
+        check_htf_levels_integrity,
         False,
         True,
     ),  # requires_db
