@@ -1,5 +1,7 @@
 # Overnight session handover — 2026-04-19
 
+> **ADDENDUM 2026-04-19 (post-session remediation):** the "4 CRITICAL lanes flagged for immediate vote" framing used below has been **SUPERSEDED** by `docs/audit/results/2026-04-19-regime-drift-control-critical-lanes.md` (commit `9937ebf6`) and the reframed committee pack (commit `c75d7a3b`). Regime-drift control shows all 4 CRITICAL lanes track the portfolio-wide MNQ Sharpe drop (−0.41 annualized) within 0.30 — **NONE warrant retirement** on current evidence. Two of the four are actually better-than-peers. The honest retirement candidates are the 4-to-13 lanes with drops > 0.50 beyond portfolio (notably `CROSS_SGP_MOMENTUM` family, `US_DATA_1000 ORB_G5_O15`, `COST_LT12` EUROPE_FLOW). Read the reframed committee pack first; treat every "CRITICAL" mention below as "regime-stressed, hold pending environment-controlled re-evaluation." See Corrections 1-9 (commits `b91b92d9`, `5bfcc53d`, `9937ebf6`, `c75d7a3b` onward) for the post-session remediation trail.
+
 **Purpose:** complete summary of the 14-phase autonomous overnight session. 15 commits pushed. No production code touched outside `research/`; all stage-gated work deferred to design docs for user approval.
 
 **Session scope:** every finding from the prior /code-review + every item from the earlier adversarial-audit (EXECUTIVE VERDICT, PROFIT MAP, BLOCKER AUDIT, MISSED OPPORTUNITIES). No pigeonholing on any instrument or class.
