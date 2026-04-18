@@ -390,9 +390,11 @@ def evaluate_gates(cells: list[CellResult]) -> None:
         gates["bh_pass_family"] = bool(c.passes_bh_family)
         gates["abs_t_IS_ge_3"] = bool(c.t_is is not None and abs(c.t_is) >= 3.0)
         gates["N_IS_on_ge_100"] = bool(c.n_is_on >= 100)
-        gates["years_positive_ge_4_of_7"] = bool(
-            c.per_year_total > 0 and c.per_year_positive / c.per_year_total >= 4.0 / 7.0
-        )
+        # Absolute count per pre-reg spec: "years_positive_IS >= 4 out of 7
+        # full years". Corrected 2026-04-19 per code-review AI #4. Years with
+        # N<10 are excluded from per_year_positive (power floor); denominator
+        # no longer affects the gate.
+        gates["years_positive_ge_4_of_7"] = bool(c.per_year_positive >= 4)
         gates["bootstrap_p_lt_0.10"] = bool(
             c.bootstrap_p is not None and c.bootstrap_p < 0.10
         )
