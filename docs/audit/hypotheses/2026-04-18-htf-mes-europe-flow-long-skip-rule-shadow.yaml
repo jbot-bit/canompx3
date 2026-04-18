@@ -8,7 +8,7 @@ metadata:
   pathway: A                          # no local Pathway-A-qualifying extract for level-fade
   supersedes: none
   exemplar: docs/audit/hypotheses/2026-04-18-h1-mes-london-metals-signal-only-shadow.yaml
-  revision: v2                        # audit-driven rewrite of v1 draft; see audit_changelog
+  revision: v3                        # second audit pass; see audit_changelog
   depends_on:
     - docs/audit/hypotheses/2026-04-18-htf-path-a-prev-week-v1.yaml
     - docs/audit/results/2026-04-18-htf-path-a-prev-week-v1-scan.md
@@ -23,7 +23,7 @@ metadata:
     - .claude/rules/backtesting-methodology.md   # RULE 3.2 directional-only; RULE 8.1 fire-rate
     - .claude/rules/quant-audit-protocol.md      # storytelling-bias Seven Sins guard
   committed_sha: "TO_FILL_AFTER_COMMIT"
-  head_sha_at_draft: a2ee1a41
+  head_sha_at_draft: 2eb92bee         # v3 hardening commit follows
   do_not_run_discovery: true
   scope_note: >
     Residual-anomaly observational shadow for ONE lane
@@ -39,6 +39,14 @@ metadata:
     verdict acceptable at cap per RULE 3.2.
 
 audit_changelog:
+  v3 (2026-04-18, second audit — hardening pass):
+    - "FST interpolation made explicit: K=24 -> E[max SR] ~= 1.80 via log-linear between K=10 (1.5) and K=100 (2.3); observed v1 |t|=4.13 margin over null is documented as 0.3-0.7 t units"
+    - "selection-space framing made robust to both M=24 and M=48 interpretations; Chordia 3.79 exceeds Bonferroni rank-1 at both"
+    - "expected N_fire_days at cap refined to ~25 (from '~22-26') via explicit 8.6% fire rate * 290 expected fresh long-break days"
+    - "confirmatory_feasibility block added — explicitly notes that N ~= 152 is required at v1-observed effect magnitude to clear Chordia 3.79, vs N ~= 25 expected at cap; shadow is structurally a directional-only vehicle at the declared cap"
+    - "subjective_prior renamed from 'quantified_prior' (it is not literature-calibrated; honesty fix)"
+    - "single-day outlier cap labelled 'heuristic — not formally grounded in local literature'"
+    - "pre_reg_checklist extended to cover the above"
   v2 (2026-04-18, post-review):
     - "peek penalty reverted to Chordia t >= 3.79 (v1 gate of 4.5 was invented; Harvey-Liu Eq. 5 + BHY sanity-cross-check suffices)"
     - "fresh_oos_window.start moved from 2026-01-01 -> 2026-04-18 (v1 scan already looked at the earlier stub)"
@@ -56,11 +64,14 @@ edge_claim_summary: >
   On MES EUROPE_FLOW O15 E2 CB1 long trades, when the ORB break is
   direction-aligned with a prior-week-high break (`break_dir = 'long' AND
   prev_week_high IS NOT NULL AND orb_EUROPE_FLOW_high > prev_week_high`),
-  the per-fire-day mean pnl_r (averaged across RR 1.5 and RR 2.0) is
-  NEGATIVE on the v1 IS window at |t| = 4.13 / 4.04 per RR cell, raw p =
-  0.0001, q_family = 0.001. The shadow tests whether this survives on FRESH
-  OOS — trading days from 2026-04-18 onward, i.e., after the v1 scan's
-  observation moment.
+  the per-trade pnl_r was NEGATIVE on the v1 IS window with
+  |t| = 4.13 (RR 1.5) and |t| = 4.04 (RR 2.0), raw p = 0.0001 each,
+  q_family at K=24 = 0.001 each (v1 scan result doc cells #17 / #18 —
+  N_trades = 215 per RR cell, equivalent to 215 fire days). v2 tests
+  whether this survives on FRESH OOS fires (trading_day >= 2026-04-18,
+  AFTER the v1 scan's observation moment) using the per-fire-day mean
+  pnl_r across RR 1.5 and RR 2.0 as the test statistic (see
+  test_statistic block below).
 
 prior_assessment:
   mechanism_candidate: >
@@ -79,14 +90,19 @@ prior_assessment:
       source: docs/audit/results/2026-04-18-htf-path-a-prev-week-v1-scan.md (cells #19 / #20)
     - name: false_strategy_theorem_at_K_24
       finding: >
-        Per Lopez de Prado Bailey 2018 Theorem 1 (False Strategy Theorem),
-        under the null at K=24 independent strategies, E[max SR] is
-        approximately 1.8-2.0 (interpolated from FST Exhibit: K=10 -> 1.5,
-        K=100 -> 2.3). Observed |t|=4.13 on cell #17 corresponds to per-
-        trade SR ~0.28 (215 trades). Against the unsigned max null for
-        K=24, this is informative but not decisive; against the signed max
-        over K=48 possible (sign-x-cell) selections, it clears the null at
-        approximately the Chordia 3.79 level without room to spare.
+        Per Lopez de Prado Bailey 2018 Theorem 1 (False Strategy Theorem)
+        extract anchor points: K=10 -> E[max SR]=1.5, K=100 -> 2.3,
+        K=1000 -> 3.26. Log-linear interpolation in K at K=24 gives
+        E[max SR] ~= 1.5 + 0.38 * (2.3 - 1.5) = 1.80 under the null with
+        iid Gaussian tests. Observed v1 cell #17 per-trade SR = 4.13 /
+        sqrt(215) = 0.282 (annualised-equivalent differs; FST numbers are
+        per-observation SR). Selection-space framing is ambiguous:
+        conservatively K=48 (24 cells x 2 signed interpretations; sign
+        explicit), pessimistically K=24 (cells as the unit; sign baked in).
+        Bonferroni-rank-1 thresholds: at M=24, alpha=0.002 -> t ~= 3.10;
+        at M=48, alpha=0.001 -> t ~= 3.29. Chordia 3.79 exceeds both.
+        Observed v1 IS |t|=4.13 therefore clears the selection-corrected
+        null under both framings, but by only ~0.3-0.7 t units of margin.
       source: docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md:48-55
     - name: bh_fdr_expected_false_discoveries
       finding: >
@@ -106,10 +122,31 @@ prior_assessment:
         negative sign as MES, weaker, not individually significant at
         |t|<0.4. Weak directional consistency, not a signal.
       source: docs/audit/results/2026-04-18-htf-path-a-prev-week-v1-scan.md (cells #5 / #6)
-  quantified_prior: >
-    ~20-30% probability effect is genuine. Mechanism contradiction on
-    short-side + FST null-band at K=24 outweigh weak MNQ-twin support.
-    Shadow exists to cheaply update this prior one way or the other.
+  subjective_prior: >
+    Honest subjective prior ~20-30% that the effect is genuine. NOT a
+    literature-calibrated probability — it is my gut calibration weighted
+    by the three falsifying findings vs one weak-supportive finding above.
+    Stated here for transparency per quant-audit-protocol.md "bias rule"
+    (no hidden priors). Shadow exists to cheaply update this prior.
+  confirmatory_feasibility:
+    # Calibration against observed v1 effect size to assess whether the
+    # shadow can realistically clear Chordia 3.79 at fire-day sample sizes
+    # feasible within the calendar cap.
+    observed_per_trade_SR_v1_IS: 0.282
+    per_day_SR_implied: >
+      ~0.307 assuming RR 1.5 and RR 2.0 pnl correlation ~0.7 on same fire
+      day (per-day averaging reduces variance modestly; per-day-mean
+      SR ~= 1.09 * per-trade SR).
+    N_fire_days_required_at_observed_effect_for_t_ge_3p79: ~152
+    N_fire_days_expected_at_cap_2028_06_30: ~25
+    implication: >
+      Even if the v1 IS effect magnitude persists exactly on fresh OOS,
+      at N_fire_days = 25 the fresh OOS t-stat lands near 1.5 — far below
+      Chordia 3.79. Confirmatory pass would require EITHER a genuine
+      fresh-OOS effect several times larger than v1 IS (unlikely for real
+      effects) OR a cap extension well beyond 2028-06-30. The shadow is
+      realistically a directional-only observation vehicle at the declared
+      cap. See review_verdict_at_cap for the honest cap-outcome tiers.
 
 peek_contamination:
   # Explicit acknowledgement of what has and has not been observed by v1.
@@ -118,12 +155,17 @@ peek_contamination:
       observation: "v1 scan reported full IS per-cell stats; window EXHAUSTED"
     - window: "2026-01-01 -> 2026-04-18 (pre-v1-scan OOS stub)"
       observation: >
-        v1 scan at commit 93b06712 reported ExpR_on_OOS = -1.000 on this
-        cell (N_OOS_on = 1 trade at this stub). Treat this stub as peeked
+        Exactly 1 fire day (2026-02-26) with 2 trades (RR 1.5 pnl_r=-1.0;
+        RR 2.0 pnl_r=-1.0; per-day mean=-1.0). v1 scan at commit 93b06712
+        reported ExpR_on_OOS=-1.0 per RR cell. Treat this stub as PEEKED
         and EXCLUDE from the shadow's fresh-OOS gate test.
   not_yet_observed:
     - window: "2026-04-18 onward (fresh OOS)"
       role: "sole evidence window for the shadow's review gate"
+      current_state_at_draft: >
+        Zero fresh OOS fires in DB at draft (DB max MES trading_day =
+        2026-04-17). Accumulation begins with the next business day after
+        the shadow ledger is initialised.
   enforcement: >
     Review script computes N_fire_days and t-stat ONLY on fires with
     trading_day >= 2026-04-18. Any attempt to include pre-2026-04-18 OOS
@@ -132,22 +174,23 @@ peek_contamination:
 peek_penalty:
   source: docs/institutional/literature/harvey_liu_2015_backtesting.md
   framing: >
-    v1 signed-selected one cell from a family of K=24 with 2 possible
-    signs -> effective selection space M ~ 48. Harvey-Liu Eq. 5
-    (adjusted-p via p^M = 1 - (1-p)^M) and BHY sequential p-adjustment
-    both apply conceptually. The FRESH OOS test window is independent of
-    v1, so multiple-testing correction is needed only for the SELECTION of
-    this hypothesis direction, not for re-testing the same data.
+    v1 tested K=24 cells (sign baked into each cell via direction field).
+    This v2 selects one cell AND inverts its sign hypothesis. Effective
+    selection-space M depends on framing: M=24 if we count cells (pessimistic
+    — sign already fixed per cell in v1), M=48 if we count cell x signed-
+    interpretation combinations (conservative — sign is a free parameter of
+    the follow-up). Both framings are defensible; the gate is chosen to be
+    robust to both.
   chosen_gate:
     raw_p_threshold: 0.05
     chordia_t_threshold: 3.79          # Criterion 4 no-theory
     bhy_sanity_cross_check: >
-      Bonferroni-equivalent at M=48 rank 1: adjusted alpha = 0.05 / 48 =
-      0.00104. At typical N (fire_days ~20-26), this corresponds to
-      t ~ 3.4-3.6. Chordia 3.79 (raw p ~0.00015 at large df) exceeds this
-      requirement — hence Chordia 3.79 is the operative gate with
-      explicit BHY sanity headroom rather than a separately-inflated
-      t=4.5 threshold (which was invented without formal basis in v1).
+      Bonferroni-rank-1: at M=24 alpha_adj=0.05/24=0.00208 -> t~=3.10;
+      at M=48 alpha_adj=0.05/48=0.00104 -> t~=3.29 (large-df limits).
+      Chordia 3.79 (two-sided raw p ~= 0.00015 at large df) exceeds both
+      thresholds by >=0.5 t units. The additional t=4.5 threshold proposed
+      in the v1 draft had no formal basis; it is replaced with Chordia
+      3.79 + BHY sanity headroom documented here.
   not_applied:
     - name: Sharpe_haircut_Eq_5
       reason: >
@@ -271,10 +314,14 @@ review_conditions:
     - name: calendar_cap
       rule: "review_date <= 2028-06-30"
       rationale: >
-        Measured fresh OOS fire rate ~8.6% on long-break days. 26 fresh
-        months -> ~200 long-break days -> ~17-26 fire days expected. Tight.
-        At-cap verdict may be directional-only per RULE 3.2 rather than
-        confirmatory; see review_verdict_at_cap below.
+        Measured fresh OOS fire rate 8.6% on long-break days (3 fires /
+        35 long-break days in 3.5 months post-holdout). Fresh window
+        2026-04-18 -> 2028-06-30 = ~26.3 months ~= 550 trading days. At
+        the IS rate of 132 long-break-days/year (= 876/6.65), expected
+        long-break days in fresh OOS ~= 290. At 8.6% fire rate,
+        expected fresh fire days ~= 25. This is BELOW the N=30
+        confirmatory floor; at-cap verdict is expected to be directional-
+        only per RULE 3.2. See review_verdict_at_cap below.
   review_method: one-off single-use-fresh-OOS test; no repeated looking
   review_artifacts:
     - docs/audit/results/YYYY-MM-DD-htf-mes-europe-flow-long-skip-rule-shadow-review.md
@@ -298,7 +345,7 @@ review_verdict_gates:
     - "two-sided t on per-day mean: |t_OOS| >= 3.79 (Chordia no-theory severity)"
     - "raw p_OOS < 0.00015 (implied by |t| >= 3.79 at large df; confirms Chordia gate)"
     - "sign confirmation: v1 IS sign was negative (established in scan doc); OOS per-day mean must also be negative"
-    - "single-day outlier cap: no single fire day's abs(pnl_r_per_day_mean) contributes more than 25% of the sum of abs(pnl_r_per_day_mean) across all fires (guards against one-day pathology)"
+    - "single-day outlier cap (heuristic — not formally grounded in local literature; included as a pragmatic guard against one-day pathology): no single fire day's abs(pnl_r_per_day_mean) contributes more than 25% of the sum of abs(pnl_r_per_day_mean) across all fires"
     - "drift_check 59 zero violations at review moment"
   hard_kill_any_of:
     - "delta_OOS_per_day >= 0 (fires improved vs baseline on fresh OOS -> v1 mechanism partially vindicated or null)"
@@ -376,7 +423,8 @@ artifacts_to_save:
 pre_reg_checklist:
   - "[ ] prereg-writer gate self-review per research-truth-protocol §2a"
   - "[ ] testing_mode = research_only_signal_shadow (matches H1 exemplar)"
-  - "[ ] prior_assessment with quantified prior (~20-30%) declared"
+  - "[ ] prior_assessment with subjective prior (~20-30%) declared and LABELED subjective, not 'quantified'"
+  - "[ ] confirmatory_feasibility block shows N~=152 needed at observed v1 effect vs N~=25 expected at cap — shadow realistic only as directional-only vehicle"
   - "[ ] falsifying_evidence enumerated with literature source line citations"
   - "[ ] peek_contamination block present; fresh_oos_window.start = 2026-04-18"
   - "[ ] peek_penalty cites Harvey-Liu 2015 Eq. 5 + BHY; Chordia 3.79 operative gate"
