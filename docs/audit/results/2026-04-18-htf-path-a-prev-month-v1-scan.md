@@ -182,3 +182,52 @@ Combined across both HTF families (prev-week v1 + prev-month v1 = K=48 pre-regis
 - The MES EUROPE_FLOW long signed-inverted shadow (`docs/audit/hypotheses/2026-04-18-htf-mes-europe-flow-long-skip-rule-shadow.yaml`) remains LOCKED as a zero-capital observational contract. Prev-month v1 cells #17/#18 (MES EUROPE_FLOW long) replicate the same wrong-sign significance seen in prev-week v1 cells #17/#18, and prev-month v1 now ALSO shows the pattern on MES TOKYO_OPEN long (cells #13/#14 here, t = -3.63 / -3.79). This strengthens the observational case for the shadow but does NOT authorise a direct discovery pre-reg on the inverted direction — that remains subject to the peek-penalty and single-lane discipline already in the shadow YAML.
 
 **Honest status:** HTF-level-break-as-filter (take-aligned direction) is closed. The wrong-sign residual-anomaly lane is under observation. Research effort should move to a new mechanism class until one of the closure-criteria items above is met.
+
+---
+
+## Adversarial-audit addendum — 2026-04-19
+
+**Context.** The § Closure recommendation paragraph above frames the MES EUROPE_FLOW long wrong-sign finding as prev-month v1 *replicating* prev-week v1, and frames MES TOKYO_OPEN long as *also showing the pattern*. A post-commit adversarial audit (see `docs/handoffs/2026-04-19-htf-session-handover.md` §"Adversarial audit finding") showed that framing is **overstated on MES EUROPE_FLOW and wrong on MES TOKYO_OPEN**. The numbers below correct the record; they do not change the primary FAMILY KILL FK1 verdict.
+
+### Fire-overlap between prev-week v1 and prev-month v1
+
+| Lane | PW fires | PM fires | Both | Overlap (% of PM fires also PW) |
+|---|---:|---:|---:|---:|
+| MES EUROPE_FLOW long | 215 | 344 | 148 | 43% |
+| MES TOKYO_OPEN long | 181 | 309 | 121 | 39% |
+
+### Overlap decomposition — MES EUROPE_FLOW long RR2.0 (cell #18)
+
+| Subset | N | mean pnl_r | t | raw p |
+|---|---:|---:|---:|---:|
+| OVERLAP (PM ∧ PW) | 146 | -0.353 | **-4.018** | 0.0001 |
+| NON-OVERLAP (PM-only, ¬PW) | 195 | -0.119 | -1.384 | 0.168 |
+| Combined (cell as scanned) | 341 | -0.219 | -3.53 | 0.0005 |
+
+The cell's combined-sample significance is carried by the OVERLAP subset — those are largely the same days prev-week v1 already flagged. The prev-month-specific contribution (non-overlap) is not significant at the raw level and would not clear any BH-FDR framing in isolation. Calling it "replication" conflates cross-family agreement with cross-family redundancy.
+
+### Overlap decomposition — MES TOKYO_OPEN long RR2.0 (cell #14)
+
+| Subset | N | mean pnl_r | t | raw p |
+|---|---:|---:|---:|---:|
+| OVERLAP (PM ∧ PW) | 121 | -0.193 | -1.863 | 0.065 |
+| NON-OVERLAP (PM-only, ¬PW) | 188 | -0.275 | **-3.367** | **0.0009** |
+| Combined (cell as scanned) | 309 | -0.243 | -3.79 | 0.0002 |
+
+On MES TOKYO_OPEN the pattern is the opposite — the non-overlap subset carries the signal. This is **a genuinely new independent observation**, not a replication of prev-week v1. Prev-week v1 scanned this lane in its cells #13/#14 and did not produce a wrong-sign significance; prev-month v1 does, driven by days prev-week v1 did not flag.
+
+### Implications — what this changes, what it does not
+
+1. **Primary verdict unchanged.** FAMILY KILL FK1 on the take-direction stands. Zero of 24 cells clear the pre-registered gate. Combined K=48 across prev-week v1 and prev-month v1 remains zero-survivor in the pre-registered direction.
+2. **Evidence for the existing MES EUROPE_FLOW long shadow is NOT strengthened by prev-month v1.** The prev-month MES EUROPE_FLOW wrong-sign result is 43%-overlap-driven. Treat prev-week v1 as the primary evidence line for that shadow.
+3. **MES TOKYO_OPEN long is OUT OF SCOPE for the existing shadow.** The shadow pre-reg (`2026-04-18-htf-mes-europe-flow-long-skip-rule-shadow.yaml`) is single-lane by construction. The non-overlap TOKYO_OPEN finding is a standalone residual observation — it must not trigger scope expansion of that shadow.
+4. **If MES TOKYO_OPEN long is pursued**, it requires a separate peek-penalized pre-reg (single lane, fresh-OOS only, Carver-style forecast combination not in scope). Alternatively, file as a research note and move on.
+
+### Reproduction
+
+Overlap decomposition was computed on the same canonical IS window `[2019-01-01, 2026-01-01)` from `bars_1m` → `daily_features` → `orb_outcomes` used by `research/htf_path_a_prev_month_v1_scan.py`. A dedicated reproducible-decomposition script is not in-tree; the numbers above are authoritative per the 2026-04-19 adversarial audit and can be re-derived by intersecting the per-day fire masks of both scans on the MES EUROPE_FLOW long and MES TOKYO_OPEN long long-break rows.
+
+### Historical failure pointer
+
+This addendum is a local instance of the general rule `/backtesting-methodology.md` § RULE 12 ("Every top survivor references the same feature class" → spurious global vs spurious family): two scans over the same feature family can agree from redundancy rather than independence. Cross-scan overlap must be decomposed before claiming replication. Added to the CLAUDE rule's historical failure log by the handoff commit.
+
