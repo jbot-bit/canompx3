@@ -5,6 +5,28 @@
 **Trustworthy cells** (not extreme-fire, not tautology, not arithmetic-only): 13635
 **Strict survivors** (|t|>=3 + dir_match + N>=50 + trustworthy): 102
 
+> **WARN — deployed-filter survivor cells are contaminated (2026-04-19):**
+> The scan's `compute_deployed_filter` (at the time of this run) re-implemented
+> OVNRNG_100 as `overnight_range / atr_20 >= 1.0` — a ratio gate. Canonical
+> `OvernightRangeAbsFilter(min_range=100.0)` at `trading_app/config.py:1384` is
+> an absolute-points gate (`overnight_range >= 100.0`). On MNQ COMEX_SETTLE
+> O5 RR1.5 the old ratio impl fired 25/1698 rows (1.5%); canonical absolute
+> fires 579/1698 rows (34.1%). Any "deployed" scope-tag survivor cell for
+> lanes with OVNRNG_100 as the deployed filter operated on a ~20× smaller
+> population than the real deployed filter would produce. The 2026-04-19 fix
+> (`compute_deployed_filter` now delegates to
+> `research.filter_utils.filter_signal`) produces canonical numbers. See
+> `docs/audit/results/2026-04-19-research-filter-delegation-audit.md` for the
+> full audit and fix details.
+>
+> **Which cells in THIS doc are affected:** rows in any survivor / promising /
+> baseline table tagged `scope=deployed` with `Filter=OVNRNG_100` were computed
+> under the broken ratio gate. `non_deployed` / `twin` cells tested features
+> overlays on the unfiltered population are NOT affected. The rel_vol_HIGH_Q3
+> BH-global survivor list used `unfiltered` overlay scope — NOT affected by the
+> deployed-filter bug (but see the separate rel_vol quantile look-ahead caveat
+> below).
+
 > **Follow-up 2026-04-19** — the five non-twin `rel_vol_HIGH_Q3` BH-global cells
 > (MES TOKYO long / MES COMEX short / MNQ COMEX short / MGC LONDON short /
 > MNQ SINGAPORE short) are NOT five independent draws. Pairwise overlap

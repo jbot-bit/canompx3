@@ -223,48 +223,64 @@ def load_lane(session: str, apt: int, rr: float, instrument: str) -> pd.DataFram
 # ============================================================================
 
 
-def compute_deployed_filter(df: pd.DataFrame, filter_key: str | None) -> np.ndarray:
-    """Return 0/1 array — 1 where the deployed filter fires (day tradable)."""
+def compute_deployed_filter(
+    df: pd.DataFrame, filter_key: str | None, orb_label: str | None = None
+) -> np.ndarray:
+    """Return 0/1 array — 1 where the deployed filter fires (day tradable).
+
+    Canonical filter delegation (2026-04-19 fix, closes filter-delegation audit
+    2026-04-19). Prior inline implementations mis-specified OVNRNG_100 as a
+    ratio (overnight_range/atr >= 1.0) when the canonical OvernightRangeAbsFilter
+    at trading_app/config.py:1384 is an absolute threshold (overnight_range >=
+    100.0). ORB_G5 / ATR_P50 / VWAP_MID_ALIGNED were also re-implemented
+    independently of the canonical ALL_FILTERS definitions, risking silent drift.
+
+    orb_label is now REQUIRED for VWAP_MID_ALIGNED and any other canonical
+    filter that looks up per-session columns like `orb_{label}_vwap`. The
+    load_lane() SELECT aliases these as orb_*, session_vwap, rel_vol for
+    session-independence; this wrapper rehydrates canonical column names
+    on a view so ALL_FILTERS[...].matches_df can find them.
+
+    None key preserves prior behavior: return all-ones (pass-through).
+    """
     if filter_key is None:
         return np.ones(len(df), dtype=int)
-    n = len(df)
-
-    if filter_key == "ORB_G5":
-        # orb_size >= Q80 (top quintile, per-lane)
-        sizes = df["orb_size"].astype(float)
-        if sizes.notna().sum() < 30:
-            return np.zeros(n, dtype=int)
-        q80 = np.nanpercentile(sizes, 80)
-        return (sizes >= q80).astype(int).values
-
-    if filter_key == "ATR_P50":
-        atr = df["atr_20"].astype(float)
-        if atr.notna().sum() < 30:
-            return np.zeros(n, dtype=int)
-        p50 = np.nanpercentile(atr, 50)
-        return (atr >= p50).astype(int).values
-
-    if filter_key == "OVNRNG_100":
-        ovn = df["overnight_range"].astype(float)
-        atr = df["atr_20"].astype(float)
-        ratio = ovn / atr
-        return (ratio >= 1.0).fillna(False).astype(int).values
-
-    if filter_key == "VWAP_MID_ALIGNED":
-        # Approximation: orb_mid on same side as break_dir relative to vwap
-        # Long: orb_mid > vwap, Short: orb_mid < vwap
-        mid = df["orb_mid"].astype(float)
-        vwap = df["session_vwap"].astype(float)
-        bd = df["break_dir"]
-        aligned = np.where(
-            bd == "long",
-            (mid > vwap).astype(int),
-            (mid < vwap).astype(int),
+    if orb_label is None:
+        raise ValueError(
+            f"compute_deployed_filter requires orb_label for canonical filter "
+            f"delegation; got filter_key={filter_key!r} orb_label=None"
         )
-        aligned = np.where(pd.isna(vwap), 0, aligned)
-        return aligned.astype(int)
 
-    return np.ones(n, dtype=int)
+    # Rehydrate canonical column names alongside load_lane's aliases so
+    # research.filter_utils.filter_signal -> ALL_FILTERS[key].matches_df can
+    # look them up by the per-session names the canonical filters expect.
+    view = df.copy()
+    _ALIAS_MAP = {
+        f"orb_{orb_label}_high": "orb_high",
+        f"orb_{orb_label}_low": "orb_low",
+        f"orb_{orb_label}_vwap": "session_vwap",
+        f"orb_{orb_label}_size": "orb_size",
+        f"orb_{orb_label}_break_dir": "break_dir",
+        f"rel_vol_{orb_label}": "rel_vol",
+    }
+    for canon, alias in _ALIAS_MAP.items():
+        if canon not in view.columns and alias in view.columns:
+            view[canon] = view[alias]
+
+    try:
+        # research.filter_utils import is deliberately local to avoid a
+        # top-of-module circular dependency for any caller that imports this
+        # function without filter_utils installed.
+        from research.filter_utils import filter_signal  # type: ignore  # noqa: E402
+    except ImportError as exc:  # pragma: no cover — canonical path must exist
+        raise ImportError(
+            "research.filter_utils.filter_signal is required for canonical "
+            "filter delegation. The 2026-04-19 fix replaced inline filter "
+            "implementations with delegation to this helper; falling back "
+            "would re-introduce the OVNRNG_100 mis-spec bug."
+        ) from exc
+
+    return np.asarray(filter_signal(view, filter_key, orb_label)).astype(int)
 
 
 # ============================================================================
@@ -585,7 +601,7 @@ def scan_lane(
         print(f"  [skip] {instr} {session} O{apt} RR{rr}: N={len(df)}")
         return []
 
-    filter_sig = compute_deployed_filter(df, filter_key)
+    filter_sig = compute_deployed_filter(df, filter_key, orb_label=session)
     filter_fire_rate = filter_sig.sum() / len(filter_sig)
     print(f"    filter {filter_key or 'NONE'} fire rate: {filter_fire_rate:.1%}")
 
@@ -870,7 +886,7 @@ def emit(res: pd.DataFrame) -> None:
         df_lane = load_lane(session, apt, rr, instr)
         if len(df_lane) == 0:
             continue
-        fsig = compute_deployed_filter(df_lane, filt)
+        fsig = compute_deployed_filter(df_lane, filt, orb_label=session)
         fire_pct = fsig.sum() / max(1, len(fsig))
         is_df = df_lane[df_lane["is_is"]]
         oos_df = df_lane[df_lane["is_oos"]]

@@ -270,7 +270,7 @@ def scan_confluence_lane(
     df = load_lane(session, apt, rr, instr)
     if len(df) < 50:
         return []
-    filter_sig = compute_deployed_filter(df, filter_key)
+    filter_sig = compute_deployed_filter(df, filter_key, orb_label=session)
 
     # Gate level features for look-ahead (shouldn't apply here since level uses prev-day)
     rows = []
