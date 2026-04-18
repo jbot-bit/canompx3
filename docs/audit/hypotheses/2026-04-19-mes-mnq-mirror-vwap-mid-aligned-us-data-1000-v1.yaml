@@ -1,0 +1,249 @@
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: 2026-04-19
+slug: mes-mnq-mirror-vwap-mid-aligned-us-data-1000-v1
+title: "MES mirror of MNQ US_DATA_1000 VWAP_MID_ALIGNED long — K=2 family scan"
+owner: claude
+parent_spec: null
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/prompts/prereg-writer-prompt.md"
+  notes:
+    - "Pathway A Chordia t >= 3.00 with-theory (Fitschen Ch 3 grounds intraday trend-follow on equity indices; VWAP alignment specifies breakout direction relative to institutional pre-session anchor)."
+    - "Canonical filter delegation via research.filter_utils.filter_signal (research-truth-protocol § Canonical filter delegation)."
+    - "Mode A holdout boundary imported from trading_app.holdout_policy.HOLDOUT_SACRED_FROM. Do NOT hardcode the date."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  instruments:
+    - id: MES
+      source: "pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS"
+      verification: "MES is a member of ACTIVE_ORB_INSTRUMENTS; verified via duckdb query on orb_outcomes (N=887 IS long rows at US_DATA_1000 O15 RR1.5)."
+  sessions:
+    - id: US_DATA_1000
+      source: "pipeline.dst.SESSION_CATALOG"
+      rationale: "Session already VALIDATED on MNQ with VWAP_MID_ALIGNED. Mirror tests equity-index cross-instrument portability (MES = S&P, MNQ = NASDAQ — same asset class, different underlying)."
+  orb_minutes: 15
+  entry_model: E2
+  confirm_bars: 1
+  direction: long
+  rr_targets: [1.5, 2.0]
+  filter_type: VWAP_MID_ALIGNED
+  filter_source: "trading_app.config.ALL_FILTERS['VWAP_MID_ALIGNED']"
+  filter_implementation_class: "VWAPBreakDirectionFilter(definition='orb_mid')"
+  filter_reference_code: "trading_app/config.py:2420-2485"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM (reported descriptively; not used to select or tune)"
+    policy: "Mode A sacred; read-only for verdict corroboration; never used to rescue a kill."
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+feature_definition:
+  feature_name: VWAP_MID_ALIGNED
+  canonical_source_of_truth: "trading_app.config.VWAPBreakDirectionFilter"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'VWAP_MID_ALIGNED', 'US_DATA_1000')"
+  trade_time_knowable: true
+  first_complete_time: "Session ORB window close (O15 = 15 minutes after session start)."
+  temporal_alignment_note: "orb_*_vwap is pre-session VWAP computed from trading-day start to ORB window start (pipeline/build_daily_features.py:990-998). orb_*_high / orb_*_low / orb_*_break_dir resolve at ORB window close. All three are trade-time-knowable at entry (first post-ORB bar in E2)."
+  lookahead_check: "PASS — no post-ORB-close data used. Verified by temporal audit of VWAPBreakDirectionFilter.matches_row at config.py:2463-2485."
+  rule_category: "§ 6.1 safe (always trade-time-knowable)"
+
+calibration:
+  baseline_source: "canonical orb_outcomes JOIN daily_features with break_dir='long' AND trading_day < HOLDOUT_SACRED_FROM"
+  filter_application: "research.filter_utils.filter_signal at row level; no per-cell quantile tuning (VWAP_MID_ALIGNED has no free parameters — the filter's `definition='orb_mid'` is fixed in the filter registry)."
+  lock_policy: "Filter is a bit-exact canonical object; no calibration dof."
+
+primary_schema:
+  family_cells:
+    - id: "MES_US_DATA_1000_O15_RR1.5_long_VWAP_MID_ALIGNED"
+      instrument: MES
+      session: US_DATA_1000
+      orb_minutes: 15
+      rr_target: 1.5
+      direction: long
+      filter: VWAP_MID_ALIGNED
+    - id: "MES_US_DATA_1000_O15_RR2.0_long_VWAP_MID_ALIGNED"
+      instrument: MES
+      session: US_DATA_1000
+      orb_minutes: 15
+      rr_target: 2.0
+      direction: long
+      filter: VWAP_MID_ALIGNED
+  k_family: 2
+  k_global: 2
+  k_lane: 2
+  k_session: 2
+  k_instrument: 2
+  primary_promotion_gate: "K_family BH-FDR q < 0.05 per backtesting-methodology.md RULE 4"
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  note: |
+    This pre-reg is motivated by the validated MNQ US_DATA_1000 O15 RR{1.5, 2.0}
+    long VWAP_MID_ALIGNED lanes (validated_setups rows N=701 / N=635 with ExpR
+    +0.210 / +0.176 as displayed pre-Mode-A recomputation). Those values are
+    Mode-B grandfathered per research-truth-protocol.md § "Mode B grandfathered
+    validated_setups baselines." Canonical Mode A IS recomputation (2026-04-19,
+    this session) gave N=436 / N=398 with ExpR +0.184 / +0.148 — a 265-trade
+    and 237-trade gap respectively. These K values and these MNQ counts are
+    NOT the current test's K and NOT the current test's data. They are
+    presented for hypothesis motivation only.
+  source: "canompx3 fitness audit 2026-04-19, verified via direct duckdb query"
+  upstream_scan_k_framings: null
+
+hypotheses:
+  - id: H1_RR1.5
+    type: primary
+    theory_citation:
+      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      extract: "Table 3.8 (p.41) — stock indices show intraday trend-follow tendency. ORB breakout is intraday trend-follow entry. VWAP_MID_ALIGNED specifies the ORB formed on the same side of pre-session institutional anchor as the eventual break direction, concentrating the trend-follow signal on days where pre-ORB and ORB agree."
+    statement: "MES (S&P 500) US_DATA_1000 O15 long RR1.5 entries, filtered by VWAP_MID_ALIGNED at definition='orb_mid', produce a positive ExpR materially above the unfiltered same-cell baseline. Equity-index intraday trend-follow (Fitschen Ch 3) should port from MNQ to MES on the same session."
+    pass_metric:
+      metric: "ExpR_on_IS"
+      formula: "mean(pnl_r) over trades where VWAP_MID_ALIGNED fires AND trading_day < HOLDOUT_SACRED_FROM"
+      threshold_gte: 0.0
+    gate:
+      - "bh_pass_family (q_family < 0.05)"
+      - "dir_match (sign(Delta_IS) == sign(Delta_OOS), computed descriptively — kill not triggered by dir_match alone)"
+      - "abs(t_IS) >= 3.00"
+      - "N_IS_on >= 100"
+      - "years_positive_IS >= 4 out of 7 full years"
+      - "bootstrap_p < 0.10 (moving-block centered-H0, block=5, B=10000)"
+      - "ExpR_on_IS > 0 (positive-mean floor — mandatory per prereg-writer-prompt.md § Mandatory gate clauses)"
+    counted_against_trial_budget: true
+  - id: H2_RR2.0
+    type: primary
+    theory_citation:
+      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      extract: "Same as H1. Higher RR (2.0) tests whether the VWAP alignment signal carries through to a larger profit objective, per Fitschen's intraday trend-follow premise."
+    statement: "Same as H1 but rr_target=2.0. Tests whether the signal is robust to profit-objective scaling."
+    pass_metric:
+      metric: "ExpR_on_IS"
+      formula: "mean(pnl_r) over trades where VWAP_MID_ALIGNED fires AND trading_day < HOLDOUT_SACRED_FROM"
+      threshold_gte: 0.0
+    gate:
+      - "bh_pass_family (q_family < 0.05)"
+      - "dir_match (descriptive)"
+      - "abs(t_IS) >= 3.00"
+      - "N_IS_on >= 100"
+      - "years_positive_IS >= 4 out of 7 full years"
+      - "bootstrap_p < 0.10"
+      - "ExpR_on_IS > 0 (mandatory positive-mean floor)"
+    counted_against_trial_budget: true
+
+baseline:
+  mode_a_is_canonical:
+    MES_US_DATA_1000_O15_RR1.5_long_unfiltered: {N: 835, ExpR: -0.0012}
+    MES_US_DATA_1000_O15_RR2.0_long_unfiltered: {N: 758, ExpR: -0.0603}
+    MES_US_DATA_1000_O15_RR1.5_long_VWAP_MID_ALIGNED_on: {N: 492, ExpR_on: 0.0617, Delta_IS: 0.0629}
+    MES_US_DATA_1000_O15_RR2.0_long_VWAP_MID_ALIGNED_on: {N: 443, ExpR_on: 0.0217, Delta_IS: 0.0820}
+  computation_date: 2026-04-19
+  computation_method: "Direct duckdb query on canonical orb_outcomes JOIN daily_features, filter applied via research.filter_utils.filter_signal. Script records baseline values in its output."
+
+trial_budget:
+  primary_selection_trials: 2
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2 per Bailey et al 2013"
+    N_trials: 2
+    E_max_N: "Not formally computed; K=2 is trivially under any MinBTL cap given the Bailey 2013 bound N_trials <= 300 for clean MNQ-equivalent data."
+    within_cap: true
+    cap_reference: ".claude/rules/backtesting-methodology.md § RULE 4.2"
+
+kill_criteria:
+  - id: K1
+    metric: "Number of H1/H2 that pass all 7 gate clauses"
+    threshold: 0
+    action: "PERMANENT KILL — MES VWAP_MID_ALIGNED US_DATA_1000 long does not meet Pathway A Chordia t>=3.00 with-theory. Record as honest negative evidence for equity-index cross-instrument VWAP-signal portability. Do NOT re-run with different thresholds."
+  - id: K2
+    metric: "Harness canonical-baseline cross-check (unfiltered ExpR and VWAP_MID_ALIGNED N_on on MES against this pre-reg's baseline block, absolute ExpR difference)"
+    threshold: 0.01
+    action: "HARNESS FAIL — implementation divergence from canonical filter delegation. Fix the divergence; do NOT cite the run as evidence."
+  - id: K3
+    metric: "Number of cells flagged tautology (T0 |corr| > 0.70 with an existing filter) OR extreme_fire (<5% or >95%) OR arithmetic_only"
+    threshold: 1
+    action: "FLAG — exclude flagged cell from survivor set per backtesting-methodology.md § RULE 8. Report non-flagged cells only."
+
+decision_rule:
+  continue_if: "At least 1 of H1/H2 passes all gate clauses AND no K2 harness fail AND cell is not K3-flagged. Continue means: produce validated-candidate row for committee review; do NOT auto-write to validated_setups."
+  park_if: "At least 1 of H1/H2 passes BH-FDR family but fails exactly one of {bootstrap_p, years_positive_IS} with N_IS_on >= 100. Park means: signal-only shadow pre-reg under Mode A forward OOS."
+  kill_if: "K1 OR K2 fires."
+
+methodology_rules_applied:
+  - rule: "backtesting-methodology.md RULE 1.1 — hard-coded look-ahead features banned"
+    application: "VWAP_MID_ALIGNED uses pre-session VWAP + ORB-level inputs only. No look-ahead."
+  - rule: "backtesting-methodology.md RULE 1.2 — window-derived feature valid-domain gate"
+    application: "VWAP is computed on trading-day-start to ORB-window-start window; US_DATA_1000 starts ~01:00 Brisbane. Window closes strictly before ORB start on the same trading_day. Valid."
+  - rule: "backtesting-methodology.md RULE 3 — IS/OOS discipline"
+    application: "IS = trading_day < HOLDOUT_SACRED_FROM imported from trading_app.holdout_policy. OOS descriptively reported only; never used to select or tune."
+  - rule: "backtesting-methodology.md RULE 4 — multi-framing BH-FDR"
+    application: "K_family = K_global = 2 (family IS the full scan scope). Primary promotion gate: q_family < 0.05."
+  - rule: "backtesting-methodology.md RULE 6 — trade-time knowability feature audit"
+    application: "Every feature used is in § 6.1 safe. No § 6.2 conditionally-valid features. No § 6.3 banned features."
+  - rule: "backtesting-methodology.md RULE 7 — T0 tautology"
+    application: "T0 computed as Pearson corr(VWAP_MID_ALIGNED fire, orb_size) on IS window; reported. Flagged if |corr| > 0.70."
+  - rule: "backtesting-methodology.md RULE 8.1 — extreme-fire guard"
+    application: "Fire rate reported per cell. Flagged if < 5% or > 95%."
+  - rule: "backtesting-methodology.md RULE 8.2 — arithmetic-only guard"
+    application: "WR spread (WR_on - WR_off) reported; flagged ARITHMETIC_ONLY if |spread| < 0.03 and |Delta_IS| > 0.10."
+  - rule: "backtesting-methodology.md RULE 9 — canonical data source"
+    application: "Reads ONLY orb_outcomes + daily_features. Zero writes to validated_setups or experimental_strategies."
+  - rule: "research-truth-protocol.md § Canonical filter delegation"
+    application: "Filter fire mask computed via research.filter_utils.filter_signal. No inline filter re-implementation."
+  - rule: "research-truth-protocol.md § Mode B grandfathered validated_setups baselines"
+    application: "Baseline values in this pre-reg are canonical Mode A IS recomputations (2026-04-19), not validated_setups.expectancy_r values. The 265-trade and 237-trade gap between validated_setups N and Mode A canonical N is documented in upstream_discovery_provenance."
+
+outputs_required_after_run:
+  - "Per-cell N_on_IS, ExpR_on_IS, WR_on_IS, std_on_IS, t_IS, raw_p_IS."
+  - "Per-cell N_off_IS, ExpR_off_IS for Delta_IS computation."
+  - "Per-cell bootstrap_p (moving-block, block=5, B=10000, centered-H0)."
+  - "Per-cell T0 tautology corr; fire_rate; WR_spread."
+  - "BH-FDR q_family per cell."
+  - "Per-year breakdown (2019-2025) for years_positive_IS check."
+  - "OOS descriptive stats (N_on_OOS, ExpR_on_OOS) — NOT used to select or tune."
+  - "Kill/Park/Continue verdict per cell."
+  - "Result markdown at docs/audit/results/2026-04-19-mes-mnq-mirror-vwap-mid-aligned-us-data-1000-v1-scan.md"
+
+execution_gate:
+  allowed_now:
+    - "Lock this YAML via commit (status PRE_REGISTERED_DRAFT -> LOCKED once commit_sha stamped)."
+    - "Run the scan script AFTER commit_sha is stamped and pushed."
+  forbidden_now:
+    - "Running the scan before commit_sha is stamped into this file."
+    - "Modifying any threshold in kill_criteria or hypotheses[].gate after the first run."
+    - "Adding new cells to primary_schema.family_cells post-run to 'widen the family'."
+
+not_done_by_this_pre_reg:
+  - "Does NOT test MES OVNRNG_100 US_DATA_1000 or COMEX_SETTLE cells. MES OVNRNG_100 is not sample-viable (N_on=8 at canonical absolute threshold due to MES/MNQ point-scale mismatch). A scale-adjusted MES overnight-range filter requires a separate pre-reg and canonical filter entry."
+  - "Does NOT test MES COMEX_SETTLE lanes. Canonical Mode A IS baselines for MES COMEX_SETTLE O5 long unfiltered are ExpR = -0.099 (RR1.5) / -0.082 (RR1.0) — negative baseline with no overnight-range filter showing sample-viable uplift. Separate hypothesis would be required for COMEX equity-index short patterns."
+  - "Does NOT write to validated_setups on continue. On continue, the survivor is a validated-candidate requiring committee review (see pre_registered_criteria.md § 12 criteria before deployment)."
+  - "Does NOT re-validate MNQ lanes. Those remain Mode-B grandfathered pending their own Mode A re-validation pre-reg."
+
+self_review_checks:
+  - check: "Would backtesting-methodology.md RULE 12 red flags trigger on predicted outcomes?"
+    expected: "No — expected effect sizes (Delta_IS ~0.06-0.08) and estimated t-stats (~1.3 at current N) are far below RULE 12 thresholds (|t|>7, Delta_IS>0.6). We anticipate a KILL, which is an honest outcome."
+  - check: "Is the KILL threshold strict enough to actually kill?"
+    expected: "Yes — K1 requires all 7 gate clauses to pass on at least 1 cell. Any one gate failure on both cells triggers KILL. Positive-mean floor (ExpR_on > 0) is mandatory."
+  - check: "Is any pass threshold LATER than any uplift claim?"
+    expected: "No — primary pass gate is abs(t_IS) >= 3.00 + BH-FDR q_family + ExpR > 0 + 4 supporting gates. All committed before run."
+  - check: "Does the pre-reg allow post-hoc schema tuning?"
+    expected: "No — schema_locked_before_any_metric: true. Any widening requires a new pre-reg."
