@@ -6078,3 +6078,70 @@ Referenced in Criterion 12 but not implemented. Paper: `resources/real_time_stra
 1. **Amendment 2.9** — Parent/Proxy Data Policy (binding). NQ/ES bars deleted, GC kept for MGC Tier 2.
 2. **Amendment 2.8** — Factual correction of data horizons post-Phase-3c.
 3. **Initial 3 hypothesis YAMLs** — 16+16+4 format (all obsoleted this session).
+
+## Update (2026-04-18 runtime rebalance — topstep_50k_mnq_auto)
+
+### Command run
+
+- `python scripts/tools/rebalance_lanes.py --profile topstep_50k_mnq_auto --date 2026-04-18`
+
+### Old lanes
+
+- `MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5`
+- `MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O30`
+- `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`
+- `MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G5`
+- `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G5`
+- `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`
+
+### New lanes
+
+- `MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5`
+- `MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15`
+- `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5`
+- `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12`
+- `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12`
+- `MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15`
+
+### Delta
+
+- Retained:
+  - `MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5`
+- Added:
+  - `MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15`
+  - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5`
+  - `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12`
+  - `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12`
+  - `MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15`
+- Dropped:
+  - `MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O30`
+  - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100`
+  - `MNQ_NYSE_OPEN_E2_RR1.0_CB1_ORB_G5`
+  - `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_ORB_G5`
+  - `MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15`
+
+### Files changed
+
+- `docs/runtime/lane_allocation.json`
+- `HANDOFF.md`
+
+### Verification run
+
+- `git status --short`
+- `git branch --show-current`
+- `git rev-parse --short HEAD`
+- `python -m py_compile scripts/tools/rebalance_lanes.py trading_app/lane_allocator.py trading_app/prop_profiles.py trading_app/prop_portfolio.py`
+- `python scripts/tools/rebalance_lanes.py --profile topstep_50k_mnq_auto --date 2026-04-18`
+- `python -c "from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes; ..."`
+- `python -c "from trading_app.prop_portfolio import resolve_daily_lanes; ..."`
+
+### Scope guard
+
+- No new research
+- No holdout changes
+- No threshold tuning
+- No validator / allocator doctrine changes
+
+### Stale note corrected
+
+- Prior note that COMEX would remain on `OVNRNG_100` was stale. Canonical script output selected `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5` on 2026-04-18. Script output wins.
