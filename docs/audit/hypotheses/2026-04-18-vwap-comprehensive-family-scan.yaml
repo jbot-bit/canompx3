@@ -21,8 +21,13 @@ authority:
 
 reproducibility:
   repo_root: C:/Users/joshd/canompx3
-  commit_sha: TO_FILL_AFTER_COMMIT
+  commit_sha: "495810f5"
   committed_required_before_run: true
+  post_run_correction:
+    date: 2026-04-18
+    issue: "H3 positive-control baseline (+0.2101) was sourced from validated_setups L6 row (Mode B grandfathered, N=701) but should have been recomputed against strict Mode A IS (canonical orb_outcomes through 2026-01-01). Independent SQL verification at run time showed Mode A IS L6 ExpR_on = +0.1844 (N=436); harness produced +0.1817 (within 0.003 of ground truth, well below 0.02 tolerance). The K2 verdict fired per literal pre-reg threshold but is a SPECIFICATION error, not an EXECUTION defect. K1 substantive (zero H1 family-level survivors) ALSO fires — the doctrine-close verdict is independent of the H3 calibration error. See result md § Post-run finding for full evidence."
+    verdict_unchanged: true
+    note: "Documentation-only correction. No threshold tuning. No re-run permitted (Mode A one-shot OOS already consumed)."
 
 scope:
   instruments: [MNQ, MES, MGC]
