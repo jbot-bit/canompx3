@@ -4,6 +4,37 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-18 governance — merge side-effect recorded, branch discipline tightened)
+
+### What happened
+
+PR #5 (`docs(no-go): register overnight queue closures 2026-04-18`) was authorized as a docs-only squash merge. The intended diff was 2 files / +9 −1 lines (`docs/STRATEGY_BLUEPRINT.md` + `TRADING_RULES.md`).
+
+The actual squash commit (`0dea748e`) landed 5 files / +1089 −1 lines, because the doctrine branch was created from local `main` that contained an unpushed `a88505cd` A4c-verdict commit. GitHub computed the PR diff vs `origin/main` (which was at `1a721e92`), not vs local `main`, so the squash included both commits.
+
+Extra files that landed on `main` unintentionally:
+- `HANDOFF.md` (+57 lines — 2026-04-18 A4c NULL section)
+- `docs/audit/results/2026-04-17-garch-a4c-routing-selectivity-replay.md`
+- `research/garch_a4c_routing_selectivity_replay.py`
+
+### Decision
+
+**Accepted as-is (no revert).** The extra content is already-authorized A4c research output (docs + research script, zero trading code, zero pipeline code, zero production logic). Reverting would churn `main` purely for procedural neatness, which is net-negative work. The substantive content is clean; the process was the only thing that slipped.
+
+### Root cause
+
+`doctrine/no-go-updates-2026-04-18` was created via `git checkout main && git checkout -b doctrine/no-go-updates-2026-04-18`. At that moment local `main` had `a88505cd` (committed but not pushed). A proper base for a docs-only PR is always `origin/main`, not local `main`, especially when local main may have unpushed research commits.
+
+### Branch discipline rule added
+
+`.claude/rules/branch-discipline.md` — mandates creating docs/doctrine branches from `origin/main` with `git fetch && git checkout -b <branch> origin/main`, plus a pre-PR diff-vs-base check to catch scope-bleed before opening.
+
+### Parked research branch untouched
+
+`research/overnight-2026-04-18-v2` remains on origin with its 5 commits (VWAP_BP, wide-rel-IB v1 + v2 + replay, CROSS_NYSE pre-reg + replay). Not merged. Not cherry-picked. State preserved.
+
+---
+
 ## Update (2026-04-18 A4c executed — NULL, do not rescue, queue reset next)
 
 ### What was run
