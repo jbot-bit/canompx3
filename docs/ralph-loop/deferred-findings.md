@@ -10,6 +10,7 @@
 | ID | Iter | Severity | Target | Description | Deferred Reason |
 |----|------|----------|--------|-------------|-----------------|
 | SR-L6 | n/a | MEDIUM | trading_app/prop_profiles.py topstep_50k_mnq_auto | L6 MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 tripped Shiryaev-Roberts ALARM on first SR monitor pass at N=58. 2026 forward ExpR +0.104 (IS +0.196); C6 WFE 0.52 (barely above 0.50 literature floor); C8 ratio 53% (barely above 40% threshold). C12 review outcome after 2026-04-12 literature-grounded audit: KEEP in WATCH — threshold criteria technically pass, SR alarm is the only trigger, matches L3 NYSE_OPEN standard. | Re-check trigger: after N>=100 monitored trades, rerun `python -m trading_app.sr_monitor`. Retire if SR remains ALARM AND (C8 ratio falls below 0.40 OR WFE falls below 0.50). Procedural improvement: add SR-clean + full-criteria pre-flight gate for future profit-expansion stages. |
+| PP-167 | 167 | MEDIUM | trading_app/prop_profiles.py:864-875 (self_funded_tradovate) | self_funded_tradovate has EUROPE_FLOW (MNQ cap=150.0, MGC cap=30.0) and NYSE_OPEN (MNQ cap=150.0, MES cap=60.0). get_lane_registry raises ValueError on inconsistent per-session max_orb_size_pts. Currently blocked: active=False AND all get_lane_registry callers default exclude_self_funded=True. | Action required before activation: update get_lane_registry to key by (orb_label, instrument) for multi-instrument profiles, OR split self_funded_tradovate into per-instrument sub-profiles. No live risk while active=False. |
 
 ## Won't Fix (ACCEPTABLE)
 

@@ -3,57 +3,50 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 166
+## Last iteration: 167
 
-## RALPH AUDIT — Iteration 166
-## Date: 2026-04-14
-## Infrastructure Gates: drift 102/102 PASS (6 pre-existing advisories); behavioral audit 7/7 PASS; ruff advisory-only (B905 in scripts/research/gc_proxy_validity.py)
+## RALPH AUDIT — Iteration 167
+## Date: 2026-04-18
+## Infrastructure Gates: drift 101/101 PASS (5 pre-existing violations: anthropic module absent + 3 stale SGP windows; 6 pre-existing advisories); behavioral audit 7/7 PASS; ruff advisory-only (pre-existing)
 
 ---
 
-## Iteration 166 — consistency_tracker uses CAST(entry_time AS DATE) instead of canonical trading_day column
+## Iteration 167 — self_funded_tradovate cap conflict in get_lane_registry (DEFERRED)
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
-| Canonical violation | `consistency_tracker.py:111,213,349` — `CAST(entry_time AS DATE)` used for trade-day grouping instead of the stored `trading_day` column. UTC-cast date differs from Brisbane trading day for trades near midnight UTC (00:00–10:00 UTC = 10:00–20:00 Brisbane). `paper_trades.trading_day DATE NOT NULL` is always populated by the write path. | LOW | FIXED 03238c01 |
+| Contract drift | `prop_profiles.py:864-875` — `self_funded_tradovate` has EUROPE_FLOW (MNQ cap=150.0, MGC cap=30.0) and NYSE_OPEN (MNQ cap=150.0, MES cap=60.0). `get_lane_registry` raises `ValueError` on inconsistent per-session caps across instruments. Currently unreachable: profile is `active=False` AND `resolve_profile_id` default `exclude_self_funded=True` blocks all callers. Dormant but will fail at activation time without architectural fix. | MEDIUM | DEFERRED — dormant profile, blocked by exclude_self_funded guard (PP-167) |
 
 ### Audit Notes
 
-- **Finding source:** Seven Sins scan of `consistency_tracker.py` (Priority 3 unscanned medium target). Also scanned `risk_manager.py` — clean, no findings.
-- **TRACE:** `consistency_tracker.py:111` → `CAST(entry_time AS DATE)` → UTC date, not Brisbane trading day. `paper_trades` schema (`db_manager.py:341`) has `trading_day DATE NOT NULL`. Write path always sets `trading_day` from the session's Brisbane trading day.
-- **EVIDENCE:** grep confirmed 3 CAST occurrences. `db_manager.py:341` confirms `trading_day DATE NOT NULL`. For a trade at 23:30 UTC (09:30 Brisbane next day), UTC-cast date would attribute the trade to the prior Brisbane day — wrong grouping for the consistency/payout window.
-- **Fix:** Replaced `CAST(entry_time AS DATE) AS trade_date` with `trading_day AS trade_date` (lines 111, 213) and `MAX(CAST(entry_time AS DATE))` with `MAX(trading_day)` (line 349). Updated one minimal test fixture (`test_consistency_no_trades`) to include `trading_day DATE` column.
-- **Behavior unchanged for current data:** All test trades use same-day UTC timestamps (08:00 UTC), so CAST result == trading_day. 11/11 tests pass. 102/102 drift checks pass.
+- **Finding source:** Re-audit of `prop_profiles.py` (stale Priority 2 target, modified 2026-04-16 post iter-142 scan).
+- **TRACE:** `prop_profiles.py:864-875` (MGC_EUROPE_FLOW cap=30.0, MES_NYSE_OPEN cap=60.0) → `get_lane_registry:1089-1098` (cap mismatch logic) → would raise `ValueError`. Blocked by `resolve_profile_id:941` (`exclude_self_funded=True` default) in all 7 callers of `get_lane_registry`.
+- **EVIDENCE:** Simulation confirmed EUROPE_FLOW=[30.0, 150.0] and NYSE_OPEN=[60.0, 150.0] cap conflicts. Grep of all `get_lane_registry` callers (session_orchestrator, forward_monitor, slippage_scenario) confirmed none pass `exclude_self_funded=False`. Profile `active=False`. 61/61 existing tests pass.
+- **Deferred reason:** Dormant infrastructure. No caller can reach the cap-conflict logic today. Profile is both `active=False` and guarded by `exclude_self_funded=True`. Needs architectural fix to `get_lane_registry` to support per-(session, instrument) keying before `self_funded_tradovate` goes live.
+- **Action required at activation:** `get_lane_registry` must be updated to key by `(orb_label, instrument)` for multi-instrument profiles, or `self_funded_tradovate` must be split into per-instrument sub-profiles.
 
-### Full Seven Sins scan — consistency_tracker.py
+### Full Seven Sins scan — prop_profiles.py
 
 | Sin | Result |
 |-----|--------|
-| Silent failure | None — DB errors propagate; `_has_paper_trades` guards empty table gracefully |
-| Fail-open | None — returns None / IDLE_BREACH on missing data (fail-closed for callers) |
-| Look-ahead bias | N/A — read-only compliance tracker |
-| Cost illusion | N/A — no P&L computation |
-| Canonical violation | FIXED — `CAST(entry_time AS DATE)` replaced with `trading_day` (CT-166) |
-| Orphan risk | None — all functions are wired to callers |
-| Volatile data | None — thresholds come from canonical `prop_firm_policies` |
+| Silent failure | None — `load_allocation_lanes` fail-closed (returns empty tuple on any error). `validate_dd_budget` returns list, does not swallow. |
+| Fail-open | None — `resolve_profile_id` raises on ambiguity/inactive/self-funded. `get_lane_registry` raises on cap conflict. |
+| Look-ahead bias | N/A — configuration module |
+| Cost illusion | None — `validate_dd_budget` imports from `pipeline.cost_model.COST_SPECS` and cross-checks `_PV` |
+| Canonical violation | None — `ENTRY_MODELS` imported from `trading_app.config`. `_P90_ORB_PTS` annotated as empirical (ACCEPTABLE: intentional heuristic with update note). |
+| Orphan risk | None — all helpers wired to callers |
+| Volatile data | None — `_P90_ORB_PTS` annotated empirical, not a hard-coded claim |
 | Async safety | N/A — synchronous module |
-| State persistence gap | N/A — stateless read-only module |
-| Contract drift | None — all callers pass correct kwargs |
+| State persistence gap | N/A — pure config module, no mutable state |
+| Contract drift | DEFERRED — `self_funded_tradovate` multi-instrument cap conflict in `get_lane_registry` (PP-167) |
 
-### Full Seven Sins scan — risk_manager.py (clean)
+---
 
-| Sin | Result |
-|-----|--------|
-| Silent failure | None — no exception handlers; all paths return explicit results |
-| Fail-open | None — all checks return (False, reason, 0.0) on unknown/halted state |
-| Look-ahead bias | N/A — live risk enforcement |
-| Cost illusion | N/A — no P&L computation |
-| Canonical violation | None — F-1/F-2 @canonical-source annotations correct |
-| Orphan risk | None |
-| Volatile data | None — limits runtime-constructed by orchestrator |
-| Async safety | N/A — synchronous; no async callers |
-| State persistence gap | ACCEPTABLE — multi-day equity state in-memory, documented "Lost on process restart"; Layer 2 AccountHWMTracker provides persistent protection (guarded by verified upstream check at session_orchestrator:403) |
-| Contract drift | None — all 3 can_enter call sites in execution_engine use correct kwargs |
+## Prior: Iteration 166 — consistency_tracker uses CAST(entry_time AS DATE) instead of canonical trading_day column
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Canonical violation | `consistency_tracker.py:111,213,349` — `CAST(entry_time AS DATE)` used for trade-day grouping instead of the stored `trading_day` column. | LOW | FIXED 03238c01 |
 
 ---
 
@@ -84,7 +77,7 @@
 
 ## Files Fully Scanned
 
-> Cumulative list — 247 files fully scanned (consistency_tracker.py + risk_manager.py added iter 166).
+> Cumulative list — 248 files fully scanned (prop_profiles.py re-audited iter 167; strategy_fitness.py re-audited iter 167 — WIP-save only, no substantive change).
 
 - trading_app/ — 44 files (iters 4-61)
 - trading_app/ml/features.py — added iter 114
@@ -134,7 +127,7 @@
 - research/ — 21 files (iters 101-113)
 - docs/plans/ — 2 files (iter 103)
 - trading_app/live/rithmic/order_router.py — added iter 141
-- trading_app/prop_profiles.py — added iter 142
+- trading_app/prop_profiles.py — added iter 142, re-audited iter 167
 - trading_app/lane_allocator.py — added iter 143
 - trading_app/live/multi_runner.py — added iter 144
 - trading_app/live/broker_dispatcher.py — added iter 145
@@ -172,9 +165,9 @@
 - trading_app/sr_monitor.py — added iter 165
 - trading_app/consistency_tracker.py — added iter 166
 - trading_app/risk_manager.py — added iter 166
-- **Total: 247 files fully scanned**
+- trading_app/strategy_fitness.py — re-audited iter 167 (WIP-save only, no substantive change)
+- **Total: 248 files fully scanned**
 
 ## Next iteration targets
-- Priority 2 (stale re-audit candidates): trading_app/prop_profiles.py (modified post iter-142 during profit expansion Apr 12-13), trading_app/strategy_fitness.py (modified post iter-44)
 - Priority 3 (unscanned medium): trading_app/topstep_scaling_plan.py, trading_app/lane_correlation.py
 - Note: pre-existing drift advisories (checks 59/95) require operational resolution by user — run `python scripts/tools/select_family_rr.py` and re-run validator for Mode A strategies

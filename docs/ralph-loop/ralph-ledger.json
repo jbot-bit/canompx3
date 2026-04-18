@@ -1,7 +1,7 @@
 {
-  "total_iterations": 159,
-  "last_updated": "2026-04-14",
-  "consecutive_low_only": 3,
+  "total_iterations": 160,
+  "last_updated": "2026-04-18",
+  "consecutive_low_only": 4,
   "last_high_finding_iter": 163,
   "findings_by_type": {
     "canonical_violation": {
@@ -17,10 +17,10 @@
       "fix_rate": 0.94
     },
     "other": {
-      "found": 22,
+      "found": 23,
       "fixed": 12,
-      "deferred": 1,
-      "fix_rate": 0.55
+      "deferred": 2,
+      "fix_rate": 0.52
     },
     "dead_code": {
       "found": 15,
@@ -117,12 +117,12 @@
     "CRITICAL": 3,
     "HIGH": 12,
     "MEDIUM": 42,
-    "LOW": 102
+    "LOW": 103
   },
   "classifications": {
     "judgment": 74,
     "mechanical": 58,
-    "audit-only": 27
+    "audit-only": 28
   },
   "files_audited": {
     "execution_engine.py": {
@@ -205,6 +205,11 @@
       "last_iter": 91,
       "findings": 2
     },
+    "trading_app/prop_profiles.py": {
+      "audit_count": 3,
+      "last_iter": 167,
+      "findings": 2
+    },
     "tradovate/order_router.py": {
       "audit_count": 2,
       "last_iter": 21,
@@ -263,11 +268,6 @@
     "trading_app/prop_portfolio.py": {
       "audit_count": 2,
       "last_iter": 154,
-      "findings": 2
-    },
-    "trading_app/prop_profiles.py": {
-      "audit_count": 2,
-      "last_iter": 142,
       "findings": 2
     },
     "pipeline/check_drift.py": {
@@ -2835,6 +2835,17 @@
       "severity": "LOW",
       "verdict": "FIXED",
       "commit": "03238c01"
+    },
+    {
+      "iter": 167,
+      "date": "2026-04-18",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/prop_profiles.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "NOTED",
+      "commit": "NONE"
     }
   ]
 }

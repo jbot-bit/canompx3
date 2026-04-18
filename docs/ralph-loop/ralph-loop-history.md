@@ -1749,3 +1749,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 2 files (consistency_tracker.py production + test); 2 read-only callers unaffected (pre_session_check.py, weekly_review.py)
 - Verification: PASS — 11/11 test_consistency_tracker.py; drift 102/102
 - Commit: 03238c01
+
+---
+
+## Iteration 167 — 2026-04-18
+- Phase: audit-only
+- Classification: audit-only
+- Target: trading_app/prop_profiles.py
+- Finding: self_funded_tradovate profile has EUROPE_FLOW and NYSE_OPEN with multi-instrument lane caps (150.0 vs 30.0 for EUROPE_FLOW, 150.0 vs 60.0 for NYSE_OPEN); get_lane_registry raises ValueError on per-session cap conflicts. Also re-confirmed strategy_fitness.py unchanged (WIP-save commit only).
+- Action: DEFERRED — profile active=False and exclude_self_funded=True in all get_lane_registry callers blocks the code path. No immediate risk. Architectural fix needed before activation.
+- Blast radius: 0 files modified
+- Verification: PASS — 61/61 test_prop_profiles.py; drift 101/101 (5 pre-existing violations, 6 advisories)
+- Commit: NONE
