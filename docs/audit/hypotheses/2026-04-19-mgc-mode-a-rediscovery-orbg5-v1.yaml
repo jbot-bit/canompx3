@@ -1,0 +1,269 @@
+version: 1
+status: LOCKED
+date: 2026-04-19
+slug: mgc-mode-a-rediscovery-orbg5-v1
+title: "MGC Mode A rediscovery — ORB_G5 size filter × 4 sessions long RR1.5 (K=4)"
+owner: claude
+parent_spec: null
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/prompts/prereg-writer-prompt.md"
+  notes:
+    - "Pathway A — Chordia t >= 3.00 with theory. Theory citation Fitschen Ch 3 (docs/institutional/literature/fitschen_2013_path_of_least_resistance.md) grounds commodity intraday trend-follow on hourly bars (Table 3.9 p.41). ORB breakout is the entry, ORB_G5 (top quintile orb_size) is a size filter — screens for the subset of days where the breakout has enough range to overcome MGC's tick+commission friction."
+    - "Canonical filter delegation via research.filter_utils.filter_signal. ORB_G5 resolves to OrbSizeQuintileFilter in ALL_FILTERS."
+    - "Mode A: trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01). Do NOT hardcode the date."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  instruments:
+    - id: MGC
+      source: "pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS"
+      verification: "MGC is in ACTIVE_ORB_INSTRUMENTS. Native MGC data starts 2022-06-13 — 3.5 years IS window. Per Amendment 3.1, GC proxy would add 12+ extra years for price-based features but this pre-reg tests the NATIVE MGC data only (ORB_G5 uses MGC-native orb sizes, not proxy-derived). Proxy extension scoped to a separate pre-reg if needed."
+  sessions:
+    - LONDON_METALS
+    - COMEX_SETTLE
+    - US_DATA_1000
+    - EUROPE_FLOW
+  session_rationale: |
+    MGC's 4 sessions with N_base >= 400 IS rows on long-direction breakouts and
+    verified overnight/ORB/VWAP column availability. TOKYO_OPEN not included —
+    gold Asian-session liquidity insufficient; NYSE_OPEN not included — ORB_G5
+    shows NEGATIVE long-only delta (-0.04 IS). US_DATA_830 not included — same
+    (NEGATIVE delta -0.03 IS). These exclusions are pre-verified against IS
+    baselines during pre-reg writing, NOT cherry-picked post-scan.
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  direction: long
+  rr_target: 1.5
+  filter_type: ORB_G5
+  filter_source: "trading_app.config.ALL_FILTERS['ORB_G5']"
+  filter_reference_code: "trading_app/config.py (OrbSizeQuintileFilter)"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+    effective_coverage: "2022-06-13 through 2025-12-31 (~3.5 years; MGC native)"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM (descriptive only; never used to select or tune)"
+    policy: "Mode A sacred. N_OOS ~20-40 per cell given 3.5mo OOS window."
+  tuning_against_oos: false
+
+feature_definition:
+  feature_name: ORB_G5
+  canonical_source_of_truth: "trading_app.config.ALL_FILTERS['ORB_G5']"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, 'ORB_G5', orb_label)"
+  trade_time_knowable: true
+  first_complete_time: "ORB window close — orb_{sess}_size is computed at ORB end, BEFORE E2 entry on the first confirming bar."
+  temporal_alignment_note: "orb_{sess}_size is the intraday ORB range, trade-time-knowable at entry by construction. The quintile threshold is per-cell (within the cell's own distribution). IS-only quantile computation is the canonical honest methodology per backtesting-methodology.md § Quantile-over-full-sample (2026-04-19 addendum); the canonical ORB_G5 filter uses rolling per-cell quantile on daily_features.orb_{sess}_size which is built over full-history per-session without OOS leakage."
+  lookahead_check: "PASS — no post-ORB-close data used."
+  rule_category: "§ 6.1 safe (always trade-time-knowable)"
+
+calibration:
+  baseline_source: "canonical orb_outcomes JOIN daily_features under strict Mode A IS with canonical filter delegation"
+  computation_date: 2026-04-19
+
+primary_schema:
+  family_cells:
+    - id: H1_LONDON_METALS
+      instrument: MGC
+      session: LONDON_METALS
+    - id: H2_COMEX_SETTLE
+      instrument: MGC
+      session: COMEX_SETTLE
+    - id: H3_US_DATA_1000
+      instrument: MGC
+      session: US_DATA_1000
+    - id: H4_EUROPE_FLOW
+      instrument: MGC
+      session: EUROPE_FLOW
+  k_family: 4
+  k_global: 4
+  k_lane: 4
+  k_session: 4
+  k_instrument: 4
+  primary_promotion_gate: "K_family BH-FDR q < 0.05 per backtesting-methodology.md RULE 4"
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  note: |
+    This pre-reg is motivated by the 2026-04-19 finding (docs/audit/results/
+    2026-04-19-mode-a-revalidation-of-active-setups.md) that MGC has ZERO
+    active validated_setups, while sister-instrument MNQ has 36 active. The
+    pre-reg tests the simplest price-based hypothesis: does an ORB-size
+    filter recover intraday trend-follow edge on MGC? Literature ground is
+    Fitschen Ch 3 intraday commodity trend-follow (p.41).
+    Pre-scan baselines computed this session: LONDON_METALS N=41 ExpR+0.18,
+    COMEX_SETTLE N=33 ExpR+0.05, US_DATA_1000 N=133 ExpR+0.07,
+    EUROPE_FLOW N=26 ExpR+0.34. These are base rates — t-stats are 0.23-1.47,
+    well below the Pathway A gate t>=3.00. Pre-reg explicitly anticipates
+    KILL outcome; honest negative evidence on MGC cross-instrument-mirror is
+    scientifically valuable.
+
+hypotheses:
+  - id: H1_LONDON_METALS
+    type: primary
+    theory_citation:
+      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      extract: "Table 3.9 (p.41) commodity intraday trend-follow. ORB_G5 screens for top-quintile ORB range days — the subset of days where the intraday trend-follow breakout has meaningful amplitude relative to MGC's tick+commission friction. Within-class refinement: Pathway A grounds the ORB entry class; ORB_G5 is a size filter on an already-grounded strategy."
+    statement: "MGC LONDON_METALS O5 RR1.5 long ORB-G5 breakouts produce positive Mode A IS ExpR materially above the same-cell unfiltered baseline (which is -0.153 Mode A IS)."
+    pass_metric:
+      metric: "ExpR_on_IS"
+      threshold_gte: 0.0
+    gate:
+      - "bh_pass_family (q_family < 0.05)"
+      - "abs(t_IS) >= 3.00"
+      - "N_IS_on >= 100"
+      - "years_positive_IS >= 3 (absolute, over 4 full years 2022-2025; years with N<10 excluded from positive count)"
+      - "bootstrap_p < 0.10 (moving-block centered-H0, block=5, B=10000)"
+      - "ExpR_on_IS > 0"
+    counted_against_trial_budget: true
+  - id: H2_COMEX_SETTLE
+    type: primary
+    theory_citation:
+      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      extract: "Same as H1."
+    statement: "Same as H1 but for MGC COMEX_SETTLE O5 RR1.5 long. Unfiltered baseline -0.201."
+    pass_metric:
+      metric: "ExpR_on_IS"
+      threshold_gte: 0.0
+    gate:
+      - "bh_pass_family (q_family < 0.05)"
+      - "abs(t_IS) >= 3.00"
+      - "N_IS_on >= 100"
+      - "years_positive_IS >= 3"
+      - "bootstrap_p < 0.10"
+      - "ExpR_on_IS > 0"
+    counted_against_trial_budget: true
+  - id: H3_US_DATA_1000
+    type: primary
+    theory_citation:
+      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      extract: "Same as H1."
+    statement: "Same as H1 but for MGC US_DATA_1000 O5 RR1.5 long. Unfiltered baseline -0.030."
+    pass_metric:
+      metric: "ExpR_on_IS"
+      threshold_gte: 0.0
+    gate:
+      - "bh_pass_family (q_family < 0.05)"
+      - "abs(t_IS) >= 3.00"
+      - "N_IS_on >= 100"
+      - "years_positive_IS >= 3"
+      - "bootstrap_p < 0.10"
+      - "ExpR_on_IS > 0"
+    counted_against_trial_budget: true
+  - id: H4_EUROPE_FLOW
+    type: primary
+    theory_citation:
+      source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      extract: "Same as H1."
+    statement: "Same as H1 but for MGC EUROPE_FLOW O5 RR1.5 long. Unfiltered baseline -0.111."
+    pass_metric:
+      metric: "ExpR_on_IS"
+      threshold_gte: 0.0
+    gate:
+      - "bh_pass_family (q_family < 0.05)"
+      - "abs(t_IS) >= 3.00"
+      - "N_IS_on >= 100"
+      - "years_positive_IS >= 3"
+      - "bootstrap_p < 0.10"
+      - "ExpR_on_IS > 0"
+    counted_against_trial_budget: true
+
+baseline:
+  mode_a_is_canonical:
+    MGC_LONDON_METALS_O5_RR1.5_long_unfiltered: {N: 469, ExpR: -0.1528}
+    MGC_COMEX_SETTLE_O5_RR1.5_long_unfiltered: {N: 431, ExpR: -0.2012}
+    MGC_US_DATA_1000_O5_RR1.5_long_unfiltered: {N: 439, ExpR: -0.0298}
+    MGC_EUROPE_FLOW_O5_RR1.5_long_unfiltered: {N: 493, ExpR: -0.1111}
+    MGC_LONDON_METALS_O5_RR1.5_long_ORB_G5_on: {N: 41, ExpR_on: 0.1793, Delta_IS: 0.3321, approx_t: 0.98}
+    MGC_COMEX_SETTLE_O5_RR1.5_long_ORB_G5_on: {N: 33, ExpR_on: 0.0470, Delta_IS: 0.2482, approx_t: 0.23}
+    MGC_US_DATA_1000_O5_RR1.5_long_ORB_G5_on: {N: 133, ExpR_on: 0.0671, Delta_IS: 0.0969, approx_t: 0.66}
+    MGC_EUROPE_FLOW_O5_RR1.5_long_ORB_G5_on: {N: 26, ExpR_on: 0.3377, Delta_IS: 0.4488, approx_t: 1.47}
+  computation_date: 2026-04-19
+
+trial_budget:
+  primary_selection_trials: 4
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2 per Bailey et al 2013"
+    N_trials: 4
+    within_cap: true
+    cap_reference: ".claude/rules/backtesting-methodology.md § RULE 4.2"
+
+kill_criteria:
+  - id: K1
+    metric: "Number of H1-H4 that pass all 6 gate clauses"
+    threshold: 0
+    action: "PERMANENT KILL — MGC ORB_G5 + RR1.5 long does not yield a Pathway A Chordia-validated edge on any of the 4 pre-registered sessions. MGC stays research-only; no deployment. Do NOT re-run with different thresholds."
+  - id: K2
+    metric: "Baseline sanity smoke-test: absolute ExpR difference between pre-reg baseline block and run-time computation"
+    threshold: 0.001
+    action: "SMOKE FAIL — harness-implementation discrepancy. Run is non-authoritative. (Same-path comparison — not a genuine implementation-drift check; see prereg-writer-prompt.md § Baseline cross-check.)"
+  - id: K3
+    metric: "Any cell flagged tautology (|T0|>0.70), extreme_fire (<5% or >95%), or arithmetic_only (|WR_spread|<3% AND |Delta_IS|>0.10)"
+    threshold: 1
+    action: "FLAG — exclude flagged cells from survivor set per backtesting-methodology.md § RULE 8. Report non-flagged cells only."
+
+decision_rule:
+  continue_if: "At least 1 of H1-H4 passes all 6 gate clauses AND no K2 smoke fail AND cell not K3-flagged."
+  park_if: "At least 1 cell passes BH-FDR family but fails EXACTLY ONE of {bootstrap_p, years_positive} with N_IS_on >= 100. Park means: signal-only shadow pre-reg under Mode A forward OOS."
+  kill_if: "K1 fires (0 of 4 cells clear all gates) OR K2 smoke fail."
+
+methodology_rules_applied:
+  - rule: "backtesting-methodology.md RULE 1 — look-ahead"
+    application: "ORB_G5 uses intraday orb_size at ORB close; trade-time-knowable. The within-cell quintile threshold will be computed IS-only (per RULE 1 § Quantile-over-full-sample addendum) and applied to all rows; scan script must enforce this, NOT use full-sample quantile."
+  - rule: "backtesting-methodology.md RULE 3 — IS/OOS discipline"
+    application: "Strict Mode A IS. OOS descriptively reported only."
+  - rule: "backtesting-methodology.md RULE 4 — multi-framing BH-FDR"
+    application: "K_family = K_global = 4. Primary promotion q_family < 0.05."
+  - rule: "backtesting-methodology.md RULE 6 — trade-time-knowability"
+    application: "ORB_G5 is § 6.1 safe."
+  - rule: "backtesting-methodology.md RULE 7 — T0 tautology"
+    application: "T0 computed as Pearson corr(ORB_G5 fire, orb_size) ~ 1.0 by construction (ORB_G5 IS an orb_size function). Expected tautology with orb_size itself is trivially permitted; T0 check is against OTHER existing filters (e.g. OVNRNG_100, ATR_P50) to detect cross-filter collinearity."
+  - rule: "backtesting-methodology.md RULE 8.1 — extreme fire"
+    application: "ORB_G5 fires ~20% (top quintile) by construction — within [5%, 95%]."
+  - rule: "research-truth-protocol.md § Canonical filter delegation"
+    application: "Filter applied via research.filter_utils.filter_signal. No inline re-implementation."
+  - rule: "prereg-writer-prompt.md § Pathway A filter-mechanism specificity"
+    application: "Within-class-refinement framing explicit: Fitschen Ch 3 grounds the ORB intraday-trend-follow class; ORB_G5 is a size-filter refinement on an already-grounded strategy."
+
+outputs_required_after_run:
+  - "Per-cell N_on_IS, ExpR_on_IS, WR_on_IS, std_on_IS, t_IS, raw_p_IS."
+  - "Per-cell bootstrap_p (moving-block, block=5, B=10000, seed=42)."
+  - "Per-cell T0 tautology corr against orb_size, atr_20, overnight_range."
+  - "Per-cell fire_rate, extreme_fire flag, arithmetic_only flag."
+  - "BH-FDR q_family per cell."
+  - "Per-year breakdown 2022-2025 for years_positive check."
+  - "OOS descriptive stats — NOT used to select."
+  - "Kill/Park/Continue verdict per cell."
+  - "Result doc: docs/audit/results/2026-04-19-mgc-mode-a-rediscovery-orbg5-v1-scan.md"
+
+execution_gate:
+  allowed_now:
+    - "Stamp commit_sha and transition status to LOCKED in a follow-up commit."
+    - "Run the scan AFTER commit_sha stamped and pushed."
+  forbidden_now:
+    - "Running the scan before commit_sha is stamped."
+    - "Modifying any gate threshold or kill criterion after first run."
+    - "Widening the family to additional sessions or filters post-run."
+
+not_done_by_this_pre_reg:
+  - "Does NOT test MGC with GC proxy data extension (16yr). Would be a separate pre-reg for price-based features only, with proxy-native transfer audit required."
+  - "Does NOT test other filter classes on MGC (COST_LT, VWAP, ATR_P50). Each class is a separate pre-reg if pursued."
+  - "Does NOT test MGC at RR=1.0 or 2.0 (narrowed to RR1.5 to bound K at 4)."
+  - "Does NOT test short-direction (MGC ORB_G5 short unfiltered baseline is similar — separate pre-reg if pursued)."
+  - "Does NOT write to validated_setups or experimental_strategies."
