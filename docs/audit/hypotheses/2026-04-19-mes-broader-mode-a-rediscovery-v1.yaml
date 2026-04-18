@@ -1,0 +1,212 @@
+version: 1
+status: LOCKED
+date: 2026-04-19
+slug: mes-broader-mode-a-rediscovery-v1
+title: "MES broader Mode A rediscovery — CME_PRECLOSE long + US_DATA_1000 short (K=6)"
+owner: claude
+parent_spec: null
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/prompts/prereg-writer-prompt.md"
+  notes:
+    - "Pathway A Chordia t>=3.00 with-theory grounded by Fitschen Ch 3 intraday trend-follow on equity indices (MES = S&P 500)."
+    - "Canonical filter delegation via research.filter_utils.filter_signal."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  instrument: MES
+  sessions: [CME_PRECLOSE, US_DATA_1000]
+  session_rationale: |
+    CME_PRECLOSE is MES's existing validated session (2 live lanes: COST_LT08,
+    ORB_G8 both long RR1.0). This pre-reg tests 4 additional filter candidates
+    on that same (session, direction, RR) to map the locally-validated
+    structure. US_DATA_1000 short is new-territory — MES has NO validated
+    lanes there, but pre-screening (N>=200 unfiltered, Mode A IS) identified
+    multiple filter candidates with ExpR>0 and t>=1.5. K=6 bounds total.
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+
+data_policy:
+  is_window: "trading_day < HOLDOUT_SACRED_FROM"
+  is_coverage: "2019-05-06 through 2025-12-31 (~6.5 years MES native)"
+  oos_window: "descriptive only"
+  tuning_against_oos: false
+
+feature_definition:
+  canonical_source_of_truth: "trading_app.config.ALL_FILTERS"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, key, orb_label)"
+  trade_time_knowable: true
+  rule_category: "§ 6.1 safe (all filters used — ORB_G5/G8, ATR_P70, COST_LT12 — are trade-time-knowable)"
+
+primary_schema:
+  family_cells:
+    - id: H1_CMX_PRE_ORB_G8_L_RR1
+      session: CME_PRECLOSE
+      rr_target: 1.0
+      direction: long
+      filter_type: ORB_G8
+    - id: H2_CMX_PRE_COST_LT12_L_RR1
+      session: CME_PRECLOSE
+      rr_target: 1.0
+      direction: long
+      filter_type: COST_LT12
+    - id: H3_CMX_PRE_ATR_P70_L_RR1
+      session: CME_PRECLOSE
+      rr_target: 1.0
+      direction: long
+      filter_type: ATR_P70
+    - id: H4_USD1k_ORB_G5_S_RR15
+      session: US_DATA_1000
+      rr_target: 1.5
+      direction: short
+      filter_type: ORB_G5
+    - id: H5_USD1k_ORB_G5_S_RR2
+      session: US_DATA_1000
+      rr_target: 2.0
+      direction: short
+      filter_type: ORB_G5
+    - id: H6_USD1k_COST_LT12_S_RR15
+      session: US_DATA_1000
+      rr_target: 1.5
+      direction: short
+      filter_type: COST_LT12
+  k_family: 6
+  k_global: 6
+  primary_promotion_gate: "K_family BH-FDR q < 0.05 per RULE 4"
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  note: |
+    This pre-reg is motivated by the 2026-04-19 Mode A re-validation of MES
+    showing only 2 active validated lanes. Pre-scan (THIS SESSION) identified
+    the 30 (session, direction, RR, filter) combos with N>=100 + ExpR>0 +
+    t>=1.5 under Mode A IS; the 6 cells here are SELECTED with explicit
+    scope narrowing (CME_PRECLOSE long already-validated + US_DATA_1000 short
+    new territory + size/cost filter families Fitschen Ch 3 supports). This
+    IS data-peek-informed scope narrowing, acknowledged openly. Mitigation:
+    K=6 is small enough that Pathway A Chordia t>=3.00 with-theory remains
+    strict (BH-FDR q<0.05 at K=6 is not trivially easy); we expect 1-2 of
+    the 6 to pass, specifically H1 (CME_PRECLOSE ORB_G8 long RR1.0) where
+    pre-scan observed t=3.66.
+
+hypotheses:
+  - id: H1_CMX_PRE_ORB_G8_L_RR1
+    type: primary
+    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Table 3.8 equity-index intraday trend-follow. ORB_G8 = top 2-quintile size filter, within-class refinement on an already-grounded strategy."}
+    statement: "MES CME_PRECLOSE O5 RR1.0 long ORB_G8 breakouts produce materially positive Mode A IS ExpR."
+    pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
+    gate:
+      - "bh_pass_family (q_family < 0.05)"
+      - "abs(t_IS) >= 3.00"
+      - "N_IS_on >= 100"
+      - "years_positive_IS >= 4 (absolute, 7 full years 2019-2025)"
+      - "bootstrap_p < 0.10"
+      - "ExpR_on_IS > 0"
+    counted_against_trial_budget: true
+  - id: H2_CMX_PRE_COST_LT12_L_RR1
+    type: primary
+    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Same as H1. COST_LT12 = friction-screened (friction<12% of raw risk) within-class refinement."}
+    statement: "MES CME_PRECLOSE O5 RR1.0 long COST_LT12 same-session alternative-filter hypothesis."
+    pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
+    gate: ["bh_pass_family", "abs(t_IS) >= 3.00", "N_IS_on >= 100", "years_positive_IS >= 4", "bootstrap_p < 0.10", "ExpR_on_IS > 0"]
+    counted_against_trial_budget: true
+  - id: H3_CMX_PRE_ATR_P70_L_RR1
+    type: primary
+    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Same as H1. ATR_P70 = atr_20 percentile >= 70 — vol-regime filter."}
+    statement: "MES CME_PRECLOSE O5 RR1.0 long ATR_P70 vol-regime filter hypothesis."
+    pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
+    gate: ["bh_pass_family", "abs(t_IS) >= 3.00", "N_IS_on >= 100", "years_positive_IS >= 4", "bootstrap_p < 0.10", "ExpR_on_IS > 0"]
+    counted_against_trial_budget: true
+  - id: H4_USD1k_ORB_G5_S_RR15
+    type: primary
+    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Fitschen Table 3.8 covers both long and short intraday trend-follow on equity indices. ORB_G5 top-quintile size."}
+    statement: "MES US_DATA_1000 O5 RR1.5 short ORB_G5 — new-territory test at a session where MES has no validated lane."
+    pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
+    gate: ["bh_pass_family", "abs(t_IS) >= 3.00", "N_IS_on >= 100", "years_positive_IS >= 4", "bootstrap_p < 0.10", "ExpR_on_IS > 0"]
+    counted_against_trial_budget: true
+  - id: H5_USD1k_ORB_G5_S_RR2
+    type: primary
+    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Same as H4, RR=2.0 variant."}
+    statement: "MES US_DATA_1000 O5 RR2.0 short ORB_G5."
+    pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
+    gate: ["bh_pass_family", "abs(t_IS) >= 3.00", "N_IS_on >= 100", "years_positive_IS >= 4", "bootstrap_p < 0.10", "ExpR_on_IS > 0"]
+    counted_against_trial_budget: true
+  - id: H6_USD1k_COST_LT12_S_RR15
+    type: primary
+    theory_citation: {source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md", extract: "Same as H4, COST_LT12 friction-screened variant."}
+    statement: "MES US_DATA_1000 O5 RR1.5 short COST_LT12."
+    pass_metric: {metric: "ExpR_on_IS", threshold_gte: 0.0}
+    gate: ["bh_pass_family", "abs(t_IS) >= 3.00", "N_IS_on >= 100", "years_positive_IS >= 4", "bootstrap_p < 0.10", "ExpR_on_IS > 0"]
+    counted_against_trial_budget: true
+
+baseline:
+  mode_a_is_canonical:
+    H1_CMX_PRE_ORB_G8_L_RR1: {N_on: 130, ExpR_on: 0.280, t_IS_prescan: 3.66}
+    H2_CMX_PRE_COST_LT12_L_RR1: {N_on: 234, ExpR_on: 0.156, t_IS_prescan: 2.67}
+    H3_CMX_PRE_ATR_P70_L_RR1: {N_on: 239, ExpR_on: 0.142, t_IS_prescan: 2.59}
+    H4_USD1k_ORB_G5_S_RR15: {N_on: 573, ExpR_on: 0.119, t_IS_prescan: 2.48}
+    H5_USD1k_ORB_G5_S_RR2: {N_on: 559, ExpR_on: 0.146, t_IS_prescan: 2.55}
+    H6_USD1k_COST_LT12_S_RR15: {N_on: 504, ExpR_on: 0.116, t_IS_prescan: 2.25}
+  computation_date: 2026-04-19
+
+trial_budget:
+  primary_selection_trials: 6
+  schema_locked_before_any_metric: true
+  minbtl_bound: {N_trials: 6, within_cap: true, cap_reference: "RULE 4.2"}
+
+kill_criteria:
+  - id: K1
+    metric: "Number of H1-H6 that pass all 6 gate clauses"
+    threshold: 0
+    action: "FAMILY KILL — no MES broader edge at these cells."
+  - id: K2
+    metric: "Baseline sanity smoke-test |Δ ExpR_on| vs pre-reg baseline"
+    threshold: 0.001
+    action: "SMOKE FAIL — harness discrepancy. Re-run non-authoritative."
+  - id: K3
+    metric: "Any cell flagged tautology/extreme_fire/arithmetic_only"
+    threshold: 1
+    action: "FLAG — exclude from survivor set."
+
+decision_rule:
+  continue_if: "At least 1 of H1-H6 passes all gates AND no K2 smoke fail AND cell not K3-flagged."
+  park_if: "BH-FDR pass but exactly ONE secondary fail {bootstrap_p, years_positive}, N>=100."
+  kill_if: "K1 OR K2 fires."
+
+methodology_rules_applied:
+  - rule: "RULE 4 multi-framing BH-FDR"
+    application: "K_family = K_global = 6 (primary promotion q_family<0.05)."
+  - rule: "Canonical filter delegation"
+    application: "research.filter_utils.filter_signal used."
+  - rule: "prereg-writer-prompt.md § Quantile look-ahead"
+    application: "All filters here are non-quantile-binned (ORB_Gn uses per-cell size quantiles built over full-history daily_features, NOT per-cell IS/OOS). ATR_P70 uses atr_20 percentile. These are OK — but note scan must verify."
+  - rule: "prereg-writer-prompt.md § Pathway A filter-mechanism specificity"
+    application: "All filters framed as within-class refinements on Fitschen Ch 3 strategy class. Explicit acknowledgment."
+
+outputs_required_after_run:
+  - "Per-cell full stats (N, ExpR, t, raw_p, bootstrap_p, q_family, per-year)"
+  - "T0 tautology per cell"
+  - "Extreme_fire + arithmetic_only flags"
+  - "OOS descriptive"
+  - "Result doc: docs/audit/results/2026-04-19-mes-broader-mode-a-rediscovery-v1-scan.md"
+
+execution_gate:
+  allowed_now: ["stamp commit_sha", "run scan after SHA-stamp pushed"]
+  forbidden_now: ["run before SHA stamped", "modify thresholds", "widen family post-run"]
+
+not_done_by_this_pre_reg:
+  - "Does NOT test MES at EUROPE_FLOW, NYSE_OPEN, COMEX_SETTLE, TOKYO_OPEN — bounded scope."
+  - "Does NOT test broader MES rel_vol feature class — separate pre-reg."
+  - "Does NOT auto-promote to validated_setups — committee review required on CONTINUE."
