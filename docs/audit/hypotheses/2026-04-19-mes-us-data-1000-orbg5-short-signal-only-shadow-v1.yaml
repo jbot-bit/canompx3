@@ -1,0 +1,94 @@
+version: 1
+status: LOCKED
+date: 2026-04-19
+slug: mes-us-data-1000-orbg5-short-signal-only-shadow-v1
+title: "MES US_DATA_1000 ORB_G5 short RR1.5/RR2.0 — signal-only shadow (park underpowered positives)"
+owner: claude
+parent_spec: "docs/audit/hypotheses/2026-04-19-mes-broader-mode-a-rediscovery-v1.yaml"
+parent_result: "docs/audit/results/2026-04-19-mes-broader-mode-a-rediscovery-v1-scan.md"
+
+testing_mode: shadow_record
+pathway: shadow_only
+deployment: NONE
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+  notes:
+    - "This is NOT a new discovery pre-reg. It parks two underpowered cells from the MES broader Pathway A scan (commit 03a1fb74) that fail strict t>=3.00 on N but show persistent positive Mode A IS ExpR with 7 consecutive positive years."
+    - "No capital deployed. No validated_setups or experimental_strategies writes."
+
+motivation: |
+  Phase 7 (commit 03a1fb74) KILLED H4 and H5:
+    H4 MES US_DATA_1000 ORB_G5 short RR1.5:
+      N=573 ExpR_on=+0.119 t=2.477 boot_p=0.0101 years_positive=7/7 OOS dir_match=Y
+    H5 MES US_DATA_1000 ORB_G5 short RR2.0:
+      N=559 ExpR_on=+0.147 t=2.549 boot_p=0.0088 years_positive=7/7 OOS dir_match=Y
+  Both cells clear:
+    - BH-FDR family q < 0.05
+    - bootstrap p < 0.10 (moving-block centered-H0)
+    - 7 consecutive positive years (2019-2025)
+    - N_IS_on >= 100
+    - OOS direction matches IS (dir_match=Y)
+    - No tautology / extreme-fire / arithmetic-only flag
+  They fail ONLY on Chordia t >= 3.00 (2.48, 2.55). Fire rate 70% means the
+  signal captures most US_DATA_1000 short-breakout days — small per-trade
+  edge (0.12-0.15 R) but broadly consistent. Per
+  backtesting-methodology.md RULE 3.1 dir_match is preserved; per
+  pre_registered_criteria.md locked criteria C8 passed on Pathway B count
+  but not on strict Chordia.
+  Honest treatment: shadow-record, not kill. Forward OOS will accumulate
+  additional N; re-test at strict Chordia when power reaches bar.
+
+scope_of_shadow_record:
+  instrument: MES
+  session: US_DATA_1000
+  direction: short
+  orb_minutes: 5
+  entry_model: E2
+  rr_targets:
+    - 1.5
+    - 2.0
+  filter: ORB_G5
+  filter_delegation: "research.filter_utils.filter_signal(df, 'ORB_G5', orb_label)"
+
+shadow_record_mechanism:
+  type: "READ-ONLY — no live order, no position"
+  what_is_recorded:
+    - "Each trading day from 2026-04-19 forward, per RR cell: did ORB_G5 fire on MES US_DATA_1000 short? If yes, simulate trade using canonical orb_outcomes. Record pnl_r."
+    - "Weekly append to docs/audit/tracking/mes-usd1k-orbg5-short-shadow-YYYY-WW.csv"
+  recorder_tool:
+    existing: false
+    future_build: "Phase 15 shadow-recorder infrastructure (see docs/plans/2026-04-19-overnight-deferred-phases-design-docs.md)."
+
+reopen_criteria:
+  permanent_kill_if:
+    - condition: "Forward OOS 18 months accumulated (2026-04-19 through 2027-10-19), N_forward per cell >= 80, and bootstrap p_forward >= 0.30 on BOTH cells (RR1.5 AND RR2.0)."
+      action: "PERMANENT KILL — errata on parent_spec."
+  reopen_full_pathwayA_if:
+    - condition: "N_cumulative_IS_plus_forward >= 700 per cell AND t_cumulative >= 3.00 AND years_positive >= 8 including forward years."
+      action: "Write new Pathway A pre-reg (new commit SHA, new LOCK). Re-test strict."
+
+decision_rule:
+  continue: "Shadow-record only. No deployment."
+  no_deployment_until: "Full Pathway A re-run on accumulated data passes all 6 gate clauses."
+  do_not_do:
+    - "Do NOT write to validated_setups."
+    - "Do NOT write to experimental_strategies."
+    - "Do NOT claim 'edge' from shadow record alone."
+
+blast_radius:
+  upstream_docs_referenced:
+    - "docs/audit/hypotheses/2026-04-19-mes-broader-mode-a-rediscovery-v1.yaml (parent spec)"
+    - "docs/audit/results/2026-04-19-mes-broader-mode-a-rediscovery-v1-scan.md (parent result — KILL on t gate)"
+  downstream_docs_updated: "None at pre-reg time. Weekly shadow CSVs aspirational until Phase-15 infra."
+  production_code_touched: "NONE."
+  db_writes: "NONE."
+
+not_done_by_this_pre_reg:
+  - "No capital deployment."
+  - "Does NOT test RR1.0 or COST_LT12 variant (H6 also underpowered but at t=2.25, marginal — kept as KILL; not shadowed)."
+  - "Does NOT test long-direction on US_DATA_1000."
+  - "Does NOT write to validated_setups or experimental_strategies."
