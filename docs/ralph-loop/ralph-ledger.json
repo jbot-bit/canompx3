@@ -1,7 +1,7 @@
 {
-  "total_iterations": 160,
+  "total_iterations": 161,
   "last_updated": "2026-04-18",
-  "consecutive_low_only": 4,
+  "consecutive_low_only": 5,
   "last_high_finding_iter": 163,
   "findings_by_type": {
     "canonical_violation": {
@@ -17,10 +17,10 @@
       "fix_rate": 0.94
     },
     "other": {
-      "found": 23,
+      "found": 24,
       "fixed": 12,
-      "deferred": 2,
-      "fix_rate": 0.52
+      "deferred": 3,
+      "fix_rate": 0.5
     },
     "dead_code": {
       "found": 15,
@@ -117,12 +117,12 @@
     "CRITICAL": 3,
     "HIGH": 12,
     "MEDIUM": 42,
-    "LOW": 103
+    "LOW": 104
   },
   "classifications": {
     "judgment": 74,
     "mechanical": 58,
-    "audit-only": 28
+    "audit-only": 29
   },
   "files_audited": {
     "execution_engine.py": {
@@ -1084,6 +1084,11 @@
       "audit_count": 1,
       "last_iter": 166,
       "findings": 1
+    },
+    "trading_app/topstep_scaling_plan.py": {
+      "audit_count": 1,
+      "last_iter": 168,
+      "findings": 0
     }
   },
   "iterations": [
@@ -2842,6 +2847,17 @@
       "phase": "audit-only",
       "classification": "audit-only",
       "target": "trading_app/prop_profiles.py",
+      "finding_type": "other",
+      "severity": "LOW",
+      "verdict": "NOTED",
+      "commit": "NONE"
+    },
+    {
+      "iter": 168,
+      "date": "2026-04-18",
+      "phase": "audit-only",
+      "classification": "audit-only",
+      "target": "trading_app/topstep_scaling_plan.py",
       "finding_type": "other",
       "severity": "LOW",
       "verdict": "NOTED",

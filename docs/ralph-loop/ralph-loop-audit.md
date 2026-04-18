@@ -3,15 +3,49 @@
 > This file is overwritten each iteration with the current audit findings.
 > Historical findings are preserved in `ralph-loop-history.md`.
 
-## Last iteration: 167
+## Last iteration: 168
 
-## RALPH AUDIT — Iteration 167
+## RALPH AUDIT — Iteration 168
 ## Date: 2026-04-18
 ## Infrastructure Gates: drift 101/101 PASS (5 pre-existing violations: anthropic module absent + 3 stale SGP windows; 6 pre-existing advisories); behavioral audit 7/7 PASS; ruff advisory-only (pre-existing)
 
 ---
 
-## Iteration 167 — self_funded_tradovate cap conflict in get_lane_registry (DEFERRED)
+## Iteration 168 — topstep_scaling_plan.py (audit-only — all findings ACCEPTABLE)
+
+| Sin | Finding | Severity | Status |
+|-----|---------|----------|--------|
+| Orphan risk | `scripts/tmp/lane_analysis.py:20` imports `SCALING_LADDER` (nonexistent — correct name is `SCALING_PLAN_LADDER`). Caught by try/except; investigative script only. | LOW | ACCEPTABLE — dormant, guarded by try/except |
+| Contract drift | `lots_for_position()` misclassifies M2K and M6E as mini (1:1) instead of micro (10:1) because `instrument[1].isalpha()` excludes symbols with digit at position 1. Both instruments are dead for ORB per CLAUDE.md. All active instruments (MES, MGC, MNQ) classified correctly. | LOW | ACCEPTABLE — dormant, dead instruments only |
+
+### Audit Notes
+
+- **Auto-targeting:** Priority 1 = none (all critical/high files scanned). Priority 2 check: 2026-04-16 WIP-save commit was a line-ending normalization only (added=removed=1665 lines in build_daily_features.py), not substantive — scans remain valid. Priority 3 = topstep_scaling_plan.py (unscanned medium).
+- **Doctrine cited:** integrity-guardian.md § 2 (canonical sources), § 3 (fail-closed), § 5 (evidence over assertion); institutional-rigor.md § 4 (delegate to canonical sources), § 5 (no dead code), § 8 (verify before claiming).
+- **TRACE for Orphan risk:** `scripts/tmp/lane_analysis.py:20` → `from trading_app.topstep_scaling_plan import SCALING_LADDER` → `ImportError` (confirmed by execution) → `except Exception as e: print(...)` catches silently.
+- **TRACE for Contract drift:** `lots_for_position('M2K', 10)` → `instrument[1].isalpha()` = `'2'.isalpha()` = False → `return contracts` (returns 10 as 10 minis, should be `micros_to_mini_equivalent(10)` = 1 mini). Confirmed: M2K and M6E both dead for ORB (CLAUDE.md). Active instruments MES/MGC/MNQ all have alpha at position 1 → classified correctly.
+- **EVIDENCE:** All 49 test_topstep_scaling_plan.py pass. Python execution confirmed both bugs and that active instruments are unaffected.
+- **@future-followup noted:** NET vs GROSS position calculation (line 211). GROSS is conservative and documented.
+- **F-1 caller (risk_manager.py:231-268):** Properly wired — fail-closed when EOD balance unknown, narrow (KeyError, ValueError) exception handling, no swallowed errors.
+
+### Full Seven Sins scan — topstep_scaling_plan.py
+
+| Sin | Result |
+|-----|--------|
+| Silent failure | None — all error paths raise; no except-pass patterns |
+| Fail-open | None — max_lots_for_xfa raises KeyError/ValueError on bad input; risk_manager caller is fail-closed |
+| Look-ahead bias | N/A — no DB queries, no temporal logic |
+| Cost illusion | N/A — no P&L computation |
+| Canonical violation | None — SCALING_PLAN_LADDER values from @canonical-source annotated artifacts (TopStep policy, not pipeline canonical data). No hardcoded instrument/session/entry model lists. |
+| Orphan risk | ACCEPTABLE — scripts/tmp/lane_analysis.py:20 uses wrong constant name (SCALING_LADDER vs SCALING_PLAN_LADDER); investigative script, guarded by try/except |
+| Volatile data | None — @canonical-source annotations present with quarterly re-verify note |
+| Async safety | N/A — synchronous module |
+| State persistence gap | N/A — no mutable state |
+| Contract drift | ACCEPTABLE — lots_for_position misclassifies M2K and M6E (dead for ORB); all active instruments correct |
+
+---
+
+## Prior: Iteration 167 — self_funded_tradovate cap conflict in get_lane_registry (DEFERRED)
 
 | Sin | Finding | Severity | Status |
 |-----|---------|----------|--------|
@@ -166,8 +200,11 @@
 - trading_app/consistency_tracker.py — added iter 166
 - trading_app/risk_manager.py — added iter 166
 - trading_app/strategy_fitness.py — re-audited iter 167 (WIP-save only, no substantive change)
-- **Total: 248 files fully scanned**
+- trading_app/topstep_scaling_plan.py — added iter 168
+- **Total: 249 files fully scanned**
 
 ## Next iteration targets
-- Priority 3 (unscanned medium): trading_app/topstep_scaling_plan.py, trading_app/lane_correlation.py
+- Priority 2 (stale re-audit, critical): trading_app/db_manager.py — last scanned iter 120 (2026-03-16), substantively modified since (shelf/lifecycle/validator hardening commits). Critical tier (13 importers).
+- Priority 2 (stale re-audit, critical): trading_app/outcome_builder.py — last scanned iter 115 (2026-03-16), E2 canonical window fix (0c56c7f7) landed after. Critical tier (12 importers).
+- Priority 3 (unscanned medium): trading_app/lane_correlation.py
 - Note: pre-existing drift advisories (checks 59/95) require operational resolution by user — run `python scripts/tools/select_family_rr.py` and re-run validator for Mode A strategies

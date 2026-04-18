@@ -1761,3 +1761,15 @@ Also audited: rolling_portfolio_assembly.py (clean), generate_trade_sheet.py (cl
 - Blast radius: 0 files modified
 - Verification: PASS — 61/61 test_prop_profiles.py; drift 101/101 (5 pre-existing violations, 6 advisories)
 - Commit: NONE
+
+---
+
+## Iteration 168 — 2026-04-18
+- Phase: audit-only
+- Classification: audit-only
+- Target: trading_app/topstep_scaling_plan.py
+- Finding: Two ACCEPTABLE findings: (1) scripts/tmp/lane_analysis.py:20 imports nonexistent SCALING_LADDER (correct name: SCALING_PLAN_LADDER) — caught by try/except, investigative script only; (2) lots_for_position() misclassifies M2K and M6E as mini 1:1 instead of micro 10:1 due to instrument[1].isalpha() check — both instruments are dead for ORB per CLAUDE.md, all active instruments (MES, MGC, MNQ) classified correctly.
+- Action: ACCEPTABLE (both findings) — dormant code paths with existing guards. All 49 test_topstep_scaling_plan.py tests pass. File has proper @canonical-source annotations throughout. The @future-followup re: NET vs GROSS is documented and conservative (gross never under-counts).
+- Blast radius: 0 files modified
+- Verification: PASS — 49/49 test_topstep_scaling_plan.py; drift 101/101 (5 pre-existing, 6 advisory); behavioral 7/7
+- Commit: NONE
