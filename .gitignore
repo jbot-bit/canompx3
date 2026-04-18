@@ -219,6 +219,10 @@ Users*
 !context/*.py
 !docs/context/
 !docs/context/*.md
+!chatgpt_bundle/
+!chatgpt_bundle/**
+!chatgpt_bundle_optional/
+!chatgpt_bundle_optional/**
 
 # Local managed-worktree metadata
 .canompx3-worktree.local.json
