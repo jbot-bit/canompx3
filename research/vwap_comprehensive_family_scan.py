@@ -43,6 +43,13 @@ research/f5-below-pdl-stage1 branch and has not yet merged to main.
 Logic is character-equivalent to oneshot_utils.moving_block_bootstrap_p
 (same author, same canonical formulation per Lahiri 2003 / Politis-Romano 1994).
 
+Filter signals come from `research.filter_utils.filter_signal`, which
+delegates to the canonical `trading_app.config.ALL_FILTERS[key].matches_df`
+per `.claude/rules/institutional-rigor.md` Rule 4. The 2026-04-18 A+
+hardening pass removed the local `vwap_signal` and `deployed_filter_signal`
+functions that were re-encoding canonical filter logic; they are now pure
+delegations to the canonical filter instances.
+
 One-shot lock: refuses to re-run if result md already exists.
 
 Output: docs/audit/results/2026-04-18-vwap-comprehensive-family-scan.md
@@ -69,6 +76,7 @@ from scipy import stats  # noqa: E402
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS, ASSET_CONFIGS  # noqa: E402
 from pipeline.dst import SESSION_CATALOG  # noqa: E402
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
+from research.filter_utils import filter_signal  # noqa: E402
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM  # noqa: E402
 
 # =============================================================================
@@ -204,12 +212,26 @@ def t0_correlation(feat_sig: np.ndarray, filter_sig: np.ndarray) -> float:
 
 
 def load_lane(con: duckdb.DuckDBPyConnection, instrument: str, session: str, apt: int, rr: float) -> pd.DataFrame:
-    """Load orb_outcomes JOIN daily_features for one cell. Triple-join correct."""
+    """Load orb_outcomes JOIN daily_features for one cell. Triple-join correct.
+
+    Loads BOTH the canonical `orb_{session}_*` column names (required by
+    `research.filter_utils.filter_signal` which delegates to canonical
+    `matches_df`) AND convenience aliases used by `test_cell` for stats
+    computation. This keeps the scan's internal column references stable
+    while allowing the canonical filter lookup to succeed without renaming.
+    """
     q = f"""
     SELECT
         o.trading_day, o.symbol, o.orb_minutes, o.orb_label,
         o.entry_model, o.rr_target, o.outcome, o.pnl_r,
-        d.atr_20, d.overnight_range,
+        d.atr_20, d.atr_20_pct, d.overnight_range,
+        -- Canonical column names (consumed by ALL_FILTERS[*].matches_df):
+        d.orb_{session}_size,
+        d.orb_{session}_high,
+        d.orb_{session}_low,
+        d.orb_{session}_break_dir,
+        d.orb_{session}_vwap,
+        -- Convenience aliases (consumed by test_cell stats logic):
         d.orb_{session}_size AS orb_size,
         d.orb_{session}_high AS orb_high,
         d.orb_{session}_low AS orb_low,
@@ -241,77 +263,16 @@ def load_lane(con: duckdb.DuckDBPyConnection, instrument: str, session: str, apt
 
 
 # =============================================================================
-# VWAP filter signal computation — character-equivalent to
-# trading_app/config.py:2420-2554 VWAPBreakDirectionFilter.matches_df
+# Filter signals — delegated to canonical ALL_FILTERS via research.filter_utils
+# per .claude/rules/institutional-rigor.md Rule 4 (delegate to canonical source,
+# never re-encode). The local `vwap_signal` and `deployed_filter_signal`
+# helpers that existed in the original 2026-04-18 scan were removed in the
+# A+ hardening pass. All filter signal computation now flows through
+# `research.filter_utils.filter_signal(df, key, orb_label)` which is a thin
+# wrapper around `ALL_FILTERS[key].matches_df(df, orb_label)`.
+#
+# Tests proving wrapper equivalence: tests/test_research/test_filter_utils.py
 # =============================================================================
-
-
-def vwap_signal(df: pd.DataFrame, variant: str) -> np.ndarray:
-    """Binary 0/1 array — 1 where VWAP filter passes for that row.
-    variant: 'VWAP_MID_ALIGNED' (definition='orb_mid') or
-             'VWAP_BP_ALIGNED' (definition='break_price').
-    Mirrors trading_app/config.py:2420 VWAPBreakDirectionFilter.matches_df.
-    Fail-closed on missing data per the canonical filter."""
-    n = len(df)
-    if n == 0:
-        return np.zeros(0, dtype=int)
-    vwap = df["session_vwap"].astype(float)
-    hi = df["orb_high"].astype(float)
-    lo = df["orb_low"].astype(float)
-    bd = df["break_dir"].astype(str)
-
-    # Reference price per variant
-    if variant == "VWAP_MID_ALIGNED":
-        ref = (hi + lo) / 2.0
-    elif variant == "VWAP_BP_ALIGNED":
-        ref = hi.where(bd == "long", lo)
-    else:
-        raise ValueError(f"Unknown variant: {variant}")
-
-    is_long = (bd == "long").values
-    is_short = (bd == "short").values
-    has_break = is_long | is_short
-    has_vwap = vwap.notna().values
-    has_hilo = hi.notna().values & lo.notna().values
-
-    aligned_long = is_long & (ref > vwap).fillna(False).values
-    aligned_short = is_short & (ref < vwap).fillna(False).values
-    return (has_break & has_vwap & has_hilo & (aligned_long | aligned_short)).astype(int)
-
-
-# =============================================================================
-# Deployed-filter signals for T0 tautology — copied/adapted from
-# comprehensive_deployed_lane_scan.py:226-267
-# =============================================================================
-
-
-def deployed_filter_signal(df: pd.DataFrame, key: str) -> np.ndarray:
-    """0/1 signal where deployed filter would fire on this lane."""
-    n = len(df)
-    if n == 0:
-        return np.zeros(0, dtype=int)
-    if key == "ORB_G5":
-        sizes = df["orb_size"].astype(float)
-        if sizes.notna().sum() < 30:
-            return np.zeros(n, dtype=int)
-        q80 = np.nanpercentile(sizes, 80)
-        return (sizes >= q80).fillna(False).astype(int).values
-    if key == "ATR_P50":
-        atr = df["atr_20"].astype(float)
-        if atr.notna().sum() < 30:
-            return np.zeros(n, dtype=int)
-        p50 = np.nanpercentile(atr, 50)
-        return (atr >= p50).fillna(False).astype(int).values
-    if key == "OVNRNG_100":
-        ovn = df["overnight_range"].astype(float)
-        atr = df["atr_20"].astype(float)
-        ratio = ovn / atr
-        return (ratio >= 1.0).fillna(False).astype(int).values
-    if key == "ORB_G8":
-        return (df["orb_size"].astype(float) >= 8.0).fillna(False).astype(int).values
-    if key == "VWAP_MID_ALIGNED":
-        return vwap_signal(df, "VWAP_MID_ALIGNED")
-    return np.zeros(n, dtype=int)
 
 
 # =============================================================================
@@ -385,11 +346,13 @@ def test_cell(
     yrs_pos = int(((yearly_expr["mean"] > 0) & (yearly_expr["count"] >= 5)).sum())
     yrs_total = int((yearly_expr["count"] >= 5).sum())
 
-    # T0 tautology vs deployed filters on this cell
+    # T0 tautology vs deployed filters on this cell.
+    # Uses canonical ALL_FILTERS via research.filter_utils — no re-encoding.
+    orb_label = cell_id[1]
     t0_max = 0.0
     t0_against = ""
     for key in deployed_keys:
-        ds = deployed_filter_signal(df, key)
+        ds = filter_signal(df, key, orb_label=orb_label)
         ds_dir = ds[mask_dir]
         c = t0_correlation(sig_dir, ds_dir)
         if c > t0_max:
@@ -551,7 +514,7 @@ def main():
                     deployed_keys = DEPLOYED_FILTERS.get((instr, session, apt, rr), [])
 
                     for variant in VWAP_VARIANTS:
-                        sig = vwap_signal(df, variant)
+                        sig = filter_signal(df, variant, orb_label=session)
                         for direction in ALL_DIRS:
                             cell_id = (instr, session, apt, rr, variant)
                             res = test_cell(df, sig, direction, cell_id, deployed_keys)
@@ -925,7 +888,7 @@ def write_result_md(
     elif verdict.startswith("HARNESS"):
         lines += [
             "1. Halt — do not consume OOS for any cell.",
-            "2. Debug harness: confirm L6 row identity, verify load_lane query, verify vwap_signal computation.",
+            "2. Debug harness: confirm L6 row identity, verify load_lane query, verify filter_utils.filter_signal call.",
             "3. Do NOT delete this result md without explicit user instruction.",
         ]
     elif verdict.startswith("K3"):

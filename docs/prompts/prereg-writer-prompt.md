@@ -106,6 +106,64 @@ FORBIDDEN IN ANY PRE-REG
 - Evidence base from derived layers (validated_setups, edge_families, live_config, docs, memory)
 - "Post-hoc tuning permitted if first run fails" — always forbidden
 - Claims citing K_global only when K_family or K_lane are relevant
+- H3 (or any positive-control) baseline sourced from `validated_setups.expectancy_r`
+  without re-computing against strict Mode A IS from canonical orb_outcomes.
+  `validated_setups` rows with `last_trade_day` in [2026-01-01, 2026-04-08] are
+  Mode B grandfathered — the ExpR was computed against a different IS window
+  than Mode A. Always recompute the baseline from canonical layers against the
+  EXACT window the harness will use. See `.claude/rules/research-truth-protocol.md`
+  § "Mode B grandfathered validated_setups baselines" for the authoritative
+  warning. Origin: 2026-04-18 VWAP comprehensive scan H3 specification error.
+
+MANDATORY GATE CLAUSES (Pathway A_family pre-regs)
+
+Every family-scan H1 survivor gate MUST include an explicit positive-mean
+floor. Without it, a cell with large negative ExpR_on and |t|>=3.0 plus
+dir_match can theoretically pass (both positive Δ_IS and Δ_OOS can come from
+an even more negative off-signal mean). Shipped canonical gate template:
+
+  h1_pass = (
+      bh_pass_family
+      AND dir_match
+      AND abs(t_IS) >= 3.0           # Chordia (with theory) OR 3.79 (no-theory)
+      AND N_IS >= 50                 # deployable sample floor
+      AND years_positive_IS >= 4/7   # per-year stability
+      AND bootstrap_p < 0.10         # moving-block centered-H0, block=5, B=10000
+      AND ExpR_on_IS > 0             # positive-mean floor — REQUIRED
+  )
+
+If a family-scan pre-reg omits the `ExpR_on_IS > 0` gate, reject the pre-reg
+during self-review. Origin: 2026-04-18 VWAP comprehensive scan code review
+caught this theoretical loophole in the H1 gate spec.
+
+EXPECTED NEGATIVE-CONTROL BLOCK (family scans only)
+
+If the comprehensive scope includes cells that are in the NO-GO registry
+(`docs/STRATEGY_BLUEPRINT.md` §5), the pre-reg MUST include an
+`expected_negative_controls` block listing those cells with
+`expected_verdict: fail_per_graveyard`. This makes the Blueprint cross-check
+auditable rather than implicit. Example YAML:
+
+  expected_negative_controls:
+    - cell: "MNQ CME_PRECLOSE O5 RR{1.0,1.5,2.0} * VWAP_BP_ALIGNED"
+      graveyard_ref: "docs/STRATEGY_BLUEPRINT.md §5 entry 289 (2026-04-18 OOS reversal)"
+      expected_verdict: fail_per_graveyard
+      reopen_requires: "fundamentally new mechanism beyond this family scan"
+
+If the scan produces a survivor for a cell listed as negative control,
+treat it as a red flag requiring extended audit before any reopen claim.
+Origin: 2026-04-18 VWAP comprehensive scan Section G review finding.
+
+CANONICAL FILTER DELEGATION (research scans)
+
+Research scan scripts MUST NOT re-encode filter logic from
+`trading_app.config.ALL_FILTERS`. Use `research.filter_utils.filter_signal(df, key, orb_label)`
+which delegates to `ALL_FILTERS[key].matches_df(...)`. If a research PR
+includes a function that computes filter signals inline (e.g., a local
+`vwap_signal` or `deployed_filter_signal`), reject it and route through
+`filter_utils` instead. Origin: 2026-04-18 VWAP comprehensive scan code
+review B+ HIGH finding. See `tests/test_research/test_filter_utils.py` for
+the equivalence test harness.
 
 STYLE
 - terse

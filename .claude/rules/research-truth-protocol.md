@@ -23,6 +23,80 @@ This file enforces the protocol in Claude Code sessions.
 | `live_config` / LIVE_PORTFOLIO | HARDCODED | **NO** — deployment state, not research truth |
 | Docs, comments, memory files | META | **NO** — verify against canonical layers first |
 
+## Mode B grandfathered validated_setups baselines (MANDATORY warning, added 2026-04-18)
+
+**NEVER use `validated_setups.expectancy_r` as a positive-control or
+comparison baseline for a Mode A scan without first recomputing the value
+against strict Mode A IS from canonical `orb_outcomes`.**
+
+Background: the project transitioned from Mode B (grandfathered holdout) to
+Mode A (strict 2026-01-01 holdout) via Amendment 2.7 on 2026-04-08
+(`docs/plans/2026-04-07-holdout-policy-decision.md`). `validated_setups`
+rows with `last_trade_day` in the window `[2026-01-01, 2026-04-08]` were
+computed under Mode B — their `expectancy_r` reflects an IS window that
+includes 2026 Q1 data which is now sacred OOS under Mode A.
+
+Example trap (2026-04-18 VWAP comprehensive family scan):
+- Pre-reg H3 positive control cited `validated_setups.expectancy_r = +0.2101`
+  for the L6 lane (MNQ US_DATA_1000 O15 RR1.5 long VWAP_MID_ALIGNED) based
+  on Mode B grandfathered row with N=701, `last_trade_day=2026-04-02`
+- Scan harness correctly computed strict Mode A IS (trading_day < 2026-01-01),
+  giving N=435 and ExpR=+0.1817 — a 247-trade gap and 0.028 R difference
+  from the cited Mode B baseline
+- Scan's K2 positive-control threshold of ±0.02 fired as a FAIL because of
+  this specification error, NOT because of any harness defect (independent
+  SQL at run time reproduced the harness's +0.1817 exactly)
+- Post-run correction required; scan's K1 substantive verdict (0 family
+  survivors) was independent of the H3 calibration error
+
+**Required practice for positive-control baselines:**
+1. Identify the exact `(instrument, orb_label, orb_minutes, rr_target,
+   entry_model, confirm_bars, filter_type, direction)` tuple under test
+2. Compute IS ExpR from canonical `orb_outcomes JOIN daily_features` with
+   `trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM` — the
+   SAME window the harness will consume
+3. Cite that computed value in the pre-reg, NOT the `validated_setups` row
+4. If the pre-reg writer cannot run SQL, the pre-reg must state the
+   baseline as "to be computed by the harness" and include a separate
+   independent-SQL verification step before the K2 kill criterion is
+   evaluated
+
+The pre-reg writer prompt (`docs/prompts/prereg-writer-prompt.md`) enforces
+this at self-review time; violations block the pre-reg from committing.
+
+**Also applies to:**
+- WFE baseline comparisons (Mode B WFE may differ from Mode A WFE)
+- OOS extrapolation tests (Mode B `oos_exp_r` is NOT the Mode A OOS)
+- Sharpe ratio comparisons (Mode B IS Sharpe is computed on a different
+  sample)
+
+When in doubt, recompute. Canonical layers (`bars_1m`/`daily_features`/
+`orb_outcomes`) are the only admissible source for baselines; `validated_setups`
+is a stale snapshot whose IS window may not match the current Mode A spec.
+
+## Canonical filter delegation (MANDATORY, added 2026-04-18)
+
+Research scan scripts MUST NOT re-encode filter logic from
+`trading_app.config.ALL_FILTERS`. Use the canonical helper
+`research.filter_utils.filter_signal(df, key, orb_label)` which delegates
+to `ALL_FILTERS[key].matches_df(df, orb_label)`.
+
+Origin: 2026-04-18 VWAP comprehensive family scan code review caught two
+local functions (`vwap_signal`, `deployed_filter_signal`) re-encoding
+canonical filter logic. When the refactor landed on the canonical path,
+one cell's N_on_IS count corrected from 436 to 435 — a 1-row divergence
+invisible to any test except direct equivalence. Parallel filter implementations
+WILL drift. The canonical wrapper exists to make drift impossible.
+
+- Wrapper: `research/filter_utils.py`
+- Equivalence tests: `tests/test_research/test_filter_utils.py` (15 tests
+  covering VWAP_MID_ALIGNED, VWAP_BP_ALIGNED, ORB_G5, ORB_G8, OVNRNG_100,
+  ATR_P50)
+- Prohibited patterns: any function in `research/` that computes a 0/1
+  signal mimicking a registered `StrategyFilter.matches_df` implementation
+  without delegating to it. Review these as code-review B-grade violations
+  minimum.
+
 ## Research Claim Requirements
 
 Every research claim must include:

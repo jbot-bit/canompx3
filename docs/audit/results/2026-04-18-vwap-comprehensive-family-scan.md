@@ -179,6 +179,21 @@ The OOS window for the VWAP family was consumed in this run (one-shot OOS). Re-r
 - **L6 deployed lane**: under strict Mode A IS the lane has ExpR=+0.1844 (vs Mode B +0.2101). The lane is still positive and live, but its IS-IS comparable is +0.1844 not +0.2101. The C12 review should be revisited to use Mode A baseline for any future drift comparisons.
 - **`research/oneshot_utils.py`** currently lives only on the `research/f5-below-pdl-stage1` branch. It should be merged to main so future scans don't have to inline the bootstrap helper.
 
+## Post-commit A+ hardening addendum (2026-04-18)
+
+After the commit, a code review graded this work B+ for two canonical-integrity violations:
+- the scan's local `vwap_signal()` re-encoded `trading_app.config.VWAPBreakDirectionFilter.matches_df`
+- the scan's local `deployed_filter_signal()` re-encoded `OrbSizeFilter` / `OvernightRangeFilter` / etc.
+
+Root-cause fixes landed in a follow-up A+ hardening commit:
+- new canonical helper `research/filter_utils.py` that wraps `ALL_FILTERS[key].matches_df(df, orb_label)` as a numpy 0/1 signal — thin delegation, no re-encoding
+- 15 unit tests in `tests/test_research/test_filter_utils.py` proving wrapper equivalence across 6 filter classes (VWAP_MID_ALIGNED, VWAP_BP_ALIGNED, ORB_G5, ORB_G8, OVNRNG_100, ATR_P50) — all PASS
+- scan script refactored to call `filter_signal()` for both the family-under-test and the T0 tautology pre-screen; local `vwap_signal` and `deployed_filter_signal` deleted
+
+**Finding caught by the refactor:** on the L6 cell (MNQ US_DATA_1000 O15 RR1.5 long VWAP_MID_ALIGNED) with Mode A IS filters, the refactored canonical path returns N_on_IS=435; the original inlined `vwap_signal` returned N_on_IS=436. ExpR_on_IS matches to 4 decimals at +0.1817 in both. The 1-row divergence is the exact drift-risk `.claude/rules/institutional-rigor.md` Rule 4 was written to prevent — one row differs between the old inline code and the canonical filter's NaN-handling path. **No verdict changes:** 1 row cannot turn 0 family survivors into 3+; K1 + K2 verdicts stand. But the finding documents why canonical delegation matters in practice, not just in principle.
+
+**Scan committed with N=436 reading** on this specific cell. Not reconsumed — Mode A one-shot OOS already exhausted. Future scans using the refactored path will produce the corrected N=435. Verdict unchanged either way.
+
 ## Caveats
 
 - Pathway A_family scan; survivors require separate Pathway B pre-reg + validator pass before deployment.
