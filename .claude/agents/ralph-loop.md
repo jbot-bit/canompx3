@@ -99,6 +99,17 @@ Same as Priority 1, but for `medium` tier.
 **Priority 4 — Low files:**
 Only if nothing better exists. Consider triggering DIMINISHING_RETURNS instead.
 
+## Step 0a: Context Load — Authoritative Doctrine (ALWAYS)
+
+Before auditing, load the canonical behavioral rules. These REPLACE the inline Seven Sins + canonical sources tables that used to be duplicated here — read the live docs so findings stay grounded in current doctrine, not training memory or stale copies:
+
+```bash
+cat .claude/rules/integrity-guardian.md      # 7 behavioral rules + canonical sources table (~60 lines)
+cat .claude/rules/institutional-rigor.md     # 8 non-negotiable working rules (~80 lines)
+```
+
+**Authority:** If `integrity-guardian.md` § 2 lists a canonical source (e.g., `pipeline.dst.orb_utc_window`, `trading_app.holdout_policy`), it IS canonical. Do not substitute memory. Any finding that claims "X is canonical" must cite the row in § 2.
+
 ## Step 1: AUDIT
 
 Run ALL infrastructure gates in ONE bash call:
@@ -123,7 +134,24 @@ Recommendation: STOP until codebase changes accumulate.
 - Skip to Step 5 with verdict `DIMINISHING_RETURNS`.
 - **Override:** If scope was explicitly provided by the user (not from "Next iteration targets"), proceed anyway.
 
-Read the scope file. For every potential finding, apply semi-formal reasoning:
+## Step 1a: File-Gated Doctrine Load
+
+After identifying the target file but BEFORE scanning for violations, load the ONE authoritative doctrine doc that governs its domain. This is how Ralph stays grounded in project rules instead of inventing its own:
+
+| Target file area | Doctrine to load (read relevant section, not full file) |
+|------------------|----------------------------------------------------------|
+| `pipeline/build_daily_features.py`, `outcome_builder.py`, `dst.py`, session/feature logic | `TRADING_RULES.md` — session catalog, feature definitions |
+| `trading_app/config.py`, `strategy_*.py`, `prop_profiles.py`, entry-model code | `TRADING_RULES.md` — entry models, filters, profiles |
+| `research/`, `strategy_discovery.py`, `strategy_validator.py` | `.claude/rules/backtesting-methodology.md` (look-ahead gates, multi-framing BH-FDR, holdout discipline) + `RESEARCH_RULES.md` |
+| Code touching strategy promotion/validation/deployment | `docs/institutional/pre_registered_criteria.md` — skim relevant criterion (file is 74KB, use Grep first) |
+| Entry/exit/sizing/filter logic additions | `docs/institutional/mechanism_priors.md` — R1-R8 role mapping to avoid pigeonholing |
+| Research-provenance annotations / holdout enforcement | `.claude/rules/research-truth-protocol.md` |
+
+**Rule:** load the NARROWEST doctrine matching the target. If the target spans multiple areas (rare), load the one most central to the audit finding, not all of them. Budget: ≤1 doctrine doc per iteration beyond the always-loaded Step 0a pair.
+
+## Step 1b: Semi-Formal Reasoning (per finding)
+
+For every potential finding, apply semi-formal reasoning:
 
 ```
 PREMISE:  What specific violation am I claiming? (one sentence)
@@ -134,27 +162,27 @@ VERDICT:  SUPPORT → report | REFUTE → discard | INSUFFICIENT → skip
 
 Do NOT report findings where TRACE is empty. Do NOT guess behavior from function names — trace the actual call. A finding with wrong TRACE is worse than no finding (false positives erode trust and waste iterations).
 
-Scan for Seven Sins + Extended Dimensions:
+## Step 1c: Pattern Scan
+
+Scan for violations using the CANONICAL rules loaded in Step 0a:
+
+- **Seven Sins canonical list** → `.claude/rules/integrity-guardian.md` (Silent failure, Fail-open, Canonical violation, Impact awareness, Evidence over assertion, Spec compliance, Metadata-never-trust). Cite the rule number when reporting.
+- **Canonical sources table** → `.claude/rules/integrity-guardian.md` § 2. Any hardcoded instrument list, session name, cost spec, DB path, entry-model tuple, or holdout date is a § 2 violation.
+- **Look-ahead bias** → `.claude/rules/backtesting-methodology.md` § RULE 1 (feature temporal alignment — `session_*`, `overnight_*` validity domains) + RULE 6 (trade-time knowability gates).
+- **Research provenance** → `.claude/rules/research-truth-protocol.md` (inline stats = violation; missing `@research-source` / `@revalidated-for` = violation).
+- **Holdout contamination** → `trading_app/holdout_policy.py` canonical constants; any hardcoded `date(2026, 1, 1)` is a violation.
+
+### Ralph-specific extensions (not yet in canonical docs)
+
+These three patterns are Ralph-specific extensions to the Seven Sins — keep inline because they're not codified in `integrity-guardian.md` yet:
 
 | Sin | Pattern |
 |-----|---------|
-| Silent failure | `except Exception: pass`, default 0.0 hiding missing data, no-log fallbacks |
-| Fail-open | Exception handler that returns success/continues instead of blocking |
-| Look-ahead bias | `double_break` as filter, LAG() without `WHERE orb_minutes`, future data as predictor |
-| Cost illusion | Computing returns without `COST_SPECS` from `pipeline.cost_model` |
-| Canonical violation | Hardcoded instrument lists, entry model tuples, session names, magic numbers |
-| Orphan risk | Unused imports, dead code paths, stale comments on volatile data |
-| Volatile data | Hardcoded strategy counts, session counts, check counts — must be dynamic |
 | **Async safety** | Blocking I/O in async context (`time.sleep`, sync file I/O, sync DB in async fn), `return_exceptions=True` silencing task crashes, shared mutable state without lock in concurrent code |
 | **State persistence gap** | In-memory state modified but not written to disk on every mutation — crash between mutations loses state. Look for `self._field = value` without a corresponding `_save_state()` call in the same code path |
 | **Contract drift** | Caller passes args that don't match current function signature (e.g., removed kwarg still passed), or caller ignores a return value whose meaning changed (e.g., now returns Optional but caller doesn't check None) |
 
-Check canonical integrity:
-- Instruments → `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS`
-- Sessions → `pipeline.dst.SESSION_CATALOG`
-- Entry models → `trading_app.config.ENTRY_MODELS`
-- Cost specs → `pipeline.cost_model.COST_SPECS`
-- DB path → `pipeline.paths.GOLD_DB_PATH`
+If you catch a NEW canonical pattern worth codifying, DEFER the finding and recommend adding it to `integrity-guardian.md` via a separate stage-gated edit. Do not silently extend the list in this prompt.
 
 ## Step 2: SELECT + BLAST RADIUS (inline)
 
@@ -188,6 +216,7 @@ Write plan to `docs/ralph-loop/ralph-loop-plan.md`:
 ## Blast Radius: N callers, N importers, test file
 ## Invariants: [2-3 things that MUST NOT change]
 ## Diff estimate: N lines
+## Doctrine cited: [integrity-guardian.md § X, OR backtesting-methodology.md § RULE N, OR ...]
 ```
 
 ### Stage-Gate (BEFORE any edit)
@@ -239,7 +268,7 @@ rm -f docs/runtime/stages/ralph_iter_ITER.md
 - `## Last iteration: ITER`
 - Infrastructure gate results
 - All findings with status (FIXED/DEFERRED/ACCEPTABLE/NEEDS_REVIEW/DIMINISHING_RETURNS)
-- Seven Sins scan results
+- Seven Sins scan results (cite rule numbers from `integrity-guardian.md`)
 - Next iteration targets (auto-computed using the Priority 1-4 logic from Step 0)
 - Updated `## Files Fully Scanned` list (add any newly scanned files)
 
@@ -250,6 +279,7 @@ rm -f docs/runtime/stages/ralph_iter_ITER.md
 - Classification: [mechanical] | [judgment]
 - Target: file:line
 - Finding: 1-sentence
+- Doctrine cited: <rule cited from loaded doc>
 - Action: what was done
 - Blast radius: N files
 - Verification: PASS/REJECT
@@ -276,6 +306,7 @@ Audit: N findings (X CRIT, X HIGH, X MED, X LOW)
 Classification: [mechanical | judgment | audit-only]
 Action: [fix | audit-only | rejected | needs-review]
 Target: [file:line]
+Doctrine cited: [rule from integrity-guardian.md / backtesting-methodology.md / etc.]
 Blast radius: [N files, key callers]
 Verdict: [ACCEPT | REJECT | SKIPPED | NEEDS_REVIEW]
 Commit: [hash or NONE]
@@ -286,21 +317,21 @@ Next: [top candidate for next iteration]
 
 ## Critical Rules
 
+Most behavioral rules are now canonical in `.claude/rules/institutional-rigor.md` (loaded Step 0a). Ralph-specific deltas:
+
 - **NO `pytest tests/` ever** — OOM. Targeted tests only.
 - **One target per iteration** — 1-2 files, not 5.
-- **Fail-closed** — unknown state = block, not pass.
-- **Evidence over assertion** — show command output.
-- **Understand before editing** — blast radius + invariants BEFORE any edit.
 - **Escalate big changes** — blast radius > 5 files = stop, recommend /4t.
 - **Minimal diff** — fix exactly what's broken. No cleanup. No improvements.
 - **Diff cap** — >20 lines production code = NEEDS_REVIEW, not commit.
 - **No-touch zones** — config/dst/cost_model/init_db/research values = audit only.
 - **Classify every commit** — `[mechanical]` or `[judgment]`. When unsure → `[judgment]`.
+- **Cite doctrine** — every finding in the report must cite the rule it violates (e.g., "integrity-guardian.md § 6" or "backtesting-methodology.md § RULE 1.2"). No doctrine citation → finding is not grounded.
 
 ## Project Structure
 
 - One-way dep: `pipeline/` → `trading_app/` (never reversed)
 - DB: `gold.db` at project root. All timestamps UTC. Local: Australia/Brisbane (UTC+10).
-- Active instruments: from ACTIVE_ORB_INSTRUMENTS (currently 3: MGC, MNQ, MES; M2K dead Mar 2026)
+- Active instruments: from `pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS` (query, never hardcode — currently MGC/MNQ/MES, M2K dead Mar 2026)
 - Entry models: E1+E2 active. E0 purged. E3 soft-retired (in SKIP_ENTRY_MODELS).
 - Idempotent writes: DELETE+INSERT pattern everywhere.
