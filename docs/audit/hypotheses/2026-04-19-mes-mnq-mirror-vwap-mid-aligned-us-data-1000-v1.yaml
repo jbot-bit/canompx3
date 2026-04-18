@@ -1,5 +1,5 @@
 version: 1
-status: PRE_REGISTERED_DRAFT
+status: LOCKED
 date: 2026-04-19
 slug: mes-mnq-mirror-vwap-mid-aligned-us-data-1000-v1
 title: "MES mirror of MNQ US_DATA_1000 VWAP_MID_ALIGNED long — K=2 family scan"
@@ -22,7 +22,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "4fd08031"
   committed_required_before_run: true
 
 scope:
