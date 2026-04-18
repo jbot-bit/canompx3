@@ -1,8 +1,53 @@
 # Mode A committee review pack — live-book action recommendations
 
 **Generated:** 2026-04-19 (overnight session)
+**Reframed:** 2026-04-19 post-regime-drift control (see Addendum at top)
 **Primary source:** `docs/audit/results/2026-04-19-mode-a-revalidation-of-active-setups.md`
 **Purpose:** Synthesize the 38/38 Mode A drift finding into per-lane action categories that a committee can vote on. No auto-promote; no auto-retire. This document recommends; decisions require human sign-off.
+
+---
+
+## ADDENDUM — Regime-drift reframe (2026-04-19, supersedes Category D RETIRE framing)
+
+**Source:** `docs/audit/results/2026-04-19-regime-drift-control-critical-lanes.md` (commit 9937ebf6).
+
+The original Category D classification (4 lanes flagged for RETIRE) attributed Mode A Sharpe drop to **lane-specific decay**. A regime-drift control was run to partition lane-drop from environment-drop.
+
+**Environment baseline:** all 36 active MNQ lanes pooled early (2022-2023) vs late (2024-2025) Mode A IS subsets → Sharpe drop **−0.41 annualized portfolio-wide**.
+
+**Per-lane excess drop vs environment:**
+
+| Lane | Early Sh | Late Sh | Lane drop | Excess drop vs portfolio (−0.41) | Original verdict | **Reframed verdict** |
+|---|---:|---:|---:|---:|---|---|
+| CR1 MNQ EUROPE_FLOW OVNRNG_100 long RR1.0 | 0.78 | 0.43 | −0.36 | +0.05 | CRITICAL (RETIRE) | **REGIME (hold)** |
+| CR2 MNQ EUROPE_FLOW OVNRNG_100 long RR1.5 | 0.75 | 0.73 | −0.02 | +0.39 | CRITICAL (RETIRE) | **BETTER-THAN-PEERS (keep)** |
+| CR3 MNQ NYSE_OPEN X_MES_ATR60 long RR1.0 | 0.47 | 0.95 | +0.49 | +0.90 | CRITICAL (RETIRE) | **BETTER-THAN-PEERS (improving)** |
+| CR4 MNQ NYSE_OPEN X_MES_ATR60 long RR1.5 | 0.59 | 0.40 | −0.20 | +0.21 | CRITICAL (RETIRE) | **REGIME (hold)** |
+
+**None of the 4 CRITICAL lanes drop more than 0.30 worse than the broader MNQ environment.** Two are actually better-than-peers; the deepest-drop of the four (CR1) tracks the environment almost exactly.
+
+### Revised committee recommendation
+
+- **RETIRE vote withdrawn for all 4 CRITICAL lanes.** The RETIRE framing was over-attributed to lane decay without controlling for environment stress.
+- **Reclassify Category D → REGIME-STRESSED WATCH.** Continue live; re-evaluate Q3 2026 against fresh OOS. Downgrade from CORE to REGIME tier is optional but not mandatory.
+- **Broader finding:** 13/36 MNQ lanes show Sharpe drops > 0.50 (twice the environment). THOSE are the honest retirement candidates — see "All 36 MNQ lanes early/late" table in the control doc. Notable deep-drop non-flagged lanes:
+  - `MNQ_EUROPE_FLOW_E2_RR1.5_CB1_CROSS_SGP_MOMENTUM` (drop −1.41)
+  - `MNQ_EUROPE_FLOW_E2_RR2.0_CB1_CROSS_SGP_MOMENTUM` (drop −1.28)
+  - `MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12` (drop −1.26)
+  - `MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15` (drop −1.17, Sharpe NEGATIVE late)
+- **Committee should re-prioritize:** instead of voting on the 4 (falsely-flagged) lanes, vote on the 4-to-13 lanes with genuine excess decay (beyond portfolio).
+
+### Methodology note (Mode A → environment-controlled)
+
+Raw Mode A Sharpe drop conflates (a) honest lane-specific decay with (b) environment-wide regime compression. The 2024-2025 MNQ intraday-breakout environment produced a broad −0.41 Sharpe compression across all 36 lanes. A retirement framing anchored only on raw Mode A drift is systematically biased toward false-positive retirement.
+
+Going forward: **lane retirement decisions require environment-controlled excess drop**, not raw Sharpe drop alone. Recommended threshold: `lane_drop - portfolio_drop < -0.50` → candidate for RETIRE vote. Between -0.30 and -0.50 → downgrade to REGIME tier. Within -0.30 of portfolio → HOLD (regime stress, not lane decay).
+
+The body of this document (below) is preserved for audit trail. The Category D 4-lane RETIRE framing in § "Category D — CRITICAL" is SUPERSEDED by this addendum.
+
+---
+
+
 
 ## Framework
 
@@ -68,7 +113,9 @@ Lanes where the committee should discuss: is this lane still deployable at its r
 | MNQ | US_DATA_1000 VWAP_MID_ALIGNED long RR1.5 | 0.210 / 0.184 | 1.87 / 1.21 | -0.03 | Y |
 | MNQ | US_DATA_1000 VWAP_MID_ALIGNED long RR2.0 | 0.176 / 0.148 | 1.27 / 0.79 | -0.03 | Y |
 
-### Category D — CRITICAL (4 lanes)
+### Category D — CRITICAL (4 lanes) — SUPERSEDED, see Addendum at top
+
+**[SUPERSEDED 2026-04-19]** Regime-drift control shows all 4 lanes track the portfolio-wide −0.41 Sharpe drop. RETIRE framing withdrawn. Preserved below for audit trail only.
 
 Strong case for RETIRE under Mode A. ExpR drop > 0.05 absolute OR Mode A ExpR below 0.05.
 
