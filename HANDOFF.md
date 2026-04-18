@@ -53,6 +53,20 @@
 - Correct sync path is commit here, then intentional git-based sync later
   (push/pull or cherry-pick onto a clean target), not ad hoc file copying.
 
+### Front-door fix
+
+- `codex.bat` now defaults to the WSL-home Codex path instead of the Windows
+  checkout.
+- The Linux-home launcher runs `scripts/infra/codex-wsl-sync.sh` before launch.
+- Behavior is now:
+  - fast-forward the WSL clone when safe
+  - fail closed if the source checkout is dirty
+  - fail closed if the WSL clone is dirty, on the wrong branch, detached, or
+    divergent
+- Net effect: the user should no longer have to remember a special `linux`
+  variant just to avoid stale Codex state. `codex.bat` is the intended Windows
+  front door now.
+
 ## Update (2026-04-18 governance — merge side-effect recorded, branch discipline tightened)
 
 ### What happened

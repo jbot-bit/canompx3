@@ -155,6 +155,7 @@ class TestCodexWslCommand:
         command = windows_agent_launch.build_codex_project_wsl_command("/mnt/c/repo", use_linux_home=True)
 
         assert 'ROOT="${CANOMPX3_CODEX_WSL_ROOT:-$HOME/canompx3}"' in command
+        assert 'bash /mnt/c/repo/scripts/infra/codex-wsl-sync.sh --source /mnt/c/repo --target "$ROOT"' in command
         assert 'cd "$ROOT"' in command
         assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
@@ -232,9 +233,10 @@ class TestWindowsBatchWrappers:
     def test_codex_batch_is_the_single_smart_codex_entrypoint(self) -> None:
         content = (windows_agent_launch.repo_root() / "codex.bat").read_text(encoding="utf-8")
 
-        assert 'set "MODE=codex-project"' in content
+        assert 'set "MODE=codex-project-linux"' in content
         assert 'if /I "%ACTION%"=="gold-db" (' in content
         assert 'if /I "%ACTION%"=="search-gold-db" (' in content
+        assert 'if /I "%ACTION%"=="windows" (' in content
         assert 'if /I "%ACTION%"=="linux" (' in content
         assert 'if /I "%ACTION%"=="linux-gold-db" (' in content
         assert 'if /I "%ACTION%"=="green" (' in content
@@ -257,6 +259,9 @@ class TestWindowsBatchWrappers:
         assert "call :run_mode green-claude" in content
         assert "call :run_mode green-codex" in content
         assert "GUI=1" in content
+
+    def test_linux_search_gold_db_mode_is_supported(self) -> None:
+        assert "codex-project-linux-search-gold-db" in windows_agent_launch.VALID_MODES
 
     def test_windows_gui_script_supports_button_actions_and_dry_run(self) -> None:
         content = (windows_agent_launch.repo_root() / "scripts" / "infra" / "windows-workstreams-gui.ps1").read_text(

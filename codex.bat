@@ -6,14 +6,20 @@ set "PYTHONIOENCODING=utf-8"
 cd /d "%~dp0"
 
 set "ACTION=%~1"
-set "MODE=codex-project"
+set "MODE=codex-project-linux"
 
 if /I "%ACTION%"=="gold-db" (
-    set "MODE=codex-project-gold-db"
+    set "MODE=codex-project-linux-gold-db"
 ) else if /I "%ACTION%"=="power" (
-    set "MODE=codex-project-power"
+    set "MODE=codex-project-linux-power"
 ) else if /I "%ACTION%"=="search-gold-db" (
-    set "MODE=codex-project-search-gold-db"
+    set "MODE=codex-project-linux-search-gold-db"
+) else if /I "%ACTION%"=="windows" (
+    set "MODE=codex-project"
+) else if /I "%ACTION%"=="windows-gold-db" (
+    set "MODE=codex-project-gold-db"
+) else if /I "%ACTION%"=="windows-power" (
+    set "MODE=codex-project-power"
 ) else if /I "%ACTION%"=="linux" (
     set "MODE=codex-project-linux"
 ) else if /I "%ACTION%"=="linux-power" (
@@ -36,6 +42,9 @@ if /I "%ACTION%"=="gold-db" (
     echo   codex.bat gold-db
     echo   codex.bat power
     echo   codex.bat search-gold-db
+    echo   codex.bat windows
+    echo   codex.bat windows-gold-db
+    echo   codex.bat windows-power
     echo   codex.bat linux
     echo   codex.bat linux-power
     echo   codex.bat linux-gold-db
@@ -45,7 +54,7 @@ if /I "%ACTION%"=="gold-db" (
     exit /b 0
 )
 
-if not "%ACTION%"=="" if /I not "%ACTION%"=="gold-db" if /I not "%ACTION%"=="power" if /I not "%ACTION%"=="search-gold-db" if /I not "%ACTION%"=="linux" if /I not "%ACTION%"=="linux-power" if /I not "%ACTION%"=="linux-gold-db" if /I not "%ACTION%"=="green" if /I not "%ACTION%"=="task" if /I not "%ACTION%"=="search" if /I not "%ACTION%"=="help" (
+if not "%ACTION%"=="" if /I not "%ACTION%"=="gold-db" if /I not "%ACTION%"=="power" if /I not "%ACTION%"=="search-gold-db" if /I not "%ACTION%"=="windows" if /I not "%ACTION%"=="windows-gold-db" if /I not "%ACTION%"=="windows-power" if /I not "%ACTION%"=="linux" if /I not "%ACTION%"=="linux-power" if /I not "%ACTION%"=="linux-gold-db" if /I not "%ACTION%"=="green" if /I not "%ACTION%"=="task" if /I not "%ACTION%"=="search" if /I not "%ACTION%"=="help" (
     echo Unknown codex mode: %ACTION%
     echo Run `codex.bat help` for usage.
     exit /b 2

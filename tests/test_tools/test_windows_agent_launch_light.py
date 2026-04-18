@@ -31,6 +31,7 @@ def test_build_linux_home_project_command_uses_linux_root() -> None:
     command = module.build_codex_project_wsl_command("/mnt/c/repo", use_linux_home=True)
 
     assert 'ROOT="${CANOMPX3_CODEX_WSL_ROOT:-$HOME/canompx3}"' in command
+    assert 'bash /mnt/c/repo/scripts/infra/codex-wsl-sync.sh --source /mnt/c/repo --target "$ROOT"' in command
     assert 'cd "$ROOT"' in command
     assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
@@ -63,8 +64,11 @@ def test_linux_project_batches_target_linux_modes() -> None:
     root = Path(__file__).resolve().parents[2]
     codex_bat = (root / "codex.bat").read_text(encoding="utf-8")
 
+    assert 'set "MODE=codex-project-linux"' in codex_bat
     assert 'if /I "%ACTION%"=="power" (' in codex_bat
-    assert 'set "MODE=codex-project-power"' in codex_bat
+    assert 'set "MODE=codex-project-linux-power"' in codex_bat
+    assert 'if /I "%ACTION%"=="windows" (' in codex_bat
+    assert 'set "MODE=codex-project"' in codex_bat
     assert 'if /I "%ACTION%"=="linux" (' in codex_bat
     assert 'set "MODE=codex-project-linux"' in codex_bat
     assert 'if /I "%ACTION%"=="linux-power" (' in codex_bat

@@ -37,16 +37,20 @@ the Claude layer.
 - Primary Codex path:
   - WSL-home clone such as `~/canompx3`
   - Codex app local environment
-  - `codex.bat linux`
-  - `codex.bat linux-power`
+  - `codex.bat`
+  - `codex.bat power`
 - Parallel Codex task path:
   - `codex.bat task <name>`
   - `codex.bat search <name>`
   - `scripts/infra/codex-worktree.sh open <name>`
 - Fallback-only path:
   - native Windows Codex
-  - `codex.bat`
-  - `codex.bat power`
+  - `codex.bat windows`
+  - `codex.bat windows-power`
+
+`codex.bat` should be the only daily-driver front door to remember on Windows.
+It targets the WSL-home clone and refuses stale or divergent clone state
+instead of silently launching old code.
 
 ## Task Discipline
 

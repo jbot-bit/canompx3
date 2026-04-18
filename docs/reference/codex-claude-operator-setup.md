@@ -12,9 +12,9 @@ workflow rules, see `docs/reference/codex-operator-handbook.md`.
   - planning
   - broad repo navigation
   - review and verification
-- `codex.bat linux`
+- `codex.bat`
   - normal Codex implementation work against a WSL-home clone
-- `codex.bat linux-power`
+- `codex.bat power`
   - heavier Codex sessions when you want maximum reasoning depth
 - `ai-workstreams.bat`
   - separate worktrees when Claude and Codex need to work in parallel
@@ -146,6 +146,7 @@ Quick launcher front doors:
 
 - `codex.bat`
 - `codex.bat power`
+- `codex.bat windows`
 - `codex.bat linux`
 - `codex.bat linux-power`
 
@@ -153,8 +154,11 @@ Quick launcher front doors:
 
 - Use `claude.bat` when you want review, planning, or repo-wide judgment.
 - Use the Codex app against a WSL-home clone for the primary Codex experience.
-- Use `codex.bat linux` when you want implementation speed.
-- Use `codex.bat linux-power` when the task is hard enough to justify extra
+- Use `codex.bat` when you want implementation speed without remembering a
+  special launch variant.
+- Use `codex.bat power` when the task is hard enough to justify extra
   reasoning cost and latency.
 - Use `ai-workstreams.bat` when both tools need to be active on different tasks.
 - Treat native Windows Codex as fallback-only.
+- Use `codex.bat windows` only when you explicitly want the Windows fallback
+  path.

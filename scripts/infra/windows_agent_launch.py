@@ -25,6 +25,7 @@ VALID_MODES = {
     "codex-search",
     "codex-project",
     "codex-project-gold-db",
+    "codex-project-linux-search-gold-db",
     "codex-project-power",
     "codex-project-linux",
     "codex-project-linux-gold-db",
@@ -196,6 +197,7 @@ def build_codex_project_wsl_command(
                 '  echo "Set CANOMPX3_CODEX_WSL_ROOT or clone canompx3 into ~/canompx3." >&2',
                 "  exit 1",
                 "fi",
+                f"bash {shlex.quote(root_wsl)}/scripts/infra/codex-wsl-sync.sh --source {shlex.quote(root_wsl)} --target \"$ROOT\"",
                 'cd "$ROOT"',
                 f"exec ./scripts/infra/{script_name} --no-alt-screen",
             ]
@@ -794,6 +796,8 @@ def main() -> int:
         return open_codex_project()
     if args.mode == "codex-project-gold-db":
         return open_codex_project(enable_gold_db=True)
+    if args.mode == "codex-project-linux-search-gold-db":
+        return open_codex_project_linux_home(search_mode=True, enable_gold_db=True)
     if args.mode == "codex-project-power":
         return open_codex_project_power()
     if args.mode == "codex-project-linux":

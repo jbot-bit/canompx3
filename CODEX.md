@@ -87,8 +87,8 @@ not just `.codex/`.
 Primary Codex surfaces:
 
 - Codex app against a WSL-home clone
-- `codex.bat linux`
-- `codex.bat linux-power`
+- `codex.bat`
+- `codex.bat power`
 
 Default Codex entrypoints:
 
@@ -113,10 +113,13 @@ Windows convenience entrypoints:
   - `claude.bat task <name>`
   - `claude.bat green`
 - `codex.bat`
-  - default project session on the current repo
+  - default project session on the verified WSL-home Codex clone
   - `codex.bat gold-db`
   - `codex.bat power`
   - `codex.bat search-gold-db`
+  - `codex.bat windows`
+  - `codex.bat windows-gold-db`
+  - `codex.bat windows-power`
   - `codex.bat linux`
   - `codex.bat linux-power`
   - `codex.bat linux-gold-db`
@@ -134,7 +137,10 @@ For a Windows user, the human-facing front doors are:
 - `ai-workstreams.bat`
 
 Primary Codex path is a clone in the WSL filesystem such as `~/canompx3`,
-launched via `codex.bat linux` or the Codex app local environment. Set
+launched via `codex.bat` or the Codex app local environment. The Windows
+launcher sync-checks the WSL clone against the current checkout and fails
+closed if the clone is dirty, on the wrong branch, or cannot fast-forward
+cleanly. Set
 `CANOMPX3_CODEX_WSL_ROOT` if the WSL-side clone lives somewhere else.
 
 Windows-native Codex is a fallback surface only. Do not target parity with the
