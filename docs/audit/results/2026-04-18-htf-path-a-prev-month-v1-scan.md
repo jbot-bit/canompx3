@@ -187,14 +187,18 @@ Combined across both HTF families (prev-week v1 + prev-month v1 = K=48 pre-regis
 
 ## Adversarial-audit addendum — 2026-04-19
 
-**Context.** The § Closure recommendation paragraph above frames the MES EUROPE_FLOW long wrong-sign finding as prev-month v1 *replicating* prev-week v1, and frames MES TOKYO_OPEN long as *also showing the pattern*. A post-commit adversarial audit (see `docs/handoffs/2026-04-19-htf-session-handover.md` §"Adversarial audit finding") showed that framing is **overstated on MES EUROPE_FLOW and wrong on MES TOKYO_OPEN**. The numbers below correct the record; they do not change the primary FAMILY KILL FK1 verdict.
+**Context.** The § Closure recommendation paragraph above frames the MES EUROPE_FLOW long wrong-sign finding as prev-month v1 *replicating* prev-week v1, and frames MES TOKYO_OPEN long as *also showing the pattern*. A post-commit adversarial audit showed that framing is **overstated on MES EUROPE_FLOW and wrong on MES TOKYO_OPEN**. The numbers below correct the record; they do not change the primary FAMILY KILL FK1 verdict.
+
+**Reproducible via `research/htf_path_a_overlap_decomposition.py`** (committed with this addendum revision). Output markdown at `docs/audit/results/2026-04-19-htf-path-a-overlap-decomposition.md` is regenerated on each run.
 
 ### Fire-overlap between prev-week v1 and prev-month v1
 
-| Lane | PW fires | PM fires | Both | Overlap (% of PM fires also PW) |
+Counts are trades actually taken — trading_days where both the HTF predicate fired AND `orb_outcomes` carries a non-null `pnl_r` for the (E2, CB=1, O15, direction='long', RR=2.0) cell. This is the canonical population the t-tests below run on. Counts from `daily_features` fires alone would be 2-3 trading-days higher per lane (days without a trade row).
+
+| Lane | PW trades | PM trades | Both | Overlap (% of PM trades also PW) |
 |---|---:|---:|---:|---:|
-| MES EUROPE_FLOW long | 215 | 344 | 148 | 43% |
-| MES TOKYO_OPEN long | 181 | 309 | 121 | 39% |
+| MES EUROPE_FLOW long | 213 | 341 | 146 | 42.8% |
+| MES TOKYO_OPEN long | 181 | 309 | 121 | 39.2% |
 
 ### Overlap decomposition — MES EUROPE_FLOW long RR2.0 (cell #18)
 
@@ -225,9 +229,13 @@ On MES TOKYO_OPEN the pattern is the opposite — the non-overlap subset carries
 
 ### Reproduction
 
-Overlap decomposition was computed on the same canonical IS window `[2019-01-01, 2026-01-01)` from `bars_1m` → `daily_features` → `orb_outcomes` used by `research/htf_path_a_prev_month_v1_scan.py`. A dedicated reproducible-decomposition script is not in-tree; the numbers above are authoritative per the 2026-04-19 adversarial audit and can be re-derived by intersecting the per-day fire masks of both scans on the MES EUROPE_FLOW long and MES TOKYO_OPEN long long-break rows.
+```
+DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db python research/htf_path_a_overlap_decomposition.py
+```
+
+Script: `research/htf_path_a_overlap_decomposition.py`. Result markdown (regenerated each run): `docs/audit/results/2026-04-19-htf-path-a-overlap-decomposition.md`. IS window `trading_day < HOLDOUT_SACRED_FROM` imported from `trading_app.holdout_policy`. Predicate SQL copied verbatim from the long-direction branch of `research/htf_path_a_prev_week_v1_scan.py::_predicate_sql` and `research/htf_path_a_prev_month_v1_scan.py::_predicate_sql`. T-test formula matches `_t_test` in those scans (scipy `stats.t.cdf`). No randomness — canonical IS query reproduces the same numbers exactly on the same DB state.
 
 ### Historical failure pointer
 
-This addendum is a local instance of the general rule `/backtesting-methodology.md` § RULE 12 ("Every top survivor references the same feature class" → spurious global vs spurious family): two scans over the same feature family can agree from redundancy rather than independence. Cross-scan overlap must be decomposed before claiming replication. Added to the CLAUDE rule's historical failure log by the handoff commit.
+This addendum is a local instance of the class described in `.claude/rules/backtesting-methodology.md` § RULE 12 ("Every top survivor references the same feature class" → spurious global vs spurious family): two scans over the same feature family can agree from redundancy rather than independence. Cross-scan overlap must be decomposed before claiming replication. Appended to the § Historical failure log of that file in the commit that revises this addendum.
 
