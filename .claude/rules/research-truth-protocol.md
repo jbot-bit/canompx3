@@ -85,6 +85,16 @@ Before running ANY discovery that writes to `experimental_strategies` or `valida
    - Total expected trial count (N ≤ 300 clean-MNQ, N ≤ 2000 proxy-extended)
    - Kill criteria stating what outcome refutes the hypothesis
 
+2a. **Pre-reg writer gate (added 2026-04-18, binding).** Every new file under `docs/audit/hypotheses/` MUST be generated via `docs/prompts/prereg-writer-prompt.md` OR satisfy its output schema 1:1. Before committing the pre-reg, a pre-commit self-review against the prompt's § FORBIDDEN and § failure-mode table is mandatory. In particular:
+   - `testing_mode` declared: `family` (Pathway A / BH FDR) or `individual` (Pathway B / theory-driven K=1 per pre_registered_criteria.md Amendment 3.0).
+   - `pathway` field set matching `testing_mode`.
+   - For Pathway B, every hypothesis has a `theory_citation`; `testing_discipline.mandatory_downstream_gates_non_waivable` lists C6/C8/C9.
+   - Upstream scan K values (if any) live under `upstream_discovery_provenance` with `role: PROVENANCE_ONLY` — never under the current test's K framing.
+   - Kill criteria are numeric. "Reconsider" / "investigate" is forbidden.
+   - No `TO_FILL_*` placeholders other than `commit_sha: "TO_FILL_AFTER_COMMIT"` (which is legitimate until the first commit lands).
+
+   Origin: the 2026-04-18 Phase D D-0 pre-reg was written without this gate, producing a framing error (testing_mode=family on a K=1 confirmatory pilot, and upstream K=14,261 presented as the pilot's own K). Caught post-run; required a documentation-only correction commit (`93a8e53a`). The D-0 KILL verdict was unaffected but the patch cycle wasted cycles. This gate prevents recurrence.
+
 3. **Cite the specific literature file** for each statistical method used. Files live in `docs/institutional/literature/`. Never cite thresholds from training memory.
 
 4. **MinBTL check:** Before running any enumeration, compute `MinBTL = 2·Ln[N] / E[max_N]²` using the committed pre-registered N. If `MinBTL > available_clean_data_years`, reduce N. Source: `docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md`.
