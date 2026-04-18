@@ -14,6 +14,27 @@ _DEBOUNCE_SECONDS = 30
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _SUBPROCESS_ENV = {**os.environ, "PYTHONPATH": str(_PROJECT_ROOT)}
 
+
+def _resolve_python() -> str:
+    """Prefer project `.venv` Python over `sys.executable`.
+
+    The hook is wired in .claude/settings.json as `python <hookscript>`, which
+    resolves to the system Python — often lacking project deps like `anthropic`
+    (see Stages 1-4 of claude-api-modernization). Using `.venv/Scripts/python`
+    when present guarantees drift checks see the same deps the tests do.
+    Falls back to `sys.executable` if no venv is available.
+    """
+    venv_win = _PROJECT_ROOT / ".venv" / "Scripts" / "python.exe"
+    if venv_win.exists():
+        return str(venv_win)
+    venv_unix = _PROJECT_ROOT / ".venv" / "bin" / "python"
+    if venv_unix.exists():
+        return str(venv_unix)
+    return sys.executable
+
+
+_HOOK_PYTHON = _resolve_python()
+
 # Map edited modules to their test files for targeted testing
 TEST_MAP = {
     "pipeline/build_daily_features.py": "tests/test_pipeline/test_build_daily_features.py",
@@ -85,7 +106,7 @@ def main():
 
     if not _skip_drift:
         result = subprocess.run(
-            [sys.executable, str(_PROJECT_ROOT / "pipeline" / "check_drift.py")],
+            [_HOOK_PYTHON, str(_PROJECT_ROOT / "pipeline" / "check_drift.py")],
             capture_output=True,
             text=True,
             timeout=30,
@@ -110,7 +131,7 @@ def main():
         try:
             result = subprocess.run(
                 [
-                    sys.executable,
+                    _HOOK_PYTHON,
                     "-m",
                     "pytest",
                     test_file,
@@ -142,7 +163,7 @@ def main():
     if "pipeline/" in norm or "scripts/tools/" in norm:
         try:
             result = subprocess.run(
-                [sys.executable, str(_PROJECT_ROOT / "scripts" / "tools" / "audit_behavioral.py")],
+                [_HOOK_PYTHON, str(_PROJECT_ROOT / "scripts" / "tools" / "audit_behavioral.py")],
                 capture_output=True,
                 text=True,
                 timeout=15,

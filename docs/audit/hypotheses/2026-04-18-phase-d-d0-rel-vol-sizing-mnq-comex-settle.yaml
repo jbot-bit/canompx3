@@ -1,0 +1,220 @@
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: "2026-04-18"
+slug: phase-d-d0-rel-vol-sizing-mnq-comex-settle
+title: "Phase D D-0 — rel_vol size-scaling pilot on MNQ COMEX_SETTLE O5 RR1.5 OVNRNG_100"
+owner: "josh / claude-code"
+parent_spec: "docs/audit/hypotheses/2026-04-15-phase-d-volume-pilot-spec.md"
+testing_mode: family
+
+authority:
+  primary:
+    - "docs/institutional/pre_registered_criteria.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/STRATEGY_BLUEPRINT.md"
+    - "trading_app/holdout_policy.py"
+    - "docs/institutional/literature/carver_2015_systematic_trading_ch9-10.md"
+  notes:
+    - "No backtest may run until this file is committed."
+    - "2026-01-01 onward is sacred holdout (Mode A)."
+    - "Pre-registration is binding per RESEARCH_RULES Phase 0 Literature Grounding."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  instrument: "MNQ"
+  orb_label: "COMEX_SETTLE"
+  orb_minutes: 5
+  rr_target: 1.5
+  entry_model: "E2"
+  confirm_bars: 1
+  filter_type: "OVNRNG_100"
+  strategy_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+  direction: "lane_native"
+  universe_restriction: "single-lane D-0 pilot only"
+
+data_policy:
+  is_window:
+    rule: "trading_day < HOLDOUT_SACRED_FROM"
+  oos_window:
+    rule: "trading_day >= HOLDOUT_SACRED_FROM"
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+    grandfather_cutoff_source: "trading_app.holdout_policy.HOLDOUT_GRANDFATHER_CUTOFF"
+  tuning_against_oos: false
+  oos_role_in_d0: "not consulted; D-0 is IS-only"
+
+feature_definition:
+  feature_name: "rel_vol_COMEX_SETTLE"
+  column_source: "daily_features.rel_vol_COMEX_SETTLE"
+  canonical_source_of_truth: "pipeline/build_daily_features.py (rel_vol construction)"
+  trade_time_knowable: true
+  first_complete_time: "ORB session end (break-bar close)"
+  temporal_alignment_note: >
+    Per .claude/rules/backtesting-methodology.md § 6.1 whitelist, rel_vol_{session}
+    is trade-time-knowable; no post-entry data permitted. Size decision made at
+    ORB-end before entry confirmation, not after.
+  lookhead_check: "PASSES — rel_vol_COMEX_SETTLE computed from ORB-window bars only"
+
+calibration:
+  quantile_source:
+    population: "IS-only MNQ COMEX_SETTLE O5 rel_vol_COMEX_SETTLE distribution where OVNRNG_100 filter fires"
+    filter_clause: "trading_day < HOLDOUT_SACRED_FROM AND rel_vol_COMEX_SETTLE IS NOT NULL"
+  thresholds:
+    p33: "DERIVE_FROM_IS_ONLY"
+    p67: "DERIVE_FROM_IS_ONLY"
+  lock_policy:
+    - "P33 and P67 values must be computed and written into the results artifact BEFORE any sized Sharpe calculation runs."
+    - "Once computed, thresholds are frozen. No post-hoc adjustment permitted."
+
+primary_schema:
+  name: "discrete_rel_vol_size_scaling_v1"
+  locked_before_backtest: true
+  buckets:
+    low_lt_p33: 0.5
+    mid_p33_to_p67: 1.0
+    high_ge_p67: 1.5
+  execution_rule: "Size applied at entry, never retroactively."
+  mechanism_grounding:
+    - "Carver 2015 Systematic Trading Ch 9-10 (position sizing per vol regime)"
+    - "rel_vol_HIGH_Q3 passed backtesting-methodology.md Rule 4 multi-framing BH-FDR in comprehensive scan 2026-04-15"
+
+evidence_base_multi_framing_k:
+  source: "docs/audit/results/2026-04-15-comprehensive-deployed-lane-scan.md"
+  k_global: {k: 14261, survivors: 13}
+  k_family: {k_avg: 2550, survivors: 127}
+  k_lane: {k_avg: 56, survivors: 163}
+  rule_4_compliance: "All three K framings reported per backtesting-methodology.md Rule 4"
+  note: >
+    D-0 evidence base rests on BH-family and BH-lane survival of rel_vol_HIGH_Q3
+    across 5 independent (instrument, session) combos, not on K_global alone.
+    Per Rule 4, K_family is the natural hypothesis unit for this mechanism
+    (Harvey-Liu 2015). K_global=14,261 is confirmatory, not sole justification.
+
+hypotheses:
+  - id: H1
+    type: primary
+    statement: >
+      Applying the locked 0.5x / 1.0x / 1.5x rel_vol_COMEX_SETTLE size-scaling
+      schema to the MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100 lane improves IS
+      Sharpe by at least 15% versus the same lane at constant 1.0x sizing over
+      the identical IS date range and trade set.
+    pass_metric:
+      metric: "sharpe_uplift_pct"
+      formula: "100 * (sharpe_sized - sharpe_baseline) / abs(sharpe_baseline)"
+      threshold_gte: 15.0
+
+  - id: H2
+    type: secondary_descriptive_only
+    statement: >
+      Hard-skip of low_lt_p33 bucket (size=0) is recorded as an ablation for
+      downstream D-1/D-2 informational use. H2 cannot replace H1 post-hoc.
+    ablation:
+      low_q1_size_override: 0.0
+      mid_bucket: 1.0
+      high_bucket: 1.5
+    selection_rule: "descriptive_only; not primary selector; not counted against trial budget"
+    counted_against_trial_budget: false
+
+baseline:
+  name: "constant_1.0x_size"
+  comparison_sample: "identical IS date range and lane definition as sized variant"
+  assertion: "Baseline and sized variants must operate on the exact same trade set; only size differs."
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "2 * ln(N_trials) / E[max_N]^2"
+    N_trials: 1
+    within_cap: true
+    cap_reference: "docs/institutional/pre_registered_criteria.md Criterion 2 (N <= 300)"
+    note: "1 lane x 1 primary schema = 1 primary trial. H2 descriptive-only per § hypotheses.H2."
+
+kill_criteria:
+  - id: K1
+    metric: "sharpe_uplift_pct"
+    threshold_lt: 10.0
+    action: "ABANDON_PHASE_D_D0_ON_THIS_LANE"
+  - id: K2
+    metric: "implementation_integrity"
+    fail_if:
+      - "P33 or P67 calibrated using any trading_day >= HOLDOUT_SACRED_FROM"
+      - "bucket boundaries changed after first Sharpe calculation"
+      - "size applied retrospectively (any calculation that uses realized outcome to influence size)"
+      - "OOS data consulted during D-0 (read or written)"
+    action: "HALT_AND_RE_AUDIT"
+
+decision_rule:
+  continue_to_d1_if:
+    - "H1 sharpe_uplift_pct >= 15.0"
+    - "K2 implementation_integrity all pass"
+  park_if:
+    - "10.0 <= H1 sharpe_uplift_pct < 15.0"
+  kill_if:
+    - "H1 sharpe_uplift_pct < 10.0"
+
+methodology_rules_applied:
+  - rule: "RULE 1 feature temporal alignment"
+    application: "rel_vol_COMEX_SETTLE is on § 6.1 safe whitelist; trade-time-knowable at ORB end."
+  - rule: "RULE 2 filter application timing"
+    application: "Size decision made at ORB-end, applied at entry bar; never retroactively."
+  - rule: "RULE 3 sacred holdout"
+    application: "IS-only for D-0 per Mode A (HOLDOUT_SACRED_FROM=2026-01-01)."
+  - rule: "RULE 4 multi-framing BH-FDR"
+    application: "K_global, K_family, K_lane all reported in evidence_base_multi_framing_k; mechanism rests on BH-family survival, not K_global alone."
+  - rule: "RULE 6 feature audit"
+    application: "first_complete_time=ORB session end; pure computation from ORB bars; no post-entry data."
+  - rule: "RULE 8.2 arithmetic-only guard"
+    application: >
+      D-0 must measure both sharpe AND win-rate effect. If WR flat and only
+      payoff changes, classify as ARITHMETIC_ONLY per § 8.2 and reclassify as
+      cost-screen not edge.
+  - rule: "RULE 10 pre-registration"
+    application: "This file is the pre-registration. Commit before run."
+
+outputs_required_after_run:
+  - "P33 and P67 values computed"
+  - "IS sample span (first_trade_day, last_trade_day) and N"
+  - "baseline Sharpe and sized Sharpe"
+  - "Sharpe uplift %"
+  - "expectancy impact (R per trade, baseline vs sized)"
+  - "win-rate impact (baseline vs sized) -- Rule 8.2 arithmetic-only check"
+  - "trade count impact (baseline vs sized -- must be identical since only size differs)"
+  - "separate descriptive readout for H2 hard-skip ablation"
+  - "explicit statement that no OOS was used for calibration"
+  - "K2 implementation_integrity checklist with each item marked PASS/FAIL"
+
+execution_gate:
+  allowed_now:
+    - "write this file"
+    - "commit this file (fills commit_sha)"
+  forbidden_now:
+    - "run backtest before commit"
+    - "edit thresholds / buckets / kill criteria after first result"
+    - "use OOS to rescue or reject the schema"
+    - "promote H2 to primary"
+
+downstream_dependencies:
+  d1_gate:
+    - "D-0 H1 pass (sharpe_uplift_pct >= 15%)"
+    - "L3 C12 WATCH resolved (docs/audit/results/2026-04-18-c12-alarmed-lanes-review.md) or trailing-30 >= baseline for 20 consecutive trades"
+  note: >
+    D-0 is IS-only and does not require L3 to be healthy. D-1 (signal-only
+    shadow on live lane) does. Track the coupling in the D-1 pre-reg when
+    authored.
+
+provenance_tags:
+  research_source: "docs/audit/results/2026-04-15-comprehensive-deployed-lane-scan.md"
+  entry_models: "E2 canonical (pipeline.dst.orb_utc_window + outcome_builder)"
+  revalidated_for: "Phase D D-0 2026-04-18"
+
+not_done_by_this_pre_reg:
+  - "No claim about portfolio-level Sharpe uplift; D-0 is lane-only."
+  - "No claim about live broker P&L; D-0 is backtest-only."
+  - "No authorization for capital change; deploy decision deferred to D-2 pre-reg."
