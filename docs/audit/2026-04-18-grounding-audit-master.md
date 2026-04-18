@@ -122,7 +122,7 @@ The HLZ-2015 RFS "…and the Cross-Section of Expected Returns" paper is NOT in 
 
 ### CLN-2 — DA7 STALE_DOC risk — **CLOSED 2026-04-18 sweep 2**
 
-`docs/institutional/pre_registered_criteria.md:298` embedded a 2026-03-18 snapshot ("0/124 validated_setups have dsr_score > 0.95. Max dsr_score = 0.1198") as rationale for Amendment 2.1.
+`docs/institutional/pre_registered_criteria.md:300` (was line 298 pre-IMP-1 edit; shifted by sweep-1 commit `5d67edc4` adding 2 lines at Criterion 4) embedded a 2026-03-18 snapshot ("0/124 validated_setups have dsr_score > 0.95. Max dsr_score = 0.1198") as rationale for Amendment 2.1.
 
 **Remediation executed (commit `d24d8e1c`):** annotated inline as "snapshot at 2026-03-18 — historical rationale for Amendment 2.1; for current state run live query against `validated_setups.dsr_score`." **Status:** CLOSED.
 
@@ -182,7 +182,7 @@ Files: `docs/audit/hypotheses/phase-d-carver-forecast-combiner.md`, `docs/audit/
 
 **Root-cause analysis:** not corruption, not false positive — architectural snapshot-vs-live pattern. `validated_setups.{first_trade_day, last_trade_day, trade_day_count}` are snapshots written at validation time; they drift when new trading days are ingested without an explicit refresh. Canonical resolver always computes from `orb_outcomes`. `1a0a4a24` shipped the refresh tool (7 TDD tests covering dry-run, live, idempotent re-run, retired/legacy exclusion, strategy-id scoping, main exit code).
 
-**Status:** RESOLVED. No further action on NFFU-5.
+**Status:** INSTANCE RESOLVED; class-level mitigation PARTIAL. The manual refresh tool is idempotent and covers the current instance, but it is NOT auto-triggered on daily ingest. Each new trading day that advances `orb_outcomes` without an accompanying `backfill_validated_trade_windows.py` run will re-surface the same drift class. A future daily-pipeline hook invoking the refresh tool (or equivalent auto-sync in the ingest chain) would promote this to CLASS RESOLVED. Not in current audit scope; flagged here as a known gap. No further action on NFFU-5's current instance.
 
 ### NFFU-6 — Phase D D-1 contract-locked work (PD1–PD7) — **QUARANTINE LIFTED 2026-04-18 sweep 2**
 
