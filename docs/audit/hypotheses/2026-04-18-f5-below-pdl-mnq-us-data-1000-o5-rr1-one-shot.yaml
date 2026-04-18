@@ -1,5 +1,5 @@
 version: 1
-status: PRE_REGISTERED_DRAFT
+status: PRE_REGISTERED_LOCKED
 date: 2026-04-18
 slug: f5-below-pdl-mnq-us-data-1000-o5-rr1-one-shot
 title: >
@@ -30,7 +30,7 @@ authority:
 reproducibility:
   repo_root: C:/Users/joshd/canompx3-f5
   worktree_branch: research/f5-below-pdl-stage1
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "311f79979251cadfce5c82d7413260ca1b069e80"
   committed_required_before_run: true
   db_path_policy: >
     Validator uses pipeline.paths.GOLD_DB_PATH. On canompx3-f5 worktree the DB
