@@ -3012,6 +3012,182 @@ def check_daily_features_row_integrity(con=None) -> list[str]:
     return violations
 
 
+def check_htf_levels_integrity(con=None) -> list[str]:
+    """Verify all 12 prev_week_* / prev_month_* fields agree with canonical SQL.
+
+    Canonical semantics: Monday-anchor week via DuckDB DATE_TRUNC('week', ...),
+    calendar-month anchor via DATE_TRUNC('month', ...). Prior period only.
+
+    For every row, confirms against the canonical per-period aggregate:
+      prev_week_high   == MAX(daily_high)                      over prior Mon-Sun week
+      prev_week_low    == MIN(daily_low)                       over prior Mon-Sun week
+      prev_week_open   == arg_min(daily_open, trading_day)     over prior week
+      prev_week_close  == arg_max(daily_close, trading_day)    over prior week
+      prev_week_range  == ROUND(high - low, 4)
+      prev_week_mid    == ROUND((high + low) / 2.0, 4)
+      (same six for prev_month_*)
+
+    Divergence classes flagged:
+      - symmetric  : stored != canonical (both non-NULL)
+      - phantom    : stored non-NULL but canonical IS NULL
+      - stale miss : stored IS NULL but canonical non-NULL
+
+    Rounds to 4dp for floating-point comparisons (matches Python post-pass).
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
+
+        # Per-field check SQL fragment: flags symmetric, phantom, and stale-miss
+        # classes. NULL-safety handled explicitly (DuckDB "a != b" is NULL when
+        # either side is NULL, so symmetric case needs both-non-NULL guard).
+        def _diff_case(stored_col: str, canonical_col: str, label: str, round_to: int = 4) -> str:
+            return (
+                f"CASE "
+                f"WHEN df.{stored_col} IS NOT NULL AND {canonical_col} IS NOT NULL "
+                f"     AND ROUND(df.{stored_col}, {round_to}) != ROUND({canonical_col}, {round_to}) "
+                f"THEN '{label}(diff)' "
+                f"WHEN df.{stored_col} IS NOT NULL AND {canonical_col} IS NULL "
+                f"THEN '{label}(phantom)' "
+                f"WHEN df.{stored_col} IS NULL AND {canonical_col} IS NOT NULL "
+                f"THEN '{label}(stale_miss)' "
+                f"END AS {stored_col}"
+            )
+
+        week_fields = [
+            ("prev_week_high",  "w.wh"),
+            ("prev_week_low",   "w.wl"),
+            ("prev_week_open",  "w.wo"),
+            ("prev_week_close", "w.wc"),
+            ("prev_week_range", "w.wr"),
+            ("prev_week_mid",   "w.wm"),
+        ]
+        month_fields = [
+            ("prev_month_high",  "m.mh"),
+            ("prev_month_low",   "m.ml"),
+            ("prev_month_open",  "m.mo"),
+            ("prev_month_close", "m.mc"),
+            ("prev_month_range", "m.mr"),
+            ("prev_month_mid",   "m.mm"),
+        ]
+
+        diff_cases = [_diff_case(s, c, s) for s, c in week_fields + month_fields]
+        diff_concat = ",\n                       ".join(diff_cases)
+
+        # Explicit CASE-per-field SQL: each field yields a string token when
+        # divergent (symmetric diff, phantom, or stale miss) or NULL when OK.
+        # Python filters out the OK columns when formatting the violation line.
+        explicit_sql = f"""
+            WITH df AS (
+                SELECT symbol,
+                       trading_day,
+                       daily_open, daily_high, daily_low, daily_close,
+                       DATE_TRUNC('week', trading_day)::DATE  AS week_key,
+                       DATE_TRUNC('month', trading_day)::DATE AS month_key,
+                       prev_week_high, prev_week_low, prev_week_open,
+                       prev_week_close, prev_week_range, prev_week_mid,
+                       prev_month_high, prev_month_low, prev_month_open,
+                       prev_month_close, prev_month_range, prev_month_mid
+                FROM daily_features
+                WHERE symbol IN ({active_syms})
+                  AND orb_minutes = 5
+            ),
+            week_aggs AS (
+                SELECT symbol,
+                       week_key,
+                       MAX(daily_high)                     AS wh,
+                       MIN(daily_low)                      AS wl,
+                       arg_min(daily_open, trading_day)    AS wo,
+                       arg_max(daily_close, trading_day)   AS wc,
+                       ROUND(MAX(daily_high) - MIN(daily_low), 4) AS wr,
+                       ROUND((MAX(daily_high) + MIN(daily_low)) / 2.0, 4) AS wm
+                FROM df
+                WHERE daily_high IS NOT NULL AND daily_low IS NOT NULL
+                GROUP BY symbol, week_key
+            ),
+            month_aggs AS (
+                SELECT symbol,
+                       month_key,
+                       MAX(daily_high)                     AS mh,
+                       MIN(daily_low)                      AS ml,
+                       arg_min(daily_open, trading_day)    AS mo,
+                       arg_max(daily_close, trading_day)   AS mc,
+                       ROUND(MAX(daily_high) - MIN(daily_low), 4) AS mr,
+                       ROUND((MAX(daily_high) + MIN(daily_low)) / 2.0, 4) AS mm
+                FROM df
+                WHERE daily_high IS NOT NULL AND daily_low IS NOT NULL
+                GROUP BY symbol, month_key
+            ),
+            joined AS (
+                SELECT df.symbol,
+                       df.trading_day,
+                       {diff_concat}
+                FROM df
+                LEFT JOIN week_aggs w
+                       ON w.symbol = df.symbol
+                      AND w.week_key = df.week_key - INTERVAL '7 days'
+                LEFT JOIN month_aggs m
+                       ON m.symbol = df.symbol
+                      AND m.month_key = CASE
+                            WHEN EXTRACT(MONTH FROM df.month_key) = 1
+                                THEN MAKE_DATE(CAST(EXTRACT(YEAR FROM df.month_key) AS INT) - 1, 12, 1)
+                            ELSE MAKE_DATE(CAST(EXTRACT(YEAR FROM df.month_key) AS INT),
+                                           CAST(EXTRACT(MONTH FROM df.month_key) AS INT) - 1, 1)
+                      END
+            )
+            SELECT symbol, trading_day,
+                   COALESCE(prev_week_high, '')   AS e1,
+                   COALESCE(prev_week_low, '')    AS e2,
+                   COALESCE(prev_week_open, '')   AS e3,
+                   COALESCE(prev_week_close, '')  AS e4,
+                   COALESCE(prev_week_range, '')  AS e5,
+                   COALESCE(prev_week_mid, '')    AS e6,
+                   COALESCE(prev_month_high, '')  AS e7,
+                   COALESCE(prev_month_low, '')   AS e8,
+                   COALESCE(prev_month_open, '')  AS e9,
+                   COALESCE(prev_month_close, '') AS e10,
+                   COALESCE(prev_month_range, '') AS e11,
+                   COALESCE(prev_month_mid, '')   AS e12
+            FROM joined
+            WHERE prev_week_high  IS NOT NULL
+               OR prev_week_low   IS NOT NULL
+               OR prev_week_open  IS NOT NULL
+               OR prev_week_close IS NOT NULL
+               OR prev_week_range IS NOT NULL
+               OR prev_week_mid   IS NOT NULL
+               OR prev_month_high IS NOT NULL
+               OR prev_month_low  IS NOT NULL
+               OR prev_month_open IS NOT NULL
+               OR prev_month_close IS NOT NULL
+               OR prev_month_range IS NOT NULL
+               OR prev_month_mid   IS NOT NULL
+            LIMIT 20
+        """
+        bad = con.execute(explicit_sql).fetchall()
+        for row in bad:
+            sym, td = row[0], row[1]
+            diverged = [msg for msg in row[2:] if msg and msg != ""]
+            violations.append(f"  {sym} {td}: HTF level divergence → {'; '.join(diverged)}")
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_htf_levels_integrity: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 def check_data_continuity(con=None) -> list[str]:
     """Check #58: Warn on unexpected gaps in trading days per instrument.
 
@@ -5354,6 +5530,12 @@ CHECKS = [
     (
         "Daily features row integrity (one row per aperture per trading_day × symbol)",
         check_daily_features_row_integrity,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "HTF level fields match canonical week/month SQL aggregation",
+        check_htf_levels_integrity,
         False,
         True,
     ),  # requires_db

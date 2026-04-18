@@ -1,0 +1,440 @@
+metadata:
+  name: htf-mes-europe-flow-long-skip-rule-shadow
+  slug: 2026-04-18-htf-mes-europe-flow-long-skip-rule-shadow
+  owner: canompx3
+  created_at: 2026-04-18
+  status: LOCKED  # locked 2026-04-18 after v3 audit hardening + recorder + empty ledger
+                  # committed_sha placeholder TO_FILL_AFTER_COMMIT per research-truth-protocol §2a
+  testing_mode: research_only_signal_shadow
+  pathway: A                          # no local Pathway-A-qualifying extract for level-fade
+  supersedes: none
+  exemplar: docs/audit/hypotheses/2026-04-18-h1-mes-london-metals-signal-only-shadow.yaml
+  revision: v3                        # second audit pass; see audit_changelog
+  depends_on:
+    - docs/audit/hypotheses/2026-04-18-htf-path-a-prev-week-v1.yaml
+    - docs/audit/results/2026-04-18-htf-path-a-prev-week-v1-scan.md
+    - pipeline/build_daily_features.py  # _apply_htf_level_fields canonical source
+    - pipeline/check_drift.py           # check_htf_levels_integrity (pressure-tested 2026-04-18)
+    - trading_app/holdout_policy.py     # HOLDOUT_SACRED_FROM binding
+  authority:
+    - docs/institutional/pre_registered_criteria.md
+    - docs/institutional/literature/harvey_liu_2015_backtesting.md        # Eq. 5 + BHY
+    - docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md  # FST at K=24
+    - docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md  # t >= 3.79 no-theory
+    - .claude/rules/backtesting-methodology.md   # RULE 3.2 directional-only; RULE 8.1 fire-rate
+    - .claude/rules/quant-audit-protocol.md      # storytelling-bias Seven Sins guard
+  committed_sha: "TO_FILL_AFTER_COMMIT"
+  head_sha_at_draft: 2eb92bee         # v3 hardening commit follows
+  do_not_run_discovery: true
+  scope_note: >
+    Residual-anomaly observational shadow for ONE lane
+    (MES EUROPE_FLOW O15 E2 CB1 long). Follow-up on a single cell-cluster
+    that survived v1 Pathway A family BH-FDR with the WRONG sign (cells
+    #17 / #18 — same trade day, different RR targets, effectively K=1
+    cluster). The IS window AND the 2026-01-01 -> 2026-04-18 OOS stub are
+    both PEEKED by v1 (v1 scan ran 2026-04-18, commit 93b06712, and observed
+    both). This pre-reg commits to observing FRESH OOS fires from the
+    v1-scan date onward under a zero-capital contract. NOT a new mechanism
+    pre-reg. NOT a license to reopen v1. One-off review at sufficient-fresh-
+    OOS OR 2028-06-30 calendar cap, whichever first; directional-only
+    verdict acceptable at cap per RULE 3.2.
+
+audit_changelog:
+  v3 (2026-04-18, second audit — hardening pass):
+    - "FST interpolation made explicit: K=24 -> E[max SR] ~= 1.80 via log-linear between K=10 (1.5) and K=100 (2.3); observed v1 |t|=4.13 margin over null is documented as 0.3-0.7 t units"
+    - "selection-space framing made robust to both M=24 and M=48 interpretations; Chordia 3.79 exceeds Bonferroni rank-1 at both"
+    - "expected N_fire_days at cap refined to ~25 (from '~22-26') via explicit 8.6% fire rate * 290 expected fresh long-break days"
+    - "confirmatory_feasibility block added — explicitly notes that N ~= 152 is required at v1-observed effect magnitude to clear Chordia 3.79, vs N ~= 25 expected at cap; shadow is structurally a directional-only vehicle at the declared cap"
+    - "subjective_prior renamed from 'quantified_prior' (it is not literature-calibrated; honesty fix)"
+    - "single-day outlier cap labelled 'heuristic — not formally grounded in local literature'"
+    - "pre_reg_checklist extended to cover the above"
+  v2 (2026-04-18, post-review):
+    - "peek penalty reverted to Chordia t >= 3.79 (v1 gate of 4.5 was invented; Harvey-Liu Eq. 5 + BHY sanity-cross-check suffices)"
+    - "fresh_oos_window.start moved from 2026-01-01 -> 2026-04-18 (v1 scan already looked at the earlier stub)"
+    - "N_OOS threshold reframed from pooled-trade to per-fire-day (N_fire_days >= 30); pooled trades across RR 1.5+2.0 are correlated, not independent"
+    - "calendar cap extended 2027-12-31 -> 2028-06-30 to give ~26 months of fresh OOS at measured 8.6% fire rate (expected ~22-26 fire days — still tight but honest)"
+    - "RULE 3.2 directional-only verdict explicitly allowed as a cap-outcome (was missing)"
+    - "short-side mirror demoted from HARD_KILL to INFORMATIONAL per single-lane scope consistency"
+    - "era sub-stability gate (N>=30 per sub-era) dropped — inert at shadow sample size; replaced with single-day outlier cap"
+    - "Bailey 2013 MinBTL removed from authority (not applicable to K=1 observational)"
+    - "Lopez de Prado Bailey 2018 False Strategy Theorem added (K=24 selection context)"
+    - "peek_contamination block added to make v1 observation of early-OOS explicit"
+    - "ledger idempotency re-stated precisely (scan existing rows, skip duplicates)"
+
+edge_claim_summary: >
+  On MES EUROPE_FLOW O15 E2 CB1 long trades, when the ORB break is
+  direction-aligned with a prior-week-high break (`break_dir = 'long' AND
+  prev_week_high IS NOT NULL AND orb_EUROPE_FLOW_high > prev_week_high`),
+  the per-trade pnl_r was NEGATIVE on the v1 IS window with
+  |t| = 4.13 (RR 1.5) and |t| = 4.04 (RR 2.0), raw p = 0.0001 each,
+  q_family at K=24 = 0.001 each (v1 scan result doc cells #17 / #18 —
+  N_trades = 215 per RR cell, equivalent to 215 fire days). v2 tests
+  whether this survives on FRESH OOS fires (trading_day >= 2026-04-18,
+  AFTER the v1 scan's observation moment) using the per-fire-day mean
+  pnl_r across RR 1.5 and RR 2.0 as the test statistic (see
+  test_statistic block below).
+
+prior_assessment:
+  mechanism_candidate: >
+    London-open overnight-chase exhaustion on equity-index micros. Post-hoc
+    narrative authored after seeing v1's signed result; acknowledged as
+    storytelling-bias risk per Aronson Ch 6 (training-memory citation; PDF
+    at resources/Evidence_Based_Technical_Analysis.pdf; NOT extracted to
+    docs/institutional/literature/).
+  falsifying_evidence:
+    - name: short_side_mirror_contradiction
+      finding: >
+        MES EUROPE_FLOW short-side HTF (prev_week_low break short) IS
+        delta_IS = +0.153 (RR1.5) / +0.099 (RR2.0). A genuine London-open
+        exhaustion would produce same-sign skip-rule effect on both
+        directions; it does not.
+      source: docs/audit/results/2026-04-18-htf-path-a-prev-week-v1-scan.md (cells #19 / #20)
+    - name: false_strategy_theorem_at_K_24
+      finding: >
+        Per Lopez de Prado Bailey 2018 Theorem 1 (False Strategy Theorem)
+        extract anchor points: K=10 -> E[max SR]=1.5, K=100 -> 2.3,
+        K=1000 -> 3.26. Log-linear interpolation in K at K=24 gives
+        E[max SR] ~= 1.5 + 0.38 * (2.3 - 1.5) = 1.80 under the null with
+        iid Gaussian tests. Observed v1 cell #17 per-trade SR = 4.13 /
+        sqrt(215) = 0.282 (annualised-equivalent differs; FST numbers are
+        per-observation SR). Selection-space framing is ambiguous:
+        conservatively K=48 (24 cells x 2 signed interpretations; sign
+        explicit), pessimistically K=24 (cells as the unit; sign baked in).
+        Bonferroni-rank-1 thresholds: at M=24, alpha=0.002 -> t ~= 3.10;
+        at M=48, alpha=0.001 -> t ~= 3.29. Chordia 3.79 exceeds both.
+        Observed v1 IS |t|=4.13 therefore clears the selection-corrected
+        null under both framings, but by only ~0.3-0.7 t units of margin.
+      source: docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md:48-55
+    - name: bh_fdr_expected_false_discoveries
+      finding: >
+        Harvey-Liu 2015 Eq. 5 + BHY framework: under the null at M=24 with
+        q=0.05, E[# false rejections] is bounded by q*M = 1.2. One
+        surviving cluster is within the null-compatible range.
+      source: docs/institutional/literature/harvey_liu_2015_backtesting.md:55-66
+    - name: storytelling_risk
+      finding: >
+        v2 direction was chosen after seeing v1's signed outcome. Classic
+        Seven Sins pattern.
+      source: .claude/rules/quant-agent-identity.md (Seven Sins table)
+  supportive_evidence:
+    - name: mnq_instrument_class_twin
+      finding: >
+        MNQ EUROPE_FLOW long HTF IS delta_IS = -0.083 / -0.099 — same
+        negative sign as MES, weaker, not individually significant at
+        |t|<0.4. Weak directional consistency, not a signal.
+      source: docs/audit/results/2026-04-18-htf-path-a-prev-week-v1-scan.md (cells #5 / #6)
+  subjective_prior: >
+    Honest subjective prior ~20-30% that the effect is genuine. NOT a
+    literature-calibrated probability — it is my gut calibration weighted
+    by the three falsifying findings vs one weak-supportive finding above.
+    Stated here for transparency per quant-audit-protocol.md "bias rule"
+    (no hidden priors). Shadow exists to cheaply update this prior.
+  confirmatory_feasibility:
+    # Calibration against observed v1 effect size to assess whether the
+    # shadow can realistically clear Chordia 3.79 at fire-day sample sizes
+    # feasible within the calendar cap.
+    observed_per_trade_SR_v1_IS: 0.282
+    per_day_SR_implied: >
+      ~0.307 assuming RR 1.5 and RR 2.0 pnl correlation ~0.7 on same fire
+      day (per-day averaging reduces variance modestly; per-day-mean
+      SR ~= 1.09 * per-trade SR).
+    N_fire_days_required_at_observed_effect_for_t_ge_3p79: ~152
+    N_fire_days_expected_at_cap_2028_06_30: ~25
+    implication: >
+      Even if the v1 IS effect magnitude persists exactly on fresh OOS,
+      at N_fire_days = 25 the fresh OOS t-stat lands near 1.5 — far below
+      Chordia 3.79. Confirmatory pass would require EITHER a genuine
+      fresh-OOS effect several times larger than v1 IS (unlikely for real
+      effects) OR a cap extension well beyond 2028-06-30. The shadow is
+      realistically a directional-only observation vehicle at the declared
+      cap. See review_verdict_at_cap for the honest cap-outcome tiers.
+
+peek_contamination:
+  # Explicit acknowledgement of what has and has not been observed by v1.
+  already_observed_by_v1:
+    - window: "2019-05-06 -> 2025-12-31 (IS)"
+      observation: "v1 scan reported full IS per-cell stats; window EXHAUSTED"
+    - window: "2026-01-01 -> 2026-04-18 (pre-v1-scan OOS stub)"
+      observation: >
+        Exactly 1 fire day (2026-02-26) with 2 trades (RR 1.5 pnl_r=-1.0;
+        RR 2.0 pnl_r=-1.0; per-day mean=-1.0). v1 scan at commit 93b06712
+        reported ExpR_on_OOS=-1.0 per RR cell. Treat this stub as PEEKED
+        and EXCLUDE from the shadow's fresh-OOS gate test.
+  not_yet_observed:
+    - window: "2026-04-18 onward (fresh OOS)"
+      role: "sole evidence window for the shadow's review gate"
+      current_state_at_draft: >
+        Zero fresh OOS fires in DB at draft (DB max MES trading_day =
+        2026-04-17). Accumulation begins with the next business day after
+        the shadow ledger is initialised.
+  enforcement: >
+    Review script computes N_fire_days and t-stat ONLY on fires with
+    trading_day >= 2026-04-18. Any attempt to include pre-2026-04-18 OOS
+    fires in the gate test is a scope violation.
+
+peek_penalty:
+  source: docs/institutional/literature/harvey_liu_2015_backtesting.md
+  framing: >
+    v1 tested K=24 cells (sign baked into each cell via direction field).
+    This v2 selects one cell AND inverts its sign hypothesis. Effective
+    selection-space M depends on framing: M=24 if we count cells (pessimistic
+    — sign already fixed per cell in v1), M=48 if we count cell x signed-
+    interpretation combinations (conservative — sign is a free parameter of
+    the follow-up). Both framings are defensible; the gate is chosen to be
+    robust to both.
+  chosen_gate:
+    raw_p_threshold: 0.05
+    chordia_t_threshold: 3.79          # Criterion 4 no-theory
+    bhy_sanity_cross_check: >
+      Bonferroni-rank-1: at M=24 alpha_adj=0.05/24=0.00208 -> t~=3.10;
+      at M=48 alpha_adj=0.05/48=0.00104 -> t~=3.29 (large-df limits).
+      Chordia 3.79 (two-sided raw p ~= 0.00015 at large df) exceeds both
+      thresholds by >=0.5 t units. The additional t=4.5 threshold proposed
+      in the v1 draft had no formal basis; it is replaced with Chordia
+      3.79 + BHY sanity headroom documented here.
+  not_applied:
+    - name: Sharpe_haircut_Eq_5
+      reason: >
+        Harvey-Liu Eq. 5 delivers a haircut on the discovered Sharpe
+        ratio after multiple testing. Because the shadow's OOS window is
+        independent of v1, the haircut applies only to the original v1
+        finding (which was KILL anyway). No additional Sharpe haircut on
+        the fresh OOS test.
+
+mechanism_note: >
+  Pathway A / no-theory gate applies because no local Pathway-A-qualifying
+  extract grounds level-fade as an equity-index-micros mechanism. Fitschen
+  is trend-follow and excludes level filters (extract lines 67-75). Chan
+  2008 Ch 7 is regime-switching, not level-specific. Dalton / Murphy
+  absent. A Pathway B upgrade would require Chan Ch 4 (Algorithmic Trading,
+  level mean-reversion) to be extracted to
+  docs/institutional/literature/ BEFORE review_date and a fresh Pathway B
+  pre-reg filed at t >= 3.00 with-theory. Until then, Chordia 3.79 binds.
+
+lane:
+  instrument: MES
+  session: EUROPE_FLOW
+  orb_minutes: 15
+  direction: long
+  rr_targets: [1.5, 2.0]              # pooled via per-fire-day mean (NOT as K=2)
+  entry_model: E2
+  confirm_bars: 1
+  stop_multiplier: 1.0
+  role: R1_FILTER_SKIP_RULE
+  canonical_predicate: >
+    orb_EUROPE_FLOW_break_dir = 'long'
+    AND prev_week_high IS NOT NULL
+    AND orb_EUROPE_FLOW_high > prev_week_high
+  canonical_feature_sources:
+    - pipeline/init_db.py:303          # prev_week_high column declaration
+    - pipeline/build_daily_features.py::_apply_htf_level_fields
+  out_of_scope_rejected:
+    - name: mes_europe_flow_short_side
+      reason: "IS delta_IS positive (HTF-low break IMPROVES shorts); mirror contradicts mechanism"
+    - name: mnq_europe_flow_long_twin
+      reason: "directionally consistent but not significant; covered by v1 scan; shadow stays single-lane"
+    - name: other_sessions_or_instruments
+      reason: "broader scope = family reopen; this pre-reg is single-lane observational"
+
+holdout:
+  source: trading_app/holdout_policy.py::HOLDOUT_SACRED_FROM
+  value_at_draft: "2026-01-01"         # informational; tooling MUST import at runtime
+  is_window:
+    start: "2019-05-06"
+    end_exclusive: HOLDOUT_SACRED_FROM
+    status: EXHAUSTED                  # peeked by v1
+  pre_v1_scan_oos_stub:
+    start: HOLDOUT_SACRED_FROM
+    end_exclusive: "2026-04-18"        # v1 scan date
+    status: PEEKED                     # excluded from shadow's gate test
+  fresh_oos_window:
+    start: "2026-04-18"                # post-v1-scan; see peek_contamination block
+    end_exclusive: review_date
+    status: ACCUMULATING
+    sole_role: "evidence window for shadow review gate"
+  mode: A
+
+observational_contract:
+  capital_at_risk: 0
+  sizing: none
+  deployment_authorisation: none
+  writes_permitted_to:
+    - docs/audit/shadow_ledgers/htf-mes-europe-flow-long-skip-rule-ledger.md
+  writes_prohibited_to:
+    - validated_setups
+    - experimental_strategies
+    - prop_profiles.ACCOUNT_PROFILES
+    - any live config / routing surface
+  new_db_tables_created: none
+
+recording_implementation:
+  script_path: research/shadow_htf_mes_europe_flow_long_skip.py  # TO BE BUILT IF LOCKED
+  cadence: >
+    Manual or scheduled daily run against canonical DB. Queries for HTF
+    fires with trading_day >= 2026-04-18 AND not already in the ledger.
+    Appends one row per (fire trading_day) to the ledger.
+  ledger_path: docs/audit/shadow_ledgers/htf-mes-europe-flow-long-skip-rule-ledger.md
+  ledger_row_schema:
+    - trading_day
+    - orb_EUROPE_FLOW_break_ts
+    - orb_EUROPE_FLOW_high
+    - prev_week_high
+    - orb_EUROPE_FLOW_break_bar_volume
+    - rel_vol_EUROPE_FLOW
+    - rr_1p5_outcome
+    - rr_1p5_pnl_r
+    - rr_2p0_outcome
+    - rr_2p0_pnl_r
+  idempotency: >
+    Script reads existing ledger rows; each row's first column is
+    trading_day. Before appending a new row, confirm the candidate
+    trading_day does not appear in the existing rows set. Duplicate
+    candidates are skipped silently.
+  read_source: orb_outcomes JOIN daily_features (canonical only)
+
+runtime_prerequisites:
+  drift_check:
+    name: pipeline.check_drift.check_htf_levels_integrity
+    expected_result: zero violations
+    rationale: >
+      Shadow evidence depends on prev_week_high stored value. Integrity
+      check 59 was pressure-tested 2026-04-18 (commit 668d2680) across 4
+      divergence classes. If this check ever regresses, recorded signals
+      between last-pass and regression are suspect and must be requeried.
+  holdout_import:
+    rule: "HOLDOUT_SACRED_FROM imported from trading_app.holdout_policy, never hardcoded"
+  canonical_tables_only:
+    permitted: [bars_1m, daily_features, orb_outcomes]
+    forbidden_for_decisions: [validated_setups, edge_families, live_config]
+
+review_conditions:
+  fires_first:
+    - name: sufficient_fresh_oos
+      rule: "N_fire_days (trading_day >= 2026-04-18) >= 30"
+      rationale: ".claude/rules/backtesting-methodology.md RULE 3.2 (>=30 confirmatory floor)"
+    - name: calendar_cap
+      rule: "review_date <= 2028-06-30"
+      rationale: >
+        Measured fresh OOS fire rate 8.6% on long-break days (3 fires /
+        35 long-break days in 3.5 months post-holdout). Fresh window
+        2026-04-18 -> 2028-06-30 = ~26.3 months ~= 550 trading days. At
+        the IS rate of 132 long-break-days/year (= 876/6.65), expected
+        long-break days in fresh OOS ~= 290. At 8.6% fire rate,
+        expected fresh fire days ~= 25. This is BELOW the N=30
+        confirmatory floor; at-cap verdict is expected to be directional-
+        only per RULE 3.2. See review_verdict_at_cap below.
+  review_method: one-off single-use-fresh-OOS test; no repeated looking
+  review_artifacts:
+    - docs/audit/results/YYYY-MM-DD-htf-mes-europe-flow-long-skip-rule-shadow-review.md
+    - docs/audit/hypotheses/YYYY-MM-DD-htf-mes-europe-flow-long-skip-rule-shadow-postmortem.md
+
+test_statistic:
+  # Correct independence unit: each fire day is one independent event.
+  # RR 1.5 and RR 2.0 trades on the same day have correlated payoffs
+  # (same entry / same stop / different targets). Pooling them as two
+  # independent trades overstates N_eff.
+  unit_of_observation: fire_day
+  per_day_statistic: "mean(pnl_r over RR 1.5 and RR 2.0 for that day)"
+  statistic: "one-sample two-tailed t-test of per-day statistic vs 0"
+  df: "N_fire_days - 1"
+
+review_verdict_gates:
+  # Evaluated ONCE on accumulated FRESH OOS fire days.
+  pass_all_of_these:                   # confirmatory pass (requires N>=30)
+    - "N_fire_days >= 30"
+    - "delta_OOS_per_day < 0 (per-day mean pnl_r < same-lane same-window unconditional long per-day mean)"
+    - "two-sided t on per-day mean: |t_OOS| >= 3.79 (Chordia no-theory severity)"
+    - "raw p_OOS < 0.00015 (implied by |t| >= 3.79 at large df; confirms Chordia gate)"
+    - "sign confirmation: v1 IS sign was negative (established in scan doc); OOS per-day mean must also be negative"
+    - "single-day outlier cap (heuristic — not formally grounded in local literature; included as a pragmatic guard against one-day pathology): no single fire day's abs(pnl_r_per_day_mean) contributes more than 25% of the sum of abs(pnl_r_per_day_mean) across all fires"
+    - "drift_check 59 zero violations at review moment"
+  hard_kill_any_of:
+    - "delta_OOS_per_day >= 0 (fires improved vs baseline on fresh OOS -> v1 mechanism partially vindicated or null)"
+    - "|t_OOS| < 3.79 with N_fire_days >= 30 (confirmatory fail)"
+    - "any drift_check regression during observation window (invalid recorded signals)"
+
+review_verdict_at_cap:
+  # If calendar_cap fires before sufficient_fresh_oos, we are in
+  # RULE 3.2 directional-only territory. Not actionable; retired as null
+  # unless N and sign are both extreme.
+  applies_when: "review_date == 2028-06-30 AND N_fire_days < 30"
+  tiers:
+    - condition: "N_fire_days < 15"
+      verdict: "INSUFFICIENT_DATA -> retire shadow as null"
+    - condition: "15 <= N_fire_days < 30 AND per-day mean sign NEGATIVE AND |t| >= 3.79"
+      verdict: "DIRECTIONAL_ONLY -> record observation; no deployment; no pathway-B upgrade without fresh data or new mechanism"
+    - condition: "15 <= N_fire_days < 30 AND anything else"
+      verdict: "DIRECTIONAL_NULL -> retire shadow as null"
+
+informational_observations:
+  # Not gates. Recorded in review document for context only.
+  short_side_mirror:
+    cell: MES EUROPE_FLOW short pwl_break_short
+    note: >
+      If the mechanism is truly direction-specific (long-only exhaustion),
+      short-side OOS delta should be >= 0 (or at least not mirror the long-
+      side negative). If short-side OOS delta also goes negative, the
+      finding is a generic MES EUROPE_FLOW HTF-fire effect, not direction-
+      specific — which conflicts with the stated mechanism and should
+      lower confidence in the pre-registered interpretation.
+    source: documented in review artefact; not a pass/fail gate
+  mnq_instrument_class_twin:
+    cell: MNQ EUROPE_FLOW long pwh_break_long
+    note: "if OOS delta is same-sign negative, adds weak instrument-class support; not a gate."
+
+next_stage_if_validated:
+  permissions_granted:
+    - "Criterion 6 WFE check on the skip-rule metric"
+    - "Criterion 9 era-stability combined IS+OOS (full history)"
+    - "Pathway B re-pre-reg at t >= 3.00 with theory IF Chan Ch 4 / Dalton / Murphy extracted by then"
+    - "Criterion 11 Monte Carlo + Criterion 12 Shiryaev-Roberts monitor design"
+  permissions_explicitly_not_granted:
+    - "live capital deployment"
+    - "writes to prop_profiles.ACCOUNT_PROFILES"
+    - "writes to validated_setups or experimental_strategies"
+    - "extension to any other (instrument, session, direction) cell"
+
+anti_lookahead_statement:
+  feature_side:
+    source: pipeline/build_daily_features.py::_apply_htf_level_fields
+    invariant: >
+      prev_week_high populated at trading-day start from fully-closed prior
+      Mon-Sun week. Drift check 59 pressure-tested 2026-04-18 (commit
+      668d2680), 4/4 injected divergences caught across symmetric, phantom,
+      stale-miss classes.
+  decision_side:
+    known_at_ORB_close:
+      - prev_week_high
+      - orb_EUROPE_FLOW_break_dir
+      - orb_EUROPE_FLOW_high
+    forbidden_as_predictor:
+      - "daily_high / daily_low of current trading day"
+      - "outcome / mae_r / mfe_r (post-entry)"
+      - "double_break (post-entry — banned per quant-audit-protocol)"
+
+artifacts_to_save:
+  at_lock:
+    - docs/audit/hypotheses/2026-04-18-htf-mes-europe-flow-long-skip-rule-shadow.yaml
+  during_observation:
+    - docs/audit/shadow_ledgers/htf-mes-europe-flow-long-skip-rule-ledger.md
+  at_review:
+    - docs/audit/results/YYYY-MM-DD-htf-mes-europe-flow-long-skip-rule-shadow-review.md
+    - docs/audit/hypotheses/YYYY-MM-DD-htf-mes-europe-flow-long-skip-rule-shadow-postmortem.md
+
+pre_reg_checklist:
+  - "[ ] prereg-writer gate self-review per research-truth-protocol §2a"
+  - "[ ] testing_mode = research_only_signal_shadow (matches H1 exemplar)"
+  - "[ ] prior_assessment with subjective prior (~20-30%) declared and LABELED subjective, not 'quantified'"
+  - "[ ] confirmatory_feasibility block shows N~=152 needed at observed v1 effect vs N~=25 expected at cap — shadow realistic only as directional-only vehicle"
+  - "[ ] falsifying_evidence enumerated with literature source line citations"
+  - "[ ] peek_contamination block present; fresh_oos_window.start = 2026-04-18"
+  - "[ ] peek_penalty cites Harvey-Liu 2015 Eq. 5 + BHY; Chordia 3.79 operative gate"
+  - "[ ] FST cited via Lopez de Prado Bailey 2018 extract"
+  - "[ ] RR cells POOLED via per-fire-day mean (not K=2 trade-level pooling)"
+  - "[ ] unit_of_observation = fire_day; df = N_fire_days - 1"
+  - "[ ] review_verdict_at_cap tiers handle RULE 3.2 directional-only"
+  - "[ ] short-side mirror is INFORMATIONAL not HARD KILL"
+  - "[ ] single-day outlier cap replaces era sub-stability gate"
+  - "[ ] authority list is accurate (Bailey 2013 MinBTL removed; FST added)"
+  - "[ ] Aronson training-memory citation explicitly labeled"
+  - "[ ] committed_sha = TO_FILL_AFTER_COMMIT"

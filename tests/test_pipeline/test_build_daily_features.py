@@ -1106,3 +1106,271 @@ class TestBuildIntegration:
         assert row[0] is None, "Day 1 prev_day_high should be NULL"
         assert row[1] is None, "Day 1 prev_day_low should be NULL"
         assert row[2] is None, "Day 1 prev_day_close should be NULL"
+
+
+# =============================================================================
+# MODULE: HTF prev-week / prev-month level fields (Path A)
+# =============================================================================
+
+
+class TestHTFLevelFields:
+    """Unit tests for _apply_htf_level_fields and _htf_week_key / _htf_prior_month_key.
+
+    Covers:
+      1. Monday-anchor week via DATE_TRUNC('week') equivalent
+      2. Sunday trading_day row groups with the ending Mon-Sun week
+      3. Monday first row of new week references prior completed week
+      4. Month roll Dec → Jan
+      5. First-valid NULL behavior at start of history
+      6. Cross-year week handling around Jan 1
+      7. Rows before any prior week/month produce NULL
+      8. Aggregates match open-first / close-last / high-max / low-min semantics
+      9. No look-ahead — running aggregate never includes today or later
+     10. Idempotency — re-applying produces identical result
+    """
+
+    @staticmethod
+    def _make_row(td: date, o: float, h: float, low_val: float, c: float) -> dict:
+        return {
+            "trading_day": td,
+            "daily_open": o,
+            "daily_high": h,
+            "daily_low": low_val,
+            "daily_close": c,
+        }
+
+    def test_monday_anchor_via_weekday(self):
+        from pipeline.build_daily_features import _htf_week_key
+
+        assert _htf_week_key(date(2019, 5, 13)) == date(2019, 5, 13), "Monday anchors to itself"
+        assert _htf_week_key(date(2019, 5, 14)) == date(2019, 5, 13), "Tuesday → Monday 5/13"
+        assert _htf_week_key(date(2019, 5, 17)) == date(2019, 5, 13), "Friday → Monday 5/13"
+
+    def test_sunday_trading_day_groups_with_ending_week(self):
+        from pipeline.build_daily_features import _htf_week_key
+
+        sunday = date(2019, 5, 12)
+        assert sunday.weekday() == 6, "sanity check: 2019-05-12 is Sunday"
+        anchor = _htf_week_key(sunday)
+        assert anchor == date(2019, 5, 6), "Sunday binds to its ENDING Mon-Sun week"
+
+        monday = date(2019, 5, 13)
+        assert _htf_week_key(monday) == date(2019, 5, 13), "Next Monday starts a new week"
+
+    def test_monday_first_row_of_new_week_references_prior_week(self):
+        from pipeline.build_daily_features import _apply_htf_level_fields
+
+        # Week of 2024-01-01 (Mon): Mon=2024-01-01, Tue=2024-01-02, ..., Fri=2024-01-05
+        # Next week Monday: 2024-01-08. That Monday row should see prev_week_* from Jan 1-5.
+        rows = [
+            self._make_row(date(2024, 1, 1), 100.0, 105.0, 98.0, 102.0),
+            self._make_row(date(2024, 1, 2), 102.0, 108.0, 99.0, 107.0),
+            self._make_row(date(2024, 1, 3), 107.0, 110.0, 104.0, 106.0),
+            self._make_row(date(2024, 1, 4), 106.0, 112.0, 103.0, 109.0),
+            self._make_row(date(2024, 1, 5), 109.0, 111.0, 105.0, 108.0),
+            self._make_row(date(2024, 1, 8), 108.0, 115.0, 106.0, 114.0),
+        ]
+        _apply_htf_level_fields(rows)
+
+        # Jan 1-5 rows: no prior week available → NULL
+        for r in rows[:5]:
+            assert r["prev_week_high"] is None
+            assert r["prev_week_low"] is None
+
+        # Jan 8 Monday: prior week = Jan 1-5, high=112, low=98, open=100, close=108
+        jan8 = rows[5]
+        assert jan8["prev_week_high"] == 112.0
+        assert jan8["prev_week_low"] == 98.0
+        assert jan8["prev_week_open"] == 100.0
+        assert jan8["prev_week_close"] == 108.0
+        assert jan8["prev_week_range"] == 14.0
+        assert jan8["prev_week_mid"] == 105.0
+
+    def test_month_roll_dec_to_jan(self):
+        from pipeline.build_daily_features import _apply_htf_level_fields, _htf_prior_month_key
+
+        assert _htf_prior_month_key(date(2024, 1, 15)) == date(2023, 12, 1)
+
+        rows = [
+            # December 2023 month — three trading days
+            self._make_row(date(2023, 12, 20), 200.0, 210.0, 195.0, 205.0),
+            self._make_row(date(2023, 12, 21), 205.0, 215.0, 200.0, 212.0),
+            self._make_row(date(2023, 12, 22), 212.0, 220.0, 208.0, 218.0),
+            # January 2024 row — should see prev_month from Dec
+            self._make_row(date(2024, 1, 2), 218.0, 225.0, 214.0, 222.0),
+        ]
+        _apply_htf_level_fields(rows)
+
+        jan2 = rows[3]
+        assert jan2["prev_month_high"] == 220.0
+        assert jan2["prev_month_low"] == 195.0
+        assert jan2["prev_month_open"] == 200.0  # Dec 20 open, first-seen in month
+        assert jan2["prev_month_close"] == 218.0  # Dec 22 close, last-seen
+        assert jan2["prev_month_range"] == 25.0
+        assert jan2["prev_month_mid"] == 207.5
+
+    def test_first_valid_null_at_start_of_history(self):
+        from pipeline.build_daily_features import _apply_htf_level_fields
+
+        rows = [
+            self._make_row(date(2024, 3, 4), 50.0, 52.0, 48.0, 51.0),
+            self._make_row(date(2024, 3, 5), 51.0, 53.0, 49.0, 52.0),
+        ]
+        _apply_htf_level_fields(rows)
+        for r in rows:
+            assert r["prev_week_high"] is None
+            assert r["prev_week_low"] is None
+            assert r["prev_month_high"] is None
+            assert r["prev_month_low"] is None
+
+    def test_cross_year_week_around_jan_1(self):
+        from pipeline.build_daily_features import _apply_htf_level_fields, _htf_week_key
+
+        # 2021: Jan 1 is a Friday. Week of Jan 1 2021 = Mon 2020-12-28 through Sun 2021-01-03.
+        assert _htf_week_key(date(2021, 1, 1)) == date(2020, 12, 28)
+        assert _htf_week_key(date(2021, 1, 3)) == date(2020, 12, 28), "Sunday 1/3 binds to W 12/28"
+        assert _htf_week_key(date(2021, 1, 4)) == date(2021, 1, 4)
+
+        rows = [
+            # Week 12/28-01/03 — two trading days spanning year boundary
+            self._make_row(date(2020, 12, 30), 300.0, 310.0, 295.0, 305.0),
+            self._make_row(date(2020, 12, 31), 305.0, 315.0, 300.0, 312.0),
+            # Next week Monday 2021-01-04
+            self._make_row(date(2021, 1, 4), 312.0, 320.0, 308.0, 318.0),
+        ]
+        _apply_htf_level_fields(rows)
+
+        jan4 = rows[2]
+        assert jan4["prev_week_high"] == 315.0, "carries Dec 31 high across year boundary"
+        assert jan4["prev_week_low"] == 295.0
+        assert jan4["prev_week_open"] == 300.0
+        assert jan4["prev_week_close"] == 312.0
+
+    def test_aggregate_semantics_open_first_close_last_high_max_low_min(self):
+        from pipeline.build_daily_features import _apply_htf_level_fields
+
+        # Week Mon-Fri; interior Tuesday has the highest high; Thursday has the lowest low
+        rows = [
+            self._make_row(date(2024, 2, 5), 100.0, 102.0, 99.0, 101.0),   # Mon
+            self._make_row(date(2024, 2, 6), 101.0, 130.0, 100.0, 120.0),  # Tue — max high
+            self._make_row(date(2024, 2, 7), 120.0, 125.0, 115.0, 118.0),  # Wed
+            self._make_row(date(2024, 2, 8), 118.0, 119.0, 80.0, 90.0),    # Thu — min low
+            self._make_row(date(2024, 2, 9), 90.0, 95.0, 88.0, 93.0),      # Fri — last close
+            # Next Monday's row — inspects prev_week from Feb 5-9
+            self._make_row(date(2024, 2, 12), 93.0, 98.0, 91.0, 96.0),
+        ]
+        _apply_htf_level_fields(rows)
+
+        nxt = rows[5]
+        assert nxt["prev_week_high"] == 130.0, "max over Mon-Fri"
+        assert nxt["prev_week_low"] == 80.0, "min over Mon-Fri"
+        assert nxt["prev_week_open"] == 100.0, "Monday open"
+        assert nxt["prev_week_close"] == 93.0, "Friday close"
+
+    def test_no_look_ahead_today_not_in_own_aggregate(self):
+        from pipeline.build_daily_features import _apply_htf_level_fields
+
+        # Monday row must NOT see its own high in prev_week_high.
+        rows = [
+            # Prior week Mon-Fri (Jan 22-26 2024)
+            self._make_row(date(2024, 1, 22), 10.0, 11.0, 9.0, 10.5),
+            self._make_row(date(2024, 1, 23), 10.5, 12.0, 10.0, 11.5),
+            # Current week Monday Jan 29 — try a huge high that MUST NOT appear in its own prev_week
+            self._make_row(date(2024, 1, 29), 11.5, 9999.0, 11.0, 12.0),
+        ]
+        _apply_htf_level_fields(rows)
+        jan29 = rows[2]
+        # prior week was Jan 22-26 with high=12.0 (max of 11.0, 12.0)
+        assert jan29["prev_week_high"] == 12.0, "today's 9999 high not in prev_week"
+
+    def test_mgc_early_rows_null_until_prior_week_exists(self):
+        """Simulate MGC launch 2023-09-11 (Monday). First row and same-week rows return NULL."""
+        from pipeline.build_daily_features import _apply_htf_level_fields
+
+        rows = [
+            self._make_row(date(2023, 9, 11), 1900.0, 1910.0, 1890.0, 1905.0),
+            self._make_row(date(2023, 9, 12), 1905.0, 1915.0, 1895.0, 1908.0),
+            # Week rolls 2023-09-18 Monday — first row with a prior complete week
+            self._make_row(date(2023, 9, 18), 1908.0, 1925.0, 1902.0, 1920.0),
+        ]
+        _apply_htf_level_fields(rows)
+
+        assert rows[0]["prev_week_high"] is None
+        assert rows[1]["prev_week_high"] is None
+        assert rows[2]["prev_week_high"] == 1915.0
+
+    def test_idempotent_reapply(self):
+        from pipeline.build_daily_features import _apply_htf_level_fields
+
+        rows_a = [
+            self._make_row(date(2024, 2, 5), 100.0, 105.0, 99.0, 104.0),
+            self._make_row(date(2024, 2, 12), 104.0, 110.0, 100.0, 108.0),
+        ]
+        _apply_htf_level_fields(rows_a)
+        snapshot_1 = [{k: v for k, v in r.items()} for r in rows_a]
+
+        _apply_htf_level_fields(rows_a)
+        snapshot_2 = [{k: v for k, v in r.items()} for r in rows_a]
+
+        assert snapshot_1 == snapshot_2, "Second apply must produce identical rows"
+
+    def test_month_first_row_null_prev_month(self):
+        from pipeline.build_daily_features import _apply_htf_level_fields
+
+        rows = [
+            self._make_row(date(2024, 2, 1), 100.0, 105.0, 98.0, 103.0),
+        ]
+        _apply_htf_level_fields(rows)
+        assert rows[0]["prev_month_high"] is None
+        assert rows[0]["prev_month_low"] is None
+
+    def test_week_spans_month_boundary_no_contamination(self):
+        """Fri Jan 31 and Sun Feb 2 live in the SAME ISO week (Mon Jan 27)
+        but DIFFERENT calendar months. Feb 3 Mon must see:
+          - prev_week = full ISO week incl. Sunday Feb 2 in February
+          - prev_month = January ONLY (Sunday Feb 2 excluded)
+        """
+        from pipeline.build_daily_features import (
+            _apply_htf_level_fields,
+            _htf_prior_month_key,
+            _htf_week_key,
+        )
+
+        # Sanity: Sunday Feb 2 2025 -> week_key Mon Jan 27 2025; month_key Feb 1 2025.
+        assert date(2025, 2, 2).weekday() == 6
+        assert _htf_week_key(date(2025, 2, 2)) == date(2025, 1, 27)
+        assert _htf_week_key(date(2025, 2, 3)) == date(2025, 2, 3)
+        assert _htf_prior_month_key(date(2025, 2, 3)) == date(2025, 1, 1)
+
+        rows = [
+            # January rows Mon-Fri in the week that will cross into February
+            self._make_row(date(2025, 1, 27), 50.0, 60.0, 48.0, 55.0),  # Mon — Jan open
+            self._make_row(date(2025, 1, 28), 55.0, 62.0, 50.0, 58.0),
+            self._make_row(date(2025, 1, 29), 58.0, 65.0, 52.0, 60.0),
+            self._make_row(date(2025, 1, 30), 60.0, 70.0, 55.0, 64.0),  # Jan high in this run
+            self._make_row(date(2025, 1, 31), 64.0, 68.0, 45.0, 50.0),  # Fri — Jan low + Jan close
+            # February Sunday — in the same ISO week but a new month.
+            # Intentionally extreme values: if these leak into January's
+            # prev_month aggregate, this test catches it.
+            self._make_row(date(2025, 2, 2), 50.0, 999.0, 1.0, 999.0),  # Sun — Feb row
+            # Target row: Monday Feb 3 — reads prev_week (full ISO week incl. Sun Feb 2)
+            # and prev_month (January only).
+            self._make_row(date(2025, 2, 3), 999.0, 1000.0, 990.0, 995.0),
+        ]
+        _apply_htf_level_fields(rows)
+
+        feb3 = rows[6]
+
+        # prev_week SHOULD include Sunday Feb 2 (same ISO week).
+        assert feb3["prev_week_high"] == 999.0, "Sun Feb 2 high must be in ISO week agg"
+        assert feb3["prev_week_low"] == 1.0, "Sun Feb 2 low must be in ISO week agg"
+        assert feb3["prev_week_open"] == 50.0, "Mon Jan 27 open is week-first"
+        assert feb3["prev_week_close"] == 999.0, "Sun Feb 2 close is week-last"
+
+        # prev_month SHOULD be January only — Sun Feb 2 EXCLUDED.
+        assert feb3["prev_month_high"] == 70.0, "Jan high (Jan 30) — NOT Feb 2's 999"
+        assert feb3["prev_month_low"] == 45.0, "Jan low (Jan 31) — NOT Feb 2's 1.0"
+        assert feb3["prev_month_open"] == 50.0, "Jan 27 Monday open is Jan-first"
+        assert feb3["prev_month_close"] == 50.0, "Jan 31 Friday close is Jan-last"
+        assert feb3["prev_month_range"] == 25.0
+        assert feb3["prev_month_mid"] == 57.5
