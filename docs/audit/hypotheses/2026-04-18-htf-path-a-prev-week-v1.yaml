@@ -1,0 +1,433 @@
+metadata:
+  name: htf-path-a-prev-week-v1
+  slug: 2026-04-18-htf-path-a-prev-week-v1
+  owner: canompx3
+  created_at: 2026-04-18
+  status: LOCKED  # locked 2026-04-18 after:
+                  #   (a) fire-rate precheck artefact in-band on all 12 smoke cells
+                  #       (RR-invariant → covers all 24 YAML cells)
+                  #   (b) scan script research/htf_path_a_prev_week_v1_scan.py committed
+                  # committed_sha: placeholder TO_FILL_AFTER_COMMIT until first commit
+                  # lands (research-truth-protocol §2a legitimate pattern).
+  supersedes: none
+  parent_stub: docs/audit/hypotheses/2026-04-15-htf-level-break-pre-reg-stub.md
+  testing_mode: family   # Pathway A per Criterion 3 (Amendment 3.0):
+                         # "a single hypothesis file tests multiple hypotheses as a
+                         # family and the researcher intends to select survivors from the set."
+  pathway: A             # BH-FDR family search (NOT Pathway B — Pathway B is for
+                         # single theory-grounded predictions tested at raw p).
+  chordia_threshold_basis: Criterion_4_no_theory  # t >= 3.79 applies independent of
+                                                  # pathway choice (no Pathway-A-qualifying
+                                                  # local literature extract for level filters).
+  pathway_classification_note: >
+    12 hypotheses spanning (MNQ, MES) x (TOKYO_OPEN, EUROPE_FLOW, NYSE_OPEN) x
+    (long, short) x (RR 1.5, 2.0) = 24 cells. All are variants of the SAME
+    mechanism (HTF prev-week level break). Survivors selected by family-level
+    BH-FDR. Upgrade to Pathway B would require a SINGLE pre-registered
+    prediction in its own file backed by a Pathway-A-qualifying literature
+    extract — not currently available locally (see mechanism block).
+  depends_on:
+    - pipeline/build_daily_features.py  # _apply_htf_level_fields canonical source
+    - pipeline/check_drift.py  # check_htf_levels_integrity pressure-tested 2026-04-18
+    - trading_app/holdout_policy.py  # HOLDOUT_SACRED_FROM binding
+  authority:
+    - docs/institutional/pre_registered_criteria.md  # v3.1 locked criteria
+    - .claude/rules/backtesting-methodology.md  # 13 rules, esp. 1/4/8.1/10
+    - docs/institutional/mechanism_priors.md  # R1 FILTER role
+    - docs/STRATEGY_BLUEPRINT.md  # NO-GO registry clean for HTF (verified)
+  committed_sha: "TO_FILL_AFTER_COMMIT"  # research-truth-protocol §2a legitimate placeholder
+  head_sha_at_draft: 668d2680b2e50cad0c2e1195e32a191be6d3cfea
+  do_not_run_until_committed: true  # hard gate — scan aborts if YAML is uncommitted
+  do_not_run_until_fire_rate_precheck: true
+  scope_note: >
+    Stage 1 binary FILTER overlay on existing E2 ORB entries, testing whether
+    direction-aligned breakouts of the prior-Mon-Sun-week extreme produce
+    higher ExpR than unconditional ORB entries on the same (instrument,
+    session, RR) lane. Not a sizer. Not a confluence composite. Not a new
+    entry model. Scope restricted to prev-week (prev-month deferred to v2
+    with its own MinBTL budget).
+
+edge_claim_summary: >
+  On MNQ and MES, during the three most liquid index-flow sessions
+  (TOKYO_OPEN, EUROPE_FLOW, NYSE_OPEN) at the 15-minute aperture, an ORB
+  break whose direction aligns with a break of the prior Mon-Sun calendar
+  week's extreme (prev_week_high for longs, prev_week_low for shorts) has
+  positive per-trade ExpR and the effect size meets Chordia-2018 without-
+  theory severity (t >= 3.79) with family-level BH-FDR q=0.05 at K=24.
+
+mechanism:
+  summary: >
+    Prior-week horizontal levels concentrate resting liquidity (limit
+    orders, protective stops, discretionary triggers) that institutional
+    flow sweeps when broken. An ORB session whose first break aligns with
+    a fresh daily penetration of that HTF level should carry more
+    directional follow-through than an equivalent ORB break inside the
+    prior-week range. Tested as a Pathway A family search because the
+    local literature corpus contains no Pathway-A-qualifying extract for
+    level-based filters; Criterion 4 no-theory severity (t >= 3.79) applies.
+  tier_1_literature_support:
+    - file: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+      lines: "1-90"
+      relevance: CORE ORB premise (intraday trend-follow on index futures)
+      with_theory_claim: false
+      note: >
+        Fitschen supports intraday breakout-continuation in general but the
+        extract itself at lines 67-75 EXPLICITLY EXCLUDES level-based
+        filters from its scope. This prereg acknowledges the exclusion.
+  tier_1_literature_absent:
+    - "Dalton (Markets in Profile) — not in resources/ or literature/"
+    - "Murphy (Technical Analysis of the Financial Markets) — not in resources/ or literature/"
+    - "Chan Ch 4 level mean-reversion / level-break — extract not yet written"
+  pathway_upgrade_path: >
+    If any of the three missing extracts is added to
+    docs/institutional/literature/ AFTER this prereg runs, a v2-with-theory
+    individual-pathway prereg may be drafted for the single strongest
+    surviving cell, applying Criterion 4 t >= 3.00 carve-out. Results from
+    v1 (family Pathway A) do NOT auto-qualify for Pathway B without that
+    separate re-pre-registration.
+
+canonical_features_in_scope:
+  primary_predictors:
+    - name: prev_week_high
+      source_file: pipeline/init_db.py
+      source_line: 303
+      build_source: pipeline/build_daily_features.py::_apply_htf_level_fields
+      temporal_validity: >
+        Populated at trading-day start (09:00 Brisbane) from fully-closed
+        prior ISO Mon-Sun week. Stable for every intraday session fire on
+        the current trading day.
+    - name: prev_week_low
+      source_file: pipeline/init_db.py
+      source_line: 304
+      build_source: pipeline/build_daily_features.py::_apply_htf_level_fields
+      temporal_validity: same as prev_week_high
+  context_only_not_predictors:
+    # Populated by the canonical builder but NOT tested as predictors in v1
+    # to keep trial budget under strict Bailey. May enter v2.
+    - prev_week_open
+    - prev_week_close
+    - prev_week_range
+    - prev_week_mid
+  out_of_scope_for_v1:
+    - prev_month_high
+    - prev_month_low
+    - prev_month_open
+    - prev_month_close
+    - prev_month_range
+    - prev_month_mid
+
+scope:
+  instruments: [MNQ, MES]
+  sessions: [TOKYO_OPEN, EUROPE_FLOW, NYSE_OPEN]
+  orb_minutes: [15]
+  rr_targets: [1.5, 2.0]
+  entry_models: [E2]
+  confirm_bars: [1]
+  stop_multipliers: [1.0]
+  directions_cells:
+    - pwh_break_long:
+        predicate: >
+          orb_{session}_break_dir = 'long'
+            AND prev_week_high IS NOT NULL
+            AND orb_{session}_high > prev_week_high
+        direction: long
+    - pwl_break_short:
+        predicate: >
+          orb_{session}_break_dir = 'short'
+            AND prev_week_low IS NOT NULL
+            AND orb_{session}_low < prev_week_low
+        direction: short
+  role: R1_FILTER
+  data_source_mode: clean_real_micro
+  data_source_disclosure: >
+    MNQ + MES 1m bars from 2019-05-06 (CME Micro E-mini launch) to
+    2025-12-31 (pre-sacred boundary). No proxy, no parent-futures backfill.
+
+trial_budget:
+  cells:
+    instruments: 2
+    sessions: 3
+    apertures: 1
+    rr_targets: 2
+    directions_cells: 2
+    total_per_instrument: 12
+    total: 24  # 2 * 3 * 1 * 2 * 2
+  minbtl:
+    source: docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md
+    formula: "2 * ln(N_trials) / E_max^2 <= available_clean_years"
+    E_max_assumed: 1.0
+    computed: "2 * ln(24) / 1.0^2 = 6.356 years"
+    clean_years_MNQ: 6.65
+    clean_years_MES: 6.65
+    verdict: "24 <= 28 strict Bailey bound at E=1.0 — PASS"
+
+holdout:
+  source: trading_app/holdout_policy.py::HOLDOUT_SACRED_FROM
+  value_at_draft: "2026-01-01"  # informational; scan MUST import at runtime
+  binding_rule: >
+    The scan script imports HOLDOUT_SACRED_FROM from
+    trading_app.holdout_policy and uses its value to partition trades.
+    No hardcoded date literals permitted in the scan script.
+  is_window:
+    start: "2019-05-06"
+    end_exclusive: HOLDOUT_SACRED_FROM
+  oos_window:
+    start: HOLDOUT_SACRED_FROM
+    end_exclusive: "run_date"
+  mode: A
+  forbidden: [discovery_on_oos, tuning_on_oos, multiple_looks_at_oos]
+
+hypotheses:
+  # 12 hypotheses (one per (instrument, session, direction)). Each contains
+  # 2 RR trials (1.5, 2.0). Total = 24 cells. BH-FDR is applied at CELL level
+  # (K_family=24), not hypothesis level.
+  - id: H1
+    name: "MNQ TOKYO_OPEN O15 prev_week_high break long"
+    instrument: MNQ
+    session: TOKYO_OPEN
+    direction: long
+    cell: pwh_break_long
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "prior-week high break in Asia-open window on index future"
+  - id: H2
+    name: "MNQ TOKYO_OPEN O15 prev_week_low break short"
+    instrument: MNQ
+    session: TOKYO_OPEN
+    direction: short
+    cell: pwl_break_short
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "prior-week low break in Asia-open window on index future"
+  - id: H3
+    name: "MNQ EUROPE_FLOW O15 prev_week_high break long"
+    instrument: MNQ
+    session: EUROPE_FLOW
+    direction: long
+    cell: pwh_break_long
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "prior-week high break at London-open window"
+  - id: H4
+    name: "MNQ EUROPE_FLOW O15 prev_week_low break short"
+    instrument: MNQ
+    session: EUROPE_FLOW
+    direction: short
+    cell: pwl_break_short
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "prior-week low break at London-open window"
+  - id: H5
+    name: "MNQ NYSE_OPEN O15 prev_week_high break long"
+    instrument: MNQ
+    session: NYSE_OPEN
+    direction: long
+    cell: pwh_break_long
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "prior-week high break at US cash open"
+  - id: H6
+    name: "MNQ NYSE_OPEN O15 prev_week_low break short"
+    instrument: MNQ
+    session: NYSE_OPEN
+    direction: short
+    cell: pwl_break_short
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "prior-week low break at US cash open"
+  - id: H7
+    name: "MES TOKYO_OPEN O15 prev_week_high break long"
+    instrument: MES
+    session: TOKYO_OPEN
+    direction: long
+    cell: pwh_break_long
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "MES twin of H1"
+  - id: H8
+    name: "MES TOKYO_OPEN O15 prev_week_low break short"
+    instrument: MES
+    session: TOKYO_OPEN
+    direction: short
+    cell: pwl_break_short
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "MES twin of H2"
+  - id: H9
+    name: "MES EUROPE_FLOW O15 prev_week_high break long"
+    instrument: MES
+    session: EUROPE_FLOW
+    direction: long
+    cell: pwh_break_long
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "MES twin of H3"
+  - id: H10
+    name: "MES EUROPE_FLOW O15 prev_week_low break short"
+    instrument: MES
+    session: EUROPE_FLOW
+    direction: short
+    cell: pwl_break_short
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "MES twin of H4"
+  - id: H11
+    name: "MES NYSE_OPEN O15 prev_week_high break long"
+    instrument: MES
+    session: NYSE_OPEN
+    direction: long
+    cell: pwh_break_long
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "MES twin of H5"
+  - id: H12
+    name: "MES NYSE_OPEN O15 prev_week_low break short"
+    instrument: MES
+    session: NYSE_OPEN
+    direction: short
+    cell: pwl_break_short
+    rr_trials: [1.5, 2.0]
+    mechanism_ref: "MES twin of H6"
+
+per_cell_gates:
+  # Applied to each of 24 cells BEFORE family-BH-FDR ranking.
+  - id: G1_fire_rate
+    rule: "fire_rate in [0.05, 0.95]"
+    authority: .claude/rules/backtesting-methodology.md RULE 8.1
+  - id: G2_sample
+    rule: "N_on >= 50"
+    authority: backtesting-methodology.md RULE 4.1 (discovery-candidacy sample floor)
+  - id: G3_raw_p_screen
+    rule: "raw two-tailed p < 0.05"  # pre-filter only; PRIMARY gate is BH-FDR below
+    authority: Criterion 3 Pathway A (BH-FDR after per-cell raw-p screen)
+  - id: G4_chordia_t
+    rule: "abs(t) >= 3.79"
+    authority: Criterion 4 no-theory severity (orthogonal to pathway)
+  - id: G5_dir_match
+    rule: "sign(ExpR_IS) == sign(ExpR_OOS) on the OOS window"
+    authority: backtesting-methodology.md RULE 3.1 + Criterion 8 non-waivable
+  - id: G6_tautology
+    rule: "abs(corr(fire_vector, ORB_G5_family_fire_vector)) <= 0.70"
+    authority: backtesting-methodology.md RULE 7 (T0)
+  - id: G7_arithmetic_only
+    rule: "NOT (abs(wr_spread) < 0.03 AND abs(delta_IS) > 0.10)"
+    authority: backtesting-methodology.md RULE 8.2
+  - id: G8_walk_forward
+    rule: "WFE = OOS_Sharpe / IS_Sharpe >= 0.50 (and < 0.95 to avoid LEAKAGE_SUSPECT)"
+    authority: Criterion 6 (pre_registered_criteria.md); RULE 3.2 for thin-OOS flag
+  - id: G9_era_stability
+    rule: "ExpR >= -0.05 in every era with N >= 50 (eras: 2019-2020, 2021-2022, 2023, 2024-2025)"
+    authority: Criterion 9 (pre_registered_criteria.md)
+
+dsr_informational:
+  # Criterion 5 (DSR > 0.95) is informational-only per Amendment 2.1 (N_eff
+  # unresolved). Reported alongside results, NOT a hard gate.
+  threshold: "DSR > 0.95"
+  status: informational_cross_check
+  authority: pre_registered_criteria.md Amendment 2.1 (2026-04-07)
+
+primary_promotion_gate:
+  name: BH_FDR_family
+  K: 24
+  q: 0.05
+  unit_of_correction: cell
+  rule: "cell passes BH-FDR at K_family=24, q=0.05"
+  authority: Criterion 3 Pathway A
+
+pass_criteria:
+  # A cell is PROMOTED TO CANDIDATE (not deployed) if and only if:
+  - "cell passes all per_cell_gates G1..G9"
+  - "cell passes primary_promotion_gate (BH-FDR family K=24 q=0.05)"
+  - "no family_kill_criteria fires"
+  next_stage_if_passed:
+    - "signal-only shadow pre-reg per the H1 Apr-18 exemplar pattern"
+    - "NO capital deployment without Criterion 11 Monte Carlo + Criterion 12 SR monitor"
+
+park_criteria:
+  - "cell passes G1..G7 on IS but fails primary BH-FDR at K_family"
+  - "cell passes G1..G7 on IS but G5 dir_match fails with N_OOS >= 30
+     (real OOS sample, genuine flip)"
+
+kill_per_cell:
+  # A cell is INDIVIDUALLY KILLED and cannot be re-pre-registered without a
+  # new mechanism.
+  - "raw p >= 0.05 across both RR cells of the hypothesis"
+  - "abs(t) < 3.79 on best RR cell"
+  - "N_on < 50 on best RR cell"
+  - "tautology: abs(corr(fire, ORB_G5_family.fire)) > 0.70"
+  - "OOS direction flip on best cell with N_OOS >= 30"
+
+family_kill_criteria:
+  - id: FK1
+    rule: "< 1 of N_scoped_cells cells pass G1..G7 AND BH-FDR K_family q=0.05"
+    meaning: "signal absent after multi-testing correction"
+  - id: FK2
+    rule: "> (0.833 * N_scoped_cells) cells pass all gates"   # proportional to scope
+    meaning: "uniform-survivor pattern — pipeline artefact red flag per RULE 12"
+  - id: FK3
+    rule: "every top-5 survivor shares identical (session, direction)"
+    meaning: "look-ahead / data-snooping suspicion per RULE 1 / RULE 12"
+  - id: FK4
+    rule: "best-cell delta_IS > 0.6 R per trade"
+    meaning: "RULE 12 red flag — investigate before publishing"
+
+anti_lookahead_statement:
+  feature_side:
+    source: pipeline/build_daily_features.py::_apply_htf_level_fields
+    invariant: >
+      For any row with trading_day = D, prev_week_* reads the running
+      per-(symbol, week_key) dict BEFORE inserting D's own OHLC into
+      that dict. Prior week = DATE_TRUNC('week', D) - 7 days. Aggregate
+      keys never alias (prior != current by construction). The helper is
+      the single canonical source shared by the live builder and
+      scripts/backfill_htf_levels.py.
+    drift_guard: >
+      pipeline/check_drift.py::check_htf_levels_integrity. On
+      2026-04-18 upgraded to cross-verify all 12 HTF fields against a
+      DuckDB DATE_TRUNC('week')/('month') aggregation, covering
+      symmetric-diff, phantom (stored non-NULL / canonical NULL), and
+      stale-miss (stored NULL / canonical non-NULL) classes. Pressure-
+      tested same day by injecting 4 deliberate divergences; all 4
+      caught with correct class labels (commit 668d2680).
+  decision_side:
+    at_ORB_close:
+      known_safely:
+        - "prev_week_high / prev_week_low (known from 09:00 Brisbane, trading-day start)"
+        - "orb_{session}_break_dir (final at ORB window close + break detection)"
+        - "orb_{session}_high / orb_{session}_low (final at ORB window close)"
+      forbidden_as_predictor:
+        - "daily_high / daily_low of the CURRENT trading day (includes post-ORB bars)"
+        - "orb_{session}_outcome / orb_{session}_mae_r / orb_{session}_mfe_r (post-entry)"
+        - "double_break (scans full session after entry — banned per audit protocol)"
+    trading_day_boundary: "09:00 Brisbane — prior-week aggregate stable before every session fires"
+
+multi_framing_bh_fdr:
+  # Per backtesting-methodology RULE 4. K_family is PRIMARY under Pathway A;
+  # the other framings are REPORTED for honest disclosure, not gating.
+  primary_reported_framing: K_family
+  primary_K: 24   # will be updated if cells are dropped after precheck
+  informational_framings:
+    - K_global: 24
+    - K_lane: 2
+    - K_instrument: 12
+    - K_session: 8
+    - K_direction: 12
+  reporting_rule: "per-cell BH-FDR q-value at each framing reported in results MD"
+
+artifacts_to_save:
+  pre_lock:
+    - docs/audit/hypotheses/2026-04-18-htf-path-a-prev-week-v1.yaml  # this file
+    - research/htf_path_a_prev_week_v1_scan.py  # scan script (not yet written)
+    - docs/audit/hypotheses/2026-04-18-htf-path-a-prev-week-v1-fire-rate-precheck.txt
+  post_run:
+    - docs/audit/results/2026-04-18-htf-path-a-prev-week-v1-results.md
+    - docs/audit/hypotheses/2026-04-18-htf-path-a-prev-week-v1-postmortem.md
+    - docs/audit/results/2026-04-18-htf-path-a-prev-week-v1-raw-cells.csv
+
+execution_gates:
+  # The scan aborts if ANY of these return False at startup.
+  - "this YAML file is tracked in git (scan reads committed_sha via git rev-parse HEAD)"
+  - "pre_lock/fire-rate-precheck.txt exists and all scoped cells show fire_rate in [0.05, 0.95]"
+  - "pipeline/check_drift.py::check_htf_levels_integrity returns 0 violations"
+  - "HOLDOUT_SACRED_FROM imported from trading_app.holdout_policy (no hardcoded date)"
+  - "committed_sha field in this YAML is non-empty after lock commit"
+
+pre_reg_checklist:
+  - "[ ] Every hypothesis has a mechanism_ref"
+  - "[ ] Sum of trial_count = 24 (or lower after fire-rate-precheck drops), within strict Bailey E=1.0 bound (<=28)"
+  - "[ ] Kill criteria pre-registered, not post-hoc"
+  - "[ ] No volume-based filter on parent-proxy data (MNQ/MES real-micro only — N/A here)"
+  - "[ ] Holdout bound via Python import, not date literal"
+  - "[ ] File committed BEFORE scan script runs"
+  - "[ ] Fire-rate pre-check artefact in place BEFORE lock, every scoped cell in [5%, 95%]"
+  - "[ ] testing_mode = family — survivors selected by BH-FDR at K_family q=0.05"
+  - "[ ] pathway = A — justified in metadata; Chordia t threshold from Criterion 4 independent of pathway"

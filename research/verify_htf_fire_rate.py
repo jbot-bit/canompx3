@@ -18,15 +18,10 @@ Family (v1-index, pre-holdout only; trading_day < 2026-01-01):
     instruments: MNQ, MES
     sessions:    TOKYO_OPEN, EUROPE_FLOW, NYSE_OPEN
     aperture:    O15
-    directions / cells:
-        pwh_first_touch_long  = break_dir='long'  AND orb_high > prev_week_high
-                                AND week_took_pwh_to_date = FALSE
-        pwl_first_touch_short = break_dir='short' AND orb_low  < prev_week_low
-                                AND week_took_pwl_to_date = FALSE
-
-The ``week_took_pwh_to_date`` flag is derived at query time from the raw
-HTF fields + daily_high/daily_low (no new canonical column needed). See
-"DERIVATION" comment in the SQL below.
+    directions / cells (Pathway A v1 — first-touch gate dropped after
+    2026-04-18 smoke returned all cells <5% fire rate under strict gate):
+        pwh_break_long  = break_dir='long'  AND orb_high > prev_week_high
+        pwl_break_short = break_dir='short' AND orb_low  < prev_week_low
 
 Usage:
     DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db python research/verify_htf_fire_rate.py
@@ -95,9 +90,9 @@ flags AS (
 SELECT
     SUM(CASE WHEN prev_week_high IS NOT NULL AND break_dir IS NOT NULL THEN 1 ELSE 0 END) AS base_rows,
     SUM(CASE WHEN break_dir = 'long' AND prev_week_high IS NOT NULL
-              AND o_high > prev_week_high AND took_pwh_prior = 0 THEN 1 ELSE 0 END) AS pwh_first_touch_long_fires,
+              AND o_high > prev_week_high THEN 1 ELSE 0 END) AS pwh_break_long_fires,
     SUM(CASE WHEN break_dir = 'short' AND prev_week_low IS NOT NULL
-              AND o_low  < prev_week_low  AND took_pwl_prior = 0 THEN 1 ELSE 0 END) AS pwl_first_touch_short_fires
+              AND o_low  < prev_week_low  THEN 1 ELSE 0 END) AS pwl_break_short_fires
 FROM flags
 """
 
