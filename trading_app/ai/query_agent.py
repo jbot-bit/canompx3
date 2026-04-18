@@ -159,16 +159,27 @@ class QueryAgent:
         Uses `messages.parse()` with a Pydantic schema — Claude's response
         is validated against `QueryIntentSchema` before we see it. No manual
         JSON parsing, no markdown-fence recovery, no sampling parameters.
+
+        Caching: `cache_control` is NOT a top-level kwarg on `messages.parse()`
+        (strict signature — verified by SDK introspection on anthropic 0.96.0).
+        Prompt caching on parse() is expressed via a TextBlockParam in the
+        `system` list. The grounding prompt is large and stable across calls,
+        so caching it saves ~10× on repeat calls within the 5-minute window.
         """
         system_prompt = build_grounding_prompt(self.corpus, self.schema_summary)
 
         response = self.client.messages.parse(
             model=CLAUDE_STRUCTURED_MODEL,
             max_tokens=500,
-            system=system_prompt,
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=[{"role": "user", "content": question}],
             output_format=QueryIntentSchema,
-            cache_control={"type": "ephemeral"},
         )
 
         schema: QueryIntentSchema = response.parsed_output

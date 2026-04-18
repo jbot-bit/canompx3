@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 from trading_app.ai.query_agent import (
+    QueryIntentSchema,
     QueryResult,
     _generate_warnings,
 )
@@ -148,15 +149,32 @@ class TestQueryAgentIntentExtraction:
         assert call_kwargs["model"] == CLAUDE_STRUCTURED_MODEL
 
     def test_extract_intent_applies_cache_control(self, mock_agent):
-        """Grounding system prompt is a stable, large prefix — must be cached."""
+        """Grounding system prompt is a stable, large prefix — must be cached.
+
+        `messages.parse()` rejects top-level `cache_control` kwarg (strict SDK
+        signature on anthropic 0.96.0). Caching must be expressed via a
+        TextBlockParam on the `system` list.
+        """
         mock_agent.client.messages.parse.return_value = self._mock_parse_response(
             template="table_counts"
         )
         mock_agent._extract_intent("how many rows?")
 
         call_kwargs = mock_agent.client.messages.parse.call_args.kwargs
-        assert "cache_control" in call_kwargs
-        assert call_kwargs["cache_control"] == {"type": "ephemeral"}
+
+        # cache_control must NOT be a top-level kwarg (would raise TypeError
+        # against the real SDK; the MagicMock previously hid this).
+        assert "cache_control" not in call_kwargs, (
+            "cache_control as top-level kwarg is invalid on messages.parse() — "
+            "the real SDK raises TypeError. Use a system TextBlockParam instead."
+        )
+
+        # system must be a list of blocks with cache_control on the grounding block.
+        assert isinstance(call_kwargs["system"], list)
+        assert len(call_kwargs["system"]) >= 1
+        grounding_block = call_kwargs["system"][0]
+        assert grounding_block["type"] == "text"
+        assert grounding_block["cache_control"] == {"type": "ephemeral"}
 
     def test_extract_intent_passes_no_temperature(self, mock_agent):
         """`temperature` is removed from Opus 4.7; Sonnet 4.6 is forward-compatible.
@@ -178,6 +196,88 @@ class TestQueryAgentIntentExtraction:
             template="nonexistent_template_name"
         )
         assert mock_agent._extract_intent("garbled") is None
+
+
+class TestSDKSurfaceGuards:
+    """Regression guards against SDK-surface bugs that MagicMock tests hide.
+
+    MagicMock agent.client.messages.parse accepts any kwargs, so tests green-
+    light calls that would TypeError against the real SDK. These tests exercise
+    the REAL anthropic.resources.messages.Messages signature via inspect — no
+    network, no mock — to validate our call shape.
+    """
+
+    def test_messages_parse_exists_with_required_params(self):
+        """Every kwarg _extract_intent passes must exist on the real SDK."""
+        import inspect
+
+        from anthropic.resources.messages import Messages
+
+        sig = inspect.signature(Messages.parse)
+        required_for_our_call = {
+            "model",
+            "max_tokens",
+            "system",
+            "messages",
+            "output_format",
+        }
+        missing = required_for_our_call - set(sig.parameters)
+        assert not missing, f"SDK surface changed: parse() missing {missing}"
+
+    def test_messages_parse_rejects_cache_control_kwarg(self):
+        """Regression guard: cache_control is NOT a top-level kwarg on parse().
+
+        If this ever flips (SDK adds the param), we can simplify the system-
+        block workaround in _extract_intent. Until then, caching MUST be on a
+        TextBlockParam inside the system list.
+        """
+        import inspect
+
+        from anthropic.resources.messages import Messages
+
+        sig = inspect.signature(Messages.parse)
+        assert "cache_control" not in sig.parameters, (
+            "SDK now accepts cache_control on parse() — can simplify "
+            "_extract_intent to pass it at top level."
+        )
+
+    def test_extract_intent_call_shape_binds_to_real_sdk(self):
+        """Validate the exact kwargs our code passes against the REAL SDK sig.
+
+        Uses inspect.signature.bind() — zero network, zero mock. Catches what
+        MagicMock hides: passing an unexpected kwarg raises TypeError here,
+        same as the real call would.
+
+        If _extract_intent is ever updated to pass a new/removed kwarg, update
+        the dict below so this guard stays in sync with production code.
+        """
+        import inspect
+
+        from anthropic.resources.messages import Messages
+
+        from trading_app.ai.claude_client import CLAUDE_STRUCTURED_MODEL
+
+        our_kwargs = dict(
+            model=CLAUDE_STRUCTURED_MODEL,
+            max_tokens=500,
+            system=[
+                {
+                    "type": "text",
+                    "text": "sentinel-grounding",
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            messages=[{"role": "user", "content": "sentinel-question"}],
+            output_format=QueryIntentSchema,
+        )
+
+        sig = inspect.signature(Messages.parse)
+        try:
+            sig.bind(None, **our_kwargs)  # None = self, ignored for kwarg validation
+        except TypeError as exc:
+            pytest.fail(
+                f"_extract_intent call shape invalid against anthropic SDK: {exc}"
+            )
 
 
 class TestQueryAgentInterpretation:
