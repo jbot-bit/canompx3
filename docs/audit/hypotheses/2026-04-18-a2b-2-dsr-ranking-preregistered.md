@@ -206,12 +206,32 @@ The Phase 3a/3b finding (4-of-6 deployed lanes have DSR_canonical < 0.013) is **
 
 Neither interpretation is fast-disambiguatable from the current data. Forward observation is the only adjudicator. Shapes A/B commit to interpretation #1 prematurely; Shape D wastes the audit work; Shape C is incoherent across its calibration range (default floor=0.05 catastrophically filters 4-5 of 6 deployed lanes since most have DSR < 0.05; low floor ≈ no-op).
 
-### Shape E (NEW) — diagnostic-only DSR exposure — PICKED
+### Shape E (NEW) — diagnostic-only DSR exposure — PICKED (literature-grounded)
 
-- Add `LaneScore.dsr_score`, `LaneScore.sr0_at_rebalance` fields, populate via canonical `compute_sr0`/`compute_dsr` in `compute_lane_scores`.
-- Surface `dsr_score`, `sr0`, `n_eff_at_rebalance`, `var_sr_em` per lane in `lane_allocation.json`.
-- `_effective_annual_r` UNCHANGED — selection and live deployment unchanged.
-- `regime-check` skill output gains DSR column next to `trailing_expr` (small skill edit, not a production-code change).
+Per-lane fields added to `LaneScore`, populated in `compute_lane_scores`:
+- `dsr_score: float | None` — canonical `trading_app.dsr.compute_dsr` output at the validator's N_eff
+- `sr0_at_rebalance: float | None` — canonical `compute_sr0` output (the noise-floor Sharpe)
+
+Per-rebalance globals computed in `compute_lane_scores` and recorded in JSON:
+- `n_eff_raw` — `COUNT(DISTINCT family_hash) FROM edge_families` (validator's current choice, raw M)
+- `n_hat_eq9` — Bailey-LdP 2014 Equation 9 correlation-adjusted: `N̂ = ρ̂ + (1 - ρ̂)·M`
+- `avg_rho_hat` — mean of off-diagonal entries in `compute_pairwise_correlation` over eligible lanes
+- `var_sr_em` — `{E1: float, E2: float}` from canonical `experimental_strategies` per validator pattern
+
+Per-lane DSR sensitivity also recorded in JSON: `dsr_at_n_eff_raw` + `dsr_at_n_hat_eq9` (so operators see both calibrations side-by-side).
+
+`_effective_annual_r` UNCHANGED — selection and live deployment unchanged.
+`regime-check` skill gains DSR + N̂ columns next to `trailing_expr` (skill content edit only).
+
+**Literature grounding (added during plan-improve cycle):**
+
+- `docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md` Equation 9 (page 14-15): `N̂ = ρ̂ + (1-ρ̂)·M` is the correlation-adjusted independent-trial count. The validator's `COUNT(DISTINCT family_hash)` returns M (cluster count), not N̂. Recording both is the lit-correct disclosure.
+- `docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md` Theorem 1 (page 3): expected max Sharpe under noise = `(1-γ)·Z⁻¹[1 - 1/K] + γ·Z⁻¹[1 - 1/(Ke)]` (where K = independent trials). Section "Application to our project" line 80-82 explicitly calculates that the project's best deployed lane (annualized Sharpe ~1.23) is **below the noise floor of ~3.87** under K=35,616 trials — Phase 3a/3b's RANKING_MATERIAL finding is a literature-confirmed restatement of this 2026-04-07 institutional grounding finding.
+- `trading_app/dsr.py` line 35: "Until N_eff is properly estimated, DSR is INFORMATIONAL, not a hard gate." Shape E aligns with this doctrine literally — DSR becomes visible without becoming an objective.
+
+**Open question Shape E does NOT resolve (deferred, logged for future audit):**
+
+`var_sr_by_em` is computed across `experimental_strategies WHERE is_canonical=TRUE`, i.e., variance across SURVIVOR strategies. Bailey-LdP Equation 2 calls for variance across ALL trials in the search. The project's choice (post-survivor variance) is smaller, which makes DSR look more favorable than the strict Bailey-LdP intent. Shape E records the value used + this caveat in the JSON output; resolving the variance-population question is a separate audit (potential A2b-4 or doctrine update to `pre_registered_criteria.md` Criterion 5).
 
 **Why Shape E is the institutionally correct call:**
 
@@ -226,26 +246,35 @@ Neither interpretation is fast-disambiguatable from the current data. Forward ob
 - Doesn't act on Phase 3a/3b's directional finding NOW. Defers the Shape A/B strategic decision until forward evidence accumulates.
 - Could be characterized as kicking the can. Counter: Shape E IS a decision — to act on instrumentation rather than theory. The wrong move would be ignoring the audit (Shape D) or committing to one theory without evidence (Shapes A/B).
 
-### Shape E Stage-2 specification (smaller than original A/B/C scope)
+### Shape E Stage-2 specification — IMPROVED PLAN
 
 Files in scope (`scope_lock` for Stage-2):
-- `trading_app/lane_allocator.py` — add 2 fields to `LaneScore`, populate in `compute_lane_scores`, write to `save_allocation` JSON output. NO change to `_effective_annual_r`. NO change to `build_allocation`.
-- `tests/test_trading_app/test_lane_allocator.py` — 2 new tests:
-  - `test_dsr_score_populated_in_lane_score` — `compute_lane_scores` produces `LaneScore.dsr_score` in [0, 1] for every scored lane via canonical compute.
-  - `test_save_allocation_writes_dsr_diagnostic_fields` — `lane_allocation.json` post-patch contains `dsr_score`, `sr0`, `n_eff_at_rebalance`, `var_sr_em` per lane.
-- `.claude/skills/regime-check/SKILL.md` — add DSR column to output template (skill content edit, no Python).
+- `trading_app/lane_allocator.py`
+  - Add `dsr_score`, `sr0_at_rebalance`, `dsr_at_n_eff_raw`, `dsr_at_n_hat_eq9` to `LaneScore` dataclass (all `float | None = None` for backward compat).
+  - `compute_lane_scores` computes per-rebalance globals (`n_eff_raw`, `n_hat_eq9`, `avg_rho_hat`, `var_sr_em`) once at the top, then populates per-lane DSR fields via canonical `compute_sr0`/`compute_dsr`.
+  - `save_allocation` writes per-lane DSR fields plus the per-rebalance globals into `lane_allocation.json`.
+  - NO change to `_effective_annual_r`, `build_allocation`, `_compute_session_regime`, `_classify_status`, or any selection/ranking logic.
+- `tests/test_trading_app/test_lane_allocator.py` — 4 new tests (T1-T4 below).
+- `.claude/skills/regime-check/SKILL.md` — add DSR + N̂ columns to output template (content edit, no Python).
 
-Out of scope (deferred until forward data justifies):
-- Modifying `_effective_annual_r` — that's a future Shape A patch IF Shape E's instrumentation generates evidence
-- DSR drift check (originally K6 of Shape A) — moot under Shape E (no behavioral change)
-- First-rebalance interactive flip-confirmation gate — moot under Shape E (no flips)
-- N_eff sensitivity policy — diagnostic version records DSR at multiple bands in `lane_allocation.json`; the policy choice is deferred
+Out of scope (deferred until forward data justifies promotion):
+- Modifying `_effective_annual_r` — future Shape A patch
+- DSR-as-gate / behavioral consumption — future Shape B/C patch
+- `var_sr` recomputation against full-trial population (Bailey-LdP intent) — future audit (A2b-4 candidate)
+- ONC-algorithm proper N_eff estimation (LdP 2020) — future enhancement
+- First-rebalance flip-confirmation gate — moot under Shape E
 
-Kill criteria for Shape E Stage-2 (4 K, narrower than original A's 6):
-- K1: Existing test regression (lane_allocator + drift check must remain green)
-- K2: Phase 1 reproduction must still match `lane_allocation.json` (with PASS_TIED tolerance)
-- K3: Backward compat — `LaneScore` field additions must default to `None` so any external code that constructs `LaneScore` directly doesn't break
-- K4: New JSON fields must not break `prop_profiles.AccountProfile.consume(lane_allocation.json)` consumers (verify via test or by running the consumer post-patch)
+Tests (pre-registered):
+- **T1** `test_dsr_fields_populated_in_lane_score` — `compute_lane_scores` returns `LaneScore` with `dsr_score in [0, 1]`, `sr0_at_rebalance >= 0`, both `dsr_at_n_eff_raw` and `dsr_at_n_hat_eq9` populated for every scored lane that has the prerequisite stored stats. Synthetic-fixture DB.
+- **T2** `test_dsr_canonical_equivalence` — for a fixture lane with known `(sharpe_ratio, sample_size, skewness, kurtosis_excess)`, `LaneScore.dsr_score` equals the result of calling `trading_app.dsr.compute_dsr(...)` directly with the same inputs. Guards against parallel-encoding regression.
+- **T3** `test_dsr_fields_default_none_for_backward_compat` — constructing `LaneScore(...)` with the pre-patch keyword set (no DSR kwargs) succeeds and the new fields default to `None`. Guards external constructors.
+- **T4** `test_save_allocation_writes_dsr_block` — `save_allocation` post-patch writes per-lane `dsr_score`, `sr0`, `dsr_at_n_eff_raw`, `dsr_at_n_hat_eq9` AND per-rebalance `n_eff_raw`, `n_hat_eq9`, `avg_rho_hat`, `var_sr_em`. Round-trips via `json.loads`.
+
+Kill criteria for Shape E Stage-2 (4 K):
+- **K1** Existing tests regression — `pytest tests/test_trading_app/test_lane_allocator.py` plus `pytest tests/test_research/` must remain green. Drift check `python -m pipeline.check_drift` must not add violations attributable to this commit.
+- **K2** Phase 1 reproduction preservation — `python research/audit_allocator_rho_excluded.py` (when re-run with the lock cleared) must reproduce `lane_allocation.json` with the same PASS_TIED tolerance as today.
+- **K3** Backward-compat on `LaneScore` constructor — T3 must pass first try; if any caller breaks, HALT.
+- **K4** Consumer compat — `trading_app.prop_profiles.load_allocation_lanes(profile_id)` must continue returning the same `DailyLaneSpec` tuple post-patch (verified by re-reading lane_allocation.json after the patch and asserting set equality of returned spec keys). Already verified by code inspection: `load_allocation_lanes` uses `entry.get(...)` with defaults and only consumes `status`, `strategy_id`, `instrument`, `orb_label`, `p90_orb_pts` — new diagnostic fields are inert to it.
 
 ### Final user gate
 
