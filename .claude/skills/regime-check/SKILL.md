@@ -71,26 +71,64 @@ print(con.sql('''
     FROM edge_families GROUP BY instrument ORDER BY instrument
 ''').fetchdf().to_string(index=False))
 
-print('\n=== ORB SIZE TREND (MNQ O5, 6mo windows) ===')
+print('\n=== ORB SIZE TREND (all MNQ sessions, recent 6mo vs prior 6mo) ===')
+# Recent ORB size expansion flagged in 2026-04-19 session: 5 of 6 MNQ sessions
+# up 18-45% vs prior 6mo. Keep all 6 visible, not just CME_PRECLOSE + NYSE_OPEN.
 print(con.sql('''
-    SELECT CASE WHEN trading_day >= CURRENT_DATE - 180 THEN 'recent' ELSE 'prior' END as period,
-           ROUND(AVG(orb_CME_PRECLOSE_size), 2) as cme_pre, ROUND(AVG(orb_NYSE_OPEN_size), 2) as nyse
+    SELECT CASE WHEN trading_day >= CURRENT_DATE - 180 THEN 'recent_6mo' ELSE 'prior_6mo' END as period,
+           ROUND(AVG(orb_TOKYO_OPEN_size),2) as tokyo,
+           ROUND(AVG(orb_EUROPE_FLOW_size),2) as europe,
+           ROUND(AVG(orb_US_DATA_830_size),2) as us830,
+           ROUND(AVG(orb_NYSE_OPEN_size),2) as nyse_o,
+           ROUND(AVG(orb_COMEX_SETTLE_size),2) as comex,
+           ROUND(AVG(orb_CME_PRECLOSE_size),2) as cme_pre
     FROM daily_features WHERE symbol = 'MNQ' AND orb_minutes = 5 AND trading_day >= CURRENT_DATE - 360
-    GROUP BY period ORDER BY period
+    GROUP BY period ORDER BY period DESC
 ''').fetchdf().to_string(index=False))
+
+print('\n=== MODE-B GRANDFATHER CONTAMINATION FLAG ===')
+# Per research-truth-protocol.md § Mode B grandfathered, any validated_setups
+# row with last_trade_day >= 2026-01-01 has an ExpR computed partly on data
+# that is now sacred Mode A OOS. See 2026-04-19 re-validation at
+# docs/audit/results/2026-04-19-mode-a-revalidation-of-active-setups.md
+print(con.sql('''
+    SELECT instrument,
+           SUM(CASE WHEN last_trade_day >= DATE '2026-01-01' THEN 1 ELSE 0 END) AS mode_b_contaminated,
+           COUNT(*) AS total_active
+    FROM validated_setups
+    WHERE LOWER(status) = 'active'
+    GROUP BY instrument ORDER BY instrument
+''').fetchdf().to_string(index=False))
+
+print('\n=== FRESH-OOS WINDOW LENGTH (days since sacred boundary) ===')
+import datetime
+sacred_start = datetime.date(2026, 1, 1)
+today = datetime.date.today()
+days_oos = (today - sacred_start).days
+print(f'  Days since HOLDOUT_SACRED_FROM (2026-01-01): {days_oos}')
+print(f'  Days of Mode A fresh-OOS data available: {days_oos}')
+
 con.close()
 "
 ```
 
 ## Step 2: Flags
 
-- 0 CORE families for any instrument → RED
-- Edge families > 30 days old → STALE
-- ORB sizes trending down → edge weakening
+- **0 CORE families** for any instrument → RED
+- **Edge families > 30 days old** → STALE (triggers rebuild recommendation)
+- **ORB sizes trending up >20%** on 3+ sessions → regime-shift flag (may lift vol; may increase cost-risk at small accounts)
+- **ORB sizes trending down >20%** on 3+ sessions → edge weakening
+- **Mode-B contaminated count >0** → stored ExpR values for those lanes are NOT Mode A canonical; treat stored numbers as indicative only, cite the 2026-04-19 re-validation doc for Mode A baselines
+- **Fresh-OOS days < 90** → too short for WFE OOS validation under strict Mode A (Criterion 8 N_OOS>=30 requires ~3 months at typical trade frequency)
 
 ## Step 3: Present
 
-One-liner per instrument: `MGC: X CORE, Y REGIME [HEALTHY/CONCERN/CRITICAL]`
+One-liner per instrument plus Mode-B flag:
+```
+MGC: X CORE, Y REGIME [HEALTHY/CONCERN/CRITICAL], Z Mode-B contaminated
+```
+
+For deployed-lane-specific decisions, route to `docs/audit/results/2026-04-19-mnq-mode-a-committee-review-pack.md` (or the newest equivalent) for per-lane action recommendations.
 
 ## Rules
 
@@ -98,3 +136,5 @@ One-liner per instrument: `MGC: X CORE, Y REGIME [HEALTHY/CONCERN/CRITICAL]`
 - Column is `instrument` not `symbol` in validated_setups
 - Fitness is in `edge_families` (robustness_status, trade_tier)
 - **Family linkage: join on `family_hash`, not `head_strategy_id`.** `edge_families` stores one row per family (the head); every `validated_setups` row carries the same `family_hash` as its family. A head-only join mis-labels all non-head members as NO_FAMILY — fixed 2026-04-19 after an audit over-reported "17 MNQ unlinked" (they were all correctly classified members at non-winning RRs). Use `ef.head_strategy_id` only in queries that explicitly scope to heads (e.g., the `FAMILY HEADS ONLY` block above).
+- **Mode-B grandfather contamination is a real, not theoretical flag.** On 2026-04-19 all 38 active lanes had material drift vs stored values under strict Mode A. The Mode-B flag in the query above identifies lanes whose `last_trade_day >= 2026-01-01`, meaning stored ExpR includes data now sacred under Mode A. Canonical Mode A baselines live in `docs/audit/results/2026-04-19-mode-a-revalidation-of-active-setups.md`. Always cite the Mode A recomputed value going forward, NOT the stored value.
+- **ORB size regime drift is an informational signal, not an edge claim.** Big up/down moves on 3+ sessions signal a regime shift affecting risk/cost dynamics but not directly the edge. Use alongside allocator capital-efficiency review rather than as a standalone deploy/retire trigger.
