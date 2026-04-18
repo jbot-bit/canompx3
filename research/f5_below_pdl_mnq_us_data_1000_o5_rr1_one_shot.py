@@ -9,13 +9,18 @@ evaluates gates, writes verdict md.
 
 Refuses to re-run if output md already exists (Mode A single-shot enforcement).
 
-Gates (verbatim from pre-reg):
-- PASS iff ExpR_on_OOS >= 0 AND eff_ratio >= 0.40 AND sign match AND N_on_OOS >= 5
-- KILL if ExpR_on_OOS < 0 OR eff_ratio < 0.40 OR sign flip
-- PARK if N_on_OOS < 5 AND no kill trigger
+Gates (aligned with post-audit oneshot_utils decision rule):
+- KILL is evaluated UNCONDITIONALLY on power whenever any OOS observation exists:
+    ExpR_on_OOS < 0 OR eff_ratio < 0.40 OR sign-flip vs IS.
+- PARK fires when no KILL fires and power is below the CLT floor:
+    N_on_OOS < 10  -> INSUFFICIENT (bootstrap undefined)
+    10 <= N < 30   -> UNDERPOWERED
+- PASS requires N_on_OOS >= 30 AND ExpR_on_OOS >= 0 AND eff_ratio >= 0.40 AND sign match.
 
 IS stats are locked in the pre-reg; this script re-computes them in-validator
-and asserts drift < 1e-6 vs locked values.
+and asserts drift < 5e-4 vs locked values.
+
+Refuses to re-run if output md already exists (Mode A single-shot enforcement).
 """
 
 from __future__ import annotations
@@ -30,6 +35,12 @@ from scipy import stats
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
+from research.oneshot_utils import (  # noqa: E402
+    POWER_FLOOR_PASS,
+    OneShotGates,
+    decide_verdict,
+    moving_block_bootstrap_p,
+)
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM  # noqa: E402
 
 LOCK_DATE = "2026-04-18"
@@ -137,30 +148,10 @@ def cell_stats(df, label: str) -> dict:
     return out
 
 
-def block_bootstrap_p_vs_zero(
-    pnl_on: np.ndarray, B: int = BOOTSTRAP_B, block: int = BOOTSTRAP_BLOCK, seed: int = RNG_SEED
-) -> float:
-    """Moving-block bootstrap on the on-signal OOS subset.
-
-    Tests H0: mean(pnl_on) = 0. Returns one-sided p-value (lower tail) per
-    backtesting-methodology.md Rule 4 convention for "beats zero" gate.
-    Phipson-Smyth adjustment: p = (count + 1) / (B + 1).
-    """
-    n = len(pnl_on)
-    if n < block * 2:
-        return float("nan")
-    rng = np.random.default_rng(seed)
-    observed_mean = float(pnl_on.mean())
-    n_blocks = int(np.ceil(n / block))
-    count_below_or_eq_zero = 0
-    for _ in range(B):
-        starts = rng.integers(low=0, high=n - block + 1, size=n_blocks)
-        sampled = np.concatenate([pnl_on[s : s + block] for s in starts])[:n]
-        # center by observed mean so null is "mean=0"
-        centered = sampled - observed_mean
-        if centered.mean() >= 0:
-            count_below_or_eq_zero += 1
-    return (count_below_or_eq_zero + 1) / (B + 1)
+# NOTE: the prior script-local `block_bootstrap_p_vs_zero` was replaced by
+# `research.oneshot_utils.moving_block_bootstrap_p` on 2026-04-18 after the
+# F5 audit caught a structural bug producing p ~ 0.5 regardless of signal.
+# See tests/research/test_oneshot_utils.py for the numerical self-test.
 
 
 def main() -> int:
@@ -184,46 +175,30 @@ def main() -> int:
         and abs(drift["delta"]) < 5e-4
     )
 
-    # Gates
+    # Gates — delegated to research.oneshot_utils.decide_verdict so that:
+    #  - KILL is evaluated UNCONDITIONALLY on power (kills > parks)
+    #  - PARK only fires when no KILL fires and N_on_OOS < 30 (CLT floor)
+    #  - PASS requires N_on_OOS >= POWER_FLOOR_PASS (30) AND all primaries clear
     n_on_oos = oos_stats["N_on"]
     expR_on_oos = oos_stats["ExpR_on"]
     expR_on_is = IS_LOCKED["ExpR_on"]
-    eff_ratio = expR_on_oos / expR_on_is if expR_on_is != 0 and n_on_oos > 0 else float("nan")
 
-    sign_is = 1 if expR_on_is > 0 else -1
-    sign_oos = 1 if expR_on_oos > 0 else (-1 if expR_on_oos < 0 else 0)
-    sign_match = (sign_is == sign_oos) and sign_oos != 0
-
-    # Bootstrap (only meaningful with N_on_OOS >= block*2)
-    on_oos_pnl = df_oos[df_oos["F5_BELOW_PDL"] == 1]["pnl_r"].values
-    bootstrap_p = (
-        block_bootstrap_p_vs_zero(on_oos_pnl) if n_on_oos >= BOOTSTRAP_BLOCK * 2 else float("nan")
+    gates = OneShotGates(expR_on_is=expR_on_is, eff_ratio_min=EFF_RATIO_MIN)
+    result = decide_verdict(
+        expR_on_oos=expR_on_oos, n_on_oos=n_on_oos, gates=gates
     )
+    verdict = result.verdict
+    kill_reasons = list(result.kill_reasons)
+    park_reason = result.park_reason
+    eff_ratio = result.eff_ratio
+    sign_match = result.sign_match
 
-    # Verdict
-    kill_reasons: list[str] = []
-    if n_on_oos >= 5:  # only apply kills when powered
-        if expR_on_oos < 0:
-            kill_reasons.append("K1 ExpR_on_OOS<0")
-        if not np.isnan(eff_ratio) and eff_ratio < EFF_RATIO_MIN:
-            kill_reasons.append(f"K2 eff_ratio<{EFF_RATIO_MIN}")
-        if not sign_match:
-            kill_reasons.append("K3 sign flip")
-    park_reason = "N_on_OOS<5" if n_on_oos < 5 else None
-
-    if kill_reasons:
-        verdict = "KILL"
-    elif park_reason:
-        verdict = "PARK (UNDERPOWERED)"
-    elif (
-        expR_on_oos >= 0
-        and (not np.isnan(eff_ratio) and eff_ratio >= EFF_RATIO_MIN)
-        and sign_match
-        and n_on_oos >= 5
-    ):
-        verdict = "PASS"
-    else:
-        verdict = "INDETERMINATE"
+    # Bootstrap (corrected moving-block under H0:mean=0). Upper-tail because
+    # the IS direction is positive and H1 is "OOS mean > 0".
+    on_oos_pnl = df_oos[df_oos["F5_BELOW_PDL"] == 1]["pnl_r"].values
+    bootstrap_p = moving_block_bootstrap_p(
+        on_oos_pnl, B=BOOTSTRAP_B, block=BOOTSTRAP_BLOCK, seed=RNG_SEED, tail="upper"
+    )
 
     # T0 informational: correlation to VWAP_MID_ALIGNED fire is skipped here —
     # VWAP_MID_ALIGNED is the live deployed filter on this lane but its fire
@@ -289,14 +264,15 @@ def main() -> int:
         f"| Primary: eff_ratio >= 0.40 | ExpR_on_OOS / ExpR_on_IS | {eff_ratio:+.4f} | "
         f"{'PASS' if not np.isnan(eff_ratio) and eff_ratio >= EFF_RATIO_MIN else 'FAIL'} |"
     )
+    sign_char = "+" if (n_on_oos > 0 and expR_on_oos > 0) else ("-" if (n_on_oos > 0 and expR_on_oos < 0) else "0")
     lines.append(
         f"| Primary: direction match | sign(OOS) == sign(IS=+) | "
-        f"{'+' if sign_oos == 1 else ('-' if sign_oos == -1 else '0')} | "
+        f"{sign_char} | "
         f"{'PASS' if sign_match else 'FAIL'} |"
     )
     lines.append(
-        f"| Primary: N_on_OOS >= 5 | N_on_OOS | {n_on_oos} | "
-        f"{'PASS' if n_on_oos >= 5 else 'PARK (UNDERPOWERED)'} |"
+        f"| Primary: N_on_OOS >= {POWER_FLOOR_PASS} (CLT floor) | N_on_OOS | {n_on_oos} | "
+        f"{'PASS' if n_on_oos >= POWER_FLOOR_PASS else f'PARK ({result.power_band})'} |"
     )
     lines.append(
         f"| Secondary: bootstrap p < 0.10 | moving-block B={BOOTSTRAP_B}, block={BOOTSTRAP_BLOCK} | "
@@ -343,9 +319,10 @@ def main() -> int:
         )
     elif verdict.startswith("PARK"):
         lines.append(
-            "- PARK: OOS on-signal count below power threshold. No capital "
-            "deployment. Shadow forward for 6+ months before any re-read. No "
-            "re-tuning permitted under Mode A."
+            f"- PARK ({result.power_band}): OOS on-signal count below "
+            f"POWER_FLOOR_PASS={POWER_FLOOR_PASS}. No capital deployment. "
+            f"Shadow forward for 6+ months before any re-read. No re-tuning "
+            f"permitted under Mode A. Park reason: {park_reason}"
         )
     elif verdict == "KILL":
         lines.append(

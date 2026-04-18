@@ -219,23 +219,36 @@ kill_criteria:
     metric: sign(ExpR_on_OOS)
     threshold: "!= sign(ExpR_on_IS=+0.3258)"  # i.e. negative OOS
     action: KILL — structural reversal, not thin-sample noise.
-  - id: K4_no_on_signal_fires
+  - id: K4_power_band
     metric: N_on_OOS
-    threshold: "< 5"
-    action: PARK — shadow for at least 6 months before any re-read; not a deployment-eligible verdict either way. Does not kill but forbids capital deployment.
+    threshold: "< 30 (CLT floor, per trading_app.strategy_validator._OOS_MIN_TRADES_CLT_HEURISTIC)"
+    bands:
+      - "N_on_OOS < 10  -> INSUFFICIENT (bootstrap undefined)"
+      - "10 <= N < 30   -> UNDERPOWERED"
+      - "N >= 30        -> POWERED (PASS-eligible)"
+    action: >
+      PARK (any sub-POWERED band) — shadow for at least 6 months before any
+      re-read; not a deployment-eligible verdict either way. K4 does NOT
+      override a simultaneously firing K1/K2/K3 — kills take precedence.
 
 decision_rule:
   continue_if: >
     ALL of the following true: ExpR_on_OOS >= 0 AND eff_ratio >= 0.40 AND
-    sign(ExpR_on_OOS) == sign(ExpR_on_IS) AND N_on_OOS >= 5. In that case,
-    verdict is PASS and user may decide whether to advance to implementation
+    sign(ExpR_on_OOS) == sign(ExpR_on_IS) AND N_on_OOS >= 30 (CLT floor).
+    Verdict is PASS and user may decide whether to advance to implementation
     pre-reg. Implementation is NOT authorised by this pre-reg alone.
   park_if: >
-    N_on_OOS < 5 AND no other kill trigger fires. Verdict = UNDERPOWERED;
-    deployment forbidden; shadow forward 6+ months before any re-read.
+    N_on_OOS < 30 AND no kill trigger fires. Verdict = PARK (INSUFFICIENT if
+    N<10; UNDERPOWERED if 10<=N<30); deployment forbidden; shadow forward
+    6+ months before any re-read.
   kill_if: >
-    ExpR_on_OOS < 0 OR eff_ratio < 0.40 OR sign flip vs IS. Verdict = KILL;
-    F5_BELOW_PDL on this exact lane is declared DEAD; postmortem required.
+    ExpR_on_OOS < 0 OR eff_ratio < 0.40 OR sign flip vs IS. Evaluated
+    UNCONDITIONALLY on power — kills apply even when K4 would also fire.
+    Verdict = KILL; F5_BELOW_PDL on this exact lane is declared DEAD;
+    postmortem required.
+  precedence_rule: >
+    Kills take precedence over parks: if any of K1/K2/K3 fires AND K4 also
+    fires, verdict is KILL. PARK only fires when no KILL fires.
 
 methodology_rules_applied:
   - rule: .claude/rules/backtesting-methodology.md Rule 1 (feature temporal alignment)
@@ -318,3 +331,24 @@ do_not_re_open_unless:
   - brand-new pre-reg is filed under a DIFFERENT slug
   - the new pre-reg must not reuse the 2026-01-01..2026-04-18 window (it is consumed here)
   - reopen must cite a NEW mechanism claim, not a statistical rescue argument
+
+post_audit_methodology_hardening:
+  when: 2026-04-18 (after KILL verdict landed)
+  applies_to: framework for NEXT Pathway-B one-shot; F5 verdict is unchanged
+  verdict_safety: >
+    The original validator script produced KILL on (ExpR=-0.0243, N=8, sign
+    flip vs IS=+). Under the corrected decision rule (kills unconditional on
+    power, CLT floor raised to 30) the same numbers still produce KILL —
+    three primaries fail (K1, K2, K3). F5_BELOW_PDL on this lane remains DEAD.
+  changes:
+    - bootstrap helper moved to research.oneshot_utils.moving_block_bootstrap_p
+      with self-tests in tests/research/test_oneshot_utils.py — corrects a
+      structural bug where the pre-fix implementation returned p~0.5
+      regardless of signal. This bug did NOT alter F5's verdict because
+      N_on_OOS=8 was below block*2=10 so bootstrap was NaN.
+    - decide_verdict in research.oneshot_utils evaluates kills unconditionally;
+      K4 (power) no longer short-circuits K1/K2/K3. Same verdict for F5
+      because N=8 was already above the old N>=5 floor; mattered only for
+      hypothetical N<5 + ExpR<0 cases.
+    - PASS power floor raised from N>=5 to N>=30 (CLT heuristic). F5 could
+      not have been a PASS either way since primaries failed.

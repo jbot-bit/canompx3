@@ -72,3 +72,22 @@ IS drift within tolerance: **True**
 ## Decision
 
 - KILL: K1 ExpR_on_OOS<0, K2 eff_ratio<0.4, K3 sign flip. Declare F5_BELOW_PDL on this exact lane DEAD. Postmortem required. Do not wire into ALL_FILTERS.
+
+## Post-audit methodology-hardening addendum (2026-04-18)
+
+After the verdict landed, a code review of the validator identified two latent
+HIGH issues (broken moving-block bootstrap returning p~0.5 regardless of
+signal; kill evaluation short-circuited when N_on_OOS<5) and one MEDIUM
+(PASS power floor of 5 vs CLT heuristic of 30). Fixes were landed in
+`research/oneshot_utils.py` with self-tests in
+`tests/research/test_oneshot_utils.py`.
+
+**Verdict safety:** F5 verdict is **UNCHANGED**. Regression test
+`test_f5_actual_verdict_unchanged` in `test_oneshot_utils.py` re-applies the
+observed F5 numbers (ExpR=-0.0243, N=8) under the corrected decision rule and
+asserts KILL. All three primary kills fire regardless of power short-circuit.
+The bootstrap bug did not affect F5's verdict because N_on_OOS=8 was below
+block*2=10, so bootstrap returned NaN ("N/A") in both pre-fix and post-fix
+implementations.
+
+F5_BELOW_PDL on MNQ US_DATA_1000 O5 E2 CB1 RR1.0 long remains DEAD.
