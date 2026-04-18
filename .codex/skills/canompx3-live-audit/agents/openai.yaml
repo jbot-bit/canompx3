@@ -1,0 +1,7 @@
+interface:
+  display_name: "Canompx3 Live Audit"
+  short_description: "Audit live-trading runtime and safety surfaces"
+  default_prompt: "Use the canompx3-live-audit skill to review the relevant live-trading surface against the canonical runtime authorities."
+
+policy:
+  allow_implicit_invocation: true

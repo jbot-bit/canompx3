@@ -37,6 +37,22 @@
   tooling.
 - Maintenance automation guidance exists, but remains report-only by design.
 
+### Follow-on additions
+
+- Added two Codex repo-local skills:
+  - `.codex/skills/canompx3-live-audit/`
+  - `.codex/skills/canompx3-deploy-readiness/`
+- Updated `.codex/WORKFLOWS.md` and `.codex/skills/README.md` to route to the
+  new skills.
+
+### WSL clone note
+
+- `~/canompx3` exists but is currently heavily dirty and includes Claude-owned
+  file changes and broad deletions.
+- Do **not** mirror this Codex diff into that clone by hand.
+- Correct sync path is commit here, then intentional git-based sync later
+  (push/pull or cherry-pick onto a clean target), not ad hoc file copying.
+
 ## Update (2026-04-18 governance — merge side-effect recorded, branch discipline tightened)
 
 ### What happened

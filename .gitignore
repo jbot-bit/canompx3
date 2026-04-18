@@ -215,6 +215,8 @@ refs/
 # Temp path artifacts (mangled Windows paths)
 C*/
 Users*
+!.codex/skills/
+!.codex/skills/**
 !context/
 !context/*.py
 !docs/context/

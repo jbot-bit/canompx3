@@ -7,6 +7,7 @@ the thin startup pass.
 
 Codex is another operator on the same project, not a separate project
 environment. Claude remains the authority for project workflow and guardrails.
+Codex should adapt to that authority, not reshape it.
 
 ## When To Open This File
 
@@ -23,6 +24,8 @@ When the task matches, prefer these repo-local skills:
 - `canompx3-verify` for post-edit verification
 - `canompx3-audit` for structured audit work
 - `canompx3-research` for research, analysis, and claim scrutiny
+- `canompx3-live-audit` for live-trading/runtime safety audits
+- `canompx3-deploy-readiness` for promotion/deployment go-no-go decisions
 
 ## Design / Implementation Routing
 
@@ -63,9 +66,12 @@ For large post-edit verification, use the shared logic indexed in:
 
 ## Review Flows
 
+- Day-to-day implementation: Codex app or `scripts/infra/codex-project.sh`
+- Narrow scripted jobs: `codex exec`
+- Non-interactive review of current changes: `codex review` or
+  `scripts/infra/codex-review.sh`
 - Interactive work: `scripts/infra/codex-project.sh`
 - Interactive with live web search: `scripts/infra/codex-project-search.sh`
-- Non-interactive review of current changes: `scripts/infra/codex-review.sh`
 - Heavier coding / review profile: `canompx3_max`
 
 ## Codex CLI Surfaces Worth Using
@@ -81,6 +87,9 @@ Confirmed from the installed CLI:
 - approval modes: `untrusted`, `on-request`, `never`
 
 Use these intentionally. They do not replace or outrank Claude workflow rules.
+
+For the operator split and recommended day-to-day surface choice, see
+`docs/reference/codex-operator-handbook.md`.
 
 ## Current Project Profiles
 
