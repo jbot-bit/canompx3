@@ -510,6 +510,30 @@ def _claim_matches_repo(claim: SessionClaim, repo_anchor: Path) -> bool:
         return False
 
 
+def _repo_anchor_for_root(root: Path) -> Path | None:
+    try:
+        canonical_root, git_common_dir = _canonical_repo_root(root)
+    except OSError:
+        return None
+    return _repo_anchor(canonical_root, git_common_dir)
+
+
+def _repo_anchors_for_roots(selected_root: Path, related_roots: list[Path] | None = None) -> set[Path]:
+    anchors: set[Path] = set()
+    selected_anchor = _repo_anchor_for_root(selected_root)
+    if selected_anchor is not None:
+        anchors.add(selected_anchor)
+    for related_root in related_roots or []:
+        related_anchor = _repo_anchor_for_root(related_root)
+        if related_anchor is not None:
+            anchors.add(related_anchor)
+    return anchors
+
+
+def _claim_matches_any_repo(claim: SessionClaim, repo_anchors: set[Path]) -> bool:
+    return any(_claim_matches_repo(claim, repo_anchor) for repo_anchor in repo_anchors)
+
+
 def build_system_context(
     root: Path | None = None,
     *,
@@ -518,10 +542,11 @@ def build_system_context(
     active_mode: SessionMode = "read-only",
     claim_dir: Path = ACTIVE_SESSION_DIR,
     db_path: Path | None = None,
+    related_roots: list[Path] | None = None,
 ) -> SystemContext:
     selected_root = (root or PROJECT_ROOT).resolve()
     canonical_root, git_common_dir = _canonical_repo_root(selected_root)
-    repo_anchor = _repo_anchor(canonical_root, git_common_dir)
+    repo_anchors = _repo_anchors_for_roots(selected_root, related_roots)
 
     from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 
@@ -556,7 +581,11 @@ def build_system_context(
             db_override_active=selected_db != canonical_db,
             live_journal_db_path=str(LIVE_JOURNAL_DB_PATH.resolve()),
         ),
-        claims=[claim for claim in list_claims(claim_dir=claim_dir, fresh_only=True) if _claim_matches_repo(claim, repo_anchor)],
+        claims=[
+            claim
+            for claim in list_claims(claim_dir=claim_dir, fresh_only=True)
+            if _claim_matches_any_repo(claim, repo_anchors)
+        ],
         active_stages=_list_active_stages(selected_root),
         authority=_build_authority_context(selected_db),
     )

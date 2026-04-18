@@ -51,6 +51,9 @@ the Claude layer.
 `codex.bat` should be the only daily-driver front door to remember on Windows.
 It targets the WSL-home clone and refuses stale or divergent clone state
 instead of silently launching old code.
+It also evaluates the shared session-claim layer across the Windows checkout
+and WSL clone, so a fresh Claude or parallel terminal mutating claim on the
+same branch blocks the launch early.
 
 ## Task Discipline
 

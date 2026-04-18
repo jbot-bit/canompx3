@@ -143,6 +143,12 @@ closed if the clone is dirty, on the wrong branch, or cannot fast-forward
 cleanly. Set
 `CANOMPX3_CODEX_WSL_ROOT` if the WSL-side clone lives somewhere else.
 
+That launch path also runs the shared session-preflight claim check across the
+Windows checkout and the WSL clone before opening a mutating Codex session. If
+Claude, another Codex terminal, or another managed worktree already owns a
+fresh mutating claim on that branch, `codex.bat` blocks instead of silently
+opening a conflicting second session.
+
 Windows-native Codex is a fallback surface only. Do not target parity with the
 WSL path when official Codex behavior differs across platforms.
 

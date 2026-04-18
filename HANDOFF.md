@@ -63,6 +63,11 @@
   - fail closed if the source checkout is dirty
   - fail closed if the WSL clone is dirty, on the wrong branch, detached, or
     divergent
+- The sync guard now also runs `session_preflight.py` against the WSL clone
+  with the Windows checkout passed as a related root.
+  - Result: a fresh mutating claim from Claude, another Codex terminal, or a
+    managed worktree on the same branch blocks `codex.bat` before the WSL
+    session opens, even when the competing session lives in the other clone.
 - Net effect: the user should no longer have to remember a special `linux`
   variant just to avoid stale Codex state. `codex.bat` is the intended Windows
   front door now.

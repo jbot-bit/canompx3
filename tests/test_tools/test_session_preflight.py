@@ -60,6 +60,23 @@ class TestExtractHandoffSnapshot:
 
 
 class TestBuildWarnings:
+    def test_passes_related_roots_into_system_context(self, tmp_path: Path) -> None:
+        related_root = tmp_path / "peer"
+
+        with (
+            patch.object(session_preflight, "build_system_context", return_value=object()) as context_mock,
+            patch.object(session_preflight, "evaluate_system_policy", return_value=_decision()),
+        ):
+            session_preflight.build_warnings(
+                tmp_path,
+                context="codex-wsl",
+                active_tool="codex",
+                active_mode="mutating",
+                related_roots=[related_root],
+            )
+
+        assert context_mock.call_args.kwargs["related_roots"] == [related_root]
+
     def test_warns_when_handoff_missing(self, tmp_path: Path) -> None:
         with (
             patch.object(session_preflight, "build_system_context"),
@@ -296,6 +313,14 @@ class TestPrintReport:
 
 
 class TestCliBootstrap:
+    def test_parse_args_accepts_related_root(self) -> None:
+        args = session_preflight.build_parser().parse_args(
+            ["--root", "C:/repo", "--related-root", "C:/peer", "--related-root", "D:/other"]
+        )
+
+        assert args.root == "C:/repo"
+        assert args.related_root == ["C:/peer", "D:/other"]
+
     def test_script_help_runs_via_direct_path(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
 

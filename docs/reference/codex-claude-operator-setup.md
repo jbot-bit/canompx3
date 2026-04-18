@@ -156,6 +156,9 @@ Quick launcher front doors:
 - Use the Codex app against a WSL-home clone for the primary Codex experience.
 - Use `codex.bat` when you want implementation speed without remembering a
   special launch variant.
+- `codex.bat` now sync-checks the WSL clone and cross-checks fresh session
+  claims across the Windows checkout and WSL clone before opening a mutating
+  Codex session.
 - Use `codex.bat power` when the task is hard enough to justify extra
   reasoning cost and latency.
 - Use `ai-workstreams.bat` when both tools need to be active on different tasks.

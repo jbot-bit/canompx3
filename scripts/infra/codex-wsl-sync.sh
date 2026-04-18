@@ -86,26 +86,42 @@ fi
 
 source_head="$(git -C "$SOURCE_ROOT" rev-parse HEAD)"
 target_head="$(git -C "$TARGET_ROOT" rev-parse HEAD)"
+sync_message=""
 
 if [[ "$source_head" == "$target_head" ]]; then
-  exit 0
+  sync_message="WSL Codex repo already current at ${source_branch} @ ${source_head:0:12}"
+else
+  git -C "$TARGET_ROOT" fetch --quiet "$SOURCE_ROOT" "$source_branch"
+  fetch_head="$(git -C "$TARGET_ROOT" rev-parse FETCH_HEAD)"
+
+  if [[ "$fetch_head" != "$source_head" ]]; then
+    echo "ERROR: fetched WSL state does not match source HEAD." >&2
+    echo "Source: $source_head" >&2
+    echo "Fetched: $fetch_head" >&2
+    exit 1
+  fi
+
+  if ! git -C "$TARGET_ROOT" merge --ff-only --quiet FETCH_HEAD; then
+    echo "ERROR: WSL Codex repo cannot fast-forward to the current checkout." >&2
+    echo "Source: $SOURCE_ROOT [$source_branch @ ${source_head:0:12}]" >&2
+    echo "Target: $TARGET_ROOT [$target_branch @ ${target_head:0:12}]" >&2
+    exit 1
+  fi
+
+  sync_message="Synced WSL Codex repo to ${source_branch} @ ${source_head:0:12}"
 fi
 
-git -C "$TARGET_ROOT" fetch --quiet "$SOURCE_ROOT" "$source_branch"
-fetch_head="$(git -C "$TARGET_ROOT" rev-parse FETCH_HEAD)"
-
-if [[ "$fetch_head" != "$source_head" ]]; then
-  echo "ERROR: fetched WSL state does not match source HEAD." >&2
-  echo "Source: $source_head" >&2
-  echo "Fetched: $fetch_head" >&2
-  exit 1
+preflight_py="$TARGET_ROOT/.venv-wsl/bin/python"
+if [[ ! -x "$preflight_py" ]]; then
+  preflight_py="python3"
 fi
 
-if ! git -C "$TARGET_ROOT" merge --ff-only --quiet FETCH_HEAD; then
-  echo "ERROR: WSL Codex repo cannot fast-forward to the current checkout." >&2
-  echo "Source: $SOURCE_ROOT [$source_branch @ ${source_head:0:12}]" >&2
-  echo "Target: $TARGET_ROOT [$target_branch @ ${target_head:0:12}]" >&2
-  exit 1
-fi
+"$preflight_py" "$TARGET_ROOT/scripts/tools/session_preflight.py" \
+  --quiet \
+  --root "$TARGET_ROOT" \
+  --related-root "$SOURCE_ROOT" \
+  --context codex-wsl \
+  --claim codex \
+  --mode mutating
 
-echo "Synced WSL Codex repo to ${source_branch} @ ${source_head:0:12}"
+echo "$sync_message"

@@ -247,6 +247,7 @@ def _evaluate_preflight_policy(
     active_tool: str | None,
     active_mode: str,
     claim_dir: Path,
+    related_roots: list[Path] | None = None,
 ) -> tuple[list[str], list[str]]:
     snapshot = build_system_context(
         root,
@@ -254,6 +255,7 @@ def _evaluate_preflight_policy(
         active_tool=active_tool,
         active_mode=active_mode if active_mode in CLAIM_MODES else "read-only",
         claim_dir=claim_dir,
+        related_roots=related_roots,
     )
     decision = evaluate_system_policy(snapshot, _policy_action_for_mode(active_mode))
     return _format_policy_messages(decision.blockers), _format_policy_messages(decision.warnings)
@@ -266,6 +268,7 @@ def build_blockers(
     active_tool: str | None = None,
     active_mode: str = "read-only",
     claim_dir: Path = ACTIVE_SESSION_DIR,
+    related_roots: list[Path] | None = None,
 ) -> list[str]:
     blockers, _warnings = _evaluate_preflight_policy(
         root,
@@ -273,6 +276,7 @@ def build_blockers(
         active_tool=active_tool,
         active_mode=active_mode,
         claim_dir=claim_dir,
+        related_roots=related_roots,
     )
     return blockers
 
@@ -283,6 +287,7 @@ def build_warnings(
     active_tool: str | None = None,
     active_mode: str = "read-only",
     claim_dir: Path = ACTIVE_SESSION_DIR,
+    related_roots: list[Path] | None = None,
 ) -> list[str]:
     _blockers, warnings = _evaluate_preflight_policy(
         root,
@@ -290,6 +295,7 @@ def build_warnings(
         active_tool=active_tool,
         active_mode=active_mode,
         claim_dir=claim_dir,
+        related_roots=related_roots,
     )
     return warnings
 
@@ -303,6 +309,7 @@ def print_report(
     verify_only: bool = False,
     quiet: bool = False,
     claim_dir: Path = ACTIVE_SESSION_DIR,
+    related_roots: list[Path] | None = None,
 ) -> int:
     blockers, warnings = _evaluate_preflight_policy(
         root,
@@ -310,6 +317,7 @@ def print_report(
         active_tool=claim_tool,
         active_mode=claim_mode,
         claim_dir=claim_dir,
+        related_roots=related_roots,
     )
 
     if quiet:
@@ -430,6 +438,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--quiet", action="store_true", help="Only print warnings, suppress verbose output")
     parser.add_argument("--with-pulse", action="store_true", help="Append project pulse summary")
     parser.add_argument("--root", default=None, help="Override repo root")
+    parser.add_argument(
+        "--related-root",
+        action="append",
+        default=[],
+        help="Additional repo root whose fresh session claims should count as the same logical workspace",
+    )
     return parser
 
 
@@ -437,6 +451,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     root = Path(args.root).resolve() if args.root else DEFAULT_ROOT.resolve()
+    related_roots = [Path(path).resolve() for path in args.related_root]
     claim_mode = args.mode or infer_claim_mode(args.claim)
     exit_code = print_report(
         root,
@@ -446,6 +461,7 @@ def main(argv: list[str] | None = None) -> int:
         task_text=args.task,
         verify_only=args.verify_claim,
         quiet=args.quiet,
+        related_roots=related_roots,
     )
 
     if args.with_pulse:
