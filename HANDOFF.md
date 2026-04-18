@@ -4,6 +4,32 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-19 post-result sanity pass — canonical reusable prompt added)
+
+### What changed
+
+- Added a reusable post-result audit prompt:
+  - `docs/prompts/POST_RESULT_SANITY_PASS.md`
+- Wired the canonical audit skill to point to it for post-result claim /
+  closure / readiness checks:
+  - `.claude/skills/audit/SKILL.md`
+
+### Why this exists
+
+- The repo had strong prompts for system audit, pipeline changes, entry-model
+  changes, pre-registration, and imported-idea triage, but no single canonical
+  prompt for the recurring "slow down and prove this result actually happened,
+  actually matters, and is not operationally misleading" workflow.
+- The new prompt hard-locks a fixed sequence:
+  - reality check
+  - tunnel-vision check
+  - fresh-eyes check
+
+### Boundary
+
+- Docs / workflow only.
+- No runtime, research logic, live-trading, or database surfaces changed.
+
 ## Update (2026-04-18 medium-frequency futures kernel — MNQ narrow formal pass pre-registered)
 
 ### What changed

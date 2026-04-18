@@ -51,9 +51,10 @@ Key distinctions:
 
 ## Mode: prompts (guardian routing)
 
-Before significant changes, read the relevant guardian prompt:
+Read the relevant guardian or audit prompt for the task:
 - **Entry model changes** -> `docs/prompts/ENTRY_MODEL_GUARDIAN.md`
 - **Pipeline data changes** -> `docs/prompts/PIPELINE_DATA_GUARDIAN.md`
 - **Feature specs** -> check `docs/specs/` first (follow exactly if exists)
+- **Post-result claim / closure / readiness checks** -> `docs/prompts/POST_RESULT_SANITY_PASS.md`
 
-"Significant" = adding/removing entry models, schema changes, pipeline data flow, strategy lifecycle, drift check definitions.
+"Significant change" = adding/removing entry models, schema changes, pipeline data flow, strategy lifecycle, drift check definitions.
