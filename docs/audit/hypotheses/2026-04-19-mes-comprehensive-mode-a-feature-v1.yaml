@@ -1,5 +1,5 @@
 version: 1
-status: DRAFT
+status: LOCKED
 date: 2026-04-19
 slug: mes-comprehensive-mode-a-feature-v1
 title: "MES comprehensive Mode A Pathway A feature scan — 5 sessions × 4 filters × 2 directions (K=40)"
@@ -24,7 +24,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: null
+  commit_sha: "d8ad96f2"
   committed_required_before_run: true
 
 scope:
