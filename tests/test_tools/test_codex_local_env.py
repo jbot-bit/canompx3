@@ -31,3 +31,15 @@ def test_env_for_platform_sets_expected_uv_project_environment() -> None:
     assert wsl_env["JOBLIB_MULTIPROCESSING"] == "0"
     assert windows_env["UV_PROJECT_ENVIRONMENT"] == ".venv"
     assert windows_env["JOBLIB_MULTIPROCESSING"] == "0"
+
+
+def test_parse_args_accepts_doctor_command() -> None:
+    args = codex_local_env.parse_args(["doctor", "--platform", "wsl"])
+
+    assert args.command == "doctor"
+    assert args.platform == "wsl"
+
+
+def test_is_wsl_native_root_detects_wsl_home_paths() -> None:
+    assert codex_local_env.is_wsl_native_root(Path("/home/joshd/canompx3"))
+    assert not codex_local_env.is_wsl_native_root(Path("/mnt/c/Users/joshd/canompx3"))

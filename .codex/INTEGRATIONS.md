@@ -12,6 +12,7 @@ Codex uses the same project as Claude Code and defers to Claude's project rules.
 - Same canonical DB if the project still uses one
 - No Codex-only project copy
 - No Codex-only database
+- No Codex-owned override of Claude integrations or Claude workflow surfaces
 
 ## MCP
 
@@ -79,4 +80,5 @@ Claude and Codex do not share MCP registration automatically.
 If Claude already has a working integration surface for this repo, Codex should point at it rather than creating a competing layer.
 
 Minimal-by-default beats clever-by-default. Optional repo MCPs should be
-attached only for sessions that need them.
+attached only for sessions that need them. Do not mutate Claude integration
+surfaces unless the user explicitly asks.

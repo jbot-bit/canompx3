@@ -8,12 +8,15 @@ background_terminal_max_timeout = 900000
 developer_instructions = """
 Repo-specific Codex startup contract for canompx3:
 - Preferred entrypoints are `scripts/infra/codex-project.sh`, `scripts/infra/codex-project-search.sh`, and `scripts/infra/codex-worktree.sh`; they already run session preflight.
+- Preferred operator surface is a WSL-home clone plus the Codex app or `codex.bat linux`; `/mnt/c/...` is fallback-only.
 - If this session started any other way, run `python3 scripts/tools/session_preflight.py --context codex-wsl` from the repo root before substantial work. Use `python` only if `python3` is unavailable.
 - Read `HANDOFF.md` before planning or editing.
 - Follow `AGENTS.md`, `CLAUDE.md`, and `CODEX.md`; the Claude layer remains canonical and `.codex/` is additive only.
+- Do not mutate `CLAUDE.md`, `.claude/`, `claude.bat`, or Claude-owned settings/hooks unless the user explicitly requests it.
 - Do not mutate `.claude/` or `CLAUDE.md` unless the user explicitly asks.
 """
 
+sandbox_mode = "danger-full-access"
 [history]
 persistence = "save-all"
 

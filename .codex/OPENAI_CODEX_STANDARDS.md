@@ -41,6 +41,16 @@ These layers are complementary, not competing.
 
 ## Rules For This Repo
 
+### 0. Respect the authority boundary
+
+OpenAI guidance on customization layers does not override local project
+authority. In this repo:
+
+- Claude remains canonical.
+- Codex must adapt to the Claude layer, not reshape it.
+- Do not edit `CLAUDE.md`, `.claude/`, `claude.bat`, or Claude-owned
+  settings/hooks unless the user explicitly asks.
+
 ### 1. Keep `AGENTS.md` small and practical
 
 Use `AGENTS.md` for:
@@ -170,6 +180,7 @@ To improve Codex project awareness without degrading quality:
 These go against the official guidance and should be avoided:
 
 - gigantic startup docs
+- mutating Claude-owned surfaces from the Codex side without explicit approval
 - multiple competing authority layers
 - copying canonical docs into `.codex/`
 - adding MCP integrations with no repeated workflow behind them

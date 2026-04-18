@@ -39,7 +39,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Codex local-environment helpers")
     parser.add_argument(
         "command",
-        choices=["setup", "cleanup", "status", "lint", "tests", "drift"],
+        choices=["setup", "cleanup", "status", "doctor", "lint", "tests", "drift"],
         help="Action to run",
     )
     parser.add_argument(
@@ -140,6 +140,138 @@ def run_drift(platform: str) -> None:
     run_checked(["uv", "run", "--frozen", "python", "pipeline/check_drift.py"], env=env)
 
 
+def is_wsl_native_root(root: Path) -> bool:
+    root_text = root.as_posix()
+    return root_text.startswith("/") and not root_text.startswith("/mnt/")
+
+
+def capture_command(
+    command: list[str], *, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        cwd=ROOT,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+def _doctor_check(label: str, ok: bool, detail: str) -> tuple[str, bool, str]:
+    return label, ok, detail
+
+
+def run_doctor(platform: str) -> None:
+    env = env_for_platform(platform)
+    checks: list[tuple[str, bool, str]] = []
+
+    if platform == "wsl":
+        checks.append(
+            _doctor_check(
+                "WSL-native repo root",
+                is_wsl_native_root(ROOT),
+                str(ROOT),
+            )
+        )
+        checks.append(
+            _doctor_check(
+                ".venv-wsl present",
+                (ROOT / ".venv-wsl" / "bin" / "python").exists(),
+                str(ROOT / ".venv-wsl" / "bin" / "python"),
+            )
+        )
+        codex_path = shutil.which("codex")
+        checks.append(
+            _doctor_check(
+                "Codex binary available",
+                bool(codex_path),
+                codex_path or "codex not found on PATH",
+            )
+        )
+        mount_guard = capture_command(
+            platform_python(platform)
+            + ["scripts/tools/wsl_mount_guard.py", "--root", str(ROOT)],
+            env=env,
+        )
+        checks.append(
+            _doctor_check(
+                "WSL mount guard",
+                mount_guard.returncode == 0,
+                mount_guard.stdout.strip() or mount_guard.stderr.strip() or f"exit {mount_guard.returncode}",
+            )
+        )
+        preflight_context = "codex-wsl"
+    else:
+        checks.append(
+            _doctor_check(
+                ".venv present",
+                (ROOT / ".venv" / "Scripts" / "python.exe").exists(),
+                str(ROOT / ".venv" / "Scripts" / "python.exe"),
+            )
+        )
+        launcher = ROOT / "codex.bat"
+        checks.append(
+            _doctor_check(
+                "Codex launcher available",
+                launcher.exists(),
+                str(launcher),
+            )
+        )
+        preflight_context = "generic"
+
+    preflight = ROOT / "scripts" / "tools" / "session_preflight.py"
+    if preflight.exists():
+        preflight_result = capture_command(
+            [
+                "uv",
+                "run",
+                "--frozen",
+                "python",
+                str(preflight),
+                "--quiet",
+                "--context",
+                preflight_context,
+                "--claim",
+                "codex-search",
+                "--mode",
+                "read-only",
+            ],
+            env=env,
+        )
+        checks.append(
+            _doctor_check(
+                "Session preflight",
+                preflight_result.returncode == 0,
+                preflight_result.stdout.strip() or preflight_result.stderr.strip() or f"exit {preflight_result.returncode}",
+            )
+        )
+    else:
+        checks.append(_doctor_check("Session preflight", False, f"missing {preflight}"))
+
+    worktrees = capture_command(["git", "worktree", "list"], env=env)
+    worktree_detail = worktrees.stdout.strip().splitlines()
+    checks.append(
+        _doctor_check(
+            "Git worktree visibility",
+            worktrees.returncode == 0,
+            worktree_detail[0] if worktree_detail else worktrees.stderr.strip() or f"exit {worktrees.returncode}",
+        )
+    )
+
+    failures = 0
+    for label, ok, detail in checks:
+        status = "PASS" if ok else "FAIL"
+        print(f"[{status}] {label}: {detail}")
+        if not ok:
+            failures += 1
+
+    if failures:
+        raise SystemExit(1)
+
+
 def cleanup_paths(root: Path) -> list[Path]:
     removed: list[Path] = []
     for current_root, dirs, files in os.walk(root, topdown=True):
@@ -188,6 +320,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "status":
         run_status(args.platform)
+        return 0
+    if args.command == "doctor":
+        run_doctor(args.platform)
         return 0
     if args.command == "lint":
         run_lint(args.platform)

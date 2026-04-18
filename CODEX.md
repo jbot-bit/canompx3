@@ -8,12 +8,18 @@ project without creating a second rule system.
 
 ## Role
 
-- Same repo as Claude Code: `/mnt/c/Users/joshd/canompx3`
-- Same source files, git history, and canonical `gold.db`
-- No Codex-only project copy
+- Same project as Claude Code, with the same source files, git history, and
+  canonical `gold.db`
+- Primary Codex checkout should live under WSL home, for example
+  `~/canompx3`, not `/mnt/c/...`
+- A WSL-home clone is acceptable for Codex, but it must track the same repo
+  and rules as Claude
 - No Codex-only database or parallel truth layer
-- Claude is boss; Codex is the second system for implementation, review,
-  verification, audit, and stale-state detection
+- Claude is top dog and canonical authority
+- Codex is the second boss for implementation, review, verification, audit,
+  official-doc alignment, and stale-state detection
+- Do not mutate `CLAUDE.md`, `.claude/`, `claude.bat`, or Claude-owned
+  settings/hooks unless the user explicitly asks
 
 ## Thin Session Default
 
@@ -73,8 +79,16 @@ Shared cross-tool state lives in:
 - `docs/plans/`
 
 Do not treat Codex-private docs as shared truth.
+If a change matters to both tools, record it in `HANDOFF.md` or `docs/plans/`,
+not just `.codex/`.
 
 ## Operator Model
+
+Primary Codex surfaces:
+
+- Codex app against a WSL-home clone
+- `codex.bat linux`
+- `codex.bat linux-power`
 
 Default Codex entrypoints:
 
@@ -119,9 +133,12 @@ For a Windows user, the human-facing front doors are:
 - `codex.bat`
 - `ai-workstreams.bat`
 
-If you are running Codex inside WSL 2, prefer a clone in the WSL filesystem
-such as `~/canompx3` and launch it via `codex.bat linux`. Set
+Primary Codex path is a clone in the WSL filesystem such as `~/canompx3`,
+launched via `codex.bat linux` or the Codex app local environment. Set
 `CANOMPX3_CODEX_WSL_ROOT` if the WSL-side clone lives somewhere else.
+
+Windows-native Codex is a fallback surface only. Do not target parity with the
+WSL path when official Codex behavior differs across platforms.
 
 Codex app local-environment support lives in:
 
@@ -131,6 +148,7 @@ Codex app local-environment support lives in:
 - `scripts/infra/codex-app-setup.ps1`
 - `scripts/infra/codex-app-cleanup.ps1`
 - `docs/reference/codex-claude-operator-setup.md`
+- `docs/reference/codex-operator-handbook.md`
 
 Default stance: Codex should start minimal. Repo MCPs such as `gold-db` are
 opt-in for sessions that actually need live trading-data queries.
@@ -165,6 +183,8 @@ Open these only when the task calls for them:
   - memory-writing policy
 - `.codex/OPENAI_CODEX_STANDARDS.md`
   - official-source Codex setup principles
+- `.codex/AUTOMATIONS.md`
+  - report-only Codex maintenance automation templates
 - `.codex/CODEX_IMPROVEMENT_PLAN.md`
   - Codex improvement backlog
 
@@ -172,6 +192,10 @@ Open these only when the task calls for them:
 
 - Do not rename, replace, or weaken the Claude layer.
 - Do not build a second project workflow or second project truth.
+- Do not mutate Claude-owned files or launch surfaces without an explicit user
+  request.
 - Keep the Codex layer small, practical, and linked to canonical sources.
 - Prefer isolated worktrees for concurrent Claude/Codex mutating work.
+- Keep Codex automations report-only unless the user explicitly asks for
+  mutating behavior.
 - Update `HANDOFF.md` when you leave durable decisions or meaningful changes.

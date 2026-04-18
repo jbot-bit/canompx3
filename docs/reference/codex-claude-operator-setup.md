@@ -3,6 +3,9 @@
 This repo supports both Claude and Codex. Use both, but do not let them mutate
 the same checkout at the same time.
 
+This document is setup-only. For the day-to-day operator split and Codex
+workflow rules, see `docs/reference/codex-operator-handbook.md`.
+
 ## Recommended split
 
 - `claude.bat`
@@ -18,6 +21,8 @@ the same checkout at the same time.
 
 ## Non-negotiables
 
+- Do not edit `CLAUDE.md`, `.claude/`, `claude.bat`, or Claude-specific hooks
+  and settings from Codex unless the user explicitly asks.
 - Keep the Codex repo under WSL home, for example `~/canompx3`, not
   `/mnt/c/...`.
 - Use separate worktrees if Claude and Codex are both editing in parallel.
@@ -84,6 +89,12 @@ tracked files.
 
 Add these actions to the Codex app header.
 
+Doctor:
+
+```bash
+python3 scripts/infra/codex_local_env.py doctor --platform wsl
+```
+
 Status:
 
 ```bash
@@ -111,6 +122,7 @@ python3 scripts/infra/codex_local_env.py drift --platform wsl
 Windows fallback actions:
 
 ```powershell
+uv run --frozen python scripts/infra/codex_local_env.py doctor --platform windows
 uv run --frozen python scripts/infra/codex_local_env.py status --platform windows
 uv run --frozen python scripts/infra/codex_local_env.py lint --platform windows
 uv run --frozen python scripts/infra/codex_local_env.py tests --platform windows
@@ -140,7 +152,9 @@ Quick launcher front doors:
 ## Practical best practice
 
 - Use `claude.bat` when you want review, planning, or repo-wide judgment.
+- Use the Codex app against a WSL-home clone for the primary Codex experience.
 - Use `codex.bat linux` when you want implementation speed.
 - Use `codex.bat linux-power` when the task is hard enough to justify extra
   reasoning cost and latency.
 - Use `ai-workstreams.bat` when both tools need to be active on different tasks.
+- Treat native Windows Codex as fallback-only.

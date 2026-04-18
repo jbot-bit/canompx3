@@ -9,10 +9,13 @@ matter for Codex specifically.
 
 - Use the same repo, env split, git state, and canonical DB as Claude.
 - Do not create a second project layout or second state layer.
+- Do not edit Claude-owned files or launch surfaces unless the user explicitly
+  asks.
 - Keep the default load small, then deepen only for the task at hand.
 
 ## Preferred Entry Points
 
+- Codex app against a WSL-home clone
 - `scripts/infra/codex-project.sh`
 - `scripts/infra/codex-project-search.sh`
 - `scripts/infra/codex-project-gold-db.sh`
@@ -64,6 +67,8 @@ Do not auto-load all of `.codex/` every session.
 
 - WSL Python env: `.venv-wsl`
 - Windows Claude env: `.venv`
+- Preferred Codex checkout: WSL-home clone such as `~/canompx3`
+- Windows-native Codex: fallback-only surface
 - Dependency manager: `uv`
 - Canonical DB: `gold.db` unless `DUCKDB_PATH` overrides it
 - Project-scoped Codex defaults live in `.codex/config.toml`
