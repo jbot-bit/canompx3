@@ -48,7 +48,6 @@ from scipy import stats
 from pipeline.paths import GOLD_DB_PATH
 from research.filter_utils import filter_signal  # canonical delegation (research-truth-protocol.md)
 from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
-from trading_app.strategy_fitness import _enrich_cross_asset_atr
 
 OUTPUT_MD = Path("docs/audit/results/2026-04-16-garch-validated-role-exhaustion.md")
 OUTPUT_MD.parent.mkdir(parents=True, exist_ok=True)
@@ -80,9 +79,10 @@ def load_trades(con, row: pd.Series, direction: str, *, is_oos: bool) -> pd.Data
 
     Cross-asset filters (CrossAssetATRFilter family, e.g. X_MES_ATR60) require
     ``cross_atr_{source_instrument}_pct`` to be injected into the feature row
-    before ``filter_signal`` can evaluate. Delegates to the canonical
-    ``trading_app.strategy_fitness._enrich_cross_asset_atr`` enricher (same
-    path used by the fitness tracker and live bot).
+    before ``filter_signal`` can evaluate. Uses a direct column-map assignment
+    (equivalent semantics to ``trading_app.strategy_fitness._enrich_cross_asset_atr``
+    but preserves dtypes — the fitness-tracker path round-trips through
+    ``list[dict] -> DataFrame`` which collapses numpy dtypes to object).
     """
     filter_type = row["filter_type"]
     if filter_type not in ALL_FILTERS:
@@ -122,14 +122,32 @@ def load_trades(con, row: pd.Series, direction: str, *, is_oos: bool) -> pd.Data
     if len(df) == 0:
         return df
 
-    # Cross-asset enrichment if the filter needs it (e.g., X_MES_ATR60 requires
-    # cross_atr_MES_pct). _enrich_cross_asset_atr modifies feat_dicts in-place;
-    # apply the same pattern to a DataFrame by round-tripping rows.
+    # Cross-asset enrichment for CrossAssetATRFilter (e.g., X_MES_ATR60 needs
+    # cross_atr_MES_pct injected). Direct column-map assignment — avoids the
+    # DataFrame -> list[dict] -> DataFrame round-trip pattern used by the
+    # canonical fitness tracker path. Round-tripping collapses numpy/pandas
+    # dtypes to object, which can silently corrupt vectorized comparisons
+    # for other filters sharing the df. This path keeps the column's float64
+    # dtype intact.
     filt = ALL_FILTERS[filter_type]
     if isinstance(filt, CrossAssetATRFilter):
-        feat_dicts = df.to_dict("records")
-        _enrich_cross_asset_atr(con, feat_dicts, filt.source_instrument)
-        df = pd.DataFrame(feat_dicts)
+        src = filt.source_instrument
+        atr_rows = con.execute(
+            """SELECT trading_day, atr_20_pct FROM daily_features
+               WHERE symbol = ? AND orb_minutes = 5 AND atr_20_pct IS NOT NULL""",
+            [src],
+        ).fetchall()
+        # Normalize trading_day key to date so the lookup works whether df's
+        # trading_day is pd.Timestamp, numpy.datetime64, or plain date.
+        atr_map: dict = {}
+        for td, pct in atr_rows:
+            key = td.date() if hasattr(td, "date") else td
+            atr_map[key] = pct
+
+        def _date_key(t):
+            return t.date() if hasattr(t, "date") else t
+
+        df[f"cross_atr_{src}_pct"] = df["trading_day"].apply(_date_key).map(atr_map)
 
     # Canonical filter application — delegate to filter_signal. No inline SQL.
     mask = np.asarray(filter_signal(df, filter_type, row["orb_label"])).astype(bool)
