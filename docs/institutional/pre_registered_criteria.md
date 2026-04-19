@@ -864,3 +864,109 @@ GC proxy extends the data horizon back to 2010. However, gold market structure h
 3. **Build GC daily_features** — required for filter application on GC data.
 4. **Add GC to COST_SPECS** — with full-size gold specs ($100/pt, ~$57.40 friction) for GC-native cost analysis; MGC cost model used for proxy discovery.
 5. **Write MGC proxy hypothesis files** — using GC data, relative filters, full 16-year horizon.
+
+---
+
+## v3.2 Amendment (2026-04-19) — Cost-screen / fire-rate hard promotion blockers
+
+**Status:** DRAFT (this amendment adds Criteria 13 and 14 as hard promotion blockers; adoption requires user sign-off. Literature grounded via `docs/institutional/literature/` extracts; project-empirical thresholds called out explicitly.)
+
+### Justification
+
+`.claude/rules/backtesting-methodology.md` already codifies RULE 8.1 (extreme fire rate flag) and RULE 8.2 (ARITHMETIC_ONLY cost-screen flag). Both are currently *flags*, not *promotion blockers*. The 2026-04-19 fire-rate audit (`docs/audit/results/2026-04-19-fire-rate-audit.md`) found that 14 of 38 active deployable validated_setups rows violate RULE 8.1 (9 over-firing ≥95%, 5 at 0% because cross-instrument ATR proxy features are not computed in canonical pipeline), and 4 of 38 violate RULE 8.2. Maintaining a flag-not-block posture lets known-invalid rows sit on the deployable shelf with allocator-visible `expectancy_r` values. That is inconsistent with `.claude/rules/institutional-rigor.md` § 6 "no silent failures" and with banned practice #4 of this file ("Deploying strategies skipping criteria for speed or opportunity reasons").
+
+The institutional rigor claim is that filter lanes must actually *select* — i.e., the filter's fire distribution must differ meaningfully from its complement — or the strategy is operationally indistinguishable from the unfiltered baseline whose aggregate statistics already exist and are not a "discovery."
+
+### Literature grounding
+
+**Bailey & López de Prado 2014 (Deflated Sharpe Ratio), p3**, verbatim extract at `docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md:26`:
+
+> "Put bluntly, *a backtest where the researcher has not controlled for the extent of the search involved in his or her finding is worthless, regardless of how excellent the reported performance might be*."
+
+**Connection:** a filter with fire rate ≥95% or ≤5% effectively reduces the M=filter-variants search to a near-constant mapping. The filter contributes no selection beyond the aggregate. Reported post-filter Sharpe is then the aggregate's Sharpe ± sampling noise, not a discovery. The "extent of the search" is miscounted if a near-constant filter is treated as a real selection step.
+
+**López de Prado & Bailey 2018 (False Strategy Theorem), Theorem 1 p3**, verbatim extract at `docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md:29`:
+
+> "*Given a sample of estimated performance statistics {ŜR_k}, k = 1, ..., K, with independent and identically distributed Gaussian distribution, ... E[max_k {ŜR_k}] · (V[{ŜR_k}])^(-1/2) ≈ (1-γ)·Z⁻¹[1 - 1/K] + γ·Z⁻¹[1 - 1/(Ke)]*"
+
+And the conclusion (p6), extracted at `docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md:64`:
+
+> "unless max_k {ŜR_k} >> E[{ŜR_k}], the discovered strategy is likely to be a *false positive*."
+
+**Connection:** a near-constant filter (fire rate → 1) makes the population post-filter nearly identical to the aggregate population; the effective independence of the filter as a discovery trial collapses. Stacking such filters inflates the nominal K without contributing real independent alternatives.
+
+**Chordia, Goyal, Saretto 2018 (Two Million Trading Strategies), p6**, verbatim extract at `docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md:26`:
+
+> "In order to gauge some consistency between performance measures we ask of a trading signal to not only generate a high long-short portfolio alpha but also to explain the broader cross-section of returns in a regression setting."
+
+**Connection to Criterion 14:** Chordia's dual-measure consistency principle maps to our project-empirical observation that a legitimate filter must improve both win rate (selection quality) and expectancy (payoff), not expectancy alone. A WR-flat / ExpR-rising filter is operationally a cost-screen, not a signal.
+
+**Project-internal precedent (2026-03-24 cost_risk_pct finding),** graveyard at `.claude/rules/quant-audit-protocol.md` § KNOWN FAILURE PATTERNS:
+
+> "WR flat at ~58-60% across all friction bins (quintile spread <3%). ExpR improvement is payoff arithmetic — bigger ORBs pay more per win because costs eat less of the gross win. Not a win-rate predictor. |corr(cost_risk_pct, 1/orb_size_pts)| = 1.0 by construction (inverse)."
+
+### Threshold provenance (honest declaration)
+
+- The **95%/5% fire-rate bound** is project-empirical, not literature-derived. `.claude/rules/backtesting-methodology.md` RULE 8.1 established it based on project-internal scan calibration. Literature (Bailey-LdP + LdP-Bailey) supports the direction ("not controlling for search extent is worthless" / "near-constant trial degrades discovery power"), but the specific cut is empirical.
+- The **|wr_spread| < 0.03 AND |ExpR_spread| > 0.10** bound for ARITHMETIC_ONLY is project-empirical from the 2026-03-24 cost_risk_pct case.
+- **Chordia's t ≥ 3.79** (without-theory) remains the statistical significance escape hatch for any borderline cost-screen claim — if a project-empirical threshold is borderline, upgrade to Chordia-strict per Criterion 4.
+
+Both thresholds are operational ceilings consistent with literature direction, not claims derived verbatim from any single paper. Declared honestly per `.claude/rules/institutional-rigor.md` § 7.
+
+### Criterion 13 — Fire-rate non-extremity (MANDATORY hard promotion blocker)
+
+**Rule:** a strategy's filter must fire on neither fewer than 5% nor more than 95% of eligible trade-day rows in its pre-Mode-A-holdout IS window.
+
+- Eligible trade-day rows = `orb_outcomes` rows matching (symbol, orb_label, orb_minutes, entry_model, confirm_bars, rr_target) pre-2026, direction-locked per the candidate's direction axis.
+- Fire row = `research.filter_utils.filter_signal(df, filter_type, orb_label) == 1` per canonical delegation.
+- Fire rate = count(fire_rows) / count(eligible_trade_day_rows).
+- **5% lower-bound exemption:** pre-registered rare-event filters (e.g., NFP-day, OPEX-day, scheduled macro event) may fire below 5% if the hypothesis file declares `rare_event_exemption: true` with explicit economic theory citation AND Criterion 4 is upgraded to Chordia t ≥ 3.79 regardless of theory claims.
+- **95% upper bound has no exemption.** A filter firing ≥95% of the time is not selecting meaningfully; promote the aggregate baseline instead.
+
+**Enforcement:**
+- Pre-promotion: `strategy_validator.py` must compute fire rate and block promotion if outside [0.05, 0.95].
+- Drift check: `check_drift.py` must flag any `deployable_validated_setups` row whose current canonical fire rate violates this bound.
+- Retrospective: existing active lanes failing Criterion 13 are flagged `NON_COMPLIANT_CRITERION_13`. This amendment does NOT automatically demote them. A subsequent reclassification pre-reg must decide the disposition for each.
+
+### Criterion 14 — Non-arithmetic signal (MANDATORY hard promotion blocker)
+
+**Rule:** a filter must demonstrate selection power via win rate or expectancy difference; it cannot be purely cost-screen arithmetic.
+
+**Block condition (ARITHMETIC_ONLY):** `|wr_on - wr_off| < 0.03` AND `|expR_on - expR_off| > 0.10`, where `_on` = filter fires and `_off` = filter does not fire, both on the same pre-Mode-A eligible population.
+
+**Enforcement:**
+- Pre-promotion: `strategy_validator.py` must compute both WR and ExpR on/off split and block if the ARITHMETIC_ONLY condition triggers.
+- Reclassification: lanes flagged ARITHMETIC_ONLY route to a new registry `cost_screens` (distinct from `validated_setups`) with:
+  - Separate correlation-gate class (cost-screens correlate with each other by construction; treat as a single effective cost-screen lane for capacity).
+  - Separate capacity bucket (cost-screens do not add to the filter-lane capacity count).
+  - Separate monitoring (Shiryaev-Roberts monitor on per-trade-R is still required, but drift signal is interpreted as cost-regime shift rather than predictive-edge decay).
+- Drift check: analogous to Criterion 13.
+- Retrospective: same "flag, do not auto-demote" disposition as Criterion 13.
+
+### Downstream code changes gated by sign-off
+
+This amendment does NOT authorize any of the following; each needs its own design-proposal-gate approval:
+- `trading_app/strategy_validator.py` to compute fire rate + WR/ExpR on-off split and enforce blocks.
+- `pipeline/check_drift.py` new rules for Criterion 13 and 14 compliance.
+- New registry schema for `cost_screens`.
+- Allocator changes to treat cost-screen lanes distinctly.
+
+The honest near-term action after this amendment merges is: flag the non-compliant active lanes in the Mode A revalidation output and run a reclassification pre-reg per-lane before any demotion.
+
+### Rollback plan
+
+If retrospective application of these criteria materially damages the deployable shelf (e.g., demoting >30% of active lanes creates allocator capacity crisis), the amendment may be revised to apply **prospective-only** for new promotions. The literature grounding still applies; only the retrospective-review clause would be weakened. Any such rollback must itself be a new amendment per the amendment procedure above — not a silent code-level exemption.
+
+### Affected criteria
+
+- Criteria 1–12: UNCHANGED.
+- Acceptance matrix: stale after this amendment lands; must be updated in a subsequent docs PR to add Criterion 13 and 14 columns. Deferred out of this amendment to isolate blast radius.
+
+### Signer / audit trail
+
+- Author: Claude Code session (canompx3 main → phase-2 worktree `research/campaign-2026-04-19-phase-2`).
+- Date: 2026-04-19.
+- Literature extracts read in session: `docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`, `docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md`, `docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md`, `docs/institutional/literature/harvey_liu_2015_backtesting.md`.
+- Fire-rate audit evidence: `docs/audit/results/2026-04-19-fire-rate-audit.md`.
+- Mode A refresh evidence: `docs/audit/results/2026-04-19-mode-a-revalidation-of-active-setups.md` (38/38 lanes drifted, independent of this amendment).
+- Threshold-provenance honesty: the 95%/5% fire-rate bound and the 3%/0.10 ARITHMETIC_ONLY bounds are project-empirical operational thresholds; literature supports the direction but does not specify these exact cuts.
