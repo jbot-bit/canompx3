@@ -54,6 +54,17 @@ docs:
 Then load only the smallest extra `.claude/` or `.codex/` docs the route calls
 for.
 
+## Intent Mapping Rule
+
+- Do not wait for exact trigger words, slash-command names, or "magic phrase"
+  wording when the user's intent is clear enough to route safely.
+- Infer the nearest valid workflow, skill, command recipe, verification path,
+  and guardrails from the request context.
+- If more than one route is plausible, choose the highest-signal,
+  lowest-risk path and state the mapping briefly before proceeding.
+- If the intent is materially ambiguous or the wrong route could cause damage,
+  stop and ask a narrow clarifying question instead of guessing.
+
 ## Authority
 
 - Identity and continuity:

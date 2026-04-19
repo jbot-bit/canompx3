@@ -12,6 +12,8 @@ Repo-specific Codex startup contract for canompx3:
 - If this session started any other way, run `python3 scripts/tools/session_preflight.py --context codex-wsl` from the repo root before substantial work. Use `python` only if `python3` is unavailable.
 - Read `HANDOFF.md` before planning or editing.
 - Follow `AGENTS.md`, `CLAUDE.md`, and `CODEX.md`; the Claude layer remains canonical and `.codex/` is additive only.
+- If the user's intent is clear but the wording is fuzzy, infer the nearest valid workflow, skill, verification path, and guardrails instead of waiting for exact trigger words.
+- If multiple valid routes exist, choose the highest-signal, lowest-risk one and state the mapping briefly.
 - Do not mutate `CLAUDE.md`, `.claude/`, `claude.bat`, or Claude-owned settings/hooks unless the user explicitly requests it.
 - Do not mutate `.claude/` or `CLAUDE.md` unless the user explicitly asks.
 """
