@@ -23,7 +23,6 @@ Grounding (pre-reg integrity gate).
 
 from __future__ import annotations
 
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -60,6 +59,7 @@ def build_header(
     script_path: str,
     *,
     extra_lines: list[str] | None = None,
+    observed_cell_count: int | None = None,
 ) -> list[str]:
     """Return a canonical result-doc header block for inclusion in a scan
     result MD.
@@ -69,6 +69,12 @@ def build_header(
       script_path: canonical location of the scan script (pass `__file__`).
       extra_lines: optional additional header lines (e.g. IS window
         description). Appended AFTER the generated provenance block.
+      observed_cell_count: optional scan-observed K. If provided, cross-checks
+        against `primary_schema.k_family` in the pre-reg. Emits a WARNING
+        banner in the header if they mismatch (rather than raising — the
+        LOCKED pre-reg is the source-of-truth for the declared family, so
+        the result doc is expected to carry the erratum, not silently
+        conform).
 
     Raises:
       ValueError on malformed or unlocked pre-reg.
@@ -92,6 +98,16 @@ def build_header(
             f"pre-reg {prereg_path} has no commit_sha stamped; cannot emit "
             f"canonical provenance header."
         )
+    k_mismatch_banner: str | None = None
+    if observed_cell_count is not None:
+        declared_k = (cfg.get("primary_schema") or {}).get("k_family")
+        if declared_k is not None and int(declared_k) != int(observed_cell_count):
+            k_mismatch_banner = (
+                f"> **K MISMATCH WARNING:** pre-reg declares `k_family={declared_k}` "
+                f"but scan observed {observed_cell_count} cells. Substantive verdict "
+                f"may be affected via BH-FDR q-value scaling. Result doc must carry "
+                f"an explicit erratum block explaining the arithmetic."
+            )
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
     prereg_rel = prereg_path if not Path(prereg_path).is_absolute() else (
         str(Path(prereg_path).resolve().relative_to(_REPO_ROOT)).replace("\\", "/")
@@ -105,12 +121,16 @@ def build_header(
     ]
     if extra_lines:
         lines.extend(extra_lines)
+    if k_mismatch_banner:
+        lines.append("")
+        lines.append(k_mismatch_banner)
     lines.append("")
     return lines
 
 
 def main() -> int:
     """Smoke-test when run directly: emits a header for the MES K=40 pre-reg."""
+    import sys
     lines = build_header(
         prereg_path="docs/audit/hypotheses/2026-04-19-mes-comprehensive-mode-a-feature-v1.yaml",
         script_path=__file__,
@@ -118,8 +138,19 @@ def main() -> int:
     )
     for l in lines:
         print(l)
+    # Also demonstrate K-mismatch banner:
+    print("\n--- With K-mismatch cross-check (observed=10, declared=40) ---\n")
+    lines = build_header(
+        prereg_path="docs/audit/hypotheses/2026-04-19-mes-comprehensive-mode-a-feature-v1.yaml",
+        script_path=__file__,
+        extra_lines=["**IS window:** Mode A"],
+        observed_cell_count=10,
+    )
+    for l in lines:
+        print(l)
     return 0
 
 
 if __name__ == "__main__":
+    import sys
     sys.exit(main())

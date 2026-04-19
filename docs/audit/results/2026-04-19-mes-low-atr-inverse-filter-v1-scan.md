@@ -1,34 +1,31 @@
-# MES low-ATR (~ATR_P70) inverse-filter Pathway A family — 5 sessions × 2 directions × RR=1.5
+# MES low-ATR (~ATR_P70) inverse-filter Pathway A family — 5 sessions × 2 directions × RR=1.5 (K=20)
 
-**Generated:** 2026-04-19T00:02:37+00:00
+**Generated:** 2026-04-19T00:07:28+00:00
 **Pre-reg:** `docs/audit/hypotheses/2026-04-19-mes-low-atr-inverse-filter-v1.yaml` (LOCKED, commit_sha=b9f38e33)
 **Script:** `research/mes_low_atr_inverse_filter_v1_scan.py`
 **IS:** `trading_day < 2026-01-01`
 
+> **K MISMATCH WARNING:** pre-reg declares `k_family=20` but scan observed 10 cells. Substantive verdict may be affected via BH-FDR q-value scaling. Result doc must carry an explicit erratum block explaining the arithmetic.
+
 ## ERRATUM — pre-reg arithmetic error (K=20 → K=10 actual)
 
-The LOCKED pre-reg declares `k_family: 20` with the structure "5 sessions × 2 directions × RR=1.5 × (~ATR_P70) = 20 cells". The correct multiplication is `5 × 2 × 1 × 1 = 10`. The "× 2" factor in the pre-reg's narrative was an arithmetic error — this family has 10 cells, not 20.
+The LOCKED pre-reg declares `k_family: 20` with the structure "5 sessions × 2 directions × RR=1.5 × (~ATR_P70) = 20 cells". The correct multiplication is `5 × 2 × 1 × 1 = 10`. The "× 2" factor was an arithmetic error. This family has 10 cells, not 20.
 
-**Impact on verdict:** NONE. All 10 cells fail the positive-ExpR gate (`ExpR_on_IS > 0`) — every cell has strongly NEGATIVE ExpR (t from −2.04 to −7.33). The K1 kill criterion (0 cells pass all 6 gate clauses) fires at BOTH K=10 and K=20 framings.
+**Impact on verdict:** NONE. All 10 cells fail the positive-ExpR gate — every cell has strongly NEGATIVE ExpR (t from −2.04 to −7.33). K1 fires at BOTH K=10 and K=20 framings.
 
-**Impact on q-values:** q-values reported below are computed at the actual K=10. At the declared K=20, q-values approximately double. The strongest cell (H07 LONDON_METALS long) moves from q=0.042 to q≈0.084 — borderline fail at K=20. All other cells remain q < 0.001 even at K=20. Substantive verdict unchanged.
+**Impact on q-values:** q-values below computed at actual K=10. At declared K=20, they approximately double. Strongest cell (H07 LONDON_METALS long) moves from q=0.042 to q≈0.084 — borderline fail at K=20. All others remain q < 0.001 even at K=20.
 
-**Action:** pre-reg is NOT being modified (the LOCKED commit SHA is preserved). This erratum block is appended to the result doc per the spirit of `backtesting-methodology.md` RULE 11 (audit trail: supersede via new docs, never delete).
+**Action:** pre-reg NOT modified (LOCKED SHA preserved). Erratum block appended per `backtesting-methodology.md` RULE 11.
 
 ## Substantive finding — MES unfiltered baseline is NEGATIVE across ATR distribution
 
 The hypothesis from `2026-04-19-correction-cycle-multi-angle-synthesis.md` § Angle 1 was: "since 10/10 MES ATR_P70 cells (top-30% ATR) show negative ExpR, the inverse (~ATR_P70 = bottom-70% ATR) should be the profitable regime." This scan REFUTES that hypothesis.
 
-**Observed:** every cell's unfiltered baseline (`ExpR_b` column) is ALREADY negative, ranging from −0.084 (LONDON_METALS long) to −0.232 (SINGAPORE_OPEN short). The ~ATR_P70 subset's ExpR is approximately equal to the unfiltered baseline — the filter barely moves expectancy. So neither top-30% nor bottom-70% ATR is a profitable MES regime.
+**Observed:** every cell's unfiltered baseline (`ExpR_b` column) is ALREADY negative, ranging from −0.084 (LONDON_METALS long) to −0.232 (SINGAPORE_OPEN short). The ~ATR_P70 subset's ExpR is approximately equal to the unfiltered baseline — the filter barely moves expectancy.
 
-**Correct interpretation:** MES unfiltered E2 breakouts are structurally unprofitable across the entire ATR distribution. The ATR_P70 pattern observed in the K=40 scan (top-30% ATR cells all negative) is NOT a diagnostic for a low-ATR edge — it's just a reflection of the NEGATIVE UNFILTERED BASELINE. Every subset of MES unfiltered E2 is negative, on average, because the unfiltered mean is negative.
+**Correct interpretation:** MES unfiltered E2 breakouts are structurally unprofitable across the entire ATR distribution. The ATR_P70 pattern observed in the K=40 scan (top-30% ATR cells all negative) is NOT a diagnostic for a low-ATR edge — it reflects the NEGATIVE UNFILTERED BASELINE. Every subset of MES unfiltered E2 is negative, on average.
 
-**What this means for the original K=40 finding:**
-- The K=40 ATR_P70 cells being 10/10 negative does NOT validate "high ATR is bad for MES". It reflects the instrument-wide unfiltered negative baseline.
-- The K=40's single validated MES lane (`MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8`) remains the exception — ORB_G8 (top octile orb size) on CME_PRECLOSE long is the ONE known profitable MES subset.
-- The correction-cycle-synthesis Angle 1 framing was a PREMATURE hypothesis. Now falsified.
-
-**Canonical framing going forward:** MES requires an AFFIRMATIVE edge signal (size/vol/cross-asset confluence), not an inverse-ATR SKIP. Future MES pre-regs should test positive-selection hypotheses, not negation of already-negative patterns.
+**Implication for future MES pre-regs:** MES requires an AFFIRMATIVE edge signal (size/vol/cross-asset confluence). The single validated MES lane (`MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8` from Phase 7) remains the exception. Future MES pre-regs should test positive-selection hypotheses, not negation of already-negative patterns.
 
 ## Summary: 10 cells | CONTINUE: 0 | KILL: 10
 

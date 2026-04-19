@@ -167,7 +167,6 @@ def _resolve_direction(spec: dict) -> str:
          "long"/"short" (case-insensitive), use that.
       2. If strategy_id contains an explicit _LONG_/_SHORT_ segment, use that.
       3. Else default to "long" WITH an emitted warning (legacy long-only).
-         Callers can pass --strict to elevate this path to an error.
     """
     spec_str = str(spec.get("execution_spec") or "").lower()
     has_long = "long" in spec_str

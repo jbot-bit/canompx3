@@ -254,6 +254,7 @@ def render(cells):
         prereg_path=PREREG_PATH,
         script_path=__file__,
         extra_lines=[f"**IS:** `trading_day < {HOLDOUT_SACRED_FROM}`"],
+        observed_cell_count=len(cells),
     )
     L.append(f"## Summary: {len(cells)} cells | CONTINUE: {nc} | KILL: {len(cells)-nc}")
     L.append("")
@@ -314,7 +315,7 @@ def render(cells):
     L.append("")
     L.append("## Reproduction")
     L.append("```")
-    L.append("DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db python research/mes_broader_mode_a_rediscovery_v1_scan.py")
+    L.append("DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db python research/mes_low_atr_inverse_filter_v1_scan.py")
     L.append("```")
     return "\n".join(L) + "\n"
 
