@@ -4,6 +4,501 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-19 GC -> MGC translation audit)
+
+### What changed
+
+- Added pre-registration:
+  - `docs/audit/hypotheses/2026-04-19-gc-mgc-translation-audit.yaml`
+- Added canonical audit script:
+  - `research/research_gc_mgc_translation_audit.py`
+- Added result note:
+  - `docs/audit/results/2026-04-19-gc-mgc-translation-audit.md`
+- Added reproducible CSV outputs under:
+  - `research/output/gc_mgc_translation_audit_*.csv`
+
+### Scope
+
+- Canonical proof only:
+  - `gold.db::orb_outcomes`
+  - `gold.db::daily_features`
+  - `pipeline.cost_model`
+- Overlap era only:
+  - `2022-06-13 <= trading_day < 2026-01-01`
+- Locked trade surface:
+  - `entry_model='E2'`
+  - `confirm_bars=1`
+- `GC` proxy conclusions are **5-minute only** in this audit because the
+  canonical `GC` proxy surface has no 15m/30m rows.
+- No 2026 holdout rescue. No deployment claim. No new discovery family.
+
+### Result
+
+- `GC` strength is still real in the overlap era. The old gold edge was **not**
+  just a pre-2022 artifact.
+- Price-safe trigger translation is strong:
+  - daily feature means are nearly identical between `GC` and `MGC`
+  - retired `GC` price-safe filter pass counts are almost one-for-one on `MGC`
+- The translation break is mainly **payoff compression on 5-minute MGC**:
+  - losses stay broadly similar in R
+  - winners get materially smaller
+  - some sessions also lose modest win rate
+- On the exact retired `GC` validated rows:
+  - `5 / 17` keep a positive sign on `MGC` overlap
+  - `0 / 17` above `RR = 1.0` keep a positive sign on `MGC`
+- So the old shorthand "edge does not transfer" was too blunt, but the stronger
+  operational conclusion still holds:
+  - the **full `GC` proxy shelf does not transfer cleanly to `MGC`**
+  - any surviving bridge is narrow, weak, and concentrated at low RR
+
+### Important correction
+
+- The repo-wide unresolved opportunity is still `GC -> MGC` translation, but
+  the question is now better specified:
+  - this is **not** a trigger-parity problem
+  - this is **mainly a payoff-shape / exit-realization problem on 5-minute MGC**
+
+### Next move
+
+- Do **not** reopen broad `GC` proxy discovery.
+- Do **not** treat this audit as license to revive the retired `GC` shelf.
+- Next highest-EV step:
+  - run a narrow **MGC 5-minute payoff-compression audit** on the warm translated
+    families (`US_DATA_1000`, `NYSE_OPEN`, `EUROPE_FLOW`) to test whether the
+    remaining value is lower-RR / exit-shape handling rather than more proxy
+    discovery.
+
+## Update (2026-04-19 GC / MGC handling note)
+
+### What changed
+
+- Added contract/asset handling guidance:
+  - `docs/plans/2026-04-19-gc-mgc-handling-note.md`
+
+### Why this matters
+
+- The translation audit answered the narrow proxy question, but not the broader
+  "how should this asset/contract be handled?" question.
+- The handling note grounds that answer in:
+  - current repo proxy policy
+  - CME contract mechanics and delivery rules
+  - World Gold Council market-structure and liquidity framing
+
+### Operational rules locked by the note
+
+- Treat `GC` and `MGC` as the same underlying **asset class** for broad macro
+  exposure and narrow price-safe discovery questions.
+- Treat `MGC` as the truth surface for:
+  - execution quality
+  - payoff realization
+  - deployability
+- Gold research must remain:
+  - session-aware
+  - macro-aware
+  - contract-aware
+- Do **not** silently extend 5-minute `GC -> MGC` proxy conclusions to 15m/30m.
+- Do **not** treat `GC` and `MGC` as interchangeable across the whole strip:
+  - COMEX price discovery is concentrated in the **active month**
+  - proxy arguments should be framed around comparable active-month behavior,
+    not the entire deferred curve
+
+### Next move remains unchanged
+
+- The next gold-specific research pass is still:
+  - narrow `MGC` 5-minute payoff-compression audit on the warm translated
+    families
+- This handling note is guidance, not a reason to reopen broad `GC` proxy
+  discovery.
+
+## Update (2026-04-19 MGC 5-minute payoff-compression audit)
+
+### What changed
+
+- Added pre-registration:
+  - `docs/audit/hypotheses/2026-04-19-mgc-payoff-compression-audit.yaml`
+- Added diagnostic audit script:
+  - `research/research_mgc_payoff_compression_audit.py`
+- Added targeted tests:
+  - `tests/test_research/test_mgc_payoff_compression_audit.py`
+- Added result note:
+  - `docs/audit/results/2026-04-19-mgc-payoff-compression-audit.md`
+- Added reproducible CSV outputs under:
+  - `research/output/mgc_payoff_compression_audit_*.csv`
+
+### Scope
+
+- Canonical proof only:
+  - `gold.db::orb_outcomes`
+  - `gold.db::daily_features`
+  - `pipeline.cost_model`
+- Overlap era only:
+  - `2022-06-13 <= trading_day < 2026-01-01`
+- Locked trade surface:
+  - `symbol = MGC`
+  - `orb_minutes = 5`
+  - `entry_model = 'E2'`
+  - `confirm_bars = 1`
+  - `rr_target = 1.0`
+  - sessions: `EUROPE_FLOW`, `NYSE_OPEN`, `US_DATA_1000`
+- Locked diagnostics:
+  - raw canonical `pnl_r`
+  - canonical `ts_pnl_r`
+  - conservative lower-target rewrites at `0.5R` and `0.75R`
+
+### Result
+
+- Current canonical time-stop is a **null lens** on this surface:
+  - `ts_pnl_r == pnl_r` across all tested families
+  - `EARLY_EXIT_MINUTES` is `None` for `EUROPE_FLOW`, `NYSE_OPEN`, and `US_DATA_1000`
+- Conservative lower-target rewrites improve the warm translated rows, but the
+  important correction is that they also improve the broad no-filter
+  comparators:
+  - `NYSE_OPEN` broad: `-0.0384 -> +0.0380` at `0.5R`
+  - `US_DATA_1000` broad: `-0.0301 -> +0.0488` at `0.5R`
+  - `EUROPE_FLOW` broad: `-0.1297 -> -0.0095` at `0.5R`
+- Warm translated rows remain better than the broad baseline in places, but the
+  rescue is **not narrowly confined** to the proxy-adjacent families.
+
+### Important correction
+
+- The next unresolved gold question has widened slightly:
+  - this is still a gold-specific 5-minute payoff-compression problem
+  - but it now looks more like a broader **native `MGC` target-shape issue** in
+    these sessions, not just a narrow `GC -> MGC` proxy-rescue path
+
+### Next move
+
+- Do **not** reopen broad `GC` proxy discovery.
+- Do **not** revive the retired `GC` shelf from these diagnostics.
+- Next highest-EV step:
+  - run a native `MGC` low-R / target-shape audit on these sessions under a
+    fresh prereg, because the compression signal now appears broader than the
+    translated warm families alone
+
+## Update (2026-04-19 MGC native low-R v1)
+
+### What changed
+
+- Added pre-registration:
+  - `docs/audit/hypotheses/2026-04-19-mgc-native-low-r-v1.yaml`
+- Added native low-R validation script:
+  - `research/research_mgc_native_low_r_v1.py`
+- Added targeted tests:
+  - `tests/test_research/test_mgc_native_low_r_v1.py`
+- Added result note:
+  - `docs/audit/results/2026-04-19-mgc-native-low-r-v1.md`
+- Added reproducible CSV output:
+  - `research/output/mgc_native_low_r_v1_matrix.csv`
+
+### Scope
+
+- Canonical proof only:
+  - `gold.db::orb_outcomes`
+  - `gold.db::daily_features`
+  - `pipeline.cost_model`
+- Locked native matrix:
+  - `symbol = MGC`
+  - `orb_minutes = 5`
+  - `entry_model = 'E2'`
+  - `confirm_bars = 1`
+  - sessions: `EUROPE_FLOW`, `NYSE_OPEN`, `US_DATA_1000`
+  - families: `3` broad + `5` warm/filtered
+  - target variants: `0.5R`, `0.75R`
+  - total `K = 16` with global BH at `q = 0.10`
+- Selection uses pre-2026 only; 2026 is diagnostic only.
+
+### Result
+
+- `5 / 16` families survive the locked native low-R matrix under:
+  - global BH
+  - `N >= 50`
+  - positive pre-2026 expectancy
+- Survivor split:
+  - `0.5R = 4`
+  - `0.75R = 1`
+  - `broad = 2`
+  - `warm = 3`
+- Surviving rows:
+  - `NYSE_OPEN_OVNRNG_50_RR1` at `0.75R`
+  - `US_DATA_1000_ATR_P70_RR1` at `0.5R`
+  - `US_DATA_1000_OVNRNG_10_RR1` at `0.5R`
+  - `US_DATA_1000_BROAD_RR1` at `0.5R`
+  - `NYSE_OPEN_BROAD_RR1` at `0.5R`
+- 2026 diagnostic rows are present on this surface and the survivors remain
+  positive there, but this must not be treated as promotion by itself.
+
+### Important correction
+
+- The lower-R effect is now stronger than "purely diagnostic" but it is still
+  **not live-ready proof**:
+  - exits are conservative rewrites from canonical `RR1.0` rows
+  - ambiguous losses stay fail-closed
+  - this is not yet a path-accurate sub-`1R` execution rebuild
+- The unresolved gold question is now:
+  - whether these `MGC` low-R survivors still hold under a **path-accurate**
+    sub-`1R` outcome audit using actual 1-minute bar sequence, not `mfe_r`
+    rewrites alone
+
+### Next move
+
+- Do **not** reopen broad `GC` proxy discovery.
+- Do **not** promote these rows yet.
+- Next highest-EV step:
+  - path-accurate native `MGC` sub-`1R` audit on the `5` surviving rows to
+    verify that the low-R survivors remain positive when rebuilt from actual
+    1-minute price path rather than `RR1.0`-row rewrites
+
+## Update (2026-04-19 MGC path-accurate sub-R v1)
+
+### What changed
+
+- Added pre-registration:
+  - `docs/audit/hypotheses/2026-04-19-mgc-path-accurate-subr-v1.yaml`
+- Added path-accurate audit script:
+  - `research/research_mgc_path_accurate_subr_v1.py`
+- Added targeted tests:
+  - `tests/test_research/test_mgc_path_accurate_subr_v1.py`
+- Added result note:
+  - `docs/audit/results/2026-04-19-mgc-path-accurate-subr-v1.md`
+- Added reproducible CSV outputs:
+  - `research/output/mgc_path_accurate_subr_v1_*.csv`
+
+### Scope
+
+- Canonical proof only:
+  - `gold.db::orb_outcomes`
+  - `gold.db::daily_features`
+  - `gold.db::bars_1m`
+  - `pipeline.cost_model`
+- Locked matrix:
+  - the `5` survivors from native low-R v1 only
+  - actual 1-minute fill-bar + post-entry target/stop sequencing
+  - same-bar target/stop conflicts fail closed as losses
+  - K = 5 with global BH at q=0.10
+
+### Result
+
+- **No families survive** after path-accurate sub-R reconstruction.
+- The strongest warm candidate (`NYSE_OPEN_OVNRNG_50_RR1` at `0.75R`) stays
+  positive in IS and OOS means, but does not survive BH (`p=0.2308`).
+- The broad `0.5R` rows that looked strongest under the cheaper rewrite become
+  negative in pre-2026 once rebuilt from actual path:
+  - `US_DATA_1000_BROAD_RR1`: `avg_is = -0.0417`
+  - `NYSE_OPEN_BROAD_RR1`: `avg_is = -0.0623`
+- Some 2026 OOS means remain positive, but this cannot rescue the family once
+  the locked pre-2026 path rebuild fails.
+
+### Important correction
+
+- The native low-R `MGC` path is now **demoted back to diagnostic only**.
+- The earlier low-R survivors were too optimistic relative to actual bar-path
+  sequencing.
+
+### Next move
+
+- Do **not** keep rescuing this exact MGC low-R path.
+- Do **not** promote any of the low-R rows.
+- The next honest move should step back out of this local gold rescue thread
+  and return to the broader repo EV map rather than iterating another adjacent
+  target-shape variant here.
+
+## Update (2026-04-19 MNQ NYSE_CLOSE failure-mode audit)
+
+### What changed
+
+- Added pre-registration:
+  - `docs/audit/hypotheses/2026-04-19-mnq-nyse-close-failure-mode-audit.yaml`
+- Added canonical/blocker audit script:
+  - `research/research_mnq_nyse_close_failure_mode_audit.py`
+- Added targeted tests:
+  - `tests/test_research/test_mnq_nyse_close_failure_mode_audit.py`
+- Added result note:
+  - `docs/audit/results/2026-04-19-mnq-nyse-close-failure-mode-audit.md`
+- Added reproducible CSV outputs under:
+  - `research/output/mnq_nyse_close_failure_mode_audit_*.csv`
+
+### Scope
+
+- Canonical proof:
+  - `gold.db::orb_outcomes`
+  - `gold.db::daily_features`
+- Comparison-only blocker layers:
+  - `gold.db::experimental_strategies`
+  - `gold.db::validated_setups`
+  - `gold.db::deployable_validated_setups`
+  - `trading_app/portfolio.py`
+- Locked session-family:
+  - `symbol = MNQ`
+  - `orb_label = NYSE_CLOSE`
+  - `entry_model = E2`
+  - `confirm_bars = 1`
+  - apertures `5 / 15 / 30`
+  - RR grid `1.0 / 1.5 / 2.0 / 2.5 / 3.0 / 4.0`
+
+### Result
+
+- `MNQ NYSE_CLOSE` is **not canonically dead**:
+  - broad `RR1.0` remains positive pre-2026 on `O5`, `O15`, and `O30`
+  - 2026 diagnostic means on those broad rows are also positive
+- But the current unvalidated state is also **not random neglect**:
+  - `validated_setups = 0`
+  - `deployable_validated_setups = 0`
+  - only `10` experimental rows exist for this session-family
+  - those attempts are narrow (`O5` only except one `O15`, no `NO_FILTER`, no `O30`)
+- Rejection pattern is dominated by stability gates:
+  - `year_stability = 5`
+  - `era_instability = 4`
+  - `negative_expectancy = 1`
+
+### Important correction
+
+- The unresolved issue is **not** "discover more random NYSE_CLOSE filters."
+- It is that a positive broad `RR1.0` session-family has only been tested
+  through a narrow, unstable filter set while the raw-baseline path still
+  excludes `NYSE_CLOSE`.
+
+### Next move
+
+- Do **not** start another broad NYSE_CLOSE filter sweep.
+- Do **not** call the session dead.
+- The next honest move is a narrow `RR1.0` native governance / blocker follow-up
+  on broad `MNQ NYSE_CLOSE`, not another random discovery branch.
+
+## Update (2026-04-19 level interaction v1 — research-only primitive layer)
+
+### What changed
+
+- Added a research-only specification:
+  - `docs/specs/level_interaction_v1.md`
+- Added a shared research helper:
+  - `research/lib/level_interactions.py`
+- Added targeted tests:
+  - `tests/test_research/test_level_interactions.py`
+- Exported the helper from:
+  - `research/lib/__init__.py`
+
+### Why this exists
+
+- The repo already had canonical pre-trade levels and some break-time
+  primitives, but no single reusable contract for level interactions.
+- Existing research scripts were re-encoding touch / fail / reclaim logic ad
+  hoc.
+- This layer creates a thin shared surface for the first two families only:
+  - level pass/fail
+  - sweep/reclaim
+
+### Boundary
+
+- Research-only. No pipeline schema changes.
+- No live execution changes.
+- No market-profile / POC / VAH / VAL support.
+- No FVG / IFVG / order-block ontology.
+- Chronology is fail-closed through `pipeline.session_guard`.
+
+### Operational meaning
+
+- This is not a new truth layer. It is a reusable research helper built on top
+  of existing canonical truth.
+- Promotion into canonical pipeline features is explicitly deferred until
+  pre-registered research shows the layer is useful.
+
+## Update (2026-04-19 level pass/fail v1 — first locked use of level interaction layer)
+
+### What changed
+
+- Added pre-registration:
+  - `docs/audit/hypotheses/2026-04-19-level-pass-fail-v1.yaml`
+- Added first research script using the new helper:
+  - `research/research_level_pass_fail_v1.py`
+- Added targeted helper tests:
+  - `tests/test_research/test_level_pass_fail_v1.py`
+- Added result note:
+  - `docs/audit/results/2026-04-19-level-pass-fail-v1.md`
+- Added raw cell output:
+  - `research/output/level_pass_fail_v1_cells.csv`
+
+### Locked scope
+
+- Instruments: `MES`, `MGC`, `MNQ`
+- Sessions: `CME_PRECLOSE`, `COMEX_SETTLE`, `EUROPE_FLOW`, `NYSE_OPEN`, `TOKYO_OPEN`, `US_DATA_1000`
+- Levels: `prev_day_high`, `prev_day_low`
+- Event kinds: `close_through`, `wick_fail`
+- Event window: first 30 minutes of session
+- Response: signed next-2-bar close-to-close return / `atr_20`
+- Selection window: pre-2026 only
+- 2026 used only as diagnostic OOS
+
+### Result
+
+- **Family NULL under the locked standard.**
+- Locked family K = 72.
+- Primary survivors (BH + N>=100 + avg_is>0) = 0.
+- Warm but non-surviving cells were recorded in the result note for reference;
+  none earned promotion to strategy status.
+
+### Implication
+
+- The new level-interaction helper is useful as infra, but this first narrow
+  PDH/PDL pass-fail family did not surface a real strategy candidate.
+- Do not rescue this family by widening levels, sessions, horizons, or event
+  windows without a new pre-reg.
+
+## Update (2026-04-19 sweep reclaim v1 — next narrow trapped-side re-test)
+
+### What changed
+
+- Added pre-registration:
+  - `docs/audit/hypotheses/2026-04-19-sweep-reclaim-v1.yaml`
+- Added a second research script using the same helper layer:
+  - `research/research_sweep_reclaim_v1.py`
+- Added targeted helper tests:
+  - `tests/test_research/test_sweep_reclaim_v1.py`
+
+### Why this exists
+
+- The first generic PDH/PDL pass-fail family came back null under the locked
+  standard.
+- The next justified family is narrower, not broader:
+  - swept close-through
+  - reclaim back inside within 2 bars
+- This is overlap-aware. It does not reopen the older non-ORB mechanism script
+  as a strategy backtest; it re-tests the trapped-side idea under the new
+  canonical helper and honest K accounting.
+
+### Locked scope
+
+- Instruments: `MES`, `MGC`, `MNQ`
+- Sessions: `CME_PRECLOSE`, `COMEX_SETTLE`, `EUROPE_FLOW`, `NYSE_OPEN`,
+  `TOKYO_OPEN`, `US_DATA_1000`
+- Levels: `prev_day_high`, `prev_day_low`
+- Event definition: swept `close_through` that reclaims within 2 bars
+- Event window: first 30 minutes of session
+- Response: signed next-2-bar close-to-close return from reclaim close / `atr_20`
+- Selection window: pre-2026 only
+- 2026 used only as diagnostic OOS
+
+### Result
+
+- Added result note:
+  - `docs/audit/results/2026-04-19-sweep-reclaim-v1.md`
+- Added raw cell output:
+  - `research/output/sweep_reclaim_v1_cells.csv`
+- **Family NULL under the locked standard.**
+- Locked family K = 36.
+- Primary survivors (BH + N>=50 + avg_is>0) = 0.
+- Warm but non-surviving cells were recorded in the result note for reference;
+  none earned promotion to strategy status.
+
+### Implication
+
+- The new level-interaction helper has now cleared two useful infra tests:
+  - generic pass/fail
+  - sweep-reclaim
+- Both first-family studies came back null under hard standards.
+- Do not keep opening adjacent level-event families just because the helper
+  exists. The next move should be a fresh bottleneck/EV audit, not a third
+  near-neighbor family without new justification.
+
 ## Update (2026-04-19 validated shelf vs live deployment audit)
 
 ### What changed
@@ -50,6 +545,130 @@
   - rewrite stale inactive profiles from current generated `DailyLaneSpec`
     suggestions
   - keep them inactive until account-by-account activation review
+
+## Update (2026-04-19 inactive profile rewrite-only pass)
+
+### What changed
+
+- Rewrote stale inactive profile lane sets in:
+  - `trading_app/prop_profiles.py`
+- Adjusted brittle profile-shape tests to cover the real invariants instead of
+  pinning old inactive inventory:
+  - `tests/test_trading_app/test_prop_profiles.py`
+
+### Profiles rewritten
+
+- `tradeify_50k`
+- `topstep_50k_type_a`
+- `topstep_100k_type_a`
+- `tradeify_50k_type_b`
+- `tradeify_100k_type_b`
+- `bulenox_50k`
+- `self_funded_tradovate`
+
+### Profiles intentionally not rewritten
+
+- `topstep_50k`
+  - no current deployable rebuild
+- `topstep_50k_mes_auto`
+  - current valid lane exists but allocator recommends `PAUSE` under cold regime
+
+### Operational meaning
+
+- This is a rewrite-only pass. All touched profiles remain `active=False`.
+- No allocator semantics changed.
+- No live routing changed.
+- The stale ghost-lane problem is materially reduced: rebuilt inactive profiles
+  now point at current deployable strategy ids and replay cleanly through
+  `generate_profile_lanes.py`.
+- Current rebuildable inventory is smaller and more MNQ-led than the old
+  inactive book suggested.
+
+### Verification
+
+- `python3 -m py_compile trading_app/prop_profiles.py`
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_prop_profiles.py tests/test_tools/test_generate_profile_lanes.py tests/test_trading_app/test_paper_trade_logger.py -q`
+- `./.venv-wsl/bin/python -m ruff check trading_app/prop_profiles.py tests/test_trading_app/test_prop_profiles.py tests/test_tools/test_generate_profile_lanes.py --quiet`
+- `./.venv-wsl/bin/python scripts/tools/generate_profile_lanes.py --date 2026-04-19`
+
+### Next correct move
+
+- Do not bulk-activate these profiles.
+- Use the rebuilt inactive inventory for explicit account-by-account activation
+  review only.
+
+## Update (2026-04-19 inactive profile code review + activation review)
+
+### What changed
+
+- Resolved two operator-facing note mismatches in:
+  - `trading_app/prop_profiles.py`
+- Re-ran the narrow verification and replay gates for the rewritten inactive
+  profile surface.
+
+### Findings closed
+
+- `tradeify_50k` notes now correctly state `5 copies x 3 current lanes`.
+- `self_funded_tradovate` inline comments and notes now correctly state that
+  current ORB caps use allocator-backed session `P90` limits rather than the
+  older `$300`-budget-derived translation.
+
+### Activation verdict
+
+- No rebuilt inactive profile is activation-ready today.
+- Status by profile:
+  - `topstep_50k`: `NO_GO` — no current deployable rebuild
+  - `topstep_50k_mes_auto`: `NO_GO` — allocator recommends `PAUSE` under cold
+    regime
+  - `tradeify_50k`, `tradeify_50k_type_b`, `tradeify_100k_type_b`:
+    `BLOCKED_PENDING_TRADOVATE_RUNTIME`
+  - `bulenox_50k`: `BLOCKED_PENDING_RITHMIC_CONFORMANCE`
+  - `self_funded_tradovate`: `BLOCKED_PENDING_SELF_FUNDED_RUNTIME`
+  - `topstep_50k_type_a`, `topstep_100k_type_a`:
+    `BLOCKED_PENDING_EXPLICIT_ACTIVATION_REVIEW`
+
+### Verification
+
+- `python3 -m py_compile trading_app/prop_profiles.py`
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_prop_profiles.py tests/test_tools/test_generate_profile_lanes.py tests/test_trading_app/test_paper_trade_logger.py -q`
+- `./.venv-wsl/bin/python -m ruff check trading_app/prop_profiles.py tests/test_trading_app/test_prop_profiles.py tests/test_tools/test_generate_profile_lanes.py --quiet`
+- `./.venv-wsl/bin/python scripts/tools/generate_profile_lanes.py --date 2026-04-19`
+
+### Next correct move
+
+- Keep the rewritten inactive profiles dormant.
+- Only reopen activation on the first runtime surface that is actually proven
+  operational; do not treat allocator-backed rebuilds as deployment approval.
+
+## Update (2026-04-19 canonical coverage and opportunity audit)
+
+### What changed
+
+- Added a broad canonical audit memo:
+  - `docs/audit/results/2026-04-19-canonical-coverage-and-opportunity-audit.md`
+
+### Core finding
+
+- The current repo is **not** mainly missing profit because the active ORB
+  surface was randomly under-tested.
+- Canonical pre-2026 ORB truth shows the active-universe opportunity is
+  genuinely concentrated in `MNQ`.
+- `MES` sparsity is largely real at the broad baseline level.
+- `MGC` sparsity is also real at the micro contract level.
+- The biggest unresolved opportunity is **gold translation**:
+  - `GC` is structurally strong on multiple sessions
+  - `MGC` is broadly weak on the same broad comparator
+- `MNQ NYSE_CLOSE` is the one active-universe session family that still looks
+  like a meaningful mismatch, but it is **not untouched** — it has experimental
+  rows and zero promotions, so the right next step is a failure-mode audit, not
+  a blind rediscovery pass.
+
+### Next correct move
+
+1. `GC -> MGC` translation audit
+2. `MNQ NYSE_CLOSE` failure-mode audit
+3. keep deployment translation secondary
+4. do not reopen adjacent level-event families right now
 
 ## Update (2026-04-19 post-result sanity pass — canonical reusable prompt added)
 

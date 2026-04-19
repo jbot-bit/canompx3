@@ -10,6 +10,7 @@
 - User explicitly rejects trailing DD accounts ("can't breathe"). Static DD preferred.
 - User gets frustrated with verbose or slow responses - keep tight and actionable.
 - User wants MORE validated edges, not just refinement of existing ones.
+- User has ADHD and does not want to have to remember exact trigger words; infer the intended workflow from context and proactively invoke the right checks, skills, prompts, or action sequences.
 
 ## Prop Firm Decision
 

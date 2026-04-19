@@ -1,0 +1,86 @@
+version: 1
+name: mnq_nyse_close_failure_mode_audit
+date: 2026-04-19
+status: locked
+
+metadata:
+  intent: >
+    Audit why MNQ NYSE_CLOSE remains unvalidated and undeployed despite a
+    positive canonical broad baseline, without drifting into a new discovery
+    sweep or treating absence from the current shelf as proof of no opportunity.
+  testing_mode: audit
+  holdout_boundary: 2026-01-01
+  source_truth:
+    canonical:
+      - gold.db::orb_outcomes
+      - gold.db::daily_features
+    comparison_only:
+      - gold.db::experimental_strategies
+      - gold.db::validated_setups
+      - gold.db::deployable_validated_setups
+      - trading_app/portfolio.py
+  locked_surface:
+    symbol: MNQ
+    orb_label: NYSE_CLOSE
+    entry_model: E2
+    confirm_bars: 1
+    apertures:
+      - 5
+      - 15
+      - 30
+    rr_grid:
+      - 1.0
+      - 1.5
+      - 2.0
+      - 2.5
+      - 3.0
+      - 4.0
+
+hypotheses:
+  - id: H1
+    claim: >
+      MNQ NYSE_CLOSE is not canonically dead; the broad RR1.0 baseline remains
+      positive on at least one supported aperture in pre-2026 data.
+    falsifier: >
+      All broad RR1.0 apertures are flat or negative pre-2026.
+
+  - id: H2
+    claim: >
+      Prior experimental attempts at MNQ NYSE_CLOSE failed mainly because of
+      stability gates, not because every candidate lacked in-sample expectancy.
+    falsifier: >
+      Most rejected candidates fail immediately on negative expectancy or lack
+      of statistical lift rather than stability / era constraints.
+
+  - id: H3
+    claim: >
+      The current absence of MNQ NYSE_CLOSE from validation/deployment is at
+      least partly a pathway/blocker issue, not just a null-edge issue.
+    falsifier: >
+      The broad baseline is weak, experimental coverage is already broad across
+      apertures and filter classes, and rejection reasons consistently show
+      there is no viable family left.
+
+rules:
+  - No 2026 holdout selection or rescue.
+  - No new filters, no new strategy families, no live recommendation.
+  - Canonical truth decides whether the session-family is alive or dead.
+  - Experimental/validated/deployable layers are comparison-only for blocker analysis.
+  - If the broad baseline is positive but prior tested filters fail on stability,
+    say so plainly rather than collapsing the whole family into dead.
+
+deliverables:
+  - research/research_mnq_nyse_close_failure_mode_audit.py
+  - docs/audit/results/2026-04-19-mnq-nyse-close-failure-mode-audit.md
+  - tests/test_research/test_mnq_nyse_close_failure_mode_audit.py
+  - HANDOFF.md update
+
+kill_criteria:
+  - >
+    If the broad RR1.0 baseline is negative across apertures and prior
+    experimental coverage is already wide, mark MNQ NYSE_CLOSE as broadly dead
+    and stop spending research capital here.
+  - >
+    If the broad baseline is positive but the only prior attempts are a narrow,
+    unstable filter set, classify the gap as a failure-mode / pathway problem,
+    not a fresh discovery void.
