@@ -49,9 +49,17 @@ def _utc_now_iso() -> str:
 # ---------------------------------------------------------------------------
 
 
-def generate_portfolio_state_snapshot() -> str:
-    """Strategy counts and edge family summary by instrument."""
-    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+def generate_portfolio_state_snapshot(db_path: Path | None = None) -> str:
+    """Strategy counts and edge family summary by instrument.
+
+    Args:
+        db_path: Optional override for the gold.db location. Defaults to the
+            canonical `pipeline.paths.GOLD_DB_PATH`. Tests pass a seeded temp
+            DB here to exercise the function without depending on live data.
+    """
+    if db_path is None:
+        db_path = GOLD_DB_PATH
+    con = duckdb.connect(str(db_path), read_only=True)
     try:
         # Strategy counts by instrument
         strat_rows = con.execute(f"""
@@ -120,9 +128,16 @@ def generate_portfolio_state_snapshot() -> str:
 # ---------------------------------------------------------------------------
 
 
-def generate_fitness_report_snapshot() -> str:
-    """Active strategy breakdown by session, entry model, aperture; top 10 by Sharpe."""
-    con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+def generate_fitness_report_snapshot(db_path: Path | None = None) -> str:
+    """Active strategy breakdown by session, entry model, aperture; top 10 by Sharpe.
+
+    Args:
+        db_path: Optional override for the gold.db location. Defaults to the
+            canonical `pipeline.paths.GOLD_DB_PATH`.
+    """
+    if db_path is None:
+        db_path = GOLD_DB_PATH
+    con = duckdb.connect(str(db_path), read_only=True)
     try:
         # Breakdown by instrument, session, entry model, aperture
         breakdown_rows = con.execute("""

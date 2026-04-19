@@ -9,10 +9,12 @@ WHO CHECKS THE CHECKER: unit tests prove logic; these prove reality.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
+import duckdb
 import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -20,7 +22,59 @@ PULSE_SCRIPT = PROJECT_ROOT / "scripts" / "tools" / "project_pulse.py"
 PYTHON = sys.executable
 
 
-def _run_pulse(*args: str, timeout: int = 60) -> subprocess.CompletedProcess[str]:
+@pytest.fixture
+def seeded_pulse_db(tmp_path):
+    """Temp gold.db with one active validated_setups row per active instrument.
+
+    project_pulse reports `Strategy fitness:` only when fitness_summary is
+    non-empty, which requires at least one validated_setups row. The test
+    runs the pulse via subprocess with DUCKDB_PATH pointing here.
+    """
+    db_path = tmp_path / "gold.db"
+    con = duckdb.connect(str(db_path))
+    con.execute(
+        """
+        CREATE TABLE validated_setups (
+            strategy_id VARCHAR PRIMARY KEY,
+            instrument VARCHAR,
+            orb_label VARCHAR,
+            entry_model VARCHAR,
+            orb_minutes INTEGER,
+            rr_target DOUBLE,
+            confirm_bars INTEGER,
+            filter_type VARCHAR,
+            expectancy_r DOUBLE,
+            win_rate DOUBLE,
+            sample_size INTEGER,
+            sharpe_ann DOUBLE,
+            status VARCHAR,
+            fdr_significant BOOLEAN,
+            wf_passed BOOLEAN,
+            stop_multiplier DOUBLE
+        )
+        """
+    )
+    for inst in ("MNQ", "MES"):
+        con.execute(
+            """
+            INSERT INTO validated_setups
+                (strategy_id, instrument, orb_label, entry_model, orb_minutes,
+                 rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
+                 sample_size, sharpe_ann, status, fdr_significant, wf_passed,
+                 stop_multiplier)
+            VALUES (?, ?, 'TOKYO_OPEN', 'E2', 5, 1.5, 1, 'ORB_G5',
+                    0.18, 0.52, 150, 1.1, 'active', TRUE, TRUE, 1.0)
+            """,
+            [f"{inst}_TOKYO_OPEN_E2_CB1_ORB_G5_RR1.5", inst],
+        )
+    con.close()
+    return db_path
+
+
+def _run_pulse(*args: str, timeout: int = 60, db_path: Path | None = None) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    if db_path is not None:
+        env["DUCKDB_PATH"] = str(db_path)
     return subprocess.run(
         [PYTHON, str(PULSE_SCRIPT), *args],
         cwd=PROJECT_ROOT,
@@ -29,6 +83,7 @@ def _run_pulse(*args: str, timeout: int = 60) -> subprocess.CompletedProcess[str
         encoding="utf-8",
         errors="replace",
         timeout=timeout,
+        env=env,
     )
 
 
@@ -43,9 +98,9 @@ class TestPulseIntegration:
         assert "PROJECT PULSE" in r.stdout
         assert "===" in r.stdout
 
-    def test_fast_text_has_required_sections(self) -> None:
+    def test_fast_text_has_required_sections(self, seeded_pulse_db) -> None:
         """Output must have the key sections a user needs."""
-        r = _run_pulse("--fast", "--no-cache")
+        r = _run_pulse("--fast", "--no-cache", db_path=seeded_pulse_db)
         output = r.stdout
         # Must show branch and HEAD
         assert "Branch:" in output
