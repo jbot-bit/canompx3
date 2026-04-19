@@ -214,6 +214,7 @@ def _looks_like_sql(block: str) -> bool:
     """Heuristic: real SQL has a verb AND a source clause. Docstrings usually have one."""
     return bool(_SQL_VERB_PATTERN.search(block) and _SQL_SOURCE_PATTERN.search(block))
 
+
 # Regex to detect JOIN daily_features
 JOIN_DF_PATTERN = re.compile(r"\bJOIN\s+daily_features\b", re.IGNORECASE)
 
