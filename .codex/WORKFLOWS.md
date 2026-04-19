@@ -27,25 +27,6 @@ When the task matches, prefer these repo-local skills:
 - `canompx3-live-audit` for live-trading/runtime safety audits
 - `canompx3-deploy-readiness` for promotion/deployment go-no-go decisions
 
-## Intent-To-Workflow Routing
-
-Codex should route from intent, not from exact wording.
-
-- If the user asks fuzzily for a review, hardening pass, deployment check,
-  readiness check, verification, or cleanup of a specific risk, map the ask to
-  the nearest valid workflow instead of waiting for the exact skill or command
-  name.
-- Use the smallest strong route that covers the request:
-  - `canompx3-audit` for evidence-first audits and repo-health findings
-  - `canompx3-verify` for post-edit verification and done-definition checks
-  - `canompx3-live-audit` for runtime, broker, session, or live-control safety
-  - `canompx3-deploy-readiness` for go/no-go promotion decisions
-  - shared `.claude/skills/` recipes when the task is really a shared command
-    flow
-- If multiple routes fit, prefer the path with the strongest verification and
-  the lowest blast radius, then state the mapping briefly.
-- Only ask for clarification when the ambiguity is load-bearing.
-
 ## Design / Implementation Routing
 
 Before proposing or implementing any non-trivial change:

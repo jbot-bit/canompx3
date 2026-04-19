@@ -63,16 +63,6 @@ Typical deepen rules:
 
 Do not auto-load all of `.codex/` every session.
 
-## Intent-First Routing
-
-- Treat user intent as primary and exact wording as secondary.
-- If the user clearly wants a workflow outcome but does not name the exact
-  skill, prompt, command, or check, infer the right route and use it.
-- Do not make the user remember repo jargon, trigger phrases, or command names
-  to get the expected workflow behavior.
-- When the route is not obvious, prefer the safer valid workflow and say what
-  mapping you chose.
-
 ## Environment Facts
 
 - WSL Python env: `.venv-wsl`

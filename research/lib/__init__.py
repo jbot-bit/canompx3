@@ -7,13 +7,6 @@ Usage:
 from research.lib.audit import assert_no_inflation
 from research.lib.db import connect_db, query_df
 from research.lib.io import format_stats_table, output_dir, write_csv, write_markdown
-from research.lib.level_interactions import (
-    SUPPORTED_LEVELS,
-    LevelInteractionEvent,
-    LevelReference,
-    classify_level_interaction,
-    resolve_level_reference,
-)
 from research.lib.query import SAFE_JOIN, outcomes_query, session_col, with_dst_split
 from research.lib.stats import (
     bh_fdr,
@@ -32,11 +25,6 @@ __all__ = [
     "output_dir",
     "write_csv",
     "write_markdown",
-    "SUPPORTED_LEVELS",
-    "LevelInteractionEvent",
-    "LevelReference",
-    "classify_level_interaction",
-    "resolve_level_reference",
     "SAFE_JOIN",
     "outcomes_query",
     "session_col",

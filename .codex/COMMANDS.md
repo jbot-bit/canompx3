@@ -36,8 +36,6 @@ The shared slash-command equivalents live in `.claude/skills/`. Use them as task
 
 ## Selection Heuristic
 
-- Do not wait for the user to name the exact command or skill if the intended
-  workflow is already clear.
 - Start with `discover/SKILL.md` when the repo area is unclear.
 - Use `blast-radius/SKILL.md` before edits that touch shared interfaces.
 - Use `quant-verify/SKILL.md` or `verify-done/SKILL.md` before closing any material implementation task.

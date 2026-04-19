@@ -356,24 +356,24 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         allowed_sessions=frozenset({"CME_PRECLOSE", "NYSE_CLOSE", "COMEX_SETTLE", "US_DATA_1000", "TOKYO_OPEN"}),
         allowed_instruments=frozenset({"MNQ"}),
         active=False,  # Activate when Tradovate API bot is ready for per-account execution
-        # Rebuilt from current allocator-backed deployable shelf on 2026-04-19.
-        # Prior config had 4 ghost lanes and 1 valid incumbent displaced by the
-        # current liveness-aware allocator. Keep inactive until explicit account
-        # activation review.
+        # Allocator-generated 2026-04-04 — all lanes validated. Refresh via
+        # rebalance_lanes.py --profile tradeify_50k before activation.
         # Execution: Tradovate API per-account (Group Trading broken for brackets).
         # Bot must be exclusive to Tradeify (official rule — no cross-firm sharing).
         # 10s microscalp rule: no issue for ORB trades (hold 27-100+ minutes).
         daily_lanes=(
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
-            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12", "MNQ", "TOKYO_OPEN", max_orb_size_pts=45.6),
-            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15", "MNQ", "US_DATA_1000", max_orb_size_pts=94.9),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100", "MNQ", "COMEX_SETTLE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10", "MNQ", "TOKYO_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec(
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075", "MNQ", "CME_PRECLOSE", max_orb_size_pts=120.0
+            ),
+            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10", "MNQ", "US_DATA_1000", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_CLOSE", max_orb_size_pts=120.0),
         ),
         payout_policy_id="tradeify_select_funded",
         notes=(
-            "Phase 2 MNQ auto. 5 copies x 3 current lanes via Tradovate API. "
-            "Inactive profile rebuilt 2026-04-19 from current allocator-backed shelf. "
-            "Current recommendation = 3 lanes after removing stale ghosts and "
-            "dropping SR-alarmed COMEX incumbent substitute. "
+            "Phase 2 MNQ auto. 5 copies x 5 lanes via Tradovate API. "
+            "Lanes allocator-generated 2026-04-04 (all validated). "
             "DD $2K, budget $750 (37.5%)."
         ),
     ),
@@ -567,22 +567,27 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
-        # Rebuilt from current allocator-backed deployable shelf on 2026-04-19.
-        # Prior config had 7 ghost lanes and 1 valid incumbent displaced by the
-        # current liveness-aware allocator. Keep inactive until explicit account
-        # activation review.
+        # Allocator-generated 2026-04-04 — all lanes validated. 8/16 slots filled
+        # (DD budget limits further slots). Refresh via rebalance_lanes.py before activation.
         daily_lanes=(
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
-            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
-            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12", "MNQ", "TOKYO_OPEN", max_orb_size_pts=45.6),
-            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15", "MNQ", "US_DATA_1000", max_orb_size_pts=94.9),
+            DailyLaneSpec("MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6", "MGC", "CME_REOPEN", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100", "MNQ", "COMEX_SETTLE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10", "MNQ", "TOKYO_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec(
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075", "MNQ", "CME_PRECLOSE", max_orb_size_pts=120.0
+            ),
+            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10", "MNQ", "US_DATA_1000", max_orb_size_pts=120.0),
+            DailyLaneSpec(
+                "MES_LONDON_METALS_E2_RR2.5_CB1_ORB_VOL_8K_S075", "MES", "LONDON_METALS", max_orb_size_pts=30.0
+            ),
+            DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MES", "NYSE_OPEN", max_orb_size_pts=30.0),
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "TYPE-A auto inactive profile rebuilt 2026-04-19 from current allocator-backed shelf. "
-            "Current recommendation = 4 lanes, all MNQ-led; stale ghosts removed and "
-            "SR-alarmed COMEX incumbent displaced by current liveness-aware substitute. "
-            "TopStepX/ProjectX. Keep inactive pending explicit activation review."
+            "TYPE-A auto. 7 sessions, 8 lanes (DD-budget limited), 3 instruments. TopStepX/ProjectX. "
+            "Lanes allocator-generated 2026-04-04 (all validated). "
+            "Refresh via rebalance_lanes.py before activation."
         ),
     ),
     # --- TYPE-A: TopStep 100K (5 Express accounts via ProjectX) ---
@@ -607,19 +612,27 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
-        # Rebuilt from current allocator-backed deployable shelf on 2026-04-19.
-        # Same inactive recommendation as 50K TYPE-A under current shelf truth.
+        # Allocator-generated 2026-04-04 — same lanes as 50K TYPE-A.
+        # Refresh via rebalance_lanes.py before activation.
         daily_lanes=(
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
-            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
-            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12", "MNQ", "TOKYO_OPEN", max_orb_size_pts=45.6),
-            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15", "MNQ", "US_DATA_1000", max_orb_size_pts=94.9),
+            DailyLaneSpec("MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6", "MGC", "CME_REOPEN", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100", "MNQ", "COMEX_SETTLE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10", "MNQ", "TOKYO_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec(
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075", "MNQ", "CME_PRECLOSE", max_orb_size_pts=120.0
+            ),
+            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10", "MNQ", "US_DATA_1000", max_orb_size_pts=120.0),
+            DailyLaneSpec(
+                "MES_LONDON_METALS_E2_RR2.5_CB1_ORB_VOL_8K_S075", "MES", "LONDON_METALS", max_orb_size_pts=30.0
+            ),
+            DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MES", "NYSE_OPEN", max_orb_size_pts=30.0),
         ),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "TYPE-A auto 100K inactive profile rebuilt 2026-04-19 from current allocator-backed shelf. "
-            "Same 4-lane MNQ-led recommendation as 50K TYPE-A under current truth. "
-            "$3K DD = 46% at 1ct. Keep inactive pending explicit activation review."
+            "TYPE-A auto 100K. Same 8 lanes as 50K. $3K DD = 46% at 1ct. "
+            "Lanes allocator-generated 2026-04-04 (all validated). "
+            "Refresh via rebalance_lanes.py before activation."
         ),
     ),
     # --- TYPE-B: Tradeify 50K (5 accounts via Tradovate API) ---
@@ -644,23 +657,25 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
-        # Rebuilt from current allocator-backed deployable shelf on 2026-04-19.
-        # Prior config had 8 ghost lanes and 1 valid incumbent displaced by the
-        # current liveness-aware allocator. Keep inactive until explicit account
-        # activation review.
+        # Allocator-generated 2026-04-04 — all lanes validated. 9/15 slots filled
+        # (DD budget limits further slots). Refresh via rebalance_lanes.py before activation.
         daily_lanes=(
-            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
-            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
-            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15", "MNQ", "US_DATA_1000", max_orb_size_pts=94.9),
+            DailyLaneSpec("MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6", "MGC", "CME_REOPEN", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100", "MNQ", "COMEX_SETTLE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10", "MNQ", "EUROPE_FLOW", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10", "MNQ", "US_DATA_1000", max_orb_size_pts=120.0),
+            DailyLaneSpec("MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6", "MGC", "EUROPE_FLOW", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_CLOSE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MES", "NYSE_OPEN", max_orb_size_pts=30.0),
         ),
         payout_policy_id="tradeify_select_funded",
         notes=(
-            "TYPE-B auto inactive profile rebuilt 2026-04-19 from current allocator-backed shelf. "
-            "Current recommendation = 5 lanes, MNQ-led. Tradovate API (auth broken). "
+            "TYPE-B auto. 7 sessions, 9 lanes (DD-budget limited), 3 instruments. "
+            "Tradovate API (auth broken). Lanes allocator-generated 2026-04-04 (all validated). "
             "Bot must be exclusive to Tradeify (no cross-firm sharing). "
-            "Keep inactive pending explicit activation review."
+            "Refresh via rebalance_lanes.py before activation."
         ),
     ),
     # --- TYPE-B: Tradeify 100K (5 accounts via Tradovate API) ---
@@ -685,20 +700,24 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
-        # Rebuilt from current allocator-backed deployable shelf on 2026-04-19.
-        # Same inactive recommendation as 50K TYPE-B under current shelf truth.
+        # Allocator-generated 2026-04-04 — same lanes as 50K TYPE-B.
+        # Refresh via rebalance_lanes.py before activation.
         daily_lanes=(
-            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
-            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
-            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15", "MNQ", "US_DATA_1000", max_orb_size_pts=94.9),
+            DailyLaneSpec("MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6", "MGC", "CME_REOPEN", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100", "MNQ", "COMEX_SETTLE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10", "MNQ", "EUROPE_FLOW", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_OPEN", max_orb_size_pts=120.0),
+            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10", "MNQ", "US_DATA_1000", max_orb_size_pts=120.0),
+            DailyLaneSpec("MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6", "MGC", "EUROPE_FLOW", max_orb_size_pts=20.0),
+            DailyLaneSpec("MNQ_NYSE_CLOSE_E2_RR1.0_CB1_OVNRNG_50", "MNQ", "NYSE_CLOSE", max_orb_size_pts=120.0),
+            DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MES", "NYSE_OPEN", max_orb_size_pts=30.0),
         ),
         payout_policy_id="tradeify_select_funded",
         notes=(
-            "TYPE-B auto 100K inactive profile rebuilt 2026-04-19 from current allocator-backed shelf. "
-            "Same 5-lane MNQ-led recommendation as 50K TYPE-B under current truth. "
-            "$3K DD = 46% at 1ct. Keep inactive pending explicit activation review."
+            "TYPE-B auto 100K. Same 9 lanes as 50K. $3K DD = 46% at 1ct. "
+            "Lanes allocator-generated 2026-04-04 (all validated). "
+            "Refresh via rebalance_lanes.py before activation."
         ),
     ),
     # =========================================================================
@@ -722,21 +741,45 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC"}),
-        # Rebuilt from current allocator-backed deployable shelf on 2026-04-19.
-        # Prior config had 4 ghost lanes and 1 valid incumbent displaced by the
-        # current liveness-aware allocator. Keep inactive until explicit account
-        # activation review.
+        # Same lanes as topstep_50k_mnq_auto (proven allocation).
+        # Refresh via rebalance_lanes.py --profile bulenox_50k before activation.
         daily_lanes=(
-            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
-            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12", "MNQ", "TOKYO_OPEN", max_orb_size_pts=45.6),
+            DailyLaneSpec(
+                "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
+                "MGC",
+                "CME_REOPEN",
+                max_orb_size_pts=30.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
+                "MNQ",
+                "SINGAPORE_OPEN",
+                max_orb_size_pts=90.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=80.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
+                "MNQ",
+                "EUROPE_FLOW",
+                max_orb_size_pts=120.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
+                "MNQ",
+                "TOKYO_OPEN",
+                max_orb_size_pts=80.0,
+            ),
         ),
         notes=(
             "Bulenox 50K via Rithmic API. 3 copies (max simultaneous). "
             "No forced conversion. 100% first $10K then 90/10. "
             "40% consistency rule. DD locks at starting+$100. "
-            "Inactive profile rebuilt 2026-04-19 from current allocator-backed shelf. "
+            "Lanes mirror topstep_50k_mnq_auto (proven). "
             "Source: bulenox.com/help/master-account (scraped Apr 3 2026)."
         ),
     ),
@@ -765,24 +808,76 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
             }
         ),
         allowed_instruments=frozenset({"MNQ", "MGC", "MES"}),
-        # Rebuilt from current allocator-backed deployable shelf on 2026-04-19.
-        # Prior config had 9 ghost lanes and 1 valid incumbent displaced by the
-        # current liveness-aware allocator. ORB caps now use allocator-backed
-        # session P90 limits rather than the older $300-budget-derived translation.
+        # 10 allocator-driven lanes (Apr 4 2026). All in validated_setups (active).
+        # ORB caps: $300 / point_value (MGC=30pt, MNQ=150pt, MES=60pt).
+        # Replaced 11 manual lanes (2 were UNDEPLOYABLE — failed FDR / not discovered).
+        # Allocator source: rebalance_lanes.py --date 2026-04-04 --profile self_funded_tradovate
         daily_lanes=(
-            DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
-            DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
-            DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
-            DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12", "MNQ", "TOKYO_OPEN", max_orb_size_pts=45.6),
-            DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15", "MNQ", "US_DATA_1000", max_orb_size_pts=94.9),
+            DailyLaneSpec(
+                "MGC_CME_REOPEN_E2_RR2.5_CB1_ORB_G6",
+                "MGC",
+                "CME_REOPEN",
+                max_orb_size_pts=30.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR2.0_CB1_COST_LT12",
+                "MNQ",
+                "SINGAPORE_OPEN",
+                max_orb_size_pts=150.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+                "MNQ",
+                "COMEX_SETTLE",
+                max_orb_size_pts=150.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_EUROPE_FLOW_E2_RR3.0_CB1_COST_LT10",
+                "MNQ",
+                "EUROPE_FLOW",
+                max_orb_size_pts=150.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_COST_LT10",
+                "MNQ",
+                "TOKYO_OPEN",
+                max_orb_size_pts=150.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50",
+                "MNQ",
+                "NYSE_OPEN",
+                max_orb_size_pts=150.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_OVNRNG_50_S075",
+                "MNQ",
+                "CME_PRECLOSE",
+                max_orb_size_pts=150.0,
+            ),
+            DailyLaneSpec(
+                "MNQ_US_DATA_1000_E2_RR1.5_CB1_COST_LT10",
+                "MNQ",
+                "US_DATA_1000",
+                max_orb_size_pts=150.0,
+            ),
+            DailyLaneSpec(
+                "MGC_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G6",
+                "MGC",
+                "EUROPE_FLOW",
+                max_orb_size_pts=30.0,
+            ),
+            DailyLaneSpec(
+                "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12",
+                "MES",
+                "NYSE_OPEN",
+                max_orb_size_pts=60.0,
+            ),
         ),
         payout_policy_id="self_funded",
         notes=(
-            "Self-funded Tradovate inactive profile rebuilt 2026-04-19 from current allocator-backed shelf. "
-            "Current recommendation = 6 MNQ-led lanes after removing stale ghosts and "
-            "dropping the SR-alarmed COMEX incumbent substitute. Current ORB caps are allocator-backed "
-            "session P90 limits, not the older $300-budget-derived translation. Profile SM=0.75 overrides "
+            "Self-funded Tradovate personal account. 10 allocator-validated lanes "
+            "(Apr 4 2026 rebalance). All in validated_setups. Profile SM=0.75 overrides "
             "at runtime. Margin: $50/contract intraday (Tradovate). Commission: $1.22/RT. "
             "Self-imposed limits: daily -$600, weekly -$1,500, DD halt -$3,000."
         ),
