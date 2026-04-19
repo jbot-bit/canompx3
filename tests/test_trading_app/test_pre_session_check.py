@@ -19,7 +19,39 @@ from trading_app.pre_session_check import (
     check_manual_halt,
     check_topstep_xfa_aggregate_cap,
 )
-from trading_app.prop_profiles import ACCOUNT_PROFILES, get_profile
+from trading_app.prop_profiles import ACCOUNT_PROFILES, DailyLaneSpec, get_profile
+
+
+def _shared_nyse_open_profile(profile_id: str):
+    """Return a copy of profile_id with MNQ+MES lanes on NYSE_OPEN + active=True.
+
+    2026-04-19 rebuild of topstep_50k_type_a removed the shared-session lanes
+    these tests exercise. Inject them synthetically so shared-session logic
+    is still testable after the profile rebuild.
+    """
+    base = ACCOUNT_PROFILES[profile_id]
+    non_nyse = tuple(lane for lane in base.daily_lanes if lane.orb_label != "NYSE_OPEN")
+    shared = (
+        DailyLaneSpec(
+            "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50",
+            "MNQ",
+            "NYSE_OPEN",
+            max_orb_size_pts=117.8,
+        ),
+        DailyLaneSpec(
+            "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12",
+            "MES",
+            "NYSE_OPEN",
+            max_orb_size_pts=60.0,
+        ),
+    )
+    return replace(
+        base,
+        active=True,
+        daily_lanes=non_nyse + shared,
+        allowed_instruments=frozenset(base.allowed_instruments | {"MNQ", "MES"}),
+        allowed_sessions=frozenset(base.allowed_sessions | {"NYSE_OPEN"}),
+    )
 
 
 def _make_hwm_file(tmp_path: Path, data: dict, filename: str = "account_hwm_TEST123.json") -> Path:
@@ -257,10 +289,10 @@ class TestHWMTrackerFailClosed:
 
 
 def test_resolve_session_lane_ambiguous_profile_requires_strategy_specific_tool():
-    # NYSE_OPEN has both MNQ and MES lanes in type_a profiles
+    # Synthetic: NYSE_OPEN shared between MNQ + MES lanes — must raise.
     with patch.dict(
         ACCOUNT_PROFILES,
-        {"topstep_50k_type_a": replace(get_profile("topstep_50k_type_a"), active=True)},
+        {"topstep_50k_type_a": _shared_nyse_open_profile("topstep_50k_type_a")},
         clear=False,
     ):
         with pytest.raises(ValueError, match="multiple lanes"):
@@ -268,7 +300,14 @@ def test_resolve_session_lane_ambiguous_profile_requires_strategy_specific_tool(
 
 
 def test_resolve_session_lanes_returns_all_shared_session_lanes():
-    with patch("trading_app.prop_profiles.resolve_profile_id", return_value="topstep_50k_type_a"):
+    with (
+        patch.dict(
+            ACCOUNT_PROFILES,
+            {"topstep_50k_type_a": _shared_nyse_open_profile("topstep_50k_type_a")},
+            clear=False,
+        ),
+        patch("trading_app.prop_profiles.resolve_profile_id", return_value="topstep_50k_type_a"),
+    ):
         profile_id, lanes = _resolve_session_lanes("NYSE_OPEN", profile_id="topstep_50k_type_a")
 
     assert profile_id == "topstep_50k_type_a"

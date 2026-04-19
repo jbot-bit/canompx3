@@ -310,7 +310,10 @@ class TestBulenoxProfile:
         assert profile.firm == "bulenox"
         assert profile.copies == 3  # Max simultaneous
         assert profile.active is False  # Not activated yet
-        assert len(profile.daily_lanes) == 5
+        # Rebuilt 2026-04-19 from current allocator-backed shelf — prior 5 lanes
+        # included 4 ghost lanes + 1 valid incumbent. Current is the 4 lanes
+        # backed by the liveness-aware allocator. See prop_profiles.py:725-728.
+        assert len(profile.daily_lanes) == 4
 
     def test_bulenox_profile_sessions(self):
         from trading_app.prop_profiles import ACCOUNT_PROFILES
