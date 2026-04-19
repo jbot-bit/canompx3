@@ -605,16 +605,18 @@ class TestStaleScratchDb:
     """Check 37: Canonical gold.db must exist at project root."""
 
     def test_catches_missing_canonical(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
-        # No gold.db at project root
+        # Point the canonical DB resolver at a path that doesn't exist
+        nonexistent_db = tmp_path / "nonexistent" / "gold.db"
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", str(nonexistent_db))
         violations = check_drift.check_stale_scratch_db()
         assert len(violations) > 0
         assert "not found" in violations[0].lower() or "Canonical" in violations[0]
 
     def test_passes_with_db_no_scratch(self, tmp_path, monkeypatch):
         """If canonical DB exists and no scratch copy, no violation."""
-        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
-        (tmp_path / "gold.db").write_bytes(b"fake db")
+        canonical_db = tmp_path / "gold.db"
+        canonical_db.write_bytes(b"fake db")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", str(canonical_db))
         # Patch Path to make C:/db/gold.db appear nonexistent
         original_exists = Path.exists
 
@@ -626,6 +628,46 @@ class TestStaleScratchDb:
         monkeypatch.setattr(Path, "exists", mock_exists)
         violations = check_drift.check_stale_scratch_db()
         assert len(violations) == 0
+
+    def test_honors_duckdb_path_override_when_project_root_has_no_db(self, tmp_path, monkeypatch):
+        """Check 37 must honor canonical pipeline.paths.GOLD_DB_PATH delegation.
+
+        Worktree scenario: PROJECT_ROOT has no gold.db, but DUCKDB_PATH points
+        to a real DB elsewhere (e.g., the main repo's canonical gold.db).
+        Per integrity-guardian.md rule 2 (canonical-source delegation), check
+        37 must call pipeline.check_drift._get_db_path() — which honors the
+        GOLD_DB_PATH_FOR_CHECKS override hook (production reads
+        pipeline.paths.GOLD_DB_PATH, which honors DUCKDB_PATH).
+
+        Suppresses no-scratch verification by patching Path.exists like the
+        sibling test does.
+        """
+        # Worktree: project_root has NO gold.db
+        worktree_root = tmp_path / "worktree"
+        worktree_root.mkdir()
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", worktree_root)
+
+        # Canonical DB lives elsewhere — pointed to by the test override hook
+        canonical_db = tmp_path / "canonical_repo" / "gold.db"
+        canonical_db.parent.mkdir()
+        canonical_db.write_bytes(b"fake canonical db")
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", str(canonical_db))
+
+        # Suppress C:/db/gold.db scratch copy false-positive
+        original_exists = Path.exists
+
+        def mock_exists(self):
+            if str(self) == r"C:\db\gold.db" or str(self) == "C:/db/gold.db":
+                return False
+            return original_exists(self)
+
+        monkeypatch.setattr(Path, "exists", mock_exists)
+
+        violations = check_drift.check_stale_scratch_db()
+        assert len(violations) == 0, (
+            f"Expected check 37 to honor GOLD_DB_PATH_FOR_CHECKS override "
+            f"and find canonical DB at {canonical_db}. Got: {violations}"
+        )
 
 
 # ── Check 44: Variant selection metric ────────────────────────────────

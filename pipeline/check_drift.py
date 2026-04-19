@@ -1586,16 +1586,26 @@ def check_doc_stats_consistency(con=None) -> list[str]:
 
 
 def check_stale_scratch_db() -> list[str]:
-    """Check #37: Canonical gold.db must exist at project root.
+    """Check #37: Canonical gold.db must exist where pipeline.paths points.
 
-    Canonical DB is <project>/gold.db (via pipeline.paths.GOLD_DB_PATH).
+    Resolves the canonical DB location via _get_db_path(), which honors:
+      1. GOLD_DB_PATH_FOR_CHECKS module-level test override (set by tests)
+      2. pipeline.paths.GOLD_DB_PATH (production), which honors:
+         - DUCKDB_PATH env var (worktree / override scenario)
+         - PROJECT_ROOT/gold.db (default canonical location)
+
+    Per integrity-guardian.md rule 2 (canonical-source delegation), this
+    check delegates to the canonical resolver rather than recomputing
+    the path independently. Worktree scenario: f5 worktree has no local
+    gold.db; DUCKDB_PATH points to canonical canompx3/gold.db.
+
     C:/db/gold.db scratch copy is DEPRECATED (Mar 24 2026) — caused stale-data
     decisions across terminals. No auto-sync. Use canonical only.
     """
     violations = []
-    project_root_db = PROJECT_ROOT / "gold.db"
-    if not project_root_db.exists():
-        violations.append(f"  Canonical DB not found at project root ({project_root_db}). Run pipeline to create it.")
+    canonical_db = _get_db_path()
+    if not canonical_db.exists():
+        violations.append(f"  Canonical DB not found at {canonical_db}. Run pipeline to create it.")
         return violations
     scratch_db = Path("C:/db/gold.db")
     if scratch_db.exists():
