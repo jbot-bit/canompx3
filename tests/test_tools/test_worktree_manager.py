@@ -226,9 +226,7 @@ class TestEnsureSymlinkCrossDrive:
         original_relpath = worktree_manager.os.path.relpath
 
         def relpath_cross_drive(path: str, start: str | None = None) -> str:
-            raise ValueError(
-                "path is on mount 'D:', start on mount 'C:'"
-            )
+            raise ValueError("path is on mount 'D:', start on mount 'C:'")
 
         with patch.object(worktree_manager.os.path, "relpath", side_effect=relpath_cross_drive):
             # Must not raise. symlink creation itself may still silently fail
