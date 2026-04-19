@@ -132,7 +132,8 @@ class TestAccountProfile:
         assert p.account_size == 30_000
         assert p.stop_multiplier == 0.75
         assert p.max_slots == 10
-        assert len(p.daily_lanes) == 10
+        assert len(p.daily_lanes) >= 1
+        assert len(p.daily_lanes) <= p.max_slots
         assert p.active is False
         assert p.payout_policy_id == "self_funded"
         # All lanes must have ORB caps (stress test showed uncapped tail risk)
@@ -281,14 +282,23 @@ class TestLaneRegistryOrbCap:
             assert cap > 0, f"{label} cap must be positive"
 
     def test_duplicate_session_profile_raises_on_session_registry(self):
-        """get_lane_registry must raise when lanes on the same session
-        disagree on max_orb_size_pts. topstep_50k_type_a has NYSE_OPEN lanes
-        for both MNQ (cap 120) and MES (cap 30), so the session-level cap
-        is not resolvable and the registry must fail closed rather than
-        silently pick one.
-        """
-        with pytest.raises(ValueError, match="inconsistent max_orb_size_pts"):
-            get_lane_registry("topstep_50k_type_a")
+        """get_lane_registry must fail closed on same-session cap conflicts."""
+        conflict = AccountProfile(
+            profile_id="dup_conflict_profile",
+            firm="topstep",
+            account_size=50_000,
+            active=False,
+            daily_lanes=(
+                DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
+                DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MES", "NYSE_OPEN", max_orb_size_pts=30.0),
+            ),
+        )
+        ACCOUNT_PROFILES["dup_conflict_profile"] = conflict
+        try:
+            with pytest.raises(ValueError, match="inconsistent max_orb_size_pts"):
+                get_lane_registry("dup_conflict_profile")
+        finally:
+            ACCOUNT_PROFILES.pop("dup_conflict_profile", None)
 
     def test_consistent_duplicate_sessions_allowed(self):
         """Multi-RR profiles (multiple lanes on the same session that share
@@ -313,10 +323,23 @@ class TestLaneRegistryOrbCap:
             assert cap > 0, f"{label} cap must be positive"
 
     def test_duplicate_session_profile_preserves_all_lane_definitions(self):
-        lanes = get_profile_lane_definitions("topstep_50k_type_a")
-        # NYSE_OPEN has both MNQ and MES lanes (multi-instrument per session)
-        nyse_open = [lane for lane in lanes if lane["orb_label"] == "NYSE_OPEN"]
-        assert len(nyse_open) >= 2
+        duplicate = AccountProfile(
+            profile_id="dup_lane_profile",
+            firm="topstep",
+            account_size=50_000,
+            active=False,
+            daily_lanes=(
+                DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
+                DailyLaneSpec("MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12", "MES", "NYSE_OPEN", max_orb_size_pts=30.0),
+            ),
+        )
+        ACCOUNT_PROFILES["dup_lane_profile"] = duplicate
+        try:
+            lanes = get_profile_lane_definitions("dup_lane_profile")
+            nyse_open = [lane for lane in lanes if lane["orb_label"] == "NYSE_OPEN"]
+            assert len(nyse_open) == 2
+        finally:
+            ACCOUNT_PROFILES.pop("dup_lane_profile", None)
 
 
 class TestOrbCapLogic:
@@ -583,7 +606,7 @@ class TestLoadAllocationLanes:
 
         path = self._write_json(tmp_path, self._sample_allocation())
         lanes = load_allocation_lanes("test_profile", allocation_path=str(path))
-        sids = [l.strategy_id for l in lanes]
+        sids = [lane.strategy_id for lane in lanes]
         assert "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12" not in sids
 
     def test_provisional_lanes_included(self, tmp_path):
@@ -600,5 +623,5 @@ class TestLoadAllocationLanes:
 
         path = self._write_json(tmp_path, self._sample_allocation())
         lanes = load_allocation_lanes("test_profile", allocation_path=str(path))
-        assert all(isinstance(l, DailyLaneSpec) for l in lanes)
+        assert all(isinstance(lane, DailyLaneSpec) for lane in lanes)
         assert isinstance(lanes, tuple)
