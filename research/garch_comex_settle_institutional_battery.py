@@ -56,6 +56,7 @@ from scipy import stats
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.cost_model import COST_SPECS
+from research.filter_utils import filter_signal  # canonical delegation (research-truth-protocol.md)
 
 OUTPUT_MD = Path("docs/audit/results/2026-04-15-garch-comex-settle-institutional-battery.md")
 OUTPUT_MD.parent.mkdir(parents=True, exist_ok=True)
@@ -74,7 +75,7 @@ class Cell:
     aperture: int
     rr: float
     direction: str
-    filter_sql: str | None  # None = no filter (H2 raw cell)
+    filter_type: str | None  # None = no filter (H2 raw cell). Canonical key from trading_app.config.ALL_FILTERS.
 
 
 CELLS = [
@@ -82,57 +83,60 @@ CELLS = [
     Cell("H2_COMEX_SETTLE_RR1.0_long", "MNQ COMEX_SETTLE O5 RR1.0 long (no filter)",
          "MNQ", "COMEX_SETTLE", 5, 1.0, "long", None),
 
-    # All 6 deployed lanes × both directions
+    # All 6 deployed lanes × both directions. Filter keys delegate to
+    # research.filter_utils.filter_signal per research-truth-protocol.md
+    # § Canonical filter delegation (added 2026-04-18).
     Cell("L1_EUROPE_FLOW_RR1.5_long",  "L1 MNQ EUROPE_FLOW O5 RR1.5 long (ORB_G5)",
-         "MNQ", "EUROPE_FLOW", 5, 1.5, "long", "d.orb_EUROPE_FLOW_size >= 5.0"),
+         "MNQ", "EUROPE_FLOW", 5, 1.5, "long", "ORB_G5"),
     Cell("L1_EUROPE_FLOW_RR1.5_short", "L1 MNQ EUROPE_FLOW O5 RR1.5 short (ORB_G5)",
-         "MNQ", "EUROPE_FLOW", 5, 1.5, "short", "d.orb_EUROPE_FLOW_size >= 5.0"),
+         "MNQ", "EUROPE_FLOW", 5, 1.5, "short", "ORB_G5"),
 
     Cell("L2_SINGAPORE_OPEN_RR1.5_long",  "L2 MNQ SINGAPORE_OPEN O30 RR1.5 long (ATR_P50)",
-         "MNQ", "SINGAPORE_OPEN", 30, 1.5, "long", "d.atr_20_pct >= 50.0"),
+         "MNQ", "SINGAPORE_OPEN", 30, 1.5, "long", "ATR_P50"),
     Cell("L2_SINGAPORE_OPEN_RR1.5_short", "L2 MNQ SINGAPORE_OPEN O30 RR1.5 short (ATR_P50)",
-         "MNQ", "SINGAPORE_OPEN", 30, 1.5, "short", "d.atr_20_pct >= 50.0"),
+         "MNQ", "SINGAPORE_OPEN", 30, 1.5, "short", "ATR_P50"),
 
     Cell("L3_COMEX_SETTLE_RR1.5_long",  "L3 MNQ COMEX_SETTLE O5 RR1.5 long (OVNRNG_100)",
-         "MNQ", "COMEX_SETTLE", 5, 1.5, "long", "d.overnight_range >= 100.0"),
+         "MNQ", "COMEX_SETTLE", 5, 1.5, "long", "OVNRNG_100"),
     Cell("L3_COMEX_SETTLE_RR1.5_short", "L3 MNQ COMEX_SETTLE O5 RR1.5 short (OVNRNG_100)",
-         "MNQ", "COMEX_SETTLE", 5, 1.5, "short", "d.overnight_range >= 100.0"),
+         "MNQ", "COMEX_SETTLE", 5, 1.5, "short", "OVNRNG_100"),
 
     Cell("L4_NYSE_OPEN_RR1.0_long",  "L4 MNQ NYSE_OPEN O5 RR1.0 long (ORB_G5)",
-         "MNQ", "NYSE_OPEN", 5, 1.0, "long", "d.orb_NYSE_OPEN_size >= 5.0"),
+         "MNQ", "NYSE_OPEN", 5, 1.0, "long", "ORB_G5"),
     Cell("L4_NYSE_OPEN_RR1.0_short", "L4 MNQ NYSE_OPEN O5 RR1.0 short (ORB_G5)",
-         "MNQ", "NYSE_OPEN", 5, 1.0, "short", "d.orb_NYSE_OPEN_size >= 5.0"),
+         "MNQ", "NYSE_OPEN", 5, 1.0, "short", "ORB_G5"),
 
     Cell("L5_TOKYO_OPEN_RR1.5_long",  "L5 MNQ TOKYO_OPEN O5 RR1.5 long (ORB_G5)",
-         "MNQ", "TOKYO_OPEN", 5, 1.5, "long", "d.orb_TOKYO_OPEN_size >= 5.0"),
+         "MNQ", "TOKYO_OPEN", 5, 1.5, "long", "ORB_G5"),
     Cell("L5_TOKYO_OPEN_RR1.5_short", "L5 MNQ TOKYO_OPEN O5 RR1.5 short (ORB_G5)",
-         "MNQ", "TOKYO_OPEN", 5, 1.5, "short", "d.orb_TOKYO_OPEN_size >= 5.0"),
+         "MNQ", "TOKYO_OPEN", 5, 1.5, "short", "ORB_G5"),
 
     Cell("L6_US_DATA_1000_RR1.5_long",  "L6 MNQ US_DATA_1000 O15 RR1.5 long (VWAP_MID_ALIGNED)",
-         "MNQ", "US_DATA_1000", 15, 1.5, "long",
-         "((d.orb_US_DATA_1000_break_dir='long' AND "
-         "(d.orb_US_DATA_1000_high + d.orb_US_DATA_1000_low)/2.0 > d.orb_US_DATA_1000_vwap) OR "
-         "(d.orb_US_DATA_1000_break_dir='short' AND "
-         "(d.orb_US_DATA_1000_high + d.orb_US_DATA_1000_low)/2.0 < d.orb_US_DATA_1000_vwap))"),
+         "MNQ", "US_DATA_1000", 15, 1.5, "long", "VWAP_MID_ALIGNED"),
     Cell("L6_US_DATA_1000_RR1.5_short", "L6 MNQ US_DATA_1000 O15 RR1.5 short (VWAP_MID_ALIGNED)",
-         "MNQ", "US_DATA_1000", 15, 1.5, "short",
-         "((d.orb_US_DATA_1000_break_dir='long' AND "
-         "(d.orb_US_DATA_1000_high + d.orb_US_DATA_1000_low)/2.0 > d.orb_US_DATA_1000_vwap) OR "
-         "(d.orb_US_DATA_1000_break_dir='short' AND "
-         "(d.orb_US_DATA_1000_high + d.orb_US_DATA_1000_low)/2.0 < d.orb_US_DATA_1000_vwap))"),
+         "MNQ", "US_DATA_1000", 15, 1.5, "short", "VWAP_MID_ALIGNED"),
 ]
 
 
 def load_cell(cell: Cell) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load an IS/OOS split for one cell. Canonical filter is applied via
+    research.filter_utils.filter_signal AFTER SQL load — so the filter SQL
+    stays out of this module and all six deployed-lane filters route through
+    the single canonical registry (trading_app.config.ALL_FILTERS).
+
+    Direction filter (orb_{session}_break_dir) remains in the SQL because
+    it is NOT a canonical filter — it's a cell-axis parameter that selects
+    which side of the ORB break this cell audits.
+    """
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-    filter_clause = f"AND {cell.filter_sql}" if cell.filter_sql else ""
+    # Load the full daily_features row so filter_signal has every column
+    # any canonical filter might need (VWAP filters read orb_{s}_vwap,
+    # OVNRNG reads overnight_range, ATR_P* reads atr_20_pct, etc.).
     q = f"""
     SELECT
       o.trading_day, o.pnl_r, o.risk_dollars, o.mae_r, o.mfe_r,
       o.pnl_r * o.risk_dollars AS pnl_dollars,
-      d.garch_forecast_vol_pct AS garch_pct,
-      d.orb_{cell.orb_label}_size AS orb_size,
-      d.overnight_range
+      d.*
     FROM orb_outcomes o
     JOIN daily_features d
       ON o.trading_day=d.trading_day AND o.symbol=d.symbol AND o.orb_minutes=d.orb_minutes
@@ -141,13 +145,38 @@ def load_cell(cell: Cell) -> tuple[pd.DataFrame, pd.DataFrame]:
       AND o.rr_target={cell.rr} AND o.pnl_r IS NOT NULL
       AND d.garch_forecast_vol_pct IS NOT NULL
       AND d.orb_{cell.orb_label}_break_dir='{cell.direction}'
-      {filter_clause}
     """
     q_is = q + f" AND o.trading_day < DATE '{IS_END}'"
     q_oos = q + f" AND o.trading_day >= DATE '{IS_END}'"
     df_is = con.execute(q_is).df()
     df_oos = con.execute(q_oos).df()
     con.close()
+
+    # Canonical filter application — delegate to filter_signal per
+    # research-truth-protocol.md. None = H2 raw cell (no filter).
+    if cell.filter_type is not None:
+        for df_name, df in (("is", df_is), ("oos", df_oos)):
+            if len(df) == 0:
+                continue
+            mask = np.asarray(filter_signal(df, cell.filter_type, cell.orb_label)).astype(bool)
+            if df_name == "is":
+                df_is = df_is.loc[mask].reset_index(drop=True)
+            else:
+                df_oos = df_oos.loc[mask].reset_index(drop=True)
+
+    # Project only the columns the rest of the module consumes (preserve
+    # the historical shape of load_cell output so regime_stats / ntile5 /
+    # permutation tests don't need changes). garch_pct is aliased from
+    # garch_forecast_vol_pct; orb_size is aliased from the canonical
+    # per-session column.
+    for df_name, df in (("is", df_is), ("oos", df_oos)):
+        if len(df) == 0:
+            continue
+        if "garch_pct" not in df.columns:
+            df["garch_pct"] = df["garch_forecast_vol_pct"]
+        orb_size_col = f"orb_{cell.orb_label}_size"
+        if "orb_size" not in df.columns and orb_size_col in df.columns:
+            df["orb_size"] = df[orb_size_col]
     for df in (df_is, df_oos):
         df["trading_day"] = pd.to_datetime(df["trading_day"])
         df["year"] = df["trading_day"].dt.year
