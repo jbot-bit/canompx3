@@ -513,8 +513,11 @@ def enrich_scores_with_dsr_diagnostics(
         floor across all validated families." This is what `dsr_score`
         aliases.
       - `dsr_at_n_hat_eq9` — ALLOCATION-LAYER. Uses Eq 9 with
-        INTERNALLY CONSISTENT population per Bailey-LdP 2014 line 89-92
-        (`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`):
+        INTERNALLY CONSISTENT population per Bailey-LdP 2014 lines 85-92
+        (`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`
+        — line 85 establishes M as the dependent-trial count being
+        deflated; line 87 bounds ρ ∈ (-1/(M-1), 1] requiring M > 1;
+        line 92 gives the formula `N̂ = ρ̂ + (1 - ρ̂)·M`):
         ρ̂ = mean off-diagonal correlation among deployable pairs in
         `pairs`, M = number of distinct deployable strategy_ids
         appearing in those pairs. This is "noise floor for selecting
@@ -602,12 +605,14 @@ def enrich_scores_with_dsr_diagnostics(
         con.close()
 
     # Bailey-LdP 2014 Eq 9: N̂ = ρ̂ + (1-ρ̂)·M, with ρ̂ = mean off-diagonal
-    # pair rho. Per the literature extract (line 89-92) ρ̂ and M must come
-    # from the same trial set — ρ̂ is the average correlation AMONG the M
-    # trials being deflated. We therefore derive M from the deployable
-    # candidate set that produced ρ̂ (the strategy_ids appearing in
-    # `pairs`), not from `n_eff_raw` (which is edge_families-wide and
-    # represents the validation-layer selection bias).
+    # pair rho. Per the literature extract (lines 85-92) ρ̂ and M must
+    # come from the same trial set — line 85 establishes M as the
+    # dependent-trial count being deflated to N̂; line 87 names ρ̂ the
+    # "average correlation between the trials"; line 92 gives the formula.
+    # We therefore derive M from the deployable candidate set that
+    # produced ρ̂ (the strategy_ids appearing in `pairs`), not from
+    # `n_eff_raw` (which is edge_families-wide and represents the
+    # validation-layer selection bias).
     #
     # This makes Eq 9 the ALLOCATOR-LAYER DSR ("noise floor for selection
     # AMONG deployable candidates"), distinct from `dsr_at_n_eff_raw`
@@ -623,7 +628,8 @@ def enrich_scores_with_dsr_diagnostics(
         rhos = list(eligible_pairs.values())
         avg_rho_hat = sum(rhos) / len(rhos) if rhos else 0.0
         # M_deployable = distinct strategy_ids appearing in eligible pairs.
-        # Per literature line 89, ρ̂ requires M > 1.
+        # Per literature line 87 ("ρ ∈ (-1/(M-1), 1], with M>1 for a
+        # correlation to exist"), ρ̂ is undefined for M < 2.
         deployable_ids: set[str] = set()
         for a, b in eligible_pairs.keys():
             deployable_ids.add(a)
@@ -1085,7 +1091,7 @@ def save_allocation(
                 "(validation-layer noise floor, no rho correction); "
                 "(2) dsr_at_n_hat_eq9 uses M=m_deployable with rho_hat "
                 "averaged across deployable pairs (allocation-layer noise "
-                "floor, internally consistent population per literature line 89-92)."
+                "floor, internally consistent population per literature lines 85-92)."
             ),
         }
 
