@@ -1,0 +1,235 @@
+version: 1
+status: DRAFT
+date: 2026-04-19
+slug: mnq-regime-tailwind-discovery-v1
+title: "MNQ regime-tailwind discovery — 3 session-directions aligned with 2024-25 regime shift × 5 filters × RR=1.5 (K=15)"
+owner: claude
+parent_spec: null
+sibling_spec: "docs/audit/results/2026-04-19-second-pass-multi-angle-audit.md § Finding 1 / Finding 7"
+
+testing_mode: family
+pathway: A_family
+
+deployment_not_done_here: |
+  This pre-reg is DRAFT ONLY. User review + LOCK commit required before any
+  scan execution. Purpose of DRAFT is to formalize the regime-tailwind
+  hypothesis for committee review; actual scan is deferred to a future
+  session with explicit user sign-off.
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/prompts/prereg-writer-prompt.md"
+  notes:
+    - "Pathway A — Chordia t >= 3.00 with-theory."
+    - "Theory citation stack: (1) Fitschen Ch 3 p.41 for the intraday trend-follow class on equity-index; (2) Chan Ch 7 p.141 for intraday momentum in directions aligned with prevailing flow; (3) Second-pass audit Finding 1 as the EMPIRICAL GROUNDING — NOT a mechanism hypothesis."
+    - "Mode A strict: trading_day < HOLDOUT_SACRED_FROM (2026-01-01)."
+    - "Canonical filter delegation via research.filter_utils.filter_signal."
+    - "Scope is LOCKED PRE-SCAN per regime-drift control findings; NOT chosen by peeking at filter-on approx_t."
+
+empirical_grounding:
+  source: "docs/audit/results/2026-04-19-second-pass-multi-angle-audit.md § Finding 1"
+  observation: |
+    MNQ O5 E2 unfiltered session-wide ExpR (all RRs pooled) by period:
+      NYSE_OPEN    short: +0.056 (2022-23) -> +0.202 (2024-25)  +0.146 strong regime tailwind
+      COMEX_SETTLE short: +0.009 (2022-23) -> +0.148 (2024-25)  +0.139 strong regime tailwind
+      SINGAPORE_OPEN long: -0.013 (2022-23) -> +0.090 (2024-25)  +0.103 regime tailwind
+      (compare EUROPE_FLOW long:   +0.115 -> +0.006   -0.109 DECAY, not in scope)
+  role: "PROVENANCE_ONLY — the empirical shift is the reason to TEST these specific session-directions. It is NOT itself the hypothesis. The hypothesis is that filtered subsets within these aligned session-directions produce deployable Pathway A edges."
+  data_snooping_guard: |
+    The three session-directions are chosen from the UNFILTERED regime
+    observation (done once on 2026-04-19 in the session-wide query). The
+    pre-reg LOCKS the scope before any FILTER-ON approx_t is computed.
+    Filter-level baselines are computed by the scan harness at run time,
+    not by this pre-reg's author. This pre-registration discipline
+    prevents the data-snooping that refuted synthesis § Angle 1.
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: null
+  committed_required_before_run: true
+
+scope:
+  instruments:
+    - id: MNQ
+      source: "pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS"
+      verification: "MNQ ~8 years native Mode A data (2018-06 through 2025-12 at 2026-01-01 holdout)."
+  session_direction_cells:
+    - {session: NYSE_OPEN,       direction: short}
+    - {session: COMEX_SETTLE,    direction: short}
+    - {session: SINGAPORE_OPEN,  direction: long}
+  session_direction_rationale: |
+    Three and only three — the exact cells where Finding 1 identified
+    positive regime shift AND current validated_setups has ZERO active
+    coverage (fresh query 2026-04-19 confirms all 36 active MNQ lanes
+    are LONG direction). Zero short coverage in current book = largest
+    under-exploited gap in the portfolio.
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.5
+  filter_classes:
+    - ORB_G5        # size top-quintile (Fitschen)
+    - ORB_G8        # size top-octile (Fitschen)
+    - COST_LT12     # friction screen (Chordia cost discipline)
+    - OVNRNG_100    # overnight range absolute
+    - X_MES_ATR60   # cross-asset equity-index vol
+  filter_rationale: |
+    Five filter classes chosen for mechanism (Fitschen/Chordia/cross-asset),
+    not by approx_t. No VWAP variants — VWAP family is already deployed on
+    US_DATA_1000 O15 long; tested separately. No ATR_P50/P70 — the MES K=40
+    + low-ATR cycle established ATR-percentile is not an MNQ-useful cut
+    at 5m. Session×filter combos that are data-sparse (e.g. X_MES_ATR60 on
+    sessions where MES ATR isn't available) will naturally skip with N=0;
+    scan reports coverage transparently.
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+    effective_coverage: "MNQ native ~7.5 years (2018-06 through 2025-12)"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM (descriptive only)"
+    policy: "Mode A sacred."
+  tuning_against_oos: false
+
+feature_definition:
+  canonical_source_of_truth: "trading_app.config.ALL_FILTERS"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, filter_key, orb_label)"
+  trade_time_knowable: true
+  lookahead_check: "PASS — all 5 filters resolve at ORB close per § RULE 6.1 safe list."
+
+primary_schema:
+  k_family: 15
+  k_global: 15
+  k_lane: 15
+  k_session: 5     # 5 filters per session-direction (1 direction per session in this scope)
+  k_instrument: 15
+  primary_promotion_gate: "K_family BH-FDR q < 0.05"
+  family_cells_structured_as: |
+    3 session-directions × 5 filters × RR=1.5 = 15 cells.
+    Cell IDs: "H{idx:02d}_{session_abbr}_{dir_abbr}_{filter_short}_RR15".
+
+hypotheses_schema:
+  id_format: "H{idx:02d}_{session_abbr}_{dir_abbr}_{filter_short}_RR15"
+  session_abbr:
+    NYSE_OPEN: "NYO"
+    COMEX_SETTLE: "CMX"
+    SINGAPORE_OPEN: "SGP"
+  dir_abbr:
+    long: "L"
+    short: "S"
+  filter_short:
+    ORB_G5: "G5"
+    ORB_G8: "G8"
+    COST_LT12: "COST"
+    OVNRNG_100: "OVN"
+    X_MES_ATR60: "XMES"
+  theory_citation_for_all_cells:
+    source_primary: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md Ch 3 p.41"
+    source_supporting: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+    extract: "Fitschen intraday trend-follow class; Chan intraday momentum cascade. Filters are within-class size/cost/vol refinements."
+  per_cell_gate:
+    - "bh_pass_family (q_family < 0.05)"
+    - "abs(t_IS) >= 3.00"
+    - "N_IS_on >= 100"
+    - "years_positive_IS >= 5 (absolute, over 7 full MNQ years 2019-2025; N<10 years excluded)"
+    - "bootstrap_p < 0.10 (moving-block centered-H0, block=5, B=10000)"
+    - "ExpR_on_IS > 0"
+    - "direction_match_OOS: sign(ExpR_OOS_on) == sign(ExpR_IS_on) when N_OOS_on >= 10; else SKIP_DIR_CHECK"
+
+trial_budget:
+  primary_selection_trials: 15
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2"
+    N_trials: 15
+    expected_max_N: 1900
+    minbtl_value: "2 * ln(15) / 1900^2 ~ 1.5e-6 — well within data horizon"
+    within_cap: true
+
+kill_criteria:
+  - id: K1
+    metric: "Number of H01-H15 that pass all 7 gate clauses"
+    threshold: 0
+    action: "PERMANENT KILL. Regime-tailwind session-directions do not yield Pathway A filtered edges at RR=1.5 / O5. No re-run at different RR / aperture without a new pre-reg citing new mechanism grounding."
+  - id: K2
+    metric: "Baseline sanity smoke-test: harness sum(fire_on) + sum(fire_off) == total valid rows per cell"
+    threshold: 1
+    action: "SMOKE FAIL — harness fire mask corrupted."
+  - id: K3
+    metric: "Any cell flagged tautology (|T0|>0.70 vs deployed MNQ filter set), extreme_fire (<5% or >95%), or arithmetic_only (|WR_spread|<3% AND |Delta_IS|>0.10)"
+    threshold: 1
+    action: "FLAG — exclude flagged cells from survivor set per RULE 8."
+  - id: K4
+    metric: "Pre-reg K_family (15) != scan observed cell count"
+    threshold: 1
+    action: "SCAN MUST ABORT with K MISMATCH error. (Canonical via research/result_doc_header.py observed_cell_count cross-check.)"
+
+decision_rule:
+  continue_if: "At least 1 of H01-H15 passes all 7 gate clauses AND no K2/K4 fail AND not K3-flagged."
+  park_if: "At least 1 cell passes BH-FDR family but fails EXACTLY ONE of {bootstrap_p, years_positive, direction_match_OOS} with N_IS_on >= 100."
+  kill_if: "K1 fires OR K2/K4 smoke fail."
+
+methodology_rules_applied:
+  - rule: "backtesting-methodology.md RULE 1 — look-ahead"
+    application: "All 5 filters are § 6.1 safe trade-time-knowable."
+  - rule: "backtesting-methodology.md RULE 3 — IS/OOS discipline"
+    application: "Strict Mode A IS; OOS descriptive only with direction_match gate for OOS reporting."
+  - rule: "backtesting-methodology.md RULE 4 — multi-framing BH-FDR"
+    application: "K_family = K_global = 15."
+  - rule: "research-truth-protocol.md § Canonical filter delegation"
+    application: "filter_signal applied canonically."
+  - rule: "prereg-writer-prompt.md § data-snooping discipline"
+    application: "Session-directions locked from UNFILTERED regime observation; filter-level baselines deferred to harness at run time. See empirical_grounding.data_snooping_guard."
+
+outputs_required_after_run:
+  - "Per-cell N_on_IS, ExpR_on_IS, WR_on_IS, std_on_IS, t_IS, raw_p_IS."
+  - "Per-cell bootstrap_p (moving-block, block=5, B=10000, seed=42)."
+  - "Per-cell T0 tautology corr against orb_size, atr_20, overnight_range."
+  - "Per-cell fire_rate, extreme_fire flag, arithmetic_only flag."
+  - "BH-FDR q_family per cell."
+  - "Per-year breakdown 2019-2025."
+  - "OOS descriptive + direction_match per cell."
+  - "Use research/result_doc_header.py::build_header(..., observed_cell_count=len(cells))."
+  - "Result doc: docs/audit/results/2026-04-19-mnq-regime-tailwind-discovery-v1-scan.md"
+
+execution_gate:
+  allowed_now:
+    - "User review of DRAFT."
+    - "Stamp commit_sha + flip DRAFT→LOCKED in follow-up commit (USER APPROVAL REQUIRED)."
+    - "Run scan AFTER LOCK SHA stamped."
+  forbidden_now:
+    - "Running any scan before LOCK commit lands."
+    - "Modifying session-direction scope, filter list, gate thresholds, or kill criteria after first run."
+    - "Adding cells post-run."
+    - "Claiming 'edge' from promising ExpR alone without the 7-gate pass."
+
+blast_radius:
+  upstream_docs_referenced:
+    - "Second-pass audit (2026-04-19-second-pass-multi-angle-audit.md) § Finding 1 / 7"
+    - "Correction-cycle synthesis (2026-04-19-correction-cycle-multi-angle-synthesis.md)"
+    - "Regime-drift control (2026-04-19-regime-drift-control-critical-lanes.md)"
+  downstream_docs_created:
+    - "docs/audit/results/2026-04-19-mnq-regime-tailwind-discovery-v1-scan.md (on run)"
+  production_code_touched: "NONE."
+  db_writes: "NONE. Read-only scan (when eventually run)."
+  governance_flag: |
+    If this scan validates 1+ short lane, the retirement of Tier 1 EUROPE_FLOW
+    long lanes (from the retirement queue) + addition of new short lanes
+    constitutes a PORTFOLIO REBALANCE that the allocator should be informed
+    about. Not part of this pre-reg's scope — flagged for committee.
+
+not_done_by_this_pre_reg:
+  - "Does NOT run the scan. DRAFT only; LOCK + run require explicit user sign-off."
+  - "Does NOT retire any existing lane. Retirement queue is a separate action doc."
+  - "Does NOT modify trading_app.prop_profiles or lane_allocation.json."
+  - "Does NOT test apertures 15 / 30 minutes."
+  - "Does NOT test RR 1.0 or 2.0 — bounded to 1.5 for K=15 management."
+  - "Does NOT test VWAP filters — VWAP family is a separate pre-reg class (deployed on US_DATA_1000 O15 long)."
+  - "Does NOT test composite filters (e.g. ORB_G5 AND X_MES_ATR60)."
+  - "Does NOT write to validated_setups or experimental_strategies."
+  - "Does NOT auto-promote any survivor to deployment. Any validated survivor still requires Criterion-11 Monte Carlo account-death + WFE + DSR confirmation per pre_registered_criteria.md before deployment."
