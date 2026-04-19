@@ -889,13 +889,13 @@ The institutional rigor claim is that filter lanes must actually *select* — i.
 
 > "*Given a sample of estimated performance statistics {ŜR_k}, k = 1, ..., K, with independent and identically distributed Gaussian distribution, ... E[max_k {ŜR_k}] · (V[{ŜR_k}])^(-1/2) ≈ (1-γ)·Z⁻¹[1 - 1/K] + γ·Z⁻¹[1 - 1/(Ke)]*"
 
-And the conclusion (p6), extracted at `docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md:64`:
+And the conclusion (p6), extracted at `docs/institutional/literature/lopez_de_prado_bailey_2018_false_strategy.md:65`:
 
 > "unless max_k {ŜR_k} >> E[{ŜR_k}], the discovered strategy is likely to be a *false positive*."
 
 **Connection:** a near-constant filter (fire rate → 1) makes the population post-filter nearly identical to the aggregate population; the effective independence of the filter as a discovery trial collapses. Stacking such filters inflates the nominal K without contributing real independent alternatives.
 
-**Chordia, Goyal, Saretto 2018 (Two Million Trading Strategies), p6**, verbatim extract at `docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md:26`:
+**Chordia, Goyal, Saretto 2018 (Two Million Trading Strategies), p6**, verbatim extract at `docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md:28`:
 
 > "In order to gauge some consistency between performance measures we ask of a trading signal to not only generate a high long-short portfolio alpha but also to explain the broader cross-section of returns in a regression setting."
 
@@ -920,7 +920,15 @@ Both thresholds are operational ceilings consistent with literature direction, n
 - Eligible trade-day rows = `orb_outcomes` rows matching (symbol, orb_label, orb_minutes, entry_model, confirm_bars, rr_target) pre-2026, direction-locked per the candidate's direction axis.
 - Fire row = `research.filter_utils.filter_signal(df, filter_type, orb_label) == 1` per canonical delegation.
 - Fire rate = count(fire_rows) / count(eligible_trade_day_rows).
-- **5% lower-bound exemption:** pre-registered rare-event filters (e.g., NFP-day, OPEX-day, scheduled macro event) may fire below 5% if the hypothesis file declares `rare_event_exemption: true` with explicit economic theory citation AND Criterion 4 is upgraded to Chordia t ≥ 3.79 regardless of theory claims.
+- **5% lower-bound exemption (rare-event):** pre-registered rare-event filters (e.g., NFP-day, OPEX-day, scheduled macro event) may fire below 5% if ALL of the following hold:
+  1. Hypothesis file declares `rare_event_exemption: true`.
+  2. Hypothesis file cites a verbatim passage from `docs/institutional/literature/<file>.md` supporting the rare-event economic mechanism, OR declares `literature_citation: UNSUPPORTED_BY_LITERATURE` honestly per `.claude/rules/institutional-rigor.md § 7`.
+  3. Criterion 4 is upgraded to Chordia t ≥ 3.79 regardless of any "with theory" framing in the hypothesis file (no-theory Chordia strict is the escape hatch for rare-event signals).
+  A vague "this macro event matters" claim without a specific literature extract or an explicit UNSUPPORTED_BY_LITERATURE declaration does NOT qualify; the promotion is blocked by Criterion 13.
+- **0% fire-rate sub-classification (DATA_PIPELINE_GAP vs EXTREME_FIRE):** before flagging a lane `NON_COMPLIANT_CRITERION_13`, the validator MUST distinguish two cases:
+  - `DATA_PIPELINE_GAP`: fire_rate = 0 because the filter's feature requires columns/signals not in the canonical pipeline (e.g., `X_MES_ATR60` requires `cross_atr_*_pct` which is runtime-injected by fitness tracker, not in `daily_features` schema). Remedy is "build the feature into the canonical pipeline" or "retire the lane"; NOT re-registration under rare-event exemption. Per-lane disposition required.
+  - `EXTREME_FIRE`: fire_rate ∈ (0%, 5%) ∪ (95%, 100%) on a filter whose features ARE in canonical pipeline — genuine extreme-fire. Eligible for rare-event exemption ONLY under the three conditions above for the low-side case.
+  Enforcement: `strategy_validator.py` and `check_drift.py` must query the filter's canonical-feature-availability before labeling, and emit the sub-classification. See `docs/audit/results/2026-04-19-fire-rate-audit.md` for the 5 `X_MES_ATR60` lanes currently in DATA_PIPELINE_GAP state.
 - **95% upper bound has no exemption.** A filter firing ≥95% of the time is not selecting meaningfully; promote the aggregate baseline instead.
 
 **Enforcement:**
@@ -933,6 +941,8 @@ Both thresholds are operational ceilings consistent with literature direction, n
 **Rule:** a filter must demonstrate selection power via win rate or expectancy difference; it cannot be purely cost-screen arithmetic.
 
 **Block condition (ARITHMETIC_ONLY):** `|wr_on - wr_off| < 0.03` AND `|expR_on - expR_off| > 0.10`, where `_on` = filter fires and `_off` = filter does not fire, both on the same pre-Mode-A eligible population.
+
+**Precondition for evaluation:** `min(N_on, N_off) >= 50`. Below this floor, neither `wr_off` nor `expR_off` is a reliable comparator (sampling-variance dominates the signal). If `min(N_on, N_off) < 50`, Criterion 14 verdict is `UNVERIFIABLE_CRITERION_14` — the strategy is NOT auto-blocked by Criterion 14, but promotion still requires passing Criteria 1–13; and the lane is flagged for manual review before any capital allocation. This prevents a 99%-fire lane with N_off=5 from escaping the ARITHMETIC_ONLY guard via a noise-driven wr_spread.
 
 **Enforcement:**
 - Pre-promotion: `strategy_validator.py` must compute both WR and ExpR on/off split and block if the ARITHMETIC_ONLY condition triggers.
