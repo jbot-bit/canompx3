@@ -15,6 +15,7 @@ Usage:
     python pipeline/check_drift.py
 """
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -5105,7 +5106,29 @@ def check_shared_profile_fingerprint_canonical() -> list[str]:
             f"  Expected exactly one runtime build_profile_fingerprint() definition, found {runtime_defs}"
         )
 
-    if "from trading_app.derived_state import build_profile_fingerprint" not in account_text:
+    # AST-based import detection — robust to single-line, multi-line, and
+    # parenthesized `from X import (a, b, c)` forms. Literal string match
+    # was brittle: ruff's I001 import-sort consolidates separate imports
+    # into the existing multi-line block, breaking the literal pattern
+    # while preserving semantics. See drift-check-96-ast-aware stage.
+    canonical_module = "trading_app.derived_state"
+    canonical_name = "build_profile_fingerprint"
+    has_canonical_import = False
+    if account_text:
+        try:
+            tree = ast.parse(account_text)
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.ImportFrom)
+                    and node.module == canonical_module
+                    and any(alias.name == canonical_name for alias in node.names)
+                ):
+                    has_canonical_import = True
+                    break
+        except SyntaxError:
+            # Unparseable file — let other checks handle it; don't double-violate.
+            has_canonical_import = True
+    if not has_canonical_import:
         violations.append(
             "  trading_app/account_survival.py must import build_profile_fingerprint from trading_app.derived_state"
         )

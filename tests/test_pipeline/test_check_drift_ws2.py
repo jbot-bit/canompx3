@@ -962,3 +962,65 @@ class TestDeployableSubsetOfActive:
         # MNQ dropped from DEPLOYABLE while still expected → violation
         assert any("MNQ" in v for v in violations)
         assert any("missing" in v.lower() for v in violations)
+
+
+# ── Check 96: Shared profile fingerprint canonical ───────────────────
+
+
+class TestSharedProfileFingerprintCanonical:
+    """Check 96: account_survival.py must import build_profile_fingerprint
+    from canonical derived_state module. Detection must be syntax-aware
+    (handles single-line and multi-line `from X import (...)` forms)."""
+
+    @staticmethod
+    def _setup(tmp_path, monkeypatch, derived_text, account_text):
+        derived_dir = tmp_path / "trading_app"
+        derived_dir.mkdir()
+        (derived_dir / "derived_state.py").write_text(derived_text, encoding="utf-8")
+        (derived_dir / "account_survival.py").write_text(account_text, encoding="utf-8")
+        monkeypatch.setattr(check_drift, "TRADING_APP_DIR", derived_dir)
+
+    def test_passes_single_line_import(self, tmp_path, monkeypatch):
+        """Single-line `from X import build_profile_fingerprint` → pass."""
+        derived = "def build_profile_fingerprint(p): return 'x'\n"
+        account = "from trading_app.derived_state import build_profile_fingerprint\n"
+        self._setup(tmp_path, monkeypatch, derived, account)
+        violations = check_drift.check_shared_profile_fingerprint_canonical()
+        assert violations == []
+
+    def test_passes_multi_line_import(self, tmp_path, monkeypatch):
+        """Multi-line `from X import (Y, build_profile_fingerprint, Z)` → pass.
+
+        Reproduces the post-ruff-I001 form that breaks the literal-string
+        check. After fix, ast-based detection must handle this.
+        """
+        derived = "def build_profile_fingerprint(p): return 'x'\n"
+        account = (
+            "from trading_app.derived_state import (\n"
+            "    build_code_fingerprint,\n"
+            "    build_db_identity,\n"
+            "    build_profile_fingerprint,\n"
+            "    build_state_envelope,\n"
+            ")\n"
+        )
+        self._setup(tmp_path, monkeypatch, derived, account)
+        violations = check_drift.check_shared_profile_fingerprint_canonical()
+        assert violations == [], f"Multi-line import should pass; got: {violations}"
+
+    def test_catches_missing_import(self, tmp_path, monkeypatch):
+        """If account_survival doesn't import build_profile_fingerprint at
+        all, must violate."""
+        derived = "def build_profile_fingerprint(p): return 'x'\n"
+        account = "from trading_app.config import something_else\n"
+        self._setup(tmp_path, monkeypatch, derived, account)
+        violations = check_drift.check_shared_profile_fingerprint_canonical()
+        assert any("must import build_profile_fingerprint" in v for v in violations)
+
+    def test_catches_import_from_wrong_module(self, tmp_path, monkeypatch):
+        """If imported from non-canonical module, must violate (module match
+        is part of the canonical-source enforcement)."""
+        derived = "def build_profile_fingerprint(p): return 'x'\n"
+        account = "from somewhere_else import build_profile_fingerprint\n"
+        self._setup(tmp_path, monkeypatch, derived, account)
+        violations = check_drift.check_shared_profile_fingerprint_canonical()
+        assert any("must import build_profile_fingerprint" in v for v in violations)
