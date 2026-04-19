@@ -73,6 +73,19 @@ class LaneScore:
     # Liveness fields (populated post-scoring)
     recent_3mo_expr: float | None = None  # 3-month trailing ExpR (decay signal)
     sr_status: str = "UNKNOWN"  # ALARM / CONTINUE / NO_DATA / UNKNOWN
+    # DSR diagnostic fields — populated post-scoring by
+    # enrich_scores_with_dsr_diagnostics(). Default None preserves
+    # backward compatibility for callers that construct LaneScore
+    # without DSR awareness. DSR is INFORMATIONAL per
+    # trading_app/dsr.py docstring line 35; these fields are diagnostic
+    # only and are NOT consumed by _effective_annual_r or any
+    # selection logic. dsr_at_n_eff_raw uses validator's
+    # COUNT(DISTINCT family_hash); dsr_at_n_hat_eq9 uses Bailey-LdP
+    # 2014 Eq 9 correlation-adjusted N̂ = ρ̂ + (1-ρ̂)·M.
+    dsr_score: float | None = None
+    sr0_at_rebalance: float | None = None
+    dsr_at_n_eff_raw: float | None = None
+    dsr_at_n_hat_eq9: float | None = None
 
 
 def _month_range(rebalance_date: date, months_back: int) -> tuple[date, date]:
@@ -475,6 +488,122 @@ def enrich_scores_with_liveness(scores: list[LaneScore]) -> None:
         s.sr_status = sr_state.get(s.strategy_id, "UNKNOWN")
 
 
+def enrich_scores_with_dsr_diagnostics(
+    scores: list[LaneScore],
+    pairs: dict[tuple[str, str], float] | None,
+    db_path: str | Path | None = None,
+) -> dict:
+    """Populate DSR diagnostic fields on scored lanes (Shape E, A2b-2).
+
+    Computes per-rebalance globals (var_sr_em, n_eff_raw, avg_rho_hat,
+    n_hat_eq9) and per-lane DSR scores via canonical
+    `trading_app.dsr.compute_sr0` + `compute_dsr`. Mutates `scores` in
+    place to add `dsr_score`, `sr0_at_rebalance`, `dsr_at_n_eff_raw`,
+    `dsr_at_n_hat_eq9` on each LaneScore.
+
+    Inputs sourced from validator's calibration pattern verbatim
+    (`trading_app/strategy_validator.py:2186-2199`):
+      - var_sr_by_em from canonical experimental_strategies per EM
+      - n_eff_raw from edge_families distinct family_hash count
+      - per-lane sharpe/sample_size/skew/kurt from validated_setups
+    The Bailey-LdP 2014 Eq 9 N̂ correction
+    (`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`
+    Eq 9, page 14-15) is computed as `N̂ = ρ̂ + (1-ρ̂)·M` where ρ̂ is the
+    mean off-diagonal entry of `pairs` over `scores` and M = n_eff_raw.
+    If `pairs` is None, ρ̂ defaults to 0 and N̂ = M (raw fallback).
+
+    DSR is INFORMATIONAL per `trading_app/dsr.py` line 35; populated
+    fields are NOT consumed by `_effective_annual_r` or any selection
+    logic. Returns the per-rebalance globals dict for `save_allocation`
+    to write into the JSON top level.
+    """
+    # Local import keeps lane_allocator.py importable even if dsr.py
+    # changes; mirrors strategy_validator.py:2180 import-at-use pattern.
+    from trading_app.dsr import compute_dsr, compute_sr0
+
+    db = db_path or GOLD_DB_PATH
+    con = duckdb.connect(str(db), read_only=True)
+    configure_connection(con)
+    try:
+        # Per-rebalance globals — mirror strategy_validator.py:2186-2200
+        var_sr_em: dict[str, float] = {}
+        for em in ("E1", "E2"):
+            row = con.execute(
+                """SELECT VAR_SAMP(sharpe_ratio)
+                   FROM experimental_strategies
+                   WHERE entry_model = ?
+                     AND sample_size >= 30
+                     AND sharpe_ratio IS NOT NULL
+                     AND is_canonical = TRUE""",
+                [em],
+            ).fetchone()
+            var_sr_em[em] = float(row[0]) if row and row[0] else 0.047
+        n_eff_row = con.execute(
+            "SELECT COUNT(DISTINCT family_hash) FROM edge_families"
+        ).fetchone()
+        n_eff_raw = max(int(n_eff_row[0]) if n_eff_row and n_eff_row[0] else 253, 2)
+
+        # Per-lane DSR inputs (sharpe / N / skew / kurt / EM). Use canonical
+        # `deployable_validated_relation` rather than raw `status='active'`
+        # predicate (drift check #94 enforces this for shelf readers).
+        rel = deployable_validated_relation(con, alias="vs")
+        rows = con.execute(
+            f"""SELECT strategy_id, sharpe_ratio, sample_size, skewness,
+                       kurtosis_excess, entry_model
+                FROM {rel}"""
+        ).fetchall()
+        per_lane: dict[str, tuple] = {
+            r[0]: (
+                float(r[1]) if r[1] is not None else 0.0,
+                int(r[2]) if r[2] is not None else 30,
+                float(r[3]) if r[3] is not None else 0.0,
+                float(r[4]) if r[4] is not None else 0.0,
+                r[5] or "E2",
+            )
+            for r in rows
+        }
+    finally:
+        con.close()
+
+    # Bailey-LdP 2014 Eq 9: N̂ = ρ̂ + (1-ρ̂)·M, with ρ̂ = mean off-diagonal pair rho
+    if pairs:
+        eligible_ids = {s.strategy_id for s in scores}
+        rhos = [
+            rho for (a, b), rho in pairs.items()
+            if a in eligible_ids and b in eligible_ids
+        ]
+        avg_rho_hat = sum(rhos) / len(rhos) if rhos else 0.0
+    else:
+        avg_rho_hat = 0.0
+    avg_rho_hat = max(0.0, min(1.0, avg_rho_hat))  # clamp per Eq 9 domain
+    n_hat_eq9 = avg_rho_hat + (1.0 - avg_rho_hat) * n_eff_raw
+
+    for s in scores:
+        inputs = per_lane.get(s.strategy_id)
+        if inputs is None:
+            # Lane has no validated_setups row (shouldn't happen since
+            # compute_lane_scores reads from deployable_validated_relation,
+            # but defensive). Leave DSR fields as None.
+            continue
+        sr_hat, t_obs, skew, kurt, em = inputs
+        var_sr = var_sr_em.get(em, 0.047)
+        sr0_raw = compute_sr0(n_eff_raw, var_sr)
+        sr0_eq9 = compute_sr0(n_hat_eq9, var_sr)
+        s.sr0_at_rebalance = round(sr0_raw, 6)
+        s.dsr_at_n_eff_raw = round(compute_dsr(sr_hat, sr0_raw, t_obs, skew, kurt), 6)
+        s.dsr_at_n_hat_eq9 = round(compute_dsr(sr_hat, sr0_eq9, t_obs, skew, kurt), 6)
+        # dsr_score = canonical ranker-relevant value (validator's choice = raw N_eff).
+        # Recorded separately to make the "which N_eff is canonical" choice explicit.
+        s.dsr_score = s.dsr_at_n_eff_raw
+
+    return {
+        "n_eff_raw": n_eff_raw,
+        "n_hat_eq9": round(n_hat_eq9, 4),
+        "avg_rho_hat": round(avg_rho_hat, 4),
+        "var_sr_em": {k: round(v, 6) for k, v in var_sr_em.items()},
+    }
+
+
 # ---------------------------------------------------------------------------
 # Liveness-aware ranking
 # ---------------------------------------------------------------------------
@@ -806,11 +935,19 @@ def save_allocation(
     profile_id: str,
     output_path: str | Path | None = None,
     orb_size_stats: dict[tuple[str, str], tuple[float, float]] | None = None,
+    dsr_globals: dict | None = None,
 ) -> Path:
     """Save allocation to JSON file.
 
     orb_size_stats: {(instrument, orb_label): (avg_orb_pts, p90_orb_pts)}.
     If None, ORB size fields are omitted from the output.
+
+    dsr_globals: per-rebalance DSR diagnostic globals returned by
+    `enrich_scores_with_dsr_diagnostics()`. When provided AND any
+    LaneScore in `allocation` has DSR fields populated, the JSON gains
+    a top-level `dsr_diagnostics` block plus per-lane `dsr_score`,
+    `sr0_at_rebalance`, `dsr_at_n_eff_raw`, `dsr_at_n_hat_eq9` fields.
+    When None, behavior is unchanged (backward-compat).
     """
     path = Path(output_path) if output_path else Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
 
@@ -843,6 +980,14 @@ def save_allocation(
                 avg_pts, p90_pts = orb_size_stats[key]
                 lane["avg_orb_pts"] = avg_pts
                 lane["p90_orb_pts"] = p90_pts
+        # DSR diagnostic fields (Shape E, A2b-2). Written only when populated
+        # via enrich_scores_with_dsr_diagnostics(); otherwise omitted to
+        # preserve the pre-Shape-E JSON shape exactly.
+        if s.dsr_score is not None:
+            lane["dsr_score"] = s.dsr_score
+            lane["sr0_at_rebalance"] = s.sr0_at_rebalance
+            lane["dsr_at_n_eff_raw"] = s.dsr_at_n_eff_raw
+            lane["dsr_at_n_hat_eq9"] = s.dsr_at_n_hat_eq9
         lanes_data.append(lane)
 
     data = {
@@ -853,6 +998,18 @@ def save_allocation(
         "paused": [{"strategy_id": s.strategy_id, "reason": s.status_reason} for s in scores if s.status == "PAUSE"],
         "all_scores_count": len(scores),
     }
+    # Per-rebalance DSR globals (Shape E). Top-level block; consumers
+    # that don't read it (e.g., load_allocation_lanes) ignore it.
+    if dsr_globals:
+        data["dsr_diagnostics"] = {
+            "n_eff_raw": dsr_globals.get("n_eff_raw"),
+            "n_hat_eq9": dsr_globals.get("n_hat_eq9"),
+            "avg_rho_hat": dsr_globals.get("avg_rho_hat"),
+            "var_sr_em": dsr_globals.get("var_sr_em"),
+            "doctrine": "DSR is INFORMATIONAL per trading_app/dsr.py:35; "
+                        "diagnostic only, not consumed by selection.",
+            "lit_ref": "Bailey-Lopez de Prado 2014 Eq 9 N_hat = rho_hat + (1-rho_hat)*M",
+        }
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2, default=str))

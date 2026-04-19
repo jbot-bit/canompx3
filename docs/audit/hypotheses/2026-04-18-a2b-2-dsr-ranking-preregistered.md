@@ -251,11 +251,12 @@ Per-lane DSR sensitivity also recorded in JSON: `dsr_at_n_eff_raw` + `dsr_at_n_h
 Files in scope (`scope_lock` for Stage-2):
 - `trading_app/lane_allocator.py`
   - Add `dsr_score`, `sr0_at_rebalance`, `dsr_at_n_eff_raw`, `dsr_at_n_hat_eq9` to `LaneScore` dataclass (all `float | None = None` for backward compat).
-  - `compute_lane_scores` computes per-rebalance globals (`n_eff_raw`, `n_hat_eq9`, `avg_rho_hat`, `var_sr_em`) once at the top, then populates per-lane DSR fields via canonical `compute_sr0`/`compute_dsr`.
-  - `save_allocation` writes per-lane DSR fields plus the per-rebalance globals into `lane_allocation.json`.
+  - Add new function `enrich_scores_with_dsr_diagnostics(scores, pairs, db_path=None)` mirroring the existing `enrich_scores_with_liveness` post-scoring pattern. Returns the per-rebalance globals dict (`n_eff_raw`, `n_hat_eq9`, `avg_rho_hat`, `var_sr_em`) for downstream consumers.
+  - `save_allocation` accepts optional `dsr_globals` kwarg and writes both per-lane DSR fields (when populated on `LaneScore`) and the per-rebalance globals block. When omitted, behavior unchanged.
   - NO change to `_effective_annual_r`, `build_allocation`, `_compute_session_regime`, `_classify_status`, or any selection/ranking logic.
 - `tests/test_trading_app/test_lane_allocator.py` — 4 new tests (T1-T4 below).
 - `.claude/skills/regime-check/SKILL.md` — add DSR + N̂ columns to output template (content edit, no Python).
+- `scripts/tools/rebalance_lanes.py` — **EXPANDED SCOPE 2026-04-18**: 3-line wiring change to call `enrich_scores_with_dsr_diagnostics(scores, corr_matrix)` between `compute_pairwise_correlation` and `save_allocation`, then pass returned `dsr_globals` to `save_allocation(..., dsr_globals=...)`. Reason: without this wiring the DSR fields stay `None` on real rebalances and the diagnostic is dead code. Blast radius: single CLI script, no library change, no caller change. Without expansion, the field-add infrastructure ships but isn't populated until someone manually calls the enrichment helper — defeats Shape E's "make DSR live" rationale.
 
 Out of scope (deferred until forward data justifies promotion):
 - Modifying `_effective_annual_r` — future Shape A patch
