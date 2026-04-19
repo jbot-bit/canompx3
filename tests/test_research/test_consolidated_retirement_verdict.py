@@ -32,8 +32,14 @@ from research.consolidated_retirement_verdict import (
     RETIREMENT_TIER1_URGENT,
     RETIREMENT_TIER2,
     SGP_JACCARD_PAIR,
+    SUBSET_T_ARITHMETIC_LIFT,
+    SUBSET_T_TIER1_PASS,
+    SUBSET_T_TIER1_THIN_N,
+    SUBSET_T_TIER2,
+    SUBSET_T_TIER4_FAIL_CONVENTIONAL,
     VERDICT_ORDER,
     assign_verdict,
+    subset_t_annotation,
 )
 from research.mode_a_revalidation_active_setups import LaneRevalidation
 
@@ -44,6 +50,7 @@ AUDIT_DIR = PROJECT_ROOT / "docs" / "audit" / "results"
 RETIREMENT_DOC = AUDIT_DIR / "2026-04-19-mnq-retirement-queue-committee-action.md"
 FIRE_RATE_DOC = AUDIT_DIR / "2026-04-19-fire-rate-audit.md"
 SGP_JACCARD_DOC = AUDIT_DIR / "2026-04-19-sgp-o15-o30-jaccard.md"
+PHASE_2_5_CSV = PROJECT_ROOT / "research" / "output" / "phase_2_5_portfolio_subset_t_sweep.csv"
 
 
 # --- Source-doc drift detection ----------------------------------------
@@ -374,6 +381,103 @@ class TestVerdictOrderCompleteness:
             "KEEP is the null-action verdict; must be last so that "
             "render-by-severity lists keep-lanes at the bottom"
         )
+
+
+class TestPhase25SubsetTSetsMatchCSV:
+    """Drift detection: Phase 2.5 hardcoded sets must match the live CSV."""
+
+    @staticmethod
+    def _load_csv():
+        if not PHASE_2_5_CSV.exists():
+            pytest.skip(f"{PHASE_2_5_CSV} not present (run phase_2_5 sweep first)")
+        import csv
+        with PHASE_2_5_CSV.open() as f:
+            return list(csv.DictReader(f))
+
+    def test_tier1_pass_matches_csv(self):
+        """Lanes with primary_flag=PASS and subset_t>=3.00 must equal SUBSET_T_TIER1_PASS."""
+        rows = self._load_csv()
+        csv_tier1 = {
+            r["strategy_id"] for r in rows
+            if r["primary_flag"] == "PASS"
+            and r["subset_t"] not in ("", None)
+            and abs(float(r["subset_t"])) >= 3.00
+        }
+        assert csv_tier1 == SUBSET_T_TIER1_PASS, (
+            f"Hardcoded SUBSET_T_TIER1_PASS drifted from CSV.\n"
+            f"Only in CSV: {csv_tier1 - SUBSET_T_TIER1_PASS}\n"
+            f"Only in hardcoded: {SUBSET_T_TIER1_PASS - csv_tier1}"
+        )
+
+    def test_tier4_fails_conventional_matches_csv(self):
+        """Lanes with |subset_t|<1.96 must equal SUBSET_T_TIER4_FAIL_CONVENTIONAL."""
+        rows = self._load_csv()
+        csv_tier4 = {
+            r["strategy_id"] for r in rows
+            if r["subset_t"] not in ("", None) and abs(float(r["subset_t"])) < 1.96
+        }
+        assert csv_tier4 == SUBSET_T_TIER4_FAIL_CONVENTIONAL, (
+            f"Hardcoded SUBSET_T_TIER4_FAIL_CONVENTIONAL drifted from CSV.\n"
+            f"Only in CSV: {csv_tier4 - SUBSET_T_TIER4_FAIL_CONVENTIONAL}\n"
+            f"Only in hardcoded: {SUBSET_T_TIER4_FAIL_CONVENTIONAL - csv_tier4}"
+        )
+
+    def test_arithmetic_lift_matches_csv(self):
+        """Lanes with primary_flag=ARITHMETIC_LIFT must equal SUBSET_T_ARITHMETIC_LIFT."""
+        rows = self._load_csv()
+        csv_lift = {
+            r["strategy_id"] for r in rows
+            if r["primary_flag"] == "ARITHMETIC_LIFT"
+        }
+        assert csv_lift == SUBSET_T_ARITHMETIC_LIFT, (
+            f"Hardcoded SUBSET_T_ARITHMETIC_LIFT drifted from CSV.\n"
+            f"Only in CSV: {csv_lift - SUBSET_T_ARITHMETIC_LIFT}\n"
+            f"Only in hardcoded: {SUBSET_T_ARITHMETIC_LIFT - csv_lift}"
+        )
+
+    def test_tiers_are_disjoint(self):
+        """No lane can appear in multiple mutually-exclusive tier sets."""
+        all_sets = {
+            "TIER1_PASS": SUBSET_T_TIER1_PASS,
+            "TIER1_THIN_N": SUBSET_T_TIER1_THIN_N,
+            "TIER2": SUBSET_T_TIER2,
+            "TIER4": SUBSET_T_TIER4_FAIL_CONVENTIONAL,
+        }
+        for name_a, set_a in all_sets.items():
+            for name_b, set_b in all_sets.items():
+                if name_a >= name_b:
+                    continue
+                overlap = set_a & set_b
+                assert not overlap, f"{name_a} and {name_b} overlap: {overlap}"
+
+
+class TestPhase25Annotation:
+    """Subset-t annotation returns correct string per tier."""
+
+    def test_tier1_pass_annotation(self):
+        for sid in SUBSET_T_TIER1_PASS:
+            assert subset_t_annotation(sid) == "Tier 1 (t>=3.00 Chordia PASS)"
+
+    def test_tier1_thin_n_annotation(self):
+        for sid in SUBSET_T_TIER1_THIN_N:
+            assert subset_t_annotation(sid) == "Tier 1 thin-N (t>=3.00, N<100)"
+
+    def test_tier2_annotation(self):
+        # Exclude ARITHMETIC_LIFT-flagged lanes (which take priority per doctrine).
+        # A Tier-2 lane that also has Rule 8.3 violation should render as ARITHMETIC_LIFT.
+        for sid in SUBSET_T_TIER2 - SUBSET_T_ARITHMETIC_LIFT:
+            assert subset_t_annotation(sid) == "Tier 2 (t in [2.58, 3.00))"
+
+    def test_tier4_annotation(self):
+        for sid in SUBSET_T_TIER4_FAIL_CONVENTIONAL:
+            assert subset_t_annotation(sid) == "Tier 4 (t<1.96 — fails p<0.05)"
+
+    def test_arithmetic_lift_annotation_takes_priority(self):
+        for sid in SUBSET_T_ARITHMETIC_LIFT:
+            assert subset_t_annotation(sid) == "Rule 8.3 ARITHMETIC_LIFT (retire/reframe)"
+
+    def test_unknown_lane_defaults_to_tier3(self):
+        assert subset_t_annotation("UNKNOWN_LANE_ID_THAT_DOES_NOT_EXIST") == "Tier 3 (t in [1.96, 2.58))"
 
 
 if __name__ == "__main__":

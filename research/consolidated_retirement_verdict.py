@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Consolidated retirement-verdict view for the 38 active validated_setups.
 
-Cross-references four 2026-04-19 audit streams (all read-only) into one
+Cross-references five 2026-04-19 audit streams (all read-only) into one
 per-lane verdict matrix suitable for committee vote:
 
 1. Mode-A criterion evaluation (C4/C7/C9) — computed in-script via
@@ -16,6 +16,13 @@ per-lane verdict matrix suitable for committee vote:
    absent caveat).
 4. SGP O15/O30 capacity — hardcoded Jaccard finding from
    `docs/audit/results/2026-04-19-sgp-o15-o30-jaccard.md`.
+5. Portfolio subset-t + lift-vs-unfiltered sweep (Phase 2.5) — hardcoded
+   tier assignments from
+   `docs/audit/results/2026-04-19-portfolio-subset-t-sweep.md` and
+   `research/output/phase_2_5_portfolio_subset_t_sweep.csv`. Adds subset-t
+   tier (1/2/3/4) and Rule 8.3 ARITHMETIC_LIFT flag as a NEW ANNOTATION
+   on each lane — does NOT change existing verdict logic; surfaces in
+   committee output for additional evidence.
 
 The verdict column is assigned deterministically by rules documented below.
 No post-hoc tuning; no new research; no DB writes; read-only audit join.
@@ -148,6 +155,76 @@ SGP_JACCARD_PAIR: set[str] = {
     "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15",
     "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O30",
 }
+
+
+# From docs/audit/results/2026-04-19-portfolio-subset-t-sweep.md (Phase 2.5)
+# Tier 1: subset-t >= 3.00 (Chordia 2018 with-theory, discovery-strict) AND
+#         primary_flag = PASS (i.e., N >= 100 also, so lane fully qualifies)
+SUBSET_T_TIER1_PASS: set[str] = {
+    "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60",
+    "MNQ_CME_PRECLOSE_E2_RR1.0_CB1_X_MES_ATR60",
+    "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O30",
+    "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15",
+    "MES_CME_PRECLOSE_E2_RR1.0_CB1_ORB_G8",
+    "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100",
+    "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_X_MES_ATR60",
+    "MNQ_US_DATA_1000_E2_RR1.5_CB1_VWAP_MID_ALIGNED_O15",
+}
+
+# Chordia-strict t-pass BUT N<100 (Harvey-Liu deployable floor). Noted
+# separately because the signal quality is strong; only N is sample-constrained.
+SUBSET_T_TIER1_THIN_N: set[str] = {
+    "MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08",
+}
+
+# Tier 2: t in [2.58, 3.00) — passes stringent p<0.01 re-audit, misses Chordia
+SUBSET_T_TIER2: set[str] = {
+    "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_COST_LT12",
+    "MNQ_US_DATA_1000_E2_RR1.0_CB1_VWAP_MID_ALIGNED_O15",
+    "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+    "MNQ_TOKYO_OPEN_E2_RR2.0_CB1_ORB_G5",
+}
+
+# Tier 4: t < 1.96 (fails conventional p<0.05) — HONEST retirement candidates
+SUBSET_T_TIER4_FAIL_CONVENTIONAL: set[str] = {
+    "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_ORB_G5",
+    "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_OVNRNG_100",
+    "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_COST_LT12",
+    "MNQ_EUROPE_FLOW_E2_RR1.0_CB1_CROSS_SGP_MOMENTUM",
+    "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5",
+    "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_OVNRNG_100",
+    "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_CROSS_SGP_MOMENTUM",
+    "MNQ_EUROPE_FLOW_E2_RR2.0_CB1_ORB_G5",
+    "MNQ_NYSE_OPEN_E2_RR1.0_CB1_X_MES_ATR60",
+    "MNQ_NYSE_OPEN_E2_RR1.5_CB1_X_MES_ATR60",
+    "MNQ_TOKYO_OPEN_E2_RR1.0_CB1_COST_LT12",
+    "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12",
+    "MNQ_US_DATA_1000_E2_RR1.0_CB1_X_MES_ATR60",
+    "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15",
+}
+
+# Rule 8.3 ARITHMETIC_LIFT (from backtesting-methodology.md addendum 2026-04-19):
+# subset ExpR shows >0.10 lift vs unfiltered baseline BUT subset-t fails Chordia.
+# Classic MES-class arithmetic illusion. Retain regardless of tier.
+SUBSET_T_ARITHMETIC_LIFT: set[str] = {
+    "MNQ_US_DATA_1000_E2_RR2.0_CB1_VWAP_MID_ALIGNED_O15",
+    "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100",
+}
+
+
+def subset_t_annotation(strategy_id: str) -> str:
+    """Return human-readable Phase 2.5 subset-t annotation for a lane."""
+    if strategy_id in SUBSET_T_ARITHMETIC_LIFT:
+        return "Rule 8.3 ARITHMETIC_LIFT (retire/reframe)"
+    if strategy_id in SUBSET_T_TIER1_PASS:
+        return "Tier 1 (t>=3.00 Chordia PASS)"
+    if strategy_id in SUBSET_T_TIER1_THIN_N:
+        return "Tier 1 thin-N (t>=3.00, N<100)"
+    if strategy_id in SUBSET_T_TIER2:
+        return "Tier 2 (t in [2.58, 3.00))"
+    if strategy_id in SUBSET_T_TIER4_FAIL_CONVENTIONAL:
+        return "Tier 4 (t<1.96 — fails p<0.05)"
+    return "Tier 3 (t in [1.96, 2.58))"
 
 
 # --- Verdict assignment rules (deterministic, doctrine-grounded) ----------
@@ -286,6 +363,10 @@ def render(results: list[tuple[LaneRevalidation, str, list[str]]]) -> str:
         "  - SGP O15/O30 Jaccard "
         "(`docs/audit/results/2026-04-19-sgp-o15-o30-jaccard.md`)"
     )
+    lines.append(
+        "  - Portfolio subset-t + lift-vs-unfiltered sweep (Phase 2.5) "
+        "(`docs/audit/results/2026-04-19-portfolio-subset-t-sweep.md`)"
+    )
     lines.append("")
     lines.append(
         "**Canonical truth:** `orb_outcomes`, `daily_features`, "
@@ -364,9 +445,9 @@ def render(results: list[tuple[LaneRevalidation, str, list[str]]]) -> str:
     )
     lines.append("")
     lines.append(
-        "| # | Strategy ID | Verdict | Mode-A N | t_IS | C7 | C9 | Primary reason |"
+        "| # | Strategy ID | Verdict | Mode-A N | t_IS | C7 | C9 | Phase 2.5 tier | Primary reason |"
     )
-    lines.append("|---|---|---|---:|---:|---|---|---|")
+    lines.append("|---|---|---|---:|---:|---|---|---|---|")
 
     idx = 1
     for v in VERDICT_ORDER:
@@ -375,9 +456,10 @@ def render(results: list[tuple[LaneRevalidation, str, list[str]]]) -> str:
             c7_str = {True: "PASS", False: "FAIL", None: "—"}[rv.c7_pass]
             c9_str = {True: "PASS", False: "FAIL", None: "—"}[rv.c9_pass]
             primary = reasons[0] if reasons else "—"
+            p25 = subset_t_annotation(rv.strategy_id)
             lines.append(
                 f"| {idx} | `{rv.strategy_id}` | **{v}** | "
-                f"{rv.mode_a_n} | {t_str} | {c7_str} | {c9_str} | {primary} |"
+                f"{rv.mode_a_n} | {t_str} | {c7_str} | {c9_str} | {p25} | {primary} |"
             )
             idx += 1
     lines.append("")
@@ -397,6 +479,9 @@ def render(results: list[tuple[LaneRevalidation, str, list[str]]]) -> str:
             lines.append("")
             lines.append(
                 f"- Mode-A: N={rv.mode_a_n} ExpR={expr_str} t_IS={t_str} Sh_ann={sh_str}"
+            )
+            lines.append(
+                f"- Phase 2.5 subset-t sweep: {subset_t_annotation(rv.strategy_id)}"
             )
             lines.append(
                 f"- Years positive: {rv.years_positive}/{rv.years_total}"
