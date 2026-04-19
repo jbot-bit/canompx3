@@ -526,7 +526,10 @@ def enrich_scores_with_dsr_diagnostics(
     configure_connection(con)
     try:
         # Per-rebalance globals — mirror strategy_validator.py:2186-2200
+        import warnings as _warnings
+
         var_sr_em: dict[str, float] = {}
+        var_sr_fallback_used: list[str] = []
         for em in ("E1", "E2"):
             row = con.execute(
                 """SELECT VAR_SAMP(sharpe_ratio)
@@ -537,11 +540,34 @@ def enrich_scores_with_dsr_diagnostics(
                      AND is_canonical = TRUE""",
                 [em],
             ).fetchone()
-            var_sr_em[em] = float(row[0]) if row and row[0] else 0.047
+            if row and row[0]:
+                var_sr_em[em] = float(row[0])
+            else:
+                # Validator's fallback (0.047) per strategy_validator.py:2195.
+                # Surface so operators know DSR for this EM uses default.
+                var_sr_em[em] = 0.047
+                var_sr_fallback_used.append(em)
+        if var_sr_fallback_used:
+            _warnings.warn(
+                f"enrich_scores_with_dsr_diagnostics: var_sr_em fallback to "
+                f"0.047 used for {var_sr_fallback_used} (no qualifying "
+                f"experimental_strategies rows). DSR for these entry models "
+                f"is computed against default calibration, not measured V[SR].",
+                stacklevel=2,
+            )
         n_eff_row = con.execute(
             "SELECT COUNT(DISTINCT family_hash) FROM edge_families"
         ).fetchone()
-        n_eff_raw = max(int(n_eff_row[0]) if n_eff_row and n_eff_row[0] else 253, 2)
+        if n_eff_row and n_eff_row[0]:
+            n_eff_raw = max(int(n_eff_row[0]), 2)
+        else:
+            n_eff_raw = 253
+            _warnings.warn(
+                "enrich_scores_with_dsr_diagnostics: edge_families is empty; "
+                "n_eff_raw fallback to 253 (validator default per "
+                "strategy_validator.py:2200).",
+                stacklevel=2,
+            )
 
         # Per-lane DSR inputs (sharpe / N / skew / kurt / EM). Use canonical
         # `deployable_validated_relation` rather than raw `status='active'`
@@ -999,8 +1025,13 @@ def save_allocation(
         "all_scores_count": len(scores),
     }
     # Per-rebalance DSR globals (Shape E). Top-level block; consumers
-    # that don't read it (e.g., load_allocation_lanes) ignore it.
-    if dsr_globals:
+    # that don't read it (e.g., load_allocation_lanes) ignore it. Guarded
+    # by both `dsr_globals` provided AND at least one allocation lane has
+    # populated DSR — prevents writing the diagnostics block when callers
+    # passed dsr_globals but no per-lane data was actually computed
+    # (an internally-inconsistent state worth not silently masking).
+    any_lane_has_dsr = any(s.dsr_score is not None for s in allocation)
+    if dsr_globals and any_lane_has_dsr:
         data["dsr_diagnostics"] = {
             "n_eff_raw": dsr_globals.get("n_eff_raw"),
             "n_hat_eq9": dsr_globals.get("n_hat_eq9"),

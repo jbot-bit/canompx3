@@ -1097,3 +1097,85 @@ class TestDsrDiagnosticEnrichment:
         # Per-lane DSR fields also absent because LaneScore.dsr_score is None
         for lane in data["lanes"]:
             assert "dsr_score" not in lane
+
+    def test_save_allocation_omits_dsr_block_when_globals_provided_but_lanes_empty(
+        self, dsr_test_db, tmp_path
+    ):
+        """Post-ship fix: dsr_diagnostics requires BOTH globals AND populated per-lane.
+
+        Internally-inconsistent state where caller passes globals but no
+        lane has dsr_score populated should not produce a misleading JSON
+        with global diagnostics that suggest per-lane data exists.
+        """
+        scores = [_make_score()]  # No DSR fields populated
+        out = tmp_path / "alloc_inconsistent.json"
+        fake_globals = {
+            "n_eff_raw": 21, "n_hat_eq9": 21.0,
+            "avg_rho_hat": 0.0, "var_sr_em": {"E1": 0.047, "E2": 0.025},
+        }
+        save_allocation(
+            scores=scores,
+            allocation=scores,
+            rebalance_date=date(2026, 4, 18),
+            profile_id="topstep_50k_mnq_auto",
+            output_path=out,
+            dsr_globals=fake_globals,
+        )
+        data = json.loads(out.read_text())
+        assert "dsr_diagnostics" not in data, (
+            "globals-without-per-lane-data should NOT write diagnostics block"
+        )
+
+    def test_dsr_warns_when_var_sr_em_falls_back(self, tmp_path):
+        """Post-ship fix: silent var_sr_em fallback to 0.047 must emit warning.
+
+        Reproduces the real-world condition where E1 has no qualifying
+        experimental_strategies rows. Warning ensures operators see
+        which entry models are using default calibration instead of
+        measured V[SR].
+        """
+        import warnings as _warnings
+        db_path = tmp_path / "test_warn.db"
+        con = duckdb.connect(str(db_path))
+        # Schemas needed by enrich
+        con.execute(
+            """CREATE TABLE validated_setups (
+                strategy_id VARCHAR, instrument VARCHAR, orb_label VARCHAR,
+                entry_model VARCHAR, rr_target DOUBLE, confirm_bars INTEGER,
+                filter_type VARCHAR, stop_multiplier DOUBLE, sample_size INTEGER,
+                sharpe_ratio DOUBLE, skewness DOUBLE, kurtosis_excess DOUBLE,
+                status VARCHAR
+            )"""
+        )
+        con.execute(
+            """CREATE TABLE experimental_strategies (
+                entry_model VARCHAR, sample_size INTEGER,
+                sharpe_ratio DOUBLE, is_canonical BOOLEAN
+            )"""
+        )
+        con.execute("CREATE TABLE edge_families (family_hash VARCHAR)")
+        # Seed: only E2 has rows; E1 is empty (real-world condition)
+        for sr in (0.0, 0.1, 0.2, 0.3, 0.4):
+            con.execute(
+                "INSERT INTO experimental_strategies VALUES ('E2', 100, ?, TRUE)",
+                [sr],
+            )
+        for i in range(5):
+            con.execute("INSERT INTO edge_families VALUES (?)", [f"hash_{i}"])
+        con.execute(
+            """INSERT INTO validated_setups VALUES
+               ('S', 'MNQ', 'COMEX_SETTLE', 'E2', 1.0, 1, 'OVNRNG_100',
+                1.0, 200, 0.30, -0.5, -1.0, 'active')"""
+        )
+        con.close()
+
+        scores = [_make_score()]
+        with _warnings.catch_warnings(record=True) as caught:
+            _warnings.simplefilter("always")
+            enrich_scores_with_dsr_diagnostics(
+                scores, pairs={}, db_path=db_path
+            )
+        msgs = [str(w.message) for w in caught]
+        assert any("var_sr_em fallback" in m and "E1" in m for m in msgs), (
+            f"expected var_sr_em fallback warning for E1, got: {msgs}"
+        )
