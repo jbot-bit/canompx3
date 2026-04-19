@@ -1,6 +1,6 @@
 # Correction-cycle handoff — 2026-04-19
 
-**Scope:** 9 corrections + 1 provenance fix + 1 multi-angle synthesis, 16 commits landed on `main` (not yet pushed). Builds on the overnight session (commits `341132ba..a281481e`, already pushed) and the subsequent self-audit that identified 9 remediation items.
+**Scope:** 9 corrections + 1 provenance fix + 1 multi-angle synthesis + "FULL PROPER PROCESS" addendum (6 more commits — hardening trio, MNQ retirement queue doc, MES low-ATR pre-reg + scan, review action items). Original 15 correction-cycle commits pushed at `64b281d7`; 6 addendum commits pushed at `00906e9e`. See "FULL PROPER PROCESS ADDENDUM" section below.
 
 ---
 
@@ -105,3 +105,65 @@ The correction cycle DID initially frame in a KILL-centric lens — that's what 
 **HEAD:** `2a466e83`
 **Branch:** `main`
 **Origin:** 16 commits ahead (ready to push)
+
+---
+
+# FULL PROPER PROCESS ADDENDUM — 2026-04-19 extended
+
+User asked for "FULL PROPER PROCESS" after correction cycle closure. Executed 6 additional commits addressing code-review action items + the MES ATR inverse-filter hypothesis surfaced by the multi-angle synthesis.
+
+## Addendum commits (6 commits, `bf1595e3..00906e9e`)
+
+| SHA | Commit | Purpose |
+|---|---|---|
+| `bf1595e3` | chore: hardening trio | Direction resolver + result_doc_header helper + synthesis relabel |
+| `898a0b75` | docs: MNQ retirement queue | Formal committee-action doc with 4 Tier 1 DECAY + 9 Tier 2 REVIEW |
+| `b9f38e33` | pre-reg(DRAFT): MES low-ATR K=20 | Hypothesis from synthesis Angle 1 → formal test |
+| `e89c0d4f` | pre-reg(LOCK): MES low-ATR | commit_sha stamped |
+| `0a86bc8d` | research: MES low-ATR scan — FAMILY KILL + hypothesis REFUTED | All 10 cells negative; Angle 1 falsified |
+| `00906e9e` | chore: review action items | K-mismatch forward-check shipped + docstring alignment |
+
+## Addendum headline — the scientific value of the low-ATR scan
+
+The multi-angle synthesis § Angle 1 proposed: "MES ATR_P70 10/10-negative pattern from K=40 → bottom-70% ATR (~ATR_P70) should be profitable." Running this as a proper Pathway A family (K=10, all cells with N 500-600) produced:
+
+**Every cell strongly NEGATIVE** (t from −2.04 to −7.33). All 10 cells' unfiltered baseline (`ExpR_b`) was ALREADY negative (−0.084 to −0.232). The ~ATR_P70 subset barely moves expectancy from that baseline.
+
+**Correct interpretation:** MES unfiltered E2 breakouts are structurally unprofitable across the ENTIRE ATR distribution. The top-30% negative pattern in K=40 was NOT a low-ATR-edge diagnostic — it reflected MES's instrument-wide negative baseline. Every subset of unfiltered MES E2 is negative on average.
+
+**Methodological value:** this is the correction cycle's most scientifically rigorous moment. A post-hoc pattern from the K=40 data was converted into a formal Pathway A hypothesis and immediately REFUTED by proper pre-registration. The synthesis doc's "NEW FINDING" framing (already relabelled to "NEW HYPOTHESIS — pre-reg required") was correctly flagged as data-snooping-adjacent.
+
+## Honest bug found during the addendum: K=20 → K=10 arithmetic error
+
+My pre-reg DRAFT declared `k_family: 20` with arithmetic "5 × 2 × 1 × 1 = 20" (wrong; correct = 10). Caught at scan-run-time. Fixed via:
+1. Erratum block in result doc explaining the mismatch.
+2. LOCKED pre-reg preserved unchanged per RULE 11 audit trail.
+3. New `observed_cell_count` parameter in `result_doc_header.build_header()` that emits a K MISMATCH WARNING banner on every future run where pre-reg's declared K differs from the scan's observed K. This would have caught the bug at scan-start.
+
+## New infra shipped
+
+- **`research/result_doc_header.py`** — shared helper that reads title/SHA/script from pre-reg YAML. Enforces: LOCKED status required, commit_sha required, raises on missing fields. Optional `observed_cell_count` cross-check against `k_family`. Prevents the scan-clone copy-paste-bug class (caught 2 instances earlier in the correction cycle).
+
+- **`research/regime_drift_control_critical_lanes.py::_resolve_direction`** — robust direction resolver with priority chain (execution_spec JSON → strategy_id _LONG_/_SHORT_ segment → long default with stderr warning). Current MNQ book is all long, so zero material impact; but future short lanes get explicit detection.
+
+## New committee-action doc
+
+**`docs/audit/results/2026-04-19-mnq-retirement-queue-committee-action.md`** — replaces the SUPERSEDED Category D RETIRE framing from the earlier committee pack with environment-controlled excess-decay ranking:
+
+**Tier 1 (vote THIS WEEK, excess > 0.60 vs portfolio drop of −0.41):**
+- `MNQ_EUROPE_FLOW_E2_RR1.5_CB1_CROSS_SGP_MOMENTUM` (excess −1.00)
+- `MNQ_EUROPE_FLOW_E2_RR2.0_CB1_CROSS_SGP_MOMENTUM` (excess −0.87)
+- `MNQ_EUROPE_FLOW_E2_RR1.5_CB1_COST_LT12` (excess −0.85)
+- `MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15` (excess −0.76, **late Sharpe NEGATIVE — highest urgency**)
+
+**Tier 2 (vote within 2 weeks, excess 0.10 – 0.60):** 9 lanes listed with full rationale.
+
+Pattern flagged for follow-up research: 8 of 13 decay candidates on EUROPE_FLOW session; 4 of 5 better-than-peers on COMEX_SETTLE / SINGAPORE_OPEN. Potential regime shift favouring pre-US-liquidity sessions.
+
+## Addendum code-review grade
+
+**A−** (one round). Action items addressed in commit `00906e9e`. Remaining non-blocking nit: scan scripts still hard-code scope tables (SESSIONS, DIRECTIONS) rather than reading from pre-reg YAML — acceptable since pre-reg YAMLs are scope-locked anyway.
+
+## Push target
+**Final HEAD:** `00906e9e` — pushing to `origin/main` now.
+
