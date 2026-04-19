@@ -1,0 +1,229 @@
+id: 2026-04-19-mnq-nyse-close-long-direction-locked-v1
+title: MNQ NYSE_CLOSE LONG direction-locked broad validation
+author: Claude Code session (canompx3 main)
+date: 2026-04-19
+testing_mode: family
+pathway: A  # BH-FDR across 3-aperture family (stricter than Pathway B raw p)
+holdout_policy: mode_a_sacred_2026_01_01
+commit_sha: "TO_FILL_AFTER_COMMIT"  # pre-reg writer gate convention
+
+# ---------------------------------------------------------------------------
+# MOTIVATION
+# ---------------------------------------------------------------------------
+motivation: |
+  The MNQ NYSE_CLOSE session family has a canonically positive broad baseline
+  at RR1.0 pre-2026 on all three apertures. Ten prior experimental attempts
+  (docs/audit/results/2026-04-19-mnq-nyse-close-failure-mode-audit.md) all
+  tested overlays on the direction-blind aggregate and all failed stability
+  gates. Canonical re-query in this session (2026-04-19) shows the positive
+  aggregate is driven by LONG, while SHORT is flat (t<2 on all apertures).
+  This has never been validated as a direction-locked lane. portfolio.py
+  hardcodes NYSE_CLOSE exclusion at :633, :997, :1011 with a direction-blind
+  rationale (STRATEGY_BLUEPRINT.md:215 "Low WR 30.8%"). The aggregate rationale
+  no longer applies to the LONG-only subset.
+
+# ---------------------------------------------------------------------------
+# ECONOMIC THEORY (required for Pathway A/B t-gate at 3.00)
+# ---------------------------------------------------------------------------
+theory:
+  citation:
+    - Fitschen 2013 Chapter 3 — intraday trend-follow on stock indices: the
+      late-session (4pm ET / 7am Brisbane next day) window carries directional
+      closing flows that bias equity-index futures toward continuation rather
+      than mean-reversion.
+    - Extract file: docs/institutional/literature/fitschen_2013_intraday.md (stub
+      if not yet grounded, flagged in pre-reg integrity check).
+  mechanism: |
+    US cash equity close (4pm ET) is a liquidity event. Market-on-close orders
+    are directional and imbalance is public via the NYSE imbalance feed pre-
+    close. This asymmetrically biases MNQ (Micro Nasdaq-100 futures) toward the
+    side of the imbalance in the minutes following the cash close. The ORB
+    break-bar in the 7:00-8:00 Brisbane window (NYSE 4pm–5pm ET) is the
+    earliest futures-only window where this imbalance resolves. The LONG side
+    is hypothesised to capture upward-carry days; SHORT is hypothesised to be
+    noisier because bear-imbalance days are less persistent in futures after
+    cash close (mean-reverting into US overnight).
+
+# ---------------------------------------------------------------------------
+# HYPOTHESES (family of 3, same mechanism, aperture-sensitivity variants)
+# ---------------------------------------------------------------------------
+hypotheses:
+  - id: H1
+    claim: MNQ NYSE_CLOSE LONG O5 RR1.0 broad (no filter) has positive
+      mean pnl_r pre-2026 with t >= 3.00.
+    scope:
+      symbol: MNQ
+      orb_label: NYSE_CLOSE
+      entry_model: E2
+      confirm_bars: 1
+      orb_minutes: 5
+      rr_target: 1.0
+      direction: long  # derived at query time from CASE WHEN entry_price > stop_price
+      filter_type: NO_FILTER
+      holdout_selection: trading_day < 2026-01-01
+  - id: H2
+    claim: MNQ NYSE_CLOSE LONG O15 RR1.0 broad has positive mean pnl_r
+      pre-2026 with t >= 3.00.
+    scope:
+      symbol: MNQ
+      orb_label: NYSE_CLOSE
+      entry_model: E2
+      confirm_bars: 1
+      orb_minutes: 15
+      rr_target: 1.0
+      direction: long
+      filter_type: NO_FILTER
+      holdout_selection: trading_day < 2026-01-01
+  - id: H3
+    claim: MNQ NYSE_CLOSE LONG O30 RR1.0 broad has positive mean pnl_r
+      pre-2026 with t >= 3.00.
+    scope:
+      symbol: MNQ
+      orb_label: NYSE_CLOSE
+      entry_model: E2
+      confirm_bars: 1
+      orb_minutes: 30
+      rr_target: 1.0
+      direction: long
+      filter_type: NO_FILTER
+      holdout_selection: trading_day < 2026-01-01
+
+# ---------------------------------------------------------------------------
+# DISCOVERY SCOPE AND CANONICAL TRUTH
+# ---------------------------------------------------------------------------
+canonical_sources:
+  - gold.db::orb_outcomes
+  - gold.db::deployable_validated_setups  # correlation check only
+  - pipeline.cost_model.COST_SPECS         # pnl_r is cost-netted per outcome_builder.py:393
+  - pipeline.paths.GOLD_DB_PATH
+banned_sources:
+  - validated_setups (derived)
+  - experimental_strategies (derived)
+  - prior audit docs (orientation only, not proof)
+
+K_total: 3
+bh_fdr_q: 0.05   # Criterion 3 Pathway A family-wide
+minbtl_budget_used_of_allowed: 3_of_28   # Amendment 2.8: N <= 28 at strict Bailey E=1.0 for 6.65yr MNQ
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  source: docs/audit/results/2026-04-19-mnq-nyse-close-failure-mode-audit.md
+  note: |
+    The broad aggregate RR1.0 positive was surfaced by the 2026-04-19
+    failure-mode audit (canonical orb_outcomes). The direction-locked
+    LONG split was re-queried canonically on 2026-04-19 in this
+    session (pre-script pre-flight B2). Upstream K does not enter this
+    pre-reg's K; this file is a fresh direct-canonical-truth validation.
+
+# ---------------------------------------------------------------------------
+# LOCKED PASS/FAIL GATES (cite criterion numbers, no post-hoc relaxation)
+# ---------------------------------------------------------------------------
+# Per pre_registered_criteria.md v2.9 + v2.7 Mode A holdout.
+gates:
+  c1_pre_registration:
+    rule: this file exists + referenced at run time
+    required: true
+  c2_minbtl:
+    rule: K=3 <= 28 at strict Bailey E=1.0 on 6.65yr clean MNQ
+    required: true
+  c3_bh_fdr:
+    rule: BH-adjusted p <= 0.05 across the K=3 family
+    required: true
+  c4_t_stat:
+    rule: t >= 3.00 (with-theory; Fitschen 2013 Ch 3 citation)
+    required: true
+  c5_dsr:
+    rule: informational cross-check only per Amendment 2.1
+    required: false
+  c6_wfe:
+    rule: pre-2026 walk-forward IS 2019-05-06..2023-12-31, pseudo-OOS 2024-01-01..2025-12-31;
+          WFE = (OOS avg_r / OOS std) / (IS avg_r / IS std) >= 0.50
+    required: true
+  c7_sample_size:
+    rule: N >= 100 per aperture on LONG-only pre-2026 subset
+    required: true
+  c8_2026_oos:
+    rule: OOS (2026-01-01..present) avg pnl_r >= 0 AND OOS avg_r >= 0.40 * IS avg_r
+    required: true
+    notes: 2026 data is read ONLY at the end of evaluation and gated by pre-registered
+      thresholds. No threshold tuning allowed after seeing 2026 numbers. Fail-closed
+      if ratio < 0.40 or OOS avg_r < 0.
+  c9_era_stability:
+    rule: eras (2019-2022, 2023, 2024-2025) each with ExpR >= -0.05 where N >= 50
+    required: true
+  c10_data_era:
+    rule: not applicable (price-based broad baseline, no volume filter)
+    required: false
+  c11_account_mc:
+    rule: deferred to post-validation deployment proposal
+    required: false
+  c12_sr_monitor:
+    rule: deferred to post-deployment
+    required: false
+
+# ---------------------------------------------------------------------------
+# ADVERSARIAL GATES (local to this pre-reg; added 2026-04-19)
+# ---------------------------------------------------------------------------
+adversarial_gates:
+  direction_mix_parity:
+    rule: SHORT t-stat on same (aperture, rr=1.0) must be < LONG t-stat by
+      at least 1.5 sigma. If SHORT is also >= 3.0 t, the direction-locked
+      hypothesis is fake and the cell was merely under-tested.
+    fail_closed: true
+  single_year_dominance:
+    rule: no single year may contribute > 50% of sum(pnl_r) on the LONG-only
+      pre-2026 subset.
+    fail_closed: true
+  winner_size_sanity:
+    rule: report mean, median, p75, p95, max of pnl_r on winners. Flag if
+      max winner > 20 * median winner (suggests fragile fat tail).
+    fail_closed: false  # report only
+  correlation_with_live_lanes:
+    rule: per-day fire-mask Jaccard of the candidate LONG lane against each
+      of the 19 current MNQ deployable_validated_setups lanes pre-2026.
+      Flag any Jaccard > 0.50 (redundant), > 0.70 is a hard fail.
+    fail_closed: true_at_0_70
+
+# ---------------------------------------------------------------------------
+# KILL CRITERIA (explicit refutation)
+# ---------------------------------------------------------------------------
+kill_criteria: |
+  Any one of the following triggers family KILL + graveyard entry:
+    - C3 BH fails on all 3 apertures
+    - C4 t < 3.00 on all 3 apertures
+    - SHORT t >= 3.0 on ANY aperture (direction-mix parity fails)
+    - Any single-year share > 0.50
+    - 2026 OOS avg_r < 0 on all 3 apertures OR ratio < 0.40 on all 3
+    - WFE < 0.50 on all 3 apertures
+    - Correlation Jaccard >= 0.70 with any existing MNQ live lane
+
+# ---------------------------------------------------------------------------
+# PROMOTION PATH (if passes)
+# ---------------------------------------------------------------------------
+promotion_plan: |
+  If 1 or more apertures pass ALL required gates:
+    1. Write strategy_id = MNQ_NYSE_CLOSE_E2_RR1.0_CB{orb_minutes}_DIR_LONG
+       using existing DIR_LONG filter from trading_app/config.py:3050.
+    2. Do NOT commit the validated_setups row in this worktree. Open a
+       follow-up branch for:
+         (a) trading_app/portfolio.py :633, :997, :1011 NYSE_CLOSE
+             exclusion re-scope with @canonical-source annotation.
+         (b) get_filters_for_grid() DIR_LONG wiring for NYSE_CLOSE.
+         (c) promotion row insertion via canonical validator.
+  If 0 apertures pass: register KILL in graveyard and update
+  STRATEGY_BLUEPRINT.md:215 to clarify the rationale still holds
+  direction-locked.
+
+# ---------------------------------------------------------------------------
+# DELIVERABLES
+# ---------------------------------------------------------------------------
+deliverables:
+  script: research/research_mnq_nyse_close_long_direction_locked_v1.py
+  tests: tests/test_research/test_mnq_nyse_close_long_direction_locked_v1.py
+  result: docs/audit/results/2026-04-19-mnq-nyse-close-long-direction-locked-v1.md
+  csv_outputs:
+    - research/output/mnq_nyse_close_long_direction_locked_v1_apertures.csv
+    - research/output/mnq_nyse_close_long_direction_locked_v1_years.csv
+    - research/output/mnq_nyse_close_long_direction_locked_v1_eras.csv
+    - research/output/mnq_nyse_close_long_direction_locked_v1_direction_parity.csv
+    - research/output/mnq_nyse_close_long_direction_locked_v1_correlation.csv
