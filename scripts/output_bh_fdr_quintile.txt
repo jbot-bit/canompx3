@@ -6,7 +6,7 @@ MGC: 10828 test trades, baseline=-0.0492
 MES: 8532 test trades, baseline=-0.0928
 
 ==========================================================================================
-BH FDR CORRECTION — 1768 total tests
+BH FDR CORRECTION â€” 1768 total tests
 ==========================================================================================
 
 Total tests: 1768
@@ -269,12 +269,12 @@ MES   rel_vol_CME_PRECLOSE                      +0.388  -0.221  +0.168  0.01415 
 ==========================================================================================
 FEATURES THAT SURVIVE BH FDR ACROSS INSTRUMENTS:
 ==========================================================================================
-  orb_TOKYO_OPEN_break_bar_volume          — 3 instruments: MGC(+0.220), MNQ(+0.420), MES(+0.157)
-  rel_vol_TOKYO_OPEN                       — 3 instruments: MNQ(+0.411), MES(+0.182), MGC(+0.117)
-  orb_CME_REOPEN_size                      — 2 instruments: MGC(+0.321), MES(+0.188)
-  orb_EUROPE_FLOW_break_bar_volume         — 2 instruments: MES(+0.234), MGC(+0.168)
-  rel_vol_EUROPE_FLOW                      — 2 instruments: MGC(+0.184), MES(+0.177)
-  orb_CME_REOPEN_break_bar_volume          — 2 instruments: MES(+0.239), MGC(+0.195)
-  orb_NYSE_CLOSE_volume                    — 2 instruments: MGC(+0.144), MNQ(+0.289)
+  orb_TOKYO_OPEN_break_bar_volume          â€” 3 instruments: MGC(+0.220), MNQ(+0.420), MES(+0.157)
+  rel_vol_TOKYO_OPEN                       â€” 3 instruments: MNQ(+0.411), MES(+0.182), MGC(+0.117)
+  orb_CME_REOPEN_size                      â€” 2 instruments: MGC(+0.321), MES(+0.188)
+  orb_EUROPE_FLOW_break_bar_volume         â€” 2 instruments: MES(+0.234), MGC(+0.168)
+  rel_vol_EUROPE_FLOW                      â€” 2 instruments: MGC(+0.184), MES(+0.177)
+  orb_CME_REOPEN_break_bar_volume          â€” 2 instruments: MES(+0.239), MGC(+0.195)
+  orb_NYSE_CLOSE_volume                    â€” 2 instruments: MGC(+0.144), MNQ(+0.289)
 
 Done. 1768 tests, 251 BH FDR survivors at q=0.10.

@@ -16,7 +16,7 @@ losers. If avg_r < 0 past T80, a time-stop at T80 improves Sharpe with no entry 
 - DIRECTIONAL (negative, not sig): 82
 - NO-BENEFIT (avg_r_after >= 0): 544
 
-## SURVIVED — Time-Stop Recommended
+## SURVIVED â€” Time-Stop Recommended
 
 | Symbol | Session | RR | CB | T80 | N_after | avg_r_after | WR_after | p_bh |
 |--------|---------|----|----|-----|---------|-------------|----------|------|
@@ -138,7 +138,7 @@ losers. If avg_r < 0 past T80, a time-stop at T80 improves Sharpe with no entry 
 | MGC | US_EQUITY_OPEN | 1.5 | 1 | 49m | 354 | -0.1752 | 46.6% | 0.0008 |
 
 **Mechanism:** Past T80, the market has moved on. Remaining open positions are
-dead exposure — the breakout momentum has dissipated and mean-reversion dominates.
+dead exposure â€” the breakout momentum has dissipated and mean-reversion dominates.
 A time-stop at T80 exits these positions before they turn negative.
 
 **What could kill it:** If momentum sessions (e.g. MGC 0900 trending day) continue
@@ -147,7 +147,7 @@ T80 values rather than a global cutoff.
 
 ## CAVEATS
 - T80 from winner_speed_summary.csv uses ALL winners regardless of filter
-- Filter (ORB_G4/G5/etc.) not applied — T80 may differ for validated strategies only
+- Filter (ORB_G4/G5/etc.) not applied â€” T80 may differ for validated strategies only
 - Small N_after for high-RR groups reduces statistical power
 - DST regime not split (1000 session is clean; 0900/1800 may differ by DST half)
 
