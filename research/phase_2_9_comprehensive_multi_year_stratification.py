@@ -94,7 +94,24 @@ def _two_sided_p_from_t(t: float | None, n: int) -> float | None:
 
 
 def bh_fdr(pvalues: list[float | None], q: float) -> list[bool]:
-    """Benjamini-Hochberg step-up at level q. None p-values never survive."""
+    """Benjamini-Hochberg (1995) step-up procedure at FDR level q.
+
+    Canonical reference: benjamini_hochberg_1995_fdr.md equation 1 --
+        k = max { i : P(i) <= (i/m) * q },  reject H(i) for all i <= k.
+
+    Design choice: the denominator `n` is the full input length including
+    None/NaN entries, not just the count of valid p-values. This makes the
+    test strictly more conservative when data is missing: K stays at the
+    pre-committed family size regardless of cells that failed to produce p.
+    None/NaN p-values can never be survivors.
+
+    Caveat (verbatim from BH 1995 Theorem 1): "For independent test
+    statistics and for any configuration of false null hypotheses, the
+    above procedure controls the FDR at q*." Under arbitrary dependency
+    Benjamini-Yekutieli (2001) / BHY (Harvey-Liu 2015 p16) is strictly more
+    conservative. Standard BH is defensible here because same-underlying
+    strategy cells fall within the positive-regression-dependency regime.
+    """
     n = len(pvalues)
     survivors = [False] * n
     indexed = [(p, i) for i, p in enumerate(pvalues) if p is not None and not math.isnan(p)]
@@ -211,8 +228,11 @@ def add_bh_flags(df: pd.DataFrame, q: float) -> pd.DataFrame:
 def assign_v2_pattern(row: pd.Series) -> str:
     """Symmetric DRAG/BOOST, BH-conditioned.
 
-    Any survivor of bh_session OR bh_year counts. Bare label_raw without BH
-    support is downgraded to NEUTRAL_LABELED. UNEVALUABLE preserved.
+    Any survivor of bh_session OR bh_year counts. A raw delta-threshold
+    label (DRAG_candidate / BOOST_candidate) without BH support is
+    downgraded to DRAG_unconfirmed / BOOST_unconfirmed so the label tier
+    is never elevated above what per-cell significance supports.
+    UNEVALUABLE (n < MIN_N_YEAR) and EMPTY_FULL_WINDOW preserved.
     """
     if row["label_raw"] == "UNEVALUABLE":
         return "UNEVALUABLE"

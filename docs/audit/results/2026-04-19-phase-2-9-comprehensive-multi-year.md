@@ -136,20 +136,29 @@ The v1 PATTERN labeller flagged 3 SINGLE_YEAR_DRAG cells:
 2. `MNQ_EUROPE_FLOW CROSS_SGP_MOMENTUM RR2.0` × 2024 — y2024 = −0.132, delta2024 = +0.049
 3. `MNQ_US_DATA_1000 X_MES_ATR60 RR1.0` × 2020 — y2020 = −0.059, delta2020 = +0.041
 
-Under Phase 2.9's per-cell BH testing with K_session/K_year/K_global all considered:
-- Lane 1: 2024 year_t = −1.91, year_p = 0.060. **Not a BH survivor at any framing.**
-- Lane 2: 2024 year_t = −1.85, year_p = 0.068. **Not a BH survivor at any framing.**
-- Lane 3: 2020 year_t = −0.79, year_p = 0.434. **Not a BH survivor at any framing.**
+Under Phase 2.9's per-cell t-test with K_session / K_year / K_global all considered (values queried directly from `research/output/phase_2_9_main.csv`):
+
+| Cell | N_year | year_t | year_p (two-sided) | bh_global | bh_session | bh_year |
+|---|--:|--:|--:|:-:|:-:|:-:|
+| SGP RR1.5 × 2024 | 89 | −1.080 | 0.283 | ✗ | ✗ | ✗ |
+| SGP RR2.0 × 2024 | 89 | −0.985 | 0.327 | ✗ | ✗ | ✗ |
+| X_MES_ATR60 RR1.0 × 2020 | 86 | −0.578 | 0.565 | ✗ | ✗ | ✗ |
+
+All three cells fail BH at every framing (standard CHT two-sided p > 0.05, well above any BH critical value at K=266 / K_session / K_year=38). The Chordia et al 2018 threshold of t ≥ 3.00 with-theory (see `docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md` page 5: "the MHT threshold for alpha t-statistic (t_α) is 3.79 ... they are not far from the suggestion of Harvey, Liu, and Zhu (2015) to use a threshold of three") is clearly not met — the absolute t-stats are 0.58 to 1.08.
 
 **The SGP retirement verdicts stand** — they were independently confirmed by Phase 2.4 (composite C1-C12 audit) and Phase 2.7 (2024-specific regime break). But v1's Phase 2.8 DRAG labels for those cells were not statistically supported under honest testing; they were bare-threshold observations that the v1 classifier elevated to a label tier without significance checking. This is the single most important methodological correction from the reframe addendum to the sweep itself.
 
 ## Institutional methodology notes
 
-- **BH-FDR calibration verified:** small-p cells cluster at the rank-boundary as expected. K_global=266 produces rank 1 pass at p ≤ 0.000376; observed smallest p is 0.000192, passing with headroom.
-- **MinBTL check passed:** at K=266 and est_max_N=1521, MinBTL = 2·ln(266)/1521² = 5.0×10⁻⁶ << 1.0. Sample size is not a binding constraint at any K framing tested.
-- **Per-cell subset-t uses t-distribution (df = n−1), not Normal.** Stricter for small-N cells than Normal approximation. This is the correct choice per Chordia 2018 § 3 footnote 14.
-- **Canonical delegation verified:** sanity check on MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08 shows full-window `_window_stats` agrees with `compute_mode_a` to div=0.00e+00.
-- **UNEVALUABLE cells can pass BH.** The labeller marks n_year < 30 as UNEVALUABLE but BH is computed on p-values which don't know about N. 5 of 12 K_session survivors have n < 30 (all CME_PRECLOSE). These are statistically significant but low-power evidence; for any deployment decision they should be treated as suggestive only (RULE 3.2).
+- **BH-FDR procedure used is the 1995 step-up** (`docs/institutional/literature/benjamini_hochberg_1995_fdr.md` page 293 equation 1): `k = max { i : P(i) ≤ (i/m) · q }`, reject all H(i) for i ≤ k. Implemented in `research/phase_2_9_comprehensive_multi_year_stratification.py::bh_fdr`. q = 0.10 locked at pre-reg time.
+- **K-framing rationale** per Harvey-Liu 2015 (`docs/institutional/literature/harvey_liu_2015_backtesting.md` page 20): "In financial applications, it seems reasonable to control for the rate of false discoveries, rather than the absolute number." K_family (our K_session, K_year) is the natural test unit when the family has internal structure; K_global is reported as headline context only, not the promotion gate.
+- **BH vs BHY under dependency:** Harvey-Liu page 16 advocates BHY (Benjamini-Yekutieli 2001) because it "works under arbitrary dependency for the test statistics." We used standard BH-1995 here. Defensible because cells within a session-year share the same underlying bars and therefore fall within the positive-regression-dependency regime where BH-1995 is valid (Benjamini-Yekutieli 2001 Theorem 1.2). For strict arbitrary-dependency safety, re-run with BHY (c(M) = ∑1/j multiplier) — it is strictly more conservative and our substantive findings (GOLD clean, v1 DRAG not significant, 2025 BOOST concentration) would only become cleaner, not flip direction.
+- **BH-FDR calibration verified:** K_global=266 produces rank-1 critical value = (1/266) · 0.10 = 3.76 × 10⁻⁴. Observed smallest p = 1.92 × 10⁻⁴ on MNQ_CME_PRECLOSE X_MES_ATR60 × 2020, passing rank-1 with headroom. No other cell clears its critical value at K_global.
+- **Chordia 2018 t-threshold context** (`docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md` page 5): MHT-adjusted alpha threshold is t ≥ 3.79 (strict) or 3.00 (with prior theory, from Harvey-Liu-Zhu 2015). The single K_global survivor (t = 4.00) and the strongest K_session / K_year survivors (t = 3.08 to 4.00) clear the Chordia with-theory threshold of 3.00. UNEVALUABLE K_session cells with t = 2.72 / 2.56 / 3.07 / 2.45 / 2.63 / 2.45 are survivor-significance-BH-eligible but do NOT clear Chordia's with-theory bar — flagged suggestive-only.
+- **MinBTL check passed:** at K = 266 and est max_N = 1521 (computed at run time from the active-setups sample_size field), MinBTL = 2·ln(266) / 1521² = 5.0 × 10⁻⁶. Much less than 1.0 years — sample size is not a binding constraint. Per Bailey et al 2013 (`docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md` page 8) the guidance is "no more than 45 independent model configurations should be tried" with 5 years of data; our 266 cells operate on years-of-data that support far more than this via the K = 38 × 7 independent-over-year factorization.
+- **Per-cell subset-t uses Student's t (df = n−1), not Normal.** Correct small-sample treatment. p-value computed via `scipy.stats.t.sf(|t|, df=n-1) * 2` for two-sided.
+- **Canonical delegation verified at run time:** full-window `_window_stats` agrees with `compute_mode_a` to div = 0.00e+00 on MES_CME_PRECLOSE_E2_RR1.0_CB1_COST_LT08 (first-lane probe in main()).
+- **UNEVALUABLE cells can pass BH.** The labeller marks n_year < 30 as UNEVALUABLE but BH operates on p-values which don't know about N. 5 of 12 K_session survivors have n < 30 (all CME_PRECLOSE 2019/2020 thin years). These are BH-significant but low-power evidence; treat as suggestive per RULE 3.2 of `.claude/rules/backtesting-methodology.md`. They do NOT clear Chordia 2018's with-theory t ≥ 3.0 threshold in 4 of 5 cases.
 
 ## What the scan does NOT claim
 
@@ -161,10 +170,11 @@ Under Phase 2.9's per-cell BH testing with K_session/K_year/K_global all conside
 
 ## Next steps (candidate — require fresh pre-reg if pursued)
 
-1. **Phase 2.10 (not written):** investigate the 2025 BOOST concentration. 4 BH-survivor lanes in one year suggests a genuine year-regime; would benefit from a macro-grounded pre-reg (Carver 2015 Ch 9 vol-standardised sizing as a Stage 2 framework) plus a check that 2025 partial-year data is not biased by sample-selection.
+1. **Phase 2.10 (not written):** investigate the 2025 BOOST concentration. 4 BH-survivor lanes in one year suggests a genuine year-regime; would benefit from a macro-grounded pre-reg (Carver 2015 Ch 9 vol-standardised sizing per `docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md` as a Stage 2 framework) plus a check that 2025 partial-year data is not biased by sample-selection.
 2. **Retired-SGP RR dose-response audit (not written):** the addendum § I2 claim is untested here. Would require a separate pre-reg against the retired lanes in `validated_setups` with `status != 'active'`.
-3. **Governance:** update Phase 2.8 v1 result doc with a pointer to this v2 supersession (same method as the addendum used — footnote, not rewrite).
-4. **Doctrine upgrade (proposed):** add to backtesting-methodology.md RULE 4 a sub-clause requiring per-cell significance testing on any classification threshold, not just on the discovery scan's promotion gate. The v1 PATTERN labeller used 0.03 bare threshold without p-values — that pattern should be caught in future reviews.
+3. **Governance:** update Phase 2.8 v1 result doc with a pointer to this v2 supersession (landed in this commit set via header footnote).
+4. **Doctrine upgrade (proposed):** add to `.claude/rules/backtesting-methodology.md` RULE 4 a sub-clause requiring per-cell significance testing on any classification threshold, not just on the discovery scan's promotion gate. The v1 PATTERN labeller used 0.03 bare threshold without p-values — that pattern should be caught in future reviews. Grounded in Harvey-Liu 2015 page 17 ("an OOS test's success can be due to luck for both the in-sample selection and the out-of-sample testing") — bare-threshold labels are in-sample selections without the significance filter to discount luck.
+5. **BHY-replication check (proposed, low-cost):** re-run with Benjamini-Yekutieli 2001 correction (c(M) = ∑_{j=1}^M 1/j ≈ 6.32 at K=266) to confirm substantive findings hold under arbitrary-dependency assumption. Expected: fewer survivors (BHY is strictly more conservative); direction of findings should be unchanged.
 
 ## Audit trail
 
