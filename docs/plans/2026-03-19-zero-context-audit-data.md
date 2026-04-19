@@ -1,4 +1,4 @@
-# Zero-Context Adversarial Audit — Raw Data Package
+# Zero-Context Adversarial Audit â€” Raw Data Package
 # Generated: 2026-03-19
 # Context: NONE. Evaluate these numbers cold.
 # Instrument: Micro futures (MGC=gold, MNQ=nasdaq, MES=S&P)

@@ -1,8 +1,10 @@
 """Focused tests for dashboard metadata, operator state, and legacy compatibility."""
 
 import asyncio
+from dataclasses import replace
 from datetime import date
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from trading_app.live import bot_dashboard
 from trading_app.live.bot_dashboard import (
@@ -15,7 +17,43 @@ from trading_app.live.bot_dashboard import (
     _strategy_meta,
 )
 from trading_app.live.bot_state import build_state_snapshot
-from trading_app.prop_profiles import ACCOUNT_PROFILES
+from trading_app.prop_profiles import ACCOUNT_PROFILES, DailyLaneSpec
+
+
+def _with_shared_nyse_open(profile_id: str):
+    """Return a patched copy of profile_id with MNQ + MES lanes on NYSE_OPEN.
+
+    The 2026-04-19 rebuild of topstep_50k_type_a removed the second NYSE_OPEN
+    lane that these tests relied on for shared-session ambiguity coverage.
+    The logic under test (_legacy_lanes_to_lane_cards, _profile_session_
+    ambiguity, _resolve_session_lane) still needs a shared-session profile
+    to exercise — construct one explicitly rather than depending on live
+    profile drift.
+    """
+    base = ACCOUNT_PROFILES[profile_id]
+    extra_lanes = tuple(base.daily_lanes) + (
+        DailyLaneSpec(
+            "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50",
+            "MNQ",
+            "NYSE_OPEN",
+            max_orb_size_pts=117.8,
+        ),
+        DailyLaneSpec(
+            "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12",
+            "MES",
+            "NYSE_OPEN",
+            max_orb_size_pts=60.0,
+        ),
+    )
+    # Replace any existing NYSE_OPEN lane so the two lanes above are the
+    # only NYSE_OPEN lanes (guarantees shared-session ambiguity).
+    non_nyse = tuple(lane for lane in base.daily_lanes if lane.orb_label != "NYSE_OPEN")
+    return replace(
+        base,
+        daily_lanes=non_nyse + extra_lanes[-2:],
+        allowed_instruments=frozenset(base.allowed_instruments | {"MNQ", "MES"}),
+        allowed_sessions=frozenset(base.allowed_sessions | {"NYSE_OPEN"}),
+    )
 
 
 def test_build_state_snapshot_uses_explicit_trading_day_for_session_times():
@@ -64,32 +102,37 @@ def test_strategy_meta_extracts_human_readable_lane_fields():
 
 
 def test_legacy_lanes_reconstruct_all_profile_lanes_and_mark_ambiguous_shared_sessions():
-    profile = ACCOUNT_PROFILES["topstep_50k_type_a"]
+    """Shared-session disambiguation: legacy-lane dict with one NYSE_OPEN
+    entry must reconstruct cards for BOTH NYSE_OPEN lanes and mark the
+    non-matching one UNKNOWN/cannot-disambiguate.
+    """
+    synthetic = _with_shared_nyse_open("topstep_50k_type_a")
     mnq_nyse = next(
-        lane for lane in profile.daily_lanes if lane.strategy_id == "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50"
+        lane for lane in synthetic.daily_lanes if lane.strategy_id == "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50"
     )
     mes_nyse = next(
-        lane for lane in profile.daily_lanes if lane.strategy_id == "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12"
+        lane for lane in synthetic.daily_lanes if lane.strategy_id == "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12"
     )
 
-    cards = _legacy_lanes_to_lane_cards(
-        lanes={
-            "NYSE_OPEN": {
-                "strategy_id": mnq_nyse.strategy_id,
-                "status": "IN_TRADE",
-                "direction": "long",
-                "entry_price": 21543.25,
-                "current_pnl_r": 0.8,
-                "rr_target": 1.0,
-                "orb_minutes": 5,
-                "filter_type": "OVNRNG_50",
-            }
-        },
-        trading_day=date(2026, 4, 3),
-        account_name="profile_topstep_50k_type_a",
-    )
+    with patch.dict(ACCOUNT_PROFILES, {"topstep_50k_type_a": synthetic}):
+        cards = _legacy_lanes_to_lane_cards(
+            lanes={
+                "NYSE_OPEN": {
+                    "strategy_id": mnq_nyse.strategy_id,
+                    "status": "IN_TRADE",
+                    "direction": "long",
+                    "entry_price": 21543.25,
+                    "current_pnl_r": 0.8,
+                    "rr_target": 1.0,
+                    "orb_minutes": 5,
+                    "filter_type": "OVNRNG_50",
+                }
+            },
+            trading_day=date(2026, 4, 3),
+            account_name="profile_topstep_50k_type_a",
+        )
 
-    assert len(cards) == len(profile.daily_lanes)
+    assert len(cards) == len(synthetic.daily_lanes)
 
     mnq_card = next(card for card in cards if card["strategy_id"] == mnq_nyse.strategy_id)
     mes_card = next(card for card in cards if card["strategy_id"] == mes_nyse.strategy_id)
@@ -171,7 +214,12 @@ def test_derive_operator_state_marks_stale_running_session():
 
 
 def test_profile_session_ambiguity_passes_for_shared_session_profiles():
-    result = _profile_session_ambiguity("topstep_50k_type_a")
+    """With MNQ+MES lanes on NYSE_OPEN, ambiguity-detection reports that the
+    shared session is supported (not a blocking error) and names the session.
+    """
+    synthetic = _with_shared_nyse_open("topstep_50k_type_a")
+    with patch.dict(ACCOUNT_PROFILES, {"topstep_50k_type_a": synthetic}):
+        result = _profile_session_ambiguity("topstep_50k_type_a")
 
     assert result["status"] == "pass"
     assert "NYSE_OPEN" in result["detail"]
@@ -179,10 +227,7 @@ def test_profile_session_ambiguity_passes_for_shared_session_profiles():
 
 
 def test_choose_operator_profile_prefers_running_state_then_first_active_auto_profile():
-    assert (
-        _choose_operator_profile(None, {"account_name": "profile_topstep_50k_mes_auto"})
-        == "topstep_50k_mes_auto"
-    )
+    assert _choose_operator_profile(None, {"account_name": "profile_topstep_50k_mes_auto"}) == "topstep_50k_mes_auto"
     assert _choose_operator_profile(None, {}) == "topstep_50k_mnq_auto"
 
 

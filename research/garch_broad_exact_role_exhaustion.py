@@ -465,7 +465,9 @@ def emit(rows: pd.DataFrame, results_df: pd.DataFrame, shapes_df: pd.DataFrame) 
             .reset_index()
         )
         for _, r in agg.iterrows():
-            lines.append(f"| {r['orb_label']} | {int(r['count'])} | {float(r['tail_bias']):+.3f} | {float(r['best_bucket']):.2f} |")
+            lines.append(
+                f"| {r['orb_label']} | {int(r['count'])} | {float(r['tail_bias']):+.3f} | {float(r['best_bucket']):.2f} |"
+            )
 
     OUTPUT_MD.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n[report] {OUTPUT_MD}")

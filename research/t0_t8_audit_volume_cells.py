@@ -126,9 +126,7 @@ class VolumeCell:
     with_level_feature: str | None = None  # "F6_INSIDE_PDR" if confluence cell
 
 
-def build_feature_sql_for_cell(
-    session: str, feature_type: str, p67_threshold: float, with_level: str | None
-) -> str:
+def build_feature_sql_for_cell(session: str, feature_type: str, p67_threshold: float, with_level: str | None) -> str:
     """Build SQL expression producing 0/1 for the cell's anchor feature."""
     if feature_type == "rel_vol_HIGH":
         anchor_ge = f"(d.rel_vol_{session} > {p67_threshold:.6f})"
@@ -153,26 +151,46 @@ CELLS = [
     VolumeCell(
         name="V1_MES_COMEX_SETTLE_O5_RR1.0_short_REL_VOL_HIGH",
         description="MES COMEX_SETTLE O5 RR1.0 SHORT rel_vol > P67 — BH-global t=+4.89",
-        instrument="MES", session="COMEX_SETTLE", aperture=5, rr=1.0, direction="short",
-        expected_sign="positive", feature_type="rel_vol_HIGH",
+        instrument="MES",
+        session="COMEX_SETTLE",
+        aperture=5,
+        rr=1.0,
+        direction="short",
+        expected_sign="positive",
+        feature_type="rel_vol_HIGH",
     ),
     VolumeCell(
         name="V2_MES_TOKYO_OPEN_O5_RR1.5_long_REL_VOL_HIGH",
         description="MES TOKYO_OPEN O5 RR1.5 LONG rel_vol > P67 — BH-global t=+4.46",
-        instrument="MES", session="TOKYO_OPEN", aperture=5, rr=1.5, direction="long",
-        expected_sign="positive", feature_type="rel_vol_HIGH",
+        instrument="MES",
+        session="TOKYO_OPEN",
+        aperture=5,
+        rr=1.5,
+        direction="long",
+        expected_sign="positive",
+        feature_type="rel_vol_HIGH",
     ),
     VolumeCell(
         name="V3_MNQ_SINGAPORE_OPEN_O5_RR1.0_short_REL_VOL_HIGH",
         description="MNQ SINGAPORE_OPEN O5 RR1.0 SHORT rel_vol > P67 — BH-global t=+4.27",
-        instrument="MNQ", session="SINGAPORE_OPEN", aperture=5, rr=1.0, direction="short",
-        expected_sign="positive", feature_type="rel_vol_HIGH",
+        instrument="MNQ",
+        session="SINGAPORE_OPEN",
+        aperture=5,
+        rr=1.0,
+        direction="short",
+        expected_sign="positive",
+        feature_type="rel_vol_HIGH",
     ),
     VolumeCell(
         name="V4_MNQ_COMEX_SETTLE_O5_RR1.5_short_REL_VOL_HIGH_AND_F6",
         description="MNQ COMEX_SETTLE O5 RR1.5 SHORT rel_vol×F6 — confluence t=+3.51, Δ_OOS=+0.276",
-        instrument="MNQ", session="COMEX_SETTLE", aperture=5, rr=1.5, direction="short",
-        expected_sign="positive", feature_type="rel_vol_HIGH",
+        instrument="MNQ",
+        session="COMEX_SETTLE",
+        aperture=5,
+        rr=1.5,
+        direction="short",
+        expected_sign="positive",
+        feature_type="rel_vol_HIGH",
         with_level_feature="F6_INSIDE_PDR",
     ),
     # MGC cells — cross-instrument confirmation of volume finding
@@ -183,26 +201,46 @@ CELLS = [
     VolumeCell(
         name="M1_MGC_LONDON_METALS_O5_RR1.0_short_REL_VOL_HIGH",
         description="MGC LONDON_METALS O5 RR1.0 SHORT rel_vol > P67 — BH-global t=+4.78 (strongest MGC)",
-        instrument="MGC", session="LONDON_METALS", aperture=5, rr=1.0, direction="short",
-        expected_sign="positive", feature_type="rel_vol_HIGH",
+        instrument="MGC",
+        session="LONDON_METALS",
+        aperture=5,
+        rr=1.0,
+        direction="short",
+        expected_sign="positive",
+        feature_type="rel_vol_HIGH",
     ),
     VolumeCell(
         name="M2_MGC_LONDON_METALS_O5_RR1.5_short_REL_VOL_HIGH",
         description="MGC LONDON_METALS O5 RR1.5 SHORT rel_vol > P67 — cross-RR family check",
-        instrument="MGC", session="LONDON_METALS", aperture=5, rr=1.5, direction="short",
-        expected_sign="positive", feature_type="rel_vol_HIGH",
+        instrument="MGC",
+        session="LONDON_METALS",
+        aperture=5,
+        rr=1.5,
+        direction="short",
+        expected_sign="positive",
+        feature_type="rel_vol_HIGH",
     ),
     VolumeCell(
         name="M3_MGC_NYSE_OPEN_O5_RR1.5_short_BB_RATIO_HIGH",
         description="MGC NYSE_OPEN O5 RR1.5 SHORT bb_vol_ratio > P67 — alt-feature, t=+3.47",
-        instrument="MGC", session="NYSE_OPEN", aperture=5, rr=1.5, direction="short",
-        expected_sign="positive", feature_type="bb_ratio_HIGH",
+        instrument="MGC",
+        session="NYSE_OPEN",
+        aperture=5,
+        rr=1.5,
+        direction="short",
+        expected_sign="positive",
+        feature_type="bb_ratio_HIGH",
     ),
     VolumeCell(
         name="M4_MGC_US_DATA_1000_O5_RR1.0_short_BB_RATIO_HIGH",
         description="MGC US_DATA_1000 O5 RR1.0 SHORT bb_vol_ratio > P67 — cross-session, t=+3.15",
-        instrument="MGC", session="US_DATA_1000", aperture=5, rr=1.0, direction="short",
-        expected_sign="positive", feature_type="bb_ratio_HIGH",
+        instrument="MGC",
+        session="US_DATA_1000",
+        aperture=5,
+        rr=1.0,
+        direction="short",
+        expected_sign="positive",
+        feature_type="bb_ratio_HIGH",
     ),
 ]
 
@@ -218,9 +256,7 @@ def build_patterns() -> list[Pattern]:
             desc_suffix = f" (bb_ratio P67={p67:.4f} on {cell.instrument} IS)"
         else:
             raise ValueError(f"unsupported feature_type: {cell.feature_type}")
-        fsql = build_feature_sql_for_cell(
-            cell.session, cell.feature_type, p67, cell.with_level_feature
-        )
+        fsql = build_feature_sql_for_cell(cell.session, cell.feature_type, p67, cell.with_level_feature)
         p = Pattern(
             name=cell.name,
             description=cell.description + desc_suffix,

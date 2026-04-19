@@ -41,7 +41,7 @@ from pipeline.cost_model import COST_SPECS, CostSpec
 # ---------------------------------------------------------------------------
 ALL_INSTRUMENTS = ["MGC", "MES", "MNQ", "M2K", "MCL", "M6E", "SIL"]
 
-MIN_TRADES = 30          # REGIME minimum per RESEARCH_RULES.md
+MIN_TRADES = 30  # REGIME minimum per RESEARCH_RULES.md
 FDR_ALPHA = 0.05
 
 # ORB labels to test for Failed Breakout Fade (sessions with meaningful breaks)
@@ -51,18 +51,18 @@ FADE_ORB_LABELS = ["1000", "1100", "1800", "0030", "US_EQUITY_OPEN"]
 # Times are in UTC (Brisbane - 10 hours). Session end = next group boundary.
 SESSION_BLOCKS = {
     "asia": {
-        "start_utc_h": 0,   # 10:00 Brisbane = 00:00 UTC
-        "end_utc_h": 8,     # 18:00 Brisbane = 08:00 UTC
+        "start_utc_h": 0,  # 10:00 Brisbane = 00:00 UTC
+        "end_utc_h": 8,  # 18:00 Brisbane = 08:00 UTC
         "duration_hours": 8,
     },
     "london": {
-        "start_utc_h": 8,   # 18:00 Brisbane = 08:00 UTC
-        "end_utc_h": 13,    # 23:00 Brisbane = 13:00 UTC
+        "start_utc_h": 8,  # 18:00 Brisbane = 08:00 UTC
+        "end_utc_h": 13,  # 23:00 Brisbane = 13:00 UTC
         "duration_hours": 5,
     },
     "us": {
         "start_utc_h": 13,  # 23:00 Brisbane = 13:00 UTC
-        "end_utc_h": 19,    # 05:00 Brisbane = 19:00 UTC
+        "end_utc_h": 19,  # 05:00 Brisbane = 19:00 UTC
         "duration_hours": 6,
     },
 }
@@ -77,6 +77,7 @@ MAX_TRADE_BARS = 240  # 4 hours
 @dataclass
 class StrategyResult:
     """Result of a single strategy backtest."""
+
     archetype: str
     instrument: str
     variant: str
@@ -143,14 +144,17 @@ def apply_friction_r(pnl_points: float, risk_points: float, spec: CostSpec) -> f
 
 
 def finalize_result(
-    archetype: str, instrument: str, variant: str, params: dict,
-    trades: list[float], trade_dates: list,
+    archetype: str,
+    instrument: str,
+    variant: str,
+    params: dict,
+    trades: list[float],
+    trade_dates: list,
 ) -> StrategyResult:
     """Compute stats from a list of R-multiple trades."""
     n = len(trades)
     if n < 1:
-        return StrategyResult(archetype=archetype, instrument=instrument,
-                              variant=variant, params=params)
+        return StrategyResult(archetype=archetype, instrument=instrument, variant=variant, params=params)
 
     arr = np.array(trades)
     wins = int(np.sum(arr > 0))
@@ -166,13 +170,21 @@ def finalize_result(
         p_val = 1.0
 
     return StrategyResult(
-        archetype=archetype, instrument=instrument, variant=variant, params=params,
-        n_trades=n, n_wins=wins, win_rate=round(wins / n, 4),
-        avg_pnl_r=round(avg_r, 4), total_pnl_r=round(total_r, 2),
-        sharpe=round(sharpe, 4), max_dd_r=compute_max_dd(trades),
+        archetype=archetype,
+        instrument=instrument,
+        variant=variant,
+        params=params,
+        n_trades=n,
+        n_wins=wins,
+        win_rate=round(wins / n, 4),
+        avg_pnl_r=round(avg_r, 4),
+        total_pnl_r=round(total_r, 2),
+        sharpe=round(sharpe, 4),
+        max_dd_r=compute_max_dd(trades),
         p_value=round(p_val, 6),
         yearly_results=yearly_breakdown(trade_dates, trades),
-        pnl_series=trades, trade_dates=trade_dates,
+        pnl_series=trades,
+        trade_dates=trade_dates,
     )
 
 
@@ -201,7 +213,8 @@ def compute_orb_correlation(
     """Compute correlation between strategy daily PnL and representative ORB PnL."""
     if not result.trade_dates or not result.pnl_series:
         return None
-    orb_df = con.execute("""
+    orb_df = con.execute(
+        """
         SELECT o.trading_day, o.pnl_r
         FROM orb_outcomes o
         WHERE o.symbol = ? AND o.orb_label = '1000'
@@ -209,9 +222,12 @@ def compute_orb_correlation(
           AND o.rr_target = 1.0 AND o.orb_minutes = 5
           AND o.outcome IN ('WIN', 'LOSS')
         ORDER BY o.trading_day
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
     if orb_df.empty:
-        orb_df = con.execute("""
+        orb_df = con.execute(
+            """
             SELECT o.trading_day, o.pnl_r
             FROM orb_outcomes o
             WHERE o.symbol = ? AND o.orb_label = '0900'
@@ -219,7 +235,9 @@ def compute_orb_correlation(
               AND o.rr_target = 1.0 AND o.orb_minutes = 5
               AND o.outcome IN ('WIN', 'LOSS')
             ORDER BY o.trading_day
-        """, [instrument]).fetchdf()
+        """,
+            [instrument],
+        ).fetchdf()
     if orb_df.empty:
         return None
     strat_df = pd.DataFrame({"trading_day": result.trade_dates, "strat_pnl": result.pnl_series})
@@ -275,53 +293,73 @@ def simulate_trade(
 # Data Loading
 # ---------------------------------------------------------------------------
 def load_instrument_bars(
-    con: duckdb.DuckDBPyConnection, instrument: str,
+    con: duckdb.DuckDBPyConnection,
+    instrument: str,
 ) -> pd.DataFrame:
     """Load all 1m bars for an instrument with trading_day column."""
     print(f"    Loading 1m bars for {instrument}...", end=" ", flush=True)
     t0 = time.time()
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume,
                CAST((ts_utc AT TIME ZONE 'Australia/Brisbane'
                      - INTERVAL '9 hours') AS DATE) AS trading_day
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
     elapsed = time.time() - t0
     print(f"{len(df):,} bars in {elapsed:.1f}s")
     return df
 
 
 def load_daily_features(
-    con: duckdb.DuckDBPyConnection, instrument: str,
+    con: duckdb.DuckDBPyConnection,
+    instrument: str,
 ) -> pd.DataFrame:
     """Load daily features (orb_minutes=5) with ORB columns for all labels."""
     # Build column list for ORB labels we need
-    cols = ["trading_day", "atr_20", "us_dst", "uk_dst",
-            "daily_open", "daily_close", "daily_high", "daily_low"]
+    cols = ["trading_day", "atr_20", "us_dst", "uk_dst", "daily_open", "daily_close", "daily_high", "daily_low"]
     for label in FADE_ORB_LABELS:
-        cols.extend([
-            f"orb_{label}_high", f"orb_{label}_low", f"orb_{label}_size",
-            f"orb_{label}_break_dir", f"orb_{label}_break_ts",
-        ])
+        cols.extend(
+            [
+                f"orb_{label}_high",
+                f"orb_{label}_low",
+                f"orb_{label}_size",
+                f"orb_{label}_break_dir",
+                f"orb_{label}_break_ts",
+            ]
+        )
     # Session range stats for Late-Session Reversal
-    cols.extend(["session_asia_high", "session_asia_low",
-                 "session_london_high", "session_london_low",
-                 "session_ny_high", "session_ny_low"])
+    cols.extend(
+        [
+            "session_asia_high",
+            "session_asia_low",
+            "session_london_high",
+            "session_london_low",
+            "session_ny_high",
+            "session_ny_low",
+        ]
+    )
     col_str = ", ".join(cols)
-    df = con.execute(f"""
+    df = con.execute(
+        f"""
         SELECT {col_str}
         FROM daily_features
         WHERE symbol = ? AND orb_minutes = 5
         ORDER BY trading_day
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
     return df
 
 
 # =============================================================================
 # ARCHETYPE 1: Failed Breakout Fade
 # =============================================================================
+
 
 def run_failed_breakout_fade(
     daily_df: pd.DataFrame,
@@ -344,15 +382,13 @@ def run_failed_breakout_fade(
     Time stop: 4 hours after entry.
     """
     variant = f"{orb_label}_N{n_return_bars}_RR{rr_target}"
-    params = {"orb_label": orb_label, "n_return_bars": n_return_bars,
-              "rr_target": rr_target}
+    params = {"orb_label": orb_label, "n_return_bars": n_return_bars, "rr_target": rr_target}
     archetype = "failed_breakout_fade"
 
     if spec is None:
         spec = COST_SPECS.get(instrument)
     if spec is None:
-        return StrategyResult(archetype=archetype, instrument=instrument,
-                              variant=variant, params=params)
+        return StrategyResult(archetype=archetype, instrument=instrument, variant=variant, params=params)
 
     h_col = f"orb_{orb_label}_high"
     l_col = f"orb_{orb_label}_low"
@@ -430,12 +466,16 @@ def run_failed_breakout_fade(
         target_price = entry_price + direction * rr_target * risk_pts
 
         # Simulate on bars after entry
-        remaining_bars = post_break.iloc[entry_bar_idx + 1:]
+        remaining_bars = post_break.iloc[entry_bar_idx + 1 :]
         if len(remaining_bars) == 0:
             continue
 
         pnl_pts, exit_type = simulate_trade(
-            remaining_bars, direction, entry_price, stop_price, target_price,
+            remaining_bars,
+            direction,
+            entry_price,
+            stop_price,
+            target_price,
             max_bars=MAX_TRADE_BARS,
         )
 
@@ -450,8 +490,11 @@ def run_failed_breakout_fade(
 # ARCHETYPE 2: Late-Session Reversal
 # =============================================================================
 
+
 def _get_session_bars(
-    day_bars: pd.DataFrame, block_name: str, trading_day,
+    day_bars: pd.DataFrame,
+    block_name: str,
+    trading_day,
 ) -> pd.DataFrame:
     """Filter 1m bars to a session block by UTC hour range."""
     block = SESSION_BLOCKS[block_name]
@@ -490,15 +533,13 @@ def run_late_session_reversal(
     Time stop: Session close.
     """
     variant = f"{block_name}_ext{extension_threshold}_T-{entry_offset_min}"
-    params = {"block": block_name, "extension_threshold": extension_threshold,
-              "entry_offset_min": entry_offset_min}
+    params = {"block": block_name, "extension_threshold": extension_threshold, "entry_offset_min": entry_offset_min}
     archetype = "late_session_reversal"
 
     if spec is None:
         spec = COST_SPECS.get(instrument)
     if spec is None:
-        return StrategyResult(archetype=archetype, instrument=instrument,
-                              variant=variant, params=params)
+        return StrategyResult(archetype=archetype, instrument=instrument, variant=variant, params=params)
 
     block = SESSION_BLOCKS[block_name]
     session_end_h = block["end_utc_h"]
@@ -548,7 +589,7 @@ def run_late_session_reversal(
         if entry_price > session_mid:
             direction = -1  # short: price is above mid, expect reversion down
         else:
-            direction = 1   # long: price is below mid, expect reversion up
+            direction = 1  # long: price is below mid, expect reversion up
 
         # Risk and targets
         stop_distance = 0.5 * atr
@@ -565,7 +606,11 @@ def run_late_session_reversal(
             continue
 
         pnl_pts, exit_type = simulate_trade(
-            post_entry, direction, entry_price, stop_price, target_price,
+            post_entry,
+            direction,
+            entry_price,
+            stop_price,
+            target_price,
             max_bars=entry_offset_min + 10,  # session end + small buffer
         )
 
@@ -579,6 +624,7 @@ def run_late_session_reversal(
 # =============================================================================
 # ARCHETYPE 3: VWAP Reversion
 # =============================================================================
+
 
 def run_vwap_reversion(
     daily_df: pd.DataFrame,
@@ -600,15 +646,13 @@ def run_vwap_reversion(
     Time stop: Session close.
     """
     variant = f"{block_name}_sig{sigma_mult}_{target_type}"
-    params = {"block": block_name, "sigma_mult": sigma_mult,
-              "target_type": target_type}
+    params = {"block": block_name, "sigma_mult": sigma_mult, "target_type": target_type}
     archetype = "vwap_reversion"
 
     if spec is None:
         spec = COST_SPECS.get(instrument)
     if spec is None:
-        return StrategyResult(archetype=archetype, instrument=instrument,
-                              variant=variant, params=params)
+        return StrategyResult(archetype=archetype, instrument=instrument, variant=variant, params=params)
 
     min_vwap_bars = 60  # need 1 hour of bars before VWAP signal meaningful
 
@@ -661,7 +705,7 @@ def run_vwap_reversion(
             if entry_price > current_vwap:
                 direction = -1  # short: price above VWAP, expect reversion down
             else:
-                direction = 1   # long: price below VWAP, expect reversion up
+                direction = 1  # long: price below VWAP, expect reversion up
 
             # Stop: deviation extends by 1σ
             stop_price = entry_price - direction * current_std
@@ -677,7 +721,7 @@ def run_vwap_reversion(
                 target_price = current_vwap + direction * 0.5 * current_std
 
             # Remaining bars after entry
-            remaining_idx = vol_bars.index[j + 1:] if j + 1 < len(vol_bars) else pd.Index([])
+            remaining_idx = vol_bars.index[j + 1 :] if j + 1 < len(vol_bars) else pd.Index([])
             if len(remaining_idx) == 0:
                 continue
 
@@ -688,7 +732,11 @@ def run_vwap_reversion(
                 continue
 
             pnl_pts, exit_type = simulate_trade(
-                remaining, direction, entry_price, stop_price, target_price,
+                remaining,
+                direction,
+                entry_price,
+                stop_price,
+                target_price,
                 max_bars=MAX_TRADE_BARS,
             )
 
@@ -704,6 +752,7 @@ def run_vwap_reversion(
 # =============================================================================
 # Main Runner
 # =============================================================================
+
 
 def run_all(
     db_path: str,
@@ -725,9 +774,9 @@ def run_all(
                 print(f"  No cost model for {instrument}, skipping")
                 continue
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print(f"  INSTRUMENT: {instrument}")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
 
             # Load data once per instrument
             bars_df = load_instrument_bars(con, instrument)
@@ -752,16 +801,23 @@ def run_all(
                     for n_bars in [5, 10, 15, 20]:
                         for rr in [0.5, 1.0, 1.5]:
                             r = run_failed_breakout_fade(
-                                daily_df, bars_by_day, instrument, label,
-                                n_return_bars=n_bars, rr_target=rr, spec=spec,
+                                daily_df,
+                                bars_by_day,
+                                instrument,
+                                label,
+                                n_return_bars=n_bars,
+                                rr_target=rr,
+                                spec=spec,
                             )
                             results.append(r)
                             if r.n_trades >= MIN_TRADES:
                                 sig = "*" if r.p_value < 0.05 else " "
-                                print(f"    {sig} {label:18s} N_ret={n_bars:2d} "
-                                      f"RR={rr:.1f} N={r.n_trades:4d} "
-                                      f"WR={r.win_rate:.2%} ExpR={r.avg_pnl_r:+.4f} "
-                                      f"p={r.p_value:.4f}")
+                                print(
+                                    f"    {sig} {label:18s} N_ret={n_bars:2d} "
+                                    f"RR={rr:.1f} N={r.n_trades:4d} "
+                                    f"WR={r.win_rate:.2%} ExpR={r.avg_pnl_r:+.4f} "
+                                    f"p={r.p_value:.4f}"
+                                )
 
             # =================================================================
             # ARCHETYPE 2: Late-Session Reversal
@@ -772,17 +828,23 @@ def run_all(
                     for threshold in [0.5, 0.75, 1.0, 1.5]:
                         for offset in [60, 90]:
                             r = run_late_session_reversal(
-                                daily_df, bars_by_day, instrument, block,
+                                daily_df,
+                                bars_by_day,
+                                instrument,
+                                block,
                                 extension_threshold=threshold,
-                                entry_offset_min=offset, spec=spec,
+                                entry_offset_min=offset,
+                                spec=spec,
                             )
                             results.append(r)
                             if r.n_trades >= MIN_TRADES:
                                 sig = "*" if r.p_value < 0.05 else " "
-                                print(f"    {sig} {block:8s} ext={threshold:.2f} "
-                                      f"T-{offset} N={r.n_trades:4d} "
-                                      f"WR={r.win_rate:.2%} ExpR={r.avg_pnl_r:+.4f} "
-                                      f"p={r.p_value:.4f}")
+                                print(
+                                    f"    {sig} {block:8s} ext={threshold:.2f} "
+                                    f"T-{offset} N={r.n_trades:4d} "
+                                    f"WR={r.win_rate:.2%} ExpR={r.avg_pnl_r:+.4f} "
+                                    f"p={r.p_value:.4f}"
+                                )
 
             # =================================================================
             # ARCHETYPE 3: VWAP Reversion
@@ -793,16 +855,23 @@ def run_all(
                     for sigma in [1.5, 2.0, 2.5, 3.0]:
                         for ttype in ["full", "partial"]:
                             r = run_vwap_reversion(
-                                daily_df, bars_by_day, instrument, block,
-                                sigma_mult=sigma, target_type=ttype, spec=spec,
+                                daily_df,
+                                bars_by_day,
+                                instrument,
+                                block,
+                                sigma_mult=sigma,
+                                target_type=ttype,
+                                spec=spec,
                             )
                             results.append(r)
                             if r.n_trades >= MIN_TRADES:
                                 sig = "*" if r.p_value < 0.05 else " "
-                                print(f"    {sig} {block:8s} sig={sigma:.1f} "
-                                      f"{ttype:7s} N={r.n_trades:4d} "
-                                      f"WR={r.win_rate:.2%} ExpR={r.avg_pnl_r:+.4f} "
-                                      f"p={r.p_value:.4f}")
+                                print(
+                                    f"    {sig} {block:8s} sig={sigma:.1f} "
+                                    f"{ttype:7s} N={r.n_trades:4d} "
+                                    f"WR={r.win_rate:.2%} ExpR={r.avg_pnl_r:+.4f} "
+                                    f"p={r.p_value:.4f}"
+                                )
 
             # Free memory
             del bars_df, bars_by_day, daily_df
@@ -826,18 +895,22 @@ def run_all(
             print(f"FDR-significant at alpha={FDR_ALPHA}: {n_sig}")
 
             if n_sig > 0:
-                print(f"\n{'Archetype':<25s} {'Instrument':<8s} {'Variant':<35s} "
-                      f"{'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>7s} "
-                      f"{'raw_p':>8s} {'adj_p':>8s}")
+                print(
+                    f"\n{'Archetype':<25s} {'Instrument':<8s} {'Variant':<35s} "
+                    f"{'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>7s} "
+                    f"{'raw_p':>8s} {'adj_p':>8s}"
+                )
                 print("-" * 120)
                 for idx, adj_p, sig in fdr_results:
                     if sig:
                         r = valid_results[idx]
-                        print(f"{r.archetype:<25s} {r.instrument:<8s} "
-                              f"{r.variant:<35s} "
-                              f"{r.n_trades:5d} {r.win_rate:7.2%} "
-                              f"{r.avg_pnl_r:+8.4f} {r.sharpe:7.3f} "
-                              f"{r.p_value:8.4f} {adj_p:8.4f}")
+                        print(
+                            f"{r.archetype:<25s} {r.instrument:<8s} "
+                            f"{r.variant:<35s} "
+                            f"{r.n_trades:5d} {r.win_rate:7.2%} "
+                            f"{r.avg_pnl_r:+8.4f} {r.sharpe:7.3f} "
+                            f"{r.p_value:8.4f} {adj_p:8.4f}"
+                        )
             else:
                 print("\nNo strategies survived FDR correction.")
         else:
@@ -855,8 +928,7 @@ def run_all(
                 corr = compute_orb_correlation(con, r, r.instrument)
                 if corr is not None:
                     label = "UNCORRELATED" if abs(corr) < 0.3 else "CORRELATED"
-                    print(f"  {r.archetype:25s} {r.instrument:8s} "
-                          f"{r.variant:35s} corr={corr:+.3f} [{label}]")
+                    print(f"  {r.archetype:25s} {r.instrument:8s} {r.variant:35s} corr={corr:+.3f} [{label}]")
 
         # =====================================================================
         # HONEST SUMMARY
@@ -873,13 +945,14 @@ def run_all(
         print("\nSURVIVED SCRUTINY:")
         if survived:
             for r in survived:
-                print(f"  - {r.archetype} | {r.instrument} | {r.variant} | "
-                      f"N={r.n_trades}, ExpR={r.avg_pnl_r:+.4f}, p={r.p_value:.4f}")
+                print(
+                    f"  - {r.archetype} | {r.instrument} | {r.variant} | "
+                    f"N={r.n_trades}, ExpR={r.avg_pnl_r:+.4f}, p={r.p_value:.4f}"
+                )
         else:
             print("  None.")
 
-        print(f"\nDID NOT SURVIVE: {len(failed)} strategies tested, "
-              f"none FDR-significant")
+        print(f"\nDID NOT SURVIVE: {len(failed)} strategies tested, none FDR-significant")
 
         # Per-archetype summary
         for arch in ["failed_breakout_fade", "late_session_reversal", "vwap_reversion"]:
@@ -889,9 +962,11 @@ def run_all(
                 avg_exp = np.mean([r.avg_pnl_r for r in arch_results])
                 print(f"\n  {arch} ({len(arch_results)} valid tests):")
                 print(f"    Average ExpR across all: {avg_exp:+.4f}")
-                print(f"    Best: {best.instrument} {best.variant} "
-                      f"N={best.n_trades} ExpR={best.avg_pnl_r:+.4f} "
-                      f"p={best.p_value:.4f}")
+                print(
+                    f"    Best: {best.instrument} {best.variant} "
+                    f"N={best.n_trades} ExpR={best.avg_pnl_r:+.4f} "
+                    f"p={best.p_value:.4f}"
+                )
 
         print("\nCAVEATS:")
         print("  - Session block times are fixed UTC (DST may shift by ±1hr)")
@@ -916,17 +991,14 @@ def run_all(
 # Entry Point
 # =============================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Non-ORB Strategy Research — Phase 2: Intraday")
-    parser.add_argument("--db-path", type=Path,
-                        default=PROJECT_ROOT / "gold.db")
-    parser.add_argument("--archetype", type=str, default=None,
-                        choices=["fade", "reversal", "vwap"],
-                        help="Run only one archetype")
-    parser.add_argument("--instrument", type=str, default=None,
-                        choices=ALL_INSTRUMENTS,
-                        help="Run only one instrument")
+    parser = argparse.ArgumentParser(description="Non-ORB Strategy Research — Phase 2: Intraday")
+    parser.add_argument("--db-path", type=Path, default=PROJECT_ROOT / "gold.db")
+    parser.add_argument(
+        "--archetype", type=str, default=None, choices=["fade", "reversal", "vwap"], help="Run only one archetype"
+    )
+    parser.add_argument("--instrument", type=str, default=None, choices=ALL_INSTRUMENTS, help="Run only one instrument")
     args = parser.parse_args()
 
     print("Non-ORB Strategy Research — Phase 2: Intraday Strategies")
@@ -947,7 +1019,7 @@ def main():
     total = len(results)
     valid = sum(1 for r in results if r.n_trades >= MIN_TRADES)
     print(f"\nTotal tests: {total}, Valid (N>={MIN_TRADES}): {valid}")
-    print(f"Runtime: {elapsed:.0f}s ({elapsed/60:.1f}min)")
+    print(f"Runtime: {elapsed:.0f}s ({elapsed / 60:.1f}min)")
 
 
 if __name__ == "__main__":

@@ -153,7 +153,9 @@ def run_for_symbol(
         vah = float(prof["vah"])
 
         session_start, _ = _orb_utc_window(td, session_label, 1)
-        first_min = day_bars[(day_bars["ts_utc"] >= session_start) & (day_bars["ts_utc"] < session_start + pd.Timedelta(minutes=1))]
+        first_min = day_bars[
+            (day_bars["ts_utc"] >= session_start) & (day_bars["ts_utc"] < session_start + pd.Timedelta(minutes=1))
+        ]
         if first_min.empty:
             continue
 
@@ -170,18 +172,24 @@ def run_for_symbol(
         bars_b = day_bars[(day_bars["ts_utc"] >= a_end) & (day_bars["ts_utc"] < b_end)]
 
         # Variant 1: A and B both overlap/touch VA
-        v1_ok = (not bars_a.empty and not bars_b.empty and
-                 any(_bar_overlap_va(r, val, vah) for _, r in bars_a.iterrows()) and
-                 any(_bar_overlap_va(r, val, vah) for _, r in bars_b.iterrows()))
+        v1_ok = (
+            not bars_a.empty
+            and not bars_b.empty
+            and any(_bar_overlap_va(r, val, vah) for _, r in bars_a.iterrows())
+            and any(_bar_overlap_va(r, val, vah) for _, r in bars_b.iterrows())
+        )
         if v1_ok:
             after = day_bars[day_bars["ts_utc"] >= b_end]
             s, r = _evaluate_path(after, side, val, vah)
             results.append(SetupResult(symbol, pd.Timestamp(td), "touch_A_B", side, s, r))
 
         # Variant 2: A and B closes both inside VA (stricter)
-        v2_ok = (not bars_a.empty and not bars_b.empty and
-                 _bar_close_inside_va(bars_a.iloc[-1], val, vah) and
-                 _bar_close_inside_va(bars_b.iloc[-1], val, vah))
+        v2_ok = (
+            not bars_a.empty
+            and not bars_b.empty
+            and _bar_close_inside_va(bars_a.iloc[-1], val, vah)
+            and _bar_close_inside_va(bars_b.iloc[-1], val, vah)
+        )
         if v2_ok:
             after = day_bars[day_bars["ts_utc"] >= b_end]
             s, r = _evaluate_path(after, side, val, vah)
@@ -203,17 +211,15 @@ def summarize(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     if df.empty:
         return pd.DataFrame(), pd.DataFrame()
 
-    sdf = (
-        df.groupby(["symbol", "variant", "open_side"], as_index=False)
-        .agg(setups=("resolved", "count"), resolved=("resolved", "sum"), wins=("success", "sum"))
+    sdf = df.groupby(["symbol", "variant", "open_side"], as_index=False).agg(
+        setups=("resolved", "count"), resolved=("resolved", "sum"), wins=("success", "sum")
     )
     sdf["hit_rate"] = np.where(sdf["resolved"] > 0, sdf["wins"] / sdf["resolved"], np.nan)
 
     ydf = df.copy()
     ydf["year"] = pd.to_datetime(ydf["trading_day"]).dt.year
-    ydf = (
-        ydf.groupby(["symbol", "variant", "open_side", "year"], as_index=False)
-        .agg(setups=("resolved", "count"), resolved=("resolved", "sum"), wins=("success", "sum"))
+    ydf = ydf.groupby(["symbol", "variant", "open_side", "year"], as_index=False).agg(
+        setups=("resolved", "count"), resolved=("resolved", "sum"), wins=("success", "sum")
     )
     ydf["hit_rate"] = np.where(ydf["resolved"] > 0, ydf["wins"] / ydf["resolved"], np.nan)
 

@@ -329,9 +329,7 @@ def main() -> None:
         if args.raw_baseline:
             print("--profile and --raw-baseline are mutually exclusive.")
             sys.exit(1)
-        from trading_app.prop_profiles import ACCOUNT_PROFILES
-
-        from trading_app.prop_profiles import effective_daily_lanes
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
         profile = ACCOUNT_PROFILES[args.profile]
         profile_instruments = sorted({lane.instrument for lane in effective_daily_lanes(profile)})
@@ -399,9 +397,9 @@ def main() -> None:
 
             all_ok = True
             for inst in args._profile_instruments:
-                print(f"\n{'='*50}")
+                print(f"\n{'=' * 50}")
                 print(f"Preflight: {inst}")
-                print(f"{'='*50}")
+                print(f"{'=' * 50}")
                 inst_portfolio = build_profile_portfolio(profile_id=args.profile, instrument=inst)
                 ok = _run_preflight(inst, args.broker, demo, portfolio=inst_portfolio)
                 if not ok:

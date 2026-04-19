@@ -35,7 +35,7 @@ def check_equity_cooldown(portfolio_name: str, instrument: str) -> tuple[bool, s
     After an equity halt (max DD breached), a 24h cooldown is enforced.
     This prevents emotional re-entry after a major loss event.
     """
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
 
     from trading_app.live.session_safety_state import SessionSafetyState
 
@@ -174,8 +174,10 @@ def check_daily_equity(profile_id: str | None = None) -> tuple[bool, str]:
         if tier and tier.daily_loss_limit:
             dll = tier.daily_loss_limit
     except Exception as exc:
-        print(f"WARNING: could not load DLL for profile {profile_id!r} — using fallback ${dll:,.0f} ({exc})",
-              file=sys.stderr)
+        print(
+            f"WARNING: could not load DLL for profile {profile_id!r} — using fallback ${dll:,.0f} ({exc})",
+            file=sys.stderr,
+        )
 
     if dd <= -dll:
         return False, f"DAILY DD LIMIT BREACHED: ${dd:.0f} (limit -${dll:,.0f})"
@@ -586,7 +588,9 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
     # Shadow-only check
     for lane in lanes:
         if lane.get("shadow_only"):
-            results.append((f"Shadow mode ({lane['instrument']})", True, "MGC TOKYO_OPEN: shadow-trade ONLY, no real capital"))
+            results.append(
+                (f"Shadow mode ({lane['instrument']})", True, "MGC TOKYO_OPEN: shadow-trade ONLY, no real capital")
+            )
 
     # Print results
     all_pass = True

@@ -51,10 +51,13 @@ def build_filter_flags(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     rows = []
 
     for sym in SYMBOLS:
-        tdays = [r[0] for r in con.execute(
-            "SELECT DISTINCT trading_day FROM daily_features WHERE symbol=? AND orb_minutes=5 ORDER BY trading_day",
-            [sym],
-        ).fetchall()]
+        tdays = [
+            r[0]
+            for r in con.execute(
+                "SELECT DISTINCT trading_day FROM daily_features WHERE symbol=? AND orb_minutes=5 ORDER BY trading_day",
+                [sym],
+            ).fetchall()
+        ]
         if len(tdays) < 3:
             continue
 
@@ -217,13 +220,20 @@ def main() -> int:
     md_path = out_dir / "dalton_filter_uplift_notes.md"
 
     if summary.empty:
-        md_path.write_text("# Dalton Filter Uplift\n\nNo cells met sample thresholds (n_base>=30, n_on>=20).", encoding="utf-8")
+        md_path.write_text(
+            "# Dalton Filter Uplift\n\nNo cells met sample thresholds (n_base>=30, n_on>=20).", encoding="utf-8"
+        )
         print("No summary rows after thresholds.")
         return 0
 
     summary.to_csv(csv_path, index=False)
 
-    lines = ["# Dalton Filter ON/OFF Uplift", "", "No-lookahead: only trades with entry_ts >= A/B gate_ts included.", ""]
+    lines = [
+        "# Dalton Filter ON/OFF Uplift",
+        "",
+        "No-lookahead: only trades with entry_ts >= A/B gate_ts included.",
+        "",
+    ]
 
     top = summary.head(12)
     lines.append("## Top uplift cells")

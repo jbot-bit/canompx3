@@ -92,6 +92,7 @@ ORDER BY bars.bris_h, bars.bris_m
 
 # ── Helpers ───────────────────────────────────────────────────────────
 
+
 def load_time_scan(csv_path):
     """Load time scan CSV keyed by (instrument, bris_h, bris_m)."""
     data = {}
@@ -175,6 +176,7 @@ def nearest_session(bris_h, bris_m):
 
 # ── Core Logic ────────────────────────────────────────────────────────
 
+
 def query_volume(con, instrument):
     """Query volume aggregated into 15-min Brisbane-time slots.
 
@@ -183,31 +185,30 @@ def query_volume(con, instrument):
     rows = con.execute(VOLUME_SQL, [instrument]).fetchall()
 
     results = []
-    for (bris_h, bris_m, us_w_days, us_w_vol,
-         us_s_days, us_s_vol, uk_w_days, uk_w_vol,
-         uk_s_days, uk_s_vol) in rows:
-
+    for bris_h, bris_m, us_w_days, us_w_vol, us_s_days, us_s_vol, uk_w_days, uk_w_vol, uk_s_days, uk_s_vol in rows:
         us_w_mean = us_w_vol / us_w_days if us_w_days and us_w_days > 0 else 0
         us_s_mean = us_s_vol / us_s_days if us_s_days and us_s_days > 0 else 0
         uk_w_mean = uk_w_vol / uk_w_days if uk_w_days and uk_w_days > 0 else 0
         uk_s_mean = uk_s_vol / uk_s_days if uk_s_days and uk_s_days > 0 else 0
 
-        results.append({
-            "bris_h": int(bris_h),
-            "bris_m": int(bris_m),
-            "us_winter_days": int(us_w_days or 0),
-            "us_winter_vol_total": int(us_w_vol or 0),
-            "us_winter_vol_mean": us_w_mean,
-            "us_summer_days": int(us_s_days or 0),
-            "us_summer_vol_total": int(us_s_vol or 0),
-            "us_summer_vol_mean": us_s_mean,
-            "uk_winter_days": int(uk_w_days or 0),
-            "uk_winter_vol_total": int(uk_w_vol or 0),
-            "uk_winter_vol_mean": uk_w_mean,
-            "uk_summer_days": int(uk_s_days or 0),
-            "uk_summer_vol_total": int(uk_s_vol or 0),
-            "uk_summer_vol_mean": uk_s_mean,
-        })
+        results.append(
+            {
+                "bris_h": int(bris_h),
+                "bris_m": int(bris_m),
+                "us_winter_days": int(us_w_days or 0),
+                "us_winter_vol_total": int(us_w_vol or 0),
+                "us_winter_vol_mean": us_w_mean,
+                "us_summer_days": int(us_s_days or 0),
+                "us_summer_vol_total": int(us_s_vol or 0),
+                "us_summer_vol_mean": us_s_mean,
+                "uk_winter_days": int(uk_w_days or 0),
+                "uk_winter_vol_total": int(uk_w_vol or 0),
+                "uk_winter_vol_mean": uk_w_mean,
+                "uk_summer_days": int(uk_s_days or 0),
+                "uk_summer_vol_total": int(uk_s_vol or 0),
+                "uk_summer_vol_mean": uk_s_mean,
+            }
+        )
 
     return results
 
@@ -273,6 +274,7 @@ def find_dst_shift_pairs(winter_spikes, summer_spikes, shift_slots=4):
 
 # ── Report Generation ─────────────────────────────────────────────────
 
+
 def build_report(all_data, edge_data):
     """Build the full markdown report.
 
@@ -283,10 +285,12 @@ def build_report(all_data, edge_data):
     out = []
     out.append("# 24-Hour Volume + Edge Scan")
     out.append("")
-    out.append("**Method:** Raw `bars_1m.volume` aggregated into 15-minute "
-               "Brisbane-time slots, split by US and UK DST regimes.  Mean "
-               "daily volume per slot = total_vol / n_trading_days.  Edge "
-               "data overlaid from `orb_time_scan_full.csv`.")
+    out.append(
+        "**Method:** Raw `bars_1m.volume` aggregated into 15-minute "
+        "Brisbane-time slots, split by US and UK DST regimes.  Mean "
+        "daily volume per slot = total_vol / n_trading_days.  Edge "
+        "data overlaid from `orb_time_scan_full.csv`."
+    )
     out.append("")
     out.append("**Instruments:** " + ", ".join(INSTRUMENTS))
     out.append("")
@@ -295,17 +299,21 @@ def build_report(all_data, edge_data):
     for inst in INSTRUMENTS:
         if all_data.get(inst):
             d = all_data[inst][0]
-            out.append(f"- **{inst}:** {d['us_winter_days']} US-winter days, "
-                       f"{d['us_summer_days']} US-summer days, "
-                       f"{d['uk_winter_days']} UK-winter days, "
-                       f"{d['uk_summer_days']} UK-summer days")
+            out.append(
+                f"- **{inst}:** {d['us_winter_days']} US-winter days, "
+                f"{d['us_summer_days']} US-summer days, "
+                f"{d['uk_winter_days']} UK-winter days, "
+                f"{d['uk_summer_days']} UK-summer days"
+            )
     out.append("")
 
     if edge_data:
-        out.append("**Edge overlay caveat:** Time scan uses US DST for all "
-                   "instruments.  For 1800/London (UK DST driver), the edge "
-                   "winter/summer classification differs from the volume UK "
-                   "split.")
+        out.append(
+            "**Edge overlay caveat:** Time scan uses US DST for all "
+            "instruments.  For 1800/London (UK DST driver), the edge "
+            "winter/summer classification differs from the volume UK "
+            "split."
+        )
     else:
         out.append("**Note:** Time scan CSV not found — edge overlay skipped.")
     out.append("")
@@ -353,15 +361,13 @@ def section_spikes(out, all_data):
                 out.append("")
                 continue
 
-            out.append(f"**{regime_label} — Top {len(spikes)} spikes "
-                       f"(> 2x median):**")
+            out.append(f"**{regime_label} — Top {len(spikes)} spikes (> 2x median):**")
             out.append("")
             out.append("| Rank | Time | Mean Daily Vol | x Median | Session |")
             out.append("|------|------|---------------|----------|---------|")
             for i, (h, m, vol, mag) in enumerate(spikes, 1):
                 sess = nearest_session(h, m)
-                out.append(f"| {i} | {h:02d}:{m:02d} | {fmt_vol(vol)} "
-                           f"| {mag:.1f}x | {sess} |")
+                out.append(f"| {i} | {h:02d}:{m:02d} | {fmt_vol(vol)} | {mag:.1f}x | {sess} |")
             out.append("")
 
     out.append("---")
@@ -382,22 +388,17 @@ def section_full_tables(out, all_data, edge_data):
         vol_by_slot = {(d["bris_h"], d["bris_m"]): d for d in vol_data}
 
         # Compute medians for spike flagging
-        us_w_vals = [d["us_winter_vol_mean"] for d in vol_data
-                     if d["us_winter_vol_mean"] > 0]
-        us_s_vals = [d["us_summer_vol_mean"] for d in vol_data
-                     if d["us_summer_vol_mean"] > 0]
+        us_w_vals = [d["us_winter_vol_mean"] for d in vol_data if d["us_winter_vol_mean"] > 0]
+        us_s_vals = [d["us_summer_vol_mean"] for d in vol_data if d["us_summer_vol_mean"] > 0]
         us_w_med = statistics.median(us_w_vals) if us_w_vals else 0
         us_s_med = statistics.median(us_s_vals) if us_s_vals else 0
 
         out.append(f"### {inst}")
         out.append("")
-        out.append(f"Median daily volume: US-W={fmt_vol(us_w_med)}, "
-                   f"US-S={fmt_vol(us_s_med)}")
+        out.append(f"Median daily volume: US-W={fmt_vol(us_w_med)}, US-S={fmt_vol(us_s_med)}")
         out.append("")
-        out.append("| Time | US-W Vol | US-S Vol | S/W Ratio "
-                   "| Edge-W | Edge-S | Spike? | Session |")
-        out.append("|------|----------|----------|-----------|"
-                   "--------|--------|--------|---------|")
+        out.append("| Time | US-W Vol | US-S Vol | S/W Ratio | Edge-W | Edge-S | Spike? | Session |")
+        out.append("|------|----------|----------|-----------|--------|--------|--------|---------|")
 
         for bh, bm in CANDIDATE_TIMES:
             d = vol_by_slot.get((bh, bm))
@@ -446,9 +447,11 @@ def section_dst_events(out, all_data, edge_data):
     """Section 3: DST-Confirmed Events — volume spike shift pairs."""
     out.append("## 3. DST-Confirmed Events")
     out.append("")
-    out.append("Pairs where a volume spike in one DST regime has a "
-               "corresponding spike shifted by exactly 1 hour in the other "
-               "regime — confirming the spike tracks a DST-shifting event.")
+    out.append(
+        "Pairs where a volume spike in one DST regime has a "
+        "corresponding spike shifted by exactly 1 hour in the other "
+        "regime — confirming the spike tracks a DST-shifting event."
+    )
     out.append("")
 
     for inst in INSTRUMENTS:
@@ -477,10 +480,8 @@ def section_dst_events(out, all_data, edge_data):
         if us_pairs:
             out.append("**US DST shifts:**")
             out.append("")
-            out.append("| Winter Time | Summer Time | Shift | Edge-W (winter) "
-                       "| Edge-S (summer) |")
-            out.append("|-------------|-------------|-------|------------------"
-                       "|-----------------|")
+            out.append("| Winter Time | Summer Time | Shift | Edge-W (winter) | Edge-S (summer) |")
+            out.append("|-------------|-------------|-------|------------------|-----------------|")
             for wh, wm, sh, sm, direction in us_pairs:
                 ew = edge_data.get((inst, wh, wm), {})
                 es = edge_data.get((inst, sh, sm), {})
@@ -495,10 +496,8 @@ def section_dst_events(out, all_data, edge_data):
         if uk_pairs:
             out.append("**UK DST shifts:**")
             out.append("")
-            out.append("| Winter Time | Summer Time | Shift | Edge-W (winter) "
-                       "| Edge-S (summer) |")
-            out.append("|-------------|-------------|-------|------------------"
-                       "|-----------------|")
+            out.append("| Winter Time | Summer Time | Shift | Edge-W (winter) | Edge-S (summer) |")
+            out.append("|-------------|-------------|-------|------------------|-----------------|")
             for wh, wm, sh, sm, direction in uk_pairs:
                 ew = edge_data.get((inst, wh, wm), {})
                 es = edge_data.get((inst, sh, sm), {})
@@ -518,9 +517,11 @@ def section_undiscovered(out, all_data):
     """Section 4: Volume spikes that don't match any named session."""
     out.append("## 4. Undiscovered Events")
     out.append("")
-    out.append("Volume spikes (> 2x median) at times that don't correspond "
-               "to any named session (beyond ±1 slot).  These are candidates "
-               "for new dynamic sessions or further research.")
+    out.append(
+        "Volume spikes (> 2x median) at times that don't correspond "
+        "to any named session (beyond ±1 slot).  These are candidates "
+        "for new dynamic sessions or further research."
+    )
     out.append("")
 
     found_any = False
@@ -530,8 +531,7 @@ def section_undiscovered(out, all_data):
             continue
 
         unnamed = []
-        for vol_key, regime in [("us_winter_vol_mean", "US-W"),
-                                ("us_summer_vol_mean", "US-S")]:
+        for vol_key, regime in [("us_winter_vol_mean", "US-W"), ("us_summer_vol_mean", "US-S")]:
             spikes = detect_spikes(vol_data, vol_key, top_n=20)
             for h, m, vol, mag in spikes:
                 sess = nearest_session(h, m)
@@ -545,8 +545,7 @@ def section_undiscovered(out, all_data):
             out.append("| Time | Regime | Mean Daily Vol | x Median |")
             out.append("|------|--------|---------------|----------|")
             for h, m, regime, vol, mag in unnamed:
-                out.append(f"| {h:02d}:{m:02d} | {regime} "
-                           f"| {fmt_vol(vol)} | {mag:.1f}x |")
+                out.append(f"| {h:02d}:{m:02d} | {regime} | {fmt_vol(vol)} | {mag:.1f}x |")
             out.append("")
 
     if not found_any:
@@ -594,12 +593,10 @@ def section_cross_instrument(out, all_data):
             if (h, m) in spike_sets.get(inst, set()):
                 # Get the volume
                 vol_data = all_data.get(inst, [])
-                slot = next((d for d in vol_data
-                             if d["bris_h"] == h and d["bris_m"] == m), None)
+                slot = next((d for d in vol_data if d["bris_h"] == h and d["bris_m"] == m), None)
                 if slot:
                     # Use max of US winter/summer as representative
-                    v = max(slot["us_winter_vol_mean"],
-                            slot["us_summer_vol_mean"])
+                    v = max(slot["us_winter_vol_mean"], slot["us_summer_vol_mean"])
                     cells.append(fmt_vol(v))
                 else:
                     cells.append("spike")
@@ -611,32 +608,39 @@ def section_cross_instrument(out, all_data):
         label = " ALL" if count == len(INSTRUMENTS) else ""
         sess = nearest_session(h, m)
         sess_note = f" ({sess})" if sess != "UNNAMED" else ""
-        out.append(
-            f"| {h:02d}:{m:02d}{sess_note} | "
-            + " | ".join(cells)
-            + f" | {coverage}{label} |"
-        )
+        out.append(f"| {h:02d}:{m:02d}{sess_note} | " + " | ".join(cells) + f" | {coverage}{label} |")
 
     out.append("")
 
 
 # ── CSV Output ────────────────────────────────────────────────────────
 
+
 def write_csv(all_data, edge_data):
     """Write full results CSV."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     fieldnames = [
-        "instrument", "bris_h", "bris_m", "time",
-        "us_winter_days", "us_winter_vol_mean",
-        "us_summer_days", "us_summer_vol_mean",
+        "instrument",
+        "bris_h",
+        "bris_m",
+        "time",
+        "us_winter_days",
+        "us_winter_vol_mean",
+        "us_summer_days",
+        "us_summer_vol_mean",
         "us_summer_winter_ratio",
-        "uk_winter_days", "uk_winter_vol_mean",
-        "uk_summer_days", "uk_summer_vol_mean",
+        "uk_winter_days",
+        "uk_winter_vol_mean",
+        "uk_summer_days",
+        "uk_summer_vol_mean",
         "uk_summer_winter_ratio",
-        "edge_n_trades", "edge_avg_r",
-        "edge_n_winter", "edge_avg_r_winter",
-        "edge_n_summer", "edge_avg_r_summer",
+        "edge_n_trades",
+        "edge_avg_r",
+        "edge_n_winter",
+        "edge_avg_r_winter",
+        "edge_n_summer",
+        "edge_avg_r_summer",
         "session",
     ]
 
@@ -651,48 +655,40 @@ def write_csv(all_data, edge_data):
                 ekey = (inst, bh, bm)
                 e = edge_data.get(ekey, {})
 
-                us_ratio = (d["us_summer_vol_mean"] / d["us_winter_vol_mean"]
-                            if d["us_winter_vol_mean"] > 0 else None)
-                uk_ratio = (d["uk_summer_vol_mean"] / d["uk_winter_vol_mean"]
-                            if d["uk_winter_vol_mean"] > 0 else None)
+                us_ratio = d["us_summer_vol_mean"] / d["us_winter_vol_mean"] if d["us_winter_vol_mean"] > 0 else None
+                uk_ratio = d["uk_summer_vol_mean"] / d["uk_winter_vol_mean"] if d["uk_winter_vol_mean"] > 0 else None
 
-                writer.writerow({
-                    "instrument": inst,
-                    "bris_h": bh,
-                    "bris_m": bm,
-                    "time": f"{bh:02d}:{bm:02d}",
-                    "us_winter_days": d["us_winter_days"],
-                    "us_winter_vol_mean": f"{d['us_winter_vol_mean']:.1f}",
-                    "us_summer_days": d["us_summer_days"],
-                    "us_summer_vol_mean": f"{d['us_summer_vol_mean']:.1f}",
-                    "us_summer_winter_ratio": (f"{us_ratio:.3f}"
-                                               if us_ratio is not None
-                                               else ""),
-                    "uk_winter_days": d["uk_winter_days"],
-                    "uk_winter_vol_mean": f"{d['uk_winter_vol_mean']:.1f}",
-                    "uk_summer_days": d["uk_summer_days"],
-                    "uk_summer_vol_mean": f"{d['uk_summer_vol_mean']:.1f}",
-                    "uk_summer_winter_ratio": (f"{uk_ratio:.3f}"
-                                               if uk_ratio is not None
-                                               else ""),
-                    "edge_n_trades": e.get("n_trades", ""),
-                    "edge_avg_r": (f"{e['avg_r']:.4f}"
-                                   if e.get("avg_r") is not None else ""),
-                    "edge_n_winter": e.get("n_winter", ""),
-                    "edge_avg_r_winter": (f"{e['avg_r_winter']:.4f}"
-                                          if e.get("avg_r_winter") is not None
-                                          else ""),
-                    "edge_n_summer": e.get("n_summer", ""),
-                    "edge_avg_r_summer": (f"{e['avg_r_summer']:.4f}"
-                                          if e.get("avg_r_summer") is not None
-                                          else ""),
-                    "session": NAMED_SESSIONS.get((bh, bm), ""),
-                })
+                writer.writerow(
+                    {
+                        "instrument": inst,
+                        "bris_h": bh,
+                        "bris_m": bm,
+                        "time": f"{bh:02d}:{bm:02d}",
+                        "us_winter_days": d["us_winter_days"],
+                        "us_winter_vol_mean": f"{d['us_winter_vol_mean']:.1f}",
+                        "us_summer_days": d["us_summer_days"],
+                        "us_summer_vol_mean": f"{d['us_summer_vol_mean']:.1f}",
+                        "us_summer_winter_ratio": (f"{us_ratio:.3f}" if us_ratio is not None else ""),
+                        "uk_winter_days": d["uk_winter_days"],
+                        "uk_winter_vol_mean": f"{d['uk_winter_vol_mean']:.1f}",
+                        "uk_summer_days": d["uk_summer_days"],
+                        "uk_summer_vol_mean": f"{d['uk_summer_vol_mean']:.1f}",
+                        "uk_summer_winter_ratio": (f"{uk_ratio:.3f}" if uk_ratio is not None else ""),
+                        "edge_n_trades": e.get("n_trades", ""),
+                        "edge_avg_r": (f"{e['avg_r']:.4f}" if e.get("avg_r") is not None else ""),
+                        "edge_n_winter": e.get("n_winter", ""),
+                        "edge_avg_r_winter": (f"{e['avg_r_winter']:.4f}" if e.get("avg_r_winter") is not None else ""),
+                        "edge_n_summer": e.get("n_summer", ""),
+                        "edge_avg_r_summer": (f"{e['avg_r_summer']:.4f}" if e.get("avg_r_summer") is not None else ""),
+                        "session": NAMED_SESSIONS.get((bh, bm), ""),
+                    }
+                )
 
     return len(all_data.get(INSTRUMENTS[0], [])) * len(INSTRUMENTS)
 
 
 # ── Main ──────────────────────────────────────────────────────────────
+
 
 def main():
     t_start = _time.time()
@@ -704,9 +700,7 @@ def main():
 
     # Sanity check: bars_1m row counts
     for inst in INSTRUMENTS:
-        n = con.execute(
-            "SELECT COUNT(*) FROM bars_1m WHERE symbol = $1", [inst]
-        ).fetchone()[0]
+        n = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = $1", [inst]).fetchone()[0]
         print(f"  {inst}: {n:,} bars in bars_1m")
 
     # Load edge data
@@ -729,8 +723,7 @@ def main():
             # Quick summary
             us_w_total = sum(d["us_winter_vol_total"] for d in vol)
             us_s_total = sum(d["us_summer_vol_total"] for d in vol)
-            print(f"  Total volume: US-winter={us_w_total:,}, "
-                  f"US-summer={us_s_total:,}")
+            print(f"  Total volume: US-winter={us_w_total:,}, US-summer={us_s_total:,}")
 
         all_data[inst] = vol
 

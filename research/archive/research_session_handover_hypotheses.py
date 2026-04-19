@@ -112,15 +112,15 @@ def load_hypothesis_df(con: duckdb.DuckDBPyConnection, h: dict) -> pd.DataFrame:
      AND df_f.trading_day=o.trading_day
      AND df_f.orb_minutes=o.orb_minutes
     JOIN daily_features df_l
-      ON df_l.symbol='{h['leader_symbol']}'
+      ON df_l.symbol='{h["leader_symbol"]}'
      AND df_l.trading_day=o.trading_day
      AND df_l.orb_minutes=o.orb_minutes
     WHERE o.orb_minutes=5
-      AND o.symbol='{h['follower_symbol']}'
-      AND o.orb_label='{h['follower_session']}'
-      AND o.entry_model='{h['entry_model']}'
-      AND o.confirm_bars={h['confirm_bars']}
-      AND o.rr_target={h['rr_target']}
+      AND o.symbol='{h["follower_symbol"]}'
+      AND o.orb_label='{h["follower_session"]}'
+      AND o.entry_model='{h["entry_model"]}'
+      AND o.confirm_bars={h["confirm_bars"]}
+      AND o.rr_target={h["rr_target"]}
       AND o.pnl_r IS NOT NULL
       AND o.entry_ts IS NOT NULL
     """
@@ -164,7 +164,9 @@ def condition_mask(df: pd.DataFrame, mode: str) -> pd.Series:
 
     if mode == "opp_dir_stretch":
         q70 = df["l_size_atr"].quantile(0.70)
-        return opp & df["l_size_atr"].notna() & (df["l_size_atr"] >= q70) & df["l_delay"].notna() & (df["l_delay"] <= 30)
+        return (
+            opp & df["l_size_atr"].notna() & (df["l_size_atr"] >= q70) & df["l_delay"].notna() & (df["l_delay"] <= 30)
+        )
 
     raise ValueError(f"Unknown mode: {mode}")
 
@@ -235,12 +237,7 @@ def verdict(row: dict) -> str:
     ):
         return "PROMOTE"
 
-    if (
-        row["avg_on"] is not None
-        and row["avg_on"] > 0
-        and row["uplift"] >= 0.10
-        and row["n_on"] >= 40
-    ):
+    if row["avg_on"] is not None and row["avg_on"] > 0 and row["uplift"] >= 0.10 and row["n_on"] >= 40:
         return "WATCH"
 
     return "KILL"

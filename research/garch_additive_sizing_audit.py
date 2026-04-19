@@ -164,7 +164,11 @@ def summarize(df: pd.DataFrame, weight_col: str) -> dict[str, float]:
     work["weighted_r"] = work["pnl_r"] * work[weight_col]
     work["weighted_dollars"] = work["pnl_dollars"] * work[weight_col]
     work["weighted_risk_dollars"] = work["risk_dollars"] * work[weight_col]
-    daily = work.groupby("trading_day", as_index=True)[["weighted_r", "weighted_dollars", "weighted_risk_dollars"]].sum().sort_index()
+    daily = (
+        work.groupby("trading_day", as_index=True)[["weighted_r", "weighted_dollars", "weighted_risk_dollars"]]
+        .sum()
+        .sort_index()
+    )
     roll5 = daily["weighted_dollars"].rolling(5).sum()
     return {
         "exp_r": float(work["weighted_r"].mean()) if len(work) else 0.0,
@@ -178,7 +182,9 @@ def summarize(df: pd.DataFrame, weight_col: str) -> dict[str, float]:
     }
 
 
-def evaluate_scope(df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, bool]]) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+def evaluate_scope(
+    df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, bool]]
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     base = df.copy()
     base["w"] = 1.0
     base_is = summarize(base[~base["is_oos"]], "w")
@@ -246,7 +252,9 @@ def emit(profiles: dict[str, dict[str, bool]], res: pd.DataFrame, contribs: dict
         "|---|---|---|---|",
     ]
     for sess, p in sorted(profiles.items()):
-        lines.append(f"| {sess} | {'Y' if p['high_dir'] else '.'} | {'Y' if p['low_dir'] else '.'} | {'Y' if p['high_mono'] else '.'} |")
+        lines.append(
+            f"| {sess} | {'Y' if p['high_dir'] else '.'} | {'Y' if p['low_dir'] else '.'} | {'Y' if p['high_mono'] else '.'} |"
+        )
 
     lines += [
         "",
@@ -277,7 +285,13 @@ def emit(profiles: dict[str, dict[str, bool]], res: pd.DataFrame, contribs: dict
             )
         best = sub.iloc[0]["map"] if len(sub) else None
         if best is not None:
-            lines += ["", f"### {scope.title()} best-map contributions: `{best}`", "", "| Instrument | Session | Δ$ |", "|---|---|---|"]
+            lines += [
+                "",
+                f"### {scope.title()} best-map contributions: `{best}`",
+                "",
+                "| Instrument | Session | Δ$ |",
+                "|---|---|---|",
+            ]
             for _, r in contribs[scope][best].head(15).iterrows():
                 lines.append(f"| {r['instrument']} | {r['orb_label']} | {r['delta_dollars']:+.1f} |")
 

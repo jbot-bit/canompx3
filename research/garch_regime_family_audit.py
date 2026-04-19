@@ -209,13 +209,17 @@ def family_directional(cells: list[CellRecord]) -> pd.DataFrame:
                     "mean_lift": float(np.mean(lifts)) if lifts else float("nan"),
                     "long_support": sum(v > 0 for v in long_vals) if side == "high" else sum(v < 0 for v in long_vals),
                     "long_total": len(long_vals),
-                    "short_support": sum(v > 0 for v in short_vals) if side == "high" else sum(v < 0 for v in short_vals),
+                    "short_support": sum(v > 0 for v in short_vals)
+                    if side == "high"
+                    else sum(v < 0 for v in short_vals),
                     "short_total": len(short_vals),
                     "family_bh_survivors": bh_ct,
                     "oos_match_frac": (
-                        sum(x > 0 for x in oos) / len(oos) if (side == "high" and oos) else
-                        sum(x < 0 for x in oos) / len(oos) if (side == "low" and oos) else
-                        float("nan")
+                        sum(x > 0 for x in oos) / len(oos)
+                        if (side == "high" and oos)
+                        else sum(x < 0 for x in oos) / len(oos)
+                        if (side == "low" and oos)
+                        else float("nan")
                     ),
                 }
             )

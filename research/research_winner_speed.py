@@ -47,19 +47,19 @@ CHECKPOINTS = [5, 10, 15, 20, 30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 420,
 # Used to compute dead_exposure = session_max - T80. These are estimates —
 # actual session close is determined by trading_day end logic in outcome_builder.
 SESSION_MAX_MINUTES: dict[str, int] = {
-    "0900":           480,
-    "1000":           480,
-    "1100":           420,
-    "1130":           360,
-    "1800":           420,
-    "2300":           360,
-    "0030":           300,
-    "CME_OPEN":       480,
-    "LONDON_OPEN":    420,
+    "0900": 480,
+    "1000": 480,
+    "1100": 420,
+    "1130": 360,
+    "1800": 420,
+    "2300": 360,
+    "0030": 300,
+    "CME_OPEN": 480,
+    "LONDON_OPEN": 420,
     "US_EQUITY_OPEN": 300,
-    "US_DATA_OPEN":   240,
+    "US_DATA_OPEN": 240,
     "US_POST_EQUITY": 180,
-    "CME_CLOSE":      180,
+    "CME_CLOSE": 180,
 }
 DEFAULT_SESSION_MAX = 480
 
@@ -67,6 +67,7 @@ DEFAULT_SESSION_MAX = 480
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def classify_sample(n: int) -> str:
     """Per RESEARCH_RULES.md thresholds."""
@@ -91,6 +92,7 @@ def find_percentile(sorted_vals: list[float], pct: float) -> float | None:
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
+
 
 def load_winners(con, instruments: list[str], sessions: list[str] | None) -> pd.DataFrame:
     """
@@ -132,39 +134,50 @@ def load_winners(con, instruments: list[str], sessions: list[str] | None) -> pd.
 # Per-group statistics
 # ---------------------------------------------------------------------------
 
-def analyze_group(minutes: list[float], symbol: str, session: str,
-                  rr_target: float, confirm_bars: int) -> dict:
+
+def analyze_group(minutes: list[float], symbol: str, session: str, rr_target: float, confirm_bars: int) -> dict:
     """Compute T-percentiles and dead exposure for one group."""
     n = len(minutes)
     session_max = SESSION_MAX_MINUTES.get(session, DEFAULT_SESSION_MAX)
 
     base = {
-        "symbol": symbol, "session": session,
-        "rr_target": rr_target, "confirm_bars": confirm_bars,
-        "n_winners": n, "sample_class": classify_sample(n),
+        "symbol": symbol,
+        "session": session,
+        "rr_target": rr_target,
+        "confirm_bars": confirm_bars,
+        "n_winners": n,
+        "sample_class": classify_sample(n),
         "session_max_min": session_max,
     }
 
     if n == 0:
-        return {**base, "t50": None, "t80": None, "t90": None, "t95": None,
-                "t_max_obs": None, "dead_exposure_min": None}
+        return {
+            **base,
+            "t50": None,
+            "t80": None,
+            "t90": None,
+            "t95": None,
+            "t_max_obs": None,
+            "dead_exposure_min": None,
+        }
 
     srt = sorted(minutes)
     t80 = find_percentile(srt, 80)
 
     return {
         **base,
-        "t50":              round(find_percentile(srt, 50), 1),
-        "t80":              round(t80, 1),
-        "t90":              round(find_percentile(srt, 90), 1),
-        "t95":              round(find_percentile(srt, 95), 1),
-        "t_max_obs":        round(srt[-1], 1),
+        "t50": round(find_percentile(srt, 50), 1),
+        "t80": round(t80, 1),
+        "t90": round(find_percentile(srt, 90), 1),
+        "t95": round(find_percentile(srt, 95), 1),
+        "t_max_obs": round(srt[-1], 1),
         "dead_exposure_min": round(session_max - t80, 1),
     }
 
 
-def build_cumulative(minutes: list[float], symbol: str, session: str,
-                     rr_target: float, confirm_bars: int) -> list[dict]:
+def build_cumulative(
+    minutes: list[float], symbol: str, session: str, rr_target: float, confirm_bars: int
+) -> list[dict]:
     """Cumulative % of winners hit by each checkpoint."""
     n = len(minutes)
     if n == 0:
@@ -172,14 +185,18 @@ def build_cumulative(minutes: list[float], symbol: str, session: str,
     rows = []
     for cp in CHECKPOINTS:
         n_hit = sum(1 for m in minutes if m <= cp)
-        rows.append({
-            "symbol": symbol, "session": session,
-            "rr_target": rr_target, "confirm_bars": confirm_bars,
-            "checkpoint_min": cp,
-            "n_hit": n_hit,
-            "n_total": n,
-            "pct_hit": round(100.0 * n_hit / n, 1),
-        })
+        rows.append(
+            {
+                "symbol": symbol,
+                "session": session,
+                "rr_target": rr_target,
+                "confirm_bars": confirm_bars,
+                "checkpoint_min": cp,
+                "n_hit": n_hit,
+                "n_total": n,
+                "pct_hit": round(100.0 * n_hit / n, 1),
+            }
+        )
     return rows
 
 
@@ -187,14 +204,12 @@ def build_cumulative(minutes: list[float], symbol: str, session: str,
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Winner speed profiling — time-to-target for ORB wins"
-    )
+    parser = argparse.ArgumentParser(description="Winner speed profiling — time-to-target for ORB wins")
     parser.add_argument("--db-path", type=str, default=None)
     parser.add_argument("--instruments", nargs="+", default=["MGC", "MES", "MNQ"])
-    parser.add_argument("--sessions", nargs="*", default=None,
-                        help="Sessions to include (default: all)")
+    parser.add_argument("--sessions", nargs="*", default=None, help="Sessions to include (default: all)")
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
@@ -240,9 +255,7 @@ def main() -> None:
         minutes = grp["minutes_to_target"].dropna().tolist()
         stats = analyze_group(minutes, symbol, session, rr_target, int(confirm_bars))
         summary_rows.append(stats)
-        cumulative_rows.extend(build_cumulative(
-            minutes, symbol, session, rr_target, int(confirm_bars)
-        ))
+        cumulative_rows.extend(build_cumulative(minutes, symbol, session, rr_target, int(confirm_bars)))
 
     summary_df = pd.DataFrame(summary_rows)
     cumulative_df = pd.DataFrame(cumulative_rows)
@@ -263,22 +276,25 @@ def main() -> None:
     # -----------------------------------------------------------------------
     # Console: ranked table by dead exposure (worst offenders first)
     # -----------------------------------------------------------------------
-    valid = summary_df[
-        (summary_df["sample_class"] != "INVALID")
-        & summary_df["dead_exposure_min"].notna()
-    ].sort_values("dead_exposure_min", ascending=False)
+    valid = summary_df[(summary_df["sample_class"] != "INVALID") & summary_df["dead_exposure_min"].notna()].sort_values(
+        "dead_exposure_min", ascending=False
+    )
 
     print(f"\n{'=' * 90}")
     print(f"  WINNER SPEED TABLE  (REGIME+ only, ranked by dead exposure)")
     print(f"  dead_exposure = session_max - T80  |  >120m = consider tighter close")
     print(f"{'=' * 90}")
-    print(f"  {'Sym':>4}  {'Session':>14}  {'RR':>4}  {'CB':>3}  {'N':>5}  "
-          f"{'Class':>11}  {'T50':>6}  {'T80':>6}  {'T90':>6}  {'SessMax':>8}  {'DeadExp':>8}")
+    print(
+        f"  {'Sym':>4}  {'Session':>14}  {'RR':>4}  {'CB':>3}  {'N':>5}  "
+        f"{'Class':>11}  {'T50':>6}  {'T80':>6}  {'T90':>6}  {'SessMax':>8}  {'DeadExp':>8}"
+    )
     print(f"  {'-' * 82}")
 
     for _, r in valid.iterrows():
+
         def _fmt(v, suffix="m"):
             return f"{v:.0f}{suffix}" if pd.notna(v) else "N/A"
+
         print(
             f"  {r['symbol']:>4}  {r['session']:>14}  {r['rr_target']:>4.1f}  "
             f"{int(r['confirm_bars']):>3}  {int(r['n_winners']):>5}  "
@@ -292,9 +308,11 @@ def main() -> None:
     if not worst.empty:
         print(f"\n  HIGH DEAD EXPOSURE (>2h) — consider tighter session close:")
         for _, r in worst.iterrows():
-            print(f"    {r['symbol']} {r['session']}: "
-                  f"T80={r['t80']:.0f}m, session_max={r['session_max_min']}m, "
-                  f"dead_exposure={r['dead_exposure_min']:.0f}m")
+            print(
+                f"    {r['symbol']} {r['session']}: "
+                f"T80={r['t80']:.0f}m, session_max={r['session_max_min']}m, "
+                f"dead_exposure={r['dead_exposure_min']:.0f}m"
+            )
 
     # -----------------------------------------------------------------------
     # Console: cumulative hit % table (one representative per symbol/session)
@@ -321,16 +339,20 @@ def main() -> None:
         if cum.empty:
             continue
 
-        print(f"\n  {r['symbol']} {r['session']}  RR{r['rr_target']:.1f}  "
-              f"CB{int(r['confirm_bars'])}  "
-              f"(N={int(r['n_winners'])}, {r['sample_class']})")
+        print(
+            f"\n  {r['symbol']} {r['session']}  RR{r['rr_target']:.1f}  "
+            f"CB{int(r['confirm_bars'])}  "
+            f"(N={int(r['n_winners'])}, {r['sample_class']})"
+        )
         print(f"  {'Min':>5}   {'% Hit':>7}   {'Count':>12}")
         print(f"  {'-' * 35}")
         for _, row in cum.iterrows():
             # Mark T80 threshold visually
             marker = " <-- T80" if abs(row["pct_hit"] - 80.0) < 5 else ""
-            print(f"  {int(row['checkpoint_min']):>5}m   {row['pct_hit']:>6.1f}%   "
-                  f"{int(row['n_hit']):>5}/{int(row['n_total'])}{marker}")
+            print(
+                f"  {int(row['checkpoint_min']):>5}m   {row['pct_hit']:>6.1f}%   "
+                f"{int(row['n_hit']):>5}/{int(row['n_total'])}{marker}"
+            )
 
     print(f"\n  Outputs: {output_dir}\n")
 

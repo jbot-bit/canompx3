@@ -81,6 +81,7 @@ _UK_LONDON = ZoneInfo("Europe/London")
 # Helpers
 # =========================================================================
 
+
 def fmt_metrics(m: dict | None) -> str:
     """Format metrics dict as a compact summary line."""
     if m is None:
@@ -98,15 +99,11 @@ def compute_dst_transition_dates(year: int) -> dict:
 
     # US: 2nd Sunday March, 1st Sunday November
     mar1 = date(year, 3, 1)
-    sundays_mar = [mar1 + timedelta(days=d)
-                   for d in range(31)
-                   if (mar1 + timedelta(days=d)).weekday() == 6]
+    sundays_mar = [mar1 + timedelta(days=d) for d in range(31) if (mar1 + timedelta(days=d)).weekday() == 6]
     us_spring = sundays_mar[1]  # 2nd Sunday
 
     nov1 = date(year, 11, 1)
-    sundays_nov = [nov1 + timedelta(days=d)
-                   for d in range(30)
-                   if (nov1 + timedelta(days=d)).weekday() == 6]
+    sundays_nov = [nov1 + timedelta(days=d) for d in range(30) if (nov1 + timedelta(days=d)).weekday() == 6]
     us_fall = sundays_nov[0]  # 1st Sunday
 
     # UK: Last Sunday March, Last Sunday October
@@ -128,6 +125,7 @@ def compute_dst_transition_dates(year: int) -> dict:
 # Section 1: DST Resolver Correctness Audit
 # =========================================================================
 
+
 def section1_resolver_audit(con: duckdb.DuckDBPyConnection):
     print("=" * 60)
     print("  SECTION 1: DST RESOLVER CORRECTNESS")
@@ -138,10 +136,8 @@ def section1_resolver_audit(con: duckdb.DuckDBPyConnection):
         SELECT DISTINCT trading_day FROM daily_features
         ORDER BY trading_day
     """).fetchdf()
-    trading_days = [d.date() if hasattr(d, 'date') else d
-                    for d in days_df["trading_day"]]
-    print(f"\n  Trading days in DB: {len(trading_days)} "
-          f"({trading_days[0]} to {trading_days[-1]})")
+    trading_days = [d.date() if hasattr(d, "date") else d for d in days_df["trading_day"]]
+    print(f"\n  Trading days in DB: {len(trading_days)} ({trading_days[0]} to {trading_days[-1]})")
 
     # Resolver hour distribution
     total_anomalies = 0
@@ -172,38 +168,43 @@ def section1_resolver_audit(con: duckdb.DuckDBPyConnection):
     min_year = trading_days[0].year
     max_year = trading_days[-1].year
     print(f"\n  DST Transition Dates ({min_year}-{max_year}):")
-    print(f"    {'Year':>4s} | {'US Spring':>10s} | {'US Fall':>10s} | "
-          f"{'UK Spring':>10s} | {'UK Fall':>10s}")
+    print(f"    {'Year':>4s} | {'US Spring':>10s} | {'US Fall':>10s} | {'UK Spring':>10s} | {'UK Fall':>10s}")
     print(f"    {'-' * 4}-+-{'-' * 10}-+-{'-' * 10}-+-{'-' * 10}-+-{'-' * 10}")
 
     all_mismatches = []
     for year in range(min_year, max_year + 1):
         t = compute_dst_transition_dates(year)
-        print(f"    {year} | {t['us_spring']} | {t['us_fall']} | "
-              f"{t['uk_spring']} | {t['uk_fall']}")
+        print(f"    {year} | {t['us_spring']} | {t['us_fall']} | {t['uk_spring']} | {t['uk_fall']}")
 
         # Spring mismatch: US goes DST first (mid-March), UK follows (late March)
         if t["us_spring"] < t["uk_spring"]:
-            all_mismatches.append({
-                "year": year, "season": "Spring",
-                "start": t["us_spring"], "end": t["uk_spring"] - timedelta(days=1),
-                "note": "US=DST, UK=not",
-            })
+            all_mismatches.append(
+                {
+                    "year": year,
+                    "season": "Spring",
+                    "start": t["us_spring"],
+                    "end": t["uk_spring"] - timedelta(days=1),
+                    "note": "US=DST, UK=not",
+                }
+            )
 
         # Fall mismatch: UK reverts first (late Oct), US follows (early Nov)
         if t["uk_fall"] < t["us_fall"]:
-            all_mismatches.append({
-                "year": year, "season": "Fall",
-                "start": t["uk_fall"], "end": t["us_fall"] - timedelta(days=1),
-                "note": "UK=reverted, US=still DST",
-            })
+            all_mismatches.append(
+                {
+                    "year": year,
+                    "season": "Fall",
+                    "start": t["uk_fall"],
+                    "end": t["us_fall"] - timedelta(days=1),
+                    "note": "UK=reverted, US=still DST",
+                }
+            )
 
     # Mismatch windows
     print(f"\n  US/UK DST Mismatch Windows:")
     for mm in all_mismatches:
         days = (mm["end"] - mm["start"]).days + 1
-        print(f"    {mm['year']} {mm['season']:6s}: "
-              f"{mm['start']} - {mm['end']} ({days} days) — {mm['note']}")
+        print(f"    {mm['year']} {mm['season']:6s}: {mm['start']} - {mm['end']} ({days} days) — {mm['note']}")
 
     print(f"\n  TOTAL RESOLVER ANOMALIES: {total_anomalies}")
     return total_anomalies
@@ -212,6 +213,7 @@ def section1_resolver_audit(con: duckdb.DuckDBPyConnection):
 # =========================================================================
 # Section 2: Fixed Session Edge Split (Winter vs Summer)
 # =========================================================================
+
 
 def section2_winter_summer_split(con: duckdb.DuckDBPyConnection):
     print("\n" + "=" * 60)
@@ -223,7 +225,8 @@ def section2_winter_summer_split(con: duckdb.DuckDBPyConnection):
     for instrument, session, em, rr, cb, gate_label, gate_min, dst_flag in EDGE_COMBOS:
         print(f"\n  {instrument} {session} {em} RR{rr} CB{cb} {gate_label}:")
 
-        df = con.execute(f"""
+        df = con.execute(
+            f"""
             SELECT o.pnl_r, d.{dst_flag} AS is_dst
             FROM orb_outcomes o
             JOIN daily_features d
@@ -237,7 +240,9 @@ def section2_winter_summer_split(con: duckdb.DuckDBPyConnection):
               AND o.confirm_bars = ?
               AND o.outcome IN ('win', 'loss')
               AND d.orb_{session}_size >= ?
-        """, [instrument, session, em, rr, cb, gate_min]).fetchdf()
+        """,
+            [instrument, session, em, rr, cb, gate_min],
+        ).fetchdf()
 
         if len(df) == 0:
             print("    No data.")
@@ -282,6 +287,7 @@ def section2_winter_summer_split(con: duckdb.DuckDBPyConnection):
 # Section 3: Dynamic vs Fixed Head-to-Head
 # =========================================================================
 
+
 def section3_head_to_head(con: duckdb.DuckDBPyConnection):
     print("\n" + "=" * 60)
     print("  SECTION 3: DYNAMIC vs FIXED HEAD-TO-HEAD")
@@ -293,7 +299,8 @@ def section3_head_to_head(con: duckdb.DuckDBPyConnection):
         print(f"\n  {instrument}: {fixed} vs {dynamic} ({em} RR{rr} CB{cb}):")
 
         # Self-join: same day, same params, different orb_label
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT f.pnl_r AS fixed_pnl,
                    d.pnl_r AS dynamic_pnl,
                    f.trading_day
@@ -313,7 +320,9 @@ def section3_head_to_head(con: duckdb.DuckDBPyConnection):
               AND f.confirm_bars = ?
               AND f.outcome IN ('win', 'loss')
               AND d.outcome IN ('win', 'loss')
-        """, [instrument, fixed, dynamic, em, rr, cb]).fetchdf()
+        """,
+            [instrument, fixed, dynamic, em, rr, cb],
+        ).fetchdf()
 
         if len(df) == 0:
             print("    No overlapping resolved days.")
@@ -331,8 +340,10 @@ def section3_head_to_head(con: duckdb.DuckDBPyConnection):
             delta = m_dynamic["expr"] - m_fixed["expr"]
             print(f"    Delta (dynamic - fixed): avgR={delta:+.3f}")
             h2h_results[(instrument, fixed, dynamic)] = {
-                "fixed": m_fixed, "dynamic": m_dynamic,
-                "delta": delta, "n_matched": len(df),
+                "fixed": m_fixed,
+                "dynamic": m_dynamic,
+                "delta": delta,
+                "n_matched": len(df),
             }
         else:
             h2h_results[(instrument, fixed, dynamic)] = None
@@ -343,6 +354,7 @@ def section3_head_to_head(con: duckdb.DuckDBPyConnection):
 # =========================================================================
 # Section 4: DST Mismatch Windows
 # =========================================================================
+
 
 def section4_mismatch_windows(con: duckdb.DuckDBPyConnection):
     print("\n" + "=" * 60)
@@ -368,7 +380,7 @@ def section4_mismatch_windows(con: duckdb.DuckDBPyConnection):
     fall_days = []
     for _, row in df.iterrows():
         td = row["trading_day"]
-        if hasattr(td, 'date'):
+        if hasattr(td, "date"):
             td = td.date()
         month = td.month
         if month in (3, 4):  # Spring mismatch
@@ -390,7 +402,8 @@ def section4_mismatch_windows(con: duckdb.DuckDBPyConnection):
         print(f"\n  {instrument} {session} ({dst_flag}) — mismatch vs normal:")
 
         # All resolved trades with size gate
-        all_trades = con.execute(f"""
+        all_trades = con.execute(
+            f"""
             SELECT o.pnl_r, d.us_dst, d.uk_dst, o.trading_day
             FROM orb_outcomes o
             JOIN daily_features d
@@ -404,7 +417,9 @@ def section4_mismatch_windows(con: duckdb.DuckDBPyConnection):
               AND o.confirm_bars = ?
               AND o.outcome IN ('win', 'loss')
               AND d.orb_{session}_size >= ?
-        """, [instrument, session, em, rr, cb, gate_min]).fetchdf()
+        """,
+            [instrument, session, em, rr, cb, gate_min],
+        ).fetchdf()
 
         if len(all_trades) == 0:
             print("    No data.")
@@ -428,6 +443,7 @@ def section4_mismatch_windows(con: duckdb.DuckDBPyConnection):
 # =========================================================================
 # Section 5: Recommendations
 # =========================================================================
+
 
 def section5_recommendations(verdicts: dict, h2h_results: dict, anomaly_count: int):
     print("\n" + "=" * 60)
@@ -467,10 +483,10 @@ def section5_recommendations(verdicts: dict, h2h_results: dict, anomaly_count: i
 # Main
 # =========================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="DST Edge Audit")
-    parser.add_argument("--db-path", type=str, default=None,
-                        help="Path to gold.db (default: auto-resolve)")
+    parser.add_argument("--db-path", type=str, default=None, help="Path to gold.db (default: auto-resolve)")
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH

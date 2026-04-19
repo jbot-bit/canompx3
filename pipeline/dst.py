@@ -528,9 +528,7 @@ DYNAMIC_ORB_RESOLVERS = {
 }
 
 
-def orb_utc_window(
-    trading_day: date, orb_label: str, orb_minutes: int
-) -> tuple[datetime, datetime]:
+def orb_utc_window(trading_day: date, orb_label: str, orb_minutes: int) -> tuple[datetime, datetime]:
     """
     Compute the [start, end) UTC window for an ORB on a given trading day.
 
@@ -577,17 +575,12 @@ def orb_utc_window(
     # in build_daily_features._orb_utc_window (which accepted any int). The
     # bounds catch zero, negative, and implausibly-large apertures.
     if not (_ORB_MINUTES_MIN <= orb_minutes <= _ORB_MINUTES_MAX):
-        raise ValueError(
-            f"orb_minutes={orb_minutes} outside valid range "
-            f"[{_ORB_MINUTES_MIN}, {_ORB_MINUTES_MAX}]"
-        )
+        raise ValueError(f"orb_minutes={orb_minutes} outside valid range [{_ORB_MINUTES_MIN}, {_ORB_MINUTES_MAX}]")
 
     # Resolve the session's Brisbane (hour, minute) for this trading day.
     # DYNAMIC_ORB_RESOLVERS holds the per-session DST-aware resolver callables.
     if orb_label not in DYNAMIC_ORB_RESOLVERS:
-        raise ValueError(
-            f"Unknown ORB label '{orb_label}' — not in DYNAMIC_ORB_RESOLVERS"
-        )
+        raise ValueError(f"Unknown ORB label '{orb_label}' — not in DYNAMIC_ORB_RESOLVERS")
     hour, minute = DYNAMIC_ORB_RESOLVERS[orb_label](trading_day)
 
     # Determine the Brisbane calendar date for this ORB time. The trading day

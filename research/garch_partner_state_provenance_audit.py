@@ -206,8 +206,12 @@ def analyze_cell(df: pd.DataFrame, df_oos: pd.DataFrame, cand: Candidate) -> dic
     g_sub = df.loc[g & valid_partner].copy()
     p_sub = df.loc[valid_partner].copy()
 
-    partner_inside_garch = compare_split(g_sub, fav.loc[g_sub.index]) if len(g_sub) >= (2 * MIN_SIDE) else {"valid": False}
-    garch_inside_partner = compare_split(p_sub, g.loc[p_sub.index]) if len(p_sub) >= (2 * MIN_SIDE) else {"valid": False}
+    partner_inside_garch = (
+        compare_split(g_sub, fav.loc[g_sub.index]) if len(g_sub) >= (2 * MIN_SIDE) else {"valid": False}
+    )
+    garch_inside_partner = (
+        compare_split(p_sub, g.loc[p_sub.index]) if len(p_sub) >= (2 * MIN_SIDE) else {"valid": False}
+    )
 
     n_conj = int(conj.sum())
     base_exp = exp_r(df["pnl_r"])
@@ -242,7 +246,9 @@ def analyze_cell(df: pd.DataFrame, df_oos: pd.DataFrame, cand: Candidate) -> dic
     }
 
 
-def to_row(family: Family, cand: Candidate, row: pd.Series, direction: str, res: dict[str, object]) -> dict[str, object]:
+def to_row(
+    family: Family, cand: Candidate, row: pd.Series, direction: str, res: dict[str, object]
+) -> dict[str, object]:
     return {
         "family": family.label,
         "session": family.session,
@@ -286,18 +292,26 @@ def summarize_candidate(sub: pd.DataFrame) -> dict[str, object]:
         "base_exp": base_exp,
         "conj_exp": conj_exp,
         "delta": conj_exp - base_exp if n_conj else float("nan"),
-        "support_cells_partner_inside_garch": int(sub.loc[sub["valid_partner_inside_garch"], "support_partner_inside_garch"].sum()),
+        "support_cells_partner_inside_garch": int(
+            sub.loc[sub["valid_partner_inside_garch"], "support_partner_inside_garch"].sum()
+        ),
         "valid_cells_partner_inside_garch": int(sub["valid_partner_inside_garch"].sum()),
         "support_weight_partner_inside_garch": int(
-            sub.loc[sub["valid_partner_inside_garch"] & sub["support_partner_inside_garch"], "n_partner_inside_garch"].sum()
+            sub.loc[
+                sub["valid_partner_inside_garch"] & sub["support_partner_inside_garch"], "n_partner_inside_garch"
+            ].sum()
         ),
         "valid_weight_partner_inside_garch": int(
             sub.loc[sub["valid_partner_inside_garch"], "n_partner_inside_garch"].sum()
         ),
-        "support_cells_garch_inside_partner": int(sub.loc[sub["valid_garch_inside_partner"], "support_garch_inside_partner"].sum()),
+        "support_cells_garch_inside_partner": int(
+            sub.loc[sub["valid_garch_inside_partner"], "support_garch_inside_partner"].sum()
+        ),
         "valid_cells_garch_inside_partner": int(sub["valid_garch_inside_partner"].sum()),
         "support_weight_garch_inside_partner": int(
-            sub.loc[sub["valid_garch_inside_partner"] & sub["support_garch_inside_partner"], "n_garch_inside_partner"].sum()
+            sub.loc[
+                sub["valid_garch_inside_partner"] & sub["support_garch_inside_partner"], "n_garch_inside_partner"
+            ].sum()
         ),
         "valid_weight_garch_inside_partner": int(
             sub.loc[sub["valid_garch_inside_partner"], "n_garch_inside_partner"].sum()
@@ -324,7 +338,9 @@ def support_share(num: int, den: int) -> float:
 def viable(summary: dict[str, object]) -> bool:
     if not summary:
         return False
-    cond_share = support_share(summary["support_weight_partner_inside_garch"], summary["valid_weight_partner_inside_garch"])
+    cond_share = support_share(
+        summary["support_weight_partner_inside_garch"], summary["valid_weight_partner_inside_garch"]
+    )
     return (
         summary["n_conj"] >= MIN_CONJ
         and not pd.isna(summary["delta"])
@@ -349,12 +365,16 @@ def family_mech_verdict(mech_sub: pd.DataFrame) -> tuple[str, str, pd.DataFrame]
         )
         s["viable"] = viable(s)
         summaries.append(s)
-    s_df = pd.DataFrame(summaries).sort_values(["current_w2", "delta", "support_share_partner_inside_garch"], ascending=[False, False, False])
+    s_df = pd.DataFrame(summaries).sort_values(
+        ["current_w2", "delta", "support_share_partner_inside_garch"], ascending=[False, False, False]
+    )
     if len(s_df) == 0:
         return "unclear", "no_rows", s_df
 
     current = s_df[s_df["current_w2"]].iloc[0] if s_df["current_w2"].any() else None
-    viable_df = s_df[s_df["viable"]].sort_values(["delta", "support_share_partner_inside_garch", "n_conj"], ascending=[False, False, False])
+    viable_df = s_df[s_df["viable"]].sort_values(
+        ["delta", "support_share_partner_inside_garch", "n_conj"], ascending=[False, False, False]
+    )
 
     if len(viable_df) == 0:
         if s_df["n_conj"].max() < MIN_CONJ:
@@ -456,11 +476,21 @@ def emit(df: pd.DataFrame, summaries: dict[tuple[str, str], pd.DataFrame]) -> No
                     "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
                 ]
             )
-            for _, row in s_df.sort_values(["current_w2", "delta", "support_share_partner_inside_garch"], ascending=[False, False, False]).iterrows():
+            for _, row in s_df.sort_values(
+                ["current_w2", "delta", "support_share_partner_inside_garch"], ascending=[False, False, False]
+            ).iterrows():
                 conj_s = "" if pd.isna(row["conj_exp"]) else f"{row['conj_exp']:+.3f}"
                 delta_s = "" if pd.isna(row["delta"]) else f"{row['delta']:+.3f}"
-                pig_s = "" if pd.isna(row["support_share_partner_inside_garch"]) else f"{row['support_share_partner_inside_garch']:.2f}"
-                gip_s = "" if pd.isna(row["support_share_garch_inside_partner"]) else f"{row['support_share_garch_inside_partner']:.2f}"
+                pig_s = (
+                    ""
+                    if pd.isna(row["support_share_partner_inside_garch"])
+                    else f"{row['support_share_partner_inside_garch']:.2f}"
+                )
+                gip_s = (
+                    ""
+                    if pd.isna(row["support_share_garch_inside_partner"])
+                    else f"{row['support_share_garch_inside_partner']:.2f}"
+                )
                 oos_s = "" if pd.isna(row["exp_conj_oos"]) else f"{row['exp_conj_oos']:+.3f}"
                 cw2_s = "yes" if row["current_w2"] else "no"
                 lines.append(

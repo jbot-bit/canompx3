@@ -15,6 +15,7 @@ Usage:
     python pipeline/check_drift.py
 """
 
+import ast
 import re
 import sys
 from pathlib import Path
@@ -59,6 +60,28 @@ def _get_db_path() -> Path:
     from pipeline.paths import GOLD_DB_PATH
 
     return GOLD_DB_PATH
+
+
+def _skip_db_check_for_ci(skip_msg: str) -> list[str]:
+    """When CI=true (set automatically by GitHub Actions) or SKIP_DB_CHECKS=1
+    is set, return [] (silent skip — runner counts it as skip_count).
+    Otherwise return [skip_msg] as a violation (preserves local fail-closed
+    behavior — missing DB locally indicates broken setup).
+
+    Per CLAUDE.md "Database Location & Workflow": gold.db lives on local
+    disk only ("no cloud sync"). CI runners legitimately have no DB; local
+    devs are expected to. Same check, two contexts, env-controlled response.
+    No `continue-on-error` band-aid — drift stays a hard gate everywhere;
+    only the missing-DB case is treated correctly per context.
+    """
+    import os
+
+    if os.environ.get("CI", "").lower() == "true" or os.environ.get("SKIP_DB_CHECKS", "") == "1":
+        # Print so CI logs show WHICH check skipped and WHY — avoids the
+        # misleading "PASSED" label when nothing was actually verified.
+        print(f"  SKIPPED (CI/SKIP_DB_CHECKS env set): {skip_msg.strip()}")
+        return []
+    return [skip_msg]
 
 
 def _table_exists(con, table_name: str) -> bool:
@@ -1586,17 +1609,26 @@ def check_doc_stats_consistency(con=None) -> list[str]:
 
 
 def check_stale_scratch_db() -> list[str]:
-    """Check #37: Canonical gold.db must exist at project root.
+    """Check #37: Canonical gold.db must exist where pipeline.paths points.
 
-    Canonical DB is <project>/gold.db (via pipeline.paths.GOLD_DB_PATH).
+    Resolves the canonical DB location via _get_db_path(), which honors:
+      1. GOLD_DB_PATH_FOR_CHECKS module-level test override (set by tests)
+      2. pipeline.paths.GOLD_DB_PATH (production), which honors:
+         - DUCKDB_PATH env var (worktree / override scenario)
+         - PROJECT_ROOT/gold.db (default canonical location)
+
+    Per integrity-guardian.md rule 2 (canonical-source delegation), this
+    check delegates to the canonical resolver rather than recomputing
+    the path independently. Worktree scenario: f5 worktree has no local
+    gold.db; DUCKDB_PATH points to canonical canompx3/gold.db.
+
     C:/db/gold.db scratch copy is DEPRECATED (Mar 24 2026) — caused stale-data
     decisions across terminals. No auto-sync. Use canonical only.
     """
     violations = []
-    project_root_db = PROJECT_ROOT / "gold.db"
-    if not project_root_db.exists():
-        violations.append(f"  Canonical DB not found at project root ({project_root_db}). Run pipeline to create it.")
-        return violations
+    canonical_db = _get_db_path()
+    if not canonical_db.exists():
+        return _skip_db_check_for_ci(f"  Canonical DB not found at {canonical_db}. Run pipeline to create it.")
     scratch_db = Path("C:/db/gold.db")
     if scratch_db.exists():
         violations.append(
@@ -3067,20 +3099,20 @@ def check_htf_levels_integrity(con=None) -> list[str]:
             )
 
         week_fields = [
-            ("prev_week_high",  "w.wh"),
-            ("prev_week_low",   "w.wl"),
-            ("prev_week_open",  "w.wo"),
+            ("prev_week_high", "w.wh"),
+            ("prev_week_low", "w.wl"),
+            ("prev_week_open", "w.wo"),
             ("prev_week_close", "w.wc"),
             ("prev_week_range", "w.wr"),
-            ("prev_week_mid",   "w.wm"),
+            ("prev_week_mid", "w.wm"),
         ]
         month_fields = [
-            ("prev_month_high",  "m.mh"),
-            ("prev_month_low",   "m.ml"),
-            ("prev_month_open",  "m.mo"),
+            ("prev_month_high", "m.mh"),
+            ("prev_month_low", "m.ml"),
+            ("prev_month_open", "m.mo"),
             ("prev_month_close", "m.mc"),
             ("prev_month_range", "m.mr"),
-            ("prev_month_mid",   "m.mm"),
+            ("prev_month_mid", "m.mm"),
         ]
 
         diff_cases = [_diff_case(s, c, s) for s, c in week_fields + month_fields]
@@ -3258,7 +3290,9 @@ def check_family_rr_locks_coverage(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return ["SKIPPED"]
+                return _skip_db_check_for_ci(
+                    "  FAMILY RR LOCKS SKIPPED: gold.db not found — cannot verify lock coverage"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
         # Check table exists
@@ -3269,7 +3303,7 @@ def check_family_rr_locks_coverage(con=None) -> list[str]:
             ).fetchall()
         ]
         if not tables:
-            return ["SKIPPED"]
+            return _skip_db_check_for_ci("  FAMILY RR LOCKS SKIPPED: family_rr_locks table not present in DB")
 
         # Count families in validated_setups without a matching lock
         missing = con.execute("""
@@ -3882,7 +3916,9 @@ def check_holdout_contamination(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return ["  HOLDOUT CHECK SKIPPED: gold.db not found — cannot verify holdout integrity"]
+                return _skip_db_check_for_ci(
+                    "  HOLDOUT CHECK SKIPPED: gold.db not found — cannot verify holdout integrity"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -4620,9 +4656,9 @@ def check_phase_4_sha_integrity(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return [
-                    "  PHASE 4 SHA INTEGRITY SKIPPED: gold.db not found — cannot verify hypothesis file SHA integrity"
-                ]
+                return _skip_db_check_for_ci(
+                    "  PHASE 4 SHA INTEGRITY SKIPPED: gold.db not found — cannot verify hypothesis file SHA integrity"  # noqa: E501
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -4707,10 +4743,10 @@ def check_prop_profiles_validated_alignment(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return [
+                return _skip_db_check_for_ci(
                     "  PROP PROFILES ALIGNMENT SKIPPED: gold.db not found — "
                     "cannot verify deployed lane validation backing"
-                ]
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -5105,7 +5141,29 @@ def check_shared_profile_fingerprint_canonical() -> list[str]:
             f"  Expected exactly one runtime build_profile_fingerprint() definition, found {runtime_defs}"
         )
 
-    if "from trading_app.derived_state import build_profile_fingerprint" not in account_text:
+    # AST-based import detection — robust to single-line, multi-line, and
+    # parenthesized `from X import (a, b, c)` forms. Literal string match
+    # was brittle: ruff's I001 import-sort consolidates separate imports
+    # into the existing multi-line block, breaking the literal pattern
+    # while preserving semantics. See drift-check-96-ast-aware stage.
+    canonical_module = "trading_app.derived_state"
+    canonical_name = "build_profile_fingerprint"
+    has_canonical_import = False
+    if account_text:
+        try:
+            tree = ast.parse(account_text)
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.ImportFrom)
+                    and node.module == canonical_module
+                    and any(alias.name == canonical_name for alias in node.names)
+                ):
+                    has_canonical_import = True
+                    break
+        except SyntaxError:
+            # Unparseable file — let other checks handle it; don't double-violate.
+            has_canonical_import = True
+    if not has_canonical_import:
         violations.append(
             "  trading_app/account_survival.py must import build_profile_fingerprint from trading_app.derived_state"
         )
@@ -5708,7 +5766,12 @@ CHECKS = [
         False,
     ),
     ("Generated context-routing docs stay in sync with the registry", check_context_generated_docs, False, False),
-    ("Generated task views preserve strict truth-class boundaries", check_context_view_contracts, True, False),  # ADVISORY: context/ package not yet committed
+    (
+        "Generated task views preserve strict truth-class boundaries",
+        check_context_view_contracts,
+        True,
+        False,
+    ),  # ADVISORY: context/ package not yet committed
     (
         "AGENTS.md points cold-start agents to the deterministic context router",
         check_agents_mentions_context_resolver,

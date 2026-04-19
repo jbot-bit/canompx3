@@ -1,6 +1,8 @@
 """Full factor audit for self-funded + prop income projection."""
+
 import duckdb
 import numpy as np
+
 from pipeline.paths import GOLD_DB_PATH
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -34,7 +36,7 @@ print()
 print(f"OOS: {days} days, {trades} trades, avg {avg_r:+.4f}R")
 print(f"95% CI: [{ci_lo:+.4f}, {ci_hi:+.4f}]  (CI excludes zero = real signal)")
 print(f"Gross/ct/yr: MID {gross_mid:,.0f} | LOW {gross_lo:,.0f}")
-print(f"Comm+slip/ct/yr: {comm_yr + slip_yr:,.0f} ({(comm_yr+slip_yr)/gross_mid*100:.0f}% of gross)")
+print(f"Comm+slip/ct/yr: {comm_yr + slip_yr:,.0f} ({(comm_yr + slip_yr) / gross_mid * 100:.0f}% of gross)")
 print(f"Fixed: {FIXED:,}/yr")
 print()
 
@@ -114,16 +116,16 @@ for yr in range(10):
     aud_lo2 = max(0, total_lo2 * 1.555 * 0.655)
     cumul_lo += aud_lo2
 
-print(f"  MID: {cumul_mid:>10,.0f} AUD total ({cumul_mid/10:>7,.0f}/yr = {cumul_mid/120:>5,.0f}/mo)")
-print(f"  LOW: {cumul_lo:>10,.0f} AUD total ({cumul_lo/10:>7,.0f}/yr = {cumul_lo/120:>5,.0f}/mo)")
+print(f"  MID: {cumul_mid:>10,.0f} AUD total ({cumul_mid / 10:>7,.0f}/yr = {cumul_mid / 120:>5,.0f}/mo)")
+print(f"  LOW: {cumul_lo:>10,.0f} AUD total ({cumul_lo / 10:>7,.0f}/yr = {cumul_lo / 120:>5,.0f}/mo)")
 print()
 
 time_cost_aud = 3000 * 1.555 * 0.655  # post-tax equivalent
-print(f"Time cost (100 hrs/yr at 30 USD/hr): {time_cost_aud:,.0f} AUD/yr = {time_cost_aud/12:,.0f}/mo")
+print(f"Time cost (100 hrs/yr at 30 USD/hr): {time_cost_aud:,.0f} AUD/yr = {time_cost_aud / 12:,.0f}/mo")
 print()
 print("BOTTOM LINE:")
-print(f"  MID: {cumul_mid/120 - time_cost_aud/12:>+6,.0f}/mo AUD after EVERYTHING including your time")
-print(f"  LOW: {cumul_lo/120 - time_cost_aud/12:>+6,.0f}/mo AUD (if edge is at bottom of 95% CI)")
+print(f"  MID: {cumul_mid / 120 - time_cost_aud / 12:>+6,.0f}/mo AUD after EVERYTHING including your time")
+print(f"  LOW: {cumul_lo / 120 - time_cost_aud / 12:>+6,.0f}/mo AUD (if edge is at bottom of 95% CI)")
 print()
 print("67 DAYS IS SHORT. The CI is wide. Need 6 months live to narrow it.")
 print("If LOW CI is reality: barely worth the effort at 5+5 scale.")

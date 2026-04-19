@@ -148,15 +148,17 @@ def build_concordance_map(features: pd.DataFrame) -> pd.DataFrame:
         maj_dir = np.where(n_long >= n_short, "long", "short")
         maj_dir = np.where(n_active < 2, "none", maj_dir)
 
-        sess_df = pd.DataFrame({
-            "trading_day": wide["trading_day"],
-            "session": sess,
-            "concordance_tier": tier,
-            "majority_dir": maj_dir,
-            "n_active": n_active,
-            "n_long": n_long,
-            "n_short": n_short,
-        })
+        sess_df = pd.DataFrame(
+            {
+                "trading_day": wide["trading_day"],
+                "session": sess,
+                "concordance_tier": tier,
+                "majority_dir": maj_dir,
+                "n_active": n_active,
+                "n_long": n_long,
+                "n_short": n_short,
+            }
+        )
         for i in INSTRUMENTS:
             sess_df[f"{i}_break_dir"] = dirs[i].values
             sess_df[f"{i}_orb_size"] = sizes[i].values
@@ -184,10 +186,12 @@ def build_mgc_2300_context(features: pd.DataFrame) -> pd.DataFrame:
         wide = wide.merge(dfs[inst], on="trading_day", how="inner")
 
     # Compute MGC 2300 ORB size / ATR ratio
-    has_data = (wide["MGC_2300_break_dir"].notna() &
-                wide["MGC_2300_size"].notna() &
-                wide["MGC_atr_20"].notna() &
-                (wide["MGC_atr_20"] > 0))
+    has_data = (
+        wide["MGC_2300_break_dir"].notna()
+        & wide["MGC_2300_size"].notna()
+        & wide["MGC_atr_20"].notna()
+        & (wide["MGC_atr_20"] > 0)
+    )
     wide["mgc_2300_size_atr"] = np.where(
         has_data,
         wide["MGC_2300_size"] / wide["MGC_atr_20"],
@@ -195,7 +199,8 @@ def build_mgc_2300_context(features: pd.DataFrame) -> pd.DataFrame:
     )
     median_ratio = wide.loc[has_data, "mgc_2300_size_atr"].median()
     wide["mgc_2300_size_bucket"] = np.where(
-        ~has_data, "no_data",
+        ~has_data,
+        "no_data",
         np.where(wide["mgc_2300_size_atr"] >= median_ratio, "large", "small"),
     )
     wide["mgc_2300_median_ratio"] = median_ratio
@@ -241,8 +246,7 @@ def fmt_f(v, decimals=3):
 # =========================================================================
 
 
-def analysis_1_concordance_overlay(conc_map: pd.DataFrame,
-                                   outcomes: pd.DataFrame):
+def analysis_1_concordance_overlay(conc_map: pd.DataFrame, outcomes: pd.DataFrame):
     """Test concordance tiers on top of G4+/G5+ strategies."""
     print("\n--- ANALYSIS 1: CONCORDANCE AS OVERLAY FILTER ---")
     print("Three tiers: 3/3 concordant > 2/3 majority > remaining")
@@ -260,19 +264,19 @@ def analysis_1_concordance_overlay(conc_map: pd.DataFrame,
         combo_label = f"{sess} {em}/CB{cb}/RR{rr}"
 
         # Get outcomes matching this combo for all instruments at this session
-        mask = ((outcomes["orb_label"] == sess) &
-                (outcomes["entry_model"] == em) &
-                (outcomes["confirm_bars"] == cb) &
-                (outcomes["rr_target"] == rr))
+        mask = (
+            (outcomes["orb_label"] == sess)
+            & (outcomes["entry_model"] == em)
+            & (outcomes["confirm_bars"] == cb)
+            & (outcomes["rr_target"] == rr)
+        )
         combo_outcomes = outcomes[mask].copy()
 
         if len(combo_outcomes) == 0:
             continue
 
         # Get concordance map for this session
-        sess_conc = conc_map[conc_map["session"] == sess][
-            ["trading_day", "concordance_tier", "majority_dir"]
-        ].copy()
+        sess_conc = conc_map[conc_map["session"] == sess][["trading_day", "concordance_tier", "majority_dir"]].copy()
 
         for size_label, min_size in SIZE_FILTERS.items():
             print(f"  {combo_label} / {size_label}+:")
@@ -286,13 +290,17 @@ def analysis_1_concordance_overlay(conc_map: pd.DataFrame,
             for inst in INSTRUMENTS:
                 inst_merged = merged[merged["symbol"] == inst].copy()
                 inst_sizes = conc_with_size[["trading_day", f"{inst}_orb_size"]].rename(
-                    columns={f"{inst}_orb_size": "_orb_size"})
+                    columns={f"{inst}_orb_size": "_orb_size"}
+                )
                 inst_merged = inst_merged.merge(inst_sizes, on="trading_day", how="left")
                 inst_merged = inst_merged[inst_merged["_orb_size"] >= min_size]
-                merged = pd.concat([
-                    merged[merged["symbol"] != inst],
-                    inst_merged.drop(columns=["_orb_size"]),
-                ], ignore_index=True)
+                merged = pd.concat(
+                    [
+                        merged[merged["symbol"] != inst],
+                        inst_merged.drop(columns=["_orb_size"]),
+                    ],
+                    ignore_index=True,
+                )
 
             if len(merged) == 0:
                 print(f"    (no data after {size_label} filter)")
@@ -301,8 +309,9 @@ def analysis_1_concordance_overlay(conc_map: pd.DataFrame,
 
             # Baseline (all tiers combined)
             bl = compute_metrics(merged["pnl_r"])
-            print(f"    Baseline: WR={fmt_wr(bl['wr'])} ExpR={fmt_f(bl['expr'])} "
-                  f"Sharpe={fmt_f(bl['sharpe'])} N={bl['n']}")
+            print(
+                f"    Baseline: WR={fmt_wr(bl['wr'])} ExpR={fmt_f(bl['expr'])} Sharpe={fmt_f(bl['sharpe'])} N={bl['n']}"
+            )
 
             # Per tier
             monotonic = True
@@ -311,9 +320,11 @@ def analysis_1_concordance_overlay(conc_map: pd.DataFrame,
                 tier_data = merged[merged["concordance_tier"] == tier]
                 m = compute_metrics(tier_data["pnl_r"])
                 flag = sig_flag(m["n"])
-                print(f"    {tier_labels[tier]:>8}: WR={fmt_wr(m['wr'])} "
-                      f"ExpR={fmt_f(m['expr'])} Sharpe={fmt_f(m['sharpe'])} "
-                      f"N={m['n']:>4} {flag}")
+                print(
+                    f"    {tier_labels[tier]:>8}: WR={fmt_wr(m['wr'])} "
+                    f"ExpR={fmt_f(m['expr'])} Sharpe={fmt_f(m['sharpe'])} "
+                    f"N={m['n']:>4} {flag}"
+                )
 
                 if m["wr"] is not None and prev_wr is not None:
                     if m["wr"] > prev_wr:
@@ -345,8 +356,7 @@ def analysis_2_overlap(conc_map: pd.DataFrame):
         conc3_days = sess_data[sess_data["concordance_tier"] == "concordant_3"]
         all_days = sess_data
 
-        print(f"  Session {sess} ({len(all_days)} total days, "
-              f"{len(conc3_days)} concordant-3 days):")
+        print(f"  Session {sess} ({len(all_days)} total days, {len(conc3_days)} concordant-3 days):")
 
         for inst in INSTRUMENTS:
             size_col = f"{inst}_orb_size"
@@ -368,9 +378,11 @@ def analysis_2_overlap(conc_map: pd.DataFrame):
                 if n_conc3 > 0:
                     overlap_pct = n_both / n_conc3
                     g_pct = n_g / len(all_days) if len(all_days) > 0 else 0
-                    print(f"    {inst} {filt_name}+: "
-                          f"conc3 & {filt_name}+={n_both}/{n_conc3} ({overlap_pct:.0%}) "
-                          f"| {filt_name}+ alone={n_g}/{len(all_days)} ({g_pct:.0%})")
+                    print(
+                        f"    {inst} {filt_name}+: "
+                        f"conc3 & {filt_name}+={n_both}/{n_conc3} ({overlap_pct:.0%}) "
+                        f"| {filt_name}+ alone={n_g}/{len(all_days)} ({g_pct:.0%})"
+                    )
 
         # Summary: is concordance independent?
         # Use MGC G5 as representative
@@ -396,8 +408,7 @@ def analysis_2_overlap(conc_map: pd.DataFrame):
 # =========================================================================
 
 
-def analysis_3_mgc_2300_gate(mgc_context: pd.DataFrame,
-                              outcomes: pd.DataFrame):
+def analysis_3_mgc_2300_gate(mgc_context: pd.DataFrame, outcomes: pd.DataFrame):
     """Test MGC 2300 ORB size as a gate for MES/MNQ 0030 strategies."""
     print("\n--- ANALYSIS 3: MGC 2300 ORB SIZE GATE FOR MES/MNQ 0030 ---")
     print("Does a large MGC 2300 ORB (relative to ATR) predict better")
@@ -411,9 +422,7 @@ def analysis_3_mgc_2300_gate(mgc_context: pd.DataFrame,
     for follower in ["MES", "MNQ"]:
         # 0030 outcomes for this follower
         f_outcomes = outcomes[
-            (outcomes["symbol"] == follower) &
-            (outcomes["orb_label"] == "0030") &
-            (outcomes["outcome"].notna())
+            (outcomes["symbol"] == follower) & (outcomes["orb_label"] == "0030") & (outcomes["outcome"].notna())
         ].copy()
 
         if len(f_outcomes) == 0:
@@ -429,9 +438,11 @@ def analysis_3_mgc_2300_gate(mgc_context: pd.DataFrame,
         ]
 
         for tc in test_combos:
-            combo_mask = ((f_outcomes["entry_model"] == tc["entry_model"]) &
-                          (f_outcomes["confirm_bars"] == tc["confirm_bars"]) &
-                          (f_outcomes["rr_target"] == tc["rr_target"]))
+            combo_mask = (
+                (f_outcomes["entry_model"] == tc["entry_model"])
+                & (f_outcomes["confirm_bars"] == tc["confirm_bars"])
+                & (f_outcomes["rr_target"] == tc["rr_target"])
+            )
             combo_out = f_outcomes[combo_mask].copy()
 
             if len(combo_out) == 0:
@@ -441,9 +452,9 @@ def analysis_3_mgc_2300_gate(mgc_context: pd.DataFrame,
 
             # Join with MGC 2300 context
             merged = combo_out.merge(
-                mgc_context[["trading_day", "mgc_2300_size_bucket",
-                             "MGC_2300_break_dir", "MGC_2300_size"]],
-                on="trading_day", how="inner",
+                mgc_context[["trading_day", "mgc_2300_size_bucket", "MGC_2300_break_dir", "MGC_2300_size"]],
+                on="trading_day",
+                how="inner",
             )
 
             if len(merged) == 0:
@@ -452,8 +463,9 @@ def analysis_3_mgc_2300_gate(mgc_context: pd.DataFrame,
             # Baseline
             bl = compute_metrics(merged["pnl_r"])
             print(f"  {label}:")
-            print(f"    Baseline: WR={fmt_wr(bl['wr'])} ExpR={fmt_f(bl['expr'])} "
-                  f"Sharpe={fmt_f(bl['sharpe'])} N={bl['n']}")
+            print(
+                f"    Baseline: WR={fmt_wr(bl['wr'])} ExpR={fmt_f(bl['expr'])} Sharpe={fmt_f(bl['sharpe'])} N={bl['n']}"
+            )
 
             # By MGC 2300 ORB size bucket
             for bucket in ["large", "small", "no_data"]:
@@ -462,9 +474,11 @@ def analysis_3_mgc_2300_gate(mgc_context: pd.DataFrame,
                     continue
                 m = compute_metrics(bk["pnl_r"])
                 flag = sig_flag(m["n"])
-                print(f"    MGC 2300 {bucket:>7}: WR={fmt_wr(m['wr'])} "
-                      f"ExpR={fmt_f(m['expr'])} Sharpe={fmt_f(m['sharpe'])} "
-                      f"N={m['n']:>4} {flag}")
+                print(
+                    f"    MGC 2300 {bucket:>7}: WR={fmt_wr(m['wr'])} "
+                    f"ExpR={fmt_f(m['expr'])} Sharpe={fmt_f(m['sharpe'])} "
+                    f"N={m['n']:>4} {flag}"
+                )
 
             # By MGC 2300 break direction
             for mgc_dir in ["long", "short"]:
@@ -474,9 +488,11 @@ def analysis_3_mgc_2300_gate(mgc_context: pd.DataFrame,
                     continue
                 m = compute_metrics(bk["pnl_r"])
                 flag = sig_flag(m["n"])
-                print(f"    MGC 2300 {mgc_dir:>7}: WR={fmt_wr(m['wr'])} "
-                      f"ExpR={fmt_f(m['expr'])} Sharpe={fmt_f(m['sharpe'])} "
-                      f"N={m['n']:>4} {flag}")
+                print(
+                    f"    MGC 2300 {mgc_dir:>7}: WR={fmt_wr(m['wr'])} "
+                    f"ExpR={fmt_f(m['expr'])} Sharpe={fmt_f(m['sharpe'])} "
+                    f"N={m['n']:>4} {flag}"
+                )
 
             print()
 
@@ -519,7 +535,7 @@ def main():
         parts = []
         for tier in ["concordant_3", "majority_2", "remaining"]:
             n = vc.get(tier, 0)
-            parts.append(f"{tier}={n} ({n/total:.0%})")
+            parts.append(f"{tier}={n} ({n / total:.0%})")
         print(f"  {sess}: {', '.join(parts)}")
 
     # Run analyses

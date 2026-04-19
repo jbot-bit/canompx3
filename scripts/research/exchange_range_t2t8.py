@@ -58,9 +58,7 @@ BH_K = 320  # original search space (10 features x 12 sessions x 3 instruments)
 MIN_BIN_N = 20
 FEATURE_COL = "F5_exchange_range_atr"
 
-ALL_SESSIONS = sorted(
-    set(s for inst in INSTRUMENTS for s in ASSET_CONFIGS[inst].get("enabled_sessions", []))
-)
+ALL_SESSIONS = sorted(set(s for inst in INSTRUMENTS for s in ASSET_CONFIGS[inst].get("enabled_sessions", [])))
 
 OUT_FILE = PROJECT_ROOT / "scripts" / "research" / "output" / "exchange_range_t2t8_results.txt"
 
@@ -104,14 +102,16 @@ def _get_stats_df() -> pd.DataFrame:
 
 
 # --- Data Pipeline ----------------------------------------------------------
-def load_data(entry_model: str = PRIMARY_ENTRY, rr_target: float = PRIMARY_RR,
-              session: str = SESSION) -> tuple[pd.DataFrame, int, int, float]:
+def load_data(
+    entry_model: str = PRIMARY_ENTRY, rr_target: float = PRIMARY_RR, session: str = SESSION
+) -> tuple[pd.DataFrame, int, int, float]:
     """Load and merge statistics + daily_features + orb_outcomes."""
     stats_shifted = _get_stats_df()
 
     # Load daily_features + orb_outcomes
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT d.trading_day, d.symbol, d.atr_20,
                d.orb_CME_REOPEN_size AS orb_size,
                d.rel_vol_CME_REOPEN AS rel_vol,
@@ -130,7 +130,9 @@ def load_data(entry_model: str = PRIMARY_ENTRY, rr_target: float = PRIMARY_RR,
           AND o.rr_target = $4
           AND o.outcome IN ('win', 'loss')
           AND d.atr_20 IS NOT NULL AND d.atr_20 > 0
-    """, [session, entry_model, CONFIRM_BARS, rr_target, INSTRUMENTS]).fetchdf()
+    """,
+        [session, entry_model, CONFIRM_BARS, rr_target, INSTRUMENTS],
+    ).fetchdf()
     con.close()
 
     df["trading_day"] = pd.to_datetime(df["trading_day"]).dt.date
@@ -147,9 +149,7 @@ def load_data(entry_model: str = PRIMARY_ENTRY, rr_target: float = PRIMARY_RR,
     coverage = post_merge_n / pre_merge_n if pre_merge_n > 0 else 0
 
     # 4. Compute F5
-    merged[FEATURE_COL] = (
-        (merged["prev_session_high"] - merged["prev_session_low"]) / merged["atr_20"]
-    )
+    merged[FEATURE_COL] = (merged["prev_session_high"] - merged["prev_session_low"]) / merged["atr_20"]
     merged = merged.dropna(subset=[FEATURE_COL])
 
     # 5. Duplicate guard
@@ -192,19 +192,27 @@ def wr_spread_quintile(data: pd.DataFrame) -> dict | None:
     per_bin = []
     for b in bins:
         bdata = valid[valid["qbin"] == b]
-        per_bin.append({
-            "bin": int(b), "n": len(bdata),
-            "wr": bdata["is_win"].mean(),
-            "expr": bdata["pnl_r"].mean(),
-            "avg_win_r": bdata.loc[bdata["is_win"] == 1, "pnl_r"].mean() if bdata["is_win"].sum() > 0 else 0,
-        })
+        per_bin.append(
+            {
+                "bin": int(b),
+                "n": len(bdata),
+                "wr": bdata["is_win"].mean(),
+                "expr": bdata["pnl_r"].mean(),
+                "avg_win_r": bdata.loc[bdata["is_win"] == 1, "pnl_r"].mean() if bdata["is_win"].sum() > 0 else 0,
+            }
+        )
 
     return {
         "wr_spread": wr_q5 - wr_q1,
-        "wr_q1": wr_q1, "wr_q5": wr_q5,
-        "expr_q1": expr_q1, "expr_q5": expr_q5,
-        "avgwin_q1": avgwin_q1, "avgwin_q5": avgwin_q5,
-        "n_q1": len(q1), "n_q5": len(q5), "N": len(valid),
+        "wr_q1": wr_q1,
+        "wr_q5": wr_q5,
+        "expr_q1": expr_q1,
+        "expr_q5": expr_q5,
+        "avgwin_q1": avgwin_q1,
+        "avgwin_q5": avgwin_q5,
+        "n_q1": len(q1),
+        "n_q5": len(q5),
+        "N": len(valid),
         "per_bin": per_bin,
     }
 
@@ -294,13 +302,16 @@ def test_t3_walkforward(df: pd.DataFrame, inst: str) -> dict:
 
         wfe = oos_spread["wr_spread"] / is_spread["wr_spread"] if is_spread["wr_spread"] != 0 else 0
         same_sign = (is_spread["wr_spread"] > 0) == (oos_spread["wr_spread"] > 0)
-        oos_results.append({
-            "oos_year": oos_year,
-            "is_spread": is_spread["wr_spread"],
-            "oos_spread": oos_spread["wr_spread"],
-            "wfe": wfe, "same_sign": same_sign,
-            "oos_n": oos_spread["N"],
-        })
+        oos_results.append(
+            {
+                "oos_year": oos_year,
+                "is_spread": is_spread["wr_spread"],
+                "oos_spread": oos_spread["wr_spread"],
+                "wfe": wfe,
+                "same_sign": same_sign,
+                "oos_n": oos_spread["N"],
+            }
+        )
 
     if not oos_results:
         return {"verdict": "SKIP", "reason": "no valid OOS windows"}
@@ -317,9 +328,12 @@ def test_t3_walkforward(df: pd.DataFrame, inst: str) -> dict:
         verdict = "FAIL"
 
     return {
-        "n_oos_years": len(oos_results), "mean_wfe": mean_wfe,
-        "worst_wfe": worst_wfe, "sign_flips": sign_flips,
-        "oos_results": oos_results, "verdict": verdict,
+        "n_oos_years": len(oos_results),
+        "mean_wfe": mean_wfe,
+        "worst_wfe": worst_wfe,
+        "sign_flips": sign_flips,
+        "oos_results": oos_results,
+        "verdict": verdict,
     }
 
 
@@ -327,13 +341,16 @@ def test_t3_walkforward(df: pd.DataFrame, inst: str) -> dict:
 def _compute_actual_atr(period: int) -> pd.DataFrame:
     """Compute ATR_N from daily OHLC (SMA of true range, matching pipeline convention)."""
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-    daily = con.execute("""
+    daily = con.execute(
+        """
         SELECT trading_day, symbol, daily_high, daily_low, daily_close
         FROM daily_features
         WHERE orb_minutes = 5 AND symbol = ANY($1)
           AND daily_high IS NOT NULL AND daily_low IS NOT NULL
         ORDER BY symbol, trading_day
-    """, [INSTRUMENTS]).fetchdf()
+    """,
+        [INSTRUMENTS],
+    ).fetchdf()
     con.close()
 
     daily["prev_close"] = daily.groupby("symbol")["daily_close"].shift(1)
@@ -345,10 +362,7 @@ def _compute_actual_atr(period: int) -> pd.DataFrame:
 
     # SMA of prior N true ranges (no look-ahead — shift(1) then rolling)
     col = f"recomp_atr_{period}"
-    daily[col] = (
-        daily.groupby("symbol")["tr"]
-        .transform(lambda s: s.shift(1).rolling(period, min_periods=1).mean())
-    )
+    daily[col] = daily.groupby("symbol")["tr"].transform(lambda s: s.shift(1).rolling(period, min_periods=1).mean())
     result = daily[["trading_day", "symbol", col]].dropna(subset=[col]).copy()
     result["trading_day"] = pd.to_datetime(result["trading_day"]).dt.date
     return result
@@ -365,18 +379,20 @@ def test_t4_sensitivity(df: pd.DataFrame, inst: str) -> dict:
         atr_col = f"recomp_atr_{period}"
         test_df = sub.merge(
             atr_df[atr_df["symbol"] == inst][["trading_day", atr_col]],
-            on="trading_day", how="inner",
+            on="trading_day",
+            how="inner",
         )
-        test_df[FEATURE_COL] = (
-            (test_df["prev_session_high"] - test_df["prev_session_low"]) / test_df[atr_col]
-        )
+        test_df[FEATURE_COL] = (test_df["prev_session_high"] - test_df["prev_session_low"]) / test_df[atr_col]
         test_df = test_df.dropna(subset=[FEATURE_COL])
         spread_info = wr_spread_quintile(test_df)
         if spread_info:
-            atr_results.append({
-                "atr": f"ATR_{period}", "wr_spread": spread_info["wr_spread"],
-                "n": len(test_df),
-            })
+            atr_results.append(
+                {
+                    "atr": f"ATR_{period}",
+                    "wr_spread": spread_info["wr_spread"],
+                    "n": len(test_df),
+                }
+            )
     atr_signs = [r["wr_spread"] > 0 for r in atr_results]
     atr_stable = (all(atr_signs) or not any(atr_signs)) if atr_signs else False
 
@@ -406,8 +422,10 @@ def test_t4_sensitivity(df: pd.DataFrame, inst: str) -> dict:
     # Kill if ATR period change flips sign (real sensitivity test)
     verdict = "PASS" if atr_stable else "FAIL"
     return {
-        "atr_results": atr_results, "atr_stable": atr_stable,
-        "bin_results": bin_results, "bin_stable": bin_stable,
+        "atr_results": atr_results,
+        "atr_stable": atr_stable,
+        "bin_results": bin_results,
+        "bin_stable": bin_stable,
         "verdict": verdict,
     }
 
@@ -422,9 +440,7 @@ def test_t5_family(inst: str, session_cache: dict) -> dict:
             continue
         if sess not in session_cache:
             try:
-                session_cache[sess], _, _, _ = load_data(
-                    entry_model=PRIMARY_ENTRY, rr_target=PRIMARY_RR, session=sess
-                )
+                session_cache[sess], _, _, _ = load_data(entry_model=PRIMARY_ENTRY, rr_target=PRIMARY_RR, session=sess)
             except Exception:
                 session_cache[sess] = None
                 continue
@@ -491,8 +507,10 @@ def test_t5c_filter_interaction(df: pd.DataFrame, inst: str) -> dict:
 
     verdict = "REDUNDANT" if abs(spread_info["wr_spread"]) < 0.03 else "PASS"
     return {
-        "g5_wr_spread": spread_info["wr_spread"], "g5_N": spread_info["N"],
-        "unfiltered_wr_spread": unfiltered_spread, "verdict": verdict,
+        "g5_wr_spread": spread_info["wr_spread"],
+        "g5_N": spread_info["N"],
+        "unfiltered_wr_spread": unfiltered_spread,
+        "verdict": verdict,
     }
 
 
@@ -542,7 +560,8 @@ def test_t6_null(df: pd.DataFrame, inst: str) -> dict:
         "null_mean": np.mean(null_spreads),
         "null_p95": np.percentile([abs(x) for x in null_spreads], 95),
         "null_p99": np.percentile([abs(x) for x in null_spreads], 99),
-        "p_value": p_value, "n_bootstraps": len(null_spreads),
+        "p_value": p_value,
+        "n_bootstraps": len(null_spreads),
         "verdict": verdict,
     }
 
@@ -574,8 +593,7 @@ def test_t7_peryear(df: pd.DataFrame, inst: str) -> dict:
         if len(lo) < MIN_BIN_N or len(hi) < MIN_BIN_N:
             continue
         spread = hi["is_win"].mean() - lo["is_win"].mean()
-        year_results.append({"year": y, "spread": spread, "n": len(valid),
-                             "same_sign": (spread > 0) == ref_positive})
+        year_results.append({"year": y, "spread": spread, "n": len(valid), "same_sign": (spread > 0) == ref_positive})
 
     if len(year_results) < 5:
         return {"verdict": "SKIP", "reason": f"only {len(year_results)} years with data"}
@@ -591,8 +609,11 @@ def test_t7_peryear(df: pd.DataFrame, inst: str) -> dict:
         verdict = "FAIL"
 
     return {
-        "years_tested": len(year_results), "same_sign": same_sign_count,
-        "pct": pct, "year_details": year_results, "verdict": verdict,
+        "years_tested": len(year_results),
+        "same_sign": same_sign_count,
+        "pct": pct,
+        "year_details": year_results,
+        "verdict": verdict,
     }
 
 
@@ -683,10 +704,19 @@ def main():
         tee(f"\n  T1 WR MONOTONICITY: {t1['verdict']}", f)
         if "per_bin" in t1:
             tee(f"     Q5-Q1 WR spread: {t1['wr_spread']:+.1%}", f)
-            tee(f"     Q1: WR={t1['wr_q1']:.1%} ExpR={t1['expr_q1']:+.3f} AvgWinR={t1['avgwin_q1']:.3f} (n={t1['n_q1']})", f)
-            tee(f"     Q5: WR={t1['wr_q5']:.1%} ExpR={t1['expr_q5']:+.3f} AvgWinR={t1['avgwin_q5']:.3f} (n={t1['n_q5']})", f)
+            tee(
+                f"     Q1: WR={t1['wr_q1']:.1%} ExpR={t1['expr_q1']:+.3f} AvgWinR={t1['avgwin_q1']:.3f} (n={t1['n_q1']})",
+                f,
+            )
+            tee(
+                f"     Q5: WR={t1['wr_q5']:.1%} ExpR={t1['expr_q5']:+.3f} AvgWinR={t1['avgwin_q5']:.3f} (n={t1['n_q5']})",
+                f,
+            )
             for b in t1["per_bin"]:
-                tee(f"       Q{b['bin']+1}: WR={b['wr']:.1%} ExpR={b['expr']:+.3f} AvgWinR={b['avg_win_r']:.3f} n={b['n']}", f)
+                tee(
+                    f"       Q{b['bin'] + 1}: WR={b['wr']:.1%} ExpR={b['expr']:+.3f} AvgWinR={b['avg_win_r']:.3f} n={b['n']}",
+                    f,
+                )
         elif "reason" in t1:
             tee(f"     {t1['reason']}", f)
 
@@ -723,7 +753,10 @@ def main():
             tee(f"     Sign flips: {t3['sign_flips']}/{t3['n_oos_years']} OOS years", f)
             for r in t3["oos_results"]:
                 sign = "+" if r["same_sign"] else "X"
-                tee(f"     {r['oos_year']}: IS={r['is_spread']:+.1%} OOS={r['oos_spread']:+.1%} WFE={r['wfe']:.2f} n={r['oos_n']} {sign}", f)
+                tee(
+                    f"     {r['oos_year']}: IS={r['is_spread']:+.1%} OOS={r['oos_spread']:+.1%} WFE={r['wfe']:.2f} n={r['oos_n']} {sign}",
+                    f,
+                )
         elif "reason" in t3:
             tee(f"     {t3['reason']}", f)
 
@@ -741,7 +774,9 @@ def main():
 
         # T5
         t5 = test_t5_family(inst, session_cache)
-        tee(f"\n  T5 FAMILY: {t5['verdict']} ({t5.get('same_sign', '?')}/{t5.get('sessions_tested', '?')} same sign)", f)
+        tee(
+            f"\n  T5 FAMILY: {t5['verdict']} ({t5.get('same_sign', '?')}/{t5.get('sessions_tested', '?')} same sign)", f
+        )
         if "results" in t5:
             for r in sorted(t5["results"], key=lambda x: -x["wr_spread"]):
                 marker = " <--" if r["session"] == SESSION else ""
@@ -794,10 +829,15 @@ def main():
 
         # Collect verdicts
         verdicts = {
-            "T1": t1["verdict"], "T2": t2["verdict"],
-            "T3": t3["verdict"], "T4": t4["verdict"],
-            "T5": t5["verdict"], "T5b": t5b["verdict"], "T5c": t5c["verdict"],
-            "T6": t6["verdict"], "T7": t7["verdict"],
+            "T1": t1["verdict"],
+            "T2": t2["verdict"],
+            "T3": t3["verdict"],
+            "T4": t4["verdict"],
+            "T5": t5["verdict"],
+            "T5b": t5b["verdict"],
+            "T5c": t5c["verdict"],
+            "T6": t6["verdict"],
+            "T7": t7["verdict"],
         }
         passes = sum(1 for v in verdicts.values() if v == "PASS")
         fails = sum(1 for v in verdicts.values() if v == "FAIL")

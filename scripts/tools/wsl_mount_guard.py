@@ -119,12 +119,8 @@ def collect_mount_issues(
                 )
             duplicates = duplicate_mounts(mount_entry.mount_point, entries)
             if len(duplicates) > 1:
-                rendered = "; ".join(
-                    f"{entry.fs_type}:{','.join(entry.options)}" for entry in duplicates
-                )
-                issues.append(
-                    f"mount {mount_entry.mount_point} has multiple active entries ({rendered})"
-                )
+                rendered = "; ".join(f"{entry.fs_type}:{','.join(entry.options)}" for entry in duplicates)
+                issues.append(f"mount {mount_entry.mount_point} has multiple active entries ({rendered})")
 
     root_probe_error = probe_write_access(root)
     if root_probe_error:

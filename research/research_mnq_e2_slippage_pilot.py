@@ -53,12 +53,12 @@ CACHE_DIR = PROJECT_ROOT / "research" / "data" / "tbbo_mnq_pilot"
 
 # Sessions to sample from (chronological, covers Asian + US)
 PILOT_SESSIONS = [
-    "TOKYO_OPEN",       # Asian — thinner book
-    "SINGAPORE_OPEN",   # Asian — thinner book
-    "LONDON_METALS",    # European — medium book
-    "NYSE_OPEN",        # US — deepest book
-    "US_DATA_830",      # US — deep book
-    "CME_PRECLOSE",     # US — medium book
+    "TOKYO_OPEN",  # Asian — thinner book
+    "SINGAPORE_OPEN",  # Asian — thinner book
+    "LONDON_METALS",  # European — medium book
+    "NYSE_OPEN",  # US — deepest book
+    "US_DATA_830",  # US — deep book
+    "CME_PRECLOSE",  # US — medium book
 ]
 
 
@@ -108,13 +108,15 @@ def build_pilot_manifest(seed: int = DEFAULT_SEED) -> list[PilotDay]:
         """).fetchall()
 
         for r in session_rows:
-            all_days.append({
-                "trading_day": str(r[0]),
-                "orb_label": r[1],
-                "break_dir": r[2],
-                "orb_level": float(r[3]) if r[3] else None,
-                "atr_20": float(r[4]),
-            })
+            all_days.append(
+                {
+                    "trading_day": str(r[0]),
+                    "orb_label": r[1],
+                    "break_dir": r[2],
+                    "orb_level": float(r[3]) if r[3] else None,
+                    "atr_20": float(r[4]),
+                }
+            )
 
     con.close()
 
@@ -148,23 +150,29 @@ def build_pilot_manifest(seed: int = DEFAULT_SEED) -> list[PilotDay]:
                 window_start = orb_end - timedelta(minutes=WINDOW_MINUTES_BEFORE)
                 window_end = orb_end + timedelta(minutes=WINDOW_MINUTES_AFTER)
 
-                sampled.append(PilotDay(
-                    trading_day=row["trading_day"],
-                    orb_label=session,
-                    break_dir=row["break_dir"],
-                    orb_level=row["orb_level"],
-                    atr_20=row["atr_20"],
-                    atr_regime=regime,
-                    window_start_utc=window_start.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-                    window_end_utc=window_end.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
-                ))
+                sampled.append(
+                    PilotDay(
+                        trading_day=row["trading_day"],
+                        orb_label=session,
+                        break_dir=row["break_dir"],
+                        orb_level=row["orb_level"],
+                        atr_20=row["atr_20"],
+                        atr_regime=regime,
+                        window_start_utc=window_start.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                        window_end_utc=window_end.strftime("%Y-%m-%dT%H:%M:%S+00:00"),
+                    )
+                )
 
     print(f"Pilot manifest: {len(sampled)} days")
     print(f"  Sessions: {set(d.orb_label for d in sampled)}")
-    print(f"  ATR regimes: high={sum(1 for d in sampled if d.atr_regime=='high')}, "
-          f"low={sum(1 for d in sampled if d.atr_regime=='low')}")
-    print(f"  Break dirs: long={sum(1 for d in sampled if d.break_dir=='long')}, "
-          f"short={sum(1 for d in sampled if d.break_dir=='short')}")
+    print(
+        f"  ATR regimes: high={sum(1 for d in sampled if d.atr_regime == 'high')}, "
+        f"low={sum(1 for d in sampled if d.atr_regime == 'low')}"
+    )
+    print(
+        f"  Break dirs: long={sum(1 for d in sampled if d.break_dir == 'long')}, "
+        f"short={sum(1 for d in sampled if d.break_dir == 'short')}"
+    )
 
     return sampled
 
@@ -176,6 +184,7 @@ def estimate_cost(manifest: list[PilotDay]) -> float:
     api_key = os.getenv("DATABENTO_API_KEY")
     if not api_key:
         from dotenv import load_dotenv
+
         load_dotenv(PROJECT_ROOT / ".env")
         api_key = os.getenv("DATABENTO_API_KEY")
 
@@ -212,6 +221,7 @@ def pull_tbbo(manifest: list[PilotDay], force: bool = False) -> list[Path]:
     api_key = os.getenv("DATABENTO_API_KEY")
     if not api_key:
         from dotenv import load_dotenv
+
         load_dotenv(PROJECT_ROOT / ".env")
         api_key = os.getenv("DATABENTO_API_KEY")
 
@@ -224,11 +234,11 @@ def pull_tbbo(manifest: list[PilotDay], force: bool = False) -> list[Path]:
         cache_path = CACHE_DIR / f"{day.trading_day}_{day.orb_label}_MNQ.dbn.zst"
 
         if cache_path.exists() and not force:
-            print(f"  [{i+1}/{len(manifest)}] {day.trading_day} {day.orb_label} ... cached")
+            print(f"  [{i + 1}/{len(manifest)}] {day.trading_day} {day.orb_label} ... cached")
             paths.append(cache_path)
             continue
 
-        print(f"  [{i+1}/{len(manifest)}] {day.trading_day} {day.orb_label} ... pulling")
+        print(f"  [{i + 1}/{len(manifest)}] {day.trading_day} {day.orb_label} ... pulling")
         try:
             client.timeseries.get_range(
                 dataset=DATASET,
@@ -266,14 +276,14 @@ def reprice_entries(manifest: list[PilotDay]) -> pd.DataFrame:
     for i, day in enumerate(manifest):
         cache_path = CACHE_DIR / f"{day.trading_day}_{day.orb_label}_MNQ.dbn.zst"
         if not cache_path.exists():
-            results.append({"trading_day": day.trading_day, "orb_label": day.orb_label,
-                            "error": "no cache file"})
+            results.append({"trading_day": day.trading_day, "orb_label": day.orb_label, "error": "no cache file"})
             continue
 
         tbbo_df = load_tbbo_df(cache_path)
         if tbbo_df.empty:
-            results.append({"trading_day": day.trading_day, "orb_label": day.orb_label,
-                            "error": "empty after filtering"})
+            results.append(
+                {"trading_day": day.trading_day, "orb_label": day.orb_label, "error": "empty after filtering"}
+            )
             continue
 
         # Compute ORB end time for post-ORB filtering
@@ -328,9 +338,9 @@ def analyze_results(results_df: pd.DataFrame) -> None:
     valid = results_df[results_df["error"].isna()].copy()
     errors = results_df[results_df["error"].notna()]
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"MNQ E2 SLIPPAGE PILOT RESULTS")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  Valid samples: {len(valid)}")
     print(f"  Errors: {len(errors)}")
 
@@ -345,8 +355,8 @@ def analyze_results(results_df: pd.DataFrame) -> None:
     print(f"    Std:    {np.std(slip):.2f}")
     print(f"    Min:    {np.min(slip):.2f}")
     print(f"    Max:    {np.max(slip):.2f}")
-    print(f"    % <= 1 tick: {(slip <= 1).mean()*100:.1f}%")
-    print(f"    % <= 2 ticks: {(slip <= 2).mean()*100:.1f}%")
+    print(f"    % <= 1 tick: {(slip <= 1).mean() * 100:.1f}%")
+    print(f"    % <= 2 ticks: {(slip <= 2).mean() * 100:.1f}%")
 
     spec = get_cost_spec(INSTRUMENT)
     modeled = spec.slippage / spec.point_value / spec.tick_size
@@ -384,8 +394,10 @@ def analyze_results(results_df: pd.DataFrame) -> None:
         extra_cost = ticks * spec.tick_size * spec.point_value * 2  # entry + exit
         extra_cost_r = extra_cost / avg_risk
         net_expr = baseline - extra_cost_r + modeled * spec.tick_size * spec.point_value * 2 / avg_risk
-        print(f"    At {ticks:.1f} ticks: extra cost = ${extra_cost:.2f} = {extra_cost_r:.3f}R, "
-              f"net baseline = {baseline:.3f}R (already includes modeled)")
+        print(
+            f"    At {ticks:.1f} ticks: extra cost = ${extra_cost:.2f} = {extra_cost_r:.3f}R, "
+            f"net baseline = {baseline:.3f}R (already includes modeled)"
+        )
 
 
 def main():

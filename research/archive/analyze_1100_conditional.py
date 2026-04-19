@@ -37,11 +37,13 @@ COST_SPEC = get_cost_spec("MGC")
 # Data loading
 # ---------------------------------------------------------------------------
 
+
 def load_data(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Load 1100 outcomes joined with 0900/1000 context from daily_features."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT
                 o.trading_day,
                 o.entry_model,
@@ -83,7 +85,9 @@ def load_data(db_path: Path, start: date, end: date) -> pd.DataFrame:
                 AND o.pnl_r IS NOT NULL
                 AND o.trading_day BETWEEN ? AND ?
             ORDER BY o.trading_day
-        """, [start, end]).fetchdf()
+        """,
+            [start, end],
+        ).fetchdf()
     finally:
         con.close()
 
@@ -93,12 +97,13 @@ def load_data(db_path: Path, start: date, end: date) -> pd.DataFrame:
     print(f"Loaded {len(df)} 1100 outcomes ({df['trading_day'].nunique()} days)")
     return df
 
-def load_earlier_outcomes(db_path: Path, start: date, end: date,
-                          session: str) -> pd.DataFrame:
+
+def load_earlier_outcomes(db_path: Path, start: date, end: date, session: str) -> pd.DataFrame:
     """Load outcomes for an earlier session to check if they won/lost."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT
                 trading_day,
                 entry_model,
@@ -114,7 +119,9 @@ def load_earlier_outcomes(db_path: Path, start: date, end: date,
                 AND outcome IS NOT NULL
                 AND pnl_r IS NOT NULL
                 AND trading_day BETWEEN ? AND ?
-        """, [session, start, end]).fetchdf()
+        """,
+            [session, start, end],
+        ).fetchdf()
     finally:
         con.close()
 
@@ -122,9 +129,11 @@ def load_earlier_outcomes(db_path: Path, start: date, end: date,
     df = df[~((df["entry_model"] == "E3") & (df["confirm_bars"] > 1))].copy()
     return df
 
+
 # ---------------------------------------------------------------------------
 # Analysis helpers
 # ---------------------------------------------------------------------------
+
 
 def metrics(pnls: np.ndarray) -> dict:
     n = len(pnls)
@@ -137,14 +146,17 @@ def metrics(pnls: np.ndarray) -> dict:
     cumul = np.cumsum(pnls)
     peak = np.maximum.accumulate(cumul)
     maxdd = float((cumul - peak).min())
-    return {"n": n, "wr": wr, "expr": expr, "sharpe": sharpe,
-            "maxdd": maxdd, "total": float(pnls.sum())}
+    return {"n": n, "wr": wr, "expr": expr, "sharpe": sharpe, "maxdd": maxdd, "total": float(pnls.sum())}
+
 
 def fmt(m: dict) -> str:
     if m["n"] == 0:
         return "N=0"
-    return (f"N={m['n']:<4d}  WR={m['wr']*100:5.1f}%  ExpR={m['expr']:+.3f}  "
-            f"Sharpe={m['sharpe']:.3f}  MaxDD={m['maxdd']:.1f}R  Total={m['total']:+.1f}R")
+    return (
+        f"N={m['n']:<4d}  WR={m['wr'] * 100:5.1f}%  ExpR={m['expr']:+.3f}  "
+        f"Sharpe={m['sharpe']:.3f}  MaxDD={m['maxdd']:.1f}R  Total={m['total']:+.1f}R"
+    )
+
 
 def analyze_group(df: pd.DataFrame, label: str, condition_col: str = None):
     """Analyze a dataframe, optionally grouped by a condition column."""
@@ -159,9 +171,11 @@ def analyze_group(df: pd.DataFrame, label: str, condition_col: str = None):
         m = metrics(pnls)
         print(f"  {label:30s}  {fmt(m)}")
 
+
 # ---------------------------------------------------------------------------
 # Main analysis
 # ---------------------------------------------------------------------------
+
 
 def run_analysis(db_path: Path, start: date, end: date):
     df = load_data(db_path, start, end)
@@ -177,18 +191,16 @@ def run_analysis(db_path: Path, start: date, end: date):
     for em in ["E1", "E3"]:
         for rr in [1.5, 2.0, 2.5]:
             if em == "E1":
-                subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
-                            & (df["confirm_bars"] == 2)]
+                subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr) & (df["confirm_bars"] == 2)]
             else:
-                subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
-                            & (df["confirm_bars"] == 1)]
+                subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr) & (df["confirm_bars"] == 1)]
 
             if len(subset) < 20:
                 continue
 
-            print(f"\n{'='*90}")
+            print(f"\n{'=' * 90}")
             print(f"1100 {em} RR{rr} — {len(subset)} trades")
-            print(f"{'='*90}")
+            print(f"{'=' * 90}")
 
             # Baseline
             print(f"\nBASELINE:")
@@ -218,9 +230,7 @@ def run_analysis(db_path: Path, start: date, end: date):
             sub_both = subset[has_both].copy()
             if len(sub_both) > 0:
                 sub_both["align_0900"] = np.where(
-                    sub_both["break_0900"] == sub_both["break_1100"],
-                    "SAME direction",
-                    "OPPOSITE direction"
+                    sub_both["break_0900"] == sub_both["break_1100"], "SAME direction", "OPPOSITE direction"
                 )
                 analyze_group(sub_both, "vs 0900", "align_0900")
 
@@ -235,29 +245,24 @@ def run_analysis(db_path: Path, start: date, end: date):
             sub_both = subset[has_both].copy()
             if len(sub_both) > 0:
                 sub_both["align_1000"] = np.where(
-                    sub_both["break_1000"] == sub_both["break_1100"],
-                    "SAME direction",
-                    "OPPOSITE direction"
+                    sub_both["break_1000"] == sub_both["break_1100"], "SAME direction", "OPPOSITE direction"
                 )
                 analyze_group(sub_both, "vs 1000", "align_1000")
 
             # --- TRIPLE ALIGNMENT (0900 + 1000 + 1100 all same direction) ---
             print(f"\nTRIPLE ALIGNMENT (0900 + 1000 + 1100 all break same direction):")
-            has_all = (subset["break_0900"].notna()
-                       & subset["break_1000"].notna()
-                       & subset["break_1100"].notna())
+            has_all = subset["break_0900"].notna() & subset["break_1000"].notna() & subset["break_1100"].notna()
             sub_all = subset[has_all].copy()
             if len(sub_all) > 0:
                 sub_all["triple"] = np.where(
-                    (sub_all["break_0900"] == sub_all["break_1100"])
-                    & (sub_all["break_1000"] == sub_all["break_1100"]),
+                    (sub_all["break_0900"] == sub_all["break_1100"]) & (sub_all["break_1000"] == sub_all["break_1100"]),
                     "ALL ALIGNED",
                     np.where(
                         (sub_all["break_0900"] != sub_all["break_1100"])
                         & (sub_all["break_1000"] != sub_all["break_1100"]),
                         "BOTH OPPOSITE",
-                        "MIXED"
-                    )
+                        "MIXED",
+                    ),
                 )
                 analyze_group(sub_all, "Triple", "triple")
 
@@ -267,9 +272,7 @@ def run_analysis(db_path: Path, start: date, end: date):
             sub_db = subset[has_db].copy()
             if len(sub_db) > 0:
                 sub_db["db_0900"] = np.where(
-                    sub_db["double_break_0900"] == True,
-                    "0900 DOUBLE BROKE",
-                    "0900 held direction"
+                    sub_db["double_break_0900"] == True, "0900 DOUBLE BROKE", "0900 held direction"
                 )
                 analyze_group(sub_db, "0900 DB", "db_0900")
 
@@ -279,18 +282,15 @@ def run_analysis(db_path: Path, start: date, end: date):
             sub_db = subset[has_db].copy()
             if len(sub_db) > 0:
                 sub_db["db_1000"] = np.where(
-                    sub_db["double_break_1000"] == True,
-                    "1000 DOUBLE BROKE",
-                    "1000 held direction"
+                    sub_db["double_break_1000"] == True, "1000 DOUBLE BROKE", "1000 held direction"
                 )
                 analyze_group(sub_db, "1000 DB", "db_1000")
 
             # --- 0900 OUTCOME (did the 0900 trade win or lose?) ---
             print(f"\n0900 TRADE OUTCOME (did 0900 same-params trade win?):")
-            earlier = outcomes_0900[
-                (outcomes_0900["entry_model"] == em)
-                & (outcomes_0900["rr_target"] == rr)
-            ][["trading_day", "earlier_outcome", "earlier_pnl_r"]].drop_duplicates("trading_day")
+            earlier = outcomes_0900[(outcomes_0900["entry_model"] == em) & (outcomes_0900["rr_target"] == rr)][
+                ["trading_day", "earlier_outcome", "earlier_pnl_r"]
+            ].drop_duplicates("trading_day")
 
             merged = subset.merge(earlier, on="trading_day", how="left")
             has_earlier = merged["earlier_outcome"].notna()
@@ -300,10 +300,9 @@ def run_analysis(db_path: Path, start: date, end: date):
 
             # --- 1000 OUTCOME ---
             print(f"\n1000 TRADE OUTCOME (did 1000 same-params trade win?):")
-            earlier = outcomes_1000[
-                (outcomes_1000["entry_model"] == em)
-                & (outcomes_1000["rr_target"] == rr)
-            ][["trading_day", "earlier_outcome", "earlier_pnl_r"]].drop_duplicates("trading_day")
+            earlier = outcomes_1000[(outcomes_1000["entry_model"] == em) & (outcomes_1000["rr_target"] == rr)][
+                ["trading_day", "earlier_outcome", "earlier_pnl_r"]
+            ].drop_duplicates("trading_day")
 
             merged = subset.merge(earlier, on="trading_day", how="left")
             has_earlier = merged["earlier_outcome"].notna()
@@ -313,51 +312,41 @@ def run_analysis(db_path: Path, start: date, end: date):
 
             # --- COMBO: 0900+1000 both won + 1100 aligned ---
             print(f"\nCOMBO: Earlier sessions won AND 1100 aligned:")
-            e0900 = outcomes_0900[
-                (outcomes_0900["entry_model"] == em)
-                & (outcomes_0900["rr_target"] == rr)
-            ][["trading_day", "earlier_outcome"]].drop_duplicates("trading_day")
+            e0900 = outcomes_0900[(outcomes_0900["entry_model"] == em) & (outcomes_0900["rr_target"] == rr)][
+                ["trading_day", "earlier_outcome"]
+            ].drop_duplicates("trading_day")
             e0900 = e0900.rename(columns={"earlier_outcome": "o0900"})
 
-            e1000 = outcomes_1000[
-                (outcomes_1000["entry_model"] == em)
-                & (outcomes_1000["rr_target"] == rr)
-            ][["trading_day", "earlier_outcome"]].drop_duplicates("trading_day")
+            e1000 = outcomes_1000[(outcomes_1000["entry_model"] == em) & (outcomes_1000["rr_target"] == rr)][
+                ["trading_day", "earlier_outcome"]
+            ].drop_duplicates("trading_day")
             e1000 = e1000.rename(columns={"earlier_outcome": "o1000"})
 
             combo = subset.merge(e0900, on="trading_day", how="left")
             combo = combo.merge(e1000, on="trading_day", how="left")
 
             # Both earlier sessions won
-            both_won = combo[
-                (combo["o0900"] == "win") & (combo["o1000"] == "win")
-            ]
+            both_won = combo[(combo["o0900"] == "win") & (combo["o1000"] == "win")]
             if len(both_won) > 0:
                 analyze_group(both_won, "0900+1000 both WON")
 
             # Both lost
-            both_lost = combo[
-                (combo["o0900"] == "loss") & (combo["o1000"] == "loss")
-            ]
+            both_lost = combo[(combo["o0900"] == "loss") & (combo["o1000"] == "loss")]
             if len(both_lost) > 0:
                 analyze_group(both_lost, "0900+1000 both LOST")
 
             # 0900 won + aligned
-            won_aligned = combo[
-                (combo["o0900"] == "win")
-                & (combo["break_0900"] == combo["break_1100"])
-            ]
+            won_aligned = combo[(combo["o0900"] == "win") & (combo["break_0900"] == combo["break_1100"])]
             if len(won_aligned) > 0:
                 analyze_group(won_aligned, "0900 WON + aligned")
 
             # 0900 lost + 1100 opposite
             lost_opposite = combo[
-                (combo["o0900"] == "loss")
-                & (combo["break_0900"] != combo["break_1100"])
-                & combo["break_0900"].notna()
+                (combo["o0900"] == "loss") & (combo["break_0900"] != combo["break_1100"]) & combo["break_0900"].notna()
             ]
             if len(lost_opposite) > 0:
                 analyze_group(lost_opposite, "0900 LOST + 1100 opposite")
+
 
 def main():
     parser = argparse.ArgumentParser(description="1100 conditional analysis")
@@ -367,6 +356,7 @@ def main():
     args = parser.parse_args()
 
     run_analysis(args.db_path, args.start, args.end)
+
 
 if __name__ == "__main__":
     main()

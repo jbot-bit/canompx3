@@ -173,8 +173,7 @@ def _e2_look_ahead_reason(filter_type: str) -> str | None:
     # module has finished importing before describe() is invoked.
     if filter_type.startswith(E2_EXCLUDED_FILTER_PREFIXES):
         return (
-            f"E2 look-ahead: filter_type '{filter_type}' depends on break-bar "
-            f"properties unknown at E2 entry placement"
+            f"E2 look-ahead: filter_type '{filter_type}' depends on break-bar properties unknown at E2 entry placement"
         )
     if is_e2_lookahead_filter(filter_type):
         for sub in E2_EXCLUDED_FILTER_SUBSTRINGS:
@@ -250,6 +249,7 @@ class AtomDescription:
     error_message: str | None = None
     size_multiplier: float = 1.0
     explanation: str = ""
+
 
 # ── Noise ExpR floor per entry model ──────────────────────────────────────
 # NO LONGER A HARD GATE (2026-03-21). Phase 2b removed from strategy_validator.
@@ -653,9 +653,7 @@ class CostRatioFilter(StrategyFilter):
             try:
                 cost_spec = get_cost_spec(str(symbol))
                 raw_risk = size * cost_spec.point_value
-                observed_ratio = (
-                    100.0 * cost_spec.total_friction / (raw_risk + cost_spec.total_friction)
-                )
+                observed_ratio = 100.0 * cost_spec.total_friction / (raw_risk + cost_spec.total_friction)
             except ValueError:
                 missing = True
                 observed_ratio = None
@@ -769,8 +767,7 @@ class VolumeFilter(StrategyFilter):
                 comparator=">=",
                 is_data_missing=missing,
                 explanation=(
-                    f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline "
-                    f"(breakout conviction gate)."
+                    f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline (breakout conviction gate)."
                 ),
             )
         ]
@@ -849,10 +846,7 @@ class CombinedATRVolumeFilter(VolumeFilter):
             threshold=self.min_atr_pct,
             comparator=">=",
             is_data_missing=atr_missing,
-            explanation=(
-                f"Require own ATR-20 rolling percentile >= {self.min_atr_pct:g}% "
-                f"(high-vol regime gate)."
-            ),
+            explanation=(f"Require own ATR-20 rolling percentile >= {self.min_atr_pct:g}% (high-vol regime gate)."),
         )
 
         # Atom 2: rel_vol (E2-excluded via filter_type prefix)
@@ -891,9 +885,7 @@ class CombinedATRVolumeFilter(VolumeFilter):
             threshold=self.min_rel_vol,
             comparator=">=",
             is_data_missing=vol_missing,
-            explanation=(
-                f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline."
-            ),
+            explanation=(f"Require break-bar relative volume >= {self.min_rel_vol:g}x baseline."),
         )
         return [atr_atom, vol_atom]
 
@@ -1202,8 +1194,7 @@ class OwnATRPercentileFilter(StrategyFilter):
                 comparator=">=",
                 is_data_missing=missing,
                 explanation=(
-                    f"Require own-instrument ATR-20 rolling percentile "
-                    f">= {self.min_pct:g}% (own-vol regime gate)."
+                    f"Require own-instrument ATR-20 rolling percentile >= {self.min_pct:g}% (own-vol regime gate)."
                 ),
             )
         ]
@@ -1262,8 +1253,7 @@ class OvernightRangeFilter(StrategyFilter):
                 comparator=">=",
                 is_data_missing=missing,
                 explanation=(
-                    f"Require overnight range rolling percentile >= {self.min_pct:g}% "
-                    f"(Asian-session activity gate)."
+                    f"Require overnight range rolling percentile >= {self.min_pct:g}% (Asian-session activity gate)."
                 ),
             )
         ]
@@ -1313,10 +1303,7 @@ class GARCHForecastVolPctFilter(StrategyFilter):
 
     def __post_init__(self):
         if self.direction not in ("low", "high"):
-            raise ValueError(
-                f"GARCHForecastVolPctFilter direction must be 'low' or 'high', "
-                f"got {self.direction!r}"
-            )
+            raise ValueError(f"GARCHForecastVolPctFilter direction must be 'low' or 'high', got {self.direction!r}")
 
     def matches_row(self, row: dict, orb_label: str) -> bool:
         _ = orb_label
@@ -1541,8 +1528,7 @@ class PrevDayRangeNormFilter(StrategyFilter):
                 )
             elif raw_atr is not None and atr is None and not _atom_is_missing(raw_atr):
                 error_message = (
-                    f"PDR: type mismatch on atr_20 — expected numeric, "
-                    f"got {type(raw_atr).__name__}({raw_atr!r})"
+                    f"PDR: type mismatch on atr_20 — expected numeric, got {type(raw_atr).__name__}({raw_atr!r})"
                 )
         elif atr <= 0:
             missing = True
@@ -1570,8 +1556,7 @@ class PrevDayRangeNormFilter(StrategyFilter):
                 confidence_tier=self.CONFIDENCE_TIER,
                 error_message=error_message,
                 explanation=(
-                    f"Require prior-day range normalized by ATR-20 "
-                    f">= {self.min_ratio:g} (prior-day expansion gate)."
+                    f"Require prior-day range normalized by ATR-20 >= {self.min_ratio:g} (prior-day expansion gate)."
                 ),
             )
         ]
@@ -1602,9 +1587,7 @@ class GapNormFilter(StrategyFilter):
     """
 
     # ── Canonical research metadata (ClassVar) ──────────────────────────
-    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (
-        ("MGC", "CME_REOPEN"),
-    )
+    VALIDATED_FOR: ClassVar[tuple[tuple[str, str], ...]] = (("MGC", "CME_REOPEN"),)
     LAST_REVALIDATED: ClassVar[date] = date(2026, 4, 2)
     CONFIDENCE_TIER: ClassVar[str] = "PROVEN"
 
@@ -1655,8 +1638,7 @@ class GapNormFilter(StrategyFilter):
                 )
             elif raw_atr is not None and atr is None and not _atom_is_missing(raw_atr):
                 error_message = (
-                    f"GAP: type mismatch on atr_20 — expected numeric, "
-                    f"got {type(raw_atr).__name__}({raw_atr!r})"
+                    f"GAP: type mismatch on atr_20 — expected numeric, got {type(raw_atr).__name__}({raw_atr!r})"
                 )
         elif atr <= 0:
             missing = True
@@ -1685,8 +1667,7 @@ class GapNormFilter(StrategyFilter):
                 confidence_tier=self.CONFIDENCE_TIER,
                 error_message=error_message,
                 explanation=(
-                    f"Require absolute overnight gap normalized by ATR-20 "
-                    f">= {self.min_ratio:g} (gap-shock gate)."
+                    f"Require absolute overnight gap normalized by ATR-20 >= {self.min_ratio:g} (gap-shock gate)."
                 ),
             )
         ]
@@ -1899,10 +1880,7 @@ class DayOfWeekSkipFilter(StrategyFilter):
                 comparator="not in",
                 is_data_missing=missing,
                 confidence_tier=self._confidence_tier(),
-                explanation=(
-                    f"Skip trading on day_of_week {skip_list} "
-                    f"(0=Mon, 6=Sun, Python weekday convention)."
-                ),
+                explanation=(f"Skip trading on day_of_week {skip_list} (0=Mon, 6=Sun, Python weekday convention)."),
             )
         ]
 
@@ -2019,8 +1997,7 @@ class ATRVelocityFilter(StrategyFilter):
                     last_revalidated=self.LAST_REVALIDATED,
                     confidence_tier=self.CONFIDENCE_TIER,
                     explanation=(
-                        "ATR velocity overlay: skip when ATR is actively "
-                        "contracting AND the ORB is Neutral/Compressed."
+                        "ATR velocity overlay: skip when ATR is actively contracting AND the ORB is Neutral/Compressed."
                     ),
                 )
             ]
@@ -2115,10 +2092,7 @@ class DoubleBreakFilter(StrategyFilter):
                     "entry). Cannot be used as a real-time gate. Removed from "
                     "production discovery 2026-02."
                 ),
-                explanation=(
-                    "Deprecated filter — kept only for backward-compat with "
-                    "legacy strategy ids."
-                ),
+                explanation=("Deprecated filter — kept only for backward-compat with legacy strategy ids."),
             )
         ]
 
@@ -2227,8 +2201,7 @@ class BreakSpeedFilter(StrategyFilter):
                 last_revalidated=self.LAST_REVALIDATED,
                 confidence_tier=self.CONFIDENCE_TIER,
                 explanation=(
-                    f"Require break within {self.max_delay_min:g} minutes of ORB end "
-                    f"(momentum conviction gate)."
+                    f"Require break within {self.max_delay_min:g} minutes of ORB end (momentum conviction gate)."
                 ),
             )
         ]
@@ -2322,10 +2295,7 @@ class BreakBarContinuesFilter(StrategyFilter):
                 comparator="==",
                 is_data_missing=missing,
                 confidence_tier=self.CONFIDENCE_TIER,
-                explanation=(
-                    "Require the break bar to close in the break direction "
-                    "(conviction gate)."
-                ),
+                explanation=("Require the break bar to close in the break direction (conviction gate)."),
             )
         ]
 
@@ -2456,8 +2426,7 @@ class VWAPBreakDirectionFilter(StrategyFilter):
     def __post_init__(self) -> None:
         if self.definition not in ("orb_mid", "break_price"):
             raise ValueError(
-                f"VWAPBreakDirectionFilter definition must be 'orb_mid' or "
-                f"'break_price', got '{self.definition}'"
+                f"VWAPBreakDirectionFilter definition must be 'orb_mid' or 'break_price', got '{self.definition}'"
             )
 
     def matches_row(self, row: dict, orb_label: str) -> bool:

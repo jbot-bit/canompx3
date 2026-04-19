@@ -45,18 +45,21 @@ FILTERS = [
     ("G6+", 6.0, None),
 ]
 
-MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-               "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 # =========================================================================
 # Data loading (standalone engine — same as research_day_of_week.py)
 # =========================================================================
 
+
 def load_bars(con, instrument):
-    return con.execute("""
+    return con.execute(
+        """
         SELECT ts_utc, open, high, low, close
         FROM bars_1m WHERE symbol = ? ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def build_day_arrays(bars_df):
@@ -120,9 +123,11 @@ def scan_session(highs, lows, closes, bris_h, bris_m):
             if np.isnan(c):
                 continue
             if c > oh:
-                break_dir, entry, break_at = "long", c, m; break
+                break_dir, entry, break_at = "long", c, m
+                break
             elif c < ol:
-                break_dir, entry, break_at = "short", c, m; break
+                break_dir, entry, break_at = "short", c, m
+                break
         if break_dir is None:
             continue
 
@@ -136,19 +141,31 @@ def scan_session(highs, lows, closes, bris_h, bris_m):
                 continue
             last_close = c
             if break_dir == "long":
-                if l <= stop and h >= target: outcome_r = -1.0; break
-                if l <= stop: outcome_r = -1.0; break
-                if h >= target: outcome_r = RR_TARGET; break
+                if l <= stop and h >= target:
+                    outcome_r = -1.0
+                    break
+                if l <= stop:
+                    outcome_r = -1.0
+                    break
+                if h >= target:
+                    outcome_r = RR_TARGET
+                    break
             else:
-                if h >= stop and l <= target: outcome_r = -1.0; break
-                if h >= stop: outcome_r = -1.0; break
-                if l <= target: outcome_r = RR_TARGET; break
+                if h >= stop and l <= target:
+                    outcome_r = -1.0
+                    break
+                if h >= stop:
+                    outcome_r = -1.0
+                    break
+                if l <= target:
+                    outcome_r = RR_TARGET
+                    break
         if outcome_r is None:
-            outcome_r = ((last_close - entry) / os_val if break_dir == "long"
-                         else (entry - last_close) / os_val)
+            outcome_r = (last_close - entry) / os_val if break_dir == "long" else (entry - last_close) / os_val
 
         results[di] = {
-            "orb_size": float(os_val), "direction": break_dir,
+            "orb_size": float(os_val),
+            "direction": break_dir,
             "outcome_r": float(outcome_r),
         }
     return results
@@ -157,6 +174,7 @@ def scan_session(highs, lows, closes, bris_h, bris_m):
 # =========================================================================
 # Q1: Month-by-month breakdown
 # =========================================================================
+
 
 def q1_month_breakdown(data_cache):
     print(f"\n{'=' * 100}")
@@ -217,11 +235,19 @@ def q1_month_breakdown(data_cache):
 
                     print(f"    {MONTH_NAMES[month - 1]:>5s} {n:5d} {avg:+7.3f} {wr:5.1%} {tot:+8.1f}{marker}")
 
-                    all_rows.append({
-                        "instrument": instrument, "session": session, "filter": fname,
-                        "month": month, "month_name": MONTH_NAMES[month - 1],
-                        "n": n, "avg_r": avg, "wr": wr, "total_r": tot,
-                    })
+                    all_rows.append(
+                        {
+                            "instrument": instrument,
+                            "session": session,
+                            "filter": fname,
+                            "month": month,
+                            "month_name": MONTH_NAMES[month - 1],
+                            "n": n,
+                            "avg_r": avg,
+                            "wr": wr,
+                            "total_r": tot,
+                        }
+                    )
 
     return all_rows
 
@@ -229,6 +255,7 @@ def q1_month_breakdown(data_cache):
 # =========================================================================
 # Q2: Skip-month filter simulation
 # =========================================================================
+
 
 def q2_skip_month(data_cache, q1_rows):
     print(f"\n{'=' * 100}")
@@ -245,10 +272,9 @@ def q2_skip_month(data_cache, q1_rows):
     for instrument, session, fname in sorted(combos):
         if instrument not in data_cache:
             continue
-        combo_rows = [r for r in q1_rows
-                      if r["instrument"] == instrument
-                      and r["session"] == session
-                      and r["filter"] == fname]
+        combo_rows = [
+            r for r in q1_rows if r["instrument"] == instrument and r["session"] == session and r["filter"] == fname
+        ]
 
         if not combo_rows:
             continue
@@ -291,15 +317,27 @@ def q2_skip_month(data_cache, q1_rows):
         print(f"    {'Skip worst 2':>20s} {s2_n:5d} {s2_avg:+7.3f} {s2_tot:+8.1f} {s2_tot - total_r:+8.1f}")
         print(f"    {'Best quarter only':>20s} {bq_n:5d} {bq_avg:+7.3f} {bq_tot:+8.1f} {bq_tot - total_r:+8.1f}")
 
-        all_rows.append({
-            "instrument": instrument, "session": session, "filter": fname,
-            "worst_month": MONTH_NAMES[worst_1["month"] - 1],
-            "best_quarter": best_3_names,
-            "baseline_n": total_n, "baseline_avgR": baseline_avg, "baseline_totR": total_r,
-            "skip1_n": s1_n, "skip1_avgR": s1_avg, "skip1_totR": s1_tot,
-            "skip2_n": s2_n, "skip2_avgR": s2_avg, "skip2_totR": s2_tot,
-            "bestQ_n": bq_n, "bestQ_avgR": bq_avg, "bestQ_totR": bq_tot,
-        })
+        all_rows.append(
+            {
+                "instrument": instrument,
+                "session": session,
+                "filter": fname,
+                "worst_month": MONTH_NAMES[worst_1["month"] - 1],
+                "best_quarter": best_3_names,
+                "baseline_n": total_n,
+                "baseline_avgR": baseline_avg,
+                "baseline_totR": total_r,
+                "skip1_n": s1_n,
+                "skip1_avgR": s1_avg,
+                "skip1_totR": s1_tot,
+                "skip2_n": s2_n,
+                "skip2_avgR": s2_avg,
+                "skip2_totR": s2_tot,
+                "bestQ_n": bq_n,
+                "bestQ_avgR": bq_avg,
+                "bestQ_totR": bq_tot,
+            }
+        )
 
     return all_rows
 
@@ -307,6 +345,7 @@ def q2_skip_month(data_cache, q1_rows):
 # =========================================================================
 # Q3: Yearly stability — does the month pattern hold across years?
 # =========================================================================
+
 
 def q3_yearly_stability(data_cache):
     print(f"\n{'=' * 100}")
@@ -370,6 +409,7 @@ def q3_yearly_stability(data_cache):
 # Main
 # =========================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="Month-of-year seasonality analysis")
     parser.add_argument("--db-path", type=str, default=None)
@@ -380,6 +420,7 @@ def main():
     else:
         try:
             from pipeline.paths import GOLD_DB_PATH
+
             db_path = GOLD_DB_PATH
         except ImportError:
             db_path = Path("gold.db")
@@ -419,11 +460,9 @@ def main():
         out.mkdir(parents=True, exist_ok=True)
 
         if q1_rows:
-            pd.DataFrame(q1_rows).to_csv(out / "month_seasonality_breakdown.csv",
-                                          index=False, float_format="%.4f")
+            pd.DataFrame(q1_rows).to_csv(out / "month_seasonality_breakdown.csv", index=False, float_format="%.4f")
         if q2_rows:
-            pd.DataFrame(q2_rows).to_csv(out / "month_seasonality_skip_filter.csv",
-                                          index=False, float_format="%.4f")
+            pd.DataFrame(q2_rows).to_csv(out / "month_seasonality_skip_filter.csv", index=False, float_format="%.4f")
 
         print(f"\n  CSVs saved to research/output/month_seasonality_*.csv")
         print(f"  Total: {time.time() - t_total:.1f}s")

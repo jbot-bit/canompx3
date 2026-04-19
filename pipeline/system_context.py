@@ -475,6 +475,7 @@ def _build_authority_context(db_path: Path) -> AuthorityContext:
     active_profiles: list[str] = []
     try:
         import importlib
+
         _mod = importlib.import_module("trading_app.prop_profiles")
         active_profiles = sorted(_mod.get_active_profile_ids())
     except (ImportError, AttributeError):
@@ -786,7 +787,8 @@ def format_system_context_text(snapshot: SystemContext, decision: PolicyDecision
         + (
             f"yes ({snapshot.git.dirty_count})"
             if snapshot.git.dirty
-            else "unknown" if not snapshot.git.status_available
+            else "unknown"
+            if not snapshot.git.status_available
             else f"no ({snapshot.git.dirty_count})"
         ),
         f"Interpreter: {snapshot.interpreter.current_python}",

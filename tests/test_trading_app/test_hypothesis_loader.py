@@ -43,9 +43,7 @@ def _write_minimal_hypothesis(path: Path, total_trials: int = 60, with_theory: b
         ],
     }
     if with_theory:
-        body["hypotheses"][0]["theory_citation"] = (
-            "docs/institutional/literature/synthetic_test.md"
-        )
+        body["hypotheses"][0]["theory_citation"] = "docs/institutional/literature/synthetic_test.md"
     path.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
 
 

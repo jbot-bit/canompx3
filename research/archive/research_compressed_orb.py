@@ -15,6 +15,7 @@ Methodology:
 
 import sys
 import os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import duckdb
@@ -38,10 +39,7 @@ def bh_fdr(pvals, q=0.10):
     adjusted[sorted_idx[-1]] = sorted_p[-1]
     for i in range(n - 2, -1, -1):
         rank = np.where(sorted_idx == sorted_idx[i])[0][0] + 1
-        adjusted[sorted_idx[i]] = min(
-            sorted_p[i] * n / rank,
-            adjusted[sorted_idx[i + 1]] if i + 1 < n else 1.0
-        )
+        adjusted[sorted_idx[i]] = min(sorted_p[i] * n / rank, adjusted[sorted_idx[i + 1]] if i + 1 < n else 1.0)
     return np.clip(adjusted, 0, 1).tolist()
 
 
@@ -61,7 +59,8 @@ def run():
     for sym in ["MGC", "MES", "MNQ"]:
         for sess in ["0900", "1000", "1800"]:
             col = f"orb_{sess}_compression_tier"
-            row = con.execute(f"""
+            row = con.execute(
+                f"""
                 SELECT COUNT(*) as total,
                        COUNT({col}) as has_tier,
                        COUNT(CASE WHEN {col}='Compressed' THEN 1 END) as n_compressed,
@@ -69,9 +68,13 @@ def run():
                        COUNT(CASE WHEN {col}='Expanded' THEN 1 END) as n_expanded
                 FROM daily_features
                 WHERE symbol=? AND orb_minutes=5
-            """, [sym]).fetchone()
-            lines.append(f"  {sym} {sess}: total={row[0]}, has_tier={row[1]}, "
-                         f"Compressed={row[2]}, Neutral={row[3]}, Expanded={row[4]}")
+            """,
+                [sym],
+            ).fetchone()
+            lines.append(
+                f"  {sym} {sess}: total={row[0]}, has_tier={row[1]}, "
+                f"Compressed={row[2]}, Neutral={row[3]}, Expanded={row[4]}"
+            )
     lines.append("")
 
     # ── Main analysis ───────────────────────────────────────────────
@@ -86,7 +89,8 @@ def run():
             tier_col = f"orb_{sess}_compression_tier"
 
             # Get R-values by tier
-            rows = con.execute(f"""
+            rows = con.execute(
+                f"""
                 SELECT d.{tier_col} as tier,
                        o.pnl_r,
                        EXTRACT(YEAR FROM o.trading_day) as yr
@@ -102,7 +106,9 @@ def run():
                   AND d.{tier_col} IS NOT NULL
                   AND d.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
-            """, [sym, sess]).fetchall()
+            """,
+                [sym, sess],
+            ).fetchall()
 
             if not rows:
                 continue
@@ -123,27 +129,34 @@ def run():
             wr_nc = np.mean([1 if x > 0 else 0 for x in non_compressed])
 
             label = f"{sym}_{sess}_E1_RR2.0"
-            all_tests.append((label, p_val, len(compressed), avg_c, avg_nc,
-                              avg_c - avg_nc, wr_c, wr_nc))
+            all_tests.append((label, p_val, len(compressed), avg_c, avg_nc, avg_c - avg_nc, wr_c, wr_nc))
 
-            size_label = ("CORE" if len(compressed) >= 200 else
-                          "PRELIMINARY" if len(compressed) >= 100 else
-                          "REGIME" if len(compressed) >= 30 else "INVALID")
+            size_label = (
+                "CORE"
+                if len(compressed) >= 200
+                else "PRELIMINARY"
+                if len(compressed) >= 100
+                else "REGIME"
+                if len(compressed) >= 30
+                else "INVALID"
+            )
 
             lines.append(f"  {label}:")
             lines.append(f"    Compressed: N={len(compressed):>4}, avgR={avg_c:+.3f}, WR={wr_c:.1%}")
             lines.append(f"    Non-Comp:   N={len(non_compressed):>4}, avgR={avg_nc:+.3f}, WR={wr_nc:.1%}")
-            lines.append(f"    Delta: {avg_c - avg_nc:+.3f}R, WR delta: {(wr_c - wr_nc)*100:+.1f}pp, "
-                         f"p={p_val:.4f}, {size_label}")
+            lines.append(
+                f"    Delta: {avg_c - avg_nc:+.3f}R, WR delta: {(wr_c - wr_nc) * 100:+.1f}pp, "
+                f"p={p_val:.4f}, {size_label}"
+            )
 
             # Breakdown by tier
-            for tier_name, tier_data in [("Compressed", compressed),
-                                          ("Neutral", neutral),
-                                          ("Expanded", expanded)]:
+            for tier_name, tier_data in [("Compressed", compressed), ("Neutral", neutral), ("Expanded", expanded)]:
                 if len(tier_data) >= 5:
-                    lines.append(f"      {tier_name:>12}: N={len(tier_data):>4}, "
-                                 f"avgR={np.mean(tier_data):+.3f}, "
-                                 f"WR={np.mean([1 if x > 0 else 0 for x in tier_data]):.1%}")
+                    lines.append(
+                        f"      {tier_name:>12}: N={len(tier_data):>4}, "
+                        f"avgR={np.mean(tier_data):+.3f}, "
+                        f"WR={np.mean([1 if x > 0 else 0 for x in tier_data]):.1%}"
+                    )
             lines.append("")
 
     # ── Also test E0 (the stronger entry model) ────────────────────
@@ -155,7 +168,8 @@ def run():
         for sess in ["0900", "1000", "1800"]:
             tier_col = f"orb_{sess}_compression_tier"
 
-            rows = con.execute(f"""
+            rows = con.execute(
+                f"""
                 SELECT d.{tier_col} as tier,
                        o.pnl_r,
                        EXTRACT(YEAR FROM o.trading_day) as yr
@@ -171,7 +185,9 @@ def run():
                   AND d.{tier_col} IS NOT NULL
                   AND d.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
-            """, [sym, sess]).fetchall()
+            """,
+                [sym, sess],
+            ).fetchall()
 
             if not rows:
                 continue
@@ -189,18 +205,25 @@ def run():
             wr_nc = np.mean([1 if x > 0 else 0 for x in non_compressed])
 
             label = f"{sym}_{sess}_E0_RR2.0"
-            all_tests.append((label, p_val, len(compressed), avg_c, avg_nc,
-                              avg_c - avg_nc, wr_c, wr_nc))
+            all_tests.append((label, p_val, len(compressed), avg_c, avg_nc, avg_c - avg_nc, wr_c, wr_nc))
 
-            size_label = ("CORE" if len(compressed) >= 200 else
-                          "PRELIMINARY" if len(compressed) >= 100 else
-                          "REGIME" if len(compressed) >= 30 else "INVALID")
+            size_label = (
+                "CORE"
+                if len(compressed) >= 200
+                else "PRELIMINARY"
+                if len(compressed) >= 100
+                else "REGIME"
+                if len(compressed) >= 30
+                else "INVALID"
+            )
 
             lines.append(f"  {label}:")
             lines.append(f"    Compressed: N={len(compressed):>4}, avgR={avg_c:+.3f}, WR={wr_c:.1%}")
             lines.append(f"    Non-Comp:   N={len(non_compressed):>4}, avgR={avg_nc:+.3f}, WR={wr_nc:.1%}")
-            lines.append(f"    Delta: {avg_c - avg_nc:+.3f}R, WR delta: {(wr_c - wr_nc)*100:+.1f}pp, "
-                         f"p={p_val:.4f}, {size_label}")
+            lines.append(
+                f"    Delta: {avg_c - avg_nc:+.3f}R, WR delta: {(wr_c - wr_nc) * 100:+.1f}pp, "
+                f"p={p_val:.4f}, {size_label}"
+            )
             lines.append("")
 
     # ── Year-by-year for top results ────────────────────────────────
@@ -210,7 +233,8 @@ def run():
 
     for em in ["E0", "E1"]:
         for rr in [1.0, 1.5, 2.0]:
-            rows = con.execute(f"""
+            rows = con.execute(
+                f"""
                 SELECT d.orb_0900_compression_tier as tier,
                        o.pnl_r,
                        EXTRACT(YEAR FROM o.trading_day) as yr
@@ -226,7 +250,9 @@ def run():
                   AND d.orb_0900_compression_tier IS NOT NULL
                   AND d.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
-            """, [em, rr]).fetchall()
+            """,
+                [em, rr],
+            ).fetchall()
 
             if not rows:
                 continue
@@ -259,7 +285,8 @@ def run():
     for sym in ["MGC", "MES", "MNQ"]:
         for sess in ["0900", "1000"]:
             tier_col = f"orb_{sess}_compression_tier"
-            rows = con.execute(f"""
+            rows = con.execute(
+                f"""
                 SELECT d.{tier_col} as comp_tier,
                        d.atr_vel_regime as vel_regime,
                        o.pnl_r
@@ -276,7 +303,9 @@ def run():
                   AND d.atr_vel_regime IS NOT NULL
                   AND d.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
-            """, [sym, sess]).fetchall()
+            """,
+                [sym, sess],
+            ).fetchall()
 
             if not rows:
                 continue
@@ -288,8 +317,7 @@ def run():
                     if len(subset) >= 5:
                         avg = np.mean(subset)
                         wr = np.mean([1 if x > 0 else 0 for x in subset])
-                        lines.append(f"    {vel:>12} x {comp:>12}: N={len(subset):>4}, "
-                                     f"avgR={avg:+.3f}, WR={wr:.1%}")
+                        lines.append(f"    {vel:>12} x {comp:>12}: N={len(subset):>4}, avgR={avg:+.3f}, WR={wr:.1%}")
             lines.append("")
 
     # ── Threshold sensitivity ───────────────────────────────────────
@@ -298,7 +326,8 @@ def run():
     lines.append("=" * 70 + "\n")
 
     for em in ["E0", "E1"]:
-        rows = con.execute(f"""
+        rows = con.execute(
+            f"""
             SELECT d.orb_0900_compression_z as z,
                    o.pnl_r
             FROM orb_outcomes o
@@ -313,7 +342,9 @@ def run():
               AND d.orb_0900_compression_z IS NOT NULL
               AND d.orb_minutes = 5
               AND o.pnl_r IS NOT NULL
-        """, [em]).fetchall()
+        """,
+            [em],
+        ).fetchall()
 
         if not rows:
             continue
@@ -328,9 +359,11 @@ def run():
                 wr_b = np.mean([1 if x > 0 else 0 for x in below])
                 wr_a = np.mean([1 if x > 0 else 0 for x in above])
                 _, p = stats.ttest_ind(below, above, equal_var=False)
-                lines.append(f"    z<={z_thresh:+.2f}: N={len(below):>4}, avgR={avg_b:+.3f}, WR={wr_b:.1%} | "
-                             f"z>{z_thresh:+.2f}: N={len(above):>4}, avgR={avg_a:+.3f}, WR={wr_a:.1%} | "
-                             f"delta={avg_b - avg_a:+.3f}, p={p:.4f}")
+                lines.append(
+                    f"    z<={z_thresh:+.2f}: N={len(below):>4}, avgR={avg_b:+.3f}, WR={wr_b:.1%} | "
+                    f"z>{z_thresh:+.2f}: N={len(above):>4}, avgR={avg_a:+.3f}, WR={wr_a:.1%} | "
+                    f"delta={avg_b - avg_a:+.3f}, p={p:.4f}"
+                )
         lines.append("")
 
     # ── BH FDR ──────────────────────────────────────────────────────
@@ -347,8 +380,10 @@ def run():
 
     lines.append(f"  BH survivors (q=0.10): {len(survivors)}")
     for (label, raw_p, n, avg_c, avg_nc, delta, wr_c, wr_nc), adj_p in survivors:
-        lines.append(f"    {label}: raw_p={raw_p:.4f}, p_bh={adj_p:.4f}, "
-                     f"N_comp={n}, delta={delta:+.3f}R, WR_comp={wr_c:.1%}, WR_other={wr_nc:.1%}")
+        lines.append(
+            f"    {label}: raw_p={raw_p:.4f}, p_bh={adj_p:.4f}, "
+            f"N_comp={n}, delta={delta:+.3f}R, WR_comp={wr_c:.1%}, WR_other={wr_nc:.1%}"
+        )
 
     # ── Honest summary ──────────────────────────────────────────────
     lines.append("\n" + "=" * 70)
@@ -360,8 +395,10 @@ def run():
     if mnq_0900_tests:
         lines.append("### MNQ 0900 Compressed ORB Claim Check")
         for label, raw_p, n, avg_c, avg_nc, delta, wr_c, wr_nc in mnq_0900_tests:
-            lines.append(f"  {label}: WR_comp={wr_c:.1%}, WR_other={wr_nc:.1%}, "
-                         f"WR_delta={((wr_c - wr_nc)*100):+.1f}pp, p={raw_p:.4f}")
+            lines.append(
+                f"  {label}: WR_comp={wr_c:.1%}, WR_other={wr_nc:.1%}, "
+                f"WR_delta={((wr_c - wr_nc) * 100):+.1f}pp, p={raw_p:.4f}"
+            )
         lines.append("")
 
     lines.append("### VERDICT")

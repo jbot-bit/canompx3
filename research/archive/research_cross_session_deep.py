@@ -16,6 +16,7 @@ Output: research/output/cross_session_deep_findings.md
 
 import sys
 from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import duckdb
@@ -37,7 +38,7 @@ def welch_t(group_a, group_b):
     if len(a) < 5 or len(b) < 5:
         return (np.nan, np.nan, np.nan)
     t_stat, p_val = stats.ttest_ind(a, b, equal_var=False)
-    pooled_std = np.sqrt((np.std(a, ddof=1)**2 + np.std(b, ddof=1)**2) / 2)
+    pooled_std = np.sqrt((np.std(a, ddof=1) ** 2 + np.std(b, ddof=1) ** 2) / 2)
     d = (np.nanmean(a) - np.nanmean(b)) / pooled_std if pooled_std > 0 else 0
     return (t_stat, p_val, d)
 
@@ -69,21 +70,28 @@ def bh_fdr(p_values, q=0.10):
 
 
 def fmt(p):
-    if np.isnan(p): return "N/A"
-    if p < 0.001: return f"{p:.4f}"
+    if np.isnan(p):
+        return "N/A"
+    if p < 0.001:
+        return f"{p:.4f}"
     return f"{p:.3f}"
 
 
 def sample_label(n):
-    if n < 30: return "INVALID"
-    if n < 100: return "REGIME"
-    if n < 200: return "PRELIMINARY"
-    if n < 500: return "CORE"
+    if n < 30:
+        return "INVALID"
+    if n < 100:
+        return "REGIME"
+    if n < 200:
+        return "PRELIMINARY"
+    if n < 500:
+        return "CORE"
     return "HIGH-CONFIDENCE"
 
 
 con = duckdb.connect(DB_PATH, read_only=True)
 report_lines = []
+
 
 def report(line=""):
     print(line)
@@ -124,12 +132,16 @@ for col in ["mgc_size", "mes_size", "mnq_size"]:
 df_conc = df_conc.dropna(subset=["mgc_size_med", "mes_size_med", "mnq_size_med"])
 
 # Classify concordance (strictly backward-looking)
-all_wide = ((df_conc["mgc_size"] > df_conc["mgc_size_med"]) &
-            (df_conc["mes_size"] > df_conc["mes_size_med"]) &
-            (df_conc["mnq_size"] > df_conc["mnq_size_med"]))
-all_narrow = ((df_conc["mgc_size"] < df_conc["mgc_size_med"]) &
-              (df_conc["mes_size"] < df_conc["mes_size_med"]) &
-              (df_conc["mnq_size"] < df_conc["mnq_size_med"]))
+all_wide = (
+    (df_conc["mgc_size"] > df_conc["mgc_size_med"])
+    & (df_conc["mes_size"] > df_conc["mes_size_med"])
+    & (df_conc["mnq_size"] > df_conc["mnq_size_med"])
+)
+all_narrow = (
+    (df_conc["mgc_size"] < df_conc["mgc_size_med"])
+    & (df_conc["mes_size"] < df_conc["mes_size_med"])
+    & (df_conc["mnq_size"] < df_conc["mnq_size_med"])
+)
 df_conc["concordance"] = "mixed"
 df_conc.loc[all_wide, "concordance"] = "all_wide"
 df_conc.loc[all_narrow, "concordance"] = "all_narrow"
@@ -137,7 +149,7 @@ df_conc.loc[all_narrow, "concordance"] = "all_narrow"
 report(f"\n  Days with expanding concordance (20-day min lookback): {len(df_conc)}")
 for c in ["all_wide", "all_narrow", "mixed"]:
     n = len(df_conc[df_conc["concordance"] == c])
-    report(f"    {c}: {n} days ({100*n/len(df_conc):.1f}%)")
+    report(f"    {c}: {n} days ({100 * n / len(df_conc):.1f}%)")
 
 # Now test across multiple RR targets and entry models
 report("\n--- Year-by-year for each instrument x concordance x RR ---")
@@ -175,34 +187,48 @@ for sym in ["MGC", "MES", "MNQ"]:
                 for y in years:
                     yv = clean(grp[grp["year"] == y]["pnl_r"].values)
                     if len(yv) >= 5:
-                        yr_results.append({"year": int(y), "N": len(yv),
-                                           "avg_r": np.nanmean(yv),
-                                           "positive": np.nanmean(yv) > 0})
+                        yr_results.append(
+                            {"year": int(y), "N": len(yv), "avg_r": np.nanmean(yv), "positive": np.nanmean(yv) > 0}
+                        )
 
                 pos_years = sum(1 for yr in yr_results if yr["positive"])
                 total_years = len(yr_results)
 
-                all_tests.append({
-                    "sym": sym, "rr": rr, "em": em, "conc": conc_type,
-                    "N": len(vals), "avg_r": avg_r, "baseline": base_r,
-                    "delta": avg_r - base_r, "p": p, "d": d,
-                    "pos_years": pos_years, "total_years": total_years,
-                    "yr_detail": yr_results,
-                    "label": sample_label(len(vals))
-                })
+                all_tests.append(
+                    {
+                        "sym": sym,
+                        "rr": rr,
+                        "em": em,
+                        "conc": conc_type,
+                        "N": len(vals),
+                        "avg_r": avg_r,
+                        "baseline": base_r,
+                        "delta": avg_r - base_r,
+                        "p": p,
+                        "d": d,
+                        "pos_years": pos_years,
+                        "total_years": total_years,
+                        "yr_detail": yr_results,
+                        "label": sample_label(len(vals)),
+                    }
+                )
 
 # Sort by p-value and show top results
 all_tests.sort(key=lambda x: x["p"] if not np.isnan(x["p"]) else 999)
 
 report("\n  TOP 20 CONCORDANCE RESULTS (by raw p-value):")
-report(f"  {'Sym':<5} {'EM':<4} {'RR':<5} {'Conc':<12} {'N':<6} {'avgR':>7} {'base':>7} "
-       f"{'delta':>7} {'p':>8} {'yrs+':>5} {'label':<15}")
+report(
+    f"  {'Sym':<5} {'EM':<4} {'RR':<5} {'Conc':<12} {'N':<6} {'avgR':>7} {'base':>7} "
+    f"{'delta':>7} {'p':>8} {'yrs+':>5} {'label':<15}"
+)
 report("  " + "-" * 90)
 
 for t in all_tests[:20]:
-    report(f"  {t['sym']:<5} {t['em']:<4} {t['rr']:<5.1f} {t['conc']:<12} {t['N']:<6} "
-           f"{t['avg_r']:>+7.3f} {t['baseline']:>+7.3f} {t['delta']:>+7.3f} "
-           f"{fmt(t['p']):>8} {t['pos_years']}/{t['total_years']:>2} {t['label']:<15}")
+    report(
+        f"  {t['sym']:<5} {t['em']:<4} {t['rr']:<5.1f} {t['conc']:<12} {t['N']:<6} "
+        f"{t['avg_r']:>+7.3f} {t['baseline']:>+7.3f} {t['delta']:>+7.3f} "
+        f"{fmt(t['p']):>8} {t['pos_years']}/{t['total_years']:>2} {t['label']:<15}"
+    )
 
 # Show year-by-year detail for top 5
 report("\n  YEAR-BY-YEAR DETAIL (top 5 by p-value):")
@@ -241,8 +267,10 @@ for sym in ["MGC", "MES", "MNQ"]:
         if len(vals) >= 10:
             avg = np.nanmean(vals)
             t_stat, p_1s = one_sample_t(vals)
-            report(f"  {sym} E0 RR2.0 G4+ {conc_type}: N={len(vals)}, avgR={avg:+.3f}, "
-                   f"p_vs_0={fmt(p_1s)}, {sample_label(len(vals))}")
+            report(
+                f"  {sym} E0 RR2.0 G4+ {conc_type}: N={len(vals)}, avgR={avg:+.3f}, "
+                f"p_vs_0={fmt(p_1s)}, {sample_label(len(vals))}"
+            )
             if not np.isnan(p_1s):
                 part1b_tests.append({"label": f"G4_{sym}_{conc_type}", "p": p_1s})
 
@@ -296,22 +324,34 @@ for sym in ["MGC", "MES", "MNQ"]:
             if len(fri) >= 10 and len(not_fri) >= 10:
                 t, p, d = welch_t(fri, not_fri)
                 delta = np.nanmean(fri) - np.nanmean(not_fri)
-                fri_tests.append({
-                    "sym": sym, "pct": pct, "vol": vol_label,
-                    "N_fri": len(fri), "fri_avg": np.nanmean(fri),
-                    "notfri_avg": np.nanmean(not_fri), "delta": delta,
-                    "p": p, "d": d, "threshold": latest_threshold
-                })
+                fri_tests.append(
+                    {
+                        "sym": sym,
+                        "pct": pct,
+                        "vol": vol_label,
+                        "N_fri": len(fri),
+                        "fri_avg": np.nanmean(fri),
+                        "notfri_avg": np.nanmean(not_fri),
+                        "delta": delta,
+                        "p": p,
+                        "d": d,
+                        "threshold": latest_threshold,
+                    }
+                )
 
 # Show results sorted by delta (most toxic Fridays first)
 fri_tests.sort(key=lambda x: x["delta"])
-report(f"\n  {'Sym':<5} {'Pct':<5} {'Vol':<10} {'N_fri':<7} {'Fri_R':>7} {'M-T_R':>7} "
-       f"{'Delta':>7} {'p':>8} {'ATR_thresh':>10}")
+report(
+    f"\n  {'Sym':<5} {'Pct':<5} {'Vol':<10} {'N_fri':<7} {'Fri_R':>7} {'M-T_R':>7} "
+    f"{'Delta':>7} {'p':>8} {'ATR_thresh':>10}"
+)
 report("  " + "-" * 80)
 for ft in fri_tests[:15]:
-    report(f"  {ft['sym']:<5} P{ft['pct']:<4} {ft['vol']:<10} {ft['N_fri']:<7} "
-           f"{ft['fri_avg']:>+7.3f} {ft['notfri_avg']:>+7.3f} {ft['delta']:>+7.3f} "
-           f"{fmt(ft['p']):>8} {ft['threshold']:>10.1f}")
+    report(
+        f"  {ft['sym']:<5} P{ft['pct']:<4} {ft['vol']:<10} {ft['N_fri']:<7} "
+        f"{ft['fri_avg']:>+7.3f} {ft['notfri_avg']:>+7.3f} {ft['delta']:>+7.3f} "
+        f"{fmt(ft['p']):>8} {ft['threshold']:>10.1f}"
+    )
 
 # Year-by-year for the most toxic combo (using expanding threshold per day)
 report("\n--- Year-by-year for top toxic Friday combos ---")
@@ -345,8 +385,10 @@ for ft in sorted(fri_tests, key=lambda x: -x["delta"])[:5]:
         sub_lv = sub_lv[(sub_lv["atr_20"] <= sub_lv["exp_threshold"]) & (sub_lv["is_friday"] == True)]
         vals = clean(sub_lv["pnl_r"].values)
         t_stat, p_1s = one_sample_t(vals)
-        report(f"  {sym} P{pct} low_vol Friday: N={len(vals)}, avgR={np.nanmean(vals):+.3f}, "
-               f"p_vs_0={fmt(p_1s)}, {sample_label(len(vals))}")
+        report(
+            f"  {sym} P{pct} low_vol Friday: N={len(vals)}, avgR={np.nanmean(vals):+.3f}, "
+            f"p_vs_0={fmt(p_1s)}, {sample_label(len(vals))}"
+        )
 
 
 # ============================================================
@@ -377,8 +419,10 @@ for session in ["0900", "1800"]:
             other = clean(df_sess_conc[df_sess_conc["concordance"] != conc_type]["pnl_r"].values)
             if len(vals) >= 10 and len(other) >= 10:
                 t, p, d = welch_t(vals, other)
-                report(f"  {sym} {session} {conc_type}: N={len(vals)}, avgR={np.nanmean(vals):+.3f}, "
-                       f"baseline={np.nanmean(other):+.3f}, p={fmt(p)}, {sample_label(len(vals))}")
+                report(
+                    f"  {sym} {session} {conc_type}: N={len(vals)}, avgR={np.nanmean(vals):+.3f}, "
+                    f"baseline={np.nanmean(other):+.3f}, p={fmt(p)}, {sample_label(len(vals))}"
+                )
                 if not np.isnan(p):
                     part3_tests.append({"label": f"SESS_{sym}_{session}_{conc_type}", "p": p})
 
@@ -408,8 +452,7 @@ for sym in ["MGC", "MES", "MNQ"]:
         if len(sub) > 0:
             pct_g4 = 100 * sub["passes_g4"].mean()
             avg_size = sub["orb_1000_size"].mean()
-            report(f"  {sym} {conc_type}: {len(sub)} days, "
-                   f"{pct_g4:.0f}% pass G4, avg orb_size={avg_size:.1f}")
+            report(f"  {sym} {conc_type}: {len(sub)} days, {pct_g4:.0f}% pass G4, avg orb_size={avg_size:.1f}")
 
     # KEY TEST: among G4+ days, does concordance STILL matter?
     g4_only = df_check_conc[df_check_conc["passes_g4"] == 1]
@@ -434,9 +477,11 @@ for sym in ["MGC", "MES", "MNQ"]:
     not_wide_r = clean(df_g4_out_conc[df_g4_out_conc["concordance"] != "all_wide"]["pnl_r"].values)
     if len(wide_r) >= 10 and len(not_wide_r) >= 10:
         t, p, d = welch_t(wide_r, not_wide_r)
-        report(f"  {sym} G4+ all_wide: N={len(wide_r)}, avgR={np.nanmean(wide_r):+.3f} "
-               f"vs G4+ not_wide: N={len(not_wide_r)}, avgR={np.nanmean(not_wide_r):+.3f}, "
-               f"p={fmt(p)}, d={d:+.3f}")
+        report(
+            f"  {sym} G4+ all_wide: N={len(wide_r)}, avgR={np.nanmean(wide_r):+.3f} "
+            f"vs G4+ not_wide: N={len(not_wide_r)}, avgR={np.nanmean(not_wide_r):+.3f}, "
+            f"p={fmt(p)}, d={d:+.3f}"
+        )
         if not np.isnan(p):
             part4_tests.append({"label": f"G4WITHIN_{sym}_wide_vs_not", "p": p})
     report("")
@@ -485,14 +530,20 @@ for label, raw_p, adj_p in sorted(survivors, key=lambda x: x[2])[:20]:
 # Also show: how many concordance tests survive at different year thresholds
 report("\n--- Concordance tests with year-consistency filter ---")
 for min_pos_pct in [0.5, 0.6, 0.67, 0.75]:
-    consistent = [t for t in all_tests
-                  if t["total_years"] >= 3
-                  and t["pos_years"] / t["total_years"] >= min_pos_pct
-                  and not np.isnan(t["p"]) and t["p"] < 0.05]
-    report(f"  {int(min_pos_pct*100)}%+ years positive AND raw p<0.05: {len(consistent)} tests")
+    consistent = [
+        t
+        for t in all_tests
+        if t["total_years"] >= 3
+        and t["pos_years"] / t["total_years"] >= min_pos_pct
+        and not np.isnan(t["p"])
+        and t["p"] < 0.05
+    ]
+    report(f"  {int(min_pos_pct * 100)}%+ years positive AND raw p<0.05: {len(consistent)} tests")
     for t in consistent[:5]:
-        report(f"    {t['sym']} {t['em']} RR{t['rr']} {t['conc']}: N={t['N']}, "
-               f"avgR={t['avg_r']:+.3f}, {t['pos_years']}/{t['total_years']} yrs+, p={fmt(t['p'])}")
+        report(
+            f"    {t['sym']} {t['em']} RR{t['rr']} {t['conc']}: N={t['N']}, "
+            f"avgR={t['avg_r']:+.3f}, {t['pos_years']}/{t['total_years']} yrs+, p={fmt(t['p'])}"
+        )
 
 
 # ============================================================

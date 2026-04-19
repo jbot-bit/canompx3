@@ -267,7 +267,9 @@ def collect_family_data(con: duckdb.DuckDBPyConnection, *, validated_only: bool)
                         "src": row["src"],
                         "overall_sr_lift": float(base["sr_lift"]),
                         "overall_lift": float(base["lift"]),
-                        "oos_sr_lift": None if len(df_oos) < MIN_TOTAL else score_side_metrics(df_oos, ctx.side).get("sr_lift"),
+                        "oos_sr_lift": None
+                        if len(df_oos) < MIN_TOTAL
+                        else score_side_metrics(df_oos, ctx.side).get("sr_lift"),
                     }
                 )
         pooled = pd.concat(pooled_frames, ignore_index=True) if pooled_frames else pd.DataFrame()
@@ -284,7 +286,9 @@ def overlap_table(pooled: pd.DataFrame, side: str) -> dict[str, float | int]:
         "mean_gp": float(pooled["gp"].mean()),
         "mean_atr_pct": float(pooled["atr_20_pct"].mean()),
         "mean_ovn_pct": float(pooled["overnight_range_pct"].mean()),
-        "mean_atr_vel": float(pooled["atr_vel_ratio"].dropna().mean()) if pooled["atr_vel_ratio"].notna().any() else float("nan"),
+        "mean_atr_vel": float(pooled["atr_vel_ratio"].dropna().mean())
+        if pooled["atr_vel_ratio"].notna().any()
+        else float("nan"),
         "corr_garch_atr": safe_corr(pooled["gp"], pooled["atr_20_pct"]),
         "corr_garch_ovn": safe_corr(pooled["gp"], pooled["overnight_range_pct"]),
         "corr_garch_atr_vel": safe_corr(pooled["gp"], pooled["atr_vel_ratio"]),
@@ -454,7 +458,11 @@ def utility_summary(con: duckdb.DuckDBPyConnection, family: FamilyContext) -> pd
             threshold_value=PCT_HIGH if family.side == "high" else PCT_LOW,
         ),
     ]
-    df = pd.concat([f for f in frames if len(f) > 0], ignore_index=True) if any(len(f) > 0 for f in frames) else pd.DataFrame()
+    df = (
+        pd.concat([f for f in frames if len(f) > 0], ignore_index=True)
+        if any(len(f) > 0 for f in frames)
+        else pd.DataFrame()
+    )
     if len(df) == 0:
         return df
     return (
@@ -519,16 +527,32 @@ def verdict_for_family(
             util_row = utility[utility["score"] == ("atr" if proxy == "atr" else "overnight")]
             g_row = utility[utility["score"] == "garch"]
             if len(util_row) > 0 and len(g_row) > 0:
-                utility_rank = "garch_ge_proxy" if float(g_row.iloc[0]["mean_sr_lift"]) >= float(util_row.iloc[0]["mean_sr_lift"]) else "proxy_gt_garch"
+                utility_rank = (
+                    "garch_ge_proxy"
+                    if float(g_row.iloc[0]["mean_sr_lift"]) >= float(util_row.iloc[0]["mean_sr_lift"])
+                    else "proxy_gt_garch"
+                )
 
         pair_signal = pair_signals[proxy]["signal"]
         pair_ok = pair_signals[proxy]["status"] == "ok"
 
-        if overall_ok and overall_support and supportive >= 1 and pair_ok and pair_signal in {"garch_marginal", "interaction_like"} and utility_rank != "proxy_gt_garch":
+        if (
+            overall_ok
+            and overall_support
+            and supportive >= 1
+            and pair_ok
+            and pair_signal in {"garch_marginal", "interaction_like"}
+            and utility_rank != "proxy_gt_garch"
+        ):
             verdict = "distinct"
         elif overall_ok and overall_support and pair_ok and pair_signal == "interaction_like":
             verdict = "complementary"
-        elif (not overall_support or supportive == 0) and pair_ok and pair_signal == "shared_or_flat" and utility_rank == "proxy_gt_garch":
+        elif (
+            (not overall_support or supportive == 0)
+            and pair_ok
+            and pair_signal == "shared_or_flat"
+            and utility_rank == "proxy_gt_garch"
+        ):
             verdict = "subsumed"
         else:
             verdict = "unclear"
@@ -610,9 +634,9 @@ def emit(
         ]:
             row = persistence.get(key, {"status": "thin", "n": 0})
             lines.append(
-                f"| {key} | {row.get('status','thin')} | {int(row.get('n',0))} | "
-                f"{'' if row.get('status') != 'ok' else f'{row.get('lift', float('nan')):+.3f}'} | "
-                f"{'' if row.get('status') != 'ok' else f'{row.get('sr_lift', float('nan')):+.3f}'} | "
+                f"| {key} | {row.get('status', 'thin')} | {int(row.get('n', 0))} | "
+                f"{'' if row.get('status') != 'ok' else f'{row.get("lift", float("nan")):+.3f}'} | "
+                f"{'' if row.get('status') != 'ok' else f'{row.get("sr_lift", float("nan")):+.3f}'} | "
                 f"{'' if row.get('status') != 'ok' else ('Y' if row.get('support') else 'N')} |"
             )
 
@@ -629,9 +653,9 @@ def emit(
                 for _, row in table.iterrows():
                     lines.append(
                         f"| {row['proxy_state']} | {row['garch_state']} | {int(row['n'])} | "
-                        f"{'' if pd.isna(row['exp_r']) else f'{row['exp_r']:+.3f}'} | "
-                        f"{'' if pd.isna(row['sr']) else f'{row['sr']:+.3f}'} | "
-                        f"{'' if pd.isna(row['total_r']) else f'{row['total_r']:+.1f}'} | "
+                        f"{'' if pd.isna(row['exp_r']) else f'{row["exp_r"]:+.3f}'} | "
+                        f"{'' if pd.isna(row['sr']) else f'{row["sr"]:+.3f}'} | "
+                        f"{'' if pd.isna(row['total_r']) else f'{row["total_r"]:+.1f}'} | "
                         f"{row['status']} |"
                     )
             lines.append("")
@@ -685,14 +709,13 @@ def main() -> None:
         utility_by_family[label] = utility
         pair_tables[label] = {
             "atr": four_cell_tail_pair(pooled, proxy_col="atr_20_pct", proxy_label="atr", proxy_mode="pct"),
-            "overnight": four_cell_tail_pair(pooled, proxy_col="overnight_range_pct", proxy_label="overnight", proxy_mode="pct"),
+            "overnight": four_cell_tail_pair(
+                pooled, proxy_col="overnight_range_pct", proxy_label="overnight", proxy_mode="pct"
+            ),
             "atr_vel": four_cell_tail_pair(pooled, proxy_label="atr_vel", proxy_mode="atr_vel_tercile"),
         }
         persistence = conditional_persistence(pooled, ctx)
-        pair_signals = {
-            proxy: four_cell_signal(tbl, ctx)
-            for proxy, tbl in pair_tables[label].items()
-        }
+        pair_signals = {proxy: four_cell_signal(tbl, ctx) for proxy, tbl in pair_tables[label].items()}
         verdicts[label] = verdict_for_family(ctx, persistence, utility, pair_signals)
 
     con.close()

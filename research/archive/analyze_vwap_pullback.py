@@ -51,30 +51,36 @@ RR_TARGETS = [1.0, 1.5, 2.0]
 STOP_MULTIPLIERS = [0.5, 1.0]  # fraction of ATR_20
 TREND_LENGTHS = [6, 12, 20]  # consecutive 5m bars above/below VWAP
 TIME_FILTERS = {
-    "active": (0, 23),   # Nearly all hours
-    "core": (8, 18),     # London + NY
+    "active": (0, 23),  # Nearly all hours
+    "core": (8, 18),  # London + NY
 }
 VWAP_PROXIMITY = 0.2  # Touch VWAP within this fraction of ATR
 
 REGIME_BOUNDARY = date(2025, 1, 1)
 
+
 def load_bars_1m_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1-minute bars for one trading day."""
     from pipeline.build_daily_features import compute_trading_day_utc_range
+
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [start_utc, end_utc]).fetchdf()
+        """,
+            [start_utc, end_utc],
+        ).fetchdf()
     finally:
         con.close()
     return df
+
 
 def compute_vwap(bars_1m: pd.DataFrame) -> np.ndarray:
     """Compute cumulative VWAP from bars.
@@ -92,6 +98,7 @@ def compute_vwap(bars_1m: pd.DataFrame) -> np.ndarray:
     cum_vol = np.cumsum(vol)
     vwap = cum_tp_vol / cum_vol
     return vwap
+
 
 def resample_to_5m(bars_1m: pd.DataFrame) -> pd.DataFrame:
     """Resample 1m bars to 5m bars with VWAP."""
@@ -114,21 +121,24 @@ def resample_to_5m(bars_1m: pd.DataFrame) -> pd.DataFrame:
 
     df["bucket"] = (epoch // 300) * 300
 
-    grouped = df.groupby("bucket").agg(
-        ts_utc=("ts_utc", "first"),
-        open=("open", "first"),
-        high=("high", "max"),
-        low=("low", "min"),
-        close=("close", "last"),
-        volume=("volume", "sum"),
-        vwap=("vwap", "last"),  # VWAP at end of 5m bar (cumulative)
-    ).reset_index(drop=True)
+    grouped = (
+        df.groupby("bucket")
+        .agg(
+            ts_utc=("ts_utc", "first"),
+            open=("open", "first"),
+            high=("high", "max"),
+            low=("low", "min"),
+            close=("close", "last"),
+            volume=("volume", "sum"),
+            vwap=("vwap", "last"),  # VWAP at end of 5m bar (cumulative)
+        )
+        .reset_index(drop=True)
+    )
 
     return grouped
 
-def find_vwap_pullback_signals(
-    bars_5m: pd.DataFrame, atr: float, trend_length: int, time_filter: tuple
-) -> list[dict]:
+
+def find_vwap_pullback_signals(bars_5m: pd.DataFrame, atr: float, trend_length: int, time_filter: tuple) -> list[dict]:
     """Find VWAP pullback signals in 5m bars.
 
     Returns list of signal dicts with direction, entry_bar_idx, entry_price, etc.
@@ -179,12 +189,14 @@ def find_vwap_pullback_signals(
                 if not had_long_trade:
                     entry_bar_idx = i + 1
                     entry_price = bars_5m.iloc[entry_bar_idx]["open"]
-                    signals.append({
-                        "direction": "long",
-                        "entry_bar_idx": entry_bar_idx,
-                        "entry_price": entry_price,
-                        "vwap_at_entry": vwap[i],
-                    })
+                    signals.append(
+                        {
+                            "direction": "long",
+                            "entry_bar_idx": entry_bar_idx,
+                            "entry_price": entry_price,
+                            "vwap_at_entry": vwap[i],
+                        }
+                    )
                     had_long_trade = True
                     above_count = 0  # Reset after signal
 
@@ -195,29 +207,35 @@ def find_vwap_pullback_signals(
                 if not had_short_trade:
                     entry_bar_idx = i + 1
                     entry_price = bars_5m.iloc[entry_bar_idx]["open"]
-                    signals.append({
-                        "direction": "short",
-                        "entry_bar_idx": entry_bar_idx,
-                        "entry_price": entry_price,
-                        "vwap_at_entry": vwap[i],
-                    })
+                    signals.append(
+                        {
+                            "direction": "short",
+                            "entry_bar_idx": entry_bar_idx,
+                            "entry_price": entry_price,
+                            "vwap_at_entry": vwap[i],
+                        }
+                    )
                     had_short_trade = True
                     below_count = 0
 
     return signals
+
 
 def compute_vwap_outcomes(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Compute VWAP pullback outcomes for all days."""
     # Get trading days and ATR from daily_features
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        features = con.execute("""
+        features = con.execute(
+            """
             SELECT trading_day, daily_high, daily_low
             FROM daily_features
             WHERE symbol = 'MGC' AND orb_minutes = 5
               AND trading_day BETWEEN ? AND ?
             ORDER BY trading_day
-        """, [start, end]).fetchdf()
+        """,
+            [start, end],
+        ).fetchdf()
     finally:
         con.close()
 
@@ -234,7 +252,7 @@ def compute_vwap_outcomes(db_path: Path, start: date, end: date) -> pd.DataFrame
 
     for idx, (_, row) in enumerate(eligible.iterrows()):
         if idx % 200 == 0:
-            print(f"    Processing day {idx+1}/{total}...")
+            print(f"    Processing day {idx + 1}/{total}...")
 
         td = row["trading_day"]
         if hasattr(td, "date") and callable(td.date):
@@ -283,35 +301,39 @@ def compute_vwap_outcomes(db_path: Path, start: date, end: date) -> pd.DataFrame
 
                             # Resolve on 5m bars
                             result = _resolve_5m(
-                                bars_5m, entry_price, stop_price, target_price,
-                                direction, entry_bar_idx + 1
+                                bars_5m, entry_price, stop_price, target_price, direction, entry_bar_idx + 1
                             )
 
                             if result is None:
                                 last_close = bars_5m.iloc[-1]["close"]
-                                pnl_pts = (last_close - entry_price) if direction == "long" else (entry_price - last_close)
+                                pnl_pts = (
+                                    (last_close - entry_price) if direction == "long" else (entry_price - last_close)
+                                )
                                 pnl_r = to_r_multiple(SPEC, entry_price, stop_price, pnl_pts)
                                 outcome_type = "eod"
                             else:
                                 pnl_r = to_r_multiple(SPEC, entry_price, stop_price, result["pnl_points"])
                                 outcome_type = result["outcome"]
 
-                            all_outcomes.append({
-                                "trading_day": str(td_date),
-                                "direction": direction,
-                                "trend_length": trend_length,
-                                "time_filter": tf_name,
-                                "stop_multiplier": stop_mult,
-                                "rr_target": rr,
-                                "entry_price": entry_price,
-                                "stop_price": stop_price,
-                                "pnl_r": pnl_r,
-                                "outcome": outcome_type,
-                            })
+                            all_outcomes.append(
+                                {
+                                    "trading_day": str(td_date),
+                                    "direction": direction,
+                                    "trend_length": trend_length,
+                                    "time_filter": tf_name,
+                                    "stop_multiplier": stop_mult,
+                                    "rr_target": rr,
+                                    "entry_price": entry_price,
+                                    "stop_price": stop_price,
+                                    "pnl_r": pnl_r,
+                                    "outcome": outcome_type,
+                                }
+                            )
 
     if not all_outcomes:
         return pd.DataFrame()
     return pd.DataFrame(all_outcomes)
+
 
 def _resolve_5m(bars, entry, stop, target, direction, start_idx):
     """Resolve outcome on 5m bars."""
@@ -336,6 +358,7 @@ def _resolve_5m(bars, entry, stop, target, direction, start_idx):
             return {"outcome": "win", "pnl_points": pnl, "exit_bar_idx": i}
     return None
 
+
 def run_walk_forward(
     db_path: Path,
     train_months: int = 12,
@@ -345,6 +368,7 @@ def run_walk_forward(
     """Run walk-forward analysis for VWAP pullback strategy."""
     # Only load data needed for training + OOS (train_months before test_start)
     from research._alt_strategy_utils import _add_months
+
     full_start = _add_months(test_start, -(train_months + 2))  # +2 months buffer for ATR warmup
 
     print("  Computing all VWAP pullback outcomes...")
@@ -363,13 +387,11 @@ def run_walk_forward(
     oos_all_dates = []
 
     for w in windows:
-        train_mask = (
-            (outcomes_df["trading_day_date"] >= w["train_start"])
-            & (outcomes_df["trading_day_date"] <= w["train_end"])
+        train_mask = (outcomes_df["trading_day_date"] >= w["train_start"]) & (
+            outcomes_df["trading_day_date"] <= w["train_end"]
         )
-        test_mask = (
-            (outcomes_df["trading_day_date"] >= w["test_start"])
-            & (outcomes_df["trading_day_date"] <= w["test_end"])
+        test_mask = (outcomes_df["trading_day_date"] >= w["test_start"]) & (
+            outcomes_df["trading_day_date"] <= w["test_end"]
         )
 
         train_data = outcomes_df[train_mask]
@@ -414,13 +436,15 @@ def run_walk_forward(
         oos_all_pnls.extend(oos_pnls)
         oos_all_dates.extend(oos["trading_day_date"].values)
 
-        window_results.append({
-            "test_start": str(w["test_start"]),
-            "test_end": str(w["test_end"]),
-            "selected": f"TL{tl}_{tf_name}_SM{sm}_RR{rr}",
-            "train_sharpe": best_sharpe,
-            "oos_stats": oos_stats,
-        })
+        window_results.append(
+            {
+                "test_start": str(w["test_start"]),
+                "test_end": str(w["test_end"]),
+                "selected": f"TL{tl}_{tf_name}_SM{sm}_RR{rr}",
+                "train_sharpe": best_sharpe,
+                "oos_stats": oos_stats,
+            }
+        )
 
     combined_oos = None
     regime_split = None
@@ -444,6 +468,7 @@ def run_walk_forward(
         "combined_oos": combined_oos,
         "regime_split": regime_split,
     }
+
 
 def _print_go_no_go(combined: dict | None, regime_split: dict | None) -> None:
     print()
@@ -473,15 +498,18 @@ def _print_go_no_go(combined: dict | None, regime_split: dict | None) -> None:
     verdict = "GO" if all_pass else "NO-GO"
     print(f"\n  VERDICT: {verdict}")
 
+
 def main():
     parser = argparse.ArgumentParser(description="VWAP Momentum Pullback analysis")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--train-months", type=int, default=12)
     parser.add_argument("--output", type=Path, default=None)
-    parser.add_argument("--start", type=date.fromisoformat, default=None,
-                        help="OOS start date (YYYY-MM-DD), default 2024-08-01")
-    parser.add_argument("--end", type=date.fromisoformat, default=None,
-                        help="OOS end date (YYYY-MM-DD), default 2026-02-01")
+    parser.add_argument(
+        "--start", type=date.fromisoformat, default=None, help="OOS start date (YYYY-MM-DD), default 2024-08-01"
+    )
+    parser.add_argument(
+        "--end", type=date.fromisoformat, default=None, help="OOS end date (YYYY-MM-DD), default 2026-02-01"
+    )
     args = parser.parse_args()
 
     sep = "=" * 80
@@ -490,9 +518,11 @@ def main():
     print(sep)
     print()
     print("Entry: Buy/sell pullbacks to VWAP after established trend")
-    print(f"Grid: {len(TREND_LENGTHS)} trend lengths x {len(TIME_FILTERS)} time filters x "
-          f"{len(STOP_MULTIPLIERS)} stop mults x {len(RR_TARGETS)} RR = "
-          f"{len(TREND_LENGTHS) * len(TIME_FILTERS) * len(STOP_MULTIPLIERS) * len(RR_TARGETS)} combos")
+    print(
+        f"Grid: {len(TREND_LENGTHS)} trend lengths x {len(TIME_FILTERS)} time filters x "
+        f"{len(STOP_MULTIPLIERS)} stop mults x {len(RR_TARGETS)} RR = "
+        f"{len(TREND_LENGTHS) * len(TIME_FILTERS) * len(STOP_MULTIPLIERS) * len(RR_TARGETS)} combos"
+    )
     print(f"Gate B: Risk floor >= {SPEC.min_risk_floor_points} points")
     print(f"Gate C: Ambiguous bar = LOSS")
     print(f"Gate G: Trend established ({TREND_LENGTHS} consecutive bars)")
@@ -511,26 +541,32 @@ def main():
         for w in result["windows"]:
             oos = w["oos_stats"]
             if oos:
-                print(f"  {w['test_start']} to {w['test_end']}: "
-                      f"Selected {w['selected']}, "
-                      f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
-                      f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}")
+                print(
+                    f"  {w['test_start']} to {w['test_end']}: "
+                    f"Selected {w['selected']}, "
+                    f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
+                    f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}"
+                )
 
         if result["combined_oos"]:
             c = result["combined_oos"]
-            sha = c.get('sharpe_ann')
+            sha = c.get("sharpe_ann")
             sha_str = f", ShANN={sha:.3f}" if sha is not None else ""
-            print(f"\n  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
-                  f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}{sha_str}, "
-                  f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R")
+            print(
+                f"\n  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
+                f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}{sha_str}, "
+                f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R"
+            )
 
         if result["regime_split"]:
             rs = result["regime_split"]
             print("\n  REGIME SPLIT:")
             for label, stats in rs.items():
                 if stats:
-                    print(f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
-                          f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}")
+                    print(
+                        f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
+                        f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}"
+                    )
                 else:
                     print(f"    {label}: No data")
 
@@ -546,6 +582,7 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

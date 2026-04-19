@@ -49,11 +49,11 @@ def main() -> int:
     df["trading_day"] = pd.to_datetime(df["trading_day"])
 
     base = (
-        df["f_dir"].isin(["long", "short"]) &
-        df["l_dir"].isin(["long", "short"]) &
-        (df["f_dir"] == df["l_dir"]) &
-        df["l_ts"].notna() &
-        (df["l_ts"] <= df["entry_ts"])
+        df["f_dir"].isin(["long", "short"])
+        & df["l_dir"].isin(["long", "short"])
+        & (df["f_dir"] == df["l_dir"])
+        & df["l_ts"].notna()
+        & (df["l_ts"] <= df["entry_ts"])
     )
     d = df[base].copy()
     d["dow"] = d["trading_day"].dt.dayofweek

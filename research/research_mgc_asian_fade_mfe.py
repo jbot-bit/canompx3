@@ -33,7 +33,9 @@ from pipeline.paths import GOLD_DB_PATH
 def main():
     cost = get_cost_spec("MGC")
     friction_pts = cost.total_friction / cost.point_value
-    print(f"MGC: tick={cost.tick_size}, pt_val={cost.point_value}, friction={cost.total_friction:.2f} (={friction_pts:.3f} pts)")
+    print(
+        f"MGC: tick={cost.tick_size}, pt_val={cost.point_value}, friction={cost.total_friction:.2f} (={friction_pts:.3f} pts)"
+    )
 
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 
@@ -136,26 +138,28 @@ def main():
         mfe_bar_idx = int(np.argmax(running_mfe))
 
         # Store bar-by-bar data for stop/target simulation
-        results.append({
-            "trading_day": td_date,
-            "fade_dir": fade_dir,
-            "trend_return": trend_return,
-            "trend_points": trend_points,
-            "entry_price": entry_price,
-            "mfe_points": mfe_points,
-            "mae_points": mae_points,
-            "asian_range": asian_range,
-            "orb_size": orb_size,
-            "mfe_minutes": mfe_bar_idx,
-            "n_post_bars": len(post_peak),
-            "running_mfe": running_mfe,
-            "running_mae": running_mae,
-            # R-multiples
-            "mfe_r_asian": mfe_points / asian_range if asian_range > 0 else None,
-            "mae_r_asian": mae_points / asian_range if asian_range > 0 else None,
-            "mfe_r_trend": mfe_points / trend_points if trend_points > 0 else None,
-            "mae_r_trend": mae_points / trend_points if trend_points > 0 else None,
-        })
+        results.append(
+            {
+                "trading_day": td_date,
+                "fade_dir": fade_dir,
+                "trend_return": trend_return,
+                "trend_points": trend_points,
+                "entry_price": entry_price,
+                "mfe_points": mfe_points,
+                "mae_points": mae_points,
+                "asian_range": asian_range,
+                "orb_size": orb_size,
+                "mfe_minutes": mfe_bar_idx,
+                "n_post_bars": len(post_peak),
+                "running_mfe": running_mfe,
+                "running_mae": running_mae,
+                # R-multiples
+                "mfe_r_asian": mfe_points / asian_range if asian_range > 0 else None,
+                "mae_r_asian": mae_points / asian_range if asian_range > 0 else None,
+                "mfe_r_trend": mfe_points / trend_points if trend_points > 0 else None,
+                "mae_r_trend": mae_points / trend_points if trend_points > 0 else None,
+            }
+        )
 
     con.close()
 

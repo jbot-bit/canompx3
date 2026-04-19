@@ -9,6 +9,7 @@ if overnight bars breach those levels before 0900 session.
 """
 
 import sys, os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import duckdb
@@ -30,10 +31,7 @@ def bh_fdr(pvals, q=0.10):
     adjusted[sorted_idx[-1]] = sorted_p[-1]
     for i in range(n - 2, -1, -1):
         rank = np.where(sorted_idx == sorted_idx[i])[0][0] + 1
-        adjusted[sorted_idx[i]] = min(
-            sorted_p[i] * n / rank,
-            adjusted[sorted_idx[i + 1]] if i + 1 < n else 1.0
-        )
+        adjusted[sorted_idx[i]] = min(sorted_p[i] * n / rank, adjusted[sorted_idx[i + 1]] if i + 1 < n else 1.0)
     return np.clip(adjusted, 0, 1).tolist()
 
 
@@ -107,7 +105,8 @@ def run():
     for sym in ["MNQ", "MGC", "MES"]:
         for sess in ["0900", "1000"]:
             for em in ["E0", "E1"]:
-                rows = con.execute(f"""
+                rows = con.execute(
+                    f"""
                     WITH prev AS (
                         SELECT trading_day, symbol,
                                daily_high, daily_low, daily_open,
@@ -139,7 +138,9 @@ def run():
                       AND o.pnl_r IS NOT NULL
                       AND p.prev_high IS NOT NULL
                       AND p.prev_low IS NOT NULL
-                """, [sym, sym, sess, em]).fetchall()
+                """,
+                    [sym, sym, sess, em],
+                ).fetchall()
 
                 if not rows:
                     continue
@@ -166,10 +167,10 @@ def run():
                     wr_pdh = np.mean([1 if x > 0 else 0 for x in pdh])
                     wr_rest = np.mean([1 if x > 0 else 0 for x in rest])
                     delta = avg_pdh - avg_rest
-                    all_tests.append((label + "_PDH", p, len(pdh), avg_pdh, avg_rest,
-                                      delta, wr_pdh, wr_rest))
-                    lines.append(f"    PDH vs rest: delta={delta:+.3f}R, "
-                                 f"WR_delta={(wr_pdh-wr_rest)*100:+.1f}pp, p={p:.4f}")
+                    all_tests.append((label + "_PDH", p, len(pdh), avg_pdh, avg_rest, delta, wr_pdh, wr_rest))
+                    lines.append(
+                        f"    PDH vs rest: delta={delta:+.3f}R, WR_delta={(wr_pdh - wr_rest) * 100:+.1f}pp, p={p:.4f}"
+                    )
 
                 # T-test: PDL_taken vs rest
                 rest2 = pdh + neither
@@ -180,10 +181,10 @@ def run():
                     wr_pdl = np.mean([1 if x > 0 else 0 for x in pdl])
                     wr_rest2 = np.mean([1 if x > 0 else 0 for x in rest2])
                     delta = avg_pdl - avg_rest2
-                    all_tests.append((label + "_PDL", p, len(pdl), avg_pdl, avg_rest2,
-                                      delta, wr_pdl, wr_rest2))
-                    lines.append(f"    PDL vs rest: delta={delta:+.3f}R, "
-                                 f"WR_delta={(wr_pdl-wr_rest2)*100:+.1f}pp, p={p:.4f}")
+                    all_tests.append((label + "_PDL", p, len(pdl), avg_pdl, avg_rest2, delta, wr_pdl, wr_rest2))
+                    lines.append(
+                        f"    PDL vs rest: delta={delta:+.3f}R, WR_delta={(wr_pdl - wr_rest2) * 100:+.1f}pp, p={p:.4f}"
+                    )
                 lines.append("")
 
     # ── Year-by-year for MNQ 0900 ──────────────────────────────
@@ -192,7 +193,8 @@ def run():
     lines.append("=" * 70 + "\n")
 
     for em in ["E0", "E1"]:
-        rows = con.execute(f"""
+        rows = con.execute(
+            f"""
             WITH prev AS (
                 SELECT trading_day, symbol, daily_open,
                        LAG(daily_high) OVER (PARTITION BY symbol ORDER BY trading_day) as prev_high,
@@ -213,7 +215,9 @@ def run():
             WHERE o.symbol = 'MNQ' AND o.orb_label = '0900'
               AND o.entry_model = ? AND o.rr_target = 2.0
               AND o.pnl_r IS NOT NULL AND p.prev_high IS NOT NULL
-        """, [em]).fetchall()
+        """,
+            [em],
+        ).fetchall()
 
         pdh_rows = [(r[1], int(r[2])) for r in rows if r[0] == "PDH_taken"]
         if len(pdh_rows) < 10:
@@ -247,8 +251,10 @@ def run():
         lines.append(f"  BH survivors (q=0.10): {len(survivors)}")
         for (label, raw_p, n, avg_b, avg_a, delta, wr_b, wr_a), adj_p in survivors:
             direction = "HELPS" if delta > 0 else "HURTS"
-            lines.append(f"    {label}: raw_p={raw_p:.4f}, p_bh={adj_p:.4f}, "
-                         f"N={n}, delta={delta:+.3f}R, WR_delta={(wr_b-wr_a)*100:+.1f}pp, {direction}")
+            lines.append(
+                f"    {label}: raw_p={raw_p:.4f}, p_bh={adj_p:.4f}, "
+                f"N={n}, delta={delta:+.3f}R, WR_delta={(wr_b - wr_a) * 100:+.1f}pp, {direction}"
+            )
     lines.append("")
 
     lines.append("=" * 70)

@@ -57,10 +57,7 @@ VALIDATION_FRESHNESS_DAYS = 180
 
 # Path to calendar cascade rules file (for RULES_NOT_LOADED detection).
 _CALENDAR_RULES_PATH = (
-    Path(__file__).resolve().parent.parent.parent
-    / "research"
-    / "output"
-    / "calendar_cascade_rules.json"
+    Path(__file__).resolve().parent.parent.parent / "research" / "output" / "calendar_cascade_rules.json"
 )
 
 
@@ -88,9 +85,7 @@ def parse_strategy_id(strategy_id: str) -> dict[str, Any]:
 
     instrument = parts[0]
     if instrument not in ("MGC", "MNQ", "MES"):
-        raise ValueError(
-            f"strategy_id has unknown instrument {instrument!r}: {strategy_id!r}"
-        )
+        raise ValueError(f"strategy_id has unknown instrument {instrument!r}: {strategy_id!r}")
 
     em_idx = None
     for i, p in enumerate(parts):
@@ -98,9 +93,7 @@ def parse_strategy_id(strategy_id: str) -> dict[str, Any]:
             em_idx = i
             break
     if em_idx is None:
-        raise ValueError(
-            f"strategy_id has no entry model (E1/E2/E3): {strategy_id!r}"
-        )
+        raise ValueError(f"strategy_id has no entry model (E1/E2/E3): {strategy_id!r}")
 
     orb_label = "_".join(parts[1:em_idx])
     entry_model = parts[em_idx]
@@ -237,24 +230,17 @@ def _walk_filter_atoms(
     per .claude/rules/institutional-rigor.md rule #6 ("no silent failures").
     """
     if isinstance(filt, CompositeFilter):
-        return _walk_filter_atoms(
-            filt.base, row, orb_label, entry_model
-        ) + _walk_filter_atoms(
+        return _walk_filter_atoms(filt.base, row, orb_label, entry_model) + _walk_filter_atoms(
             filt.overlay, row, orb_label, entry_model
         )
     try:
         atoms = filt.describe(row, orb_label, entry_model)
     except Exception as exc:  # noqa: BLE001 — adapter boundary, fail-closed
-        error_msg = (
-            f"{filt.filter_type}.describe raised: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        error_msg = f"{filt.filter_type}.describe raised: {type(exc).__name__}: {exc}"
         return [
             (
                 filt.filter_type,
-                _synthetic_failed_atom(
-                    filt.filter_type, error_msg, violation_subtype="raised exception"
-                ),
+                _synthetic_failed_atom(filt.filter_type, error_msg, violation_subtype="raised exception"),
             )
         ]
 
@@ -262,16 +248,11 @@ def _walk_filter_atoms(
     # contract is list[AtomDescription]; anything else (None, dict, str,
     # generator, set) is a filter bug we refuse to paper over.
     if not isinstance(atoms, (list, tuple)):
-        error_msg = (
-            f"{filt.filter_type}.describe returned {type(atoms).__name__}, "
-            f"expected list[AtomDescription]"
-        )
+        error_msg = f"{filt.filter_type}.describe returned {type(atoms).__name__}, expected list[AtomDescription]"
         return [
             (
                 filt.filter_type,
-                _synthetic_failed_atom(
-                    filt.filter_type, error_msg, violation_subtype="returned non-list"
-                ),
+                _synthetic_failed_atom(filt.filter_type, error_msg, violation_subtype="returned non-list"),
             )
         ]
 
@@ -280,10 +261,7 @@ def _walk_filter_atoms(
     result: list[tuple[str, AtomDescription]] = []
     for atom in atoms:
         if not isinstance(atom, AtomDescription):
-            error_msg = (
-                f"{filt.filter_type}.describe yielded {type(atom).__name__}, "
-                f"expected AtomDescription"
-            )
+            error_msg = f"{filt.filter_type}.describe yielded {type(atom).__name__}, expected AtomDescription"
             result.append(
                 (
                     filt.filter_type,
@@ -461,18 +439,14 @@ def _atom_to_condition(
             f"ConditionCategory (expected one of {sorted(_CATEGORY_MAP)})"
         )
         build_errors.append(error_msg)
-        return _contract_violation_record(
-            source_filter, error_msg, violation_subtype="bad category"
-        )
+        return _contract_violation_record(source_filter, error_msg, violation_subtype="bad category")
     if atom.resolves_at not in _RESOLVES_AT_MAP:
         error_msg = (
             f"{source_filter}: atom.resolves_at={atom.resolves_at!r} not a "
             f"valid ResolvesAt (expected one of {sorted(_RESOLVES_AT_MAP)})"
         )
         build_errors.append(error_msg)
-        return _contract_violation_record(
-            source_filter, error_msg, violation_subtype="bad resolves_at"
-        )
+        return _contract_violation_record(source_filter, error_msg, violation_subtype="bad resolves_at")
     if atom.confidence_tier not in _CONFIDENCE_TIER_MAP:
         error_msg = (
             f"{source_filter}: atom.confidence_tier={atom.confidence_tier!r} "
@@ -480,9 +454,7 @@ def _atom_to_condition(
             f"(expected one of {sorted(_CONFIDENCE_TIER_MAP)})"
         )
         build_errors.append(error_msg)
-        return _contract_violation_record(
-            source_filter, error_msg, violation_subtype="bad confidence_tier"
-        )
+        return _contract_violation_record(source_filter, error_msg, violation_subtype="bad confidence_tier")
 
     # All enum strings valid — direct indexing, no silent defaults.
     category = _CATEGORY_MAP[atom.category]
@@ -551,8 +523,7 @@ def _build_calendar_condition(
             source_filter="calendar",
             confidence_tier=ConfidenceTier.UNKNOWN,
             explanation=(
-                f"calendar_cascade_rules.json not found at "
-                f"{_CALENDAR_RULES_PATH} — rules system unavailable."
+                f"calendar_cascade_rules.json not found at {_CALENDAR_RULES_PATH} — rules system unavailable."
             ),
         )
 
@@ -571,9 +542,7 @@ def _build_calendar_condition(
             size_multiplier = 0.0
         observed = action.name
     except Exception as exc:  # noqa: BLE001
-        build_errors.append(
-            f"calendar lookup raised: {type(exc).__name__}: {exc}"
-        )
+        build_errors.append(f"calendar lookup raised: {type(exc).__name__}: {exc}")
         return ConditionRecord(
             name="calendar action",
             category=ConditionCategory.OVERLAY,
@@ -581,9 +550,7 @@ def _build_calendar_condition(
             resolves_at=ResolvesAt.STARTUP,
             source_filter="calendar",
             confidence_tier=ConfidenceTier.UNKNOWN,
-            explanation=(
-                f"calendar lookup raised: {type(exc).__name__}: {exc}"
-            ),
+            explanation=(f"calendar lookup raised: {type(exc).__name__}: {exc}"),
         )
 
     return ConditionRecord(
@@ -594,10 +561,7 @@ def _build_calendar_condition(
         observed_value=observed,
         source_filter="calendar",
         confidence_tier=ConfidenceTier.UNKNOWN,
-        explanation=(
-            "Calendar overlay (NEUTRAL=trade, HALF_SIZE=half size, "
-            "SKIP=no trade)."
-        ),
+        explanation=("Calendar overlay (NEUTRAL=trade, HALF_SIZE=half size, SKIP=no trade)."),
         size_multiplier=size_multiplier,
     )
 
@@ -651,9 +615,7 @@ def _build_atr_velocity_condition(
     # Pre-check: if this (instrument, session) is outside the canonical
     # VALIDATED_FOR tuple, the overlay genuinely doesn't apply — skip
     # entirely. Reading the ClassVar is canonical delegation.
-    if ATR_VELOCITY_OVERLAY.VALIDATED_FOR and (
-        instrument, session
-    ) not in ATR_VELOCITY_OVERLAY.VALIDATED_FOR:
+    if ATR_VELOCITY_OVERLAY.VALIDATED_FOR and (instrument, session) not in ATR_VELOCITY_OVERLAY.VALIDATED_FOR:
         return None
 
     row_safe = feature_row if feature_row is not None else {}
@@ -662,10 +624,7 @@ def _build_atr_velocity_condition(
     try:
         atoms = ATR_VELOCITY_OVERLAY.describe(row_safe, session, "E2")
     except Exception as exc:  # noqa: BLE001 — adapter boundary, fail-closed
-        error_msg = (
-            f"ATR_VELOCITY_OVERLAY.describe raised: "
-            f"{type(exc).__name__}: {exc}"
-        )
+        error_msg = f"ATR_VELOCITY_OVERLAY.describe raised: {type(exc).__name__}: {exc}"
         build_errors.append(error_msg)
         # Fail-closed: surface the failure as a visible DATA_MISSING
         # condition on the (already-verified-applicable) lane rather
@@ -823,9 +782,7 @@ def build_eligibility_report(
     build_errors: list[str] = []
 
     if feature_row is None and db_path is not None:
-        feature_row = _fetch_feature_row(
-            db_path, instrument, trading_day, dims["orb_minutes"], build_errors
-        )
+        feature_row = _fetch_feature_row(db_path, instrument, trading_day, dims["orb_minutes"], build_errors)
 
     freshness, as_of_ts = _resolve_freshness(feature_row, trading_day)
 
@@ -844,9 +801,7 @@ def build_eligibility_report(
     # DATA_MISSING atom whose error_message flows into build_errors via
     # the main loop below (single source of truth for error aggregation).
     row_for_describe = feature_row if feature_row is not None else {}
-    atom_pairs = _walk_filter_atoms(
-        filter_instance, row_for_describe, orb_label, entry_model
-    )
+    atom_pairs = _walk_filter_atoms(filter_instance, row_for_describe, orb_label, entry_model)
 
     # Translate atoms to ConditionRecords AND collect error_messages.
     # _atom_to_condition also writes into build_errors on enum contract
@@ -868,12 +823,8 @@ def build_eligibility_report(
         )
 
     # Add overlay conditions
-    conditions.append(
-        _build_calendar_condition(instrument, orb_label, trading_day, build_errors)
-    )
-    atr_vel = _build_atr_velocity_condition(
-        feature_row, instrument, orb_label, trading_day, build_errors
-    )
+    conditions.append(_build_calendar_condition(instrument, orb_label, trading_day, build_errors))
+    atr_vel = _build_atr_velocity_condition(feature_row, instrument, orb_label, trading_day, build_errors)
     if atr_vel is not None:
         conditions.append(atr_vel)
 
@@ -889,9 +840,7 @@ def build_eligibility_report(
         freshness_status=freshness,
         conditions=tuple(conditions),
         overall_status=overall,
-        data_provenance={
-            "feature_row": "daily_features" if feature_row is not None else "none"
-        },
+        data_provenance={"feature_row": "daily_features" if feature_row is not None else "none"},
         build_errors=tuple(build_errors),
     )
 
@@ -924,9 +873,7 @@ def _fetch_feature_row(
     try:
         con = duckdb.connect(str(db_path), read_only=True)
     except Exception as exc:  # noqa: BLE001
-        build_errors.append(
-            f"duckdb.connect({db_path}) raised: {type(exc).__name__}: {exc}"
-        )
+        build_errors.append(f"duckdb.connect({db_path}) raised: {type(exc).__name__}: {exc}")
         return None
 
     try:
@@ -946,9 +893,7 @@ def _fetch_feature_row(
         cols = [desc[0] for desc in con.description]
         return dict(zip(cols, row, strict=True))
     except Exception as exc:  # noqa: BLE001
-        build_errors.append(
-            f"daily_features query raised: {type(exc).__name__}: {exc}"
-        )
+        build_errors.append(f"daily_features query raised: {type(exc).__name__}: {exc}")
         return None
     finally:
         if con is not None:

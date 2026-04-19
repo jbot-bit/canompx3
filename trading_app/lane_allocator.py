@@ -619,7 +619,11 @@ def build_allocation(
         if correlation_matrix is not None:
             corr_reject = False
             for sel in selected:
-                key = (lane.strategy_id, sel.strategy_id) if lane.strategy_id < sel.strategy_id else (sel.strategy_id, lane.strategy_id)
+                key = (
+                    (lane.strategy_id, sel.strategy_id)
+                    if lane.strategy_id < sel.strategy_id
+                    else (sel.strategy_id, lane.strategy_id)
+                )
                 rho = correlation_matrix.get(key, 0.0)
                 if rho > CORRELATION_REJECT_RHO:
                     corr_reject = True
@@ -636,6 +640,7 @@ def build_allocation(
             _, p90_orb = orb_size_stats.get(key, (100.0, 100.0))
         else:
             from trading_app.prop_profiles import _P90_ORB_PTS
+
             p90_orb = _P90_ORB_PTS.get(lane.instrument, 100.0)
         lane_dd = p90_orb * stop_multiplier * cost.point_value
 
@@ -812,7 +817,11 @@ def save_allocation(
     orb_size_stats: {(instrument, orb_label): (avg_orb_pts, p90_orb_pts)}.
     If None, ORB size fields are omitted from the output.
     """
-    path = Path(output_path) if output_path else Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+    path = (
+        Path(output_path)
+        if output_path
+        else Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+    )
 
     lanes_data = []
     for s in allocation:

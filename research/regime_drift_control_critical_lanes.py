@@ -23,6 +23,7 @@ Interpretive rules:
 
 Output: docs/audit/results/2026-04-19-regime-drift-control-critical-lanes.md
 """
+
 from __future__ import annotations
 
 import math
@@ -48,10 +49,42 @@ RESULT_PATH = PROJECT_ROOT / "docs/audit/results/2026-04-19-regime-drift-control
 
 # 4 CRITICAL lanes from Phase 8 committee pack
 CRITICAL = [
-    {"id": "CR1", "instrument": "MNQ", "session": "EUROPE_FLOW",  "orb_minutes": 5, "rr": 1.0, "direction": "long", "filter": "OVNRNG_100"},
-    {"id": "CR2", "instrument": "MNQ", "session": "EUROPE_FLOW",  "orb_minutes": 5, "rr": 1.5, "direction": "long", "filter": "OVNRNG_100"},
-    {"id": "CR3", "instrument": "MNQ", "session": "NYSE_OPEN",    "orb_minutes": 5, "rr": 1.0, "direction": "long", "filter": "X_MES_ATR60"},
-    {"id": "CR4", "instrument": "MNQ", "session": "NYSE_OPEN",    "orb_minutes": 5, "rr": 1.5, "direction": "long", "filter": "X_MES_ATR60"},
+    {
+        "id": "CR1",
+        "instrument": "MNQ",
+        "session": "EUROPE_FLOW",
+        "orb_minutes": 5,
+        "rr": 1.0,
+        "direction": "long",
+        "filter": "OVNRNG_100",
+    },
+    {
+        "id": "CR2",
+        "instrument": "MNQ",
+        "session": "EUROPE_FLOW",
+        "orb_minutes": 5,
+        "rr": 1.5,
+        "direction": "long",
+        "filter": "OVNRNG_100",
+    },
+    {
+        "id": "CR3",
+        "instrument": "MNQ",
+        "session": "NYSE_OPEN",
+        "orb_minutes": 5,
+        "rr": 1.0,
+        "direction": "long",
+        "filter": "X_MES_ATR60",
+    },
+    {
+        "id": "CR4",
+        "instrument": "MNQ",
+        "session": "NYSE_OPEN",
+        "orb_minutes": 5,
+        "rr": 1.5,
+        "direction": "long",
+        "filter": "X_MES_ATR60",
+    },
 ]
 
 
@@ -95,7 +128,9 @@ def stats(pnl: np.ndarray, year_span: int = 2) -> PeriodStats:
     return ps
 
 
-def inject_cross_atr(con: duckdb.DuckDBPyConnection, df: pd.DataFrame, filter_type: str, instrument: str) -> pd.DataFrame:
+def inject_cross_atr(
+    con: duckdb.DuckDBPyConnection, df: pd.DataFrame, filter_type: str, instrument: str
+) -> pd.DataFrame:
     if filter_type not in ALL_FILTERS:
         return df
     filt_obj = ALL_FILTERS[filter_type]
@@ -104,10 +139,13 @@ def inject_cross_atr(con: duckdb.DuckDBPyConnection, df: pd.DataFrame, filter_ty
     source = filt_obj.source_instrument
     if source == instrument:
         return df
-    src_rows = con.execute("""
+    src_rows = con.execute(
+        """
         SELECT trading_day, atr_20_pct FROM daily_features
         WHERE symbol=? AND orb_minutes=5 AND atr_20_pct IS NOT NULL
-    """, [source]).fetchall()
+    """,
+        [source],
+    ).fetchall()
     src_map = {td.date() if hasattr(td, "date") else td: float(pct) for td, pct in src_rows}
     col = f"cross_atr_{source}_pct"
     df = df.copy()
@@ -127,8 +165,9 @@ def compute_lane_drift(con: duckdb.DuckDBPyConnection, lane: dict) -> LaneDrift:
       AND o.pnl_r IS NOT NULL
       AND o.trading_day < ?
     """
-    df = con.execute(sql, [lane["instrument"], sess, lane["orb_minutes"],
-                            lane["rr"], lane["direction"], HOLDOUT_SACRED_FROM]).df()
+    df = con.execute(
+        sql, [lane["instrument"], sess, lane["orb_minutes"], lane["rr"], lane["direction"], HOLDOUT_SACRED_FROM]
+    ).df()
     df = inject_cross_atr(con, df, lane["filter"], lane["instrument"])
     fire = np.asarray(filter_signal(df, lane["filter"], sess)).astype(bool)
     df_on = df.loc[fire].copy()
@@ -142,9 +181,13 @@ def compute_lane_drift(con: duckdb.DuckDBPyConnection, lane: dict) -> LaneDrift:
     late_pnl = df_on.loc[late_mask, "pnl_r"].astype(float).to_numpy()
 
     ld = LaneDrift(
-        id=lane["id"], instrument=lane["instrument"], session=sess,
-        orb_minutes=lane["orb_minutes"], rr_target=lane["rr"],
-        direction=lane["direction"], filter_type=lane["filter"],
+        id=lane["id"],
+        instrument=lane["instrument"],
+        session=sess,
+        orb_minutes=lane["orb_minutes"],
+        rr_target=lane["rr"],
+        direction=lane["direction"],
+        filter_type=lane["filter"],
     )
     ld.early = stats(early_pnl, year_span=2)
     ld.late = stats(late_pnl, year_span=2)
@@ -182,6 +225,7 @@ def _resolve_direction(spec: dict) -> str:
         return "long"
     # Legacy fallback — emit a one-time warning via stderr.
     import sys as _sys
+
     if not getattr(_resolve_direction, "_warned", False):
         print(
             f"[_resolve_direction WARNING] spec {spec.get('strategy_id')!r} "
@@ -211,8 +255,17 @@ def portfolio_mnq_sharpe_per_period(con: duckdb.DuckDBPyConnection) -> tuple[Per
         WHERE LOWER(status)='active' AND instrument='MNQ'
         ORDER BY orb_label, orb_minutes, rr_target, filter_type
     """).fetchall()
-    cols = ["strategy_id", "instrument", "orb_label", "orb_minutes", "rr_target",
-            "entry_model", "confirm_bars", "filter_type", "execution_spec"]
+    cols = [
+        "strategy_id",
+        "instrument",
+        "orb_label",
+        "orb_minutes",
+        "rr_target",
+        "entry_model",
+        "confirm_bars",
+        "filter_type",
+        "execution_spec",
+    ]
     active_dicts = [dict(zip(cols, r)) for r in active]
 
     all_early: list[float] = []
@@ -232,8 +285,18 @@ def portfolio_mnq_sharpe_per_period(con: duckdb.DuckDBPyConnection) -> tuple[Per
               AND d.orb_{sess}_break_dir=?
               AND o.pnl_r IS NOT NULL AND o.trading_day < ?
             """
-            df = con.execute(sql, [sess, spec["orb_minutes"], spec["entry_model"],
-                                    spec["confirm_bars"], spec["rr_target"], direction, HOLDOUT_SACRED_FROM]).df()
+            df = con.execute(
+                sql,
+                [
+                    sess,
+                    spec["orb_minutes"],
+                    spec["entry_model"],
+                    spec["confirm_bars"],
+                    spec["rr_target"],
+                    direction,
+                    HOLDOUT_SACRED_FROM,
+                ],
+            ).df()
         except duckdb.Error:
             continue
         if len(df) == 0:
@@ -251,15 +314,23 @@ def portfolio_mnq_sharpe_per_period(con: duckdb.DuckDBPyConnection) -> tuple[Per
         all_late.extend(late_p.tolist())
         e_st = stats(early_p, 2)
         l_st = stats(late_p, 2)
-        per_lane.append({
-            "strategy_id": spec["strategy_id"],
-            "orb_label": sess, "orb_minutes": spec["orb_minutes"],
-            "rr_target": spec["rr_target"], "filter_type": spec["filter_type"],
-            "direction": direction,
-            "early_n": e_st.n, "early_sharpe": e_st.sharpe_ann,
-            "late_n": l_st.n, "late_sharpe": l_st.sharpe_ann,
-            "sharpe_drop": None if (e_st.sharpe_ann is None or l_st.sharpe_ann is None) else (l_st.sharpe_ann - e_st.sharpe_ann),
-        })
+        per_lane.append(
+            {
+                "strategy_id": spec["strategy_id"],
+                "orb_label": sess,
+                "orb_minutes": spec["orb_minutes"],
+                "rr_target": spec["rr_target"],
+                "filter_type": spec["filter_type"],
+                "direction": direction,
+                "early_n": e_st.n,
+                "early_sharpe": e_st.sharpe_ann,
+                "late_n": l_st.n,
+                "late_sharpe": l_st.sharpe_ann,
+                "sharpe_drop": None
+                if (e_st.sharpe_ann is None or l_st.sharpe_ann is None)
+                else (l_st.sharpe_ann - e_st.sharpe_ann),
+            }
+        )
 
     early_port = stats(np.asarray(all_early), year_span=2)
     early_port.label = "2022_2023 (portfolio all-MNQ aggregated)"
@@ -269,14 +340,18 @@ def portfolio_mnq_sharpe_per_period(con: duckdb.DuckDBPyConnection) -> tuple[Per
 
 
 def _fmt(x, p=3):
-    if x is None: return "—"
+    if x is None:
+        return "—"
     if isinstance(x, float):
-        if math.isnan(x): return "nan"
+        if math.isnan(x):
+            return "nan"
         return f"{x:.{p}f}"
     return str(x)
 
 
-def render(critical_drifts: list[LaneDrift], port_early: PeriodStats, port_late: PeriodStats, per_lane: list[dict]) -> str:
+def render(
+    critical_drifts: list[LaneDrift], port_early: PeriodStats, port_late: PeriodStats, per_lane: list[dict]
+) -> str:
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
     port_drop = None
     if port_early.sharpe_ann is not None and port_late.sharpe_ann is not None:
@@ -291,7 +366,9 @@ def render(critical_drifts: list[LaneDrift], port_early: PeriodStats, port_late:
     L.append("")
     L.append("## Motivation")
     L.append("")
-    L.append("The 2026-04-19 Phase 8 committee review pack flagged 4 MNQ lanes as CRITICAL for RETIRE/DOWNGRADE based on Mode A Sharpe drop from stored values. The 2026-04-19 self-audit identified a framing bias: attributing the drop to LANE DECAY without controlling for 2024-2025 ENVIRONMENT-WIDE regime stress on MNQ intraday breakouts.")
+    L.append(
+        "The 2026-04-19 Phase 8 committee review pack flagged 4 MNQ lanes as CRITICAL for RETIRE/DOWNGRADE based on Mode A Sharpe drop from stored values. The 2026-04-19 self-audit identified a framing bias: attributing the drop to LANE DECAY without controlling for 2024-2025 ENVIRONMENT-WIDE regime stress on MNQ intraday breakouts."
+    )
     L.append("")
     L.append("This control test:")
     L.append("  1. Recomputes each CRITICAL lane's Sharpe in early (2022-2023) vs late (2024-2025) Mode A IS subsets")
@@ -305,15 +382,21 @@ def render(critical_drifts: list[LaneDrift], port_early: PeriodStats, port_late:
     L.append("")
     L.append("## Portfolio-wide MNQ aggregate")
     L.append("")
-    L.append(f"Early (2022-2023): N={port_early.n} ExpR={_fmt(port_early.expr)} Sharpe_ann={_fmt(port_early.sharpe_ann, 2)}")
-    L.append(f"Late  (2024-2025): N={port_late.n} ExpR={_fmt(port_late.expr)} Sharpe_ann={_fmt(port_late.sharpe_ann, 2)}")
+    L.append(
+        f"Early (2022-2023): N={port_early.n} ExpR={_fmt(port_early.expr)} Sharpe_ann={_fmt(port_early.sharpe_ann, 2)}"
+    )
+    L.append(
+        f"Late  (2024-2025): N={port_late.n} ExpR={_fmt(port_late.expr)} Sharpe_ann={_fmt(port_late.sharpe_ann, 2)}"
+    )
     L.append(f"**Portfolio-wide Sharpe drop early->late:** {_fmt(port_drop, 2) if port_drop is not None else '—'}")
     L.append("")
     L.append("This is the baseline environment delta against which the 4 CRITICAL lanes should be measured.")
     L.append("")
     L.append("## CRITICAL lanes — per-lane drift vs environment")
     L.append("")
-    L.append("| Cell | Early 2022-2023 Sharpe | Late 2024-2025 Sharpe | Lane drop | Portfolio drop | Excess drop vs port | Verdict |")
+    L.append(
+        "| Cell | Early 2022-2023 Sharpe | Late 2024-2025 Sharpe | Lane drop | Portfolio drop | Excess drop vs port | Verdict |"
+    )
     L.append("|---|---:|---:|---:|---:|---:|---|")
     for cd in critical_drifts:
         excess = None
@@ -331,10 +414,12 @@ def render(critical_drifts: list[LaneDrift], port_early: PeriodStats, port_late:
             verdict = "BORDERLINE"
         e_s = cd.early.sharpe_ann
         l_s = cd.late.sharpe_ann
-        L.append(f"| {cd.id} {cd.instrument} {cd.session} O{cd.orb_minutes} RR{cd.rr_target} {cd.filter_type} {cd.direction} | "
-                 f"{_fmt(e_s, 2)} (N={cd.early.n}) | {_fmt(l_s, 2)} (N={cd.late.n}) | "
-                 f"{_fmt(cd.early_to_late_sharpe_drop, 2)} | {_fmt(port_drop, 2)} | "
-                 f"{_fmt(excess, 2)} | {verdict} |")
+        L.append(
+            f"| {cd.id} {cd.instrument} {cd.session} O{cd.orb_minutes} RR{cd.rr_target} {cd.filter_type} {cd.direction} | "
+            f"{_fmt(e_s, 2)} (N={cd.early.n}) | {_fmt(l_s, 2)} (N={cd.late.n}) | "
+            f"{_fmt(cd.early_to_late_sharpe_drop, 2)} | {_fmt(port_drop, 2)} | "
+            f"{_fmt(excess, 2)} | {verdict} |"
+        )
     L.append("")
     L.append("## All 36 MNQ active lanes — early/late Sharpe + drop")
     L.append("")
@@ -347,7 +432,7 @@ def render(critical_drifts: list[LaneDrift], port_early: PeriodStats, port_late:
     for r in per_lane_sorted:
         e_s = f"{_fmt(r['early_sharpe'], 2)} (N={r['early_n']})"
         l_s = f"{_fmt(r['late_sharpe'], 2)} (N={r['late_n']})"
-        drop = _fmt(r['sharpe_drop'], 2)
+        drop = _fmt(r["sharpe_drop"], 2)
         L.append(f"| `{r['strategy_id']}` | {e_s} | {l_s} | {drop} |")
     L.append("")
     L.append("## Interpretation")
@@ -358,7 +443,9 @@ def render(critical_drifts: list[LaneDrift], port_early: PeriodStats, port_late:
         median_drop = float(np.median(drops))
         q25 = float(np.percentile(drops, 25))
         q75 = float(np.percentile(drops, 75))
-        L.append(f"Portfolio of 36 MNQ lanes: median Sharpe drop = {_fmt(median_drop, 2)}, IQR [{_fmt(q25, 2)}, {_fmt(q75, 2)}].")
+        L.append(
+            f"Portfolio of 36 MNQ lanes: median Sharpe drop = {_fmt(median_drop, 2)}, IQR [{_fmt(q25, 2)}, {_fmt(q75, 2)}]."
+        )
         L.append("")
         n_decayed = sum(1 for d in drops if d < -0.50)
         n_mild = sum(1 for d in drops if -0.50 <= d < -0.20)
@@ -372,23 +459,35 @@ def render(critical_drifts: list[LaneDrift], port_early: PeriodStats, port_late:
     L.append("## Recommendation for the committee review pack")
     L.append("")
     any_decay = any(
-        (cd.early_to_late_sharpe_drop is not None and port_drop is not None and
-         (cd.early_to_late_sharpe_drop - port_drop) < -0.50)
+        (
+            cd.early_to_late_sharpe_drop is not None
+            and port_drop is not None
+            and (cd.early_to_late_sharpe_drop - port_drop) < -0.50
+        )
         for cd in critical_drifts
     )
     any_regime = any(
-        (cd.early_to_late_sharpe_drop is not None and port_drop is not None and
-         abs(cd.early_to_late_sharpe_drop - port_drop) < 0.30)
+        (
+            cd.early_to_late_sharpe_drop is not None
+            and port_drop is not None
+            and abs(cd.early_to_late_sharpe_drop - port_drop) < 0.30
+        )
         for cd in critical_drifts
     )
     if any_decay and not any_regime:
-        L.append("Some or all CRITICAL lanes show excess Sharpe drop > 0.50 vs environment — confirms LANE DECAY framing. Retirement recommendation stands for those specific lanes.")
+        L.append(
+            "Some or all CRITICAL lanes show excess Sharpe drop > 0.50 vs environment — confirms LANE DECAY framing. Retirement recommendation stands for those specific lanes."
+        )
     elif any_regime and not any_decay:
-        L.append("ALL CRITICAL lanes show drops within 0.30 of portfolio-wide drop — REGIME framing. The committee pack's RETIRE framing was over-attributed to lane decay. Recommended action: HOLD on retirement; reclassify as regime-stressed, continue monitoring.")
+        L.append(
+            "ALL CRITICAL lanes show drops within 0.30 of portfolio-wide drop — REGIME framing. The committee pack's RETIRE framing was over-attributed to lane decay. Recommended action: HOLD on retirement; reclassify as regime-stressed, continue monitoring."
+        )
     elif any_decay and any_regime:
         L.append("MIXED: some CRITICAL lanes look like regime, others like decay. Per-lane verdict above.")
     else:
-        L.append("Both criteria weak. BORDERLINE — recommend per-lane committee discussion rather than bulk retirement.")
+        L.append(
+            "Both criteria weak. BORDERLINE — recommend per-lane committee discussion rather than bulk retirement."
+        )
     L.append("")
     L.append("## Reproduction")
     L.append("```")
@@ -416,8 +515,14 @@ def main() -> int:
     for cd in critical_drifts:
         e_s = cd.early.sharpe_ann
         l_s = cd.late.sharpe_ann
-        excess = None if (cd.early_to_late_sharpe_drop is None or port_drop is None) else (cd.early_to_late_sharpe_drop - port_drop)
-        print(f"{cd.id} {cd.instrument} {cd.session} RR{cd.rr_target} {cd.filter_type}: early Sh={e_s} late Sh={l_s} drop={cd.early_to_late_sharpe_drop} excess={excess}")
+        excess = (
+            None
+            if (cd.early_to_late_sharpe_drop is None or port_drop is None)
+            else (cd.early_to_late_sharpe_drop - port_drop)
+        )
+        print(
+            f"{cd.id} {cd.instrument} {cd.session} RR{cd.rr_target} {cd.filter_type}: early Sh={e_s} late Sh={l_s} drop={cd.early_to_late_sharpe_drop} excess={excess}"
+        )
 
     RESULT_PATH.parent.mkdir(parents=True, exist_ok=True)
     RESULT_PATH.write_text(render(critical_drifts, port_early, port_late, per_lane), encoding="utf-8")

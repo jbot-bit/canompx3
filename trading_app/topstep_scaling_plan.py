@@ -265,9 +265,7 @@ def project_total_open_lots(
         Total mini-equivalent lot count assuming the new entry lands.
     """
     contracts_by_inst = _aggregate_open_contracts(active_trades)
-    contracts_by_inst[new_instrument] = (
-        contracts_by_inst.get(new_instrument, 0) + new_contracts
-    )
+    contracts_by_inst[new_instrument] = contracts_by_inst.get(new_instrument, 0) + new_contracts
     total = 0
     for inst, contracts in contracts_by_inst.items():
         total += lots_for_position(inst, contracts)

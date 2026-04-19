@@ -79,8 +79,8 @@ def load_df(con, row):
         JOIN daily_features d_l ON d_l.symbol='{lsym}' AND d_l.trading_day=o.trading_day AND d_l.orb_minutes=o.orb_minutes
         WHERE o.orb_minutes=5
           AND o.symbol='{fsym}' AND o.orb_label='{fsess}'
-          AND o.entry_model='{row['entry_model']}' AND o.confirm_bars={int(row['confirm_bars'])}
-          AND o.rr_target={float(row['rr_target'])}
+          AND o.entry_model='{row["entry_model"]}' AND o.confirm_bars={int(row["confirm_bars"])}
+          AND o.rr_target={float(row["rr_target"])}
           AND o.pnl_r IS NOT NULL AND o.entry_ts IS NOT NULL
         """
     else:
@@ -99,8 +99,8 @@ def load_df(con, row):
         JOIN daily_features d_f ON d_f.symbol=o.symbol AND d_f.trading_day=o.trading_day AND d_f.orb_minutes=o.orb_minutes
         WHERE o.orb_minutes=5
           AND o.symbol='{fsym}' AND o.orb_label='{fsess}'
-          AND o.entry_model='{row['entry_model']}' AND o.confirm_bars={int(row['confirm_bars'])}
-          AND o.rr_target={float(row['rr_target'])}
+          AND o.entry_model='{row["entry_model"]}' AND o.confirm_bars={int(row["confirm_bars"])}
+          AND o.rr_target={float(row["rr_target"])}
           AND o.pnl_r IS NOT NULL AND o.entry_ts IS NOT NULL
         """
     df = con.execute(q).fetchdf()
@@ -118,11 +118,11 @@ def base_mask(df, sid, leader_tag):
     if sid == "B2" or str(leader_tag).endswith("fast_le_15"):
         return df["f_delay"].notna() & (df["f_delay"] <= 15)
     return (
-        df["f_dir"].isin(["long", "short"]) &
-        df["l_dir"].isin(["long", "short"]) &
-        (df["f_dir"] == df["l_dir"]) &
-        df["l_ts"].notna() &
-        (df["l_ts"] <= df["entry_ts"])
+        df["f_dir"].isin(["long", "short"])
+        & df["l_dir"].isin(["long", "short"])
+        & (df["f_dir"] == df["l_dir"])
+        & df["l_ts"].notna()
+        & (df["l_ts"] <= df["entry_ts"])
     )
 
 
@@ -135,7 +135,7 @@ def preset_mask(dfb, preset):
     if preset == "base_plus_vol60":
         return dfb["f_vol_imp"].notna() & (dfb["f_vol_imp"] >= vq)
     if preset == "base_plus_both":
-        return (dfb["f_delay"].notna() & (dfb["f_delay"] <= 15) & dfb["f_vol_imp"].notna() & (dfb["f_vol_imp"] >= vq))
+        return dfb["f_delay"].notna() & (dfb["f_delay"] <= 15) & dfb["f_vol_imp"].notna() & (dfb["f_vol_imp"] >= vq)
     return pd.Series(True, index=dfb.index)
 
 
@@ -186,9 +186,11 @@ def main():
         decision = "PENDING"
         if n_on >= target_n:
             pass_all = (
-                pd.notna(avg_on) and avg_on > 0 and
-                pd.notna(uplift) and uplift > 0 and
-                (pd.isna(dd_delta_pct) or dd_delta_pct <= 10)
+                pd.notna(avg_on)
+                and avg_on > 0
+                and pd.notna(uplift)
+                and uplift > 0
+                and (pd.isna(dd_delta_pct) or dd_delta_pct <= 10)
             )
             decision = "PROMOTE" if pass_all else "KILL"
 

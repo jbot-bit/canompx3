@@ -51,11 +51,12 @@ def run():
     """).fetchall()
 
     lines.append(f"  {'Qtr':>8} {'N':>4} {'ATR':>7} {'ORB1000':>8} {'ORB0900':>8} {'ORB1800':>8} {'ORB/ATR':>8}")
-    lines.append(f"  {'-'*8} {'-'*4} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    lines.append(f"  {'-' * 8} {'-' * 4} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
     for yr, qtr, atr, orb1k, orb9, orb18, n, ratio in rows:
         yr_q = f"{int(yr)}Q{int(qtr)}"
-        lines.append(f"  {yr_q:>8} {n:>4} {atr:>7.1f} {orb1k or 0:>8.1f} {orb9 or 0:>8.1f} "
-                     f"{orb18 or 0:>8.1f} {ratio or 0:>8.3f}")
+        lines.append(
+            f"  {yr_q:>8} {n:>4} {atr:>7.1f} {orb1k or 0:>8.1f} {orb9 or 0:>8.1f} {orb18 or 0:>8.1f} {ratio or 0:>8.3f}"
+        )
     lines.append("")
 
     # ── G filter pass rates by year ─────────────────────────────
@@ -78,11 +79,13 @@ def run():
     """).fetchall()
 
     lines.append(f"  {'Year':>6} {'N':>5} {'AvgORB':>7} {'G4%':>6} {'G6%':>6} {'G8%':>6}")
-    lines.append(f"  {'-'*6} {'-'*5} {'-'*7} {'-'*6} {'-'*6} {'-'*6}")
+    lines.append(f"  {'-' * 6} {'-' * 5} {'-' * 7} {'-' * 6} {'-' * 6} {'-' * 6}")
     for yr, n, g4, g6, g8, avg in rows:
-        lines.append(f"  {int(yr):>6} {n:>5} {avg:>7.1f} "
-                     f"{g4/n*100 if n else 0:>5.1f}% {g6/n*100 if n else 0:>5.1f}% "
-                     f"{g8/n*100 if n else 0:>5.1f}%")
+        lines.append(
+            f"  {int(yr):>6} {n:>5} {avg:>7.1f} "
+            f"{g4 / n * 100 if n else 0:>5.1f}% {g6 / n * 100 if n else 0:>5.1f}% "
+            f"{g8 / n * 100 if n else 0:>5.1f}%"
+        )
     lines.append("")
 
     # ── Same for 0900 session ───────────────────────────────────
@@ -102,11 +105,13 @@ def run():
     """).fetchall()
 
     lines.append(f"  {'Year':>6} {'N':>5} {'AvgORB':>7} {'G4%':>6} {'G6%':>6} {'G8%':>6}")
-    lines.append(f"  {'-'*6} {'-'*5} {'-'*7} {'-'*6} {'-'*6} {'-'*6}")
+    lines.append(f"  {'-' * 6} {'-' * 5} {'-' * 7} {'-' * 6} {'-' * 6} {'-' * 6}")
     for yr, n, g4, g6, g8, avg in rows:
-        lines.append(f"  {int(yr):>6} {n:>5} {avg:>7.1f} "
-                     f"{g4/n*100 if n else 0:>5.1f}% {g6/n*100 if n else 0:>5.1f}% "
-                     f"{g8/n*100 if n else 0:>5.1f}%")
+        lines.append(
+            f"  {int(yr):>6} {n:>5} {avg:>7.1f} "
+            f"{g4 / n * 100 if n else 0:>5.1f}% {g6 / n * 100 if n else 0:>5.1f}% "
+            f"{g8 / n * 100 if n else 0:>5.1f}%"
+        )
     lines.append("")
 
     # ── Performance by ATR regime ───────────────────────────────
@@ -116,7 +121,8 @@ def run():
 
     for em in ["E0", "E1"]:
         for sess in ["0900", "1000"]:
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT d.atr_20, o.pnl_r,
                        EXTRACT(YEAR FROM o.trading_day) as yr
                 FROM orb_outcomes o
@@ -131,7 +137,9 @@ def run():
                   AND d.atr_20 IS NOT NULL
                   AND d.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
-            """, [sess, em]).fetchall()
+            """,
+                [sess, em],
+            ).fetchall()
 
             if len(rows) < 100:
                 continue
@@ -143,8 +151,12 @@ def run():
 
             lines.append(f"  MGC {sess} {em} RR2.0 (ATR quartiles: P25={p25:.1f}, P50={p50:.1f}, P75={p75:.1f}):")
 
-            for label, lo, hi in [("Q1 (low ATR)", 0, p25), ("Q2", p25, p50),
-                                    ("Q3", p50, p75), ("Q4 (high ATR)", p75, 999)]:
+            for label, lo, hi in [
+                ("Q1 (low ATR)", 0, p25),
+                ("Q2", p25, p50),
+                ("Q3", p50, p75),
+                ("Q4 (high ATR)", p75, 999),
+            ]:
                 subset = [r[1] for r in rows if lo <= r[0] < hi]
                 if len(subset) >= 10:
                     avg = np.mean(subset)
@@ -156,8 +168,10 @@ def run():
             low = [r[1] for r in rows if r[0] < 40]
             if len(high) >= 20 and len(low) >= 20:
                 _, p = stats.ttest_ind(high, low, equal_var=False)
-                lines.append(f"    ATR>=75 vs ATR<40: high N={len(high)}, avgR={np.mean(high):+.3f} | "
-                             f"low N={len(low)}, avgR={np.mean(low):+.3f} | p={p:.4f}")
+                lines.append(
+                    f"    ATR>=75 vs ATR<40: high N={len(high)}, avgR={np.mean(high):+.3f} | "
+                    f"low N={len(low)}, avgR={np.mean(low):+.3f} | p={p:.4f}"
+                )
             lines.append("")
 
     # ── Year-by-year performance (is 2025/2026 structurally different?) ──
@@ -167,7 +181,8 @@ def run():
 
     for em in ["E0", "E1"]:
         for sess in ["0900", "1000", "1100"]:
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT o.pnl_r, EXTRACT(YEAR FROM o.trading_day) as yr
                 FROM orb_outcomes o
                 WHERE o.symbol = 'MGC'
@@ -176,7 +191,9 @@ def run():
                   AND o.rr_target = 2.0
                   AND o.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
-            """, [sess, em]).fetchall()
+            """,
+                [sess, em],
+            ).fetchall()
 
             if not rows:
                 continue
@@ -199,7 +216,8 @@ def run():
 
     for em in ["E0", "E1"]:
         for sess in ["0900", "1000", "1100"]:
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT o.pnl_r,
                        CASE WHEN o.trading_day >= '2025-01-01' THEN 'post' ELSE 'pre' END as era
                 FROM orb_outcomes o
@@ -209,7 +227,9 @@ def run():
                   AND o.rr_target = 2.0
                   AND o.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
-            """, [sess, em]).fetchall()
+            """,
+                [sess, em],
+            ).fetchall()
 
             pre = [r[0] for r in rows if r[1] == "pre"]
             post = [r[0] for r in rows if r[1] == "post"]
@@ -226,7 +246,9 @@ def run():
             lines.append(f"  MGC {sess} {em} RR2.0:")
             lines.append(f"    Pre-2025:  N={len(pre):>5}, avgR={avg_pre:+.3f}, WR={wr_pre:.1%}")
             lines.append(f"    Post-2025: N={len(post):>5}, avgR={avg_post:+.3f}, WR={wr_post:.1%}")
-            lines.append(f"    Delta: {avg_post - avg_pre:+.3f}R, WR_delta: {(wr_post - wr_pre)*100:+.1f}pp, p={p:.4f}")
+            lines.append(
+                f"    Delta: {avg_post - avg_pre:+.3f}R, WR_delta: {(wr_post - wr_pre) * 100:+.1f}pp, p={p:.4f}"
+            )
             lines.append("")
 
     # ── G filter effectiveness in high-ATR regime ───────────────
@@ -237,7 +259,8 @@ def run():
     for sess in ["0900", "1000"]:
         size_col = f"orb_{sess}_size"
         for em in ["E0", "E1"]:
-            rows = con.execute(f"""
+            rows = con.execute(
+                f"""
                 SELECT d.{size_col} as orb_size, o.pnl_r
                 FROM orb_outcomes o
                 JOIN daily_features d
@@ -252,14 +275,23 @@ def run():
                   AND d.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
                   AND o.trading_day >= '2025-01-01'
-            """, [sess, em]).fetchall()
+            """,
+                [sess, em],
+            ).fetchall()
 
             if len(rows) < 30:
                 continue
 
             lines.append(f"  MGC {sess} {em} RR2.0 (2025+ only):")
-            for g_name, g_thresh in [("ALL", 0), ("G4+", 4), ("G6+", 6), ("G8+", 8),
-                                      ("G10+", 10), ("G15+", 15), ("G20+", 20)]:
+            for g_name, g_thresh in [
+                ("ALL", 0),
+                ("G4+", 4),
+                ("G6+", 6),
+                ("G8+", 8),
+                ("G10+", 10),
+                ("G15+", 15),
+                ("G20+", 20),
+            ]:
                 subset = [r[1] for r in rows if r[0] >= g_thresh]
                 if len(subset) >= 10:
                     avg = np.mean(subset)

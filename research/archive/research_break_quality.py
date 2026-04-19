@@ -48,6 +48,7 @@ from scipy import stats
 
 from pipeline.paths import GOLD_DB_PATH
 from pipeline.log import get_logger
+
 logger = get_logger(__name__)
 
 
@@ -67,11 +68,13 @@ def _bh_reject(p_values: np.ndarray, alpha: float = 0.05) -> np.ndarray:
     reject[order[: max_k + 1]] = True
     return reject
 
+
 BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
 
 # =========================================================================
 # Data loading
 # =========================================================================
+
 
 def load_break_context(con, instrument: str, session: str) -> pd.DataFrame:
     """Load outcomes joined with ORB levels from daily_features.
@@ -127,14 +130,17 @@ def load_bars_for_day(con, instrument: str, trading_day, orb_label: str) -> pd.D
     utc_start = bris_start.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
     utc_end = bris_end.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
 
-    bars = con.execute("""
+    bars = con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume
         FROM bars_1m
         WHERE symbol = ?
           AND ts_utc >= ?
           AND ts_utc < ?
         ORDER BY ts_utc
-    """, [instrument, utc_start, utc_end]).fetchdf()
+    """,
+        [instrument, utc_start, utc_end],
+    ).fetchdf()
 
     return bars
 
@@ -142,6 +148,7 @@ def load_bars_for_day(con, instrument: str, trading_day, orb_label: str) -> pd.D
 # =========================================================================
 # Condition extractors
 # =========================================================================
+
 
 def extract_conditions(bars: pd.DataFrame, row: dict) -> dict | None:
     """Extract all break-quality conditions for a single trade.
@@ -287,13 +294,9 @@ def extract_conditions(bars: pd.DataFrame, row: dict) -> dict | None:
     # --- C8: Held 30 bars clean, then returned ---
     held_outside_30 = not bool(result.get("c6_reversal_30bar", True))
     result["c8_held_outside_30"] = held_outside_30
-    result["c8_held30_then_returned"] = (
-        held_outside_30 and t_first_inside is not None and t_first_inside > 30
-    )
+    result["c8_held30_then_returned"] = held_outside_30 and t_first_inside is not None and t_first_inside > 30
     # Was the trade still OPEN at bar 30? (target/stop not yet hit)
-    result["c8_open_at_bar30"] = (
-        bars_until_exit is None or bars_until_exit > 30
-    )
+    result["c8_open_at_bar30"] = bars_until_exit is None or bars_until_exit > 30
     # Did price return inside ORB WHILE the trade was still open? (the Case B problem)
     result["c8_returned_while_open"] = bool(
         held_outside_30
@@ -362,8 +365,10 @@ def extract_conditions(bars: pd.DataFrame, row: dict) -> dict | None:
 # Reporting helpers
 # =========================================================================
 
-def split_report(df: pd.DataFrame, condition_col: str, label_true: str, label_false: str,
-                 header: str, min_n: int = 20) -> dict | None:
+
+def split_report(
+    df: pd.DataFrame, condition_col: str, label_true: str, label_false: str, header: str, min_n: int = 20
+) -> dict | None:
     """Split by boolean condition and report comparative stats."""
     if condition_col not in df.columns:
         return None
@@ -393,8 +398,12 @@ def split_report(df: pd.DataFrame, condition_col: str, label_true: str, label_fa
     print(f"\n  {header}")
     print(f"    {'':>25s} {'N':>6s} {'avgR':>8s} {'WR':>7s} {'totR':>9s} {'Sharpe':>8s}")
     print(f"    {'-' * 65}")
-    print(f"    {label_true:>25s} {st['n']:6d} {st['avgR']:+8.3f} {st['wr']:6.1%} {st['totR']:+9.1f} {st['sharpe']:8.2f}")
-    print(f"    {label_false:>25s} {sf['n']:6d} {sf['avgR']:+8.3f} {sf['wr']:6.1%} {sf['totR']:+9.1f} {sf['sharpe']:8.2f}")
+    print(
+        f"    {label_true:>25s} {st['n']:6d} {st['avgR']:+8.3f} {st['wr']:6.1%} {st['totR']:+9.1f} {st['sharpe']:8.2f}"
+    )
+    print(
+        f"    {label_false:>25s} {sf['n']:6d} {sf['avgR']:+8.3f} {sf['wr']:6.1%} {sf['totR']:+9.1f} {sf['sharpe']:8.2f}"
+    )
     print(f"    {'Delta':>25s} {'':>6s} {delta_avgr:+8.3f}")
 
     # t-test (Welch, unequal variance)
@@ -410,8 +419,9 @@ def split_report(df: pd.DataFrame, condition_col: str, label_true: str, label_fa
     return {"true": st, "false": sf, "delta": delta_avgr, "p_val": p_val}
 
 
-def quantile_report(df: pd.DataFrame, condition_col: str, header: str,
-                    cuts: list[float] | None = None, min_n: int = 15) -> dict | None:
+def quantile_report(
+    df: pd.DataFrame, condition_col: str, header: str, cuts: list[float] | None = None, min_n: int = 15
+) -> dict | None:
     """Split continuous variable into quantile buckets and report stats."""
     if condition_col not in df.columns:
         return None
@@ -452,8 +462,9 @@ def quantile_report(df: pd.DataFrame, condition_col: str, header: str,
     return results
 
 
-def year_breakdown(df: pd.DataFrame, condition_col: str, threshold,
-                   label_on: str, label_off: str, header: str, min_n: int = 8) -> dict:
+def year_breakdown(
+    df: pd.DataFrame, condition_col: str, threshold, label_on: str, label_off: str, header: str, min_n: int = 8
+) -> dict:
     """Show signal effectiveness year by year. threshold can be a bool (True/False groups)
     or a numeric cutoff (col < threshold = 'on' group)."""
     df = df.copy()
@@ -481,12 +492,20 @@ def year_breakdown(df: pd.DataFrame, condition_col: str, threshold,
         delta = avg_on - avg_off
         flag = " **" if abs(delta) > 0.15 else ""
         print(f"    {yr:>6d} {len(grp_on):5d} {avg_on:+9.3f} {len(grp_off):6d} {avg_off:+9.3f} {delta:+8.3f}{flag}")
-        year_results[yr] = {"n_on": len(grp_on), "avg_on": avg_on, "n_off": len(grp_off), "avg_off": avg_off, "delta": delta}
+        year_results[yr] = {
+            "n_on": len(grp_on),
+            "avg_on": avg_on,
+            "n_off": len(grp_off),
+            "avg_off": avg_off,
+            "delta": delta,
+        }
 
     if year_results:
         deltas = [v["delta"] for v in year_results.values()]
         pct_consistent = sum(1 for d in deltas if d > 0) / len(deltas)
-        print(f"    Consistent direction: {pct_consistent:.0%} of years ({sum(1 for d in deltas if d > 0)}/{len(deltas)})")
+        print(
+            f"    Consistent direction: {pct_consistent:.0%} of years ({sum(1 for d in deltas if d > 0)}/{len(deltas)})"
+        )
 
     return year_results
 
@@ -498,7 +517,9 @@ def c3_sensitivity_sweep(df: pd.DataFrame, cutoffs: list[float]) -> None:
         return
 
     print(f"\n  C3 Sensitivity Sweep (break speed cutoff):")
-    print(f"    {'Cutoff':>10s} {'N_fast':>7s} {'avgR_fast':>10s} {'N_slow':>7s} {'avgR_slow':>10s} {'Delta':>8s} {'p':>7s}")
+    print(
+        f"    {'Cutoff':>10s} {'N_fast':>7s} {'avgR_fast':>10s} {'N_slow':>7s} {'avgR_slow':>10s} {'Delta':>8s} {'p':>7s}"
+    )
     print(f"    {'-' * 65}")
 
     p_vals = []
@@ -523,7 +544,9 @@ def c3_sensitivity_sweep(df: pd.DataFrame, cutoffs: list[float]) -> None:
     for i, (cut, nf, af, ns, as_, delta, p) in enumerate(rows):
         bh = " BH-SIG" if rejects[i] else ""
         p_flag = " ***" if p < 0.01 else (" **" if p < 0.05 else (" *" if p < 0.10 else ""))
-        print(f"    {f'<={cut:.0f}min':>10s} {nf:7d} {af:+10.3f} {ns:7d} {as_:+10.3f} {delta:+8.3f} {p:7.4f}{p_flag}{bh}")
+        print(
+            f"    {f'<={cut:.0f}min':>10s} {nf:7d} {af:+10.3f} {ns:7d} {as_:+10.3f} {delta:+8.3f} {p:7.4f}{p_flag}{bh}"
+        )
 
 
 def simulate_exit_rules(
@@ -568,7 +591,7 @@ def simulate_exit_rules(
             delta = (0.0 - old_ev) * n_c3 / n
             total_delta += delta
             print(f"\n  C3 slow-break skip (>{c3_cutoff}min, 1000 only):")
-            print(f"    Skipped N={n_c3} ({n_c3/n:.0%})  old avgR={old_ev:+.3f}R -> 0.000R")
+            print(f"    Skipped N={n_c3} ({n_c3 / n:.0%})  old avgR={old_ev:+.3f}R -> 0.000R")
             print(f"    Portfolio delta: {delta:+.3f}R/trade")
 
     # ---- C5: entry bar reverses -> exit at entry bar close (1000 only) ----
@@ -583,10 +606,12 @@ def simulate_exit_rules(
             delta = (new_ev - old_ev) * n_c5 / n
             total_delta += delta
             print(f"\n  C5 1-bar bail (entry bar reverses, 1000 only):")
-            print(f"    Triggered N={n_c5} ({n_c5/n:.0%})  old avgR={old_ev:+.3f}R -> new {new_ev:+.3f}R")
-            print(f"    Exit pnl_r p25={cdf.loc[mask, 'c5_exit_pnl_r'].quantile(0.25):+.3f}  "
-                  f"p50={cdf.loc[mask, 'c5_exit_pnl_r'].quantile(0.50):+.3f}  "
-                  f"p75={cdf.loc[mask, 'c5_exit_pnl_r'].quantile(0.75):+.3f}")
+            print(f"    Triggered N={n_c5} ({n_c5 / n:.0%})  old avgR={old_ev:+.3f}R -> new {new_ev:+.3f}R")
+            print(
+                f"    Exit pnl_r p25={cdf.loc[mask, 'c5_exit_pnl_r'].quantile(0.25):+.3f}  "
+                f"p50={cdf.loc[mask, 'c5_exit_pnl_r'].quantile(0.50):+.3f}  "
+                f"p75={cdf.loc[mask, 'c5_exit_pnl_r'].quantile(0.75):+.3f}"
+            )
             print(f"    Portfolio delta: {delta:+.3f}R/trade")
 
     # ---- C9: MFE at bar 30 < threshold -> exit at bar30 close ----
@@ -607,9 +632,13 @@ def simulate_exit_rules(
             total_delta += delta
             pctiles = cdf.loc[mask, "c9_bar30_close_r"].quantile([0.10, 0.50, 0.90])
             print(f"\n  C9 kill-switch (MFE_30 < {c9_mfe_threshold}R -- exit at bar30 close):")
-            print(f"    Triggered N={n_c9} ({n_c9/n:.0%})  old avgR={old_ev:+.3f}R -> new {new_ev:+.3f}R")
-            print(f"    Bar30 close pnl_r: p10={pctiles[0.10]:+.3f}  p50={pctiles[0.50]:+.3f}  p90={pctiles[0.90]:+.3f}")
-            print(f"    Trades where exit < holding: {(cdf.loc[mask, 'c9_bar30_close_r'] < cdf.loc[mask, 'pnl_r']).mean():.0%}")
+            print(f"    Triggered N={n_c9} ({n_c9 / n:.0%})  old avgR={old_ev:+.3f}R -> new {new_ev:+.3f}R")
+            print(
+                f"    Bar30 close pnl_r: p10={pctiles[0.10]:+.3f}  p50={pctiles[0.50]:+.3f}  p90={pctiles[0.90]:+.3f}"
+            )
+            print(
+                f"    Trades where exit < holding: {(cdf.loc[mask, 'c9_bar30_close_r'] < cdf.loc[mask, 'pnl_r']).mean():.0%}"
+            )
             print(f"    Portfolio delta: {delta:+.3f}R/trade")
 
     # ---- C8: held 30 bars clean -> break-even stop at bar 30 ----
@@ -642,18 +671,27 @@ def simulate_exit_rules(
             delta = (0.0 - old_ev) * n_c8 / n
             total_delta += delta
             print(f"\n  C8 break-even stop (held 30 bars clean -> scratch at entry):")
-            print(f"    Case B (returned while open): N={n_caseb}  "
-                  f"({caseb_winners} winners scratched, {caseb_losers} losers saved)")
+            print(
+                f"    Case B (returned while open): N={n_caseb}  "
+                f"({caseb_winners} winners scratched, {caseb_losers} losers saved)"
+            )
             print(f"    Case A-loss (slow grind to stop): N={n_aloss}")
-            print(f"    Total triggered N={n_c8} ({n_c8/n:.0%})  old avgR={old_ev:+.3f}R -> 0.000R")
+            print(f"    Total triggered N={n_c8} ({n_c8 / n:.0%})  old avgR={old_ev:+.3f}R -> 0.000R")
             print(f"    Portfolio delta: {delta:+.3f}R/trade")
 
     new_ev = sim.mean()
     print(f"\n  COMBINED RESULT:")
-    print(f"    EV: {baseline:+.3f}R -> {new_ev:+.3f}R  (delta {total_delta:+.3f}R/trade, "
-          f"{total_delta/abs(baseline)*100:+.0f}% vs baseline)" if baseline != 0 else
-          f"    EV: {baseline:+.3f}R -> {new_ev:+.3f}R  (delta {total_delta:+.3f}R/trade)")
-    verdict = "** IMPROVES PORTFOLIO" if total_delta > 0.02 else ("~ NEUTRAL" if total_delta > -0.02 else "** HURTS PORTFOLIO")
+    print(
+        f"    EV: {baseline:+.3f}R -> {new_ev:+.3f}R  (delta {total_delta:+.3f}R/trade, "
+        f"{total_delta / abs(baseline) * 100:+.0f}% vs baseline)"
+        if baseline != 0
+        else f"    EV: {baseline:+.3f}R -> {new_ev:+.3f}R  (delta {total_delta:+.3f}R/trade)"
+    )
+    verdict = (
+        "** IMPROVES PORTFOLIO"
+        if total_delta > 0.02
+        else ("~ NEUTRAL" if total_delta > -0.02 else "** HURTS PORTFOLIO")
+    )
     print(f"    Verdict: {verdict}")
     print(f"    Modified trades: {modified.sum()}/{n} ({modified.mean():.0%})")
 
@@ -664,15 +702,13 @@ def simulate_exit_rules(
 # Main
 # =========================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="Break Quality Research")
     parser.add_argument("--db-path", type=str, default=None)
-    parser.add_argument("--instrument", type=str, default=None,
-                        help="Single instrument (default: all tradeable)")
-    parser.add_argument("--sessions", type=str, default=None,
-                        help="Comma-separated sessions (default: 0900,1000,1800)")
-    parser.add_argument("--min-orb-size", type=float, default=4.0,
-                        help="Min ORB size in R (default: G4+)")
+    parser.add_argument("--instrument", type=str, default=None, help="Single instrument (default: all tradeable)")
+    parser.add_argument("--sessions", type=str, default=None, help="Comma-separated sessions (default: 0900,1000,1800)")
+    parser.add_argument("--min-orb-size", type=float, default=4.0, help="Min ORB size in R (default: G4+)")
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
@@ -731,31 +767,45 @@ def main():
                 cdf = pd.DataFrame(conditions)
                 all_conditions.extend(conditions)
                 print(f"  {len(cdf)} trades analyzed in {time.time() - t_load:.1f}s")
-                print(f"  Baseline: N={len(cdf)}, avgR={cdf['pnl_r'].mean():+.3f}, "
-                      f"WR={( cdf['pnl_r'] > 0).mean():.1%}, totR={cdf['pnl_r'].sum():+.1f}")
+                print(
+                    f"  Baseline: N={len(cdf)}, avgR={cdf['pnl_r'].mean():+.3f}, "
+                    f"WR={(cdf['pnl_r'] > 0).mean():.1%}, totR={cdf['pnl_r'].sum():+.1f}"
+                )
 
                 # ================================================
                 # C4: Entry bar engulfing (THE KEY QUESTION)
                 # ================================================
-                split_report(cdf, "c4_entry_bar_engulf",
-                             "Entry bar INSIDE ORB", "Entry bar OUTSIDE ORB",
-                             "C4: Entry bar engulfs back inside ORB?")
+                split_report(
+                    cdf,
+                    "c4_entry_bar_engulf",
+                    "Entry bar INSIDE ORB",
+                    "Entry bar OUTSIDE ORB",
+                    "C4: Entry bar engulfs back inside ORB?",
+                )
 
                 # ================================================
                 # C5: Entry bar direction
                 # ================================================
-                split_report(cdf, "c5_entry_bar_continues",
-                             "Entry bar CONTINUES", "Entry bar REVERSES",
-                             "C5: Does entry bar continue in break direction?")
+                split_report(
+                    cdf,
+                    "c5_entry_bar_continues",
+                    "Entry bar CONTINUES",
+                    "Entry bar REVERSES",
+                    "C5: Does entry bar continue in break direction?",
+                )
 
                 # ================================================
                 # C6: Close inside ORB at 1/3/5/10/15/30 bars
                 # ================================================
                 for n in [1, 3, 5, 10, 15, 30]:
                     col = f"c6_reversal_{n}bar"
-                    split_report(cdf, col,
-                                 f"Close inside ORB <={n}bars", f"Stays outside <={n}bars",
-                                 f"C6: Any close back inside ORB within {n} bar(s)?")
+                    split_report(
+                        cdf,
+                        col,
+                        f"Close inside ORB <={n}bars",
+                        f"Stays outside <={n}bars",
+                        f"C6: Any close back inside ORB within {n} bar(s)?",
+                    )
 
                 # ================================================
                 # C7: First close inside ORB — time distribution
@@ -765,10 +815,14 @@ def main():
                 stayed = cdf[never]
                 if len(returned) >= 10 and len(stayed) >= 10:
                     print(f"\n  C7: When does price first close back inside ORB?")
-                    print(f"    Never returned:   N={len(stayed):4d}  avgR={stayed['pnl_r'].mean():+.3f}  "
-                          f"WR={( stayed['pnl_r'] > 0).mean():.1%}")
-                    print(f"    Returned (any):   N={len(returned):4d}  avgR={returned['pnl_r'].mean():+.3f}  "
-                          f"WR={( returned['pnl_r'] > 0).mean():.1%}")
+                    print(
+                        f"    Never returned:   N={len(stayed):4d}  avgR={stayed['pnl_r'].mean():+.3f}  "
+                        f"WR={(stayed['pnl_r'] > 0).mean():.1%}"
+                    )
+                    print(
+                        f"    Returned (any):   N={len(returned):4d}  avgR={returned['pnl_r'].mean():+.3f}  "
+                        f"WR={(returned['pnl_r'] > 0).mean():.1%}"
+                    )
                     print(f"    Delta (never-returned): {stayed['pnl_r'].mean() - returned['pnl_r'].mean():+.3f}")
                     print(f"\n    Outcome by when price first re-entered ORB:")
                     print(f"    {'First re-entry':>20s} {'N':>5s} {'avgR':>8s} {'WR':>7s}")
@@ -778,8 +832,10 @@ def main():
                         grp = cdf[cdf["c7_first_inside_bar"].between(lo, hi)]
                         if len(grp) >= 5:
                             label = f"bar {lo}-{hi}"
-                            print(f"    {label:>20s} {len(grp):5d} {grp['pnl_r'].mean():+8.3f} "
-                                  f"{( grp['pnl_r'] > 0).mean():6.1%}")
+                            print(
+                                f"    {label:>20s} {len(grp):5d} {grp['pnl_r'].mean():+8.3f} "
+                                f"{(grp['pnl_r'] > 0).mean():6.1%}"
+                            )
 
                 # ================================================
                 # C6 EXIT SIMULATION: Actual pnl_r at trigger bar close
@@ -811,22 +867,26 @@ def main():
                     # Distribution of exit prices
                     pctiles = exit_r.quantile([0.10, 0.25, 0.50, 0.75, 0.90])
                     print(f"\n    Exit pnl_r distribution (actual close price):")
-                    print(f"      p10={pctiles[0.10]:+.3f}  p25={pctiles[0.25]:+.3f}  "
-                          f"p50={pctiles[0.50]:+.3f}  p75={pctiles[0.75]:+.3f}  p90={pctiles[0.90]:+.3f}")
+                    print(
+                        f"      p10={pctiles[0.10]:+.3f}  p25={pctiles[0.25]:+.3f}  "
+                        f"p50={pctiles[0.50]:+.3f}  p75={pctiles[0.75]:+.3f}  p90={pctiles[0.90]:+.3f}"
+                    )
 
                     # Breakdown: exit < -0.5R, -0.5 to 0, 0 to +0.5, > +0.5
                     buckets = [
-                        (exit_r < -0.5,  "Exit < -0.5R  (big loss, worse than stop)"),
+                        (exit_r < -0.5, "Exit < -0.5R  (big loss, worse than stop)"),
                         ((exit_r >= -0.5) & (exit_r < 0), "Exit -0.5R to 0  (small loss)"),
-                        ((exit_r >= 0) & (exit_r < 0.5),  "Exit 0 to +0.5R (small gain)"),
-                        (exit_r >= 0.5,  "Exit > +0.5R  (good exit)"),
+                        ((exit_r >= 0) & (exit_r < 0.5), "Exit 0 to +0.5R (small gain)"),
+                        (exit_r >= 0.5, "Exit > +0.5R  (good exit)"),
                     ]
                     print(f"\n    Exit price breakdown:")
                     for mask, label in buckets:
                         grp = triggered[mask]
                         if len(grp) > 0:
-                            print(f"      {label}: N={len(grp):3d} ({len(grp)/len(triggered):.0%}), "
-                                  f"avg_exit={grp[col].mean():+.3f}R, avg_hold={grp['pnl_r'].mean():+.3f}R")
+                            print(
+                                f"      {label}: N={len(grp):3d} ({len(grp) / len(triggered):.0%}), "
+                                f"avg_exit={grp[col].mean():+.3f}R, avg_hold={grp['pnl_r'].mean():+.3f}R"
+                            )
 
                     # The real net math: does exiting help?
                     # Expected value if you always exit on trigger vs never
@@ -835,21 +895,31 @@ def main():
                     # Full portfolio EV comparison:
                     n_total = len(cdf)
                     if n_total > 0:
-                        ev_always_exit = (len(triggered) * avg_exit + len(not_triggered) * not_triggered["pnl_r"].mean()) / n_total if len(not_triggered) > 0 else avg_exit
+                        ev_always_exit = (
+                            (len(triggered) * avg_exit + len(not_triggered) * not_triggered["pnl_r"].mean()) / n_total
+                            if len(not_triggered) > 0
+                            else avg_exit
+                        )
                         ev_never_exit = cdf["pnl_r"].mean()
                         print(f"\n    Portfolio EV comparison (full {n_total} trades):")
                         print(f"      EV (never exit early):   {ev_never_exit:+.3f}R")
                         print(f"      EV (always exit on C6):  {ev_always_exit:+.3f}R")
                         net = ev_always_exit - ev_never_exit
-                        verdict = " ** EXIT HELPS" if net > 0.03 else (" ** EXIT HURTS" if net < -0.03 else " ~ NEUTRAL")
+                        verdict = (
+                            " ** EXIT HELPS" if net > 0.03 else (" ** EXIT HURTS" if net < -0.03 else " ~ NEUTRAL")
+                        )
                         print(f"      Net effect:              {net:+.3f}R per trade{verdict}")
 
                 # ================================================
                 # C8: Held 30 clean, then returned — the key hypothesis
                 # ================================================
-                split_report(cdf, "c8_held_outside_30",
-                             "Clean outside 30 bars", "Reversed within 30 bars",
-                             "C8: Held cleanly outside ORB for 30+ bars?")
+                split_report(
+                    cdf,
+                    "c8_held_outside_30",
+                    "Clean outside 30 bars",
+                    "Reversed within 30 bars",
+                    "C8: Held cleanly outside ORB for 30+ bars?",
+                )
 
                 # Within the "held 30 clean" group, split by whether it eventually returned
                 held30 = cdf[cdf["c8_held_outside_30"] == True]
@@ -860,13 +930,17 @@ def main():
                     print(f"    {'':>28s} {'N':>5s} {'avgR':>8s} {'WR':>7s}")
                     print(f"    {'-' * 50}")
                     if len(then_returned) >= 5:
-                        print(f"    {'Held 30 then returned inside':>28s} {len(then_returned):5d} "
-                              f"{then_returned['pnl_r'].mean():+8.3f} "
-                              f"{( then_returned['pnl_r'] > 0).mean():6.1%}")
+                        print(
+                            f"    {'Held 30 then returned inside':>28s} {len(then_returned):5d} "
+                            f"{then_returned['pnl_r'].mean():+8.3f} "
+                            f"{(then_returned['pnl_r'] > 0).mean():6.1%}"
+                        )
                     if len(never_returned) >= 5:
-                        print(f"    {'Held 30, never returned':>28s} {len(never_returned):5d} "
-                              f"{never_returned['pnl_r'].mean():+8.3f} "
-                              f"{( never_returned['pnl_r'] > 0).mean():6.1%}")
+                        print(
+                            f"    {'Held 30, never returned':>28s} {len(never_returned):5d} "
+                            f"{never_returned['pnl_r'].mean():+8.3f} "
+                            f"{(never_returned['pnl_r'] > 0).mean():6.1%}"
+                        )
                     if len(then_returned) >= 5 and len(never_returned) >= 5:
                         delta = never_returned["pnl_r"].mean() - then_returned["pnl_r"].mean()
                         flag = " ** ACTIONABLE" if abs(delta) > 0.15 else ""
@@ -879,50 +953,63 @@ def main():
                         caseb_win = caseb[caseb["pnl_r"] > 0]
                         caseb_loss = caseb[caseb["pnl_r"] <= 0]
                         print(f"\n  C8c: Case B — return inside ORB happened WHILE TRADE STILL OPEN")
-                        print(f"    Total Case B: N={len(caseb)} ({len(caseb)/len(cdf):.0%} of all trades)")
-                        print(f"    Winners (C8 would scratch): N={len(caseb_win)}, avgR={caseb_win['pnl_r'].mean():+.3f}" if len(caseb_win) > 0 else f"    Winners: N=0")
-                        print(f"    Losers  (C8 would save):   N={len(caseb_loss)}, avgR={caseb_loss['pnl_r'].mean():+.3f}" if len(caseb_loss) > 0 else f"    Losers:  N=0")
-                        net = (len(caseb_loss) * abs(caseb_loss["pnl_r"].mean()) - len(caseb_win) * caseb_win["pnl_r"].mean()) / len(cdf) if len(caseb) > 0 else 0
+                        print(f"    Total Case B: N={len(caseb)} ({len(caseb) / len(cdf):.0%} of all trades)")
+                        print(
+                            f"    Winners (C8 would scratch): N={len(caseb_win)}, avgR={caseb_win['pnl_r'].mean():+.3f}"
+                            if len(caseb_win) > 0
+                            else f"    Winners: N=0"
+                        )
+                        print(
+                            f"    Losers  (C8 would save):   N={len(caseb_loss)}, avgR={caseb_loss['pnl_r'].mean():+.3f}"
+                            if len(caseb_loss) > 0
+                            else f"    Losers:  N=0"
+                        )
+                        net = (
+                            (
+                                len(caseb_loss) * abs(caseb_loss["pnl_r"].mean())
+                                - len(caseb_win) * caseb_win["pnl_r"].mean()
+                            )
+                            / len(cdf)
+                            if len(caseb) > 0
+                            else 0
+                        )
                         print(f"    Net C8 Case B impact: {net:+.3f}R/trade (positive = C8 helps on this group)")
 
                 # ================================================
                 # C9: MFE context — how far did price get before reversal?
                 # ================================================
-                quantile_report(cdf, "c9_mfe_10bar_r",
-                                "C9: Max favorable excursion in first 10 bars (R)")
-                quantile_report(cdf, "c9_mfe_30bar_r",
-                                "C9: Max favorable excursion in first 30 bars (R)")
+                quantile_report(cdf, "c9_mfe_10bar_r", "C9: Max favorable excursion in first 10 bars (R)")
+                quantile_report(cdf, "c9_mfe_30bar_r", "C9: Max favorable excursion in first 30 bars (R)")
 
                 # ================================================
                 # C10: Volume dropoff after breakout
                 # ================================================
-                quantile_report(cdf, "c10_vol_ratio",
-                                "C10: Volume ratio (post-entry mean / break bar) — dropoff = <1.0",
-                                cuts=[0.0, 0.25, 0.50, 0.75, 1.0])
+                quantile_report(
+                    cdf,
+                    "c10_vol_ratio",
+                    "C10: Volume ratio (post-entry mean / break bar) — dropoff = <1.0",
+                    cuts=[0.0, 0.25, 0.50, 0.75, 1.0],
+                )
 
                 # ================================================
                 # C1: Break distance (quantiles)
                 # ================================================
-                quantile_report(cdf, "c1_break_distance_r",
-                                "C1: Confirm bar break distance (in R)")
+                quantile_report(cdf, "c1_break_distance_r", "C1: Confirm bar break distance (in R)")
 
                 # ================================================
                 # C2: Wick ratio (quantiles)
                 # ================================================
-                quantile_report(cdf, "c2_wick_ratio",
-                                "C2: Confirm bar wick-back ratio")
+                quantile_report(cdf, "c2_wick_ratio", "C2: Confirm bar wick-back ratio")
 
                 # ================================================
                 # C3: Break speed (quantiles)
                 # ================================================
-                quantile_report(cdf, "c3_break_speed_min",
-                                "C3: Break speed (minutes to confirm)")
+                quantile_report(cdf, "c3_break_speed_min", "C3: Break speed (minutes to confirm)")
 
                 # ================================================
                 # BONUS: Entry bar distance from ORB
                 # ================================================
-                quantile_report(cdf, "entry_bar_dist_r",
-                                "BONUS: Entry bar close distance from ORB (in R)")
+                quantile_report(cdf, "entry_bar_dist_r", "BONUS: Entry bar close distance from ORB (in R)")
 
                 # ================================================
                 # VALIDITY TESTING — p-values, year-by-year, BH, sensitivity
@@ -948,26 +1035,38 @@ def main():
                         print(f"    Slow (>3m):  N={len(slow)}, avgR={slow['pnl_r'].mean():+.3f}")
                         print(f"    Delta: {delta_c3:+.3f}R | p={p_c3:.4f}")
                         c3_sensitivity_sweep(cdf, cutoffs=[1, 2, 3, 5, 7, 10])
-                        year_breakdown(c3_valid, "c3_break_speed_min", 3.0,
-                                       "Fast (<= 3m)", "Slow (> 3m)", "C3 break speed < 3 min")
+                        year_breakdown(
+                            c3_valid, "c3_break_speed_min", 3.0, "Fast (<= 3m)", "Slow (> 3m)", "C3 break speed < 3 min"
+                        )
 
                 # --- C5: Entry bar direction (post-fill, 1-bar exit signal) ---
-                r5 = split_report(cdf, "c5_entry_bar_continues",
-                                  "Continues", "Reverses",
-                                  "C5 (re-test p-value): Entry bar direction")
+                r5 = split_report(
+                    cdf, "c5_entry_bar_continues", "Continues", "Reverses", "C5 (re-test p-value): Entry bar direction"
+                )
                 if r5 is not None:
                     bh_tests.append(("C5 entry-bar direction", r5["p_val"], r5["delta"], "post-fill 1-bar"))
-                    year_breakdown(cdf, "c5_entry_bar_continues", True,
-                                   "Continues", "Reverses", "C5 entry bar direction (True = continues)")
+                    year_breakdown(
+                        cdf,
+                        "c5_entry_bar_continues",
+                        True,
+                        "Continues",
+                        "Reverses",
+                        "C5 entry bar direction (True = continues)",
+                    )
 
                 # --- C8: Held 30 bars clean (post-hoc classifier) ---
-                r8 = split_report(cdf, "c8_held_outside_30",
-                                  "Held 30 clean", "Reversed <30",
-                                  "C8 (re-test p-value): Held 30 bars outside ORB")
+                r8 = split_report(
+                    cdf,
+                    "c8_held_outside_30",
+                    "Held 30 clean",
+                    "Reversed <30",
+                    "C8 (re-test p-value): Held 30 bars outside ORB",
+                )
                 if r8 is not None:
                     bh_tests.append(("C8 held 30 bars clean", r8["p_val"], r8["delta"], "post-hoc (30bar look-ahead)"))
-                    year_breakdown(cdf, "c8_held_outside_30", True,
-                                   "Held 30 clean", "Reversed <30", "C8 held 30 bars clean")
+                    year_breakdown(
+                        cdf, "c8_held_outside_30", True, "Held 30 clean", "Reversed <30", "C8 held 30 bars clean"
+                    )
 
                 # --- C9: MFE at 30 bars (post-entry mid-trade) ---
                 c9_valid = cdf[cdf["c9_mfe_30bar_r"].notna()].copy()
@@ -978,10 +1077,16 @@ def main():
                     if len(bottom_q) >= 10 and len(top_3q) >= 10:
                         _, p_c9 = stats.ttest_ind(bottom_q["pnl_r"], top_3q["pnl_r"], equal_var=False)
                         delta_c9 = bottom_q["pnl_r"].mean() - top_3q["pnl_r"].mean()
-                        bh_tests.append(("C9 MFE<30bar p25 (30-bar look-ahead)", p_c9, delta_c9, "post-entry 30-bar look-ahead"))
+                        bh_tests.append(
+                            ("C9 MFE<30bar p25 (30-bar look-ahead)", p_c9, delta_c9, "post-entry 30-bar look-ahead")
+                        )
                         print(f"\n  [C9] MFE at 30 bars: bottom quartile (cutoff={q25_mfe:.3f}R)")
-                        print(f"    Bottom Q (MFE <= {q25_mfe:.3f}R): N={len(bottom_q)}, avgR={bottom_q['pnl_r'].mean():+.3f}, WR={( bottom_q['pnl_r'] > 0).mean():.0%}")
-                        print(f"    Top 3Q  (MFE >  {q25_mfe:.3f}R): N={len(top_3q)},  avgR={top_3q['pnl_r'].mean():+.3f}, WR={( top_3q['pnl_r'] > 0).mean():.0%}")
+                        print(
+                            f"    Bottom Q (MFE <= {q25_mfe:.3f}R): N={len(bottom_q)}, avgR={bottom_q['pnl_r'].mean():+.3f}, WR={(bottom_q['pnl_r'] > 0).mean():.0%}"
+                        )
+                        print(
+                            f"    Top 3Q  (MFE >  {q25_mfe:.3f}R): N={len(top_3q)},  avgR={top_3q['pnl_r'].mean():+.3f}, WR={(top_3q['pnl_r'] > 0).mean():.0%}"
+                        )
                         print(f"    Delta: {delta_c9:+.3f}R | p={p_c9:.4f}")
                         # Sensitivity: p50 cutoff
                         q50_mfe = c9_valid["c9_mfe_30bar_r"].quantile(0.50)
@@ -989,9 +1094,17 @@ def main():
                         top_half = c9_valid[c9_valid["c9_mfe_30bar_r"] > q50_mfe]
                         if len(bottom_half) >= 10 and len(top_half) >= 10:
                             _, p50 = stats.ttest_ind(bottom_half["pnl_r"], top_half["pnl_r"], equal_var=False)
-                            print(f"    Sensitivity p50 cutoff ({q50_mfe:.3f}R): delta={bottom_half['pnl_r'].mean() - top_half['pnl_r'].mean():+.3f}R | p={p50:.4f}")
-                        year_breakdown(c9_valid, "c9_mfe_30bar_r", q25_mfe,
-                                       f"Low MFE (<={q25_mfe:.2f}R)", "Higher MFE", "C9 MFE<30bar bottom quartile")
+                            print(
+                                f"    Sensitivity p50 cutoff ({q50_mfe:.3f}R): delta={bottom_half['pnl_r'].mean() - top_half['pnl_r'].mean():+.3f}R | p={p50:.4f}"
+                            )
+                        year_breakdown(
+                            c9_valid,
+                            "c9_mfe_30bar_r",
+                            q25_mfe,
+                            f"Low MFE (<={q25_mfe:.2f}R)",
+                            "Higher MFE",
+                            "C9 MFE<30bar bottom quartile",
+                        )
 
                 # --- BH correction across all 4 signals ---
                 if bh_tests:
@@ -1015,8 +1128,7 @@ def main():
             out_dir = Path("research/output")
             out_dir.mkdir(parents=True, exist_ok=True)
             all_df = pd.DataFrame(all_conditions)
-            all_df.to_csv(out_dir / "break_quality_conditions.csv",
-                          index=False, float_format="%.4f")
+            all_df.to_csv(out_dir / "break_quality_conditions.csv", index=False, float_format="%.4f")
             print(f"\n  CSV saved: research/output/break_quality_conditions.csv")
 
     finally:

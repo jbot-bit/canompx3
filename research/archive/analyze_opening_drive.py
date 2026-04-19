@@ -52,29 +52,35 @@ SESSIONS = {
 # Drive windows in minutes
 DRIVE_WINDOWS = [15, 30, 60]
 
+
 def load_1m_bars(db_path: Path) -> pd.DataFrame:
     """Load 1m bars for MGC (screened date range)."""
     print("Loading 1m bars...", end=" ", flush=True)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
               AND ts_utc >= ?::TIMESTAMPTZ
             ORDER BY ts_utc
-        """, [f"{SCREEN_START} 00:00:00+00"]).fetchdf()
+        """,
+            [f"{SCREEN_START} 00:00:00+00"],
+        ).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} bars loaded.")
     return df
+
 
 def load_atr(db_path: Path) -> pd.DataFrame:
     """Load ATR_20 from daily_features."""
     print("Loading daily ATR...", end=" ", flush=True)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT trading_day, atr_20
             FROM daily_features
             WHERE symbol = 'MGC'
@@ -82,11 +88,14 @@ def load_atr(db_path: Path) -> pd.DataFrame:
               AND atr_20 IS NOT NULL
               AND trading_day >= ?
             ORDER BY trading_day
-        """, [SCREEN_START]).fetchdf()
+        """,
+            [SCREEN_START],
+        ).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} days with ATR.")
     return df
+
 
 def analyze_opening_drive(bars: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFrame:
     """Analyze opening drive for each session and window.
@@ -133,8 +142,7 @@ def analyze_opening_drive(bars: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFr
                 print(f"    Day {day_idx}/{len(all_dates)}...", flush=True)
 
             # Session start/end as epoch seconds
-            session_start_dt = datetime(cal_date.year, cal_date.month, cal_date.day,
-                                        start_h, 0, 0, tzinfo=timezone.utc)
+            session_start_dt = datetime(cal_date.year, cal_date.month, cal_date.day, start_h, 0, 0, tzinfo=timezone.utc)
             session_start_ep = int(session_start_dt.timestamp())
             session_end_ep = session_start_ep + dur_h * 3600
 
@@ -197,30 +205,33 @@ def analyze_opening_drive(bars: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFr
 
                 hold_pnl_pts = session_close - drive_close
 
-                results.append({
-                    "date": cal_date,
-                    "trading_day": trading_day,
-                    "session": session_name,
-                    "window_min": window_min,
-                    "drive_direction": drive_direction,
-                    "session_direction": session_direction,
-                    "aligned": aligned,
-                    "drive_return_pts": drive_return,
-                    "drive_range_pts": drive_range,
-                    "drive_return_pct_atr": drive_return / atr * 100,
-                    "session_return_pts": session_return,
-                    "trade_pnl_pts": trade_pnl_pts,
-                    "pnl_r": pnl_r,
-                    "hold_pnl_pts": hold_pnl_pts,
-                    "risk_pts": risk_pts,
-                    "atr_20": atr,
-                    "year": trading_day.year if hasattr(trading_day, "year") else pd.Timestamp(trading_day).year,
-                    "remaining_bars": (i_end - i_start) - n_drive,
-                })
+                results.append(
+                    {
+                        "date": cal_date,
+                        "trading_day": trading_day,
+                        "session": session_name,
+                        "window_min": window_min,
+                        "drive_direction": drive_direction,
+                        "session_direction": session_direction,
+                        "aligned": aligned,
+                        "drive_return_pts": drive_return,
+                        "drive_range_pts": drive_range,
+                        "drive_return_pct_atr": drive_return / atr * 100,
+                        "session_return_pts": session_return,
+                        "trade_pnl_pts": trade_pnl_pts,
+                        "pnl_r": pnl_r,
+                        "hold_pnl_pts": hold_pnl_pts,
+                        "risk_pts": risk_pts,
+                        "atr_20": atr,
+                        "year": trading_day.year if hasattr(trading_day, "year") else pd.Timestamp(trading_day).year,
+                        "remaining_bars": (i_end - i_start) - n_drive,
+                    }
+                )
 
         print(f"    {session_count:,} valid sessions found.")
 
     return pd.DataFrame(results)
+
 
 def print_alignment_summary(data: pd.DataFrame) -> None:
     """Print alignment rates for each session/window combo."""
@@ -243,9 +254,12 @@ def print_alignment_summary(data: pd.DataFrame) -> None:
             # Test vs 50% null hypothesis
             se = np.sqrt(0.25 / n)  # std error of proportion under H0=0.5
             t_stat = (align_rate - 0.5) / se
-            signif = "***" if abs(t_stat) > 2.576 else "**" if abs(t_stat) > 1.96 else "*" if abs(t_stat) > 1.645 else ""
+            signif = (
+                "***" if abs(t_stat) > 2.576 else "**" if abs(t_stat) > 1.96 else "*" if abs(t_stat) > 1.645 else ""
+            )
 
-            print(f"{session:<15} {window:>5}m {n:>7,} {align_rate*100:>7.1f}% {t_stat:>+8.2f} {signif:>6}")
+            print(f"{session:<15} {window:>5}m {n:>7,} {align_rate * 100:>7.1f}% {t_stat:>+8.2f} {signif:>6}")
+
 
 def print_conditional_pnl(data: pd.DataFrame) -> None:
     """Print PnL if trading in drive direction."""
@@ -276,7 +290,10 @@ def print_conditional_pnl(data: pd.DataFrame) -> None:
             sha = stats.get("sharpe_ann")
             sha_str = f"{sha:>+7.2f}" if sha is not None else "   N/A"
 
-            print(f"{session:<15} {window:>5}m {stats['n']:>7,} {stats['wr']*100:>5.1f}% {stats['expr']:>+8.4f} {stats['sharpe']:>+8.4f} {stats['maxdd']:>+8.2f} {stats['total']:>+9.2f} {sha_str}")
+            print(
+                f"{session:<15} {window:>5}m {stats['n']:>7,} {stats['wr'] * 100:>5.1f}% {stats['expr']:>+8.4f} {stats['sharpe']:>+8.4f} {stats['maxdd']:>+8.2f} {stats['total']:>+9.2f} {sha_str}"
+            )
+
 
 def print_direction_breakdown(data: pd.DataFrame) -> None:
     """Break down by drive direction (up vs down)."""
@@ -309,7 +326,10 @@ def print_direction_breakdown(data: pd.DataFrame) -> None:
 
                 mean_move = subset["trade_pnl_pts"].mean()
 
-                print(f"  {window:>5}m {direction:>5} {n:>7,} {align_pct:>7.1f}% {stats['wr']*100:>5.1f}% {stats['expr']:>+8.4f} {mean_move:>+10.3f}")
+                print(
+                    f"  {window:>5}m {direction:>5} {n:>7,} {align_pct:>7.1f}% {stats['wr'] * 100:>5.1f}% {stats['expr']:>+8.4f} {mean_move:>+10.3f}"
+                )
+
 
 def print_drive_strength(data: pd.DataFrame) -> None:
     """Does a STRONGER opening drive predict better?"""
@@ -337,9 +357,16 @@ def print_drive_strength(data: pd.DataFrame) -> None:
                 continue
 
             print(f"\n  {session} / {window}m drive:")
-            print(f"    Weak   (|drive| <= {t1:.1f}% ATR): N={len(weak):>5}, Align={weak['aligned'].mean()*100:.1f}%, ExpR={weak['pnl_r'].mean():+.4f}")
-            print(f"    Medium (|drive| <= {t2:.1f}% ATR): N={len(medium):>5}, Align={medium['aligned'].mean()*100:.1f}%, ExpR={medium['pnl_r'].mean():+.4f}")
-            print(f"    Strong (|drive| >  {t2:.1f}% ATR): N={len(strong):>5}, Align={strong['aligned'].mean()*100:.1f}%, ExpR={strong['pnl_r'].mean():+.4f}")
+            print(
+                f"    Weak   (|drive| <= {t1:.1f}% ATR): N={len(weak):>5}, Align={weak['aligned'].mean() * 100:.1f}%, ExpR={weak['pnl_r'].mean():+.4f}"
+            )
+            print(
+                f"    Medium (|drive| <= {t2:.1f}% ATR): N={len(medium):>5}, Align={medium['aligned'].mean() * 100:.1f}%, ExpR={medium['pnl_r'].mean():+.4f}"
+            )
+            print(
+                f"    Strong (|drive| >  {t2:.1f}% ATR): N={len(strong):>5}, Align={strong['aligned'].mean() * 100:.1f}%, ExpR={strong['pnl_r'].mean():+.4f}"
+            )
+
 
 def print_year_consistency(data: pd.DataFrame) -> None:
     """Year-by-year alignment rates."""
@@ -358,17 +385,14 @@ def print_year_consistency(data: pd.DataFrame) -> None:
         for window in DRIVE_WINDOWS:
             row = f"  {window:>5}m"
             for y in years:
-                subset = data[
-                    (data["session"] == session)
-                    & (data["window_min"] == window)
-                    & (data["year"] == y)
-                ]
+                subset = data[(data["session"] == session) & (data["window_min"] == window) & (data["year"] == y)]
                 if len(subset) >= 10:
                     align = subset["aligned"].sum() / len(subset) * 100
                     row += f"  {align:5.1f}%({len(subset):>3})"
                 else:
                     row += f"{'---':>10}"
             print(row)
+
 
 def print_best_setups(data: pd.DataFrame) -> None:
     """Print the best session/window combinations."""
@@ -389,26 +413,39 @@ def print_best_setups(data: pd.DataFrame) -> None:
             t_stat = (align - 0.5) / se
             expr = subset["pnl_r"].mean()
 
-            results.append({
-                "session": session,
-                "window": window,
-                "n": n,
-                "align_pct": align * 100,
-                "t_stat": t_stat,
-                "expr": expr,
-            })
+            results.append(
+                {
+                    "session": session,
+                    "window": window,
+                    "n": n,
+                    "align_pct": align * 100,
+                    "t_stat": t_stat,
+                    "expr": expr,
+                }
+            )
 
     results.sort(key=lambda x: x["align_pct"], reverse=True)
 
     for r in results:
-        sig = "***" if abs(r["t_stat"]) > 2.576 else "**" if abs(r["t_stat"]) > 1.96 else "*" if abs(r["t_stat"]) > 1.645 else ""
-        print(f"  {r['session']:<15} {r['window']:>3}m: Align={r['align_pct']:>5.1f}%, N={r['n']:>6,}, t={r['t_stat']:>+5.2f}{sig:>4}, ExpR={r['expr']:>+.4f}")
+        sig = (
+            "***"
+            if abs(r["t_stat"]) > 2.576
+            else "**"
+            if abs(r["t_stat"]) > 1.96
+            else "*"
+            if abs(r["t_stat"]) > 1.645
+            else ""
+        )
+        print(
+            f"  {r['session']:<15} {r['window']:>3}m: Align={r['align_pct']:>5.1f}%, N={r['n']:>6,}, t={r['t_stat']:>+5.2f}{sig:>4}, ExpR={r['expr']:>+.4f}"
+        )
 
     print("\n  Interpretation:")
     print("    >55% alignment with t>1.96 = statistically significant predictive power")
     print("    >60% alignment = strong signal (rare in noisy markets)")
     print("    50% alignment = no predictive power (coin flip)")
     print("    <45% alignment = contrarian signal (fade the opening drive)")
+
 
 def main():
     print("=" * 110)
@@ -445,6 +482,7 @@ def main():
     print("  - Sessions: fixed Brisbane-time windows (not DST-aware). See pipeline/dst.py for actual market opens.")
 
     print("\n[Done]")
+
 
 if __name__ == "__main__":
     main()

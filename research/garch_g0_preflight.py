@@ -320,16 +320,15 @@ def validated_rebuild(con: duckdb.DuckDBPyConnection) -> tuple[list[CheckResult]
         CheckResult(
             "validated-anchor-rebuild",
             fmt_bool(all(r["matched"] for r in anchor_rows)),
-            ", ".join(
-                f"{r['strategy_id']}={'ok' if r['matched'] else 'FAIL'}"
-                for r in anchor_rows
-            ),
+            ", ".join(f"{r['strategy_id']}={'ok' if r['matched'] else 'FAIL'}" for r in anchor_rows),
         ),
     ]
     return results, {"validated": validated, "results_df": res_df, "anchors": anchor_rows}
 
 
-def broad_rebuild(con: duckdb.DuckDBPyConnection) -> tuple[list[CheckResult], dict[str, object], list[fam.CellRecord], pd.DataFrame]:
+def broad_rebuild(
+    con: duckdb.DuckDBPyConnection,
+) -> tuple[list[CheckResult], dict[str, object], list[fam.CellRecord], pd.DataFrame]:
     rows = broad.load_rows(con)
     rows = rows[rows["filter_type"].map(broad.in_scope)].copy()
     cells, _pf = fam.build_cells()
@@ -443,7 +442,9 @@ def placebo_controls(con: duckdb.DuckDBPyConnection) -> dict[str, object]:
     }
 
 
-def destruction_audit(con: duckdb.DuckDBPyConnection, cells: list[fam.CellRecord]) -> tuple[list[CheckResult], dict[str, object]]:
+def destruction_audit(
+    con: duckdb.DuckDBPyConnection, cells: list[fam.CellRecord]
+) -> tuple[list[CheckResult], dict[str, object]]:
     asym = fam.global_asymmetry(cells)
     shuf = fam.shuffle_controls(cells)
     shifted = shifted_controls(cells)
@@ -564,7 +565,9 @@ def emit(
         "|---|---|",
     ]
     for r in validated_meta["anchors"]:
-        lines.append(f"| {r['strategy_id']} {r.get('direction', '')} {r.get('side', '')}@{r.get('threshold', '')} | {'Y' if r['matched'] else 'N'} |")
+        lines.append(
+            f"| {r['strategy_id']} {r.get('direction', '')} {r.get('side', '')}@{r.get('threshold', '')} | {'Y' if r['matched'] else 'N'} |"
+        )
 
     lines += [
         "",

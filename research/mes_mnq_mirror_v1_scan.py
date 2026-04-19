@@ -51,10 +51,24 @@ RESULT_PATH = PROJECT_ROOT / "docs/audit/results/2026-04-19-mes-mnq-mirror-vwap-
 
 # Cell definitions frozen at pre-reg lock (commit 9b9826ee)
 CELLS = [
-    {"id": "H1_RR1.5", "instrument": "MES", "session": "US_DATA_1000",
-     "orb_minutes": 15, "rr": 1.5, "direction": "long", "filter_key": "VWAP_MID_ALIGNED"},
-    {"id": "H2_RR2.0", "instrument": "MES", "session": "US_DATA_1000",
-     "orb_minutes": 15, "rr": 2.0, "direction": "long", "filter_key": "VWAP_MID_ALIGNED"},
+    {
+        "id": "H1_RR1.5",
+        "instrument": "MES",
+        "session": "US_DATA_1000",
+        "orb_minutes": 15,
+        "rr": 1.5,
+        "direction": "long",
+        "filter_key": "VWAP_MID_ALIGNED",
+    },
+    {
+        "id": "H2_RR2.0",
+        "instrument": "MES",
+        "session": "US_DATA_1000",
+        "orb_minutes": 15,
+        "rr": 2.0,
+        "direction": "long",
+        "filter_key": "VWAP_MID_ALIGNED",
+    },
 ]
 
 ENTRY_MODEL = "E2"
@@ -99,8 +113,7 @@ def load_cell(con: duckdb.DuckDBPyConnection, cell: dict[str, Any]) -> pd.DataFr
     """
     df = con.execute(
         sql,
-        [cell["instrument"], sess, cell["orb_minutes"],
-         ENTRY_MODEL, CONFIRM_BARS, cell["rr"], cell["direction"]],
+        [cell["instrument"], sess, cell["orb_minutes"], ENTRY_MODEL, CONFIRM_BARS, cell["rr"], cell["direction"]],
     ).df()
     df["trading_day"] = pd.to_datetime(df["trading_day"]).dt.date
     df["is_is"] = df["trading_day"] < HOLDOUT_SACRED_FROM
@@ -125,8 +138,7 @@ def t_test_vs_zero(pnl: np.ndarray) -> tuple[float | None, float | None]:
     return float(t), raw_p
 
 
-def block_bootstrap_p(pnl: np.ndarray, block: int = 5, B: int = 10_000,
-                      seed: int = 42) -> float | None:
+def block_bootstrap_p(pnl: np.ndarray, block: int = 5, B: int = 10_000, seed: int = 42) -> float | None:
     """Moving-block bootstrap under centered-H0 (mean subtracted).
 
     Null: true mean is 0. Test statistic: observed mean. Resample blocks
@@ -149,7 +161,7 @@ def block_bootstrap_p(pnl: np.ndarray, block: int = 5, B: int = 10_000,
         starts = rng.integers(0, n - block + 1, size=n_blocks)
         samples: list[np.ndarray] = []
         for s in starts:
-            samples.append(centered[s:s + block])
+            samples.append(centered[s : s + block])
         boot = np.concatenate(samples)[:n]
         if abs(float(np.mean(boot))) >= observed:
             exceedances += 1
@@ -177,8 +189,7 @@ def bh_fdr_qvalues(pvalues: list[float]) -> list[float]:
     return q.tolist()
 
 
-def tautology_corr_with_orb_size(df: pd.DataFrame, fire_mask: np.ndarray,
-                                 sess: str) -> float | None:
+def tautology_corr_with_orb_size(df: pd.DataFrame, fire_mask: np.ndarray, sess: str) -> float | None:
     """T0: Pearson corr between fire binary and orb_size over IS window."""
     sz_col = f"orb_{sess}_size"
     sz = df[sz_col].astype(float).values
@@ -260,8 +271,12 @@ class CellResult:
 def analyze_cell(con: duckdb.DuckDBPyConnection, cell: dict[str, Any]) -> CellResult:
     df = load_cell(con, cell)
     res = CellResult(
-        id=cell["id"], instrument=cell["instrument"], session=cell["session"],
-        orb_minutes=cell["orb_minutes"], rr=cell["rr"], direction=cell["direction"],
+        id=cell["id"],
+        instrument=cell["instrument"],
+        session=cell["session"],
+        orb_minutes=cell["orb_minutes"],
+        rr=cell["rr"],
+        direction=cell["direction"],
         filter_key=cell["filter_key"],
     )
 
@@ -278,8 +293,7 @@ def analyze_cell(con: duckdb.DuckDBPyConnection, cell: dict[str, Any]) -> CellRe
         res.expr_is_base = float(is_df["pnl_r"].mean())
 
     # K2 harness cross-check: IS unfiltered baseline vs pre-reg
-    key_base = (cell["instrument"], cell["session"], cell["orb_minutes"],
-                cell["rr"], cell["direction"], "unfiltered")
+    key_base = (cell["instrument"], cell["session"], cell["orb_minutes"], cell["rr"], cell["direction"], "unfiltered")
     if key_base in PREREG_BASELINES:
         exp = PREREG_BASELINES[key_base]
         if res.expr_is_base is not None:
@@ -314,8 +328,14 @@ def analyze_cell(con: duckdb.DuckDBPyConnection, cell: dict[str, Any]) -> CellRe
         res.wr_spread = res.wr_is_on - res.wr_is_off
 
     # K2 harness cross-check: IS on-filter ExpR vs pre-reg
-    key_on = (cell["instrument"], cell["session"], cell["orb_minutes"],
-              cell["rr"], cell["direction"], cell["filter_key"])
+    key_on = (
+        cell["instrument"],
+        cell["session"],
+        cell["orb_minutes"],
+        cell["rr"],
+        cell["direction"],
+        cell["filter_key"],
+    )
     if key_on in PREREG_BASELINES:
         exp = PREREG_BASELINES[key_on]
         if res.expr_is_on is not None:
@@ -323,17 +343,19 @@ def analyze_cell(con: duckdb.DuckDBPyConnection, cell: dict[str, Any]) -> CellRe
 
     # T0 tautology
     res.tautology_corr = tautology_corr_with_orb_size(is_df, fire_is, cell["session"])
-    res.tautology = (
-        res.tautology_corr is not None and abs(res.tautology_corr) > 0.70
-    )
+    res.tautology = res.tautology_corr is not None and abs(res.tautology_corr) > 0.70
 
     # Fire rate flag
     if res.fire_rate_is is not None:
         res.extreme_fire = res.fire_rate_is < 0.05 or res.fire_rate_is > 0.95
 
     # Arithmetic-only flag
-    if (res.wr_spread is not None and res.delta_is is not None
-            and abs(res.wr_spread) < 0.03 and abs(res.delta_is) > 0.10):
+    if (
+        res.wr_spread is not None
+        and res.delta_is is not None
+        and abs(res.wr_spread) < 0.03
+        and abs(res.delta_is) > 0.10
+    ):
         res.arithmetic_only = True
 
     # Per-year stability
@@ -364,10 +386,7 @@ def analyze_cell(con: duckdb.DuckDBPyConnection, cell: dict[str, Any]) -> CellRe
             expr_oos_base = float(oos_df["pnl_r"].mean())
             res.delta_oos = res.expr_oos_on - expr_oos_base
             if res.delta_is is not None and res.delta_oos is not None:
-                res.dir_match = (
-                    (res.delta_is > 0 and res.delta_oos > 0)
-                    or (res.delta_is < 0 and res.delta_oos < 0)
-                )
+                res.dir_match = (res.delta_is > 0 and res.delta_oos > 0) or (res.delta_is < 0 and res.delta_oos < 0)
 
     return res
 
@@ -395,9 +414,7 @@ def evaluate_gates(cells: list[CellResult]) -> None:
         # N<10 are excluded from per_year_positive (power floor); denominator
         # no longer affects the gate.
         gates["years_positive_ge_4_of_7"] = bool(c.per_year_positive >= 4)
-        gates["bootstrap_p_lt_0.10"] = bool(
-            c.bootstrap_p is not None and c.bootstrap_p < 0.10
-        )
+        gates["bootstrap_p_lt_0.10"] = bool(c.bootstrap_p is not None and c.bootstrap_p < 0.10)
         gates["ExpR_on_IS_gt_0"] = bool(c.positive_mean_floor)
 
         # flags exclude from survivor
@@ -407,11 +424,17 @@ def evaluate_gates(cells: list[CellResult]) -> None:
 
         c.gate_results = gates
         c.h1_pass = all(
-            gates[k] for k in [
-                "bh_pass_family", "abs_t_IS_ge_3", "N_IS_on_ge_100",
-                "years_positive_ge_4_of_7", "bootstrap_p_lt_0.10",
+            gates[k]
+            for k in [
+                "bh_pass_family",
+                "abs_t_IS_ge_3",
+                "N_IS_on_ge_100",
+                "years_positive_ge_4_of_7",
+                "bootstrap_p_lt_0.10",
                 "ExpR_on_IS_gt_0",
-                "not_tautology", "not_extreme_fire", "not_arithmetic_only",
+                "not_tautology",
+                "not_extreme_fire",
+                "not_arithmetic_only",
             ]
         )
         c.verdict = "CONTINUE" if c.h1_pass else "KILL"
@@ -440,9 +463,13 @@ def render(cells: list[CellResult]) -> str:
     lines.append("# MES mirror of MNQ US_DATA_1000 VWAP_MID_ALIGNED long — K=2 scan")
     lines.append("")
     lines.append(f"**Generated:** {ts}")
-    lines.append(f"**Pre-reg:** `docs/audit/hypotheses/2026-04-19-mes-mnq-mirror-vwap-mid-aligned-us-data-1000-v1.yaml` (LOCKED, commit_sha=4fd08031)")
+    lines.append(
+        f"**Pre-reg:** `docs/audit/hypotheses/2026-04-19-mes-mnq-mirror-vwap-mid-aligned-us-data-1000-v1.yaml` (LOCKED, commit_sha=4fd08031)"
+    )
     lines.append(f"**Script:** `research/mes_mnq_mirror_v1_scan.py`")
-    lines.append(f"**IS window:** `trading_day < {HOLDOUT_SACRED_FROM.isoformat()}` (Mode A, from `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`)")
+    lines.append(
+        f"**IS window:** `trading_day < {HOLDOUT_SACRED_FROM.isoformat()}` (Mode A, from `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`)"
+    )
     lines.append("")
     lines.append("## Summary")
     lines.append("")
@@ -465,9 +492,7 @@ def render(cells: list[CellResult]) -> str:
     # Per-cell table
     lines.append("## Per-cell IS results")
     lines.append("")
-    lines.append(
-        "| Cell | N_on | ExpR_on | WR_on | ExpR_base | Δ_IS | t | raw_p | boot_p | q_family | years+ |"
-    )
+    lines.append("| Cell | N_on | ExpR_on | WR_on | ExpR_base | Δ_IS | t | raw_p | boot_p | q_family | years+ |")
     lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for c in cells:
         yr = f"{c.per_year_positive}/{c.per_year_total}" if c.per_year_total else "0/0"
@@ -482,9 +507,15 @@ def render(cells: list[CellResult]) -> str:
     lines.append("## Gate breakdown")
     lines.append("")
     gate_keys = [
-        "bh_pass_family", "abs_t_IS_ge_3", "N_IS_on_ge_100",
-        "years_positive_ge_4_of_7", "bootstrap_p_lt_0.10",
-        "ExpR_on_IS_gt_0", "not_tautology", "not_extreme_fire", "not_arithmetic_only",
+        "bh_pass_family",
+        "abs_t_IS_ge_3",
+        "N_IS_on_ge_100",
+        "years_positive_ge_4_of_7",
+        "bootstrap_p_lt_0.10",
+        "ExpR_on_IS_gt_0",
+        "not_tautology",
+        "not_extreme_fire",
+        "not_arithmetic_only",
     ]
     header = "| Cell | " + " | ".join(gate_keys) + " | Verdict |"
     sep = "|---|" + "|".join(["---"] * (len(gate_keys) + 1)) + "|"
@@ -517,10 +548,7 @@ def render(cells: list[CellResult]) -> str:
     lines.append("| Cell | N_OOS_on | ExpR_on_OOS | Δ_OOS | dir_match |")
     lines.append("|---|---:|---:|---:|---|")
     for c in cells:
-        lines.append(
-            f"| {c.id} | {c.n_oos_on} | {_fmt(c.expr_oos_on)} | "
-            f"{_fmt(c.delta_oos)} | {_fmt(c.dir_match)} |"
-        )
+        lines.append(f"| {c.id} | {c.n_oos_on} | {_fmt(c.expr_oos_on)} | {_fmt(c.delta_oos)} | {_fmt(c.dir_match)} |")
     lines.append("")
 
     # Per-year breakdown
@@ -565,11 +593,17 @@ def render(cells: list[CellResult]) -> str:
     lines.append("## Decision")
     lines.append("")
     if k2_ok and n_continue == 0:
-        lines.append("**Verdict: KILL per K1.** Zero of 2 cells pass all gate clauses. Honest negative evidence on MES cross-instrument portability of the MNQ VWAP_MID_ALIGNED US_DATA_1000 long signal. No re-runs with different thresholds (forbidden by pre-reg § execution_gate).")
+        lines.append(
+            "**Verdict: KILL per K1.** Zero of 2 cells pass all gate clauses. Honest negative evidence on MES cross-instrument portability of the MNQ VWAP_MID_ALIGNED US_DATA_1000 long signal. No re-runs with different thresholds (forbidden by pre-reg § execution_gate)."
+        )
     elif k2_ok and n_continue >= 1:
-        lines.append(f"**Verdict: CONTINUE on {n_continue} cell(s).** Passing cells are validated-candidates; do NOT auto-promote to validated_setups — committee review required per pre_registered_criteria.md.")
+        lines.append(
+            f"**Verdict: CONTINUE on {n_continue} cell(s).** Passing cells are validated-candidates; do NOT auto-promote to validated_setups — committee review required per pre_registered_criteria.md."
+        )
     elif not k2_ok:
-        lines.append("**Verdict: HARNESS FAIL per K2.** Canonical baseline cross-check diverged from pre-reg values. Run is non-authoritative until divergence is traced and fixed.")
+        lines.append(
+            "**Verdict: HARNESS FAIL per K2.** Canonical baseline cross-check diverged from pre-reg values. Run is non-authoritative until divergence is traced and fixed."
+        )
     lines.append("")
     lines.append("## Reproduction")
     lines.append("")

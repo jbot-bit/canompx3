@@ -83,8 +83,8 @@ def test_codex_bat_routes_task_shortcuts_to_ai_workstreams() -> None:
 
     assert 'call "ai-workstreams.bat" codex %*' in codex_bat
     assert 'call "ai-workstreams.bat" search %*' in codex_bat
-    assert 'Unknown codex mode: %ACTION%' in codex_bat
-    assert 'codex.bat help' in codex_bat
+    assert "Unknown codex mode: %ACTION%" in codex_bat
+    assert "codex.bat help" in codex_bat
 
 
 def test_claude_bat_is_simple_front_door() -> None:

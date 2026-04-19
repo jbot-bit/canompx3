@@ -56,11 +56,7 @@ def select_profile_ids(
         if profile_id not in ACCOUNT_PROFILES:
             raise KeyError(f"Unknown profile_id: {profile_id}")
         return [profile_id]
-    return [
-        pid
-        for pid, profile in ACCOUNT_PROFILES.items()
-        if include_active or not profile.active
-    ]
+    return [pid for pid, profile in ACCOUNT_PROFILES.items() if include_active or not profile.active]
 
 
 def load_deployable_strategy_ids(db_path: str | Path = GOLD_DB_PATH) -> set[str]:
@@ -68,10 +64,7 @@ def load_deployable_strategy_ids(db_path: str | Path = GOLD_DB_PATH) -> set[str]
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         return {
-            row[0]
-            for row in con.execute(
-                f"SELECT strategy_id FROM {deployable_validated_relation(con)}"
-            ).fetchall()
+            row[0] for row in con.execute(f"SELECT strategy_id FROM {deployable_validated_relation(con)}").fetchall()
         }
     finally:
         con.close()

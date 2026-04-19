@@ -248,16 +248,20 @@ def main() -> int:
     all_df = all_df.sort_values(["avg_on", "uplift"], ascending=False)
     all_df.to_csv(p_all, index=False)
 
-    topgain = all_df[
-        (all_df["avg_on"] > 0)
-        & (all_df["uplift"] >= 0.18)
-        & (all_df["years_total"] >= 3)
-        & (all_df["years_pos_ratio"] >= 0.6)
-        & (all_df["train_uplift"].fillna(-999) >= 0)
-        & (all_df["test2025_uplift"].fillna(-999) >= 0)
-        & (all_df["n_test_on"] >= MIN_TEST_ON)
-        & (all_df["n_test_off"] >= MIN_TEST_OFF)
-    ].copy().sort_values(["avg_on", "uplift"], ascending=False)
+    topgain = (
+        all_df[
+            (all_df["avg_on"] > 0)
+            & (all_df["uplift"] >= 0.18)
+            & (all_df["years_total"] >= 3)
+            & (all_df["years_pos_ratio"] >= 0.6)
+            & (all_df["train_uplift"].fillna(-999) >= 0)
+            & (all_df["test2025_uplift"].fillna(-999) >= 0)
+            & (all_df["n_test_on"] >= MIN_TEST_ON)
+            & (all_df["n_test_off"] >= MIN_TEST_OFF)
+        ]
+        .copy()
+        .sort_values(["avg_on", "uplift"], ascending=False)
+    )
     topgain.to_csv(p_top, index=False)
 
     freq150 = topgain[topgain["signals_per_year"] >= 150].copy().sort_values(["avg_on", "uplift"], ascending=False)

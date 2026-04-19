@@ -123,9 +123,7 @@ class TestStatusBadgeFromEligibility:
         assert any("waiting on:" in p for p in view["tooltip_parts"])
 
     def test_data_missing_produces_data_badge_and_row_inactive(self):
-        view = _status_badge_from_eligibility(
-            _trade("DATA_MISSING", elig_freshness="NO_DATA")
-        )
+        view = _status_badge_from_eligibility(_trade("DATA_MISSING", elig_freshness="NO_DATA"))
         assert "badge-filter-missing" in view["badge_html"]
         assert "DATA" in view["badge_html"]
         assert view["row_class_suffix"] == " row-inactive"
@@ -153,30 +151,22 @@ class TestStatusBadgeFromEligibility:
         assert "STALE" in view["pills_html"]
 
     def test_half_size_pill_appears_when_size_mult_below_one(self):
-        view = _status_badge_from_eligibility(
-            _trade("ELIGIBLE", elig_size_mult=0.5)
-        )
+        view = _status_badge_from_eligibility(_trade("ELIGIBLE", elig_size_mult=0.5))
         assert "badge-filter-active" in view["badge_html"]
         assert "pill-half" in view["pills_html"]
         assert "HALF" in view["pills_html"]
 
     def test_both_pills_can_appear_independently_of_main_badge(self):
-        view = _status_badge_from_eligibility(
-            _trade("ELIGIBLE", elig_stale=True, elig_size_mult=0.5)
-        )
+        view = _status_badge_from_eligibility(_trade("ELIGIBLE", elig_stale=True, elig_size_mult=0.5))
         assert "pill-stale" in view["pills_html"]
         assert "pill-half" in view["pills_html"]
 
     def test_freshness_prior_day_appears_in_tooltip(self):
-        view = _status_badge_from_eligibility(
-            _trade("ELIGIBLE", elig_freshness="PRIOR_DAY")
-        )
+        view = _status_badge_from_eligibility(_trade("ELIGIBLE", elig_freshness="PRIOR_DAY"))
         assert any("yesterday" in p for p in view["tooltip_parts"])
 
     def test_freshness_stale_appears_in_tooltip(self):
-        view = _status_badge_from_eligibility(
-            _trade("ELIGIBLE", elig_freshness="STALE")
-        )
+        view = _status_badge_from_eligibility(_trade("ELIGIBLE", elig_freshness="STALE"))
         assert any("STALE" in p for p in view["tooltip_parts"])
 
     def test_pure_function_does_not_mutate_input(self):
@@ -327,9 +317,9 @@ class TestPrefetchFeatureRows:
 
         trades = [
             {"instrument": "MGC", "aperture": 5},
-            {"instrument": "MGC", "aperture": 5},   # dup pair
+            {"instrument": "MGC", "aperture": 5},  # dup pair
             {"instrument": "MNQ", "aperture": 5},
-            {"instrument": "MNQ", "aperture": 5},   # dup pair
+            {"instrument": "MNQ", "aperture": 5},  # dup pair
             {"instrument": "MES", "aperture": 5},
         ]
         result = _prefetch_feature_rows(trades, Path("dummy.db"))
@@ -377,11 +367,13 @@ class TestEnrichTradesIntegration:
             if not profile.active or not lanes:
                 continue
             for lane in lanes:
-                trades.append({
-                    "strategy_id": lane.strategy_id,
-                    "instrument": lane.instrument,
-                    "aperture": 5,
-                })
+                trades.append(
+                    {
+                        "strategy_id": lane.strategy_id,
+                        "instrument": lane.instrument,
+                        "aperture": 5,
+                    }
+                )
 
         if not trades:
             pytest.skip("no deployed lanes in prop_profiles; nothing to test")
@@ -409,10 +401,7 @@ class TestEnrichTradesIntegration:
         # be UNKNOWN (which would mean the canonical builder raised). The
         # 32% UNKNOWN rate that triggered commit 35ae1fd must not return.
         unknowns = [t for t in trades if t["elig_overall"] == "UNKNOWN"]
-        assert not unknowns, (
-            f"deployed lanes raising in canonical builder: "
-            f"{[t['strategy_id'] for t in unknowns]}"
-        )
+        assert not unknowns, f"deployed lanes raising in canonical builder: {[t['strategy_id'] for t in unknowns]}"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -455,18 +444,14 @@ class TestRenderFilterUniverseSection:
         assert ">LIVE<" in html
 
     def test_routed_row_uses_row_routed_class_and_check_badge(self):
-        html = _render_filter_universe_section(
-            [_fu_row(status="ROUTED", routed=10, deployed=0)]
-        )
+        html = _render_filter_universe_section([_fu_row(status="ROUTED", routed=10, deployed=0)])
         assert "row-routed" in html
         # ROUTED intentionally reuses badge-filter-check (LOW-2 accepted)
         assert "badge-filter-check" in html
         assert ">ROUTED<" in html
 
     def test_dead_row_uses_row_dead_class_and_dead_badge(self):
-        html = _render_filter_universe_section(
-            [_fu_row(status="DEAD", routed=0, deployed=0)]
-        )
+        html = _render_filter_universe_section([_fu_row(status="DEAD", routed=0, deployed=0)])
         assert "row-dead" in html
         assert "badge-filter-dead" in html
         assert ">DEAD<" in html
@@ -477,9 +462,7 @@ class TestRenderFilterUniverseSection:
         assert "&mdash;" in html
 
     def test_stale_pill_appears_when_is_stale_true(self):
-        html = _render_filter_universe_section(
-            [_fu_row(last_revalidated="2025-01-01", is_stale=True)]
-        )
+        html = _render_filter_universe_section([_fu_row(last_revalidated="2025-01-01", is_stale=True)])
         assert "pill-stale" in html
         assert "STALE" in html
 
@@ -513,7 +496,9 @@ class TestRenderFilterUniverseSection:
         ]
         html = _render_filter_universe_section(rows)
         assert "4 total" in html
-        assert "3 routed" in html  # LIVE + ROUTED have routed > 0? Actually LIVE has routed=21 by default, so all 3 count
+        assert (
+            "3 routed" in html
+        )  # LIVE + ROUTED have routed > 0? Actually LIVE has routed=21 by default, so all 3 count
         assert "2 deployed" in html  # 2 LIVE rows
         assert "3 live lanes" in html  # deployed 2 + 1 = 3
 
@@ -571,13 +556,9 @@ class TestBuildFilterUniverseRows:
             if r["status"] == "LIVE":
                 assert r["deployed"] > 0, f"LIVE but deployed=0: {r['filter_type']}"
             elif r["status"] == "ROUTED":
-                assert r["deployed"] == 0 and r["routed"] > 0, (
-                    f"ROUTED but counts wrong: {r['filter_type']}"
-                )
+                assert r["deployed"] == 0 and r["routed"] > 0, f"ROUTED but counts wrong: {r['filter_type']}"
             else:  # DEAD
-                assert r["deployed"] == 0 and r["routed"] == 0, (
-                    f"DEAD but counts nonzero: {r['filter_type']}"
-                )
+                assert r["deployed"] == 0 and r["routed"] == 0, f"DEAD but counts nonzero: {r['filter_type']}"
 
     def test_deployed_count_matches_active_profile_lane_count(self):
         from pipeline.paths import GOLD_DB_PATH
@@ -595,8 +576,7 @@ class TestBuildFilterUniverseRows:
                 expected += len(effective_daily_lanes(profile))
 
         assert sum_deployed == expected, (
-            f"View B deployed count ({sum_deployed}) does not match "
-            f"active profile lane total ({expected})"
+            f"View B deployed count ({sum_deployed}) does not match active profile lane total ({expected})"
         )
 
     def test_routed_count_matches_active_validated_setups_query(self):
@@ -611,9 +591,7 @@ class TestBuildFilterUniverseRows:
 
         con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
         try:
-            row = con.execute(
-                "SELECT COUNT(*) FROM validated_setups WHERE LOWER(status)='active'"
-            ).fetchone()
+            row = con.execute("SELECT COUNT(*) FROM validated_setups WHERE LOWER(status)='active'").fetchone()
             assert row is not None
             expected = row[0]
         finally:

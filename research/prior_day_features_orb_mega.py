@@ -49,9 +49,18 @@ rng = np.random.default_rng(SEED)
 
 INSTRUMENTS = ("MNQ", "MES", "MGC")
 SESSIONS = (
-    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-    "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE", "BRISBANE_1025",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "EUROPE_FLOW",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
+    "BRISBANE_1025",
 )
 APERTURES = (5, 15, 30)
 RR_TARGETS = (1.0, 1.5, 2.0)
@@ -138,7 +147,7 @@ def compute_features_all_theta(df: pd.DataFrame) -> pd.DataFrame:
 
     # θ-sensitive features: F1/F2/F3 at each θ
     for theta in THETAS:
-        tag = f"{int(theta*100):02d}"
+        tag = f"{int(theta * 100):02d}"
         df[f"F1_NEAR_PDH_{tag}"] = (np.abs(mid - pdh) / atr < theta).astype(int)
         df[f"F2_NEAR_PDL_{tag}"] = (np.abs(mid - pdl) / atr < theta).astype(int)
         df[f"F3_NEAR_PIVOT_{tag}"] = (np.abs(mid - pivot) / atr < theta).astype(int)
@@ -154,9 +163,9 @@ def compute_features_all_theta(df: pd.DataFrame) -> pd.DataFrame:
 
 
 FEATURES = (
-    [f"F1_NEAR_PDH_{int(t*100):02d}" for t in THETAS]
-    + [f"F2_NEAR_PDL_{int(t*100):02d}" for t in THETAS]
-    + [f"F3_NEAR_PIVOT_{int(t*100):02d}" for t in THETAS]
+    [f"F1_NEAR_PDH_{int(t * 100):02d}" for t in THETAS]
+    + [f"F2_NEAR_PDL_{int(t * 100):02d}" for t in THETAS]
+    + [f"F3_NEAR_PIVOT_{int(t * 100):02d}" for t in THETAS]
     + ["F4_ABOVE_PDH", "F5_BELOW_PDL", "F6_INSIDE_PDR", "F7_GAP_UP", "F8_GAP_DOWN"]
 )
 
@@ -213,11 +222,13 @@ def analyze_cell(df: pd.DataFrame, signal: str) -> CellResult | None:
     t_c, p_c = float("nan"), float("nan")
     p_logit = float("nan")
     try:
-        X = pd.DataFrame({
-            "feature": is_df[signal].astype(float).values,
-            "atr_20": is_df["atr_20"].astype(float).values,
-            "orb_size": is_df["orb_size"].astype(float).values,
-        })
+        X = pd.DataFrame(
+            {
+                "feature": is_df[signal].astype(float).values,
+                "atr_20": is_df["atr_20"].astype(float).values,
+                "orb_size": is_df["orb_size"].astype(float).values,
+            }
+        )
         X = sm.add_constant(X)
         y = is_df["pnl_r"].astype(float).values
         clusters = is_df["trading_day"].dt.date.values
@@ -229,11 +240,13 @@ def analyze_cell(df: pd.DataFrame, signal: str) -> CellResult | None:
 
     try:
         y_win = (is_df["pnl_r"] > 0).astype(int).values
-        X2 = pd.DataFrame({
-            "feature": is_df[signal].astype(float).values,
-            "atr_20": is_df["atr_20"].astype(float).values,
-            "orb_size": is_df["orb_size"].astype(float).values,
-        })
+        X2 = pd.DataFrame(
+            {
+                "feature": is_df[signal].astype(float).values,
+                "atr_20": is_df["atr_20"].astype(float).values,
+                "orb_size": is_df["orb_size"].astype(float).values,
+            }
+        )
         X2 = sm.add_constant(X2)
         lm = sm.Logit(y_win, X2).fit(disp=0, maxiter=100)
         p_logit = float(lm.pvalues.get("feature", float("nan")))
@@ -336,9 +349,11 @@ def main():
                             count += 1
                             if count % 1000 == 0:
                                 elapsed = time.time() - t0
-                                print(f"  [progress] {count}/{n_combos}  elapsed={elapsed:.0f}s  analyzed={len(results)}")
+                                print(
+                                    f"  [progress] {count}/{n_combos}  elapsed={elapsed:.0f}s  analyzed={len(results)}"
+                                )
 
-    print(f"[run] complete. {len(results)} cells analyzed of {n_combos} possible. elapsed={time.time()-t0:.0f}s")
+    print(f"[run] complete. {len(results)} cells analyzed of {n_combos} possible. elapsed={time.time() - t0:.0f}s")
 
     # Multi-K FDR framings
     p_cluster = np.array([r.p_cluster for r in results])

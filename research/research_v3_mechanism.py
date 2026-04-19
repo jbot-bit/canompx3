@@ -66,9 +66,9 @@ MIN_TRADES = 30
 FDR_ALPHA = 0.05
 
 SESSION_BLOCKS = {
-    "asia":   {"start_utc_h": 0, "end_utc_h": 8},
+    "asia": {"start_utc_h": 0, "end_utc_h": 8},
     "london": {"start_utc_h": 8, "end_utc_h": 13},
-    "us":     {"start_utc_h": 13, "end_utc_h": 19},
+    "us": {"start_utc_h": 13, "end_utc_h": 19},
 }
 
 # US market open times (UTC) for session trend detection
@@ -77,8 +77,8 @@ US_OPEN = {
     "summer": {"h": 13, "m": 30},  # 9:30 ET = 13:30 UTC (EDT)
 }
 LONDON_OPEN = {
-    "winter": {"h": 8, "m": 0},    # 8:00 UTC (GMT)
-    "summer": {"h": 7, "m": 0},    # 7:00 UTC (BST)
+    "winter": {"h": 8, "m": 0},  # 8:00 UTC (GMT)
+    "summer": {"h": 7, "m": 0},  # 7:00 UTC (BST)
 }
 
 
@@ -88,9 +88,10 @@ LONDON_OPEN = {
 @dataclass
 class MechanicalEntry:
     """Trade entry with a STRUCTURAL stop defined by the price pattern."""
-    direction: int          # +1 long, -1 short
+
+    direction: int  # +1 long, -1 short
     entry_price: float
-    stop_price: float       # Defined by the mechanism, not an ATR multiple
+    stop_price: float  # Defined by the mechanism, not an ATR multiple
     remaining_bars: pd.DataFrame
     atr: float
     trading_day: object
@@ -145,7 +146,8 @@ def yearly_breakdown(dates: list, pnls: list[float]) -> dict:
         if n < 5:
             continue
         result[int(year)] = {
-            "n": n, "avg_r": round(float(grp["pnl_r"].mean()), 4),
+            "n": n,
+            "avg_r": round(float(grp["pnl_r"].mean()), 4),
             "total_r": round(float(grp["pnl_r"].sum()), 2),
             "wr": round(float((grp["pnl_r"] > 0).mean()), 4),
         }
@@ -168,13 +170,17 @@ def to_r_multiple(pnl_points: float, risk_points: float, spec: CostSpec) -> floa
 
 
 def finalize_result(
-    strategy: str, instrument: str, variant: str, exit_type: str,
-    r_multiples: list[float], trade_dates: list, risk_points_list: list[float],
+    strategy: str,
+    instrument: str,
+    variant: str,
+    exit_type: str,
+    r_multiples: list[float],
+    trade_dates: list,
+    risk_points_list: list[float],
 ) -> StrategyResult:
     n = len(r_multiples)
     if n < 1:
-        return StrategyResult(strategy=strategy, instrument=instrument,
-                              variant=variant, exit_type=exit_type)
+        return StrategyResult(strategy=strategy, instrument=instrument, variant=variant, exit_type=exit_type)
     arr = np.array(r_multiples)
     wins = int(np.sum(arr > 0))
     avg_r = float(np.mean(arr))
@@ -187,14 +193,21 @@ def finalize_result(
     else:
         p_val = 1.0
     return StrategyResult(
-        strategy=strategy, instrument=instrument, variant=variant,
+        strategy=strategy,
+        instrument=instrument,
+        variant=variant,
         exit_type=exit_type,
-        n_trades=n, n_wins=wins, win_rate=round(wins / n, 4),
-        avg_r=round(avg_r, 4), total_r=round(total_r, 2),
-        sharpe=round(sharpe, 4), max_dd_r=compute_max_dd(r_multiples),
+        n_trades=n,
+        n_wins=wins,
+        win_rate=round(wins / n, 4),
+        avg_r=round(avg_r, 4),
+        total_r=round(total_r, 2),
+        sharpe=round(sharpe, 4),
+        max_dd_r=compute_max_dd(r_multiples),
         p_value=round(p_val, 6),
         yearly_results=yearly_breakdown(trade_dates, r_multiples),
-        pnl_series=r_multiples, trade_dates=trade_dates,
+        pnl_series=r_multiples,
+        trade_dates=trade_dates,
         avg_risk_pts=round(float(np.mean(risk_points_list)), 4) if risk_points_list else 0.0,
         median_risk_pts=round(float(np.median(risk_points_list)), 4) if risk_points_list else 0.0,
     )
@@ -268,20 +281,24 @@ def simulate_trailing_r(bars_after, direction, entry_price, stop_price, trail_r=
             # Trailing stop moves up, but never below initial stop
             trail_stop = max(initial_sl, best_price - trail_dist)
             if float(bar["low"]) <= trail_stop:
-                return (trail_stop - entry_price)
+                return trail_stop - entry_price
         else:
             best_price = min(best_price, float(bar["low"]))
             trail_stop = min(initial_sl, best_price + trail_dist)
             if float(bar["high"]) >= trail_stop:
-                return (entry_price - trail_stop)
+                return entry_price - trail_stop
 
     exit_price = float(bars_after.iloc[min(239, len(bars_after) - 1)]["close"])
     return (exit_price - entry_price) * direction
 
 
-def run_mechanical_exits(entries: list[MechanicalEntry], strategy: str,
-                         instrument: str, variant: str, spec: CostSpec,
-                         ) -> list[StrategyResult]:
+def run_mechanical_exits(
+    entries: list[MechanicalEntry],
+    strategy: str,
+    instrument: str,
+    variant: str,
+    spec: CostSpec,
+) -> list[StrategyResult]:
     """Run 4 logical exits for a set of mechanical entries."""
     exit_configs = [
         ("R1", lambda b, d, ep, sp: simulate_r_target(b, d, ep, sp, 1.0)),
@@ -300,9 +317,11 @@ def run_mechanical_exits(entries: list[MechanicalEntry], strategy: str,
             r_multiples.append(r_mult)
             trade_dates.append(e.trading_day)
             risk_pts_list.append(e.risk_points)
-        results.append(finalize_result(
-            strategy, instrument, f"{variant}_{exit_label}", exit_label,
-            r_multiples, trade_dates, risk_pts_list))
+        results.append(
+            finalize_result(
+                strategy, instrument, f"{variant}_{exit_label}", exit_label, r_multiples, trade_dates, risk_pts_list
+            )
+        )
     return results
 
 
@@ -312,27 +331,33 @@ def run_mechanical_exits(entries: list[MechanicalEntry], strategy: str,
 def load_instrument_bars(con, instrument):
     print(f"    Loading 1m bars for {instrument}...", end=" ", flush=True)
     t0 = time.time()
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume,
                CAST((ts_utc AT TIME ZONE 'Australia/Brisbane'
                      - INTERVAL '9 hours') AS DATE) AS trading_day
         FROM bars_1m WHERE symbol = ? ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
     # Ensure .dt.hour extracts UTC hours, not Brisbane hours
     if df["ts_utc"].dt.tz is not None:
         df["ts_utc"] = df["ts_utc"].dt.tz_convert("UTC")
-    print(f"{len(df):,} bars in {time.time()-t0:.1f}s")
+    print(f"{len(df):,} bars in {time.time() - t0:.1f}s")
     return df
 
 
 def load_daily_features(con, instrument):
-    return con.execute("""
+    return con.execute(
+        """
         SELECT trading_day, atr_20, us_dst, uk_dst,
                daily_open, daily_close, daily_high, daily_low,
                prev_day_high, prev_day_low, prev_day_close
         FROM daily_features
         WHERE symbol = ? AND orb_minutes = 5 ORDER BY trading_day
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def get_session_bars(day_bars, block_name):
@@ -357,8 +382,7 @@ def get_session_bars(day_bars, block_name):
 #   - Filter: fast rejection (close back within max_rej_bars)
 #   - R-based exits (risk = entry to sweep extreme)
 # =============================================================================
-def find_sweep_entries_v3(daily_df, bars_by_day, instrument, block_name,
-                          max_rej_bars=5, min_penetration_atr=0.05):
+def find_sweep_entries_v3(daily_df, bars_by_day, instrument, block_name, max_rej_bars=5, min_penetration_atr=0.05):
     """Find PDH/PDL sweeps with fast rejection and structural stop."""
     entries = []
     for _, row in daily_df.iterrows():
@@ -403,16 +427,19 @@ def find_sweep_entries_v3(daily_df, bars_by_day, instrument, block_name,
                         # Skip if risk is too large (>2 ATR = not a tight rejection)
                         if risk > 2.0 * atr or risk < 0.01 * atr:
                             break
-                        remaining = session_bars.iloc[i + k + 1:]
+                        remaining = session_bars.iloc[i + k + 1 :]
                         if len(remaining) >= 5:
-                            entries.append(MechanicalEntry(
-                                direction=-1, entry_price=entry_price,
-                                stop_price=stop_price,
-                                remaining_bars=remaining, atr=float(atr),
-                                trading_day=trading_day,
-                                metadata={"sweep_type": "pdh", "rej_bars": k,
-                                          "penetration": float(h - pdh) / atr},
-                            ))
+                            entries.append(
+                                MechanicalEntry(
+                                    direction=-1,
+                                    entry_price=entry_price,
+                                    stop_price=stop_price,
+                                    remaining_bars=remaining,
+                                    atr=float(atr),
+                                    trading_day=trading_day,
+                                    metadata={"sweep_type": "pdh", "rej_bars": k, "penetration": float(h - pdh) / atr},
+                                )
+                            )
                             trade_taken = True
                         break
 
@@ -428,16 +455,19 @@ def find_sweep_entries_v3(daily_df, bars_by_day, instrument, block_name,
                         risk = entry_price - stop_price
                         if risk > 2.0 * atr or risk < 0.01 * atr:
                             break
-                        remaining = session_bars.iloc[i + k + 1:]
+                        remaining = session_bars.iloc[i + k + 1 :]
                         if len(remaining) >= 5:
-                            entries.append(MechanicalEntry(
-                                direction=1, entry_price=entry_price,
-                                stop_price=stop_price,
-                                remaining_bars=remaining, atr=float(atr),
-                                trading_day=trading_day,
-                                metadata={"sweep_type": "pdl", "rej_bars": k,
-                                          "penetration": float(pdl - l) / atr},
-                            ))
+                            entries.append(
+                                MechanicalEntry(
+                                    direction=1,
+                                    entry_price=entry_price,
+                                    stop_price=stop_price,
+                                    remaining_bars=remaining,
+                                    atr=float(atr),
+                                    trading_day=trading_day,
+                                    metadata={"sweep_type": "pdl", "rej_bars": k, "penetration": float(pdl - l) / atr},
+                                )
+                            )
                             trade_taken = True
                         break
 
@@ -455,9 +485,16 @@ def find_sweep_entries_v3(daily_df, bars_by_day, instrument, block_name,
 #
 # STRUCTURAL STOP: Below the pullback low (for longs) / above pullback high
 # =============================================================================
-def find_pullback_entries(daily_df, bars_by_day, instrument, session_open_cfg,
-                          drive_minutes=15, min_move_atr=0.3,
-                          retrace_pct=0.50, max_wait_bars=60):
+def find_pullback_entries(
+    daily_df,
+    bars_by_day,
+    instrument,
+    session_open_cfg,
+    drive_minutes=15,
+    min_move_atr=0.3,
+    retrace_pct=0.50,
+    max_wait_bars=60,
+):
     """Find trend pullback entries at 50% retracement of initial session move."""
     entries = []
 
@@ -548,16 +585,24 @@ def find_pullback_entries(daily_df, bars_by_day, instrument, session_open_cfg,
                             stop_price = pullback_extreme - 0.01 * atr
                             risk = entry_price - stop_price
                             if 0.05 * atr < risk < 2.0 * atr:
-                                remaining = post_drive.iloc[j + 2:]
+                                remaining = post_drive.iloc[j + 2 :]
                                 if len(remaining) >= 5:
-                                    entries.append(MechanicalEntry(
-                                        direction=1, entry_price=entry_price,
-                                        stop_price=stop_price,
-                                        remaining_bars=remaining, atr=float(atr),
-                                        trading_day=trading_day,
-                                        metadata={"drive_move": drive_move / atr,
-                                                  "retrace_depth": (drive_close - pullback_extreme) / abs(drive_move) if abs(drive_move) > 0 else 0},
-                                    ))
+                                    entries.append(
+                                        MechanicalEntry(
+                                            direction=1,
+                                            entry_price=entry_price,
+                                            stop_price=stop_price,
+                                            remaining_bars=remaining,
+                                            atr=float(atr),
+                                            trading_day=trading_day,
+                                            metadata={
+                                                "drive_move": drive_move / atr,
+                                                "retrace_depth": (drive_close - pullback_extreme) / abs(drive_move)
+                                                if abs(drive_move) > 0
+                                                else 0,
+                                            },
+                                        )
+                                    )
                                     entry_found = True
                             break
             else:
@@ -573,16 +618,24 @@ def find_pullback_entries(daily_df, bars_by_day, instrument, session_open_cfg,
                             stop_price = pullback_extreme + 0.01 * atr
                             risk = stop_price - entry_price
                             if 0.05 * atr < risk < 2.0 * atr:
-                                remaining = post_drive.iloc[j + 2:]
+                                remaining = post_drive.iloc[j + 2 :]
                                 if len(remaining) >= 5:
-                                    entries.append(MechanicalEntry(
-                                        direction=-1, entry_price=entry_price,
-                                        stop_price=stop_price,
-                                        remaining_bars=remaining, atr=float(atr),
-                                        trading_day=trading_day,
-                                        metadata={"drive_move": drive_move / atr,
-                                                  "retrace_depth": (pullback_extreme - drive_close) / abs(drive_move) if abs(drive_move) > 0 else 0},
-                                    ))
+                                    entries.append(
+                                        MechanicalEntry(
+                                            direction=-1,
+                                            entry_price=entry_price,
+                                            stop_price=stop_price,
+                                            remaining_bars=remaining,
+                                            atr=float(atr),
+                                            trading_day=trading_day,
+                                            metadata={
+                                                "drive_move": drive_move / atr,
+                                                "retrace_depth": (pullback_extreme - drive_close) / abs(drive_move)
+                                                if abs(drive_move) > 0
+                                                else 0,
+                                            },
+                                        )
+                                    )
                                     entry_found = True
                             break
 
@@ -603,8 +656,7 @@ def find_pullback_entries(daily_df, bars_by_day, instrument, session_open_cfg,
 #
 # This goes WITH the trend, using VWAP as a support level, not a target.
 # =============================================================================
-def find_vwap_bounce_entries(daily_df, bars_by_day, instrument, block_name,
-                             trend_minutes=30, min_trend_atr=0.2):
+def find_vwap_bounce_entries(daily_df, bars_by_day, instrument, block_name, trend_minutes=30, min_trend_atr=0.2):
     """Find VWAP bounce entries that go WITH the established trend."""
     entries = []
 
@@ -671,16 +723,22 @@ def find_vwap_bounce_entries(daily_df, bars_by_day, instrument, block_name,
                     stop_price = min(pullback_extreme, current_vwap) - 0.1 * atr
                     risk = entry_price - stop_price
                     if 0.05 * atr < risk < 2.0 * atr:
-                        remaining = vol_bars.iloc[j + 1:]
+                        remaining = vol_bars.iloc[j + 1 :]
                         if len(remaining) >= 5:
-                            entries.append(MechanicalEntry(
-                                direction=1, entry_price=float(entry_price),
-                                stop_price=float(stop_price),
-                                remaining_bars=remaining, atr=float(atr),
-                                trading_day=trading_day,
-                                metadata={"trend_strength": trend_move / atr,
-                                          "vwap_distance": (entry_price - current_vwap) / atr},
-                            ))
+                            entries.append(
+                                MechanicalEntry(
+                                    direction=1,
+                                    entry_price=float(entry_price),
+                                    stop_price=float(stop_price),
+                                    remaining_bars=remaining,
+                                    atr=float(atr),
+                                    trading_day=trading_day,
+                                    metadata={
+                                        "trend_strength": trend_move / atr,
+                                        "vwap_distance": (entry_price - current_vwap) / atr,
+                                    },
+                                )
+                            )
                             trade_taken = True
             else:
                 # Downtrend: look for pullback up to VWAP
@@ -695,16 +753,22 @@ def find_vwap_bounce_entries(daily_df, bars_by_day, instrument, block_name,
                     stop_price = max(pullback_extreme, current_vwap) + 0.1 * atr
                     risk = stop_price - entry_price
                     if 0.05 * atr < risk < 2.0 * atr:
-                        remaining = vol_bars.iloc[j + 1:]
+                        remaining = vol_bars.iloc[j + 1 :]
                         if len(remaining) >= 5:
-                            entries.append(MechanicalEntry(
-                                direction=-1, entry_price=float(entry_price),
-                                stop_price=float(stop_price),
-                                remaining_bars=remaining, atr=float(atr),
-                                trading_day=trading_day,
-                                metadata={"trend_strength": trend_move / atr,
-                                          "vwap_distance": (current_vwap - entry_price) / atr},
-                            ))
+                            entries.append(
+                                MechanicalEntry(
+                                    direction=-1,
+                                    entry_price=float(entry_price),
+                                    stop_price=float(stop_price),
+                                    remaining_bars=remaining,
+                                    atr=float(atr),
+                                    trading_day=trading_day,
+                                    metadata={
+                                        "trend_strength": trend_move / atr,
+                                        "vwap_distance": (current_vwap - entry_price) / atr,
+                                    },
+                                )
+                            )
                             trade_taken = True
 
     return entries
@@ -714,10 +778,8 @@ def find_vwap_bounce_entries(daily_df, bars_by_day, instrument, block_name,
 # Main Runner
 # =============================================================================
 SESSION_OPEN_CONFIGS = {
-    "us_open": {"winter_h": 14, "winter_m": 30, "summer_h": 13, "summer_m": 30,
-                "dst_flag": "us_dst"},
-    "london_open": {"winter_h": 8, "winter_m": 0, "summer_h": 7, "summer_m": 0,
-                    "dst_flag": "uk_dst"},
+    "us_open": {"winter_h": 14, "winter_m": 30, "summer_h": 13, "summer_m": 30, "dst_flag": "us_dst"},
+    "london_open": {"winter_h": 8, "winter_m": 0, "summer_h": 7, "summer_m": 0, "dst_flag": "uk_dst"},
 }
 
 
@@ -736,9 +798,9 @@ def run_all(db_path, strategy_filter=None, instrument_filter=None):
                 print(f"  No cost model for {instrument}, skipping")
                 continue
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print(f"  INSTRUMENT: {instrument}")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
 
             bars_df = load_instrument_bars(con, instrument)
             if len(bars_df) < 10000:
@@ -759,21 +821,20 @@ def run_all(db_path, strategy_filter=None, instrument_filter=None):
                 print(f"\n  --- PDH/PDL Sweep Rejection ({instrument}) ---")
                 for block in SESSION_BLOCKS:
                     for max_rej in [3, 5, 10]:
-                        entries = find_sweep_entries_v3(
-                            daily_df, bars_by_day, instrument, block,
-                            max_rej_bars=max_rej)
+                        entries = find_sweep_entries_v3(daily_df, bars_by_day, instrument, block, max_rej_bars=max_rej)
                         if not entries:
                             continue
                         variant = f"{block}_rej{max_rej}"
-                        for r in run_mechanical_exits(
-                                entries, "sweep_rejection", instrument, variant, spec):
+                        for r in run_mechanical_exits(entries, "sweep_rejection", instrument, variant, spec):
                             results.append(r)
                             if r.n_trades >= MIN_TRADES:
                                 sig = "*" if r.p_value < 0.05 else " "
-                                print(f"    {sig} {r.variant:40s} "
-                                      f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                                      f"AvgR={r.avg_r:+.4f} p={r.p_value:.4f} "
-                                      f"risk={r.avg_risk_pts:.2f}pts")
+                                print(
+                                    f"    {sig} {r.variant:40s} "
+                                    f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                                    f"AvgR={r.avg_r:+.4f} p={r.p_value:.4f} "
+                                    f"risk={r.avg_risk_pts:.2f}pts"
+                                )
 
             # =========================================================
             # 2. Session Trend Pullback
@@ -784,20 +845,26 @@ def run_all(db_path, strategy_filter=None, instrument_filter=None):
                     for drive_min in [15, 30]:
                         for min_move in [0.05, 0.08]:
                             entries = find_pullback_entries(
-                                daily_df, bars_by_day, instrument, sess_cfg,
-                                drive_minutes=drive_min, min_move_atr=min_move)
+                                daily_df,
+                                bars_by_day,
+                                instrument,
+                                sess_cfg,
+                                drive_minutes=drive_min,
+                                min_move_atr=min_move,
+                            )
                             if not entries:
                                 continue
                             variant = f"{sess_name}_drv{drive_min}_mv{min_move}"
-                            for r in run_mechanical_exits(
-                                    entries, "trend_pullback", instrument, variant, spec):
+                            for r in run_mechanical_exits(entries, "trend_pullback", instrument, variant, spec):
                                 results.append(r)
                                 if r.n_trades >= MIN_TRADES:
                                     sig = "*" if r.p_value < 0.05 else " "
-                                    print(f"    {sig} {r.variant:40s} "
-                                          f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                                          f"AvgR={r.avg_r:+.4f} p={r.p_value:.4f} "
-                                          f"risk={r.avg_risk_pts:.2f}pts")
+                                    print(
+                                        f"    {sig} {r.variant:40s} "
+                                        f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                                        f"AvgR={r.avg_r:+.4f} p={r.p_value:.4f} "
+                                        f"risk={r.avg_risk_pts:.2f}pts"
+                                    )
 
             # =========================================================
             # 3. VWAP Bounce WITH Trend
@@ -808,20 +875,26 @@ def run_all(db_path, strategy_filter=None, instrument_filter=None):
                     for trend_min in [20, 30]:
                         for min_trend in [0.03, 0.06]:
                             entries = find_vwap_bounce_entries(
-                                daily_df, bars_by_day, instrument, block,
-                                trend_minutes=trend_min, min_trend_atr=min_trend)
+                                daily_df,
+                                bars_by_day,
+                                instrument,
+                                block,
+                                trend_minutes=trend_min,
+                                min_trend_atr=min_trend,
+                            )
                             if not entries:
                                 continue
                             variant = f"{block}_trnd{trend_min}_mv{min_trend}"
-                            for r in run_mechanical_exits(
-                                    entries, "vwap_bounce", instrument, variant, spec):
+                            for r in run_mechanical_exits(entries, "vwap_bounce", instrument, variant, spec):
                                 results.append(r)
                                 if r.n_trades >= MIN_TRADES:
                                     sig = "*" if r.p_value < 0.05 else " "
-                                    print(f"    {sig} {r.variant:40s} "
-                                          f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                                          f"AvgR={r.avg_r:+.4f} p={r.p_value:.4f} "
-                                          f"risk={r.avg_risk_pts:.2f}pts")
+                                    print(
+                                        f"    {sig} {r.variant:40s} "
+                                        f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                                        f"AvgR={r.avg_r:+.4f} p={r.p_value:.4f} "
+                                        f"risk={r.avg_risk_pts:.2f}pts"
+                                    )
 
             del bars_df, bars_by_day, daily_df
 
@@ -844,22 +917,25 @@ def run_all(db_path, strategy_filter=None, instrument_filter=None):
 
             if n_sig > 0:
                 print(f"\n*** FDR SURVIVORS ***")
-                print(f"{'Strategy':<20s} {'Inst':<6s} {'Variant':<42s} "
-                      f"{'Exit':>4s} {'N':>5s} {'WR':>7s} {'AvgR':>8s} "
-                      f"{'Sharpe':>7s} {'raw_p':>8s} {'adj_p':>8s}")
+                print(
+                    f"{'Strategy':<20s} {'Inst':<6s} {'Variant':<42s} "
+                    f"{'Exit':>4s} {'N':>5s} {'WR':>7s} {'AvgR':>8s} "
+                    f"{'Sharpe':>7s} {'raw_p':>8s} {'adj_p':>8s}"
+                )
                 print("-" * 140)
                 for idx, adj_p, sig in fdr_results:
                     if sig:
                         r = valid_results[idx]
-                        print(f"{r.strategy:<20s} {r.instrument:<6s} "
-                              f"{r.variant:<42s} {r.exit_type:>4s} "
-                              f"{r.n_trades:5d} {r.win_rate:7.2%} "
-                              f"{r.avg_r:+8.4f} {r.sharpe:7.3f} "
-                              f"{r.p_value:8.4f} {adj_p:8.4f}")
+                        print(
+                            f"{r.strategy:<20s} {r.instrument:<6s} "
+                            f"{r.variant:<42s} {r.exit_type:>4s} "
+                            f"{r.n_trades:5d} {r.win_rate:7.2%} "
+                            f"{r.avg_r:+8.4f} {r.sharpe:7.3f} "
+                            f"{r.p_value:8.4f} {adj_p:8.4f}"
+                        )
                         # Year by year
                         for yr, yd in sorted(r.yearly_results.items()):
-                            print(f"         {yr}: N={yd['n']:3d} "
-                                  f"AvgR={yd['avg_r']:+.4f} WR={yd['wr']:.2%}")
+                            print(f"         {yr}: N={yd['n']:3d} AvgR={yd['avg_r']:+.4f} WR={yd['wr']:.2%}")
             else:
                 print("\nNo strategies survived FDR correction.")
 
@@ -868,9 +944,11 @@ def run_all(db_path, strategy_filter=None, instrument_filter=None):
             sorted_by_p = sorted(enumerate(valid_results), key=lambda x: x[1].p_value)
             for rank, (idx, r) in enumerate(sorted_by_p[:15]):
                 adj_p = fdr_results[idx][1]
-                print(f"    {rank+1:2d}. {r.strategy:18s} {r.instrument:6s} "
-                      f"{r.variant:40s} N={r.n_trades:4d} AvgR={r.avg_r:+.4f} "
-                      f"raw_p={r.p_value:.4f} adj_p={adj_p:.4f}")
+                print(
+                    f"    {rank + 1:2d}. {r.strategy:18s} {r.instrument:6s} "
+                    f"{r.variant:40s} N={r.n_trades:4d} AvgR={r.avg_r:+.4f} "
+                    f"raw_p={r.p_value:.4f} adj_p={adj_p:.4f}"
+                )
 
             # Summary per strategy
             print(f"\n  STRATEGY SUMMARY:")
@@ -881,12 +959,15 @@ def run_all(db_path, strategy_filter=None, instrument_filter=None):
                 n_pos = sum(1 for r in strat_valid if r.avg_r > 0)
                 avg_r = np.mean([r.avg_r for r in strat_valid])
                 best = min(strat_valid, key=lambda r: r.p_value)
-                n_fdr = sum(1 for i, (_, _, sig) in enumerate(fdr_results)
-                            if sig and valid_results[i].strategy == strat)
+                n_fdr = sum(
+                    1 for i, (_, _, sig) in enumerate(fdr_results) if sig and valid_results[i].strategy == strat
+                )
                 print(f"\n    {strat} ({len(strat_valid)} valid, {n_pos} positive, {n_fdr} FDR):")
                 print(f"      Average AvgR: {avg_r:+.4f}")
-                print(f"      Best: {best.instrument} {best.variant} "
-                      f"N={best.n_trades} AvgR={best.avg_r:+.4f} p={best.p_value:.4f}")
+                print(
+                    f"      Best: {best.instrument} {best.variant} "
+                    f"N={best.n_trades} AvgR={best.avg_r:+.4f} p={best.p_value:.4f}"
+                )
 
                 # Best per exit type
                 for exit_type in ["R1", "R2", "R3", "TR1"]:
@@ -895,8 +976,10 @@ def run_all(db_path, strategy_filter=None, instrument_filter=None):
                         continue
                     et_best = min(et_results, key=lambda r: r.p_value)
                     et_pos = sum(1 for r in et_results if r.avg_r > 0)
-                    print(f"        {exit_type}: {et_pos}/{len(et_results)} positive, "
-                          f"best p={et_best.p_value:.4f} ({et_best.variant})")
+                    print(
+                        f"        {exit_type}: {et_pos}/{len(et_results)} positive, "
+                        f"best p={et_best.p_value:.4f} ({et_best.variant})"
+                    )
         else:
             print(f"\nNo strategies had N >= {MIN_TRADES}")
 
@@ -917,8 +1000,10 @@ def run_all(db_path, strategy_filter=None, instrument_filter=None):
         print("SURVIVED SCRUTINY:")
         if survived:
             for r in survived:
-                print(f"  + {r.strategy} | {r.instrument} | {r.variant} | "
-                      f"N={r.n_trades}, AvgR={r.avg_r:+.4f}, p={r.p_value:.4f}")
+                print(
+                    f"  + {r.strategy} | {r.instrument} | {r.variant} | "
+                    f"N={r.n_trades}, AvgR={r.avg_r:+.4f}, p={r.p_value:.4f}"
+                )
         else:
             print("  None.")
 
@@ -932,8 +1017,7 @@ def run_all(db_path, strategy_filter=None, instrument_filter=None):
             avg_r = np.mean([r.avg_r for r in strat_valid])
             n_pos = sum(1 for r in strat_valid if r.avg_r > 0)
             if not any(r in survived for r in strat_valid):
-                print(f"  - {strat}: {n_pos}/{len(strat_valid)} positive, "
-                      f"avg={avg_r:+.4f}, best p={best.p_value:.4f}")
+                print(f"  - {strat}: {n_pos}/{len(strat_valid)} positive, avg={avg_r:+.4f}, best p={best.p_value:.4f}")
 
         print("\nKEY DIAGNOSTICS:")
         # Risk profile
@@ -952,13 +1036,10 @@ def run_all(db_path, strategy_filter=None, instrument_filter=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Non-ORB V3 Mechanism-Based Strategy Research")
+    parser = argparse.ArgumentParser(description="Non-ORB V3 Mechanism-Based Strategy Research")
     parser.add_argument("--db-path", type=Path, default=PROJECT_ROOT / "gold.db")
-    parser.add_argument("--strategy", type=str, default=None,
-                        choices=["sweep", "pullback", "vwap"])
-    parser.add_argument("--instrument", type=str, default=None,
-                        choices=INSTRUMENTS + ["MGC"])
+    parser.add_argument("--strategy", type=str, default=None, choices=["sweep", "pullback", "vwap"])
+    parser.add_argument("--instrument", type=str, default=None, choices=INSTRUMENTS + ["MGC"])
     args = parser.parse_args()
 
     print("=" * 70)
@@ -983,7 +1064,7 @@ def main():
     total = len(results)
     valid = sum(1 for r in results if r.n_trades >= MIN_TRADES)
     print(f"\nTotal tests: {total}, Valid (N>={MIN_TRADES}): {valid}")
-    print(f"Runtime: {elapsed:.0f}s ({elapsed/60:.1f}min)")
+    print(f"Runtime: {elapsed:.0f}s ({elapsed / 60:.1f}min)")
 
 
 if __name__ == "__main__":

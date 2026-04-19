@@ -227,7 +227,9 @@ def summarize(df: pd.DataFrame, weight_col: str) -> dict[str, float]:
     }
 
 
-def evaluate_scope(df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, bool]]) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+def evaluate_scope(
+    df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, bool]]
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     out_rows = []
     contribution_tables: dict[str, pd.DataFrame] = {}
 
@@ -253,11 +255,7 @@ def evaluate_scope(df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, b
 
         expr_delta_is = is_metrics["exp_r"] - base_is["exp_r"]
         expr_delta_oos = oos_metrics["exp_r"] - base_oos["exp_r"] if oos_metrics["n_trades"] else 0.0
-        retention = (
-            expr_delta_oos / expr_delta_is
-            if abs(expr_delta_is) > 1e-9
-            else float("nan")
-        )
+        retention = expr_delta_oos / expr_delta_is if abs(expr_delta_is) > 1e-9 else float("nan")
 
         out_rows.append(
             {
@@ -280,7 +278,8 @@ def evaluate_scope(df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, b
                 "worst_5day_dollars": full_metrics["worst_5day_dollars"],
                 "worst_5day_dollars_delta": full_metrics["worst_5day_dollars"] - base_full["worst_5day_dollars"],
                 "max_daily_risk_dollars": full_metrics["max_daily_risk_dollars"],
-                "max_daily_risk_dollars_delta": full_metrics["max_daily_risk_dollars"] - base_full["max_daily_risk_dollars"],
+                "max_daily_risk_dollars_delta": full_metrics["max_daily_risk_dollars"]
+                - base_full["max_daily_risk_dollars"],
                 "is_exp_r": is_metrics["exp_r"],
                 "is_exp_r_delta": expr_delta_is,
                 "oos_exp_r": oos_metrics["exp_r"],
@@ -294,7 +293,9 @@ def evaluate_scope(df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, b
         contrib["alt_dollars"] = contrib["pnl_dollars"] * contrib["weight"]
         contrib["delta_dollars"] = contrib["alt_dollars"] - contrib["base_dollars"]
         contribution_tables[map_name] = (
-            contrib.groupby(["instrument", "orb_label"], as_index=False)[["base_dollars", "alt_dollars", "delta_dollars"]]
+            contrib.groupby(["instrument", "orb_label"], as_index=False)[
+                ["base_dollars", "alt_dollars", "delta_dollars"]
+            ]
             .sum()
             .sort_values("delta_dollars", ascending=False)
             .reset_index(drop=True)
@@ -368,7 +369,13 @@ def emit(
 
         best = sub.iloc[0]["map"] if len(sub) else None
         if best is not None:
-            lines += ["", f"### {scope.title()} best-map contributions: `{best}`", "", "| Instrument | Session | Base $ | Alt $ | Δ$ |", "|---|---|---|---|---|"]
+            lines += [
+                "",
+                f"### {scope.title()} best-map contributions: `{best}`",
+                "",
+                "| Instrument | Session | Base $ | Alt $ | Δ$ |",
+                "|---|---|---|---|---|",
+            ]
             for _, r in contrib_tables[scope][best].head(15).iterrows():
                 lines.append(
                     f"| {r['instrument']} | {r['orb_label']} | {r['base_dollars']:+.1f} | {r['alt_dollars']:+.1f} | {r['delta_dollars']:+.1f} |"

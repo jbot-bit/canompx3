@@ -9,6 +9,7 @@ and tests portfolio overlay stability.
 """
 
 import sys, os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import duckdb
@@ -30,12 +31,15 @@ def run():
     # Get all session labels per instrument
     sessions_by_sym = {}
     for sym in ["MGC", "MES", "MNQ"]:
-        sess_rows = con.execute("""
+        sess_rows = con.execute(
+            """
             SELECT DISTINCT orb_label FROM orb_outcomes
             WHERE symbol = ? AND entry_model = 'E0' AND rr_target = 2.0
               AND pnl_r IS NOT NULL
             ORDER BY orb_label
-        """, [sym]).fetchall()
+        """,
+            [sym],
+        ).fetchall()
         sessions_by_sym[sym] = [r[0] for r in sess_rows]
         lines.append(f"  {sym} sessions: {', '.join(sessions_by_sym[sym])}")
     lines.append("")
@@ -52,7 +56,8 @@ def run():
             # Build daily return vectors per session
             session_returns = {}
             for sess in sessions:
-                rows = con.execute("""
+                rows = con.execute(
+                    """
                     SELECT o.trading_day, o.pnl_r
                     FROM orb_outcomes o
                     WHERE o.symbol = ?
@@ -61,7 +66,9 @@ def run():
                       AND o.rr_target = 2.0
                       AND o.pnl_r IS NOT NULL
                     ORDER BY o.trading_day
-                """, [sym, sess, em]).fetchall()
+                """,
+                    [sym, sess, em],
+                ).fetchall()
                 session_returns[sess] = {str(r[0]): r[1] for r in rows}
 
             # Compute pairwise correlations on overlapping dates
@@ -118,7 +125,8 @@ def run():
         # Individual session stats
         sess_stats = {}
         for sess in sessions:
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT o.pnl_r, EXTRACT(YEAR FROM o.trading_day) as yr
                 FROM orb_outcomes o
                 WHERE o.symbol = ?
@@ -127,7 +135,9 @@ def run():
                   AND o.rr_target = 2.0
                   AND o.pnl_r IS NOT NULL
                 ORDER BY o.trading_day
-            """, [sym, sess]).fetchall()
+            """,
+                [sym, sess],
+            ).fetchall()
 
             if len(rows) < 30:
                 continue
@@ -150,14 +160,10 @@ def run():
                     yr_sharpe = yr_avg / yr_std * np.sqrt(252) if yr_std > 0 else 0
                     yr_sharpes.append((yr, yr_sharpe, len(yr_pnl)))
 
-            sess_stats[sess] = {
-                "avg": avg, "std": std, "sharpe": sharpe,
-                "wr": wr, "n": n, "yr_sharpes": yr_sharpes
-            }
+            sess_stats[sess] = {"avg": avg, "std": std, "sharpe": sharpe, "wr": wr, "n": n, "yr_sharpes": yr_sharpes}
 
             yr_str = ", ".join(f"{yr}:{s:.2f}" for yr, s, _ in yr_sharpes)
-            lines.append(f"    {sess:>16}: N={n:>5}, avgR={avg:+.3f}, WR={wr:.1%}, "
-                         f"Sharpe={sharpe:.2f}  [{yr_str}]")
+            lines.append(f"    {sess:>16}: N={n:>5}, avgR={avg:+.3f}, WR={wr:.1%}, Sharpe={sharpe:.2f}  [{yr_str}]")
         lines.append("")
 
         # Test selected combos
@@ -169,14 +175,16 @@ def run():
 
             # All pairs
             for i, s1 in enumerate(sessions_with_data):
-                for s2 in sessions_with_data[i+1:]:
+                for s2 in sessions_with_data[i + 1 :]:
                     combos.append((s1, s2))
 
             # Key triples from claim
-            for triple in [("0900", "1100", "CME_OPEN"),
-                           ("0900", "1000", "1100"),
-                           ("1000", "1100", "1800"),
-                           ("0900", "1000", "CME_OPEN")]:
+            for triple in [
+                ("0900", "1100", "CME_OPEN"),
+                ("0900", "1000", "1100"),
+                ("1000", "1100", "1800"),
+                ("0900", "1000", "CME_OPEN"),
+            ]:
                 if all(s in sessions_with_data for s in triple):
                     combos.append(triple)
 
@@ -184,7 +192,8 @@ def run():
                 # Get overlapping dates
                 sess_data = {}
                 for sess in combo:
-                    rows = con.execute("""
+                    rows = con.execute(
+                        """
                         SELECT o.trading_day, o.pnl_r
                         FROM orb_outcomes o
                         WHERE o.symbol = ?
@@ -192,7 +201,9 @@ def run():
                           AND o.entry_model = 'E0'
                           AND o.rr_target = 2.0
                           AND o.pnl_r IS NOT NULL
-                    """, [sym, sess]).fetchall()
+                    """,
+                        [sym, sess],
+                    ).fetchall()
                     sess_data[sess] = {str(r[0]): r[1] for r in rows}
 
                 common = set.intersection(*[set(d.keys()) for d in sess_data.values()])
@@ -224,8 +235,10 @@ def run():
 
                 combo_label = "+".join(combo)
                 yr_str = ", ".join(f"{yr}:{s:.2f}" for yr, s in yr_sharpes)
-                lines.append(f"    {combo_label:>35}: N={len(common):>5}, avgR={combo_avg:+.3f}, "
-                             f"WR={combo_wr:.1%}, Sharpe={combo_sharpe:.2f}  [{yr_str}]")
+                lines.append(
+                    f"    {combo_label:>35}: N={len(common):>5}, avgR={combo_avg:+.3f}, "
+                    f"WR={combo_wr:.1%}, Sharpe={combo_sharpe:.2f}  [{yr_str}]"
+                )
 
             lines.append("")
 
@@ -239,16 +252,22 @@ def run():
         for s1, s2 in [("0900", "CME_OPEN"), ("1000", "1100"), ("0900", "1100")]:
             key = (s1, s2)
             # Re-query if needed
-            r1_data = con.execute("""
+            r1_data = con.execute(
+                """
                 SELECT o.trading_day, o.pnl_r FROM orb_outcomes o
                 WHERE o.symbol=? AND o.orb_label=? AND o.entry_model='E0'
                   AND o.rr_target=2.0 AND o.pnl_r IS NOT NULL
-            """, [sym, s1]).fetchall()
-            r2_data = con.execute("""
+            """,
+                [sym, s1],
+            ).fetchall()
+            r2_data = con.execute(
+                """
                 SELECT o.trading_day, o.pnl_r FROM orb_outcomes o
                 WHERE o.symbol=? AND o.orb_label=? AND o.entry_model='E0'
                   AND o.rr_target=2.0 AND o.pnl_r IS NOT NULL
-            """, [sym, s2]).fetchall()
+            """,
+                [sym, s2],
+            ).fetchall()
 
             d1 = {str(r[0]): r[1] for r in r1_data}
             d2 = {str(r[0]): r[1] for r in r2_data}

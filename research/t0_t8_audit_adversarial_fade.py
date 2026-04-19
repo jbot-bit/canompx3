@@ -75,8 +75,7 @@ def parse_all_cells() -> list[tuple[str, str, int, float, str, str, float, float
     out = []
     for m in bullet_re.finditer(text):
         instr, session, apt, rr, direction, signal, t_cl, delta_is = m.groups()
-        out.append((instr, session, int(apt), float(rr), direction, signal,
-                    float(t_cl), float(delta_is)))
+        out.append((instr, session, int(apt), float(rr), direction, signal, float(t_cl), float(delta_is)))
     return out
 
 
@@ -102,8 +101,10 @@ def build_fade_patterns() -> list[tuple[Pattern, dict]]:
             continue
 
         name = f"FADE_{instr}_{session}_O{apt}_RR{rr}_{fade_dir}_{signal}"
-        desc = (f"FADE of {direction.upper()} SKIP signal: take {fade_dir.upper()} "
-                f"when {signal} fires (original lost {delta_is:+.3f} @ t_cl={t_cl:+.2f})")
+        desc = (
+            f"FADE of {direction.upper()} SKIP signal: take {fade_dir.upper()} "
+            f"when {signal} fires (original lost {delta_is:+.3f} @ t_cl={t_cl:+.2f})"
+        )
         p = Pattern(
             name=name,
             description=desc,
@@ -116,11 +117,16 @@ def build_fade_patterns() -> list[tuple[Pattern, dict]]:
             theta=theta,
             expected_sign="positive",
         )
-        patterns.append((p, {
-            "orig_direction": direction,
-            "orig_delta_is": delta_is,
-            "orig_t_cl": t_cl,
-        }))
+        patterns.append(
+            (
+                p,
+                {
+                    "orig_direction": direction,
+                    "orig_delta_is": delta_is,
+                    "orig_t_cl": t_cl,
+                },
+            )
+        )
     return patterns
 
 
@@ -222,9 +228,7 @@ def emit(all_results: list[dict]) -> None:
         p = r["pattern"]
         fails = [tname for tname, tr in r["tests"].items() if tr.pass_status == "FAIL"]
         orig_dir = "long" if p.direction == "short" else "short"
-        lines.append(
-            f"| {p.name} | {orig_dir} | {expr_str} | **{v}** | {r['n_on']} | {','.join(fails) or '—'} |"
-        )
+        lines.append(f"| {p.name} | {orig_dir} | {expr_str} | **{v}** | {r['n_on']} | {','.join(fails) or '—'} |")
 
     lines += ["", "---", "", "## Per-Cell Detail (fade validated / conditional only)", ""]
 

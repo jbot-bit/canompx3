@@ -73,8 +73,12 @@ def analyze_row(df: pd.DataFrame, df_oos: pd.DataFrame, cand: prov.Candidate) ->
 
     g_sub = df.loc[g & valid_partner].copy()
     p_sub = df.loc[valid_partner].copy()
-    partner_inside_garch = prov.compare_split(g_sub, fav.loc[g_sub.index]) if len(g_sub) >= (2 * prov.MIN_SIDE) else {"valid": False}
-    garch_inside_partner = prov.compare_split(p_sub, g.loc[p_sub.index]) if len(p_sub) >= (2 * prov.MIN_SIDE) else {"valid": False}
+    partner_inside_garch = (
+        prov.compare_split(g_sub, fav.loc[g_sub.index]) if len(g_sub) >= (2 * prov.MIN_SIDE) else {"valid": False}
+    )
+    garch_inside_partner = (
+        prov.compare_split(p_sub, g.loc[p_sub.index]) if len(p_sub) >= (2 * prov.MIN_SIDE) else {"valid": False}
+    )
 
     oos = {"n_conj_oos": 0, "conj_exp_oos": None}
     if len(df_oos) > 0:
@@ -140,7 +144,9 @@ def summarize_family(sub: pd.DataFrame) -> dict[str, object]:
         "delta_conj_vs_garch": conj_exp - garch_exp if n_conj and n_garch else float("nan"),
         "support_share_partner_inside_garch": (
             float(
-                sub.loc[sub["valid_partner_inside_garch"] & sub["support_partner_inside_garch"], "n_partner_inside_garch"].sum()
+                sub.loc[
+                    sub["valid_partner_inside_garch"] & sub["support_partner_inside_garch"], "n_partner_inside_garch"
+                ].sum()
                 / sub.loc[sub["valid_partner_inside_garch"], "n_partner_inside_garch"].sum()
             )
             if sub.loc[sub["valid_partner_inside_garch"], "n_partner_inside_garch"].sum() > 0
@@ -148,7 +154,9 @@ def summarize_family(sub: pd.DataFrame) -> dict[str, object]:
         ),
         "support_share_garch_inside_partner": (
             float(
-                sub.loc[sub["valid_garch_inside_partner"] & sub["support_garch_inside_partner"], "n_garch_inside_partner"].sum()
+                sub.loc[
+                    sub["valid_garch_inside_partner"] & sub["support_garch_inside_partner"], "n_garch_inside_partner"
+                ].sum()
                 / sub.loc[sub["valid_garch_inside_partner"], "n_garch_inside_partner"].sum()
             )
             if sub.loc[sub["valid_garch_inside_partner"], "n_garch_inside_partner"].sum() > 0
@@ -175,10 +183,23 @@ def family_verdict(summary: dict[str, object]) -> tuple[str, str]:
         return "unclear", "thin_conjunction"
     if pd.isna(summary["delta_conj_vs_garch"]):
         return "unclear", "missing_garch_or_conj"
-    concentration = bool(summary["max_conj_cell_share"] > CONCENTRATION_RISK) if not pd.isna(summary["max_conj_cell_share"]) else True
-    partner_support = bool(summary["support_share_partner_inside_garch"] >= 0.5) if not pd.isna(summary["support_share_partner_inside_garch"]) else False
+    concentration = (
+        bool(summary["max_conj_cell_share"] > CONCENTRATION_RISK)
+        if not pd.isna(summary["max_conj_cell_share"])
+        else True
+    )
+    partner_support = (
+        bool(summary["support_share_partner_inside_garch"] >= 0.5)
+        if not pd.isna(summary["support_share_partner_inside_garch"])
+        else False
+    )
 
-    if summary["delta_conj_vs_garch"] > 0 and summary["delta_conj_vs_base"] > 0 and partner_support and not concentration:
+    if (
+        summary["delta_conj_vs_garch"] > 0
+        and summary["delta_conj_vs_base"] > 0
+        and partner_support
+        and not concentration
+    ):
         return "carry_local_m2", "validated_local_m2_candidate"
     if summary["delta_conj_vs_base"] > 0 and (partner_support or summary["delta_conj_vs_garch"] >= 0):
         return "partial_local_m2", "useful_but_not_clean"
@@ -258,11 +279,11 @@ def emit(df: pd.DataFrame, summary_df: pd.DataFrame) -> None:
             f"| {row['family']} | {row['candidate']} | {int(row['cells'])} | {int(row['n_total'])} | {int(row['n_garch'])} | {int(row['n_conj'])} | "
             f"{row['base_exp']:+.3f} | {row['garch_exp']:+.3f} | {row['conj_exp']:+.3f} | "
             f"{row['delta_conj_vs_base']:+.3f} | {row['delta_conj_vs_garch']:+.3f} | "
-            f"{'' if pd.isna(row['support_share_partner_inside_garch']) else f'{row['support_share_partner_inside_garch']:.2f}'} | "
-            f"{'' if pd.isna(row['support_share_garch_inside_partner']) else f'{row['support_share_garch_inside_partner']:.2f}'} | "
-            f"{'' if pd.isna(row['max_conj_cell_share']) else f'{row['max_conj_cell_share']:.2f}'} | "
+            f"{'' if pd.isna(row['support_share_partner_inside_garch']) else f'{row["support_share_partner_inside_garch"]:.2f}'} | "
+            f"{'' if pd.isna(row['support_share_garch_inside_partner']) else f'{row["support_share_garch_inside_partner"]:.2f}'} | "
+            f"{'' if pd.isna(row['max_conj_cell_share']) else f'{row["max_conj_cell_share"]:.2f}'} | "
             f"{int(row['n_conj_oos'])} | "
-            f"{'' if pd.isna(row['conj_exp_oos']) else f'{row['conj_exp_oos']:+.3f}'} | "
+            f"{'' if pd.isna(row['conj_exp_oos']) else f'{row["conj_exp_oos"]:+.3f}'} | "
             f"{row['verdict']} |"
         )
 
@@ -279,7 +300,9 @@ def emit(df: pd.DataFrame, summary_df: pd.DataFrame) -> None:
                 "|---|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
             ]
         )
-        for _, row in sub.sort_values(["instrument", "orb_minutes", "direction", "filter_type", "rr_target"]).iterrows():
+        for _, row in sub.sort_values(
+            ["instrument", "orb_minutes", "direction", "filter_type", "rr_target"]
+        ).iterrows():
             lines.append(
                 f"| {row['instrument']} | {int(row['orb_minutes'])} | {row['direction']} | {row['filter_type']} | {row['rr_target']:.1f} | {int(row['n_total'])} | {int(row['n_garch'])} | {int(row['n_conj'])} | "
                 f"{row['base_exp']:+.3f} | {row['garch_exp']:+.3f} | {row['conj_exp']:+.3f} | "

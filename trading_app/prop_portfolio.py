@@ -36,8 +36,8 @@ from trading_app.prop_profiles import (
     TradingBook,
     TradingBookEntry,
     compute_profit_split_factor,
-    get_account_tier,
     effective_daily_lanes,
+    get_account_tier,
     get_firm_spec,
 )
 from trading_app.strategy_fitness import compute_fitness  # noqa: F401

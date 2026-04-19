@@ -170,8 +170,7 @@ def run():
     # Baseline MES mfe_r
     base_mfe = df_raw["mes_mfe_r"].dropna()
     t_base, p_base = ttest(base_mfe)
-    print(f"MES 1000 baseline: N={len(base_mfe)}, avg_mfe={base_mfe.mean():.3f}R "
-          f"(t={t_base:.2f}, p={p_base:.4f})")
+    print(f"MES 1000 baseline: N={len(base_mfe)}, avg_mfe={base_mfe.mean():.3f}R (t={t_base:.2f}, p={p_base:.4f})")
     print()
 
     # Normalise direction/outcome to uppercase
@@ -200,10 +199,10 @@ def run():
         if v is None or np.isnan(v):
             return None
         if v <= q33:
-            return "TIGHT"    # small fraction of ATR = energy to spare
+            return "TIGHT"  # small fraction of ATR = energy to spare
         if v <= q67:
             return "MEDIUM"
-        return "WIDE"         # large fraction of ATR = volatile/tired
+        return "WIDE"  # large fraction of ATR = volatile/tired
 
     df_raw["atr_tier"] = df_raw["mgc_atr_ratio"].apply(atr_tier)
 
@@ -271,10 +270,8 @@ def run():
 
     conc_pct = df_raw["concordant"].mean() * 100
     print(f"  Direction concordance rate: {conc_pct:.1f}%  (50% = pure noise)")
-    print(f"  Concordant  (same dir): N={len(conc)}, avg_mfe={conc.mean():.3f}R, "
-          f"t={t_c:.2f}, p={p_c:.4f}")
-    print(f"  Discordant  (opp dir):  N={len(disc)}, avg_mfe={disc.mean():.3f}R, "
-          f"t={t_d:.2f}, p={p_d:.4f}")
+    print(f"  Concordant  (same dir): N={len(conc)}, avg_mfe={conc.mean():.3f}R, t={t_c:.2f}, p={p_c:.4f}")
+    print(f"  Discordant  (opp dir):  N={len(disc)}, avg_mfe={disc.mean():.3f}R, t={t_d:.2f}, p={p_d:.4f}")
     print(f"  Conc vs Disc difference: t={t_cd:.2f}, p={p_cd:.4f}")
     print()
 
@@ -314,21 +311,15 @@ def run():
     print("L5: Combined signal — MGC WIN + TIGHT ORB + concordant direction")
     print("    ⚠ mgc_won uses final outcome (partial look-ahead)")
     print("─" * 65)
-    combined = df_raw[
-        df_raw["mgc_won"]
-        & (df_raw["atr_tier"] == "TIGHT")
-        & df_raw["concordant"]
-    ]["mes_mfe_r"].dropna()
-    baseline_match = df_raw[
-        ~(df_raw["mgc_won"] & (df_raw["atr_tier"] == "TIGHT") & df_raw["concordant"])
-    ]["mes_mfe_r"].dropna()
+    combined = df_raw[df_raw["mgc_won"] & (df_raw["atr_tier"] == "TIGHT") & df_raw["concordant"]]["mes_mfe_r"].dropna()
+    baseline_match = df_raw[~(df_raw["mgc_won"] & (df_raw["atr_tier"] == "TIGHT") & df_raw["concordant"])][
+        "mes_mfe_r"
+    ].dropna()
     t5, p5 = ttest(combined)
     t5_vs, p5_vs = ttest_ind(combined, baseline_match)
     all_results.append(("L5_combined", len(combined), combined.mean(), t5, p5))
-    all_results.append(("L5_combined_vs_rest", len(combined) + len(baseline_match),
-                        float("nan"), t5_vs, p5_vs))
-    print(f"  Combined signal: N={len(combined)}, avg_mfe={combined.mean():.3f}R, "
-          f"t={t5:.2f}, p={p5:.4f}")
+    all_results.append(("L5_combined_vs_rest", len(combined) + len(baseline_match), float("nan"), t5_vs, p5_vs))
+    print(f"  Combined signal: N={len(combined)}, avg_mfe={combined.mean():.3f}R, t={t5:.2f}, p={p5:.4f}")
     print(f"  Rest:            N={len(baseline_match)}, avg_mfe={baseline_match.mean():.3f}R")
     print(f"  Combined vs Rest: t={t5_vs:.2f}, p={p5_vs:.4f}")
     print()
@@ -337,16 +328,14 @@ def run():
     print("─" * 65)
     print("L6: DST split — winter (MGC 0900 = CME open) vs summer (MGC 0900 = 1hr post-open)")
     print("─" * 65)
-    for dst_label, dst_val in [("Winter (MGC 0900 = CME open)", False),
-                                ("Summer (MGC 0900 = post-open)", True)]:
+    for dst_label, dst_val in [("Winter (MGC 0900 = CME open)", False), ("Summer (MGC 0900 = post-open)", True)]:
         sub_dst = df_raw[df_raw["mgc_us_dst"] == dst_val]
         # Direction signal within DST regime
         for mgc_dir in ["LONG", "SHORT"]:
             sub = sub_dst[sub_dst["mgc_dir"] == mgc_dir]["mes_mfe_r"].dropna()
             if len(sub) >= 20:
                 t, p = ttest(sub)
-                print(f"  {dst_label[:28]} | MGC {mgc_dir}: N={len(sub)}, "
-                      f"avg_mfe={sub.mean():.3f}R, p={p:.4f}")
+                print(f"  {dst_label[:28]} | MGC {mgc_dir}: N={len(sub)}, avg_mfe={sub.mean():.3f}R, p={p:.4f}")
     print()
 
     # ── L7: Year-by-year for the direction signal ─────────────────────────────

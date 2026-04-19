@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
+import duckdb
 import pytest
 
-# Import generators — these read from the live gold.db
 from scripts.tools.pinecone_snapshots import (
     generate_fitness_report_snapshot,
     generate_live_config_snapshot,
@@ -13,9 +13,90 @@ from scripts.tools.pinecone_snapshots import (
 )
 
 
-def test_portfolio_state_snapshot():
+@pytest.fixture
+def seeded_snapshot_db(tmp_path):
+    """Temp gold.db with minimal validated_setups + edge_families rows for MNQ.
+
+    Covers both portfolio_state and fitness_report snapshot assertions:
+    they check for markdown table headers (always present) and at least one
+    active instrument name (mentioned only if there's a row). One MNQ row
+    per table is sufficient.
+    """
+    db_path = tmp_path / "gold.db"
+    con = duckdb.connect(str(db_path))
+    con.execute("""
+        CREATE TABLE validated_setups (
+            strategy_id VARCHAR PRIMARY KEY,
+            instrument VARCHAR,
+            orb_label VARCHAR,
+            entry_model VARCHAR,
+            orb_minutes INTEGER,
+            rr_target DOUBLE,
+            confirm_bars INTEGER,
+            filter_type VARCHAR,
+            expectancy_r DOUBLE,
+            win_rate DOUBLE,
+            sample_size INTEGER,
+            sharpe_ann DOUBLE,
+            sharpe_ratio DOUBLE,
+            max_drawdown_r DOUBLE,
+            status VARCHAR,
+            fdr_significant BOOLEAN,
+            wf_passed BOOLEAN,
+            years_tested INTEGER,
+            all_years_positive BOOLEAN,
+            yearly_results VARCHAR,
+            fdr_adjusted_p DOUBLE,
+            wf_windows VARCHAR,
+            wfe DOUBLE,
+            skewness DOUBLE,
+            kurtosis_excess DOUBLE,
+            stop_multiplier DOUBLE,
+            oos_exp_r DOUBLE,
+            noise_risk BOOLEAN
+        )
+    """)
+    con.execute("""
+        CREATE TABLE edge_families (
+            family_id VARCHAR PRIMARY KEY,
+            instrument VARCHAR,
+            head_strategy_id VARCHAR,
+            robustness_status VARCHAR,
+            member_count INTEGER,
+            pbo DOUBLE,
+            cv_expectancy DOUBLE,
+            trade_tier VARCHAR
+        )
+    """)
+    con.execute(
+        """
+        INSERT INTO validated_setups
+            (strategy_id, instrument, orb_label, entry_model, orb_minutes,
+             rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
+             sample_size, sharpe_ann, sharpe_ratio, max_drawdown_r, status,
+             fdr_significant, wf_passed, stop_multiplier, oos_exp_r, noise_risk)
+        VALUES ('MNQ_TOKYO_OPEN_E2_CB1_ORB_G5_RR1.5', 'MNQ', 'TOKYO_OPEN', 'E2',
+                5, 1.5, 1, 'ORB_G5', 0.18, 0.52, 150, 1.1, 1.1, 3.0, 'active',
+                TRUE, TRUE, 1.0, 0.20, FALSE)
+        """
+    )
+    con.execute(
+        """
+        INSERT INTO edge_families
+            (family_id, instrument, head_strategy_id, robustness_status,
+             member_count, pbo, cv_expectancy, trade_tier)
+        VALUES ('MNQ_TOKYO_OPEN_ORB_G5', 'MNQ',
+                'MNQ_TOKYO_OPEN_E2_CB1_ORB_G5_RR1.5', 'ROBUST',
+                3, 0.20, 0.15, 'CORE')
+        """
+    )
+    con.close()
+    return db_path
+
+
+def test_portfolio_state_snapshot(seeded_snapshot_db):
     """Verify markdown has Portfolio State header and instrument table."""
-    md = generate_portfolio_state_snapshot()
+    md = generate_portfolio_state_snapshot(db_path=seeded_snapshot_db)
 
     assert "# Portfolio State Snapshot" in md
     assert "Generated:" in md
@@ -39,9 +120,9 @@ def test_portfolio_state_snapshot():
     assert any(inst in md for inst in ("MGC", "MNQ", "MES", "M2K"))
 
 
-def test_fitness_report_snapshot():
+def test_fitness_report_snapshot(seeded_snapshot_db):
     """Verify markdown has breakdown sections and top strategies."""
-    md = generate_fitness_report_snapshot()
+    md = generate_fitness_report_snapshot(db_path=seeded_snapshot_db)
 
     assert "# Fitness Report Snapshot" in md
     assert "Generated:" in md

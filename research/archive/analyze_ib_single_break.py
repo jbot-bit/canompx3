@@ -51,17 +51,18 @@ sys.stdout.reconfigure(line_buffering=True)
 SESSION_START_UTC_HOUR = 0
 SESSION_START_UTC_MINUTE = 0
 
-DEFAULT_IB_MINUTES = 60       # Initial Balance = first 60 minutes
+DEFAULT_IB_MINUTES = 60  # Initial Balance = first 60 minutes
 DEFAULT_MIN_ORB_SIZE = 4.0
 DEFAULT_RR = 2.0
 DEFAULT_CB = 2
-HOLD_HOURS = 7                # Runner hold duration
-VOL_MULTIPLIER = 1.30         # Breakout bar volume > 130% of rolling avg
-VOL_LOOKBACK = 10             # Rolling average lookback bars
+HOLD_HOURS = 7  # Runner hold duration
+VOL_MULTIPLIER = 1.30  # Breakout bar volume > 130% of rolling avg
+VOL_LOOKBACK = 10  # Rolling average lookback bars
 
 # ---------------------------------------------------------------------------
 # IB computation
 # ---------------------------------------------------------------------------
+
 
 def compute_ib(bars: pd.DataFrame, ib_minutes: int) -> dict | None:
     """Compute Initial Balance (IB) from 1-minute bars.
@@ -96,6 +97,7 @@ def compute_ib(bars: pd.DataFrame, ib_minutes: int) -> dict | None:
         "ib_end": ib_end,
     }
 
+
 def classify_day(
     bars: pd.DataFrame,
     ib: dict,
@@ -118,8 +120,13 @@ def classify_day(
     # Scan post-IB bars
     post_ib = bars[bars["ts_utc"] >= ib_end].copy()
     if post_ib.empty:
-        return {"day_type": "no_break", "broke_high": False, "broke_low": False,
-                "break_bar_volume": None, "pre_break_volumes": []}
+        return {
+            "day_type": "no_break",
+            "broke_high": False,
+            "broke_low": False,
+            "break_bar_volume": None,
+            "pre_break_volumes": [],
+        }
 
     broke_high = False
     broke_low = False
@@ -169,6 +176,7 @@ def classify_day(
         "pre_break_volumes": pre_break_volumes,
     }
 
+
 def check_volume_filter(classification: dict) -> bool:
     """Check if breakout bar volume > 130% of 10-bar rolling avg."""
     vol = classification["break_bar_volume"]
@@ -179,6 +187,7 @@ def check_volume_filter(classification: dict) -> bool:
     if avg_vol <= 0:
         return False
     return vol > avg_vol * VOL_MULTIPLIER
+
 
 def compute_7h_pnl(
     bars: pd.DataFrame,
@@ -219,17 +228,19 @@ def compute_7h_pnl(
     pnl_pts = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(spec, entry_price, stop_price, pnl_pts)
 
+
 # ---------------------------------------------------------------------------
 # Main analysis
 # ---------------------------------------------------------------------------
 
-def run(db_path: Path, ib_minutes: int, min_orb_size: float,
-        start: date, end: date):
+
+def run(db_path: Path, ib_minutes: int, min_orb_size: float, start: date, end: date):
     con = duckdb.connect(str(db_path), read_only=True)
 
     # Load 1000 E1 CB2 RR2.0 trades with G4+ filter
     print(f"Loading 1000 E1 CB{DEFAULT_CB} RR{DEFAULT_RR} G{min_orb_size}+ trades...")
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT o.trading_day, o.entry_ts, o.entry_price, o.stop_price,
                o.target_price, o.outcome, o.pnl_r,
                d.orb_1000_size, d.orb_1000_break_dir
@@ -242,7 +253,9 @@ def run(db_path: Path, ib_minutes: int, min_orb_size: float,
           AND o.pnl_r IS NOT NULL AND d.orb_1000_size >= ?
           AND o.trading_day BETWEEN ? AND ?
         ORDER BY o.trading_day
-    """, [DEFAULT_RR, DEFAULT_CB, min_orb_size, start, end]).fetchdf()
+    """,
+        [DEFAULT_RR, DEFAULT_CB, min_orb_size, start, end],
+    ).fetchdf()
     df["entry_ts"] = pd.to_datetime(df["entry_ts"], utc=True)
     print(f"  {len(df)} trades loaded ({df['trading_day'].nunique()} unique days)")
 
@@ -304,19 +317,21 @@ def run(db_path: Path, ib_minutes: int, min_orb_size: float,
 
         year = str(td.year) if hasattr(td, "year") else str(td)[:4]
 
-        results.append({
-            "td": td,
-            "year": year,
-            "day_type": cl["day_type"],
-            "vol_ok": vol_ok,
-            "is_long": is_long,
-            "ib_size": ib["ib_size"],
-            "orb_size": row["orb_1000_size"],
-            "fixed_pnl_r": fixed_pnl_r,
-            "hold_pnl_r": hold_pnl_r,
-            "blended_pnl_r": blended_pnl_r,
-            "blended_vol_pnl_r": blended_vol_pnl_r,
-        })
+        results.append(
+            {
+                "td": td,
+                "year": year,
+                "day_type": cl["day_type"],
+                "vol_ok": vol_ok,
+                "is_long": is_long,
+                "ib_size": ib["ib_size"],
+                "orb_size": row["orb_1000_size"],
+                "fixed_pnl_r": fixed_pnl_r,
+                "hold_pnl_r": hold_pnl_r,
+                "blended_pnl_r": blended_pnl_r,
+                "blended_vol_pnl_r": blended_vol_pnl_r,
+            }
+        )
 
     elapsed = time.time() - t0
     print(f"  Classified in {elapsed:.1f}s")
@@ -341,16 +356,16 @@ def run(db_path: Path, ib_minutes: int, min_orb_size: float,
     single = pdf[pdf["day_type"].isin(["single_bull", "single_bear"])]
     double = pdf[pdf["day_type"] == "double_break"]
     single_vol = pdf[(pdf["day_type"].isin(["single_bull", "single_bear"])) & pdf["vol_ok"]]
-    print(f"\n  Single Break rate: {len(single)/len(pdf)*100:.1f}%")
-    print(f"  Double Break rate: {len(double)/len(pdf)*100:.1f}%")
-    print(f"  Single + Volume:   {len(single_vol)} trades ({len(single_vol)/len(pdf)*100:.1f}%)")
+    print(f"\n  Single Break rate: {len(single) / len(pdf) * 100:.1f}%")
+    print(f"  Double Break rate: {len(double) / len(pdf) * 100:.1f}%")
+    print(f"  Single + Volume:   {len(single_vol)} trades ({len(single_vol) / len(pdf) * 100:.1f}%)")
 
     # --- Metrics by day type ---
     print("\n" + "=" * 90)
     print("METRICS BY DAY TYPE")
     print("=" * 90)
     print(f"  {'Type':15s} {'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>8s} {'MaxDD':>8s} {'Total':>8s}")
-    print(f"  {'-'*15} {'-'*5} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(f"  {'-' * 15} {'-' * 5} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for label, subset, col in [
         ("All (fixed)", pdf, "fixed_pnl_r"),
@@ -366,15 +381,17 @@ def run(db_path: Path, ib_minutes: int, min_orb_size: float,
         m = compute_strategy_metrics(subset[col].values)
         if m is None:
             continue
-        print(f"  {label:15s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
-              f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}")
+        print(
+            f"  {label:15s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
+            f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}"
+        )
 
     # --- Blended strategy comparison ---
     print("\n" + "=" * 90)
     print("BLENDED STRATEGY: Single=7h, Double=FixedRR")
     print("=" * 90)
     print(f"  {'Strategy':20s} {'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>8s} {'MaxDD':>8s} {'Total':>8s}")
-    print(f"  {'-'*20} {'-'*5} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(f"  {'-' * 20} {'-' * 5} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for label, col in [
         ("Fixed RR (control)", "fixed_pnl_r"),
@@ -385,15 +402,19 @@ def run(db_path: Path, ib_minutes: int, min_orb_size: float,
         m = compute_strategy_metrics(pdf[col].values)
         if m is None:
             continue
-        print(f"  {label:20s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
-              f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}")
+        print(
+            f"  {label:20s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
+            f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}"
+        )
 
     # --- Yearly stability of blended ---
     print("\n" + "=" * 90)
     print("YEARLY STABILITY: Blended (Single=7h, Double=Fixed)")
     print("=" * 90)
-    print(f"  {'Year':5s} {'N':>4s} {'Single':>7s} {'Double':>7s} {'Fixed':>8s} {'7h':>8s} {'Blended':>8s} {'Blend+V':>8s} {'Best':>8s}")
-    print(f"  {'-'*5} {'-'*4} {'-'*7} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(
+        f"  {'Year':5s} {'N':>4s} {'Single':>7s} {'Double':>7s} {'Fixed':>8s} {'7h':>8s} {'Blended':>8s} {'Blend+V':>8s} {'Best':>8s}"
+    )
+    print(f"  {'-' * 5} {'-' * 4} {'-' * 7} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for year in sorted(pdf["year"].unique()):
         ydf = pdf[pdf["year"] == year]
@@ -408,12 +429,13 @@ def run(db_path: Path, ib_minutes: int, min_orb_size: float,
         mv = compute_strategy_metrics(ydf["blended_vol_pnl_r"].values)
 
         if mf and m7 and mb and mv:
-            sharpes = {"fixed": mf["sharpe"], "7h": m7["sharpe"],
-                       "blended": mb["sharpe"], "blend+v": mv["sharpe"]}
+            sharpes = {"fixed": mf["sharpe"], "7h": m7["sharpe"], "blended": mb["sharpe"], "blend+v": mv["sharpe"]}
             best = max(sharpes, key=sharpes.get)
-            print(f"  {year:5s} {len(ydf):>4d} {n_single:>7d} {n_double:>7d} "
-                  f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
-                  f"{mb['sharpe']:>8.3f} {mv['sharpe']:>8.3f} {best:>8s}")
+            print(
+                f"  {year:5s} {len(ydf):>4d} {n_single:>7d} {n_double:>7d} "
+                f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
+                f"{mb['sharpe']:>8.3f} {mv['sharpe']:>8.3f} {best:>8s}"
+            )
 
     # Overall
     mf = compute_strategy_metrics(pdf["fixed_pnl_r"].values)
@@ -421,9 +443,11 @@ def run(db_path: Path, ib_minutes: int, min_orb_size: float,
     mb = compute_strategy_metrics(pdf["blended_pnl_r"].values)
     mv = compute_strategy_metrics(pdf["blended_vol_pnl_r"].values)
     if mf and m7 and mb and mv:
-        print(f"  {'TOTAL':5s} {len(pdf):>4d} {len(single):>7d} {len(double):>7d} "
-              f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
-              f"{mb['sharpe']:>8.3f} {mv['sharpe']:>8.3f}")
+        print(
+            f"  {'TOTAL':5s} {len(pdf):>4d} {len(single):>7d} {len(double):>7d} "
+            f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
+            f"{mb['sharpe']:>8.3f} {mv['sharpe']:>8.3f}"
+        )
 
     # --- IB size vs runner rate ---
     print("\n" + "=" * 90)
@@ -436,10 +460,12 @@ def run(db_path: Path, ib_minutes: int, min_orb_size: float,
         single_rate = len(subset[subset["day_type"].isin(["single_bull", "single_bear"])]) / len(subset) * 100
         runner_rate = (subset["hold_pnl_r"] > 1.0).mean() * 100
         avg_7h = subset["hold_pnl_r"].mean()
-        print(f"  IB>={ib_tier:>2d}pt: N={len(subset):>4d}, "
-              f"single rate={single_rate:.0f}%, "
-              f"runner rate={runner_rate:.0f}%, "
-              f"avg 7h R={avg_7h:+.3f}")
+        print(
+            f"  IB>={ib_tier:>2d}pt: N={len(subset):>4d}, "
+            f"single rate={single_rate:.0f}%, "
+            f"runner rate={runner_rate:.0f}%, "
+            f"avg 7h R={avg_7h:+.3f}"
+        )
 
     # --- Direction analysis ---
     print("\n" + "=" * 90)
@@ -449,10 +475,7 @@ def run(db_path: Path, ib_minutes: int, min_orb_size: float,
         sub = pdf[pdf["day_type"] == dt]
         if len(sub) < 3:
             continue
-        aligned = sub[
-            ((dt == "single_bull") & sub["is_long"]) |
-            ((dt == "single_bear") & ~sub["is_long"])
-        ]
+        aligned = sub[((dt == "single_bull") & sub["is_long"]) | ((dt == "single_bear") & ~sub["is_long"])]
         opposed = sub[~sub.index.isin(aligned.index)]
 
         print(f"\n  {dt}:")
@@ -462,10 +485,10 @@ def run(db_path: Path, ib_minutes: int, min_orb_size: float,
                 continue
             m = compute_strategy_metrics(ss["hold_pnl_r"].values)
             if m:
-                print(f"    {label:10s}: N={m['n']:>4d}, "
-                      f"ExpR={m['expr']:+.4f}, Sharpe={m['sharpe']:.4f}")
+                print(f"    {label:10s}: N={m['n']:>4d}, ExpR={m['expr']:+.4f}, Sharpe={m['sharpe']:.4f}")
 
     print()
+
 
 def main():
     parser = argparse.ArgumentParser(description="IB Single Break Runner Detection")
@@ -476,6 +499,7 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
     args = parser.parse_args()
     run(args.db_path, args.ib_minutes, args.min_orb_size, args.start, args.end)
+
 
 if __name__ == "__main__":
     main()

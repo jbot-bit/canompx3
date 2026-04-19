@@ -1357,9 +1357,7 @@ def build_daily_features(
         # WFE 1.00 p=0.042. Deployed as rolling percentile instead of absolute
         # threshold to handle cross-instrument distribution variance
         # (MNQ Q20 ~0.16 vs MES Q20 ~0.11) and regime drift.
-        rows[i]["garch_forecast_vol_pct"] = _prior_rank_pct(
-            rows, i, "garch_forecast_vol", lookback=252, min_prior=60
-        )
+        rows[i]["garch_forecast_vol_pct"] = _prior_rank_pct(rows, i, "garch_forecast_vol", lookback=252, min_prior=60)
 
         # Per-session ORB compression z-score (prior 20 days, no look-ahead).
         # Compression = rolling z-score of (orb_size / atr_20).

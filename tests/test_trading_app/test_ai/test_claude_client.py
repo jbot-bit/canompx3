@@ -24,13 +24,17 @@ RETIRED_MODEL_IDS = {
 DEPRECATED_MODEL_IDS = {
     "claude-3-haiku-20240307",  # retires 2026-04-19
 }
-STALE_MODEL_IDS = RETIRED_MODEL_IDS | DEPRECATED_MODEL_IDS | {
-    # Pre-4.6-era models still alive but superseded — project must not pin these
-    "claude-sonnet-4-20250514",  # Sonnet 4.0
-    "claude-sonnet-4-5-20250929",  # Sonnet 4.5
-    "claude-opus-4-20250514",  # Opus 4.0
-    "claude-opus-4-1-20250805",  # Opus 4.1
-}
+STALE_MODEL_IDS = (
+    RETIRED_MODEL_IDS
+    | DEPRECATED_MODEL_IDS
+    | {
+        # Pre-4.6-era models still alive but superseded — project must not pin these
+        "claude-sonnet-4-20250514",  # Sonnet 4.0
+        "claude-sonnet-4-5-20250929",  # Sonnet 4.5
+        "claude-opus-4-20250514",  # Opus 4.0
+        "claude-opus-4-1-20250805",  # Opus 4.1
+    }
+)
 
 
 class TestModelConstants:

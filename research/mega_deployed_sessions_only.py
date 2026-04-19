@@ -179,30 +179,30 @@ def scan_session_rr_direction(
         t_oos, p_oos, n_on_oos, n_off_oos, expr_on_oos, expr_off_oos = welch_t(oos_df, signal)
         delta_is = expr_on_is - expr_off_is
         delta_oos = expr_on_oos - expr_off_oos if not np.isnan(expr_on_oos) else float("nan")
-        dir_match = (
-            not np.isnan(delta_oos) and (np.sign(delta_is) == np.sign(delta_oos))
-        )
+        dir_match = not np.isnan(delta_oos) and (np.sign(delta_is) == np.sign(delta_oos))
         fire_rate = n_on_is / (n_on_is + n_off_is)
-        rows.append({
-            "session": session,
-            "aperture": aperture,
-            "rr": rr,
-            "direction": direction,
-            "signal": signal,
-            "n_on_is": n_on_is,
-            "n_off_is": n_off_is,
-            "n_on_oos": n_on_oos,
-            "expr_on_is": expr_on_is,
-            "expr_off_is": expr_off_is,
-            "delta_is": delta_is,
-            "expr_on_oos": expr_on_oos,
-            "delta_oos": delta_oos,
-            "t_is": t_is,
-            "p_is": p_is,
-            "dir_match": dir_match,
-            "fire_rate": fire_rate,
-            "deployed_match": (session, rr, aperture) in {(s, r, a) for s, r, a in DEPLOYED_LANES},
-        })
+        rows.append(
+            {
+                "session": session,
+                "aperture": aperture,
+                "rr": rr,
+                "direction": direction,
+                "signal": signal,
+                "n_on_is": n_on_is,
+                "n_off_is": n_off_is,
+                "n_on_oos": n_on_oos,
+                "expr_on_is": expr_on_is,
+                "expr_off_is": expr_off_is,
+                "delta_is": delta_is,
+                "expr_on_oos": expr_on_oos,
+                "delta_oos": delta_oos,
+                "t_is": t_is,
+                "p_is": p_is,
+                "dir_match": dir_match,
+                "fire_rate": fire_rate,
+                "deployed_match": (session, rr, aperture) in {(s, r, a) for s, r, a in DEPLOYED_LANES},
+            }
+        )
     return rows
 
 
@@ -233,9 +233,7 @@ def main():
 
     # Strict filter: |t|>=3, dir_match, deployed_match
     survivors_strict = res_sorted[
-        (res_sorted["t_is"].abs() >= 3.0)
-        & (res_sorted["dir_match"])
-        & (res_sorted["deployed_match"])
+        (res_sorted["t_is"].abs() >= 3.0) & (res_sorted["dir_match"]) & (res_sorted["deployed_match"])
     ].copy()
     survivors_bh = res_sorted[res_sorted["bh_pass"] & res_sorted["deployed_match"]].copy()
 

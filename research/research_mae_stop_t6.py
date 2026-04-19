@@ -64,8 +64,7 @@ def load_population(con: duckdb.DuckDBPyConnection, instrument: str) -> list[dic
         [instrument, ENTRY_MODEL, RR_TARGET, G4_THRESHOLD],
     ).fetchall()
 
-    cols = ["mae_r", "pnl_r", "entry_price", "stop_price", "risk_dollars",
-            "outcome", "orb_minutes"]
+    cols = ["mae_r", "pnl_r", "entry_price", "stop_price", "risk_dollars", "outcome", "orb_minutes"]
     return [dict(zip(cols, row)) for row in rows]
 
 

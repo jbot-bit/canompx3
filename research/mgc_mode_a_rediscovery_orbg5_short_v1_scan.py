@@ -40,9 +40,9 @@ RESULT_PATH = PROJECT_ROOT / "docs/audit/results/2026-04-19-mgc-mode-a-rediscove
 
 CELLS = [
     {"id": "H1_LONDON_METALS", "session": "LONDON_METALS"},
-    {"id": "H2_COMEX_SETTLE",  "session": "COMEX_SETTLE"},
-    {"id": "H3_US_DATA_1000",  "session": "US_DATA_1000"},
-    {"id": "H4_EUROPE_FLOW",   "session": "EUROPE_FLOW"},
+    {"id": "H2_COMEX_SETTLE", "session": "COMEX_SETTLE"},
+    {"id": "H3_US_DATA_1000", "session": "US_DATA_1000"},
+    {"id": "H4_EUROPE_FLOW", "session": "EUROPE_FLOW"},
 ]
 
 INSTRUMENT = "MGC"
@@ -54,13 +54,13 @@ FILTER_KEY = "ORB_G5"
 # Pre-reg baselines (Mode A IS, computed 2026-04-19 — K2 smoke-test source)
 PREREG_BASELINES = {
     "LONDON_METALS_unfiltered": {"N": 448, "ExpR": -0.1548},
-    "COMEX_SETTLE_unfiltered":  {"N": 416, "ExpR": -0.1948},
-    "US_DATA_1000_unfiltered":  {"N": 384, "ExpR": -0.0490},
-    "EUROPE_FLOW_unfiltered":   {"N": 424, "ExpR": -0.1375},
-    "LONDON_METALS_ORB_G5_on":  {"N": 32,  "ExpR": 0.1568},
-    "COMEX_SETTLE_ORB_G5_on":   {"N": 20,  "ExpR": -0.0781},
-    "US_DATA_1000_ORB_G5_on":   {"N": 123, "ExpR": 0.0359},
-    "EUROPE_FLOW_ORB_G5_on":    {"N": 29,  "ExpR": 0.1147},
+    "COMEX_SETTLE_unfiltered": {"N": 416, "ExpR": -0.1948},
+    "US_DATA_1000_unfiltered": {"N": 384, "ExpR": -0.0490},
+    "EUROPE_FLOW_unfiltered": {"N": 424, "ExpR": -0.1375},
+    "LONDON_METALS_ORB_G5_on": {"N": 32, "ExpR": 0.1568},
+    "COMEX_SETTLE_ORB_G5_on": {"N": 20, "ExpR": -0.0781},
+    "US_DATA_1000_ORB_G5_on": {"N": 123, "ExpR": 0.0359},
+    "EUROPE_FLOW_ORB_G5_on": {"N": 29, "ExpR": 0.1147},
 }
 K2_TOLERANCE = 0.001  # same-path smoke-test, tight
 
@@ -128,7 +128,7 @@ def block_bootstrap(pnl: np.ndarray, block: int = 5, B: int = 10_000, seed: int 
     ex = 0
     for _ in range(B):
         starts = rng.integers(0, n - block + 1, size=nblocks)
-        boot = np.concatenate([centered[s:s + block] for s in starts])[:n]
+        boot = np.concatenate([centered[s : s + block] for s in starts])[:n]
         if abs(float(np.mean(boot))) >= obs:
             ex += 1
     return (ex + 1) / (B + 1)
@@ -291,10 +291,14 @@ def eval_gates(cells: list[CellResult]) -> None:
 
 
 def _fmt(x, p=4):
-    if x is None: return "—"
-    if isinstance(x, float) and math.isnan(x): return "nan"
-    if isinstance(x, bool): return "Y" if x else "N"
-    if isinstance(x, float): return f"{x:.{p}f}"
+    if x is None:
+        return "—"
+    if isinstance(x, float) and math.isnan(x):
+        return "nan"
+    if isinstance(x, bool):
+        return "Y" if x else "N"
+    if isinstance(x, float):
+        return f"{x:.{p}f}"
     return str(x)
 
 
@@ -305,7 +309,9 @@ def render(cells: list[CellResult]) -> str:
     lines.append("# MGC Mode A rediscovery — ORB_G5 SHORT RR1.5 K=4 scan")
     lines.append("")
     lines.append(f"**Generated:** {ts}")
-    lines.append(f"**Pre-reg:** `docs/audit/hypotheses/2026-04-19-mgc-mode-a-rediscovery-orbg5-short-v1.yaml` (LOCKED, commit_sha=4ac0b688)")
+    lines.append(
+        f"**Pre-reg:** `docs/audit/hypotheses/2026-04-19-mgc-mode-a-rediscovery-orbg5-short-v1.yaml` (LOCKED, commit_sha=4ac0b688)"
+    )
     lines.append(f"**Script:** `research/mgc_mode_a_rediscovery_orbg5_short_v1_scan.py`")
     lines.append(f"**IS window:** `trading_day < {HOLDOUT_SACRED_FROM}` (Mode A)")
     lines.append("")
@@ -314,11 +320,15 @@ def render(cells: list[CellResult]) -> str:
     lines.append(f"Cells: {len(cells)} | CONTINUE: {n_cont} | KILL: {len(cells) - n_cont}")
     lines.append("")
     k2_ok = all((c.k2_base_match is not False and c.k2_on_match is not False) for c in cells)
-    lines.append(f"**K2 baseline sanity smoke-test:** {'PASS' if k2_ok else 'FAIL'} (same-path reproducibility only; see pre-reg § Baseline cross-check).")
+    lines.append(
+        f"**K2 baseline sanity smoke-test:** {'PASS' if k2_ok else 'FAIL'} (same-path reproducibility only; see pre-reg § Baseline cross-check)."
+    )
     lines.append("")
     lines.append("## Per-cell IS results")
     lines.append("")
-    lines.append("| Cell | Session | N_base | N_on | Fire% | ExpR_base | ExpR_on | Δ_IS | t | raw_p | boot_p | q_family | years_pos |")
+    lines.append(
+        "| Cell | Session | N_base | N_on | Fire% | ExpR_base | ExpR_on | Δ_IS | t | raw_p | boot_p | q_family | years_pos |"
+    )
     lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     for c in cells:
         lines.append(
@@ -330,17 +340,30 @@ def render(cells: list[CellResult]) -> str:
     lines.append("")
     lines.append("## Gate breakdown")
     lines.append("")
-    keys = ["bh_pass_family", "abs_t_IS_ge_3", "N_IS_on_ge_100", "years_positive_ge_3",
-            "bootstrap_p_lt_0.10", "ExpR_on_IS_gt_0", "not_tautology", "not_extreme_fire", "not_arithmetic_only"]
+    keys = [
+        "bh_pass_family",
+        "abs_t_IS_ge_3",
+        "N_IS_on_ge_100",
+        "years_positive_ge_3",
+        "bootstrap_p_lt_0.10",
+        "ExpR_on_IS_gt_0",
+        "not_tautology",
+        "not_extreme_fire",
+        "not_arithmetic_only",
+    ]
     lines.append("| Cell | " + " | ".join(keys) + " | Verdict |")
     lines.append("|---|" + "|".join(["---"] * (len(keys) + 1)) + "|")
     for c in cells:
         row = [c.id] + ["Y" if c.gate_results.get(k) else "N" for k in keys] + [c.verdict]
         lines.append("| " + " | ".join(row) + " |")
     lines.append("")
-    lines.append("## Flags & T0 (cross-filter tautology — ORB_G5 is trivially correlated with orb_size; check vs atr_20, overnight_range)")
+    lines.append(
+        "## Flags & T0 (cross-filter tautology — ORB_G5 is trivially correlated with orb_size; check vs atr_20, overnight_range)"
+    )
     lines.append("")
-    lines.append("| Cell | fire_rate | corr_orbsize (self, expected ~1) | corr_atr | corr_ovnrng | tautology | extreme_fire | arithmetic_only |")
+    lines.append(
+        "| Cell | fire_rate | corr_orbsize (self, expected ~1) | corr_atr | corr_ovnrng | tautology | extreme_fire | arithmetic_only |"
+    )
     lines.append("|---|---:|---:|---:|---:|---|---|---|")
     for c in cells:
         lines.append(
@@ -355,9 +378,7 @@ def render(cells: list[CellResult]) -> str:
     lines.append("| Cell | N_OOS_on | ExpR_OOS_on | Δ_OOS | dir_match |")
     lines.append("|---|---:|---:|---:|---|")
     for c in cells:
-        lines.append(
-            f"| {c.id} | {c.n_oos_on} | {_fmt(c.expr_oos_on)} | {_fmt(c.delta_oos)} | {_fmt(c.dir_match)} |"
-        )
+        lines.append(f"| {c.id} | {c.n_oos_on} | {_fmt(c.expr_oos_on)} | {_fmt(c.delta_oos)} | {_fmt(c.dir_match)} |")
     lines.append("")
     lines.append("## Per-year IS breakdown")
     lines.append("")
@@ -380,7 +401,9 @@ def render(cells: list[CellResult]) -> str:
     lines.append("## Decision")
     lines.append("")
     if n_cont == 0 and k2_ok:
-        lines.append("**Verdict: KILL per pre-reg K1.** Zero of 4 cells pass all gate clauses. MGC ORB_G5 SHORT RR1.5 on the 4 pre-registered sessions does NOT yield a Pathway A Chordia-validated edge on 3.5-year Mode A IS. Honest negative evidence on MGC short-direction cross-instrument-mirror hypothesis. Pre-reg explicitly anticipated this outcome; baselines (approx_t -0.31 to 0.77) predicted a KILL. No re-runs with different thresholds.")
+        lines.append(
+            "**Verdict: KILL per pre-reg K1.** Zero of 4 cells pass all gate clauses. MGC ORB_G5 SHORT RR1.5 on the 4 pre-registered sessions does NOT yield a Pathway A Chordia-validated edge on 3.5-year Mode A IS. Honest negative evidence on MGC short-direction cross-instrument-mirror hypothesis. Pre-reg explicitly anticipated this outcome; baselines (approx_t -0.31 to 0.77) predicted a KILL. No re-runs with different thresholds."
+        )
     elif n_cont >= 1 and k2_ok:
         lines.append(f"**Verdict: CONTINUE on {n_cont} cell(s).** Candidates for committee review.")
     else:

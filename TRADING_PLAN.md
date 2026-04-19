@@ -130,7 +130,7 @@ Rolling window: 12m | Classification: STABLE >= 0.1 Sharpe in 60%+ of last 6 win
 
 - **STABLE**: Full size (1.0x risk per trade)
 - **TRANSITIONING**: Half size (0.5x risk per trade)
-- **DEGRADED**: OFF — do not trade until 3 consecutive passing windows
+- **DEGRADED**: OFF â€” do not trade until 3 consecutive passing windows
 
 ## Rolling Re-evaluation
 

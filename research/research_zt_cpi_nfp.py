@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import databento as db
 import pandas as pd
 
-from pipeline.asset_configs import get_asset_config
+from pipeline.asset_configs import get_asset_config, require_dbn_available
 from pipeline.calendar_filters import build_cpi_set, is_nfp_day
 
 NY_TZ = ZoneInfo("America/New_York")
@@ -94,7 +94,15 @@ def infer_tick_size(rows: pd.DataFrame) -> float | None:
     if rows.empty:
         return None
     values: list[float] = []
-    for col in ("pre_event_open", "pre_event_close", "shock_open", "shock_close", "fw_5m_close", "fw_10m_close", "fw_15m_close"):
+    for col in (
+        "pre_event_open",
+        "pre_event_close",
+        "shock_open",
+        "shock_close",
+        "fw_5m_close",
+        "fw_10m_close",
+        "fw_15m_close",
+    ):
         vals = rows[col].dropna().tolist()
         values.extend(float(v) for v in vals)
     uniq = sorted(set(values))
@@ -109,10 +117,12 @@ def first_second_half_hit(split_rows: pd.DataFrame, hit_col: str) -> str:
     mid = len(ordered) // 2
     first = ordered.iloc[:mid] if mid else ordered.iloc[:0]
     second = ordered.iloc[mid:]
+
     def fmt(frame: pd.DataFrame) -> str:
         if frame.empty:
             return "n/a"
         return f"{frame[hit_col].mean():.1%} ({len(frame)})"
+
     return f"{fmt(first)} / {fmt(second)}"
 
 
@@ -282,7 +292,9 @@ def build_markdown(events: pd.DataFrame, summary: pd.DataFrame, tick_size: float
     if summary.empty:
         lines.append("No usable summary rows.")
     else:
-        lines.append("| family | model | window | n | hits | hit_rate | avg_move | median_move | avg_ticks | p_value | first/second half | friction |")
+        lines.append(
+            "| family | model | window | n | hits | hit_rate | avg_move | median_move | avg_ticks | p_value | first/second half | friction |"
+        )
         lines.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|")
         for row in summary.to_dict("records"):
             lines.append(
@@ -336,7 +348,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    dbn_dir = args.dbn_dir or get_asset_config("ZT")["dbn_path"]
+    if args.dbn_dir is not None:
+        dbn_dir = args.dbn_dir
+    else:
+        require_dbn_available("ZT")
+        dbn_dir = get_asset_config("ZT")["dbn_path"]
     out_prefix = args.output_prefix
     out_prefix.parent.mkdir(parents=True, exist_ok=True)
 

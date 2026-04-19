@@ -102,7 +102,7 @@ def load_is_trades(con) -> list[dict]:
             o.trading_day,
             o.pnl_r,
             o.outcome,
-            d.rel_vol_{SCOPE['orb_label']} AS rel_vol,
+            d.rel_vol_{SCOPE["orb_label"]} AS rel_vol,
             d.overnight_range
         FROM orb_outcomes o
         JOIN daily_features d
@@ -120,7 +120,7 @@ def load_is_trades(con) -> list[dict]:
           AND o.trading_day < ?
           AND d.overnight_range IS NOT NULL
           AND d.overnight_range >= ?
-          AND d.rel_vol_{SCOPE['orb_label']} IS NOT NULL
+          AND d.rel_vol_{SCOPE["orb_label"]} IS NOT NULL
         ORDER BY o.trading_day
         """,
         [
@@ -216,9 +216,7 @@ def run_backtest() -> dict:
         # Step 8: K2 integrity checklist
         oos_trades = [t for t in trades if t["trading_day"] >= HOLDOUT_SACRED_FROM]
         k2 = {
-            "p33_p67_calibrated_is_only": all(
-                t["trading_day"] < HOLDOUT_SACRED_FROM for t in trades
-            ),
+            "p33_p67_calibrated_is_only": all(t["trading_day"] < HOLDOUT_SACRED_FROM for t in trades),
             "oos_trades_in_sample": len(oos_trades),
             "oos_consulted": False,  # script never queries OOS
             "bucket_thresholds_frozen_before_sharpe": True,
@@ -259,19 +257,12 @@ def run_backtest() -> dict:
                 "p67": p67,
                 "frozen_at_utc": thresholds_frozen_at,
             },
-            "bucket_distribution": {
-                b: sum(1 for t in trades if t["bucket"] == b)
-                for b in ("low", "mid", "high")
-            },
+            "bucket_distribution": {b: sum(1 for t in trades if t["bucket"] == b) for b in ("low", "mid", "high")},
             "per_bucket_stats": {b: asdict(bucket_stats[b]) for b in ("low", "mid", "high")},
             "baseline": asdict(baseline),
             "sized_primary": asdict(sized),
             "h1_sharpe_uplift_pct": uplift_pct,
-            "h1_verdict": (
-                "CONTINUE_TO_D1" if uplift_pct >= 15.0
-                else "PARK" if uplift_pct >= 10.0
-                else "KILL"
-            ),
+            "h1_verdict": ("CONTINUE_TO_D1" if uplift_pct >= 15.0 else "PARK" if uplift_pct >= 10.0 else "KILL"),
             "h2_ablation": {
                 "stats": asdict(h2),
                 "low_trades_skipped": h2_skipped_low,
@@ -282,7 +273,8 @@ def run_backtest() -> dict:
                 "win_rate_spread_pct": wr_spread_pct,
                 "flag": arithmetic_only_flag,
                 "interpretation": (
-                    "ARITHMETIC_ONLY (cost-screen not edge)" if arithmetic_only_flag
+                    "ARITHMETIC_ONLY (cost-screen not edge)"
+                    if arithmetic_only_flag
                     else "Not flagged — WR spread >= 3% OR uplift within noise band"
                 ),
             },
@@ -356,7 +348,9 @@ def emit_markdown(report: dict, out_path: Path) -> None:
         f"| H2 hard-skip | {h2s['n']} | {h2s['mean_r']:+.4f} | {h2s['std_r']:.4f} | {h2s['sharpe']:+.4f} | {h2s['win_rate']:.3f} | {h2s['total_r']:+.2f} | {report['h2_ablation']['low_trades_skipped']} |"
     )
     lines.append("")
-    lines.append("**H2 note:** per pre-reg § hypotheses.H2.selection_rule, this is descriptive-only. It is not the primary D-0 selector and cannot replace H1 post hoc.")
+    lines.append(
+        "**H2 note:** per pre-reg § hypotheses.H2.selection_rule, this is descriptive-only. It is not the primary D-0 selector and cannot replace H1 post hoc."
+    )
     lines.append("")
     lines.append("## K2 implementation integrity checklist (pre-reg § kill_criteria.K2)")
     k2 = report["k2_implementation_integrity"]
@@ -394,7 +388,9 @@ def main() -> int:
 
     # Console summary
     print(f"Pre-reg: {report['prereg_path']} (commit {report['prereg_commit']})")
-    print(f"IS N: {report['is_trades']['n']}  span: {report['is_trades']['first_day']} .. {report['is_trades']['last_day']}")
+    print(
+        f"IS N: {report['is_trades']['n']}  span: {report['is_trades']['first_day']} .. {report['is_trades']['last_day']}"
+    )
     print(f"P33: {report['thresholds']['p33']:.4f}  P67: {report['thresholds']['p67']:.4f}")
     print(f"Bucket dist: {report['bucket_distribution']}")
     print(f"Baseline Sharpe: {report['baseline']['sharpe']:+.4f}  WR: {report['baseline']['win_rate']:.3f}")

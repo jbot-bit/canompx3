@@ -137,36 +137,60 @@ def main() -> int:
     # consistency by symbol/session/model
     sym = (
         df.groupby("symbol")
-        .apply(lambda g: pd.Series({
-            "n": len(g),
-            "n_on": int(cond.loc[g.index].sum()),
-            "avg_on": float(g.loc[cond.loc[g.index], "pnl_r"].mean()) if cond.loc[g.index].sum() > 0 else np.nan,
-            "avg_off": float(g.loc[~cond.loc[g.index], "pnl_r"].mean()) if (~cond.loc[g.index]).sum() > 0 else np.nan,
-        }))
+        .apply(
+            lambda g: pd.Series(
+                {
+                    "n": len(g),
+                    "n_on": int(cond.loc[g.index].sum()),
+                    "avg_on": float(g.loc[cond.loc[g.index], "pnl_r"].mean())
+                    if cond.loc[g.index].sum() > 0
+                    else np.nan,
+                    "avg_off": float(g.loc[~cond.loc[g.index], "pnl_r"].mean())
+                    if (~cond.loc[g.index]).sum() > 0
+                    else np.nan,
+                }
+            )
+        )
         .reset_index()
     )
     sym["uplift"] = sym["avg_on"] - sym["avg_off"]
 
     ses = (
         df.groupby("orb_label")
-        .apply(lambda g: pd.Series({
-            "n": len(g),
-            "n_on": int(cond.loc[g.index].sum()),
-            "avg_on": float(g.loc[cond.loc[g.index], "pnl_r"].mean()) if cond.loc[g.index].sum() > 0 else np.nan,
-            "avg_off": float(g.loc[~cond.loc[g.index], "pnl_r"].mean()) if (~cond.loc[g.index]).sum() > 0 else np.nan,
-        }))
+        .apply(
+            lambda g: pd.Series(
+                {
+                    "n": len(g),
+                    "n_on": int(cond.loc[g.index].sum()),
+                    "avg_on": float(g.loc[cond.loc[g.index], "pnl_r"].mean())
+                    if cond.loc[g.index].sum() > 0
+                    else np.nan,
+                    "avg_off": float(g.loc[~cond.loc[g.index], "pnl_r"].mean())
+                    if (~cond.loc[g.index]).sum() > 0
+                    else np.nan,
+                }
+            )
+        )
         .reset_index()
     )
     ses["uplift"] = ses["avg_on"] - ses["avg_off"]
 
     mdl = (
         df.groupby(["entry_model", "confirm_bars", "rr_target"])
-        .apply(lambda g: pd.Series({
-            "n": len(g),
-            "n_on": int(cond.loc[g.index].sum()),
-            "avg_on": float(g.loc[cond.loc[g.index], "pnl_r"].mean()) if cond.loc[g.index].sum() > 0 else np.nan,
-            "avg_off": float(g.loc[~cond.loc[g.index], "pnl_r"].mean()) if (~cond.loc[g.index]).sum() > 0 else np.nan,
-        }))
+        .apply(
+            lambda g: pd.Series(
+                {
+                    "n": len(g),
+                    "n_on": int(cond.loc[g.index].sum()),
+                    "avg_on": float(g.loc[cond.loc[g.index], "pnl_r"].mean())
+                    if cond.loc[g.index].sum() > 0
+                    else np.nan,
+                    "avg_off": float(g.loc[~cond.loc[g.index], "pnl_r"].mean())
+                    if (~cond.loc[g.index]).sum() > 0
+                    else np.nan,
+                }
+            )
+        )
         .reset_index()
     )
     mdl["uplift"] = mdl["avg_on"] - mdl["avg_off"]
@@ -183,23 +207,25 @@ def main() -> int:
     out_dir = ROOT / "research" / "output"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    summary = pd.DataFrame([
-        {
-            "hypothesis": "U1_fast30_and_continuation",
-            "n_total": int(len(df)),
-            "n_on": int(len(on)),
-            "on_rate": float(len(on) / len(df)),
-            "avg_on": avg_on,
-            "avg_off": avg_off,
-            "uplift": uplift,
-            "wr_on": wr_on,
-            "wr_off": wr_off,
-            "perm_p": pval,
-            "sym_pos_ratio": sym_pos,
-            "session_pos_ratio": ses_pos,
-            "model_pos_ratio": mdl_pos,
-        }
-    ])
+    summary = pd.DataFrame(
+        [
+            {
+                "hypothesis": "U1_fast30_and_continuation",
+                "n_total": int(len(df)),
+                "n_on": int(len(on)),
+                "on_rate": float(len(on) / len(df)),
+                "avg_on": avg_on,
+                "avg_off": avg_off,
+                "uplift": uplift,
+                "wr_on": wr_on,
+                "wr_off": wr_off,
+                "perm_p": pval,
+                "sym_pos_ratio": sym_pos,
+                "session_pos_ratio": ses_pos,
+                "model_pos_ratio": mdl_pos,
+            }
+        ]
+    )
 
     p_sum = out_dir / "universal_hypothesis_u1_summary.csv"
     p_sym = out_dir / "universal_hypothesis_u1_by_symbol.csv"
@@ -215,11 +241,16 @@ def main() -> int:
     # strict verdict for this hypothesis
     verdict = "KILL"
     if (
-        avg_on >= 0.20 and uplift >= 0.20 and
-        pd.notna(pval) and pval <= 0.01 and
-        pd.notna(sym_pos) and sym_pos >= 0.60 and
-        pd.notna(ses_pos) and ses_pos >= 0.60 and
-        pd.notna(mdl_pos) and mdl_pos >= 0.60
+        avg_on >= 0.20
+        and uplift >= 0.20
+        and pd.notna(pval)
+        and pval <= 0.01
+        and pd.notna(sym_pos)
+        and sym_pos >= 0.60
+        and pd.notna(ses_pos)
+        and ses_pos >= 0.60
+        and pd.notna(mdl_pos)
+        and mdl_pos >= 0.60
     ):
         verdict = "PROMOTE"
 
@@ -230,7 +261,7 @@ def main() -> int:
         "Pooled across all symbols/sessions/models (orb_minutes=5).",
         "",
         f"N total: {len(df)}",
-        f"N on: {len(on)} ({len(on)/len(df):.1%})",
+        f"N on: {len(on)} ({len(on) / len(df):.1%})",
         f"avg_on: {avg_on:+.4f}",
         f"avg_off: {avg_off:+.4f}",
         f"uplift: {uplift:+.4f}",

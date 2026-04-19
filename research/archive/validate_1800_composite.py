@@ -29,6 +29,7 @@ MIN_ORB_SIZE = 6.0  # G6+ filter
 EXCLUDE_YEAR = 2021  # structurally different regime
 ARTIFACT_PATH = PROJECT_ROOT / "artifacts" / "1800_composite_validation.txt"
 
+
 # ---------------------------------------------------------------------------
 # Step 1: Data Assembly
 # ---------------------------------------------------------------------------
@@ -37,7 +38,8 @@ def load_composite_data(db_path: Path) -> list[dict]:
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         # Load orb_outcomes for 1800 E3 CB4, RR1.0 and RR2.0
-        outcomes = con.execute("""
+        outcomes = con.execute(
+            """
             SELECT trading_day, rr_target, outcome, pnl_r,
                    entry_price, stop_price, target_price
             FROM orb_outcomes
@@ -46,7 +48,9 @@ def load_composite_data(db_path: Path) -> list[dict]:
               AND orb_minutes = 5
               AND outcome IN ('win', 'loss')
             ORDER BY trading_day, rr_target
-        """, [ORB_LABEL, ENTRY_MODEL, CONFIRM_BARS]).fetchdf()
+        """,
+            [ORB_LABEL, ENTRY_MODEL, CONFIRM_BARS],
+        ).fetchdf()
 
         # Load 5m daily_features for G6+ filter and break direction
         df5 = con.execute("""
@@ -70,13 +74,13 @@ def load_composite_data(db_path: Path) -> list[dict]:
         con.close()
 
     # Pivot outcomes: one row per trading_day with RR1.0 and RR2.0 columns
-    rr1 = outcomes[outcomes["rr_target"] == 1.0].rename(
-        columns={"outcome": "outcome_rr1", "pnl_r": "pnl_r_rr1"}
-    )[["trading_day", "outcome_rr1", "pnl_r_rr1", "entry_price", "stop_price"]]
+    rr1 = outcomes[outcomes["rr_target"] == 1.0].rename(columns={"outcome": "outcome_rr1", "pnl_r": "pnl_r_rr1"})[
+        ["trading_day", "outcome_rr1", "pnl_r_rr1", "entry_price", "stop_price"]
+    ]
 
-    rr2 = outcomes[outcomes["rr_target"] == 2.0].rename(
-        columns={"outcome": "outcome_rr2", "pnl_r": "pnl_r_rr2"}
-    )[["trading_day", "outcome_rr2", "pnl_r_rr2"]]
+    rr2 = outcomes[outcomes["rr_target"] == 2.0].rename(columns={"outcome": "outcome_rr2", "pnl_r": "pnl_r_rr2"})[
+        ["trading_day", "outcome_rr2", "pnl_r_rr2"]
+    ]
 
     # Merge RR1 and RR2 on trading_day (must have both)
     merged = rr1.merge(rr2, on="trading_day", how="inner")
@@ -91,9 +95,7 @@ def load_composite_data(db_path: Path) -> list[dict]:
     merged = merged[merged["orb_size"] >= MIN_ORB_SIZE].copy()
 
     # Exclude 2021
-    merged["year"] = merged["trading_day"].apply(
-        lambda d: d.year if hasattr(d, "year") else int(str(d)[:4])
-    )
+    merged["year"] = merged["trading_day"].apply(lambda d: d.year if hasattr(d, "year") else int(str(d)[:4]))
     merged = merged[merged["year"] != EXCLUDE_YEAR].copy()
 
     # Compute agree flag
@@ -103,6 +105,7 @@ def load_composite_data(db_path: Path) -> list[dict]:
     merged["pnl_r_combined"] = merged["pnl_r_rr1"] + merged["pnl_r_rr2"]
 
     return merged.to_dict("records")
+
 
 # ---------------------------------------------------------------------------
 # Step 2: Metrics Computation
@@ -125,7 +128,7 @@ def compute_composite_metrics(rows: list[dict], label: str = "") -> dict:
     mean_r = total_r / n
     if n > 1:
         var = sum((p - mean_r) ** 2 for p in pnl_combined) / (n - 1)
-        std_r = var ** 0.5
+        std_r = var**0.5
         sharpe = mean_r / std_r if std_r > 0 else None
     else:
         sharpe = None
@@ -171,6 +174,7 @@ def compute_composite_metrics(rows: list[dict], label: str = "") -> dict:
         "yearly": yearly,
     }
 
+
 # ---------------------------------------------------------------------------
 # Step 3: Stress Testing
 # ---------------------------------------------------------------------------
@@ -192,8 +196,7 @@ def stress_test_pnl(rows: list[dict], multiplier: float) -> list[dict]:
 
         # Re-compute pnl_r for each RR target under stressed costs
         new_row = dict(r)
-        for rr_key, outcome_key in [("pnl_r_rr1", "outcome_rr1"),
-                                     ("pnl_r_rr2", "outcome_rr2")]:
+        for rr_key, outcome_key in [("pnl_r_rr1", "outcome_rr1"), ("pnl_r_rr2", "outcome_rr2")]:
             if r[outcome_key] == "win":
                 # Winner: pnl_points = target distance from entry
                 rr_val = 1.0 if "rr1" in rr_key else 2.0
@@ -212,6 +215,7 @@ def stress_test_pnl(rows: list[dict], multiplier: float) -> list[dict]:
 
     return stressed
 
+
 def find_breakeven_multiplier(rows: list[dict]) -> float:
     """Binary search for friction multiplier where ExpR = 0."""
     lo, hi = 1.0, 10.0
@@ -227,6 +231,7 @@ def find_breakeven_multiplier(rows: list[dict]) -> float:
         else:
             hi = mid
     return (lo + hi) / 2
+
 
 # ---------------------------------------------------------------------------
 # Step 4: Walk-Forward OOS
@@ -247,6 +252,7 @@ def walk_forward_expanding(rows: list[dict]) -> list[dict]:
         results.append({"fold": fold, "is": m_train, "oos": m_test})
     return results
 
+
 def leave_one_year_out(rows: list[dict]) -> list[dict]:
     """Leave-one-year-out cross-validation (2022-2025)."""
     results = []
@@ -257,6 +263,7 @@ def leave_one_year_out(rows: list[dict]) -> list[dict]:
         m_test = compute_composite_metrics(test, f"OOS {leave_out}")
         results.append({"leave_out": leave_out, "is": m_train, "oos": m_test})
     return results
+
 
 # ---------------------------------------------------------------------------
 # Step 5: Regime Analysis
@@ -293,6 +300,7 @@ def regime_analysis(rows: list[dict]) -> dict:
         "recent_r": recent_r,
     }
 
+
 # ---------------------------------------------------------------------------
 # Step 6: Direction Split
 # ---------------------------------------------------------------------------
@@ -308,6 +316,7 @@ def direction_split(rows: list[dict]) -> dict:
     pct_long = (long_r / total_r * 100) if total_r != 0 else 0
 
     return {"long": m_long, "short": m_short, "pct_long": pct_long}
+
 
 # ---------------------------------------------------------------------------
 # Step 7: Comparison Matrix (4 variants)
@@ -332,21 +341,24 @@ def build_comparison(all_rows: list[dict]) -> dict:
 
     return {"A": m_a, "B": m_b, "C": m_c, "D": m_d}
 
+
 # ---------------------------------------------------------------------------
 # Step 8: Report
 # ---------------------------------------------------------------------------
 def fmt_pct(v, decimals=1):
-    return f"{v*100:.{decimals}f}%" if v is not None else "N/A"
+    return f"{v * 100:.{decimals}f}%" if v is not None else "N/A"
+
 
 def fmt_r(v, decimals=2):
     return f"{v:+.{decimals}f}R" if v is not None else "N/A"
 
+
 def fmt_f(v, decimals=2):
     return f"{v:.{decimals}f}" if v is not None else "N/A"
 
+
 def generate_report(
-    all_rows, agree_rows, metrics, stress_results, wf_results, loo_results,
-    regime, dirs, comparison, be_mult
+    all_rows, agree_rows, metrics, stress_results, wf_results, loo_results, regime, dirs, comparison, be_mult
 ):
     lines = []
 
@@ -373,14 +385,14 @@ def generate_report(
             flags.append(f"[!] OOS DEGRADATION: {wf['fold']['test']} OOS ExpR < 50% of IS")
     if abs(dirs["pct_long"]) > 80 or abs(dirs["pct_long"]) < 20:
         dominant = "LONG" if dirs["pct_long"] > 80 else "SHORT"
-        flags.append(f"[!] DIRECTION SKEW: {dominant} carries {max(dirs['pct_long'], 100-dirs['pct_long']):.0f}% of edge")
+        flags.append(
+            f"[!] DIRECTION SKEW: {dominant} carries {max(dirs['pct_long'], 100 - dirs['pct_long']):.0f}% of edge"
+        )
     # Pre-2024 viability
-    pre2024_trades = sum(
-        1 for r in agree_rows if r["year"] < 2024
-    )
+    pre2024_trades = sum(1 for r in agree_rows if r["year"] < 2024)
     pre2024_years = len(set(r["year"] for r in agree_rows if r["year"] < 2024))
     if pre2024_years > 0 and pre2024_trades / pre2024_years < 5:
-        flags.append(f"[!] PRE-2024 VIABILITY: {pre2024_trades/pre2024_years:.1f} trades/year before 2024")
+        flags.append(f"[!] PRE-2024 VIABILITY: {pre2024_trades / pre2024_years:.1f} trades/year before 2024")
     if be_mult < 1.3:
         flags.append(f"[!] FRAGILE EDGE: breakeven at {be_mult:.2f}x friction (< 1.3x)")
 
@@ -421,8 +433,10 @@ def generate_report(
     w("--- STRESS TEST ---")
     for mult, label in [(1.0, "Base"), (1.5, "1.5x"), (2.0, "2.0x")]:
         sr = stress_results[mult]
-        w(f"  {label:5s} friction: N={sr['N']}, ExpR/trade={fmt_r(sr['exp_r'])}, "
-          f"ExpR/R={fmt_r(sr['exp_r_per_r'])}, Sharpe={fmt_f(sr['sharpe'])}")
+        w(
+            f"  {label:5s} friction: N={sr['N']}, ExpR/trade={fmt_r(sr['exp_r'])}, "
+            f"ExpR/R={fmt_r(sr['exp_r_per_r'])}, Sharpe={fmt_f(sr['sharpe'])}"
+        )
     w(f"  Breakeven friction multiplier: {be_mult:.2f}x")
     w()
 
@@ -448,12 +462,16 @@ def generate_report(
 
     # --- Regime ---
     w("--- REGIME ANALYSIS ---")
-    w(f"  PnL from 2025-2026: {regime['pct_pnl_2025_2026']:.1f}% ({fmt_r(regime['recent_r'])} of {fmt_r(regime['total_r'])})")
+    w(
+        f"  PnL from 2025-2026: {regime['pct_pnl_2025_2026']:.1f}% ({fmt_r(regime['recent_r'])} of {fmt_r(regime['total_r'])})"
+    )
     w()
     w("  Year-by-Year:")
     for y, m in regime["by_year"].items():
-        w(f"    {y}: N={m['N']}, WR1={fmt_pct(m.get('wr_rr1'))}, WR2={fmt_pct(m.get('wr_rr2'))}, "
-          f"Total={fmt_r(m.get('total_r'))}, ExpR={fmt_r(m.get('exp_r'))}")
+        w(
+            f"    {y}: N={m['N']}, WR1={fmt_pct(m.get('wr_rr1'))}, WR2={fmt_pct(m.get('wr_rr2'))}, "
+            f"Total={fmt_r(m.get('total_r'))}, ExpR={fmt_r(m.get('exp_r'))}"
+        )
     w()
     w("  ORB Size Buckets:")
     for bucket, m in regime["by_bucket"].items():
@@ -465,20 +483,24 @@ def generate_report(
     w(f"  LONG edge share: {dirs['pct_long']:.1f}%")
     for d_label in ["long", "short"]:
         m = dirs[d_label]
-        w(f"  {d_label.upper():6s}: N={m['N']}, WR1={fmt_pct(m.get('wr_rr1'))}, "
-          f"WR2={fmt_pct(m.get('wr_rr2'))}, Total={fmt_r(m.get('total_r'))}, "
-          f"ExpR={fmt_r(m.get('exp_r'))}")
+        w(
+            f"  {d_label.upper():6s}: N={m['N']}, WR1={fmt_pct(m.get('wr_rr1'))}, "
+            f"WR2={fmt_pct(m.get('wr_rr2'))}, Total={fmt_r(m.get('total_r'))}, "
+            f"ExpR={fmt_r(m.get('exp_r'))}"
+        )
     w()
 
     # --- Comparison ---
     w("--- COMPARISON MATRIX ---")
     w(f"  {'Variant':<25s} {'N':>5s} {'ExpR/trade':>12s} {'ExpR/R':>10s} {'Sharpe':>8s} {'MaxDD':>8s} {'PF':>8s}")
-    w(f"  {'-'*25} {'-'*5} {'-'*12} {'-'*10} {'-'*8} {'-'*8} {'-'*8}")
+    w(f"  {'-' * 25} {'-' * 5} {'-' * 12} {'-' * 10} {'-' * 8} {'-' * 8} {'-' * 8}")
     for key in ["A", "B", "C", "D"]:
         m = comparison[key]
-        w(f"  {m['label']:<25s} {m['N']:>5d} {fmt_r(m.get('exp_r')):>12s} "
-          f"{fmt_r(m.get('exp_r_per_r')):>10s} {fmt_f(m.get('sharpe')):>8s} "
-          f"{fmt_r(m.get('max_dd_r')):>8s} {fmt_f(m.get('profit_factor')):>8s}")
+        w(
+            f"  {m['label']:<25s} {m['N']:>5d} {fmt_r(m.get('exp_r')):>12s} "
+            f"{fmt_r(m.get('exp_r_per_r')):>10s} {fmt_f(m.get('sharpe')):>8s} "
+            f"{fmt_r(m.get('max_dd_r')):>8s} {fmt_f(m.get('profit_factor')):>8s}"
+        )
     w()
 
     # --- Honest Assessment ---
@@ -500,7 +522,7 @@ def generate_report(
     if regime["pct_pnl_2025_2026"] > 50:
         w(f"    - {regime['pct_pnl_2025_2026']:.0f}% of PnL concentrated in 2025-2026")
     if pre2024_years > 0 and pre2024_trades / pre2024_years < 5:
-        w(f"    - Only {pre2024_trades/pre2024_years:.1f} trades/year before 2024 -- thin history")
+        w(f"    - Only {pre2024_trades / pre2024_years:.1f} trades/year before 2024 -- thin history")
     w()
     w("  RISKS:")
     w("    - 15m AGREE is a new filter concept not in the validated grid")
@@ -517,6 +539,7 @@ def generate_report(
     w("=" * 70)
 
     return "\n".join(lines)
+
 
 # ---------------------------------------------------------------------------
 # Main
@@ -559,8 +582,7 @@ def main():
 
     # Step 8: Report
     report = generate_report(
-        all_rows, agree_rows, metrics, stress_results,
-        wf_results, loo_results, regime, dirs, comparison, be_mult
+        all_rows, agree_rows, metrics, stress_results, wf_results, loo_results, regime, dirs, comparison, be_mult
     )
 
     print(report)
@@ -569,6 +591,7 @@ def main():
     ARTIFACT_PATH.parent.mkdir(parents=True, exist_ok=True)
     ARTIFACT_PATH.write_text(report, encoding="utf-8")
     print(f"\nReport saved to: {ARTIFACT_PATH}")
+
 
 if __name__ == "__main__":
     main()

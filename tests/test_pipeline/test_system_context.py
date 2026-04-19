@@ -73,7 +73,9 @@ class TestBuildSystemContext:
             patch.object(system_context, "list_claims", return_value=[claim]),
             patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
         ):
-            snapshot = build_system_context(tmp_path, context_name="generic", active_tool="codex", active_mode="mutating")
+            snapshot = build_system_context(
+                tmp_path, context_name="generic", active_tool="codex", active_mode="mutating"
+            )
 
         assert snapshot.handoff.exists is True
         assert snapshot.git.branch == "main"
@@ -126,7 +128,9 @@ class TestBuildSystemContext:
             patch.object(system_context, "list_claims", return_value=[relevant, unrelated]),
             patch.object(system_context, "_build_authority_context", return_value=_authority_stub()),
         ):
-            snapshot = build_system_context(current_root, context_name="generic", active_tool="codex", active_mode="mutating")
+            snapshot = build_system_context(
+                current_root, context_name="generic", active_tool="codex", active_mode="mutating"
+            )
 
         assert [claim.root for claim in snapshot.claims] == [str(current_root)]
 
@@ -163,7 +167,9 @@ class TestEvaluateSystemPolicy:
             patch.object(system_context.sys, "executable", "/usr/bin/python3"),
             patch.object(system_context.sys, "prefix", "/usr"),
         ):
-            snapshot = build_system_context(tmp_path, context_name="codex-wsl", active_tool="codex", active_mode="mutating")
+            snapshot = build_system_context(
+                tmp_path, context_name="codex-wsl", active_tool="codex", active_mode="mutating"
+            )
             decision = evaluate_system_policy(snapshot, "session_start_mutating")
 
         assert decision.allowed is False

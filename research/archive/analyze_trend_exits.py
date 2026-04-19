@@ -64,6 +64,7 @@ SPEC = get_cost_spec("MGC")
 # IB computation (same as analyze_trend_holding.py)
 # ---------------------------------------------------------------------------
 
+
 def compute_ib(ts, highs, lows, anchor_utc_hour, duration_minutes):
     """Compute IB from numpy arrays."""
     hours = np.array([t.hour for t in ts])
@@ -82,6 +83,7 @@ def compute_ib(ts, highs, lows, anchor_utc_hour, duration_minutes):
         "ib_end": ib_end,
     }
 
+
 def find_ib_break(ts, highs, lows, ib):
     """Find first IB break after ib_end. Returns (direction, break_ts, break_idx)."""
     post_idx = np.flatnonzero(ts >= ib["ib_end"])
@@ -96,9 +98,11 @@ def find_ib_break(ts, highs, lows, ib):
             return "short", ts[i], i
     return None, None, None
 
+
 # ---------------------------------------------------------------------------
 # VWAP computation
 # ---------------------------------------------------------------------------
+
 
 def compute_running_vwap(prices, volumes):
     """Compute running VWAP from arrays of typical price and volume.
@@ -113,17 +117,19 @@ def compute_running_vwap(prices, volumes):
     vwap[mask] = cum_pv[mask] / cum_v[mask]
     return vwap
 
+
 # ---------------------------------------------------------------------------
 # Exit simulations
 # ---------------------------------------------------------------------------
+
 
 def _exit_pnl_r(entry_price, stop_price, exit_price, is_long):
     """Compute pnl_r from exit price."""
     pnl_pts = (exit_price - entry_price) if is_long else (entry_price - exit_price)
     return to_r_multiple(SPEC, entry_price, stop_price, pnl_pts)
 
-def sim_fixed_target(ts, highs, lows, closes, entry_idx, entry_price,
-                     stop_price, target_price, is_long, cutoff_ts):
+
+def sim_fixed_target(ts, highs, lows, closes, entry_idx, entry_price, stop_price, target_price, is_long, cutoff_ts):
     """Plain fixed-target strategy (control). Returns (pnl_r, exit_reason)."""
     for i in range(entry_idx, len(ts)):
         h, lo = highs[i], lows[i]
@@ -142,8 +148,8 @@ def sim_fixed_target(ts, highs, lows, closes, entry_idx, entry_price,
             return _exit_pnl_r(entry_price, stop_price, closes[i], is_long), "time"
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
 
-def sim_hold_7h(ts, highs, lows, closes, entry_idx, entry_price,
-                stop_price, is_long, cutoff_ts):
+
+def sim_hold_7h(ts, highs, lows, closes, entry_idx, entry_price, stop_price, is_long, cutoff_ts):
     """Hold with stop only for 7 hours. No target. Returns (pnl_r, exit_reason)."""
     for i in range(entry_idx, len(ts)):
         h, lo = highs[i], lows[i]
@@ -157,8 +163,8 @@ def sim_hold_7h(ts, highs, lows, closes, entry_idx, entry_price,
             return _exit_pnl_r(entry_price, stop_price, closes[i], is_long), "time_7h"
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
 
-def sim_vwap_trail(ts, highs, lows, closes, volumes, vwap, entry_idx,
-                   entry_price, stop_price, is_long, session_end_ts):
+
+def sim_vwap_trail(ts, highs, lows, closes, volumes, vwap, entry_idx, entry_price, stop_price, is_long, session_end_ts):
     """VWAP trail exit.
 
     After being in profit, exit when price crosses VWAP.
@@ -204,8 +210,8 @@ def sim_vwap_trail(ts, highs, lows, closes, volumes, vwap, entry_idx,
 
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
 
-def sim_session_close(ts, highs, lows, closes, entry_idx, entry_price,
-                      stop_price, is_long, cutoff_ts):
+
+def sim_session_close(ts, highs, lows, closes, entry_idx, entry_price, stop_price, is_long, cutoff_ts):
     """Hold until session close with stop. Returns (pnl_r, exit_reason)."""
     for i in range(entry_idx, len(ts)):
         h, lo = highs[i], lows[i]
@@ -219,8 +225,8 @@ def sim_session_close(ts, highs, lows, closes, entry_idx, entry_price,
             return _exit_pnl_r(entry_price, stop_price, closes[i], is_long), "session_close"
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
 
-def sim_atr_trail(ts, highs, lows, closes, entry_idx, entry_price,
-                  stop_price, is_long, atr_value, session_end_ts):
+
+def sim_atr_trail(ts, highs, lows, closes, entry_idx, entry_price, stop_price, is_long, atr_value, session_end_ts):
     """ATR trailing stop anchored to highest CLOSE (longs) or lowest CLOSE (shorts).
 
     Trail distance = ATR_MULT * atr_value.
@@ -267,8 +273,8 @@ def sim_atr_trail(ts, highs, lows, closes, entry_idx, entry_price,
 
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
 
-def sim_chandelier(ts, highs, lows, closes, entry_idx, entry_price,
-                   stop_price, is_long, atr_value, session_end_ts):
+
+def sim_chandelier(ts, highs, lows, closes, entry_idx, entry_price, stop_price, is_long, atr_value, session_end_ts):
     """Chandelier exit: ATR trail anchored to highest HIGH (longs) or lowest LOW (shorts).
 
     Trail distance = ATR_MULT * atr_value.
@@ -314,14 +320,31 @@ def sim_chandelier(ts, highs, lows, closes, entry_idx, entry_price,
 
     return _exit_pnl_r(entry_price, stop_price, closes[-1], is_long), "eod"
 
+
 # ---------------------------------------------------------------------------
 # Wrapper: run all exits with IB gating
 # ---------------------------------------------------------------------------
 
-def simulate_all_exits(ts, highs, lows, closes, volumes, vwap,
-                       entry_idx, entry_price, stop_price, target_price,
-                       is_long, orb_dir, ib_dir, ib_break_idx,
-                       cutoff_7h, session_end_ts, atr_value):
+
+def simulate_all_exits(
+    ts,
+    highs,
+    lows,
+    closes,
+    volumes,
+    vwap,
+    entry_idx,
+    entry_price,
+    stop_price,
+    target_price,
+    is_long,
+    orb_dir,
+    ib_dir,
+    ib_break_idx,
+    cutoff_7h,
+    session_end_ts,
+    atr_value,
+):
     """Run all 6 exit strategies for one trade.
 
     For limbo phase (before IB break): fixed target active.
@@ -335,8 +358,8 @@ def simulate_all_exits(ts, highs, lows, closes, volumes, vwap,
 
     # 1. Fixed target (control) -- always uses stored logic
     results["fixed"] = sim_fixed_target(
-        ts, highs, lows, closes, entry_idx, entry_price,
-        stop_price, target_price, is_long, session_end_ts)
+        ts, highs, lows, closes, entry_idx, entry_price, stop_price, target_price, is_long, session_end_ts
+    )
 
     # Determine alignment
     if ib_dir is None:
@@ -356,9 +379,7 @@ def simulate_all_exits(ts, highs, lows, closes, volumes, vwap,
         kill_r = _exit_pnl_r(entry_price, stop_price, kill_price, is_long)
 
         # But check if stopped out BEFORE IB break
-        stopped_before = _check_stop_before(
-            ts, highs, lows, entry_idx, entry_price, stop_price,
-            is_long, ib_break_idx)
+        stopped_before = _check_stop_before(ts, highs, lows, entry_idx, entry_price, stop_price, is_long, ib_break_idx)
         if stopped_before is not None:
             kill_r = _exit_pnl_r(entry_price, stop_price, stop_price, is_long)
             reason = "stop"
@@ -387,8 +408,8 @@ def simulate_all_exits(ts, highs, lows, closes, volumes, vwap,
     # --- Aligned: run each exit method from IB break point ---
     # First check if trade resolved BEFORE IB break (limbo phase)
     limbo_resolved = _check_limbo_resolution(
-        ts, highs, lows, closes, entry_idx, entry_price,
-        stop_price, target_price, is_long, ib_break_idx)
+        ts, highs, lows, closes, entry_idx, entry_price, stop_price, target_price, is_long, ib_break_idx
+    )
 
     if limbo_resolved is not None:
         # Trade already exited before IB break -- all methods get same result
@@ -399,42 +420,40 @@ def simulate_all_exits(ts, highs, lows, closes, volumes, vwap,
         return results, alignment
 
     # 2. Hold 7h
-    results["hold_7h"] = sim_hold_7h(
-        ts, highs, lows, closes, entry_idx, entry_price,
-        stop_price, is_long, cutoff_7h)
+    results["hold_7h"] = sim_hold_7h(ts, highs, lows, closes, entry_idx, entry_price, stop_price, is_long, cutoff_7h)
 
     # 3. VWAP trail
     results["vwap_trail"] = sim_vwap_trail(
-        ts, highs, lows, closes, volumes, vwap, entry_idx,
-        entry_price, stop_price, is_long, session_end_ts)
+        ts, highs, lows, closes, volumes, vwap, entry_idx, entry_price, stop_price, is_long, session_end_ts
+    )
 
     # 4. Session close at various cutoffs
     for h in SESSION_CLOSE_HOURS:
         cutoff = ts[entry_idx] + timedelta(hours=h)
         results[f"close_{h}h"] = sim_session_close(
-            ts, highs, lows, closes, entry_idx, entry_price,
-            stop_price, is_long, cutoff)
+            ts, highs, lows, closes, entry_idx, entry_price, stop_price, is_long, cutoff
+        )
 
     # 5. ATR trail
     if atr_value is not None and atr_value > 0:
         results["atr_trail"] = sim_atr_trail(
-            ts, highs, lows, closes, entry_idx, entry_price,
-            stop_price, is_long, atr_value, session_end_ts)
+            ts, highs, lows, closes, entry_idx, entry_price, stop_price, is_long, atr_value, session_end_ts
+        )
     else:
         results["atr_trail"] = results["fixed"]  # Fallback
 
     # 6. Chandelier
     if atr_value is not None and atr_value > 0:
         results["chandelier"] = sim_chandelier(
-            ts, highs, lows, closes, entry_idx, entry_price,
-            stop_price, is_long, atr_value, session_end_ts)
+            ts, highs, lows, closes, entry_idx, entry_price, stop_price, is_long, atr_value, session_end_ts
+        )
     else:
         results["chandelier"] = results["fixed"]  # Fallback
 
     return results, alignment
 
-def _check_stop_before(ts, highs, lows, entry_idx, entry_price,
-                       stop_price, is_long, ib_break_idx):
+
+def _check_stop_before(ts, highs, lows, entry_idx, entry_price, stop_price, is_long, ib_break_idx):
     """Check if original stop was hit before IB break. Returns bar index or None."""
     if ib_break_idx is None:
         return None
@@ -445,8 +464,10 @@ def _check_stop_before(ts, highs, lows, entry_idx, entry_price,
             return i
     return None
 
-def _check_limbo_resolution(ts, highs, lows, closes, entry_idx, entry_price,
-                            stop_price, target_price, is_long, ib_break_idx):
+
+def _check_limbo_resolution(
+    ts, highs, lows, closes, entry_idx, entry_price, stop_price, target_price, is_long, ib_break_idx
+):
     """Check if trade resolved (stop or target) before IB break.
 
     Returns (pnl_r, exit_reason) or None.
@@ -467,9 +488,11 @@ def _check_limbo_resolution(ts, highs, lows, closes, entry_idx, entry_price,
             return _exit_pnl_r(entry_price, stop_price, target_price, is_long), "limbo_target"
     return None
 
+
 # ---------------------------------------------------------------------------
 # Process session
 # ---------------------------------------------------------------------------
+
 
 def process_session(db_path, session_label, start, end):
     """Load trades + bars, run all exit simulations, return DataFrame."""
@@ -480,7 +503,8 @@ def process_session(db_path, session_label, start, end):
     con = duckdb.connect(str(db_path), read_only=True)
 
     # Load outcomes
-    df = con.execute(f"""
+    df = con.execute(
+        f"""
         SELECT o.trading_day, o.entry_ts, o.entry_price, o.stop_price,
                o.target_price, o.pnl_r,
                d.orb_{session_label}_break_dir,
@@ -495,7 +519,9 @@ def process_session(db_path, session_label, start, end):
           AND o.pnl_r IS NOT NULL AND d.orb_{session_label}_size >= ?
           AND o.trading_day BETWEEN ? AND ?
         ORDER BY o.trading_day
-    """, [session_label, RR_TARGET, CONFIRM_BARS, MIN_ORB_SIZE, start, end]).fetchdf()
+    """,
+        [session_label, RR_TARGET, CONFIRM_BARS, MIN_ORB_SIZE, start, end],
+    ).fetchdf()
 
     if df.empty:
         con.close()
@@ -516,8 +542,7 @@ def process_session(db_path, session_label, start, end):
         if not b.empty:
             b["ts_utc"] = pd.to_datetime(b["ts_utc"], utc=True)
             ts_raw = b["ts_utc"].values.astype("datetime64[ms]")
-            ts_py = np.array([pd.Timestamp(t).to_pydatetime().replace(tzinfo=None)
-                              for t in ts_raw])
+            ts_py = np.array([pd.Timestamp(t).to_pydatetime().replace(tzinfo=None) for t in ts_raw])
 
             opens = b["open"].values.astype(np.float64)
             h_arr = b["high"].values.astype(np.float64)
@@ -530,8 +555,7 @@ def process_session(db_path, session_label, start, end):
 
             # Find session start (23:00 UTC) for VWAP anchor
             # VWAP resets at market open (23:00 UTC)
-            session_start_mask = np.array([t.hour == MARKET_OPEN_UTC_HOUR and t.minute == 0
-                                           for t in ts_py])
+            session_start_mask = np.array([t.hour == MARKET_OPEN_UTC_HOUR and t.minute == 0 for t in ts_py])
             session_start_indices = np.flatnonzero(session_start_mask)
 
             # Compute VWAP from session start
@@ -594,10 +618,24 @@ def process_session(db_path, session_label, start, end):
 
         # Run all exits
         exit_results, alignment = simulate_all_exits(
-            ts_py, h_arr, l_arr, c_arr, v_arr, vwap_arr,
-            entry_idx, entry_p, stop_p, target_p,
-            is_long, orb_dir, ib_dir, ib_break_idx,
-            cutoff_7h, session_end, atr_20)
+            ts_py,
+            h_arr,
+            l_arr,
+            c_arr,
+            v_arr,
+            vwap_arr,
+            entry_idx,
+            entry_p,
+            stop_p,
+            target_p,
+            is_long,
+            orb_dir,
+            ib_dir,
+            ib_break_idx,
+            cutoff_7h,
+            session_end,
+            atr_20,
+        )
 
         year = str(td.year) if hasattr(td, "year") else str(td)[:4]
 
@@ -615,6 +653,7 @@ def process_session(db_path, session_label, start, end):
 
     return pd.DataFrame(results)
 
+
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
@@ -631,10 +670,14 @@ EXIT_METHODS = [
     ("Chandelier 1.5x", "chandelier_pnl"),
 ]
 
+
 def fmt_row(label, m):
     """Format one metrics row."""
-    return (f"  {label:22s} {m['n']:>5d} {m['wr']:>7.1%} {m['expr']:>+8.4f} "
-            f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>+8.1f}")
+    return (
+        f"  {label:22s} {m['n']:>5d} {m['wr']:>7.1%} {m['expr']:>+8.4f} "
+        f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>+8.1f}"
+    )
+
 
 def print_comparison_table(pdf, title, methods=None):
     """Print a comparison table of all exit methods."""
@@ -645,9 +688,8 @@ def print_comparison_table(pdf, title, methods=None):
         return
 
     print(f"\n  {title} (N={len(pdf)})")
-    print(f"  {'Strategy':22s} {'N':>5s} {'WR':>7s} {'ExpR':>8s} "
-          f"{'Sharpe':>8s} {'MaxDD':>8s} {'Total':>8s}")
-    print(f"  {'-'*22} {'-'*5} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(f"  {'Strategy':22s} {'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>8s} {'MaxDD':>8s} {'Total':>8s}")
+    print(f"  {'-' * 22} {'-' * 5} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for label, col in methods:
         if col not in pdf.columns:
@@ -655,6 +697,7 @@ def print_comparison_table(pdf, title, methods=None):
         m = compute_strategy_metrics(pdf[col].values)
         if m:
             print(fmt_row(label, m))
+
 
 def print_report(pdf, session_label):
     """Print full report for one session."""
@@ -668,14 +711,13 @@ def print_report(pdf, session_label):
 
     print(f"\n{'=' * 95}")
     print(f"{session_label} SESSION  |  IB: {ib_name}  |  N={n}")
-    print(f"E1 CB{CONFIRM_BARS} RR{RR_TARGET} G{int(MIN_ORB_SIZE)}+  |  "
-          f"ATR mult={ATR_MULT}  |  Hold={HOLD_HOURS}h")
+    print(f"E1 CB{CONFIRM_BARS} RR{RR_TARGET} G{int(MIN_ORB_SIZE)}+  |  ATR mult={ATR_MULT}  |  Hold={HOLD_HOURS}h")
     print(f"{'=' * 95}")
 
     # Alignment distribution
     for a in ["aligned", "opposed", "no_break"]:
         na = len(pdf[pdf["alignment"] == a])
-        print(f"  {a:10s}: {na:>4d} ({na/n*100:.0f}%)", end="  ")
+        print(f"  {a:10s}: {na:>4d} ({na / n * 100:.0f}%)", end="  ")
     print()
 
     # --- ALL TRADES ---
@@ -718,7 +760,7 @@ def print_report(pdf, session_label):
     ]
     header_labels = [l for l, _ in yearly_methods]
     print(f"  {'Year':5s} {'N':>4s} " + " ".join(f"{l:>8s}" for l in header_labels))
-    print(f"  {'-'*5} {'-'*4} " + " ".join(f"{'-'*8}" for _ in header_labels))
+    print(f"  {'-' * 5} {'-' * 4} " + " ".join(f"{'-' * 8}" for _ in header_labels))
 
     for year in sorted(pdf["year"].unique()):
         ydf = pdf[pdf["year"] == year]
@@ -765,6 +807,7 @@ def print_report(pdf, session_label):
                 best_label = label
         if best_label:
             print(f"    {subset_name:10s}: {best_label} (ExpR={best_expr:+.4f})")
+
 
 def run_integrity_checks(pdf, session_label):
     """Run basic integrity checks."""
@@ -823,9 +866,11 @@ def run_integrity_checks(pdf, session_label):
 
     print(f"    {ok}/{total} passed")
 
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def run(db_path, start, end):
     print("Alternative Exit Methods for IB-Aligned Trades")
@@ -834,7 +879,7 @@ def run(db_path, start, end):
     print(f"Params: E1 CB{CONFIRM_BARS} RR{RR_TARGET} G{int(MIN_ORB_SIZE)}+")
     print(f"Trail params: ATR mult={ATR_MULT}, Hold={HOLD_HOURS}h")
     print(f"Session close cutoffs: {SESSION_CLOSE_HOURS}h")
-    print(f"IB configs: {dict((s, f'{a}_{d}m') for s,(a,d) in SESSION_IB_CONFIG.items())}")
+    print(f"IB configs: {dict((s, f'{a}_{d}m') for s, (a, d) in SESSION_IB_CONFIG.items())}")
 
     for session in SESSIONS:
         print(f"\nProcessing {session} session...")
@@ -866,9 +911,9 @@ def run(db_path, start, end):
     print("  - MaxDD must not be materially worse than Fixed RR")
     print("  - If no trail method wins: fixed target is the correct exit")
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Alternative Exit Methods for IB-Aligned Trades")
+    parser = argparse.ArgumentParser(description="Alternative Exit Methods for IB-Aligned Trades")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
     parser.add_argument("--start", type=date.fromisoformat, default=date(2016, 2, 1))
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
@@ -881,6 +926,7 @@ def main():
         sys.exit(1)
 
     run(args.db_path, args.start, args.end)
+
 
 if __name__ == "__main__":
     main()

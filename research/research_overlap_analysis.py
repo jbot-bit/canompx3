@@ -39,6 +39,7 @@ import pandas as pd
 
 try:
     from scipy.stats import pearsonr
+
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
@@ -55,15 +56,13 @@ _UK_LONDON = ZoneInfo("Europe/London")
 
 def is_us_dst(trading_day: date) -> bool:
     """True if US Eastern is in DST (EDT, UTC-4) on this date."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_US_EASTERN)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_US_EASTERN)
     return dt.utcoffset().total_seconds() == -4 * 3600
 
 
 def is_uk_dst(trading_day: date) -> bool:
     """True if UK is in BST (UTC+1) on this date."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_UK_LONDON)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_UK_LONDON)
     return dt.utcoffset().total_seconds() == 1 * 3600
 
 
@@ -73,7 +72,7 @@ def is_uk_dst(trading_day: date) -> bool:
 
 # Fixed parameters (match production: E1 entry, CB1, RR2.0, G4+)
 G4_MIN = 4.0
-BREAK_WINDOW = 240    # 4 hours in minutes
+BREAK_WINDOW = 240  # 4 hours in minutes
 OUTCOME_WINDOW = 480  # 8 hours in minutes
 RR_TARGET = 2.0
 
@@ -82,22 +81,22 @@ RR_TARGET = 2.0
 # UK DST: sessions near London open (8AM London) — shifts ±1hr with UK DST
 # CLEAN: sessions near Asia opens (no DST) or mid-European-morning (no shifting event)
 SESSION_DST_TYPE = {
-    "0900": "US",     # CME open in winter, +1hr late in summer
-    "0930": "US",     # CME +30min winter, +1hr30 summer
+    "0900": "US",  # CME open in winter, +1hr late in summer
+    "0930": "US",  # CME +30min winter, +1hr30 summer
     "1000": "CLEAN",  # Tokyo open, no DST
     "1015": "CLEAN",  # Tokyo +15min, no DST
     "1100": "CLEAN",  # Singapore open, no DST
     "1130": "CLEAN",  # HK/Shanghai open, no DST
     "1245": "CLEAN",  # HK/SG afternoon, no DST
-    "1545": "UK",     # 05:45 UTC — relationship to London open shifts ±1hr
-    "1615": "UK",     # 06:15 UTC — near London open, shifts ±1hr
-    "1645": "UK",     # 06:45 UTC — very close to London open, shifts ±1hr
-    "1800": "UK",     # London open in winter, +1hr late in summer
-    "1815": "UK",     # London +15min winter, +1hr15 summer
+    "1545": "UK",  # 05:45 UTC — relationship to London open shifts ±1hr
+    "1615": "UK",  # 06:15 UTC — near London open, shifts ±1hr
+    "1645": "UK",  # 06:45 UTC — very close to London open, shifts ±1hr
+    "1800": "UK",  # London open in winter, +1hr late in summer
+    "1815": "UK",  # London +15min winter, +1hr15 summer
     "1900": "CLEAN",  # 09:00 UTC — mid-European-morning, not near any DST-shifting open
     "1915": "CLEAN",  # 09:15 UTC — same
-    "2300": "US",     # Pre/post US data release depending on DST
-    "0030": "US",     # US equity open in winter, +1hr late in summer
+    "2300": "US",  # Pre/post US data release depending on DST
+    "0030": "US",  # US equity open in winter, +1hr late in summer
 }
 
 # Candidate pairs: (existing_session, candidate_session) per instrument
@@ -112,14 +111,18 @@ CANDIDATE_PAIRS = {
 # Data Loading (copied from research_aperture_scan.py — standalone)
 # =========================================================================
 
+
 def load_bars(con, instrument):
     """Load all 1m bars for an instrument into a DataFrame."""
-    return con.execute("""
+    return con.execute(
+        """
         SELECT ts_utc, open, high, low, close
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def build_day_arrays(bars_df):
@@ -182,6 +185,7 @@ def build_dst_masks(trading_days):
 # =========================================================================
 # Per-Day Scan Engine
 # =========================================================================
+
 
 def parse_session_label(label):
     """Parse session label like '0930' or '1815' into (bris_h, bris_m)."""
@@ -347,6 +351,7 @@ def scan_session_per_day(highs, lows, closes, bris_h, bris_m, aperture_min=5):
 # Overlap Metrics
 # =========================================================================
 
+
 def compute_overlap_metrics(existing_days, candidate_days):
     """Compute overlap metrics between two sessions' per-day results.
 
@@ -404,12 +409,10 @@ def compute_overlap_metrics(existing_days, candidate_days):
     n_candidate_broke = n_both_broke + n_candidate_only
 
     # Shared break percentage (candidate denominator)
-    shared_break_pct = (n_both_broke / n_candidate_broke
-                        if n_candidate_broke > 0 else np.nan)
+    shared_break_pct = n_both_broke / n_candidate_broke if n_candidate_broke > 0 else np.nan
 
     # Direction concordance
-    direction_concordance = (n_same_direction / n_both_broke
-                             if n_both_broke > 0 else np.nan)
+    direction_concordance = n_same_direction / n_both_broke if n_both_broke > 0 else np.nan
 
     # Pearson r on shared break-days
     r_correlation = np.nan
@@ -424,14 +427,11 @@ def compute_overlap_metrics(existing_days, candidate_days):
         print("  WARNING: scipy not available, Pearson r will be NaN")
 
     # Conditional avgR on exclusive days
-    cond_avg_r_exclusive = (float(np.mean(candidate_r_exclusive))
-                            if candidate_r_exclusive else np.nan)
+    cond_avg_r_exclusive = float(np.mean(candidate_r_exclusive)) if candidate_r_exclusive else np.nan
 
     # Overall avgR for each session (on common G4+ days only)
-    existing_avg_r = (float(np.mean(existing_all_r))
-                      if existing_all_r else np.nan)
-    candidate_avg_r = (float(np.mean(candidate_all_r))
-                       if candidate_all_r else np.nan)
+    existing_avg_r = float(np.mean(existing_all_r)) if existing_all_r else np.nan
+    candidate_avg_r = float(np.mean(candidate_all_r)) if candidate_all_r else np.nan
 
     return {
         "n_common_g4": len(common_g4),
@@ -468,8 +468,7 @@ def classify_overlap(shared_break_pct, r_correlation):
 
     if shared_break_pct < 0.50 and r_abs < 0.3:
         return "INDEPENDENT"
-    elif shared_break_pct > 0.80 and (not np.isnan(r_correlation)
-                                      and r_correlation > 0.6):
+    elif shared_break_pct > 0.80 and (not np.isnan(r_correlation) and r_correlation > 0.6):
         return "REDUNDANT"
     else:
         return "GREY-ZONE"
@@ -479,42 +478,47 @@ def classify_overlap(shared_break_pct, r_correlation):
 # Output Formatting
 # =========================================================================
 
+
 def print_instrument_table(inst_rows, instrument):
     """Print overlap analysis table for one instrument."""
     print(f"\n{'=' * 120}")
     print(f"  {instrument} — OVERLAP ANALYSIS")
     print(f"{'=' * 120}")
 
-    header = (f"  {'Existing':>8s} {'Candidate':>9s} {'DST':>6s} "
-              f"{'G4':>5s} {'Both':>5s} {'E_only':>6s} {'C_only':>6s} "
-              f"{'Neith':>5s} {'Shrd%':>6s} {'DirCon':>6s} "
-              f"{'r':>6s} {'r_p':>7s} "
-              f"{'E_avgR':>7s} {'E_N':>4s} {'C_avgR':>7s} {'C_N':>4s} "
-              f"{'Excl_R':>7s} {'X_N':>4s} {'Verdict':>12s}")
+    header = (
+        f"  {'Existing':>8s} {'Candidate':>9s} {'DST':>6s} "
+        f"{'G4':>5s} {'Both':>5s} {'E_only':>6s} {'C_only':>6s} "
+        f"{'Neith':>5s} {'Shrd%':>6s} {'DirCon':>6s} "
+        f"{'r':>6s} {'r_p':>7s} "
+        f"{'E_avgR':>7s} {'E_N':>4s} {'C_avgR':>7s} {'C_N':>4s} "
+        f"{'Excl_R':>7s} {'X_N':>4s} {'Verdict':>12s}"
+    )
     print(header)
     print(f"  {'-' * 116}")
 
     for r in inst_rows:
-        sbp = f"{r['shared_break_pct'] * 100:5.1f}%" if not np.isnan(r['shared_break_pct']) else "    --%"
-        dc = f"{r['direction_concordance'] * 100:5.1f}%" if not np.isnan(r['direction_concordance']) else "    --%"
-        rc = f"{r['r_correlation']:+6.3f}" if not np.isnan(r['r_correlation']) else "    --"
-        rp = f"{r['r_pvalue']:7.4f}" if not np.isnan(r['r_pvalue']) else "     --"
-        ea = f"{r['existing_avg_r']:+7.3f}" if not np.isnan(r['existing_avg_r']) else "     --"
-        ca = f"{r['candidate_avg_r']:+7.3f}" if not np.isnan(r['candidate_avg_r']) else "     --"
-        xa = f"{r['cond_avg_r_exclusive']:+7.3f}" if not np.isnan(r['cond_avg_r_exclusive']) else "     --"
+        sbp = f"{r['shared_break_pct'] * 100:5.1f}%" if not np.isnan(r["shared_break_pct"]) else "    --%"
+        dc = f"{r['direction_concordance'] * 100:5.1f}%" if not np.isnan(r["direction_concordance"]) else "    --%"
+        rc = f"{r['r_correlation']:+6.3f}" if not np.isnan(r["r_correlation"]) else "    --"
+        rp = f"{r['r_pvalue']:7.4f}" if not np.isnan(r["r_pvalue"]) else "     --"
+        ea = f"{r['existing_avg_r']:+7.3f}" if not np.isnan(r["existing_avg_r"]) else "     --"
+        ca = f"{r['candidate_avg_r']:+7.3f}" if not np.isnan(r["candidate_avg_r"]) else "     --"
+        xa = f"{r['cond_avg_r_exclusive']:+7.3f}" if not np.isnan(r["cond_avg_r_exclusive"]) else "     --"
 
         excl_flag = ""
-        if r['n_exclusive'] > 0 and r['n_exclusive'] < 15:
+        if r["n_exclusive"] > 0 and r["n_exclusive"] < 15:
             excl_flag = " *"  # Flag small exclusive N
 
-        print(f"  {r['existing_session']:>8s} {r['candidate_session']:>9s} "
-              f"{r['dst_regime']:>6s} "
-              f"{r['n_common_g4']:5d} {r['n_both_broke']:5d} "
-              f"{r['n_existing_only']:6d} {r['n_candidate_only']:6d} "
-              f"{r['n_neither']:5d} {sbp} {dc} "
-              f"{rc} {rp} "
-              f"{ea} {r['existing_n']:4d} {ca} {r['candidate_n']:4d} "
-              f"{xa} {r['n_exclusive']:4d}{excl_flag} {r['classification']:>12s}")
+        print(
+            f"  {r['existing_session']:>8s} {r['candidate_session']:>9s} "
+            f"{r['dst_regime']:>6s} "
+            f"{r['n_common_g4']:5d} {r['n_both_broke']:5d} "
+            f"{r['n_existing_only']:6d} {r['n_candidate_only']:6d} "
+            f"{r['n_neither']:5d} {sbp} {dc} "
+            f"{rc} {rp} "
+            f"{ea} {r['existing_n']:4d} {ca} {r['candidate_n']:4d} "
+            f"{xa} {r['n_exclusive']:4d}{excl_flag} {r['classification']:>12s}"
+        )
 
 
 def print_honest_summary(all_rows):
@@ -537,8 +541,7 @@ def print_honest_summary(all_rows):
     n_grey = sum(1 for r in all_rows if r["classification"] == "GREY-ZONE")
     n_verdicts = n_independent + n_redundant + n_grey
 
-    print(f"\n  SCOPE: {n_pairs} candidate pairs tested across "
-          f"{len(CANDIDATE_PAIRS)} instruments")
+    print(f"\n  SCOPE: {n_pairs} candidate pairs tested across {len(CANDIDATE_PAIRS)} instruments")
     print(f"  scipy available: {HAS_SCIPY}")
 
     print(f"\n  CLASSIFICATION ({n_verdicts} operative verdicts across {n_pairs} pairs):")
@@ -549,9 +552,11 @@ def print_honest_summary(all_rows):
 
     # --- Per-pair results ---
     def _fmt_row(r):
-        rc = f"r={r['r_correlation']:+.3f}" if not np.isnan(r['r_correlation']) else "r=NaN"
-        sbp = f"shared={r['shared_break_pct'] * 100:.1f}%" if not np.isnan(r['shared_break_pct']) else "shared=NaN"
-        xa = f"excl_avgR={r['cond_avg_r_exclusive']:.3f}" if not np.isnan(r['cond_avg_r_exclusive']) else "excl_avgR=NaN"
+        rc = f"r={r['r_correlation']:+.3f}" if not np.isnan(r["r_correlation"]) else "r=NaN"
+        sbp = f"shared={r['shared_break_pct'] * 100:.1f}%" if not np.isnan(r["shared_break_pct"]) else "shared=NaN"
+        xa = (
+            f"excl_avgR={r['cond_avg_r_exclusive']:.3f}" if not np.isnan(r["cond_avg_r_exclusive"]) else "excl_avgR=NaN"
+        )
         return sbp, rc, xa
 
     # SURVIVED
@@ -567,15 +572,16 @@ def print_honest_summary(all_rows):
             # Clean pair
             r = rows[0]
             sbp, rc, xa = _fmt_row(r)
-            print(f"    {inst} {ex}->{cand}: {sbp}, {rc}, "
-                  f"exclusive_days={r['n_exclusive']}, {xa}")
+            print(f"    {inst} {ex}->{cand}: {sbp}, {rc}, exclusive_days={r['n_exclusive']}, {xa}")
         else:
             # DST pair — report both regimes
             for r in rows:
                 if r["classification"] == "INDEPENDENT":
                     sbp, rc, xa = _fmt_row(r)
-                    print(f"    {inst} {ex}->{cand} [{r['dst_regime']}]: {sbp}, {rc}, "
-                          f"exclusive_days={r['n_exclusive']}, {xa}")
+                    print(
+                        f"    {inst} {ex}->{cand} [{r['dst_regime']}]: {sbp}, {rc}, "
+                        f"exclusive_days={r['n_exclusive']}, {xa}"
+                    )
     if not found_independent:
         print("    None — all candidates overlap with existing sessions.")
 
@@ -634,11 +640,13 @@ def print_honest_summary(all_rows):
             if w["classification"] != s["classification"]:
                 divergence_found = True
                 inst, ex, cand = key
-                w_sbp = f"{w['shared_break_pct'] * 100:.1f}%" if not np.isnan(w['shared_break_pct']) else "NaN"
-                s_sbp = f"{s['shared_break_pct'] * 100:.1f}%" if not np.isnan(s['shared_break_pct']) else "NaN"
-                print(f"    ** {inst} {ex}->{cand}: "
-                      f"WINTER={w['classification']} (shared={w_sbp}), "
-                      f"SUMMER={s['classification']} (shared={s_sbp})")
+                w_sbp = f"{w['shared_break_pct'] * 100:.1f}%" if not np.isnan(w["shared_break_pct"]) else "NaN"
+                s_sbp = f"{s['shared_break_pct'] * 100:.1f}%" if not np.isnan(s["shared_break_pct"]) else "NaN"
+                print(
+                    f"    ** {inst} {ex}->{cand}: "
+                    f"WINTER={w['classification']} (shared={w_sbp}), "
+                    f"SUMMER={s['classification']} (shared={s_sbp})"
+                )
                 print("       DIFFERENT TRADE in each regime.")
 
     if not divergence_found:
@@ -648,14 +656,22 @@ def print_honest_summary(all_rows):
     # London opens at 08:00 UTC in winter (GMT), 07:00 UTC in summer (BST).
     # Pre-London candidates are CLOSER in summer, FARTHER in winter.
     _PRE_LONDON_NOTES = {
-        "1545": ("In winter, 15:45 Brisbane (05:45 UTC) = 2hr15 pre-London-open (08:00 UTC). "
-                 "In summer, 15:45 Brisbane (05:45 UTC) = 1hr15 pre-London-open (07:00 UTC)."),
-        "1615": ("In winter, 16:15 Brisbane (06:15 UTC) = 1hr45 pre-London-open (08:00 UTC). "
-                 "In summer, 16:15 Brisbane (06:15 UTC) = 45min pre-London-open (07:00 UTC)."),
-        "1645": ("In winter, 16:45 Brisbane (06:45 UTC) = 1hr15 pre-London-open (08:00 UTC). "
-                 "In summer, 16:45 Brisbane (06:45 UTC) = 15min pre-London-open (07:00 UTC)."),
-        "1815": ("In summer, 18:15 Brisbane (08:15 UTC) = 1hr15 post-London-open (07:00 UTC). "
-                 "In winter, 18:15 Brisbane (08:15 UTC) = 15min post-London-open (08:00 UTC)."),
+        "1545": (
+            "In winter, 15:45 Brisbane (05:45 UTC) = 2hr15 pre-London-open (08:00 UTC). "
+            "In summer, 15:45 Brisbane (05:45 UTC) = 1hr15 pre-London-open (07:00 UTC)."
+        ),
+        "1615": (
+            "In winter, 16:15 Brisbane (06:15 UTC) = 1hr45 pre-London-open (08:00 UTC). "
+            "In summer, 16:15 Brisbane (06:15 UTC) = 45min pre-London-open (07:00 UTC)."
+        ),
+        "1645": (
+            "In winter, 16:45 Brisbane (06:45 UTC) = 1hr15 pre-London-open (08:00 UTC). "
+            "In summer, 16:45 Brisbane (06:45 UTC) = 15min pre-London-open (07:00 UTC)."
+        ),
+        "1815": (
+            "In summer, 18:15 Brisbane (08:15 UTC) = 1hr15 post-London-open (07:00 UTC). "
+            "In winter, 18:15 Brisbane (08:15 UTC) = 15min post-London-open (08:00 UTC)."
+        ),
     }
     pre_london_candidates = set()
     for r in all_rows:
@@ -693,13 +709,11 @@ def print_honest_summary(all_rows):
 # Main
 # =========================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Overlap analysis: are candidate sessions independent edges?"
-    )
+    parser = argparse.ArgumentParser(description="Overlap analysis: are candidate sessions independent edges?")
     parser.add_argument(
-        "--db-path", type=str, default=None,
-        help="Path to gold.db (default: auto-resolve via pipeline.paths)"
+        "--db-path", type=str, default=None, help="Path to gold.db (default: auto-resolve via pipeline.paths)"
     )
     args = parser.parse_args()
 
@@ -708,6 +722,7 @@ def main():
     else:
         try:
             from pipeline.paths import GOLD_DB_PATH
+
             db_path = GOLD_DB_PATH
         except ImportError:
             db_path = Path("gold.db")
@@ -716,8 +731,10 @@ def main():
     print(f"\n{'=' * 120}")
     print("  OVERLAP ANALYSIS — Session Independence Test")
     print(f"  Database: {db_path}")
-    print(f"  Parameters: G{G4_MIN:.0f}+ filter | RR{RR_TARGET:.1f} target | "
-          f"{BREAK_WINDOW // 60}h break window | {OUTCOME_WINDOW // 60}h outcome window")
+    print(
+        f"  Parameters: G{G4_MIN:.0f}+ filter | RR{RR_TARGET:.1f} target | "
+        f"{BREAK_WINDOW // 60}h break window | {OUTCOME_WINDOW // 60}h outcome window"
+    )
     print(f"  Pairs: {n_total_pairs} across {len(CANDIDATE_PAIRS)} instruments")
     print(f"  scipy available: {HAS_SCIPY}")
     print(f"{'=' * 120}")
@@ -740,16 +757,13 @@ def main():
             t_build = time.time()
             all_days, opens, highs, lows, closes = build_day_arrays(bars_df)
             n_days = len(all_days)
-            print(f"    {n_days} trading days ({all_days[0]} to {all_days[-1]}) "
-                  f"built in {time.time() - t_build:.1f}s")
+            print(f"    {n_days} trading days ({all_days[0]} to {all_days[-1]}) built in {time.time() - t_build:.1f}s")
             del bars_df
 
             # Build DST masks once
             us_mask, uk_mask = build_dst_masks(all_days)
-            print(f"    US DST: {int(us_mask.sum())} summer / "
-                  f"{n_days - int(us_mask.sum())} winter")
-            print(f"    UK DST: {int(uk_mask.sum())} summer / "
-                  f"{n_days - int(uk_mask.sum())} winter")
+            print(f"    US DST: {int(us_mask.sum())} summer / {n_days - int(us_mask.sum())} winter")
+            print(f"    UK DST: {int(uk_mask.sum())} summer / {n_days - int(uk_mask.sum())} winter")
 
             # Cache per-day results for each unique session label
             session_cache = {}
@@ -761,12 +775,9 @@ def main():
             t_scan = time.time()
             for sess_label in unique_sessions:
                 bris_h, bris_m = parse_session_label(sess_label)
-                session_cache[sess_label] = scan_session_per_day(
-                    highs, lows, closes, bris_h, bris_m
-                )
+                session_cache[sess_label] = scan_session_per_day(highs, lows, closes, bris_h, bris_m)
 
-            print(f"    {len(unique_sessions)} sessions scanned in "
-                  f"{time.time() - t_scan:.1f}s")
+            print(f"    {len(unique_sessions)} sessions scanned in {time.time() - t_scan:.1f}s")
 
             # Process each pair
             inst_rows = []
@@ -780,8 +791,7 @@ def main():
 
                 # Fail-closed: conflicting DST types (US vs UK) would make
                 # the split meaningless — abort rather than produce bad data
-                if (e_dst != "CLEAN" and c_dst != "CLEAN"
-                        and e_dst != c_dst):
+                if e_dst != "CLEAN" and c_dst != "CLEAN" and e_dst != c_dst:
                     raise ValueError(
                         f"Conflicting DST types in pair {existing}({e_dst}) "
                         f"vs {candidate}({c_dst}). Cannot determine split mask."
@@ -810,9 +820,7 @@ def main():
                         print(f"    {existing}->{candidate}: no common G4+ days, skipping")
                         continue
 
-                    classification = classify_overlap(
-                        metrics["shared_break_pct"], metrics["r_correlation"]
-                    )
+                    classification = classify_overlap(metrics["shared_break_pct"], metrics["r_correlation"])
 
                     row = {
                         "instrument": instrument,
@@ -829,10 +837,8 @@ def main():
                     # --- DST-affected pair: WINTER + SUMMER only (no blended ALL) ---
                     pair_has_data = False
                     for regime_name, regime_test in [("WINTER", False), ("SUMMER", True)]:
-                        e_filtered = {d: r for d, r in existing_days.items()
-                                      if dst_mask[d] == regime_test}
-                        c_filtered = {d: r for d, r in candidate_days_data.items()
-                                      if dst_mask[d] == regime_test}
+                        e_filtered = {d: r for d, r in existing_days.items() if dst_mask[d] == regime_test}
+                        c_filtered = {d: r for d, r in candidate_days_data.items() if dst_mask[d] == regime_test}
 
                         regime_metrics = compute_overlap_metrics(e_filtered, c_filtered)
                         if regime_metrics is None:

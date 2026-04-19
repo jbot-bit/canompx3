@@ -99,7 +99,11 @@ def main() -> int:
         "same_cont": same & (df["f_cont"] == True),
         "same_short_fast15": same & (df["f_dir"] == "short") & df["f_delay"].notna() & (df["f_delay"] <= 15),
         "same_long_fast15": same & (df["f_dir"] == "long") & df["f_delay"].notna() & (df["f_delay"] <= 15),
-        "same_fast15_size60": same & df["f_delay"].notna() & (df["f_delay"] <= 15) & pd.Series(size_atr).notna() & (pd.Series(size_atr) >= q60),
+        "same_fast15_size60": same
+        & df["f_delay"].notna()
+        & (df["f_delay"] <= 15)
+        & pd.Series(size_atr).notna()
+        & (pd.Series(size_atr) >= q60),
     }
 
     rows = []

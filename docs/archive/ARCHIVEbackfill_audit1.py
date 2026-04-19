@@ -29,8 +29,10 @@ from pipeline.paths import GOLD_DB_PATH
 
 TZ_LOCAL = ZoneInfo("Australia/Brisbane")
 
+
 def get_connection(db_path: str = GOLD_DB_PATH) -> duckdb.DuckDBPyConnection:
     return duckdb.connect(db_path, read_only=True)
+
 
 def audit_bars_1m(conn: duckdb.DuckDBPyConnection, symbol: str = "MGC") -> dict:
     """Audit bars_1m table for coverage and gaps."""
@@ -81,6 +83,7 @@ def audit_bars_1m(conn: duckdb.DuckDBPyConnection, symbol: str = "MGC") -> dict:
         "dates_with_data": dates_with_data,
     }
 
+
 def audit_bars_5m(conn: duckdb.DuckDBPyConnection, symbol: str = "MGC") -> dict:
     """Audit bars_5m table for coverage."""
 
@@ -108,6 +111,7 @@ def audit_bars_5m(conn: duckdb.DuckDBPyConnection, symbol: str = "MGC") -> dict:
         "total_bars": sum(dates_with_data.values()),
         "dates_with_data": dates_with_data,
     }
+
 
 def audit_daily_features(conn: duckdb.DuckDBPyConnection, instrument: str = "MGC") -> dict:
     """Audit daily_features table for coverage."""
@@ -155,6 +159,7 @@ def audit_daily_features(conn: duckdb.DuckDBPyConnection, instrument: str = "MGC
         "dates": set(dates),
     }
 
+
 def audit_dbn_file(dbn_path: Path) -> dict:
     """Audit a DBN file for date coverage."""
     try:
@@ -177,22 +182,21 @@ def audit_dbn_file(dbn_path: Path) -> dict:
     df = df.reset_index()
 
     # Get timestamps
-    df['ts_utc_dt'] = pd.to_datetime(df['ts_event'], utc=True)
+    df["ts_utc_dt"] = pd.to_datetime(df["ts_event"], utc=True)
 
     # Determine trading days (09:00 local -> 09:00 next day)
-    df['ts_local'] = df['ts_utc_dt'].dt.tz_convert(str(TZ_LOCAL))
-    df['hour'] = df['ts_local'].dt.hour
-    df['base_date'] = df['ts_local'].dt.date
-    df['trading_day'] = df.apply(
-        lambda row: row['base_date'] - timedelta(days=1) if row['hour'] < 9 else row['base_date'],
-        axis=1
+    df["ts_local"] = df["ts_utc_dt"].dt.tz_convert(str(TZ_LOCAL))
+    df["hour"] = df["ts_local"].dt.hour
+    df["base_date"] = df["ts_local"].dt.date
+    df["trading_day"] = df.apply(
+        lambda row: row["base_date"] - timedelta(days=1) if row["hour"] < 9 else row["base_date"], axis=1
     )
 
     # Aggregate by trading day
-    daily_counts = df.groupby('trading_day').size().to_dict()
+    daily_counts = df.groupby("trading_day").size().to_dict()
 
     # Get symbols
-    symbols = df['symbol'].unique().tolist() if 'symbol' in df.columns else []
+    symbols = df["symbol"].unique().tolist() if "symbol" in df.columns else []
 
     return {
         "file": str(dbn_path),
@@ -203,6 +207,7 @@ def audit_dbn_file(dbn_path: Path) -> dict:
         "daily_counts": daily_counts,
         "symbols": symbols,
     }
+
 
 def compare_coverage(bars_1m: dict, bars_5m: dict, daily_features: dict) -> list:
     """Compare coverage between tables and identify discrepancies."""
@@ -236,6 +241,7 @@ def compare_coverage(bars_1m: dict, bars_5m: dict, daily_features: dict) -> list
 
     return issues
 
+
 def print_report(bars_1m: dict, bars_5m: dict, daily_features: dict, issues: list):
     """Print the audit report."""
 
@@ -254,18 +260,18 @@ def print_report(bars_1m: dict, bars_5m: dict, daily_features: dict, issues: lis
         print(f"  Total bars: {bars_1m['total_bars']:,}")
         print(f"  Normal days (>=400 bars): {bars_1m['normal_days_count']}")
 
-        if bars_1m['gaps']:
+        if bars_1m["gaps"]:
             print(f"\n  GAPS (missing weekdays): {len(bars_1m['gaps'])}")
-            for gap in bars_1m['gaps'][:10]:
+            for gap in bars_1m["gaps"][:10]:
                 print(f"    - {gap}")
-            if len(bars_1m['gaps']) > 10:
+            if len(bars_1m["gaps"]) > 10:
                 print(f"    ... and {len(bars_1m['gaps']) - 10} more")
         else:
             print(f"\n  GAPS: None found")
 
-        if bars_1m['low_bar_days']:
+        if bars_1m["low_bar_days"]:
             print(f"\n  LOW BAR DAYS (<400 bars): {len(bars_1m['low_bar_days'])}")
-            for d, c in sorted(bars_1m['low_bar_days'])[-5:]:
+            for d, c in sorted(bars_1m["low_bar_days"])[-5:]:
                 print(f"    - {d}: {c} bars")
 
     # bars_5m summary
@@ -286,12 +292,12 @@ def print_report(bars_1m: dict, bars_5m: dict, daily_features: dict, issues: lis
         print(f"  Date range: {daily_features['first_date']} to {daily_features['last_date']}")
         print(f"  Total days: {daily_features['total_days']}")
         print(f"\n  ORB Coverage:")
-        for orb, count in daily_features['orb_coverage'].items():
-            pct = (count / daily_features['total_days'] * 100) if daily_features['total_days'] else 0
+        for orb, count in daily_features["orb_coverage"].items():
+            pct = (count / daily_features["total_days"] * 100) if daily_features["total_days"] else 0
             print(f"    {orb}: {count}/{daily_features['total_days']} ({pct:.1f}%)")
         print(f"\n  Session Coverage:")
-        for sess, count in daily_features['session_coverage'].items():
-            pct = (count / daily_features['total_days'] * 100) if daily_features['total_days'] else 0
+        for sess, count in daily_features["session_coverage"].items():
+            pct = (count / daily_features["total_days"] * 100) if daily_features["total_days"] else 0
             print(f"    {sess}: {count}/{daily_features['total_days']} ({pct:.1f}%)")
 
     # Issues
@@ -311,17 +317,20 @@ def print_report(bars_1m: dict, bars_5m: dict, daily_features: dict, issues: lis
 
     if "error" not in bars_1m:
         today = date.today()
-        last_bar_date = bars_1m['last_date']
+        last_bar_date = bars_1m["last_date"]
         days_behind = (today - last_bar_date).days
 
         if days_behind > 1:
             print(f"  Data is {days_behind} days behind (last: {last_bar_date})")
             print(f"  Suggested command:")
-            print(f"    python pipeline/backfill_range.py {last_bar_date + timedelta(days=1)} {today - timedelta(days=1)}")
+            print(
+                f"    python pipeline/backfill_range.py {last_bar_date + timedelta(days=1)} {today - timedelta(days=1)}"
+            )
         else:
             print(f"  Data is current (last: {last_bar_date})")
 
     print()
+
 
 def main():
     import argparse
@@ -359,14 +368,14 @@ def main():
             print(f"  Symbols: {len(dbn_result['symbols'])} unique contracts")
 
             # Show some daily stats
-            daily = dbn_result['daily_counts']
+            daily = dbn_result["daily_counts"]
             avg_bars = sum(daily.values()) / len(daily) if daily else 0
             print(f"  Avg bars/day: {avg_bars:.0f}")
 
             # Find gaps
-            dates_in_file = set(dbn_result['daily_counts'].keys())
-            first = dbn_result['first_date']
-            last = dbn_result['last_date']
+            dates_in_file = set(dbn_result["daily_counts"].keys())
+            first = dbn_result["first_date"]
+            last = dbn_result["last_date"]
             gaps = []
             current = first
             while current <= last:
@@ -390,8 +399,8 @@ def main():
 
     # Add DBN vs DB comparison
     if dbn_result and "error" not in dbn_result and "error" not in bars_1m:
-        dbn_dates = set(dbn_result['daily_counts'].keys())
-        db_dates = set(bars_1m['dates_with_data'].keys())
+        dbn_dates = set(dbn_result["daily_counts"].keys())
+        db_dates = set(bars_1m["dates_with_data"].keys())
 
         in_file_not_db = dbn_dates - db_dates
         in_db_not_file = db_dates - dbn_dates
@@ -411,6 +420,7 @@ def main():
 
     # Return exit code based on issues
     return 1 if issues else 0
+
 
 if __name__ == "__main__":
     sys.exit(main())

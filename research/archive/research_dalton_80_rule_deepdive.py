@@ -93,10 +93,13 @@ def main() -> int:
     rows = []
 
     for sym in SYMBOLS:
-        tdays = [r[0] for r in con.execute(
-            "SELECT DISTINCT trading_day FROM daily_features WHERE symbol=? AND orb_minutes=5 ORDER BY trading_day",
-            [sym],
-        ).fetchall()]
+        tdays = [
+            r[0]
+            for r in con.execute(
+                "SELECT DISTINCT trading_day FROM daily_features WHERE symbol=? AND orb_minutes=5 ORDER BY trading_day",
+                [sym],
+            ).fetchall()
+        ]
         if len(tdays) < 3:
             continue
 
@@ -151,7 +154,8 @@ def main() -> int:
                 checks: list[tuple[str, pd.Timestamp]] = []
 
                 v_touch = (
-                    not bars_a.empty and not bars_b.empty
+                    not bars_a.empty
+                    and not bars_b.empty
                     and any(_overlap_va(r, val, vah) for _, r in bars_a.iterrows())
                     and any(_overlap_va(r, val, vah) for _, r in bars_b.iterrows())
                 )
@@ -159,7 +163,8 @@ def main() -> int:
                     checks.append(("touch_A_B", pd.Timestamp(b_end)))
 
                 v_close = (
-                    not bars_a.empty and not bars_b.empty
+                    not bars_a.empty
+                    and not bars_b.empty
                     and _close_in_va(bars_a.iloc[-1], val, vah)
                     and _close_in_va(bars_b.iloc[-1], val, vah)
                 )
@@ -174,16 +179,18 @@ def main() -> int:
                 for variant, entry_ts in checks:
                     after = day_bars[day_bars["ts_utc"] >= entry_ts]
                     sw, sr, lw, lr = _evaluate(after, side, val, vah)
-                    rows.append({
-                        "symbol": sym,
-                        "anchor": anchor,
-                        "variant": variant,
-                        "open_side": side,
-                        "strict_win": sw,
-                        "strict_resolved": sr,
-                        "loose_win": lw,
-                        "loose_resolved": lr,
-                    })
+                    rows.append(
+                        {
+                            "symbol": sym,
+                            "anchor": anchor,
+                            "variant": variant,
+                            "open_side": side,
+                            "strict_win": sw,
+                            "strict_resolved": sr,
+                            "loose_win": lw,
+                            "loose_resolved": lr,
+                        }
+                    )
 
     con.close()
 
@@ -225,10 +232,7 @@ def main() -> int:
         notes.append(f"## {mode.upper()} top lines")
         m = summary[summary["mode"] == mode].sort_values(["anchor", "variant", "symbol", "open_side"])
         for r in m.itertuples(index=False):
-            notes.append(
-                f"- {r.anchor} {r.variant} {r.symbol} {r.open_side}: "
-                f"N={r.setups}, hit_rate={r.hit_rate:.1%}"
-            )
+            notes.append(f"- {r.anchor} {r.variant} {r.symbol} {r.open_side}: N={r.setups}, hit_rate={r.hit_rate:.1%}")
         notes.append("")
 
     notes_path = out_dir / "dalton_80_deepdive_notes.md"

@@ -61,7 +61,8 @@ def load_data(instrument: str, session: str) -> pd.DataFrame:
     """
     con = duckdb.connect(str(DB_PATH), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT
                 o.trading_day,
                 d.orb_{session}_size AS orb_size,
@@ -93,7 +94,7 @@ def load_data(instrument: str, session: str) -> pd.DataFrame:
                 AND o.pnl_r IS NOT NULL
             ORDER BY o.trading_day
         """.replace("{session}", session),
-            [instrument, session, REFERENCE_RR, REFERENCE_CB, REFERENCE_EM]
+            [instrument, session, REFERENCE_RR, REFERENCE_CB, REFERENCE_EM],
         ).fetchdf()
     finally:
         con.close()
@@ -135,7 +136,7 @@ def compute_expansion_features(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
         """Is each value the minimum of the preceding lb values (inclusive)?"""
         result = pd.Series(False, index=series.index)
         for i in range(lb, len(series)):
-            window = series.iloc[i - lb + 1:i + 1]
+            window = series.iloc[i - lb + 1 : i + 1]
             if len(window) == lb and series.iloc[i] == window.min():
                 result.iloc[i] = True
         return result
@@ -145,15 +146,12 @@ def compute_expansion_features(df: pd.DataFrame, lookback: int) -> pd.DataFrame:
     df[f"post_nr_{lookback}"] = nr_flags.shift(1).fillna(False)
 
     # Z-score: how unusual is today's ORB vs recent distribution
-    df[f"orb_zscore_{lookback}"] = (
-        (df[col] - df[f"rolling_median_{lookback}"]) / df[f"rolling_std_{lookback}"]
-    )
+    df[f"orb_zscore_{lookback}"] = (df[col] - df[f"rolling_median_{lookback}"]) / df[f"rolling_std_{lookback}"]
 
     return df
 
 
-def follow_through_stats(pnl_r: np.ndarray, mfe_r: np.ndarray,
-                          label: str = "") -> dict:
+def follow_through_stats(pnl_r: np.ndarray, mfe_r: np.ndarray, label: str = "") -> dict:
     """Compute follow-through statistics from R-multiples.
 
     This is the HONEST measure — not just WR at one target,
@@ -195,8 +193,7 @@ def follow_through_stats(pnl_r: np.ndarray, mfe_r: np.ndarray,
     }
 
 
-def test_expansion_ratio(df: pd.DataFrame, lookback: int,
-                          instrument: str, session: str) -> list[dict]:
+def test_expansion_ratio(df: pd.DataFrame, lookback: int, instrument: str, session: str) -> list[dict]:
     """TEST 1: Does high expansion ratio predict better follow-through?"""
     col_ratio = f"expansion_ratio_{lookback}"
     valid = df.dropna(subset=[col_ratio, "pnl_r", "mfe_r"])
@@ -207,13 +204,16 @@ def test_expansion_ratio(df: pd.DataFrame, lookback: int,
     results = []
 
     # Baseline: ALL trades (no expansion filter)
-    baseline = follow_through_stats(
-        valid["pnl_r"].values, valid["mfe_r"].values,
-        label=f"ALL (N={len(valid)})"
+    baseline = follow_through_stats(valid["pnl_r"].values, valid["mfe_r"].values, label=f"ALL (N={len(valid)})")
+    baseline.update(
+        {
+            "instrument": instrument,
+            "session": session,
+            "lookback": lookback,
+            "test": "expansion_ratio",
+            "threshold": "ALL",
+        }
     )
-    baseline.update({"instrument": instrument, "session": session,
-                     "lookback": lookback, "test": "expansion_ratio",
-                     "threshold": "ALL"})
     results.append(baseline)
 
     # Split by expansion ratio thresholds
@@ -223,44 +223,59 @@ def test_expansion_ratio(df: pd.DataFrame, lookback: int,
 
         if len(expanding) >= 10:
             e_stats = follow_through_stats(
-                expanding["pnl_r"].values, expanding["mfe_r"].values,
-                label=f"EXPAND>={thresh}x (N={len(expanding)})"
+                expanding["pnl_r"].values, expanding["mfe_r"].values, label=f"EXPAND>={thresh}x (N={len(expanding)})"
             )
-            e_stats.update({"instrument": instrument, "session": session,
-                           "lookback": lookback, "test": "expansion_ratio",
-                           "threshold": f">={thresh}"})
+            e_stats.update(
+                {
+                    "instrument": instrument,
+                    "session": session,
+                    "lookback": lookback,
+                    "test": "expansion_ratio",
+                    "threshold": f">={thresh}",
+                }
+            )
             results.append(e_stats)
 
         if len(contracting) >= 10:
             c_stats = follow_through_stats(
-                contracting["pnl_r"].values, contracting["mfe_r"].values,
-                label=f"CONTRACT<{thresh}x (N={len(contracting)})"
+                contracting["pnl_r"].values,
+                contracting["mfe_r"].values,
+                label=f"CONTRACT<{thresh}x (N={len(contracting)})",
             )
-            c_stats.update({"instrument": instrument, "session": session,
-                           "lookback": lookback, "test": "expansion_ratio",
-                           "threshold": f"<{thresh}"})
+            c_stats.update(
+                {
+                    "instrument": instrument,
+                    "session": session,
+                    "lookback": lookback,
+                    "test": "expansion_ratio",
+                    "threshold": f"<{thresh}",
+                }
+            )
             results.append(c_stats)
 
     # Correlation: expansion_ratio vs pnl_r and mfe_r
     r_pnl, p_pnl = sp_stats.pearsonr(valid[col_ratio], valid["pnl_r"])
     r_mfe, p_mfe = sp_stats.pearsonr(valid[col_ratio], valid["mfe_r"])
 
-    results.append({
-        "instrument": instrument, "session": session,
-        "lookback": lookback, "test": "expansion_ratio_correlation",
-        "threshold": "continuous",
-        "label": f"r(expansion,pnl)={r_pnl:.3f} p={p_pnl:.4f} | r(expansion,mfe)={r_mfe:.3f} p={p_mfe:.4f}",
-        "n": len(valid),
-        "avg_r": r_pnl,  # store correlation in avg_r field for CSV
-        "wr": p_pnl,     # store p-value in wr field for CSV
-        "median_mfe": r_mfe,
-    })
+    results.append(
+        {
+            "instrument": instrument,
+            "session": session,
+            "lookback": lookback,
+            "test": "expansion_ratio_correlation",
+            "threshold": "continuous",
+            "label": f"r(expansion,pnl)={r_pnl:.3f} p={p_pnl:.4f} | r(expansion,mfe)={r_mfe:.3f} p={p_mfe:.4f}",
+            "n": len(valid),
+            "avg_r": r_pnl,  # store correlation in avg_r field for CSV
+            "wr": p_pnl,  # store p-value in wr field for CSV
+            "median_mfe": r_mfe,
+        }
+    )
 
     return results
 
 
-def test_nr_contraction(df: pd.DataFrame, lookback: int,
-                         instrument: str, session: str) -> list[dict]:
+def test_nr_contraction(df: pd.DataFrame, lookback: int, instrument: str, session: str) -> list[dict]:
     """TEST 2: Does prior contraction (NR-style) predict follow-through?
 
     Crabel's principle: contraction → expansion. So if yesterday's ORB
@@ -279,48 +294,55 @@ def test_nr_contraction(df: pd.DataFrame, lookback: int,
 
     if len(post_nr) >= 5:
         nr_stats = follow_through_stats(
-            post_nr["pnl_r"].values, post_nr["mfe_r"].values,
-            label=f"POST-NR{lookback} (N={len(post_nr)})"
+            post_nr["pnl_r"].values, post_nr["mfe_r"].values, label=f"POST-NR{lookback} (N={len(post_nr)})"
         )
-        nr_stats.update({"instrument": instrument, "session": session,
-                        "lookback": lookback, "test": "post_nr",
-                        "threshold": "post_nr=True"})
+        nr_stats.update(
+            {
+                "instrument": instrument,
+                "session": session,
+                "lookback": lookback,
+                "test": "post_nr",
+                "threshold": "post_nr=True",
+            }
+        )
         results.append(nr_stats)
 
     if len(not_nr) >= 10:
         notnr_stats = follow_through_stats(
-            not_nr["pnl_r"].values, not_nr["mfe_r"].values,
-            label=f"NOT-NR{lookback} (N={len(not_nr)})"
+            not_nr["pnl_r"].values, not_nr["mfe_r"].values, label=f"NOT-NR{lookback} (N={len(not_nr)})"
         )
-        notnr_stats.update({"instrument": instrument, "session": session,
-                           "lookback": lookback, "test": "post_nr",
-                           "threshold": "post_nr=False"})
+        notnr_stats.update(
+            {
+                "instrument": instrument,
+                "session": session,
+                "lookback": lookback,
+                "test": "post_nr",
+                "threshold": "post_nr=False",
+            }
+        )
         results.append(notnr_stats)
 
     # If enough data, test statistical significance
     if len(post_nr) >= 10 and len(not_nr) >= 10:
-        t_stat, p_val = sp_stats.ttest_ind(
-            post_nr["pnl_r"].values, not_nr["pnl_r"].values,
-            equal_var=False
+        t_stat, p_val = sp_stats.ttest_ind(post_nr["pnl_r"].values, not_nr["pnl_r"].values, equal_var=False)
+        mfe_t, mfe_p = sp_stats.ttest_ind(post_nr["mfe_r"].values, not_nr["mfe_r"].values, equal_var=False)
+        results.append(
+            {
+                "instrument": instrument,
+                "session": session,
+                "lookback": lookback,
+                "test": "post_nr_significance",
+                "threshold": "t-test",
+                "label": f"pnl t={t_stat:.2f} p={p_val:.4f} | mfe t={mfe_t:.2f} p={mfe_p:.4f}",
+                "n": len(post_nr),
+                "avg_r": float(post_nr["pnl_r"].mean() - not_nr["pnl_r"].mean()),
+            }
         )
-        mfe_t, mfe_p = sp_stats.ttest_ind(
-            post_nr["mfe_r"].values, not_nr["mfe_r"].values,
-            equal_var=False
-        )
-        results.append({
-            "instrument": instrument, "session": session,
-            "lookback": lookback, "test": "post_nr_significance",
-            "threshold": "t-test",
-            "label": f"pnl t={t_stat:.2f} p={p_val:.4f} | mfe t={mfe_t:.2f} p={mfe_p:.4f}",
-            "n": len(post_nr),
-            "avg_r": float(post_nr["pnl_r"].mean() - not_nr["pnl_r"].mean()),
-        })
 
     return results
 
 
-def test_expansion_vs_absolute(df: pd.DataFrame, lookback: int,
-                                instrument: str, session: str) -> list[dict]:
+def test_expansion_vs_absolute(df: pd.DataFrame, lookback: int, instrument: str, session: str) -> list[dict]:
     """TEST 3: After controlling for absolute size, does expansion ratio add info?
 
     This is the HONEST test. If expansion ratio is just correlated with
@@ -337,13 +359,18 @@ def test_expansion_vs_absolute(df: pd.DataFrame, lookback: int,
 
     # First: how correlated is expansion ratio with absolute size?
     r_size, p_size = sp_stats.pearsonr(valid[col_ratio], valid["orb_size"])
-    results.append({
-        "instrument": instrument, "session": session,
-        "lookback": lookback, "test": "confound_check",
-        "threshold": "ratio_vs_abs_size",
-        "label": f"r(expansion_ratio, abs_size)={r_size:.3f} p={p_size:.4f}",
-        "n": len(valid), "avg_r": r_size,
-    })
+    results.append(
+        {
+            "instrument": instrument,
+            "session": session,
+            "lookback": lookback,
+            "test": "confound_check",
+            "threshold": "ratio_vs_abs_size",
+            "label": f"r(expansion_ratio, abs_size)={r_size:.3f} p={p_size:.4f}",
+            "n": len(valid),
+            "avg_r": r_size,
+        }
+    )
 
     # Second: within SIZE BANDS, does expansion ratio still predict?
     # This is the key test — control for absolute size, then check expansion
@@ -370,29 +397,32 @@ def test_expansion_vs_absolute(df: pd.DataFrame, lookback: int,
             c_mfe = contracting["mfe_r"].mean()
             diff = e_avg - c_avg
 
-            t_stat, p_val = sp_stats.ttest_ind(
-                expanding["pnl_r"].values, contracting["pnl_r"].values,
-                equal_var=False
-            )
+            t_stat, p_val = sp_stats.ttest_ind(expanding["pnl_r"].values, contracting["pnl_r"].values, equal_var=False)
 
-            results.append({
-                "instrument": instrument, "session": session,
-                "lookback": lookback, "test": "expansion_within_size_band",
-                "threshold": band_name,
-                "label": (f"SIZE={band_name} ({lo:.1f}-{hi:.1f}pt): "
-                         f"expanding={e_avg:.3f}R(N={len(expanding)}) "
-                         f"contracting={c_avg:.3f}R(N={len(contracting)}) "
-                         f"diff={diff:+.3f}R p={p_val:.4f}"),
-                "n": len(band), "avg_r": diff,
-                "wr": p_val,
-                "median_mfe": e_mfe - c_mfe,
-            })
+            results.append(
+                {
+                    "instrument": instrument,
+                    "session": session,
+                    "lookback": lookback,
+                    "test": "expansion_within_size_band",
+                    "threshold": band_name,
+                    "label": (
+                        f"SIZE={band_name} ({lo:.1f}-{hi:.1f}pt): "
+                        f"expanding={e_avg:.3f}R(N={len(expanding)}) "
+                        f"contracting={c_avg:.3f}R(N={len(contracting)}) "
+                        f"diff={diff:+.3f}R p={p_val:.4f}"
+                    ),
+                    "n": len(band),
+                    "avg_r": diff,
+                    "wr": p_val,
+                    "median_mfe": e_mfe - c_mfe,
+                }
+            )
 
     return results
 
 
-def test_follow_through_curve(df: pd.DataFrame, instrument: str,
-                               session: str) -> list[dict]:
+def test_follow_through_curve(df: pd.DataFrame, instrument: str, session: str) -> list[dict]:
     """BONUS: The raw follow-through curve — how far does price go?
 
     This answers the user's fundamental question: "broke the same means
@@ -407,13 +437,13 @@ def test_follow_through_curve(df: pd.DataFrame, instrument: str,
 
     # Follow-through curve by absolute ORB size bands
     pcts = [0, 25, 50, 75, 90, 100]
-    size_quartiles = np.percentile(valid["orb_size"].values,
-                                    [0, 25, 50, 75, 100])
+    size_quartiles = np.percentile(valid["orb_size"].values, [0, 25, 50, 75, 100])
 
     for i in range(len(size_quartiles) - 1):
         lo, hi = size_quartiles[i], size_quartiles[i + 1]
-        band = valid[(valid["orb_size"] >= lo) &
-                     (valid["orb_size"] <= (hi if i == len(size_quartiles) - 2 else hi - 0.001))]
+        band = valid[
+            (valid["orb_size"] >= lo) & (valid["orb_size"] <= (hi if i == len(size_quartiles) - 2 else hi - 0.001))
+        ]
 
         if len(band) < 10:
             continue
@@ -422,23 +452,27 @@ def test_follow_through_curve(df: pd.DataFrame, instrument: str,
         pnl = band["pnl_r"].values
 
         # What % of trades reach each distance?
-        ft_data = {f"reach_{t}R": float((mfe >= t).sum() / len(mfe))
-                   for t in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0]}
+        ft_data = {f"reach_{t}R": float((mfe >= t).sum() / len(mfe)) for t in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0]}
 
-        results.append({
-            "instrument": instrument, "session": session,
-            "test": "follow_through_curve",
-            "threshold": f"Q{i+1}({lo:.1f}-{hi:.1f}pt)",
-            "label": (f"SIZE Q{i+1} ({lo:.1f}-{hi:.1f}pt, N={len(band)}): "
-                     f"avgR={np.mean(pnl):.3f} medianMFE={np.median(mfe):.2f}R "
-                     f"reach1R={ft_data['reach_1.0R']:.0%} "
-                     f"reach2R={ft_data['reach_2.0R']:.0%} "
-                     f"reach3R={ft_data['reach_3.0R']:.0%}"),
-            "n": len(band),
-            "avg_r": float(np.mean(pnl)),
-            "median_mfe": float(np.median(mfe)),
-            **ft_data,
-        })
+        results.append(
+            {
+                "instrument": instrument,
+                "session": session,
+                "test": "follow_through_curve",
+                "threshold": f"Q{i + 1}({lo:.1f}-{hi:.1f}pt)",
+                "label": (
+                    f"SIZE Q{i + 1} ({lo:.1f}-{hi:.1f}pt, N={len(band)}): "
+                    f"avgR={np.mean(pnl):.3f} medianMFE={np.median(mfe):.2f}R "
+                    f"reach1R={ft_data['reach_1.0R']:.0%} "
+                    f"reach2R={ft_data['reach_2.0R']:.0%} "
+                    f"reach3R={ft_data['reach_3.0R']:.0%}"
+                ),
+                "n": len(band),
+                "avg_r": float(np.mean(pnl)),
+                "median_mfe": float(np.median(mfe)),
+                **ft_data,
+            }
+        )
 
     return results
 
@@ -479,8 +513,7 @@ def main():
 
             for lb in LOOKBACKS:
                 df_exp = compute_expansion_features(df, lb)
-                valid_count = df_exp.dropna(
-                    subset=[f"expansion_ratio_{lb}"]).shape[0]
+                valid_count = df_exp.dropna(subset=[f"expansion_ratio_{lb}"]).shape[0]
                 print(f"\n  LOOKBACK={lb} ({valid_count} valid rows)")
 
                 # Test 1: Expansion ratio
@@ -490,15 +523,16 @@ def main():
                     if "correlation" in r.get("test", ""):
                         print(f"    CORR: {r['label']}")
                     elif r.get("threshold") == "ALL":
-                        print(f"    BASELINE: avgR={r['avg_r']:.3f} "
-                              f"WR={r['wr']:.0%} medMFE={r['median_mfe']:.2f}R")
+                        print(f"    BASELINE: avgR={r['avg_r']:.3f} WR={r['wr']:.0%} medMFE={r['median_mfe']:.2f}R")
 
                 # Show expansion splits
                 for r in exp_results:
                     thresh = r.get("threshold", "")
                     if thresh.startswith(">=") and r.get("n", 0) >= 10:
-                        print(f"    {r['label']}: avgR={r['avg_r']:.3f} "
-                              f"WR={r.get('wr', 0):.0%} medMFE={r.get('median_mfe', 0):.2f}R")
+                        print(
+                            f"    {r['label']}: avgR={r['avg_r']:.3f} "
+                            f"WR={r.get('wr', 0):.0%} medMFE={r.get('median_mfe', 0):.2f}R"
+                        )
 
                 # Test 2: NR contraction
                 nr_results = test_nr_contraction(df_exp, lb, instrument, session)
@@ -552,8 +586,7 @@ def main():
             sig_count += 1
     total_band = len(band_results)
     expected_false = total_band * 0.05
-    print(f"\n   Significant at p<0.05: {sig_count}/{total_band} "
-          f"(expected by chance: {expected_false:.1f})")
+    print(f"\n   Significant at p<0.05: {sig_count}/{total_band} (expected by chance: {expected_false:.1f})")
 
     # NR results
     nr_sig_results = [r for r in all_results if r.get("test") == "post_nr_significance"]
@@ -587,13 +620,11 @@ def main():
     out_dir.mkdir(exist_ok=True)
 
     if all_results:
-        pd.DataFrame(all_results).to_csv(
-            out_dir / "contraction_expansion_results.csv", index=False)
+        pd.DataFrame(all_results).to_csv(out_dir / "contraction_expansion_results.csv", index=False)
         print(f"\nDetailed results: {out_dir / 'contraction_expansion_results.csv'}")
 
     if all_ft_curves:
-        pd.DataFrame(all_ft_curves).to_csv(
-            out_dir / "follow_through_curves.csv", index=False)
+        pd.DataFrame(all_ft_curves).to_csv(out_dir / "follow_through_curves.csv", index=False)
         print(f"Follow-through curves: {out_dir / 'follow_through_curves.csv'}")
 
 

@@ -139,7 +139,7 @@ def check_git_cleanliness(path: Path) -> None:
             f"Hypothesis file {path} is not tracked by git. Pre-registration "
             f"requires a commit as the lock point — the SHA is only meaningful "
             f"against a committed version of the file. Run 'git add {path} && "
-            f"git commit -m \"pre-register <slug>\"' before running discovery. "
+            f'git commit -m "pre-register <slug>"\' before running discovery. '
             f"See docs/audit/hypotheses/README.md § 'Workflow' step 6."
         )
 

@@ -26,6 +26,7 @@ COST = {
     "MNQ": {"pv": 2.0, "friction": 2.74},
 }
 
+
 def analyze(instrument, start, end, window_name):
     cost = COST[instrument]
     orb = "2300"
@@ -36,14 +37,18 @@ def analyze(instrument, start, end, window_name):
     print(f"{'=' * 90}")
 
     # Break days
-    break_days = con.execute("""
+    break_days = con.execute(
+        """
         SELECT COUNT(DISTINCT trading_day) FROM orb_outcomes
         WHERE symbol = ? AND orb_label = ?
           AND trading_day >= ? AND trading_day <= ?
-    """, [instrument, orb, start, end]).fetchone()[0]
+    """,
+        [instrument, orb, start, end],
+    ).fetchone()[0]
 
     # ORB size stats
-    orb_stats = con.execute("""
+    orb_stats = con.execute(
+        """
         SELECT COUNT(*) as n,
                ROUND(AVG(orb_2300_size), 2) as avg,
                ROUND(PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY orb_2300_size), 2) as p50,
@@ -52,29 +57,37 @@ def analyze(instrument, start, end, window_name):
         WHERE symbol = ? AND orb_minutes = 5
           AND trading_day >= ? AND trading_day <= ?
           AND orb_2300_break_dir IS NOT NULL
-    """, [instrument, start, end]).fetchone()
+    """,
+        [instrument, start, end],
+    ).fetchone()
 
     print(f"Break days: {break_days} | ORB size: avg={orb_stats[1]} p50={orb_stats[2]} p90={orb_stats[3]}")
 
     # Double-break rate
-    db = con.execute("""
+    db = con.execute(
+        """
         SELECT ROUND(100.0 * SUM(CASE WHEN orb_2300_double_break THEN 1 ELSE 0 END) / COUNT(*), 1)
         FROM daily_features
         WHERE symbol = ? AND orb_minutes = 5
           AND trading_day >= ? AND trading_day <= ?
           AND orb_2300_break_dir IS NOT NULL
-    """, [instrument, start, end]).fetchone()[0]
+    """,
+        [instrument, start, end],
+    ).fetchone()[0]
     print(f"Double-break rate: {db}%")
 
     # Pull all outcomes
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT trading_day, rr_target, confirm_bars, entry_model,
                entry_price, stop_price, pnl_r, outcome
         FROM orb_outcomes
         WHERE symbol = ? AND orb_label = ?
           AND trading_day >= ? AND trading_day <= ?
         ORDER BY trading_day
-    """, [instrument, orb, start, end]).fetchdf()
+    """,
+        [instrument, orb, start, end],
+    ).fetchdf()
 
     if len(df) == 0:
         print("  No data.")
@@ -85,7 +98,9 @@ def analyze(instrument, start, end, window_name):
     df["pnl_r_net"] = df["pnl_r"] - df["friction_r"]
 
     # Inside day filter
-    id_days = con.execute("""
+    id_days = (
+        con.execute(
+            """
         WITH lagged AS (
             SELECT trading_day, daily_high, daily_low,
                    LAG(daily_high) OVER (ORDER BY trading_day) as prev_high,
@@ -97,22 +112,41 @@ def analyze(instrument, start, end, window_name):
         SELECT trading_day FROM lagged
         WHERE daily_high < prev_high AND daily_low > prev_low
           AND trading_day >= ?
-    """, [instrument, start, end, start]).fetchdf()["trading_day"].tolist()
+    """,
+            [instrument, start, end, start],
+        )
+        .fetchdf()["trading_day"]
+        .tolist()
+    )
 
     # Filter sets
-    g6_days = con.execute("""
+    g6_days = (
+        con.execute(
+            """
         SELECT trading_day FROM daily_features
         WHERE symbol = ? AND orb_minutes = 5
           AND trading_day >= ? AND trading_day <= ?
           AND orb_2300_size >= 6 AND orb_2300_break_dir IS NOT NULL
-    """, [instrument, start, end]).fetchdf()["trading_day"].tolist()
+    """,
+            [instrument, start, end],
+        )
+        .fetchdf()["trading_day"]
+        .tolist()
+    )
 
-    g8_days = con.execute("""
+    g8_days = (
+        con.execute(
+            """
         SELECT trading_day FROM daily_features
         WHERE symbol = ? AND orb_minutes = 5
           AND trading_day >= ? AND trading_day <= ?
           AND orb_2300_size >= 8 AND orb_2300_break_dir IS NOT NULL
-    """, [instrument, start, end]).fetchdf()["trading_day"].tolist()
+    """,
+            [instrument, start, end],
+        )
+        .fetchdf()["trading_day"]
+        .tolist()
+    )
 
     filters = [
         ("NO_FILTER", df),
@@ -127,7 +161,9 @@ def analyze(instrument, start, end, window_name):
 
         n_days = df_f["trading_day"].nunique()
         print(f"\n  --- {filt_name} ({n_days} days, {len(df_f)} outcomes) ---")
-        print(f"  {'EM':<4} {'RR':<5} {'CB':<4} {'N':<5} {'WR%':<7} {'ExpR_raw':<10} {'ExpR_net':<10} {'Sharpe':<8} {'MaxDD':<7}")
+        print(
+            f"  {'EM':<4} {'RR':<5} {'CB':<4} {'N':<5} {'WR%':<7} {'ExpR_raw':<10} {'ExpR_net':<10} {'Sharpe':<8} {'MaxDD':<7}"
+        )
         print(f"  {'-' * 75}")
 
         results = []
@@ -151,19 +187,22 @@ def analyze(instrument, start, end, window_name):
             if expr_net < -0.15 and shown >= 10:
                 continue  # skip deep losers after showing top 10
             flag = " **" if expr_net > 0.05 and n >= 15 else ""
-            print(f"  {em:<4} {rr:<5} {int(cb):<4} {n:<5} {wr*100:>5.1f}%  {expr_raw:>+8.4f}  {expr_net:>+8.4f}  {sharpe:>+6.4f}  {dd:>6.2f}{flag}")
+            print(
+                f"  {em:<4} {rr:<5} {int(cb):<4} {n:<5} {wr * 100:>5.1f}%  {expr_raw:>+8.4f}  {expr_net:>+8.4f}  {sharpe:>+6.4f}  {dd:>6.2f}{flag}"
+            )
             shown += 1
 
         # Count positives
         pos = sum(1 for r in results if r[6] > 0)
         print(f"  Net-positive: {pos}/{len(results)}")
 
+
 for instrument in ["MGC", "MNQ"]:
     for wname, start in WINDOWS.items():
         # Check data exists
         ct = con.execute(
             "SELECT COUNT(*) FROM orb_outcomes WHERE symbol = ? AND orb_label = '2300' AND trading_day >= ?",
-            [instrument, start]
+            [instrument, start],
         ).fetchone()[0]
         if ct > 0:
             analyze(instrument, start, END, wname)

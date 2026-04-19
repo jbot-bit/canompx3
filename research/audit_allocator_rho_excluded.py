@@ -64,13 +64,21 @@ RESULT_MD = Path("docs/audit/results/2026-04-18-allocator-rho-audit-excluded-lan
 RESULT_CSV = Path("docs/audit/results/2026-04-18-allocator-rho-matrix.csv")
 LANE_ALLOCATION_JSON = Path("docs/runtime/lane_allocation.json")
 
-if RESULT_MD.exists():
-    print(
-        f"REFUSING TO RE-RUN. Result file already exists: {RESULT_MD}\n"
-        f"This audit's scope is locked to the {REBALANCE_DATE} rebalance. Re-running\n"
-        f"with tuned parameters violates the one-shot audit discipline."
-    )
-    sys.exit(1)
+def _refuse_rerun_if_result_exists() -> None:
+    """One-shot audit discipline guard. Called from main(), NOT at module load.
+
+    Module-level sys.exit(1) on import made this script unimportable, killing
+    pytest collection of tests/test_research/test_allocator_rho_audit.py.
+    Tests need to import the helper functions (bootstrap_rho_ci, classify_excluded,
+    etc.) without triggering the rerun guard.
+    """
+    if RESULT_MD.exists():
+        print(
+            f"REFUSING TO RE-RUN. Result file already exists: {RESULT_MD}\n"
+            f"This audit's scope is locked to the {REBALANCE_DATE} rebalance. Re-running\n"
+            f"with tuned parameters violates the one-shot audit discipline."
+        )
+        sys.exit(1)
 
 # =============================================================================
 # Novel helpers — tested in tests/test_research/test_allocator_rho_audit.py
@@ -282,9 +290,7 @@ def _dd_contribution(lane: LaneScore, state: dict) -> float:
     return p90 * state["profile"].stop_multiplier * cost.point_value
 
 
-def _max_rho_vs_selected(
-    lane: LaneScore, state: dict
-) -> tuple[float, str, int, list[tuple[str, float]]]:
+def _max_rho_vs_selected(lane: LaneScore, state: dict) -> tuple[float, str, int, list[tuple[str, float]]]:
     """Return (max_rho_abs_value, paired_with_strategy_id, min_overlap_if_known, all_rhos_vs_selected).
     all_rhos_vs_selected preserves per-live-lane rho for the output table.
     """
@@ -414,7 +420,7 @@ def write_result_md(
         "- Self-consistency check: reproduction must match `docs/runtime/lane_allocation.json` selected set exactly.",
         "- Gate-order classification: rank → rho → DD (first-failing wins).",
         "- Mode A/B labels: trailing_expr uses allocator's 12mo trailing window which INCLUDES post-2026-01-01 data (Mode A OOS already consumed by allocator rebalance; this audit re-reads that same window — no new OOS consumption).",
-        "- Bootstrap CI + Fisher-z p-value + BH-FDR at q=0.05 applied to \"rho<0.70\" claims.",
+        '- Bootstrap CI + Fisher-z p-value + BH-FDR at q=0.05 applied to "rho<0.70" claims.',
         "- Literature footnote: rho<0.70 is the allocator's threshold. Markowitz 1952 suggests rho<~0.3 for material risk reduction — lenient threshold.",
         "",
         "## Self-consistency check",
@@ -454,16 +460,26 @@ def write_result_md(
     unlocks = [c for c in classifications if c["verdict"] == "TRUE_UNLOCK"]
     lines += ["", "## TRUE_UNLOCK candidates", ""]
     if unlocks:
-        lines.append(f"**{len(unlocks)} lane(s) pass all allocator gates but were excluded — potential hidden unlock.**")
+        lines.append(
+            f"**{len(unlocks)} lane(s) pass all allocator gates but were excluded — potential hidden unlock.**"
+        )
         lines.append("")
         for u in unlocks:
-            lines.append(f"- `{u['strategy_id']}` — effective annual_r={u['effective_annual_r']:.2f}, max rho={u['max_rho_vs_selected']:+.3f} vs `{u['rho_paired_with']}`")
+            lines.append(
+                f"- `{u['strategy_id']}` — effective annual_r={u['effective_annual_r']:.2f}, max rho={u['max_rho_vs_selected']:+.3f} vs `{u['rho_paired_with']}`"
+            )
         lines.append("")
-        lines.append("**Interpretation:** these lanes were excluded purely by annual_r ranking (rank > max_slots=7). If the ranking objective were changed (A2b-2 DSR sub-audit), they could enter the live set.")
+        lines.append(
+            "**Interpretation:** these lanes were excluded purely by annual_r ranking (rank > max_slots=7). If the ranking objective were changed (A2b-2 DSR sub-audit), they could enter the live set."
+        )
     else:
-        lines.append("**NONE.** The allocator's correlation + DD + ranking gates correctly explain every excluded lane.")
+        lines.append(
+            "**NONE.** The allocator's correlation + DD + ranking gates correctly explain every excluded lane."
+        )
         lines.append("")
-        lines.append("This verifies the adversarial audit's preliminary finding that the 32-lane \"gap\" is ALLOCATOR WORKING AS DESIGNED — not unfair exclusion.")
+        lines.append(
+            'This verifies the adversarial audit\'s preliminary finding that the 32-lane "gap" is ALLOCATOR WORKING AS DESIGNED — not unfair exclusion.'
+        )
 
     # Live-6 internal rho summary
     lines += [
@@ -526,6 +542,7 @@ def write_result_md(
 
 
 def main() -> None:
+    _refuse_rerun_if_result_exists()
     print("=" * 70)
     print("ALLOCATOR RHO AUDIT — EXCLUDED LANES")
     print("Phase 1 / A2a of multi-phase audit roadmap")

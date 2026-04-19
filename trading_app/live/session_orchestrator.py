@@ -304,9 +304,9 @@ class SessionOrchestrator:
                             # strats_with_risk was filtered on `s.median_risk_dollars and
                             # s.median_risk_dollars > 0` above — all values guaranteed non-None
                             # and > 0. `or 0.0` narrows the type for pyright.
-                            avg_risk = sum(
-                                s.median_risk_dollars or 0.0 for s in strats_with_risk
-                            ) / max(1, len(strats_with_risk))
+                            avg_risk = sum(s.median_risk_dollars or 0.0 for s in strats_with_risk) / max(
+                                1, len(strats_with_risk)
+                            )
                             if avg_risk > 0:
                                 max_equity_dd_r = -abs(tier.max_dd / avg_risk)
                                 log.info(
@@ -1249,9 +1249,7 @@ class SessionOrchestrator:
                 )
             else:
                 try:
-                    eod_equity = self.positions.query_equity(
-                        self.order_router.account_id if self.order_router else 0
-                    )
+                    eod_equity = self.positions.query_equity(self.order_router.account_id if self.order_router else 0)
                     if eod_equity is not None:
                         self.risk_mgr.set_topstep_xfa_eod_balance(eod_equity)
                         log.info("F-1 XFA EOD balance refreshed at rollover: $%.2f", eod_equity)
@@ -1818,8 +1816,7 @@ class SessionOrchestrator:
             # Past the signal_only early return: live mode is active.
             # order_router is non-None whenever signal_only=False (see __init__ L266-297).
             assert self.order_router is not None, (
-                "_handle_event ENTRY: order_router is None but signal_only=False — "
-                "broken invariant from __init__."
+                "_handle_event ENTRY: order_router is None but signal_only=False — broken invariant from __init__."
             )
 
             if not self._circuit_breaker.should_allow_request():
@@ -2061,8 +2058,7 @@ class SessionOrchestrator:
 
             # Past the signal_only early return: live mode is active.
             assert self.order_router is not None, (
-                "_handle_event EXIT: order_router is None but signal_only=False — "
-                "broken invariant from __init__."
+                "_handle_event EXIT: order_router is None but signal_only=False — broken invariant from __init__."
             )
 
             # Cancel any broker-side bracket orders before submitting exit
@@ -2534,9 +2530,7 @@ class SessionOrchestrator:
 
                 if attempt < self.ORCHESTRATOR_MAX_RECONNECTS:
                     try:
-                        await asyncio.get_running_loop().run_in_executor(
-                            None, self.auth.refresh_if_needed
-                        )
+                        await asyncio.get_running_loop().run_in_executor(None, self.auth.refresh_if_needed)
                     except Exception as exc:
                         log.warning("Auth refresh failed before reconnect: %s", exc)
 

@@ -22,9 +22,7 @@ def test_classify_rejection_reason_maps_criterion9() -> None:
 def test_summarize_baseline_counts_positive_years_pre_holdout_only() -> None:
     rows = pd.DataFrame(
         {
-            "trading_day": pd.to_datetime(
-                ["2024-01-02", "2024-02-02", "2025-01-03", "2026-01-05"]
-            ),
+            "trading_day": pd.to_datetime(["2024-01-02", "2024-02-02", "2025-01-03", "2026-01-05"]),
             "orb_minutes": [5, 5, 5, 5],
             "rr_target": [1.0, 1.0, 1.0, 1.0],
             "pnl_r": [0.1, 0.2, -0.3, 0.9],

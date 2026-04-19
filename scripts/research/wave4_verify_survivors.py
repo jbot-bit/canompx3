@@ -36,7 +36,7 @@ FILTER_SQL = {
     "OVNRNG_25": "df.overnight_range >= 25",
     "OVNRNG_10": "df.overnight_range >= 10",
     "X_MES_ATR60": "X_MES",  # special — cross-asset join
-    "COST_LT12": "COST12",   # special — per-instrument friction
+    "COST_LT12": "COST12",  # special — per-instrument friction
     "COST_LT10": "COST10",
     "COST_LT08": "COST08",
     "ATR_P70": "df.atr_20_pct >= 70",
@@ -54,8 +54,7 @@ COST_SPECS = {
 }
 
 
-def load_filtered_outcomes(con, instrument: str, session: str, filter_type: str,
-                            rr_target: float) -> pd.DataFrame:
+def load_filtered_outcomes(con, instrument: str, session: str, filter_type: str, rr_target: float) -> pd.DataFrame:
     """Load outcomes with filter applied. Returns DataFrame with trading_day, pnl_r, year."""
     if filter_type not in FILTER_SQL:
         return pd.DataFrame()
@@ -132,8 +131,7 @@ def load_unfiltered_outcomes(con, instrument: str, session: str, rr_target: floa
     return df
 
 
-def t6_pass_rate_bootstrap(filtered: pd.DataFrame, unfiltered: pd.DataFrame,
-                           n_perms: int = N_BOOTSTRAP) -> dict:
+def t6_pass_rate_bootstrap(filtered: pd.DataFrame, unfiltered: pd.DataFrame, n_perms: int = N_BOOTSTRAP) -> dict:
     """Bootstrap WITH REPLACEMENT: sample N trades from unfiltered pool,
     compute ExpR distribution. Does filtered ExpR beat the null?
     Uses replacement so pool-vs-N ratio doesn't distort the null.
@@ -206,8 +204,10 @@ def run_verification():
 
         pass_t6 = t6["p_value"] < 0.05
         verdict = "SURVIVES" if pass_t6 else "KILL (NOISE)"
-        print(f"  T6: filtered ExpR={t6['observed_expr']:+.3f} vs unfiltered={t6['unfiltered_expr']:+.3f} "
-              f"lift={t6['lift']:+.3f}")
+        print(
+            f"  T6: filtered ExpR={t6['observed_expr']:+.3f} vs unfiltered={t6['unfiltered_expr']:+.3f} "
+            f"lift={t6['lift']:+.3f}"
+        )
         print(f"      null p95={t6['null_p95']:+.3f} p={t6['p_value']:.4f} → {verdict}")
 
         if pass_t6:

@@ -973,10 +973,7 @@ def _check_criterion_8_oos(
     confirm_bars = row_dict.get("confirm_bars")
     rr_target = row_dict.get("rr_target")
     is_expr = row_dict.get("expectancy_r")
-    if any(
-        v is None
-        for v in (instrument, orb_label, orb_minutes, entry_model, confirm_bars, rr_target, is_expr)
-    ):
+    if any(v is None for v in (instrument, orb_label, orb_minutes, entry_model, confirm_bars, rr_target, is_expr)):
         return (
             "REJECTED",
             "criterion_8: experimental row missing required dimensions for OOS query",
@@ -1025,7 +1022,11 @@ def _check_criterion_8_oos(
             # validator. The row is dropped from the OOS sample.
             logger.warning(
                 "criterion_8 filter %s.matches_row raised on (%s, %s, %s): %s",
-                filter_type, instrument, orb_label_str, joined.get("trading_day"), exc,
+                filter_type,
+                instrument,
+                orb_label_str,
+                joined.get("trading_day"),
+                exc,
             )
             continue
 
@@ -1059,9 +1060,9 @@ def _check_criterion_8_oos(
                 f"for Pathway B individual testing mode)",
             )
         logger.warning(
-            "  Criterion 8: N_oos=%d < %d — insufficient for judgment, "
-            "pass-through (Pathway A permissive mode)",
-            n_oos, _OOS_MIN_TRADES_CLT_HEURISTIC,
+            "  Criterion 8: N_oos=%d < %d — insufficient for judgment, pass-through (Pathway A permissive mode)",
+            n_oos,
+            _OOS_MIN_TRADES_CLT_HEURISTIC,
         )
         return (None, None)
 
@@ -1076,8 +1077,7 @@ def _check_criterion_8_oos(
         if ratio < 0.40:
             return (
                 "REJECTED",
-                f"criterion_8: OOS/IS ratio={ratio:.3f} < 0.40 "
-                f"(OOS={oos_expr:+.4f} IS={is_expr_f:+.4f} N_oos={n_oos})",
+                f"criterion_8: OOS/IS ratio={ratio:.3f} < 0.40 (OOS={oos_expr:+.4f} IS={is_expr_f:+.4f} N_oos={n_oos})",
             )
     return (None, None)
 
@@ -1148,8 +1148,7 @@ def _check_criterion_9_era_stability(
             if era_expr < -0.05:
                 return (
                     "REJECTED",
-                    f"criterion_9: era {era_label} ExpR={era_expr:+.4f} < -0.05 "
-                    f"(N={n_total})",
+                    f"criterion_9: era {era_label} ExpR={era_expr:+.4f} < -0.05 (N={n_total})",
                 )
     return (None, None)
 
@@ -1224,9 +1223,7 @@ def _check_phase_4_pre_flight_gates(
     # Last in the sequence because it issues a DuckDB read-only query per row.
     # Pathway B (individual mode) uses strict_oos_n=True: hard reject at N<30
     # per Amendment 3.0 condition 4 ("no insufficient OOS data exemptions").
-    rejection = _check_criterion_8_oos(
-        row_dict, db_path, strict_oos_n=(testing_mode == "individual")
-    )
+    rejection = _check_criterion_8_oos(row_dict, db_path, strict_oos_n=(testing_mode == "individual"))
     if rejection != (None, None):
         return rejection
 
@@ -1623,9 +1620,7 @@ def run_validation(
     if not dry_run and processed_sids:
         import uuid
 
-        validation_run_id = (
-            f"{instrument}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
-        )
+        validation_run_id = f"{instrument}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
         with duckdb.connect(str(db_path)) as con:
             from pipeline.db_config import configure_connection
 
@@ -1760,10 +1755,7 @@ def run_validation(
                         or trade_window.first_trade_day is None
                         or trade_window.last_trade_day is None
                     ):
-                        raise RuntimeError(
-                            f"{sid}: cannot recompute canonical trade window "
-                            "for promotion provenance"
-                        )
+                        raise RuntimeError(f"{sid}: cannot recompute canonical trade window for promotion provenance")
 
                     shelf_lifecycle = validated_shelf_lifecycle(rd["instrument"])
 
@@ -1934,9 +1926,7 @@ def run_validation(
                     # line ~1905: null WFE → treat as 0.0 → reject.
                     # @research-source: Pardo "Evaluation and Optimization" Ch.7
                     #   WFE < 0.50 = lost >50% of edge OOS → likely overfit.
-                    wfe_row = con.execute(
-                        "SELECT wfe FROM validated_setups WHERE strategy_id = ?", [sid]
-                    ).fetchone()
+                    wfe_row = con.execute("SELECT wfe FROM validated_setups WHERE strategy_id = ?", [sid]).fetchone()
                     wfe_val = wfe_row[0] if wfe_row and wfe_row[0] is not None else 0.0
 
                     pass_raw_p = raw_p < 0.05
@@ -1974,13 +1964,10 @@ def run_validation(
                             failures.append(f"criterion_3_pathway_b: sharpe_ann={sharpe:.4f}<=0")
                         if not pass_wfe:
                             failures.append(
-                                f"criterion_6_pathway_b: wfe={wfe_val:.4f}<{MIN_WFE} "
-                                f"(Amendment 3.0 non-waivable)"
+                                f"criterion_6_pathway_b: wfe={wfe_val:.4f}<{MIN_WFE} (Amendment 3.0 non-waivable)"
                             )
                         reason = "; ".join(failures)
-                        con.execute(
-                            "DELETE FROM validated_setups WHERE strategy_id = ?", [sid]
-                        )
+                        con.execute("DELETE FROM validated_setups WHERE strategy_id = ?", [sid])
                         con.execute(
                             """UPDATE experimental_strategies
                                SET validation_status = 'REJECTED',
@@ -1992,9 +1979,7 @@ def run_validation(
                 if pathway_b_rejected_ids:
                     passed -= n_pathway_b_rejected
                     rejected += n_pathway_b_rejected
-                    passed_strategy_ids = [
-                        s for s in passed_strategy_ids if s not in set(pathway_b_rejected_ids)
-                    ]
+                    passed_strategy_ids = [s for s in passed_strategy_ids if s not in set(pathway_b_rejected_ids)]
                 # Reuse n_fdr_rejected so Phase D counters (line ~2066) log
                 # Pathway B rejections. Name is historical, not methodological.
                 n_fdr_rejected = n_pathway_b_rejected
@@ -2093,9 +2078,7 @@ def run_validation(
                     # promoted. This maintains audit trail integrity.
                     # WFE gate: WFE < MIN_WFE → overfit, demote regardless of FDR
                     # Pardo: WFE < 0.50 = lost >50% of edge OOS → likely overfit
-                    _wfe_row = con.execute(
-                        "SELECT wfe FROM validated_setups WHERE strategy_id = ?", [sid]
-                    ).fetchone()
+                    _wfe_row = con.execute("SELECT wfe FROM validated_setups WHERE strategy_id = ?", [sid]).fetchone()
                     _wfe = _wfe_row[0] if _wfe_row and _wfe_row[0] is not None else 0.0  # fail-closed
                     _fdr_sig = fdr["fdr_significant"] and _wfe >= MIN_WFE
                     if fdr["fdr_significant"] and not _fdr_sig:
@@ -2276,9 +2259,7 @@ def run_validation(
         if validation_run_id is None:
             import uuid
 
-            validation_run_id = (
-                f"{instrument}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
-            )
+            validation_run_id = f"{instrument}_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
 
         with duckdb.connect(str(db_path)) as con:
             from pipeline.db_config import configure_connection

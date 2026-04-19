@@ -9,6 +9,7 @@ expansion) across 6 hypothesis groups = 18 trials total.
 
 Read-only. No pipeline changes. Re-runnable.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -23,6 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb  # noqa: E402
+
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
 
 HOLDOUT_DATE = "2026-01-01"
@@ -67,8 +69,7 @@ def bh_fdr(p_values: list[float], alpha: float = 0.05) -> list[bool]:
     return significant
 
 
-def year_by_year(con: duckdb.DuckDBPyConnection, query_template: str,
-                 params: dict, label: str) -> None:
+def year_by_year(con: duckdb.DuckDBPyConnection, query_template: str, params: dict, label: str) -> None:
     """Print year-by-year breakdown for a signal."""
     yearly = con.sql(f"""
         WITH base AS ({query_template})
@@ -85,19 +86,20 @@ def year_by_year(con: duckdb.DuckDBPyConnection, query_template: str,
         al_r = row[3] if row[3] is not None else 0
         mis_r = row[4] if row[4] is not None else 0
         lift = al_r - mis_r
-        print(f"      {int(row[0])}: N={row[1]:>4} aligned={row[2]:>4} "
-              f"al_R={al_r:>+7.4f} mis_R={mis_r:>+7.4f} lift={lift:>+7.3f}")
+        print(
+            f"      {int(row[0])}: N={row[1]:>4} aligned={row[2]:>4} "
+            f"al_R={al_r:>+7.4f} mis_R={mis_r:>+7.4f} lift={lift:>+7.3f}"
+        )
 
 
-def run_m3_overnight_momentum(con: duckdb.DuckDBPyConnection, session: str,
-                              orb_min: int, rr: float, instrument: str,
-                              period: str) -> dict:
+def run_m3_overnight_momentum(
+    con: duckdb.DuckDBPyConnection, session: str, orb_min: int, rr: float, instrument: str, period: str
+) -> dict:
     """M3: Overnight directional momentum.
 
     Aligned = (long break + took_pdh only) OR (short break + took_pdl only).
     """
-    date_filter = (f"o.trading_day < '{HOLDOUT_DATE}'" if period == "IS"
-                   else f"o.trading_day >= '{HOLDOUT_DATE}'")
+    date_filter = f"o.trading_day < '{HOLDOUT_DATE}'" if period == "IS" else f"o.trading_day >= '{HOLDOUT_DATE}'"
     bd_col = f"orb_{session}_break_dir"
 
     query = f"""
@@ -148,17 +150,22 @@ def run_m3_overnight_momentum(con: duckdb.DuckDBPyConnection, session: str,
     }
 
 
-def run_m4_cross_session_state(con: duckdb.DuckDBPyConnection, prior_session: str,
-                               current_session: str, orb_min: int, rr: float,
-                               instrument: str, period: str) -> dict:
+def run_m4_cross_session_state(
+    con: duckdb.DuckDBPyConnection,
+    prior_session: str,
+    current_session: str,
+    orb_min: int,
+    rr: float,
+    instrument: str,
+    period: str,
+) -> dict:
     """M4: Cross-session 4-state machine.
 
     States: PRIOR_WIN_ALIGN, PRIOR_WIN_OPPOSED, PRIOR_LOSS_ALIGN, PRIOR_LOSS_OPPOSED
     Prior win = prior session pnl_r > 0 (same day).
     Aligned = prior and current break in same direction.
     """
-    date_filter = (f"o.trading_day < '{HOLDOUT_DATE}'" if period == "IS"
-                   else f"o.trading_day >= '{HOLDOUT_DATE}'")
+    date_filter = f"o.trading_day < '{HOLDOUT_DATE}'" if period == "IS" else f"o.trading_day >= '{HOLDOUT_DATE}'"
     prior_dir = f"orb_{prior_session}_break_dir"
     prior_outcome = f"orb_{prior_session}_outcome"
     curr_dir = f"orb_{current_session}_break_dir"
@@ -203,8 +210,7 @@ def run_m4_cross_session_state(con: duckdb.DuckDBPyConnection, prior_session: st
 
     # 4-state breakdown
     states = {}
-    for state_name in ["PRIOR_WIN_ALIGN", "PRIOR_WIN_OPPOSED",
-                       "PRIOR_LOSS_ALIGN", "PRIOR_LOSS_OPPOSED"]:
+    for state_name in ["PRIOR_WIN_ALIGN", "PRIOR_WIN_OPPOSED", "PRIOR_LOSS_ALIGN", "PRIOR_LOSS_OPPOSED"]:
         vals = np.array([float(r[1]) for r in rows if r[7] == state_name and r[1] is not None], dtype=np.float64)
         states[state_name] = {
             "n": len(vals),
@@ -213,34 +219,47 @@ def run_m4_cross_session_state(con: duckdb.DuckDBPyConnection, prior_session: st
 
     # Best actionable split: TAKE states vs VETO states
     # Codex finding: take = WIN_ALIGN + LOSS_OPPOSED, veto = WIN_OPPOSED + LOSS_ALIGN
-    take_r = np.array([float(r[1]) for r in rows if r[7] in ("PRIOR_WIN_ALIGN", "PRIOR_LOSS_OPPOSED") and r[1] is not None], dtype=np.float64)
-    veto_r = np.array([float(r[1]) for r in rows if r[7] in ("PRIOR_WIN_OPPOSED", "PRIOR_LOSS_ALIGN") and r[1] is not None], dtype=np.float64)
+    take_r = np.array(
+        [float(r[1]) for r in rows if r[7] in ("PRIOR_WIN_ALIGN", "PRIOR_LOSS_OPPOSED") and r[1] is not None],
+        dtype=np.float64,
+    )
+    veto_r = np.array(
+        [float(r[1]) for r in rows if r[7] in ("PRIOR_WIN_OPPOSED", "PRIOR_LOSS_ALIGN") and r[1] is not None],
+        dtype=np.float64,
+    )
     t_4state, p_4state = welch_t_test(take_r, veto_r)
 
     return {
         "n": len(rows),
-        "binary": {"n_same": len(same_r), "n_opp": len(opp_r),
-                    "same_avg_r": float(np.mean(same_r)) if len(same_r) else None,
-                    "opp_avg_r": float(np.mean(opp_r)) if len(opp_r) else None,
-                    "t": t_binary, "p": p_binary},
+        "binary": {
+            "n_same": len(same_r),
+            "n_opp": len(opp_r),
+            "same_avg_r": float(np.mean(same_r)) if len(same_r) else None,
+            "opp_avg_r": float(np.mean(opp_r)) if len(opp_r) else None,
+            "t": t_binary,
+            "p": p_binary,
+        },
         "states": states,
-        "take_veto": {"n_take": len(take_r), "n_veto": len(veto_r),
-                      "take_avg_r": float(np.mean(take_r)) if len(take_r) else None,
-                      "veto_avg_r": float(np.mean(veto_r)) if len(veto_r) else None,
-                      "t": t_4state, "p": p_4state},
+        "take_veto": {
+            "n_take": len(take_r),
+            "n_veto": len(veto_r),
+            "take_avg_r": float(np.mean(take_r)) if len(take_r) else None,
+            "veto_avg_r": float(np.mean(veto_r)) if len(veto_r) else None,
+            "t": t_4state,
+            "p": p_4state,
+        },
         "query": query,
     }
 
 
-def run_m5_pre1000_expansion(con: duckdb.DuckDBPyConnection, session: str,
-                             orb_min: int, rr: float, instrument: str,
-                             period: str) -> dict:
+def run_m5_pre1000_expansion(
+    con: duckdb.DuckDBPyConnection, session: str, orb_min: int, rr: float, instrument: str, period: str
+) -> dict:
     """M5: Pre-1000 range expansion.
 
     Aligned = (long break + took_pdh_before_1000) OR (short break + took_pdl_before_1000).
     """
-    date_filter = (f"o.trading_day < '{HOLDOUT_DATE}'" if period == "IS"
-                   else f"o.trading_day >= '{HOLDOUT_DATE}'")
+    date_filter = f"o.trading_day < '{HOLDOUT_DATE}'" if period == "IS" else f"o.trading_day >= '{HOLDOUT_DATE}'"
     bd_col = f"orb_{session}_break_dir"
 
     query = f"""
@@ -316,19 +335,25 @@ def main() -> None:
 
             all_p_values.append((label, is_result["p_value"]))
 
-            print(f"  RR{rr}: IS N={is_result['n']} "
-                  f"al={is_result['n_aligned']}({al_r:+.4f}) "
-                  f"mis={is_result['n_misaligned']}({mis_r:+.4f}) "
-                  f"lift={lift:+.3f} t={is_result['t_stat']:.2f} p={is_result['p_value']:.6f}")
-            print(f"         OOS N={oos_result.get('n', 0)} "
-                  f"al={oos_result.get('n_aligned', 0)}({oos_al:+.4f}) "
-                  f"mis={oos_result.get('n_misaligned', 0)}({oos_mis:+.4f}) "
-                  f"lift={oos_lift:+.3f}")
+            print(
+                f"  RR{rr}: IS N={is_result['n']} "
+                f"al={is_result['n_aligned']}({al_r:+.4f}) "
+                f"mis={is_result['n_misaligned']}({mis_r:+.4f}) "
+                f"lift={lift:+.3f} t={is_result['t_stat']:.2f} p={is_result['p_value']:.6f}"
+            )
+            print(
+                f"         OOS N={oos_result.get('n', 0)} "
+                f"al={oos_result.get('n_aligned', 0)}({oos_al:+.4f}) "
+                f"mis={oos_result.get('n_misaligned', 0)}({oos_mis:+.4f}) "
+                f"lift={oos_lift:+.3f}"
+            )
 
             # Confound check
             if is_result.get("al_ovnrng_avg"):
-                print(f"         Confound: aligned avg_ovnrng={is_result['al_ovnrng_avg']:.1f}% "
-                      f"misaligned={is_result['mis_ovnrng_avg']:.1f}%")
+                print(
+                    f"         Confound: aligned avg_ovnrng={is_result['al_ovnrng_avg']:.1f}% "
+                    f"misaligned={is_result['mis_ovnrng_avg']:.1f}%"
+                )
 
     # ================================================================
     # MECHANISM M4: Cross-Session State Machine
@@ -339,8 +364,7 @@ def main() -> None:
     print("Take = WIN_ALIGN + LOSS_OPPOSED; Veto = WIN_OPPOSED + LOSS_ALIGN")
     print("=" * 70)
 
-    for hyp_id, (prior, current) in [(3, ("NYSE_OPEN", "US_DATA_1000")),
-                                      (4, ("COMEX_SETTLE", "CME_PRECLOSE"))]:
+    for hyp_id, (prior, current) in [(3, ("NYSE_OPEN", "US_DATA_1000")), (4, ("COMEX_SETTLE", "CME_PRECLOSE"))]:
         print(f"\n--- Hypothesis {hyp_id}: M4 {prior}>{current} MNQ O5 ---")
         for rr in [1.0, 1.5, 2.0]:
             label = f"M4_{prior}_{current}_RR{rr}"
@@ -355,42 +379,47 @@ def main() -> None:
 
             # Use the 4-state take/veto p-value (more informative than binary)
             tv = is_result["take_veto"]
-            tv_oos = oos_result.get("take_veto", {})
             all_p_values.append((label, tv["p"]))
 
             take_r = tv["take_avg_r"] or 0
             veto_r = tv["veto_avg_r"] or 0
             lift = take_r - veto_r
 
-            print(f"  RR{rr}: IS N={is_result['n']} "
-                  f"take={tv['n_take']}({take_r:+.4f}) "
-                  f"veto={tv['n_veto']}({veto_r:+.4f}) "
-                  f"lift={lift:+.3f} t={tv['t']:.2f} p={tv['p']:.6f}")
+            print(
+                f"  RR{rr}: IS N={is_result['n']} "
+                f"take={tv['n_take']}({take_r:+.4f}) "
+                f"veto={tv['n_veto']}({veto_r:+.4f}) "
+                f"lift={lift:+.3f} t={tv['t']:.2f} p={tv['p']:.6f}"
+            )
 
             # Binary comparison too
             b = is_result["binary"]
-            print(f"         Binary: same={b['n_same']}({(b['same_avg_r'] or 0):+.4f}) "
-                  f"opp={b['n_opp']}({(b['opp_avg_r'] or 0):+.4f}) "
-                  f"t={b['t']:.2f} p={b['p']:.6f}")
+            print(
+                f"         Binary: same={b['n_same']}({(b['same_avg_r'] or 0):+.4f}) "
+                f"opp={b['n_opp']}({(b['opp_avg_r'] or 0):+.4f}) "
+                f"t={b['t']:.2f} p={b['p']:.6f}"
+            )
 
             # OOS
             if oos_result.get("n", 0) > 0:
                 tv_o = oos_result.get("take_veto", {})
-                b_o = oos_result.get("binary", {})
-                print(f"         OOS N={oos_result['n']} "
-                      f"take={tv_o.get('n_take', 0)}({(tv_o.get('take_avg_r') or 0):+.4f}) "
-                      f"veto={tv_o.get('n_veto', 0)}({(tv_o.get('veto_avg_r') or 0):+.4f}) "
-                      f"lift={(tv_o.get('take_avg_r') or 0) - (tv_o.get('veto_avg_r') or 0):+.3f}")
+                print(
+                    f"         OOS N={oos_result['n']} "
+                    f"take={tv_o.get('n_take', 0)}({(tv_o.get('take_avg_r') or 0):+.4f}) "
+                    f"veto={tv_o.get('n_veto', 0)}({(tv_o.get('veto_avg_r') or 0):+.4f}) "
+                    f"lift={(tv_o.get('take_avg_r') or 0) - (tv_o.get('veto_avg_r') or 0):+.3f}"
+                )
 
             # 4-state breakdown
             print("         States:")
-            for state_name in ["PRIOR_WIN_ALIGN", "PRIOR_WIN_OPPOSED",
-                               "PRIOR_LOSS_ALIGN", "PRIOR_LOSS_OPPOSED"]:
+            for state_name in ["PRIOR_WIN_ALIGN", "PRIOR_WIN_OPPOSED", "PRIOR_LOSS_ALIGN", "PRIOR_LOSS_OPPOSED"]:
                 is_s = is_result["states"].get(state_name, {})
                 oos_s = oos_result.get("states", {}).get(state_name, {})
-                print(f"           {state_name}: IS N={is_s.get('n', 0)} "
-                      f"R={is_s.get('avg_r') or 0:+.4f} | "
-                      f"OOS N={oos_s.get('n', 0)} R={oos_s.get('avg_r') or 0:+.4f}")
+                print(
+                    f"           {state_name}: IS N={is_s.get('n', 0)} "
+                    f"R={is_s.get('avg_r') or 0:+.4f} | "
+                    f"OOS N={oos_s.get('n', 0)} R={oos_s.get('avg_r') or 0:+.4f}"
+                )
 
     # ================================================================
     # MECHANISM M5: Pre-1000 Range Expansion
@@ -425,16 +454,20 @@ def main() -> None:
 
             all_p_values.append((label, is_result["p_value"]))
 
-            print(f"  RR{rr}: IS N={is_result['n']} "
-                  f"al={is_result['n_aligned']}({al_r:+.4f}) "
-                  f"mis={is_result['n_misaligned']}({mis_r:+.4f}) "
-                  f"lift={lift:+.3f} t={is_result['t_stat']:.2f} p={is_result['p_value']:.6f}")
+            print(
+                f"  RR{rr}: IS N={is_result['n']} "
+                f"al={is_result['n_aligned']}({al_r:+.4f}) "
+                f"mis={is_result['n_misaligned']}({mis_r:+.4f}) "
+                f"lift={lift:+.3f} t={is_result['t_stat']:.2f} p={is_result['p_value']:.6f}"
+            )
             oos_al = oos_result.get("aligned_avg_r") or 0
             oos_mis = oos_result.get("misaligned_avg_r") or 0
-            print(f"         OOS N={oos_result.get('n', 0)} "
-                  f"al={oos_result.get('n_aligned', 0)}({oos_al:+.4f}) "
-                  f"mis={oos_result.get('n_misaligned', 0)}({oos_mis:+.4f}) "
-                  f"lift={oos_al - oos_mis:+.3f}")
+            print(
+                f"         OOS N={oos_result.get('n', 0)} "
+                f"al={oos_result.get('n_aligned', 0)}({oos_al:+.4f}) "
+                f"mis={oos_result.get('n_misaligned', 0)}({oos_mis:+.4f}) "
+                f"lift={oos_al - oos_mis:+.3f}"
+            )
 
     # ================================================================
     # PHASE A.5: MES Cross-Instrument Robustness (for Phase A survivors)
@@ -460,8 +493,10 @@ def main() -> None:
                 mis = is_r["misaligned_avg_r"] or 0
                 oos_al = oos_r.get("aligned_avg_r") or 0
                 oos_mis = oos_r.get("misaligned_avg_r") or 0
-                print(f"  {mech} MES {sess}: IS lift={al - mis:+.3f} (N={is_r['n']}) "
-                      f"OOS lift={oos_al - oos_mis:+.3f} (N={oos_r.get('n', 0)})")
+                print(
+                    f"  {mech} MES {sess}: IS lift={al - mis:+.3f} (N={is_r['n']}) "
+                    f"OOS lift={oos_al - oos_mis:+.3f} (N={oos_r.get('n', 0)})"
+                )
         elif mech == "M4":
             is_r = run_m4_cross_session_state(con, prior, sess, om, rr, "MES", "IS")
             oos_r = run_m4_cross_session_state(con, prior, sess, om, rr, "MES", "OOS")
@@ -472,8 +507,10 @@ def main() -> None:
                 veto_r = tv["veto_avg_r"] or 0
                 oos_take = tv_o.get("take_avg_r") or 0
                 oos_veto = tv_o.get("veto_avg_r") or 0
-                print(f"  {mech} MES {prior}>{sess}: IS lift={take_r - veto_r:+.3f} (N={is_r['n']}) "
-                      f"OOS lift={oos_take - oos_veto:+.3f} (N={oos_r.get('n', 0)})")
+                print(
+                    f"  {mech} MES {prior}>{sess}: IS lift={take_r - veto_r:+.3f} (N={is_r['n']}) "
+                    f"OOS lift={oos_take - oos_veto:+.3f} (N={oos_r.get('n', 0)})"
+                )
 
     # ================================================================
     # BH FDR at Phase A K=18
@@ -483,7 +520,6 @@ def main() -> None:
     print("=" * 70)
 
     p_vals = [p for _, p in all_p_values]
-    labels = [l for l, _ in all_p_values]
     sig = bh_fdr(p_vals)
 
     survivors = []

@@ -35,11 +35,11 @@ import pandas as pd
 # Timezone definitions
 # =========================================================================
 
-_BRISBANE = ZoneInfo("Australia/Brisbane")       # UTC+10, no DST ever
-_US_EASTERN = ZoneInfo("America/New_York")       # EST UTC-5 / EDT UTC-4
-_US_CHICAGO = ZoneInfo("America/Chicago")        # CST UTC-6 / CDT UTC-5
-_UK_LONDON = ZoneInfo("Europe/London")           # GMT UTC+0 / BST UTC+1
-_TOKYO = ZoneInfo("Asia/Tokyo")                  # JST UTC+9, no DST
+_BRISBANE = ZoneInfo("Australia/Brisbane")  # UTC+10, no DST ever
+_US_EASTERN = ZoneInfo("America/New_York")  # EST UTC-5 / EDT UTC-4
+_US_CHICAGO = ZoneInfo("America/Chicago")  # CST UTC-6 / CDT UTC-5
+_UK_LONDON = ZoneInfo("Europe/London")  # GMT UTC+0 / BST UTC+1
+_TOKYO = ZoneInfo("Asia/Tokyo")  # JST UTC+9, no DST
 _UTC = ZoneInfo("UTC")
 
 DOW_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -98,8 +98,7 @@ SESSION_EXCHANGE_TZ = {
 
 def brisbane_to_utc(brisbane_date: date, hour: int, minute: int) -> datetime:
     """Convert Brisbane local time to UTC datetime."""
-    bris_dt = datetime(brisbane_date.year, brisbane_date.month, brisbane_date.day,
-                       hour, minute, 0, tzinfo=_BRISBANE)
+    bris_dt = datetime(brisbane_date.year, brisbane_date.month, brisbane_date.day, hour, minute, 0, tzinfo=_BRISBANE)
     return bris_dt.astimezone(_UTC)
 
 
@@ -111,6 +110,7 @@ def utc_to_exchange(utc_dt: datetime, exchange_tz: ZoneInfo) -> datetime:
 # =========================================================================
 # Part 1: Static mapping table
 # =========================================================================
+
 
 def build_static_mapping():
     """For each session, map Brisbane DOW → UTC time → exchange calendar day.
@@ -128,7 +128,7 @@ def build_static_mapping():
     # Week of 2025-07-07 (Mon) = US summer (EDT), UK summer (BST)
     test_weeks = {
         "Winter (Jan 2025)": date(2025, 1, 6),  # Monday
-        "Summer (Jul 2025)": date(2025, 7, 7),   # Monday
+        "Summer (Jul 2025)": date(2025, 7, 7),  # Monday
     }
 
     rows = []
@@ -143,7 +143,9 @@ def build_static_mapping():
             cme_next = info.get("cme_next_day_convention", False)
 
             print(f"\n  {session_label} ({info['event']}):")
-            print(f"    {'Bris DOW':>10s} → {'Bris Date':>12s}  {'UTC':>18s}  {'Exch Local':>20s}  {'Exch DOW':>10s}  {'Match?':>7s}")
+            print(
+                f"    {'Bris DOW':>10s} → {'Bris Date':>12s}  {'UTC':>18s}  {'Exch Local':>20s}  {'Exch DOW':>10s}  {'Match?':>7s}"
+            )
             print(f"    {'-' * 90}")
 
             for offset in range(5):  # Mon-Fri
@@ -166,24 +168,28 @@ def build_static_mapping():
 
                 match = "✓" if bris_dow == exch_dow else "✗ DIFF"
 
-                print(f"    {DOW_NAMES[bris_dow]:>10s} → {bris_date!s:>12s}  "
-                      f"{utc_dt.strftime('%Y-%m-%d %H:%M'):>18s}  "
-                      f"{exch_dt.strftime('%Y-%m-%d %H:%M %Z'):>20s}  "
-                      f"{exch_dow_label:>10s}  {match:>7s}")
+                print(
+                    f"    {DOW_NAMES[bris_dow]:>10s} → {bris_date!s:>12s}  "
+                    f"{utc_dt.strftime('%Y-%m-%d %H:%M'):>18s}  "
+                    f"{exch_dt.strftime('%Y-%m-%d %H:%M %Z'):>20s}  "
+                    f"{exch_dow_label:>10s}  {match:>7s}"
+                )
 
-                rows.append({
-                    "season": season_label,
-                    "session": session_label,
-                    "brisbane_date": str(bris_date),
-                    "brisbane_dow": bris_dow,
-                    "brisbane_dow_name": DOW_NAMES[bris_dow],
-                    "utc_time": utc_dt.strftime('%Y-%m-%d %H:%M'),
-                    "exchange_time": exch_dt.strftime('%Y-%m-%d %H:%M %Z'),
-                    "exchange_dow": exch_dow,
-                    "exchange_dow_name": DOW_NAMES[exch_dow],
-                    "aligned": bris_dow == exch_dow,
-                    "cme_convention": cme_next,
-                })
+                rows.append(
+                    {
+                        "season": season_label,
+                        "session": session_label,
+                        "brisbane_date": str(bris_date),
+                        "brisbane_dow": bris_dow,
+                        "brisbane_dow_name": DOW_NAMES[bris_dow],
+                        "utc_time": utc_dt.strftime("%Y-%m-%d %H:%M"),
+                        "exchange_time": exch_dt.strftime("%Y-%m-%d %H:%M %Z"),
+                        "exchange_dow": exch_dow,
+                        "exchange_dow_name": DOW_NAMES[exch_dow],
+                        "aligned": bris_dow == exch_dow,
+                        "cme_convention": cme_next,
+                    }
+                )
 
     return rows
 
@@ -191,6 +197,7 @@ def build_static_mapping():
 # =========================================================================
 # Part 2: Validate existing DOW filters
 # =========================================================================
+
 
 def validate_existing_filters(static_rows):
     """Check whether NOFRI@0900, NOMON@1800, NOTUE@1000 target the right exchange day."""
@@ -210,10 +217,11 @@ def validate_existing_filters(static_rows):
 
         # Check winter and summer
         for season in ["Winter (Jan 2025)", "Summer (Jul 2025)"]:
-            matching = [r for r in static_rows
-                       if r["session"] == session
-                       and r["season"] == season
-                       and r["brisbane_dow"] == skip_dow]
+            matching = [
+                r
+                for r in static_rows
+                if r["session"] == session and r["season"] == season and r["brisbane_dow"] == skip_dow
+            ]
 
             if not matching:
                 print(f"    {season}: NO DATA")
@@ -223,9 +231,11 @@ def validate_existing_filters(static_rows):
             if r["aligned"]:
                 verdict = f"✓ ALIGNED — Brisbane {skip_day_name} = Exchange {r['exchange_dow_name']}"
             else:
-                verdict = (f"✗ MISALIGNED — Brisbane {skip_day_name} = "
-                          f"Exchange {r['exchange_dow_name']} "
-                          f"(UTC: {r['utc_time']}, Exch: {r['exchange_time']})")
+                verdict = (
+                    f"✗ MISALIGNED — Brisbane {skip_day_name} = "
+                    f"Exchange {r['exchange_dow_name']} "
+                    f"(UTC: {r['utc_time']}, Exch: {r['exchange_time']})"
+                )
 
             print(f"    {season}: {verdict}")
 
@@ -233,24 +243,27 @@ def validate_existing_filters(static_rows):
     print(f"\n  --- 0030 (US equity open) — NOT currently filtered, but important to document ---")
     for season in ["Winter (Jan 2025)", "Summer (Jul 2025)"]:
         for dow in range(5):
-            matching = [r for r in static_rows
-                       if r["session"] == "0030"
-                       and r["season"] == season
-                       and r["brisbane_dow"] == dow]
+            matching = [
+                r for r in static_rows if r["session"] == "0030" and r["season"] == season and r["brisbane_dow"] == dow
+            ]
             if matching:
                 r = matching[0]
                 status = "✓" if r["aligned"] else f"→ Exchange {r['exchange_dow_name']}"
-                print(f"    {season} Brisbane-{DOW_NAMES[dow]}: "
-                      f"UTC={r['utc_time']}, Exchange={r['exchange_time']} {status}")
+                print(
+                    f"    {season} Brisbane-{DOW_NAMES[dow]}: "
+                    f"UTC={r['utc_time']}, Exchange={r['exchange_time']} {status}"
+                )
 
 
 # =========================================================================
 # Part 3: Data-driven — compare Brisbane DOW vs exchange DOW grouping
 # =========================================================================
 
+
 def load_outcomes(con, instrument, session):
     """Load orb_outcomes joined with daily_features for DOW analysis."""
-    return con.execute("""
+    return con.execute(
+        """
         SELECT
             oo.trading_day,
             oo.pnl_r,
@@ -267,7 +280,9 @@ def load_outcomes(con, instrument, session):
           AND oo.rr_target = 2.0
           AND df.day_of_week IS NOT NULL
         ORDER BY oo.trading_day
-    """, [instrument, session]).fetchdf()
+    """,
+        [instrument, session],
+    ).fetchdf()
 
 
 def compute_exchange_dow(trading_day: date, session: str) -> int:
@@ -308,9 +323,7 @@ def q3_data_driven(con):
                 continue
 
             # Compute exchange DOW for each row
-            df["exchange_dow"] = df["trading_day"].apply(
-                lambda td: compute_exchange_dow(td, session)
-            )
+            df["exchange_dow"] = df["trading_day"].apply(lambda td: compute_exchange_dow(td, session))
 
             # Filter to G4+ (orb_size_r >= 4.0)
             df_g4 = df[df["orb_size_r"] >= 4.0].copy()
@@ -327,8 +340,10 @@ def q3_data_driven(con):
             # There ARE mismatches — show both groupings
             print(f"\n  {instrument} {session} G4+ (N={len(df_g4)}, {mismatches} DOW mismatches)")
             print(f"    {'':>10s}  {'--- Brisbane DOW ---':>30s}  {'--- Exchange DOW ---':>30s}")
-            print(f"    {'Day':>10s}  {'N':>5s} {'avgR':>7s} {'WR':>6s} {'totR':>8s}  "
-                  f"{'N':>5s} {'avgR':>7s} {'WR':>6s} {'totR':>8s}")
+            print(
+                f"    {'Day':>10s}  {'N':>5s} {'avgR':>7s} {'WR':>6s} {'totR':>8s}  "
+                f"{'N':>5s} {'avgR':>7s} {'WR':>6s} {'totR':>8s}"
+            )
             print(f"    {'-' * 75}")
 
             for dow in range(5):
@@ -352,19 +367,29 @@ def q3_data_driven(con):
                 if b_n > 0 and e_n > 0 and abs(b_avg - e_avg) > 0.05:
                     diff_marker = " <<"
 
-                print(f"    {DOW_NAMES[dow]:>10s}  "
-                      f"{b_n:5d} {b_avg:+7.3f} {b_wr:5.1%} {b_tot:+8.1f}  "
-                      f"{e_n:5d} {e_avg:+7.3f} {e_wr:5.1%} {e_tot:+8.1f}{diff_marker}")
+                print(
+                    f"    {DOW_NAMES[dow]:>10s}  "
+                    f"{b_n:5d} {b_avg:+7.3f} {b_wr:5.1%} {b_tot:+8.1f}  "
+                    f"{e_n:5d} {e_avg:+7.3f} {e_wr:5.1%} {e_tot:+8.1f}{diff_marker}"
+                )
 
-                all_rows.append({
-                    "instrument": instrument, "session": session,
-                    "dow": dow, "dow_name": DOW_NAMES[dow],
-                    "bris_n": b_n, "bris_avg_r": round(b_avg, 4),
-                    "bris_wr": round(b_wr, 4), "bris_tot_r": round(b_tot, 2),
-                    "exch_n": e_n, "exch_avg_r": round(e_avg, 4),
-                    "exch_wr": round(e_wr, 4), "exch_tot_r": round(e_tot, 2),
-                    "mismatches": mismatches,
-                })
+                all_rows.append(
+                    {
+                        "instrument": instrument,
+                        "session": session,
+                        "dow": dow,
+                        "dow_name": DOW_NAMES[dow],
+                        "bris_n": b_n,
+                        "bris_avg_r": round(b_avg, 4),
+                        "bris_wr": round(b_wr, 4),
+                        "bris_tot_r": round(b_tot, 2),
+                        "exch_n": e_n,
+                        "exch_avg_r": round(e_avg, 4),
+                        "exch_wr": round(e_wr, 4),
+                        "exch_tot_r": round(e_tot, 2),
+                        "mismatches": mismatches,
+                    }
+                )
 
     return all_rows
 
@@ -372,6 +397,7 @@ def q3_data_driven(con):
 # =========================================================================
 # Part 4: Summary and recommendations
 # =========================================================================
+
 
 def print_summary():
     print(f"\n{'=' * 110}")
@@ -439,6 +465,7 @@ def print_summary():
 # Main
 # =========================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="DOW Alignment Investigation")
     parser.add_argument("--db-path", type=str, default=None)
@@ -449,6 +476,7 @@ def main():
     else:
         try:
             from pipeline.paths import GOLD_DB_PATH
+
             db_path = GOLD_DB_PATH
         except ImportError:
             db_path = Path("gold.db")
@@ -485,14 +513,10 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
 
     if static_rows:
-        pd.DataFrame(static_rows).to_csv(
-            out / "dow_alignment_static_mapping.csv",
-            index=False)
+        pd.DataFrame(static_rows).to_csv(out / "dow_alignment_static_mapping.csv", index=False)
 
     if data_rows:
-        pd.DataFrame(data_rows).to_csv(
-            out / "dow_alignment_data_comparison.csv",
-            index=False, float_format="%.4f")
+        pd.DataFrame(data_rows).to_csv(out / "dow_alignment_data_comparison.csv", index=False, float_format="%.4f")
 
     print(f"\n  CSVs saved to research/output/dow_alignment_*.csv")
     print(f"  Total: {time.time() - t_start:.1f}s")

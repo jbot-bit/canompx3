@@ -650,7 +650,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # activation review.
         daily_lanes=(
             DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8
+            ),
             DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
             DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15", "MNQ", "US_DATA_1000", max_orb_size_pts=94.9),
@@ -689,7 +691,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # Same inactive recommendation as 50K TYPE-B under current shelf truth.
         daily_lanes=(
             DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8
+            ),
             DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
             DailyLaneSpec("MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15", "MNQ", "US_DATA_1000", max_orb_size_pts=94.9),
@@ -728,7 +732,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # activation review.
         daily_lanes=(
             DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8
+            ),
             DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
             DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12", "MNQ", "TOKYO_OPEN", max_orb_size_pts=45.6),
         ),
@@ -771,7 +777,9 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # session P90 limits rather than the older $300-budget-derived translation.
         daily_lanes=(
             DailyLaneSpec("MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5", "MNQ", "EUROPE_FLOW", max_orb_size_pts=39.0),
-            DailyLaneSpec("MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8),
+            DailyLaneSpec(
+                "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15", "MNQ", "SINGAPORE_OPEN", max_orb_size_pts=37.8
+            ),
             DailyLaneSpec("MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5", "MNQ", "COMEX_SETTLE", max_orb_size_pts=52.8),
             DailyLaneSpec("MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12", "MNQ", "NYSE_OPEN", max_orb_size_pts=117.8),
             DailyLaneSpec("MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12", "MNQ", "TOKYO_OPEN", max_orb_size_pts=45.6),
@@ -996,8 +1004,7 @@ def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
 
     if cap_conflicts:
         details = ", ".join(
-            f"{label}={sorted(caps, key=lambda c: (c is None, c))}"
-            for label, caps in sorted(cap_conflicts.items())
+            f"{label}={sorted(caps, key=lambda c: (c is None, c))}" for label, caps in sorted(cap_conflicts.items())
         )
         raise ValueError(
             "Profile has inconsistent max_orb_size_pts across lanes on the "

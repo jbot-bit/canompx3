@@ -60,20 +60,23 @@ EXIT_TYPES = ["fixed_rr", "session_eod", "time_4h"]
 # Data loading
 # ---------------------------------------------------------------------------
 
-def load_outcomes(db_path: Path, sessions: list[str], entry_models: list[str],
-                  rr_targets: list[float], min_orb_size: float,
-                  start: date, end: date) -> pd.DataFrame:
+
+def load_outcomes(
+    db_path: Path,
+    sessions: list[str],
+    entry_models: list[str],
+    rr_targets: list[float],
+    min_orb_size: float,
+    start: date,
+    end: date,
+) -> pd.DataFrame:
     """Load orb_outcomes with entry_ts NOT NULL, G4+ filter."""
     session_ph = ", ".join(["?"] * len(sessions))
     em_ph = ", ".join(["?"] * len(entry_models))
     rr_ph = ", ".join(["?"] * len(rr_targets))
 
-    size_cases = " ".join(
-        f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_size" for s in sessions
-    )
-    dir_cases = " ".join(
-        f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_break_dir" for s in sessions
-    )
+    size_cases = " ".join(f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_size" for s in sessions)
+    dir_cases = " ".join(f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_break_dir" for s in sessions)
 
     query = f"""
         SELECT
@@ -113,27 +116,33 @@ def load_outcomes(db_path: Path, sessions: list[str], entry_models: list[str],
     print(f"Loaded {len(df)} trades ({df['trading_day'].nunique()} days)")
     return df
 
+
 def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1-minute bars for one trading day."""
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [start_utc, end_utc]).fetchdf()
+        """,
+            [start_utc, end_utc],
+        ).fetchdf()
     finally:
         con.close()
     if not df.empty:
         df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
     return df
 
+
 # ---------------------------------------------------------------------------
 # Exit computation
 # ---------------------------------------------------------------------------
+
 
 def compute_exits(
     bars_df: pd.DataFrame,
@@ -171,7 +180,11 @@ def compute_exits(
     _, day_end_utc = compute_trading_day_utc_range(trading_day)
     # Scan bars from entry forward; check stop first, then mark-to-market at EOD
     eod_pnl = _scan_with_stop_and_time_exit(
-        bars_df, entry_idx, entry_price, stop_price, is_long,
+        bars_df,
+        entry_idx,
+        entry_price,
+        stop_price,
+        is_long,
         cutoff_ts=day_end_utc,
     )
     results["session_eod"] = eod_pnl
@@ -179,12 +192,17 @@ def compute_exits(
     # --- 4h Time exit ---
     cutoff_4h = entry_ts + FOUR_HOURS
     time4h_pnl = _scan_with_stop_and_time_exit(
-        bars_df, entry_idx, entry_price, stop_price, is_long,
+        bars_df,
+        entry_idx,
+        entry_price,
+        stop_price,
+        is_long,
         cutoff_ts=cutoff_4h,
     )
     results["time_4h"] = time4h_pnl
 
     return results
+
 
 def _scan_with_stop_and_time_exit(
     bars_df: pd.DataFrame,
@@ -224,16 +242,30 @@ def _scan_with_stop_and_time_exit(
     pnl_pts = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(cost_spec, entry_price, stop_price, pnl_pts)
 
+
 # ---------------------------------------------------------------------------
 # Main analysis
 # ---------------------------------------------------------------------------
 
-def run_analysis(db_path: Path, sessions: list[str], entry_models: list[str],
-                 rr_targets: list[float], min_orb_size: float,
-                 start: date, end: date) -> dict:
+
+def run_analysis(
+    db_path: Path,
+    sessions: list[str],
+    entry_models: list[str],
+    rr_targets: list[float],
+    min_orb_size: float,
+    start: date,
+    end: date,
+) -> dict:
     """Run the full EOD exit tournament."""
     outcomes_df = load_outcomes(
-        db_path, sessions, entry_models, rr_targets, min_orb_size, start, end,
+        db_path,
+        sessions,
+        entry_models,
+        rr_targets,
+        min_orb_size,
+        start,
+        end,
     )
 
     # Group results by (session, entry_model, exit_type)
@@ -261,9 +293,15 @@ def run_analysis(db_path: Path, sessions: list[str], entry_models: list[str],
             continue
 
         exits = compute_exits(
-            bars, row["entry_ts"], row["entry_price"], row["stop_price"],
-            row["target_price"], row["break_dir"],
-            row["outcome"], row["pnl_r"], td,
+            bars,
+            row["entry_ts"],
+            row["entry_price"],
+            row["stop_price"],
+            row["target_price"],
+            row["break_dir"],
+            row["outcome"],
+            row["pnl_r"],
+            td,
         )
 
         key = (row["orb_label"], row["entry_model"])
@@ -271,9 +309,10 @@ def run_analysis(db_path: Path, sessions: list[str], entry_models: list[str],
             results[key][exit_type].append(pnl_r)
 
     elapsed = time.time() - t0
-    print(f"  Processed in {elapsed:.1f}s ({len(outcomes_df)/max(elapsed,0.1):.0f} trades/s)")
+    print(f"  Processed in {elapsed:.1f}s ({len(outcomes_df) / max(elapsed, 0.1):.0f} trades/s)")
 
     return dict(results)
+
 
 def print_results(results: dict) -> None:
     """Print formatted comparison table."""
@@ -284,7 +323,7 @@ def print_results(results: dict) -> None:
     for (session, em), exit_data in sorted(results.items()):
         print(f"\n--- {session} / {em} ---")
         print(f"  {'Exit Type':<15} {'N':>6} {'WR':>7} {'ExpR':>7} {'Sharpe':>7} {'MaxDD':>8} {'Total':>8}")
-        print(f"  {'-'*15} {'-'*6} {'-'*7} {'-'*7} {'-'*7} {'-'*8} {'-'*8}")
+        print(f"  {'-' * 15} {'-' * 6} {'-' * 7} {'-' * 7} {'-' * 7} {'-' * 8} {'-' * 8}")
 
         for exit_type in EXIT_TYPES:
             pnls = exit_data.get(exit_type, [])
@@ -294,8 +333,11 @@ def print_results(results: dict) -> None:
             m = compute_strategy_metrics(arr)
             if m is None:
                 continue
-            print(f"  {exit_type:<15} {m['n']:>6} {m['wr']:>7.3f} {m['expr']:>7.3f} "
-                  f"{m['sharpe']:>7.3f} {m['maxdd']:>8.2f} {m['total']:>8.1f}")
+            print(
+                f"  {exit_type:<15} {m['n']:>6} {m['wr']:>7.3f} {m['expr']:>7.3f} "
+                f"{m['sharpe']:>7.3f} {m['maxdd']:>8.2f} {m['total']:>8.1f}"
+            )
+
 
 def run_walk_forward(results: dict) -> None:
     """Walk-forward: for each (session, em), select best exit in train window."""
@@ -306,9 +348,11 @@ def run_walk_forward(results: dict) -> None:
     print("For now, the in-sample comparison above shows relative performance.")
     print("Run with --walk-forward after adding trade-level date support.")
 
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(description="EOD Exit Tournament")
@@ -333,11 +377,17 @@ def main():
     print()
 
     results = run_analysis(
-        args.db_path, sessions, entry_models, rr_targets,
-        args.min_orb_size, args.start, args.end,
+        args.db_path,
+        sessions,
+        entry_models,
+        rr_targets,
+        args.min_orb_size,
+        args.start,
+        args.end,
     )
     print_results(results)
     run_walk_forward(results)
+
 
 if __name__ == "__main__":
     main()

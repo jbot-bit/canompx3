@@ -62,24 +62,27 @@ ALL_RULE_KEYS = (
 # Data loading
 # ---------------------------------------------------------------------------
 
-def load_outcomes(db_path: Path, sessions: list[str], entry_models: list[str],
-                  rr_targets: list[float], min_orb_size: float,
-                  start: date, end: date) -> pd.DataFrame:
+
+def load_outcomes(
+    db_path: Path,
+    sessions: list[str],
+    entry_models: list[str],
+    rr_targets: list[float],
+    min_orb_size: float,
+    start: date,
+    end: date,
+) -> pd.DataFrame:
     """Load orb_outcomes with entry_ts NOT NULL, joined with ORB size filter."""
     session_placeholders = ", ".join(["?"] * len(sessions))
     em_placeholders = ", ".join(["?"] * len(entry_models))
     rr_placeholders = ", ".join(["?"] * len(rr_targets))
 
     # Build ORB size CASE expression for filtering
-    size_cases = " ".join(
-        f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_size" for s in sessions
-    )
+    size_cases = " ".join(f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_size" for s in sessions)
     size_expr = f"CASE {size_cases} ELSE NULL END"
 
     # Also get break_dir from daily_features
-    dir_cases = " ".join(
-        f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_break_dir" for s in sessions
-    )
+    dir_cases = " ".join(f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_break_dir" for s in sessions)
     dir_expr = f"CASE {dir_cases} ELSE NULL END"
 
     query = f"""
@@ -131,27 +134,33 @@ def load_outcomes(db_path: Path, sessions: list[str], entry_models: list[str],
     print(f"Loaded {len(df)} trades ({df['trading_day'].nunique()} days)")
     return df
 
+
 def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1-minute bars for one trading day."""
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [start_utc, end_utc]).fetchdf()
+        """,
+            [start_utc, end_utc],
+        ).fetchdf()
     finally:
         con.close()
     if not df.empty:
         df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
     return df
 
+
 # ---------------------------------------------------------------------------
 # Per-trade replay
 # ---------------------------------------------------------------------------
+
 
 def replay_trade_with_exits(
     bars_df: pd.DataFrame,
@@ -186,9 +195,9 @@ def replay_trade_with_exits(
 
     # State tracking
     max_favorable_r = 0.0
-    has_gone_green = False       # MFE >= RULE2_MFE_THRESHOLD_R
-    consecutive_dwell = 0        # consecutive minutes in entry zone after going green
-    wrong_dir_streak = 0         # consecutive bars closing in wrong direction
+    has_gone_green = False  # MFE >= RULE2_MFE_THRESHOLD_R
+    consecutive_dwell = 0  # consecutive minutes in entry zone after going green
+    wrong_dir_streak = 0  # consecutive bars closing in wrong direction
     breakeven_triggers = {t: False for t in RULE3_MFE_TRIGGERS}  # per threshold
 
     # Track which rules have already fired (first trigger only)
@@ -286,9 +295,7 @@ def replay_trade_with_exits(
                     rule_fired[key] = True
                     # Exit at entry_price (breakeven), compute actual R
                     be_pnl_pts = 0.0  # breakeven = 0 points PnL
-                    be_pnl_r = round(
-                        to_r_multiple(cost_spec, entry_price, stop_price, be_pnl_pts), 4
-                    )
+                    be_pnl_r = round(to_r_multiple(cost_spec, entry_price, stop_price, be_pnl_pts), 4)
                     results[key] = {"pnl_r": be_pnl_r, "triggered": True}
 
         # --- Rule 4: First N-Bar Momentum ---
@@ -306,16 +313,17 @@ def replay_trade_with_exits(
 
     return results
 
+
 # ---------------------------------------------------------------------------
 # Aggregation
 # ---------------------------------------------------------------------------
+
 
 def compute_metrics(pnls: np.ndarray) -> dict:
     """Compute trading stats from array of R-multiples."""
     n = len(pnls)
     if n == 0:
-        return {"n": 0, "wr": 0.0, "expr": 0.0, "sharpe": 0.0,
-                "maxdd": 0.0, "total": 0.0}
+        return {"n": 0, "wr": 0.0, "expr": 0.0, "sharpe": 0.0, "maxdd": 0.0, "total": 0.0}
     wr = float((pnls > 0).sum() / n)
     expr = float(pnls.mean())
     std = float(pnls.std())
@@ -324,8 +332,8 @@ def compute_metrics(pnls: np.ndarray) -> dict:
     peak = np.maximum.accumulate(cumul)
     maxdd = float((cumul - peak).min())
     total = float(pnls.sum())
-    return {"n": n, "wr": wr, "expr": expr, "sharpe": sharpe,
-            "maxdd": maxdd, "total": total}
+    return {"n": n, "wr": wr, "expr": expr, "sharpe": sharpe, "maxdd": maxdd, "total": total}
+
 
 def aggregate_results(all_results: list[dict]) -> dict:
     """Group results by (session, entry_model) and compute metrics per rule."""
@@ -346,25 +354,17 @@ def aggregate_results(all_results: list[dict]) -> dict:
 
         for rule_key in ALL_RULE_KEYS:
             modified_pnls = np.array([t["replay"][rule_key]["pnl_r"] for t in trades])
-            triggered_trades = [
-                t for t in trades if t["replay"][rule_key]["triggered"]
-            ]
+            triggered_trades = [t for t in trades if t["replay"][rule_key]["triggered"]]
             triggered_count = len(triggered_trades)
             metrics = compute_metrics(modified_pnls)
             metrics["triggered"] = triggered_count
-            metrics["triggered_pct"] = (
-                triggered_count / len(trades) * 100 if trades else 0.0
-            )
+            metrics["triggered_pct"] = triggered_count / len(trades) * 100 if trades else 0.0
 
             # Validation: original WR of the triggered subset
             # (e.g., Rule1 N30 triggered subset should show ~24% original WR for 1800 E3)
             if triggered_trades:
-                orig_pnls_triggered = np.array([
-                    t["replay"]["original"]["pnl_r"] for t in triggered_trades
-                ])
-                metrics["triggered_orig_wr"] = float(
-                    (orig_pnls_triggered > 0).sum() / len(orig_pnls_triggered)
-                )
+                orig_pnls_triggered = np.array([t["replay"]["original"]["pnl_r"] for t in triggered_trades])
+                metrics["triggered_orig_wr"] = float((orig_pnls_triggered > 0).sum() / len(orig_pnls_triggered))
                 metrics["triggered_orig_expr"] = float(orig_pnls_triggered.mean())
             else:
                 metrics["triggered_orig_wr"] = None
@@ -373,15 +373,17 @@ def aggregate_results(all_results: list[dict]) -> dict:
 
     return report
 
+
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
+
 
 def fmt_metrics(m: dict, triggered: bool = False) -> str:
     """Format metrics dict as a compact string."""
     parts = [
         f"N={m['n']:<4d}",
-        f"WR={m['wr']*100:5.1f}%",
+        f"WR={m['wr'] * 100:5.1f}%",
         f"ExpR={m['expr']:+.3f}",
         f"Sharpe={m['sharpe']:.3f}",
         f"MaxDD={m['maxdd']:.1f}R",
@@ -389,10 +391,11 @@ def fmt_metrics(m: dict, triggered: bool = False) -> str:
     if triggered and "triggered_pct" in m:
         trig_str = f"[{m['triggered_pct']:.0f}% triggered"
         if m.get("triggered_orig_wr") is not None:
-            trig_str += f", orig WR={m['triggered_orig_wr']*100:.0f}%"
+            trig_str += f", orig WR={m['triggered_orig_wr'] * 100:.0f}%"
         trig_str += "]"
         parts.append(trig_str)
     return "  ".join(parts)
+
 
 def print_report(report: dict, start: date, end: date, min_orb_size: float):
     """Print the structured report."""
@@ -415,8 +418,7 @@ def print_report(report: dict, start: date, end: date, min_orb_size: float):
     print("=" * 80)
     print("EARLY EXIT ANALYSIS REPORT")
     print("=" * 80)
-    print(f"Period: {start} to {end} | Filter: G{int(min_orb_size)}+ | "
-          f"Entries: E1, E3")
+    print(f"Period: {start} to {end} | Filter: G{int(min_orb_size)}+ | Entries: E1, E3")
     print("=" * 80)
 
     improvements = []
@@ -445,15 +447,17 @@ def print_report(report: dict, start: date, end: date, min_orb_size: float):
             if orig["sharpe"] != 0:
                 delta_sharpe = m["sharpe"] - orig["sharpe"]
                 delta_expr = m["expr"] - orig["expr"]
-                improvements.append({
-                    "group": group_key,
-                    "rule": rule_key,
-                    "orig_sharpe": orig["sharpe"],
-                    "new_sharpe": m["sharpe"],
-                    "delta_sharpe": delta_sharpe,
-                    "delta_expr": delta_expr,
-                    "triggered_pct": m.get("triggered_pct", 0),
-                })
+                improvements.append(
+                    {
+                        "group": group_key,
+                        "rule": rule_key,
+                        "orig_sharpe": orig["sharpe"],
+                        "new_sharpe": m["sharpe"],
+                        "delta_sharpe": delta_sharpe,
+                        "delta_expr": delta_expr,
+                        "triggered_pct": m.get("triggered_pct", 0),
+                    }
+                )
 
     # Best improvements
     improvements.sort(key=lambda x: x["delta_sharpe"], reverse=True)
@@ -463,7 +467,7 @@ def print_report(report: dict, start: date, end: date, min_orb_size: float):
     for i, imp in enumerate(improvements[:15]):
         pct = ((imp["new_sharpe"] / imp["orig_sharpe"]) - 1) * 100 if imp["orig_sharpe"] != 0 else 0
         print(
-            f"  {i+1:2d}. {imp['group']:12s} + {imp['rule']:12s}: "
+            f"  {i + 1:2d}. {imp['group']:12s} + {imp['rule']:12s}: "
             f"Sharpe {imp['orig_sharpe']:.3f} -> {imp['new_sharpe']:.3f} "
             f"({imp['delta_sharpe']:+.3f}), "
             f"ExpR {imp['delta_expr']:+.3f}, "
@@ -476,52 +480,51 @@ def print_report(report: dict, start: date, end: date, min_orb_size: float):
     print("=" * 80)
     for i, imp in enumerate(improvements[-15:][::-1]):
         print(
-            f"  {i+1:2d}. {imp['group']:12s} + {imp['rule']:12s}: "
+            f"  {i + 1:2d}. {imp['group']:12s} + {imp['rule']:12s}: "
             f"Sharpe {imp['orig_sharpe']:.3f} -> {imp['new_sharpe']:.3f} "
             f"({imp['delta_sharpe']:+.3f}), "
             f"ExpR {imp['delta_expr']:+.3f}, "
             f"{imp['triggered_pct']:.0f}% triggered"
         )
 
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Analyze early exit rules across sessions and entry models"
+    parser = argparse.ArgumentParser(description="Analyze early exit rules across sessions and entry models")
+    parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"), help="Path to DuckDB database")
+    parser.add_argument(
+        "--sessions",
+        type=str,
+        default=",".join(DEFAULT_SESSIONS),
+        help="Comma-separated ORB sessions (default: 0900,1000,1800,2300)",
     )
     parser.add_argument(
-        "--db-path", type=Path, default=Path("C:/db/gold.db"),
-        help="Path to DuckDB database"
+        "--entry-models",
+        type=str,
+        default=",".join(DEFAULT_ENTRY_MODELS),
+        help="Comma-separated entry models (default: E1,E3)",
     )
     parser.add_argument(
-        "--sessions", type=str, default=",".join(DEFAULT_SESSIONS),
-        help="Comma-separated ORB sessions (default: 0900,1000,1800,2300)"
+        "--rr-targets",
+        type=str,
+        default=",".join(str(r) for r in DEFAULT_RR_TARGETS),
+        help="Comma-separated RR targets (default: 1.5,2.0,2.5)",
     )
     parser.add_argument(
-        "--entry-models", type=str, default=",".join(DEFAULT_ENTRY_MODELS),
-        help="Comma-separated entry models (default: E1,E3)"
+        "--min-orb-size", type=float, default=DEFAULT_MIN_ORB_SIZE, help="Minimum ORB size in points (default: 4.0)"
     )
     parser.add_argument(
-        "--rr-targets", type=str, default=",".join(str(r) for r in DEFAULT_RR_TARGETS),
-        help="Comma-separated RR targets (default: 1.5,2.0,2.5)"
+        "--start", type=date.fromisoformat, default=date(2021, 1, 1), help="Start date (default: 2021-01-01)"
     )
     parser.add_argument(
-        "--min-orb-size", type=float, default=DEFAULT_MIN_ORB_SIZE,
-        help="Minimum ORB size in points (default: 4.0)"
+        "--end", type=date.fromisoformat, default=date(2026, 2, 4), help="End date (default: 2026-02-04)"
     )
     parser.add_argument(
-        "--start", type=date.fromisoformat, default=date(2021, 1, 1),
-        help="Start date (default: 2021-01-01)"
-    )
-    parser.add_argument(
-        "--end", type=date.fromisoformat, default=date(2026, 2, 4),
-        help="End date (default: 2026-02-04)"
-    )
-    parser.add_argument(
-        "--confirm-bars", type=int, default=2,
-        help="Confirm bars for E1 (default: 2, E3 always uses 1)"
+        "--confirm-bars", type=int, default=2, help="Confirm bars for E1 (default: 2, E3 always uses 1)"
     )
     args = parser.parse_args()
 
@@ -545,10 +548,7 @@ def main():
         return
 
     # Further filter: keep only the requested CB for E1
-    mask = (
-        (outcomes_df["entry_model"] == "E3")
-        | (outcomes_df["confirm_bars"] == args.confirm_bars)
-    )
+    mask = (outcomes_df["entry_model"] == "E3") | (outcomes_df["confirm_bars"] == args.confirm_bars)
     outcomes_df = outcomes_df[mask].copy()
     print(f"After CB filter (E1 CB{args.confirm_bars}): {len(outcomes_df)} trades")
 
@@ -566,8 +566,8 @@ def main():
 
     for day_idx, trading_day in enumerate(unique_days):
         # Convert numpy date to python date
-        if hasattr(trading_day, 'date'):
-            td = trading_day.date() if hasattr(trading_day, 'date') else trading_day
+        if hasattr(trading_day, "date"):
+            td = trading_day.date() if hasattr(trading_day, "date") else trading_day
         elif isinstance(trading_day, np.datetime64):
             td = pd.Timestamp(trading_day).date()
         else:
@@ -592,13 +592,15 @@ def main():
                 original_pnl_r=float(trade["pnl_r"]),
             )
 
-            all_results.append({
-                "trading_day": td,
-                "orb_label": trade["orb_label"],
-                "entry_model": trade["entry_model"],
-                "rr_target": trade["rr_target"],
-                "replay": replay,
-            })
+            all_results.append(
+                {
+                    "trading_day": td,
+                    "orb_label": trade["orb_label"],
+                    "entry_model": trade["entry_model"],
+                    "rr_target": trade["rr_target"],
+                    "replay": replay,
+                }
+            )
 
         if (day_idx + 1) % 100 == 0:
             elapsed = time.monotonic() - t0
@@ -616,6 +618,7 @@ def main():
     # Aggregate and report
     report = aggregate_results(all_results)
     print_report(report, args.start, args.end, args.min_orb_size)
+
 
 if __name__ == "__main__":
     main()

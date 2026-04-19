@@ -54,13 +54,14 @@ HOLD_HOURS = 7
 
 # Session UTC offsets: session_label -> UTC hour of session start
 SESSION_UTC = {
-    "0900": 23,   # 0900 Brisbane = 23:00 UTC previous day
-    "1000": 0,    # 1000 Brisbane = 00:00 UTC
+    "0900": 23,  # 0900 Brisbane = 23:00 UTC previous day
+    "1000": 0,  # 1000 Brisbane = 00:00 UTC
 }
 
 # ---------------------------------------------------------------------------
 # Core functions
 # ---------------------------------------------------------------------------
+
 
 def compute_ib(bars: pd.DataFrame, session_utc_hour: int) -> dict | None:
     """IB = high/low of first 120 minutes from session start."""
@@ -84,6 +85,7 @@ def compute_ib(bars: pd.DataFrame, session_utc_hour: int) -> dict | None:
         "ib_end": ib_end,
     }
 
+
 def get_first_ib_break(bars: pd.DataFrame, ib: dict) -> dict:
     """Find FIRST bar that breaks IB high or IB low after IB forms."""
     post_ib = bars[bars["ts_utc"] >= ib["ib_end"]]
@@ -101,10 +103,14 @@ def get_first_ib_break(bars: pd.DataFrame, ib: dict) -> dict:
 
     return {"ib_break_dir": None, "ib_break_ts": None}
 
+
 def compute_aligned_hold_with_kill_switch(
     bars: pd.DataFrame,
-    entry_ts, entry_price: float, stop_price: float,
-    is_long: bool, ib: dict,
+    entry_ts,
+    entry_price: float,
+    stop_price: float,
+    is_long: bool,
+    ib: dict,
 ) -> tuple[float, str]:
     """Hold 7h with original stop AND IB kill switch.
 
@@ -156,9 +162,12 @@ def compute_aligned_hold_with_kill_switch(
     pnl = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(spec, entry_price, stop_price, pnl), "time_7h"
 
+
 def compute_vanilla_hold(
     bars: pd.DataFrame,
-    entry_ts, entry_price: float, stop_price: float,
+    entry_ts,
+    entry_price: float,
+    stop_price: float,
     is_long: bool,
 ) -> float | None:
     """Plain 7h hold with original stop only (no kill switch). For comparison."""
@@ -184,18 +193,24 @@ def compute_vanilla_hold(
     pnl = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(spec, entry_price, stop_price, pnl)
 
+
 # ---------------------------------------------------------------------------
 # Per-session processing
 # ---------------------------------------------------------------------------
 
+
 def process_session(
-    db_path: Path, session_label: str, start: date, end: date,
+    db_path: Path,
+    session_label: str,
+    start: date,
+    end: date,
 ) -> pd.DataFrame:
     """Process one session. Returns results DataFrame."""
     session_utc_hour = SESSION_UTC[session_label]
     con = duckdb.connect(str(db_path), read_only=True)
 
-    df = con.execute(f"""
+    df = con.execute(
+        f"""
         SELECT o.trading_day, o.entry_ts, o.entry_price, o.stop_price,
                o.target_price, o.outcome, o.pnl_r,
                d.orb_{session_label}_size, d.orb_{session_label}_break_dir
@@ -209,7 +224,9 @@ def process_session(
           AND o.pnl_r IS NOT NULL AND d.orb_{session_label}_size >= ?
           AND o.trading_day BETWEEN ? AND ?
         ORDER BY o.trading_day
-    """, [session_label, RR_TARGET, CONFIRM_BARS, MIN_ORB_SIZE, start, end]).fetchdf()
+    """,
+        [session_label, RR_TARGET, CONFIRM_BARS, MIN_ORB_SIZE, start, end],
+    ).fetchdf()
     df["entry_ts"] = pd.to_datetime(df["entry_ts"], utc=True)
 
     unique_days = sorted(df["trading_day"].unique())
@@ -264,7 +281,12 @@ def process_session(
 
         # Kill switch 7h hold
         ks_pnl, exit_reason = compute_aligned_hold_with_kill_switch(
-            bars, entry_ts, entry_p, stop_p, is_long, ib,
+            bars,
+            entry_ts,
+            entry_p,
+            stop_p,
+            is_long,
+            ib,
         )
 
         # Blended strategies:
@@ -275,19 +297,27 @@ def process_session(
 
         year = str(td.year) if hasattr(td, "year") else str(td)[:4]
 
-        results.append({
-            "td": td, "year": year, "is_long": is_long,
-            "orb_dir": orb_dir, "ib_dir": ib_dir, "alignment": alignment,
-            "ib_size": ib["ib_size"], "orb_size": row[f"orb_{session_label}_size"],
-            "fixed_pnl": fixed_pnl,
-            "vanilla_pnl": vanilla_pnl,
-            "ks_pnl": ks_pnl,
-            "exit_reason": exit_reason,
-            "blended_v1": blended_v1,
-            "blended_v2": blended_v2,
-        })
+        results.append(
+            {
+                "td": td,
+                "year": year,
+                "is_long": is_long,
+                "orb_dir": orb_dir,
+                "ib_dir": ib_dir,
+                "alignment": alignment,
+                "ib_size": ib["ib_size"],
+                "orb_size": row[f"orb_{session_label}_size"],
+                "fixed_pnl": fixed_pnl,
+                "vanilla_pnl": vanilla_pnl,
+                "ks_pnl": ks_pnl,
+                "exit_reason": exit_reason,
+                "blended_v1": blended_v1,
+                "blended_v2": blended_v2,
+            }
+        )
 
     return pd.DataFrame(results)
+
 
 def print_session_report(pdf: pd.DataFrame, session_label: str):
     """Print full report for one session."""
@@ -302,9 +332,11 @@ def print_session_report(pdf: pd.DataFrame, session_label: str):
     print(f"\n{'=' * 90}")
     print(f"{session_label} SESSION -- IB={IB_MINUTES}m, E1 CB{CONFIRM_BARS} RR{RR_TARGET} G{MIN_ORB_SIZE}+")
     print(f"{'=' * 90}")
-    print(f"  Total: {len(pdf)}  |  Aligned: {len(aligned)} ({len(aligned)/len(pdf)*100:.0f}%)  |  "
-          f"Opposed: {len(opposed)} ({len(opposed)/len(pdf)*100:.0f}%)  |  "
-          f"No break: {len(no_break)} ({len(no_break)/len(pdf)*100:.0f}%)")
+    print(
+        f"  Total: {len(pdf)}  |  Aligned: {len(aligned)} ({len(aligned) / len(pdf) * 100:.0f}%)  |  "
+        f"Opposed: {len(opposed)} ({len(opposed) / len(pdf) * 100:.0f}%)  |  "
+        f"No break: {len(no_break)} ({len(no_break) / len(pdf) * 100:.0f}%)"
+    )
 
     # Kill switch exit stats
     ks_trades = pdf[pdf["alignment"] == "aligned"]
@@ -312,8 +344,7 @@ def print_session_report(pdf: pd.DataFrame, session_label: str):
         ks_fired = ks_trades[ks_trades["exit_reason"] == "kill_switch"]
         stopped = ks_trades[ks_trades["exit_reason"] == "stop"]
         held_7h = ks_trades[ks_trades["exit_reason"] == "time_7h"]
-        print(f"\n  Aligned trade exits: "
-              f"held 7h={len(held_7h)} | kill switch={len(ks_fired)} | stopped={len(stopped)}")
+        print(f"\n  Aligned trade exits: held 7h={len(held_7h)} | kill switch={len(ks_fired)} | stopped={len(stopped)}")
         if len(ks_fired) > 0:
             avg_ks = ks_fired["ks_pnl"].mean()
             print(f"  Kill switch avg PnL: {avg_ks:+.3f}R (would have been worse without it)")
@@ -326,7 +357,7 @@ def print_session_report(pdf: pd.DataFrame, session_label: str):
 
     # --- Main comparison ---
     print(f"\n  {'Strategy':25s} {'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>8s} {'MaxDD':>8s} {'Total':>8s}")
-    print(f"  {'-'*25} {'-'*5} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(f"  {'-' * 25} {'-' * 5} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for label, col in [
         ("Fixed RR (control)", "fixed_pnl"),
@@ -336,14 +367,16 @@ def print_session_report(pdf: pd.DataFrame, session_label: str):
     ]:
         m = compute_strategy_metrics(pdf[col].values)
         if m:
-            print(f"  {label:25s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
-                  f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}")
+            print(
+                f"  {label:25s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
+                f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}"
+            )
 
     # --- Aligned-only ---
     if len(aligned) >= 5:
         print(f"\n  ALIGNED-ONLY ({len(aligned)} trades):")
         print(f"  {'Strategy':25s} {'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>8s} {'MaxDD':>8s} {'Total':>8s}")
-        print(f"  {'-'*25} {'-'*5} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+        print(f"  {'-' * 25} {'-' * 5} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
         for label, col in [
             ("Fixed RR", "fixed_pnl"),
             ("7h hold (no KS)", "vanilla_pnl"),
@@ -351,14 +384,14 @@ def print_session_report(pdf: pd.DataFrame, session_label: str):
         ]:
             m = compute_strategy_metrics(aligned[col].values)
             if m:
-                print(f"  {label:25s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
-                      f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}")
+                print(
+                    f"  {label:25s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
+                    f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}"
+                )
 
     # --- Yearly stability ---
-    print(f"\n  {'Year':5s} {'N':>4s} {'Algn':>5s} {'Opp':>5s} "
-          f"{'Fixed':>8s} {'V1noKS':>8s} {'V2+KS':>8s} {'Best':>8s}")
-    print(f"  {'-'*5} {'-'*4} {'-'*5} {'-'*5} "
-          f"{'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(f"\n  {'Year':5s} {'N':>4s} {'Algn':>5s} {'Opp':>5s} {'Fixed':>8s} {'V1noKS':>8s} {'V2+KS':>8s} {'Best':>8s}")
+    print(f"  {'-' * 5} {'-' * 4} {'-' * 5} {'-' * 5} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for year in sorted(pdf["year"].unique()):
         ydf = pdf[pdf["year"] == year]
@@ -373,9 +406,11 @@ def print_session_report(pdf: pd.DataFrame, session_label: str):
         if mf and mv1 and mv2:
             sharpes = {"fixed": mf["sharpe"], "v1": mv1["sharpe"], "v2": mv2["sharpe"]}
             best = max(sharpes, key=sharpes.get)
-            print(f"  {year:5s} {len(ydf):>4d} {na:>5d} {no:>5d} "
-                  f"{mf['sharpe']:>8.3f} {mv1['sharpe']:>8.3f} "
-                  f"{mv2['sharpe']:>8.3f} {best:>8s}")
+            print(
+                f"  {year:5s} {len(ydf):>4d} {na:>5d} {no:>5d} "
+                f"{mf['sharpe']:>8.3f} {mv1['sharpe']:>8.3f} "
+                f"{mv2['sharpe']:>8.3f} {best:>8s}"
+            )
 
     mf = compute_strategy_metrics(pdf["fixed_pnl"].values)
     mv1 = compute_strategy_metrics(pdf["blended_v1"].values)
@@ -383,13 +418,17 @@ def print_session_report(pdf: pd.DataFrame, session_label: str):
     if mf and mv1 and mv2:
         na = len(aligned)
         no = len(opposed)
-        print(f"  {'TOTAL':5s} {len(pdf):>4d} {na:>5d} {no:>5d} "
-              f"{mf['sharpe']:>8.3f} {mv1['sharpe']:>8.3f} "
-              f"{mv2['sharpe']:>8.3f}")
+        print(
+            f"  {'TOTAL':5s} {len(pdf):>4d} {na:>5d} {no:>5d} "
+            f"{mf['sharpe']:>8.3f} {mv1['sharpe']:>8.3f} "
+            f"{mv2['sharpe']:>8.3f}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def run(db_path: Path, start: date, end: date):
     print(f"IB Direction Alignment v2 -- Kill Switch + Blind 0900 Test")
@@ -413,6 +452,7 @@ def run(db_path: Path, start: date, end: date):
     print("If 120m IB works at 1000 but fails at 0900 -> noise / p-hack.")
     print("The 0900 test was BLIND: same IB length, same parameters, no tuning.")
 
+
 def main():
     parser = argparse.ArgumentParser(description="IB Alignment v2 + Kill Switch")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
@@ -420,6 +460,7 @@ def main():
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
     args = parser.parse_args()
     run(args.db_path, args.start, args.end)
+
 
 if __name__ == "__main__":
     main()

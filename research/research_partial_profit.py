@@ -51,8 +51,8 @@ from research.lib.stats import bh_fdr
 # ---------------------------------------------------------------------------
 ACTIVE_INSTRUMENTS = sorted(ACTIVE_ORB_INSTRUMENTS)
 RR_TARGETS = [1.5, 2.0, 2.5, 3.0]  # Skip 1.0 (0.1% rescuable), skip 4.0 (sparse)
-PARTIAL_LEVELS = [0.5, 1.0, 1.5]     # Grid for sensitivity analysis
-TRAIL_LEVELS = [0.0, 0.25, 0.5]      # 0=breakeven, 0.5=plan value
+PARTIAL_LEVELS = [0.5, 1.0, 1.5]  # Grid for sensitivity analysis
+TRAIL_LEVELS = [0.0, 0.25, 0.5]  # 0=breakeven, 0.5=plan value
 DB_PATH = GOLD_DB_PATH
 
 # Minimum trades per cell for statistical testing
@@ -66,7 +66,7 @@ def simulate_partial_trade(
     highs: np.ndarray,
     lows: np.ndarray,
     closes: np.ndarray,
-    direction: int,        # 1=long, -1=short
+    direction: int,  # 1=long, -1=short
     entry_price: float,
     stop_price: float,
     target_price: float,
@@ -168,9 +168,9 @@ def simulate_partial_trade(
         }
 
     # ── Phase 2: remaining half with new trail stop ──
-    remaining_highs = highs[idx1 + 1:]
-    remaining_lows = lows[idx1 + 1:]
-    remaining_closes = closes[idx1 + 1:]
+    remaining_highs = highs[idx1 + 1 :]
+    remaining_lows = lows[idx1 + 1 :]
+    remaining_closes = closes[idx1 + 1 :]
 
     if len(remaining_highs) == 0:
         # Partial fired on last bar — use that bar's close for remaining half
@@ -254,12 +254,15 @@ def compute_partial_r(
 def load_bars(con: duckdb.DuckDBPyConnection, instrument: str) -> pd.DataFrame:
     """Load all 1m bars for instrument, sorted by timestamp."""
     print(f"  Loading bars_1m for {instrument}...")
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT ts_utc, high, low, close
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
     # Ensure ts_utc is timezone-naive UTC for fast comparison
     df["ts_utc"] = pd.to_datetime(df["ts_utc"]).dt.tz_localize(None)
     print(f"  Loaded {len(df):,} bars")
@@ -273,7 +276,8 @@ def load_outcomes(
 ) -> pd.DataFrame:
     """Load ALL E1+E2 outcomes (CB1, O5) for bar-by-bar simulation."""
     placeholders = ",".join(["?"] * len(rr_targets))
-    df = con.execute(f"""
+    df = con.execute(
+        f"""
         SELECT
             trading_day, symbol, orb_label, rr_target,
             entry_ts, entry_price, stop_price, target_price,
@@ -290,7 +294,9 @@ def load_outcomes(
           AND entry_price IS NOT NULL
           AND stop_price IS NOT NULL
           AND target_price IS NOT NULL
-    """, [instrument] + rr_targets).fetchdf()
+    """,
+        [instrument] + rr_targets,
+    ).fetchdf()
 
     # Timezone-naive UTC for fast comparison
     df["entry_ts"] = pd.to_datetime(df["entry_ts"]).dt.tz_localize(None)
@@ -338,8 +344,7 @@ def run_simulation(
             elapsed = time.time() - t0
             rate = (i + 1) / elapsed
             remaining = (n_outcomes - i - 1) / rate
-            print(f"  {i+1:,}/{n_outcomes:,} outcomes "
-                  f"({elapsed:.0f}s elapsed, ~{remaining:.0f}s remaining)")
+            print(f"  {i + 1:,}/{n_outcomes:,} outcomes ({elapsed:.0f}s elapsed, ~{remaining:.0f}s remaining)")
 
         entry_ts = np.datetime64(row.entry_ts, "us")
         td_end = np.datetime64(row.td_end, "us")
@@ -384,25 +389,38 @@ def run_simulation(
                     partial_pnl_r = baseline_r  # Identical to baseline
                 else:
                     sim = simulate_partial_trade(
-                        h, l, c, direction,
-                        entry_price, stop_price, target_price, risk_points,
-                        partial_r, trail_r,
+                        h,
+                        l,
+                        c,
+                        direction,
+                        entry_price,
+                        stop_price,
+                        target_price,
+                        risk_points,
+                        partial_r,
+                        trail_r,
                     )
                     partial_pnl_r = compute_partial_r(
-                        sim, risk_points, cost_spec, entry_price, stop_price,
+                        sim,
+                        risk_points,
+                        cost_spec,
+                        entry_price,
+                        stop_price,
                     )
 
-                results.append({
-                    "trading_day": row.trading_day,
-                    "instrument": instrument,
-                    "session": row.orb_label,
-                    "rr_target": row.rr_target,
-                    "partial_r": partial_r,
-                    "trail_r": trail_r,
-                    "baseline_r": baseline_r,
-                    "partial_pnl_r": partial_pnl_r,
-                    "delta_r": partial_pnl_r - baseline_r,
-                })
+                results.append(
+                    {
+                        "trading_day": row.trading_day,
+                        "instrument": instrument,
+                        "session": row.orb_label,
+                        "rr_target": row.rr_target,
+                        "partial_r": partial_r,
+                        "trail_r": trail_r,
+                        "baseline_r": baseline_r,
+                        "partial_pnl_r": partial_pnl_r,
+                        "delta_r": partial_pnl_r - baseline_r,
+                    }
+                )
 
     elapsed = time.time() - t0
     print(f"  Completed {instrument}: {len(results):,} simulation results in {elapsed:.0f}s")
@@ -430,10 +448,14 @@ def analyze_results(df: pd.DataFrame) -> pd.DataFrame:
             continue
 
         # ── Aggregate daily P&L for paired test ──
-        daily = grp.groupby("trading_day").agg(
-            baseline_daily=("baseline_r", "sum"),
-            partial_daily=("partial_pnl_r", "sum"),
-        ).reset_index()
+        daily = (
+            grp.groupby("trading_day")
+            .agg(
+                baseline_daily=("baseline_r", "sum"),
+                partial_daily=("partial_pnl_r", "sum"),
+            )
+            .reset_index()
+        )
         daily["diff"] = daily["partial_daily"] - daily["baseline_daily"]
 
         n_days = len(daily)
@@ -466,30 +488,29 @@ def analyze_results(df: pd.DataFrame) -> pd.DataFrame:
         # Use f=0.02 (2% risk per trade) as reference fraction
         f = 0.02
         baseline_geo = float(np.sum(np.log1p(f * grp["baseline_r"].values)))
-        partial_geo = float(np.sum(np.log1p(
-            np.clip(f * grp["partial_pnl_r"].values, -0.99, None)
-        )))
-        geo_delta_pct = ((np.exp(partial_geo) / np.exp(baseline_geo)) - 1) * 100 \
-            if baseline_geo != 0 else 0.0
+        partial_geo = float(np.sum(np.log1p(np.clip(f * grp["partial_pnl_r"].values, -0.99, None))))
+        geo_delta_pct = ((np.exp(partial_geo) / np.exp(baseline_geo)) - 1) * 100 if baseline_geo != 0 else 0.0
 
-        rows.append({
-            "instrument": instrument,
-            "session": session,
-            "rr_target": rr_target,
-            "partial_r": partial_r,
-            "trail_r": trail_r,
-            "n_trades": n_trades,
-            "n_days": n_days,
-            "total_baseline_r": round(total_baseline, 2),
-            "total_partial_r": round(total_partial, 2),
-            "total_delta_r": round(total_delta, 2),
-            "per_trade_delta_r": round(per_trade_delta, 4),
-            "t_stat": round(t_stat, 3),
-            "p_val": round(p_val, 6),
-            "n_years": n_years,
-            "years_positive": years_positive,
-            "geo_delta_pct": round(geo_delta_pct, 2),
-        })
+        rows.append(
+            {
+                "instrument": instrument,
+                "session": session,
+                "rr_target": rr_target,
+                "partial_r": partial_r,
+                "trail_r": trail_r,
+                "n_trades": n_trades,
+                "n_days": n_days,
+                "total_baseline_r": round(total_baseline, 2),
+                "total_partial_r": round(total_partial, 2),
+                "total_delta_r": round(total_delta, 2),
+                "per_trade_delta_r": round(per_trade_delta, 4),
+                "t_stat": round(t_stat, 3),
+                "p_val": round(p_val, 6),
+                "n_years": n_years,
+                "years_positive": years_positive,
+                "geo_delta_pct": round(geo_delta_pct, 2),
+            }
+        )
 
     stats_df = pd.DataFrame(rows)
     if stats_df.empty:
@@ -500,9 +521,7 @@ def analyze_results(df: pd.DataFrame) -> pd.DataFrame:
     n_tests = len(p_values)
     rejected = bh_fdr(p_values, q=0.05)
     stats_df["bh_rejected"] = [i in rejected for i in range(n_tests)]
-    stats_df["p_bh"] = stats_df["p_val"] * n_tests / (
-        stats_df.index + 1
-    )  # approximate adjusted p
+    stats_df["p_bh"] = stats_df["p_val"] * n_tests / (stats_df.index + 1)  # approximate adjusted p
 
     # Proper BH adjusted p-values
     sorted_indices = np.argsort(p_values)
@@ -540,12 +559,7 @@ def apply_decision_gate(stats_df: pd.DataFrame) -> pd.DataFrame:
     stats_df["gate_geo"] = stats_df["geo_delta_pct"] > -10.0
     stats_df["gate_net_r"] = stats_df["total_delta_r"] > 0
 
-    stats_df["GO"] = (
-        stats_df["gate_fdr"]
-        & stats_df["gate_years"]
-        & stats_df["gate_geo"]
-        & stats_df["gate_net_r"]
-    )
+    stats_df["GO"] = stats_df["gate_fdr"] & stats_df["gate_years"] & stats_df["gate_geo"] & stats_df["gate_net_r"]
 
     return stats_df
 
@@ -574,12 +588,14 @@ def print_report(stats_df: pd.DataFrame) -> None:
         print("SURVIVED SCRUTINY:")
         print(f"{'─' * 80}")
         for _, r in go_df.iterrows():
-            print(f"  {r['instrument']} {r['session']} RR{r['rr_target']} | "
-                  f"partial@{r['partial_r']}R trail@{r['trail_r']}R | "
-                  f"N={r['n_trades']:,} | delta={r['total_delta_r']:+,.1f}R "
-                  f"({r['per_trade_delta_r']:+.4f}R/trade) | "
-                  f"p_bh={r['p_bh']:.4f} | years+={r['years_positive']}/{r['n_years']} | "
-                  f"geo={r['geo_delta_pct']:+.1f}%")
+            print(
+                f"  {r['instrument']} {r['session']} RR{r['rr_target']} | "
+                f"partial@{r['partial_r']}R trail@{r['trail_r']}R | "
+                f"N={r['n_trades']:,} | delta={r['total_delta_r']:+,.1f}R "
+                f"({r['per_trade_delta_r']:+.4f}R/trade) | "
+                f"p_bh={r['p_bh']:.4f} | years+={r['years_positive']}/{r['n_years']} | "
+                f"geo={r['geo_delta_pct']:+.1f}%"
+            )
 
     # Show top FDR survivors that failed other gates
     fdr_only = stats_df[stats_df["bh_rejected"] & ~stats_df.get("GO", False)]
@@ -595,9 +611,11 @@ def print_report(stats_df: pd.DataFrame) -> None:
                 gates.append(f"geo={r['geo_delta_pct']:+.1f}%")
             if not r.get("gate_net_r", True):
                 gates.append(f"netR={r['total_delta_r']:+.1f}")
-            print(f"  {r['instrument']} {r['session']} RR{r['rr_target']} | "
-                  f"partial@{r['partial_r']}R trail@{r['trail_r']}R | "
-                  f"FAILED: {', '.join(gates)}")
+            print(
+                f"  {r['instrument']} {r['session']} RR{r['rr_target']} | "
+                f"partial@{r['partial_r']}R trail@{r['trail_r']}R | "
+                f"FAILED: {', '.join(gates)}"
+            )
 
     # Summary by parameter combo
     print(f"\n{'─' * 80}")
@@ -611,9 +629,11 @@ def print_report(stats_df: pd.DataFrame) -> None:
             total_delta = sub["total_delta_r"].sum()
             n_go_sub = sub["GO"].sum() if "GO" in sub.columns else 0
             n_fdr_sub = sub["bh_rejected"].sum()
-            print(f"  partial={pr}R trail={tr}R: "
-                  f"delta={total_delta:+,.0f}R | "
-                  f"FDR={n_fdr_sub}/{len(sub)} | GO={n_go_sub}/{len(sub)}")
+            print(
+                f"  partial={pr}R trail={tr}R: "
+                f"delta={total_delta:+,.0f}R | "
+                f"FDR={n_fdr_sub}/{len(sub)} | GO={n_go_sub}/{len(sub)}"
+            )
 
     print(f"\n{'─' * 80}")
     print("CAVEATS:")
@@ -642,13 +662,12 @@ def print_report(stats_df: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description="Partial profit taking research")
-    parser.add_argument("--instrument", type=str, default=None,
-                        help="Single instrument (default: all 4)")
+    parser.add_argument("--instrument", type=str, default=None, help="Single instrument (default: all 4)")
     parser.add_argument("--db-path", type=str, default=str(DB_PATH))
-    parser.add_argument("--partial-levels", type=str, default="0.5,1.0,1.5",
-                        help="Comma-separated partial exit R levels")
-    parser.add_argument("--trail-levels", type=str, default="0.0,0.25,0.5",
-                        help="Comma-separated trail stop R levels")
+    parser.add_argument(
+        "--partial-levels", type=str, default="0.5,1.0,1.5", help="Comma-separated partial exit R levels"
+    )
+    parser.add_argument("--trail-levels", type=str, default="0.0,0.25,0.5", help="Comma-separated trail stop R levels")
     args = parser.parse_args()
 
     instruments = [args.instrument] if args.instrument else ACTIVE_INSTRUMENTS
@@ -661,8 +680,10 @@ def main():
     print(f"RR targets: {RR_TARGETS}")
     print(f"Partial levels: {partial_levels}")
     print(f"Trail levels: {trail_levels}")
-    print(f"Grid size: {len(partial_levels)} × {len(trail_levels)} = "
-          f"{len(partial_levels) * len(trail_levels)} combos per cell")
+    print(
+        f"Grid size: {len(partial_levels)} × {len(trail_levels)} = "
+        f"{len(partial_levels) * len(trail_levels)} combos per cell"
+    )
     print(f"DB: {args.db_path}")
     print("=" * 80)
 
@@ -674,7 +695,11 @@ def main():
         print(f"Processing {instrument}...")
         print(f"{'─' * 40}")
         result_df = run_simulation(
-            instrument, con, partial_levels, trail_levels, RR_TARGETS,
+            instrument,
+            con,
+            partial_levels,
+            trail_levels,
+            RR_TARGETS,
         )
         if not result_df.empty:
             all_results.append(result_df)

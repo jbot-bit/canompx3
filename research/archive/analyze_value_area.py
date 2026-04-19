@@ -51,14 +51,15 @@ SPEC = get_cost_spec("MGC")
 
 # Grid dimensions
 STOP_MULTIPLIERS = [0.5, 1.0, 1.5]  # fraction of ATR_20
-RR_TARGETS = [1.0, 1.5, 2.0]        # for breakout mode
-BIN_SIZES = [0.1, 0.5]              # price bin width in points
+RR_TARGETS = [1.0, 1.5, 2.0]  # for breakout mode
+BIN_SIZES = [0.1, 0.5]  # price bin width in points
 TIME_FILTERS = {
-    "ny_only": (23, 7),   # 09:00-17:00 Brisbane = 23:00-07:00 UTC
+    "ny_only": (23, 7),  # 09:00-17:00 Brisbane = 23:00-07:00 UTC
     "all": (0, 23),
 }
 VALUE_AREA_PCT = 0.70  # 70% of volume
 VOLUME_BREAKOUT_MULT = 1.5  # Volume must exceed 1.5x average
+
 
 def compute_volume_profile(bars_1m: pd.DataFrame, bin_size: float) -> dict | None:
     """Compute volume profile from 1m bars.
@@ -136,6 +137,7 @@ def compute_volume_profile(bars_1m: pd.DataFrame, bin_size: float) -> dict | Non
         "avg_bar_volume": total_vol / len(bars_1m),
     }
 
+
 def find_reversion_signals(
     bars_1m: pd.DataFrame,
     prior_profile: dict,
@@ -175,13 +177,15 @@ def find_reversion_signals(
 
             if bars_1m.iloc[i]["close"] < vah:
                 entry_price = bars_1m.iloc[i]["close"]
-                signals.append({
-                    "mode": "reversion",
-                    "direction": "short",
-                    "entry_bar_idx": i + 1,
-                    "entry_price": entry_price,
-                    "target_price": poc,
-                })
+                signals.append(
+                    {
+                        "mode": "reversion",
+                        "direction": "short",
+                        "entry_bar_idx": i + 1,
+                        "entry_price": entry_price,
+                        "target_price": poc,
+                    }
+                )
                 break
 
     elif first_open < val:
@@ -198,16 +202,19 @@ def find_reversion_signals(
 
             if bars_1m.iloc[i]["close"] > val:
                 entry_price = bars_1m.iloc[i]["close"]
-                signals.append({
-                    "mode": "reversion",
-                    "direction": "long",
-                    "entry_bar_idx": i + 1,
-                    "entry_price": entry_price,
-                    "target_price": poc,
-                })
+                signals.append(
+                    {
+                        "mode": "reversion",
+                        "direction": "long",
+                        "entry_bar_idx": i + 1,
+                        "entry_price": entry_price,
+                        "target_price": poc,
+                    }
+                )
                 break
 
     return signals
+
 
 def find_breakout_signals(
     bars_1m: pd.DataFrame,
@@ -246,36 +253,41 @@ def find_breakout_signals(
                 continue
 
         bar_close = bars_1m.iloc[i]["close"]
-        recent_vol = vol_arr[i-4:i+1].mean()
+        recent_vol = vol_arr[i - 4 : i + 1].mean()
 
         # Breakout above VAH with volume
         if bar_close > vah and recent_vol > VOLUME_BREAKOUT_MULT * avg_vol and not had_long:
             entry_price = bars_1m.iloc[i + 1]["open"]
-            signals.append({
-                "mode": "breakout",
-                "direction": "long",
-                "entry_bar_idx": i + 1,
-                "entry_price": entry_price,
-                "target_price": None,  # Set by RR grid
-            })
+            signals.append(
+                {
+                    "mode": "breakout",
+                    "direction": "long",
+                    "entry_bar_idx": i + 1,
+                    "entry_price": entry_price,
+                    "target_price": None,  # Set by RR grid
+                }
+            )
             had_long = True
 
         # Breakout below VAL with volume
         if bar_close < val and recent_vol > VOLUME_BREAKOUT_MULT * avg_vol and not had_short:
             entry_price = bars_1m.iloc[i + 1]["open"]
-            signals.append({
-                "mode": "breakout",
-                "direction": "short",
-                "entry_bar_idx": i + 1,
-                "entry_price": entry_price,
-                "target_price": None,
-            })
+            signals.append(
+                {
+                    "mode": "breakout",
+                    "direction": "short",
+                    "entry_bar_idx": i + 1,
+                    "entry_price": entry_price,
+                    "target_price": None,
+                }
+            )
             had_short = True
 
         if had_long and had_short:
             break
 
     return signals
+
 
 def compute_value_area_outcomes(
     db_path: Path,
@@ -311,7 +323,7 @@ def compute_value_area_outcomes(
     print(f"    Computing volume profiles for {len(trading_days)} days...")
     for idx, (td, _) in enumerate(trading_days):
         if idx % 200 == 0:
-            print(f"    Day {idx+1}/{len(trading_days)}...")
+            print(f"    Day {idx + 1}/{len(trading_days)}...")
 
         bars = load_bars_for_day(db_path, td)
         if bars.empty:
@@ -332,7 +344,7 @@ def compute_value_area_outcomes(
         bars = profiles[td]["bars"]
 
         if idx % 200 == 0:
-            print(f"    Processing {idx+1}/{len(trading_days)}...")
+            print(f"    Processing {idx + 1}/{len(trading_days)}...")
 
         for bin_size in BIN_SIZES:
             prior_prof = profiles[prev_td].get(bin_size)
@@ -367,10 +379,7 @@ def compute_value_area_outcomes(
                         if direction == "short" and target_price >= entry_price:
                             continue
 
-                        result = _resolve_1m(
-                            bars, entry_price, stop_price, target_price,
-                            direction, entry_bar_idx
-                        )
+                        result = _resolve_1m(bars, entry_price, stop_price, target_price, direction, entry_bar_idx)
 
                         if result is None:
                             last_close = bars.iloc[-1]["close"]
@@ -381,20 +390,22 @@ def compute_value_area_outcomes(
                             pnl_r = to_r_multiple(SPEC, entry_price, stop_price, result["pnl_points"])
                             outcome_type = result["outcome"]
 
-                        all_outcomes.append({
-                            "trading_day": str(td),
-                            "mode": "reversion",
-                            "direction": direction,
-                            "bin_size": bin_size,
-                            "time_filter": tf_name,
-                            "stop_multiplier": stop_mult,
-                            "rr_target": 0,  # reversion targets POC directly
-                            "entry_price": entry_price,
-                            "stop_price": stop_price,
-                            "target_price": target_price,
-                            "pnl_r": pnl_r,
-                            "outcome": outcome_type,
-                        })
+                        all_outcomes.append(
+                            {
+                                "trading_day": str(td),
+                                "mode": "reversion",
+                                "direction": direction,
+                                "bin_size": bin_size,
+                                "time_filter": tf_name,
+                                "stop_multiplier": stop_mult,
+                                "rr_target": 0,  # reversion targets POC directly
+                                "entry_price": entry_price,
+                                "stop_price": stop_price,
+                                "target_price": target_price,
+                                "pnl_r": pnl_r,
+                                "outcome": outcome_type,
+                            }
+                        )
 
                 # Breakout signals
                 bk_signals = find_breakout_signals(bars, prior_prof, tf_range)
@@ -423,36 +434,38 @@ def compute_value_area_outcomes(
                             else:
                                 target_price = entry_price - reward
 
-                            result = _resolve_1m(
-                                bars, entry_price, stop_price, target_price,
-                                direction, entry_bar_idx
-                            )
+                            result = _resolve_1m(bars, entry_price, stop_price, target_price, direction, entry_bar_idx)
 
                             if result is None:
                                 last_close = bars.iloc[-1]["close"]
-                                pnl_pts = (last_close - entry_price) if direction == "long" else (entry_price - last_close)
+                                pnl_pts = (
+                                    (last_close - entry_price) if direction == "long" else (entry_price - last_close)
+                                )
                                 pnl_r = to_r_multiple(SPEC, entry_price, stop_price, pnl_pts)
                                 outcome_type = "eod"
                             else:
                                 pnl_r = to_r_multiple(SPEC, entry_price, stop_price, result["pnl_points"])
                                 outcome_type = result["outcome"]
 
-                            all_outcomes.append({
-                                "trading_day": str(td),
-                                "mode": "breakout",
-                                "direction": direction,
-                                "bin_size": bin_size,
-                                "time_filter": tf_name,
-                                "stop_multiplier": stop_mult,
-                                "rr_target": rr,
-                                "entry_price": entry_price,
-                                "stop_price": stop_price,
-                                "target_price": target_price,
-                                "pnl_r": pnl_r,
-                                "outcome": outcome_type,
-                            })
+                            all_outcomes.append(
+                                {
+                                    "trading_day": str(td),
+                                    "mode": "breakout",
+                                    "direction": direction,
+                                    "bin_size": bin_size,
+                                    "time_filter": tf_name,
+                                    "stop_multiplier": stop_mult,
+                                    "rr_target": rr,
+                                    "entry_price": entry_price,
+                                    "stop_price": stop_price,
+                                    "target_price": target_price,
+                                    "pnl_r": pnl_r,
+                                    "outcome": outcome_type,
+                                }
+                            )
 
     return all_outcomes
+
 
 def _resolve_1m(bars, entry, stop, target, direction, start_idx):
     """Resolve outcome on 1m bars."""
@@ -478,6 +491,7 @@ def _resolve_1m(bars, entry, stop, target, direction, start_idx):
             return {"outcome": "win", "pnl_points": pnl, "exit_bar_idx": i}
     return None
 
+
 def run_walk_forward(
     db_path: Path,
     train_months: int = 12,
@@ -487,6 +501,7 @@ def run_walk_forward(
     """Run walk-forward analysis for value area strategy."""
     # Only load data needed for training + OOS
     from research._alt_strategy_utils import _add_months
+
     full_start = _add_months(test_start, -(train_months + 2))
 
     print("  Computing all value area outcomes...")
@@ -513,13 +528,11 @@ def run_walk_forward(
         oos_all_pnls = []
 
         for w in windows:
-            train_mask = (
-                (mode_df["trading_day_date"] >= w["train_start"])
-                & (mode_df["trading_day_date"] <= w["train_end"])
+            train_mask = (mode_df["trading_day_date"] >= w["train_start"]) & (
+                mode_df["trading_day_date"] <= w["train_end"]
             )
-            test_mask = (
-                (mode_df["trading_day_date"] >= w["test_start"])
-                & (mode_df["trading_day_date"] <= w["test_end"])
+            test_mask = (mode_df["trading_day_date"] >= w["test_start"]) & (
+                mode_df["trading_day_date"] <= w["test_end"]
             )
 
             train_data = mode_df[train_mask]
@@ -574,13 +587,15 @@ def run_walk_forward(
             oos_stats = compute_strategy_metrics(oos_pnls)
             oos_all_pnls.extend(oos_pnls)
 
-            window_results.append({
-                "test_start": str(w["test_start"]),
-                "test_end": str(w["test_end"]),
-                "selected": f"BS{bs}_{tf_name}_SM{sm}_RR{rr}",
-                "train_sharpe": best_sharpe,
-                "oos_stats": oos_stats,
-            })
+            window_results.append(
+                {
+                    "test_start": str(w["test_start"]),
+                    "test_end": str(w["test_end"]),
+                    "selected": f"BS{bs}_{tf_name}_SM{sm}_RR{rr}",
+                    "train_sharpe": best_sharpe,
+                    "oos_stats": oos_stats,
+                }
+            )
 
         combined_oos = None
         if oos_all_pnls:
@@ -595,15 +610,18 @@ def run_walk_forward(
 
     return results
 
+
 def main():
     parser = argparse.ArgumentParser(description="Value Area (Volume Profile) strategy analysis")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--train-months", type=int, default=12)
     parser.add_argument("--output", type=Path, default=None)
-    parser.add_argument("--start", type=date.fromisoformat, default=None,
-                        help="OOS start date (YYYY-MM-DD), default 2024-08-01")
-    parser.add_argument("--end", type=date.fromisoformat, default=None,
-                        help="OOS end date (YYYY-MM-DD), default 2026-02-01")
+    parser.add_argument(
+        "--start", type=date.fromisoformat, default=None, help="OOS start date (YYYY-MM-DD), default 2024-08-01"
+    )
+    parser.add_argument(
+        "--end", type=date.fromisoformat, default=None, help="OOS end date (YYYY-MM-DD), default 2026-02-01"
+    )
     args = parser.parse_args()
 
     sep = "=" * 80
@@ -613,8 +631,10 @@ def main():
     print()
     print("Mode 1: REVERSION -- fade outside Value Area, target POC")
     print("Mode 2: BREAKOUT -- volume-confirmed break of Value Area boundary")
-    print(f"Grid: {len(BIN_SIZES)} bin sizes x {len(TIME_FILTERS)} time filters x "
-          f"{len(STOP_MULTIPLIERS)} stop mults x {len(RR_TARGETS)} RR (breakout)")
+    print(
+        f"Grid: {len(BIN_SIZES)} bin sizes x {len(TIME_FILTERS)} time filters x "
+        f"{len(STOP_MULTIPLIERS)} stop mults x {len(RR_TARGETS)} RR (breakout)"
+    )
     print(f"Gate B: Risk floor >= {SPEC.min_risk_floor_points} points")
     print(f"Gate C: Ambiguous bar = LOSS")
     print()
@@ -636,18 +656,22 @@ def main():
             for w in windows:
                 oos = w.get("oos_stats")
                 if oos:
-                    print(f"    {w['test_start']} to {w['test_end']}: "
-                          f"Selected {w['selected']}, "
-                          f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
-                          f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}")
+                    print(
+                        f"    {w['test_start']} to {w['test_end']}: "
+                        f"Selected {w['selected']}, "
+                        f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
+                        f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}"
+                    )
 
             combined = r.get("combined_oos")
             if combined:
                 sha = combined.get("sharpe_ann")
                 sha_str = f", ShANN={sha:.3f}" if sha is not None else ""
-                print(f"\n    COMBINED OOS: N={combined['n']}, WR={combined['wr']:.0%}, "
-                      f"ExpR={combined['expr']:+.3f}, Sharpe={combined['sharpe']:.3f}{sha_str}, "
-                      f"MaxDD={combined['maxdd']:+.1f}R, Total={combined['total']:+.1f}R")
+                print(
+                    f"\n    COMBINED OOS: N={combined['n']}, WR={combined['wr']:.0%}, "
+                    f"ExpR={combined['expr']:+.3f}, Sharpe={combined['sharpe']:.3f}{sha_str}, "
+                    f"MaxDD={combined['maxdd']:+.1f}R, Total={combined['total']:+.1f}R"
+                )
         else:
             print("    No qualifying windows")
 
@@ -658,6 +682,7 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

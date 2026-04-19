@@ -81,20 +81,24 @@ EXIT_CONFIGS = [
 FADE_ORB_LABELS = ["1000", "1800", "0030", "US_EQUITY_OPEN"]
 
 SESSION_BLOCKS = {
-    "asia":   {"start_utc_h": 0, "end_utc_h": 8},
+    "asia": {"start_utc_h": 0, "end_utc_h": 8},
     "london": {"start_utc_h": 8, "end_utc_h": 13},
-    "us":     {"start_utc_h": 13, "end_utc_h": 19},
+    "us": {"start_utc_h": 13, "end_utc_h": 19},
 }
 
 DRIVE_SESSIONS = {
     "us_open": {
-        "winter_start_h": 14, "winter_start_m": 30,
-        "summer_start_h": 13, "summer_start_m": 30,
+        "winter_start_h": 14,
+        "winter_start_m": 30,
+        "summer_start_h": 13,
+        "summer_start_m": 30,
         "dst_flag": "us_dst",
     },
     "london_open": {
-        "winter_start_h": 8, "winter_start_m": 0,
-        "summer_start_h": 7, "summer_start_m": 0,
+        "winter_start_h": 8,
+        "winter_start_m": 0,
+        "summer_start_h": 7,
+        "summer_start_m": 0,
         "dst_flag": "uk_dst",
     },
 }
@@ -125,15 +129,19 @@ class StrategyResult:
 
     @property
     def classification(self) -> str:
-        if self.n_trades < 30: return "INVALID"
-        elif self.n_trades < 100: return "REGIME"
-        elif self.n_trades < 200: return "PRELIMINARY"
+        if self.n_trades < 30:
+            return "INVALID"
+        elif self.n_trades < 100:
+            return "REGIME"
+        elif self.n_trades < 200:
+            return "PRELIMINARY"
         return "CORE"
 
 
 @dataclass
 class EntrySignal:
     """A detected trade entry, independent of exit style."""
+
     direction: int
     entry_price: float
     remaining_bars: pd.DataFrame
@@ -145,7 +153,8 @@ class EntrySignal:
 # Shared Utilities
 # ---------------------------------------------------------------------------
 def compute_max_dd(pnl_series: list[float]) -> float:
-    if not pnl_series: return 0.0
+    if not pnl_series:
+        return 0.0
     cum = np.cumsum(pnl_series)
     peak = np.maximum.accumulate(cum)
     dd = peak - cum
@@ -153,15 +162,18 @@ def compute_max_dd(pnl_series: list[float]) -> float:
 
 
 def yearly_breakdown(dates: list, pnls: list[float]) -> dict:
-    if not dates or not pnls: return {}
+    if not dates or not pnls:
+        return {}
     df = pd.DataFrame({"date": dates, "pnl_r": pnls})
     df["year"] = pd.to_datetime(df["date"]).dt.year
     result = {}
     for year, grp in df.groupby("year"):
         n = len(grp)
-        if n < 5: continue
+        if n < 5:
+            continue
         result[int(year)] = {
-            "n": n, "avg_r": round(float(grp["pnl_r"].mean()), 4),
+            "n": n,
+            "avg_r": round(float(grp["pnl_r"].mean()), 4),
             "total_r": round(float(grp["pnl_r"].sum()), 2),
             "wr": round(float((grp["pnl_r"] > 0).mean()), 4),
         }
@@ -170,18 +182,22 @@ def yearly_breakdown(dates: list, pnls: list[float]) -> dict:
 
 def atr_normalize(pnl_points: float, atr: float, spec: CostSpec) -> float:
     """PnL in ATR units after friction."""
-    if atr <= 0: return 0.0
+    if atr <= 0:
+        return 0.0
     return (pnl_points - spec.friction_in_points) / atr
 
 
 def finalize_result(
-    archetype: str, instrument: str, variant: str, params: dict,
-    trades: list[float], trade_dates: list,
+    archetype: str,
+    instrument: str,
+    variant: str,
+    params: dict,
+    trades: list[float],
+    trade_dates: list,
 ) -> StrategyResult:
     n = len(trades)
     if n < 1:
-        return StrategyResult(archetype=archetype, instrument=instrument,
-                              variant=variant, params=params)
+        return StrategyResult(archetype=archetype, instrument=instrument, variant=variant, params=params)
     arr = np.array(trades)
     wins = int(np.sum(arr > 0))
     avg_r = float(np.mean(arr))
@@ -194,19 +210,28 @@ def finalize_result(
     else:
         p_val = 1.0
     return StrategyResult(
-        archetype=archetype, instrument=instrument, variant=variant, params=params,
-        n_trades=n, n_wins=wins, win_rate=round(wins / n, 4),
-        avg_pnl_r=round(avg_r, 4), total_pnl_r=round(total_r, 2),
-        sharpe=round(sharpe, 4), max_dd_r=compute_max_dd(trades),
+        archetype=archetype,
+        instrument=instrument,
+        variant=variant,
+        params=params,
+        n_trades=n,
+        n_wins=wins,
+        win_rate=round(wins / n, 4),
+        avg_pnl_r=round(avg_r, 4),
+        total_pnl_r=round(total_r, 2),
+        sharpe=round(sharpe, 4),
+        max_dd_r=compute_max_dd(trades),
         p_value=round(p_val, 6),
         yearly_results=yearly_breakdown(trade_dates, trades),
-        pnl_series=trades, trade_dates=trade_dates,
+        pnl_series=trades,
+        trade_dates=trade_dates,
     )
 
 
 def bh_fdr(p_values: list[float], alpha: float = 0.05) -> list[tuple[int, float, bool]]:
     n = len(p_values)
-    if n == 0: return []
+    if n == 0:
+        return []
     indexed = sorted(enumerate(p_values), key=lambda x: x[1])
     adjusted = [0.0] * n
     prev_adj = 1.0
@@ -220,30 +245,39 @@ def bh_fdr(p_values: list[float], alpha: float = 0.05) -> list[tuple[int, float,
 
 
 def compute_orb_correlation(con, result, instrument):
-    if not result.trade_dates or not result.pnl_series: return None
-    orb_df = con.execute("""
+    if not result.trade_dates or not result.pnl_series:
+        return None
+    orb_df = con.execute(
+        """
         SELECT o.trading_day, o.pnl_r FROM orb_outcomes o
         WHERE o.symbol = ? AND o.orb_label = '1000'
           AND o.entry_model = 'E0' AND o.confirm_bars = 1
           AND o.rr_target = 1.0 AND o.orb_minutes = 5
           AND o.outcome IN ('WIN', 'LOSS')
         ORDER BY o.trading_day
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
     if orb_df.empty:
-        orb_df = con.execute("""
+        orb_df = con.execute(
+            """
             SELECT o.trading_day, o.pnl_r FROM orb_outcomes o
             WHERE o.symbol = ? AND o.orb_label = '0900'
               AND o.entry_model = 'E1' AND o.confirm_bars = 1
               AND o.rr_target = 1.0 AND o.orb_minutes = 5
               AND o.outcome IN ('WIN', 'LOSS')
             ORDER BY o.trading_day
-        """, [instrument]).fetchdf()
-    if orb_df.empty: return None
+        """,
+            [instrument],
+        ).fetchdf()
+    if orb_df.empty:
+        return None
     strat_df = pd.DataFrame({"trading_day": result.trade_dates, "strat_pnl": result.pnl_series})
     strat_df["trading_day"] = pd.to_datetime(strat_df["trading_day"])
     orb_df["trading_day"] = pd.to_datetime(orb_df["trading_day"])
     merged = strat_df.merge(orb_df, on="trading_day", how="inner")
-    if len(merged) < 20: return None
+    if len(merged) < 20:
+        return None
     corr = merged["strat_pnl"].corr(merged["pnl_r"])
     return round(float(corr), 4) if not pd.isna(corr) else None
 
@@ -316,13 +350,18 @@ def apply_exit(bars_after, direction, entry_price, atr, exit_config):
         return simulate_time_exit(bars_after, direction, entry_price, exit_config["hold"])
     elif mode == "trail":
         return simulate_trailing_stop(
-            bars_after, direction, entry_price, atr,
-            exit_config["trail_atr"], exit_config["max_hold"])
+            bars_after, direction, entry_price, atr, exit_config["trail_atr"], exit_config["max_hold"]
+        )
     elif mode == "sl_tp":
         return simulate_wide_sl_tp(
-            bars_after, direction, entry_price, atr,
-            exit_config["sl_atr"], exit_config["tp_atr"],
-            exit_config.get("max_hold", 240))
+            bars_after,
+            direction,
+            entry_price,
+            atr,
+            exit_config["sl_atr"],
+            exit_config["tp_atr"],
+            exit_config.get("max_hold", 240),
+        )
     return 0.0
 
 
@@ -331,8 +370,11 @@ def apply_exit(bars_after, direction, entry_price, atr, exit_config):
 # ---------------------------------------------------------------------------
 def run_all_exits(
     entries: list[EntrySignal],
-    archetype: str, instrument: str,
-    base_variant: str, base_params: dict, spec: CostSpec,
+    archetype: str,
+    instrument: str,
+    base_variant: str,
+    base_params: dict,
+    spec: CostSpec,
 ) -> list[StrategyResult]:
     """Given entry signals, simulate ALL exit configs."""
     results = []
@@ -355,30 +397,51 @@ def run_all_exits(
 def load_instrument_bars(con, instrument):
     print(f"    Loading 1m bars for {instrument}...", end=" ", flush=True)
     t0 = time.time()
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume,
                CAST((ts_utc AT TIME ZONE 'Australia/Brisbane'
                      - INTERVAL '9 hours') AS DATE) AS trading_day
         FROM bars_1m WHERE symbol = ? ORDER BY ts_utc
-    """, [instrument]).fetchdf()
-    print(f"{len(df):,} bars in {time.time()-t0:.1f}s")
+    """,
+        [instrument],
+    ).fetchdf()
+    print(f"{len(df):,} bars in {time.time() - t0:.1f}s")
     return df
 
 
 def load_daily_features(con, instrument):
-    cols = ["trading_day", "atr_20", "us_dst", "uk_dst",
-            "daily_open", "daily_close", "daily_high", "daily_low",
-            "prev_day_high", "prev_day_low", "prev_day_close"]
+    cols = [
+        "trading_day",
+        "atr_20",
+        "us_dst",
+        "uk_dst",
+        "daily_open",
+        "daily_close",
+        "daily_high",
+        "daily_low",
+        "prev_day_high",
+        "prev_day_low",
+        "prev_day_close",
+    ]
     for label in FADE_ORB_LABELS:
-        cols.extend([
-            f"orb_{label}_high", f"orb_{label}_low", f"orb_{label}_size",
-            f"orb_{label}_break_dir", f"orb_{label}_break_ts",
-        ])
+        cols.extend(
+            [
+                f"orb_{label}_high",
+                f"orb_{label}_low",
+                f"orb_{label}_size",
+                f"orb_{label}_break_dir",
+                f"orb_{label}_break_ts",
+            ]
+        )
     col_str = ", ".join(cols)
-    return con.execute(f"""
+    return con.execute(
+        f"""
         SELECT {col_str} FROM daily_features
         WHERE symbol = ? AND orb_minutes = 5 ORDER BY trading_day
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def get_session_bars(day_bars, block_name):
@@ -399,16 +462,20 @@ def find_vwap_entries(daily_df, bars_by_day, instrument, block_name, sigma_mult)
     for _, row in daily_df.iterrows():
         atr = row.get("atr_20")
         trading_day = row["trading_day"]
-        if pd.isna(atr) or atr <= 0: continue
+        if pd.isna(atr) or atr <= 0:
+            continue
 
         day_bars = bars_by_day.get(trading_day)
-        if day_bars is None: continue
+        if day_bars is None:
+            continue
 
         session_bars = get_session_bars(day_bars, block_name)
-        if len(session_bars) < min_bars + 30: continue
+        if len(session_bars) < min_bars + 30:
+            continue
 
         vol_bars = session_bars[session_bars["volume"] > 0].copy()
-        if len(vol_bars) < min_bars: continue
+        if len(vol_bars) < min_bars:
+            continue
 
         cum_pv = (vol_bars["close"].values * vol_bars["volume"].values).cumsum()
         cum_vol = vol_bars["volume"].values.cumsum()
@@ -417,21 +484,28 @@ def find_vwap_entries(daily_df, bars_by_day, instrument, block_name, sigma_mult)
         dev_std = pd.Series(deviation).expanding(min_periods=min_bars).std().values
 
         for j in range(min_bars, len(vol_bars)):
-            if dev_std[j] <= 0 or np.isnan(dev_std[j]): continue
-            if abs(deviation[j]) / dev_std[j] < sigma_mult: continue
+            if dev_std[j] <= 0 or np.isnan(dev_std[j]):
+                continue
+            if abs(deviation[j]) / dev_std[j] < sigma_mult:
+                continue
 
             entry_price = float(vol_bars.iloc[j]["close"])
             entry_ts = vol_bars.iloc[j]["ts_utc"]
             direction = -1 if entry_price > vwap[j] else 1
 
             remaining = session_bars[session_bars["ts_utc"] > entry_ts]
-            if len(remaining) < 5: continue
+            if len(remaining) < 5:
+                continue
 
-            entries.append(EntrySignal(
-                direction=direction, entry_price=entry_price,
-                remaining_bars=remaining, atr=float(atr),
-                trading_day=trading_day,
-            ))
+            entries.append(
+                EntrySignal(
+                    direction=direction,
+                    entry_price=entry_price,
+                    remaining_bars=remaining,
+                    atr=float(atr),
+                    trading_day=trading_day,
+                )
+            )
             break
     return entries
 
@@ -454,15 +528,20 @@ def find_fade_entries(daily_df, bars_by_day, instrument, orb_label, n_return_bar
         atr = row.get("atr_20")
         trading_day = row["trading_day"]
 
-        if pd.isna(break_dir) or pd.isna(break_ts): continue
-        if pd.isna(orb_high) or pd.isna(orb_low) or orb_high <= orb_low: continue
-        if pd.isna(atr) or atr <= 0: continue
+        if pd.isna(break_dir) or pd.isna(break_ts):
+            continue
+        if pd.isna(orb_high) or pd.isna(orb_low) or orb_high <= orb_low:
+            continue
+        if pd.isna(atr) or atr <= 0:
+            continue
 
         day_bars = bars_by_day.get(trading_day)
-        if day_bars is None: continue
+        if day_bars is None:
+            continue
 
         post_break = day_bars[day_bars["ts_utc"] > break_ts]
-        if len(post_break) < n_return_bars + 5: continue
+        if len(post_break) < n_return_bars + 5:
+            continue
 
         scan = post_break.iloc[:n_return_bars]
         entry_idx = None
@@ -470,25 +549,33 @@ def find_fade_entries(daily_df, bars_by_day, instrument, orb_label, n_return_bar
         if break_dir == "long":
             for j in range(len(scan)):
                 if float(scan.iloc[j]["close"]) < orb_high:
-                    entry_idx = j; break
+                    entry_idx = j
+                    break
         elif break_dir == "short":
             for j in range(len(scan)):
                 if float(scan.iloc[j]["close"]) > orb_low:
-                    entry_idx = j; break
+                    entry_idx = j
+                    break
 
-        if entry_idx is None: continue
+        if entry_idx is None:
+            continue
 
         entry_price = float(scan.iloc[entry_idx]["close"])
         direction = -1 if break_dir == "long" else 1
 
-        remaining = post_break.iloc[entry_idx + 1:]
-        if len(remaining) < 5: continue
+        remaining = post_break.iloc[entry_idx + 1 :]
+        if len(remaining) < 5:
+            continue
 
-        entries.append(EntrySignal(
-            direction=direction, entry_price=entry_price,
-            remaining_bars=remaining, atr=float(atr),
-            trading_day=trading_day,
-        ))
+        entries.append(
+            EntrySignal(
+                direction=direction,
+                entry_price=entry_price,
+                remaining_bars=remaining,
+                atr=float(atr),
+                trading_day=trading_day,
+            )
+        )
     return entries
 
 
@@ -503,14 +590,18 @@ def find_sweep_entries(daily_df, bars_by_day, instrument, block_name, n_sweep_ba
         atr = row.get("atr_20")
         trading_day = row["trading_day"]
 
-        if pd.isna(pdh) or pd.isna(pdl) or pd.isna(atr) or atr <= 0: continue
-        if pdh <= pdl: continue
+        if pd.isna(pdh) or pd.isna(pdl) or pd.isna(atr) or atr <= 0:
+            continue
+        if pdh <= pdl:
+            continue
 
         day_bars = bars_by_day.get(trading_day)
-        if day_bars is None: continue
+        if day_bars is None:
+            continue
 
         session_bars = get_session_bars(day_bars, block_name)
-        if len(session_bars) < 30: continue
+        if len(session_bars) < 30:
+            continue
 
         bars_arr = session_bars[["ts_utc", "open", "high", "low", "close"]].values
         trade_taken = False
@@ -522,13 +613,17 @@ def find_sweep_entries(daily_df, bars_by_day, instrument, block_name, n_sweep_ba
                 for k in range(1, min(n_sweep_bars + 1, len(bars_arr) - i)):
                     rej_ts, _, _, _, rej_c = bars_arr[i + k]
                     if rej_c < pdh:
-                        remaining = session_bars.iloc[i + k + 1:]
+                        remaining = session_bars.iloc[i + k + 1 :]
                         if len(remaining) >= 5:
-                            entries.append(EntrySignal(
-                                direction=-1, entry_price=float(rej_c),
-                                remaining_bars=remaining, atr=float(atr),
-                                trading_day=trading_day,
-                            ))
+                            entries.append(
+                                EntrySignal(
+                                    direction=-1,
+                                    entry_price=float(rej_c),
+                                    remaining_bars=remaining,
+                                    atr=float(atr),
+                                    trading_day=trading_day,
+                                )
+                            )
                             trade_taken = True
                         break
 
@@ -536,13 +631,17 @@ def find_sweep_entries(daily_df, bars_by_day, instrument, block_name, n_sweep_ba
                 for k in range(1, min(n_sweep_bars + 1, len(bars_arr) - i)):
                     rej_ts, _, _, _, rej_c = bars_arr[i + k]
                     if rej_c > pdl:
-                        remaining = session_bars.iloc[i + k + 1:]
+                        remaining = session_bars.iloc[i + k + 1 :]
                         if len(remaining) >= 5:
-                            entries.append(EntrySignal(
-                                direction=1, entry_price=float(rej_c),
-                                remaining_bars=remaining, atr=float(atr),
-                                trading_day=trading_day,
-                            ))
+                            entries.append(
+                                EntrySignal(
+                                    direction=1,
+                                    entry_price=float(rej_c),
+                                    remaining_bars=remaining,
+                                    atr=float(atr),
+                                    trading_day=trading_day,
+                                )
+                            )
                             trade_taken = True
                         break
 
@@ -563,10 +662,12 @@ def find_drive_entries(daily_df, bars_by_day, instrument, session_name, drive_mi
         atr = row.get("atr_20")
         trading_day = row["trading_day"]
         is_dst = row.get(dst_col, False)
-        if pd.isna(atr) or atr <= 0: continue
+        if pd.isna(atr) or atr <= 0:
+            continue
 
         day_bars = bars_by_day.get(trading_day)
-        if day_bars is None: continue
+        if day_bars is None:
+            continue
 
         if is_dst:
             start_h = sess_cfg["summer_start_h"]
@@ -582,12 +683,13 @@ def find_drive_entries(daily_df, bars_by_day, instrument, session_name, drive_mi
 
         window_end_min = session_start_min + drive_minutes + MAX_EXIT_BARS + 30
         if window_end_min > 24 * 60:
-            mask = (bar_minutes_utc >= session_start_min) | (bar_minutes_utc < window_end_min - 24*60)
+            mask = (bar_minutes_utc >= session_start_min) | (bar_minutes_utc < window_end_min - 24 * 60)
         else:
             mask = (bar_minutes_utc >= session_start_min) & (bar_minutes_utc < window_end_min)
 
         window_bars = day_bars[mask].sort_values("ts_utc")
-        if len(window_bars) < drive_minutes + 10: continue
+        if len(window_bars) < drive_minutes + 10:
+            continue
 
         drive_bars = window_bars.iloc[:drive_minutes]
         drive_open = float(drive_bars.iloc[0]["open"])
@@ -601,13 +703,18 @@ def find_drive_entries(daily_df, bars_by_day, instrument, session_name, drive_mi
         direction = -1 if drive_move > 0 else 1
 
         remaining = window_bars.iloc[drive_minutes:]
-        if len(remaining) < 5: continue
+        if len(remaining) < 5:
+            continue
 
-        entries.append(EntrySignal(
-            direction=direction, entry_price=entry_price,
-            remaining_bars=remaining, atr=float(atr),
-            trading_day=trading_day,
-        ))
+        entries.append(
+            EntrySignal(
+                direction=direction,
+                entry_price=entry_price,
+                remaining_bars=remaining,
+                atr=float(atr),
+                trading_day=trading_day,
+            )
+        )
     return entries
 
 
@@ -629,9 +736,9 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
                 print(f"  No cost model for {instrument}, skipping")
                 continue
 
-            print(f"\n{'='*70}")
+            print(f"\n{'=' * 70}")
             print(f"  INSTRUMENT: {instrument}")
-            print(f"{'='*70}")
+            print(f"{'=' * 70}")
 
             bars_df = load_instrument_bars(con, instrument)
             if len(bars_df) < 10000:
@@ -652,19 +759,20 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
                 print(f"\n  --- VWAP Reversion ({instrument}) ---")
                 for block in SESSION_BLOCKS:
                     for sigma in [1.5, 2.0, 2.5, 3.0]:
-                        entries = find_vwap_entries(
-                            daily_df, bars_by_day, instrument, block, sigma)
-                        if not entries: continue
+                        entries = find_vwap_entries(daily_df, bars_by_day, instrument, block, sigma)
+                        if not entries:
+                            continue
                         base_var = f"{block}_sig{sigma}"
                         base_p = {"block": block, "sigma_mult": sigma}
-                        for r in run_all_exits(entries, "vwap_reversion",
-                                               instrument, base_var, base_p, spec):
+                        for r in run_all_exits(entries, "vwap_reversion", instrument, base_var, base_p, spec):
                             results.append(r)
                             if r.n_trades >= MIN_TRADES:
                                 sig = "*" if r.p_value < 0.05 else " "
-                                print(f"    {sig} {r.variant:45s} "
-                                      f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                                      f"ExpR={r.avg_pnl_r:+.4f} p={r.p_value:.4f}")
+                                print(
+                                    f"    {sig} {r.variant:45s} "
+                                    f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                                    f"ExpR={r.avg_pnl_r:+.4f} p={r.p_value:.4f}"
+                                )
 
             # =============================================================
             # 2. Failed Breakout Fade
@@ -673,19 +781,20 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
                 print(f"\n  --- Failed Breakout Fade ({instrument}) ---")
                 for label in FADE_ORB_LABELS:
                     for n_ret in [10, 20]:
-                        entries = find_fade_entries(
-                            daily_df, bars_by_day, instrument, label, n_ret)
-                        if not entries: continue
+                        entries = find_fade_entries(daily_df, bars_by_day, instrument, label, n_ret)
+                        if not entries:
+                            continue
                         base_var = f"{label}_N{n_ret}"
                         base_p = {"orb_label": label, "n_return_bars": n_ret}
-                        for r in run_all_exits(entries, "fade_breakout",
-                                               instrument, base_var, base_p, spec):
+                        for r in run_all_exits(entries, "fade_breakout", instrument, base_var, base_p, spec):
                             results.append(r)
                             if r.n_trades >= MIN_TRADES:
                                 sig = "*" if r.p_value < 0.05 else " "
-                                print(f"    {sig} {r.variant:45s} "
-                                      f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                                      f"ExpR={r.avg_pnl_r:+.4f} p={r.p_value:.4f}")
+                                print(
+                                    f"    {sig} {r.variant:45s} "
+                                    f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                                    f"ExpR={r.avg_pnl_r:+.4f} p={r.p_value:.4f}"
+                                )
 
             # =============================================================
             # 3. PDH/PDL Sweep Rejection
@@ -694,19 +803,20 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
                 print(f"\n  --- PDH/PDL Sweep Rejection ({instrument}) ---")
                 for block in SESSION_BLOCKS:
                     for n_sweep in [5, 10]:
-                        entries = find_sweep_entries(
-                            daily_df, bars_by_day, instrument, block, n_sweep)
-                        if not entries: continue
+                        entries = find_sweep_entries(daily_df, bars_by_day, instrument, block, n_sweep)
+                        if not entries:
+                            continue
                         base_var = f"{block}_sw{n_sweep}"
                         base_p = {"block": block, "n_sweep_bars": n_sweep}
-                        for r in run_all_exits(entries, "pdh_pdl_sweep",
-                                               instrument, base_var, base_p, spec):
+                        for r in run_all_exits(entries, "pdh_pdl_sweep", instrument, base_var, base_p, spec):
                             results.append(r)
                             if r.n_trades >= MIN_TRADES:
                                 sig = "*" if r.p_value < 0.05 else " "
-                                print(f"    {sig} {r.variant:45s} "
-                                      f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                                      f"ExpR={r.avg_pnl_r:+.4f} p={r.p_value:.4f}")
+                                print(
+                                    f"    {sig} {r.variant:45s} "
+                                    f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                                    f"ExpR={r.avg_pnl_r:+.4f} p={r.p_value:.4f}"
+                                )
 
             # =============================================================
             # 4. Opening Drive Fade
@@ -716,21 +826,20 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
                 for sess in DRIVE_SESSIONS:
                     for drv_min in [10, 15]:
                         for threshold in [0.3, 0.5]:
-                            entries = find_drive_entries(
-                                daily_df, bars_by_day, instrument, sess,
-                                drv_min, threshold)
-                            if not entries: continue
+                            entries = find_drive_entries(daily_df, bars_by_day, instrument, sess, drv_min, threshold)
+                            if not entries:
+                                continue
                             base_var = f"{sess}_drv{drv_min}_thr{threshold}"
-                            base_p = {"session": sess, "drive_minutes": drv_min,
-                                       "threshold_atr": threshold}
-                            for r in run_all_exits(entries, "opening_drive_fade",
-                                                   instrument, base_var, base_p, spec):
+                            base_p = {"session": sess, "drive_minutes": drv_min, "threshold_atr": threshold}
+                            for r in run_all_exits(entries, "opening_drive_fade", instrument, base_var, base_p, spec):
                                 results.append(r)
                                 if r.n_trades >= MIN_TRADES:
                                     sig = "*" if r.p_value < 0.05 else " "
-                                    print(f"    {sig} {r.variant:45s} "
-                                          f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                                          f"ExpR={r.avg_pnl_r:+.4f} p={r.p_value:.4f}")
+                                    print(
+                                        f"    {sig} {r.variant:45s} "
+                                        f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                                        f"ExpR={r.avg_pnl_r:+.4f} p={r.p_value:.4f}"
+                                    )
 
             del bars_df, bars_by_day, daily_df
 
@@ -756,18 +865,22 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
             print(f"FDR-significant at alpha={FDR_ALPHA}: {n_sig}")
 
             if n_sig > 0:
-                print(f"\n{'Archetype':<22s} {'Inst':<6s} {'Variant':<45s} "
-                      f"{'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>7s} "
-                      f"{'raw_p':>8s} {'adj_p':>8s}")
+                print(
+                    f"\n{'Archetype':<22s} {'Inst':<6s} {'Variant':<45s} "
+                    f"{'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>7s} "
+                    f"{'raw_p':>8s} {'adj_p':>8s}"
+                )
                 print("-" * 130)
                 for idx, adj_p, sig in fdr_results:
                     if sig:
                         r = valid_results[idx]
-                        print(f"{r.archetype:<22s} {r.instrument:<6s} "
-                              f"{r.variant:<45s} "
-                              f"{r.n_trades:5d} {r.win_rate:7.2%} "
-                              f"{r.avg_pnl_r:+8.4f} {r.sharpe:7.3f} "
-                              f"{r.p_value:8.4f} {adj_p:8.4f}")
+                        print(
+                            f"{r.archetype:<22s} {r.instrument:<6s} "
+                            f"{r.variant:<45s} "
+                            f"{r.n_trades:5d} {r.win_rate:7.2%} "
+                            f"{r.avg_pnl_r:+8.4f} {r.sharpe:7.3f} "
+                            f"{r.p_value:8.4f} {adj_p:8.4f}"
+                        )
             else:
                 print("\nNo strategies survived FDR correction.")
 
@@ -777,15 +890,18 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
             for rank, (idx, r) in enumerate(sorted_by_p[:15]):
                 adj_p = fdr_results[idx][1]
                 exit_lbl = r.params.get("exit", {}).get("label", "?")
-                print(f"    {rank+1:2d}. {r.archetype:22s} {r.instrument:6s} "
-                      f"{r.variant:42s} N={r.n_trades:4d} ExpR={r.avg_pnl_r:+.4f} "
-                      f"raw_p={r.p_value:.4f} adj_p={adj_p:.4f} [{exit_lbl}]")
+                print(
+                    f"    {rank + 1:2d}. {r.archetype:22s} {r.instrument:6s} "
+                    f"{r.variant:42s} N={r.n_trades:4d} ExpR={r.avg_pnl_r:+.4f} "
+                    f"raw_p={r.p_value:.4f} adj_p={adj_p:.4f} [{exit_lbl}]"
+                )
 
             # Best exit mode per archetype
             print(f"\n  BEST EXIT MODE PER ARCHETYPE:")
             for arch in ["vwap_reversion", "fade_breakout", "pdh_pdl_sweep", "opening_drive_fade"]:
                 arch_valid = [r for r in valid_results if r.archetype == arch]
-                if not arch_valid: continue
+                if not arch_valid:
+                    continue
                 by_mode = {}
                 for r in arch_valid:
                     mode = r.params.get("exit", {}).get("mode", "?")
@@ -797,9 +913,11 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
                         avg_r = np.mean([r.avg_pnl_r for r in mr])
                         n_pos = sum(1 for r in mr if r.avg_pnl_r > 0)
                         best = min(mr, key=lambda r: r.p_value)
-                        print(f"      {mode:6s}: {len(mr):3d} tests, "
-                              f"{n_pos:3d} pos, avg={avg_r:+.4f}, "
-                              f"best p={best.p_value:.4f} ({best.variant})")
+                        print(
+                            f"      {mode:6s}: {len(mr):3d} tests, "
+                            f"{n_pos:3d} pos, avg={avg_r:+.4f}, "
+                            f"best p={best.p_value:.4f} ({best.variant})"
+                        )
         else:
             print(f"\nNo strategies had N >= {MIN_TRADES}")
 
@@ -814,8 +932,7 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
                 corr = compute_orb_correlation(con, r, r.instrument)
                 if corr is not None:
                     tag = "UNCORRELATED" if abs(corr) < 0.3 else "CORRELATED"
-                    print(f"  {r.archetype:22s} {r.instrument:6s} "
-                          f"{r.variant:42s} corr={corr:+.3f} [{tag}]")
+                    print(f"  {r.archetype:22s} {r.instrument:6s} {r.variant:42s} corr={corr:+.3f} [{tag}]")
 
         # =================================================================
         # HONEST SUMMARY
@@ -833,8 +950,10 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
         print("SURVIVED SCRUTINY:")
         if survived:
             for r in survived:
-                print(f"  - {r.archetype} | {r.instrument} | {r.variant} | "
-                      f"N={r.n_trades}, ExpR={r.avg_pnl_r:+.4f}, p={r.p_value:.4f}")
+                print(
+                    f"  - {r.archetype} | {r.instrument} | {r.variant} | "
+                    f"N={r.n_trades}, ExpR={r.avg_pnl_r:+.4f}, p={r.p_value:.4f}"
+                )
         else:
             print("  None.")
 
@@ -846,17 +965,19 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
                 n_pos = sum(1 for r in arch_results if r.avg_pnl_r > 0)
                 print(f"\n  {arch} ({len(arch_results)} valid, {n_pos} positive):")
                 print(f"    Average ExpR: {avg_exp:+.4f}")
-                print(f"    Best: {best.instrument} {best.variant} "
-                      f"N={best.n_trades} ExpR={best.avg_pnl_r:+.4f} p={best.p_value:.4f}")
+                print(
+                    f"    Best: {best.instrument} {best.variant} "
+                    f"N={best.n_trades} ExpR={best.avg_pnl_r:+.4f} p={best.p_value:.4f}"
+                )
 
         print("\nEXIT MODE VERDICT:")
         for arch in ["vwap_reversion", "fade_breakout", "pdh_pdl_sweep", "opening_drive_fade"]:
             arch_valid = [r for r in valid_results if r.archetype == arch]
-            if not arch_valid: continue
+            if not arch_valid:
+                continue
             best = min(arch_valid, key=lambda r: r.p_value)
             exit_lbl = best.params.get("exit", {}).get("label", "?")
-            print(f"  {arch:24s} -> best exit: {exit_lbl:12s} "
-                  f"(p={best.p_value:.4f}, ExpR={best.avg_pnl_r:+.4f})")
+            print(f"  {arch:24s} -> best exit: {exit_lbl:12s} (p={best.p_value:.4f}, ExpR={best.avg_pnl_r:+.4f})")
 
         print("\nCAVEATS:")
         print("  - ATR normalization is NOT a true R-multiple")
@@ -873,13 +994,10 @@ def run_all(db_path, archetype_filter=None, instrument_filter=None):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Non-ORB V2 Multi-Exit Strategy Research")
+    parser = argparse.ArgumentParser(description="Non-ORB V2 Multi-Exit Strategy Research")
     parser.add_argument("--db-path", type=Path, default=PROJECT_ROOT / "gold.db")
-    parser.add_argument("--archetype", type=str, default=None,
-                        choices=["vwap", "fade", "sweep", "drive"])
-    parser.add_argument("--instrument", type=str, default=None,
-                        choices=ALL_INSTRUMENTS)
+    parser.add_argument("--archetype", type=str, default=None, choices=["vwap", "fade", "sweep", "drive"])
+    parser.add_argument("--instrument", type=str, default=None, choices=ALL_INSTRUMENTS)
     args = parser.parse_args()
 
     n_t = sum(1 for e in EXIT_CONFIGS if e["mode"] == "time")
@@ -900,7 +1018,7 @@ def main():
     total = len(results)
     valid = sum(1 for r in results if r.n_trades >= MIN_TRADES)
     print(f"\nTotal tests: {total}, Valid (N>={MIN_TRADES}): {valid}")
-    print(f"Runtime: {elapsed:.0f}s ({elapsed/60:.1f}min)")
+    print(f"Runtime: {elapsed:.0f}s ({elapsed / 60:.1f}min)")
 
 
 if __name__ == "__main__":

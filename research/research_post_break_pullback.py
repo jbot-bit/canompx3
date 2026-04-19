@@ -52,13 +52,7 @@ def main():
     inst_tuple = str(tuple(instruments))
 
     cols = [r[0] for r in con.execute("DESCRIBE daily_features").fetchall()]
-    sessions = sorted(
-        set(
-            c.replace("orb_", "").replace("_break_ts", "")
-            for c in cols
-            if c.endswith("_break_ts")
-        )
-    )
+    sessions = sorted(set(c.replace("orb_", "").replace("_break_ts", "") for c in cols if c.endswith("_break_ts")))
 
     print("Building bulk dataset (one query per session)...")
 
@@ -179,7 +173,7 @@ def main():
         pct = n_pb / (n_pb + n_npb) * 100
         print("=== UNIVERSAL POOLED ===")
         print(f"  Pullback:    N={n_pb:,} ({pct:.1f}%)  avgR = {avg_pb:+.4f}")
-        print(f"  No-pullback: N={n_npb:,} ({100-pct:.1f}%)  avgR = {avg_npb:+.4f}")
+        print(f"  No-pullback: N={n_npb:,} ({100 - pct:.1f}%)  avgR = {avg_npb:+.4f}")
         print(f"  Delta (stay - pullback): {avg_npb - avg_pb:+.4f}")
         print(f"  Welch t-test: t={t_stat:+.3f}, p={p_val:.6f}")
         if p_val < 0.05:
@@ -204,7 +198,7 @@ def main():
         print(
             f"  {inst}: pb={len(pb):,} ({pct:.0f}%) avgR={avg_pb:+.3f}"
             f" | stay={len(npb):,} avgR={avg_npb:+.3f}"
-            f" | delta={avg_npb-avg_pb:+.3f} | t={t_stat:+.2f} p={p_val:.4f}{sig}"
+            f" | delta={avg_npb - avg_pb:+.3f} | t={t_stat:+.2f} p={p_val:.4f}{sig}"
         )
 
     # === PER-SESSION ===
@@ -228,7 +222,7 @@ def main():
         print(
             f"  {s:>18}: pb={npb_n:,} ({pct:.0f}%)"
             f" avgR={apb:+.3f} | stay={nnpb:,} avgR={anpb:+.3f}"
-            f" | delta={anpb-apb:+.3f} | t={t:+.2f} p={p:.4f}{sig}"
+            f" | delta={anpb - apb:+.3f} | t={t:+.2f} p={p:.4f}{sig}"
         )
 
     # === DETAIL GRID ===
@@ -246,9 +240,7 @@ def main():
                 avg_npb = np.mean(npb)
                 t_stat, p_val = run_t_test(npb, pb)
                 pct = len(pb) / (len(pb) + len(npb)) * 100
-                detail_results.append(
-                    (inst, session, orb_min, len(pb), len(npb), avg_pb, avg_npb, t_stat, p_val, pct)
-                )
+                detail_results.append((inst, session, orb_min, len(pb), len(npb), avg_pb, avg_npb, t_stat, p_val, pct))
 
     detail_results.sort(key=lambda x: x[8])
     header = (
@@ -264,7 +256,7 @@ def main():
         print(
             f"{inst:>4} {sess:>18} {om:>3}m"
             f" {npb_n:>5} {nnpb:>6} {pct:>3.0f}%"
-            f" {apb:>+8.3f} {anpb:>+9.3f} {anpb-apb:>+7.3f}"
+            f" {apb:>+8.3f} {anpb:>+9.3f} {anpb - apb:>+7.3f}"
             f" {t:>+6.2f} {p:>8.4f} {sig_mark}"
         )
 
@@ -283,9 +275,7 @@ def main():
             print()
             print("  BH FDR SURVIVORS:")
             sorted_detail = sorted(detail_results, key=lambda x: x[8])
-            for rank, (inst, sess, om, npb_n, nnpb, apb, anpb, _t, p, _pct) in enumerate(
-                sorted_detail, 1
-            ):
+            for rank, (inst, sess, om, npb_n, nnpb, apb, anpb, _t, p, _pct) in enumerate(sorted_detail, 1):
                 threshold = 0.05 * rank / n_tests
                 if p <= threshold:
                     direction = "PULLBACK WORSE" if anpb > apb else "PULLBACK BETTER"
@@ -305,9 +295,7 @@ def main():
         wr_npb = npb_wins / n_npb * 100
         pb_losses = n_pb - pb_wins
         npb_losses = n_npb - npb_wins
-        odds, fisher_p = stats.fisher_exact(
-            [[pb_wins, pb_losses], [npb_wins, npb_losses]]
-        )
+        odds, fisher_p = stats.fisher_exact([[pb_wins, pb_losses], [npb_wins, npb_losses]])
         print(f"  Pullback WR:    {wr_pb:.1f}% ({pb_wins}/{n_pb})")
         print(f"  No-pullback WR: {wr_npb:.1f}% ({npb_wins}/{n_npb})")
         print(f"  Fisher exact: p={fisher_p:.6f}")

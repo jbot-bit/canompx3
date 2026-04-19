@@ -1251,11 +1251,11 @@ class TestHTFLevelFields:
 
         # Week Mon-Fri; interior Tuesday has the highest high; Thursday has the lowest low
         rows = [
-            self._make_row(date(2024, 2, 5), 100.0, 102.0, 99.0, 101.0),   # Mon
+            self._make_row(date(2024, 2, 5), 100.0, 102.0, 99.0, 101.0),  # Mon
             self._make_row(date(2024, 2, 6), 101.0, 130.0, 100.0, 120.0),  # Tue — max high
             self._make_row(date(2024, 2, 7), 120.0, 125.0, 115.0, 118.0),  # Wed
-            self._make_row(date(2024, 2, 8), 118.0, 119.0, 80.0, 90.0),    # Thu — min low
-            self._make_row(date(2024, 2, 9), 90.0, 95.0, 88.0, 93.0),      # Fri — last close
+            self._make_row(date(2024, 2, 8), 118.0, 119.0, 80.0, 90.0),  # Thu — min low
+            self._make_row(date(2024, 2, 9), 90.0, 95.0, 88.0, 93.0),  # Fri — last close
             # Next Monday's row — inspects prev_week from Feb 5-9
             self._make_row(date(2024, 2, 12), 93.0, 98.0, 91.0, 96.0),
         ]

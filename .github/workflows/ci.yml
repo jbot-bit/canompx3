@@ -25,16 +25,23 @@ jobs:
         run: uv sync --frozen --all-extras
 
       - name: Ruff format check
-        run: uv run ruff format --check pipeline/ trading_app/ ui/ scripts/ tests/
+        run: uv run ruff format --check pipeline/ trading_app/ scripts/ tests/
 
       - name: Ruff lint check
-        run: uv run ruff check pipeline/ trading_app/ ui/ scripts/
+        run: uv run ruff check pipeline/ trading_app/ scripts/
 
       - name: Pyright type check (356 errors as of 2026-03-14 — fix before promoting to hard gate)
         run: uv run pyright
         continue-on-error: true
 
-      - name: Drift check (static analysis)
+      - name: Drift check (static analysis — hard gate; CI=true triggers DB-skip helper)
+        # 5 of 110 checks (37, 61, 80, 92, 95) are fail-closed when gold.db
+        # is missing — correct for LOCAL workflow where missing DB = broken
+        # setup. CI has no DB by policy (CLAUDE.md "local disk, no cloud
+        # sync"). pipeline.check_drift._skip_db_check_for_ci() returns []
+        # (silent skip, runner counts it as skip_count) when CI=true is set
+        # (auto by GitHub Actions). Local without DB still fails. Same
+        # check, env-controlled response — no `continue-on-error` band-aid.
         run: uv run python pipeline/check_drift.py
 
       - name: Behavioral audit

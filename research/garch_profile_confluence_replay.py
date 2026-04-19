@@ -262,7 +262,15 @@ def make_daily_scenarios(
     return scenarios
 
 
-def emit(output_md: Path, profile_id: str, as_of, lane_defs: list[dict], skipped_lanes: list[dict[str, object]], native_profiles_by_map, results):
+def emit(
+    output_md: Path,
+    profile_id: str,
+    as_of,
+    lane_defs: list[dict],
+    skipped_lanes: list[dict[str, object]],
+    native_profiles_by_map,
+    results,
+):
     profile = replay.get_profile(profile_id)
     copy_label = f"{profile.copies}-copy total $" if profile.copies != 1 else "1-copy total $"
     lines = [

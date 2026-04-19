@@ -126,9 +126,7 @@ def extract_daily_stats(instrument: str) -> pd.DataFrame:
                     # Filter out sentinel values (2147483647 = INT_MAX = no data)
                     vol_by_sym = {s: v for s, v in vol_by_sym.items() if 0 < v < 2147483647}
                     if vol_by_sym:
-                        front_symbol = choose_front_contract(
-                            vol_by_sym, outright_pattern=pattern, prefix_len=plen
-                        )
+                        front_symbol = choose_front_contract(vol_by_sym, outright_pattern=pattern, prefix_len=plen)
                         if front_symbol:
                             break
 
@@ -151,12 +149,14 @@ def extract_daily_stats(instrument: str) -> pd.DataFrame:
                         cleared_vol = total_vol
 
             if settlement is not None or cleared_vol is not None:
-                all_rows.append({
-                    "cal_date": cal_date,
-                    "instrument": instrument,
-                    "settlement": settlement,
-                    "cleared_volume": cleared_vol,
-                })
+                all_rows.append(
+                    {
+                        "cal_date": cal_date,
+                        "instrument": instrument,
+                        "settlement": settlement,
+                        "cleared_volume": cleared_vol,
+                    }
+                )
 
     if not all_rows:
         return pd.DataFrame()
@@ -259,7 +259,9 @@ def main():
         if len(gap_valid) > 100:
             r_gap, _ = stats.pearsonr(gap_valid["settle_gap_atr"], gap_valid["close_gap_atr"])
             print(f"  H1 tautology: corr(settle_gap/atr, close_gap/atr) = {r_gap:.6f}")
-            print(f"  Mean |settle - close|: {(gap_valid['prev_settlement'] - gap_valid['prev_day_close']).abs().mean():.4f}")
+            print(
+                f"  Mean |settle - close|: {(gap_valid['prev_settlement'] - gap_valid['prev_day_close']).abs().mean():.4f}"
+            )
         else:
             r_gap = 1.0
 
@@ -353,7 +355,9 @@ def main():
             outcomes["is_win"] = (outcomes["outcome"] == "win").astype(float)
 
             # Join with features
-            feat_subset = valid[valid["symbol"] == inst][["trading_day", "settle_gap_atr", "cleared_vol_ratio", "atr_20"]]
+            feat_subset = valid[valid["symbol"] == inst][
+                ["trading_day", "settle_gap_atr", "cleared_vol_ratio", "atr_20"]
+            ]
             joined = outcomes.merge(feat_subset, on="trading_day", how="inner")
 
             if len(joined) < 100:
@@ -394,23 +398,25 @@ def main():
                 p_pool = (top["is_win"].sum() + bot["is_win"].sum()) / (n_top + n_bot)
                 if p_pool == 0 or p_pool == 1:
                     continue
-                se = np.sqrt(p_pool * (1 - p_pool) * (1/n_top + 1/n_bot))
+                se = np.sqrt(p_pool * (1 - p_pool) * (1 / n_top + 1 / n_bot))
                 z = wr_spread / se
                 p_val = 2 * (1 - stats.norm.cdf(abs(z)))
 
-                all_wr_tests.append({
-                    "feature": label,
-                    "instrument": inst,
-                    "session": sess,
-                    "wr_spread": wr_spread,
-                    "wr_top": wr_by_q["mean"].iloc[-1],
-                    "wr_bot": wr_by_q["mean"].iloc[0],
-                    "n_top": n_top,
-                    "n_bot": n_bot,
-                    "z": z,
-                    "p_value": p_val,
-                    "N": len(feat_valid),
-                })
+                all_wr_tests.append(
+                    {
+                        "feature": label,
+                        "instrument": inst,
+                        "session": sess,
+                        "wr_spread": wr_spread,
+                        "wr_top": wr_by_q["mean"].iloc[-1],
+                        "wr_bot": wr_by_q["mean"].iloc[0],
+                        "n_top": n_top,
+                        "n_bot": n_bot,
+                        "z": z,
+                        "p_value": p_val,
+                        "N": len(feat_valid),
+                    }
+                )
 
     con.close()
 
@@ -440,8 +446,10 @@ def main():
     print("  " + "-" * 80)
     for _, row in tests_df.head(10).iterrows():
         bh = "*" if row["bh_significant"] else ""
-        print(f"  {row['feature']:<20} {row['instrument']:<5} {row['session']:<16} "
-              f"{row['wr_spread']:>+9.1%} {row['N']:>6.0f} {row['p_value']:>10.4f} {bh}")
+        print(
+            f"  {row['feature']:<20} {row['instrument']:<5} {row['session']:<16} "
+            f"{row['wr_spread']:>+9.1%} {row['N']:>6.0f} {row['p_value']:>10.4f} {bh}"
+        )
 
     # Print WR monotonicity check for top results
     if n_sig > 0:
@@ -449,8 +457,10 @@ def main():
         for _, row in sig.iterrows():
             # Check if WR is monotonic or just noise
             label = "SIGNAL" if abs(row["wr_spread"]) > 0.03 else "WEAK (<3%)"
-            print(f"    {row['feature']} {row['instrument']} {row['session']}: "
-                  f"spread={row['wr_spread']:+.1%}, p={row['p_value']:.4f} -> {label}")
+            print(
+                f"    {row['feature']} {row['instrument']} {row['session']}: "
+                f"spread={row['wr_spread']:+.1%}, p={row['p_value']:.4f} -> {label}"
+            )
     else:
         print("\n  NO BH-significant results.")
 

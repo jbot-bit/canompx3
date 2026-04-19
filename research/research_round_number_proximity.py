@@ -54,10 +54,10 @@ from pipeline.paths import GOLD_DB_PATH
 # =============================================================================
 
 ROUND_INCREMENTS = {
-    "MGC": 10.0,    # Gold $10 increments (2050, 2060, 2070...)
-    "MNQ": 100.0,   # Nasdaq 100pt increments (17500, 17600...)
-    "MES": 25.0,    # S&P 25pt increments (5000, 5025, 5050...)
-    "M2K": 10.0,    # Russell 10pt increments
+    "MGC": 10.0,  # Gold $10 increments (2050, 2060, 2070...)
+    "MNQ": 100.0,  # Nasdaq 100pt increments (17500, 17600...)
+    "MES": 25.0,  # S&P 25pt increments (5000, 5025, 5050...)
+    "M2K": 10.0,  # Russell 10pt increments
 }
 
 # US sessions = the ones that showed anti-clustering in prior analysis
@@ -65,7 +65,7 @@ US_SESSIONS = {"COMEX_SETTLE", "NYSE_OPEN", "US_DATA_1000", "US_DATA_830", "NYSE
 ASIAN_SESSIONS = {"TOKYO_OPEN", "SINGAPORE_OPEN", "CME_REOPEN", "LONDON_METALS", "EUROPE_FLOW", "BRISBANE_1025"}
 
 # IS/OOS split — define BEFORE seeing results
-IS_END = date(2024, 12, 31)   # In-sample ends 2024
+IS_END = date(2024, 12, 31)  # In-sample ends 2024
 OOS_START = date(2025, 1, 1)  # OOS = 2025+
 
 
@@ -194,8 +194,9 @@ def load_trade_data(instrument: str | None = None) -> pd.DataFrame:
 
     df = con.execute(query, instruments).fetchdf()
     con.close()
-    print(f"Loaded {len(df):,} trades across {df['symbol'].nunique()} instruments, "
-          f"{df['orb_label'].nunique()} sessions")
+    print(
+        f"Loaded {len(df):,} trades across {df['symbol'].nunique()} instruments, {df['orb_label'].nunique()} sessions"
+    )
     return df
 
 
@@ -238,8 +239,7 @@ def run_t0_tautology(df: pd.DataFrame) -> dict:
 # =============================================================================
 
 
-def run_t1_wr_monotonicity(df: pd.DataFrame, feature: str = "distance_to_round_R",
-                            session_regime: str = "ALL") -> dict:
+def run_t1_wr_monotonicity(df: pd.DataFrame, feature: str = "distance_to_round_R", session_regime: str = "ALL") -> dict:
     """Quintile analysis of win rate by round-number proximity."""
     print("\n" + "=" * 60)
     print(f"T1: WIN-RATE MONOTONICITY — {feature} ({session_regime} sessions)")
@@ -281,7 +281,7 @@ def run_t1_wr_monotonicity(df: pd.DataFrame, feature: str = "distance_to_round_R
     if wr_values[0] > wr_values[-1]:
         direction = "INVERSE"  # low distance = high WR (near round = better)
     else:
-        direction = "DIRECT"   # high distance = high WR (far from round = better)
+        direction = "DIRECT"  # high distance = high WR (far from round = better)
 
     if wr_spread < 3.0:
         verdict = "ARITHMETIC_ONLY"
@@ -342,14 +342,15 @@ def run_t1b_crosses_round(df: pd.DataFrame, session_regime: str = "ALL") -> dict
 
     # Quick significance: proportions z-test
     from scipy import stats
+
     n1, n2 = len(crosses), len(no_cross)
     w1 = (crosses["outcome"] == "win").sum()
     w2 = (no_cross["outcome"] == "win").sum()
     if n1 > 0 and n2 > 0:
         p_pooled = (w1 + w2) / (n1 + n2)
-        se = (p_pooled * (1 - p_pooled) * (1/n1 + 1/n2)) ** 0.5
+        se = (p_pooled * (1 - p_pooled) * (1 / n1 + 1 / n2)) ** 0.5
         if se > 0:
-            z_stat = (w1/n1 - w2/n2) / se
+            z_stat = (w1 / n1 - w2 / n2) / se
             p_val = 2 * (1 - stats.norm.cdf(abs(z_stat)))
         else:
             z_stat, p_val = 0, 1.0
@@ -374,8 +375,9 @@ def run_t1b_crosses_round(df: pd.DataFrame, session_regime: str = "ALL") -> dict
 # =============================================================================
 
 
-def run_t2_t3_is_oos(df: pd.DataFrame, feature: str = "distance_to_round_R",
-                      session_regime: str = "ALL", threshold_pct: float = 50.0) -> dict:
+def run_t2_t3_is_oos(
+    df: pd.DataFrame, feature: str = "distance_to_round_R", session_regime: str = "ALL", threshold_pct: float = 50.0
+) -> dict:
     """IS/OOS split test. Threshold = percentile cutoff on feature."""
     print("\n" + "=" * 60)
     print(f"T2/T3: IS/OOS — {feature} ({session_regime} sessions)")
@@ -454,20 +456,26 @@ def run_t5_family(df: pd.DataFrame, feature: str = "distance_to_round_R") -> dic
     print("=" * 60)
 
     results = {}
-    print(f"\n  {'Session':<20} | {'N':>6} | {'WR_Q1':>6} | {'WR_Q5':>6} | {'Spread':>7} | {'ExpR_Q1':>8} | {'ExpR_Q5':>8} | {'Verdict'}")
+    print(
+        f"\n  {'Session':<20} | {'N':>6} | {'WR_Q1':>6} | {'WR_Q5':>6} | {'Spread':>7} | {'ExpR_Q1':>8} | {'ExpR_Q5':>8} | {'Verdict'}"
+    )
     print("  " + "-" * 95)
 
     for session in sorted(df["orb_label"].unique()):
         sdf = df[(df["orb_label"] == session) & df[feature].notna()]
         if len(sdf) < 50:
-            print(f"  {session:<20} | {len(sdf):>6} | {'---':>6} | {'---':>6} | {'---':>7} | {'---':>8} | {'---':>8} | SKIP (N<50)")
+            print(
+                f"  {session:<20} | {len(sdf):>6} | {'---':>6} | {'---':>6} | {'---':>7} | {'---':>8} | {'---':>8} | SKIP (N<50)"
+            )
             continue
 
         sdf = sdf.copy()
         try:
             sdf["quintile"] = pd.qcut(sdf[feature], 5, labels=False, duplicates="drop") + 1
         except ValueError:
-            print(f"  {session:<20} | {len(sdf):>6} | {'---':>6} | {'---':>6} | {'---':>7} | {'---':>8} | {'---':>8} | SKIP (qcut fail)")
+            print(
+                f"  {session:<20} | {len(sdf):>6} | {'---':>6} | {'---':>6} | {'---':>7} | {'---':>8} | {'---':>8} | SKIP (qcut fail)"
+            )
             continue
 
         q1 = sdf[sdf["quintile"] == 1]
@@ -481,10 +489,16 @@ def run_t5_family(df: pd.DataFrame, feature: str = "distance_to_round_R") -> dic
 
         verdict = "SIGNAL" if abs(spread) >= 5 else ("AMBIGUOUS" if abs(spread) >= 3 else "FLAT")
         results[session] = {
-            "n": len(sdf), "wr_q1": round(wr1, 1), "wr_q5": round(wr5, 1),
-            "spread": round(spread, 1), "regime": regime, "verdict": verdict,
+            "n": len(sdf),
+            "wr_q1": round(wr1, 1),
+            "wr_q5": round(wr5, 1),
+            "spread": round(spread, 1),
+            "regime": regime,
+            "verdict": verdict,
         }
-        print(f"  {session:<20} | {len(sdf):>6} | {wr1:>5.1f}% | {wr5:>5.1f}% | {spread:>+6.1f}% | {expr1:>+7.4f} | {expr5:>+7.4f} | {verdict} [{regime}]")
+        print(
+            f"  {session:<20} | {len(sdf):>6} | {wr1:>5.1f}% | {wr5:>5.1f}% | {spread:>+6.1f}% | {expr1:>+7.4f} | {expr5:>+7.4f} | {verdict} [{regime}]"
+        )
 
     signal_count = sum(1 for v in results.values() if v["verdict"] == "SIGNAL")
     total = len(results)
@@ -498,8 +512,9 @@ def run_t5_family(df: pd.DataFrame, feature: str = "distance_to_round_R") -> dic
 # =============================================================================
 
 
-def run_t6_null_floor(df: pd.DataFrame, feature: str = "distance_to_round_R",
-                       session_regime: str = "ALL", n_perms: int = 1000) -> dict:
+def run_t6_null_floor(
+    df: pd.DataFrame, feature: str = "distance_to_round_R", session_regime: str = "ALL", n_perms: int = 1000
+) -> dict:
     """Shuffle pnl_r, compute WR spread each time, compare to observed."""
     print("\n" + "=" * 60)
     print(f"T6: NULL FLOOR — {feature} ({session_regime}, {n_perms} permutations)")
@@ -542,7 +557,7 @@ def run_t6_null_floor(df: pd.DataFrame, feature: str = "distance_to_round_R",
     # Phipson & Smyth correction
     p_val = (exceeding + 1) / (n_perms + 1)
 
-    print(f"  Observed WR spread (Q1-Q5): {observed_spread*100:+.2f}%")
+    print(f"  Observed WR spread (Q1-Q5): {observed_spread * 100:+.2f}%")
     print(f"  Null P95 exceeded: {exceeding}/{n_perms}")
     print(f"  p-value: {p_val:.4f}")
 
@@ -563,8 +578,7 @@ def run_t6_null_floor(df: pd.DataFrame, feature: str = "distance_to_round_R",
 # =============================================================================
 
 
-def run_t7_per_year(df: pd.DataFrame, feature: str = "distance_to_round_R",
-                     session_regime: str = "ALL") -> dict:
+def run_t7_per_year(df: pd.DataFrame, feature: str = "distance_to_round_R", session_regime: str = "ALL") -> dict:
     """Check Q1 vs Q5 WR spread per year. Must be same direction in >=7/10 years."""
     print("\n" + "=" * 60)
     print(f"T7: PER-YEAR STABILITY — {feature} ({session_regime} sessions)")
@@ -616,7 +630,9 @@ def run_t7_per_year(df: pd.DataFrame, feature: str = "distance_to_round_R",
         if year_consistent:
             consistent_years += 1
 
-        print(f"  {year:>6} | {len(ydf):>6} | {wr1:>5.1f}% | {wr5:>5.1f}% | {spread:>+6.1f}% | {'✓' if year_consistent else '✗'}")
+        print(
+            f"  {year:>6} | {len(ydf):>6} | {wr1:>5.1f}% | {wr5:>5.1f}% | {spread:>+6.1f}% | {'✓' if year_consistent else '✗'}"
+        )
 
     print(f"\n  Consistent: {consistent_years}/{total_years} years")
     verdict = "STABLE" if total_years > 0 and consistent_years / total_years >= 0.7 else "ERA_DEPENDENT"
@@ -634,8 +650,9 @@ def run_t7_per_year(df: pd.DataFrame, feature: str = "distance_to_round_R",
 # =============================================================================
 
 
-def run_t8_cross_instrument(df: pd.DataFrame, feature: str = "distance_to_round_R",
-                             session_regime: str = "ALL") -> dict:
+def run_t8_cross_instrument(
+    df: pd.DataFrame, feature: str = "distance_to_round_R", session_regime: str = "ALL"
+) -> dict:
     """Same direction on all active instruments?"""
     print("\n" + "=" * 60)
     print(f"T8: CROSS-INSTRUMENT — {feature} ({session_regime} sessions)")
@@ -723,8 +740,10 @@ def main():
     for col in ["distance_to_round_pts", "distance_to_round_R"]:
         if col in df.columns:
             vals = df[col].dropna()
-            print(f"    {col}: mean={vals.mean():.4f}, median={vals.median():.4f}, "
-                  f"std={vals.std():.4f}, min={vals.min():.4f}, max={vals.max():.4f}")
+            print(
+                f"    {col}: mean={vals.mean():.4f}, median={vals.median():.4f}, "
+                f"std={vals.std():.4f}, min={vals.min():.4f}, max={vals.max():.4f}"
+            )
     if "crosses_round" in df.columns:
         cross_pct = df["crosses_round"].mean() * 100
         print(f"    crosses_round: {cross_pct:.1f}% of trades straddle a round number")

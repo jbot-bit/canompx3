@@ -31,7 +31,7 @@ logger = get_logger(__name__)
 
 OUTPUT_DIR = Path(__file__).parent / "output"
 OUTPUT_CSV = OUTPUT_DIR / "time_exit_results.csv"
-OUTPUT_MD  = OUTPUT_DIR / "time_exit_summary.md"
+OUTPUT_MD = OUTPUT_DIR / "time_exit_summary.md"
 
 # Minimum N required in the past-T80 group to report a finding
 MIN_N_AFTER = 30
@@ -79,57 +79,59 @@ def analyze_time_exit(outcomes: pd.DataFrame, t80_df: pd.DataFrame) -> pd.DataFr
     rows = []
 
     for _, t80_row in t80_df.iterrows():
-        sym     = t80_row["symbol"]
-        sess    = t80_row["session"]
-        rr      = t80_row["rr_target"]
-        cb      = t80_row["confirm_bars"]
+        sym = t80_row["symbol"]
+        sess = t80_row["session"]
+        rr = t80_row["rr_target"]
+        cb = t80_row["confirm_bars"]
         t80_val = t80_row["t80"]
 
         if pd.isna(t80_val) or t80_val <= 0:
             continue
 
         grp = outcomes[
-            (outcomes["symbol"]       == sym)  &
-            (outcomes["session"]      == sess) &
-            (outcomes["rr_target"]    == rr)   &
-            (outcomes["confirm_bars"] == cb)
+            (outcomes["symbol"] == sym)
+            & (outcomes["session"] == sess)
+            & (outcomes["rr_target"] == rr)
+            & (outcomes["confirm_bars"] == cb)
         ]
 
         if grp.empty:
             continue
 
         before = grp[grp["minutes_to_exit"] <= t80_val]
-        after  = grp[grp["minutes_to_exit"] >  t80_val]
+        after = grp[grp["minutes_to_exit"] > t80_val]
 
         n_before = len(before)
-        n_after  = len(after)
+        n_after = len(after)
 
         if n_after < MIN_N_AFTER:
             continue
 
         avg_r_before = before["pnl_r"].mean()
-        avg_r_after  = after["pnl_r"].mean()
-        wr_before    = (before["outcome"] == "win").mean() if n_before > 0 else float("nan")
-        wr_after     = (after["outcome"]  == "win").mean()
+        avg_r_after = after["pnl_r"].mean()
+        wr_before = (before["outcome"] == "win").mean() if n_before > 0 else float("nan")
+        wr_after = (after["outcome"] == "win").mean()
 
         # One-sample t-test: is avg_r_after significantly different from 0?
         t_stat, p_val = scipy_stats.ttest_1samp(after["pnl_r"].dropna(), 0.0)
 
-        rows.append({
-            "symbol":        sym,
-            "session":       sess,
-            "rr_target":     rr,
-            "confirm_bars":  cb,
-            "t80_minutes":   t80_val,
-            "n_before":      n_before,
-            "n_after":       n_after,
-            "avg_r_before":  round(avg_r_before, 4),
-            "avg_r_after":   round(avg_r_after,  4),
-            "wr_before":     round(wr_before,     4),
-            "wr_after":      round(wr_after,       4),
-            "t_stat":        round(t_stat, 4),
-            "p_val":         round(p_val, 6),
-        })
+        rows.append(
+            {
+                "symbol": sym,
+                "session": sess,
+                "rr_target": rr,
+                "confirm_bars": cb,
+                "t80_minutes": t80_val,
+                "n_before": n_before,
+                "n_after": n_after,
+                "avg_r_before": round(avg_r_before, 4),
+                "avg_r_after": round(avg_r_after, 4),
+                "wr_before": round(wr_before, 4),
+                "wr_after": round(wr_after, 4),
+                "t_stat": round(t_stat, 4),
+                "p_val": round(p_val, 6),
+            }
+        )
 
     if not rows:
         return pd.DataFrame()
@@ -152,6 +154,7 @@ def analyze_time_exit(outcomes: pd.DataFrame, t80_df: pd.DataFrame) -> pd.DataFr
             return "DIRECTIONAL (not significant)"
         else:
             return "NO-BENEFIT (avg_r_after >= 0)"
+
     result["verdict"] = result.apply(verdict, axis=1)
 
     return result.sort_values(["symbol", "session", "rr_target", "confirm_bars"])
@@ -159,8 +162,8 @@ def analyze_time_exit(outcomes: pd.DataFrame, t80_df: pd.DataFrame) -> pd.DataFr
 
 def write_summary(result: pd.DataFrame, t80_df: pd.DataFrame) -> None:
     """Write markdown summary."""
-    survivors   = result[result["verdict"].str.startswith("SURVIVES")]
-    notable     = result[result["verdict"].str.startswith("NOTABLE")]
+    survivors = result[result["verdict"].str.startswith("SURVIVES")]
+    notable = result[result["verdict"].str.startswith("NOTABLE")]
     directional = result[result["verdict"].str.startswith("DIRECTIONAL")]
 
     lines = [
@@ -253,9 +256,7 @@ def main():
     parser.add_argument("--db-path", type=str, default=None, help="Path to gold.db")
     args = parser.parse_args()
 
-    db_path = Path(args.db_path) if args.db_path else Path(
-        os.environ.get("DUCKDB_PATH", str(GOLD_DB_PATH))
-    )
+    db_path = Path(args.db_path) if args.db_path else Path(os.environ.get("DUCKDB_PATH", str(GOLD_DB_PATH)))
 
     winner_speed_csv = OUTPUT_DIR / "winner_speed_summary.csv"
     if not winner_speed_csv.exists():

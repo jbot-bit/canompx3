@@ -31,6 +31,7 @@ from trading_app.validated_shelf import deployable_validated_relation
 
 FORWARD_START = date(2026, 1, 1)
 
+
 def _load_reference_stats() -> dict[str, dict]:
     """Load per-strategy reference stats from validated_setups.
 

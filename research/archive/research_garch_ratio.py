@@ -9,6 +9,7 @@ BH FDR correction across all tests.
 """
 
 import sys, os
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import duckdb
@@ -30,17 +31,17 @@ def bh_fdr(pvals, q=0.10):
     adjusted[sorted_idx[-1]] = sorted_p[-1]
     for i in range(n - 2, -1, -1):
         rank = np.where(sorted_idx == sorted_idx[i])[0][0] + 1
-        adjusted[sorted_idx[i]] = min(
-            sorted_p[i] * n / rank,
-            adjusted[sorted_idx[i + 1]] if i + 1 < n else 1.0
-        )
+        adjusted[sorted_idx[i]] = min(sorted_p[i] * n / rank, adjusted[sorted_idx[i + 1]] if i + 1 < n else 1.0)
     return np.clip(adjusted, 0, 1).tolist()
 
 
 def size_label(n):
-    if n >= 200: return "CORE"
-    if n >= 100: return "PRELIMINARY"
-    if n >= 30: return "REGIME"
+    if n >= 200:
+        return "CORE"
+    if n >= 100:
+        return "PRELIMINARY"
+    if n >= 30:
+        return "REGIME"
     return "INVALID"
 
 
@@ -58,7 +59,8 @@ def run():
 
     for em in ["E0", "E1"]:
         for rr in [1.0, 1.5, 2.0]:
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT d.garch_atr_ratio, o.pnl_r,
                        EXTRACT(YEAR FROM o.trading_day) as yr
                 FROM orb_outcomes o
@@ -73,7 +75,9 @@ def run():
                   AND d.garch_atr_ratio IS NOT NULL
                   AND d.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
-            """, [em, rr]).fetchall()
+            """,
+                [em, rr],
+            ).fetchall()
 
             if not rows:
                 lines.append(f"  MNQ 0900 {em} RR{rr}: NO DATA")
@@ -95,8 +99,10 @@ def run():
             lines.append(f"  MNQ 0900 {em} RR{rr}:")
             lines.append(f"    GARCH<0.58: N={len(below):>4}, avgR={avg_b:+.3f}, WR={wr_b:.1%}")
             lines.append(f"    GARCH>=0.58: N={len(above):>4}, avgR={avg_a:+.3f}, WR={wr_a:.1%}")
-            lines.append(f"    Delta: {avg_b - avg_a:+.3f}R, WR delta: {(wr_b - wr_a)*100:+.1f}pp, "
-                         f"p={p:.4f}, {size_label(len(below))}")
+            lines.append(
+                f"    Delta: {avg_b - avg_a:+.3f}R, WR delta: {(wr_b - wr_a) * 100:+.1f}pp, "
+                f"p={p:.4f}, {size_label(len(below))}"
+            )
             lines.append("")
 
     # ── Cross-instrument x session ──────────────────────────────
@@ -109,7 +115,8 @@ def run():
     for sym in ["MGC", "MES", "MNQ"]:
         for sess in ["0900", "1000", "1800"]:
             for em in ["E0", "E1"]:
-                rows = con.execute(f"""
+                rows = con.execute(
+                    f"""
                     SELECT d.garch_atr_ratio, o.pnl_r
                     FROM orb_outcomes o
                     JOIN daily_features d
@@ -123,7 +130,9 @@ def run():
                       AND d.garch_atr_ratio IS NOT NULL
                       AND d.orb_minutes = 5
                       AND o.pnl_r IS NOT NULL
-                """, [sym, sess, em]).fetchall()
+                """,
+                    [sym, sess, em],
+                ).fetchall()
 
                 if not rows:
                     continue
@@ -146,8 +155,10 @@ def run():
                 lines.append(f"  {label}:")
                 lines.append(f"    GARCH<0.58: N={len(below):>4}, avgR={avg_b:+.3f}, WR={wr_b:.1%}")
                 lines.append(f"    GARCH>=0.58: N={len(above):>4}, avgR={avg_a:+.3f}, WR={wr_a:.1%}")
-                lines.append(f"    Delta: {avg_b - avg_a:+.3f}R, WR_delta: {(wr_b - wr_a)*100:+.1f}pp, "
-                             f"p={p:.4f}, {size_label(len(below))}")
+                lines.append(
+                    f"    Delta: {avg_b - avg_a:+.3f}R, WR_delta: {(wr_b - wr_a) * 100:+.1f}pp, "
+                    f"p={p:.4f}, {size_label(len(below))}"
+                )
                 lines.append("")
 
     # ── Threshold sensitivity ───────────────────────────────────
@@ -156,7 +167,8 @@ def run():
     lines.append("=" * 70 + "\n")
 
     for em in ["E0", "E1"]:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT d.garch_atr_ratio, o.pnl_r
             FROM orb_outcomes o
             JOIN daily_features d
@@ -170,7 +182,9 @@ def run():
               AND d.garch_atr_ratio IS NOT NULL
               AND d.orb_minutes = 5
               AND o.pnl_r IS NOT NULL
-        """, [em]).fetchall()
+        """,
+            [em],
+        ).fetchall()
 
         if not rows:
             continue
@@ -185,9 +199,11 @@ def run():
                 wr_b = np.mean([1 if x > 0 else 0 for x in below])
                 wr_a = np.mean([1 if x > 0 else 0 for x in above])
                 _, p = stats.ttest_ind(below, above, equal_var=False)
-                lines.append(f"    <{thresh:.2f}: N={len(below):>4}, avgR={avg_b:+.3f}, WR={wr_b:.1%} | "
-                             f">={thresh:.2f}: N={len(above):>4}, avgR={avg_a:+.3f}, WR={wr_a:.1%} | "
-                             f"delta={avg_b - avg_a:+.3f}, p={p:.4f}")
+                lines.append(
+                    f"    <{thresh:.2f}: N={len(below):>4}, avgR={avg_b:+.3f}, WR={wr_b:.1%} | "
+                    f">={thresh:.2f}: N={len(above):>4}, avgR={avg_a:+.3f}, WR={wr_a:.1%} | "
+                    f"delta={avg_b - avg_a:+.3f}, p={p:.4f}"
+                )
         lines.append("")
 
     # ── Year-by-year for MNQ 0900 ──────────────────────────────
@@ -197,7 +213,8 @@ def run():
 
     for em in ["E0", "E1"]:
         for rr in [1.0, 2.0]:
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT d.garch_atr_ratio, o.pnl_r,
                        EXTRACT(YEAR FROM o.trading_day) as yr
                 FROM orb_outcomes o
@@ -212,7 +229,9 @@ def run():
                   AND d.garch_atr_ratio IS NOT NULL
                   AND d.orb_minutes = 5
                   AND o.pnl_r IS NOT NULL
-            """, [em, rr]).fetchall()
+            """,
+                [em, rr],
+            ).fetchall()
 
             below = [(r[1], int(r[2])) for r in rows if r[0] < 0.58]
             if len(below) < 5:
@@ -227,7 +246,8 @@ def run():
                     avg = np.mean(yr_data)
                     wr = np.mean([1 if x > 0 else 0 for x in yr_data])
                     sign = "[+]" if avg > 0 else "[-]"
-                    if avg > 0: yrs_pos += 1
+                    if avg > 0:
+                        yrs_pos += 1
                     lines.append(f"    {yr}: N={len(yr_data):>4}, avgR={avg:+.3f}, WR={wr:.1%} {sign}")
             lines.append(f"    Years positive: {yrs_pos}/{len(years)}")
             lines.append("")
@@ -238,7 +258,8 @@ def run():
     lines.append("=" * 70 + "\n")
 
     for sym in ["MGC", "MES", "MNQ"]:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT d.garch_atr_ratio, d.atr_vel_regime, o.pnl_r
             FROM orb_outcomes o
             JOIN daily_features d
@@ -253,7 +274,9 @@ def run():
               AND d.atr_vel_regime IS NOT NULL
               AND d.orb_minutes = 5
               AND o.pnl_r IS NOT NULL
-        """, [sym]).fetchall()
+        """,
+            [sym],
+        ).fetchall()
 
         if not rows:
             continue
@@ -269,20 +292,22 @@ def run():
                 if len(subset) >= 5:
                     avg = np.mean(subset)
                     wr = np.mean([1 if x > 0 else 0 for x in subset])
-                    lines.append(f"    {vel:>12} x {garch_bin:>12}: N={len(subset):>4}, "
-                                 f"avgR={avg:+.3f}, WR={wr:.1%}")
+                    lines.append(f"    {vel:>12} x {garch_bin:>12}: N={len(subset):>4}, avgR={avg:+.3f}, WR={wr:.1%}")
         lines.append("")
 
     # ── Correlation between GARCH ratio and ATR vel ─────────────
     lines.append("  CORRELATION: garch_atr_ratio vs atr_vel_ratio:")
     for sym in ["MGC", "MES", "MNQ"]:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT garch_atr_ratio, atr_vel_ratio
             FROM daily_features
             WHERE symbol = ? AND orb_minutes = 5
               AND garch_atr_ratio IS NOT NULL
               AND atr_vel_ratio IS NOT NULL
-        """, [sym]).fetchall()
+        """,
+            [sym],
+        ).fetchall()
         if len(rows) >= 10:
             r, p = stats.pearsonr([r[0] for r in rows], [r[1] for r in rows])
             lines.append(f"    {sym}: r={r:.3f}, p={p:.4f}, N={len(rows)}")
@@ -304,8 +329,9 @@ def run():
         lines.append(f"  BH survivors (q=0.10): {len(survivors)}")
         for (label, raw_p, n, avg_b, avg_a, delta, wr_b, wr_a), adj_p in survivors:
             direction = "LOW GARCH HELPS" if delta > 0 else "LOW GARCH HURTS"
-            lines.append(f"    {label}: raw_p={raw_p:.4f}, p_bh={adj_p:.4f}, "
-                         f"N_below={n}, delta={delta:+.3f}R, {direction}")
+            lines.append(
+                f"    {label}: raw_p={raw_p:.4f}, p_bh={adj_p:.4f}, N_below={n}, delta={delta:+.3f}R, {direction}"
+            )
     lines.append("")
 
     # ── Verdict ─────────────────────────────────────────────────

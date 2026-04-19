@@ -68,6 +68,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── Statistical helpers ───────────────────────────────────────────────────────
 
+
 def ttest_1s(arr, mu=0.0):
     a = np.array(arr, dtype=float)
     a = a[~np.isnan(a)]
@@ -108,8 +109,7 @@ def fmt_row(label, n, avg_r, wr, t, p, sig=""):
     if np.isnan(avg_r):
         return f"  {label:<32} {'N<10':>5}  (skip)"
     s = "***" if sig else "   "
-    return (f"  {label:<32} N={n:>4}  avgR={avg_r:>+7.3f}  "
-            f"WR={wr:>5.1%}  t={t:>6.2f}  p={p:>7.4f}  {s}")
+    return f"  {label:<32} N={n:>4}  avgR={avg_r:>+7.3f}  WR={wr:>5.1%}  t={t:>6.2f}  p={p:>7.4f}  {s}"
 
 
 # ── Load data ─────────────────────────────────────────────────────────────────
@@ -245,7 +245,7 @@ def load(rr: float, cb: int, model: str) -> pd.DataFrame:
     # Fix: inject WHERE before ORDER BY
     sql = BASE_SQL.replace(
         "ORDER BY f.trading_day",
-        f"WHERE o.rr_target = {rr} AND o.confirm_bars = {cb} AND o.entry_model = '{model}'\nORDER BY f.trading_day"
+        f"WHERE o.rr_target = {rr} AND o.confirm_bars = {cb} AND o.entry_model = '{model}'\nORDER BY f.trading_day",
     )
     df = con.execute(sql).df()
     con.close()
@@ -253,6 +253,7 @@ def load(rr: float, cb: int, model: str) -> pd.DataFrame:
 
 
 # ── Analysis ──────────────────────────────────────────────────────────────────
+
 
 def analyse(df: pd.DataFrame, label: str) -> list[dict]:
     """
@@ -284,8 +285,11 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
         df[df["atr_vel_regime"] == "Contracting"]["pnl_r"],
     )
     print(f"  Expanding vs Contracting: t={t_exp_con:.2f}, p={p_exp_con:.4f}")
-    records.append(dict(layer="L1_exp_vs_con", group="vs", n=N_total, avg_r=float("nan"),
-                        wr=float("nan"), t=t_exp_con, p=p_exp_con))
+    records.append(
+        dict(
+            layer="L1_exp_vs_con", group="vs", n=N_total, avg_r=float("nan"), wr=float("nan"), t=t_exp_con, p=p_exp_con
+        )
+    )
 
     # ── L2: ORB Compression alone ─────────────────────────────────────────────
     print(f"\n{sep}")
@@ -300,11 +304,12 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
 
     # Monotonicity check: Compressed > Neutral > Expanded?
     comp_r = df[df["compression_tier"] == "Compressed"]["pnl_r"]
-    exp_r  = df[df["compression_tier"] == "Expanded"]["pnl_r"]
+    exp_r = df[df["compression_tier"] == "Expanded"]["pnl_r"]
     t_cv, p_cv = ttest_2s(comp_r, exp_r)
     print(f"  Compressed vs Expanded: t={t_cv:.2f}, p={p_cv:.4f}")
-    records.append(dict(layer="L2_comp_vs_exp", group="vs", n=N_total, avg_r=float("nan"),
-                        wr=float("nan"), t=t_cv, p=p_cv))
+    records.append(
+        dict(layer="L2_comp_vs_exp", group="vs", n=N_total, avg_r=float("nan"), wr=float("nan"), t=t_cv, p=p_cv)
+    )
 
     # ── L3: Gap Alignment alone ───────────────────────────────────────────────
     print(f"\n{sep}")
@@ -322,8 +327,17 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
         df[df["gap_alignment"] == "Counter"]["pnl_r"],
     )
     print(f"  Aligned vs Counter: t={t_align_vs_counter:.2f}, p={p_align_vs_counter:.4f}")
-    records.append(dict(layer="L3_aligned_vs_counter", group="vs", n=N_total, avg_r=float("nan"),
-                        wr=float("nan"), t=t_align_vs_counter, p=p_align_vs_counter))
+    records.append(
+        dict(
+            layer="L3_aligned_vs_counter",
+            group="vs",
+            n=N_total,
+            avg_r=float("nan"),
+            wr=float("nan"),
+            t=t_align_vs_counter,
+            p=p_align_vs_counter,
+        )
+    )
 
     # ── L4: ATR Velocity × Compression ───────────────────────────────────────
     print(f"\n{sep}")
@@ -331,13 +345,10 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
     print(sep)
     for vel in ["Expanding", "Stable", "Contracting"]:
         for comp in ["Compressed", "Neutral", "Expanded"]:
-            sub = df[
-                (df["atr_vel_regime"] == vel) & (df["compression_tier"] == comp)
-            ]["pnl_r"]
+            sub = df[(df["atr_vel_regime"] == vel) & (df["compression_tier"] == comp)]["pnl_r"]
             n, avg, wr, t, p = ttest_1s(sub)
             lbl = f"L4_{vel[:3]}×{comp[:4]}"
-            records.append(dict(layer="L4_vel_x_comp", group=f"{vel}×{comp}",
-                                n=n, avg_r=avg, wr=wr, t=t, p=p))
+            records.append(dict(layer="L4_vel_x_comp", group=f"{vel}×{comp}", n=n, avg_r=avg, wr=wr, t=t, p=p))
             print(fmt_row(lbl, n, avg, wr, t, p))
 
     # ── L5: "The Compressed Spring" — all three signals ───────────────────────
@@ -346,14 +357,14 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
     print(sep)
 
     spring_mask = (
-        (df["atr_vel_regime"]   == "Expanding")
+        (df["atr_vel_regime"] == "Expanding")
         & (df["compression_tier"] == "Compressed")
-        & (df["gap_alignment"]    == "Aligned")
+        & (df["gap_alignment"] == "Aligned")
     )
     rest_mask = ~spring_mask & df["pnl_r"].notna()
 
     spring = df[spring_mask]["pnl_r"]
-    rest   = df[rest_mask]["pnl_r"]
+    rest = df[rest_mask]["pnl_r"]
 
     n_sp, avg_sp, wr_sp, t_sp, p_sp = ttest_1s(spring)
     n_re, avg_re, wr_re, t_re, p_re = ttest_1s(rest)
@@ -361,11 +372,20 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
 
     records.append(dict(layer="L5_spring", group="Spring", n=n_sp, avg_r=avg_sp, wr=wr_sp, t=t_sp, p=p_sp))
     records.append(dict(layer="L5_rest", group="Rest", n=n_re, avg_r=avg_re, wr=wr_re, t=t_re, p=p_re))
-    records.append(dict(layer="L5_spring_vs_rest", group="vs", n=n_sp+n_re,
-                        avg_r=float("nan"), wr=float("nan"), t=t_diff, p=p_diff))
+    records.append(
+        dict(
+            layer="L5_spring_vs_rest",
+            group="vs",
+            n=n_sp + n_re,
+            avg_r=float("nan"),
+            wr=float("nan"),
+            t=t_diff,
+            p=p_diff,
+        )
+    )
 
     print(fmt_row("Compressed Spring", n_sp, avg_sp, wr_sp, t_sp, p_sp))
-    print(fmt_row("Rest of days",      n_re, avg_re, wr_re, t_re, p_re))
+    print(fmt_row("Rest of days", n_re, avg_re, wr_re, t_re, p_re))
     print(f"  Spring vs Rest: t={t_diff:.2f}, p={p_diff:.4f}")
 
     # Partial combos (2-way interactions, to see which signal adds most)
@@ -392,9 +412,9 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
         yr_df = df[df["year"] == yr].reset_index(drop=True)
         # Recompute mask on the subset to avoid index alignment bugs
         yr_spring = (
-            (yr_df["atr_vel_regime"]   == "Expanding")
+            (yr_df["atr_vel_regime"] == "Expanding")
             & (yr_df["compression_tier"] == "Compressed")
-            & (yr_df["gap_alignment"]    == "Aligned")
+            & (yr_df["gap_alignment"] == "Aligned")
         )
         sp = yr_df[yr_spring]["pnl_r"]
         ba = yr_df[~yr_spring]["pnl_r"]
@@ -406,8 +426,7 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
         if avg_s > 0:
             spring_positive += 1
         marker = " +" if avg_s > 0 else " -"
-        print(f"  {int(yr):<6} avgR={avg_s:>+6.3f}  N={n_s:>3} {marker}    "
-              f"base={avg_b:>+6.3f}  N={n_b:>4}")
+        print(f"  {int(yr):<6} avgR={avg_s:>+6.3f}  N={n_s:>3} {marker}    base={avg_b:>+6.3f}  N={n_b:>4}")
     pct = spring_positive / valid_spring_years if valid_spring_years else 0
     print(f"  Spring positive years: {spring_positive}/{valid_spring_years} ({pct:.0%})")
 
@@ -420,12 +439,11 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
         sub_mask = (
             (df["atr_vel_ratio"] > vel_thresh)
             & (df["compression_tier"] == "Compressed")
-            & (df["gap_alignment"]    == "Aligned")
+            & (df["gap_alignment"] == "Aligned")
         )
         sub = df[sub_mask]["pnl_r"]
         n, avg, wr, t, p = ttest_1s(sub)
-        records.append(dict(layer="L7_sensitivity", group=f"vel>{vel_thresh}", n=n,
-                            avg_r=avg, wr=wr, t=t, p=p))
+        records.append(dict(layer="L7_sensitivity", group=f"vel>{vel_thresh}", n=n, avg_r=avg, wr=wr, t=t, p=p))
         print(fmt_row(f"vel>{vel_thresh}", n, avg, wr, t, p))
 
     # ── L8: Year-by-year — Contracting × Neutral AVOID signal ────────────────
@@ -438,10 +456,7 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
     valid_avoid_years = 0
     for yr in years:
         yr_df = df[df["year"] == yr].reset_index(drop=True)
-        yr_avoid = (
-            (yr_df["atr_vel_regime"]   == "Contracting")
-            & (yr_df["compression_tier"] == "Neutral")
-        )
+        yr_avoid = (yr_df["atr_vel_regime"] == "Contracting") & (yr_df["compression_tier"] == "Neutral")
         av = yr_df[yr_avoid]["pnl_r"]
         ot = yr_df[~yr_avoid]["pnl_r"]
         if len(av) < 3:
@@ -452,8 +467,7 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
         if avg_a < 0:
             avoid_negative += 1
         marker = " -" if avg_a < 0 else " +"
-        print(f"  {int(yr):<6} avgR={avg_a:>+6.3f}  N={n_a:>3} {marker}    "
-              f"other={avg_o:>+6.3f}  N={n_o:>4}")
+        print(f"  {int(yr):<6} avgR={avg_a:>+6.3f}  N={n_a:>3} {marker}    other={avg_o:>+6.3f}  N={n_o:>4}")
     pct_neg = avoid_negative / valid_avoid_years if valid_avoid_years else 0
     print(f"  Avoid signal negative years: {avoid_negative}/{valid_avoid_years} ({pct_neg:.0%})")
 
@@ -463,14 +477,10 @@ def analyse(df: pd.DataFrame, label: str) -> list[dict]:
     print(sep)
     print("  (Null hypothesis: avgR=0.0, testing if AVOID is robust to threshold changes)")
     for vel_upper in [0.92, 0.93, 0.95, 0.97, 0.98]:
-        sub_mask = (
-            (df["atr_vel_ratio"] < vel_upper)
-            & (df["compression_tier"] == "Neutral")
-        )
+        sub_mask = (df["atr_vel_ratio"] < vel_upper) & (df["compression_tier"] == "Neutral")
         sub = df[sub_mask]["pnl_r"]
         n, avg, wr, t, p = ttest_1s(sub)
-        records.append(dict(layer="L9_avoid_sensitivity", group=f"vel<{vel_upper}", n=n,
-                            avg_r=avg, wr=wr, t=t, p=p))
+        records.append(dict(layer="L9_avoid_sensitivity", group=f"vel<{vel_upper}", n=n, avg_r=avg, wr=wr, t=t, p=p))
         print(fmt_row(f"Contracting(vel<{vel_upper})×Neutral", n, avg, wr, t, p))
 
     return records
@@ -492,8 +502,7 @@ def print_bh_summary(records: list[dict], label: str):
             star = "*** BH-SIG ***" if sig else ""
             avg_s = f"{r['avg_r']:+.3f}" if not np.isnan(r["avg_r"]) else "   —"
             wr_s = f"{r['wr']:.1%}" if not np.isnan(r["wr"]) else "  —"
-            print(f"  [{r['layer']}] {r['group']:<20}  N={r['n']:>4}  "
-                  f"avgR={avg_s}  WR={wr_s}  p={r['p']:.4f}  {star}")
+            print(f"  [{r['layer']}] {r['group']:<20}  N={r['n']:>4}  avgR={avg_s}  WR={wr_s}  p={r['p']:.4f}  {star}")
             if sig:
                 survivors.append(r)
 
@@ -525,8 +534,9 @@ def honest_summary(survivors: list[dict], label: str):
     else:
         print(f"\nSURVIVED BH FDR: {len(survivors)} test(s)")
         for r in survivors:
-            print(f"  [{r['layer']}] {r['group']}: N={r['n']}, avgR={r['avg_r']:+.3f}, "
-                  f"WR={r['wr']:.1%}, p={r['p']:.4f}")
+            print(
+                f"  [{r['layer']}] {r['group']}: N={r['n']}, avgR={r['avg_r']:+.3f}, WR={r['wr']:.1%}, p={r['p']:.4f}"
+            )
         print()
         print("CAVEATS:")
         print("  - All signals are pre-entry (no look-ahead confirmed)")
@@ -555,9 +565,9 @@ def run():
 
     # ── PRIMARY: E0 / CB1 / RR3.0 ────────────────────────────────────────────
     primary_label = "E0 / CB1 / RR3.0 (primary — highest validated config)"
-    print(f"\n{'─'*68}")
+    print(f"\n{'─' * 68}")
     print(f"PRIMARY: {primary_label}")
-    print(f"{'─'*68}")
+    print(f"{'─' * 68}")
 
     df_primary = load(rr=3.0, cb=1, model="E0")
     if df_primary.empty:
@@ -567,30 +577,28 @@ def run():
         print(f"  Date range: {df_primary['trading_day'].min()} → {df_primary['trading_day'].max()}")
         print(f"  ATR velocity null (warm-up): {df_primary['atr_vel_regime'].isna().sum()} rows")
         print(f"  Compression null (warm-up):  {df_primary['compression_tier'].isna().sum()} rows")
-        print(f"  Gap Aligned:  {(df_primary['gap_alignment']=='Aligned').sum()}")
-        print(f"  Gap Counter:  {(df_primary['gap_alignment']=='Counter').sum()}")
-        print(f"  Gap Neutral:  {(df_primary['gap_alignment']=='Neutral').sum()}")
+        print(f"  Gap Aligned:  {(df_primary['gap_alignment'] == 'Aligned').sum()}")
+        print(f"  Gap Counter:  {(df_primary['gap_alignment'] == 'Counter').sum()}")
+        print(f"  Gap Neutral:  {(df_primary['gap_alignment'] == 'Neutral').sum()}")
 
         # Distribution of ATR regimes
         print(f"\n  ATR Velocity distribution:")
         for r in ["Expanding", "Stable", "Contracting"]:
             n = (df_primary["atr_vel_regime"] == r).sum()
-            print(f"    {r:<13}: {n:>4} ({n/len(df_primary):.0%})")
+            print(f"    {r:<13}: {n:>4} ({n / len(df_primary):.0%})")
 
         records_primary = analyse(df_primary, primary_label)
         survivors_primary = print_bh_summary(records_primary, primary_label)
         honest_summary(survivors_primary, primary_label)
 
         # Save primary records
-        pd.DataFrame(records_primary).to_csv(
-            OUTPUT_DIR / "compressed_spring_primary.csv", index=False
-        )
+        pd.DataFrame(records_primary).to_csv(OUTPUT_DIR / "compressed_spring_primary.csv", index=False)
 
     # ── CROSS-CHECK: E1 / CB2 / RR2.5 ────────────────────────────────────────
     cross_label = "E1 / CB2 / RR2.5 (cross-check — larger sample)"
-    print(f"\n\n{'─'*68}")
+    print(f"\n\n{'─' * 68}")
     print(f"CROSS-CHECK: {cross_label}")
-    print(f"{'─'*68}")
+    print(f"{'─' * 68}")
 
     df_cross = load(rr=2.5, cb=2, model="E1")
     if df_cross.empty:
@@ -601,9 +609,7 @@ def run():
         survivors_cross = print_bh_summary(records_cross, cross_label)
         honest_summary(survivors_cross, cross_label)
 
-        pd.DataFrame(records_cross).to_csv(
-            OUTPUT_DIR / "compressed_spring_crosscheck.csv", index=False
-        )
+        pd.DataFrame(records_cross).to_csv(OUTPUT_DIR / "compressed_spring_crosscheck.csv", index=False)
 
     print(f"\nOutput saved to: {OUTPUT_DIR}/compressed_spring_*.csv")
     print()

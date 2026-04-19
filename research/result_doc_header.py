@@ -83,21 +83,15 @@ def build_header(
     required = ["title", "slug", "status", "reproducibility"]
     missing = [k for k in required if k not in cfg]
     if missing:
-        raise ValueError(
-            f"pre-reg {prereg_path} missing required top-level keys: {missing}"
-        )
+        raise ValueError(f"pre-reg {prereg_path} missing required top-level keys: {missing}")
     if cfg["status"] != "LOCKED":
         raise ValueError(
-            f"pre-reg {prereg_path} has status={cfg['status']!r}; result-doc "
-            f"header build requires status=LOCKED."
+            f"pre-reg {prereg_path} has status={cfg['status']!r}; result-doc header build requires status=LOCKED."
         )
     repro = cfg.get("reproducibility") or {}
     commit_sha = repro.get("commit_sha")
     if not commit_sha or commit_sha == "TO_FILL_AFTER_COMMIT":
-        raise ValueError(
-            f"pre-reg {prereg_path} has no commit_sha stamped; cannot emit "
-            f"canonical provenance header."
-        )
+        raise ValueError(f"pre-reg {prereg_path} has no commit_sha stamped; cannot emit canonical provenance header.")
     k_mismatch_banner: str | None = None
     if observed_cell_count is not None:
         declared_k = (cfg.get("primary_schema") or {}).get("k_family")
@@ -109,8 +103,10 @@ def build_header(
                 f"an explicit erratum block explaining the arithmetic."
             )
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    prereg_rel = prereg_path if not Path(prereg_path).is_absolute() else (
-        str(Path(prereg_path).resolve().relative_to(_REPO_ROOT)).replace("\\", "/")
+    prereg_rel = (
+        prereg_path
+        if not Path(prereg_path).is_absolute()
+        else (str(Path(prereg_path).resolve().relative_to(_REPO_ROOT)).replace("\\", "/"))
     )
     lines: list[str] = [
         f"# {cfg['title']}",
@@ -131,6 +127,7 @@ def build_header(
 def main() -> int:
     """Smoke-test when run directly: emits a header for the MES K=40 pre-reg."""
     import sys
+
     lines = build_header(
         prereg_path="docs/audit/hypotheses/2026-04-19-mes-comprehensive-mode-a-feature-v1.yaml",
         script_path=__file__,
@@ -153,4 +150,5 @@ def main() -> int:
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

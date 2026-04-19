@@ -12,6 +12,5 @@ def assert_no_inflation(n_before: int, n_after: int, context: str = "") -> None:
     if n_after > n_before:
         tag = f" [{context}]" if context else ""
         raise ValueError(
-            f"Row count inflated{tag}: {n_before} -> {n_after}. "
-            f"Check JOIN columns (missing orb_minutes?)."
+            f"Row count inflated{tag}: {n_before} -> {n_after}. Check JOIN columns (missing orb_minutes?)."
         )

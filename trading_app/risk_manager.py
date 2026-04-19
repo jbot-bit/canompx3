@@ -229,9 +229,7 @@ class RiskManager:
                 )
 
             try:
-                day_max = max_lots_for_xfa(
-                    self.limits.topstep_xfa_account_size, self._topstep_xfa_eod_balance
-                )
+                day_max = max_lots_for_xfa(self.limits.topstep_xfa_account_size, self._topstep_xfa_eod_balance)
             except (KeyError, ValueError) as e:
                 return (
                     False,
@@ -251,16 +249,14 @@ class RiskManager:
             # engine's pre-submit guard must re-check with the real contract
             # count. For the common 1-contract-per-lane case this projection
             # is exact.
-            projected = project_total_open_lots(
-                active_trades, instrument, new_contracts=1
-            )
+            projected = project_total_open_lots(active_trades, instrument, new_contracts=1)
 
             if projected > day_max:
                 return (
                     False,
                     (
                         f"topstep_scaling_plan: projected {projected} mini-equiv lots > "
-                        f"day_max {day_max} for {self.limits.topstep_xfa_account_size//1000}K XFA "
+                        f"day_max {day_max} for {self.limits.topstep_xfa_account_size // 1000}K XFA "
                         f"at EOD balance ${self._topstep_xfa_eod_balance:,.2f}. "
                         f"(F-1 — TopStep Scaling Plan ladder)"
                     ),

@@ -39,6 +39,7 @@ import pandas as pd
 
 try:
     from scipy.stats import ttest_1samp
+
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
@@ -62,15 +63,13 @@ _UK_LONDON = ZoneInfo("Europe/London")
 
 def is_us_dst(trading_day: date) -> bool:
     """True if US Eastern is in DST (EDT, UTC-4) on this date."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_US_EASTERN)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_US_EASTERN)
     return dt.utcoffset().total_seconds() == -4 * 3600
 
 
 def is_uk_dst(trading_day: date) -> bool:
     """True if UK is in BST (UTC+1) on this date."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_UK_LONDON)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_UK_LONDON)
     return dt.utcoffset().total_seconds() == 1 * 3600
 
 
@@ -81,11 +80,11 @@ def is_uk_dst(trading_day: date) -> bool:
 # Sessions to test. Skip 1100 (74% double-break, confirmed NO-GO).
 # Keys are Brisbane clock times. 0900/0030/2300 use US DST; 1800 uses UK DST.
 SESSIONS = {
-    "0900": {"bris_h": 9,  "bris_m": 0,  "orb_min": 5,  "dst_type": "US"},
-    "1000": {"bris_h": 10, "bris_m": 0,  "orb_min": 15, "dst_type": "CLEAN"},
-    "1800": {"bris_h": 18, "bris_m": 0,  "orb_min": 5,  "dst_type": "UK"},
-    "2300": {"bris_h": 23, "bris_m": 0,  "orb_min": 5,  "dst_type": "US"},
-    "0030": {"bris_h": 0,  "bris_m": 30, "orb_min": 5,  "dst_type": "US"},
+    "0900": {"bris_h": 9, "bris_m": 0, "orb_min": 5, "dst_type": "US"},
+    "1000": {"bris_h": 10, "bris_m": 0, "orb_min": 15, "dst_type": "CLEAN"},
+    "1800": {"bris_h": 18, "bris_m": 0, "orb_min": 5, "dst_type": "UK"},
+    "2300": {"bris_h": 23, "bris_m": 0, "orb_min": 5, "dst_type": "US"},
+    "0030": {"bris_h": 0, "bris_m": 30, "orb_min": 5, "dst_type": "US"},
 }
 
 DEFAULT_INSTRUMENTS = ["MGC", "MES"]
@@ -109,12 +108,12 @@ RR_TARGET = 2.0
 
 # Delay buckets for Q1/Q4/Q6 (minutes from break to fill)
 DELAY_BUCKETS = [
-    ("0-2",   0,   2),
-    ("2-5",   2,   5),
-    ("5-10",  5,  10),
+    ("0-2", 0, 2),
+    ("2-5", 2, 5),
+    ("5-10", 5, 10),
     ("10-20", 10, 20),
     ("20-30", 20, 30),
-    ("30+",   30, 99999),
+    ("30+", 30, 99999),
 ]
 DELAY_BUCKET_ORDER = [b[0] for b in DELAY_BUCKETS]
 
@@ -152,14 +151,18 @@ def dst_regime_for(session: str, us_dst: bool, uk_dst: bool) -> str:
 # Data loading
 # ---------------------------------------------------------------------------
 
+
 def load_bars(con, instrument: str) -> pd.DataFrame:
     """Load all 1m bars for an instrument."""
-    return con.execute("""
+    return con.execute(
+        """
         SELECT ts_utc, open, high, low, close
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def build_day_arrays(bars_df: pd.DataFrame):
@@ -188,17 +191,17 @@ def build_day_arrays(bars_df: pd.DataFrame):
     day_to_idx = {d: i for i, d in enumerate(all_days)}
     n_days = len(all_days)
 
-    opens  = np.full((n_days, 1440), np.nan)
-    highs  = np.full((n_days, 1440), np.nan)
-    lows   = np.full((n_days, 1440), np.nan)
+    opens = np.full((n_days, 1440), np.nan)
+    highs = np.full((n_days, 1440), np.nan)
+    lows = np.full((n_days, 1440), np.nan)
     closes = np.full((n_days, 1440), np.nan)
 
     day_idx = df["trading_day"].map(day_to_idx).values
     min_idx = df["min_offset"].values
 
-    opens[day_idx, min_idx]  = df["open"].values
-    highs[day_idx, min_idx]  = df["high"].values
-    lows[day_idx, min_idx]   = df["low"].values
+    opens[day_idx, min_idx] = df["open"].values
+    highs[day_idx, min_idx] = df["high"].values
+    lows[day_idx, min_idx] = df["low"].values
     closes[day_idx, min_idx] = df["close"].values
 
     return all_days, day_to_idx, opens, highs, lows, closes
@@ -221,7 +224,8 @@ def load_daily_features(con, instrument: str, session: str) -> pd.DataFrame:
     Filters to G4+ days with a confirmed break only.
     """
     label = session
-    return con.execute(f"""
+    return con.execute(
+        f"""
         SELECT
             trading_day,
             orb_{label}_high    AS orb_high,
@@ -236,7 +240,9 @@ def load_daily_features(con, instrument: str, session: str) -> pd.DataFrame:
           AND orb_{label}_break_dir IS NOT NULL
           AND orb_{label}_size >= {G4_MIN}
         ORDER BY trading_day
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def break_ts_to_min_offset(break_ts) -> int:
@@ -248,6 +254,7 @@ def break_ts_to_min_offset(break_ts) -> int:
     if hasattr(break_ts, "timestamp"):
         # Use .timestamp() for correct UTC epoch regardless of tz-awareness
         import datetime as _dt
+
         utc_dt = _dt.datetime.fromtimestamp(break_ts.timestamp(), _dt.timezone.utc)
         bris_hour = (utc_dt.hour + 10) % 24
         bris_minute = utc_dt.minute
@@ -261,6 +268,7 @@ def break_ts_to_min_offset(break_ts) -> int:
 # ---------------------------------------------------------------------------
 # Core engine — mirrors _resolve_e3() in trading_app/entry_rules.py
 # ---------------------------------------------------------------------------
+
 
 def scan_one_day(
     day_idx: int,
@@ -290,11 +298,11 @@ def scan_one_day(
 
     if break_dir == "long":
         entry_price = orb_high
-        stop_level  = orb_low
+        stop_level = orb_low
         target_price = orb_high + RR_TARGET * orb_size
     else:
-        entry_price  = orb_low
-        stop_level   = orb_high
+        entry_price = orb_low
+        stop_level = orb_high
         target_price = orb_low - RR_TARGET * orb_size
 
     # --- Phase 1: find retrace fill (mirrors _resolve_e3 stop-before-retrace) ---
@@ -309,13 +317,13 @@ def scan_one_day(
             # Stop: price falls all the way to orb_low
             # Retrace: price pulls back to orb_high (limit buy level)
             # Note: orb_low < orb_high, so stop_hit ⊂ retrace_hit
-            stop_hit    = l <= stop_level    # l <= orb_low
-            retrace_hit = l <= entry_price   # l <= orb_high
+            stop_hit = l <= stop_level  # l <= orb_low
+            retrace_hit = l <= entry_price  # l <= orb_high
         else:
             # Stop: price rises all the way to orb_high
             # Retrace: price rises back to orb_low (limit sell level)
-            stop_hit    = h >= stop_level    # h >= orb_high
-            retrace_hit = h >= entry_price   # h >= orb_low
+            stop_hit = h >= stop_level  # h >= orb_high
+            retrace_hit = h >= entry_price  # h >= orb_low
 
         # Stop takes priority (includes same-bar stop+retrace case)
         if stop_hit:
@@ -401,6 +409,7 @@ def scan_one_day(
 # Results collection
 # ---------------------------------------------------------------------------
 
+
 def collect_results(
     instrument: str,
     session: str,
@@ -443,15 +452,21 @@ def collect_results(
 
         day_idx = day_to_idx[td]
         orb_high = float(row["orb_high"])
-        orb_low  = float(row["orb_low"])
+        orb_low = float(row["orb_low"])
         orb_size = float(row["orb_size"])
-        atr_20   = float(row["atr_20"]) if row["atr_20"] is not None and not pd.isna(row["atr_20"]) else np.nan
+        atr_20 = float(row["atr_20"]) if row["atr_20"] is not None and not pd.isna(row["atr_20"]) else np.nan
         break_dir = str(row["break_dir"])
 
         result = scan_one_day(
-            day_idx, highs, lows, closes,
-            break_min_offset, break_dir,
-            orb_high, orb_low, orb_size,
+            day_idx,
+            highs,
+            lows,
+            closes,
+            break_min_offset,
+            break_dir,
+            orb_high,
+            orb_low,
+            orb_size,
             scan_window=scan_window,
         )
         if result is None:
@@ -487,6 +502,7 @@ def collect_results(
 # ---------------------------------------------------------------------------
 # Statistical helpers
 # ---------------------------------------------------------------------------
+
 
 def compute_pvalue(arr: np.ndarray) -> float:
     """One-sample t-test: is mean significantly different from 0?"""
@@ -534,50 +550,50 @@ def agg_stats(pnl_arr: np.ndarray) -> dict:
     arr = pnl_arr[~np.isnan(pnl_arr)]
     n = len(arr)
     if n == 0:
-        return {"n": 0, "avg_r": np.nan, "win_rate": np.nan,
-                "total_r": np.nan, "sharpe": np.nan, "pvalue": np.nan}
+        return {"n": 0, "avg_r": np.nan, "win_rate": np.nan, "total_r": np.nan, "sharpe": np.nan, "pvalue": np.nan}
     avg_r = float(arr.mean())
     win_rate = float((arr > 0).sum() / n)
     total_r = float(arr.sum())
     std = float(arr.std())
     sharpe = avg_r / std if std > 1e-10 else np.nan
     pvalue = compute_pvalue(arr)
-    return {"n": n, "avg_r": avg_r, "win_rate": win_rate,
-            "total_r": total_r, "sharpe": sharpe, "pvalue": pvalue}
+    return {"n": n, "avg_r": avg_r, "win_rate": win_rate, "total_r": total_r, "sharpe": sharpe, "pvalue": pvalue}
 
 
 # ---------------------------------------------------------------------------
 # Q1: Retrace Delay Sweep
 # ---------------------------------------------------------------------------
 
+
 def compute_q1(df: pd.DataFrame) -> list[dict]:
     """Group by (instrument, session, dst_regime, delay_bucket) → pnl_180."""
     rows = []
     pnl_col = f"pnl_{PRIMARY_CHECKPOINT}"
 
-    for (inst, sess, dst_regime), grp in df.groupby(
-            ["instrument", "session", "dst_regime"], sort=True):
+    for (inst, sess, dst_regime), grp in df.groupby(["instrument", "session", "dst_regime"], sort=True):
         total_fills = len(grp)
         for delay_bucket in DELAY_BUCKET_ORDER:
             sub = grp[grp["delay_bucket"] == delay_bucket]
             pnl = sub[pnl_col].values
             stats = agg_stats(pnl)
             pct_of_fills = round(stats["n"] / total_fills * 100, 1) if total_fills > 0 else 0.0
-            rows.append({
-                "instrument": inst,
-                "session": sess,
-                "dst_regime": dst_regime,
-                "delay_bucket": delay_bucket,
-                "n": stats["n"],
-                "sample_class": classify_sample(stats["n"]),
-                "win_rate": round(stats["win_rate"], 4) if not np.isnan(stats["win_rate"]) else np.nan,
-                "avg_r": round(stats["avg_r"], 4) if not np.isnan(stats["avg_r"]) else np.nan,
-                "total_r": round(stats["total_r"], 2) if not np.isnan(stats["total_r"]) else np.nan,
-                "sharpe": round(stats["sharpe"], 4) if not np.isnan(stats["sharpe"]) else np.nan,
-                "pvalue": round(stats["pvalue"], 6) if not np.isnan(stats["pvalue"]) else np.nan,
-                "pvalue_bh": np.nan,
-                "pct_of_fills": pct_of_fills,
-            })
+            rows.append(
+                {
+                    "instrument": inst,
+                    "session": sess,
+                    "dst_regime": dst_regime,
+                    "delay_bucket": delay_bucket,
+                    "n": stats["n"],
+                    "sample_class": classify_sample(stats["n"]),
+                    "win_rate": round(stats["win_rate"], 4) if not np.isnan(stats["win_rate"]) else np.nan,
+                    "avg_r": round(stats["avg_r"], 4) if not np.isnan(stats["avg_r"]) else np.nan,
+                    "total_r": round(stats["total_r"], 2) if not np.isnan(stats["total_r"]) else np.nan,
+                    "sharpe": round(stats["sharpe"], 4) if not np.isnan(stats["sharpe"]) else np.nan,
+                    "pvalue": round(stats["pvalue"], 6) if not np.isnan(stats["pvalue"]) else np.nan,
+                    "pvalue_bh": np.nan,
+                    "pct_of_fills": pct_of_fills,
+                }
+            )
 
     # BH correction across all Q1 rows
     p_vals = [r["pvalue"] for r in rows]
@@ -592,36 +608,43 @@ def compute_q1(df: pd.DataFrame) -> list[dict]:
 # Q2: Hold Duration Decay
 # ---------------------------------------------------------------------------
 
+
 def compute_q2(df: pd.DataFrame) -> list[dict]:
     """Group by (instrument, session, dst_regime) × checkpoint → pnl at N min."""
     rows = []
 
-    for (inst, sess, dst_regime), grp in df.groupby(
-            ["instrument", "session", "dst_regime"], sort=True):
+    for (inst, sess, dst_regime), grp in df.groupby(["instrument", "session", "dst_regime"], sort=True):
         n_total = len(grp)
         for cp in CHECKPOINTS:
             pnl_col = f"pnl_{cp}"
             pnl = grp[pnl_col].values
             stats = agg_stats(pnl)
             # terminal_rate: fraction where trade was already terminal by this checkpoint
-            terminal_rate = float(
-                grp["terminal_minute"].apply(
-                    lambda tm: tm is not None and not (isinstance(tm, float) and np.isnan(tm)) and tm <= cp
-                ).sum()
-            ) / n_total if n_total > 0 else 0.0
-            rows.append({
-                "instrument": inst,
-                "session": sess,
-                "dst_regime": dst_regime,
-                "hold_minutes": cp,
-                "n": stats["n"],
-                "avg_r": round(stats["avg_r"], 4) if not np.isnan(stats["avg_r"]) else np.nan,
-                "win_rate": round(stats["win_rate"], 4) if not np.isnan(stats["win_rate"]) else np.nan,
-                "sharpe": round(stats["sharpe"], 4) if not np.isnan(stats["sharpe"]) else np.nan,
-                "pvalue": round(stats["pvalue"], 6) if not np.isnan(stats["pvalue"]) else np.nan,
-                "pvalue_bh": np.nan,
-                "terminal_rate": round(terminal_rate, 4),
-            })
+            terminal_rate = (
+                float(
+                    grp["terminal_minute"]
+                    .apply(lambda tm: tm is not None and not (isinstance(tm, float) and np.isnan(tm)) and tm <= cp)
+                    .sum()
+                )
+                / n_total
+                if n_total > 0
+                else 0.0
+            )
+            rows.append(
+                {
+                    "instrument": inst,
+                    "session": sess,
+                    "dst_regime": dst_regime,
+                    "hold_minutes": cp,
+                    "n": stats["n"],
+                    "avg_r": round(stats["avg_r"], 4) if not np.isnan(stats["avg_r"]) else np.nan,
+                    "win_rate": round(stats["win_rate"], 4) if not np.isnan(stats["win_rate"]) else np.nan,
+                    "sharpe": round(stats["sharpe"], 4) if not np.isnan(stats["sharpe"]) else np.nan,
+                    "pvalue": round(stats["pvalue"], 6) if not np.isnan(stats["pvalue"]) else np.nan,
+                    "pvalue_bh": np.nan,
+                    "terminal_rate": round(terminal_rate, 4),
+                }
+            )
 
     p_vals = [r["pvalue"] for r in rows]
     adjusted = bh_fdr_correction(p_vals)
@@ -635,12 +658,12 @@ def compute_q2(df: pd.DataFrame) -> list[dict]:
 # Q3: 2D Heatmap (delay_bucket × hold_minutes)
 # ---------------------------------------------------------------------------
 
+
 def compute_q3(df: pd.DataFrame) -> list[dict]:
     """Cross-tabulation of delay_bucket × hold_minutes. No new scan."""
     rows = []
 
-    for (inst, sess, dst_regime), grp in df.groupby(
-            ["instrument", "session", "dst_regime"], sort=True):
+    for (inst, sess, dst_regime), grp in df.groupby(["instrument", "session", "dst_regime"], sort=True):
         for delay_bucket in DELAY_BUCKET_ORDER:
             sub_delay = grp[grp["delay_bucket"] == delay_bucket]
             for cp in CHECKPOINTS:
@@ -650,17 +673,19 @@ def compute_q3(df: pd.DataFrame) -> list[dict]:
                 n = len(pnl_valid)
                 avg_r = float(pnl_valid.mean()) if n > 0 else np.nan
                 win_rate = float((pnl_valid > 0).sum() / n) if n > 0 else np.nan
-                rows.append({
-                    "instrument": inst,
-                    "session": sess,
-                    "dst_regime": dst_regime,
-                    "delay_bucket": delay_bucket,
-                    "hold_minutes": cp,
-                    "n": n,
-                    "avg_r": round(avg_r, 4) if not np.isnan(avg_r) else np.nan,
-                    "win_rate": round(win_rate, 4) if not np.isnan(win_rate) else np.nan,
-                    "sample_class": classify_sample(n),
-                })
+                rows.append(
+                    {
+                        "instrument": inst,
+                        "session": sess,
+                        "dst_regime": dst_regime,
+                        "delay_bucket": delay_bucket,
+                        "hold_minutes": cp,
+                        "n": n,
+                        "avg_r": round(avg_r, 4) if not np.isnan(avg_r) else np.nan,
+                        "win_rate": round(win_rate, 4) if not np.isnan(win_rate) else np.nan,
+                        "sample_class": classify_sample(n),
+                    }
+                )
 
     return rows
 
@@ -669,13 +694,13 @@ def compute_q3(df: pd.DataFrame) -> list[dict]:
 # Q4: ORB Size Interaction
 # ---------------------------------------------------------------------------
 
+
 def compute_q4(df: pd.DataFrame) -> list[dict]:
     """Re-run Q1 delay sweep segmented by G-filter level."""
     rows = []
     pnl_col = f"pnl_{PRIMARY_CHECKPOINT}"
 
-    for (inst, sess, dst_regime), grp in df.groupby(
-            ["instrument", "session", "dst_regime"], sort=True):
+    for (inst, sess, dst_regime), grp in df.groupby(["instrument", "session", "dst_regime"], sort=True):
         for filter_name, min_size in G_FILTERS.items():
             filtered = grp[grp["orb_size"] >= min_size]
             if len(filtered) == 0:
@@ -684,19 +709,21 @@ def compute_q4(df: pd.DataFrame) -> list[dict]:
                 sub = filtered[filtered["delay_bucket"] == delay_bucket]
                 pnl = sub[pnl_col].values
                 stats = agg_stats(pnl)
-                rows.append({
-                    "instrument": inst,
-                    "session": sess,
-                    "dst_regime": dst_regime,
-                    "orb_filter": filter_name,
-                    "delay_bucket": delay_bucket,
-                    "n": stats["n"],
-                    "sample_class": classify_sample(stats["n"]),
-                    "avg_r": round(stats["avg_r"], 4) if not np.isnan(stats["avg_r"]) else np.nan,
-                    "win_rate": round(stats["win_rate"], 4) if not np.isnan(stats["win_rate"]) else np.nan,
-                    "pvalue": round(stats["pvalue"], 6) if not np.isnan(stats["pvalue"]) else np.nan,
-                    "pvalue_bh": np.nan,
-                })
+                rows.append(
+                    {
+                        "instrument": inst,
+                        "session": sess,
+                        "dst_regime": dst_regime,
+                        "orb_filter": filter_name,
+                        "delay_bucket": delay_bucket,
+                        "n": stats["n"],
+                        "sample_class": classify_sample(stats["n"]),
+                        "avg_r": round(stats["avg_r"], 4) if not np.isnan(stats["avg_r"]) else np.nan,
+                        "win_rate": round(stats["win_rate"], 4) if not np.isnan(stats["win_rate"]) else np.nan,
+                        "pvalue": round(stats["pvalue"], 6) if not np.isnan(stats["pvalue"]) else np.nan,
+                        "pvalue_bh": np.nan,
+                    }
+                )
 
     p_vals = [r["pvalue"] for r in rows]
     adjusted = bh_fdr_correction(p_vals)
@@ -710,20 +737,20 @@ def compute_q4(df: pd.DataFrame) -> list[dict]:
 # Q6: Regime Conditioning (ATR split at 50th percentile)
 # ---------------------------------------------------------------------------
 
+
 def compute_q6(df: pd.DataFrame) -> list[dict]:
     """Q1 delay sweep segmented by ATR regime (EXPANSION vs CONTRACTION)."""
     rows = []
     pnl_col = f"pnl_{PRIMARY_CHECKPOINT}"
 
-    for (inst, sess, dst_regime), grp in df.groupby(
-            ["instrument", "session", "dst_regime"], sort=True):
+    for (inst, sess, dst_regime), grp in df.groupby(["instrument", "session", "dst_regime"], sort=True):
         atr_vals = grp["atr_20"].dropna()
         if len(atr_vals) < 10:
             continue  # Not enough ATR data for a meaningful split
         atr_threshold = float(atr_vals.median())
 
         for atr_regime, atr_mask in [
-            ("EXPANSION",   grp["atr_20"] > atr_threshold),
+            ("EXPANSION", grp["atr_20"] > atr_threshold),
             ("CONTRACTION", grp["atr_20"] <= atr_threshold),
         ]:
             atr_grp = grp[atr_mask]
@@ -731,20 +758,22 @@ def compute_q6(df: pd.DataFrame) -> list[dict]:
                 sub = atr_grp[atr_grp["delay_bucket"] == delay_bucket]
                 pnl = sub[pnl_col].values
                 stats = agg_stats(pnl)
-                rows.append({
-                    "instrument": inst,
-                    "session": sess,
-                    "dst_regime": dst_regime,
-                    "atr_regime": atr_regime,
-                    "atr_threshold": round(atr_threshold, 4),
-                    "delay_bucket": delay_bucket,
-                    "n": stats["n"],
-                    "sample_class": classify_sample(stats["n"]),
-                    "avg_r": round(stats["avg_r"], 4) if not np.isnan(stats["avg_r"]) else np.nan,
-                    "win_rate": round(stats["win_rate"], 4) if not np.isnan(stats["win_rate"]) else np.nan,
-                    "pvalue": round(stats["pvalue"], 6) if not np.isnan(stats["pvalue"]) else np.nan,
-                    "pvalue_bh": np.nan,
-                })
+                rows.append(
+                    {
+                        "instrument": inst,
+                        "session": sess,
+                        "dst_regime": dst_regime,
+                        "atr_regime": atr_regime,
+                        "atr_threshold": round(atr_threshold, 4),
+                        "delay_bucket": delay_bucket,
+                        "n": stats["n"],
+                        "sample_class": classify_sample(stats["n"]),
+                        "avg_r": round(stats["avg_r"], 4) if not np.isnan(stats["avg_r"]) else np.nan,
+                        "win_rate": round(stats["win_rate"], 4) if not np.isnan(stats["win_rate"]) else np.nan,
+                        "pvalue": round(stats["pvalue"], 6) if not np.isnan(stats["pvalue"]) else np.nan,
+                        "pvalue_bh": np.nan,
+                    }
+                )
 
     p_vals = [r["pvalue"] for r in rows]
     adjusted = bh_fdr_correction(p_vals)
@@ -757,6 +786,7 @@ def compute_q6(df: pd.DataFrame) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Sensitivity check (Q1 at alternate scan windows)
 # ---------------------------------------------------------------------------
+
 
 def run_sensitivity(
     instrument: str,
@@ -777,9 +807,17 @@ def run_sensitivity(
     results = {}
     for window in [192, SCAN_WINDOW, 288]:
         recs = collect_results(
-            instrument, session, all_days, day_to_idx,
-            highs, lows, closes, us_mask, uk_mask,
-            df_features, scan_window=window,
+            instrument,
+            session,
+            all_days,
+            day_to_idx,
+            highs,
+            lows,
+            closes,
+            us_mask,
+            uk_mask,
+            df_features,
+            scan_window=window,
         )
         if not recs:
             results[window] = {}
@@ -798,6 +836,7 @@ def run_sensitivity(
 # ---------------------------------------------------------------------------
 # Markdown summary
 # ---------------------------------------------------------------------------
+
 
 def fmt_r(v) -> str:
     if v is None or (isinstance(v, float) and np.isnan(v)):
@@ -842,22 +881,29 @@ def generate_markdown(
     ]
 
     # SURVIVED / DID NOT SURVIVE
-    core_positive = [r for r in q1_rows
-                     if r["sample_class"] in ("CORE", "PRELIMINARY")
-                     and not np.isnan(r.get("avg_r", np.nan))
-                     and r["avg_r"] > 0
-                     and not np.isnan(r.get("pvalue_bh", np.nan))
-                     and r["pvalue_bh"] < 0.05]
-    core_negative = [r for r in q1_rows
-                     if r["sample_class"] in ("CORE", "PRELIMINARY")
-                     and not np.isnan(r.get("avg_r", np.nan))
-                     and r["avg_r"] <= 0
-                     and not np.isnan(r.get("pvalue_bh", np.nan))
-                     and r["pvalue_bh"] < 0.05]
-    inconclusive = [r for r in q1_rows
-                    if r["sample_class"] == "INVALID"
-                    or np.isnan(r.get("pvalue_bh", np.nan))
-                    or r["pvalue_bh"] >= 0.05]
+    core_positive = [
+        r
+        for r in q1_rows
+        if r["sample_class"] in ("CORE", "PRELIMINARY")
+        and not np.isnan(r.get("avg_r", np.nan))
+        and r["avg_r"] > 0
+        and not np.isnan(r.get("pvalue_bh", np.nan))
+        and r["pvalue_bh"] < 0.05
+    ]
+    core_negative = [
+        r
+        for r in q1_rows
+        if r["sample_class"] in ("CORE", "PRELIMINARY")
+        and not np.isnan(r.get("avg_r", np.nan))
+        and r["avg_r"] <= 0
+        and not np.isnan(r.get("pvalue_bh", np.nan))
+        and r["pvalue_bh"] < 0.05
+    ]
+    inconclusive = [
+        r
+        for r in q1_rows
+        if r["sample_class"] == "INVALID" or np.isnan(r.get("pvalue_bh", np.nan)) or r["pvalue_bh"] >= 0.05
+    ]
 
     lines += [
         "## SURVIVED SCRUTINY",
@@ -958,8 +1004,7 @@ def generate_markdown(
     # Show a compact pivot per (instrument, session, dst_regime)
     q2_df = pd.DataFrame(q2_rows)
     if not q2_df.empty:
-        for (inst, sess, dst_regime), grp in q2_df.groupby(
-                ["instrument", "session", "dst_regime"]):
+        for (inst, sess, dst_regime), grp in q2_df.groupby(["instrument", "session", "dst_regime"]):
             lines.append(f"**{inst} {sess} ({dst_regime})**")
             lines.append("")
             lines.append("| hold_min | N | avg_r | win_rate | sharpe | terminal% |")
@@ -1010,11 +1055,13 @@ def generate_markdown(
     q4_df = pd.DataFrame(q4_rows)
     if not q4_df.empty:
         # Show CORE/PRELIMINARY rows with positive avg_r
-        notable = q4_df[
-            (q4_df["sample_class"].isin(["CORE", "PRELIMINARY"]))
-            & (q4_df["avg_r"].notna())
-            & (q4_df["avg_r"] > 0)
-        ].sort_values("avg_r", ascending=False).head(20)
+        notable = (
+            q4_df[
+                (q4_df["sample_class"].isin(["CORE", "PRELIMINARY"])) & (q4_df["avg_r"].notna()) & (q4_df["avg_r"] > 0)
+            ]
+            .sort_values("avg_r", ascending=False)
+            .head(20)
+        )
         if not notable.empty:
             lines.append("Top positive cells (N>=100):")
             lines.append("")
@@ -1075,11 +1122,13 @@ def generate_markdown(
     ]
     q6_df = pd.DataFrame(q6_rows)
     if not q6_df.empty:
-        notable_q6 = q6_df[
-            (q6_df["sample_class"].isin(["CORE", "PRELIMINARY"]))
-            & (q6_df["avg_r"].notna())
-            & (q6_df["avg_r"] > 0)
-        ].sort_values("avg_r", ascending=False).head(20)
+        notable_q6 = (
+            q6_df[
+                (q6_df["sample_class"].isin(["CORE", "PRELIMINARY"])) & (q6_df["avg_r"].notna()) & (q6_df["avg_r"] > 0)
+            ]
+            .sort_values("avg_r", ascending=False)
+            .head(20)
+        )
         if not notable_q6.empty:
             lines.append("Positive CORE/PRELIMINARY cells by ATR regime:")
             lines.append("")
@@ -1138,17 +1187,25 @@ def generate_markdown(
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="E3 retrace timing research — 6-question analysis"
+    parser = argparse.ArgumentParser(description="E3 retrace timing research — 6-question analysis")
+    parser.add_argument(
+        "--db-path", type=str, default=None, help="Path to gold.db (default: auto-resolve via pipeline.paths)"
     )
-    parser.add_argument("--db-path", type=str, default=None,
-                        help="Path to gold.db (default: auto-resolve via pipeline.paths)")
-    parser.add_argument("--instruments", nargs="+", default=DEFAULT_INSTRUMENTS,
-                        help=f"Instruments to scan (default: {DEFAULT_INSTRUMENTS})")
-    parser.add_argument("--sessions", nargs="+", default=list(SESSIONS.keys()),
-                        choices=list(SESSIONS.keys()),
-                        help="Sessions to scan (default: all)")
+    parser.add_argument(
+        "--instruments",
+        nargs="+",
+        default=DEFAULT_INSTRUMENTS,
+        help=f"Instruments to scan (default: {DEFAULT_INSTRUMENTS})",
+    )
+    parser.add_argument(
+        "--sessions",
+        nargs="+",
+        default=list(SESSIONS.keys()),
+        choices=list(SESSIONS.keys()),
+        help="Sessions to scan (default: all)",
+    )
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
@@ -1188,8 +1245,7 @@ def main():
             if n_days == 0:
                 continue
 
-            print(f"    {n_days} trading days ({all_days[0]} to {all_days[-1]}) "
-                  f"in {time.time() - t0:.1f}s")
+            print(f"    {n_days} trading days ({all_days[0]} to {all_days[-1]}) in {time.time() - t0:.1f}s")
             date_range = f"{all_days[0]} to {all_days[-1]}"
 
             us_mask, uk_mask = build_dst_masks(all_days)
@@ -1209,28 +1265,40 @@ def main():
 
                 t0 = time.time()
                 records = collect_results(
-                    instrument, session,
-                    all_days, day_to_idx,
-                    highs, lows, closes,
-                    us_mask, uk_mask,
+                    instrument,
+                    session,
+                    all_days,
+                    day_to_idx,
+                    highs,
+                    lows,
+                    closes,
+                    us_mask,
+                    uk_mask,
                     df_features,
                     scan_window=SCAN_WINDOW,
                 )
                 n_fills = len(records)
                 n_break_days = len(df_features)
                 fill_rate = n_fills / n_break_days * 100 if n_break_days > 0 else 0
-                print(f"    {n_fills} fills / {n_break_days} break-days "
-                      f"({fill_rate:.1f}% retrace rate) in {time.time() - t0:.1f}s")
+                print(
+                    f"    {n_fills} fills / {n_break_days} break-days "
+                    f"({fill_rate:.1f}% retrace rate) in {time.time() - t0:.1f}s"
+                )
 
                 all_records.extend(records)
 
                 # Sensitivity check (only for sessions with enough data)
                 if n_fills >= 100:
                     sens = run_sensitivity(
-                        instrument, session,
-                        all_days, day_to_idx,
-                        highs, lows, closes,
-                        us_mask, uk_mask,
+                        instrument,
+                        session,
+                        all_days,
+                        day_to_idx,
+                        highs,
+                        lows,
+                        closes,
+                        us_mask,
+                        uk_mask,
                         df_features,
                     )
                     # Find top delay bucket at baseline window
@@ -1284,11 +1352,11 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     csv_specs = [
-        ("retrace_delay_sweep.csv",         q1_rows),
-        ("hold_duration_decay.csv",          q2_rows),
-        ("delay_hold_heatmap.csv",           q3_rows),
-        ("retrace_size_interaction.csv",     q4_rows),
-        ("retrace_regime_conditioning.csv",  q6_rows),
+        ("retrace_delay_sweep.csv", q1_rows),
+        ("hold_duration_decay.csv", q2_rows),
+        ("delay_hold_heatmap.csv", q3_rows),
+        ("retrace_size_interaction.csv", q4_rows),
+        ("retrace_regime_conditioning.csv", q6_rows),
     ]
     for fname, rows in csv_specs:
         path = output_dir / fname
@@ -1297,7 +1365,11 @@ def main():
 
     # Generate markdown
     md = generate_markdown(
-        q1_rows, q2_rows, q3_rows, q4_rows, q6_rows,
+        q1_rows,
+        q2_rows,
+        q3_rows,
+        q4_rows,
+        q6_rows,
         instruments=instruments,
         sessions=sessions_to_run,
         total_fills=total_fills,
@@ -1312,15 +1384,19 @@ def main():
     print(f"\n{'=' * 90}")
     print(f"  QUICK SUMMARY - Q1 (pnl@{PRIMARY_CHECKPOINT}min by delay bucket)")
     print(f"{'=' * 90}")
-    print(f"  {'Inst':>4}  {'Sess':>4}  {'DST':>6}  {'Delay':>6}  "
-          f"{'N':>5}  {'Class':>11}  {'avg_r':>8}  {'p_bh':>7}  {'pct%':>5}")
+    print(
+        f"  {'Inst':>4}  {'Sess':>4}  {'DST':>6}  {'Delay':>6}  "
+        f"{'N':>5}  {'Class':>11}  {'avg_r':>8}  {'p_bh':>7}  {'pct%':>5}"
+    )
     print(f"  {'-' * 85}")
     for r in q1_rows:
         avg_str = f"{r['avg_r']:+8.4f}" if not np.isnan(r.get("avg_r", np.nan)) else "      --"
-        p_str   = f"{r['pvalue_bh']:7.4f}" if not np.isnan(r.get("pvalue_bh", np.nan)) else "    --"
-        print(f"  {r['instrument']:>4}  {r['session']:>4}  {r['dst_regime']:>6}  "
-              f"{r['delay_bucket']:>6}  {r['n']:>5}  {r['sample_class']:>11}  "
-              f"{avg_str}  {p_str}  {r['pct_of_fills']:>5.1f}%")
+        p_str = f"{r['pvalue_bh']:7.4f}" if not np.isnan(r.get("pvalue_bh", np.nan)) else "    --"
+        print(
+            f"  {r['instrument']:>4}  {r['session']:>4}  {r['dst_regime']:>6}  "
+            f"{r['delay_bucket']:>6}  {r['n']:>5}  {r['sample_class']:>11}  "
+            f"{avg_str}  {p_str}  {r['pct_of_fills']:>5.1f}%"
+        )
 
     print(f"\n  Total runtime: {time.time() - t_total:.1f}s")
     print(f"  Outputs: {output_dir}\n")

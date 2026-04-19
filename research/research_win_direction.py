@@ -39,13 +39,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 from pipeline.paths import GOLD_DB_PATH
 
-INSTRUMENT  = "MGC"
-SESSION     = "0900"
+INSTRUMENT = "MGC"
+SESSION = "0900"
 ORB_MIN_PTS = 4.0
 
 
 def load_data(con) -> pd.DataFrame:
-    df = con.execute("""
+    df = con.execute(
+        """
         WITH base AS (
             SELECT
                 d.trading_day,
@@ -72,15 +73,17 @@ def load_data(con) -> pd.DataFrame:
           AND orb_size >= ?
           AND break_dir IS NOT NULL
         ORDER BY trading_day
-    """, [INSTRUMENT, ORB_MIN_PTS]).df()
+    """,
+        [INSTRUMENT, ORB_MIN_PTS],
+    ).df()
 
     # Encode target: LONG=1, SHORT=0
     df["is_long"] = (df["break_dir"].str.lower() == "long").astype(int)
 
     # Derived predictors
     df["atr_velocity"] = df["atr_20"] / df["prev_atr_20"].replace(0, np.nan)
-    df["asia_mid"]     = (df["session_asia_high"] + df["session_asia_low"]) / 2
-    df["london_mid"]   = (df["session_london_high"] + df["session_london_low"]) / 2
+    df["asia_mid"] = (df["session_asia_high"] + df["session_asia_low"]) / 2
+    df["london_mid"] = (df["session_london_high"] + df["session_london_low"]) / 2
     # Asia position: positive = closed upper half of Asia range (long bias?)
     df["asia_position"] = (df["asia_mid"] - df["session_asia_low"]) / (
         df["session_asia_high"] - df["session_asia_low"] + 1e-9
@@ -98,9 +101,9 @@ def test_continuous(series: pd.Series, target: pd.Series, label: str):
     clean = pd.DataFrame({"x": series, "y": target}).dropna()
     if len(clean) < 20:
         return label, np.nan, len(clean), "too few"
-    longs  = clean.loc[clean["y"] == 1, "x"]
+    longs = clean.loc[clean["y"] == 1, "x"]
     shorts = clean.loc[clean["y"] == 0, "x"]
-    t, p   = stats.ttest_ind(longs, shorts)
+    t, p = stats.ttest_ind(longs, shorts)
     direction = "LONG higher" if longs.mean() > shorts.mean() else "SHORT higher"
     desc = f"long_mean={longs.mean():.3f}  short_mean={shorts.mean():.3f}  ({direction})"
     return label, p, len(clean), desc
@@ -111,7 +114,7 @@ def test_categorical(series: pd.Series, target: pd.Series, label: str):
     clean = pd.DataFrame({"x": series, "y": target}).dropna()
     if len(clean) < 20:
         return label, np.nan, len(clean), "too few"
-    ct  = pd.crosstab(clean["x"], clean["y"])
+    ct = pd.crosstab(clean["x"], clean["y"])
     chi2, p, dof, _ = stats.chi2_contingency(ct)
     # Show breakdown
     pct_long = clean.groupby("x")["y"].mean().to_dict()
@@ -121,17 +124,17 @@ def test_categorical(series: pd.Series, target: pd.Series, label: str):
 
 def main():
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
-    df  = load_data(con)
+    df = load_data(con)
     con.close()
 
     n = len(df)
-    n_long  = df["is_long"].sum()
+    n_long = df["is_long"].sum()
     n_short = n - n_long
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print(f"DIRECTION PREDICTION  --  {INSTRUMENT} {SESSION}  G4+  prev=WIN")
-    print(f"{'='*80}")
-    print(f"N = {n} days  |  LONG breaks: {n_long} ({n_long/n:.1%})  |  SHORT breaks: {n_short} ({n_short/n:.1%})")
-    print(f"Baseline WR if always bet LONG: {n_long/n:.1%}")
+    print(f"{'=' * 80}")
+    print(f"N = {n} days  |  LONG breaks: {n_long} ({n_long / n:.1%})  |  SHORT breaks: {n_short} ({n_short / n:.1%})")
+    print(f"Baseline WR if always bet LONG: {n_long / n:.1%}")
     print()
 
     tests = []
@@ -168,7 +171,7 @@ def main():
     print("-" * 90)
 
     if pvals_v:
-        p_adj  = false_discovery_control(list(pvals_v), method="bh")
+        p_adj = false_discovery_control(list(pvals_v), method="bh")
         reject = [p <= 0.10 for p in p_adj]
         for lbl, p_raw, p_bh, rej, n_, desc in zip(labels_v, pvals_v, p_adj, reject, ns_v, descs_v):
             sig = "*** BH-SIG" if rej else ("** " if p_raw < 0.05 else "   ")
@@ -189,7 +192,7 @@ def main():
     print("=" * 80)
     print("BREAKDOWN: day_of_week × actual direction")
     print("=" * 80)
-    dow_map = {0:"Mon", 1:"Tue", 2:"Wed", 3:"Thu", 4:"Fri"}
+    dow_map = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri"}
     df["dow_name"] = df["day_of_week"].map(dow_map)
     ct2 = pd.crosstab(df["dow_name"], df["break_dir"])
     pct2 = pd.crosstab(df["dow_name"], df["break_dir"], normalize="index")
@@ -217,16 +220,15 @@ def main():
     # Miss rate = 40% → 0R (limit never fills, no trade)
     # So expected R per day = 0.60 * 0.536 = +0.322R per prev=WIN day
     # vs current OCO (all directions): ~0.40R blended
-    print(f"  One-sided LONG (60% accuracy): 0.60 × 0.536R = +{0.60*0.536:.3f}R per prev=WIN day")
-    print(f"  One-sided LONG (70% accuracy): 0.70 × 0.536R = +{0.70*0.536:.3f}R per prev=WIN day")
-    print(f"  Random OCO (no predictor):     50% × 0.536R + 50% × 0.054R = +{0.5*0.536+0.5*0.054:.3f}R")
+    print(f"  One-sided LONG (60% accuracy): 0.60 × 0.536R = +{0.60 * 0.536:.3f}R per prev=WIN day")
+    print(f"  One-sided LONG (70% accuracy): 0.70 × 0.536R = +{0.70 * 0.536:.3f}R per prev=WIN day")
+    print(f"  Random OCO (no predictor):     50% × 0.536R + 50% × 0.054R = +{0.5 * 0.536 + 0.5 * 0.054:.3f}R")
 
     print()
     print("=" * 80)
     print("SUMMARY")
     print("=" * 80)
-    bh_sigs = [lbl for lbl, p_bh, rej, n_, desc in
-               zip(labels_v, p_adj, reject, ns_v, descs_v) if rej]
+    bh_sigs = [lbl for lbl, p_bh, rej, n_, desc in zip(labels_v, p_adj, reject, ns_v, descs_v) if rej]
     if bh_sigs:
         print(f"BH SURVIVORS: {', '.join(bh_sigs)}")
         print("ACTION: Direction predictor found — test as one-sided limit filter")

@@ -181,13 +181,23 @@ def test_garch_on_validated(df: pd.DataFrame, thresh: int) -> dict:
 
     return {
         "skip": False,
-        "N": len(df), "N_on": len(on), "N_off": len(off),
-        "expr_on": expr_on, "expr_off": expr_off, "lift": lift,
-        "sr_on": sr_on, "sr_off": sr_off, "sr_lift": float(sr_lift),
+        "N": len(df),
+        "N_on": len(on),
+        "N_off": len(off),
+        "expr_on": expr_on,
+        "expr_off": expr_off,
+        "lift": lift,
+        "sr_on": sr_on,
+        "sr_off": sr_off,
+        "sr_lift": float(sr_lift),
         "wr_on": float((on["pnl_r"] > 0).mean()),
         "wr_off": float((off["pnl_r"] > 0).mean()),
-        "t_stat": float(t_stat), "p_mean": float(p_mean), "p_sharpe": p_sharpe,
-        "yr_pos": yr_pos, "yr_total": yr_total, "yr_detail": yr_detail,
+        "t_stat": float(t_stat),
+        "p_mean": float(p_mean),
+        "p_sharpe": p_sharpe,
+        "yr_pos": yr_pos,
+        "yr_total": yr_total,
+        "yr_detail": yr_detail,
     }
 
 
@@ -263,21 +273,27 @@ def main():
     print("\n=== SURVIVORS (any BH-FDR) ===")
     for r in sorted(all_results, key=lambda x: x["p_sharpe"]):
         if r["bh_sharpe"] or r["bh_mean"]:
-            print(f"  {r['strategy_id']} {r['direction']} @{r['threshold']}: "
-                  f"lift={r['lift']:+.3f} sr_lift={r['sr_lift']:+.3f} "
-                  f"p_mean={r['p_mean']:.4f} p_sharpe={r['p_sharpe']:.4f} "
-                  f"yrs={r['yr_pos']}/{r['yr_total']} "
-                  f"[bh_mean={r['bh_mean']} bh_sharpe={r['bh_sharpe']}]")
+            print(
+                f"  {r['strategy_id']} {r['direction']} @{r['threshold']}: "
+                f"lift={r['lift']:+.3f} sr_lift={r['sr_lift']:+.3f} "
+                f"p_mean={r['p_mean']:.4f} p_sharpe={r['p_sharpe']:.4f} "
+                f"yrs={r['yr_pos']}/{r['yr_total']} "
+                f"[bh_mean={r['bh_mean']} bh_sharpe={r['bh_sharpe']}]"
+            )
 
     print("\n=== TOP 20 BY |sr_lift| regardless of BH-FDR ===")
     for r in sorted(all_results, key=lambda x: -abs(x["sr_lift"]))[:20]:
         bh = ""
-        if r["bh_sharpe"]: bh += "BH_SHARPE "
-        if r["bh_mean"]: bh += "BH_MEAN "
-        print(f"  {r['strategy_id']} {r['direction']} @{r['threshold']}: "
-              f"lift={r['lift']:+.3f} sr_lift={r['sr_lift']:+.3f} "
-              f"p_mean={r['p_mean']:.4f} p_sharpe={r['p_sharpe']:.4f} "
-              f"N={r['N_on']}/{r['N_off']} yrs={r['yr_pos']}/{r['yr_total']} {bh}")
+        if r["bh_sharpe"]:
+            bh += "BH_SHARPE "
+        if r["bh_mean"]:
+            bh += "BH_MEAN "
+        print(
+            f"  {r['strategy_id']} {r['direction']} @{r['threshold']}: "
+            f"lift={r['lift']:+.3f} sr_lift={r['sr_lift']:+.3f} "
+            f"p_mean={r['p_mean']:.4f} p_sharpe={r['p_sharpe']:.4f} "
+            f"N={r['N_on']}/{r['N_off']} yrs={r['yr_pos']}/{r['yr_total']} {bh}"
+        )
 
     emit(all_results, K)
 
@@ -314,46 +330,70 @@ def emit(results, K):
     lines.append("")
 
     if not survivors_sharpe and not survivors_mean:
-        lines += ["_No survivors at validated-scope BH-FDR._", "",
-                  "This is the CORRECT test — it confirms that when tested on the actual deployed/validated trade population, garch overlay does NOT produce statistically significant lift after multiple-testing correction.",
-                  "",
-                  "The prior 'all-sessions universality' claim of 21 surviving families was testing on UNFILTERED orb_outcomes and does not apply to deployable strategies."]
+        lines += [
+            "_No survivors at validated-scope BH-FDR._",
+            "",
+            "This is the CORRECT test — it confirms that when tested on the actual deployed/validated trade population, garch overlay does NOT produce statistically significant lift after multiple-testing correction.",
+            "",
+            "The prior 'all-sessions universality' claim of 21 surviving families was testing on UNFILTERED orb_outcomes and does not apply to deployable strategies.",
+        ]
     else:
-        lines += ["| Strategy | Dir | Thr | N on/off | lift | sr_lift | p_mean | p_sharpe | yrs+ | BH_mean | BH_sharpe |",
-                  "|---|---|---|---|---|---|---|---|---|---|---|"]
+        lines += [
+            "| Strategy | Dir | Thr | N on/off | lift | sr_lift | p_mean | p_sharpe | yrs+ | BH_mean | BH_sharpe |",
+            "|---|---|---|---|---|---|---|---|---|---|---|",
+        ]
         for r in sorted(results, key=lambda x: x["p_sharpe"]):
             if r["bh_sharpe"] or r["bh_mean"]:
                 bhm = "PASS" if r["bh_mean"] else "—"
                 bhs = "PASS" if r["bh_sharpe"] else "—"
-                lines.append(f"| {r['strategy_id']} | {r['direction']} | {r['threshold']} | "
-                             f"{r['N_on']}/{r['N_off']} | {r['lift']:+.3f} | {r['sr_lift']:+.3f} | "
-                             f"{r['p_mean']:.4f} | {r['p_sharpe']:.4f} | "
-                             f"{r['yr_pos']}/{r['yr_total']} | {bhm} | {bhs} |")
+                lines.append(
+                    f"| {r['strategy_id']} | {r['direction']} | {r['threshold']} | "
+                    f"{r['N_on']}/{r['N_off']} | {r['lift']:+.3f} | {r['sr_lift']:+.3f} | "
+                    f"{r['p_mean']:.4f} | {r['p_sharpe']:.4f} | "
+                    f"{r['yr_pos']}/{r['yr_total']} | {bhm} | {bhs} |"
+                )
 
-    lines += ["", "---", "", "## Top 20 cells by |sr_lift| (informational — pre-correction)", "",
-              "These are NOT validated signals. Listed for diagnostic purposes only.",
-              "",
-              "| Strategy | Dir | Thr | N | lift | sr_lift | p_sharpe | yrs+ |",
-              "|---|---|---|---|---|---|---|---|"]
+    lines += [
+        "",
+        "---",
+        "",
+        "## Top 20 cells by |sr_lift| (informational — pre-correction)",
+        "",
+        "These are NOT validated signals. Listed for diagnostic purposes only.",
+        "",
+        "| Strategy | Dir | Thr | N | lift | sr_lift | p_sharpe | yrs+ |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
     for r in sorted(results, key=lambda x: -abs(x["sr_lift"]))[:20]:
-        lines.append(f"| {r['strategy_id']} | {r['direction']} | {r['threshold']} | "
-                     f"{r['N_on']}/{r['N_off']} | {r['lift']:+.3f} | {r['sr_lift']:+.3f} | "
-                     f"{r['p_sharpe']:.4f} | {r['yr_pos']}/{r['yr_total']} |")
+        lines.append(
+            f"| {r['strategy_id']} | {r['direction']} | {r['threshold']} | "
+            f"{r['N_on']}/{r['N_off']} | {r['lift']:+.3f} | {r['sr_lift']:+.3f} | "
+            f"{r['p_sharpe']:.4f} | {r['yr_pos']}/{r['yr_total']} |"
+        )
 
-    lines += ["", "---", "", "## Honest verdict", "",
-              "**Corrects prior claims:** Prior garch overlay tests ran on unfiltered orb_outcomes, violating the Validated Universe Rule in RESEARCH_RULES.md. At validated-scope (filter-conditional) population, the finding changes materially.",
-              "",
-              "**Deployable signal from garch overlay:** " + (
-                  "NONE at BH-FDR K=" + str(K) + "." if not survivors_sharpe else
-                  f"{len(survivors_sharpe)} cells pass Sharpe BH-FDR at K={K}."),
-              "",
-              "**Implication for NYSE_OPEN SKIP idea:** the earlier claim was based on unfiltered orb_outcomes; at validated-scope (L4 ORB_G5 filter applied), the effect does NOT pass BH-FDR. The SKIP hypothesis is NOT a validated discovery candidate.",
-              "",
-              "**What this DOES justify:**",
-              "- Shadow log garch_pct alongside live trades (informational; no code change)",
-              "- Pre-register as hypothesis for 6-12 month forward OOS accumulation",
-              "- Do NOT register SKIP_GARCH_70 as a new filter until OOS validates at proper scope",
-              ""]
+    lines += [
+        "",
+        "---",
+        "",
+        "## Honest verdict",
+        "",
+        "**Corrects prior claims:** Prior garch overlay tests ran on unfiltered orb_outcomes, violating the Validated Universe Rule in RESEARCH_RULES.md. At validated-scope (filter-conditional) population, the finding changes materially.",
+        "",
+        "**Deployable signal from garch overlay:** "
+        + (
+            "NONE at BH-FDR K=" + str(K) + "."
+            if not survivors_sharpe
+            else f"{len(survivors_sharpe)} cells pass Sharpe BH-FDR at K={K}."
+        ),
+        "",
+        "**Implication for NYSE_OPEN SKIP idea:** the earlier claim was based on unfiltered orb_outcomes; at validated-scope (L4 ORB_G5 filter applied), the effect does NOT pass BH-FDR. The SKIP hypothesis is NOT a validated discovery candidate.",
+        "",
+        "**What this DOES justify:**",
+        "- Shadow log garch_pct alongside live trades (informational; no code change)",
+        "- Pre-register as hypothesis for 6-12 month forward OOS accumulation",
+        "- Do NOT register SKIP_GARCH_70 as a new filter until OOS validates at proper scope",
+        "",
+    ]
 
     OUTPUT_MD.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n[report] {OUTPUT_MD}")

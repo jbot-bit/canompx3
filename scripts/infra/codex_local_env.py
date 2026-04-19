@@ -127,7 +127,9 @@ def run_status(platform: str) -> None:
 
 def run_lint(platform: str) -> None:
     env = env_for_platform(platform)
-    run_checked(["uv", "run", "--frozen", "ruff", "check", "pipeline", "trading_app", "ui", "scripts", "tests"], env=env)
+    run_checked(
+        ["uv", "run", "--frozen", "ruff", "check", "pipeline", "trading_app", "ui", "scripts", "tests"], env=env
+    )
 
 
 def run_tests(platform: str) -> None:
@@ -145,9 +147,7 @@ def is_wsl_native_root(root: Path) -> bool:
     return root_text.startswith("/") and not root_text.startswith("/mnt/")
 
 
-def capture_command(
-    command: list[str], *, env: dict[str, str] | None = None
-) -> subprocess.CompletedProcess[str]:
+def capture_command(command: list[str], *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
         cwd=ROOT,
@@ -192,8 +192,7 @@ def run_doctor(platform: str) -> None:
             )
         )
         mount_guard = capture_command(
-            platform_python(platform)
-            + ["scripts/tools/wsl_mount_guard.py", "--root", str(ROOT)],
+            platform_python(platform) + ["scripts/tools/wsl_mount_guard.py", "--root", str(ROOT)],
             env=env,
         )
         checks.append(
@@ -245,7 +244,9 @@ def run_doctor(platform: str) -> None:
             _doctor_check(
                 "Session preflight",
                 preflight_result.returncode == 0,
-                preflight_result.stdout.strip() or preflight_result.stderr.strip() or f"exit {preflight_result.returncode}",
+                preflight_result.stdout.strip()
+                or preflight_result.stderr.strip()
+                or f"exit {preflight_result.returncode}",
             )
         )
     else:

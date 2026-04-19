@@ -186,7 +186,7 @@ def main() -> int:
                 {
                     "leader": f"{lsym}_{lsess}",
                     "follower": f"{fsym}_{fsess}",
-                    "train_years": f"{min(years)}-{split_year-1}",
+                    "train_years": f"{min(years)}-{split_year - 1}",
                     "test_year": int(split_year),
                     "n_train_on": len(tr_on),
                     "n_test_on": len(te_on),

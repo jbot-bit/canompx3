@@ -1,5 +1,6 @@
 """Break delay tested WITHIN deployed lane filters — the correct test.
 O5 default per methodology rules. Exact deployed parameters."""
+
 import numpy as np
 import duckdb
 from scipy import stats
@@ -125,31 +126,36 @@ for lane_name, cfg in LANES.items():
     print(f"  Baseline: N={len(pnl):,}  mean={baseline_mean:+.4f}  WR={baseline_wr:.1%}")
     print()
     print(f"  {'Bucket':<10s} {'N':>6s} {'mean':>10s} {'median':>10s} {'WR':>8s} {'std':>8s}")
-    print(f"  {'-'*55}")
+    print(f"  {'-' * 55}")
 
     for label, sub in [("FAST<=5m", fast), ("MED 5-15m", medium), ("SLOW>15m", slow)]:
         if len(sub) < 5:
             print(f"  {label:<10s} {len(sub):>6d}       ---       ---      ---      ---")
             continue
-        print(f"  {label:<10s} {len(sub):>6d} {sub.mean():>+10.4f} {np.median(sub):>+10.4f} "
-              f"{(sub > 0).mean():>8.1%} {sub.std(ddof=1):>8.4f}")
+        print(
+            f"  {label:<10s} {len(sub):>6d} {sub.mean():>+10.4f} {np.median(sub):>+10.4f} "
+            f"{(sub > 0).mean():>8.1%} {sub.std(ddof=1):>8.4f}"
+        )
 
     # FAST vs SLOW test
     if len(fast) >= 10 and len(slow) >= 10:
         t, p = stats.ttest_ind(fast, slow, equal_var=False)
         n1, n2 = len(fast), len(slow)
-        pooled = np.sqrt(
-            ((n1 - 1) * fast.std(ddof=1) ** 2 + (n2 - 1) * slow.std(ddof=1) ** 2)
-            / (n1 + n2 - 2)
-        )
+        pooled = np.sqrt(((n1 - 1) * fast.std(ddof=1) ** 2 + (n2 - 1) * slow.std(ddof=1) ** 2) / (n1 + n2 - 2))
         d = (fast.mean() - slow.mean()) / pooled if pooled > 0 else 0
         all_pvalues.append(p)
-        results.append({
-            "lane": lane_name, "fast_mean": fast.mean(), "slow_mean": slow.mean(),
-            "d": d, "p": p, "fast_n": n1, "slow_n": n2,
-        })
-        print(f"\n  FAST vs SLOW: d={d:+.3f}  p={p:.4f}  "
-              f"delta={fast.mean() - slow.mean():+.4f}")
+        results.append(
+            {
+                "lane": lane_name,
+                "fast_mean": fast.mean(),
+                "slow_mean": slow.mean(),
+                "d": d,
+                "p": p,
+                "fast_n": n1,
+                "slow_n": n2,
+            }
+        )
+        print(f"\n  FAST vs SLOW: d={d:+.3f}  p={p:.4f}  delta={fast.mean() - slow.mean():+.4f}")
         if abs(d) >= 0.2:
             print(f"  --> ECONOMICALLY SIGNIFICANT (|d|>=0.2)")
         elif abs(d) >= 0.1:
@@ -166,10 +172,11 @@ for lane_name, cfg in LANES.items():
         years_data = {}
         trading_days = np.array(r["trading_day"])
         import pandas as _pd
+
         td_series = _pd.Series(trading_days)
         year_arr = td_series.dt.year.values
         for yr in sorted(set(year_arr)):
-            yr_mask = (year_arr == yr)
+            yr_mask = year_arr == yr
             yr_fast = pnl[yr_mask & (delay <= 5)]
             yr_slow = pnl[yr_mask & (delay > 15)]
             if len(yr_fast) >= 5 and len(yr_slow) >= 5:
@@ -178,8 +185,10 @@ for lane_name, cfg in LANES.items():
         if years_data:
             fast_better = sum(1 for f, s in years_data.values() if f > s)
             total = len(years_data)
-            print(f"\n  Year-by-year: FAST > SLOW in {fast_better}/{total} years "
-                  f"({'STABLE' if fast_better / total >= 0.6 else 'FRAGILE'})")
+            print(
+                f"\n  Year-by-year: FAST > SLOW in {fast_better}/{total} years "
+                f"({'STABLE' if fast_better / total >= 0.6 else 'FRAGILE'})"
+            )
 
 # BH FDR across all lane tests
 print("\n" + "=" * 110)
@@ -192,8 +201,7 @@ if all_pvalues:
     print(f"K = {K}")
     for i, res in enumerate(results):
         sig = "YES" if reject[i] else "no"
-        print(f"  {res['lane']:<45s} d={res['d']:+.3f}  raw_p={res['p']:.4f}  "
-              f"BH_p={adj_p[i]:.4f}  sig={sig}")
+        print(f"  {res['lane']:<45s} d={res['d']:+.3f}  raw_p={res['p']:.4f}  BH_p={adj_p[i]:.4f}  sig={sig}")
 
 # Also test MGC TOKYO_OPEN (shadow lane)
 print("\n--- MGC TOKYO_OPEN ORB_G4_CONT O5 RR2.0 (shadow) ---")
@@ -220,7 +228,7 @@ try:
     if len(fast) >= 10 and len(slow) >= 10:
         t, p = stats.ttest_ind(fast, slow, equal_var=False)
         n1, n2 = len(fast), len(slow)
-        pooled = np.sqrt(((n1-1)*fast.std(ddof=1)**2 + (n2-1)*slow.std(ddof=1)**2)/(n1+n2-2))
+        pooled = np.sqrt(((n1 - 1) * fast.std(ddof=1) ** 2 + (n2 - 1) * slow.std(ddof=1) ** 2) / (n1 + n2 - 2))
         d = (fast.mean() - slow.mean()) / pooled if pooled > 0 else 0
         print(f"  d={d:+.3f}  p={p:.4f}")
 except Exception as e:

@@ -728,10 +728,7 @@ def build_outcomes(
         query = f"""
             SELECT trading_day, symbol, orb_minutes,
                    {
-            ", ".join(
-                f"orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts"
-                for lbl in sessions
-            )
+            ", ".join(f"orb_{lbl}_high, orb_{lbl}_low, orb_{lbl}_break_dir, orb_{lbl}_break_ts" for lbl in sessions)
         }
             FROM daily_features
             WHERE symbol = ? AND orb_minutes = ?

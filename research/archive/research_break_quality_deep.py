@@ -41,6 +41,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 try:
     from scipy.stats import ttest_1samp
+
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
@@ -79,6 +80,7 @@ MIN_N = 30
 # =========================================================================
 # Statistical utilities (sourced from research_signal_stacking.py)
 # =========================================================================
+
 
 def classify_sample(n: int) -> str:
     """Per RESEARCH_RULES.md thresholds."""
@@ -136,16 +138,18 @@ def compute_stats(pnl: pd.Series) -> dict:
     valid = pnl.dropna()
     n = len(valid)
     if n == 0:
-        return dict(n=0, avg_r=np.nan, win_rate=np.nan, tot_r=np.nan,
-                    sharpe=np.nan, p_value=np.nan, sample_class="INVALID")
+        return dict(
+            n=0, avg_r=np.nan, win_rate=np.nan, tot_r=np.nan, sharpe=np.nan, p_value=np.nan, sample_class="INVALID"
+        )
     avg = float(valid.mean())
     win_rate = float((valid > 0).sum() / n)
     tot_r = float(valid.sum())
     std = float(valid.std(ddof=1)) if n > 1 else 0.0
     sharpe = float(avg / std * np.sqrt(252)) if std > 0 else np.nan
     p_value = compute_pvalue(valid)
-    return dict(n=n, avg_r=avg, win_rate=win_rate, tot_r=tot_r,
-                sharpe=sharpe, p_value=p_value, sample_class=classify_sample(n))
+    return dict(
+        n=n, avg_r=avg, win_rate=win_rate, tot_r=tot_r, sharpe=sharpe, p_value=p_value, sample_class=classify_sample(n)
+    )
 
 
 def bootstrap_ci(pnl: pd.Series, n_boot: int = 1000) -> tuple[float, float]:
@@ -154,8 +158,7 @@ def bootstrap_ci(pnl: pd.Series, n_boot: int = 1000) -> tuple[float, float]:
     if len(valid) < 10:
         return (np.nan, np.nan)
     rng = np.random.default_rng(42)
-    boot_means = [rng.choice(valid, size=len(valid), replace=True).mean()
-                  for _ in range(n_boot)]
+    boot_means = [rng.choice(valid, size=len(valid), replace=True).mean() for _ in range(n_boot)]
     lo = float(np.percentile(boot_means, 2.5))
     hi = float(np.percentile(boot_means, 97.5))
     return (lo, hi)
@@ -183,6 +186,7 @@ def permutation_test(group_a: pd.Series, group_b: pd.Series, n_perm: int = 1000)
 # =========================================================================
 # Data loading
 # =========================================================================
+
 
 def load_break_context(con, instrument: str, session: str) -> pd.DataFrame:
     """Load outcomes joined with ORB context from daily_features.
@@ -236,8 +240,7 @@ def load_break_context(con, instrument: str, session: str) -> pd.DataFrame:
     return df
 
 
-def load_bars_for_instrument(con, instrument: str,
-                              date_min, date_max) -> dict:
+def load_bars_for_instrument(con, instrument: str, date_min, date_max) -> dict:
     """Bulk-load all 1m bars for an instrument into a dict keyed by trading day.
 
     Single query per instrument (~160MB) vs per-trade queries (~0.3s vs 19s).
@@ -250,37 +253,36 @@ def load_bars_for_instrument(con, instrument: str,
     # Extend range by 1 day on each side for boundary safety
     td_min = date_min if isinstance(date_min, date) else date_min.date()
     td_max = date_max if isinstance(date_max, date) else date_max.date()
-    bris_start = datetime(td_min.year, td_min.month, td_min.day, 9, 0, 0,
-                          tzinfo=BRISBANE_TZ) - timedelta(days=1)
-    bris_end = datetime(td_max.year, td_max.month, td_max.day, 9, 0, 0,
-                        tzinfo=BRISBANE_TZ) + timedelta(days=2)
+    bris_start = datetime(td_min.year, td_min.month, td_min.day, 9, 0, 0, tzinfo=BRISBANE_TZ) - timedelta(days=1)
+    bris_end = datetime(td_max.year, td_max.month, td_max.day, 9, 0, 0, tzinfo=BRISBANE_TZ) + timedelta(days=2)
     utc_start = bris_start.astimezone(UTC_TZ).replace(tzinfo=None)
     utc_end = bris_end.astimezone(UTC_TZ).replace(tzinfo=None)
 
-    bars_all = con.execute("""
+    bars_all = con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume
         FROM bars_1m
         WHERE symbol = ?
           AND ts_utc >= ?
           AND ts_utc < ?
         ORDER BY ts_utc
-    """, [instrument, utc_start, utc_end]).fetchdf()
+    """,
+        [instrument, utc_start, utc_end],
+    ).fetchdf()
 
     if bars_all.empty:
         return {}
 
     # Shift UTC by 1h to compute Brisbane trading day date
     bars_all["_td"] = (bars_all["ts_utc"] + pd.Timedelta(hours=1)).dt.date
-    result = {
-        td: grp.drop(columns="_td").reset_index(drop=True)
-        for td, grp in bars_all.groupby("_td")
-    }
+    result = {td: grp.drop(columns="_td").reset_index(drop=True) for td, grp in bars_all.groupby("_td")}
     return result
 
 
 # =========================================================================
 # DST regime helper
 # =========================================================================
+
 
 def build_dst_regime_column(df: pd.DataFrame, session: str) -> pd.Series:
     """Map rows to 'winter' / 'summer' / 'clean' based on session and DST columns.
@@ -309,8 +311,8 @@ def build_dst_regime_column(df: pd.DataFrame, session: str) -> pd.Series:
 # Condition extraction (single-pass)
 # =========================================================================
 
-def extract_conditions_v2(bars_day: pd.DataFrame, row: dict,
-                           c6_windows: list) -> dict | None:
+
+def extract_conditions_v2(bars_day: pd.DataFrame, row: dict, c6_windows: list) -> dict | None:
     """Extract all break-quality conditions for a single trade.
 
     Single pass over bars_day for all C6 windows simultaneously.
@@ -434,8 +436,8 @@ def extract_conditions_v2(bars_day: pd.DataFrame, row: dict,
 # Shared helpers
 # =========================================================================
 
-def split_stats(df: pd.DataFrame, cond_col: str,
-                min_n: int = MIN_N) -> dict | None:
+
+def split_stats(df: pd.DataFrame, cond_col: str, min_n: int = MIN_N) -> dict | None:
     """Compute stats for condition True vs False groups."""
     if cond_col not in df.columns:
         return None
@@ -447,8 +449,7 @@ def split_stats(df: pd.DataFrame, cond_col: str,
     st = compute_stats(gt)
     sf = compute_stats(gf)
     delta = st["avg_r"] - sf["avg_r"]
-    return {"true": st, "false": sf, "delta": delta,
-            "perm_p": np.nan}  # perm_p filled later
+    return {"true": st, "false": sf, "delta": delta, "perm_p": np.nan}  # perm_p filled later
 
 
 def print_split(label: str, result: dict, note: str = "") -> None:
@@ -461,14 +462,17 @@ def print_split(label: str, result: dict, note: str = "") -> None:
         sig = "<< ACTIONABLE" if delta < 0 else ">> ACTIONABLE"
     elif abs(delta) >= 0.08:
         sig = "<- notable"
-    print(f"  {label:<30s}  TRUE  N={st['n']:4d} avgR={st['avg_r']:+.3f} "
-          f"WR={st['win_rate']:.1%}  |  FALSE  N={sf['n']:4d} avgR={sf['avg_r']:+.3f} "
-          f"WR={sf['win_rate']:.1%}  |  delta={delta:+.3f}  {sig}{note}")
+    print(
+        f"  {label:<30s}  TRUE  N={st['n']:4d} avgR={st['avg_r']:+.3f} "
+        f"WR={st['win_rate']:.1%}  |  FALSE  N={sf['n']:4d} avgR={sf['avg_r']:+.3f} "
+        f"WR={sf['win_rate']:.1%}  |  delta={delta:+.3f}  {sig}{note}"
+    )
 
 
 # =========================================================================
 # AUDIT MODE -- verify JOIN inflation fix
 # =========================================================================
+
 
 def run_audit(con, instrument: str = "MGC", session: str = "1000") -> None:
     """Audit Part 9: verify the orb_minutes JOIN fix prevents inflation."""
@@ -566,6 +570,7 @@ def run_audit(con, instrument: str = "MGC", session: str = "1000") -> None:
 # Part 1: Cross-Instrument Validation
 # =========================================================================
 
+
 def part1_cross_instrument(all_df: pd.DataFrame) -> list[dict]:
     """4 instruments x sessions x {C5, C6_3bar} at G4+ baseline."""
     print(f"\n{'=' * 80}")
@@ -594,24 +599,26 @@ def part1_cross_instrument(all_df: pd.DataFrame) -> list[dict]:
                     print(f"    {cond_col}: insufficient N in one group, skip")
                     continue
                 print_split(cond_col, res, note)
-                rows.append({
-                    "part": "P1",
-                    "instrument": inst,
-                    "session": sess,
-                    "dst_regime": "all",
-                    "g_filter": "G4",
-                    "condition": cond_col,
-                    "n_true": res["true"]["n"],
-                    "avg_r_true": res["true"]["avg_r"],
-                    "n_false": res["false"]["n"],
-                    "avg_r_false": res["false"]["avg_r"],
-                    "delta": res["delta"],
-                    "p_value": np.nan,
-                    "p_bh": np.nan,
-                    "sample_class_true": res["true"]["sample_class"],
-                    "sample_class_false": res["false"]["sample_class"],
-                    "mcl_nogo": inst == "MCL",
-                })
+                rows.append(
+                    {
+                        "part": "P1",
+                        "instrument": inst,
+                        "session": sess,
+                        "dst_regime": "all",
+                        "g_filter": "G4",
+                        "condition": cond_col,
+                        "n_true": res["true"]["n"],
+                        "avg_r_true": res["true"]["avg_r"],
+                        "n_false": res["false"]["n"],
+                        "avg_r_false": res["false"]["avg_r"],
+                        "delta": res["delta"],
+                        "p_value": np.nan,
+                        "p_bh": np.nan,
+                        "sample_class_true": res["true"]["sample_class"],
+                        "sample_class_false": res["false"]["sample_class"],
+                        "mcl_nogo": inst == "MCL",
+                    }
+                )
 
     return rows
 
@@ -619,6 +626,7 @@ def part1_cross_instrument(all_df: pd.DataFrame) -> list[dict]:
 # =========================================================================
 # Part 2: DST Splits (0900 and 1800 only)
 # =========================================================================
+
 
 def part2_dst_splits(all_df: pd.DataFrame) -> list[dict]:
     """DST-split analysis for all DST-affected sessions (0900, 0030, 2300, 1800).
@@ -645,8 +653,7 @@ def part2_dst_splits(all_df: pd.DataFrame) -> list[dict]:
         for inst in sorted(sub_sess["instrument"].unique()):
             sub = sub_sess[sub_sess["instrument"] == inst]
             bl = compute_stats(sub["pnl_r"])
-            print(f"    {inst} blended: N={bl['n']} avgR={bl['avg_r']:+.3f} -- "
-                  f"MISLEADING, use DST splits below")
+            print(f"    {inst} blended: N={bl['n']} avgR={bl['avg_r']:+.3f} -- MISLEADING, use DST splits below")
 
         for inst in sorted(sub_sess["instrument"].unique()):
             sub_inst = sub_sess[sub_sess["instrument"] == inst]
@@ -657,31 +664,34 @@ def part2_dst_splits(all_df: pd.DataFrame) -> list[dict]:
                     print(f"    {regime}: N={len(sub)} -- too small")
                     continue
                 bl = compute_stats(sub["pnl_r"])
-                print(f"    {regime}: N={bl['n']} avgR={bl['avg_r']:+.3f} "
-                      f"WR={bl['win_rate']:.1%} [{bl['sample_class']}]")
+                print(
+                    f"    {regime}: N={bl['n']} avgR={bl['avg_r']:+.3f} WR={bl['win_rate']:.1%} [{bl['sample_class']}]"
+                )
 
                 for cond_col in ["c5_entry_bar_continues", "c6_reversal_3bar"]:
                     res = split_stats(sub, cond_col, min_n=15)
                     if res is None:
                         continue
-                    rows.append({
-                        "part": "P2",
-                        "instrument": inst,
-                        "session": sess,
-                        "dst_regime": regime,
-                        "g_filter": "G4",
-                        "condition": cond_col,
-                        "n_true": res["true"]["n"],
-                        "avg_r_true": res["true"]["avg_r"],
-                        "n_false": res["false"]["n"],
-                        "avg_r_false": res["false"]["avg_r"],
-                        "delta": res["delta"],
-                        "p_value": np.nan,
-                        "p_bh": np.nan,
-                        "sample_class_true": res["true"]["sample_class"],
-                        "sample_class_false": res["false"]["sample_class"],
-                        "mcl_nogo": inst == "MCL",
-                    })
+                    rows.append(
+                        {
+                            "part": "P2",
+                            "instrument": inst,
+                            "session": sess,
+                            "dst_regime": regime,
+                            "g_filter": "G4",
+                            "condition": cond_col,
+                            "n_true": res["true"]["n"],
+                            "avg_r_true": res["true"]["avg_r"],
+                            "n_false": res["false"]["n"],
+                            "avg_r_false": res["false"]["avg_r"],
+                            "delta": res["delta"],
+                            "p_value": np.nan,
+                            "p_bh": np.nan,
+                            "sample_class_true": res["true"]["sample_class"],
+                            "sample_class_false": res["false"]["sample_class"],
+                            "mcl_nogo": inst == "MCL",
+                        }
+                    )
                     print_split(f"  {regime} {cond_col}", res)
 
     return rows
@@ -691,6 +701,7 @@ def part2_dst_splits(all_df: pd.DataFrame) -> list[dict]:
 # Part 3: Filter Interaction (G4, G6, G8)
 # =========================================================================
 
+
 def part3_filter_interaction(all_df: pd.DataFrame) -> list[dict]:
     """C5 and C6_3bar delta at G4/G6/G8 per (instrument, session)."""
     print(f"\n{'=' * 80}")
@@ -698,8 +709,10 @@ def part3_filter_interaction(all_df: pd.DataFrame) -> list[dict]:
     print(f"{'=' * 80}")
 
     rows = []
-    print(f"\n  {'Instrument':>10} {'Session':>7} {'Condition':>25}  "
-          f"{'G4 delta':>8} {'G6 delta':>8} {'G8 delta':>8}  Trend")
+    print(
+        f"\n  {'Instrument':>10} {'Session':>7} {'Condition':>25}  "
+        f"{'G4 delta':>8} {'G6 delta':>8} {'G8 delta':>8}  Trend"
+    )
 
     for inst in sorted(all_df["instrument"].unique()):
         for sess in sorted(all_df[all_df["instrument"] == inst]["session"].unique()):
@@ -712,24 +725,26 @@ def part3_filter_interaction(all_df: pd.DataFrame) -> list[dict]:
                     res = split_stats(sub, cond_col, min_n=20)
                     deltas[g_label] = res["delta"] if res else np.nan
                     if res:
-                        rows.append({
-                            "part": "P3",
-                            "instrument": inst,
-                            "session": sess,
-                            "dst_regime": "all",
-                            "g_filter": g_label,
-                            "condition": cond_col,
-                            "n_true": res["true"]["n"],
-                            "avg_r_true": res["true"]["avg_r"],
-                            "n_false": res["false"]["n"],
-                            "avg_r_false": res["false"]["avg_r"],
-                            "delta": res["delta"],
-                            "p_value": np.nan,
-                            "p_bh": np.nan,
-                            "sample_class_true": res["true"]["sample_class"],
-                            "sample_class_false": res["false"]["sample_class"],
-                            "mcl_nogo": inst == "MCL",
-                        })
+                        rows.append(
+                            {
+                                "part": "P3",
+                                "instrument": inst,
+                                "session": sess,
+                                "dst_regime": "all",
+                                "g_filter": g_label,
+                                "condition": cond_col,
+                                "n_true": res["true"]["n"],
+                                "avg_r_true": res["true"]["avg_r"],
+                                "n_false": res["false"]["n"],
+                                "avg_r_false": res["false"]["avg_r"],
+                                "delta": res["delta"],
+                                "p_value": np.nan,
+                                "p_bh": np.nan,
+                                "sample_class_true": res["true"]["sample_class"],
+                                "sample_class_false": res["false"]["sample_class"],
+                                "mcl_nogo": inst == "MCL",
+                            }
+                        )
 
                 d4 = deltas.get("G4", np.nan)
                 d6 = deltas.get("G6", np.nan)
@@ -744,8 +759,7 @@ def part3_filter_interaction(all_df: pd.DataFrame) -> list[dict]:
                         trend = "dampens v"
                     else:
                         trend = "stable"
-                print(f"  {inst:>10} {sess:>7} {cond_col:>25}  "
-                      f"{d4:>+8.3f} {d6:>+8.3f} {d8:>+8.3f}  {trend}")
+                print(f"  {inst:>10} {sess:>7} {cond_col:>25}  {d4:>+8.3f} {d6:>+8.3f} {d8:>+8.3f}  {trend}")
 
     return rows
 
@@ -753,6 +767,7 @@ def part3_filter_interaction(all_df: pd.DataFrame) -> list[dict]:
 # =========================================================================
 # Part 4: C5 + C6 Combination
 # =========================================================================
+
 
 def part4_combo(all_df: pd.DataFrame) -> list[dict]:
     """Five groups: C5+C6_3bar, C5+C6_5bar, C5 alone, C6_3bar alone, baseline."""
@@ -771,14 +786,16 @@ def part4_combo(all_df: pd.DataFrame) -> list[dict]:
 
             print(f"\n  {inst} {sess} (N={len(sub)}):")
             groups = [
-                ("C5=T + C6_3bar=F (continues + stays out 3bar)",
-                 (sub["c5_entry_bar_continues"] == True) & (sub["c6_reversal_3bar"] == False)),
-                ("C5=T + C6_5bar=F (continues + stays out 5bar)",
-                 (sub["c5_entry_bar_continues"] == True) & (sub["c6_reversal_5bar"] == False)),
-                ("C5=T alone (continues)",
-                 sub["c5_entry_bar_continues"] == True),
-                ("C6_3bar=F alone (stays outside 3bar)",
-                 sub["c6_reversal_3bar"] == False),
+                (
+                    "C5=T + C6_3bar=F (continues + stays out 3bar)",
+                    (sub["c5_entry_bar_continues"] == True) & (sub["c6_reversal_3bar"] == False),
+                ),
+                (
+                    "C5=T + C6_5bar=F (continues + stays out 5bar)",
+                    (sub["c5_entry_bar_continues"] == True) & (sub["c6_reversal_5bar"] == False),
+                ),
+                ("C5=T alone (continues)", sub["c5_entry_bar_continues"] == True),
+                ("C6_3bar=F alone (stays outside 3bar)", sub["c6_reversal_3bar"] == False),
                 ("Baseline (all breaks)", pd.Series(True, index=sub.index)),
             ]
 
@@ -788,21 +805,25 @@ def part4_combo(all_df: pd.DataFrame) -> list[dict]:
                 st = compute_stats(g)
                 delta_vs_base = st["avg_r"] - baseline_avgr if not np.isnan(st["avg_r"]) else np.nan
                 flag = " <" if (not np.isnan(delta_vs_base) and delta_vs_base > 0.10) else ""
-                print(f"    {label:<50s}  N={st['n']:4d} avgR={st['avg_r']:+.3f} "
-                      f"WR={st['win_rate']:.1%} deltavs_base={delta_vs_base:+.3f}{flag}")
-                rows.append({
-                    "part": "P4",
-                    "instrument": inst,
-                    "session": sess,
-                    "group": label,
-                    "n": st["n"],
-                    "avg_r": st["avg_r"],
-                    "win_rate": st["win_rate"],
-                    "tot_r": st["tot_r"],
-                    "delta_vs_baseline": delta_vs_base,
-                    "sample_class": st["sample_class"],
-                    "mcl_nogo": inst == "MCL",
-                })
+                print(
+                    f"    {label:<50s}  N={st['n']:4d} avgR={st['avg_r']:+.3f} "
+                    f"WR={st['win_rate']:.1%} deltavs_base={delta_vs_base:+.3f}{flag}"
+                )
+                rows.append(
+                    {
+                        "part": "P4",
+                        "instrument": inst,
+                        "session": sess,
+                        "group": label,
+                        "n": st["n"],
+                        "avg_r": st["avg_r"],
+                        "win_rate": st["win_rate"],
+                        "tot_r": st["tot_r"],
+                        "delta_vs_baseline": delta_vs_base,
+                        "sample_class": st["sample_class"],
+                        "mcl_nogo": inst == "MCL",
+                    }
+                )
 
     return rows
 
@@ -810,6 +831,7 @@ def part4_combo(all_df: pd.DataFrame) -> list[dict]:
 # =========================================================================
 # Part 5: Optimal C6 Window
 # =========================================================================
+
 
 def part5_optimal_c6_window(all_df: pd.DataFrame) -> list[dict]:
     """Sweep C6 windows 1-10 per (instrument, session)."""
@@ -841,23 +863,27 @@ def part5_optimal_c6_window(all_df: pd.DataFrame) -> list[dict]:
                 gain = ""
                 if prev_delta is not None and abs(delta - prev_delta) < 0.01:
                     gain = "  -> elbow"
-                print(f"    {n:>2}bar: N_out={res['false']['n']:4d} "
-                      f"avgR_out={res['false']['avg_r']:+.3f}  "
-                      f"N_rev={res['true']['n']:4d} "
-                      f"avgR_rev={res['true']['avg_r']:+.3f}  "
-                      f"delta={delta:+.3f}{gain}")
-                rows.append({
-                    "part": "P5",
-                    "instrument": inst,
-                    "session": sess,
-                    "window_bars": n,
-                    "n_stayed_outside": res["false"]["n"],
-                    "avg_r_outside": res["false"]["avg_r"],
-                    "n_reversal": res["true"]["n"],
-                    "avg_r_reversal": res["true"]["avg_r"],
-                    "delta": delta,
-                    "mcl_nogo": inst == "MCL",
-                })
+                print(
+                    f"    {n:>2}bar: N_out={res['false']['n']:4d} "
+                    f"avgR_out={res['false']['avg_r']:+.3f}  "
+                    f"N_rev={res['true']['n']:4d} "
+                    f"avgR_rev={res['true']['avg_r']:+.3f}  "
+                    f"delta={delta:+.3f}{gain}"
+                )
+                rows.append(
+                    {
+                        "part": "P5",
+                        "instrument": inst,
+                        "session": sess,
+                        "window_bars": n,
+                        "n_stayed_outside": res["false"]["n"],
+                        "avg_r_outside": res["false"]["avg_r"],
+                        "n_reversal": res["true"]["n"],
+                        "avg_r_reversal": res["true"]["avg_r"],
+                        "delta": delta,
+                        "mcl_nogo": inst == "MCL",
+                    }
+                )
                 prev_delta = delta
 
     return rows
@@ -866,6 +892,7 @@ def part5_optimal_c6_window(all_df: pd.DataFrame) -> list[dict]:
 # =========================================================================
 # Part 6: Year-over-Year Stability
 # =========================================================================
+
 
 def part6_yoy_stability(all_df: pd.DataFrame, min_abs_delta: float = 0.10) -> list[dict]:
     """Year-by-year breakdown for signals with |delta| > min_abs_delta."""
@@ -889,8 +916,7 @@ def part6_yoy_stability(all_df: pd.DataFrame, min_abs_delta: float = 0.10) -> li
                     continue
 
                 print(f"\n  {inst} {sess} {cond_col} (overall delta={overall['delta']:+.3f}):")
-                print(f"    {'Year':>4} {'N_tot':>6} {'N_true':>7} {'avgR_T':>8} "
-                      f"{'avgR_F':>8} {'delta':>7} flag")
+                print(f"    {'Year':>4} {'N_tot':>6} {'N_true':>7} {'avgR_T':>8} {'avgR_F':>8} {'delta':>7} flag")
 
                 for yr in sorted(sub["year"].dropna().unique()):
                     sub_yr = sub[sub["year"] == yr]
@@ -899,24 +925,28 @@ def part6_yoy_stability(all_df: pd.DataFrame, min_abs_delta: float = 0.10) -> li
                         print(f"    {int(yr):4d}  insufficient N, skip")
                         continue
                     flip = " FLIP" if (res["delta"] * overall["delta"]) < 0 else ""
-                    print(f"    {int(yr):4d}  {len(sub_yr):>6d}  {res['true']['n']:>7d}  "
-                          f"{res['true']['avg_r']:>+8.3f}  {res['false']['avg_r']:>+8.3f}  "
-                          f"{res['delta']:>+7.3f}{flip}")
-                    rows.append({
-                        "part": "P6",
-                        "instrument": inst,
-                        "session": sess,
-                        "condition": cond_col,
-                        "year": int(yr),
-                        "n_total": len(sub_yr),
-                        "n_true": res["true"]["n"],
-                        "avg_r_true": res["true"]["avg_r"],
-                        "avg_r_false": res["false"]["avg_r"],
-                        "delta": res["delta"],
-                        "overall_delta": overall["delta"],
-                        "sign_flip": (res["delta"] * overall["delta"]) < 0,
-                        "mcl_nogo": inst == "MCL",
-                    })
+                    print(
+                        f"    {int(yr):4d}  {len(sub_yr):>6d}  {res['true']['n']:>7d}  "
+                        f"{res['true']['avg_r']:>+8.3f}  {res['false']['avg_r']:>+8.3f}  "
+                        f"{res['delta']:>+7.3f}{flip}"
+                    )
+                    rows.append(
+                        {
+                            "part": "P6",
+                            "instrument": inst,
+                            "session": sess,
+                            "condition": cond_col,
+                            "year": int(yr),
+                            "n_total": len(sub_yr),
+                            "n_true": res["true"]["n"],
+                            "avg_r_true": res["true"]["avg_r"],
+                            "avg_r_false": res["false"]["avg_r"],
+                            "delta": res["delta"],
+                            "overall_delta": overall["delta"],
+                            "sign_flip": (res["delta"] * overall["delta"]) < 0,
+                            "mcl_nogo": inst == "MCL",
+                        }
+                    )
 
     return rows
 
@@ -924,6 +954,7 @@ def part6_yoy_stability(all_df: pd.DataFrame, min_abs_delta: float = 0.10) -> li
 # =========================================================================
 # Part 7: Early Exit Simulation
 # =========================================================================
+
 
 def part7_early_exit(all_df: pd.DataFrame) -> list[dict]:
     """Simulate early exit on C5 reversal or C6 re-entry.
@@ -956,6 +987,7 @@ def part7_early_exit(all_df: pd.DataFrame) -> list[dict]:
             # Applies to trades where C5=False (entry bar reverses)
             c5_false = sub[sub["c5_entry_bar_continues"] == False].copy()
             if len(c5_false) >= 10:
+
                 def _sim_c5_pnl(row):
                     risk_d = row["risk_dollars"]
                     if pd.isna(risk_d) or risk_d <= 0:
@@ -976,22 +1008,26 @@ def part7_early_exit(all_df: pd.DataFrame) -> list[dict]:
                     orig_tot = c5_false["pnl_r"].sum()
                     sim_tot = sim_valid.sum()
                     improvement = sim_avg - orig_avg
-                    print(f"    C5 exit (reversal->exit at eb_close): "
-                          f"N={len(sim_valid)} orig_avgR={orig_avg:+.3f} sim_avgR={sim_avg:+.3f} "
-                          f"delta={improvement:+.3f} [tot: {orig_tot:+.1f}->{sim_tot:+.1f}]")
-                    rows.append({
-                        "part": "P7",
-                        "instrument": inst,
-                        "session": sess,
-                        "rule": "C5_exit",
-                        "n_modified": len(sim_valid),
-                        "avg_r_original": orig_avg,
-                        "avg_r_simulated": sim_avg,
-                        "improvement": improvement,
-                        "tot_r_original": orig_tot,
-                        "tot_r_simulated": sim_tot,
-                        "mcl_nogo": inst == "MCL",
-                    })
+                    print(
+                        f"    C5 exit (reversal->exit at eb_close): "
+                        f"N={len(sim_valid)} orig_avgR={orig_avg:+.3f} sim_avgR={sim_avg:+.3f} "
+                        f"delta={improvement:+.3f} [tot: {orig_tot:+.1f}->{sim_tot:+.1f}]"
+                    )
+                    rows.append(
+                        {
+                            "part": "P7",
+                            "instrument": inst,
+                            "session": sess,
+                            "rule": "C5_exit",
+                            "n_modified": len(sim_valid),
+                            "avg_r_original": orig_avg,
+                            "avg_r_simulated": sim_avg,
+                            "improvement": improvement,
+                            "tot_r_original": orig_tot,
+                            "tot_r_simulated": sim_tot,
+                            "mcl_nogo": inst == "MCL",
+                        }
+                    )
 
             # --- C6 exit simulation at N=3 and N=5 ---
             for n in [3, 5]:
@@ -1016,9 +1052,7 @@ def part7_early_exit(all_df: pd.DataFrame) -> list[dict]:
                     r = pnl_dollars / risk_d if risk_d > 0 else np.nan
                     return max(r, -1.0)
 
-                c6_rev["sim_pnl_r"] = c6_rev.apply(
-                    lambda row: _sim_c6_pnl(row), axis=1
-                )
+                c6_rev["sim_pnl_r"] = c6_rev.apply(lambda row: _sim_c6_pnl(row), axis=1)
                 sim_valid = c6_rev["sim_pnl_r"].dropna()
                 if len(sim_valid) >= 5:
                     orig_avg = c6_rev["pnl_r"].mean()
@@ -1026,22 +1060,26 @@ def part7_early_exit(all_df: pd.DataFrame) -> list[dict]:
                     orig_tot = c6_rev["pnl_r"].sum()
                     sim_tot = sim_valid.sum()
                     improvement = sim_avg - orig_avg
-                    print(f"    C6_{n}bar exit (reversal->exit at first inside close): "
-                          f"N={len(sim_valid)} orig_avgR={orig_avg:+.3f} sim_avgR={sim_avg:+.3f} "
-                          f"delta={improvement:+.3f}")
-                    rows.append({
-                        "part": "P7",
-                        "instrument": inst,
-                        "session": sess,
-                        "rule": f"C6_{n}bar_exit",
-                        "n_modified": len(sim_valid),
-                        "avg_r_original": orig_avg,
-                        "avg_r_simulated": sim_avg,
-                        "improvement": improvement,
-                        "tot_r_original": orig_tot,
-                        "tot_r_simulated": sim_tot,
-                        "mcl_nogo": inst == "MCL",
-                    })
+                    print(
+                        f"    C6_{n}bar exit (reversal->exit at first inside close): "
+                        f"N={len(sim_valid)} orig_avgR={orig_avg:+.3f} sim_avgR={sim_avg:+.3f} "
+                        f"delta={improvement:+.3f}"
+                    )
+                    rows.append(
+                        {
+                            "part": "P7",
+                            "instrument": inst,
+                            "session": sess,
+                            "rule": f"C6_{n}bar_exit",
+                            "n_modified": len(sim_valid),
+                            "avg_r_original": orig_avg,
+                            "avg_r_simulated": sim_avg,
+                            "improvement": improvement,
+                            "tot_r_original": orig_tot,
+                            "tot_r_simulated": sim_tot,
+                            "mcl_nogo": inst == "MCL",
+                        }
+                    )
 
     return rows
 
@@ -1050,8 +1088,8 @@ def part7_early_exit(all_df: pd.DataFrame) -> list[dict]:
 # Part 10: Statistical Robustness
 # =========================================================================
 
-def part10_statistical_robustness(all_df: pd.DataFrame,
-                                   actionable_rows: list[dict]) -> list[dict]:
+
+def part10_statistical_robustness(all_df: pd.DataFrame, actionable_rows: list[dict]) -> list[dict]:
     """Bootstrap CI and permutation test for signals with |delta| > 0.15."""
     print(f"\n{'=' * 80}")
     print("  PART 10: Statistical Robustness (|delta| > 0.15)")
@@ -1072,7 +1110,7 @@ def part10_statistical_robustness(all_df: pd.DataFrame,
 
     print(f"\n  Testing {len(unique_combos)} unique (instrument x session x condition) combos:")
 
-    for (inst, sess, cond_col) in sorted(unique_combos):
+    for inst, sess, cond_col in sorted(unique_combos):
         if not cond_col.startswith("c5") and not cond_col.startswith("c6"):
             continue
 
@@ -1112,21 +1150,23 @@ def part10_statistical_robustness(all_df: pd.DataFrame,
 
         reliable = "RELIABLE" if (ci_delta_lo > 0) or (ci_delta_hi < 0) else "UNRELIABLE"
 
-        results.append({
-            "instrument": inst,
-            "session": sess,
-            "condition": cond_col,
-            "n_true": len(pnl_true),
-            "n_false": len(pnl_false),
-            "avg_r_true": float(pnl_true.mean()),
-            "avg_r_false": float(pnl_false.mean()),
-            "delta": delta,
-            "ci_delta_lo": ci_delta_lo,
-            "ci_delta_hi": ci_delta_hi,
-            "perm_p": perm_p,
-            "p_bh": np.nan,
-            "reliability": reliable,
-        })
+        results.append(
+            {
+                "instrument": inst,
+                "session": sess,
+                "condition": cond_col,
+                "n_true": len(pnl_true),
+                "n_false": len(pnl_false),
+                "avg_r_true": float(pnl_true.mean()),
+                "avg_r_false": float(pnl_false.mean()),
+                "delta": delta,
+                "ci_delta_lo": ci_delta_lo,
+                "ci_delta_hi": ci_delta_hi,
+                "perm_p": perm_p,
+                "p_bh": np.nan,
+                "reliability": reliable,
+            }
+        )
 
     # Apply BH correction
     if p_values_for_bh:
@@ -1135,9 +1175,11 @@ def part10_statistical_robustness(all_df: pd.DataFrame,
             r["p_bh"] = bh_corrected[i]
             bh_flag = " BH-SIG" if (not np.isnan(bh_corrected[i]) and bh_corrected[i] < 0.05) else ""
             print(f"\n  {r['instrument']} {r['session']} {r['condition']}:")
-            print(f"    delta={r['delta']:+.3f} [{r['ci_delta_lo']:+.3f}, {r['ci_delta_hi']:+.3f}] "
-                  f"perm_p={r['perm_p']:.4f} p_bh={r['p_bh']:.4f} "
-                  f"{r['reliability']}{bh_flag}")
+            print(
+                f"    delta={r['delta']:+.3f} [{r['ci_delta_lo']:+.3f}, {r['ci_delta_hi']:+.3f}] "
+                f"perm_p={r['perm_p']:.4f} p_bh={r['p_bh']:.4f} "
+                f"{r['reliability']}{bh_flag}"
+            )
 
     return results
 
@@ -1145,6 +1187,7 @@ def part10_statistical_robustness(all_df: pd.DataFrame,
 # =========================================================================
 # Summary markdown builder
 # =========================================================================
+
 
 def build_summary_md(
     p1_rows: list[dict],
@@ -1200,7 +1243,9 @@ def build_summary_md(
     lines.append("1. **In-sample only.** No OOS validation.")
     lines.append("2. **Fixed params** (E1/CB2/RR2.0). Signals may differ at other params.")
     lines.append("3. **C6 windows are post-entry** (observable, not look-ahead). C5 is also post-entry.")
-    lines.append("4. **Part 7 simulation** assumes instant execution at bar close -- slippage not modeled beyond standard friction.")
+    lines.append(
+        "4. **Part 7 simulation** assumes instant execution at bar close -- slippage not modeled beyond standard friction."
+    )
     lines.append("5. **MCL permanently excluded** from trading per TRADING_RULES.md.")
     lines.append("6. **DST blended numbers** for 0900/1800 are misleading -- use Part 2 splits.")
     lines.append("")
@@ -1219,8 +1264,12 @@ def build_summary_md(
     lines.append("## Part 10 Statistical Robustness Table")
     lines.append("")
     if p10_rows:
-        lines.append("| instrument | session | condition | N_true | N_false | delta | CI_lo | CI_hi | perm_p | p_bh | reliability |")
-        lines.append("|-----------|---------|-----------|--------|---------|---|-------|-------|--------|------|-------------|")
+        lines.append(
+            "| instrument | session | condition | N_true | N_false | delta | CI_lo | CI_hi | perm_p | p_bh | reliability |"
+        )
+        lines.append(
+            "|-----------|---------|-----------|--------|---------|---|-------|-------|--------|------|-------------|"
+        )
         for r in p10_rows:
             lines.append(
                 f"| {r['instrument']} | {r['session']} | {r['condition']} | "
@@ -1247,17 +1296,16 @@ def build_summary_md(
 # Main
 # =========================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="Break Quality Deep Dive Research")
     parser.add_argument("--db-path", type=str, default=None)
-    parser.add_argument("--instruments", nargs="+", default=None,
-                        help="Instruments to analyze (default: MGC MES MNQ MCL)")
-    parser.add_argument("--sessions", nargs="+", default=None,
-                        help="Sessions to analyze (default: 0900 1000 1800)")
-    parser.add_argument("--min-orb-size", type=float, default=4.0,
-                        help="Min ORB size filter (default: 4.0 = G4+)")
-    parser.add_argument("--audit", action="store_true",
-                        help="Run JOIN inflation audit only, then exit")
+    parser.add_argument(
+        "--instruments", nargs="+", default=None, help="Instruments to analyze (default: MGC MES MNQ MCL)"
+    )
+    parser.add_argument("--sessions", nargs="+", default=None, help="Sessions to analyze (default: 0900 1000 1800)")
+    parser.add_argument("--min-orb-size", type=float, default=4.0, help="Min ORB size filter (default: 4.0 = G4+)")
+    parser.add_argument("--audit", action="store_true", help="Run JOIN inflation audit only, then exit")
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
@@ -1301,10 +1349,8 @@ def main():
                 print(f"  [{instrument}] No outcomes found for any session, skip.")
                 continue
 
-            bars_dict = load_bars_for_instrument(con, instrument,
-                                                  min(all_dates), max(all_dates))
-            print(f"  [{instrument}] Bars loaded for {len(bars_dict)} trading days "
-                  f"in {time.time() - t_bars:.1f}s")
+            bars_dict = load_bars_for_instrument(con, instrument, min(all_dates), max(all_dates))
+            print(f"  [{instrument}] Bars loaded for {len(bars_dict)} trading days in {time.time() - t_bars:.1f}s")
 
             # --- Condition extraction per session ---
             for session in sessions:
@@ -1338,17 +1384,20 @@ def main():
                         n_skipped += 1
 
                 extracted = len(outcomes) - n_skipped
-                print(f"  {instrument} {session}: {extracted}/{len(outcomes)} conditions extracted "
-                      f"({n_skipped} skipped)")
+                print(
+                    f"  {instrument} {session}: {extracted}/{len(outcomes)} conditions extracted ({n_skipped} skipped)"
+                )
 
         if not all_conditions:
             print("\nNo conditions extracted. Check DB and instrument/session filters.")
             return
 
         all_df = pd.DataFrame(all_conditions)
-        print(f"\n[Data] Total: {len(all_df)} trade conditions across "
-              f"{all_df['instrument'].nunique()} instruments, "
-              f"{all_df['session'].nunique()} sessions")
+        print(
+            f"\n[Data] Total: {len(all_df)} trade conditions across "
+            f"{all_df['instrument'].nunique()} instruments, "
+            f"{all_df['session'].nunique()} sessions"
+        )
         print(f"       Period: {all_df['trading_day'].min()} - {all_df['trading_day'].max()}")
 
         # --- Run all parts ---
@@ -1362,11 +1411,14 @@ def main():
 
         # Collect actionable signals (|delta| > 0.15, N >= 30 in both groups)
         actionable = [
-            r for r in (p1_rows + p2_rows + p3_rows)
-            if (abs(r.get("delta", 0)) > 0.15
+            r
+            for r in (p1_rows + p2_rows + p3_rows)
+            if (
+                abs(r.get("delta", 0)) > 0.15
                 and r.get("n_true", 0) >= MIN_N
                 and r.get("n_false", 0) >= MIN_N
-                and not r.get("mcl_nogo", False))
+                and not r.get("mcl_nogo", False)
+            )
         ]
         print(f"\n  Actionable signals for Part 10: {len(actionable)}")
 
@@ -1378,11 +1430,26 @@ def main():
 
         # Save trade-level CSV
         csv_cols = [
-            "trading_day", "year", "instrument", "session", "dst_regime", "day_of_week",
-            "pnl_r", "outcome", "break_dir", "orb_size",
-            "entry_price", "stop_price", "risk_dollars", "eb_open", "eb_close",
-            "c1_break_distance_r", "c2_wick_ratio", "c3_break_speed_min",
-            "c4_entry_bar_engulf", "c5_entry_bar_continues",
+            "trading_day",
+            "year",
+            "instrument",
+            "session",
+            "dst_regime",
+            "day_of_week",
+            "pnl_r",
+            "outcome",
+            "break_dir",
+            "orb_size",
+            "entry_price",
+            "stop_price",
+            "risk_dollars",
+            "eb_open",
+            "eb_close",
+            "c1_break_distance_r",
+            "c2_wick_ratio",
+            "c3_break_speed_min",
+            "c4_entry_bar_engulf",
+            "c5_entry_bar_continues",
         ]
         for n in C6_WINDOWS:
             csv_cols.append(f"c6_reversal_{n}bar")
@@ -1396,8 +1463,16 @@ def main():
 
         # Save summary markdown
         md = build_summary_md(
-            p1_rows, p2_rows, p3_rows, p4_rows, p5_rows, p6_rows, p7_rows, p10_rows,
-            instruments, sessions,
+            p1_rows,
+            p2_rows,
+            p3_rows,
+            p4_rows,
+            p5_rows,
+            p6_rows,
+            p7_rows,
+            p10_rows,
+            instruments,
+            sessions,
         )
         md_path = out_dir / "break_quality_deep_summary.md"
         md_path.write_text(md, encoding="utf-8")

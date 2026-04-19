@@ -118,23 +118,27 @@ def estimate_cost_per_day(
                     start=day_row["window_start_utc"],
                     end=day_row["window_end_utc"],
                 )
-                rows.append({
-                    "trading_day": day_row["trading_day"],
-                    "symbol": sym,
-                    "window_start_utc": day_row["window_start_utc"],
-                    "window_end_utc": day_row["window_end_utc"],
-                    "estimated_cost_usd": float(cost),
-                    "error": None,
-                })
+                rows.append(
+                    {
+                        "trading_day": day_row["trading_day"],
+                        "symbol": sym,
+                        "window_start_utc": day_row["window_start_utc"],
+                        "window_end_utc": day_row["window_end_utc"],
+                        "estimated_cost_usd": float(cost),
+                        "error": None,
+                    }
+                )
             except Exception as e:
-                rows.append({
-                    "trading_day": day_row["trading_day"],
-                    "symbol": sym,
-                    "window_start_utc": day_row["window_start_utc"],
-                    "window_end_utc": day_row["window_end_utc"],
-                    "estimated_cost_usd": None,
-                    "error": str(e),
-                })
+                rows.append(
+                    {
+                        "trading_day": day_row["trading_day"],
+                        "symbol": sym,
+                        "window_start_utc": day_row["window_start_utc"],
+                        "window_end_utc": day_row["window_end_utc"],
+                        "estimated_cost_usd": None,
+                        "error": str(e),
+                    }
+                )
 
     return pd.DataFrame(rows)
 
@@ -396,33 +400,36 @@ def reprice_all_pilot_days(
         for sym in symbols:
             cache = _cache_path(day, sym)
             if not cache.exists():
-                results.append(asdict(RepricedEntry(
-                    trading_day=day,
-                    break_dir=row["break_dir"],
-                    symbol_pulled=sym,
-                    orb_level=row["orb_CME_REOPEN_high"] if row["break_dir"] == "long" else row["orb_CME_REOPEN_low"],
-                    modeled_entry_price=row["model_entry_price"],
-                    modeled_slippage_ticks=int(row["modeled_entry_slippage_ticks"]),
-                    tick_size=cost_spec.tick_size,
-                    tbbo_records_in_window=0,
-                    trigger_trade_price=None,
-                    trigger_trade_ts=None,
-                    bbo_at_trigger_bid=None,
-                    bbo_at_trigger_ask=None,
-                    bbo_at_trigger_spread=None,
-                    estimated_fill_price=None,
-                    actual_slippage_points=None,
-                    actual_slippage_ticks=None,
-                    error="cache_file_missing",
-                )))
+                results.append(
+                    asdict(
+                        RepricedEntry(
+                            trading_day=day,
+                            break_dir=row["break_dir"],
+                            symbol_pulled=sym,
+                            orb_level=row["orb_CME_REOPEN_high"]
+                            if row["break_dir"] == "long"
+                            else row["orb_CME_REOPEN_low"],
+                            modeled_entry_price=row["model_entry_price"],
+                            modeled_slippage_ticks=int(row["modeled_entry_slippage_ticks"]),
+                            tick_size=cost_spec.tick_size,
+                            tbbo_records_in_window=0,
+                            trigger_trade_price=None,
+                            trigger_trade_ts=None,
+                            bbo_at_trigger_bid=None,
+                            bbo_at_trigger_ask=None,
+                            bbo_at_trigger_spread=None,
+                            estimated_fill_price=None,
+                            actual_slippage_points=None,
+                            actual_slippage_ticks=None,
+                            error="cache_file_missing",
+                        )
+                    )
+                )
                 continue
 
             tbbo_df = load_tbbo_df(cache)
             # ORB range is not set until aperture closes
-            orb_end = (
-                pd.Timestamp(row["orb_start_utc"])
-                + pd.Timedelta(minutes=int(row["orb_minutes"]))
-            ).isoformat()
+            orb_end = (pd.Timestamp(row["orb_start_utc"]) + pd.Timedelta(minutes=int(row["orb_minutes"]))).isoformat()
             repriced = reprice_e2_entry(
                 tbbo_df=tbbo_df,
                 orb_high=row["orb_CME_REOPEN_high"],
@@ -540,8 +547,9 @@ def render_analysis(analysis: dict) -> None:
 
         s = data["slippage_ticks"]
         print(f"  N = {data['n']} repriced entries")
-        print(f"  Slippage: mean={s['mean']} ticks, median={s['median']}, "
-              f"std={s['std']}, range=[{s['min']}, {s['max']}]")
+        print(
+            f"  Slippage: mean={s['mean']} ticks, median={s['median']}, std={s['std']}, range=[{s['min']}, {s['max']}]"
+        )
         print(f"  P25={s['p25']}, P75={s['p75']}, P95={s['p95']}")
         print(f"  Above 1 tick: {s['pct_above_1_tick']}%, Above 2 ticks: {s['pct_above_2_ticks']}%")
 
@@ -549,8 +557,7 @@ def render_analysis(analysis: dict) -> None:
         print(f"  Spread at trigger: mean={sp['mean']} ticks, median={sp['median']}, max={sp['max']}")
 
         for direction, dd in data.get("by_direction", {}).items():
-            print(f"  {direction}: N={dd['n']}, mean={dd['mean_slippage_ticks']}, "
-                  f"median={dd['median_slippage_ticks']}")
+            print(f"  {direction}: N={dd['n']}, mean={dd['mean_slippage_ticks']}, median={dd['median_slippage_ticks']}")
 
     if "_comparison" in analysis:
         c = analysis["_comparison"]
@@ -561,16 +568,11 @@ def render_analysis(analysis: dict) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Databento microstructure pilot")
-    parser.add_argument("--estimate-cost", action="store_true",
-                        help="Estimate Databento cost per pilot day")
-    parser.add_argument("--pull", action="store_true",
-                        help="Pull tbbo data for all pilot days")
-    parser.add_argument("--reprice", action="store_true",
-                        help="Reprice E2 entries from cached tbbo data")
-    parser.add_argument("--force", action="store_true",
-                        help="Force re-download even if cached")
-    parser.add_argument("--symbols", nargs="+", default=SYMBOLS,
-                        help="Symbols to pull (default: MGC.FUT GC.FUT)")
+    parser.add_argument("--estimate-cost", action="store_true", help="Estimate Databento cost per pilot day")
+    parser.add_argument("--pull", action="store_true", help="Pull tbbo data for all pilot days")
+    parser.add_argument("--reprice", action="store_true", help="Reprice E2 entries from cached tbbo data")
+    parser.add_argument("--force", action="store_true", help="Force re-download even if cached")
+    parser.add_argument("--symbols", nargs="+", default=SYMBOLS, help="Symbols to pull (default: MGC.FUT GC.FUT)")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     return parser.parse_args()
 

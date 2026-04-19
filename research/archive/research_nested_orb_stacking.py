@@ -57,11 +57,12 @@ OUTPUT = Path(__file__).resolve().parent / "output" / "nested_orb_stacking_findi
 ENTRY_MODELS = ["E1", "E2"]
 RR_TARGETS = [2.0, 2.5, 3.0]
 CONFIRM_BARS = [1, 2]  # CB1 and CB2
-MIN_GROUP_N = 30        # minimum N per group for t-test
-BH_Q = 0.10             # FDR threshold
+MIN_GROUP_N = 30  # minimum N per group for t-test
+BH_Q = 0.10  # FDR threshold
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def clean(arr):
     """Remove NaN from array."""
@@ -75,7 +76,7 @@ def welch_t(group_a, group_b):
     if len(a) < 5 or len(b) < 5:
         return (np.nan, np.nan, np.nan)
     t_stat, p_val = stats.ttest_ind(a, b, equal_var=False)
-    pooled_std = np.sqrt((np.std(a, ddof=1)**2 + np.std(b, ddof=1)**2) / 2)
+    pooled_std = np.sqrt((np.std(a, ddof=1) ** 2 + np.std(b, ddof=1) ** 2) / 2)
     d = (np.nanmean(a) - np.nanmean(b)) / pooled_std if pooled_std > 0 else 0
     return (t_stat, p_val, d)
 
@@ -142,12 +143,14 @@ def sample_label(n):
 
 report_lines = []
 
+
 def report(line=""):
     print(line)
     report_lines.append(line)
 
 
 # ── Main Logic ────────────────────────────────────────────────────────────────
+
 
 def main():
     con = duckdb.connect(DB_PATH, read_only=True)
@@ -170,8 +173,8 @@ def main():
     report(f"BH FDR q = {BH_Q}")
     report("")
 
-    all_tests = []         # (label, p_val, test_dict) for BH pooling
-    alignment_stats = []   # Summary stats per instrument/session
+    all_tests = []  # (label, p_val, test_dict) for BH pooling
+    alignment_stats = []  # Summary stats per instrument/session
 
     for instrument in instruments:
         enabled_sessions = get_enabled_sessions(instrument)
@@ -239,15 +242,14 @@ def main():
             # Edge case: how often is 5m ORB == 30m ORB (no expansion)?
             same_high = (df["orb_5m_high"] == df["orb_30m_high"]).sum()
             same_low = (df["orb_5m_low"] == df["orb_30m_low"]).sum()
-            same_both = ((df["orb_5m_high"] == df["orb_30m_high"]) &
-                         (df["orb_5m_low"] == df["orb_30m_low"])).sum()
+            same_both = ((df["orb_5m_high"] == df["orb_30m_high"]) & (df["orb_5m_low"] == df["orb_30m_low"])).sum()
 
             report(f"  Days (G4+): {n_total}")
-            report(f"  Aligned: {n_aligned} ({100*n_aligned/n_total:.1f}%)")
-            report(f"  Contained: {n_contained} ({100*n_contained/n_total:.1f}%)")
-            report(f"  5m==30m (high): {same_high} ({100*same_high/n_total:.1f}%)")
-            report(f"  5m==30m (low):  {same_low} ({100*same_low/n_total:.1f}%)")
-            report(f"  5m==30m (both): {same_both} ({100*same_both/n_total:.1f}%)")
+            report(f"  Aligned: {n_aligned} ({100 * n_aligned / n_total:.1f}%)")
+            report(f"  Contained: {n_contained} ({100 * n_contained / n_total:.1f}%)")
+            report(f"  5m==30m (high): {same_high} ({100 * same_high / n_total:.1f}%)")
+            report(f"  5m==30m (low):  {same_low} ({100 * same_low / n_total:.1f}%)")
+            report(f"  5m==30m (both): {same_both} ({100 * same_both / n_total:.1f}%)")
 
             # ORB size ratio stats
             df["size_ratio_30_5"] = df["orb_30m_size"] / df["orb_5m_size"]
@@ -255,17 +257,19 @@ def main():
             ratio_mean = df["size_ratio_30_5"].mean()
             report(f"  30m/5m size ratio: mean={ratio_mean:.2f}, median={ratio_med:.2f}")
 
-            alignment_stats.append({
-                "instrument": instrument,
-                "session": session,
-                "n_total": n_total,
-                "n_aligned": n_aligned,
-                "n_contained": n_contained,
-                "pct_aligned": 100 * n_aligned / n_total if n_total > 0 else 0,
-                "same_both_pct": 100 * same_both / n_total if n_total > 0 else 0,
-                "ratio_mean": ratio_mean,
-                "ratio_med": ratio_med,
-            })
+            alignment_stats.append(
+                {
+                    "instrument": instrument,
+                    "session": session,
+                    "n_total": n_total,
+                    "n_aligned": n_aligned,
+                    "n_contained": n_contained,
+                    "pct_aligned": 100 * n_aligned / n_total if n_total > 0 else 0,
+                    "same_both_pct": 100 * same_both / n_total if n_total > 0 else 0,
+                    "ratio_mean": ratio_mean,
+                    "ratio_med": ratio_med,
+                }
+            )
 
             # ── Step 3: Join with orb_outcomes (orb_minutes=5) ──
             for em in ENTRY_MODELS:
@@ -300,67 +304,73 @@ def main():
                         if len(aligned_r) >= MIN_GROUP_N and len(contained_r) >= MIN_GROUP_N:
                             t_stat, p_val, d = welch_t(aligned_r, contained_r)
                             if not np.isnan(p_val):
-                                all_tests.append({
-                                    "label": f"WELCH|{combo_tag}",
-                                    "p": p_val,
-                                    "instrument": instrument,
-                                    "session": session,
-                                    "em": em,
-                                    "rr": rr,
-                                    "cb": cb,
-                                    "test_type": "welch",
-                                    "n_aligned": len(aligned_r),
-                                    "n_contained": len(contained_r),
-                                    "avg_aligned": np.nanmean(aligned_r),
-                                    "avg_contained": np.nanmean(contained_r),
-                                    "delta": np.nanmean(aligned_r) - np.nanmean(contained_r),
-                                    "d": d,
-                                    "t_stat": t_stat,
-                                })
+                                all_tests.append(
+                                    {
+                                        "label": f"WELCH|{combo_tag}",
+                                        "p": p_val,
+                                        "instrument": instrument,
+                                        "session": session,
+                                        "em": em,
+                                        "rr": rr,
+                                        "cb": cb,
+                                        "test_type": "welch",
+                                        "n_aligned": len(aligned_r),
+                                        "n_contained": len(contained_r),
+                                        "avg_aligned": np.nanmean(aligned_r),
+                                        "avg_contained": np.nanmean(contained_r),
+                                        "delta": np.nanmean(aligned_r) - np.nanmean(contained_r),
+                                        "d": d,
+                                        "t_stat": t_stat,
+                                    }
+                                )
 
                         # ── Test B: One-sample t-test aligned vs zero ──
                         if len(aligned_r) >= MIN_GROUP_N:
                             t1, p1 = one_sample_t(aligned_r)
                             if not np.isnan(p1):
-                                all_tests.append({
-                                    "label": f"1SAMP_ALN|{combo_tag}",
-                                    "p": p1,
-                                    "instrument": instrument,
-                                    "session": session,
-                                    "em": em,
-                                    "rr": rr,
-                                    "cb": cb,
-                                    "test_type": "one_sample_aligned",
-                                    "n_aligned": len(aligned_r),
-                                    "n_contained": 0,
-                                    "avg_aligned": np.nanmean(aligned_r),
-                                    "avg_contained": np.nan,
-                                    "delta": np.nanmean(aligned_r),
-                                    "d": np.nan,
-                                    "t_stat": t1,
-                                })
+                                all_tests.append(
+                                    {
+                                        "label": f"1SAMP_ALN|{combo_tag}",
+                                        "p": p1,
+                                        "instrument": instrument,
+                                        "session": session,
+                                        "em": em,
+                                        "rr": rr,
+                                        "cb": cb,
+                                        "test_type": "one_sample_aligned",
+                                        "n_aligned": len(aligned_r),
+                                        "n_contained": 0,
+                                        "avg_aligned": np.nanmean(aligned_r),
+                                        "avg_contained": np.nan,
+                                        "delta": np.nanmean(aligned_r),
+                                        "d": np.nan,
+                                        "t_stat": t1,
+                                    }
+                                )
 
                         # ── Test C: One-sample t-test contained vs zero ──
                         if len(contained_r) >= MIN_GROUP_N:
                             t2, p2 = one_sample_t(contained_r)
                             if not np.isnan(p2):
-                                all_tests.append({
-                                    "label": f"1SAMP_CON|{combo_tag}",
-                                    "p": p2,
-                                    "instrument": instrument,
-                                    "session": session,
-                                    "em": em,
-                                    "rr": rr,
-                                    "cb": cb,
-                                    "test_type": "one_sample_contained",
-                                    "n_aligned": 0,
-                                    "n_contained": len(contained_r),
-                                    "avg_aligned": np.nan,
-                                    "avg_contained": np.nanmean(contained_r),
-                                    "delta": np.nanmean(contained_r),
-                                    "d": np.nan,
-                                    "t_stat": t2,
-                                })
+                                all_tests.append(
+                                    {
+                                        "label": f"1SAMP_CON|{combo_tag}",
+                                        "p": p2,
+                                        "instrument": instrument,
+                                        "session": session,
+                                        "em": em,
+                                        "rr": rr,
+                                        "cb": cb,
+                                        "test_type": "one_sample_contained",
+                                        "n_aligned": 0,
+                                        "n_contained": len(contained_r),
+                                        "avg_aligned": np.nan,
+                                        "avg_contained": np.nanmean(contained_r),
+                                        "delta": np.nanmean(contained_r),
+                                        "d": np.nan,
+                                        "t_stat": t2,
+                                    }
+                                )
 
                         # ── Test D: Spearman correlation 30m/5m size ratio vs pnl_r ──
                         valid_ratio = merged.dropna(subset=["size_ratio_30_5", "pnl_r"])
@@ -370,23 +380,25 @@ def main():
                                 valid_ratio["pnl_r"].values,
                             )
                             if not np.isnan(p_sp):
-                                all_tests.append({
-                                    "label": f"SPEARMAN|{combo_tag}",
-                                    "p": p_sp,
-                                    "instrument": instrument,
-                                    "session": session,
-                                    "em": em,
-                                    "rr": rr,
-                                    "cb": cb,
-                                    "test_type": "spearman",
-                                    "n_aligned": len(valid_ratio),
-                                    "n_contained": 0,
-                                    "avg_aligned": rho,  # reuse field for rho
-                                    "avg_contained": np.nan,
-                                    "delta": rho,
-                                    "d": np.nan,
-                                    "t_stat": np.nan,
-                                })
+                                all_tests.append(
+                                    {
+                                        "label": f"SPEARMAN|{combo_tag}",
+                                        "p": p_sp,
+                                        "instrument": instrument,
+                                        "session": session,
+                                        "em": em,
+                                        "rr": rr,
+                                        "cb": cb,
+                                        "test_type": "spearman",
+                                        "n_aligned": len(valid_ratio),
+                                        "n_contained": 0,
+                                        "avg_aligned": rho,  # reuse field for rho
+                                        "avg_contained": np.nan,
+                                        "delta": rho,
+                                        "d": np.nan,
+                                        "t_stat": np.nan,
+                                    }
+                                )
 
             # ── Direction Sub-Analysis (longs-only, shorts-only) ──
             # Use representative combo: E2 RR2.0 CB1
@@ -414,23 +426,25 @@ def main():
                         t_d, p_d, d_d = welch_t(dir_aln, dir_con)
                         combo_dir_tag = f"{instrument}|{session}|E2|RR2.0|CB1|{direction.upper()}"
                         if not np.isnan(p_d):
-                            all_tests.append({
-                                "label": f"WELCH_DIR|{combo_dir_tag}",
-                                "p": p_d,
-                                "instrument": instrument,
-                                "session": session,
-                                "em": "E2",
-                                "rr": 2.0,
-                                "cb": 1,
-                                "test_type": f"welch_dir_{direction}",
-                                "n_aligned": len(dir_aln),
-                                "n_contained": len(dir_con),
-                                "avg_aligned": np.nanmean(dir_aln),
-                                "avg_contained": np.nanmean(dir_con),
-                                "delta": np.nanmean(dir_aln) - np.nanmean(dir_con),
-                                "d": d_d,
-                                "t_stat": t_d,
-                            })
+                            all_tests.append(
+                                {
+                                    "label": f"WELCH_DIR|{combo_dir_tag}",
+                                    "p": p_d,
+                                    "instrument": instrument,
+                                    "session": session,
+                                    "em": "E2",
+                                    "rr": 2.0,
+                                    "cb": 1,
+                                    "test_type": f"welch_dir_{direction}",
+                                    "n_aligned": len(dir_aln),
+                                    "n_contained": len(dir_con),
+                                    "avg_aligned": np.nanmean(dir_aln),
+                                    "avg_contained": np.nanmean(dir_con),
+                                    "delta": np.nanmean(dir_aln) - np.nanmean(dir_con),
+                                    "d": d_d,
+                                    "t_stat": t_d,
+                                }
+                            )
 
             report("")
 
@@ -440,13 +454,14 @@ def main():
     report("=" * 72)
     report("ALIGNMENT SUMMARY (G4+ days with both 5m and 30m ORB)")
     report("=" * 72)
-    report(f"  {'Instr':<6} {'Session':<18} {'Total':>6} {'Aligned':>8} {'%Aln':>6} "
-           f"{'5m==30m':>8} {'Ratio':>6}")
+    report(f"  {'Instr':<6} {'Session':<18} {'Total':>6} {'Aligned':>8} {'%Aln':>6} {'5m==30m':>8} {'Ratio':>6}")
     report("  " + "-" * 68)
     for s in alignment_stats:
-        report(f"  {s['instrument']:<6} {s['session']:<18} {s['n_total']:>6} "
-               f"{s['n_aligned']:>8} {s['pct_aligned']:>5.1f}% "
-               f"{s['same_both_pct']:>7.1f}% {s['ratio_med']:>6.2f}")
+        report(
+            f"  {s['instrument']:<6} {s['session']:<18} {s['n_total']:>6} "
+            f"{s['n_aligned']:>8} {s['pct_aligned']:>5.1f}% "
+            f"{s['same_both_pct']:>7.1f}% {s['ratio_med']:>6.2f}"
+        )
 
     # ══════════════════════════════════════════════════════════════════════════
     # RAW RESULTS (top 30 by p-value)
@@ -458,8 +473,7 @@ def main():
 
     all_tests.sort(key=lambda x: x["p"] if not np.isnan(x["p"]) else 999)
 
-    report(f"  {'Type':<12} {'Label':<45} {'N_a':>5} {'N_c':>5} "
-           f"{'avg_a':>7} {'avg_c':>7} {'delta':>7} {'p':>8}")
+    report(f"  {'Type':<12} {'Label':<45} {'N_a':>5} {'N_c':>5} {'avg_a':>7} {'avg_c':>7} {'delta':>7} {'p':>8}")
     report("  " + "-" * 100)
 
     for t in all_tests[:30]:
@@ -472,8 +486,7 @@ def main():
         delta_s = f"{t['delta']:>+7.3f}" if not np.isnan(t["delta"]) else "   N/A "
         ttype = t["test_type"][:12]
         label_short = t["label"][:45]
-        report(f"  {ttype:<12} {label_short:<45} {n_a:>5} {n_c:>5} "
-               f"{avg_a_s} {avg_c_s} {delta_s} {fmt(t['p']):>8}")
+        report(f"  {ttype:<12} {label_short:<45} {n_a:>5} {n_c:>5} {avg_a_s} {avg_c_s} {delta_s} {fmt(t['p']):>8}")
 
     # ══════════════════════════════════════════════════════════════════════════
     # BH FDR CORRECTION
@@ -492,22 +505,16 @@ def main():
         labels = [t["label"] for t in valid_tests]
         adjusted = bh_fdr(p_vals, q=BH_Q)
 
-        survivors = [(l, p, adj, t) for l, p, adj, t
-                     in zip(labels, p_vals, adjusted, valid_tests)
-                     if adj < BH_Q]
+        survivors = [(l, p, adj, t) for l, p, adj, t in zip(labels, p_vals, adjusted, valid_tests) if adj < BH_Q]
 
         report(f"  Total tests:  {len(valid_tests)}")
         report(f"  BH survivors (q={BH_Q}): {len(survivors)}")
 
         # Separate survivors by type
-        welch_survivors = [(l, p, a, t) for l, p, a, t in survivors
-                           if t["test_type"] == "welch"]
-        dir_survivors = [(l, p, a, t) for l, p, a, t in survivors
-                         if t["test_type"].startswith("welch_dir")]
-        onesamp_survivors = [(l, p, a, t) for l, p, a, t in survivors
-                             if t["test_type"].startswith("one_sample")]
-        spearman_survivors = [(l, p, a, t) for l, p, a, t in survivors
-                              if t["test_type"] == "spearman"]
+        welch_survivors = [(l, p, a, t) for l, p, a, t in survivors if t["test_type"] == "welch"]
+        dir_survivors = [(l, p, a, t) for l, p, a, t in survivors if t["test_type"].startswith("welch_dir")]
+        onesamp_survivors = [(l, p, a, t) for l, p, a, t in survivors if t["test_type"].startswith("one_sample")]
+        spearman_survivors = [(l, p, a, t) for l, p, a, t in survivors if t["test_type"] == "spearman"]
 
         report(f"    Welch (aligned vs contained): {len(welch_survivors)}")
         report(f"    Welch direction:              {len(dir_survivors)}")
@@ -519,8 +526,7 @@ def main():
             report("  --- BH SURVIVORS: Welch tests (PRIMARY — aligned vs contained) ---")
             report(f"  {'Label':<50} {'raw_p':>8} {'p_bh':>8} {'delta':>7}")
             report("  " + "-" * 80)
-            for label, raw_p, adj_p, t in sorted(welch_survivors + dir_survivors,
-                                                  key=lambda x: x[2]):
+            for label, raw_p, adj_p, t in sorted(welch_survivors + dir_survivors, key=lambda x: x[2]):
                 delta_s = f"{t['delta']:>+7.3f}" if not np.isnan(t["delta"]) else "   N/A "
                 report(f"  {label:<50} {fmt(raw_p):>8} {fmt(adj_p):>8} {delta_s}")
 
@@ -529,8 +535,7 @@ def main():
             report(f"  --- BH SURVIVORS: Spearman (top 20 of {len(spearman_survivors)}) ---")
             report(f"  {'Label':<50} {'raw_p':>8} {'p_bh':>8} {'rho':>7}")
             report("  " + "-" * 80)
-            for label, raw_p, adj_p, t in sorted(spearman_survivors,
-                                                  key=lambda x: x[2])[:20]:
+            for label, raw_p, adj_p, t in sorted(spearman_survivors, key=lambda x: x[2])[:20]:
                 rho_s = f"{t['delta']:>+7.3f}" if not np.isnan(t["delta"]) else "   N/A "
                 report(f"  {label:<50} {fmt(raw_p):>8} {fmt(adj_p):>8} {rho_s}")
 
@@ -539,8 +544,7 @@ def main():
             report(f"  --- BH SURVIVORS: One-sample vs zero (top 20 of {len(onesamp_survivors)}) ---")
             report(f"  {'Label':<50} {'raw_p':>8} {'p_bh':>8} {'avgR':>7}")
             report("  " + "-" * 80)
-            for label, raw_p, adj_p, t in sorted(onesamp_survivors,
-                                                  key=lambda x: x[2])[:20]:
+            for label, raw_p, adj_p, t in sorted(onesamp_survivors, key=lambda x: x[2])[:20]:
                 delta_s = f"{t['delta']:>+7.3f}" if not np.isnan(t["delta"]) else "   N/A "
                 report(f"  {label:<50} {fmt(raw_p):>8} {fmt(adj_p):>8} {delta_s}")
 
@@ -553,8 +557,7 @@ def main():
         report("YEAR-BY-YEAR STABILITY (raw p < 0.05 Welch tests only)")
         report("=" * 72)
 
-        raw_notable = [t for t in valid_tests
-                       if t["p"] < 0.05 and t["test_type"] == "welch"]
+        raw_notable = [t for t in valid_tests if t["p"] < 0.05 and t["test_type"] == "welch"]
 
         if not raw_notable:
             report("  No Welch tests with raw p < 0.05.")
@@ -603,15 +606,16 @@ def main():
                   AND d30.orb_{sess}_high IS NOT NULL
                 """).fetchdf()
 
-                cond_l = (df_yy_class["break_dir"] == "long") & (df_yy_class["orb_5m_high"] >= df_yy_class["orb_30m_high"])
-                cond_s = (df_yy_class["break_dir"] == "short") & (df_yy_class["orb_5m_low"] <= df_yy_class["orb_30m_low"])
+                cond_l = (df_yy_class["break_dir"] == "long") & (
+                    df_yy_class["orb_5m_high"] >= df_yy_class["orb_30m_high"]
+                )
+                cond_s = (df_yy_class["break_dir"] == "short") & (
+                    df_yy_class["orb_5m_low"] <= df_yy_class["orb_30m_low"]
+                )
                 df_yy_class["alignment"] = "contained"
                 df_yy_class.loc[cond_l | cond_s, "alignment"] = "aligned"
 
-                merged_yy = df_yy_out.merge(
-                    df_yy_class[["trading_day", "alignment"]],
-                    on="trading_day", how="inner"
-                )
+                merged_yy = df_yy_out.merge(df_yy_class[["trading_day", "alignment"]], on="trading_day", how="inner")
 
                 report(f"\n  {t['label']} (raw p={fmt(t['p'])}, delta={t['delta']:+.3f}):")
 
@@ -629,15 +633,15 @@ def main():
                         if same_sign:
                             pos_years += 1
                         marker = "+" if same_sign else "-"
-                        report(f"    {int(y)}: N_a={len(yr_aln):>4}, N_c={len(yr_con):>4}, "
-                               f"avg_a={np.nanmean(yr_aln):>+7.3f}, avg_c={np.nanmean(yr_con):>+7.3f}, "
-                               f"delta={yr_delta:>+7.3f} [{marker}]")
+                        report(
+                            f"    {int(y)}: N_a={len(yr_aln):>4}, N_c={len(yr_con):>4}, "
+                            f"avg_a={np.nanmean(yr_aln):>+7.3f}, avg_c={np.nanmean(yr_con):>+7.3f}, "
+                            f"delta={yr_delta:>+7.3f} [{marker}]"
+                        )
                     else:
-                        report(f"    {int(y)}: N_a={len(yr_aln):>4}, N_c={len(yr_con):>4} "
-                               f"(too few for split)")
+                        report(f"    {int(y)}: N_a={len(yr_aln):>4}, N_c={len(yr_con):>4} (too few for split)")
                 if total_years > 0:
-                    report(f"    Years consistent: {pos_years}/{total_years} "
-                           f"({100*pos_years/total_years:.0f}%)")
+                    report(f"    Years consistent: {pos_years}/{total_years} ({100 * pos_years / total_years:.0f}%)")
 
     # ══════════════════════════════════════════════════════════════════════════
     # PROXY CHECK: Is alignment just an ORB size proxy?
@@ -682,8 +686,10 @@ def main():
         aln_sizes = clean(df_proxy[df_proxy["alignment"] == "aligned"]["orb_5m_size"].values)
         con_sizes = clean(df_proxy[df_proxy["alignment"] == "contained"]["orb_5m_size"].values)
         if len(aln_sizes) >= 5 and len(con_sizes) >= 5:
-            report(f"  {inst} {sess}: aligned avg_5m_size={np.mean(aln_sizes):.2f}, "
-                   f"contained avg_5m_size={np.mean(con_sizes):.2f}")
+            report(
+                f"  {inst} {sess}: aligned avg_5m_size={np.mean(aln_sizes):.2f}, "
+                f"contained avg_5m_size={np.mean(con_sizes):.2f}"
+            )
         else:
             report(f"  {inst} {sess}: insufficient data for proxy check")
 
@@ -702,8 +708,7 @@ def main():
         report(f"  {'Label':<45} {'N':>5} {'rho':>7} {'p':>8}")
         report("  " + "-" * 70)
         for t in spearman_tests[:15]:
-            report(f"  {t['label']:<45} {t['n_aligned']:>5} "
-                   f"{t['avg_aligned']:>+7.3f} {fmt(t['p']):>8}")
+            report(f"  {t['label']:<45} {t['n_aligned']:>5} {t['avg_aligned']:>+7.3f} {fmt(t['p']):>8}")
     else:
         report("  No Spearman tests computed.")
 

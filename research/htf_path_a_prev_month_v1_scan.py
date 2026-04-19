@@ -52,11 +52,11 @@ ENTRY_MODEL = "E2"
 CONFIRM_BARS = 1
 
 # BH-FDR framings
-K_GLOBAL = 24       # whole run
-K_FAMILY = 24       # one family
-K_INSTRUMENT = 12   # per instrument
-K_SESSION = 8       # per session
-K_DIRECTION = 12    # per direction
+K_GLOBAL = 24  # whole run
+K_FAMILY = 24  # one family
+K_INSTRUMENT = 12  # per instrument
+K_SESSION = 8  # per session
+K_DIRECTION = 12  # per direction
 
 BH_Q = 0.05
 
@@ -64,27 +64,28 @@ BH_Q = 0.05
 ERAS: tuple[tuple[str, date, date], ...] = (
     ("2019-2020", date(2019, 1, 1), date(2020, 12, 31)),
     ("2021-2022", date(2021, 1, 1), date(2022, 12, 31)),
-    ("2023",      date(2023, 1, 1), date(2023, 12, 31)),
+    ("2023", date(2023, 1, 1), date(2023, 12, 31)),
     ("2024-2025", date(2024, 1, 1), date(2025, 12, 31)),
 )
 
 # Gate thresholds (all from authority documents — see YAML)
-FIRE_RATE_MIN = 0.05   # RULE 8.1
-FIRE_RATE_MAX = 0.95   # RULE 8.1
-N_ON_MIN = 50          # RULE 4.1 discovery-candidacy floor
-CHORDIA_T = 3.79       # Criterion 4 no-theory
-WFE_MIN = 0.50         # Criterion 6
-WFE_LEAKAGE = 0.95     # RULE 3.2 leakage-suspect
-ERA_EXPR_MIN = -0.05   # Criterion 9
-ERA_N_EXEMPT = 50      # Criterion 9 exemption threshold
-TAUTOLOGY_MAX = 0.70   # RULE 7 (T0)
-AO_WR_SPREAD = 0.03    # RULE 8.2
-AO_DELTA_IS = 0.10     # RULE 8.2
+FIRE_RATE_MIN = 0.05  # RULE 8.1
+FIRE_RATE_MAX = 0.95  # RULE 8.1
+N_ON_MIN = 50  # RULE 4.1 discovery-candidacy floor
+CHORDIA_T = 3.79  # Criterion 4 no-theory
+WFE_MIN = 0.50  # Criterion 6
+WFE_LEAKAGE = 0.95  # RULE 3.2 leakage-suspect
+ERA_EXPR_MIN = -0.05  # Criterion 9
+ERA_N_EXEMPT = 50  # Criterion 9 exemption threshold
+TAUTOLOGY_MAX = 0.70  # RULE 7 (T0)
+AO_WR_SPREAD = 0.03  # RULE 8.2
+AO_DELTA_IS = 0.10  # RULE 8.2
 
 
 # =========================================================================
 # DATA STRUCTURES
 # =========================================================================
+
 
 @dataclass
 class CellResult:
@@ -144,6 +145,7 @@ class CellResult:
 # =========================================================================
 # SQL HELPERS
 # =========================================================================
+
 
 def _predicate_sql(session: str, direction: str) -> str:
     if direction == "long":
@@ -244,6 +246,7 @@ def _tautology_corr(
 # STATISTICS
 # =========================================================================
 
+
 def _summarise(trades: list[tuple[date, float, str, Any]]) -> dict[str, Any]:
     n = len(trades)
     if n == 0:
@@ -267,7 +270,7 @@ def _t_test(pnl: list[float]) -> tuple[float | None, float | None]:
         return None, None
     mean = sum(pnl) / len(pnl)
     var = sum((p - mean) ** 2 for p in pnl) / (len(pnl) - 1)
-    std = var ** 0.5
+    std = var**0.5
     if std == 0:
         return None, None
     se = std / math.sqrt(len(pnl))
@@ -305,6 +308,7 @@ def _bh_fdr(pvalues: list[tuple[Any, float]]) -> dict[Any, float]:
 # =========================================================================
 # CELL EVALUATION
 # =========================================================================
+
 
 def _build_cell(
     con: duckdb.DuckDBPyConnection,
@@ -361,11 +365,7 @@ def _build_cell(
         cell.wfe = cell.sharpe_oos_on / cell.sharpe_is_on
 
     # Arithmetic-only (RULE 8.2)
-    if (
-        cell.wr_is_on is not None
-        and cell.wr_is_base is not None
-        and cell.delta_is is not None
-    ):
+    if cell.wr_is_on is not None and cell.wr_is_base is not None and cell.delta_is is not None:
         wr_spread = abs(cell.wr_is_on - cell.wr_is_base)
         if wr_spread < AO_WR_SPREAD and abs(cell.delta_is) > AO_DELTA_IS:
             cell.is_arithmetic_only = True
@@ -382,8 +382,7 @@ def _build_cell(
         exempt = n < ERA_N_EXEMPT
         cell.era_expr[era_name] = {"n": n, "expr": era_expr, "exempt": exempt}
     cell.era_stable = all(
-        e["exempt"] or (e["expr"] is not None and e["expr"] >= ERA_EXPR_MIN)
-        for e in cell.era_expr.values()
+        e["exempt"] or (e["expr"] is not None and e["expr"] >= ERA_EXPR_MIN) for e in cell.era_expr.values()
     )
 
     return cell
@@ -481,6 +480,7 @@ def _family_verdict(results: list[CellResult]) -> str:
 # RESULT MARKDOWN
 # =========================================================================
 
+
 def _fmt(value: Any, fmt: str = ".3f", none: str = "—") -> str:
     if value is None:
         return none
@@ -507,7 +507,9 @@ def _emit_result_md(
     lines.append(f"**Generated:** {now}")
     lines.append(f"**Scan script HEAD SHA:** `{scan_head_sha}`")
     lines.append(f"**Canonical DB:** `{db_path}`")
-    lines.append(f"**Holdout (Mode A):** `trading_day >= {holdout.isoformat()}` — imported from `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`")
+    lines.append(
+        f"**Holdout (Mode A):** `trading_day >= {holdout.isoformat()}` — imported from `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`"
+    )
     lines.append(f"**Pre-registration:** `docs/audit/hypotheses/2026-04-18-htf-path-a-prev-month-v1.yaml`")
     lines.append("")
     lines.append("## Scope")
@@ -548,28 +550,30 @@ def _emit_result_md(
         fr_pct = f"{c.fire_rate_is * 100:.1f}" if c.fire_rate_is is not None else "—"
         lines.append(
             "| "
-            + " | ".join([
-                str(i),
-                c.instrument,
-                c.session,
-                c.direction,
-                f"{c.rr:g}",
-                _fmt(c.n_is_base, "d"),
-                _fmt(c.n_is_on, "d"),
-                fr_pct,
-                _fmt(c.expr_is_base),
-                _fmt(c.expr_is_on),
-                _fmt(c.delta_is),
-                _fmt(c.expr_oos_on),
-                _fmt(c.delta_oos),
-                _fmt(c.dir_match),
-                _fmt(c.t_stat, ".2f"),
-                _fmt(c.raw_p, ".4f"),
-                _fmt(c.q_family, ".3f"),
-                _fmt(c.q_instrument, ".3f"),
-                _fmt(c.q_session, ".3f"),
-                _fmt(c.q_direction, ".3f"),
-            ])
+            + " | ".join(
+                [
+                    str(i),
+                    c.instrument,
+                    c.session,
+                    c.direction,
+                    f"{c.rr:g}",
+                    _fmt(c.n_is_base, "d"),
+                    _fmt(c.n_is_on, "d"),
+                    fr_pct,
+                    _fmt(c.expr_is_base),
+                    _fmt(c.expr_is_on),
+                    _fmt(c.delta_is),
+                    _fmt(c.expr_oos_on),
+                    _fmt(c.delta_oos),
+                    _fmt(c.dir_match),
+                    _fmt(c.t_stat, ".2f"),
+                    _fmt(c.raw_p, ".4f"),
+                    _fmt(c.q_family, ".3f"),
+                    _fmt(c.q_instrument, ".3f"),
+                    _fmt(c.q_session, ".3f"),
+                    _fmt(c.q_direction, ".3f"),
+                ]
+            )
             + " |"
         )
     lines.append("")
@@ -580,26 +584,26 @@ def _emit_result_md(
     lines.append(
         "| # | inst | session | dir | RR | Sharpe_IS | Sharpe_OOS | WFE | era_stable | tautology corr | tautology? | arithmetic_only |"
     )
-    lines.append(
-        "|--|-----|---------|-----|----|----:|----:|----:|:--:|----:|:--:|:--:|"
-    )
+    lines.append("|--|-----|---------|-----|----|----:|----:|----:|:--:|----:|:--:|:--:|")
     for i, c in enumerate(results, 1):
         lines.append(
             "| "
-            + " | ".join([
-                str(i),
-                c.instrument,
-                c.session,
-                c.direction,
-                f"{c.rr:g}",
-                _fmt(c.sharpe_is_on, ".3f"),
-                _fmt(c.sharpe_oos_on, ".3f"),
-                _fmt(c.wfe, ".3f"),
-                _fmt(c.era_stable),
-                _fmt(c.tautology_corr, ".3f"),
-                _fmt(c.is_tautology),
-                _fmt(c.is_arithmetic_only),
-            ])
+            + " | ".join(
+                [
+                    str(i),
+                    c.instrument,
+                    c.session,
+                    c.direction,
+                    f"{c.rr:g}",
+                    _fmt(c.sharpe_is_on, ".3f"),
+                    _fmt(c.sharpe_oos_on, ".3f"),
+                    _fmt(c.wfe, ".3f"),
+                    _fmt(c.era_stable),
+                    _fmt(c.tautology_corr, ".3f"),
+                    _fmt(c.is_tautology),
+                    _fmt(c.is_arithmetic_only),
+                ]
+            )
             + " |"
         )
     lines.append("")
@@ -607,9 +611,7 @@ def _emit_result_md(
     # Per-era detail
     lines.append("## Era stability detail (per cell, IS-on trades)")
     lines.append("")
-    lines.append(
-        "| # | inst | session | dir | RR | " + " | ".join(f"{e[0]} (n, ExpR)" for e in ERAS) + " |"
-    )
+    lines.append("| # | inst | session | dir | RR | " + " | ".join(f"{e[0]} (n, ExpR)" for e in ERAS) + " |")
     lines.append("|--|-----|---------|-----|----|" + "|".join(["----:" for _ in ERAS]) + "|")
     for i, c in enumerate(results, 1):
         era_cells = []
@@ -617,11 +619,7 @@ def _emit_result_md(
             e = c.era_expr.get(era_name, {"n": 0, "expr": None})
             exempt_mark = "*" if e.get("exempt") else ""
             era_cells.append(f"n={e['n']}, ExpR={_fmt(e['expr'])}{exempt_mark}")
-        lines.append(
-            "| "
-            + " | ".join([str(i), c.instrument, c.session, c.direction, f"{c.rr:g}"] + era_cells)
-            + " |"
-        )
+        lines.append("| " + " | ".join([str(i), c.instrument, c.session, c.direction, f"{c.rr:g}"] + era_cells) + " |")
     lines.append("")
     lines.append("*exempt = N < 50 (Criterion 9 threshold)*")
     lines.append("")
@@ -647,9 +645,7 @@ def _emit_result_md(
         "- Base (unfiltered) cell = same (instrument, session, direction, RR, E2, cb=1) "
         "lane without the HTF predicate. Delta_IS / Delta_OOS = ExpR_on − ExpR_base."
     )
-    lines.append(
-        "- t-test: one-sample two-tailed vs 0 on per-trade pnl_r of IS-on trades."
-    )
+    lines.append("- t-test: one-sample two-tailed vs 0 on per-trade pnl_r of IS-on trades.")
     lines.append(
         "- BH-FDR: classic Benjamini-Hochberg monotone q-value computation. "
         "K_family is the primary promotion gate (q < 0.05); other framings reported "
@@ -679,9 +675,7 @@ def _emit_result_md(
         "prior calendar month only. Drift check 59 (HTF integrity) passes with "
         "all 4 divergence classes caught in pressure test (commit 668d2680)."
     )
-    lines.append(
-        "- No writes to `validated_setups` or `experimental_strategies`. Read-only scan."
-    )
+    lines.append("- No writes to `validated_setups` or `experimental_strategies`. Read-only scan.")
     lines.append("")
 
     lines.append("## Reproduction")
@@ -698,12 +692,12 @@ def _emit_result_md(
 # MAIN
 # =========================================================================
 
+
 def _git_head_sha() -> str:
     try:
         import subprocess
-        out = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=str(PROJECT_ROOT), text=True
-        ).strip()
+
+        out = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(PROJECT_ROOT), text=True).strip()
         return out
     except Exception:
         return "unknown"

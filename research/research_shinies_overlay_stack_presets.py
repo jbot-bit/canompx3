@@ -69,9 +69,9 @@ def load_df(con: duckdb.DuckDBPyConnection, row: pd.Series) -> pd.DataFrame:
         WHERE o.orb_minutes=5
           AND o.symbol='{fsym}'
           AND o.orb_label='{fsess}'
-          AND o.entry_model='{row['entry_model']}'
-          AND o.confirm_bars={int(row['confirm_bars'])}
-          AND o.rr_target={float(row['rr_target'])}
+          AND o.entry_model='{row["entry_model"]}'
+          AND o.confirm_bars={int(row["confirm_bars"])}
+          AND o.rr_target={float(row["rr_target"])}
           AND o.pnl_r IS NOT NULL
           AND o.entry_ts IS NOT NULL
         """
@@ -93,9 +93,9 @@ def load_df(con: duckdb.DuckDBPyConnection, row: pd.Series) -> pd.DataFrame:
         WHERE o.orb_minutes=5
           AND o.symbol='{fsym}'
           AND o.orb_label='{fsess}'
-          AND o.entry_model='{row['entry_model']}'
-          AND o.confirm_bars={int(row['confirm_bars'])}
-          AND o.rr_target={float(row['rr_target'])}
+          AND o.entry_model='{row["entry_model"]}'
+          AND o.confirm_bars={int(row["confirm_bars"])}
+          AND o.rr_target={float(row["rr_target"])}
           AND o.pnl_r IS NOT NULL
           AND o.entry_ts IS NOT NULL
         """
@@ -162,7 +162,12 @@ def main() -> int:
             "base": pd.Series(True, index=dfb.index),
             "base_plus_fast15": dfb["f_delay"].notna() & (dfb["f_delay"] <= 15),
             "base_plus_vol60": dfb["f_vol_imp"].notna() & (dfb["f_vol_imp"] >= vol_q60),
-            "base_plus_both": (dfb["f_delay"].notna() & (dfb["f_delay"] <= 15) & dfb["f_vol_imp"].notna() & (dfb["f_vol_imp"] >= vol_q60)),
+            "base_plus_both": (
+                dfb["f_delay"].notna()
+                & (dfb["f_delay"] <= 15)
+                & dfb["f_vol_imp"].notna()
+                & (dfb["f_vol_imp"] >= vol_q60)
+            ),
         }
 
         base_stats = summarize(dfb["pnl_r"], dfb["year"])
@@ -178,17 +183,19 @@ def main() -> int:
                 if len(te_on) >= 15:
                     te_delta = float(te_on.mean() - te["pnl_r"].mean())
 
-            rows.append({
-                "strategy_id": r["id"],
-                "strategy": f"{r['leader']} -> {r['follower']} {r['entry_model']}/CB{int(r['confirm_bars'])}/RR{float(r['rr_target'])}",
-                "preset": name,
-                "n": st["n"],
-                "signals_per_year": st["sigyr"],
-                "wr": st["wr"],
-                "avg_r": st["avg"],
-                "delta_avg_vs_base": float(st["avg"] - base_stats["avg"]) if name != "base" else 0.0,
-                "delta_test2025_vs_base": te_delta if name != "base" else 0.0,
-            })
+            rows.append(
+                {
+                    "strategy_id": r["id"],
+                    "strategy": f"{r['leader']} -> {r['follower']} {r['entry_model']}/CB{int(r['confirm_bars'])}/RR{float(r['rr_target'])}",
+                    "preset": name,
+                    "n": st["n"],
+                    "signals_per_year": st["sigyr"],
+                    "wr": st["wr"],
+                    "avg_r": st["avg"],
+                    "delta_avg_vs_base": float(st["avg"] - base_stats["avg"]) if name != "base" else 0.0,
+                    "delta_test2025_vs_base": te_delta if name != "base" else 0.0,
+                }
+            )
 
     con.close()
 
@@ -213,7 +220,11 @@ def main() -> int:
             lines.append(
                 f"- {r.preset}: N={r.n}, sig/yr={r.signals_per_year:.1f}, avgR={r.avg_r:+.4f}, Δavg={r.delta_avg_vs_base:+.4f}, test2025Δ={r.delta_test2025_vs_base:+.4f}"
             )
-        best = gg[gg["preset"] != "base"].sort_values(["delta_avg_vs_base", "delta_test2025_vs_base"], ascending=False).head(1)
+        best = (
+            gg[gg["preset"] != "base"]
+            .sort_values(["delta_avg_vs_base", "delta_test2025_vs_base"], ascending=False)
+            .head(1)
+        )
         if not best.empty:
             b = best.iloc[0]
             lines.append(f"  -> Recommended preset: {b['preset']}")

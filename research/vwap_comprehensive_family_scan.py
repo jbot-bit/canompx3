@@ -106,10 +106,7 @@ if not PRE_REG_PATH.exists():
 
 ALL_SESSIONS: list[str] = list(SESSION_CATALOG.keys())  # 12 enabled sessions
 # Filter to the 12 we tested in comprehensive scan (BRISBANE_0925/1955 not in production scope)
-SCAN_SESSIONS: list[str] = [
-    s for s in ALL_SESSIONS
-    if s not in {"BRISBANE_0925", "BRISBANE_1955"}
-]
+SCAN_SESSIONS: list[str] = [s for s in ALL_SESSIONS if s not in {"BRISBANE_0925", "BRISBANE_1955"}]
 # Sanity-check
 assert len(SCAN_SESSIONS) == 12, f"Expected 12 sessions, got {len(SCAN_SESSIONS)}: {SCAN_SESSIONS}"
 
@@ -125,14 +122,12 @@ OOS_START = HOLDOUT_SACRED_FROM
 OOS_END_EXCLUSIVE = pd.Timestamp("2026-04-18").date()
 
 # Per-instrument enabled session map (auto-skip disabled cells)
-ENABLED: dict[str, set[str]] = {
-    inst: set(ASSET_CONFIGS[inst]["enabled_sessions"]) for inst in ALL_INSTRUMENTS
-}
+ENABLED: dict[str, set[str]] = {inst: set(ASSET_CONFIGS[inst]["enabled_sessions"]) for inst in ALL_INSTRUMENTS}
 
 # L6 deployed positive-control identity (per docs/audit/results/2026-04-18-c12-alarmed-lanes-review.md)
 L6_KEY = ("MNQ", "US_DATA_1000", 15, 1.5, "long", "VWAP_MID_ALIGNED")
 L6_C12_BASELINE_EXPR = 0.2101  # per C12 review baseline mean R
-L6_C12_BASELINE_TOL = 0.02     # |delta| within tol = control PASS
+L6_C12_BASELINE_TOL = 0.02  # |delta| within tol = control PASS
 
 # Deployed filter map for T0 tautology pre-screen — per active_validated_setups
 # query 2026-04-18 + comprehensive scan deployed lanes. Only the canonical
@@ -322,15 +317,9 @@ def test_cell(
     expr_on_oos = float(np.mean(on_oos)) if len(on_oos) >= 5 else float("nan")
     expr_off_oos = float(np.mean(off_oos)) if len(off_oos) >= 5 else float("nan")
     delta_oos = (
-        (expr_on_oos - expr_off_oos)
-        if not np.isnan(expr_on_oos) and not np.isnan(expr_off_oos)
-        else float("nan")
+        (expr_on_oos - expr_off_oos) if not np.isnan(expr_on_oos) and not np.isnan(expr_off_oos) else float("nan")
     )
-    dir_match = (
-        (not np.isnan(delta_oos))
-        and (np.sign(delta_is) == np.sign(delta_oos))
-        and (np.sign(delta_is) != 0)
-    )
+    dir_match = (not np.isnan(delta_oos)) and (np.sign(delta_is) == np.sign(delta_oos)) and (np.sign(delta_is) != 0)
 
     fire_rate = float(np.sum(sig_dir)) / max(1, len(sig_dir))
     extreme_fire = (fire_rate < 0.05) or (fire_rate > 0.95)
@@ -464,8 +453,12 @@ def main():
 
     # Total cell count enumeration check
     total_combos = (
-        len(SCAN_SESSIONS) * len(ALL_INSTRUMENTS) * len(ALL_APERTURES)
-        * len(ALL_RRS) * len(ALL_DIRS) * len(VWAP_VARIANTS)
+        len(SCAN_SESSIONS)
+        * len(ALL_INSTRUMENTS)
+        * len(ALL_APERTURES)
+        * len(ALL_RRS)
+        * len(ALL_DIRS)
+        * len(VWAP_VARIANTS)
     )
     print(f"Total combos enumerated: {total_combos}")
     assert total_combos == 1296, f"Expected 1296 combos, got {total_combos}"
@@ -477,7 +470,7 @@ def main():
             con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
             break
         except Exception as e:
-            print(f"  DB busy (attempt {attempt+1}/8): {e}")
+            print(f"  DB busy (attempt {attempt + 1}/8): {e}")
             time.sleep(5)
     if con is None:
         print("FATAL: could not open DB after 8 attempts")
@@ -531,8 +524,10 @@ def main():
     con.close()
 
     elapsed = time.time() - t_start
-    print(f"\nSCAN COMPLETE — {cell_count} cells attempted, {len(rows)} cells with results, "
-          f"{len(skipped_disabled)} disabled-skip, {len(skipped_low_n)} N<60 skip. Elapsed={elapsed:.0f}s.")
+    print(
+        f"\nSCAN COMPLETE — {cell_count} cells attempted, {len(rows)} cells with results, "
+        f"{len(skipped_disabled)} disabled-skip, {len(skipped_low_n)} N<60 skip. Elapsed={elapsed:.0f}s."
+    )
 
     if not rows:
         print("FATAL: no rows returned. Halting.")
@@ -545,10 +540,7 @@ def main():
 
     # Trustworthy gate
     trustworthy = res[
-        (~res["extreme_fire"])
-        & (~res["arithmetic_only"])
-        & (~res["tautology"])
-        & (res["n_on_is"] >= 50)
+        (~res["extreme_fire"]) & (~res["arithmetic_only"]) & (~res["tautology"]) & (res["n_on_is"] >= 50)
     ].copy()
 
     # H1 family-level survivors (binding gate per pre-reg)
@@ -799,10 +791,11 @@ def write_result_md(
         lines.append("(none)")
 
     # Top promising (|t|>=2.5, dir_match, trustworthy)
-    promising = trustworthy[
-        (trustworthy["t_is"].abs() >= 2.5)
-        & (trustworthy["dir_match"])
-    ].sort_values("t_is", key=abs, ascending=False).head(40)
+    promising = (
+        trustworthy[(trustworthy["t_is"].abs() >= 2.5) & (trustworthy["dir_match"])]
+        .sort_values("t_is", key=abs, ascending=False)
+        .head(40)
+    )
 
     lines += [
         "",

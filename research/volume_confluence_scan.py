@@ -231,7 +231,7 @@ def test_confluence_cell(
     # T0 tautology vs anchor alone — does AND add info beyond anchor?
     anchor_alone = anchor_sig[mask_dir]
     if pass_type == "filtered":
-        keep = (filter_sig[mask_dir] == 1)
+        keep = filter_sig[mask_dir] == 1
         anchor_alone = anchor_alone[keep]
     try:
         corr_composite_anchor = float(np.corrcoef(csig.astype(float), anchor_alone.astype(float))[0, 1])
@@ -265,7 +265,11 @@ def test_confluence_cell(
 
 
 def scan_confluence_lane(
-    session: str, apt: int, rr: float, instr: str, filter_key: str | None,
+    session: str,
+    apt: int,
+    rr: float,
+    instr: str,
+    filter_key: str | None,
 ) -> list[dict]:
     df = load_lane(session, apt, rr, instr)
     if len(df) < 50:
@@ -319,14 +323,10 @@ def emit(res: pd.DataFrame) -> None:
     res = bh_fdr_multi_framing(res, alpha=0.05)
 
     # Filter trustworthy cells
-    trustworthy = res[
-        (~res["extreme_fire"]) & (~res["arithmetic_only"])
-    ].copy()
+    trustworthy = res[(~res["extreme_fire"]) & (~res["arithmetic_only"])].copy()
 
     strict = trustworthy[
-        (trustworthy["t_is"].abs() >= 3.0)
-        & (trustworthy["dir_match"])
-        & (trustworthy["n_on_is"] >= 50)
+        (trustworthy["t_is"].abs() >= 3.0) & (trustworthy["dir_match"]) & (trustworthy["n_on_is"] >= 50)
     ].copy()
 
     bh_global = trustworthy[trustworthy["bh_pass_global"]].copy()
@@ -336,9 +336,7 @@ def emit(res: pd.DataFrame) -> None:
     # Did confluence ADD to anchor? Only interesting if t of composite > t of anchor alone
     # in the same cell. For that we'd need anchor-alone results merged. Skip for now.
     promising = trustworthy[
-        (trustworthy["t_is"].abs() >= 2.5)
-        & (trustworthy["dir_match"])
-        & (trustworthy["n_on_is"] >= 50)
+        (trustworthy["t_is"].abs() >= 2.5) & (trustworthy["dir_match"]) & (trustworthy["n_on_is"] >= 50)
     ].copy()
 
     lines = [
@@ -366,7 +364,9 @@ def emit(res: pd.DataFrame) -> None:
         bhg = "Y" if bool(r["bh_pass_global"]) else "."
         bhf = "Y" if bool(r["bh_pass_family"]) else "."
         bhl = "Y" if bool(r["bh_pass_lane"]) else "."
-        scope = "deployed" if (r["session"], r["aperture"], r["rr"], r["instrument"]) in DEPLOYED_LANE_SPECS else "other"
+        scope = (
+            "deployed" if (r["session"], r["aperture"], r["rr"], r["instrument"]) in DEPLOYED_LANE_SPECS else "other"
+        )
         lines.append(
             f"| {scope} | {r['instrument']} | {r['session']} | O{r['aperture']} | {r['rr']:.1f} | "
             f"{r['direction']} | {r['pass_type']} | {r['composite']} | {r['n_on_is']} | "
@@ -383,7 +383,9 @@ def emit(res: pd.DataFrame) -> None:
         "|-------|-------|---------|----|------|-----------|------|-------|---------|------|-------|---|---|",
     ]
     for _, r in bh_family.sort_values("t_is", key=abs, ascending=False).head(30).iterrows():
-        scope = "deployed" if (r["session"], r["aperture"], r["rr"], r["instrument"]) in DEPLOYED_LANE_SPECS else "other"
+        scope = (
+            "deployed" if (r["session"], r["aperture"], r["rr"], r["instrument"]) in DEPLOYED_LANE_SPECS else "other"
+        )
         lines.append(
             f"| {scope} | {r['instrument']} | {r['session']} | {r['direction']} | {r['pass_type']} | "
             f"{r['composite']} | {r['n_on_is']} | {r['fire_rate']:.1%} | {r['expr_on_is']:+.3f} | "
@@ -401,7 +403,9 @@ def emit(res: pd.DataFrame) -> None:
 
     OUTPUT_MD.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n[report] {OUTPUT_MD}")
-    print(f"  Strict: {len(strict)}, BH_g: {len(bh_global)}, BH_f: {len(bh_family)}, BH_l: {len(bh_lane)}, Promising: {len(promising)}")
+    print(
+        f"  Strict: {len(strict)}, BH_g: {len(bh_global)}, BH_f: {len(bh_family)}, BH_l: {len(bh_lane)}, Promising: {len(promising)}"
+    )
 
 
 def main():

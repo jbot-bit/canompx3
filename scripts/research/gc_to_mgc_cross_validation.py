@@ -28,6 +28,7 @@ from trading_app.config import ALL_FILTERS
 def run_cross_validation() -> None:
     mgc_cost = get_cost_spec("MGC")
     import time
+
     for attempt in range(10):
         try:
             con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -49,9 +50,9 @@ def run_cross_validation() -> None:
     """).fetchall()
     gc_cols = [d[0] for d in con.description]
 
-    print(f"{'='*100}")
-    print(f"GC -> MGC CROSS-VALIDATION REPORT")
-    print(f"{'='*100}")
+    print(f"{'=' * 100}")
+    print("GC -> MGC CROSS-VALIDATION REPORT")
+    print(f"{'=' * 100}")
     print(f"GC strategies: {len(gc_strats)}")
     print(f"MGC cost: ${mgc_cost.total_friction:.2f} friction")
     print()
@@ -59,7 +60,7 @@ def run_cross_validation() -> None:
     results = []
 
     for row in gc_strats:
-        strat = dict(zip(gc_cols, row))
+        strat = dict(zip(gc_cols, row, strict=True))
         sid = strat["strategy_id"]
         orb_label = strat["orb_label"]
         filter_type = strat["filter_type"]
@@ -96,7 +97,9 @@ def run_cross_validation() -> None:
             filter_sql = f"d.overnight_range_pct >= {pct}"
         elif filter_type.startswith("COST_LT"):
             threshold = int(filter_type.replace("COST_LT", ""))
-            filter_sql = f"({mgc_cost.total_friction} / NULLIF(d.{filter_col} * {mgc_cost.point_value}, 0) * 100) < {threshold}"
+            filter_sql = (
+                f"({mgc_cost.total_friction} / NULLIF(d.{filter_col} * {mgc_cost.point_value}, 0) * 100) < {threshold}"
+            )
         else:
             print(f"SKIP {sid}: unhandled filter_type '{filter_type}' for SQL generation")
             continue
@@ -165,7 +168,7 @@ def run_cross_validation() -> None:
 
         # Sharpe (annualized)
         trades_per_year = mgc_n / max(len(yearly), 1)
-        mgc_sharpe = (mgc_expr / mgc_std * (trades_per_year ** 0.5)) if mgc_std and mgc_std > 0 else 0
+        mgc_sharpe = (mgc_expr / mgc_std * (trades_per_year**0.5)) if mgc_std and mgc_std > 0 else 0
 
         # Compare to GC
         gc_expr = strat["expectancy_r"]
@@ -182,21 +185,23 @@ def run_cross_validation() -> None:
         else:
             verdict = "CONFIRMED"
 
-        results.append({
-            "gc_sid": sid,
-            "orb_label": orb_label,
-            "filter_type": filter_type,
-            "rr_target": rr_target,
-            "gc_n": gc_n,
-            "gc_wr": gc_wr,
-            "gc_expr": gc_expr,
-            "mgc_n": mgc_n,
-            "mgc_wr": mgc_wr,
-            "mgc_expr": mgc_expr,
-            "mgc_sharpe": mgc_sharpe,
-            "verdict": verdict,
-            "yearly": yearly,
-        })
+        results.append(
+            {
+                "gc_sid": sid,
+                "orb_label": orb_label,
+                "filter_type": filter_type,
+                "rr_target": rr_target,
+                "gc_n": gc_n,
+                "gc_wr": gc_wr,
+                "gc_expr": gc_expr,
+                "mgc_n": mgc_n,
+                "mgc_wr": mgc_wr,
+                "mgc_expr": mgc_expr,
+                "mgc_sharpe": mgc_sharpe,
+                "verdict": verdict,
+                "yearly": yearly,
+            }
+        )
 
     con.close()
 
@@ -223,7 +228,7 @@ def run_cross_validation() -> None:
                 print(f"    {int(yr[0])}: N={yr[1]:>4d}  WR={yr[2]:.1%}  ExpR={sign}{yr[3]:.3f}")
 
     # Summary
-    print(f"\n{'='*100}")
+    print(f"\n{'=' * 100}")
     confirmed = [r for r in results if r["verdict"] == "CONFIRMED"]
     tentative = [r for r in results if r["verdict"] == "TENTATIVE"]
     failed = [r for r in results if r["verdict"] == "FAILED"]
@@ -235,7 +240,7 @@ def run_cross_validation() -> None:
     print(f"INSUFFICIENT_DATA: {len(insufficient)}  (N<30 — cannot judge)")
 
     if confirmed:
-        print(f"\nCONFIRMED strategies for MGC deployment:")
+        print("\nCONFIRMED strategies for MGC deployment:")
         for r in confirmed:
             mgc_sid = r["gc_sid"].replace("GC_", "MGC_")
             print(f"  {mgc_sid}: ExpR={r['mgc_expr']:.3f} WR={r['mgc_wr']:.1%} N={r['mgc_n']}")

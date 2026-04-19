@@ -144,6 +144,7 @@ def _secondary_hit_rate_check(
             if sharpe is None:
                 sharpe = 0.0
             return (0 if s.status == "PROVISIONAL" else 1, float(sharpe))
+
         return sorted(xs, key=key, reverse=True)
 
     def _rank_random(xs: list) -> list:
@@ -163,7 +164,11 @@ def _secondary_hit_rate_check(
                 break
             reject = False
             for sel in selected:
-                a, b = (lane.strategy_id, sel.strategy_id) if lane.strategy_id < sel.strategy_id else (sel.strategy_id, lane.strategy_id)
+                a, b = (
+                    (lane.strategy_id, sel.strategy_id)
+                    if lane.strategy_id < sel.strategy_id
+                    else (sel.strategy_id, lane.strategy_id)
+                )
                 rho = correlation_matrix.get((a, b), 0.0)
                 if rho > CORRELATION_REJECT_RHO:
                     reject = True
@@ -268,7 +273,9 @@ def _format_md(rows: list[dict], supply_stats: dict, hit_rate_stats: dict) -> st
     for i, k in enumerate(ranked, 1):
         s = supply_stats[k]
         passes = "PASS" if s["bind_ratio"] >= BIND_PASS_RATIO_GATE else "FAIL"
-        lines.append(f"{i}. **{rank_labels[k]}** — bind {s['bind_ratio']:.3f} ({passes}), oversub {s['oversub_ratio']:.3f}")
+        lines.append(
+            f"{i}. **{rank_labels[k]}** — bind {s['bind_ratio']:.3f} ({passes}), oversub {s['oversub_ratio']:.3f}"
+        )
     lines += [
         "",
         "## Secondary: baseline dimension / hit-rate check (last 12 rebalances)",
@@ -303,13 +310,9 @@ def main() -> None:
         metas = _load_strategy_meta(con)
         histories = _build_histories(con, metas, as_of)
         session_regime_cache = _build_session_regime_cache(con, metas, as_of)
-        month_to_rebalance = _first_trading_days_by_month(
-            con, IS_START_MONTH, date(as_of.year, as_of.month, 1)
-        )
+        month_to_rebalance = _first_trading_days_by_month(con, IS_START_MONTH, date(as_of.year, as_of.month, 1))
         # IS runs through 2025-12; drop any 2026 months
-        month_to_rebalance = {
-            m: r for m, r in month_to_rebalance.items() if m.year < 2026
-        }
+        month_to_rebalance = {m: r for m, r in month_to_rebalance.items() if m.year < 2026}
     finally:
         con.close()
 
@@ -359,21 +362,24 @@ def main() -> None:
                     )
                 )
 
-        per_rebalance_rows.append({
-            "month": month_start.isoformat(),
-            "rebalance_date": rebalance_date.isoformat(),
-            "supply_slots": supply_slots,
-            "supply_corr_survivor": supply_corr_survivor,
-            "supply_risk_r_dollars": supply_risk_r_dollars,
-            "bind_A": supply_slots > BUDGET_SLOTS_RAW,
-            "bind_B": supply_corr_survivor > BUDGET_SLOTS_CORR,
-            "bind_C": supply_risk_r_dollars > BUDGET_RISK_R_DOLLARS,
-        })
+        per_rebalance_rows.append(
+            {
+                "month": month_start.isoformat(),
+                "rebalance_date": rebalance_date.isoformat(),
+                "supply_slots": supply_slots,
+                "supply_corr_survivor": supply_corr_survivor,
+                "supply_risk_r_dollars": supply_risk_r_dollars,
+                "bind_A": supply_slots > BUDGET_SLOTS_RAW,
+                "bind_B": supply_corr_survivor > BUDGET_SLOTS_CORR,
+                "bind_C": supply_risk_r_dollars > BUDGET_RISK_R_DOLLARS,
+            }
+        )
         print(
             f"[audit] {rebalance_date} slots={supply_slots} rho_survivor={supply_corr_survivor} risk_$={supply_risk_r_dollars:.0f}"
         )
 
     n = len(per_rebalance_rows)
+
     def _stats(key_supply: str, key_bind: str, budget: float) -> dict:
         supplies = [r[key_supply] for r in per_rebalance_rows]
         binds = [r[key_bind] for r in per_rebalance_rows]
@@ -403,15 +409,29 @@ def main() -> None:
                 "mean_hr_random": sum(s["hit_rate_random"] for s in valid) / len(valid),
             }
         else:
-            hit_rate_stats = {k: 0.0 for k in (
-                "mean_sel_baseline", "mean_sel_sharpe", "mean_sel_random",
-                "mean_hr_baseline", "mean_hr_sharpe", "mean_hr_random",
-            )}
+            hit_rate_stats = {
+                k: 0.0
+                for k in (
+                    "mean_sel_baseline",
+                    "mean_sel_sharpe",
+                    "mean_sel_random",
+                    "mean_hr_baseline",
+                    "mean_hr_sharpe",
+                    "mean_hr_random",
+                )
+            }
     else:
-        hit_rate_stats = {k: 0.0 for k in (
-            "mean_sel_baseline", "mean_sel_sharpe", "mean_sel_random",
-            "mean_hr_baseline", "mean_hr_sharpe", "mean_hr_random",
-        )}
+        hit_rate_stats = {
+            k: 0.0
+            for k in (
+                "mean_sel_baseline",
+                "mean_sel_sharpe",
+                "mean_sel_random",
+                "mean_hr_baseline",
+                "mean_hr_sharpe",
+                "mean_hr_random",
+            )
+        }
 
     output_path = Path(args.output_md)
     output_path.parent.mkdir(parents=True, exist_ok=True)

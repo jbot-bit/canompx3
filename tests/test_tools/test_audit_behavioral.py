@@ -274,6 +274,33 @@ query = """
         violations = audit_behavioral.check_triple_join_guard()
         assert len(violations) == 0
 
+    def test_ignores_prose_docstring_mentioning_join_daily_features(self, tmp_path, monkeypatch):
+        """Docstrings that mention 'JOIN daily_features' in English prose
+        must not be flagged. SQL_KEYWORD_PATTERN previously matched bare
+        'JOIN' which fired on prose like:
+
+            \"\"\"Load orb_outcomes JOIN daily_features for one cell.\"\"\"
+
+        The fix tightens the SQL block heuristic to require BOTH SELECT
+        AND FROM tokens (real SQL has both; prose almost never does).
+        """
+        _mkfile(
+            tmp_path / "research" / "prose.py",
+            '''\
+def load_lane(con, instrument, session):
+    """Load orb_outcomes JOIN daily_features for one cell. Triple-join correct.
+
+    This prose mentions JOIN daily_features for documentation purposes
+    only. No SQL is in this docstring.
+    """
+    pass
+''',
+        )
+        monkeypatch.setattr(audit_behavioral, "TRIPLE_JOIN_SCAN_DIRS", [tmp_path / "research"])
+        monkeypatch.setattr(audit_behavioral, "PROJECT_ROOT", tmp_path)
+        violations = audit_behavioral.check_triple_join_guard()
+        assert len(violations) == 0, f"Prose docstring incorrectly flagged. Violations: {violations}"
+
 
 # ── Check 6: Double-break look-ahead scanner ─────────────────────────
 

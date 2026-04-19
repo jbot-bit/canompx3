@@ -10,9 +10,9 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Sequence
 
 import duckdb
 
@@ -211,7 +211,10 @@ def validate_state_envelope(
 
     if current_profile_id is not None and canonical_inputs["profile_id"] != current_profile_id:
         return False, "profile mismatch", None
-    if current_profile_fingerprint is not None and canonical_inputs["profile_fingerprint"] != current_profile_fingerprint:
+    if (
+        current_profile_fingerprint is not None
+        and canonical_inputs["profile_fingerprint"] != current_profile_fingerprint
+    ):
         return False, "profile fingerprint mismatch", None
     if current_lane_ids is not None and list(canonical_inputs["lane_ids"]) != list(current_lane_ids):
         return False, "lane_ids mismatch", None

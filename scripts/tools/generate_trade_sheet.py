@@ -345,9 +345,7 @@ def _enrich_trades_with_eligibility(
             t["elig_overall"] = report.overall_status.value
             t["elig_blocking"] = tuple(c.name for c in report.blocking_conditions)
             t["elig_pending"] = tuple(c.name for c in report.pending_conditions)
-            t["elig_stale"] = any(
-                c.status.value == "STALE_VALIDATION" for c in report.conditions
-            )
+            t["elig_stale"] = any(c.status.value == "STALE_VALIDATION" for c in report.conditions)
             t["elig_size_mult"] = float(report.effective_size_multiplier)
             t["elig_freshness"] = report.freshness_status.value
         except Exception as exc:  # noqa: BLE001 — adapter boundary, surface as visible UNKNOWN
@@ -1181,8 +1179,7 @@ def _build_filter_universe_rows(db_path: Path, trading_day: date) -> list[dict]:
                 # deployed lanes in View B; print a WARNING so the
                 # trader notices while keeping the section renderable.
                 print(
-                    f"  WARNING: View B could not parse {lane.strategy_id}: "
-                    f"{type(exc).__name__}: {exc}",
+                    f"  WARNING: View B could not parse {lane.strategy_id}: {type(exc).__name__}: {exc}",
                     flush=True,
                 )
                 continue
@@ -1228,11 +1225,7 @@ def _build_filter_universe_rows(db_path: Path, trading_day: date) -> list[dict]:
         # or a ConfidenceTier enum.
         tier_str = ""
         if confidence_tier is not None:
-            tier_str = (
-                confidence_tier.value
-                if hasattr(confidence_tier, "value")
-                else str(confidence_tier)
-            )
+            tier_str = confidence_tier.value if hasattr(confidence_tier, "value") else str(confidence_tier)
 
         routed = routed_counts.get(key, 0)
         deployed = deployed_counts.get(key, 0)
@@ -1259,9 +1252,7 @@ def _build_filter_universe_rows(db_path: Path, trading_day: date) -> list[dict]:
             }
         )
 
-    rows_out.sort(
-        key=lambda r: (-r["deployed"], -r["routed"], r["filter_type"])
-    )
+    rows_out.sort(key=lambda r: (-r["deployed"], -r["routed"], r["filter_type"]))
     return rows_out
 
 
@@ -1461,11 +1452,7 @@ def generate_html(
 
     # Build View B — Filter Universe Audit section (optional, only when
     # rows were pre-computed by main() via _build_filter_universe_rows)
-    filter_universe_html = (
-        _render_filter_universe_section(filter_universe_rows)
-        if filter_universe_rows
-        else ""
-    )
+    filter_universe_html = _render_filter_universe_section(filter_universe_rows) if filter_universe_rows else ""
 
     # Instrument summary — all three sections
     instr_deployed_exp = {}

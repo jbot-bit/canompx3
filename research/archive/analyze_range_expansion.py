@@ -38,12 +38,14 @@ SCREEN_START = "2024-01-01"
 # Range expansion thresholds (fraction of ATR_20)
 THRESHOLDS = [0.50, 0.75, 1.00, 1.25, 1.50]
 
+
 def load_daily_data(db_path: Path) -> pd.DataFrame:
     """Load daily_features with ATR_20 for MGC."""
     print("Loading daily features...", end=" ", flush=True)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT trading_day, atr_20, daily_open, daily_high, daily_low, daily_close
             FROM daily_features
             WHERE symbol = 'MGC'
@@ -51,28 +53,35 @@ def load_daily_data(db_path: Path) -> pd.DataFrame:
               AND atr_20 IS NOT NULL
               AND trading_day >= ?
             ORDER BY trading_day
-        """, [SCREEN_START]).fetchdf()
+        """,
+            [SCREEN_START],
+        ).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} days loaded.")
     return df
+
 
 def load_1m_bars_bulk(db_path: Path) -> pd.DataFrame:
     """Load 1m bars for MGC (screened date range)."""
     print("Loading 1m bars...", end=" ", flush=True)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
               AND ts_utc >= ?::TIMESTAMPTZ
             ORDER BY ts_utc
-        """, [f"{SCREEN_START} 00:00:00+00"]).fetchdf()
+        """,
+            [f"{SCREEN_START} 00:00:00+00"],
+        ).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} bars loaded.")
     return df
+
 
 def assign_trading_day(ts_utc: pd.Series) -> pd.Series:
     """Assign trading day: 09:00 Brisbane (23:00 UTC prev day) boundary."""
@@ -86,10 +95,9 @@ def assign_trading_day(ts_utc: pd.Series) -> pd.Series:
     trading_days = pd.Series(dates, index=ts_utc.index)
 
     mask_next = hours >= 23
-    trading_days[mask_next] = trading_days[mask_next].apply(
-        lambda d: d + timedelta(days=1)
-    )
+    trading_days[mask_next] = trading_days[mask_next].apply(lambda d: d + timedelta(days=1))
     return trading_days
+
 
 def analyze_range_expansion(bars: pd.DataFrame, daily: pd.DataFrame) -> pd.DataFrame:
     """For each day, track when range hits ATR thresholds and what happens after."""
@@ -115,7 +123,7 @@ def analyze_range_expansion(bars: pd.DataFrame, daily: pd.DataFrame) -> pd.DataF
 
     for i, td in enumerate(trading_days):
         if i % 100 == 0:
-            print(f"  Processing day {i+1}/{total_days}...", flush=True)
+            print(f"  Processing day {i + 1}/{total_days}...", flush=True)
 
         atr = atr_lookup.get(td)
         if atr is None or atr <= 0:
@@ -168,26 +176,29 @@ def analyze_range_expansion(bars: pd.DataFrame, daily: pd.DataFrame) -> pd.DataF
             day_start_ts = ts_vals[0]
             hours_in = (pd.Timestamp(trigger_ts) - pd.Timestamp(day_start_ts)).total_seconds() / 3600
 
-            results.append({
-                "trading_day": td,
-                "threshold": threshold,
-                "direction": direction,
-                "trigger_hour_utc": pd.Timestamp(trigger_ts).hour,
-                "hours_in_session": hours_in,
-                "range_at_trigger": cum_range[first_idx],
-                "atr_20": atr,
-                "trigger_close": trigger_close,
-                "session_close": session_close,
-                "move_after_pts": move_after,
-                "continuation": continuation,
-                "pnl_r": pnl_r,
-                "remaining_bars": len(day_bars) - first_idx - 1,
-                "year": td.year if hasattr(td, "year") else pd.Timestamp(td).year,
-            })
+            results.append(
+                {
+                    "trading_day": td,
+                    "threshold": threshold,
+                    "direction": direction,
+                    "trigger_hour_utc": pd.Timestamp(trigger_ts).hour,
+                    "hours_in_session": hours_in,
+                    "range_at_trigger": cum_range[first_idx],
+                    "atr_20": atr,
+                    "trigger_close": trigger_close,
+                    "session_close": session_close,
+                    "move_after_pts": move_after,
+                    "continuation": continuation,
+                    "pnl_r": pnl_r,
+                    "remaining_bars": len(day_bars) - first_idx - 1,
+                    "year": td.year if hasattr(td, "year") else pd.Timestamp(td).year,
+                }
+            )
 
     results_df = pd.DataFrame(results)
     print(f"  {len(results_df):,} expansion events found.")
     return results_df
+
 
 def print_threshold_summary(data: pd.DataFrame) -> None:
     """Print summary for each expansion threshold."""
@@ -195,7 +206,9 @@ def print_threshold_summary(data: pd.DataFrame) -> None:
     print("RANGE EXPANSION SUMMARY BY THRESHOLD")
     print("=" * 110)
 
-    header = f"{'Thresh':>7} {'N':>7} {'Cont%':>7} {'Mean_Move':>10} {'Med_Move':>10} {'N_up':>7} {'N_dn':>7} {'Mean_Hr':>8}"
+    header = (
+        f"{'Thresh':>7} {'N':>7} {'Cont%':>7} {'Mean_Move':>10} {'Med_Move':>10} {'N_up':>7} {'N_dn':>7} {'Mean_Hr':>8}"
+    )
     print(header)
     print("-" * 110)
 
@@ -212,7 +225,10 @@ def print_threshold_summary(data: pd.DataFrame) -> None:
         n_dn = (subset["direction"] == "down").sum()
         mean_hr = subset["hours_in_session"].mean()
 
-        print(f"{thresh:>7.0%} {n:>7,} {cont_pct:>6.1f}% {mean_move:>+10.3f} {med_move:>+10.3f} {n_up:>7,} {n_dn:>7,} {mean_hr:>8.1f}")
+        print(
+            f"{thresh:>7.0%} {n:>7,} {cont_pct:>6.1f}% {mean_move:>+10.3f} {med_move:>+10.3f} {n_up:>7,} {n_dn:>7,} {mean_hr:>8.1f}"
+        )
+
 
 def print_pnl_if_trading(data: pd.DataFrame) -> None:
     """Print ExpR for continuation trade at each threshold."""
@@ -244,7 +260,10 @@ def print_pnl_if_trading(data: pd.DataFrame) -> None:
             stats = annualize_sharpe(stats, n_years)
 
             sig = "*" if len(subset) >= 100 else ""
-            print(f"{thresh:>7.0%} {direction:>5} {stats['n']:>7,}{sig} {stats['wr']*100:>5.1f}% {stats['expr']:>+8.4f} {stats['sharpe']:>+8.4f} {stats['maxdd']:>+8.2f} {stats['total']:>+9.2f}")
+            print(
+                f"{thresh:>7.0%} {direction:>5} {stats['n']:>7,}{sig} {stats['wr'] * 100:>5.1f}% {stats['expr']:>+8.4f} {stats['sharpe']:>+8.4f} {stats['maxdd']:>+8.2f} {stats['total']:>+9.2f}"
+            )
+
 
 def print_reversal_analysis(data: pd.DataFrame) -> None:
     """After large expansion, does the market reverse?"""
@@ -272,7 +291,10 @@ def print_reversal_analysis(data: pd.DataFrame) -> None:
 
         mean_rev = -subset["move_after_pts"].mean()
 
-        print(f"{thresh:>7.0%} {n:>7,} {reversal_pct:>6.1f}% {mean_rev:>+12.3f} {fade_stats['wr']*100:>7.1f}% {fade_stats['expr']:>+10.4f}")
+        print(
+            f"{thresh:>7.0%} {n:>7,} {reversal_pct:>6.1f}% {mean_rev:>+12.3f} {fade_stats['wr'] * 100:>7.1f}% {fade_stats['expr']:>+10.4f}"
+        )
+
 
 def print_timing_analysis(data: pd.DataFrame) -> None:
     """When does expansion happen? Early vs late in session."""
@@ -294,10 +316,15 @@ def print_timing_analysis(data: pd.DataFrame) -> None:
 
         if len(early) >= 30:
             cont_e = early["continuation"].sum() / len(early) * 100
-            print(f"    Early (<4h): N={len(early):,}, Cont%={cont_e:.1f}%, MeanMove={early['move_after_pts'].mean():+.3f}")
+            print(
+                f"    Early (<4h): N={len(early):,}, Cont%={cont_e:.1f}%, MeanMove={early['move_after_pts'].mean():+.3f}"
+            )
         if len(late) >= 30:
             cont_l = late["continuation"].sum() / len(late) * 100
-            print(f"    Late (>4h):  N={len(late):,}, Cont%={cont_l:.1f}%, MeanMove={late['move_after_pts'].mean():+.3f}")
+            print(
+                f"    Late (>4h):  N={len(late):,}, Cont%={cont_l:.1f}%, MeanMove={late['move_after_pts'].mean():+.3f}"
+            )
+
 
 def print_year_breakdown(data: pd.DataFrame) -> None:
     """Year-by-year consistency check."""
@@ -320,6 +347,7 @@ def print_year_breakdown(data: pd.DataFrame) -> None:
             else:
                 row += f"{'---':>10}"
         print(row)
+
 
 def main():
     print("=" * 110)
@@ -350,6 +378,7 @@ def main():
     print(f"  - Friction: ${SPEC.total_friction:.2f}/RT ({SPEC.friction_in_points:.2f} pts)")
 
     print("\n[Done]")
+
 
 if __name__ == "__main__":
     main()

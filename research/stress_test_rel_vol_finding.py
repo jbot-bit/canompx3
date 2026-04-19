@@ -189,7 +189,9 @@ def per_day_stats(df: pd.DataFrame, p67_thresh: float) -> dict:
     }
 
 
-def block_bootstrap_p(df: pd.DataFrame, p67_thresh: float, block_size: int = 5, n_boot: int = 2000, seed: int = 42) -> float:
+def block_bootstrap_p(
+    df: pd.DataFrame, p67_thresh: float, block_size: int = 5, n_boot: int = 2000, seed: int = 42
+) -> float:
     """Proper autocorrelation-robust null test via moving-block bootstrap of pnl.
 
     Null hypothesis: rel_vol_HIGH has NO effect on pnl_r.
@@ -269,8 +271,14 @@ def temporal_stability(df: pd.DataFrame, p67_thresh: float) -> dict:
     }
 
 
-def verdict(dsr_results: dict, temporal: dict, exceeds_max_t: bool,
-            passes_bonferroni: bool, per_day_sig: bool, block_bootstrap_sig: bool) -> tuple:
+def verdict(
+    dsr_results: dict,
+    temporal: dict,
+    exceeds_max_t: bool,
+    passes_bonferroni: bool,
+    per_day_sig: bool,
+    block_bootstrap_sig: bool,
+) -> tuple:
     """Consolidated verdict: GENUINE / MARGINAL / LIKELY_OVERFIT.
 
     **Institutional-grade gate logic (strict, not summed):**
@@ -331,8 +339,7 @@ def emit(results: list[dict]) -> None:
         "- **Temporal stability** — IS split 50/50 by date, sign-match + |t|≥2 in both halves required.",
         "- **Verdict scoring:** 3 points DSR@global + 2 DSR@family + 1 DSR@lane + 2 temporal + 2 exceeds-max-t + 2 Bonferroni. GENUINE ≥ 7, MARGINAL ≥ 4, else LIKELY_OVERFIT.",
         "",
-        "**Expected max t from K=14261 random trials (Gumbel):** "
-        f"{expected_max_t_from_noise(K_GLOBAL):.3f}",
+        f"**Expected max t from K=14261 random trials (Gumbel):** {expected_max_t_from_noise(K_GLOBAL):.3f}",
         f"**Bonferroni threshold at K=14261:** 3.5e-6 (corresponds to |t| ≥ {stats.norm.ppf(1 - 3.5e-6 / 2):.3f})",
         "",
         "## Per-lane stress test",
@@ -383,6 +390,7 @@ def emit(results: list[dict]) -> None:
 
     # Joint probability if all 5 are random
     import math as m
+
     ps = [r["stats"]["p_welch"] for r in results]
     joint_p = 1.0
     for p in ps:
@@ -418,6 +426,7 @@ def main():
     # Pull variance-of-SR estimate from experimental_strategies if available
     try:
         from trading_app.dsr import estimate_var_sr_from_db
+
         var_sr = estimate_var_sr_from_db(GOLD_DB_PATH, min_sample=30)
         if var_sr == 0 or not np.isfinite(var_sr):
             var_sr = 0.047  # fallback per dsr.py docstring default
@@ -440,13 +449,17 @@ def main():
             print(f"  {s['error']}")
             continue
 
-        print(f"  N_on={s['n_on']}, SR_per_trade={s['sr_on_per_trade']:+.4f}, t={s['t_welch']:+.2f}, p={s['p_welch']:.6f}")
+        print(
+            f"  N_on={s['n_on']}, SR_per_trade={s['sr_on_per_trade']:+.4f}, t={s['t_welch']:+.2f}, p={s['p_welch']:.6f}"
+        )
 
         # DSR at 3 framings
         t_obs = s["n_on"]
         dsr_results = {
             "lane": dsr_at_k(s["sr_on_per_trade"], t_obs, s["skewness"], s["kurtosis_excess"], K_LANE_AVG, var_sr),
-            "family": dsr_at_k(s["sr_on_per_trade"], t_obs, s["skewness"], s["kurtosis_excess"], K_FAMILY_VOLUME, var_sr),
+            "family": dsr_at_k(
+                s["sr_on_per_trade"], t_obs, s["skewness"], s["kurtosis_excess"], K_FAMILY_VOLUME, var_sr
+            ),
             "global": dsr_at_k(s["sr_on_per_trade"], t_obs, s["skewness"], s["kurtosis_excess"], K_GLOBAL, var_sr),
         }
         # Per-day and block-bootstrap robustness
@@ -458,10 +471,14 @@ def main():
             and np.sign(pd_stats["delta_per_day"]) == np.sign(s["delta"])
         )
         block_bootstrap_sig = (not np.isnan(bb_p)) and bb_p < 0.01
-        print(f"  Per-day: t={pd_stats.get('t_per_day', float('nan')):+.2f}, Δ_day={pd_stats.get('delta_per_day', float('nan')):+.3f}")
+        print(
+            f"  Per-day: t={pd_stats.get('t_per_day', float('nan')):+.2f}, Δ_day={pd_stats.get('delta_per_day', float('nan')):+.3f}"
+        )
         print(f"  Block bootstrap p (5-day blocks): {bb_p:.4f}")
         for k_name, res in dsr_results.items():
-            print(f"  DSR@{k_name} (K={res['k_eff']}): SR0={res['sr0']:.4f}, DSR={res['dsr']:.4f}, pass_095={res['passes_095']}")
+            print(
+                f"  DSR@{k_name} (K={res['k_eff']}): SR0={res['sr0']:.4f}, DSR={res['dsr']:.4f}, pass_095={res['passes_095']}"
+            )
 
         # Temporal stability
         temporal = temporal_stability(df, s["p67"])
@@ -472,23 +489,24 @@ def main():
 
         exceeds_max_t = abs(s["t_welch"]) > exp_max_t
         passes_bonferroni = s["p_welch"] < 3.5e-6
-        v = verdict(dsr_results, temporal, exceeds_max_t, passes_bonferroni,
-                    per_day_sig, block_bootstrap_sig)
+        v = verdict(dsr_results, temporal, exceeds_max_t, passes_bonferroni, per_day_sig, block_bootstrap_sig)
         print(f"  Verdict: {v[0]} (hard gates passed: {v[1]}/5)")
 
-        results.append({
-            "lane_name": lane_name,
-            "stats": s,
-            "dsr": dsr_results,
-            "temporal": temporal,
-            "per_day": pd_stats,
-            "block_bootstrap_p": bb_p,
-            "per_day_sig": per_day_sig,
-            "block_bootstrap_sig": block_bootstrap_sig,
-            "exceeds_max_t": exceeds_max_t,
-            "passes_bonferroni": passes_bonferroni,
-            "verdict": v,
-        })
+        results.append(
+            {
+                "lane_name": lane_name,
+                "stats": s,
+                "dsr": dsr_results,
+                "temporal": temporal,
+                "per_day": pd_stats,
+                "block_bootstrap_p": bb_p,
+                "per_day_sig": per_day_sig,
+                "block_bootstrap_sig": block_bootstrap_sig,
+                "exceeds_max_t": exceeds_max_t,
+                "passes_bonferroni": passes_bonferroni,
+                "verdict": v,
+            }
+        )
 
     emit(results)
 

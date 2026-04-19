@@ -109,9 +109,7 @@ def _fallback_lines(root: Path, *, mode: str, error: Exception) -> list[str]:
                 sm = re.search(r"^mode:\s*(.+)$", sc, flags=re.MULTILINE)
                 st = re.search(r"^task:\s*(.+)$", sc, flags=re.MULTILINE)
                 if st or sm:
-                    lines.append(
-                        f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}"
-                    )
+                    lines.append(f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}")
             except OSError:
                 pass
     legacy_file = root / "docs" / "runtime" / "STAGE_STATE.md"
@@ -160,9 +158,7 @@ def _render_lines(report: PulseReport, *, mode: str, root: Path) -> list[str]:
                 sm = re.search(r"^mode:\s*(.+)$", sc, flags=re.MULTILINE)
                 st = re.search(r"^task:\s*(.+)$", sc, flags=re.MULTILINE)
                 if st or sm:
-                    lines.append(
-                        f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}"
-                    )
+                    lines.append(f"  Stage [{sf.stem}]: {st.group(1) if st else '?'} — {sm.group(1) if sm else '?'}")
             except OSError:
                 pass
     legacy_file = root / "docs" / "runtime" / "STAGE_STATE.md"

@@ -160,7 +160,7 @@ def build_codex_wsl_command(
         "export UV_CACHE_DIR=/tmp/uv-cache",
         "export UV_PYTHON_INSTALL_DIR=/tmp/uv-python",
         "export UV_LINK_MODE=copy",
-        "mkdir -p \"$UV_CACHE_DIR\" \"$UV_PYTHON_INSTALL_DIR\"",
+        'mkdir -p "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"',
         "uv sync --frozen --python 3.13 --group dev",
     ]
     if purpose:
@@ -197,7 +197,7 @@ def build_codex_project_wsl_command(
                 '  echo "Set CANOMPX3_CODEX_WSL_ROOT or clone canompx3 into ~/canompx3." >&2',
                 "  exit 1",
                 "fi",
-                f"bash {shlex.quote(root_wsl)}/scripts/infra/codex-wsl-sync.sh --source {shlex.quote(root_wsl)} --target \"$ROOT\"",
+                f'bash {shlex.quote(root_wsl)}/scripts/infra/codex-wsl-sync.sh --source {shlex.quote(root_wsl)} --target "$ROOT"',
                 'cd "$ROOT"',
                 f"exec ./scripts/infra/{script_name} --no-alt-screen",
             ]

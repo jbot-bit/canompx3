@@ -226,10 +226,13 @@ def run_symbol(
     stop_buffer: float,
     variant: str,
 ) -> list[TradeResult]:
-    tdays = [r[0] for r in con.execute(
-        "SELECT DISTINCT trading_day FROM daily_features WHERE symbol=? AND orb_minutes=5 ORDER BY trading_day",
-        [symbol],
-    ).fetchall()]
+    tdays = [
+        r[0]
+        for r in con.execute(
+            "SELECT DISTINCT trading_day FROM daily_features WHERE symbol=? AND orb_minutes=5 ORDER BY trading_day",
+            [symbol],
+        ).fetchall()
+    ]
     if len(tdays) < 3:
         return []
 
@@ -295,7 +298,8 @@ def run_symbol(
 
             if variant == "close_A_B":
                 trigger_ok = (
-                    not bars_a.empty and not bars_b.empty
+                    not bars_a.empty
+                    and not bars_b.empty
                     and _close_in_va(bars_a.iloc[-1], val, vah)
                     and _close_in_va(bars_b.iloc[-1], val, vah)
                 )
@@ -325,9 +329,7 @@ def run_symbol(
 
             bars_after_entry = day_bars[day_bars["ts_utc"] >= entry_ts]
             for mode in ("MID", "FAR", "SPLIT70", "SPLIT70_BE"):
-                pnl_points = _strategy_points(
-                    mode, bars_after_entry, direction, entry_px, stop_px, val, vah
-                )
+                pnl_points = _strategy_points(mode, bars_after_entry, direction, entry_px, stop_px, val, vah)
                 pnl_r = float(to_r_multiple(spec, entry=entry_px, stop=stop_px, pnl_points=pnl_points))
                 out.append(
                     TradeResult(
@@ -379,7 +381,12 @@ def summarize(df: pd.DataFrame):
     y["year"] = pd.to_datetime(y["trading_day"]).dt.year
     yearly = (
         y.groupby(["symbol", "anchor", "target_mode", "year"], as_index=False)
-        .agg(n=("pnl_r", "count"), avg_r=("pnl_r", "mean"), total_r=("pnl_r", "sum"), wr=("pnl_r", lambda s: (s > 0).mean()))
+        .agg(
+            n=("pnl_r", "count"),
+            avg_r=("pnl_r", "mean"),
+            total_r=("pnl_r", "sum"),
+            wr=("pnl_r", lambda s: (s > 0).mean()),
+        )
         .sort_values(["anchor", "symbol", "target_mode", "year"])
     )
 
