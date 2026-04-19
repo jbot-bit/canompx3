@@ -49,7 +49,9 @@ GOLD_DB_PATH = Path(__file__).parent / "gold.db"
 # =============================================================================
 
 # DBN file location
-DBN_PATH = Path(r"C:\Users\sydne\OneDrive\Desktop\CANONICAL TRADING\OHLCV_MGC_FULL\glbx-mdp3-20100912-20260203.ohlcv-1m.dbn.zst")
+DBN_PATH = Path(
+    r"C:\Users\sydne\OneDrive\Desktop\CANONICAL TRADING\OHLCV_MGC_FULL\glbx-mdp3-20100912-20260203.ohlcv-1m.dbn.zst"
+)
 
 # Database
 DB_PATH = GOLD_DB_PATH
@@ -73,7 +75,7 @@ BAR_TIMESTAMP_CONVENTION = "OPEN"
 # CME Gold Micro futures outright contract pattern
 # Format: MGC + month_code + year (1 or 2 digits)
 # Month codes: F(Jan) G(Feb) H(Mar) J(Apr) K(May) M(Jun) N(Jul) Q(Aug) U(Sep) V(Oct) X(Nov) Z(Dec)
-MGC_OUTRIGHT_PATTERN = re.compile(r'^MGC[FGHJKMNQUVXZ]\d{1,2}$')
+MGC_OUTRIGHT_PATTERN = re.compile(r"^MGC[FGHJKMNQUVXZ]\d{1,2}$")
 
 
 def is_outright_contract(symbol: str) -> bool:
@@ -86,6 +88,7 @@ def is_outright_contract(symbol: str) -> bool:
 # =============================================================================
 # TRADING DAY LOGIC (backtestfix.txt requirement)
 # =============================================================================
+
 
 def get_trading_day(ts_utc: datetime) -> date:
     """
@@ -105,14 +108,15 @@ def get_trading_day(ts_utc: datetime) -> date:
 # DATA VALIDATION (backtestfix.txt requirement)
 # =============================================================================
 
+
 def validate_bar(row: pd.Series) -> tuple[bool, str]:
     """
     Validate a single bar for price/volume sanity.
 
     Returns (is_valid, reason_if_invalid)
     """
-    o, h, l, c = row['open'], row['high'], row['low'], row['close']
-    v = row['volume']
+    o, h, l, c = row["open"], row["high"], row["low"], row["close"]
+    v = row["volume"]
 
     # Check for NaN/None in prices
     if pd.isna(o) or pd.isna(h) or pd.isna(l) or pd.isna(c):
@@ -120,10 +124,10 @@ def validate_bar(row: pd.Series) -> tuple[bool, str]:
 
     # Price physics
     if h < max(o, c):
-        return False, f"high ({h}) < max(open,close) ({max(o,c)})"
+        return False, f"high ({h}) < max(open,close) ({max(o, c)})"
 
     if l > min(o, c):
-        return False, f"low ({l}) > min(open,close) ({min(o,c)})"
+        return False, f"low ({l}) > min(open,close) ({min(o, c)})"
 
     if h < l:
         return False, f"high ({h}) < low ({l})"
@@ -146,6 +150,7 @@ def validate_bar(row: pd.Series) -> tuple[bool, str]:
 # CONTRACT SELECTION
 # =============================================================================
 
+
 def choose_front_contract(daily_volumes: dict) -> str | None:
     """
     Choose front-month contract (highest volume outright).
@@ -162,14 +167,12 @@ def choose_front_contract(daily_volumes: dict) -> str | None:
 # MAIN INGESTION
 # =============================================================================
 
+
 def get_last_date_in_db(db_path: str, symbol: str) -> date | None:
     """Get the last trading day already in the database for this symbol."""
     try:
         con = duckdb.connect(db_path, read_only=True)
-        result = con.execute(
-            "SELECT MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = ?",
-            [symbol]
-        ).fetchone()
+        result = con.execute("SELECT MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = ?", [symbol]).fetchone()
         con.close()
         if result and result[0]:
             return result[0]
@@ -287,7 +290,7 @@ def main():
     df = df.reset_index()
 
     # Get unique symbols before filtering
-    all_symbols = df['symbol'].unique()
+    all_symbols = df["symbol"].unique()
     print(f"Unique symbols in file: {len(all_symbols)}")
 
     # Count outrights vs spreads
@@ -301,19 +304,18 @@ def main():
 
     # Compute trading day for each bar
     print("Computing trading days...")
-    df['ts_utc_dt'] = pd.to_datetime(df['ts_event'], utc=True)
-    df['ts_local'] = df['ts_utc_dt'].dt.tz_convert(str(TZ_LOCAL))
-    df['hour'] = df['ts_local'].dt.hour
-    df['base_date'] = df['ts_local'].dt.date
-    df['trading_day'] = df.apply(
-        lambda row: row['base_date'] - timedelta(days=1) if row['hour'] < 9 else row['base_date'],
-        axis=1
+    df["ts_utc_dt"] = pd.to_datetime(df["ts_event"], utc=True)
+    df["ts_local"] = df["ts_utc_dt"].dt.tz_convert(str(TZ_LOCAL))
+    df["hour"] = df["ts_local"].dt.hour
+    df["base_date"] = df["ts_local"].dt.date
+    df["trading_day"] = df.apply(
+        lambda row: row["base_date"] - timedelta(days=1) if row["hour"] < 9 else row["base_date"], axis=1
     )
     print("  Done")
     print()
 
     # Get unique trading days
-    trading_days = sorted(df['trading_day'].unique())
+    trading_days = sorted(df["trading_day"].unique())
     print(f"Trading days in file: {len(trading_days)}")
     print(f"  Range: {trading_days[0]} to {trading_days[-1]}")
 
@@ -332,57 +334,59 @@ def main():
     print()
 
     stats = {
-        'days_processed': 0,
-        'days_skipped_no_contract': 0,
-        'bars_inserted': 0,
-        'bars_rejected': 0,
-        'rejection_reasons': defaultdict(int),
-        'contracts_used': set(),
+        "days_processed": 0,
+        "days_skipped_no_contract": 0,
+        "bars_inserted": 0,
+        "bars_rejected": 0,
+        "rejection_reasons": defaultdict(int),
+        "contracts_used": set(),
     }
 
     rows_buffer = []
 
     for i, trading_day in enumerate(trading_days):
-        day_df = df[df['trading_day'] == trading_day]
+        day_df = df[df["trading_day"] == trading_day]
 
         # Calculate volumes per symbol (only outrights)
-        volumes = day_df[day_df['symbol'].apply(is_outright_contract)].groupby('symbol')['volume'].sum().to_dict()
+        volumes = day_df[day_df["symbol"].apply(is_outright_contract)].groupby("symbol")["volume"].sum().to_dict()
 
         # Choose front-month
         front = choose_front_contract(volumes)
         if not front:
-            stats['days_skipped_no_contract'] += 1
+            stats["days_skipped_no_contract"] += 1
             continue
 
-        stats['contracts_used'].add(front)
+        stats["contracts_used"].add(front)
 
         # Filter to front-month only
-        front_df = day_df[day_df['symbol'] == front].copy()
+        front_df = day_df[day_df["symbol"] == front].copy()
 
         # CRITICAL: Sort by timestamp (backtestfix.txt requirement)
-        front_df = front_df.sort_values('ts_utc_dt').reset_index(drop=True)
+        front_df = front_df.sort_values("ts_utc_dt").reset_index(drop=True)
 
         # Validate and prepare rows
         for _, row in front_df.iterrows():
             is_valid, reason = validate_bar(row)
 
             if not is_valid:
-                stats['bars_rejected'] += 1
-                stats['rejection_reasons'][reason] += 1
+                stats["bars_rejected"] += 1
+                stats["rejection_reasons"][reason] += 1
                 continue
 
-            rows_buffer.append((
-                row['ts_utc_dt'].isoformat(),
-                SYMBOL,
-                front,
-                float(row['open']),
-                float(row['high']),
-                float(row['low']),
-                float(row['close']),
-                int(row['volume']),
-            ))
+            rows_buffer.append(
+                (
+                    row["ts_utc_dt"].isoformat(),
+                    SYMBOL,
+                    front,
+                    float(row["open"]),
+                    float(row["high"]),
+                    float(row["low"]),
+                    float(row["close"]),
+                    int(row["volume"]),
+                )
+            )
 
-        stats['days_processed'] += 1
+        stats["days_processed"] += 1
 
         # Commit in chunks
         if con and len(rows_buffer) >= args.chunk_size * 1000:
@@ -392,16 +396,18 @@ def main():
                 (ts_utc, symbol, source_symbol, open, high, low, close, volume)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                rows_buffer
+                rows_buffer,
             )
-            stats['bars_inserted'] += len(rows_buffer)
+            stats["bars_inserted"] += len(rows_buffer)
             con.commit()
             rows_buffer = []
 
         # Progress indicator
         if (i + 1) % 500 == 0 or i == len(trading_days) - 1:
             pct = (i + 1) / len(trading_days) * 100
-            print(f"  {i+1}/{len(trading_days)} days ({pct:.1f}%) - {stats['bars_inserted'] + len(rows_buffer):,} bars")
+            print(
+                f"  {i + 1}/{len(trading_days)} days ({pct:.1f}%) - {stats['bars_inserted'] + len(rows_buffer):,} bars"
+            )
             sys.stdout.flush()
 
     # Final insert
@@ -412,12 +418,12 @@ def main():
             (ts_utc, symbol, source_symbol, open, high, low, close, volume)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            rows_buffer
+            rows_buffer,
         )
-        stats['bars_inserted'] += len(rows_buffer)
+        stats["bars_inserted"] += len(rows_buffer)
         con.commit()
     elif args.dry_run:
-        stats['bars_inserted'] = len(rows_buffer)
+        stats["bars_inserted"] = len(rows_buffer)
 
     print()
 
@@ -432,10 +438,10 @@ def main():
     print(f"Bars rejected: {stats['bars_rejected']:,}")
     print(f"Unique contracts used: {len(stats['contracts_used'])}")
 
-    if stats['rejection_reasons']:
+    if stats["rejection_reasons"]:
         print()
         print("Rejection reasons:")
-        for reason, count in sorted(stats['rejection_reasons'].items(), key=lambda x: -x[1]):
+        for reason, count in sorted(stats["rejection_reasons"].items(), key=lambda x: -x[1]):
             print(f"  {reason}: {count}")
 
     # Skip 5m rebuild and verification if dry run
@@ -469,7 +475,7 @@ def main():
         GROUP BY 1, 2
         ORDER BY 1
         """,
-        [SYMBOL]
+        [SYMBOL],
     )
     con.commit()
 
@@ -485,8 +491,7 @@ def main():
 
     count_1m = con.execute("SELECT COUNT(*) FROM bars_1m WHERE symbol = ?", [SYMBOL]).fetchone()[0]
     date_range = con.execute(
-        "SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = ?",
-        [SYMBOL]
+        "SELECT MIN(DATE(ts_utc)), MAX(DATE(ts_utc)) FROM bars_1m WHERE symbol = ?", [SYMBOL]
     ).fetchone()
 
     print(f"bars_1m (MGC): {count_1m:,} rows")
@@ -495,7 +500,9 @@ def main():
     print()
     print("Next steps:")
     print(f"  1. Run audit: python scripts/backfill_audit1.py --symbol MGC")
-    print(f"  2. Build features: python pipeline/build_daily_features.py {date_range[0]} {date_range[1]} --instrument MGC")
+    print(
+        f"  2. Build features: python pipeline/build_daily_features.py {date_range[0]} {date_range[1]} --instrument MGC"
+    )
 
     con.close()
 

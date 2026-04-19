@@ -48,13 +48,14 @@ SPEC = get_cost_spec("MGC")
 
 # Grid dimensions
 BAND_MULTIPLIERS = [0.5, 1.0, 1.5, 2.0]  # sigma
-STOP_MULTIPLIERS = [0.5, 1.0]             # sigma
+STOP_MULTIPLIERS = [0.5, 1.0]  # sigma
 RR_TARGETS = [1.0, 1.5, 2.0, 2.5]
 TIME_FILTERS = {
     "first_2h": 120,  # Only look for entry in first 2 hours after open
     "all_day": 1440,  # Full trading day
 }
 SIGMA_LOOKBACK = 14  # Days for sigma calc
+
 
 def prepare_sigma_data(features: pd.DataFrame) -> pd.DataFrame:
     """Add sigma (stddev of daily_close - daily_open) to features."""
@@ -68,6 +69,7 @@ def prepare_sigma_data(features: pd.DataFrame) -> pd.DataFrame:
     df["sigma"] = df["co_range"].rolling(window=SIGMA_LOOKBACK, min_periods=SIGMA_LOOKBACK).std().shift(1)
 
     return df
+
 
 def compute_concretum_outcomes(
     db_path: Path,
@@ -88,7 +90,7 @@ def compute_concretum_outcomes(
     print(f"    Processing {total} eligible days...")
     for idx, (_, row) in enumerate(eligible.iterrows()):
         if idx % 200 == 0:
-            print(f"    Day {idx+1}/{total}...")
+            print(f"    Day {idx + 1}/{total}...")
 
         td = row["trading_day"]
         if hasattr(td, "date") and callable(td.date):
@@ -172,10 +174,7 @@ def compute_concretum_outcomes(
                         else:
                             target_price = entry_price - reward
 
-                        result = _resolve_1m(
-                            bars, entry_price, stop_price, target_price,
-                            direction, entry_bar_idx
-                        )
+                        result = _resolve_1m(bars, entry_price, stop_price, target_price, direction, entry_bar_idx)
 
                         if result is None:
                             last_close = bars.iloc[-1]["close"]
@@ -186,22 +185,25 @@ def compute_concretum_outcomes(
                             pnl_r = to_r_multiple(SPEC, entry_price, stop_price, result["pnl_points"])
                             outcome_type = result["outcome"]
 
-                        all_outcomes.append({
-                            "trading_day": str(td),
-                            "direction": direction,
-                            "band_mult": band_mult,
-                            "stop_multiplier": stop_mult,
-                            "rr_target": rr,
-                            "time_filter": tf_name,
-                            "sigma": sigma,
-                            "entry_price": entry_price,
-                            "stop_price": stop_price,
-                            "target_price": target_price,
-                            "pnl_r": pnl_r,
-                            "outcome": outcome_type,
-                        })
+                        all_outcomes.append(
+                            {
+                                "trading_day": str(td),
+                                "direction": direction,
+                                "band_mult": band_mult,
+                                "stop_multiplier": stop_mult,
+                                "rr_target": rr,
+                                "time_filter": tf_name,
+                                "sigma": sigma,
+                                "entry_price": entry_price,
+                                "stop_price": stop_price,
+                                "target_price": target_price,
+                                "pnl_r": pnl_r,
+                                "outcome": outcome_type,
+                            }
+                        )
 
     return all_outcomes
+
 
 def _resolve_1m(bars, entry, stop, target, direction, start_idx):
     """Resolve outcome on 1m bars."""
@@ -226,6 +228,7 @@ def _resolve_1m(bars, entry, stop, target, direction, start_idx):
             return {"outcome": "win", "pnl_points": pnl, "exit_bar_idx": i}
     return None
 
+
 def run_walk_forward(
     db_path: Path,
     train_months: int = 12,
@@ -235,6 +238,7 @@ def run_walk_forward(
     """Run walk-forward analysis for concretum bands strategy."""
     # Only load data needed for training + OOS
     from research._alt_strategy_utils import _add_months
+
     full_start = _add_months(test_start, -(train_months + 2))
 
     print("  Computing all concretum band outcomes...")
@@ -256,13 +260,11 @@ def run_walk_forward(
     regime_boundary = date(2025, 1, 1)
 
     for w in windows:
-        train_mask = (
-            (outcomes_df["trading_day_date"] >= w["train_start"])
-            & (outcomes_df["trading_day_date"] <= w["train_end"])
+        train_mask = (outcomes_df["trading_day_date"] >= w["train_start"]) & (
+            outcomes_df["trading_day_date"] <= w["train_end"]
         )
-        test_mask = (
-            (outcomes_df["trading_day_date"] >= w["test_start"])
-            & (outcomes_df["trading_day_date"] <= w["test_end"])
+        test_mask = (outcomes_df["trading_day_date"] >= w["test_start"]) & (
+            outcomes_df["trading_day_date"] <= w["test_end"]
         )
 
         train_data = outcomes_df[train_mask]
@@ -307,13 +309,15 @@ def run_walk_forward(
         oos_all_pnls.extend(oos_pnls)
         oos_all_dates.extend(oos["trading_day_date"].values)
 
-        window_results.append({
-            "test_start": str(w["test_start"]),
-            "test_end": str(w["test_end"]),
-            "selected": f"BM{bm}_{tf_name}_SM{sm}_RR{rr}",
-            "train_sharpe": best_sharpe,
-            "oos_stats": oos_stats,
-        })
+        window_results.append(
+            {
+                "test_start": str(w["test_start"]),
+                "test_end": str(w["test_end"]),
+                "selected": f"BM{bm}_{tf_name}_SM{sm}_RR{rr}",
+                "train_sharpe": best_sharpe,
+                "oos_stats": oos_stats,
+            }
+        )
 
     combined_oos = None
     regime_split = None
@@ -337,15 +341,18 @@ def run_walk_forward(
         "regime_split": regime_split,
     }
 
+
 def main():
     parser = argparse.ArgumentParser(description="Concretum Bands strategy analysis")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--train-months", type=int, default=12)
     parser.add_argument("--output", type=Path, default=None)
-    parser.add_argument("--start", type=date.fromisoformat, default=None,
-                        help="OOS start date (YYYY-MM-DD), default 2024-08-01")
-    parser.add_argument("--end", type=date.fromisoformat, default=None,
-                        help="OOS end date (YYYY-MM-DD), default 2026-02-01")
+    parser.add_argument(
+        "--start", type=date.fromisoformat, default=None, help="OOS start date (YYYY-MM-DD), default 2024-08-01"
+    )
+    parser.add_argument(
+        "--end", type=date.fromisoformat, default=None, help="OOS end date (YYYY-MM-DD), default 2026-02-01"
+    )
     args = parser.parse_args()
 
     sep = "=" * 80
@@ -354,9 +361,11 @@ def main():
     print(sep)
     print()
     print("Entry: Breakout from dynamic sigma-based bands around daily open")
-    print(f"Grid: {len(BAND_MULTIPLIERS)} band mults x {len(STOP_MULTIPLIERS)} stop mults x "
-          f"{len(RR_TARGETS)} RR x {len(TIME_FILTERS)} time filters = "
-          f"{len(BAND_MULTIPLIERS) * len(STOP_MULTIPLIERS) * len(RR_TARGETS) * len(TIME_FILTERS)} combos")
+    print(
+        f"Grid: {len(BAND_MULTIPLIERS)} band mults x {len(STOP_MULTIPLIERS)} stop mults x "
+        f"{len(RR_TARGETS)} RR x {len(TIME_FILTERS)} time filters = "
+        f"{len(BAND_MULTIPLIERS) * len(STOP_MULTIPLIERS) * len(RR_TARGETS) * len(TIME_FILTERS)} combos"
+    )
     print(f"Gate B: Risk floor >= {SPEC.min_risk_floor_points} points")
     print(f"Gate C: Ambiguous bar = LOSS")
     print()
@@ -373,26 +382,32 @@ def main():
         for w in result["windows"]:
             oos = w["oos_stats"]
             if oos:
-                print(f"  {w['test_start']} to {w['test_end']}: "
-                      f"Selected {w['selected']}, "
-                      f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
-                      f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}")
+                print(
+                    f"  {w['test_start']} to {w['test_end']}: "
+                    f"Selected {w['selected']}, "
+                    f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
+                    f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}"
+                )
 
         if result["combined_oos"]:
             c = result["combined_oos"]
             sha = c.get("sharpe_ann")
             sha_str = f", ShANN={sha:.3f}" if sha is not None else ""
-            print(f"\n  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
-                  f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}{sha_str}, "
-                  f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R")
+            print(
+                f"\n  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
+                f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}{sha_str}, "
+                f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R"
+            )
 
         if result["regime_split"]:
             rs = result["regime_split"]
             print("\n  REGIME SPLIT:")
             for label, stats in rs.items():
                 if stats:
-                    print(f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
-                          f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}")
+                    print(
+                        f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
+                        f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}"
+                    )
                 else:
                     print(f"    {label}: No data")
     else:
@@ -405,6 +420,7 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

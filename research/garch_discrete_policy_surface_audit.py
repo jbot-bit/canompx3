@@ -147,7 +147,9 @@ def summarize(df: pd.DataFrame, contracts_col: str) -> dict[str, float]:
     }
 
 
-def evaluate_scope(df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, bool]]) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
+def evaluate_scope(
+    df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, bool]]
+) -> tuple[pd.DataFrame, dict[str, pd.DataFrame]]:
     out_rows = []
     contribution_tables: dict[str, pd.DataFrame] = {}
 
@@ -176,7 +178,9 @@ def evaluate_scope(df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, b
             {
                 "scope": scope,
                 "policy": policy,
-                "active_pct": full_metrics["active_trades"] / full_metrics["n_trades"] if full_metrics["n_trades"] else 0.0,
+                "active_pct": full_metrics["active_trades"] / full_metrics["n_trades"]
+                if full_metrics["n_trades"]
+                else 0.0,
                 "mean_contracts": full_metrics["mean_contracts"],
                 "full_delta_r": full_metrics["total_r"] - base_full["total_r"],
                 "full_delta_dollars": full_metrics["total_dollars"] - base_full["total_dollars"],
@@ -184,7 +188,8 @@ def evaluate_scope(df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, b
                 "full_max_dd_r_delta": full_metrics["max_dd_r"] - base_full["max_dd_r"],
                 "worst_day_dollars_delta": full_metrics["worst_day_dollars"] - base_full["worst_day_dollars"],
                 "worst_5day_dollars_delta": full_metrics["worst_5day_dollars"] - base_full["worst_5day_dollars"],
-                "max_daily_risk_dollars_delta": full_metrics["max_daily_risk_dollars"] - base_full["max_daily_risk_dollars"],
+                "max_daily_risk_dollars_delta": full_metrics["max_daily_risk_dollars"]
+                - base_full["max_daily_risk_dollars"],
                 "is_exp_r_delta": expr_delta_is,
                 "oos_exp_r_delta": expr_delta_oos,
                 "oos_retention": retention,
@@ -196,7 +201,9 @@ def evaluate_scope(df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, b
         contrib["alt_dollars"] = contrib["pnl_dollars"] * contrib["contracts"]
         contrib["delta_dollars"] = contrib["alt_dollars"] - contrib["base_dollars"]
         contribution_tables[policy] = (
-            contrib.groupby(["instrument", "orb_label"], as_index=False)[["base_dollars", "alt_dollars", "delta_dollars"]]
+            contrib.groupby(["instrument", "orb_label"], as_index=False)[
+                ["base_dollars", "alt_dollars", "delta_dollars"]
+            ]
             .sum()
             .sort_values("delta_dollars", ascending=False)
             .reset_index(drop=True)
@@ -205,7 +212,11 @@ def evaluate_scope(df: pd.DataFrame, scope: str, profiles: dict[str, dict[str, b
     return pd.DataFrame(out_rows), contribution_tables
 
 
-def emit(profiles: dict[str, dict[str, bool]], scope_results: pd.DataFrame, contrib_tables: dict[str, dict[str, pd.DataFrame]]) -> None:
+def emit(
+    profiles: dict[str, dict[str, bool]],
+    scope_results: pd.DataFrame,
+    contrib_tables: dict[str, dict[str, pd.DataFrame]],
+) -> None:
     lines = [
         "# Garch Discrete Policy Surface Audit",
         "",
@@ -268,7 +279,13 @@ def emit(profiles: dict[str, dict[str, bool]], scope_results: pd.DataFrame, cont
 
         best = sub.iloc[0]["policy"] if len(sub) else None
         if best is not None:
-            lines += ["", f"### {scope.title()} best-policy contributions: `{best}`", "", "| Instrument | Session | Base $ | Alt $ | Δ$ |", "|---|---|---|---|---|"]
+            lines += [
+                "",
+                f"### {scope.title()} best-policy contributions: `{best}`",
+                "",
+                "| Instrument | Session | Base $ | Alt $ | Δ$ |",
+                "|---|---|---|---|---|",
+            ]
             for _, r in contrib_tables[scope][best].head(15).iterrows():
                 lines.append(
                     f"| {r['instrument']} | {r['orb_label']} | {r['base_dollars']:+.1f} | {r['alt_dollars']:+.1f} | {r['delta_dollars']:+.1f} |"
@@ -292,7 +309,7 @@ def emit(profiles: dict[str, dict[str, bool]], scope_results: pd.DataFrame, cont
         "",
     ]
 
-    OUTPUT_MD.write_text('\n'.join(lines), encoding='utf-8')
+    OUTPUT_MD.write_text("\n".join(lines), encoding="utf-8")
     print(f"[report] {OUTPUT_MD}")
 
 

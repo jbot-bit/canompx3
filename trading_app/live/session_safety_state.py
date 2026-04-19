@@ -75,9 +75,7 @@ class SessionSafetyState:
                 for sid, reason in raw_blocks.items()
                 if any(pat in str(reason) for pat in self._LEGACY_LIFECYCLE_BLOCK_PATTERNS)
             }
-            self.blocked_strategies = {
-                sid: reason for sid, reason in raw_blocks.items() if sid not in legacy
-            }
+            self.blocked_strategies = {sid: reason for sid, reason in raw_blocks.items() if sid not in legacy}
             if legacy:
                 log.info(
                     "Dropped %d legacy lifecycle-sourced block(s) from persisted state "

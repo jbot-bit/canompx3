@@ -67,15 +67,17 @@ def load_slot_trades(con, selected_slots):
         filter_types = set()
         orb_labels = set()
         for slot in inst_slots:
-            row = con.execute("""
+            row = con.execute(
+                """
                 SELECT instrument, orb_label, orb_minutes, entry_model,
                        rr_target, confirm_bars, filter_type
                 FROM validated_setups WHERE strategy_id = ?
-            """, [slot["head_strategy_id"]]).fetchone()
+            """,
+                [slot["head_strategy_id"]],
+            ).fetchone()
             if not row:
                 continue
-            cols = ["instrument", "orb_label", "orb_minutes", "entry_model",
-                    "rr_target", "confirm_bars", "filter_type"]
+            cols = ["instrument", "orb_label", "orb_minutes", "entry_model", "rr_target", "confirm_bars", "filter_type"]
             params = dict(zip(cols, row))
             slot_params[slot["head_strategy_id"]] = params
             filter_types.add(params["filter_type"])
@@ -96,34 +98,41 @@ def load_slot_trades(con, selected_slots):
             params = slot_params.get(sid)
             if not params:
                 continue
-            eligible = filter_days.get(
-                (params["filter_type"], params["orb_label"]), set()
-            )
+            eligible = filter_days.get((params["filter_type"], params["orb_label"]), set())
 
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT trading_day, outcome, pnl_r
                 FROM orb_outcomes
                 WHERE symbol = ? AND orb_label = ? AND orb_minutes = ?
                   AND entry_model = ? AND rr_target = ? AND confirm_bars = ?
                   AND outcome IN ('win', 'loss')
                 ORDER BY trading_day
-            """, [
-                params["instrument"], params["orb_label"], params["orb_minutes"],
-                params["entry_model"], params["rr_target"], params["confirm_bars"],
-            ]).fetchall()
+            """,
+                [
+                    params["instrument"],
+                    params["orb_label"],
+                    params["orb_minutes"],
+                    params["entry_model"],
+                    params["rr_target"],
+                    params["confirm_bars"],
+                ],
+            ).fetchall()
 
             slot_label = f"{instrument}_{params['orb_label']}"
             for r in rows:
                 if r[0] in eligible:
-                    all_trades.append({
-                        "trading_day": r[0],
-                        "outcome": r[1],
-                        "pnl_r": r[2],
-                        "instrument": instrument,
-                        "session": params["orb_label"],
-                        "slot_label": slot_label,
-                        "strategy_id": sid,
-                    })
+                    all_trades.append(
+                        {
+                            "trading_day": r[0],
+                            "outcome": r[1],
+                            "pnl_r": r[2],
+                            "instrument": instrument,
+                            "session": params["orb_label"],
+                            "slot_label": slot_label,
+                            "strategy_id": sid,
+                        }
+                    )
 
     return all_trades
 
@@ -131,8 +140,7 @@ def load_slot_trades(con, selected_slots):
 def compute_metrics(trades, start_date=None, end_date=None):
     n = len(trades)
     if n == 0:
-        return {"n": 0, "total_r": 0, "sharpe_ann": None, "max_dd": 0,
-                "wr": 0, "exp_r": 0}
+        return {"n": 0, "total_r": 0, "sharpe_ann": None, "max_dd": 0, "wr": 0, "exp_r": 0}
 
     all_days = [t["trading_day"] for t in trades]
     if start_date is None:
@@ -156,7 +164,7 @@ def compute_metrics(trades, start_date=None, end_date=None):
     if n_days > 1:
         mean_d = sum(full) / n_days
         var = sum((v - mean_d) ** 2 for v in full) / (n_days - 1)
-        std_d = var ** 0.5
+        std_d = var**0.5
         if std_d > 0:
             sharpe_ann = (mean_d / std_d) * sqrt(TRADING_DAYS_PER_YEAR)
 
@@ -171,7 +179,8 @@ def compute_metrics(trades, start_date=None, end_date=None):
             max_dd = dd
 
     return {
-        "n": n, "total_r": round(total_r, 1),
+        "n": n,
+        "total_r": round(total_r, 1),
         "exp_r": round(total_r / n, 4) if n > 0 else 0,
         "wr": round(wins / n, 3) if n > 0 else 0,
         "sharpe_ann": round(sharpe_ann, 2) if sharpe_ann else None,
@@ -266,14 +275,14 @@ def main():
         # Rank by train-period Sharpe/DD
         train_ranked = sorted(slot_train_metrics.items(), key=lambda x: -x[1]["sh_dd"])
 
-        print(f"\n  {'Rank':>4} {'Slot':<25} {'Sharpe':>7} {'DD':>6} {'Sh/DD':>7} "
-              f"{'ExpR':>7} {'N':>5}")
-        print(f"  {'-'*4} {'-'*25} {'-'*7} {'-'*6} {'-'*7} {'-'*7} {'-'*5}")
+        print(f"\n  {'Rank':>4} {'Slot':<25} {'Sharpe':>7} {'DD':>6} {'Sh/DD':>7} {'ExpR':>7} {'N':>5}")
+        print(f"  {'-' * 4} {'-' * 25} {'-' * 7} {'-' * 6} {'-' * 7} {'-' * 7} {'-' * 5}")
 
         for i, (label, m) in enumerate(train_ranked, 1):
             sh = f"{m['sharpe']:.2f}" if m["sharpe"] else "N/A"
-            print(f"  {i:>4} {label:<25} {sh:>7} {m['max_dd']:>5.1f}R "
-                  f"{m['sh_dd']:>6.3f} {m['exp_r']:>+6.3f} {m['n']:>5}")
+            print(
+                f"  {i:>4} {label:<25} {sh:>7} {m['max_dd']:>5.1f}R {m['sh_dd']:>6.3f} {m['exp_r']:>+6.3f} {m['n']:>5}"
+            )
 
         # =====================================================================
         # STEP 2: Test each slot count on TEST DATA
@@ -282,10 +291,11 @@ def main():
         print("STEP 2: OUT-OF-SAMPLE performance (2024-2025+)")
         print(f"{'=' * 100}")
 
-        print(f"\n  {'TopN':>5} {'Train TotalR':>13} {'Train Sh':>9} {'Train DD':>9} "
-              f"| {'Test TotalR':>12} {'Test Sh':>8} {'Test DD':>8} {'Test WR':>8} {'Test N':>7}")
-        print(f"  {'-'*5} {'-'*13} {'-'*9} {'-'*9} "
-              f"| {'-'*12} {'-'*8} {'-'*8} {'-'*8} {'-'*7}")
+        print(
+            f"\n  {'TopN':>5} {'Train TotalR':>13} {'Train Sh':>9} {'Train DD':>9} "
+            f"| {'Test TotalR':>12} {'Test Sh':>8} {'Test DD':>8} {'Test WR':>8} {'Test N':>7}"
+        )
+        print(f"  {'-' * 5} {'-' * 13} {'-' * 9} {'-' * 9} | {'-' * 12} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 7}")
 
         train_slot_labels = [label for label, _ in train_ranked]
 
@@ -301,14 +311,20 @@ def main():
 
             # Test metrics
             te_trades = [t for t in test_trades if t["slot_label"] in selected_labels]
-            te_m = compute_metrics(te_trades) if te_trades else {"total_r": 0, "sharpe_ann": None, "max_dd": 0, "wr": 0, "n": 0}
+            te_m = (
+                compute_metrics(te_trades)
+                if te_trades
+                else {"total_r": 0, "sharpe_ann": None, "max_dd": 0, "wr": 0, "n": 0}
+            )
 
             tr_sh = f"{tr_m['sharpe_ann']:.2f}" if tr_m["sharpe_ann"] else "N/A"
             te_sh = f"{te_m['sharpe_ann']:.2f}" if te_m["sharpe_ann"] else "N/A"
 
-            print(f"  {top_n:>5} {tr_m['total_r']:>+12.1f}R {tr_sh:>9} {tr_m['max_dd']:>8.1f}R "
-                  f"| {te_m['total_r']:>+11.1f}R {te_sh:>8} {te_m['max_dd']:>7.1f}R "
-                  f"{te_m.get('wr', 0):>7.1%} {te_m.get('n', 0):>7}")
+            print(
+                f"  {top_n:>5} {tr_m['total_r']:>+12.1f}R {tr_sh:>9} {tr_m['max_dd']:>8.1f}R "
+                f"| {te_m['total_r']:>+11.1f}R {te_sh:>8} {te_m['max_dd']:>7.1f}R "
+                f"{te_m.get('wr', 0):>7.1%} {te_m.get('n', 0):>7}"
+            )
 
         # =====================================================================
         # STEP 3: Adaptive sizing walk-forward
@@ -324,13 +340,14 @@ def main():
         if te_trades:
             print(f"\n  Top-15 slots, test period only:")
             print(f"  {'Config':>20} {'TotalR':>9} {'Sharpe':>8} {'MaxDD':>7} {'WR':>6}")
-            print(f"  {'-'*20} {'-'*9} {'-'*8} {'-'*7} {'-'*6}")
+            print(f"  {'-' * 20} {'-' * 9} {'-' * 8} {'-' * 7} {'-' * 6}")
 
             # No adaptive
             te_base = compute_metrics(te_trades)
             sh = f"{te_base['sharpe_ann']:.2f}" if te_base["sharpe_ann"] else "N/A"
-            print(f"  {'none':>20} {te_base['total_r']:>+8.1f}R {sh:>8} "
-                  f"{te_base['max_dd']:>6.1f}R {te_base['wr']:>5.1%}")
+            print(
+                f"  {'none':>20} {te_base['total_r']:>+8.1f}R {sh:>8} {te_base['max_dd']:>6.1f}R {te_base['wr']:>5.1%}"
+            )
 
             # With adaptive configs
             for threshold in [5, 8, 10, 15]:
@@ -339,8 +356,7 @@ def main():
                     am = compute_metrics(adapted)
                     sh = f"{am['sharpe_ann']:.2f}" if am["sharpe_ann"] else "N/A"
                     label = f"{scale}x@{threshold}R"
-                    print(f"  {label:>20} {am['total_r']:>+8.1f}R {sh:>8} "
-                          f"{am['max_dd']:>6.1f}R {am['wr']:>5.1%}")
+                    print(f"  {label:>20} {am['total_r']:>+8.1f}R {sh:>8} {am['max_dd']:>6.1f}R {am['wr']:>5.1%}")
 
         # =====================================================================
         # STEP 4: Compare train-ranked vs full-data-ranked
@@ -354,7 +370,7 @@ def main():
         full_labels = [f"{s['instrument']}_{s['session']}" for s in full_ranked]
 
         print(f"\n  {'Full Rank':>10} {'Slot':<25} {'Train Rank':>11} {'Movement':>10}")
-        print(f"  {'-'*10} {'-'*25} {'-'*11} {'-'*10}")
+        print(f"  {'-' * 10} {'-' * 25} {'-' * 11} {'-' * 10}")
 
         for i, label in enumerate(full_labels, 1):
             train_rank = train_slot_labels.index(label) + 1 if label in train_slot_labels else "N/A"
@@ -380,7 +396,7 @@ def main():
         train_only = top15_train - top15_full
         full_only = top15_full - top15_train
 
-        print(f"\n  Top-15 overlap (train vs full-data): {len(overlap)}/{15} ({len(overlap)/15:.0%})")
+        print(f"\n  Top-15 overlap (train vs full-data): {len(overlap)}/{15} ({len(overlap) / 15:.0%})")
         if train_only:
             print(f"  In train top-15 but NOT full-data top-15: {train_only}")
         if full_only:

@@ -178,7 +178,7 @@ def main() -> int:
     # stress
     slip005 = avg_sel - 0.05
     slip010 = avg_sel - 0.10
-    trim5 = float(all_sel.sort_values().iloc[: max(1, len(all_sel)-max(1, int(round(len(all_sel)*0.05))))].mean())
+    trim5 = float(all_sel.sort_values().iloc[: max(1, len(all_sel) - max(1, int(round(len(all_sel) * 0.05))))].mean())
 
     # strict verdict
     promote = (
@@ -193,27 +193,29 @@ def main() -> int:
 
     verdict = "PROMOTE" if promote else "KILL"
 
-    summary = pd.DataFrame([
-        {
-            "strategy": "A0 M6E_USEO -> MES_USEO E0/CB1/RR3.0 base_plus_both",
-            "wf_years": wf_years,
-            "n_test_selected_total": int(len(all_sel)),
-            "avg_selected": avg_sel,
-            "avg_base": avg_base,
-            "uplift": uplift,
-            "wr_selected": wr_sel,
-            "pos_avg_ratio": pos_avg_ratio,
-            "pos_uplift_ratio": pos_uplift_ratio,
-            "median_test_avg": median_test_avg,
-            "worst_test_avg": worst_test_avg,
-            "dd_selected": dd_sel,
-            "dd_base": dd_base,
-            "stress_slip_0_05": slip005,
-            "stress_slip_0_10": slip010,
-            "stress_trim_top5_avg": trim5,
-            "verdict": verdict,
-        }
-    ])
+    summary = pd.DataFrame(
+        [
+            {
+                "strategy": "A0 M6E_USEO -> MES_USEO E0/CB1/RR3.0 base_plus_both",
+                "wf_years": wf_years,
+                "n_test_selected_total": int(len(all_sel)),
+                "avg_selected": avg_sel,
+                "avg_base": avg_base,
+                "uplift": uplift,
+                "wr_selected": wr_sel,
+                "pos_avg_ratio": pos_avg_ratio,
+                "pos_uplift_ratio": pos_uplift_ratio,
+                "median_test_avg": median_test_avg,
+                "worst_test_avg": worst_test_avg,
+                "dd_selected": dd_sel,
+                "dd_base": dd_base,
+                "stress_slip_0_05": slip005,
+                "stress_slip_0_10": slip010,
+                "stress_trim_top5_avg": trim5,
+                "verdict": verdict,
+            }
+        ]
+    )
 
     splits.to_csv(p_splits, index=False)
     summary.to_csv(p_summary, index=False)

@@ -90,7 +90,12 @@ def main() -> int:
     # Monthly table
     m = (
         df.groupby(["month", "dalton_accept"], as_index=False)
-        .agg(n=("pnl_r", "count"), avg_r=("pnl_r", "mean"), total_r=("pnl_r", "sum"), wr=("pnl_r", lambda s: (s > 0).mean()))
+        .agg(
+            n=("pnl_r", "count"),
+            avg_r=("pnl_r", "mean"),
+            total_r=("pnl_r", "sum"),
+            wr=("pnl_r", lambda s: (s > 0).mean()),
+        )
         .sort_values(["month", "dalton_accept"])
     )
 

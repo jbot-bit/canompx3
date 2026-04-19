@@ -129,11 +129,11 @@ def _load_candidate_df(con: duckdb.DuckDBPyConnection, c: dict) -> pd.DataFrame:
      AND d.trading_day=o.trading_day
      AND d.orb_minutes=o.orb_minutes
     WHERE o.orb_minutes=5
-      AND o.symbol='{c['follower_symbol']}'
-      AND o.orb_label='{c['follower_session']}'
-      AND o.entry_model='{c['entry_model']}'
-      AND o.confirm_bars={c['confirm_bars']}
-      AND o.rr_target={c['rr_target']}
+      AND o.symbol='{c["follower_symbol"]}'
+      AND o.orb_label='{c["follower_session"]}'
+      AND o.entry_model='{c["entry_model"]}'
+      AND o.confirm_bars={c["confirm_bars"]}
+      AND o.rr_target={c["rr_target"]}
       AND o.pnl_r IS NOT NULL
       AND o.entry_ts IS NOT NULL
     """
@@ -156,7 +156,7 @@ def _load_candidate_df(con: duckdb.DuckDBPyConnection, c: dict) -> pd.DataFrame:
                {ls_dir} AS l_dir,
                {ls_ts}  AS l_ts
         FROM daily_features
-        WHERE symbol='{c['leader_symbol']}'
+        WHERE symbol='{c["leader_symbol"]}'
           AND orb_minutes=5
         """
         ld = con.execute(ql).fetchdf()
@@ -187,7 +187,7 @@ def _bqs_masks(df: pd.DataFrame) -> dict[str, pd.Series]:
     size_q70 = pd.Series(size_atr).quantile(0.70)
     vol_q60 = pd.Series(vol_imp).quantile(0.60)
 
-    c_cont = (df["f_cont"] == True)
+    c_cont = df["f_cont"] == True
     c_bsp = df["f_delay"].notna() & (df["f_delay"] <= 10)
     c_res = pd.Series(size_atr).notna() & (pd.Series(size_atr) >= size_q70)
     c_vis = pd.Series(vol_imp).notna() & (pd.Series(vol_imp) >= vol_q60)

@@ -46,11 +46,11 @@ SPEC = get_cost_spec("MGC")
 
 # Session start times in UTC (hour, minute)
 SESSION_START_UTC = {
-    "0900": (23, 0),   # 09:00 Brisbane = 23:00 UTC prev day
-    "1000": (0, 0),    # 10:00 Brisbane = 00:00 UTC
-    "1100": (1, 0),    # 11:00 Brisbane = 01:00 UTC
-    "1800": (8, 0),    # 18:00 Brisbane = 08:00 UTC
-    "2300": (13, 0),   # 23:00 Brisbane = 13:00 UTC
+    "0900": (23, 0),  # 09:00 Brisbane = 23:00 UTC prev day
+    "1000": (0, 0),  # 10:00 Brisbane = 00:00 UTC
+    "1100": (1, 0),  # 11:00 Brisbane = 01:00 UTC
+    "1800": (8, 0),  # 18:00 Brisbane = 08:00 UTC
+    "2300": (13, 0),  # 23:00 Brisbane = 13:00 UTC
     "0030": (14, 30),  # 00:30 Brisbane = 14:30 UTC
 }
 
@@ -73,6 +73,7 @@ END_DATE = date(2026, 2, 4)
 # ORB computation from bars_1m
 # ---------------------------------------------------------------------------
 
+
 def compute_orb_from_bars(bars_df, trading_day, orb_label, orb_minutes):
     """Compute ORB high/low/size from bars_1m for a given duration.
 
@@ -94,12 +95,13 @@ def compute_orb_from_bars(bars_df, trading_day, orb_label, orb_minutes):
     size = high - low
     return high, low, size
 
+
 # ---------------------------------------------------------------------------
 # Break detection
 # ---------------------------------------------------------------------------
 
-def detect_first_break(bars_df, trading_day, orb_label, orb_minutes,
-                       orb_high, orb_low):
+
+def detect_first_break(bars_df, trading_day, orb_label, orb_minutes, orb_high, orb_low):
     """Find first 1m bar whose close breaks outside the ORB range.
 
     Returns (break_dir, break_ts) or (None, None).
@@ -108,9 +110,7 @@ def detect_first_break(bars_df, trading_day, orb_label, orb_minutes,
         return None, None
 
     # Use canonical window calculation
-    window_start, window_end = _break_detection_window(
-        trading_day, orb_label, orb_minutes
-    )
+    window_start, window_end = _break_detection_window(trading_day, orb_label, orb_minutes)
 
     mask = (bars_df["ts_utc"] >= window_start) & (bars_df["ts_utc"] < window_end)
     window_bars = bars_df.loc[mask]
@@ -130,12 +130,13 @@ def detect_first_break(bars_df, trading_day, orb_label, orb_minutes,
 
     return None, None
 
+
 # ---------------------------------------------------------------------------
 # Confirm bar detection (vectorized)
 # ---------------------------------------------------------------------------
 
-def find_confirm_bar(bars_df, break_ts, orb_high, orb_low,
-                     break_dir, confirm_bars, window_end):
+
+def find_confirm_bar(bars_df, break_ts, orb_high, orb_low, break_dir, confirm_bars, window_end):
     """Find the Nth consecutive close outside ORB after break_ts.
 
     Returns (confirm_ts, confirm_close) or (None, None).
@@ -164,12 +165,13 @@ def find_confirm_bar(bars_df, break_ts, orb_high, orb_low,
 
     return None, None
 
+
 # ---------------------------------------------------------------------------
 # E3 retrace detection
 # ---------------------------------------------------------------------------
 
-def find_e3_fill(bars_df, confirm_ts, orb_high, orb_low,
-                 break_dir, stop_price, window_end):
+
+def find_e3_fill(bars_df, confirm_ts, orb_high, orb_low, break_dir, stop_price, window_end):
     """For E3: find bar where price retraces to ORB level after confirm.
 
     Checks stop not breached before retrace.
@@ -201,12 +203,13 @@ def find_e3_fill(bars_df, confirm_ts, orb_high, orb_low,
 
     return None, None
 
+
 # ---------------------------------------------------------------------------
 # Bar-by-bar outcome resolution
 # ---------------------------------------------------------------------------
 
-def resolve_outcome(bars_df, entry_ts, entry_price, stop_price,
-                    target_price, break_dir, trading_day_end):
+
+def resolve_outcome(bars_df, entry_ts, entry_price, stop_price, target_price, break_dir, trading_day_end):
     """Scan bars forward from entry to resolve win/loss/scratch.
 
     Returns pnl_r (float) using the canonical cost model.
@@ -235,8 +238,7 @@ def resolve_outcome(bars_df, entry_ts, entry_price, stop_price,
         if hs:
             return -1.0
         if ht:
-            return round(to_r_multiple(SPEC, entry_price, stop_price,
-                                       risk_points * rr_target_raw), 4)
+            return round(to_r_multiple(SPEC, entry_price, stop_price, risk_points * rr_target_raw), 4)
 
     # Scan post-entry bars
     mask = (bars_df["ts_utc"] > entry_ts) & (bars_df["ts_utc"] < trading_day_end)
@@ -272,16 +274,28 @@ def resolve_outcome(bars_df, entry_ts, entry_price, stop_price,
     if hit_stop[idx]:
         return -1.0
     # Win
-    return round(to_r_multiple(SPEC, entry_price, stop_price,
-                               risk_points * rr_target_raw), 4)
+    return round(to_r_multiple(SPEC, entry_price, stop_price, risk_points * rr_target_raw), 4)
+
 
 # ---------------------------------------------------------------------------
 # Single trade simulation
 # ---------------------------------------------------------------------------
 
-def simulate_trade(bars_df, trading_day, orb_label, orb_minutes,
-                   orb_high, orb_low, break_dir, break_ts,
-                   entry_model, confirm_bars, rr_target, td_end):
+
+def simulate_trade(
+    bars_df,
+    trading_day,
+    orb_label,
+    orb_minutes,
+    orb_high,
+    orb_low,
+    break_dir,
+    break_ts,
+    entry_model,
+    confirm_bars,
+    rr_target,
+    td_end,
+):
     """Run a single trade simulation. Returns pnl_r or None if no trade."""
     orb_size = orb_high - orb_low
     if orb_size <= 0:
@@ -292,8 +306,7 @@ def simulate_trade(bars_df, trading_day, orb_label, orb_minutes,
 
     # Find confirm bar
     confirm_ts, confirm_close = find_confirm_bar(
-        bars_df, break_ts, orb_high, orb_low,
-        break_dir, confirm_bars, window_end
+        bars_df, break_ts, orb_high, orb_low, break_dir, confirm_bars, window_end
     )
     if confirm_ts is None:
         return None
@@ -312,10 +325,7 @@ def simulate_trade(bars_df, trading_day, orb_label, orb_minutes,
 
     elif entry_model == "E3":
         stop_price = orb_low if break_dir == "long" else orb_high
-        fill_ts, fill_price = find_e3_fill(
-            bars_df, confirm_ts, orb_high, orb_low,
-            break_dir, stop_price, td_end
-        )
+        fill_ts, fill_price = find_e3_fill(bars_df, confirm_ts, orb_high, orb_low, break_dir, stop_price, td_end)
         if fill_ts is None:
             return None
         entry_ts = fill_ts
@@ -333,14 +343,13 @@ def simulate_trade(bars_df, trading_day, orb_label, orb_minutes,
     else:
         target_price = entry_price - risk_points * rr_target
 
-    return resolve_outcome(
-        bars_df, entry_ts, entry_price, stop_price,
-        target_price, break_dir, td_end
-    )
+    return resolve_outcome(bars_df, entry_ts, entry_price, stop_price, target_price, break_dir, td_end)
+
 
 # ---------------------------------------------------------------------------
 # Load 5m baseline from orb_outcomes
 # ---------------------------------------------------------------------------
+
 
 def load_5m_baseline(con, start_date, end_date):
     """Load existing 5m orb_outcomes as baseline for comparison.
@@ -398,17 +407,16 @@ def load_5m_baseline(con, start_date, end_date):
 
     return results
 
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Compare 5m vs 15m vs 30m ORB windows for MGC breakouts"
-    )
+    parser = argparse.ArgumentParser(description="Compare 5m vs 15m vs 30m ORB windows for MGC breakouts")
     parser.add_argument(
-        "--db-path", type=str, default="C:/db/gold.db",
-        help="Path to DuckDB database (default: C:/db/gold.db)"
+        "--db-path", type=str, default="C:/db/gold.db", help="Path to DuckDB database (default: C:/db/gold.db)"
     )
     args = parser.parse_args()
 
@@ -470,14 +478,17 @@ def main():
     for day_idx, td in enumerate(trading_days):
         # Load bars once per day
         td_start, td_end = compute_trading_day_utc_range(td)
-        bars_df = con.execute("""
+        bars_df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
               AND ts_utc >= ?::TIMESTAMPTZ
               AND ts_utc < ?::TIMESTAMPTZ
             ORDER BY ts_utc ASC
-        """, [td_start.isoformat(), td_end.isoformat()]).fetchdf()
+        """,
+            [td_start.isoformat(), td_end.isoformat()],
+        ).fetchdf()
 
         if bars_df.empty:
             continue
@@ -486,16 +497,12 @@ def main():
         for orb_minutes in ORB_DURATIONS:
             for orb_label in ORB_LABELS:
                 # Compute ORB
-                orb_high, orb_low, orb_size = compute_orb_from_bars(
-                    bars_df, td, orb_label, orb_minutes
-                )
+                orb_high, orb_low, orb_size = compute_orb_from_bars(bars_df, td, orb_label, orb_minutes)
                 if orb_high is None or orb_size is None or orb_size <= 0:
                     continue
 
                 # Detect break
-                break_dir, break_ts = detect_first_break(
-                    bars_df, td, orb_label, orb_minutes, orb_high, orb_low
-                )
+                break_dir, break_ts = detect_first_break(bars_df, td, orb_label, orb_minutes, orb_high, orb_low)
                 if break_dir is None:
                     continue
 
@@ -507,21 +514,28 @@ def main():
                     for entry_model, cb in ENTRY_CB_COMBOS:
                         for rr in RR_TARGETS:
                             pnl_r = simulate_trade(
-                                bars_df, td, orb_label, orb_minutes,
-                                orb_high, orb_low, break_dir, break_ts,
-                                entry_model, cb, rr, td_end
+                                bars_df,
+                                td,
+                                orb_label,
+                                orb_minutes,
+                                orb_high,
+                                orb_low,
+                                break_dir,
+                                break_ts,
+                                entry_model,
+                                cb,
+                                rr,
+                                td_end,
                             )
                             if pnl_r is not None:
-                                key = (orb_minutes, orb_label, entry_model,
-                                       cb, rr, filt_name)
+                                key = (orb_minutes, orb_label, entry_model, cb, rr, filt_name)
                                 sim_results[key].append(pnl_r)
 
         if (day_idx + 1) % 200 == 0:
             elapsed = time.monotonic() - t0
             rate = (day_idx + 1) / elapsed
             remaining = (total_days - day_idx - 1) / rate if rate > 0 else 0
-            print(f"  {day_idx + 1}/{total_days} days "
-                  f"({elapsed:.0f}s elapsed, ~{remaining:.0f}s remaining)")
+            print(f"  {day_idx + 1}/{total_days} days ({elapsed:.0f}s elapsed, ~{remaining:.0f}s remaining)")
 
     elapsed = time.monotonic() - t0
     print(f"  Simulation complete: {total_days} days in {elapsed:.1f}s")
@@ -550,7 +564,7 @@ def main():
             return None
         return (
             f"{orb_tag:<7s} {em:<5s} {cb:<3d} {rr:<5.1f} {filt:<9s} "
-            f"{stats['n']:>5d}  {stats['wr']*100:>5.1f}%  "
+            f"{stats['n']:>5d}  {stats['wr'] * 100:>5.1f}%  "
             f"{stats['expr']:>+6.3f}  {stats['sharpe']:>6.3f}  "
             f"{stats['maxdd']:>6.1f}  {stats['total']:>+7.1f}  {suffix}"
         )
@@ -605,8 +619,12 @@ def main():
                         prev = session_bests.get(sk)
                         if prev is None or stats["expr"] > prev["expr"]:
                             session_bests[sk] = {
-                                "orb_tag": tag, "em": em, "cb": cb,
-                                "rr": rr, "filt": filt_name, **stats,
+                                "orb_tag": tag,
+                                "em": em,
+                                "cb": cb,
+                                "rr": rr,
+                                "filt": filt_name,
+                                **stats,
                             }
 
         print()
@@ -617,8 +635,10 @@ def main():
     print("=" * 80)
     print("SUMMARY: Best ORB window per session (by ExpR)")
     print("=" * 80)
-    print(f"{'Session':<9s} {'Best_ORB':<9s} {'EM':<5s} {'CB':<3s} {'RR':<5s} "
-          f"{'Filter':<9s} {'N':>5s}  {'ExpR':>6s}  {'Sharpe':>6s}  {'Delta_vs_5m':>11s}")
+    print(
+        f"{'Session':<9s} {'Best_ORB':<9s} {'EM':<5s} {'CB':<3s} {'RR':<5s} "
+        f"{'Filter':<9s} {'N':>5s}  {'ExpR':>6s}  {'Sharpe':>6s}  {'Delta_vs_5m':>11s}"
+    )
     print("-" * 80)
 
     for orb_label in ORB_LABELS:
@@ -648,6 +668,7 @@ def main():
 
     print()
     print("Done.")
+
 
 if __name__ == "__main__":
     main()

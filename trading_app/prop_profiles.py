@@ -1091,8 +1091,7 @@ def get_lane_registry(profile_id: str | None = None) -> dict[str, dict]:
 
     if cap_conflicts:
         details = ", ".join(
-            f"{label}={sorted(caps, key=lambda c: (c is None, c))}"
-            for label, caps in sorted(cap_conflicts.items())
+            f"{label}={sorted(caps, key=lambda c: (c is None, c))}" for label, caps in sorted(cap_conflicts.items())
         )
         raise ValueError(
             "Profile has inconsistent max_orb_size_pts across lanes on the "

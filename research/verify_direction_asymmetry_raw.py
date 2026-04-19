@@ -43,11 +43,11 @@ from pipeline.cost_model import get_cost_spec, to_r_multiple, risk_in_dollars
 # CONFIG
 # =============================================================================
 INSTRUMENT = "MNQ"
-SESSION_BRISBANE_HOUR = 11   # 1100 session = 11:00 Brisbane = 01:00 UTC
-ORB_MINUTES = 5              # 5-min ORB window
+SESSION_BRISBANE_HOUR = 11  # 1100 session = 11:00 Brisbane = 01:00 UTC
+ORB_MINUTES = 5  # 5-min ORB window
 RR_TARGET = 2.5
-CONFIRM_BARS = 1             # CB1: first close outside ORB
-MIN_ORB_G = 4.0              # G4+ filter
+CONFIRM_BARS = 1  # CB1: first close outside ORB
+MIN_ORB_G = 4.0  # G4+ filter
 
 # Brisbane = UTC+10 always (no DST)
 BRISBANE_UTC_OFFSET_HOURS = 10
@@ -140,14 +140,19 @@ def run_verification():
         # ----- Step 3: Post-ORB bars (from 11:05 onwards, same trading day) -----
         # Trading day ends at next day 09:00 Brisbane = current cal_date 23:00 Brisbane + 10h
         # i.e., bars up to 08:59 Brisbane on (cal_date + 1 day)
-        td_end_bris = datetime(cal_date.year, cal_date.month, cal_date.day,
-                               9, 0, 0) + timedelta(days=1)
+        td_end_bris = datetime(cal_date.year, cal_date.month, cal_date.day, 9, 0, 0) + timedelta(days=1)
 
-        post_orb = df_all[
-            (df_all["ts_bris"] >= datetime(cal_date.year, cal_date.month, cal_date.day,
-                                           SESSION_BRISBANE_HOUR, ORB_MINUTES, 0))
-            & (df_all["ts_bris"] < td_end_bris)
-        ].sort_values("ts_bris").reset_index(drop=True)
+        post_orb = (
+            df_all[
+                (
+                    df_all["ts_bris"]
+                    >= datetime(cal_date.year, cal_date.month, cal_date.day, SESSION_BRISBANE_HOUR, ORB_MINUTES, 0)
+                )
+                & (df_all["ts_bris"] < td_end_bris)
+            ]
+            .sort_values("ts_bris")
+            .reset_index(drop=True)
+        )
 
         if post_orb.empty:
             skipped_no_break += 1
@@ -222,44 +227,54 @@ def run_verification():
                 # For E1: entered at open; check if rest of bar hits stop or target
                 # For safety, check both — if ambiguous, conservative loss
                 if hit_target and hit_stop:
-                    outcome = "loss"; pnl_r = -1.0; break
+                    outcome = "loss"
+                    pnl_r = -1.0
+                    break
                 elif hit_target:
                     outcome = "win"
                     win_pts = risk_points * RR_TARGET
                     pnl_r = to_r_multiple(cost, entry_price, stop_price, win_pts)
                     break
                 elif hit_stop:
-                    outcome = "loss"; pnl_r = -1.0; break
+                    outcome = "loss"
+                    pnl_r = -1.0
+                    break
                 # else: continue to next bar
                 continue
 
             # Post-entry bars
             if hit_target and hit_stop:
-                outcome = "loss"; pnl_r = -1.0; break
+                outcome = "loss"
+                pnl_r = -1.0
+                break
             elif hit_target:
                 outcome = "win"
                 win_pts = risk_points * RR_TARGET
                 pnl_r = to_r_multiple(cost, entry_price, stop_price, win_pts)
                 break
             elif hit_stop:
-                outcome = "loss"; pnl_r = -1.0; break
+                outcome = "loss"
+                pnl_r = -1.0
+                break
 
         if outcome is None:
             # Session ended without hit
             outcome = "scratch"
             pnl_r = to_r_multiple(cost, entry_price, stop_price, 0.0)
 
-        results.append({
-            "cal_date": cal_date,
-            "break_dir": break_dir,
-            "orb_size": round(orb_size, 2),
-            "entry_price": entry_price,
-            "stop_price": stop_price,
-            "target_price": round(target_price, 2),
-            "risk_points": round(risk_points, 2),
-            "outcome": outcome,
-            "pnl_r": round(pnl_r, 4),
-        })
+        results.append(
+            {
+                "cal_date": cal_date,
+                "break_dir": break_dir,
+                "orb_size": round(orb_size, 2),
+                "entry_price": entry_price,
+                "stop_price": stop_price,
+                "target_price": round(target_price, 2),
+                "risk_points": round(risk_points, 2),
+                "outcome": outcome,
+                "pnl_r": round(pnl_r, 4),
+            }
+        )
 
     print(f"Skipped — insufficient ORB bars: {skipped_no_orb}")
     print(f"Skipped — ORB too small (<G4): {skipped_small_orb}")
@@ -291,7 +306,9 @@ def run_verification():
         t, p = stats.ttest_1samp(sub, 0.0)
         print(f"\n  {dirn.upper():5s}: N={n:4d}  avgR={avg_r:+.4f}  WR={wr:.1%}  t={t:.3f}  p={p:.5f}")
 
-    print(f"\n  Asymmetry (LONG - SHORT): {df[df['break_dir']=='long']['pnl_r'].mean() - df[df['break_dir']=='short']['pnl_r'].mean():+.4f}")
+    print(
+        f"\n  Asymmetry (LONG - SHORT): {df[df['break_dir'] == 'long']['pnl_r'].mean() - df[df['break_dir'] == 'short']['pnl_r'].mean():+.4f}"
+    )
 
     # Year-by-year
     print("\n--- Year-by-year ---")
@@ -300,7 +317,7 @@ def run_verification():
             sub = grp[grp["break_dir"] == dirn]["pnl_r"].values
             if len(sub) < 5:
                 continue
-            print(f"  {yr} {dirn:5s}: N={len(sub):4d}  avgR={np.mean(sub):+.4f}  WR={np.mean(sub>0):.1%}")
+            print(f"  {yr} {dirn:5s}: N={len(sub):4d}  avgR={np.mean(sub):+.4f}  WR={np.mean(sub > 0):.1%}")
 
     # Outcome breakdown
     print("\n--- Outcome breakdown ---")
@@ -313,7 +330,7 @@ def run_verification():
         sub = df_ns[df_ns["break_dir"] == dirn]["pnl_r"].values
         if len(sub) == 0:
             continue
-        print(f"  {dirn:5s}: N={len(sub):4d}  avgR={np.mean(sub):+.4f}  WR={np.mean(sub>0):.1%}")
+        print(f"  {dirn:5s}: N={len(sub):4d}  avgR={np.mean(sub):+.4f}  WR={np.mean(sub > 0):.1%}")
 
     # Save raw results
     out_path = PROJECT_ROOT / "research" / "output" / "verify_direction_asymmetry_raw.csv"

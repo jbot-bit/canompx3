@@ -26,6 +26,7 @@ Predecessor: research/research_orb_time_scan.py (96 times, 1 RR, no costs, no FD
 Usage:
   python research/research_session_discovery.py
 """
+
 import sys
 import time as _time
 import warnings
@@ -59,27 +60,27 @@ RR_TARGETS = [1.0, 1.5, 2.0, 2.5, 3.0]
 G_THRESHOLDS = {"G0": 0.0, "G4": 4.0, "G5": 5.0, "G6": 6.0}
 G_LIST = sorted(G_THRESHOLDS.items(), key=lambda x: x[1])  # (name, min_size) ascending
 
-ORB_BARS = 5          # 5-minute ORB
-BREAK_WINDOW = 240    # 4 hours to detect break (minutes)
+ORB_BARS = 5  # 5-minute ORB
+BREAK_WINDOW = 240  # 4 hours to detect break (minutes)
 OUTCOME_WINDOW = 480  # 8 hours to resolve target/stop (minutes)
-MIN_TRADES = 30       # Minimum for statistical testing
-FDR_Q = 0.05          # BH FDR threshold
+MIN_TRADES = 30  # Minimum for statistical testing
+FDR_Q = 0.05  # BH FDR threshold
 
 _US_EASTERN = ZoneInfo("America/New_York")
 
 # Known session approximate Brisbane times for labeling.
 # Each entry: list of (hour, minute) — includes both winter and summer DST variants.
 KNOWN_SESSIONS_BRIS = {
-    "CME_REOPEN":     [(9, 0), (8, 0)],
-    "TOKYO_OPEN":     [(10, 0)],
+    "CME_REOPEN": [(9, 0), (8, 0)],
+    "TOKYO_OPEN": [(10, 0)],
     "SINGAPORE_OPEN": [(11, 0)],
-    "LONDON_METALS":  [(18, 0), (17, 0)],
-    "US_DATA_830":    [(23, 30), (22, 30)],
-    "NYSE_OPEN":      [(0, 30)],
-    "US_DATA_1000":   [(1, 0), (0, 0)],
-    "COMEX_SETTLE":   [(4, 30), (3, 30)],
-    "CME_PRECLOSE":   [(6, 45), (5, 45)],
-    "NYSE_CLOSE":     [(7, 0), (6, 0)],
+    "LONDON_METALS": [(18, 0), (17, 0)],
+    "US_DATA_830": [(23, 30), (22, 30)],
+    "NYSE_OPEN": [(0, 30)],
+    "US_DATA_1000": [(1, 0), (0, 0)],
+    "COMEX_SETTLE": [(4, 30), (3, 30)],
+    "CME_PRECLOSE": [(6, 45), (5, 45)],
+    "NYSE_CLOSE": [(7, 0), (6, 0)],
 }
 
 
@@ -116,14 +117,18 @@ def session_distance_min(bris_h, bris_m):
 # Data Loading (proven pattern from research_orb_time_scan.py)
 # =========================================================================
 
+
 def load_bars(con, instrument):
     """Load all 1m bars for an instrument."""
-    return con.execute("""
+    return con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def build_day_arrays(bars_df):
@@ -183,8 +188,8 @@ def build_dst_mask(trading_days):
 # Core Scan
 # =========================================================================
 
-def scan_time(bris_h, bris_m, highs, lows, closes, volumes,
-              all_days, dst_mask, cost_spec):
+
+def scan_time(bris_h, bris_m, highs, lows, closes, volumes, all_days, dst_mask, cost_spec):
     """Scan one candidate ORB start time across all trading days.
 
     Returns list of trade dicts. Each trade contains outcomes for ALL RR
@@ -266,7 +271,7 @@ def scan_time(bris_h, bris_m, highs, lows, closes, volumes,
         # --- Single-pass outcome resolution for all RR targets ---
         max_outcome_min = min(break_at + 1 + OUTCOME_WINDOW, 1440)
 
-        stop_hit_at = None    # scan index where stop was first hit
+        stop_hit_at = None  # scan index where stop was first hit
         target_hit_at = {rr: None for rr in RR_TARGETS}
         last_close = entry
 
@@ -295,9 +300,7 @@ def scan_time(bris_h, bris_m, highs, lows, closes, volumes,
                         target_hit_at[rr] = scan_idx
 
             # Early exit if everything resolved
-            if stop_hit_at is not None and all(
-                t is not None for t in target_hit_at.values()
-            ):
+            if stop_hit_at is not None and all(t is not None for t in target_hit_at.values()):
                 break
 
         # --- Determine outcome per RR ---
@@ -327,15 +330,17 @@ def scan_time(bris_h, bris_m, highs, lows, closes, volumes,
 
             outcomes[rr] = raw_r - cost_r  # cost-adjusted
 
-        trades.append({
-            "day_idx": day_idx,
-            "year": all_days[day_idx].year,
-            "orb_size": os_val,
-            "break_dir": break_dir,
-            "is_dst": bool(dst_mask[day_idx]),
-            "avg_vol": float(avg_vol[day_idx]),
-            "outcomes": outcomes,
-        })
+        trades.append(
+            {
+                "day_idx": day_idx,
+                "year": all_days[day_idx].year,
+                "orb_size": os_val,
+                "break_dir": break_dir,
+                "is_dst": bool(dst_mask[day_idx]),
+                "avg_vol": float(avg_vol[day_idx]),
+                "outcomes": outcomes,
+            }
+        )
 
     return trades
 
@@ -343,6 +348,7 @@ def scan_time(bris_h, bris_m, highs, lows, closes, volumes,
 # =========================================================================
 # Statistical Analysis
 # =========================================================================
+
 
 def compute_combo_stats(trades, rr, g_min, all_days):
     """Compute stats for one (rr, g_filter) combo from trade list."""
@@ -457,6 +463,7 @@ def apply_bh_fdr(results, q=FDR_Q):
 # Output
 # =========================================================================
 
+
 def write_summary(survivors, all_results, n_tested, output_dir):
     """Write markdown summary of FDR survivors."""
     path = output_dir / "session_discovery_summary.md"
@@ -475,7 +482,9 @@ def write_summary(survivors, all_results, n_tested, output_dir):
         f.write(f"- **Cost model:** Applied (per-instrument COST_SPECS friction)\n\n")
 
         f.write("## Results Overview\n\n")
-        f.write(f"- **Total raw combos:** {len(CANDIDATE_TIMES) * len(ACTIVE_ORB_INSTRUMENTS) * len(RR_TARGETS) * len(G_THRESHOLDS):,}\n")
+        f.write(
+            f"- **Total raw combos:** {len(CANDIDATE_TIMES) * len(ACTIVE_ORB_INSTRUMENTS) * len(RR_TARGETS) * len(G_THRESHOLDS):,}\n"
+        )
         f.write(f"- **Combos with N>={MIN_TRADES}:** {n_tested:,}\n")
         f.write(f"- **BH FDR survivors (q={FDR_Q}):** {len(survivors)}\n\n")
 
@@ -495,10 +504,12 @@ def write_summary(survivors, all_results, n_tested, output_dir):
                 f.write("| Instrument | Time | RR | G | N | ExpR | Sharpe | p_bh | Yrs+ | Dist | AvgVol |\n")
                 f.write("|---|---|---|---|---|---|---|---|---|---|---|\n")
                 for s in sorted(novel, key=lambda x: x["p_bh"]):
-                    f.write(f"| {s['instrument']} | {s['time']} | {s['rr']} | {s['g_name']} "
-                            f"| {s['n']} | {s['mean_r']:+.4f} | {s['sharpe_ann']:.2f} "
-                            f"| {s['p_bh']:.6f} | {s['years_pos']}/{s['years_total']} "
-                            f"| {s['session_dist']}min | {s['avg_vol']:.0f} |\n")
+                    f.write(
+                        f"| {s['instrument']} | {s['time']} | {s['rr']} | {s['g_name']} "
+                        f"| {s['n']} | {s['mean_r']:+.4f} | {s['sharpe_ann']:.2f} "
+                        f"| {s['p_bh']:.6f} | {s['years_pos']}/{s['years_total']} "
+                        f"| {s['session_dist']}min | {s['avg_vol']:.0f} |\n"
+                    )
             else:
                 f.write("None.\n")
 
@@ -507,16 +518,20 @@ def write_summary(survivors, all_results, n_tested, output_dir):
                 f.write("| Instrument | Time | RR | G | N | ExpR | Sharpe | p_bh | Near |\n")
                 f.write("|---|---|---|---|---|---|---|---|---|\n")
                 for s in sorted(near, key=lambda x: x["p_bh"]):
-                    f.write(f"| {s['instrument']} | {s['time']} | {s['rr']} | {s['g_name']} "
-                            f"| {s['n']} | {s['mean_r']:+.4f} | {s['sharpe_ann']:.2f} "
-                            f"| {s['p_bh']:.6f} | {s['near_session']} |\n")
+                    f.write(
+                        f"| {s['instrument']} | {s['time']} | {s['rr']} | {s['g_name']} "
+                        f"| {s['n']} | {s['mean_r']:+.4f} | {s['sharpe_ann']:.2f} "
+                        f"| {s['p_bh']:.6f} | {s['near_session']} |\n"
+                    )
 
             # Year-by-year for novel survivors
             if novel:
                 f.write("\n### Year-by-Year Stability (novel survivors)\n\n")
                 for s in novel:
-                    f.write(f"\n**{s['instrument']} {s['time']} RR{s['rr']} {s['g_name']}** "
-                            f"(N={s['n']}, p_bh={s['p_bh']:.6f})\n\n")
+                    f.write(
+                        f"\n**{s['instrument']} {s['time']} RR{s['rr']} {s['g_name']}** "
+                        f"(N={s['n']}, p_bh={s['p_bh']:.6f})\n\n"
+                    )
                     if "yearly" in s:
                         for yr in sorted(s["yearly"]):
                             yd = s["yearly"][yr]
@@ -532,9 +547,11 @@ def write_summary(survivors, all_results, n_tested, output_dir):
         )
         for r in sorted_all[:20]:
             sig_mark = "YES" if r.get("fdr_significant", False) else "no"
-            f.write(f"| {r['instrument']} | {r['time']} | {r['rr']} | {r['g_name']} "
-                    f"| {r['n']} | {r['mean_r']:+.4f} | {r['p_value']:.6f} "
-                    f"| {r.get('p_bh', 1.0):.6f} | {sig_mark} | {r.get('near_session', '')} |\n")
+            f.write(
+                f"| {r['instrument']} | {r['time']} | {r['rr']} | {r['g_name']} "
+                f"| {r['n']} | {r['mean_r']:+.4f} | {r['p_value']:.6f} "
+                f"| {r.get('p_bh', 1.0):.6f} | {sig_mark} | {r.get('near_session', '')} |\n"
+            )
 
     print(f"  Summary: {path}")
     return path
@@ -544,15 +561,18 @@ def write_summary(survivors, all_results, n_tested, output_dir):
 # Main
 # =========================================================================
 
+
 def main():
     t_start = _time.time()
 
     print(f"\n{'=' * 90}")
     print("  EXHAUSTIVE SESSION DISCOVERY")
     print(f"  Database: {GOLD_DB_PATH}")
-    print(f"  Grid: {len(CANDIDATE_TIMES)} times x {len(RR_TARGETS)} RR x "
-          f"{len(G_THRESHOLDS)} G = "
-          f"{len(CANDIDATE_TIMES) * len(RR_TARGETS) * len(G_THRESHOLDS)} combos/instrument")
+    print(
+        f"  Grid: {len(CANDIDATE_TIMES)} times x {len(RR_TARGETS)} RR x "
+        f"{len(G_THRESHOLDS)} G = "
+        f"{len(CANDIDATE_TIMES) * len(RR_TARGETS) * len(G_THRESHOLDS)} combos/instrument"
+    )
     print(f"  Instruments: {ACTIVE_ORB_INSTRUMENTS}")
     print(f"  ORB: {ORB_BARS}m | Break: {BREAK_WINDOW}m | Outcome: {OUTCOME_WINDOW}m")
     print(f"  FDR: BH q={FDR_Q} | Min trades: {MIN_TRADES}")
@@ -577,8 +597,7 @@ def main():
             t_build = _time.time()
             all_days, opens, highs, lows, closes, volumes = build_day_arrays(bars_df)
             n_days = len(all_days)
-            print(f"    {n_days} trading days ({all_days[0]} to {all_days[-1]}) "
-                  f"built in {_time.time() - t_build:.1f}s")
+            print(f"    {n_days} trading days ({all_days[0]} to {all_days[-1]}) built in {_time.time() - t_build:.1f}s")
 
             del bars_df, opens  # free memory (opens not used in scan)
 
@@ -593,8 +612,15 @@ def main():
             for ti, (bris_h, bris_m) in enumerate(CANDIDATE_TIMES):
                 # Scan this time across all days
                 trades = scan_time(
-                    bris_h, bris_m, highs, lows, closes, volumes,
-                    all_days, dst_mask, cost_spec,
+                    bris_h,
+                    bris_m,
+                    highs,
+                    lows,
+                    closes,
+                    volumes,
+                    all_days,
+                    dst_mask,
+                    cost_spec,
                 )
 
                 # Compute stats for each (RR, G-filter) combo
@@ -623,8 +649,7 @@ def main():
                             for t in filtered:
                                 by_year[t["year"]].append(t["outcomes"][rr])
                             stat["yearly"] = {
-                                y: {"n": len(v), "mean_r": round(float(np.mean(v)), 4)}
-                                for y, v in by_year.items()
+                                y: {"n": len(v), "mean_r": round(float(np.mean(v)), 4)} for y, v in by_year.items()
                             }
 
                         all_results.append(stat)
@@ -633,11 +658,12 @@ def main():
                 if (ti + 1) % 48 == 0:
                     elapsed = _time.time() - t_scan
                     pct = (ti + 1) / len(CANDIDATE_TIMES) * 100
-                    print(f"      {instrument}: {ti + 1}/{len(CANDIDATE_TIMES)} times "
-                          f"({pct:.0f}%) [{elapsed:.0f}s]")
+                    print(f"      {instrument}: {ti + 1}/{len(CANDIDATE_TIMES)} times ({pct:.0f}%) [{elapsed:.0f}s]")
 
-            print(f"    {instrument}: {inst_combos_tested} combos with N>={MIN_TRADES} "
-                  f"(scan: {_time.time() - t_scan:.0f}s)")
+            print(
+                f"    {instrument}: {inst_combos_tested} combos with N>={MIN_TRADES} "
+                f"(scan: {_time.time() - t_scan:.0f}s)"
+            )
 
             del highs, lows, closes, volumes  # free before next instrument
 
@@ -670,25 +696,33 @@ def main():
 
         if novel:
             print(f"\n  NOVEL DISCOVERIES (>15 min from known sessions): {len(novel)}")
-            print(f"  {'Instrument':10s} {'Time':6s} {'RR':4s} {'G':3s} {'N':>5s} "
-                  f"{'ExpR':>8s} {'Sharpe':>7s} {'p_bh':>10s} {'Yrs+':>5s} "
-                  f"{'Dist':>5s} {'AvgVol':>7s}")
+            print(
+                f"  {'Instrument':10s} {'Time':6s} {'RR':4s} {'G':3s} {'N':>5s} "
+                f"{'ExpR':>8s} {'Sharpe':>7s} {'p_bh':>10s} {'Yrs+':>5s} "
+                f"{'Dist':>5s} {'AvgVol':>7s}"
+            )
             print(f"  {'-' * 80}")
             for s in novel:
-                print(f"  {s['instrument']:10s} {s['time']:6s} {s['rr']:4.1f} {s['g_name']:3s} "
-                      f"{s['n']:5d} {s['mean_r']:+8.4f} {s['sharpe_ann']:7.2f} "
-                      f"{s['p_bh']:10.6f} {s['years_pos']}/{s['years_total']:1d} "
-                      f"{s['session_dist']:4d}m {s['avg_vol']:7.0f}")
+                print(
+                    f"  {s['instrument']:10s} {s['time']:6s} {s['rr']:4.1f} {s['g_name']:3s} "
+                    f"{s['n']:5d} {s['mean_r']:+8.4f} {s['sharpe_ann']:7.2f} "
+                    f"{s['p_bh']:10.6f} {s['years_pos']}/{s['years_total']:1d} "
+                    f"{s['session_dist']:4d}m {s['avg_vol']:7.0f}"
+                )
 
         if near:
             print(f"\n  NEAR EXISTING SESSIONS (<=15 min): {len(near)}")
-            print(f"  {'Instrument':10s} {'Time':6s} {'RR':4s} {'G':3s} {'N':>5s} "
-                  f"{'ExpR':>8s} {'p_bh':>10s} {'Near Session':20s}")
+            print(
+                f"  {'Instrument':10s} {'Time':6s} {'RR':4s} {'G':3s} {'N':>5s} "
+                f"{'ExpR':>8s} {'p_bh':>10s} {'Near Session':20s}"
+            )
             print(f"  {'-' * 80}")
             for s in near[:30]:  # cap display at 30
-                print(f"  {s['instrument']:10s} {s['time']:6s} {s['rr']:4.1f} {s['g_name']:3s} "
-                      f"{s['n']:5d} {s['mean_r']:+8.4f} {s['p_bh']:10.6f} "
-                      f"{s['near_session']:20s}")
+                print(
+                    f"  {s['instrument']:10s} {s['time']:6s} {s['rr']:4.1f} {s['g_name']:3s} "
+                    f"{s['n']:5d} {s['mean_r']:+8.4f} {s['p_bh']:10.6f} "
+                    f"{s['near_session']:20s}"
+                )
             if len(near) > 30:
                 print(f"  ... and {len(near) - 30} more")
 
@@ -696,11 +730,16 @@ def main():
         if novel:
             print(f"\n  YEAR-BY-YEAR for novel survivors:")
             for s in novel[:10]:
-                print(f"\n  {s['instrument']} {s['time']} RR{s['rr']} {s['g_name']} "
-                      f"(N={s['n']}, p_bh={s['p_bh']:.6f}):")
+                print(
+                    f"\n  {s['instrument']} {s['time']} RR{s['rr']} {s['g_name']} (N={s['n']}, p_bh={s['p_bh']:.6f}):"
+                )
                 for yr in sorted(s["yearly"]):
                     yd = s["yearly"][yr]
-                    bar = "+" * max(int(yd["mean_r"] * 20), 0) if yd["mean_r"] > 0 else "-" * max(int(-yd["mean_r"] * 20), 0)
+                    bar = (
+                        "+" * max(int(yd["mean_r"] * 20), 0)
+                        if yd["mean_r"] > 0
+                        else "-" * max(int(-yd["mean_r"] * 20), 0)
+                    )
                     print(f"    {yr}: N={yd['n']:3d} mean={yd['mean_r']:+.4f} {bar}")
 
     else:
@@ -713,14 +752,18 @@ def main():
         if tested:
             tested.sort(key=lambda x: x["p_value"])
             print(f"  Top 10 by raw p-value (did NOT survive FDR):")
-            print(f"  {'Instrument':10s} {'Time':6s} {'RR':4s} {'G':3s} {'N':>5s} "
-                  f"{'ExpR':>8s} {'p_raw':>10s} {'p_bh':>10s} {'Near':15s} {'Dist':>5s}")
+            print(
+                f"  {'Instrument':10s} {'Time':6s} {'RR':4s} {'G':3s} {'N':>5s} "
+                f"{'ExpR':>8s} {'p_raw':>10s} {'p_bh':>10s} {'Near':15s} {'Dist':>5s}"
+            )
             print(f"  {'-' * 90}")
             for r in tested[:10]:
-                print(f"  {r['instrument']:10s} {r['time']:6s} {r['rr']:4.1f} {r['g_name']:3s} "
-                      f"{r['n']:5d} {r['mean_r']:+8.4f} {r['p_value']:10.6f} "
-                      f"{r.get('p_bh', 1.0):10.6f} {r.get('near_session', ''):15s} "
-                      f"{r.get('session_dist', 0):4d}m")
+                print(
+                    f"  {r['instrument']:10s} {r['time']:6s} {r['rr']:4.1f} {r['g_name']:3s} "
+                    f"{r['n']:5d} {r['mean_r']:+8.4f} {r['p_value']:10.6f} "
+                    f"{r.get('p_bh', 1.0):10.6f} {r.get('near_session', ''):15s} "
+                    f"{r.get('session_dist', 0):4d}m"
+                )
 
     # =====================================================================
     # Save outputs

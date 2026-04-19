@@ -53,6 +53,7 @@ P_THRESHOLD = 0.05
 # Data Loading
 # =========================================================================
 
+
 def load_features(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     """Load daily_features for all 3 instruments, orb_minutes=5 only."""
     query = """
@@ -70,6 +71,7 @@ def load_features(con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
     ORDER BY trading_day, symbol
     """
     return con.execute(query).fetchdf()
+
 
 def build_wide_df(df: pd.DataFrame) -> pd.DataFrame:
     """Pivot so each trading_day has one row with columns per instrument.
@@ -98,9 +100,11 @@ def build_wide_df(df: pd.DataFrame) -> pd.DataFrame:
 
     return wide
 
+
 # =========================================================================
 # Statistical helpers
 # =========================================================================
+
 
 def chi2_or_fisher(a: int, b: int, c: int, d: int):
     """2x2 contingency test. Returns (statistic, p_value, test_name)."""
@@ -111,6 +115,7 @@ def chi2_or_fisher(a: int, b: int, c: int, d: int):
     chi2, p, _, _ = stats.chi2_contingency(table, correction=True)
     return chi2, p, "Chi2"
 
+
 def sig_flag(n: int, p: float | None) -> str:
     """Return flag string for result quality."""
     flags = []
@@ -120,16 +125,21 @@ def sig_flag(n: int, p: float | None) -> str:
         flags.append(f"NS (p={p:.3f})")
     return ", ".join(flags) if flags else "SIG"
 
+
 # =========================================================================
 # Analysis 1: Session-Sequential Lead-Lag
 # =========================================================================
 
+
 def analysis_1_lead_lag(wide: pd.DataFrame) -> list[dict]:
     """For each session pair where A finishes before B, compute lift."""
     session_pairs = [
-        ("0900", "1000"), ("0900", "1100"),
-        ("1000", "1100"), ("1100", "1800"),
-        ("1800", "2300"), ("1800", "0030"),
+        ("0900", "1000"),
+        ("0900", "1100"),
+        ("1000", "1100"),
+        ("1100", "1800"),
+        ("1800", "2300"),
+        ("1800", "0030"),
         ("2300", "0030"),
     ]
 
@@ -148,8 +158,8 @@ def analysis_1_lead_lag(wide: pd.DataFrame) -> list[dict]:
                     continue
 
                 for direction in ["long", "short"]:
-                    l_is_dir = (wide[l_col] == direction)
-                    f_is_dir = (wide[f_col] == direction)
+                    l_is_dir = wide[l_col] == direction
+                    f_is_dir = wide[f_col] == direction
                     f_has_break = wide[f_col].notna()
 
                     # Baseline P(follower breaks direction)
@@ -172,25 +182,27 @@ def analysis_1_lead_lag(wide: pd.DataFrame) -> list[dict]:
                     d = int((~l_is_dir & ~f_is_dir).sum())
                     _, p_val, test_name = chi2_or_fisher(a, b, c, d)
 
-                    results.append({
-                        "leader": f"{l_inst} {l_sess}",
-                        "follower": f"{f_inst} {f_sess}",
-                        "direction": direction,
-                        "baseline": baseline_rate,
-                        "conditional": cond_rate,
-                        "lift": lift,
-                        "N_cond": cond_n,
-                        "p_value": p_val,
-                        "test": test_name,
-                        "flag": sig_flag(cond_n, p_val),
-                    })
+                    results.append(
+                        {
+                            "leader": f"{l_inst} {l_sess}",
+                            "follower": f"{f_inst} {f_sess}",
+                            "direction": direction,
+                            "baseline": baseline_rate,
+                            "conditional": cond_rate,
+                            "lift": lift,
+                            "N_cond": cond_n,
+                            "p_value": p_val,
+                            "test": test_name,
+                            "flag": sig_flag(cond_n, p_val),
+                        }
+                    )
 
     return results
 
+
 def print_analysis_1(results: list[dict]):
     print("\n--- ANALYSIS 1: SESSION-SEQUENTIAL LEAD-LAG ---")
-    print("Does instrument A breaking at session X predict instrument B"
-          " breaking same direction at later session Y?")
+    print("Does instrument A breaking at session X predict instrument B breaking same direction at later session Y?")
     print()
 
     if not results:
@@ -199,20 +211,24 @@ def print_analysis_1(results: list[dict]):
 
     results.sort(key=lambda r: abs(r["lift"] - 1.0), reverse=True)
 
-    header = (f"{'Leader':<14} {'Follower':<14} {'Dir':<6} "
-              f"{'Base':>6} {'Cond':>6} {'Lift':>6} {'N':>5} "
-              f"{'p':>7} {'Flag':<20}")
+    header = (
+        f"{'Leader':<14} {'Follower':<14} {'Dir':<6} {'Base':>6} {'Cond':>6} {'Lift':>6} {'N':>5} {'p':>7} {'Flag':<20}"
+    )
     print(header)
     print("-" * len(header))
 
     for r in results[:40]:
-        print(f"{r['leader']:<14} {r['follower']:<14} {r['direction']:<6} "
-              f"{r['baseline']:>6.1%} {r['conditional']:>6.1%} {r['lift']:>6.2f} "
-              f"{r['N_cond']:>5} {r['p_value']:>7.4f} {r['flag']:<20}")
+        print(
+            f"{r['leader']:<14} {r['follower']:<14} {r['direction']:<6} "
+            f"{r['baseline']:>6.1%} {r['conditional']:>6.1%} {r['lift']:>6.2f} "
+            f"{r['N_cond']:>5} {r['p_value']:>7.4f} {r['flag']:<20}"
+        )
+
 
 # =========================================================================
 # Analysis 2: Concordance Filter
 # =========================================================================
+
 
 def analysis_2_concordance(wide: pd.DataFrame) -> dict:
     """At shared sessions, classify concordance and compute win rates."""
@@ -225,10 +241,8 @@ def analysis_2_concordance(wide: pd.DataFrame) -> dict:
             continue
 
         # Vectorized: count longs/shorts per day
-        is_long = pd.DataFrame({inst: wide[f"{inst}_{sess}_break_dir"] == "long"
-                                for inst in INSTRUMENTS})
-        is_short = pd.DataFrame({inst: wide[f"{inst}_{sess}_break_dir"] == "short"
-                                 for inst in INSTRUMENTS})
+        is_long = pd.DataFrame({inst: wide[f"{inst}_{sess}_break_dir"] == "long" for inst in INSTRUMENTS})
+        is_short = pd.DataFrame({inst: wide[f"{inst}_{sess}_break_dir"] == "short" for inst in INSTRUMENTS})
         has_break = is_long | is_short
 
         n_long = is_long.sum(axis=1)
@@ -299,6 +313,7 @@ def analysis_2_concordance(wide: pd.DataFrame) -> dict:
 
     return results
 
+
 def print_analysis_2(results: dict):
     print("\n--- ANALYSIS 2: CONCORDANCE FILTER ---")
     print("When all 3 instruments break the same direction, are outcomes better?")
@@ -310,9 +325,11 @@ def print_analysis_2(results: dict):
         data = results[sess]
         print(f"  Session {sess}:")
 
-        for cat, label in [("concordant_3", "3/3 Concordant"),
-                           ("majority_2", "2/1 Majority"),
-                           ("split", "Split/Mixed")]:
+        for cat, label in [
+            ("concordant_3", "3/3 Concordant"),
+            ("majority_2", "2/1 Majority"),
+            ("split", "Split/Mixed"),
+        ]:
             d = data[cat]
             if d["n_days"] == 0:
                 print(f"    {label}: N=0")
@@ -322,10 +339,12 @@ def print_analysis_2(results: dict):
                 maj_str = f"{d['maj_wr']:.1%}" if d["maj_wr"] is not None else "N/A"
                 min_str = f"{d['min_wr']:.1%}" if d["min_wr"] is not None else "N/A"
                 flag = sig_flag(d["maj_n"], None)
-                print(f"    {label}: {d['n_days']:>3} days "
-                      f"| Majority WR={maj_str} (N={d['maj_n']}) "
-                      f"| Minority WR={min_str} (N={d['min_n']}) "
-                      f"| {flag}")
+                print(
+                    f"    {label}: {d['n_days']:>3} days "
+                    f"| Majority WR={maj_str} (N={d['maj_n']}) "
+                    f"| Minority WR={min_str} (N={d['min_n']}) "
+                    f"| {flag}"
+                )
             else:
                 wr_str = f"{d['all_wr']:.1%}" if d["all_wr"] is not None else "N/A"
                 print(f"    {label}: {d['n_days']:>3} days | WR={wr_str} (N={d['all_n']})")
@@ -335,9 +354,11 @@ def print_analysis_2(results: dict):
             print(f"    Baseline (unconditional): WR={bl['wr']:.1%} (N={bl['n']})")
         print()
 
+
 # =========================================================================
 # Analysis 3: Gold Leads Equities (MGC 2300 -> MES/MNQ 0030)
 # =========================================================================
+
 
 def analysis_3_gold_leads(wide: pd.DataFrame) -> dict:
     """Deep dive: MGC 2300 break -> MES/MNQ 0030 outcomes."""
@@ -384,9 +405,12 @@ def analysis_3_gold_leads(wide: pd.DataFrame) -> dict:
             c_wr = (c_out == "win").sum() / c_n if c_n > 0 else None
 
             fr[f"mgc_{d}"] = {
-                "follow_rate": follow_rate, "follow_n": n_mgc,
-                "aligned_wr": a_wr, "aligned_n": a_n,
-                "contrarian_wr": c_wr, "contrarian_n": c_n,
+                "follow_rate": follow_rate,
+                "follow_n": n_mgc,
+                "aligned_wr": a_wr,
+                "aligned_n": a_n,
+                "contrarian_wr": c_wr,
+                "contrarian_n": c_n,
             }
 
         # Double-break filter
@@ -411,12 +435,14 @@ def analysis_3_gold_leads(wide: pd.DataFrame) -> dict:
                 s_n = int(s_v.sum())
                 fr[label] = {
                     "wr": (s_out == "win").sum() / s_n if s_n > 0 else None,
-                    "n": s_n, "median_ratio": med,
+                    "n": s_n,
+                    "median_ratio": med,
                 }
 
         results[follower] = fr
 
     return results
+
 
 def print_analysis_3(results: dict, wide: pd.DataFrame):
     print("\n--- ANALYSIS 3: GOLD LEADS EQUITIES (MGC 2300 -> MES/MNQ 0030) ---")
@@ -447,27 +473,35 @@ def print_analysis_3(results: dict, wide: pd.DataFrame):
             fr = f"{r['follow_rate']:.1%}" if r["follow_rate"] is not None else "N/A"
             awr = f"{r['aligned_wr']:.1%}" if r["aligned_wr"] is not None else "N/A"
             cwr = f"{r['contrarian_wr']:.1%}" if r["contrarian_wr"] is not None else "N/A"
-            print(f"    MGC {d}: follow_rate={fr} (N={r['follow_n']}) "
-                  f"| aligned WR={awr} (N={r['aligned_n']}, {sig_flag(r['aligned_n'], None)}) "
-                  f"| contrarian WR={cwr} (N={r['contrarian_n']}, {sig_flag(r['contrarian_n'], None)})")
+            print(
+                f"    MGC {d}: follow_rate={fr} (N={r['follow_n']}) "
+                f"| aligned WR={awr} (N={r['aligned_n']}, {sig_flag(r['aligned_n'], None)}) "
+                f"| contrarian WR={cwr} (N={r['contrarian_n']}, {sig_flag(r['contrarian_n'], None)})"
+            )
 
         db = data.get("after_double_break", {})
         db_wr = f"{db['wr']:.1%}" if db.get("wr") is not None else "N/A"
-        print(f"    After MGC 2300 double-break (choppy): "
-              f"WR={db_wr} (N={db.get('n', 0)}, {sig_flag(db.get('n', 0), None)})")
+        print(
+            f"    After MGC 2300 double-break (choppy): "
+            f"WR={db_wr} (N={db.get('n', 0)}, {sig_flag(db.get('n', 0), None)})"
+        )
 
         for sl in ["large_orb", "small_orb"]:
             s = data.get(sl, {})
             s_wr = f"{s['wr']:.1%}" if s.get("wr") is not None else "N/A"
             med = s.get("median_ratio")
             med_str = f" (split at {med:.3f} ATR)" if med is not None else ""
-            print(f"    MGC 2300 {sl}{med_str}: "
-                  f"{follower} 0030 WR={s_wr} (N={s.get('n', 0)}, {sig_flag(s.get('n', 0), None)})")
+            print(
+                f"    MGC 2300 {sl}{med_str}: "
+                f"{follower} 0030 WR={s_wr} (N={s.get('n', 0)}, {sig_flag(s.get('n', 0), None)})"
+            )
         print()
+
 
 # =========================================================================
 # Analysis 4: Divergence Signal
 # =========================================================================
+
 
 def analysis_4_divergence(wide: pd.DataFrame) -> dict:
     """When instruments disagree at shared sessions, what happens next?"""
@@ -530,8 +564,10 @@ def analysis_4_divergence(wide: pd.DataFrame) -> dict:
                 c_wr = (conc_out == "win").sum() / c_n if c_n > 0 else None
 
                 next_outcomes[f"{inst}_{ns}"] = {
-                    "div_wr": d_wr, "div_n": d_n,
-                    "conc_wr": c_wr, "conc_n": c_n,
+                    "div_wr": d_wr,
+                    "div_n": d_n,
+                    "conc_wr": c_wr,
+                    "conc_n": c_n,
                 }
 
             sess_results[div_name] = {
@@ -544,6 +580,7 @@ def analysis_4_divergence(wide: pd.DataFrame) -> dict:
         results[sess] = sess_results
 
     return results
+
 
 def print_analysis_4(results: dict):
     print("\n--- ANALYSIS 4: DIVERGENCE SIGNAL ---")
@@ -560,14 +597,18 @@ def print_analysis_4(results: dict):
             for target, od in div_data["next_session_outcomes"].items():
                 d_wr = f"{od['div_wr']:.1%}" if od["div_wr"] is not None else "N/A"
                 c_wr = f"{od['conc_wr']:.1%}" if od["conc_wr"] is not None else "N/A"
-                print(f"      -> {target}: "
-                      f"Divergent WR={d_wr} (N={od['div_n']}, {sig_flag(od['div_n'], None)}) "
-                      f"| Concordant WR={c_wr} (N={od['conc_n']}, {sig_flag(od['conc_n'], None)})")
+                print(
+                    f"      -> {target}: "
+                    f"Divergent WR={d_wr} (N={od['div_n']}, {sig_flag(od['div_n'], None)}) "
+                    f"| Concordant WR={c_wr} (N={od['conc_n']}, {sig_flag(od['conc_n'], None)})"
+                )
         print()
+
 
 # =========================================================================
 # Analysis 5: Volatility Regime Sync
 # =========================================================================
+
 
 def analysis_5_vol_regime(wide: pd.DataFrame) -> dict:
     """Bucket days by ATR-20 percentile rank, compute session win rates."""
@@ -581,7 +622,8 @@ def analysis_5_vol_regime(wide: pd.DataFrame) -> dict:
         q25 = wide[col].quantile(0.25)
         q75 = wide[col].quantile(0.75)
         wide[f"{inst}_vol_q"] = np.where(
-            wide[col] >= q75, "high",
+            wide[col] >= q75,
+            "high",
             np.where(wide[col] <= q25, "low", "mid"),
         )
 
@@ -590,15 +632,9 @@ def analysis_5_vol_regime(wide: pd.DataFrame) -> dict:
         return results
 
     # Vectorized regime classification
-    all_high = ((wide[vol_qs[0]] == "high") &
-                (wide[vol_qs[1]] == "high") &
-                (wide[vol_qs[2]] == "high"))
-    all_low = ((wide[vol_qs[0]] == "low") &
-               (wide[vol_qs[1]] == "low") &
-               (wide[vol_qs[2]] == "low"))
-    has_all = (wide[vol_qs[0]].notna() &
-               wide[vol_qs[1]].notna() &
-               wide[vol_qs[2]].notna())
+    all_high = (wide[vol_qs[0]] == "high") & (wide[vol_qs[1]] == "high") & (wide[vol_qs[2]] == "high")
+    all_low = (wide[vol_qs[0]] == "low") & (wide[vol_qs[1]] == "low") & (wide[vol_qs[2]] == "low")
+    has_all = wide[vol_qs[0]].notna() & wide[vol_qs[1]].notna() & wide[vol_qs[2]].notna()
     mixed = has_all & ~all_high & ~all_low
 
     for regime_name, mask in [("all_high", all_high), ("all_low", all_low), ("mixed", mixed)]:
@@ -628,6 +664,7 @@ def analysis_5_vol_regime(wide: pd.DataFrame) -> dict:
 
     return results
 
+
 def print_analysis_5(results: dict):
     print("\n--- ANALYSIS 5: VOLATILITY REGIME SYNC ---")
     print("Does synchronized high/low volatility across asset classes change ORB edge?")
@@ -652,13 +689,14 @@ def print_analysis_5(results: dict):
             lift = ""
             if wd["wr"] is not None and wd["baseline_wr"] and wd["baseline_wr"] > 0:
                 lift = f"lift={wd['wr'] / wd['baseline_wr']:.2f}"
-            print(f"    {key:<12}: WR={wr:>5} (N={wd['n']:>3}, {flag:<20}) "
-                  f"baseline={bl} {lift}")
+            print(f"    {key:<12}: WR={wr:>5} (N={wd['n']:>3}, {flag:<20}) baseline={bl} {lift}")
         print()
+
 
 # =========================================================================
 # Honest Summary
 # =========================================================================
+
 
 def compute_mes_mnq_concordance(wide: pd.DataFrame) -> dict:
     """Compute baseline MES-MNQ concordance at shared sessions."""
@@ -674,16 +712,15 @@ def compute_mes_mnq_concordance(wide: pd.DataFrame) -> dict:
         concordance[sess] = {"same": same, "total": len(sub_mes), "rate": same / len(sub_mes)}
     return concordance
 
-def print_honest_summary(lead_lag: list[dict], gold_leads: dict,
-                         mes_mnq_corr: dict, n_days: int):
+
+def print_honest_summary(lead_lag: list[dict], gold_leads: dict, mes_mnq_corr: dict, n_days: int):
     print("\n" + "=" * 60)
     print("HONEST SUMMARY")
     print("=" * 60)
 
     print("\nBASELINE EXPECTATION:")
     for sess, d in mes_mnq_corr.items():
-        print(f"  MES/MNQ concordance at {sess}: "
-              f"{d['rate']:.0%} ({d['same']}/{d['total']})")
+        print(f"  MES/MNQ concordance at {sess}: {d['rate']:.0%} ({d['same']}/{d['total']})")
     print("  (They're the same asset class -- high concordance expected, not a signal)")
 
     survived = []
@@ -711,11 +748,11 @@ def print_honest_summary(lead_lag: list[dict], gold_leads: dict,
                 continue
             r = data[key]
             if r["aligned_wr"] is not None and r["aligned_n"] >= MIN_SAMPLE:
-                survived.append(f"MGC 2300 {d} -> {follower} 0030 aligned: "
-                                f"WR={r['aligned_wr']:.1%} (N={r['aligned_n']})")
+                survived.append(
+                    f"MGC 2300 {d} -> {follower} 0030 aligned: WR={r['aligned_wr']:.1%} (N={r['aligned_n']})"
+                )
             elif r["aligned_n"] > 0:
-                not_survived.append(f"MGC 2300 {d} -> {follower} 0030: "
-                                    f"N={r['aligned_n']}, insufficient")
+                not_survived.append(f"MGC 2300 {d} -> {follower} 0030: N={r['aligned_n']}, insufficient")
 
     print(f"\nSURVIVED SCRUTINY (N>={MIN_SAMPLE}, p<{P_THRESHOLD}):")
     if survived:
@@ -740,9 +777,11 @@ def print_honest_summary(lead_lag: list[dict], gold_leads: dict,
     print(f"  4. Feb 2024 - Feb 2026 includes specific market conditions (may not generalize)")
     print(f"  5. Outcomes use daily_features break_dir/outcome (parameter-free, RR=1.0)")
 
+
 # =========================================================================
 # Main
 # =========================================================================
+
 
 def main():
     print("=" * 60)
@@ -787,6 +826,7 @@ def main():
 
     mes_mnq_corr = compute_mes_mnq_concordance(wide)
     print_honest_summary(ll, gl, mes_mnq_corr, len(overlap_days))
+
 
 if __name__ == "__main__":
     main()

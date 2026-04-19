@@ -90,20 +90,20 @@ def load_strategy_df(con: duckdb.DuckDBPyConnection, row: pd.Series) -> pd.DataF
           o.entry_ts,
           d_f.atr_20 AS f_atr,
           d_l.atr_20 AS l_atr,
-          d_f.{cols_f['f_dir']} AS f_dir,
-          d_f.{cols_f['f_ts']} AS f_ts,
-          d_f.{cols_f['f_delay']} AS f_delay,
-          d_f.{cols_f['f_cont']} AS f_cont,
-          d_f.{cols_f['f_size']} AS f_size,
-          d_f.{cols_f['f_vol']} AS f_vol,
-          d_f.{cols_f['f_bvol']} AS f_bvol,
-          d_l.{l_cols['l_dir']} AS l_dir,
-          d_l.{l_cols['l_ts']} AS l_ts,
-          d_l.{l_cols['l_delay']} AS l_delay,
-          d_l.{l_cols['l_cont']} AS l_cont,
-          d_l.{l_cols['l_size']} AS l_size,
-          d_l.{l_cols['l_vol']} AS l_vol,
-          d_l.{l_cols['l_bvol']} AS l_bvol
+          d_f.{cols_f["f_dir"]} AS f_dir,
+          d_f.{cols_f["f_ts"]} AS f_ts,
+          d_f.{cols_f["f_delay"]} AS f_delay,
+          d_f.{cols_f["f_cont"]} AS f_cont,
+          d_f.{cols_f["f_size"]} AS f_size,
+          d_f.{cols_f["f_vol"]} AS f_vol,
+          d_f.{cols_f["f_bvol"]} AS f_bvol,
+          d_l.{l_cols["l_dir"]} AS l_dir,
+          d_l.{l_cols["l_ts"]} AS l_ts,
+          d_l.{l_cols["l_delay"]} AS l_delay,
+          d_l.{l_cols["l_cont"]} AS l_cont,
+          d_l.{l_cols["l_size"]} AS l_size,
+          d_l.{l_cols["l_vol"]} AS l_vol,
+          d_l.{l_cols["l_bvol"]} AS l_bvol
         FROM orb_outcomes o
         JOIN daily_features d_f
           ON d_f.symbol=o.symbol
@@ -116,9 +116,9 @@ def load_strategy_df(con: duckdb.DuckDBPyConnection, row: pd.Series) -> pd.DataF
         WHERE o.orb_minutes=5
           AND o.symbol='{fsym}'
           AND o.orb_label='{fsess}'
-          AND o.entry_model='{row['entry_model']}'
-          AND o.confirm_bars={int(row['confirm_bars'])}
-          AND o.rr_target={float(row['rr_target'])}
+          AND o.entry_model='{row["entry_model"]}'
+          AND o.confirm_bars={int(row["confirm_bars"])}
+          AND o.rr_target={float(row["rr_target"])}
           AND o.pnl_r IS NOT NULL
           AND o.entry_ts IS NOT NULL
         """
@@ -130,13 +130,13 @@ def load_strategy_df(con: duckdb.DuckDBPyConnection, row: pd.Series) -> pd.DataF
           o.entry_ts,
           d_f.atr_20 AS f_atr,
           NULL::DOUBLE AS l_atr,
-          d_f.{cols_f['f_dir']} AS f_dir,
-          d_f.{cols_f['f_ts']} AS f_ts,
-          d_f.{cols_f['f_delay']} AS f_delay,
-          d_f.{cols_f['f_cont']} AS f_cont,
-          d_f.{cols_f['f_size']} AS f_size,
-          d_f.{cols_f['f_vol']} AS f_vol,
-          d_f.{cols_f['f_bvol']} AS f_bvol,
+          d_f.{cols_f["f_dir"]} AS f_dir,
+          d_f.{cols_f["f_ts"]} AS f_ts,
+          d_f.{cols_f["f_delay"]} AS f_delay,
+          d_f.{cols_f["f_cont"]} AS f_cont,
+          d_f.{cols_f["f_size"]} AS f_size,
+          d_f.{cols_f["f_vol"]} AS f_vol,
+          d_f.{cols_f["f_bvol"]} AS f_bvol,
           NULL::VARCHAR AS l_dir,
           NULL::TIMESTAMPTZ AS l_ts,
           NULL::DOUBLE AS l_delay,
@@ -152,9 +152,9 @@ def load_strategy_df(con: duckdb.DuckDBPyConnection, row: pd.Series) -> pd.DataF
         WHERE o.orb_minutes=5
           AND o.symbol='{fsym}'
           AND o.orb_label='{fsess}'
-          AND o.entry_model='{row['entry_model']}'
-          AND o.confirm_bars={int(row['confirm_bars'])}
-          AND o.rr_target={float(row['rr_target'])}
+          AND o.entry_model='{row["entry_model"]}'
+          AND o.confirm_bars={int(row["confirm_bars"])}
+          AND o.rr_target={float(row["rr_target"])}
           AND o.pnl_r IS NOT NULL
           AND o.entry_ts IS NOT NULL
         """
@@ -252,7 +252,10 @@ def main() -> int:
             "OV_f_size60": dfb["f_size_atr"].notna() & (dfb["f_size_atr"] >= f_size_q60),
             "OV_f_vol60": dfb["f_vol_imp"].notna() & (dfb["f_vol_imp"] >= f_vol_q60),
             "OV_f_cont_fast30": (dfb["f_cont"] == True) & dfb["f_delay"].notna() & (dfb["f_delay"] <= 30),
-            "OV_f_fast30_size60": dfb["f_delay"].notna() & (dfb["f_delay"] <= 30) & dfb["f_size_atr"].notna() & (dfb["f_size_atr"] >= f_size_q60),
+            "OV_f_fast30_size60": dfb["f_delay"].notna()
+            & (dfb["f_delay"] <= 30)
+            & dfb["f_size_atr"].notna()
+            & (dfb["f_size_atr"] >= f_size_q60),
         }
 
         if dfb["l_dir"].notna().any():
@@ -296,16 +299,13 @@ def main() -> int:
     detail.to_csv(p_detail, index=False)
 
     # cross-strategy rank
-    rank = (
-        detail.groupby("overlay", as_index=False)
-        .agg(
-            strategies=("strategy_id", "nunique"),
-            improved_count=("delta_avg", lambda s: int((s > 0).sum())),
-            strong_count=("delta_avg", lambda s: int((s > 0.02).sum())),
-            avg_delta=("delta_avg", "mean"),
-            median_retain=("retain", "median"),
-            avg_test_delta=("test2025_delta_vs_base", "mean"),
-        )
+    rank = detail.groupby("overlay", as_index=False).agg(
+        strategies=("strategy_id", "nunique"),
+        improved_count=("delta_avg", lambda s: int((s > 0).sum())),
+        strong_count=("delta_avg", lambda s: int((s > 0.02).sum())),
+        avg_delta=("delta_avg", "mean"),
+        median_retain=("retain", "median"),
+        avg_test_delta=("test2025_delta_vs_base", "mean"),
     )
     rank["improve_ratio"] = rank["improved_count"] / rank["strategies"]
     rank = rank.sort_values(["improve_ratio", "avg_delta", "median_retain"], ascending=[False, False, False])
@@ -320,7 +320,11 @@ def main() -> int:
 
     lines.append("")
     lines.append("Best per strategy:")
-    best = detail.sort_values(["strategy_id", "delta_avg"], ascending=[True, False]).groupby("strategy_id", as_index=False).first()
+    best = (
+        detail.sort_values(["strategy_id", "delta_avg"], ascending=[True, False])
+        .groupby("strategy_id", as_index=False)
+        .first()
+    )
     for r in best.itertuples(index=False):
         lines.append(
             f"- {r.strategy_id}: {r.overlay}, Δ={r.delta_avg:+.4f}, retain={r.retain:.2f}, testΔ={r.test2025_delta_vs_base:+.4f}"

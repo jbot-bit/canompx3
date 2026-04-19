@@ -75,17 +75,17 @@ def main() -> int:
     df["l_ts"] = pd.to_datetime(df["l_ts"], utc=True)
 
     valid = (
-        df["f_dir"].isin(["long", "short"]) &
-        df["l_dir"].isin(["long", "short"]) &
-        (df["l_ts"].notna()) &
-        (df["l_ts"] <= df["entry_ts"])
+        df["f_dir"].isin(["long", "short"])
+        & df["l_dir"].isin(["long", "short"])
+        & (df["l_ts"].notna())
+        & (df["l_ts"] <= df["entry_ts"])
     )
     df = df[valid].copy()
     if df.empty:
         print("No valid no-lookahead rows.")
         return 0
 
-    same = (df["l_dir"] == df["f_dir"])
+    same = df["l_dir"] == df["f_dir"]
     fast = df["l_delay"].notna() & (df["l_delay"] <= 30)
     size_atr = np.where((df["l_atr"].notna()) & (df["l_atr"] > 0), df["l_size"] / df["l_atr"], np.nan)
     q60 = pd.Series(size_atr).quantile(0.60)
@@ -130,30 +130,34 @@ def main() -> int:
             if oy.mean() - fy.mean() > 0:
                 years_pos += 1
 
-        rows.append({
-            "variant": name,
-            "n_on": s_on["n"],
-            "signals_per_year": s_on["n"] / max(1, df["year"].nunique()),
-            "avg_on": s_on["avg_r"],
-            "avg_off": s_off["avg_r"],
-            "uplift": s_on["avg_r"] - s_off["avg_r"],
-            "wr_on": s_on["wr"],
-            "wr_off": s_off["wr"],
-            "years_pos": years_pos,
-            "years_total": years_total,
-            "years_pos_ratio": (years_pos / years_total) if years_total else np.nan,
-            "train_uplift": train_uplift,
-            "test2025_uplift": test_uplift,
-            "n_test_on": int(len(te_on)),
-        })
+        rows.append(
+            {
+                "variant": name,
+                "n_on": s_on["n"],
+                "signals_per_year": s_on["n"] / max(1, df["year"].nunique()),
+                "avg_on": s_on["avg_r"],
+                "avg_off": s_off["avg_r"],
+                "uplift": s_on["avg_r"] - s_off["avg_r"],
+                "wr_on": s_on["wr"],
+                "wr_off": s_off["wr"],
+                "years_pos": years_pos,
+                "years_total": years_total,
+                "years_pos_ratio": (years_pos / years_total) if years_total else np.nan,
+                "train_uplift": train_uplift,
+                "test2025_uplift": test_uplift,
+                "n_test_on": int(len(te_on)),
+            }
+        )
 
     out = pd.DataFrame(rows).sort_values(["avg_on", "uplift"], ascending=False)
 
     def verdict(r):
         if (
-            r["avg_on"] >= 0.08 and r["uplift"] >= 0.15 and
-            pd.notna(r["test2025_uplift"]) and r["test2025_uplift"] > 0 and
-            r["n_on"] >= 70
+            r["avg_on"] >= 0.08
+            and r["uplift"] >= 0.15
+            and pd.notna(r["test2025_uplift"])
+            and r["test2025_uplift"] > 0
+            and r["n_on"] >= 70
         ):
             return "PROMOTE"
         if r["avg_on"] > 0 and r["uplift"] > 0.08 and r["n_on"] >= 40:

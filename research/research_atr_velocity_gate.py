@@ -39,10 +39,7 @@ def bh_fdr(pvals, q=0.10):
     adjusted[sorted_idx[-1]] = sorted_p[-1]
     for i in range(n - 2, -1, -1):
         rank = np.where(sorted_idx == sorted_idx[i])[0][0] + 1
-        adjusted[sorted_idx[i]] = min(
-            sorted_p[i] * n / rank,
-            adjusted[sorted_idx[i + 1]] if i + 1 < n else 1.0
-        )
+        adjusted[sorted_idx[i]] = min(sorted_p[i] * n / rank, adjusted[sorted_idx[i + 1]] if i + 1 < n else 1.0)
     return np.clip(adjusted, 0, 1).tolist()
 
 
@@ -76,7 +73,8 @@ def run():
     for sym in ["MNQ", "MGC", "MES"]:
         for sess in ["0900", "1000"]:
             comp_col = f"orb_{sess}_compression_tier"
-            row = con.execute(f"""
+            row = con.execute(
+                f"""
                 SELECT
                     COUNT(*) as total,
                     COUNT(CASE WHEN d.atr_vel_regime = 'Contracting'
@@ -97,14 +95,17 @@ def run():
                   AND d.atr_vel_regime IS NOT NULL
                   AND d.{comp_col} IS NOT NULL
                   AND o.orb_minutes = 5
-            """, [sym, sess]).fetchone()
+            """,
+                [sym, sess],
+            ).fetchone()
 
             if row is None:
                 continue
             total, skipped, contracting = row
             skip_pct = skipped / total * 100 if total else 0
-            lines.append(f"  {sym} {sess}: {skipped}/{total} days skipped ({skip_pct:.1f}%), "
-                         f"contracting total={contracting}")
+            lines.append(
+                f"  {sym} {sess}: {skipped}/{total} days skipped ({skip_pct:.1f}%), contracting total={contracting}"
+            )
     lines.append("")
 
     # ── PART 1: Sharpe WITH vs WITHOUT gate ───────────────────────
@@ -121,7 +122,8 @@ def run():
         for sess in ["0900", "1000"]:
             comp_col = f"orb_{sess}_compression_tier"
             for em in ["E0", "E1"]:
-                rows = con.execute(f"""
+                rows = con.execute(
+                    f"""
                     SELECT o.pnl_r,
                            d.atr_vel_regime,
                            d.{comp_col} as comp_tier,
@@ -138,18 +140,18 @@ def run():
                       AND o.pnl_r IS NOT NULL
                       AND d.atr_vel_regime IS NOT NULL
                       AND d.{comp_col} IS NOT NULL
-                """, [sym, sess, em]).fetchall()
+                """,
+                    [sym, sess, em],
+                ).fetchall()
 
                 if len(rows) < 50:
                     continue
 
                 all_r = [r[0] for r in rows]
                 # Skipped = Contracting AND (Neutral or Compressed)
-                skipped = [r[0] for r in rows
-                           if r[1] == 'Contracting' and r[2] in ('Neutral', 'Compressed')]
+                skipped = [r[0] for r in rows if r[1] == "Contracting" and r[2] in ("Neutral", "Compressed")]
                 # Gated = everything NOT skipped
-                gated = [r[0] for r in rows
-                         if not (r[1] == 'Contracting' and r[2] in ('Neutral', 'Compressed'))]
+                gated = [r[0] for r in rows if not (r[1] == "Contracting" and r[2] in ("Neutral", "Compressed"))]
 
                 if len(skipped) < 5 or len(gated) < 30:
                     continue
@@ -168,12 +170,17 @@ def run():
                 sharpe_lift = (sharpe_gated - sharpe_all) if sharpe_all and sharpe_gated else None
 
                 lines.append(f"  {label}:")
-                lines.append(f"    ALL:     N={len(all_r):>5}, avgR={avg_all:+.3f}, WR={wr_all:.1%}"
-                             f", Sharpe={sharpe_all:+.2f}" if sharpe_all else
-                             f"    ALL:     N={len(all_r):>5}, avgR={avg_all:+.3f}, WR={wr_all:.1%}")
-                lines.append(f"    GATED:   N={len(gated):>5}, avgR={avg_gated:+.3f}, WR={wr_gated:.1%}"
-                             f", Sharpe={sharpe_gated:+.2f}" if sharpe_gated else
-                             f"    GATED:   N={len(gated):>5}, avgR={avg_gated:+.3f}, WR={wr_gated:.1%}")
+                lines.append(
+                    f"    ALL:     N={len(all_r):>5}, avgR={avg_all:+.3f}, WR={wr_all:.1%}, Sharpe={sharpe_all:+.2f}"
+                    if sharpe_all
+                    else f"    ALL:     N={len(all_r):>5}, avgR={avg_all:+.3f}, WR={wr_all:.1%}"
+                )
+                lines.append(
+                    f"    GATED:   N={len(gated):>5}, avgR={avg_gated:+.3f}, WR={wr_gated:.1%}"
+                    f", Sharpe={sharpe_gated:+.2f}"
+                    if sharpe_gated
+                    else f"    GATED:   N={len(gated):>5}, avgR={avg_gated:+.3f}, WR={wr_gated:.1%}"
+                )
                 lines.append(f"    SKIPPED: N={len(skipped):>5}, avgR={avg_skipped:+.3f}, WR={wr_skipped:.1%}")
                 if sharpe_lift is not None:
                     lines.append(f"    Sharpe lift: {sharpe_lift:+.3f}")
@@ -182,9 +189,21 @@ def run():
                 if len(skipped) >= 10:
                     _, p = stats.ttest_ind(skipped, gated, equal_var=False)
                     delta = avg_skipped - avg_gated
-                    all_tests.append((label, p, len(skipped), avg_skipped, avg_gated,
-                                      delta, wr_skipped, wr_gated,
-                                      sharpe_all, sharpe_gated, sharpe_lift))
+                    all_tests.append(
+                        (
+                            label,
+                            p,
+                            len(skipped),
+                            avg_skipped,
+                            avg_gated,
+                            delta,
+                            wr_skipped,
+                            wr_gated,
+                            sharpe_all,
+                            sharpe_gated,
+                            sharpe_lift,
+                        )
+                    )
                     lines.append(f"    Skipped vs Gated: delta={delta:+.3f}R, p={p:.4f}")
                 lines.append("")
 
@@ -197,7 +216,8 @@ def run():
         for sess in ["0900", "1000"]:
             comp_col = f"orb_{sess}_compression_tier"
             for em in ["E0", "E1"]:
-                rows = con.execute(f"""
+                rows = con.execute(
+                    f"""
                     SELECT o.pnl_r,
                            d.atr_vel_regime,
                            d.{comp_col} as comp_tier,
@@ -214,10 +234,13 @@ def run():
                       AND o.pnl_r IS NOT NULL
                       AND d.atr_vel_regime IS NOT NULL
                       AND d.{comp_col} IS NOT NULL
-                """, [sym, sess, em]).fetchall()
+                """,
+                    [sym, sess, em],
+                ).fetchall()
 
-                skipped = [(r[0], int(r[3])) for r in rows
-                           if r[1] == 'Contracting' and r[2] in ('Neutral', 'Compressed')]
+                skipped = [
+                    (r[0], int(r[3])) for r in rows if r[1] == "Contracting" and r[2] in ("Neutral", "Compressed")
+                ]
 
                 if len(skipped) < 10:
                     continue
@@ -255,7 +278,8 @@ def run():
         for sess in ["0900", "1000"]:
             comp_col = f"orb_{sess}_compression_tier"
             for em in ["E0", "E1"]:
-                rows = con.execute(f"""
+                rows = con.execute(
+                    f"""
                     SELECT o.pnl_r,
                            d.atr_vel_regime,
                            d.{comp_col} as comp_tier
@@ -271,21 +295,21 @@ def run():
                       AND o.pnl_r IS NOT NULL
                       AND d.atr_vel_regime IS NOT NULL
                       AND d.{comp_col} IS NOT NULL
-                """, [sym, sess, em]).fetchall()
+                """,
+                    [sym, sess, em],
+                ).fetchall()
 
                 if len(rows) < 50:
                     continue
 
                 # Simple gate: skip ALL contracting days
-                simple_skipped = [r[0] for r in rows if r[1] == 'Contracting']
-                simple_gated = [r[0] for r in rows if r[1] != 'Contracting']
+                simple_skipped = [r[0] for r in rows if r[1] == "Contracting"]
+                simple_gated = [r[0] for r in rows if r[1] != "Contracting"]
 
                 # Current gate: skip Contracting + (Neutral/Compressed) only
-                current_skipped = [r[0] for r in rows
-                                   if r[1] == 'Contracting' and r[2] in ('Neutral', 'Compressed')]
+                current_skipped = [r[0] for r in rows if r[1] == "Contracting" and r[2] in ("Neutral", "Compressed")]
                 # Contracting + Expanded (kept by current gate)
-                expanded_contracting = [r[0] for r in rows
-                                        if r[1] == 'Contracting' and r[2] == 'Expanded']
+                expanded_contracting = [r[0] for r in rows if r[1] == "Contracting" and r[2] == "Expanded"]
 
                 if len(simple_skipped) < 10 or len(current_skipped) < 5:
                     continue
@@ -302,7 +326,9 @@ def run():
                 lines.append(f"    ALL Contracting:  N={len(simple_skipped):>4}, avgR={avg_simple_skip:+.3f}")
                 lines.append(f"    Contr+Neut/Comp:  N={len(current_skipped):>4}, avgR={avg_current_skip:+.3f}")
                 if expanded_contracting:
-                    lines.append(f"    Contr+Expanded:   N={len(expanded_contracting):>4}, avgR={avg_expanded_keep:+.3f}")
+                    lines.append(
+                        f"    Contr+Expanded:   N={len(expanded_contracting):>4}, avgR={avg_expanded_keep:+.3f}"
+                    )
                 lines.append(f"    Simple gate Sharpe: {sharpe_simple:+.2f}" if sharpe_simple else "")
                 lines.append("")
 
@@ -315,7 +341,8 @@ def run():
         for sym in ["MNQ", "MGC", "MES"]:
             for sess in ["0900", "1000"]:
                 comp_col = f"orb_{sess}_compression_tier"
-                rows = con.execute(f"""
+                rows = con.execute(
+                    f"""
                     SELECT o.pnl_r,
                            d.atr_vel_regime,
                            d.{comp_col} as comp_tier
@@ -331,15 +358,15 @@ def run():
                       AND o.pnl_r IS NOT NULL
                       AND d.atr_vel_regime IS NOT NULL
                       AND d.{comp_col} IS NOT NULL
-                """, [sym, sess, rr]).fetchall()
+                """,
+                    [sym, sess, rr],
+                ).fetchall()
 
                 if len(rows) < 50:
                     continue
 
-                skipped = [r[0] for r in rows
-                           if r[1] == 'Contracting' and r[2] in ('Neutral', 'Compressed')]
-                gated = [r[0] for r in rows
-                         if not (r[1] == 'Contracting' and r[2] in ('Neutral', 'Compressed'))]
+                skipped = [r[0] for r in rows if r[1] == "Contracting" and r[2] in ("Neutral", "Compressed")]
+                gated = [r[0] for r in rows if not (r[1] == "Contracting" and r[2] in ("Neutral", "Compressed"))]
 
                 if len(skipped) < 5:
                     continue
@@ -350,10 +377,13 @@ def run():
                 s_gate = annualized_sharpe(gated)
 
                 label = f"{sym}_{sess}_E0_RR{rr:.0f}"
-                lines.append(f"  {label}: skip N={len(skipped)}, avgR_skip={avg_skip:+.3f}, "
-                             f"Sharpe_all={s_all:+.2f}, Sharpe_gated={s_gate:+.2f}, "
-                             f"lift={s_gate - s_all:+.3f}" if s_all and s_gate else
-                             f"  {label}: skip N={len(skipped)}, avgR_skip={avg_skip:+.3f}")
+                lines.append(
+                    f"  {label}: skip N={len(skipped)}, avgR_skip={avg_skip:+.3f}, "
+                    f"Sharpe_all={s_all:+.2f}, Sharpe_gated={s_gate:+.2f}, "
+                    f"lift={s_gate - s_all:+.3f}"
+                    if s_all and s_gate
+                    else f"  {label}: skip N={len(skipped)}, avgR_skip={avg_skip:+.3f}"
+                )
     lines.append("")
 
     # ── BH FDR ────────────────────────────────────────────────────
@@ -370,14 +400,27 @@ def run():
         survivors.sort(key=lambda x: x[1])
 
         lines.append(f"  BH survivors (q=0.10): {len(survivors)}")
-        for (label, raw_p, n, _avg_skip, _avg_gate, delta, wr_skip, wr_gate,
-             _s_all, _s_gate, s_lift), adj_p in survivors:
+        for (
+            label,
+            raw_p,
+            n,
+            _avg_skip,
+            _avg_gate,
+            delta,
+            wr_skip,
+            wr_gate,
+            _s_all,
+            _s_gate,
+            s_lift,
+        ), adj_p in survivors:
             direction = "TOXIC (skip helps)" if delta < 0 else "BENEFICIAL (skip hurts)"
             lift_str = f", Sharpe_lift={s_lift:+.3f}" if s_lift is not None else ""
-            lines.append(f"    {label}: raw_p={raw_p:.4f}, p_bh={adj_p:.4f}, "
-                         f"N_skip={n}, delta={delta:+.3f}R, "
-                         f"WR_skip={wr_skip:.1%} vs WR_gate={wr_gate:.1%}"
-                         f"{lift_str}, {direction}")
+            lines.append(
+                f"    {label}: raw_p={raw_p:.4f}, p_bh={adj_p:.4f}, "
+                f"N_skip={n}, delta={delta:+.3f}R, "
+                f"WR_skip={wr_skip:.1%} vs WR_gate={wr_gate:.1%}"
+                f"{lift_str}, {direction}"
+            )
     lines.append("")
 
     # ── HONEST SUMMARY ────────────────────────────────────────────

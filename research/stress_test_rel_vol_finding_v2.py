@@ -109,9 +109,20 @@ def estimate_var_sr_from_scan(comprehensive_scan_md: Path) -> tuple[float, int, 
     # Pull a broader set — all MNQ/MES/MGC lanes at O5, RR1.5, E2 as a reasonable
     # cross-section of our scan universe
     srs = []
-    for session in ["CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-                    "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-                    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE", "BRISBANE_1025"]:
+    for session in [
+        "CME_REOPEN",
+        "TOKYO_OPEN",
+        "SINGAPORE_OPEN",
+        "LONDON_METALS",
+        "EUROPE_FLOW",
+        "US_DATA_830",
+        "NYSE_OPEN",
+        "US_DATA_1000",
+        "COMEX_SETTLE",
+        "CME_PRECLOSE",
+        "NYSE_CLOSE",
+        "BRISBANE_1025",
+    ]:
         for instr in ["MNQ", "MES", "MGC"]:
             for direction in ["long", "short"]:
                 q = f"""
@@ -168,7 +179,9 @@ def compute_cell_stats(df: pd.DataFrame, p67_thresh: float | None = None) -> dic
     }
 
 
-def block_bootstrap_p(df: pd.DataFrame, p67_thresh: float, block_size: int = 5, n_boot: int = 2000, seed: int = 42) -> float:
+def block_bootstrap_p(
+    df: pd.DataFrame, p67_thresh: float, block_size: int = 5, n_boot: int = 2000, seed: int = 42
+) -> float:
     pnl = np.asarray(df["pnl_r"].astype(float).values, dtype=float)
     mask = np.asarray((df["rel_vol"] > p67_thresh).astype(int).values, dtype=int)
     n = len(pnl)
@@ -210,7 +223,13 @@ def temporal_stability(df: pd.DataFrame, p67_thresh: float) -> dict:
         return {"ok": False, "reason": "half too small"}
     sign_match = np.sign(a["delta"]) == np.sign(b["delta"])
     both_sig = abs(a["t"]) >= 2.0 and abs(b["t"]) >= 2.0
-    return {"ok": bool(sign_match and both_sig), "h1": a, "h2": b, "sign_match": bool(sign_match), "both_sig": bool(both_sig)}
+    return {
+        "ok": bool(sign_match and both_sig),
+        "h1": a,
+        "h2": b,
+        "sign_match": bool(sign_match),
+        "both_sig": bool(both_sig),
+    }
 
 
 def expected_max_t(k: int) -> float:
@@ -369,24 +388,28 @@ def main():
         dsr_realistic = dsr_by_framing["K=72 (sessions×instr×dir)"]["dsr"]
         v = verdict(n_core_pass, dsr_realistic)
 
-        print(f"  CORE: bootstrap={core['bootstrap']}, temporal={core['temporal']}, exceeds_max_t={core['exceeds_max_t']}, per_day={core['per_day']} → {n_core_pass}/4")
+        print(
+            f"  CORE: bootstrap={core['bootstrap']}, temporal={core['temporal']}, exceeds_max_t={core['exceeds_max_t']}, per_day={core['per_day']} → {n_core_pass}/4"
+        )
         print("  DSR:")
         for name, dr in dsr_by_framing.items():
             print(f"    {name}: SR0={dr['sr0']:.3f} DSR={dr['dsr']:.3f}")
         print(f"  Verdict: {v}")
 
-        results.append({
-            "lane_name": lane_name,
-            "stats": s,
-            "bootstrap_p": bootstrap_p,
-            "temporal": temporal,
-            "per_day_t": pd_t,
-            "per_day_sig": pd_sig,
-            "dsr_by_framing": dsr_by_framing,
-            "core": core,
-            "n_core_pass": n_core_pass,
-            "verdict": v,
-        })
+        results.append(
+            {
+                "lane_name": lane_name,
+                "stats": s,
+                "bootstrap_p": bootstrap_p,
+                "temporal": temporal,
+                "per_day_t": pd_t,
+                "per_day_sig": pd_sig,
+                "dsr_by_framing": dsr_by_framing,
+                "core": core,
+                "n_core_pass": n_core_pass,
+                "verdict": v,
+            }
+        )
 
     emit(results, var_sr, var_sr_n, var_sr_src)
 

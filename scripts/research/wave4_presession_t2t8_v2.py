@@ -183,8 +183,7 @@ def t4_sensitivity(df: pd.DataFrame, feature: str, direction: str) -> dict:
     return {"pass": all_positive, "thresholds": results}
 
 
-def t6_null_bootstrap(df: pd.DataFrame, feature: str, direction: str,
-                    n_perms: int = N_BOOTSTRAP) -> dict:
+def t6_null_bootstrap(df: pd.DataFrame, feature: str, direction: str, n_perms: int = N_BOOTSTRAP) -> dict:
     res = compute_metric(df, feature, direction)
     if res is None:
         return {"error": "base failed"}
@@ -289,40 +288,58 @@ def run_shortlist():
             suspect = t3_pass == "SUSPECT" and t4_pass and t6_pass and t7_pass
             verdict = "SURVIVES" if all_pass else ("SUSPECT" if suspect else "KILL")
             fails = []
-            if t3_pass is False: fails.append("T3")
-            if not t4_pass: fails.append("T4")
-            if not t6_pass: fails.append("T6")
-            if not t7_pass: fails.append("T7")
+            if t3_pass is False:
+                fails.append("T3")
+            if not t4_pass:
+                fails.append("T4")
+            if not t6_pass:
+                fails.append("T6")
+            if not t7_pass:
+                fails.append("T7")
 
             # Only print interesting rows (passers or strong IS)
             if all_pass or suspect or abs(t2["expr_spread"]) >= 0.10:
                 print(f"\n{feat} x {inst} x {sess} RR{rr} ({direction})", file=sys.stderr)
-                print(f"  T2 in_ExpR={t2['expr_in']:+.3f} out_ExpR={t2['expr_out']:+.3f} spread={t2['expr_spread']:+.3f}", file=sys.stderr)
+                print(
+                    f"  T2 in_ExpR={t2['expr_in']:+.3f} out_ExpR={t2['expr_out']:+.3f} spread={t2['expr_spread']:+.3f}",
+                    file=sys.stderr,
+                )
                 if "error" not in t3:
-                    print(f"  T3 IS={t3['is_spread']:+.3f} OOS={t3['oos_spread']:+.3f} WFE={t3['wfe']:.2f}", file=sys.stderr)
+                    print(
+                        f"  T3 IS={t3['is_spread']:+.3f} OOS={t3['oos_spread']:+.3f} WFE={t3['wfe']:.2f}",
+                        file=sys.stderr,
+                    )
                 if "thresholds" in t4:
                     print(f"  T4 thresholds {t4['thresholds']} pass={t4_pass}", file=sys.stderr)
                 if "error" not in t6:
                     print(f"  T6 p={t6['p_value']:.4f}", file=sys.stderr)
                 if "error" not in t7:
-                    print(f"  T7 {t7['same_sign']}/{t7['valid_years']} ({t7['pct_same_sign']*100:.0f}%) dominance={t7['dominance_pct']:.0f}%", file=sys.stderr)
-                fail_suffix = ' (fails: ' + ','.join(fails) + ')' if fails else ''
+                    print(
+                        f"  T7 {t7['same_sign']}/{t7['valid_years']} ({t7['pct_same_sign'] * 100:.0f}%) dominance={t7['dominance_pct']:.0f}%",
+                        file=sys.stderr,
+                    )
+                fail_suffix = " (fails: " + ",".join(fails) + ")" if fails else ""
                 print(f"  VERDICT: {verdict}{fail_suffix}", file=sys.stderr)
 
-            results.append({
-                "feature": feat, "instrument": inst, "session": sess, "rr": rr,
-                "direction": direction,
-                "n_in": t2["n_in"],
-                "in_expr": t2["expr_in"],
-                "out_expr": t2["expr_out"],
-                "t2_spread": t2["expr_spread"],
-                "t3_wfe": t3.get("wfe", float("nan")),
-                "t4_pass": t4_pass,
-                "t6_pvalue": t6.get("p_value", float("nan")),
-                "t7_pct_same_sign": t7.get("pct_same_sign", 0),
-                "t7_dominance": t7.get("dominance_pct", 100),
-                "verdict": verdict,
-            })
+            results.append(
+                {
+                    "feature": feat,
+                    "instrument": inst,
+                    "session": sess,
+                    "rr": rr,
+                    "direction": direction,
+                    "n_in": t2["n_in"],
+                    "in_expr": t2["expr_in"],
+                    "out_expr": t2["expr_out"],
+                    "t2_spread": t2["expr_spread"],
+                    "t3_wfe": t3.get("wfe", float("nan")),
+                    "t4_pass": t4_pass,
+                    "t6_pvalue": t6.get("p_value", float("nan")),
+                    "t7_pct_same_sign": t7.get("pct_same_sign", 0),
+                    "t7_dominance": t7.get("dominance_pct", 100),
+                    "verdict": verdict,
+                }
+            )
 
     # Summary
     print("\n" + "=" * 100, file=sys.stderr)
@@ -331,10 +348,16 @@ def run_shortlist():
     tradable_survivors = [r for r in survivors if r["in_expr"] > 0.05]
     print(f"SURVIVORS: {len(survivors)} (TRADABLE with in_ExpR > 0.05: {len(tradable_survivors)})", file=sys.stderr)
     for r in sorted(tradable_survivors, key=lambda x: -x["in_expr"]):
-        print(f"  {r['feature']} x {r['instrument']} x {r['session']} RR{r['rr']}: in_ExpR={r['in_expr']:+.3f} WFE={r['t3_wfe']:.2f} p={r['t6_pvalue']:.4f}", file=sys.stderr)
+        print(
+            f"  {r['feature']} x {r['instrument']} x {r['session']} RR{r['rr']}: in_ExpR={r['in_expr']:+.3f} WFE={r['t3_wfe']:.2f} p={r['t6_pvalue']:.4f}",
+            file=sys.stderr,
+        )
     print(f"\nSUSPECT (WFE > 1.5): {len(suspects)}", file=sys.stderr)
     for r in sorted(suspects, key=lambda x: -x["in_expr"]):
-        print(f"  {r['feature']} x {r['instrument']} x {r['session']} RR{r['rr']}: in_ExpR={r['in_expr']:+.3f} WFE={r['t3_wfe']:.2f} p={r['t6_pvalue']:.4f}", file=sys.stderr)
+        print(
+            f"  {r['feature']} x {r['instrument']} x {r['session']} RR{r['rr']}: in_ExpR={r['in_expr']:+.3f} WFE={r['t3_wfe']:.2f} p={r['t6_pvalue']:.4f}",
+            file=sys.stderr,
+        )
     print("=" * 100, file=sys.stderr)
 
     df_out = pd.DataFrame(results)

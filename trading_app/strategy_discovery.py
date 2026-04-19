@@ -1030,8 +1030,7 @@ def _inject_cross_asset_atrs(con, features, instrument, all_filters):
         logger.info(f"  Injected {col_name} for {injected}/{len(features)} rows")
 
 
-def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models,
-                        holdout_date=None, start_date=None):
+def _load_outcomes_bulk(con, instrument, orb_minutes, orb_labels, entry_models, holdout_date=None, start_date=None):
     """
     Load all non-NULL outcomes in one query per (orb, entry_model).
 
@@ -1128,9 +1127,8 @@ def _inject_hypothesis_filters(
         if ft not in ALL_FILTERS:
             continue  # unknown — scope predicate will reject anyway
         filter_obj = ALL_FILTERS[ft]
-        is_dow_composite = (
-            isinstance(filter_obj, CompositeFilter)
-            and isinstance(filter_obj.overlay, DayOfWeekSkipFilter)
+        is_dow_composite = isinstance(filter_obj, CompositeFilter) and isinstance(
+            filter_obj.overlay, DayOfWeekSkipFilter
         )
         for s in sessions:
             if is_dow_composite and s in DOW_MISALIGNED_SESSIONS:
@@ -1243,10 +1241,7 @@ def run_discovery(
         # Gate 4: Criterion 2 MinBTL bound. The proxy-mode flag is read
         # from metadata.data_source_mode; default is clean (300 cap).
         source_meta = h_meta.get("metadata", {})
-        on_proxy_data = (
-            isinstance(source_meta, dict)
-            and source_meta.get("data_source_mode") == "proxy"
-        )
+        on_proxy_data = isinstance(source_meta, dict) and source_meta.get("data_source_mode") == "proxy"
         verdict, reason = enforce_minbtl_bound(h_meta, on_proxy_data=on_proxy_data)
         if verdict is not None:
             raise HypothesisLoaderError(reason or "criterion_2: unknown rejection")
@@ -1305,6 +1300,7 @@ def run_discovery(
         effective_start = start_date
         if effective_start is None:
             from trading_app.config import WF_START_OVERRIDE
+
             wf_override = WF_START_OVERRIDE.get(instrument)
             if wf_override is not None:
                 effective_start = wf_override
@@ -1342,10 +1338,9 @@ def run_discovery(
             )
             injected_count = sum(len(v) for v in hypothesis_extra_by_session.values())
             if injected_count > 0:
-                injected_types = sorted({
-                    ft for session_map in hypothesis_extra_by_session.values()
-                    for ft in session_map
-                })
+                injected_types = sorted(
+                    {ft for session_map in hypothesis_extra_by_session.values() for ft in session_map}
+                )
                 logger.info(
                     f"Phase 4: injected {len(injected_types)} hypothesis filter type(s) "
                     f"across {injected_count} filter/session combinations: {injected_types}"
@@ -1483,10 +1478,7 @@ def run_discovery(
 
                             for stop_mult in STOP_MULTIPLIERS:
                                 # Phase 4 early-exit: skip stop_mults not referenced
-                                if (
-                                    p4_allowed_stop_mults is not None
-                                    and stop_mult not in p4_allowed_stop_mults
-                                ):
+                                if p4_allowed_stop_mults is not None and stop_mult not in p4_allowed_stop_mults:
                                     continue
 
                                 # Phase 4 FULL per-hypothesis bundle check.
@@ -1628,8 +1620,7 @@ def run_discovery(
                     f"before DB write."
                 )
             logger.info(
-                f"Phase 4 safety net: {phase_4_accepted_count}/{declared} raw "
-                f"trials accepted by scope predicate"
+                f"Phase 4 safety net: {phase_4_accepted_count}/{declared} raw trials accepted by scope predicate"
             )
             if phase_4_accepted_count == 0:
                 logger.warning(
@@ -1845,9 +1836,7 @@ def main():
     from trading_app.holdout_policy import enforce_holdout_date
 
     try:
-        effective_holdout = enforce_holdout_date(
-            args.holdout_date, override_token=args.unlock_holdout
-        )
+        effective_holdout = enforce_holdout_date(args.holdout_date, override_token=args.unlock_holdout)
     except ValueError as e:
         parser.error(str(e))  # exits with code 2 and prints the message
 

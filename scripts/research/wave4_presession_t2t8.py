@@ -71,7 +71,9 @@ SHORTLIST = [
 
 # RR × stop combos to test
 TEST_VARIANTS = [
-    (1.0, 1.0), (1.5, 1.0), (2.0, 1.0),
+    (1.0, 1.0),
+    (1.5, 1.0),
+    (2.0, 1.0),
     (1.0, 0.75),
 ]
 
@@ -191,8 +193,7 @@ def t4_sensitivity(df: pd.DataFrame, feature: str, ftype: str, direction: str) -
     return {"pass": all_positive, "thresholds": results}
 
 
-def t6_null_bootstrap(df: pd.DataFrame, feature: str, ftype: str, direction: str,
-                     n_perms: int = N_BOOTSTRAP) -> dict:
+def t6_null_bootstrap(df: pd.DataFrame, feature: str, ftype: str, direction: str, n_perms: int = N_BOOTSTRAP) -> dict:
     """Shuffle pnl_r within the valid sample, compute spread distribution. Two-tailed p."""
     res = compute_metric(df, feature, ftype, direction)
     if res is None:
@@ -337,41 +338,63 @@ def run_shortlist():
             suspect = t3_pass == "SUSPECT" and t4_pass and t6_pass and t7_pass
             verdict = "SURVIVES" if all_pass else ("SUSPECT" if suspect else "KILL")
             fails = []
-            if t3_pass is False: fails.append("T3")
-            if not t4_pass: fails.append("T4")
-            if not t6_pass: fails.append("T6")
-            if not t7_pass: fails.append("T7")
+            if t3_pass is False:
+                fails.append("T3")
+            if not t4_pass:
+                fails.append("T4")
+            if not t6_pass:
+                fails.append("T6")
+            if not t7_pass:
+                fails.append("T7")
 
             print(f"\n{feat} × {inst} × {sess} RR{rr} ({direction})", file=sys.stderr)
-            print(f"  T2 N={t2['n_in']}/{t2['n_out']} in_ExpR={t2['expr_in']:+.3f} out_ExpR={t2['expr_out']:+.3f} spread={t2['expr_spread']:+.3f}", file=sys.stderr)
+            print(
+                f"  T2 N={t2['n_in']}/{t2['n_out']} in_ExpR={t2['expr_in']:+.3f} out_ExpR={t2['expr_out']:+.3f} spread={t2['expr_spread']:+.3f}",
+                file=sys.stderr,
+            )
             if "error" not in t3:
-                print(f"  T3 IS={t3['is_spread']:+.3f} OOS={t3['oos_spread']:+.3f} WFE={t3['wfe']:.2f} sign_match={t3['sign_match']}", file=sys.stderr)
+                print(
+                    f"  T3 IS={t3['is_spread']:+.3f} OOS={t3['oos_spread']:+.3f} WFE={t3['wfe']:.2f} sign_match={t3['sign_match']}",
+                    file=sys.stderr,
+                )
             else:
                 print(f"  T3 {t3['error']}", file=sys.stderr)
             if "thresholds" in t4:
-                pass_label = 'PASS' if t4_pass else 'FAIL'
+                pass_label = "PASS" if t4_pass else "FAIL"
                 print(f"  T4 ±20% thresholds {t4['thresholds']} → {pass_label}", file=sys.stderr)
             else:
                 print(f"  T4 {t4.get('reason', t4.get('error', 'N/A'))}", file=sys.stderr)
             if "error" not in t6:
-                print(f"  T6 observed={t6['observed']:+.3f} null_p95={t6['null_p95']:.3f} p={t6['p_value']:.4f}", file=sys.stderr)
+                print(
+                    f"  T6 observed={t6['observed']:+.3f} null_p95={t6['null_p95']:.3f} p={t6['p_value']:.4f}",
+                    file=sys.stderr,
+                )
             if "error" not in t7:
-                print(f"  T7 {t7['same_sign']}/{t7['valid_years']} ({t7['pct_same_sign']*100:.0f}%) dominance={t7['dominance_pct']:.0f}%", file=sys.stderr)
-            fail_suffix = ' (fails: ' + ','.join(fails) + ')' if fails else ''
+                print(
+                    f"  T7 {t7['same_sign']}/{t7['valid_years']} ({t7['pct_same_sign'] * 100:.0f}%) dominance={t7['dominance_pct']:.0f}%",
+                    file=sys.stderr,
+                )
+            fail_suffix = " (fails: " + ",".join(fails) + ")" if fails else ""
             print(f"  VERDICT: {verdict}{fail_suffix}", file=sys.stderr)
 
-            results.append({
-                "feature": feat, "instrument": inst, "session": sess, "rr": rr,
-                "direction": direction, "ftype": ftype,
-                "t2_spread": t2['expr_spread'],
-                "t3_wfe": t3.get('wfe', float('nan')),
-                "t3_sign_match": t3.get('sign_match', False),
-                "t4_pass": t4_pass,
-                "t6_pvalue": t6.get('p_value', float('nan')),
-                "t7_pct_same_sign": t7.get('pct_same_sign', 0),
-                "t7_dominance": t7.get('dominance_pct', 100),
-                "verdict": verdict,
-            })
+            results.append(
+                {
+                    "feature": feat,
+                    "instrument": inst,
+                    "session": sess,
+                    "rr": rr,
+                    "direction": direction,
+                    "ftype": ftype,
+                    "t2_spread": t2["expr_spread"],
+                    "t3_wfe": t3.get("wfe", float("nan")),
+                    "t3_sign_match": t3.get("sign_match", False),
+                    "t4_pass": t4_pass,
+                    "t6_pvalue": t6.get("p_value", float("nan")),
+                    "t7_pct_same_sign": t7.get("pct_same_sign", 0),
+                    "t7_dominance": t7.get("dominance_pct", 100),
+                    "verdict": verdict,
+                }
+            )
 
     # Summary
     print("\n" + "=" * 100, file=sys.stderr)
@@ -380,10 +403,16 @@ def run_shortlist():
     kills = [r for r in results if r["verdict"] == "KILL"]
     print(f"SURVIVORS: {len(survivors)}", file=sys.stderr)
     for r in sorted(survivors, key=lambda x: x["t6_pvalue"]):
-        print(f"  {r['feature']} × {r['instrument']} × {r['session']} RR{r['rr']}: spread={r['t2_spread']:+.3f} WFE={r['t3_wfe']:.2f} p={r['t6_pvalue']:.4f}", file=sys.stderr)
+        print(
+            f"  {r['feature']} × {r['instrument']} × {r['session']} RR{r['rr']}: spread={r['t2_spread']:+.3f} WFE={r['t3_wfe']:.2f} p={r['t6_pvalue']:.4f}",
+            file=sys.stderr,
+        )
     print(f"\nSUSPECT (WFE > 1.5): {len(suspects)}", file=sys.stderr)
     for r in sorted(suspects, key=lambda x: x["t6_pvalue"]):
-        print(f"  {r['feature']} × {r['instrument']} × {r['session']} RR{r['rr']}: spread={r['t2_spread']:+.3f} WFE={r['t3_wfe']:.2f} p={r['t6_pvalue']:.4f}", file=sys.stderr)
+        print(
+            f"  {r['feature']} × {r['instrument']} × {r['session']} RR{r['rr']}: spread={r['t2_spread']:+.3f} WFE={r['t3_wfe']:.2f} p={r['t6_pvalue']:.4f}",
+            file=sys.stderr,
+        )
     print(f"\nKILLED: {len(kills)}", file=sys.stderr)
     print("=" * 100, file=sys.stderr)
 

@@ -60,7 +60,7 @@ def refresh_validated_trade_windows(
                    rr_target, confirm_bars, filter_type,
                    first_trade_day, last_trade_day, trade_day_count
             FROM validated_setups
-            WHERE {' AND '.join(where)}
+            WHERE {" AND ".join(where)}
             ORDER BY strategy_id
             """,
             params,

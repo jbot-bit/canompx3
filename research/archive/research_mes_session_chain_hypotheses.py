@@ -149,9 +149,9 @@ def load_df(con: duckdb.DuckDBPyConnection, h: dict) -> pd.DataFrame:
     WHERE o.orb_minutes=5
       AND o.symbol='MES'
       AND o.orb_label='{fs}'
-      AND o.entry_model='{h['entry_model']}'
-      AND o.confirm_bars={h['confirm_bars']}
-      AND o.rr_target={h['rr_target']}
+      AND o.entry_model='{h["entry_model"]}'
+      AND o.confirm_bars={h["confirm_bars"]}
+      AND o.rr_target={h["rr_target"]}
       AND o.pnl_r IS NOT NULL
       AND o.entry_ts IS NOT NULL
     """
@@ -191,7 +191,9 @@ def mask_for_mode(df: pd.DataFrame, mode: str) -> pd.Series:
         return opp & df["l_delay"].notna() & (df["l_delay"] >= 60) & (df["l_cont"] == False)
     if mode == "opp_stretch":
         q70 = df["l_size_atr"].quantile(0.70)
-        return opp & df["l_size_atr"].notna() & (df["l_size_atr"] >= q70) & df["l_delay"].notna() & (df["l_delay"] <= 30)
+        return (
+            opp & df["l_size_atr"].notna() & (df["l_size_atr"] >= q70) & df["l_delay"].notna() & (df["l_delay"] <= 30)
+        )
 
     raise ValueError(mode)
 
@@ -251,18 +253,16 @@ def evaluate(df: pd.DataFrame, m: pd.Series) -> dict:
 
 def verdict(r: dict) -> str:
     if (
-        pd.notna(r.get("avg_on")) and r["avg_on"] >= 0.10
+        pd.notna(r.get("avg_on"))
+        and r["avg_on"] >= 0.10
         and r["uplift"] >= 0.18
-        and pd.notna(r["test2025_uplift"]) and r["test2025_uplift"] > 0
+        and pd.notna(r["test2025_uplift"])
+        and r["test2025_uplift"] > 0
         and r["n_on"] >= 70
     ):
         return "PROMOTE"
 
-    if (
-        pd.notna(r.get("avg_on")) and r["avg_on"] > 0
-        and r["uplift"] >= 0.10
-        and r["n_on"] >= 40
-    ):
+    if pd.notna(r.get("avg_on")) and r["avg_on"] > 0 and r["uplift"] >= 0.10 and r["n_on"] >= 40:
         return "WATCH"
 
     return "KILL"

@@ -49,6 +49,7 @@ RR_TARGET = 2.0
 CONFIRM_BARS = 2
 HOLD_HOURS = 7
 
+
 def compute_ib(bars: pd.DataFrame, ib_minutes: int) -> dict | None:
     """IB = high/low of first N minutes starting at 00:00 UTC."""
     ib_start = None
@@ -70,6 +71,7 @@ def compute_ib(bars: pd.DataFrame, ib_minutes: int) -> dict | None:
         "ib_size": float(ib_bars["high"].max() - ib_bars["low"].min()),
         "ib_end": ib_end,
     }
+
 
 def get_first_ib_break(bars: pd.DataFrame, ib: dict) -> dict:
     """Find the FIRST bar that breaks above IB high or below IB low.
@@ -97,9 +99,14 @@ def get_first_ib_break(bars: pd.DataFrame, ib: dict) -> dict:
 
     return {"ib_break_dir": None, "ib_break_ts": None}
 
+
 def compute_pnl_with_stop(
-    bars: pd.DataFrame, entry_ts, entry_price: float,
-    stop_price: float, is_long: bool, cutoff_hours: int,
+    bars: pd.DataFrame,
+    entry_ts,
+    entry_price: float,
+    stop_price: float,
+    is_long: bool,
+    cutoff_hours: int,
 ) -> float | None:
     """Hold with stop active until cutoff. Returns pnl_r."""
     spec = get_cost_spec("MGC")
@@ -124,16 +131,19 @@ def compute_pnl_with_stop(
     pnl = (last_close - entry_price) if is_long else (entry_price - last_close)
     return to_r_multiple(spec, entry_price, stop_price, pnl)
 
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def load_data(db_path: Path, start: date, end: date):
     """Load trades and bars once (shared across all IB durations)."""
     con = duckdb.connect(str(db_path), read_only=True)
 
     print(f"Loading 1000 E1 CB{CONFIRM_BARS} RR{RR_TARGET} G{MIN_ORB_SIZE}+ trades...")
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT o.trading_day, o.entry_ts, o.entry_price, o.stop_price,
                o.target_price, o.outcome, o.pnl_r,
                d.orb_1000_size, d.orb_1000_break_dir
@@ -147,7 +157,9 @@ def load_data(db_path: Path, start: date, end: date):
           AND o.pnl_r IS NOT NULL AND d.orb_1000_size >= ?
           AND o.trading_day BETWEEN ? AND ?
         ORDER BY o.trading_day
-    """, [RR_TARGET, CONFIRM_BARS, MIN_ORB_SIZE, start, end]).fetchdf()
+    """,
+        [RR_TARGET, CONFIRM_BARS, MIN_ORB_SIZE, start, end],
+    ).fetchdf()
     df["entry_ts"] = pd.to_datetime(df["entry_ts"], utc=True)
     print(f"  {len(df)} trades ({df['trading_day'].nunique()} days)")
 
@@ -167,6 +179,7 @@ def load_data(db_path: Path, start: date, end: date):
     con.close()
     print(f"  Done\n")
     return df, bars_cache
+
 
 def process_trades(df, bars_cache, ib_minutes: int) -> pd.DataFrame:
     """Classify trades for a given IB duration. Returns DataFrame."""
@@ -217,16 +230,25 @@ def process_trades(df, bars_cache, ib_minutes: int) -> pd.DataFrame:
 
         year = str(td.year) if hasattr(td, "year") else str(td)[:4]
 
-        results.append({
-            "td": td, "year": year, "is_long": is_long,
-            "orb_dir": orb_dir, "ib_dir": ib_dir, "alignment": alignment,
-            "wait_minutes": wait_minutes, "ib_size": ib["ib_size"],
-            "orb_size": row["orb_1000_size"],
-            "fixed_pnl": fixed_pnl, "hold_pnl": hold_pnl,
-            "blended_pnl": blended_pnl,
-        })
+        results.append(
+            {
+                "td": td,
+                "year": year,
+                "is_long": is_long,
+                "orb_dir": orb_dir,
+                "ib_dir": ib_dir,
+                "alignment": alignment,
+                "wait_minutes": wait_minutes,
+                "ib_size": ib["ib_size"],
+                "orb_size": row["orb_1000_size"],
+                "fixed_pnl": fixed_pnl,
+                "hold_pnl": hold_pnl,
+                "blended_pnl": blended_pnl,
+            }
+        )
 
     return pd.DataFrame(results)
+
 
 def run(db_path: Path, start: date, end: date):
     df, bars_cache = load_data(db_path, start, end)
@@ -237,12 +259,16 @@ def run(db_path: Path, start: date, end: date):
     print("=" * 90)
     print("IB DURATION SWEEP: Which IB range gives best alignment signal?")
     print("=" * 90)
-    print(f"  {'IB':>5s} {'N':>5s} {'Algn':>5s} {'Opp':>5s} {'NoBr':>5s} "
-          f"{'OppWR':>6s} "
-          f"{'Fix_Sh':>8s} {'7h_Sh':>8s} {'Bln_Sh':>8s} {'Bln_ExpR':>9s} {'Bln_Tot':>8s}")
-    print(f"  {'-'*5} {'-'*5} {'-'*5} {'-'*5} {'-'*5} "
-          f"{'-'*6} "
-          f"{'-'*8} {'-'*8} {'-'*8} {'-'*9} {'-'*8}")
+    print(
+        f"  {'IB':>5s} {'N':>5s} {'Algn':>5s} {'Opp':>5s} {'NoBr':>5s} "
+        f"{'OppWR':>6s} "
+        f"{'Fix_Sh':>8s} {'7h_Sh':>8s} {'Bln_Sh':>8s} {'Bln_ExpR':>9s} {'Bln_Tot':>8s}"
+    )
+    print(
+        f"  {'-' * 5} {'-' * 5} {'-' * 5} {'-' * 5} {'-' * 5} "
+        f"{'-' * 6} "
+        f"{'-' * 8} {'-' * 8} {'-' * 8} {'-' * 9} {'-' * 8}"
+    )
 
     best_ib = None
     best_sharpe = -999
@@ -265,10 +291,12 @@ def run(db_path: Path, start: date, end: date):
         mb = compute_strategy_metrics(pdf["blended_pnl"].values)
 
         if mf and m7 and mb:
-            print(f"  {ib_min:>4d}m {len(pdf):>5d} {len(aligned):>5d} {len(opposed):>5d} {len(no_break):>5d} "
-                  f"{opp_wr:>5.1%} "
-                  f"{mf['sharpe']:>8.4f} {m7['sharpe']:>8.4f} {mb['sharpe']:>8.4f} "
-                  f"{mb['expr']:>+9.4f} {mb['total']:>8.1f}")
+            print(
+                f"  {ib_min:>4d}m {len(pdf):>5d} {len(aligned):>5d} {len(opposed):>5d} {len(no_break):>5d} "
+                f"{opp_wr:>5.1%} "
+                f"{mf['sharpe']:>8.4f} {m7['sharpe']:>8.4f} {mb['sharpe']:>8.4f} "
+                f"{mb['expr']:>+9.4f} {mb['total']:>8.1f}"
+            )
 
             if mb["sharpe"] > best_sharpe:
                 best_sharpe = mb["sharpe"]
@@ -295,23 +323,25 @@ def run(db_path: Path, start: date, end: date):
     print("=" * 90)
     print(f"IB DIRECTION ALIGNMENT (1000 E1 CB{CONFIRM_BARS} RR{RR_TARGET} G{MIN_ORB_SIZE}+)")
     print("=" * 90)
-    print(f"  Aligned:  {len(aligned):>4d} ({len(aligned)/len(pdf)*100:4.1f}%)")
-    print(f"  Opposed:  {len(opposed):>4d} ({len(opposed)/len(pdf)*100:4.1f}%)")
-    print(f"  No break: {len(no_break):>4d} ({len(no_break)/len(pdf)*100:4.1f}%)")
+    print(f"  Aligned:  {len(aligned):>4d} ({len(aligned) / len(pdf) * 100:4.1f}%)")
+    print(f"  Opposed:  {len(opposed):>4d} ({len(opposed) / len(pdf) * 100:4.1f}%)")
+    print(f"  No break: {len(no_break):>4d} ({len(no_break) / len(pdf) * 100:4.1f}%)")
 
     # Wait time for signal
     wait = pdf[pdf["wait_minutes"].notna()]["wait_minutes"]
     if len(wait) > 0:
         print(f"\n  Signal wait time (minutes after entry):")
-        print(f"    Median: {wait.median():.0f}m  |  Mean: {wait.mean():.0f}m  |  "
-              f"P25: {wait.quantile(0.25):.0f}m  |  P75: {wait.quantile(0.75):.0f}m")
+        print(
+            f"    Median: {wait.median():.0f}m  |  Mean: {wait.mean():.0f}m  |  "
+            f"P25: {wait.quantile(0.25):.0f}m  |  P75: {wait.quantile(0.75):.0f}m"
+        )
 
     # --- Metrics by alignment ---
     print("\n" + "=" * 90)
     print("METRICS BY ALIGNMENT")
     print("=" * 90)
     print(f"  {'Group':15s} {'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>8s} {'MaxDD':>8s} {'Total':>8s}")
-    print(f"  {'-'*15} {'-'*5} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(f"  {'-' * 15} {'-' * 5} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for label, subset, col in [
         ("All (fixed)", pdf, "fixed_pnl"),
@@ -326,15 +356,17 @@ def run(db_path: Path, start: date, end: date):
             continue
         m = compute_strategy_metrics(subset[col].values)
         if m:
-            print(f"  {label:15s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
-                  f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}")
+            print(
+                f"  {label:15s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
+                f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}"
+            )
 
     # --- Blended comparison ---
     print("\n" + "=" * 90)
     print("BLENDED: Aligned=7h hold, Opposed/NoBreak=FixedRR")
     print("=" * 90)
     print(f"  {'Strategy':20s} {'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>8s} {'MaxDD':>8s} {'Total':>8s}")
-    print(f"  {'-'*20} {'-'*5} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(f"  {'-' * 20} {'-' * 5} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for label, col in [
         ("Fixed RR (control)", "fixed_pnl"),
@@ -343,8 +375,10 @@ def run(db_path: Path, start: date, end: date):
     ]:
         m = compute_strategy_metrics(pdf[col].values)
         if m:
-            print(f"  {label:20s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
-                  f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}")
+            print(
+                f"  {label:20s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
+                f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}"
+            )
 
     # --- Variant: ONLY trade aligned days (skip opposed entirely) ---
     print("\n" + "=" * 90)
@@ -357,17 +391,20 @@ def run(db_path: Path, start: date, end: date):
         ]:
             m = compute_strategy_metrics(aligned[col].values)
             if m:
-                print(f"  {label:20s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
-                      f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}")
+                print(
+                    f"  {label:20s} {m['n']:>5d} {m['wr']:>7.3f} {m['expr']:>8.4f} "
+                    f"{m['sharpe']:>8.4f} {m['maxdd']:>8.2f} {m['total']:>8.1f}"
+                )
 
     # --- Yearly stability ---
     print("\n" + "=" * 90)
     print("YEARLY STABILITY")
     print("=" * 90)
-    print(f"  {'Year':5s} {'N':>4s} {'Algn':>5s} {'Opp':>5s} {'NoBr':>5s} "
-          f"{'Fixed':>8s} {'7h':>8s} {'Blended':>8s} {'Best':>8s}")
-    print(f"  {'-'*5} {'-'*4} {'-'*5} {'-'*5} {'-'*5} "
-          f"{'-'*8} {'-'*8} {'-'*8} {'-'*8}")
+    print(
+        f"  {'Year':5s} {'N':>4s} {'Algn':>5s} {'Opp':>5s} {'NoBr':>5s} "
+        f"{'Fixed':>8s} {'7h':>8s} {'Blended':>8s} {'Best':>8s}"
+    )
+    print(f"  {'-' * 5} {'-' * 4} {'-' * 5} {'-' * 5} {'-' * 5} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for year in sorted(pdf["year"].unique()):
         ydf = pdf[pdf["year"] == year]
@@ -382,9 +419,11 @@ def run(db_path: Path, start: date, end: date):
         if mf and m7 and mb:
             sharpes = {"fixed": mf["sharpe"], "7h": m7["sharpe"], "blended": mb["sharpe"]}
             best = max(sharpes, key=sharpes.get)
-            print(f"  {year:5s} {len(ydf):>4d} {na:>5d} {no:>5d} {nn:>5d} "
-                  f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
-                  f"{mb['sharpe']:>8.3f} {best:>8s}")
+            print(
+                f"  {year:5s} {len(ydf):>4d} {na:>5d} {no:>5d} {nn:>5d} "
+                f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
+                f"{mb['sharpe']:>8.3f} {best:>8s}"
+            )
 
     # Totals
     mf = compute_strategy_metrics(pdf["fixed_pnl"].values)
@@ -394,16 +433,18 @@ def run(db_path: Path, start: date, end: date):
         na = len(aligned)
         no = len(opposed)
         nn = len(no_break)
-        print(f"  {'TOTAL':5s} {len(pdf):>4d} {na:>5d} {no:>5d} {nn:>5d} "
-              f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
-              f"{mb['sharpe']:>8.3f}")
+        print(
+            f"  {'TOTAL':5s} {len(pdf):>4d} {na:>5d} {no:>5d} {nn:>5d} "
+            f"{mf['sharpe']:>8.3f} {m7['sharpe']:>8.3f} "
+            f"{mb['sharpe']:>8.3f}"
+        )
 
     # --- Aligned-only yearly ---
     print("\n" + "=" * 90)
     print("ALIGNED-ONLY YEARLY (skip opposed & no_break entirely)")
     print("=" * 90)
     print(f"  {'Year':5s} {'N':>4s} {'Fixed':>8s} {'7h':>8s} {'Best':>8s}")
-    print(f"  {'-'*5} {'-'*4} {'-'*8} {'-'*8} {'-'*8}")
+    print(f"  {'-' * 5} {'-' * 4} {'-' * 8} {'-' * 8} {'-' * 8}")
 
     for year in sorted(aligned["year"].unique()):
         ydf = aligned[aligned["year"] == year]
@@ -429,7 +470,7 @@ def run(db_path: Path, start: date, end: date):
         wins = (opposed["hold_pnl"] > 0).sum()
         losses = (opposed["hold_pnl"] <= 0).sum()
         print(f"  Opposed 7h: {len(opposed)} trades, {wins} wins, {losses} losses")
-        print(f"  Win rate: {wins/len(opposed)*100:.1f}%")
+        print(f"  Win rate: {wins / len(opposed) * 100:.1f}%")
         if wins > 0:
             print(f"  WARNING: opposed trades have some wins -- not 100% loss")
         else:
@@ -437,23 +478,25 @@ def run(db_path: Path, start: date, end: date):
 
         # Also check fixed RR on opposed
         fx_wins = (opposed["fixed_pnl"] > 0).sum()
-        print(f"  Opposed fixed: {fx_wins} wins out of {len(opposed)} "
-              f"({fx_wins/len(opposed)*100:.1f}% WR)")
+        print(f"  Opposed fixed: {fx_wins} wins out of {len(opposed)} ({fx_wins / len(opposed) * 100:.1f}% WR)")
 
     print()
+
 
 def main():
     parser = argparse.ArgumentParser(description="IB Direction Alignment")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
     parser.add_argument("--start", type=date.fromisoformat, default=date(2016, 2, 1))
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
-    parser.add_argument("--ib-minutes", type=str, default=None,
-                        help="Comma-separated IB durations (overrides default sweep)")
+    parser.add_argument(
+        "--ib-minutes", type=str, default=None, help="Comma-separated IB durations (overrides default sweep)"
+    )
     args = parser.parse_args()
     if args.ib_minutes:
         global IB_MINUTES_OPTIONS
         IB_MINUTES_OPTIONS = [int(x.strip()) for x in args.ib_minutes.split(",")]
     run(args.db_path, args.start, args.end)
+
 
 if __name__ == "__main__":
     main()

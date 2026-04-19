@@ -270,7 +270,13 @@ def emit(
             )
         best = sub.iloc[0]["map"] if len(sub) else None
         if best is not None:
-            lines += ["", f"### {scope.title()} best-map contributions: `{best}`", "", "| Instrument | Session | Δ$ |", "|---|---|---|"]
+            lines += [
+                "",
+                f"### {scope.title()} best-map contributions: `{best}`",
+                "",
+                "| Instrument | Session | Δ$ |",
+                "|---|---|---|",
+            ]
             for _, r in contribs[scope][best].head(15).iterrows():
                 lines.append(f"| {r['instrument']} | {r['orb_label']} | {r['delta_dollars']:+.1f} |")
 

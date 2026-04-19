@@ -1,5 +1,7 @@
 """Adversarial audit of VWAP_MID_ALIGNED filter at US_DATA_1000 O15."""
+
 import sys
+
 sys.stdout.reconfigure(encoding="utf-8")
 import duckdb
 import numpy as np
@@ -36,14 +38,18 @@ print("=" * 90)
 print("\n=== TEST 1: Aligned vs Anti-aligned ===")
 for rr in [1.0, 1.5, 2.0]:
     a = con.execute(f"SELECT AVG(o.pnl_r), COUNT(*) {BASE_SQL} AND o.rr_target = {rr} AND {ALIGNED_SQL}").fetchone()
-    b = con.execute(f"SELECT AVG(o.pnl_r), COUNT(*) {BASE_SQL} AND o.rr_target = {rr} AND d.orb_US_DATA_1000_vwap IS NOT NULL AND NOT ({ALIGNED_SQL})").fetchone()
-    print(f"  RR{rr}: aligned={a[0]:+.4f}(N={a[1]})  anti={b[0]:+.4f}(N={b[1]})  delta={a[0]-b[0]:+.4f}")
+    b = con.execute(
+        f"SELECT AVG(o.pnl_r), COUNT(*) {BASE_SQL} AND o.rr_target = {rr} AND d.orb_US_DATA_1000_vwap IS NOT NULL AND NOT ({ALIGNED_SQL})"
+    ).fetchone()
+    print(f"  RR{rr}: aligned={a[0]:+.4f}(N={a[1]})  anti={b[0]:+.4f}(N={b[1]})  delta={a[0] - b[0]:+.4f}")
 
 # TEST 2: Two-sample t-test
 print("\n=== TEST 2: Welch t-test ===")
 for rr in [1.0, 1.5]:
     a_rows = con.execute(f"SELECT o.pnl_r {BASE_SQL} AND o.rr_target = {rr} AND {ALIGNED_SQL}").fetchall()
-    b_rows = con.execute(f"SELECT o.pnl_r {BASE_SQL} AND o.rr_target = {rr} AND d.orb_US_DATA_1000_vwap IS NOT NULL AND NOT ({ALIGNED_SQL})").fetchall()
+    b_rows = con.execute(
+        f"SELECT o.pnl_r {BASE_SQL} AND o.rr_target = {rr} AND d.orb_US_DATA_1000_vwap IS NOT NULL AND NOT ({ALIGNED_SQL})"
+    ).fetchall()
     a_vals = [x[0] for x in a_rows]
     b_vals = [x[0] for x in b_rows]
     t, p = stats.ttest_ind(a_vals, b_vals, equal_var=False)
@@ -163,7 +169,7 @@ vwap = np.array([x[0] for x in r])
 gap = np.array([x[1] for x in r])
 ovn = np.array([x[2] for x in r])
 atr_vel = np.array([x[3] for x in r if x[3] is not None])
-vwap_sub = vwap[:len(atr_vel)]
+vwap_sub = vwap[: len(atr_vel)]
 
 corr_gap, p_gap = stats.pointbiserialr(vwap, gap)
 corr_ovn, p_ovn = stats.pointbiserialr(vwap, ovn)

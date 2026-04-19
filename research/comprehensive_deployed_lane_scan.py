@@ -56,9 +56,18 @@ SEED = 20260415
 
 # All active sessions per pipeline.dst.SESSION_CATALOG (mega script source of truth)
 ALL_SESSIONS = [
-    "CME_REOPEN", "TOKYO_OPEN", "SINGAPORE_OPEN", "LONDON_METALS",
-    "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN", "US_DATA_1000",
-    "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE", "BRISBANE_1025",
+    "CME_REOPEN",
+    "TOKYO_OPEN",
+    "SINGAPORE_OPEN",
+    "LONDON_METALS",
+    "EUROPE_FLOW",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
+    "BRISBANE_1025",
 ]
 ALL_INSTRUMENTS = ["MNQ", "MES", "MGC"]
 ALL_APERTURES = [5, 15, 30]
@@ -90,7 +99,9 @@ def build_all_lanes() -> list[tuple]:
                         # Twin — same session/apt/rr as a deployed lane, different instrument
                         scope = "twin"
                         # Use matching deployed lane's filter
-                        filt = next(v for k, v in DEPLOYED_LANE_SPECS.items() if (k[0], k[1], k[2]) == (session, apt, rr))
+                        filt = next(
+                            v for k, v in DEPLOYED_LANE_SPECS.items() if (k[0], k[1], k[2]) == (session, apt, rr)
+                        )
                     else:
                         scope = "non_deployed"
                         filt = None
@@ -223,9 +234,7 @@ def load_lane(session: str, apt: int, rr: float, instrument: str) -> pd.DataFram
 # ============================================================================
 
 
-def compute_deployed_filter(
-    df: pd.DataFrame, filter_key: str | None, orb_label: str | None = None
-) -> np.ndarray:
+def compute_deployed_filter(df: pd.DataFrame, filter_key: str | None, orb_label: str | None = None) -> np.ndarray:
     """Return 0/1 array — 1 where the deployed filter fires (day tradable).
 
     Canonical filter delegation (2026-04-19 fix, closes filter-delegation audit
@@ -355,8 +364,12 @@ def build_features(df: pd.DataFrame) -> dict[str, np.ndarray]:
     overnight_ok = _overnight_lookhead_clean(orb_session)
     if overnight_ok:
         if df["overnight_range_pct"].notna().any():
-            feats["ovn_range_pct_GT80"] = (df["overnight_range_pct"].astype(float) > 80).fillna(False).astype(int).values
-            feats["ovn_range_pct_LT20"] = (df["overnight_range_pct"].astype(float) < 20).fillna(False).astype(int).values
+            feats["ovn_range_pct_GT80"] = (
+                (df["overnight_range_pct"].astype(float) > 80).fillna(False).astype(int).values
+            )
+            feats["ovn_range_pct_LT20"] = (
+                (df["overnight_range_pct"].astype(float) < 20).fillna(False).astype(int).values
+            )
         if df["overnight_took_pdh"].notna().any():
             feats["ovn_took_pdh_TRUE"] = df["overnight_took_pdh"].fillna(False).astype(int).values
             long_mask = (df["break_dir"] == "long").astype(int).values
@@ -437,11 +450,20 @@ def _overnight_lookhead_clean(orb_session: str | None) -> bool:
     """Overnight_* features use 09:00-17:00 Brisbane window. CLEAN only for
     ORB sessions starting at or after 17:00 Brisbane."""
     orb_start_brisbane = {
-        "CME_REOPEN": 8.0, "TOKYO_OPEN": 10.0, "BRISBANE_0925": 9.42,
-        "BRISBANE_1025": 10.42, "SINGAPORE_OPEN": 11.0, "LONDON_METALS": 17.0,
-        "BRISBANE_1955": 19.92, "EUROPE_FLOW": 18.0, "US_DATA_830": 23.5,
-        "NYSE_OPEN": 24.5, "US_DATA_1000": 25.0, "COMEX_SETTLE": 28.5,
-        "CME_PRECLOSE": 30.0, "NYSE_CLOSE": 31.0,
+        "CME_REOPEN": 8.0,
+        "TOKYO_OPEN": 10.0,
+        "BRISBANE_0925": 9.42,
+        "BRISBANE_1025": 10.42,
+        "SINGAPORE_OPEN": 11.0,
+        "LONDON_METALS": 17.0,
+        "BRISBANE_1955": 19.92,
+        "EUROPE_FLOW": 18.0,
+        "US_DATA_830": 23.5,
+        "NYSE_OPEN": 24.5,
+        "US_DATA_1000": 25.0,
+        "COMEX_SETTLE": 28.5,
+        "CME_PRECLOSE": 30.0,
+        "NYSE_CLOSE": 31.0,
     }
     if orb_session is None or orb_session not in orb_start_brisbane:
         return False
@@ -456,20 +478,20 @@ def _valid_session_features(orb_session: str | None) -> set[str]:
     # Rule: session_{x} is CLEAN iff ORB_start >= session_{x}_end (Brisbane).
     # Approximate ORB start in Brisbane:
     orb_start_brisbane = {
-        "CME_REOPEN": 8.0,        # ~08:00 Brisbane (varies with DST)
-        "TOKYO_OPEN": 10.0,       # 10:00
-        "BRISBANE_0925": 9.42,    # 09:25
-        "BRISBANE_1025": 10.42,   # 10:25
-        "SINGAPORE_OPEN": 11.0,   # 11:00
-        "LONDON_METALS": 17.0,    # 17:00
-        "BRISBANE_1955": 19.92,   # 19:55
-        "EUROPE_FLOW": 18.0,      # 18:00
-        "US_DATA_830": 23.5,      # 23:30
-        "NYSE_OPEN": 24.5,        # 00:30 next day = 24.5
-        "US_DATA_1000": 25.0,     # 01:00 next day = 25.0
-        "COMEX_SETTLE": 28.5,     # 04:30 = 28.5
-        "CME_PRECLOSE": 30.0,     # 06:00 = 30.0
-        "NYSE_CLOSE": 31.0,       # 07:00 = 31.0
+        "CME_REOPEN": 8.0,  # ~08:00 Brisbane (varies with DST)
+        "TOKYO_OPEN": 10.0,  # 10:00
+        "BRISBANE_0925": 9.42,  # 09:25
+        "BRISBANE_1025": 10.42,  # 10:25
+        "SINGAPORE_OPEN": 11.0,  # 11:00
+        "LONDON_METALS": 17.0,  # 17:00
+        "BRISBANE_1955": 19.92,  # 19:55
+        "EUROPE_FLOW": 18.0,  # 18:00
+        "US_DATA_830": 23.5,  # 23:30
+        "NYSE_OPEN": 24.5,  # 00:30 next day = 24.5
+        "US_DATA_1000": 25.0,  # 01:00 next day = 25.0
+        "COMEX_SETTLE": 28.5,  # 04:30 = 28.5
+        "CME_PRECLOSE": 30.0,  # 06:00 = 30.0
+        "NYSE_CLOSE": 31.0,  # 07:00 = 31.0
     }
     session_ends_brisbane = {
         "asia": 17.0,
@@ -547,7 +569,9 @@ def test_cell(
     off_oos = oos_df[oos_df["_sig"] == 0]["pnl_r"]
     expr_on_oos = float(on_oos.mean()) if len(on_oos) >= 5 else float("nan")
     expr_off_oos = float(off_oos.mean()) if len(off_oos) >= 5 else float("nan")
-    delta_oos = (expr_on_oos - expr_off_oos) if not np.isnan(expr_on_oos) and not np.isnan(expr_off_oos) else float("nan")
+    delta_oos = (
+        (expr_on_oos - expr_off_oos) if not np.isnan(expr_on_oos) and not np.isnan(expr_off_oos) else float("nan")
+    )
     dir_match = (not np.isnan(delta_oos)) and (np.sign(delta_is) == np.sign(delta_oos))
 
     fire_rate = int(sum(sig)) / max(1, len(sig))
@@ -724,25 +748,17 @@ def emit(res: pd.DataFrame) -> None:
     res["bh_rank"] = res["bh_rank_global"]
 
     # Filter: trustworthy cells (not extreme fire, not tautology, not arithmetic-only)
-    trustworthy = res[
-        (~res["extreme_fire"])
-        & (~res["t0_tautology"])
-        & (~res["arithmetic_only"])
-    ].copy()
+    trustworthy = res[(~res["extreme_fire"]) & (~res["t0_tautology"]) & (~res["arithmetic_only"])].copy()
 
     strict = trustworthy[
-        (trustworthy["t_is"].abs() >= 3.0)
-        & (trustworthy["dir_match"])
-        & (trustworthy["n_on_is"] >= 50)
+        (trustworthy["t_is"].abs() >= 3.0) & (trustworthy["dir_match"]) & (trustworthy["n_on_is"] >= 50)
     ].copy()
 
     bh_global = trustworthy[trustworthy["bh_pass"]].copy()
     bh_family = trustworthy[trustworthy["bh_pass_family"]].copy()
 
     promising = trustworthy[
-        (trustworthy["t_is"].abs() >= 2.5)
-        & (trustworthy["dir_match"])
-        & (trustworthy["n_on_is"] >= 50)
+        (trustworthy["t_is"].abs() >= 2.5) & (trustworthy["dir_match"]) & (trustworthy["n_on_is"] >= 50)
     ].copy()
 
     # BH pass counts at each K framing
@@ -901,7 +917,9 @@ def emit(res: pd.DataFrame) -> None:
 
     OUTPUT_MD.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n[report] {OUTPUT_MD}")
-    print(f"  Strict: {len(strict)}, BH_global: {len(bh_global)}, BH_family: {len(bh_family)}, Promising: {len(promising)}")
+    print(
+        f"  Strict: {len(strict)}, BH_global: {len(bh_global)}, BH_family: {len(bh_family)}, Promising: {len(promising)}"
+    )
     print(f"  Flagged (tautology/extreme/arithmetic): {len(flagged)} of which |t|>=3: {len(flagged_strong)}")
 
 

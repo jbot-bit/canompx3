@@ -111,9 +111,13 @@ def build_indicators(df: pd.DataFrame, direction: str) -> pd.DataFrame:
     # Compute IS percentiles for thresholds (IS-only, no OOS leakage)
     is_sub = sub[sub["is_is"]]
     rel_vol_p67 = np.nanpercentile(is_sub["rel_vol"].astype(float), 67)
-    atr_vel_p67 = np.nanpercentile(is_sub["atr_vel_ratio"].astype(float), 67) if is_sub["atr_vel_ratio"].notna().any() else np.nan
+    atr_vel_p67 = (
+        np.nanpercentile(is_sub["atr_vel_ratio"].astype(float), 67) if is_sub["atr_vel_ratio"].notna().any() else np.nan
+    )
     sub["rel_vol_HIGH"] = (sub["rel_vol"].astype(float) > rel_vol_p67).fillna(False).astype(int)
-    sub["atr_vel_HIGH"] = (sub["atr_vel_ratio"].astype(float) > atr_vel_p67).fillna(False).astype(int) if not np.isnan(atr_vel_p67) else 0
+    sub["atr_vel_HIGH"] = (
+        (sub["atr_vel_ratio"].astype(float) > atr_vel_p67).fillna(False).astype(int) if not np.isnan(atr_vel_p67) else 0
+    )
     sub["atr_20_pct_GT80"] = (sub["atr_20_pct"].astype(float) > 80).fillna(False).astype(int)
     sub["atr_20_pct_LT20"] = (sub["atr_20_pct"].astype(float) < 20).fillna(False).astype(int)
     sub["garch_vol_pct_GT70"] = (sub["garch_forecast_vol_pct"].astype(float) > 70).fillna(False).astype(int)
@@ -132,10 +136,17 @@ def correlation_table(df_is: pd.DataFrame) -> pd.DataFrame:
     """Compute correlation of rel_vol_HIGH with TRADE-TIME-KNOWABLE proxies only.
     day_type excluded (look-ahead per pipeline source)."""
     indicators = [
-        "atr_vel_HIGH", "atr_20_pct_GT80", "atr_20_pct_LT20",
-        "garch_vol_pct_GT70", "garch_vol_pct_LT30",
-        "gap_up", "gap_down",
-        "is_nfp", "is_opex", "is_fri", "is_mon",
+        "atr_vel_HIGH",
+        "atr_20_pct_GT80",
+        "atr_20_pct_LT20",
+        "garch_vol_pct_GT70",
+        "garch_vol_pct_LT30",
+        "gap_up",
+        "gap_down",
+        "is_nfp",
+        "is_opex",
+        "is_fri",
+        "is_mon",
     ]
     rows = []
     for ind in indicators:
@@ -162,16 +173,23 @@ def partial_dependence(df_is: pd.DataFrame, strat_col: str) -> dict:
         if len(on) >= 30 and len(off) >= 30:
             t, p = stats.ttest_ind(on, off, equal_var=False)
             out[stratum_val] = {
-                "n_on": len(on), "n_off": len(off),
-                "expr_on": float(on.mean()), "expr_off": float(off.mean()),
+                "n_on": len(on),
+                "n_off": len(off),
+                "expr_on": float(on.mean()),
+                "expr_off": float(off.mean()),
                 "delta": float(on.mean() - off.mean()),
-                "t": float(t), "p": float(p),
+                "t": float(t),
+                "p": float(p),
             }
         else:
             out[stratum_val] = {
-                "n_on": len(on), "n_off": len(off),
-                "expr_on": float("nan"), "expr_off": float("nan"),
-                "delta": float("nan"), "t": float("nan"), "p": float("nan"),
+                "n_on": len(on),
+                "n_off": len(off),
+                "expr_on": float("nan"),
+                "expr_off": float("nan"),
+                "delta": float("nan"),
+                "t": float("nan"),
+                "p": float("nan"),
             }
     return out
 
@@ -180,10 +198,20 @@ def multivariate_regression(df_is: pd.DataFrame) -> dict:
     """Does rel_vol_HIGH add predictive power BEYOND trade-time-knowable vol/regime/calendar?
     Fit pnl_r ~ rel_vol_HIGH + atr_vel_HIGH + atr_20_pct_GT80 + garch_vol_pct_GT70 + gap_up + gap_down + is_nfp + is_opex.
     No day_type (look-ahead). Report t-stat of rel_vol_HIGH coefficient."""
-    cols = ["rel_vol_HIGH", "atr_vel_HIGH", "atr_20_pct_GT80",
-            "garch_vol_pct_GT70", "gap_up", "gap_down", "is_nfp", "is_opex"]
+    cols = [
+        "rel_vol_HIGH",
+        "atr_vel_HIGH",
+        "atr_20_pct_GT80",
+        "garch_vol_pct_GT70",
+        "gap_up",
+        "gap_down",
+        "is_nfp",
+        "is_opex",
+    ]
+
     def fire_count(s):
         return int(np.asarray(s).sum())
+
     available = [c for c in cols if c in df_is.columns and fire_count(df_is[c]) >= 10]
     if "rel_vol_HIGH" not in available or len(available) < 2:
         return {"error": "insufficient indicators"}
@@ -309,13 +337,25 @@ def main():
 
         mv = multivariate_regression(is_sub)
         if "rel_vol_t" in mv:
-            print(f"  multivariate rel_vol_HIGH t={mv['rel_vol_t']:+.2f}, coef={mv['rel_vol_coef']:+.4f}, p={mv['rel_vol_p']:.4f}")
+            print(
+                f"  multivariate rel_vol_HIGH t={mv['rel_vol_t']:+.2f}, coef={mv['rel_vol_coef']:+.4f}, p={mv['rel_vol_p']:.4f}"
+            )
 
-        results.append({
-            "instrument": instr, "session": session, "apt": apt, "rr": rr, "direction": direction,
-            "n_is": len(is_sub), "n_on": n_on, "fire_rate": fire_rate,
-            "corr_table": corr_table, "partial": partial, "multivar": mv,
-        })
+        results.append(
+            {
+                "instrument": instr,
+                "session": session,
+                "apt": apt,
+                "rr": rr,
+                "direction": direction,
+                "n_is": len(is_sub),
+                "n_on": n_on,
+                "fire_rate": fire_rate,
+                "corr_table": corr_table,
+                "partial": partial,
+                "multivar": mv,
+            }
+        )
 
     emit(results)
 

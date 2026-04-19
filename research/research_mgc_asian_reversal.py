@@ -81,18 +81,19 @@ def main():
             "exit_180m": timedelta(minutes=180),
         }
 
-        latest_exit = max(
-            pw + max(exit_offsets.values()) for pw in peak_windows.values()
-        )
+        latest_exit = max(pw + max(exit_offsets.values()) for pw in peak_windows.values())
 
         # Pass Brisbane times directly — DuckDB TIMESTAMPTZ handles tz conversion
-        bars = con.execute("""
+        bars = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc <= ?
             ORDER BY ts_utc
-        """, [cme_bris, latest_exit]).fetchdf()
+        """,
+            [cme_bris, latest_exit],
+        ).fetchdf()
 
         if len(bars) < 30:
             skipped += 1
@@ -181,9 +182,7 @@ def main():
             binom_p = stats.binomtest(n_wins, n_total, 0.5).pvalue
 
             valid_copy = valid.copy()
-            valid_copy["year"] = valid_copy["trading_day"].apply(
-                lambda d: d.year if isinstance(d, date) else d.year
-            )
+            valid_copy["year"] = valid_copy["trading_day"].apply(lambda d: d.year if isinstance(d, date) else d.year)
             valid_copy["fade_ret"] = fade_rets
 
             print(f"  --- {ex_name} (N={n_total}) ---")
@@ -227,27 +226,15 @@ def main():
             low_dev = v2[v2[vwap_col].abs() <= med_dev]
 
             if len(high_dev) > 20 and len(low_dev) > 20:
-                high_fade = (
-                    -np.sign(high_dev["sing_plus30_trend"]) * high_dev[ret_col]
-                ).values
-                low_fade = (
-                    -np.sign(low_dev["sing_plus30_trend"]) * low_dev[ret_col]
-                ).values
+                high_fade = (-np.sign(high_dev["sing_plus30_trend"]) * high_dev[ret_col]).values
+                low_fade = (-np.sign(low_dev["sing_plus30_trend"]) * low_dev[ret_col]).values
 
                 print(f"\n  High VWAP deviation (>{med_dev:.5f}):")
-                print(
-                    f"    N={len(high_fade)}, fade mean={high_fade.mean():+.6f}, "
-                    f"WR={(high_fade > 0).mean():.1%}"
-                )
+                print(f"    N={len(high_fade)}, fade mean={high_fade.mean():+.6f}, WR={(high_fade > 0).mean():.1%}")
                 print(f"  Low VWAP deviation (<={med_dev:.5f}):")
-                print(
-                    f"    N={len(low_fade)}, fade mean={low_fade.mean():+.6f}, "
-                    f"WR={(low_fade > 0).mean():.1%}"
-                )
+                print(f"    N={len(low_fade)}, fade mean={low_fade.mean():+.6f}, WR={(low_fade > 0).mean():.1%}")
 
-                u_stat, p_mw = stats.mannwhitneyu(
-                    high_fade, low_fade, alternative="greater"
-                )
+                u_stat, p_mw = stats.mannwhitneyu(high_fade, low_fade, alternative="greater")
                 print(f"  Mann-Whitney (high > low): U={u_stat:.0f}, p={p_mw:.4f}")
 
     print("\n--- Done ---")

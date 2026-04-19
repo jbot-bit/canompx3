@@ -35,8 +35,14 @@ MIN_BIN_N = 20
 HOLDOUT_DATE = "2026-01-01"
 
 OVERNIGHT_CLEAN_SESSIONS = [
-    "LONDON_METALS", "EUROPE_FLOW", "US_DATA_830", "NYSE_OPEN",
-    "US_DATA_1000", "COMEX_SETTLE", "CME_PRECLOSE", "NYSE_CLOSE",
+    "LONDON_METALS",
+    "EUROPE_FLOW",
+    "US_DATA_830",
+    "NYSE_OPEN",
+    "US_DATA_1000",
+    "COMEX_SETTLE",
+    "CME_PRECLOSE",
+    "NYSE_CLOSE",
 ]
 
 # 9 T1 passers from current-data rescan (post Phase 3c rebuild)
@@ -232,16 +238,20 @@ def run_all_passers():
 
         # T2 IS baseline
         t2 = compute_wr_spread(df)
-        print(f"  T2 IS: N={len(df)} Q1 WR={t2['q1_wr']*100:.1f}%/ExpR={t2['q1_expr']:+.3f} "
-              f"Q5 WR={t2['q5_wr']*100:.1f}%/ExpR={t2['q5_expr']:+.3f} "
-              f"WR_spread={t2['wr_spread']*100:+.1f}pp")
+        print(
+            f"  T2 IS: N={len(df)} Q1 WR={t2['q1_wr'] * 100:.1f}%/ExpR={t2['q1_expr']:+.3f} "
+            f"Q5 WR={t2['q5_wr'] * 100:.1f}%/ExpR={t2['q5_expr']:+.3f} "
+            f"WR_spread={t2['wr_spread'] * 100:+.1f}pp"
+        )
 
         # T3 walk-forward
         t3 = t3_walkforward(df, direction)
         if "error" not in t3:
-            print(f"  T3 WF: IS_spread={t3['is_wr_spread']*100:+.1f}pp "
-                  f"OOS_spread={t3['oos_wr_spread']*100:+.1f}pp WFE={t3['wfe']:.2f} "
-                  f"sign_match={t3['sign_match']}")
+            print(
+                f"  T3 WF: IS_spread={t3['is_wr_spread'] * 100:+.1f}pp "
+                f"OOS_spread={t3['oos_wr_spread'] * 100:+.1f}pp WFE={t3['wfe']:.2f} "
+                f"sign_match={t3['sign_match']}"
+            )
             t3_pass = t3["sign_match"] and t3["wfe"] > 0.50
         else:
             print(f"  T3 WF: {t3['error']}")
@@ -253,7 +263,7 @@ def run_all_passers():
             t4_pass = t4["all_sign_match"]
             print(f"  T4 SENS: ±20% thresholds all match sign: {t4_pass}")
             for pct, v in t4["thresholds"].items():
-                print(f"    {pct}: high_ExpR={v['high_expr']:+.3f}, WR_diff={v['wr_diff']*100:+.1f}pp")
+                print(f"    {pct}: high_ExpR={v['high_expr']:+.3f}, WR_diff={v['wr_diff'] * 100:+.1f}pp")
         else:
             print(f"  T4 SENS: {t4['error']}")
             t4_pass = False
@@ -262,25 +272,30 @@ def run_all_passers():
         t6 = t6_null_bootstrap(df)
         if "error" not in t6:
             t6_pass = t6["p_value"] < 0.05
-            print(f"  T6 NULL: observed={t6['observed']*100:+.1f}pp null_mean={t6['null_mean']*100:+.2f}pp "
-                  f"null_p95={t6['null_p95']*100:.1f}pp p={t6['p_value']:.4f} PASS={t6_pass}")
+            print(
+                f"  T6 NULL: observed={t6['observed'] * 100:+.1f}pp null_mean={t6['null_mean'] * 100:+.2f}pp "
+                f"null_p95={t6['null_p95'] * 100:.1f}pp p={t6['p_value']:.4f} PASS={t6_pass}"
+            )
         else:
             print(f"  T6 NULL: {t6['error']}")
             t6_pass = False
 
         # T7 per-year stability
         t7 = t7_per_year(df, direction)
-        print(f"  T7 YEAR: {t7['same_sign']}/{t7['valid_years']} years match "
-              f"({t7['pct_same_sign']*100:.0f}%)")
+        print(f"  T7 YEAR: {t7['same_sign']}/{t7['valid_years']} years match ({t7['pct_same_sign'] * 100:.0f}%)")
         t7_pass = t7["pct_same_sign"] >= 0.75
 
         # Verdict
         verdict = "SURVIVOR" if (t3_pass and t4_pass and t6_pass and t7_pass) else "KILL"
         why = []
-        if not t3_pass: why.append("T3")
-        if not t4_pass: why.append("T4")
-        if not t6_pass: why.append("T6")
-        if not t7_pass: why.append("T7")
+        if not t3_pass:
+            why.append("T3")
+        if not t4_pass:
+            why.append("T4")
+        if not t6_pass:
+            why.append("T6")
+        if not t7_pass:
+            why.append("T7")
         print(f"  VERDICT: {verdict}" + (f" (killed by {','.join(why)})" if why else ""))
 
         if verdict == "SURVIVOR":
@@ -293,8 +308,10 @@ def run_all_passers():
     print(f"SURVIVORS AFTER T2-T8: {len(survivors)}/{len(T1_PASSERS)}")
     print("=" * 80)
     for sym, sess, direction, t2, t3, t6, t7 in survivors:
-        print(f"  {sym} {sess} ({direction}): Q5_ExpR={t2['q5_expr']:+.3f} "
-              f"WFE={t3['wfe']:.2f} p={t6['p_value']:.4f} years={t7['same_sign']}/{t7['valid_years']}")
+        print(
+            f"  {sym} {sess} ({direction}): Q5_ExpR={t2['q5_expr']:+.3f} "
+            f"WFE={t3['wfe']:.2f} p={t6['p_value']:.4f} years={t7['same_sign']}/{t7['valid_years']}"
+        )
 
 
 if __name__ == "__main__":

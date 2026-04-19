@@ -146,9 +146,8 @@ def valid_mask(df: pd.DataFrame, filter_type: str) -> pd.Series:
 
 def apply_filter(df: pd.DataFrame, filter_type: str) -> pd.Series:
     if filter_type == "GAP_DIR_ALIGN":
-        return (
-            ((df["gap_type"] == "gap_up") & (df["trade_direction"] == "long"))
-            | ((df["gap_type"] == "gap_down") & (df["trade_direction"] == "short"))
+        return ((df["gap_type"] == "gap_up") & (df["trade_direction"] == "long")) | (
+            (df["gap_type"] == "gap_down") & (df["trade_direction"] == "short")
         )
     if filter_type == "ATR_EXPANDING":
         return df["atr_vel_regime"] == "Expanding"

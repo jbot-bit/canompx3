@@ -53,6 +53,7 @@ STOP_MULTIPLIERS = [0.5, 1.0, 1.5]  # fraction of ATR_20
 
 REGIME_BOUNDARY = date(2025, 1, 1)
 
+
 def prepare_prior_day_data(features: pd.DataFrame) -> pd.DataFrame:
     """Add previous day H/L and ATR_20 to features."""
     df = features.copy()
@@ -68,6 +69,7 @@ def prepare_prior_day_data(features: pd.DataFrame) -> pd.DataFrame:
 
     return df
 
+
 def compute_prior_day_hl_outcomes(
     db_path: Path,
     prep_data: pd.DataFrame,
@@ -79,15 +81,13 @@ def compute_prior_day_hl_outcomes(
     """
     outcomes = []
 
-    eligible = prep_data.dropna(
-        subset=["prev_day_high", "prev_day_low", "atr_20", "daily_open"]
-    )
+    eligible = prep_data.dropna(subset=["prev_day_high", "prev_day_low", "atr_20", "daily_open"])
     eligible = eligible[eligible["atr_20"] > 0]
 
     total = len(eligible)
     for idx, (_, row) in enumerate(eligible.iterrows()):
         if idx % 200 == 0:
-            print(f"    Processing day {idx+1}/{total}...")
+            print(f"    Processing day {idx + 1}/{total}...")
 
         trading_day = row["trading_day"]
         if isinstance(trading_day, str):
@@ -142,8 +142,12 @@ def compute_prior_day_hl_outcomes(
 
                     # Resolve outcome starting from bar AFTER entry
                     result = resolve_bar_outcome(
-                        bars, level, stop_price, target_price,
-                        direction, entry_bar_idx + 1,
+                        bars,
+                        level,
+                        stop_price,
+                        target_price,
+                        direction,
+                        entry_bar_idx + 1,
                     )
 
                     if result is None:
@@ -155,25 +159,25 @@ def compute_prior_day_hl_outcomes(
                         pnl_r = to_r_multiple(SPEC, level, stop_price, pnl_points)
                         outcome_type = "eod"
                     else:
-                        pnl_r = to_r_multiple(
-                            SPEC, level, stop_price, result["pnl_points"]
-                        )
+                        pnl_r = to_r_multiple(SPEC, level, stop_price, result["pnl_points"])
                         outcome_type = result["outcome"]
 
-                    outcomes.append({
-                        "trading_day": str(trading_day),
-                        "direction": direction,
-                        "level": level,
-                        "atr_20": atr,
-                        "stop_multiplier": stop_mult,
-                        "rr_target": rr,
-                        "entry_price": level,
-                        "stop_price": stop_price,
-                        "target_price": target_price,
-                        "stop_distance": stop_distance,
-                        "pnl_r": pnl_r,
-                        "outcome": outcome_type,
-                    })
+                    outcomes.append(
+                        {
+                            "trading_day": str(trading_day),
+                            "direction": direction,
+                            "level": level,
+                            "atr_20": atr,
+                            "stop_multiplier": stop_mult,
+                            "rr_target": rr,
+                            "entry_price": level,
+                            "stop_price": stop_price,
+                            "target_price": target_price,
+                            "stop_distance": stop_distance,
+                            "pnl_r": pnl_r,
+                            "outcome": outcome_type,
+                        }
+                    )
 
                 if bars is not None and bars.empty:
                     break  # No bars for this day
@@ -182,9 +186,8 @@ def compute_prior_day_hl_outcomes(
 
     return outcomes
 
-def _find_touch_bar(
-    bars: pd.DataFrame, level: float, direction: str
-) -> int | None:
+
+def _find_touch_bar(bars: pd.DataFrame, level: float, direction: str) -> int | None:
     """Find first bar index where price touches the level.
 
     For SHORT at prev_high: bar high >= level (price reached up to the level).
@@ -199,6 +202,7 @@ def _find_touch_bar(
             if bars.iloc[i]["low"] <= level:
                 return i
     return None
+
 
 def run_walk_forward(
     db_path: Path,
@@ -228,13 +232,11 @@ def run_walk_forward(
     oos_all_dates = []
 
     for w in windows:
-        train_mask = (
-            (outcomes_df["trading_day_date"] >= w["train_start"])
-            & (outcomes_df["trading_day_date"] <= w["train_end"])
+        train_mask = (outcomes_df["trading_day_date"] >= w["train_start"]) & (
+            outcomes_df["trading_day_date"] <= w["train_end"]
         )
-        test_mask = (
-            (outcomes_df["trading_day_date"] >= w["test_start"])
-            & (outcomes_df["trading_day_date"] <= w["test_end"])
+        test_mask = (outcomes_df["trading_day_date"] >= w["test_start"]) & (
+            outcomes_df["trading_day_date"] <= w["test_end"]
         )
 
         train_data = outcomes_df[train_mask]
@@ -270,10 +272,7 @@ def run_walk_forward(
         stop_mult, rr, dir_filter = best_combo
 
         # Apply to OOS
-        oos = test_data[
-            (test_data["stop_multiplier"] == stop_mult)
-            & (test_data["rr_target"] == rr)
-        ]
+        oos = test_data[(test_data["stop_multiplier"] == stop_mult) & (test_data["rr_target"] == rr)]
         if dir_filter:
             oos = oos[oos["direction"] == dir_filter]
         if oos.empty:
@@ -285,17 +284,18 @@ def run_walk_forward(
         oos_all_dates.extend(oos["trading_day_date"].values)
 
         dir_label = dir_filter or "both"
-        window_results.append({
-            "test_start": str(w["test_start"]),
-            "test_end": str(w["test_end"]),
-            "train_n": len(train_data[
-                (train_data["stop_multiplier"] == stop_mult)
-                & (train_data["rr_target"] == rr)
-            ]),
-            "selected": f"SM{stop_mult}_RR{rr}_{dir_label}",
-            "train_sharpe": best_sharpe,
-            "oos_stats": oos_stats,
-        })
+        window_results.append(
+            {
+                "test_start": str(w["test_start"]),
+                "test_end": str(w["test_end"]),
+                "train_n": len(
+                    train_data[(train_data["stop_multiplier"] == stop_mult) & (train_data["rr_target"] == rr)]
+                ),
+                "selected": f"SM{stop_mult}_RR{rr}_{dir_label}",
+                "train_sharpe": best_sharpe,
+                "oos_stats": oos_stats,
+            }
+        )
 
     combined_oos = None
     regime_split = None
@@ -317,6 +317,7 @@ def run_walk_forward(
         "combined_oos": combined_oos,
         "regime_split": regime_split,
     }
+
 
 def run_full_period_analysis(
     db_path: Path,
@@ -348,14 +349,17 @@ def run_full_period_analysis(
                 stats = compute_strategy_metrics(subset["pnl_r"].values)
                 if stats:
                     dir_label = dir_filter or "both"
-                    grid_results.append({
-                        "stop_multiplier": stop_mult,
-                        "rr_target": rr,
-                        "direction": dir_label,
-                        **stats,
-                    })
+                    grid_results.append(
+                        {
+                            "stop_multiplier": stop_mult,
+                            "rr_target": rr,
+                            "direction": dir_label,
+                            **stats,
+                        }
+                    )
 
     return {"grid": grid_results}
+
 
 def _print_go_no_go(combined_oos: dict | None, regime_split: dict | None) -> None:
     """Print GO/NO-GO evaluation."""
@@ -387,13 +391,15 @@ def _print_go_no_go(combined_oos: dict | None, regime_split: dict | None) -> Non
     verdict = "GO" if all_pass else "NO-GO"
     print(f"\n  VERDICT: {verdict}")
 
+
 def main():
     parser = argparse.ArgumentParser(description="Prior Day H/L Fade analysis")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
     parser.add_argument("--train-months", type=int, default=12)
     parser.add_argument("--output", type=Path, default=None)
-    parser.add_argument("--full-period-only", action="store_true",
-                        help="Skip walk-forward, just run full-period grid search")
+    parser.add_argument(
+        "--full-period-only", action="store_true", help="Skip walk-forward, just run full-period grid search"
+    )
     args = parser.parse_args()
 
     sep = "=" * 80
@@ -403,8 +409,10 @@ def main():
     print()
     print("Entry: Fade at previous day's high (SHORT) or low (LONG)")
     print("Stop: ATR_20-based distance beyond the level")
-    print(f"Grid: {len(RR_TARGETS)} RR x {len(STOP_MULTIPLIERS)} stop mults x 3 dirs = "
-          f"{len(RR_TARGETS) * len(STOP_MULTIPLIERS) * 3} combos")
+    print(
+        f"Grid: {len(RR_TARGETS)} RR x {len(STOP_MULTIPLIERS)} stop mults x 3 dirs = "
+        f"{len(RR_TARGETS) * len(STOP_MULTIPLIERS) * 3} combos"
+    )
     print(f"Gate B: Risk floor >= {SPEC.min_risk_floor_points} points")
     print(f"Gate C: Ambiguous bar = LOSS")
     print(f"Gate D: Skip if open already beyond level")
@@ -418,9 +426,11 @@ def main():
             print(f"  Grid results ({len(result['grid'])} combos):")
             sorted_grid = sorted(result["grid"], key=lambda x: x["sharpe"], reverse=True)
             for g in sorted_grid[:15]:
-                print(f"    SM{g['stop_multiplier']} RR{g['rr_target']} {g['direction']}: "
-                      f"N={g['n']}, WR={g['wr']:.0%}, ExpR={g['expr']:+.3f}, "
-                      f"Sharpe={g['sharpe']:.3f}, MaxDD={g['maxdd']:+.1f}R")
+                print(
+                    f"    SM{g['stop_multiplier']} RR{g['rr_target']} {g['direction']}: "
+                    f"N={g['n']}, WR={g['wr']:.0%}, ExpR={g['expr']:+.3f}, "
+                    f"Sharpe={g['sharpe']:.3f}, MaxDD={g['maxdd']:+.1f}R"
+                )
         else:
             print("  No outcomes found")
 
@@ -435,25 +445,31 @@ def main():
             for w in result["windows"]:
                 oos = w["oos_stats"]
                 if oos:
-                    print(f"  {w['test_start']} to {w['test_end']}: "
-                          f"Selected {w['selected']}, "
-                          f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
-                          f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}")
+                    print(
+                        f"  {w['test_start']} to {w['test_end']}: "
+                        f"Selected {w['selected']}, "
+                        f"OOS N={oos['n']}, WR={oos['wr']:.0%}, "
+                        f"ExpR={oos['expr']:+.3f}, Sharpe={oos['sharpe']:.3f}"
+                    )
 
             if result["combined_oos"]:
                 c = result["combined_oos"]
-                print(f"\n  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
-                      f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}, "
-                      f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R")
+                print(
+                    f"\n  COMBINED OOS: N={c['n']}, WR={c['wr']:.0%}, "
+                    f"ExpR={c['expr']:+.3f}, Sharpe={c['sharpe']:.3f}, "
+                    f"MaxDD={c['maxdd']:+.1f}R, Total={c['total']:+.1f}R"
+                )
 
             if result["regime_split"]:
                 rs = result["regime_split"]
                 print("\n  REGIME SPLIT:")
                 for label, stats in rs.items():
                     if stats:
-                        print(f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
-                              f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}, "
-                              f"MaxDD={stats['maxdd']:+.1f}R")
+                        print(
+                            f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
+                            f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}, "
+                            f"MaxDD={stats['maxdd']:+.1f}R"
+                        )
                     else:
                         print(f"    {label}: No data")
 
@@ -469,6 +485,7 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

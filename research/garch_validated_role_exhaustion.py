@@ -388,7 +388,7 @@ def main() -> None:
             f"  {r['strategy_id']} {r['direction']} {r['side']}@{int(r['threshold'])}: "
             f"lift={r['lift']:+.3f} sr_lift={r['sr_lift']:+.3f} "
             f"p_sh={r['p_sharpe']:.4f} yrs={int(r['yr_pos'])}/{int(r['yr_total'])} "
-            f"oos={('n/a' if pd.isna(r['oos_lift']) else f'{r['oos_lift']:+.3f}')}"
+            f"oos={('n/a' if pd.isna(r['oos_lift']) else f'{r["oos_lift"]:+.3f}')}"
         )
     print("\nTop 12 negative by sr_lift:")
     for _, r in results_df.sort_values("sr_lift", ascending=True).head(12).iterrows():
@@ -396,7 +396,7 @@ def main() -> None:
             f"  {r['strategy_id']} {r['direction']} {r['side']}@{int(r['threshold'])}: "
             f"lift={r['lift']:+.3f} sr_lift={r['sr_lift']:+.3f} "
             f"p_sh={r['p_sharpe']:.4f} yrs={int(r['yr_pos'])}/{int(r['yr_total'])} "
-            f"oos={('n/a' if pd.isna(r['oos_lift']) else f'{r['oos_lift']:+.3f}')}"
+            f"oos={('n/a' if pd.isna(r['oos_lift']) else f'{r["oos_lift"]:+.3f}')}"
         )
 
     role_rows = []
@@ -437,7 +437,7 @@ def emit(results_df: pd.DataFrame, shape_df: pd.DataFrame, role_df: pd.DataFrame
         "- Position-size interpretation: `docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md`.",
         "",
         f"**Primary family size:** K = {len(results_df)} tests "
-        f"({len(results_df[results_df['side']=='high'])} high-tail + {len(results_df[results_df['side']=='low'])} low-tail).",
+        f"({len(results_df[results_df['side'] == 'high'])} high-tail + {len(results_df[results_df['side'] == 'low'])} low-tail).",
         "",
         "**Thresholds:** HIGH {60,70,80}, LOW {40,30,20}. These were fixed before the run to test upper-tail, lower-tail, and inverse-high possibilities without open-ended fishing.",
         "",

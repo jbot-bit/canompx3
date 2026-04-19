@@ -459,9 +459,7 @@ class ExecutionEngine:
                 # timing (not daily_features lookup — that's look-ahead for E2).
                 # Keyed by (instrument, session). Absent key = no timeout.
                 # @research-source memory/break_speed_signal_retest.md
-                _timeout_min = self._e2_order_timeout.get(
-                    (self.portfolio.instrument, _label)
-                )
+                _timeout_min = self._e2_order_timeout.get((self.portfolio.instrument, _label))
                 if (
                     _timeout_min is not None
                     and orb.complete_ts is not None
@@ -866,7 +864,7 @@ class ExecutionEngine:
                     daily_pnl_r=self._total_pnl_r(),
                     orb_minutes=trade.orb_minutes,
                     instrument=trade.strategy.instrument,  # F-2 hedging guard
-                    direction=trade.direction,             # F-2 hedging guard
+                    direction=trade.direction,  # F-2 hedging guard
                 )
                 if not can_enter:
                     trade.state = TradeState.EXITED
@@ -1076,7 +1074,7 @@ class ExecutionEngine:
                             daily_pnl_r=self._total_pnl_r(),
                             orb_minutes=trade.orb_minutes,
                             instrument=trade.strategy.instrument,  # F-2 hedging guard
-                            direction=trade.direction,             # F-2 hedging guard
+                            direction=trade.direction,  # F-2 hedging guard
                         )
                         if not can_enter:
                             trade.state = TradeState.EXITED
@@ -1241,7 +1239,7 @@ class ExecutionEngine:
                                 daily_pnl_r=self._total_pnl_r(),
                                 orb_minutes=trade.orb_minutes,
                                 instrument=trade.strategy.instrument,  # F-2 hedging guard
-                                direction=trade.direction,             # F-2 hedging guard
+                                direction=trade.direction,  # F-2 hedging guard
                             )
                             if not can_enter:
                                 trade.state = TradeState.EXITED

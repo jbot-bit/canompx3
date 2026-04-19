@@ -28,6 +28,7 @@ from trading_app.lane_correlation import _load_lane_daily_pnl, _pearson
 
 # ── Phase 1: Load all validated MNQ strategies ───────────────────────
 
+
 def load_validated_strategies(con: duckdb.DuckDBPyConnection) -> list[dict]:
     """Load all active MNQ validated_setups with their key metrics."""
     rows = con.execute("""
@@ -46,9 +47,8 @@ def load_validated_strategies(con: duckdb.DuckDBPyConnection) -> list[dict]:
 
 # ── Phase 2: Build daily P&L series for each strategy ────────────────
 
-def build_pnl_series(
-    con: duckdb.DuckDBPyConnection, strategies: list[dict]
-) -> dict[str, dict[date, float]]:
+
+def build_pnl_series(con: duckdb.DuckDBPyConnection, strategies: list[dict]) -> dict[str, dict[date, float]]:
     """Build {strategy_id: {trading_day: pnl_r}} for each strategy."""
     result = {}
     for s in strategies:
@@ -66,6 +66,7 @@ def build_pnl_series(
 
 
 # ── Phase 3: Pairwise correlation matrix ─────────────────────────────
+
 
 @dataclass
 class PairMetrics:
@@ -102,13 +103,17 @@ def compute_pairwise(
                 rho = 0.0
 
             pairs[(a, b)] = PairMetrics(
-                rho=rho, jaccard=jaccard,
-                shared_days=n_shared, a_days=len(days_a), b_days=len(days_b),
+                rho=rho,
+                jaccard=jaccard,
+                shared_days=n_shared,
+                a_days=len(days_a),
+                b_days=len(days_b),
             )
     return pairs
 
 
 # ── Phase 4: Hierarchical clustering ─────────────────────────────────
+
 
 def _canonical_key(a: str, b: str) -> tuple[str, str]:
     """Canonical pair key: alphabetical order."""
@@ -136,10 +141,7 @@ def cluster_strategies(
         changed = False
         for i in range(len(clusters)):
             for j in range(i + 1, len(clusters)):
-                should_merge = any(
-                    get_rho(a, b) > rho_threshold
-                    for a in clusters[i] for b in clusters[j]
-                )
+                should_merge = any(get_rho(a, b) > rho_threshold for a in clusters[i] for b in clusters[j])
                 if should_merge:
                     clusters[i] = clusters[i] | clusters[j]
                     clusters.pop(j)
@@ -152,6 +154,7 @@ def cluster_strategies(
 
 
 # ── Phase 5: Greedy 6-lane selection ─────────────────────────────────
+
 
 def greedy_select(
     strategies: list[dict],
@@ -183,6 +186,7 @@ def greedy_select(
 
 
 # ── Phase 6: Criterion 11 Monte Carlo ────────────────────────────────
+
 
 def criterion_11_monte_carlo(
     pnl_series: dict[str, dict[date, float]],
@@ -237,6 +241,7 @@ def criterion_11_monte_carlo(
 
 # ── Main ─────────────────────────────────────────────────────────────
 
+
 def main():
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     configure_connection(con)
@@ -266,13 +271,13 @@ def main():
     print("=" * 80)
     high_pairs = sorted(
         [(k, v) for k, v in pairs.items() if v.rho > 0.50],
-        key=lambda x: x[1].rho, reverse=True,
+        key=lambda x: x[1].rho,
+        reverse=True,
     )
     for (a, b), pm in high_pairs[:30]:
         a_short = a.replace("MNQ_", "").replace("_E2_", " ").replace("_CB1_", " ")
         b_short = b.replace("MNQ_", "").replace("_E2_", " ").replace("_CB1_", " ")
-        print(f"  rho={pm.rho:+.3f} J={pm.jaccard:.2f} shared={pm.shared_days:>4}  "
-              f"{a_short}  vs  {b_short}")
+        print(f"  rho={pm.rho:+.3f} J={pm.jaccard:.2f} shared={pm.shared_days:>4}  {a_short}  vs  {b_short}")
 
     # Phase 4: Clustering
     print(f"\n{'=' * 80}")
@@ -280,9 +285,8 @@ def main():
     print("=" * 80)
     clusters = cluster_strategies(sids, pairs, rho_threshold=0.70)
     for i, cluster in enumerate(clusters):
-        short = [s.replace("MNQ_", "").replace("_E2_", " ").replace("_CB1_", " ")
-                 for s in cluster]
-        print(f"  Family {i+1} ({len(cluster)} members): {', '.join(short)}")
+        short = [s.replace("MNQ_", "").replace("_E2_", " ").replace("_CB1_", " ") for s in cluster]
+        print(f"  Family {i + 1} ({len(cluster)} members): {', '.join(short)}")
     print(f"\n  INDEPENDENT BET COUNT: {len(clusters)}")
 
     # Phase 5: Greedy selection
@@ -292,10 +296,12 @@ def main():
     selected = greedy_select(strategies, pairs, max_lanes=6)
     for i, s in enumerate(selected):
         sid = s["strategy_id"]
-        print(f"  L{i+1}: {sid}")
-        print(f"      ExpR={s['expectancy_r']:+.3f} Sh={s['sharpe_ratio']:.2f} "
-              f"N={s['sample_size']} WR={s['win_rate']:.1%} "
-              f"TradeDays={s['_trade_days']} p={s['p_value']:.6f}")
+        print(f"  L{i + 1}: {sid}")
+        print(
+            f"      ExpR={s['expectancy_r']:+.3f} Sh={s['sharpe_ratio']:.2f} "
+            f"N={s['sample_size']} WR={s['win_rate']:.1%} "
+            f"TradeDays={s['_trade_days']} p={s['p_value']:.6f}"
+        )
 
     # Verify pairwise rho among selected
     print(f"\n  Selected pairwise correlations:")
@@ -365,7 +371,8 @@ def main():
     print(f"  Using avg risk_dollars: ${avg_risk:.0f}")
 
     c11_rec = criterion_11_monte_carlo(
-        pnl_series, sel_ids,
+        pnl_series,
+        sel_ids,
         dd_limit_dollars=2000.0,
         risk_per_trade_dollars=avg_risk,
         stop_mult=0.75,
@@ -380,7 +387,8 @@ def main():
     deployed_ids = [s["strategy_id"] for s in deployed_strats]
     if deployed_ids:
         c11_cur = criterion_11_monte_carlo(
-            pnl_series, deployed_ids,
+            pnl_series,
+            deployed_ids,
             dd_limit_dollars=2000.0,
             risk_per_trade_dollars=avg_risk,
             stop_mult=0.75,

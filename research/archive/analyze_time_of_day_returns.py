@@ -35,6 +35,7 @@ SPEC = get_cost_spec("MGC")
 # Screen on recent data first; expand to full dataset only if signal found
 SCREEN_START = "2024-01-01"
 
+
 # Session definitions (UTC hours)
 def get_session(hour_utc: int) -> str:
     """Classify UTC hour into session."""
@@ -47,29 +48,35 @@ def get_session(hour_utc: int) -> str:
     else:
         return "Off-hours"
 
+
 def load_5m_bars(db_path: Path) -> pd.DataFrame:
     """Load 5m bars for MGC (screened date range)."""
     print("Loading 5m bars...", end=" ", flush=True)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_5m
             WHERE symbol = 'MGC'
               AND ts_utc >= ?::TIMESTAMPTZ
             ORDER BY ts_utc
-        """, [f"{SCREEN_START} 00:00:00+00"]).fetchdf()
+        """,
+            [f"{SCREEN_START} 00:00:00+00"],
+        ).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} bars loaded.")
     return df
+
 
 def load_atr(db_path: Path) -> pd.DataFrame:
     """Load ATR_20 from daily_features."""
     print("Loading daily ATR...", end=" ", flush=True)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT trading_day, atr_20
             FROM daily_features
             WHERE symbol = 'MGC'
@@ -77,11 +84,14 @@ def load_atr(db_path: Path) -> pd.DataFrame:
               AND atr_20 IS NOT NULL
               AND trading_day >= ?
             ORDER BY trading_day
-        """, [SCREEN_START]).fetchdf()
+        """,
+            [SCREEN_START],
+        ).fetchdf()
     finally:
         con.close()
     print(f"{len(df):,} days with ATR.")
     return df
+
 
 def compute_hourly_returns(bars: pd.DataFrame) -> pd.DataFrame:
     """Compute hourly returns from 5m bars.
@@ -100,13 +110,17 @@ def compute_hourly_returns(bars: pd.DataFrame) -> pd.DataFrame:
     bars["date"] = bars["ts_utc"].dt.date
 
     # Group by (date, hour) - get first open and last close
-    hourly = bars.groupby(["date", "hour_utc"]).agg(
-        open_price=("open", "first"),
-        close_price=("close", "last"),
-        high=("high", "max"),
-        low=("low", "min"),
-        n_bars=("close", "count"),
-    ).reset_index()
+    hourly = (
+        bars.groupby(["date", "hour_utc"])
+        .agg(
+            open_price=("open", "first"),
+            close_price=("close", "last"),
+            high=("high", "max"),
+            low=("low", "min"),
+            n_bars=("close", "count"),
+        )
+        .reset_index()
+    )
 
     # Only keep hours with at least 6 bars (30 min of data minimum)
     hourly = hourly[hourly["n_bars"] >= 6].copy()
@@ -116,6 +130,7 @@ def compute_hourly_returns(bars: pd.DataFrame) -> pd.DataFrame:
 
     print(f"  {len(hourly):,} hourly observations across {hourly['date'].nunique():,} days.")
     return hourly
+
 
 def merge_atr_regimes(hourly: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFrame:
     """Merge ATR and assign tercile regimes."""
@@ -133,8 +148,11 @@ def merge_atr_regimes(hourly: pd.DataFrame, atr_df: pd.DataFrame) -> pd.DataFram
     ]
     merged["atr_regime"] = np.select(conditions, ["Low", "Med", "High"], default="Med")
 
-    print(f"  ATR terciles: Low <= {tercile_edges[0]:.1f}, Med <= {tercile_edges[1]:.1f}, High > {tercile_edges[1]:.1f}")
+    print(
+        f"  ATR terciles: Low <= {tercile_edges[0]:.1f}, Med <= {tercile_edges[1]:.1f}, High > {tercile_edges[1]:.1f}"
+    )
     return merged
+
 
 def print_hourly_stats(data: pd.DataFrame) -> None:
     """Print stats for each hour."""
@@ -160,7 +178,10 @@ def print_hourly_stats(data: pd.DataFrame) -> None:
         signif = "***" if abs(t_stat) > 2.576 else "**" if abs(t_stat) > 1.96 else "*" if abs(t_stat) > 1.645 else ""
         session = get_session(hour)
 
-        print(f"{hour:>4} {session:<10} {n:>7,} {mean_r:>+8.3f} {median_r:>+8.3f} {std_r:>8.3f} {up_pct:>5.1f}% {t_stat:>+7.2f} {signif:>6}")
+        print(
+            f"{hour:>4} {session:<10} {n:>7,} {mean_r:>+8.3f} {median_r:>+8.3f} {std_r:>8.3f} {up_pct:>5.1f}% {t_stat:>+7.2f} {signif:>6}"
+        )
+
 
 def print_session_summary(data: pd.DataFrame) -> None:
     """Print aggregated session stats."""
@@ -182,6 +203,7 @@ def print_session_summary(data: pd.DataFrame) -> None:
 
         print(f"\n  {session_name} (N={n:,}):")
         print(f"    Mean: {mean_r:+.4f} pts | Std: {std_r:.4f} | Up%: {up_pct:.1f}% | Total: {total:+.1f} pts")
+
 
 def print_regime_breakdown(data: pd.DataFrame) -> None:
     """Print hourly stats broken down by ATR regime."""
@@ -210,7 +232,10 @@ def print_regime_breakdown(data: pd.DataFrame) -> None:
             t_stat = mean_r / (std_r / np.sqrt(n)) if std_r > 0 else 0
             session = get_session(hour)
 
-            print(f"{hour:>4} {session:<10} {n:>7,} {mean_r:>+8.3f} {median_r:>+8.3f} {std_r:>8.3f} {up_pct:>5.1f}% {t_stat:>+7.2f}")
+            print(
+                f"{hour:>4} {session:<10} {n:>7,} {mean_r:>+8.3f} {median_r:>+8.3f} {std_r:>8.3f} {up_pct:>5.1f}% {t_stat:>+7.2f}"
+            )
+
 
 def print_expr_if_trading(data: pd.DataFrame) -> None:
     """Compute ExpR if you buy at hour open and sell at hour close, using cost model."""
@@ -243,7 +268,10 @@ def print_expr_if_trading(data: pd.DataFrame) -> None:
             continue
 
         session = get_session(hour)
-        print(f"{hour:>4} {session:<10} {stats['n']:>7,} {stats['wr']*100:>5.1f}% {stats['expr']:>+8.4f} {stats['sharpe']:>+8.4f} {stats['maxdd']:>+8.2f} {stats['total']:>+9.2f}")
+        print(
+            f"{hour:>4} {session:<10} {stats['n']:>7,} {stats['wr'] * 100:>5.1f}% {stats['expr']:>+8.4f} {stats['sharpe']:>+8.4f} {stats['maxdd']:>+8.2f} {stats['total']:>+9.2f}"
+        )
+
 
 def print_best_worst_hours(data: pd.DataFrame) -> None:
     """Print the most biased hours."""
@@ -268,11 +296,14 @@ def print_best_worst_hours(data: pd.DataFrame) -> None:
     for hour, session, n, mean_r, std_r, t_stat in results[:5]:
         direction = "BULLISH" if mean_r > 0 else "BEARISH"
         sig = "SIGNIFICANT" if abs(t_stat) > 1.96 else "not significant"
-        print(f"  Hour {hour:02d} UTC ({session}): {direction} bias, mean={mean_r:+.4f} pts, t={t_stat:+.2f} ({sig}, N={n:,})")
+        print(
+            f"  Hour {hour:02d} UTC ({session}): {direction} bias, mean={mean_r:+.4f} pts, t={t_stat:+.2f} ({sig}, N={n:,})"
+        )
 
     print("\n  Bottom 5 (weakest bias):")
     for hour, session, n, mean_r, std_r, t_stat in results[-5:]:
         print(f"  Hour {hour:02d} UTC ({session}): mean={mean_r:+.4f} pts, t={t_stat:+.2f} (N={n:,})")
+
 
 def main():
     print("=" * 100)
@@ -320,6 +351,7 @@ def main():
         print(row)
 
     print("\n[Done]")
+
 
 if __name__ == "__main__":
     main()

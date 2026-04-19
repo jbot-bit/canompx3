@@ -137,9 +137,7 @@ class CopyOrderRouter(BrokerRouter):
                 shadow.cancel(order_id)
                 log.info("Shadow account %s: order %s cancelled", shadow.account_id, order_id)
             except Exception as exc:
-                self._shadow_failures[shadow.account_id] = (
-                    f"cancel(order_id={order_id}): {type(exc).__name__}: {exc}"
-                )
+                self._shadow_failures[shadow.account_id] = f"cancel(order_id={order_id}): {type(exc).__name__}: {exc}"
                 log.critical(
                     "F-2b SHADOW DIVERGENCE: account %s cancel order %s failed — "
                     "router DEGRADED. Next submit will raise ShadowDivergenceError.",
@@ -203,9 +201,7 @@ class CopyOrderRouter(BrokerRouter):
         """Delegate to primary."""
         return self.primary.merge_bracket_into_entry(entry_spec, bracket_spec)
 
-    def verify_bracket_legs(
-        self, entry_order_id: int, contract_id: str
-    ) -> tuple[int | None, int | None]:
+    def verify_bracket_legs(self, entry_order_id: int, contract_id: str) -> tuple[int | None, int | None]:
         """Delegate to primary.
 
         Without this delegate, calls fall through to BrokerRouter's default
@@ -261,8 +257,7 @@ class CopyOrderRouter(BrokerRouter):
         """
         if self._shadow_failures:
             log.warning(
-                "F-2b: clearing degraded state. Operator must have manually "
-                "reconciled accounts: %s",
+                "F-2b: clearing degraded state. Operator must have manually reconciled accounts: %s",
                 dict(self._shadow_failures),
             )
         self._shadow_failures.clear()

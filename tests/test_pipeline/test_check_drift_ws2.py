@@ -722,7 +722,10 @@ class TestValidatedSetupsWriterAllowlist:
 
     def test_catches_noncanonical_writer(self, tmp_path, monkeypatch):
         _patch_dirs(monkeypatch, tmp_path)
-        _mkfile(tmp_path / "trading_app" / "rogue_writer.py", "con.execute(\"UPDATE validated_setups SET status = 'active'\")\n")
+        _mkfile(
+            tmp_path / "trading_app" / "rogue_writer.py",
+            "con.execute(\"UPDATE validated_setups SET status = 'active'\")\n",
+        )
         violations = check_drift.check_validated_setups_writer_allowlist()
         assert len(violations) == 1
         assert "rogue_writer.py" in violations[0]
@@ -731,7 +734,7 @@ class TestValidatedSetupsWriterAllowlist:
         _patch_dirs(monkeypatch, tmp_path)
         _mkfile(
             tmp_path / "trading_app" / "strategy_validator.py",
-            "con.execute(\"INSERT OR REPLACE INTO validated_setups VALUES (?)\")\n",
+            'con.execute("INSERT OR REPLACE INTO validated_setups VALUES (?)")\n',
         )
         _mkfile(
             tmp_path / "scripts" / "migrations" / "fixup.py",

@@ -61,6 +61,7 @@ def welch_t(group_a, group_b):
 
 # ── H1: IBS Quartile Test ──────────────────────────────────────────────
 
+
 def run_ibs_quartile(con):
     print("=" * 72)
     print("H1: IBS QUARTILE TEST")
@@ -99,8 +100,8 @@ def run_ibs_quartile(con):
                             AND i.symbol = o.symbol
         WHERE o.entry_model = '{ENTRY_MODEL}'
           AND o.confirm_bars = {CONFIRM_BARS}
-          AND o.rr_target IN ({','.join(str(r) for r in RR_TARGETS)})
-          AND o.orb_minutes IN ({','.join(str(a) for a in APERTURES)})
+          AND o.rr_target IN ({",".join(str(r) for r in RR_TARGETS)})
+          AND o.orb_minutes IN ({",".join(str(a) for a in APERTURES)})
           AND o.pnl_r IS NOT NULL
         GROUP BY o.orb_label, o.orb_minutes, o.rr_target, i.ibs_q
         HAVING COUNT(*) >= 20
@@ -133,12 +134,22 @@ def run_ibs_quartile(con):
                 means = [qs[q][1] for q in [1, 2, 3, 4]]
                 mono = all(means[i] >= means[i + 1] for i in range(3))
 
-            all_results.append({
-                "inst": inst_k, "session": label, "aper": aper, "rr": rr,
-                "n_q1": n1, "mean_q1": mean1, "t_q1": t1, "p_q1": p1,
-                "n_q4": n4, "mean_q4": mean4,
-                "lift": lift, "monotonic": mono,
-            })
+            all_results.append(
+                {
+                    "inst": inst_k,
+                    "session": label,
+                    "aper": aper,
+                    "rr": rr,
+                    "n_q1": n1,
+                    "mean_q1": mean1,
+                    "t_q1": t1,
+                    "p_q1": p1,
+                    "n_q4": n4,
+                    "mean_q4": mean4,
+                    "lift": lift,
+                    "monotonic": mono,
+                }
+            )
 
     # BH FDR on Q1 p-values
     p_vals = [r["p_q1"] for r in all_results]
@@ -176,6 +187,7 @@ def run_ibs_quartile(con):
 
 # ── H2: IBS Continuous Correlation ─────────────────────────────────────
 
+
 def run_ibs_continuous(con):
     print("\n" + "=" * 72)
     print("H2: IBS CONTINUOUS CORRELATION")
@@ -201,12 +213,13 @@ def run_ibs_continuous(con):
           AND d.orb_minutes = 5  -- deduplicate: 3 rows per (day,sym)
           AND o.entry_model = '{ENTRY_MODEL}'
           AND o.confirm_bars = {CONFIRM_BARS}
-          AND o.rr_target IN ({','.join(str(r) for r in RR_TARGETS)})
-          AND o.orb_minutes IN ({','.join(str(a) for a in APERTURES)})
+          AND o.rr_target IN ({",".join(str(r) for r in RR_TARGETS)})
+          AND o.orb_minutes IN ({",".join(str(a) for a in APERTURES)})
           AND o.pnl_r IS NOT NULL
         """).fetchall()
 
         from collections import defaultdict
+
         combos = defaultdict(lambda: ([], []))
         for label, aper, rr, ibs, pnl in rows:
             if ibs is not None:
@@ -218,11 +231,19 @@ def run_ibs_continuous(con):
                 continue
             r_val, p_val = sp_stats.pearsonr(ibs_arr, pnl_arr)
             rho, rho_p = sp_stats.spearmanr(ibs_arr, pnl_arr)
-            results.append({
-                "inst": key[0], "session": key[1], "aper": key[2], "rr": key[3],
-                "n": len(ibs_arr), "pearson_r": r_val, "pearson_p": p_val,
-                "spearman_rho": rho, "spearman_p": rho_p,
-            })
+            results.append(
+                {
+                    "inst": key[0],
+                    "session": key[1],
+                    "aper": key[2],
+                    "rr": key[3],
+                    "n": len(ibs_arr),
+                    "pearson_r": r_val,
+                    "pearson_p": p_val,
+                    "spearman_rho": rho,
+                    "spearman_p": rho_p,
+                }
+            )
 
     results.sort(key=lambda x: x["pearson_r"])
     sig = [r for r in results if abs(r["pearson_r"]) >= 0.05]
@@ -244,6 +265,7 @@ def run_ibs_continuous(con):
 
 
 # ── H3: NR7 Standard (daily range) ────────────────────────────────────
+
 
 def run_nr7_standard(con):
     print("\n" + "=" * 72)
@@ -281,11 +303,12 @@ def run_nr7_standard(con):
         WHERE o.orb_minutes = 15
           AND o.entry_model = '{ENTRY_MODEL}'
           AND o.confirm_bars = {CONFIRM_BARS}
-          AND o.rr_target IN ({','.join(str(r) for r in RR_TARGETS)})
+          AND o.rr_target IN ({",".join(str(r) for r in RR_TARGETS)})
           AND o.pnl_r IS NOT NULL
         """).fetchall()
 
         from collections import defaultdict
+
         combos = defaultdict(lambda: {"nr7": [], "base": []})
         for label, rr, is_nr7, pnl in rows:
             key = (inst, label, rr)
@@ -301,12 +324,21 @@ def run_nr7_standard(con):
                 continue
             t, p, d = welch_t(nr7_arr, base_arr)
             lift = np.mean(nr7_arr) - np.mean(base_arr)
-            all_results.append({
-                "inst": key[0], "session": key[1], "rr": key[2],
-                "n_nr7": len(nr7_arr), "mean_nr7": np.mean(nr7_arr),
-                "n_base": len(base_arr), "mean_base": np.mean(base_arr),
-                "lift": lift, "t": t, "p": p, "d": d,
-            })
+            all_results.append(
+                {
+                    "inst": key[0],
+                    "session": key[1],
+                    "rr": key[2],
+                    "n_nr7": len(nr7_arr),
+                    "mean_nr7": np.mean(nr7_arr),
+                    "n_base": len(base_arr),
+                    "mean_base": np.mean(base_arr),
+                    "lift": lift,
+                    "t": t,
+                    "p": p,
+                    "d": d,
+                }
+            )
 
     # BH FDR
     p_vals = [r["p"] for r in all_results]
@@ -361,6 +393,7 @@ def run_nr7_standard(con):
 
 
 # ── H4: NR7 Session-Specific Range ────────────────────────────────────
+
 
 def run_nr7_session_range(con):
     print("\n" + "=" * 72)
@@ -417,11 +450,12 @@ def run_nr7_session_range(con):
               AND o.orb_minutes = 15
               AND o.entry_model = '{ENTRY_MODEL}'
               AND o.confirm_bars = {CONFIRM_BARS}
-              AND o.rr_target IN ({','.join(str(r) for r in RR_TARGETS)})
+              AND o.rr_target IN ({",".join(str(r) for r in RR_TARGETS)})
               AND o.pnl_r IS NOT NULL
             """).fetchall()
 
             from collections import defaultdict
+
             combos = defaultdict(lambda: {"nr7": [], "base": []})
             for is_nr7, rr, pnl in rows:
                 key = (inst, sess, rr)
@@ -438,13 +472,21 @@ def run_nr7_session_range(con):
                 fire_rate = len(nr7_arr) / (len(nr7_arr) + len(base_arr))
                 t, p, d = welch_t(nr7_arr, base_arr)
                 lift = np.mean(nr7_arr) - np.mean(base_arr)
-                all_results.append({
-                    "inst": key[0], "session": key[1], "rr": key[2],
-                    "n_nr7": len(nr7_arr), "fire_rate": fire_rate,
-                    "mean_nr7": np.mean(nr7_arr),
-                    "n_base": len(base_arr), "mean_base": np.mean(base_arr),
-                    "lift": lift, "t": t, "p": p,
-                })
+                all_results.append(
+                    {
+                        "inst": key[0],
+                        "session": key[1],
+                        "rr": key[2],
+                        "n_nr7": len(nr7_arr),
+                        "fire_rate": fire_rate,
+                        "mean_nr7": np.mean(nr7_arr),
+                        "n_base": len(base_arr),
+                        "mean_base": np.mean(base_arr),
+                        "lift": lift,
+                        "t": t,
+                        "p": p,
+                    }
+                )
 
     if not all_results:
         print("  No results with N >= 20")
@@ -483,6 +525,7 @@ def run_nr7_session_range(con):
 
 
 # ── Holdout Consistency Check ──────────────────────────────────────────
+
 
 def run_holdout_check(con):
     print("\n" + "=" * 72)
@@ -579,6 +622,7 @@ def run_holdout_check(con):
 
 # ── Confounding Panel ─────────────────────────────────────────────────
 
+
 def run_confounding(con):
     print("\n" + "=" * 72)
     print("CONFOUNDING: IBS Q1 vs deployed filter overlap (MNQ)")
@@ -656,6 +700,7 @@ def run_confounding(con):
 
 # ── Final Verdict ──────────────────────────────────────────────────────
 
+
 def verdict(h1_results, h2_results, h3_results, h4_results):
     print("\n" + "=" * 72)
     print("FINAL VERDICT")
@@ -669,7 +714,9 @@ def verdict(h1_results, h2_results, h3_results, h4_results):
     print(f"\n  IBS (external claim: t=4.65):")
     print(f"    BH FDR survivors: {h1_sig}/{h1_k}")
     if h1_top:
-        print(f"    Strongest: {h1_top['inst']} {h1_top['session']} O{h1_top['aper']} RR{h1_top['rr']} Q1 t={h1_top['t_q1']:.2f}")
+        print(
+            f"    Strongest: {h1_top['inst']} {h1_top['session']} O{h1_top['aper']} RR{h1_top['rr']} Q1 t={h1_top['t_q1']:.2f}"
+        )
     print(f"    Holdout: Q1 REVERSES on both MNQ and MES at top combo")
     print(f"    Direction flips: Q1>Q4 at CME_PRECLOSE, Q4>Q1 at NYSE_OPEN/TOKYO_OPEN")
     if h1_sig > 0:
@@ -709,6 +756,7 @@ def verdict(h1_results, h2_results, h3_results, h4_results):
 
 
 # ── Main ───────────────────────────────────────────────────────────────
+
 
 def main():
     print("IBS/NR7 External Claim Verification")

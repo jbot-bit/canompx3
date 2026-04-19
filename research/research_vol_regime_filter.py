@@ -66,16 +66,20 @@ def load_data(db_path):
     con = duckdb.connect(str(db_path), read_only=True)
 
     # Load daily features (5m only)
-    features = con.execute("""
+    features = con.execute(
+        """
         SELECT *
         FROM daily_features
         WHERE orb_minutes = ?
           AND symbol IN (SELECT UNNEST(?::VARCHAR[]))
         ORDER BY symbol, trading_day
-    """, [ORB_MINUTES, INSTRUMENTS]).fetchdf()
+    """,
+        [ORB_MINUTES, INSTRUMENTS],
+    ).fetchdf()
 
     # Load E2 CB1 outcomes (5m only, all RR targets)
-    outcomes = con.execute("""
+    outcomes = con.execute(
+        """
         SELECT trading_day, symbol, orb_label, rr_target, pnl_r,
                entry_model, confirm_bars, ts_pnl_r
         FROM orb_outcomes
@@ -85,7 +89,9 @@ def load_data(db_path):
           AND symbol IN (SELECT UNNEST(?::VARCHAR[]))
           AND pnl_r IS NOT NULL
         ORDER BY symbol, trading_day
-    """, [ORB_MINUTES, ENTRY_MODEL, CONFIRM_BARS, INSTRUMENTS]).fetchdf()
+    """,
+        [ORB_MINUTES, ENTRY_MODEL, CONFIRM_BARS, INSTRUMENTS],
+    ).fetchdf()
 
     con.close()
     return features, outcomes
@@ -99,15 +105,13 @@ def compute_atr_percentile(features):
     """
     atr_pct = {}
     for instrument in INSTRUMENTS:
-        inst_df = features[
-            (features["symbol"] == instrument) & (features["atr_20"].notna())
-        ].sort_values("trading_day")
+        inst_df = features[(features["symbol"] == instrument) & (features["atr_20"].notna())].sort_values("trading_day")
 
         atr_vals = inst_df["atr_20"].values
         days = inst_df["trading_day"].values
 
         for i in range(ATR_TRAILING, len(atr_vals)):
-            window = atr_vals[max(0, i - ATR_TRAILING):i]  # prior values only
+            window = atr_vals[max(0, i - ATR_TRAILING) : i]  # prior values only
             today = atr_vals[i]
             pct = np.searchsorted(np.sort(window), today) / len(window) * 100
             atr_pct[(instrument, days[i])] = pct
@@ -119,15 +123,15 @@ def compute_garch_percentile(features):
     """Compute rolling GARCH forecast vol percentile rank."""
     garch_pct = {}
     for instrument in INSTRUMENTS:
-        inst_df = features[
-            (features["symbol"] == instrument) & (features["garch_forecast_vol"].notna())
-        ].sort_values("trading_day")
+        inst_df = features[(features["symbol"] == instrument) & (features["garch_forecast_vol"].notna())].sort_values(
+            "trading_day"
+        )
 
         vals = inst_df["garch_forecast_vol"].values
         days = inst_df["trading_day"].values
 
         for i in range(ATR_TRAILING, len(vals)):
-            window = vals[max(0, i - ATR_TRAILING):i]
+            window = vals[max(0, i - ATR_TRAILING) : i]
             today = vals[i]
             pct = np.searchsorted(np.sort(window), today) / len(window) * 100
             garch_pct[(instrument, days[i])] = pct
@@ -233,10 +237,7 @@ def bh_fdr(p_values, q=0.05):
     # Enforce monotonicity (from largest rank down)
     reverse_ranked = ranked[::-1]
     for i in range(1, n):
-        adjusted[reverse_ranked[i]] = min(
-            adjusted[reverse_ranked[i]],
-            adjusted[reverse_ranked[i - 1]]
-        )
+        adjusted[reverse_ranked[i]] = min(adjusted[reverse_ranked[i]], adjusted[reverse_ranked[i - 1]])
 
     return np.minimum(adjusted, 1.0)
 
@@ -285,7 +286,11 @@ def run_research():
         inst = row["symbol"]
         day = row["trading_day"]
         for col in features.columns:
-            if col.startswith("rel_vol_") and row[col] is not None and not (isinstance(row[col], float) and np.isnan(row[col])):
+            if (
+                col.startswith("rel_vol_")
+                and row[col] is not None
+                and not (isinstance(row[col], float) and np.isnan(row[col]))
+            ):
                 session = col.replace("rel_vol_", "")
                 rel_vol_lookup[(inst, session, day)] = row[col]
 
@@ -320,12 +325,16 @@ def run_research():
             if len(pairs_atr_vol) >= 50:
                 a, v = zip(*pairs_atr_vol, strict=True)
                 rho, p = stats.spearmanr(a, v)
-                print(f"  {instrument:4s} {session:20s}  ATR vs rel_vol: rho={rho:+.4f} p={p:.4f} (N={len(pairs_atr_vol)})")
+                print(
+                    f"  {instrument:4s} {session:20s}  ATR vs rel_vol: rho={rho:+.4f} p={p:.4f} (N={len(pairs_atr_vol)})"
+                )
 
             if len(pairs_garch_vol) >= 50:
                 g, v = zip(*pairs_garch_vol, strict=True)
                 rho, p = stats.spearmanr(g, v)
-                print(f"  {instrument:4s} {session:20s}  GARCH vs rel_vol: rho={rho:+.4f} p={p:.4f} (N={len(pairs_garch_vol)})")
+                print(
+                    f"  {instrument:4s} {session:20s}  GARCH vs rel_vol: rho={rho:+.4f} p={p:.4f} (N={len(pairs_garch_vol)})"
+                )
 
     # ── Main filter comparison ─────────────────────────────────────────
     print()
@@ -339,18 +348,13 @@ def run_research():
         sessions = get_sessions_for_instrument(features, instrument)
 
         for session in sessions:
-            inst_outcomes = outcomes[
-                (outcomes["symbol"] == instrument) &
-                (outcomes["orb_label"] == session)
-            ]
+            inst_outcomes = outcomes[(outcomes["symbol"] == instrument) & (outcomes["orb_label"] == session)]
 
             if len(inst_outcomes) < MIN_TRADES:
                 continue
 
             for rr in RR_TARGETS:
-                rr_outcomes = inst_outcomes[
-                    (inst_outcomes["rr_target"] == rr)
-                ]
+                rr_outcomes = inst_outcomes[(inst_outcomes["rr_target"] == rr)]
 
                 if len(rr_outcomes) < MIN_TRADES:
                     continue
@@ -373,56 +377,65 @@ def run_research():
                 baseline_pnls = [day_pnl[d] for d in all_days]
                 baseline_stats = compute_stats(baseline_pnls, years_span)
                 if baseline_stats:
-                    results.append({
-                        "instrument": instrument,
-                        "session": session,
-                        "rr": rr,
-                        "filter": "BASELINE",
-                        "pnls": baseline_pnls,
-                        "days": list(all_days),
-                        **baseline_stats,
-                    })
+                    results.append(
+                        {
+                            "instrument": instrument,
+                            "session": session,
+                            "rr": rr,
+                            "filter": "BASELINE",
+                            "pnls": baseline_pnls,
+                            "days": list(all_days),
+                            **baseline_stats,
+                        }
+                    )
 
                 # All filters for this (instrument, session, rr) combo
                 filter_specs = [
-                    ("VOL_ONLY", [
-                        d for d in all_days
-                        if rel_vol_lookup.get((instrument, session, d), 0) >= 1.2
-                    ]),
-                    ("GARCH_P70", [
-                        d for d in all_days
-                        if garch_pct.get((instrument, d), 0) >= 70
-                    ]),
-                    ("ATR70+VOL", [
-                        d for d in all_days
-                        if (atr_pct.get((instrument, d), 0) >= 70
-                            and rel_vol_lookup.get((instrument, session, d), 0) >= 1.2)
-                    ]),
-                    ("ATR70|VOL", [
-                        d for d in all_days
-                        if (atr_pct.get((instrument, d), 0) >= 70
-                            or rel_vol_lookup.get((instrument, session, d), 0) >= 1.2)
-                    ]),
+                    ("VOL_ONLY", [d for d in all_days if rel_vol_lookup.get((instrument, session, d), 0) >= 1.2]),
+                    ("GARCH_P70", [d for d in all_days if garch_pct.get((instrument, d), 0) >= 70]),
+                    (
+                        "ATR70+VOL",
+                        [
+                            d
+                            for d in all_days
+                            if (
+                                atr_pct.get((instrument, d), 0) >= 70
+                                and rel_vol_lookup.get((instrument, session, d), 0) >= 1.2
+                            )
+                        ],
+                    ),
+                    (
+                        "ATR70|VOL",
+                        [
+                            d
+                            for d in all_days
+                            if (
+                                atr_pct.get((instrument, d), 0) >= 70
+                                or rel_vol_lookup.get((instrument, session, d), 0) >= 1.2
+                            )
+                        ],
+                    ),
                 ]
                 for pct_thresh in ATR_PCTILES:
-                    filter_specs.append((f"ATR_P{pct_thresh}", [
-                        d for d in all_days
-                        if atr_pct.get((instrument, d), 0) >= pct_thresh
-                    ]))
+                    filter_specs.append(
+                        (f"ATR_P{pct_thresh}", [d for d in all_days if atr_pct.get((instrument, d), 0) >= pct_thresh])
+                    )
 
                 for filt_name, filt_days in filter_specs:
                     pnls = [day_pnl[d] for d in filt_days]
                     st = compute_stats(pnls, years_span)
                     if st:
-                        results.append({
-                            "instrument": instrument,
-                            "session": session,
-                            "rr": rr,
-                            "filter": filt_name,
-                            "pnls": pnls,
-                            "days": list(filt_days),
-                            **st,
-                        })
+                        results.append(
+                            {
+                                "instrument": instrument,
+                                "session": session,
+                                "rr": rr,
+                                "filter": filt_name,
+                                "pnls": pnls,
+                                "days": list(filt_days),
+                                **st,
+                            }
+                        )
 
     # ── Cross-asset filters ────────────────────────────────────────────
     print()
@@ -440,18 +453,13 @@ def run_research():
 
             sessions = get_sessions_for_instrument(features, target)
             for session in sessions:
-                target_outcomes = outcomes[
-                    (outcomes["symbol"] == target) &
-                    (outcomes["orb_label"] == session)
-                ]
+                target_outcomes = outcomes[(outcomes["symbol"] == target) & (outcomes["orb_label"] == session)]
 
                 if len(target_outcomes) < MIN_TRADES:
                     continue
 
                 for rr in RR_TARGETS:
-                    rr_outcomes = target_outcomes[
-                        target_outcomes["rr_target"] == rr
-                    ]
+                    rr_outcomes = target_outcomes[target_outcomes["rr_target"] == rr]
 
                     if len(rr_outcomes) < MIN_TRADES:
                         continue
@@ -473,35 +481,37 @@ def run_research():
                     base_stats = compute_stats(base_pnls, years_span)
                     if base_stats:
                         cross_key = (target, session, rr)
-                        if cross_key not in {(r["instrument"], r["session"], r["rr"])
-                                              for r in results if r["filter"] == "BASELINE"}:
-                            results.append({
-                                "instrument": target,
-                                "session": session,
-                                "rr": rr,
-                                "filter": "BASELINE",
-                                "pnls": base_pnls,
-                                "days": list(all_days),
-                                **base_stats,
-                            })
+                        if cross_key not in {
+                            (r["instrument"], r["session"], r["rr"]) for r in results if r["filter"] == "BASELINE"
+                        }:
+                            results.append(
+                                {
+                                    "instrument": target,
+                                    "session": session,
+                                    "rr": rr,
+                                    "filter": "BASELINE",
+                                    "pnls": base_pnls,
+                                    "days": list(all_days),
+                                    **base_stats,
+                                }
+                            )
 
                     for pct_thresh in [60, 70]:
-                        cross_days = [
-                            d for d in all_days
-                            if atr_pct.get((source, d), 0) >= pct_thresh
-                        ]
+                        cross_days = [d for d in all_days if atr_pct.get((source, d), 0) >= pct_thresh]
                         cross_pnls = [day_pnl[d] for d in cross_days]
                         cross_stats = compute_stats(cross_pnls, years_span)
                         if cross_stats:
-                            results.append({
-                                "instrument": target,
-                                "session": session,
-                                "rr": rr,
-                                "filter": f"X_{source}_P{pct_thresh}",
-                                "pnls": cross_pnls,
-                                "days": list(cross_days),
-                                **cross_stats,
-                            })
+                            results.append(
+                                {
+                                    "instrument": target,
+                                    "session": session,
+                                    "rr": rr,
+                                    "filter": f"X_{source}_P{pct_thresh}",
+                                    "pnls": cross_pnls,
+                                    "days": list(cross_days),
+                                    **cross_stats,
+                                }
+                            )
 
     # ── BH FDR correction ──────────────────────────────────────────────
     print()
@@ -543,7 +553,9 @@ def run_research():
     survivors = [r for r in results if r.get("fdr_sig") and r["filter"] != "BASELINE"]
     survivors.sort(key=lambda x: x["sharpe_ann"], reverse=True)
 
-    print(f"\n{'Inst':4s} {'Session':20s} {'RR':>4s} {'Filter':14s} {'N':>5s} {'WR':>6s} {'AvgR':>8s} {'Sharpe':>7s} {'p_adj':>8s}")
+    print(
+        f"\n{'Inst':4s} {'Session':20s} {'RR':>4s} {'Filter':14s} {'N':>5s} {'WR':>6s} {'AvgR':>8s} {'Sharpe':>7s} {'p_adj':>8s}"
+    )
     print("-" * 80)
     for r in survivors[:60]:  # top 60
         print(
@@ -590,30 +602,32 @@ def run_research():
                 # Can't do matched test without day data
                 continue
 
-            uplift, perm_p = matched_day_permutation_test(
-                baseline_pnls, included_mask
-            )
+            uplift, perm_p = matched_day_permutation_test(baseline_pnls, included_mask)
 
-            lifts.append({
-                "instrument": key[0],
-                "session": key[1],
-                "rr": key[2],
-                "filter": filt_name,
-                "n_base": baseline["n"],
-                "n_filt": filt_result["n"],
-                "expr_base": baseline["avg_r"],
-                "expr_filt": filt_result["avg_r"],
-                "uplift": uplift,
-                "perm_p": perm_p,
-                "fdr_sig": filt_result.get("fdr_sig", False),
-            })
+            lifts.append(
+                {
+                    "instrument": key[0],
+                    "session": key[1],
+                    "rr": key[2],
+                    "filter": filt_name,
+                    "n_base": baseline["n"],
+                    "n_filt": filt_result["n"],
+                    "expr_base": baseline["avg_r"],
+                    "expr_filt": filt_result["avg_r"],
+                    "uplift": uplift,
+                    "perm_p": perm_p,
+                    "fdr_sig": filt_result.get("fdr_sig", False),
+                }
+            )
 
     # Sort by uplift, show FDR survivors only
     sig_lifts = [x for x in lifts if x["fdr_sig"]]
     sig_lifts.sort(key=lambda x: x["uplift"], reverse=True)
 
-    print(f"\n{'Inst':4s} {'Session':20s} {'RR':>4s} {'Filter':14s} {'N_b':>5s} {'N_f':>5s} "
-          f"{'ExR_b':>7s} {'ExR_f':>7s} {'Uplift':>8s} {'Perm_p':>8s}")
+    print(
+        f"\n{'Inst':4s} {'Session':20s} {'RR':>4s} {'Filter':14s} {'N_b':>5s} {'N_f':>5s} "
+        f"{'ExR_b':>7s} {'ExR_f':>7s} {'Uplift':>8s} {'Perm_p':>8s}"
+    )
     print("-" * 95)
     for item in sig_lifts[:40]:
         sig_flag = " **" if item["perm_p"] < 0.05 else ""
@@ -638,7 +652,9 @@ def run_research():
     print(f"Cross-asset FDR survivors: {len(cross_survivors)}")
 
     if cross_survivors:
-        print(f"\n{'Inst':4s} {'Session':20s} {'RR':>4s} {'Filter':14s} {'N':>5s} {'WR':>6s} {'AvgR':>8s} {'Sharpe':>7s} {'p_adj':>8s}")
+        print(
+            f"\n{'Inst':4s} {'Session':20s} {'RR':>4s} {'Filter':14s} {'N':>5s} {'WR':>6s} {'AvgR':>8s} {'Sharpe':>7s} {'p_adj':>8s}"
+        )
         print("-" * 80)
         for r in cross_survivors[:30]:
             print(
@@ -691,22 +707,26 @@ def run_research():
             vol_sig = vol.get("fdr_sig", False) if vol else False
 
             if atr_sig and not vol_sig:
-                atr_only_wins.append({
-                    "instrument": key[0],
-                    "session": key[1],
-                    "rr": key[2],
-                    "filter": filt_name,
-                    "n": atr["n"],
-                    "avg_r": atr["avg_r"],
-                    "sharpe": atr["sharpe_ann"],
-                    "base_avg_r": baseline["avg_r"],
-                    "base_sharpe": baseline["sharpe_ann"],
-                })
+                atr_only_wins.append(
+                    {
+                        "instrument": key[0],
+                        "session": key[1],
+                        "rr": key[2],
+                        "filter": filt_name,
+                        "n": atr["n"],
+                        "avg_r": atr["avg_r"],
+                        "sharpe": atr["sharpe_ann"],
+                        "base_avg_r": baseline["avg_r"],
+                        "base_sharpe": baseline["sharpe_ann"],
+                    }
+                )
 
     if atr_only_wins:
         atr_only_wins.sort(key=lambda x: x["sharpe"], reverse=True)
         print(f"Found {len(atr_only_wins)} combos where ATR/GARCH/COMBINED is FDR-sig but VOL is not:")
-        print(f"\n{'Inst':4s} {'Session':20s} {'RR':>4s} {'Filter':14s} {'N':>5s} {'AvgR':>8s} {'Sharpe':>7s} {'Base_R':>7s} {'Base_Sh':>8s}")
+        print(
+            f"\n{'Inst':4s} {'Session':20s} {'RR':>4s} {'Filter':14s} {'N':>5s} {'AvgR':>8s} {'Sharpe':>7s} {'Base_R':>7s} {'Base_Sh':>8s}"
+        )
         print("-" * 85)
         for w in atr_only_wins[:30]:
             print(

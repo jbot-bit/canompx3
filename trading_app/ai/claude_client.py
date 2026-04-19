@@ -37,7 +37,5 @@ def get_client(api_key: str | None = None) -> anthropic.Anthropic:
     """
     resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not resolved_key:
-        raise ValueError(
-            "ANTHROPIC_API_KEY required. Pass api_key or set env var."
-        )
+        raise ValueError("ANTHROPIC_API_KEY required. Pass api_key or set env var.")
     return anthropic.Anthropic(api_key=resolved_key)

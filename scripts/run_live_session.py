@@ -399,9 +399,9 @@ def main() -> None:
 
             all_ok = True
             for inst in args._profile_instruments:
-                print(f"\n{'='*50}")
+                print(f"\n{'=' * 50}")
                 print(f"Preflight: {inst}")
-                print(f"{'='*50}")
+                print(f"{'=' * 50}")
                 inst_portfolio = build_profile_portfolio(profile_id=args.profile, instrument=inst)
                 ok = _run_preflight(inst, args.broker, demo, portfolio=inst_portfolio)
                 if not ok:

@@ -82,7 +82,11 @@ CELLS: list[HorizonCell] = [
     HorizonCell(
         name="H1_MES_LONDON_METALS_O30_RR1.5_long_ovn_range_pct_GT80",
         description="MES LONDON_METALS O30 RR1.5 LONG ovn_range_pct≥80 — overnight vol expansion predicts continuation",
-        instrument="MES", session="LONDON_METALS", aperture=30, rr=1.5, direction="long",
+        instrument="MES",
+        session="LONDON_METALS",
+        aperture=30,
+        rr=1.5,
+        direction="long",
         feature_class="ovn_range_pct",
         feature_sql="CAST((d.overnight_range_pct >= 80) AS INTEGER)",
         expected_sign="positive",
@@ -91,7 +95,11 @@ CELLS: list[HorizonCell] = [
     HorizonCell(
         name="H2_MNQ_COMEX_SETTLE_O5_RR1.0_long_garch_vol_pct_GT70",
         description="MNQ COMEX_SETTLE O5 RR1.0 LONG garch_forecast_vol_pct≥70 — forward vol forecast",
-        instrument="MNQ", session="COMEX_SETTLE", aperture=5, rr=1.0, direction="long",
+        instrument="MNQ",
+        session="COMEX_SETTLE",
+        aperture=5,
+        rr=1.0,
+        direction="long",
         feature_class="garch_vol_pct",
         feature_sql="CAST((d.garch_forecast_vol_pct >= 70) AS INTEGER)",
         expected_sign="positive",
@@ -100,7 +108,11 @@ CELLS: list[HorizonCell] = [
     HorizonCell(
         name="H3_MNQ_BRISBANE_1025_O30_RR2.0_long_is_monday",
         description="MNQ BRISBANE_1025 O30 RR2.0 LONG is_monday — Monday-open effect",
-        instrument="MNQ", session="BRISBANE_1025", aperture=30, rr=2.0, direction="long",
+        instrument="MNQ",
+        session="BRISBANE_1025",
+        aperture=30,
+        rr=2.0,
+        direction="long",
         feature_class="is_monday",
         feature_sql="CAST(d.is_monday AS INTEGER)",
         expected_sign="positive",
@@ -109,7 +121,11 @@ CELLS: list[HorizonCell] = [
     HorizonCell(
         name="H4_MNQ_COMEX_SETTLE_O15_RR1.0_short_dow_thu",
         description="MNQ COMEX_SETTLE O15 RR1.0 SHORT dow_thu — Thursday effect",
-        instrument="MNQ", session="COMEX_SETTLE", aperture=15, rr=1.0, direction="short",
+        instrument="MNQ",
+        session="COMEX_SETTLE",
+        aperture=15,
+        rr=1.0,
+        direction="short",
         feature_class="dow_thu",
         feature_sql="CAST((d.day_of_week = 3) AS INTEGER)",
         expected_sign="positive",
@@ -118,7 +134,11 @@ CELLS: list[HorizonCell] = [
     HorizonCell(
         name="H5_MES_COMEX_SETTLE_O30_RR1.0_long_ovn_took_pdh_SKIP",
         description="MES COMEX_SETTLE O30 RR1.0 LONG — SKIP when ovn_took_pdh (continuation already spent)",
-        instrument="MES", session="COMEX_SETTLE", aperture=30, rr=1.0, direction="long",
+        instrument="MES",
+        session="COMEX_SETTLE",
+        aperture=30,
+        rr=1.0,
+        direction="long",
         feature_class="ovn_took_pdh",
         feature_sql="CAST(COALESCE(d.overnight_took_pdh, false) AS INTEGER)",
         expected_sign="negative",  # SKIP signal: feature=1 → lower ExpR
@@ -152,9 +172,7 @@ def t0_tautology_horizon(cell: HorizonCell, df: pd.DataFrame) -> TestResult:
     proxies = con.execute(q).df()
     con.close()
     proxies["trading_day"] = pd.to_datetime(proxies["trading_day"])
-    merged = df[["trading_day", "feature"]].drop_duplicates().merge(
-        proxies, on="trading_day", how="left"
-    )
+    merged = df[["trading_day", "feature"]].drop_duplicates().merge(proxies, on="trading_day", how="left")
 
     all_proxies = ["pdr_r105_fire", "gap_r015_fire", "atr70_fire", "ovn80_fire"]
     proxies_to_check = [p for p in all_proxies if p != cell.self_proxy]
@@ -171,8 +189,9 @@ def t0_tautology_horizon(cell: HorizonCell, df: pd.DataFrame) -> TestResult:
     note = f"excluded self_proxy={cell.self_proxy or 'none'}; corrs={corrs}"
 
     if max_corr > 0.70:
-        return TestResult("T0_tautology", f"{max_corr:.3f} vs {max_filt}", "FAIL",
-                          f"DUPLICATE_FILTER with {max_filt}; {note}")
+        return TestResult(
+            "T0_tautology", f"{max_corr:.3f} vs {max_filt}", "FAIL", f"DUPLICATE_FILTER with {max_filt}; {note}"
+        )
     return TestResult("T0_tautology", f"max |corr|={max_corr:.3f} ({max_filt})", "PASS", note)
 
 
@@ -191,8 +210,9 @@ def t4_sensitivity_horizon(cell: HorizonCell, df: pd.DataFrame) -> TestResult:
         grid = [60, 70, 80]
         col = "garch_forecast_vol_pct"
     else:
-        return TestResult("T4_sensitivity", "N/A", "INFO",
-                          f"binary feature ({cell.feature_class}) — no theta grid applicable")
+        return TestResult(
+            "T4_sensitivity", "N/A", "INFO", f"binary feature ({cell.feature_class}) — no theta grid applicable"
+        )
 
     # Pull underlying column for IS days
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -225,19 +245,19 @@ def t4_sensitivity_horizon(cell: HorizonCell, df: pd.DataFrame) -> TestResult:
     detail_vals = ", ".join(f"θ={g}:Δ={d:+.3f}" for g, d in zip(grid, deltas))
 
     if any(np.isnan(deltas)):
-        return TestResult("T4_sensitivity", detail_vals, "INFO",
-                          f"N<30 at some threshold in grid {grid}")
+        return TestResult("T4_sensitivity", detail_vals, "INFO", f"N<30 at some threshold in grid {grid}")
     signs = [np.sign(d) for d in deltas]
     if not all(s == signs[0] for s in signs):
-        return TestResult("T4_sensitivity", detail_vals, "FAIL",
-                          "sign flips across threshold grid — PARAMETER_SENSITIVE")
+        return TestResult(
+            "T4_sensitivity", detail_vals, "FAIL", "sign flips across threshold grid — PARAMETER_SENSITIVE"
+        )
     mid_mag = abs(deltas[1])
     adj_min = min(abs(deltas[0]), abs(deltas[2]))
     if mid_mag > 0 and adj_min < 0.25 * mid_mag:
-        return TestResult("T4_sensitivity", detail_vals, "FAIL",
-                          "adjacent-threshold magnitude < 25% primary — knife-edge")
-    return TestResult("T4_sensitivity", detail_vals, "PASS",
-                      "signs consistent, magnitudes within 25% band")
+        return TestResult(
+            "T4_sensitivity", detail_vals, "FAIL", "adjacent-threshold magnitude < 25% primary — knife-edge"
+        )
+    return TestResult("T4_sensitivity", detail_vals, "PASS", "signs consistent, magnitudes within 25% band")
 
 
 # =============================================================================
@@ -378,6 +398,7 @@ def main() -> None:
             results.append(audit_cell(cell))
         except Exception as e:
             import traceback
+
             print(f"  ERROR on {cell.name}: {e}")
             traceback.print_exc()
     emit(results)

@@ -41,8 +41,8 @@ from pipeline.cost_model import COST_SPECS, CostSpec
 ALL_INSTRUMENTS = ["MGC", "MES", "MNQ", "M2K", "MCL", "M6E", "SIL"]
 
 # Minimum data requirements
-MIN_TRADING_DAYS = 200   # need at least 200 days of daily data
-MIN_TRADES = 30          # REGIME minimum per RESEARCH_RULES.md
+MIN_TRADING_DAYS = 200  # need at least 200 days of daily data
+MIN_TRADES = 30  # REGIME minimum per RESEARCH_RULES.md
 
 # BH FDR significance threshold
 FDR_ALPHA = 0.05
@@ -51,18 +51,19 @@ FDR_ALPHA = 0.05
 @dataclass
 class StrategyResult:
     """Result of a single strategy backtest."""
+
     archetype: str
     instrument: str
-    variant: str         # human-readable description of the specific config
-    params: dict         # full parameter dict
+    variant: str  # human-readable description of the specific config
+    params: dict  # full parameter dict
     n_trades: int = 0
     n_wins: int = 0
     win_rate: float = 0.0
-    avg_pnl_r: float = 0.0       # mean PnL in R-multiples
+    avg_pnl_r: float = 0.0  # mean PnL in R-multiples
     total_pnl_r: float = 0.0
-    sharpe: float = 0.0           # PnL_R Sharpe (not annualized)
+    sharpe: float = 0.0  # PnL_R Sharpe (not annualized)
     max_dd_r: float = 0.0
-    p_value: float = 1.0          # t-test H0: mean PnL_R = 0
+    p_value: float = 1.0  # t-test H0: mean PnL_R = 0
     yearly_results: dict = field(default_factory=dict)
     pnl_series: list = field(default_factory=list)  # daily PnL_R for correlation
     trade_dates: list = field(default_factory=list)
@@ -123,6 +124,7 @@ def apply_friction_r(pnl_points: float, risk_points: float, spec: CostSpec) -> f
 # ARCHETYPE 1: Multi-Day Momentum
 # =============================================================================
 
+
 def run_multiday_momentum(
     con: duckdb.DuckDBPyConnection,
     instrument: str,
@@ -139,7 +141,8 @@ def run_multiday_momentum(
     variant = f"lookback={lookback}_hold={hold_days}_q={entry_quantile}"
 
     # Get daily OHLC data
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT trading_day, daily_open, daily_close, atr_20
         FROM daily_features
         WHERE symbol = ? AND orb_minutes = 5
@@ -147,21 +150,25 @@ def run_multiday_momentum(
           AND daily_close IS NOT NULL
           AND atr_20 > 0
         ORDER BY trading_day
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
     if len(df) < MIN_TRADING_DAYS:
         return StrategyResult(
-            archetype="multi_day_momentum", instrument=instrument,
-            variant=variant, params={"lookback": lookback, "hold_days": hold_days,
-                                      "entry_quantile": entry_quantile}
+            archetype="multi_day_momentum",
+            instrument=instrument,
+            variant=variant,
+            params={"lookback": lookback, "hold_days": hold_days, "entry_quantile": entry_quantile},
         )
 
     spec = COST_SPECS.get(instrument)
     if spec is None:
         return StrategyResult(
-            archetype="multi_day_momentum", instrument=instrument,
-            variant=variant, params={"lookback": lookback, "hold_days": hold_days,
-                                      "entry_quantile": entry_quantile}
+            archetype="multi_day_momentum",
+            instrument=instrument,
+            variant=variant,
+            params={"lookback": lookback, "hold_days": hold_days, "entry_quantile": entry_quantile},
         )
 
     df = df.sort_values("trading_day").reset_index(drop=True)
@@ -191,7 +198,7 @@ def run_multiday_momentum(
 
         direction = 0
         if ret >= q_hi:
-            direction = 1   # long (momentum continuation)
+            direction = 1  # long (momentum continuation)
         elif ret <= q_lo:
             direction = -1  # short (momentum continuation)
 
@@ -228,9 +235,10 @@ def run_multiday_momentum(
     n = len(trades)
     if n < 1:
         return StrategyResult(
-            archetype="multi_day_momentum", instrument=instrument,
-            variant=variant, params={"lookback": lookback, "hold_days": hold_days,
-                                      "entry_quantile": entry_quantile}
+            archetype="multi_day_momentum",
+            instrument=instrument,
+            variant=variant,
+            params={"lookback": lookback, "hold_days": hold_days, "entry_quantile": entry_quantile},
         )
 
     arr = np.array(trades)
@@ -249,16 +257,21 @@ def run_multiday_momentum(
         p_val = 1.0
 
     return StrategyResult(
-        archetype="multi_day_momentum", instrument=instrument,
+        archetype="multi_day_momentum",
+        instrument=instrument,
         variant=variant,
-        params={"lookback": lookback, "hold_days": hold_days,
-                "entry_quantile": entry_quantile},
-        n_trades=n, n_wins=wins, win_rate=round(wins / n, 4),
-        avg_pnl_r=round(avg_r, 4), total_pnl_r=round(total_r, 2),
-        sharpe=round(sharpe, 4), max_dd_r=compute_max_dd(trades),
+        params={"lookback": lookback, "hold_days": hold_days, "entry_quantile": entry_quantile},
+        n_trades=n,
+        n_wins=wins,
+        win_rate=round(wins / n, 4),
+        avg_pnl_r=round(avg_r, 4),
+        total_pnl_r=round(total_r, 2),
+        sharpe=round(sharpe, 4),
+        max_dd_r=compute_max_dd(trades),
         p_value=round(p_val, 6),
         yearly_results=yearly_breakdown(trade_dates, trades),
-        pnl_series=trades, trade_dates=trade_dates,
+        pnl_series=trades,
+        trade_dates=trade_dates,
     )
 
 
@@ -266,11 +279,12 @@ def run_multiday_momentum(
 # ARCHETYPE 2: Vol Expansion Fade
 # =============================================================================
 
+
 def run_vol_expansion_fade(
     con: duckdb.DuckDBPyConnection,
     instrument: str,
     atr_ratio_threshold: float = 1.3,
-    fade_mode: str = "fade_prior",   # "fade_prior" or "fade_toward_mean"
+    fade_mode: str = "fade_prior",  # "fade_prior" or "fade_toward_mean"
 ) -> StrategyResult:
     """Vol expansion fade: after ATR explodes, mean-revert next day.
 
@@ -284,7 +298,8 @@ def run_vol_expansion_fade(
     """
     variant = f"atr_ratio>{atr_ratio_threshold}_{fade_mode}"
 
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT trading_day, daily_open, daily_high, daily_low, daily_close,
                atr_20, prev_day_direction, prev_day_close, prev_day_high, prev_day_low
         FROM daily_features
@@ -292,21 +307,25 @@ def run_vol_expansion_fade(
           AND daily_open IS NOT NULL AND daily_close IS NOT NULL
           AND atr_20 > 0
         ORDER BY trading_day
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
     if len(df) < MIN_TRADING_DAYS:
         return StrategyResult(
-            archetype="vol_expansion_fade", instrument=instrument,
-            variant=variant, params={"atr_ratio_threshold": atr_ratio_threshold,
-                                     "fade_mode": fade_mode}
+            archetype="vol_expansion_fade",
+            instrument=instrument,
+            variant=variant,
+            params={"atr_ratio_threshold": atr_ratio_threshold, "fade_mode": fade_mode},
         )
 
     spec = COST_SPECS.get(instrument)
     if spec is None:
         return StrategyResult(
-            archetype="vol_expansion_fade", instrument=instrument,
-            variant=variant, params={"atr_ratio_threshold": atr_ratio_threshold,
-                                     "fade_mode": fade_mode}
+            archetype="vol_expansion_fade",
+            instrument=instrument,
+            variant=variant,
+            params={"atr_ratio_threshold": atr_ratio_threshold, "fade_mode": fade_mode},
         )
 
     df = df.sort_values("trading_day").reset_index(drop=True)
@@ -337,7 +356,7 @@ def run_vol_expansion_fade(
             if prev_dir == "UP":
                 direction = -1  # fade the prior up day
             elif prev_dir == "DOWN":
-                direction = 1   # fade the prior down day
+                direction = 1  # fade the prior down day
             else:
                 continue
         else:
@@ -367,9 +386,10 @@ def run_vol_expansion_fade(
     n = len(trades)
     if n < 1:
         return StrategyResult(
-            archetype="vol_expansion_fade", instrument=instrument,
-            variant=variant, params={"atr_ratio_threshold": atr_ratio_threshold,
-                                     "fade_mode": fade_mode}
+            archetype="vol_expansion_fade",
+            instrument=instrument,
+            variant=variant,
+            params={"atr_ratio_threshold": atr_ratio_threshold, "fade_mode": fade_mode},
         )
 
     arr = np.array(trades)
@@ -386,21 +406,28 @@ def run_vol_expansion_fade(
         p_val = 1.0
 
     return StrategyResult(
-        archetype="vol_expansion_fade", instrument=instrument,
+        archetype="vol_expansion_fade",
+        instrument=instrument,
         variant=variant,
         params={"atr_ratio_threshold": atr_ratio_threshold, "fade_mode": fade_mode},
-        n_trades=n, n_wins=wins, win_rate=round(wins / n, 4),
-        avg_pnl_r=round(avg_r, 4), total_pnl_r=round(total_r, 2),
-        sharpe=round(sharpe, 4), max_dd_r=compute_max_dd(trades),
+        n_trades=n,
+        n_wins=wins,
+        win_rate=round(wins / n, 4),
+        avg_pnl_r=round(avg_r, 4),
+        total_pnl_r=round(total_r, 2),
+        sharpe=round(sharpe, 4),
+        max_dd_r=compute_max_dd(trades),
         p_value=round(p_val, 6),
         yearly_results=yearly_breakdown(trade_dates, trades),
-        pnl_series=trades, trade_dates=trade_dates,
+        pnl_series=trades,
+        trade_dates=trade_dates,
     )
 
 
 # =============================================================================
 # ARCHETYPE 3: Cross-Instrument Vol Signal
 # =============================================================================
+
 
 def run_cross_instrument_vol(
     con: duckdb.DuckDBPyConnection,
@@ -422,7 +449,8 @@ def run_cross_instrument_vol(
     variant = f"{leader}->{follower}_vol>{vol_threshold}_rr{rr_target}"
 
     # Get leader and follower daily data aligned by trading_day
-    df = con.execute("""
+    df = con.execute(
+        """
         SELECT l.trading_day,
                l.daily_close - l.daily_open AS leader_return,
                l.daily_high - l.daily_low AS leader_range,
@@ -442,21 +470,25 @@ def run_cross_instrument_vol(
           AND l.atr_20 > 0 AND f.atr_20 > 0
           AND f.daily_open IS NOT NULL AND f.daily_close IS NOT NULL
         ORDER BY l.trading_day
-    """, [leader, follower]).fetchdf()
+    """,
+        [leader, follower],
+    ).fetchdf()
 
     if len(df) < MIN_TRADING_DAYS:
         return StrategyResult(
-            archetype="cross_instrument_vol", instrument=f"{leader}->{follower}",
-            variant=variant, params={"leader": leader, "follower": follower,
-                                     "vol_threshold": vol_threshold, "rr_target": rr_target}
+            archetype="cross_instrument_vol",
+            instrument=f"{leader}->{follower}",
+            variant=variant,
+            params={"leader": leader, "follower": follower, "vol_threshold": vol_threshold, "rr_target": rr_target},
         )
 
     spec = COST_SPECS.get(follower)
     if spec is None:
         return StrategyResult(
-            archetype="cross_instrument_vol", instrument=f"{leader}->{follower}",
-            variant=variant, params={"leader": leader, "follower": follower,
-                                     "vol_threshold": vol_threshold, "rr_target": rr_target}
+            archetype="cross_instrument_vol",
+            instrument=f"{leader}->{follower}",
+            variant=variant,
+            params={"leader": leader, "follower": follower, "vol_threshold": vol_threshold, "rr_target": rr_target},
         )
 
     trades = []
@@ -503,9 +535,10 @@ def run_cross_instrument_vol(
     n = len(trades)
     if n < 1:
         return StrategyResult(
-            archetype="cross_instrument_vol", instrument=f"{leader}->{follower}",
-            variant=variant, params={"leader": leader, "follower": follower,
-                                     "vol_threshold": vol_threshold, "rr_target": rr_target}
+            archetype="cross_instrument_vol",
+            instrument=f"{leader}->{follower}",
+            variant=variant,
+            params={"leader": leader, "follower": follower, "vol_threshold": vol_threshold, "rr_target": rr_target},
         )
 
     arr = np.array(trades)
@@ -522,22 +555,28 @@ def run_cross_instrument_vol(
         p_val = 1.0
 
     return StrategyResult(
-        archetype="cross_instrument_vol", instrument=f"{leader}->{follower}",
+        archetype="cross_instrument_vol",
+        instrument=f"{leader}->{follower}",
         variant=variant,
-        params={"leader": leader, "follower": follower,
-                "vol_threshold": vol_threshold, "rr_target": rr_target},
-        n_trades=n, n_wins=wins, win_rate=round(wins / n, 4),
-        avg_pnl_r=round(avg_r, 4), total_pnl_r=round(total_r, 2),
-        sharpe=round(sharpe, 4), max_dd_r=compute_max_dd(trades),
+        params={"leader": leader, "follower": follower, "vol_threshold": vol_threshold, "rr_target": rr_target},
+        n_trades=n,
+        n_wins=wins,
+        win_rate=round(wins / n, 4),
+        avg_pnl_r=round(avg_r, 4),
+        total_pnl_r=round(total_r, 2),
+        sharpe=round(sharpe, 4),
+        max_dd_r=compute_max_dd(trades),
         p_value=round(p_val, 6),
         yearly_results=yearly_breakdown(trade_dates, trades),
-        pnl_series=trades, trade_dates=trade_dates,
+        pnl_series=trades,
+        trade_dates=trade_dates,
     )
 
 
 # =============================================================================
 # BH FDR Correction
 # =============================================================================
+
 
 def bh_fdr(p_values: list[float], alpha: float = 0.05) -> list[tuple[int, float, bool]]:
     """Benjamini-Hochberg FDR correction.
@@ -568,6 +607,7 @@ def bh_fdr(p_values: list[float], alpha: float = 0.05) -> list[tuple[int, float,
 # ORB Correlation Analysis
 # =============================================================================
 
+
 def compute_orb_correlation(
     con: duckdb.DuckDBPyConnection,
     result: StrategyResult,
@@ -579,7 +619,8 @@ def compute_orb_correlation(
 
     # Get a representative ORB strategy's daily PnL for this instrument
     # Use 1000 session E0 CB1 RR1.0 NO_FILTER as the baseline ORB
-    orb_df = con.execute("""
+    orb_df = con.execute(
+        """
         SELECT o.trading_day, o.pnl_r
         FROM orb_outcomes o
         WHERE o.symbol = ? AND o.orb_label = '1000'
@@ -587,11 +628,14 @@ def compute_orb_correlation(
           AND o.rr_target = 1.0 AND o.orb_minutes = 5
           AND o.outcome IN ('WIN', 'LOSS')
         ORDER BY o.trading_day
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
     if orb_df.empty:
         # Try 0900 for MGC
-        orb_df = con.execute("""
+        orb_df = con.execute(
+            """
             SELECT o.trading_day, o.pnl_r
             FROM orb_outcomes o
             WHERE o.symbol = ? AND o.orb_label = '0900'
@@ -599,16 +643,20 @@ def compute_orb_correlation(
               AND o.rr_target = 1.0 AND o.orb_minutes = 5
               AND o.outcome IN ('WIN', 'LOSS')
             ORDER BY o.trading_day
-        """, [instrument]).fetchdf()
+        """,
+            [instrument],
+        ).fetchdf()
 
     if orb_df.empty:
         return None
 
     # Align by date
-    strat_df = pd.DataFrame({
-        "trading_day": result.trade_dates,
-        "strat_pnl": result.pnl_series,
-    })
+    strat_df = pd.DataFrame(
+        {
+            "trading_day": result.trade_dates,
+            "strat_pnl": result.pnl_series,
+        }
+    )
     strat_df["trading_day"] = pd.to_datetime(strat_df["trading_day"])
     orb_df["trading_day"] = pd.to_datetime(orb_df["trading_day"])
 
@@ -624,8 +672,10 @@ def compute_orb_correlation(
 # Main Runner
 # =============================================================================
 
-def run_all(db_path: str, archetype_filter: Optional[str] = None,
-            instrument_filter: Optional[str] = None) -> list[StrategyResult]:
+
+def run_all(
+    db_path: str, archetype_filter: Optional[str] = None, instrument_filter: Optional[str] = None
+) -> list[StrategyResult]:
     """Run all Phase 1 strategies."""
     results = []
     con = duckdb.connect(db_path, read_only=True)
@@ -646,16 +696,21 @@ def run_all(db_path: str, archetype_filter: Optional[str] = None,
                 for lookback in [3, 5, 10, 20]:
                     for hold in [1, 2, 3, 5]:
                         r = run_multiday_momentum(
-                            con, inst, lookback=lookback, hold_days=hold,
+                            con,
+                            inst,
+                            lookback=lookback,
+                            hold_days=hold,
                             entry_quantile=0.2,
                         )
                         results.append(r)
                         if r.n_trades >= MIN_TRADES:
                             sig = "*" if r.p_value < 0.05 else " "
-                            print(f"  {sig} {inst:4s} L={lookback:2d} H={hold} "
-                                  f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                                  f"ExpR={r.avg_pnl_r:+.4f} Sharpe={r.sharpe:.3f} "
-                                  f"p={r.p_value:.4f}")
+                            print(
+                                f"  {sig} {inst:4s} L={lookback:2d} H={hold} "
+                                f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                                f"ExpR={r.avg_pnl_r:+.4f} Sharpe={r.sharpe:.3f} "
+                                f"p={r.p_value:.4f}"
+                            )
 
         # =====================================================================
         # ARCHETYPE 2: Vol Expansion Fade
@@ -668,16 +723,20 @@ def run_all(db_path: str, archetype_filter: Optional[str] = None,
                 for threshold in [1.2, 1.3, 1.5, 1.8]:
                     for mode in ["fade_prior", "fade_toward_mean"]:
                         r = run_vol_expansion_fade(
-                            con, inst, atr_ratio_threshold=threshold,
+                            con,
+                            inst,
+                            atr_ratio_threshold=threshold,
                             fade_mode=mode,
                         )
                         results.append(r)
                         if r.n_trades >= MIN_TRADES:
                             sig = "*" if r.p_value < 0.05 else " "
-                            print(f"  {sig} {inst:4s} ATR>{threshold:.1f} {mode:20s} "
-                                  f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                                  f"ExpR={r.avg_pnl_r:+.4f} Sharpe={r.sharpe:.3f} "
-                                  f"p={r.p_value:.4f}")
+                            print(
+                                f"  {sig} {inst:4s} ATR>{threshold:.1f} {mode:20s} "
+                                f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                                f"ExpR={r.avg_pnl_r:+.4f} Sharpe={r.sharpe:.3f} "
+                                f"p={r.p_value:.4f}"
+                            )
 
         # =====================================================================
         # ARCHETYPE 3: Cross-Instrument Vol Signal
@@ -688,28 +747,38 @@ def run_all(db_path: str, archetype_filter: Optional[str] = None,
             print("=" * 70)
             # Define leader-follower pairs
             pairs = [
-                ("MGC", "MES"), ("MGC", "MNQ"), ("MGC", "M2K"),
-                ("M6E", "MGC"), ("M6E", "MES"),
-                ("MCL", "MES"), ("MCL", "MGC"),
-                ("MES", "MGC"), ("MNQ", "MGC"),
-                ("MGC", "MCL"), ("MGC", "SIL"),
+                ("MGC", "MES"),
+                ("MGC", "MNQ"),
+                ("MGC", "M2K"),
+                ("M6E", "MGC"),
+                ("M6E", "MES"),
+                ("MCL", "MES"),
+                ("MCL", "MGC"),
+                ("MES", "MGC"),
+                ("MNQ", "MGC"),
+                ("MGC", "MCL"),
+                ("MGC", "SIL"),
             ]
             if instrument_filter:
-                pairs = [(l, f) for l, f in pairs
-                         if l == instrument_filter or f == instrument_filter]
+                pairs = [(l, f) for l, f in pairs if l == instrument_filter or f == instrument_filter]
 
             for leader, follower in pairs:
                 for vol_thresh in [1.0, 1.5, 2.0]:
                     r = run_cross_instrument_vol(
-                        con, leader, follower, vol_threshold=vol_thresh,
+                        con,
+                        leader,
+                        follower,
+                        vol_threshold=vol_thresh,
                     )
                     results.append(r)
                     if r.n_trades >= MIN_TRADES:
                         sig = "*" if r.p_value < 0.05 else " "
-                        print(f"  {sig} {leader:4s}->{follower:4s} vol>{vol_thresh:.1f} "
-                              f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
-                              f"ExpR={r.avg_pnl_r:+.4f} Sharpe={r.sharpe:.3f} "
-                              f"p={r.p_value:.4f}")
+                        print(
+                            f"  {sig} {leader:4s}->{follower:4s} vol>{vol_thresh:.1f} "
+                            f"N={r.n_trades:4d} WR={r.win_rate:.2%} "
+                            f"ExpR={r.avg_pnl_r:+.4f} Sharpe={r.sharpe:.3f} "
+                            f"p={r.p_value:.4f}"
+                        )
 
         # =====================================================================
         # FDR CORRECTION
@@ -729,18 +798,22 @@ def run_all(db_path: str, archetype_filter: Optional[str] = None,
             print(f"FDR-significant at alpha={FDR_ALPHA}: {n_sig}")
 
             if n_sig > 0:
-                print(f"\n{'Archetype':<25s} {'Instrument':<15s} {'Variant':<40s} "
-                      f"{'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>7s} "
-                      f"{'raw_p':>8s} {'adj_p':>8s}")
+                print(
+                    f"\n{'Archetype':<25s} {'Instrument':<15s} {'Variant':<40s} "
+                    f"{'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>7s} "
+                    f"{'raw_p':>8s} {'adj_p':>8s}"
+                )
                 print("-" * 130)
                 for idx, adj_p, sig in fdr_results:
                     if sig:
                         r = valid_results[idx]
-                        print(f"{r.archetype:<25s} {r.instrument:<15s} "
-                              f"{r.variant:<40s} "
-                              f"{r.n_trades:5d} {r.win_rate:7.2%} "
-                              f"{r.avg_pnl_r:+8.4f} {r.sharpe:7.3f} "
-                              f"{r.p_value:8.4f} {adj_p:8.4f}")
+                        print(
+                            f"{r.archetype:<25s} {r.instrument:<15s} "
+                            f"{r.variant:<40s} "
+                            f"{r.n_trades:5d} {r.win_rate:7.2%} "
+                            f"{r.avg_pnl_r:+8.4f} {r.sharpe:7.3f} "
+                            f"{r.p_value:8.4f} {adj_p:8.4f}"
+                        )
             else:
                 print("\nNo strategies survived FDR correction.")
         else:
@@ -760,8 +833,7 @@ def run_all(db_path: str, archetype_filter: Optional[str] = None,
                 corr = compute_orb_correlation(con, r, inst)
                 if corr is not None:
                     label = "UNCORRELATED" if abs(corr) < 0.3 else "CORRELATED"
-                    print(f"  {r.archetype:25s} {r.instrument:15s} "
-                          f"{r.variant:40s} corr={corr:+.3f} [{label}]")
+                    print(f"  {r.archetype:25s} {r.instrument:15s} {r.variant:40s} corr={corr:+.3f} [{label}]")
 
         # =====================================================================
         # HONEST SUMMARY
@@ -770,16 +842,20 @@ def run_all(db_path: str, archetype_filter: Optional[str] = None,
         print("HONEST SUMMARY (per RESEARCH_RULES.md)")
         print("=" * 70)
 
-        survived = [r for i, (_, adj_p, sig) in enumerate(fdr_results)
-                    if sig for r in [valid_results[i]]] if valid_results else []
-        failed = [r for r in valid_results
-                  if r not in survived and r.n_trades >= MIN_TRADES]
+        survived = (
+            [r for i, (_, adj_p, sig) in enumerate(fdr_results) if sig for r in [valid_results[i]]]
+            if valid_results
+            else []
+        )
+        failed = [r for r in valid_results if r not in survived and r.n_trades >= MIN_TRADES]
 
         print("\nSURVIVED SCRUTINY:")
         if survived:
             for r in survived:
-                print(f"  - {r.archetype} | {r.instrument} | {r.variant} | "
-                      f"N={r.n_trades}, ExpR={r.avg_pnl_r:+.4f}, p={r.p_value:.4f}")
+                print(
+                    f"  - {r.archetype} | {r.instrument} | {r.variant} | "
+                    f"N={r.n_trades}, ExpR={r.avg_pnl_r:+.4f}, p={r.p_value:.4f}"
+                )
         else:
             print("  None.")
 
@@ -794,8 +870,7 @@ def run_all(db_path: str, archetype_filter: Optional[str] = None,
 
         print("\nNEXT STEPS:")
         print("  - For FDR survivors: run sensitivity analysis (±20% on parameters)")
-        print("  - Run Phase 2 (intraday strategies): Failed Breakout Fade, "
-              "Late-Session Reversal, VWAP Reversion")
+        print("  - Run Phase 2 (intraday strategies): Failed Breakout Fade, Late-Session Reversal, VWAP Reversion")
         print("  - Compute full correlation matrix with ORB portfolio daily PnL")
 
     finally:
@@ -808,15 +883,18 @@ def run_all(db_path: str, archetype_filter: Optional[str] = None,
 # Entry Point
 # =============================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="Non-ORB Strategy Research — Phase 1")
     parser.add_argument("--db-path", type=Path, default=PROJECT_ROOT / "gold.db")
-    parser.add_argument("--archetype", type=str, default=None,
-                        choices=["momentum", "vol_fade", "cross_vol"],
-                        help="Run only one archetype")
-    parser.add_argument("--instrument", type=str, default=None,
-                        choices=ALL_INSTRUMENTS,
-                        help="Run only one instrument")
+    parser.add_argument(
+        "--archetype",
+        type=str,
+        default=None,
+        choices=["momentum", "vol_fade", "cross_vol"],
+        help="Run only one archetype",
+    )
+    parser.add_argument("--instrument", type=str, default=None, choices=ALL_INSTRUMENTS, help="Run only one instrument")
     args = parser.parse_args()
 
     print("Non-ORB Strategy Research — Phase 1: Daily-Level Strategies")

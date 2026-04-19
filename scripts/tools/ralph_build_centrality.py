@@ -57,16 +57,14 @@ def _count_importers(target: Path) -> int:
     combined = "|".join(patterns)
     try:
         result = subprocess.run(
-            ["grep", "-rlE", combined, "pipeline/", "trading_app/", "scripts/",
-             "--include=*.py"],
-            capture_output=True, text=True, cwd=PROJECT_ROOT,
+            ["grep", "-rlE", combined, "pipeline/", "trading_app/", "scripts/", "--include=*.py"],
+            capture_output=True,
+            text=True,
+            cwd=PROJECT_ROOT,
         )
         # Exclude self
         target_rel = rel
-        matches = [
-            line for line in result.stdout.strip().split("\n")
-            if line and line.replace("\\", "/") != target_rel
-        ]
+        matches = [line for line in result.stdout.strip().split("\n") if line and line.replace("\\", "/") != target_rel]
         count = len(matches)
     except Exception:
         count = 0
@@ -106,7 +104,7 @@ def main() -> None:
             "centrality": tier,
         }
         if (i + 1) % 50 == 0 or importers >= 5:
-            print(f"  [{i+1}/{len(all_files)}] {rel}: {importers} importers ({tier})")
+            print(f"  [{i + 1}/{len(all_files)}] {rel}: {importers} importers ({tier})")
 
     # Summary
     tiers = {"critical": 0, "high": 0, "medium": 0, "low": 0}

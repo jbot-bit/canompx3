@@ -108,14 +108,10 @@ class TestAccountProfile:
         assert p.account_size == 50_000
         assert p.active is True
         lanes = effective_daily_lanes(p)
-        assert len(lanes) <= p.max_slots, (
-            f"effective lane count {len(lanes)} exceeds max_slots {p.max_slots}"
-        )
+        assert len(lanes) <= p.max_slots, f"effective lane count {len(lanes)} exceeds max_slots {p.max_slots}"
         assert all(lane.instrument == "MNQ" for lane in lanes)
         for lane in lanes:
-            assert lane.max_orb_size_pts is not None, (
-                f"{lane.strategy_id} missing ORB cap"
-            )
+            assert lane.max_orb_size_pts is not None, f"{lane.strategy_id} missing ORB cap"
             assert lane.orb_label in p.allowed_sessions, (
                 f"{lane.strategy_id} session {lane.orb_label} not in allowed_sessions"
             )

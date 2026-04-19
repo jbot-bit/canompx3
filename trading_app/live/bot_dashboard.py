@@ -40,6 +40,7 @@ STOP_FILE = PROJECT_ROOT / "live_session.stop"
 LOG_DIR = PROJECT_ROOT / "logs"
 BRISBANE_TZ = ZoneInfo("Australia/Brisbane")
 
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """Startup: clean stale locks/state. Shutdown: terminate child processes."""
@@ -73,8 +74,10 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
 
     # ── Connect brokers ──
     from dotenv import load_dotenv as _ld
+
     _ld(PROJECT_ROOT / ".env")
     from trading_app.live.broker_connections import connection_manager
+
     connection_manager.load()
     _start_broker_connect_background(connection_manager)
 
@@ -256,8 +259,11 @@ def _legacy_lanes_to_lane_cards(
                         }
                     )
         except Exception:
-            log.warning("Failed to load profile %r for lane reconstruction — falling back to raw lanes",
-                        profile_id, exc_info=True)
+            log.warning(
+                "Failed to load profile %r for lane reconstruction — falling back to raw lanes",
+                profile_id,
+                exc_info=True,
+            )
 
     if not lane_cards:
         for session_name, lane in raw_lanes.items():
@@ -1169,19 +1175,21 @@ def _fetch_accounts_for_connection(conn_id: str, broker_type: str, auth: object)
                 hwm[hwm_key] = balance
                 stored_hwm = balance
 
-            accounts.append({
-                "id": int(acct_id),
-                "name": name,
-                "balance": balance,
-                "hwm": stored_hwm if stored_hwm > 0 else balance,
-                "can_trade": can_trade,
-                "is_visible": is_visible,
-                "status": _classify_account(can_trade, is_visible),
-                "broker": broker_type,
-                "broker_display": "TopStepX",
-                "balance_type": "realized",
-                "connection_id": conn_id,
-            })
+            accounts.append(
+                {
+                    "id": int(acct_id),
+                    "name": name,
+                    "balance": balance,
+                    "hwm": stored_hwm if stored_hwm > 0 else balance,
+                    "can_trade": can_trade,
+                    "is_visible": is_visible,
+                    "status": _classify_account(can_trade, is_visible),
+                    "broker": broker_type,
+                    "broker_display": "TopStepX",
+                    "balance_type": "realized",
+                    "connection_id": conn_id,
+                }
+            )
 
         _save_hwm(hwm)
         return {"accounts": accounts, "count": len([a for a in accounts if a["status"] == "tradeable"])}
@@ -1236,20 +1244,52 @@ async def api_equity():
                 await asyncio.to_thread(connection_manager.connect, conn_id)
                 auth = connection_manager.get_auth(conn_id)
             except Exception as e:
-                brokers.append({"name": broker_type, "display": display_name, "connection_id": conn_id, "error": str(e), "accounts": []})
+                brokers.append(
+                    {
+                        "name": broker_type,
+                        "display": display_name,
+                        "connection_id": conn_id,
+                        "error": str(e),
+                        "accounts": [],
+                    }
+                )
                 continue
 
         if auth is None:
-            brokers.append({"name": broker_type, "display": display_name, "connection_id": conn_id, "error": "Auth not available", "accounts": []})
+            brokers.append(
+                {
+                    "name": broker_type,
+                    "display": display_name,
+                    "connection_id": conn_id,
+                    "error": "Auth not available",
+                    "accounts": [],
+                }
+            )
             continue
 
         try:
             fetch_result = await asyncio.to_thread(_fetch_accounts_for_connection, conn_id, broker_type, auth)
             connection_manager.update_account_count(conn_id, fetch_result["count"])
-            brokers.append({"name": broker_type, "display": display_name, "connection_id": conn_id, "error": None, "accounts": fetch_result["accounts"]})
+            brokers.append(
+                {
+                    "name": broker_type,
+                    "display": display_name,
+                    "connection_id": conn_id,
+                    "error": None,
+                    "accounts": fetch_result["accounts"],
+                }
+            )
         except Exception as e:
             log.warning("Equity fetch failed for %s: %s", display_name, e)
-            brokers.append({"name": broker_type, "display": display_name, "connection_id": conn_id, "error": str(e), "accounts": []})
+            brokers.append(
+                {
+                    "name": broker_type,
+                    "display": display_name,
+                    "connection_id": conn_id,
+                    "error": str(e),
+                    "accounts": [],
+                }
+            )
 
     eq_result = {
         "brokers": brokers,

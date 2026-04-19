@@ -50,12 +50,13 @@ def is_winter(trading_day: date, session: str) -> bool:
     """True if trading_day falls in winter (standard time) for this session's reference TZ."""
     tz = SESSION_DST_TZ[session]
     from datetime import datetime, time
+
     dt = datetime.combine(trading_day, time(12, 0), tzinfo=tz)
     offset_hours = dt.utcoffset().total_seconds() / 3600
     if tz == TZ_US_EAST:
         return offset_hours == -5  # EST
     else:  # UK
-        return offset_hours == 0   # GMT
+        return offset_hours == 0  # GMT
 
 
 # ── Filter reconstruction ─────────────────────────────────────────────
@@ -84,6 +85,7 @@ def get_eligible_days(features: list[dict], orb_label: str, filter_type: str) ->
 
 # ── Metrics computation ───────────────────────────────────────────────
 
+
 def compute_split_metrics(outcomes: list[dict]) -> dict:
     """Compute N, avgR, totalR, WR, Sharpe, MaxDD from outcome list."""
     if not outcomes:
@@ -105,7 +107,7 @@ def compute_split_metrics(outcomes: list[dict]) -> dict:
         mean_r = avg_r
         if n > 1:
             var = sum((r - mean_r) ** 2 for r in rs) / (n - 1)
-            std = var ** 0.5
+            std = var**0.5
             if std > 0:
                 sharpe = mean_r / std
 
@@ -118,9 +120,14 @@ def compute_split_metrics(outcomes: list[dict]) -> dict:
         peak = max(peak, cum)
         max_dd = max(max_dd, peak - cum)
 
-    return {"n": n, "avg_r": round(avg_r, 4), "total_r": round(total_r, 2),
-            "wr": round(wr, 4), "sharpe": round(sharpe, 4) if sharpe else None,
-            "max_dd": round(max_dd, 2)}
+    return {
+        "n": n,
+        "avg_r": round(avg_r, 4),
+        "total_r": round(total_r, 2),
+        "wr": round(wr, 4),
+        "sharpe": round(sharpe, 4) if sharpe else None,
+        "max_dd": round(max_dd, 2),
+    }
 
 
 def classify_dst_stability(winter: dict, summer: dict) -> str:
@@ -148,6 +155,7 @@ def classify_dst_stability(winter: dict, summer: dict) -> str:
 
 
 # ── Main ──────────────────────────────────────────────────────────────
+
 
 def main():
     parser = argparse.ArgumentParser(description="DST strategy re-validation")
@@ -225,13 +233,16 @@ def main():
         eligible = get_eligible_days(features, session, ft)
 
         # Load outcomes
-        outcomes = con.execute("""
+        outcomes = con.execute(
+            """
             SELECT trading_day, outcome, pnl_r
             FROM orb_outcomes
             WHERE symbol = ? AND orb_minutes = ? AND orb_label = ?
               AND entry_model = ? AND rr_target = ? AND confirm_bars = ?
               AND outcome IS NOT NULL
-        """, [inst, om, session, em, rr, cb]).fetchall()
+        """,
+            [inst, om, session, em, rr, cb],
+        ).fetchall()
         o_cols = [d[0] for d in con.description]
         outcomes = [dict(zip(o_cols, r)) for r in outcomes]
 
@@ -247,19 +258,29 @@ def main():
         summer = compute_split_metrics(summer_outcomes)
         verdict = classify_dst_stability(winter, summer)
 
-        results.append({
-            "strategy_id": sid, "source": strat["source"],
-            "instrument": inst, "session": session, "filter": ft,
-            "combined_n": combined["n"], "combined_avgR": combined["avg_r"],
-            "combined_sharpe": combined["sharpe"],
-            "winter_n": winter["n"], "winter_avgR": winter["avg_r"],
-            "winter_wr": winter["wr"], "winter_sharpe": winter["sharpe"],
-            "winter_maxdd": winter["max_dd"],
-            "summer_n": summer["n"], "summer_avgR": summer["avg_r"],
-            "summer_wr": summer["wr"], "summer_sharpe": summer["sharpe"],
-            "summer_maxdd": summer["max_dd"],
-            "verdict": verdict,
-        })
+        results.append(
+            {
+                "strategy_id": sid,
+                "source": strat["source"],
+                "instrument": inst,
+                "session": session,
+                "filter": ft,
+                "combined_n": combined["n"],
+                "combined_avgR": combined["avg_r"],
+                "combined_sharpe": combined["sharpe"],
+                "winter_n": winter["n"],
+                "winter_avgR": winter["avg_r"],
+                "winter_wr": winter["wr"],
+                "winter_sharpe": winter["sharpe"],
+                "winter_maxdd": winter["max_dd"],
+                "summer_n": summer["n"],
+                "summer_avgR": summer["avg_r"],
+                "summer_wr": summer["wr"],
+                "summer_sharpe": summer["sharpe"],
+                "summer_maxdd": summer["max_dd"],
+                "verdict": verdict,
+            }
+        )
 
         if (i + 1) % 50 == 0:
             print(f"  {i + 1}/{len(strategies)} processed")
@@ -274,6 +295,7 @@ def main():
 
     # Summary
     from collections import Counter
+
     verdict_counts = Counter(r["verdict"] for r in results)
     print("\n--- Verdict Summary ---")
     for v in ["STABLE", "WINTER-DOMINANT", "SUMMER-DOMINANT", "WINTER-ONLY", "SUMMER-ONLY", "LOW-N", "UNSTABLE"]:
@@ -290,14 +312,22 @@ def main():
     results.sort(key=instability)
 
     print(f"\n--- Per-Strategy Detail (sorted by |winter - summer|) ---")
-    print(f"{'Strategy ID':<45s} {'Sess':>4s} {'Src':>5s} | {'Comb avgR':>9s} {'W avgR(N)':>12s} {'S avgR(N)':>12s} | Verdict")
+    print(
+        f"{'Strategy ID':<45s} {'Sess':>4s} {'Src':>5s} | {'Comb avgR':>9s} {'W avgR(N)':>12s} {'S avgR(N)':>12s} | Verdict"
+    )
     print("-" * 110)
     for r in results:
-        wa_str = f"{r['winter_avgR']:+.3f}({r['winter_n']})" if r['winter_avgR'] is not None else f"  N/A({r['winter_n']})"
-        sa_str = f"{r['summer_avgR']:+.3f}({r['summer_n']})" if r['summer_avgR'] is not None else f"  N/A({r['summer_n']})"
-        ca_str = f"{r['combined_avgR']:+.3f}" if r['combined_avgR'] is not None else "  N/A"
+        wa_str = (
+            f"{r['winter_avgR']:+.3f}({r['winter_n']})" if r["winter_avgR"] is not None else f"  N/A({r['winter_n']})"
+        )
+        sa_str = (
+            f"{r['summer_avgR']:+.3f}({r['summer_n']})" if r["summer_avgR"] is not None else f"  N/A({r['summer_n']})"
+        )
+        ca_str = f"{r['combined_avgR']:+.3f}" if r["combined_avgR"] is not None else "  N/A"
         src = "VAL" if r["source"] == "validated" else "EXP"
-        print(f"{r['strategy_id']:<45s} {r['session']:>4s} {src:>5s} | {ca_str:>9s} {wa_str:>12s} {sa_str:>12s} | {r['verdict']}")
+        print(
+            f"{r['strategy_id']:<45s} {r['session']:>4s} {src:>5s} | {ca_str:>9s} {wa_str:>12s} {sa_str:>12s} | {r['verdict']}"
+        )
 
     # Red flags
     red_flags = [r for r in results if r["verdict"] in ("WINTER-ONLY", "SUMMER-ONLY")]
@@ -323,9 +353,13 @@ def main():
         print("\n--- No RED FLAGS (no edges that fully die in one regime) ---")
 
     # Hidden edges (experimental that would validate in one regime)
-    hidden = [r for r in results if r["source"] == "experimental"
-              and r["verdict"] in ("WINTER-ONLY", "SUMMER-ONLY", "WINTER-DOMINANT", "SUMMER-DOMINANT")
-              and max(r["winter_n"] or 0, r["summer_n"] or 0) >= 30]
+    hidden = [
+        r
+        for r in results
+        if r["source"] == "experimental"
+        and r["verdict"] in ("WINTER-ONLY", "SUMMER-ONLY", "WINTER-DOMINANT", "SUMMER-DOMINANT")
+        and max(r["winter_n"] or 0, r["summer_n"] or 0) >= 30
+    ]
     if hidden:
         print(f"\n--- HIDDEN EDGES: Experimental strategies revealed by DST split ({len(hidden)}) ---")
         for r in hidden:

@@ -58,8 +58,8 @@ REGIME_BOUNDARY = date(2025, 1, 1)
 # ADX computation (copied from analyze_adx_filter.py)
 # ---------------------------------------------------------------------------
 
-def compute_adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
-                period: int = 14) -> np.ndarray:
+
+def compute_adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int = 14) -> np.ndarray:
     """Compute Wilder's ADX from high/low/close arrays."""
     n = len(highs)
     adx = np.full(n, np.nan)
@@ -89,9 +89,9 @@ def compute_adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
     smooth_plus = np.zeros(n)
     smooth_minus = np.zeros(n)
 
-    atr[period] = tr[1:period + 1].mean()
-    smooth_plus[period] = plus_dm[1:period + 1].mean()
-    smooth_minus[period] = minus_dm[1:period + 1].mean()
+    atr[period] = tr[1 : period + 1].mean()
+    smooth_plus[period] = plus_dm[1 : period + 1].mean()
+    smooth_minus[period] = minus_dm[1 : period + 1].mean()
 
     for i in range(period + 1, n):
         atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
@@ -121,9 +121,11 @@ def compute_adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
 
     return adx
 
+
 # ---------------------------------------------------------------------------
 # VWAP computation (adapted from analyze_vwap_pullback.py, works on any bars)
 # ---------------------------------------------------------------------------
+
 
 def compute_vwap(bars: pd.DataFrame) -> np.ndarray:
     """Compute cumulative VWAP from bars (works on 1m or 5m).
@@ -137,9 +139,11 @@ def compute_vwap(bars: pd.DataFrame) -> np.ndarray:
     cum_vol = np.cumsum(vol)
     return cum_tp_vol / cum_vol
 
+
 # ---------------------------------------------------------------------------
 # Data loading — bulk pre-computation
 # ---------------------------------------------------------------------------
+
 
 def _load_bars_5m_with_warmup(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 5m bars for current + 3 prior calendar days (ADX warmup)."""
@@ -149,19 +153,22 @@ def _load_bars_5m_with_warmup(db_path: Path, trading_day: date) -> pd.DataFrame:
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_5m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [start_utc, end_utc]).fetchdf()
+        """,
+            [start_utc, end_utc],
+        ).fetchdf()
     finally:
         con.close()
     return df
 
-def _get_adx_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp,
-                     period: int = 14) -> float | None:
+
+def _get_adx_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp, period: int = 14) -> float | None:
     """Compute ADX(14) at a specific timestamp from 5m bars."""
     if bars_5m.empty or len(bars_5m) < 2 * period + 1:
         return None
@@ -180,14 +187,12 @@ def _get_adx_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp,
         return None
 
     subset = bars_5m[mask]
-    adx_values = compute_adx(
-        subset["high"].values, subset["low"].values, subset["close"].values, period
-    )
+    adx_values = compute_adx(subset["high"].values, subset["low"].values, subset["close"].values, period)
     last_adx = adx_values[-1]
     return float(last_adx) if not np.isnan(last_adx) else None
 
-def _get_vwap_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp,
-                      session_start_utc: pd.Timestamp) -> float | None:
+
+def _get_vwap_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp, session_start_utc: pd.Timestamp) -> float | None:
     """Compute cumulative VWAP at break_ts using bars from session_start_utc.
 
     Returns VWAP value at the break bar, or None if insufficient data.
@@ -224,6 +229,7 @@ def _get_vwap_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp,
     vwap_arr = compute_vwap(session_bars)
     return float(vwap_arr[-1])
 
+
 def _get_close_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp) -> float | None:
     """Get the close price of the bar at or just before break_ts."""
     if bars_5m.empty:
@@ -243,6 +249,7 @@ def _get_close_at_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp) -> float |
         return None
     return float(bars_5m[mask].iloc[-1]["close"])
 
+
 def _session_open_utc(trading_day: date, orb_label: str) -> pd.Timestamp:
     """Return session open time in UTC for a given trading day and ORB label.
 
@@ -253,6 +260,7 @@ def _session_open_utc(trading_day: date, orb_label: str) -> pd.Timestamp:
     prev_cal = trading_day - timedelta(days=1)
     return pd.Timestamp(prev_cal.isoformat() + "T23:00:00", tz="UTC")
 
+
 def load_all_overlay_data(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Load outcomes + daily_features + ADX + VWAP for all (day, session) pairs.
 
@@ -262,7 +270,8 @@ def load_all_overlay_data(db_path: Path, start: date, end: date) -> pd.DataFrame
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        features = con.execute("""
+        features = con.execute(
+            """
             SELECT trading_day,
                    orb_0900_break_ts, orb_0900_size, orb_0900_break_dir,
                    orb_1000_break_ts, orb_1000_size, orb_1000_break_dir
@@ -270,15 +279,20 @@ def load_all_overlay_data(db_path: Path, start: date, end: date) -> pd.DataFrame
             WHERE symbol = 'MGC' AND orb_minutes = 5
               AND trading_day BETWEEN ? AND ?
             ORDER BY trading_day
-        """, [start, end]).fetchdf()
+        """,
+            [start, end],
+        ).fetchdf()
 
-        outcomes = con.execute("""
+        outcomes = con.execute(
+            """
             SELECT trading_day, orb_label, entry_model, rr_target,
                    confirm_bars, pnl_r, outcome
             FROM orb_outcomes
             WHERE symbol = 'MGC'
               AND trading_day BETWEEN ? AND ?
-        """, [start, end]).fetchdf()
+        """,
+            [start, end],
+        ).fetchdf()
     finally:
         con.close()
 
@@ -295,7 +309,7 @@ def load_all_overlay_data(db_path: Path, start: date, end: date) -> pd.DataFrame
 
     for idx, (_, row) in enumerate(features.iterrows()):
         if idx % 200 == 0:
-            print(f"    Computing overlays: day {idx+1}/{total}...")
+            print(f"    Computing overlays: day {idx + 1}/{total}...")
 
         td = row["trading_day"]
         if hasattr(td, "date") and callable(td.date):
@@ -342,27 +356,16 @@ def load_all_overlay_data(db_path: Path, start: date, end: date) -> pd.DataFrame
             if close_val is not None:
                 close_map[key] = close_val
 
-    print(f"    ADX: {len(adx_map)} pairs, VWAP: {len(vwap_map)} pairs, "
-          f"Close: {len(close_map)} pairs")
+    print(f"    ADX: {len(adx_map)} pairs, VWAP: {len(vwap_map)} pairs, Close: {len(close_map)} pairs")
 
     # Merge into outcomes
     outcomes["trading_day_str"] = outcomes["trading_day"].astype(str).str[:10]
 
-    outcomes["orb_size"] = outcomes.apply(
-        lambda r: size_map.get((r["trading_day_str"], r["orb_label"])), axis=1
-    )
-    outcomes["break_dir"] = outcomes.apply(
-        lambda r: break_dir_map.get((r["trading_day_str"], r["orb_label"])), axis=1
-    )
-    outcomes["adx_at_break"] = outcomes.apply(
-        lambda r: adx_map.get((r["trading_day_str"], r["orb_label"])), axis=1
-    )
-    outcomes["vwap_at_break"] = outcomes.apply(
-        lambda r: vwap_map.get((r["trading_day_str"], r["orb_label"])), axis=1
-    )
-    outcomes["close_at_break"] = outcomes.apply(
-        lambda r: close_map.get((r["trading_day_str"], r["orb_label"])), axis=1
-    )
+    outcomes["orb_size"] = outcomes.apply(lambda r: size_map.get((r["trading_day_str"], r["orb_label"])), axis=1)
+    outcomes["break_dir"] = outcomes.apply(lambda r: break_dir_map.get((r["trading_day_str"], r["orb_label"])), axis=1)
+    outcomes["adx_at_break"] = outcomes.apply(lambda r: adx_map.get((r["trading_day_str"], r["orb_label"])), axis=1)
+    outcomes["vwap_at_break"] = outcomes.apply(lambda r: vwap_map.get((r["trading_day_str"], r["orb_label"])), axis=1)
+    outcomes["close_at_break"] = outcomes.apply(lambda r: close_map.get((r["trading_day_str"], r["orb_label"])), axis=1)
 
     # Compute VWAP alignment: long confirmed if close > VWAP, short if close < VWAP
     def _vwap_aligned(row):
@@ -383,9 +386,11 @@ def load_all_overlay_data(db_path: Path, start: date, end: date) -> pd.DataFrame
 
     return outcomes
 
+
 # ---------------------------------------------------------------------------
 # Walk-forward engine — runs one overlay configuration
 # ---------------------------------------------------------------------------
+
 
 def _run_single_walk_forward(
     data: pd.DataFrame,
@@ -410,14 +415,8 @@ def _run_single_walk_forward(
         valid = valid.dropna(subset=["vwap_aligned"])
 
     for w in windows:
-        train_mask = (
-            (valid["trading_day_date"] >= w["train_start"])
-            & (valid["trading_day_date"] <= w["train_end"])
-        )
-        test_mask = (
-            (valid["trading_day_date"] >= w["test_start"])
-            & (valid["trading_day_date"] <= w["test_end"])
-        )
+        train_mask = (valid["trading_day_date"] >= w["train_start"]) & (valid["trading_day_date"] <= w["train_end"])
+        test_mask = (valid["trading_day_date"] >= w["test_start"]) & (valid["trading_day_date"] <= w["test_end"])
 
         train_data = valid[train_mask]
         test_data = valid[test_mask]
@@ -501,14 +500,16 @@ def _run_single_walk_forward(
             combo_parts.append(f"ADX{adx_thresh}")
         combo_label = "_".join(combo_parts)
 
-        window_results.append({
-            "test_start": str(w["test_start"]),
-            "test_end": str(w["test_end"]),
-            "selected": combo_label,
-            "train_sharpe": best_sharpe,
-            "oos_stats": oos_stats,
-            "adx_thresh": adx_thresh,
-        })
+        window_results.append(
+            {
+                "test_start": str(w["test_start"]),
+                "test_end": str(w["test_end"]),
+                "selected": combo_label,
+                "train_sharpe": best_sharpe,
+                "oos_stats": oos_stats,
+                "adx_thresh": adx_thresh,
+            }
+        )
 
     return {
         "config": config_name,
@@ -517,30 +518,31 @@ def _run_single_walk_forward(
         "oos_dates": np.array(oos_dates) if oos_dates else np.array([]),
     }
 
+
 # ---------------------------------------------------------------------------
 # Session-level breakdown
 # ---------------------------------------------------------------------------
 
-def _compute_per_session_stats(data: pd.DataFrame, config_name: str,
-                               use_adx: bool, use_vwap: bool,
-                               windows: list[dict]) -> dict:
+
+def _compute_per_session_stats(
+    data: pd.DataFrame, config_name: str, use_adx: bool, use_vwap: bool, windows: list[dict]
+) -> dict:
     """Run walk-forward per session and return per-session combined OOS stats."""
     session_stats = {}
     for orb_label in ORB_LABELS:
         session_data = data[data["orb_label"] == orb_label]
-        result = _run_single_walk_forward(
-            session_data, f"{config_name}_{orb_label}",
-            use_adx, use_vwap, windows
-        )
+        result = _run_single_walk_forward(session_data, f"{config_name}_{orb_label}", use_adx, use_vwap, windows)
         if len(result["oos_pnls"]) > 0:
             session_stats[orb_label] = compute_strategy_metrics(result["oos_pnls"])
         else:
             session_stats[orb_label] = None
     return session_stats
 
+
 # ---------------------------------------------------------------------------
 # Main orchestrator
 # ---------------------------------------------------------------------------
+
 
 def run_overlay_comparison(
     db_path: Path,
@@ -563,10 +565,12 @@ def run_overlay_comparison(
     vwap_aligned_count = (data["vwap_aligned"] == True).sum()  # noqa: E712
     vwap_rejected_count = (data["vwap_aligned"] == False).sum()  # noqa: E712
     print(f"  Total outcomes: {len(data)}")
-    print(f"  With ADX: {has_adx} ({has_adx/len(data):.0%})")
-    print(f"  With VWAP direction: {has_vwap} ({has_vwap/len(data):.0%})")
-    print(f"  VWAP aligned: {vwap_aligned_count}, rejected: {vwap_rejected_count} "
-          f"({vwap_rejected_count/(vwap_aligned_count+vwap_rejected_count):.0%} rejection rate)")
+    print(f"  With ADX: {has_adx} ({has_adx / len(data):.0%})")
+    print(f"  With VWAP direction: {has_vwap} ({has_vwap / len(data):.0%})")
+    print(
+        f"  VWAP aligned: {vwap_aligned_count}, rejected: {vwap_rejected_count} "
+        f"({vwap_rejected_count / (vwap_aligned_count + vwap_rejected_count):.0%} rejection rate)"
+    )
     print()
 
     windows = compute_walk_forward_windows(test_start, test_end, train_months)
@@ -574,10 +578,10 @@ def run_overlay_comparison(
     print()
 
     configs = [
-        ("SIZE_ONLY",        False, False),
-        ("SIZE_ADX",         True,  False),
-        ("SIZE_VWAP",        False, True),
-        ("SIZE_ADX_VWAP",    True,  True),
+        ("SIZE_ONLY", False, False),
+        ("SIZE_ADX", True, False),
+        ("SIZE_VWAP", False, True),
+        ("SIZE_ADX_VWAP", True, True),
     ]
 
     results = {}
@@ -594,9 +598,7 @@ def run_overlay_comparison(
     print("Phase 3: Per-session breakdown...")
     session_results = {}
     for config_name, use_adx, use_vwap in configs:
-        session_results[config_name] = _compute_per_session_stats(
-            data, config_name, use_adx, use_vwap, windows
-        )
+        session_results[config_name] = _compute_per_session_stats(data, config_name, use_adx, use_vwap, windows)
 
     # Compute combined metrics + regime split
     combined = {}
@@ -638,17 +640,22 @@ def run_overlay_comparison(
         "window_details": {k: v["window_results"] for k, v in results.items()},
     }
 
+
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
+
 
 def _fmt(stats: dict | None) -> str:
     """Format stats dict as a compact string."""
     if stats is None:
         return "No data"
-    return (f"N={stats['n']:>4}, WR={stats['wr']:>5.0%}, ExpR={stats['expr']:>+7.3f}, "
-            f"Sharpe={stats['sharpe']:>+6.3f}, MaxDD={stats['maxdd']:>+6.1f}R, "
-            f"Total={stats['total']:>+7.1f}R")
+    return (
+        f"N={stats['n']:>4}, WR={stats['wr']:>5.0%}, ExpR={stats['expr']:>+7.3f}, "
+        f"Sharpe={stats['sharpe']:>+6.3f}, MaxDD={stats['maxdd']:>+6.1f}R, "
+        f"Total={stats['total']:>+7.1f}R"
+    )
+
 
 def print_report(results: dict) -> None:
     """Print the comparison report."""
@@ -703,8 +710,7 @@ def print_report(results: dict) -> None:
         sf = selection_freq.get(cfg, {})
         tw = sf.get("total_windows", 0)
         adx_sel = sf.get("adx_selected", 0)
-        print(f"  {cfg:<20s} {tw} windows total"
-              + (f", ADX selected in {adx_sel}/{tw}" if adx_sel > 0 else ""))
+        print(f"  {cfg:<20s} {tw} windows total" + (f", ADX selected in {adx_sel}/{tw}" if adx_sel > 0 else ""))
 
     # Per-session breakdown
     print()
@@ -744,9 +750,11 @@ def print_report(results: dict) -> None:
     print()
     print(sep)
 
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(description="Overlay Filter Comparison")
@@ -761,8 +769,10 @@ def main():
     print(sep)
     print()
     print("Configs: SIZE_ONLY | SIZE+ADX | SIZE+VWAP_DIR | SIZE+ADX+VWAP_DIR")
-    print(f"Grid: {len(ORB_LABELS)} ORBs x {len(ENTRY_MODELS)} EMs x {len(RR_TARGETS)} RR x "
-          f"{len(SIZE_FILTERS)} sizes x CB=1 = 24 base combos")
+    print(
+        f"Grid: {len(ORB_LABELS)} ORBs x {len(ENTRY_MODELS)} EMs x {len(RR_TARGETS)} RR x "
+        f"{len(SIZE_FILTERS)} sizes x CB=1 = 24 base combos"
+    )
     print(f"ADX thresholds: {ADX_THRESHOLDS}")
     print(f"Train: {args.train_months} months, OOS from 2018-01-01")
     print()
@@ -778,6 +788,7 @@ def main():
 
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

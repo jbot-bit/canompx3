@@ -60,7 +60,7 @@ ORB_MINUTES = 5  # standard 5-minute ORB formation
 # Brisbane 23:00 = UTC 13:00
 # Brisbane 00:30 = UTC 14:30
 SESSION_START_UTC = {
-    "0900": (23, 0),   # prev day 23:00 UTC
+    "0900": (23, 0),  # prev day 23:00 UTC
     "1000": (0, 0),
     "1100": (1, 0),
     "1800": (8, 0),
@@ -73,6 +73,7 @@ SIZE_TIERS = {"G2": 2.0, "G4": 4.0, "G6": 6.0, "G8": 8.0}
 # ---------------------------------------------------------------------------
 # V-Box computation
 # ---------------------------------------------------------------------------
+
 
 def compute_vbox_for_day(
     bars_df: pd.DataFrame,
@@ -90,14 +91,10 @@ def compute_vbox_for_day(
     # 0900 session starts at 23:00 UTC on previous calendar day
     if session == "0900":
         orb_start = datetime(
-            trading_day.year, trading_day.month, trading_day.day,
-            hour, minute, tzinfo=timezone.utc
+            trading_day.year, trading_day.month, trading_day.day, hour, minute, tzinfo=timezone.utc
         ) - timedelta(days=1)
     else:
-        orb_start = datetime(
-            trading_day.year, trading_day.month, trading_day.day,
-            hour, minute, tzinfo=timezone.utc
-        )
+        orb_start = datetime(trading_day.year, trading_day.month, trading_day.day, hour, minute, tzinfo=timezone.utc)
 
     orb_end = orb_start + timedelta(minutes=ORB_MINUTES)
 
@@ -118,6 +115,7 @@ def compute_vbox_for_day(
         "vbox_volume": int(vbox_bar["volume"]),
     }
 
+
 def classify_trade(
     entry_price: float,
     break_dir: str,
@@ -136,21 +134,18 @@ def classify_trade(
         return "CLEAR"
     return "CHOP"
 
+
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
 
-def load_outcomes(db_path: Path, sessions: list[str],
-                  start: date, end: date) -> pd.DataFrame:
+
+def load_outcomes(db_path: Path, sessions: list[str], start: date, end: date) -> pd.DataFrame:
     """Load orb_outcomes with entry details."""
     session_ph = ", ".join(["?"] * len(sessions))
 
-    dir_cases = " ".join(
-        f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_break_dir" for s in sessions
-    )
-    size_cases = " ".join(
-        f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_size" for s in sessions
-    )
+    dir_cases = " ".join(f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_break_dir" for s in sessions)
+    size_cases = " ".join(f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_size" for s in sessions)
 
     query = f"""
         SELECT
@@ -187,30 +182,35 @@ def load_outcomes(db_path: Path, sessions: list[str],
     print(f"Loaded {len(df)} trades ({df['trading_day'].nunique()} days)")
     return df
 
+
 def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1-minute bars for one trading day."""
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [start_utc, end_utc]).fetchdf()
+        """,
+            [start_utc, end_utc],
+        ).fetchdf()
     finally:
         con.close()
     if not df.empty:
         df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
     return df
 
+
 # ---------------------------------------------------------------------------
 # Main analysis
 # ---------------------------------------------------------------------------
 
-def run_analysis(db_path: Path, sessions: list[str],
-                 min_orb_size: float, start: date, end: date) -> dict:
+
+def run_analysis(db_path: Path, sessions: list[str], min_orb_size: float, start: date, end: date) -> dict:
     """Run the V-Box classification analysis."""
     outcomes_df = load_outcomes(db_path, sessions, start, end)
 
@@ -233,8 +233,7 @@ def run_analysis(db_path: Path, sessions: list[str],
             if vbox is not None:
                 vbox_cache[(td, session)] = vbox
 
-    print(f"  V-Box computed in {time.time() - t0:.1f}s "
-          f"({len(vbox_cache)} day-sessions)")
+    print(f"  V-Box computed in {time.time() - t0:.1f}s ({len(vbox_cache)} day-sessions)")
 
     # Classify each trade
     # Results: {(session, em, size_tier, classification): [pnl_r, ...]}
@@ -255,8 +254,10 @@ def run_analysis(db_path: Path, sessions: list[str],
             continue
 
         classification = classify_trade(
-            row["entry_price"], row["break_dir"],
-            vbox["vbox_high"], vbox["vbox_low"],
+            row["entry_price"],
+            row["break_dir"],
+            vbox["vbox_high"],
+            vbox["vbox_low"],
         )
 
         # Determine size tier
@@ -278,6 +279,7 @@ def run_analysis(db_path: Path, sessions: list[str],
 
     return dict(results)
 
+
 def print_results(results: dict) -> None:
     """Print formatted comparison table: CLEAR vs CHOP."""
     print("\n" + "=" * 80)
@@ -292,7 +294,7 @@ def print_results(results: dict) -> None:
     for (session, em, tier), class_data in sorted(grouped.items()):
         print(f"\n--- {session} / {em} / {tier} ---")
         print(f"  {'Class':<8} {'N':>6} {'WR':>7} {'ExpR':>7} {'Sharpe':>7} {'MaxDD':>8} {'Total':>8}")
-        print(f"  {'-'*8} {'-'*6} {'-'*7} {'-'*7} {'-'*7} {'-'*8} {'-'*8}")
+        print(f"  {'-' * 8} {'-' * 6} {'-' * 7} {'-' * 7} {'-' * 7} {'-' * 8} {'-' * 8}")
 
         for cls in ["CLEAR", "CHOP"]:
             arr = class_data.get(cls, np.array([]))
@@ -301,8 +303,10 @@ def print_results(results: dict) -> None:
             m = compute_strategy_metrics(arr)
             if m is None:
                 continue
-            print(f"  {cls:<8} {m['n']:>6} {m['wr']:>7.3f} {m['expr']:>7.3f} "
-                  f"{m['sharpe']:>7.3f} {m['maxdd']:>8.2f} {m['total']:>8.1f}")
+            print(
+                f"  {cls:<8} {m['n']:>6} {m['wr']:>7.3f} {m['expr']:>7.3f} "
+                f"{m['sharpe']:>7.3f} {m['maxdd']:>8.2f} {m['total']:>8.1f}"
+            )
 
         # Delta
         clear_arr = class_data.get("CLEAR", np.array([]))
@@ -313,12 +317,13 @@ def print_results(results: dict) -> None:
             if cm and chm:
                 delta_expr = cm["expr"] - chm["expr"]
                 delta_sharpe = cm["sharpe"] - chm["sharpe"]
-                print(f"  {'DELTA':<8} {'':>6} {'':>7} {delta_expr:>+7.3f} "
-                      f"{delta_sharpe:>+7.3f}")
+                print(f"  {'DELTA':<8} {'':>6} {'':>7} {delta_expr:>+7.3f} {delta_sharpe:>+7.3f}")
+
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(description="V-Box Volume S/R Analysis")
@@ -338,6 +343,7 @@ def main():
 
     results = run_analysis(args.db_path, sessions, args.min_orb_size, args.start, args.end)
     print_results(results)
+
 
 if __name__ == "__main__":
     main()

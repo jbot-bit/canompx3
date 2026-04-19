@@ -41,6 +41,7 @@ BETA = 0.20
 A = math.log((1 - BETA) / ALPHA)  # 2.079 — reject H0 (accept DEGRADED) when LR < -A
 B = math.log((1 - ALPHA) / BETA)  # 1.504 — accept H0 (SIGNAL) when LR > B
 
+
 def _load_reference_stats() -> dict[str, dict]:
     """Load SPRT reference parameters from current active validated rows."""
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -131,9 +132,7 @@ def _load_trade_stream(
         start_date=HOLDOUT_SACRED_FROM,
     )
     forward_trades = [
-        o["pnl_r"]
-        for o in outcomes
-        if o.get("pnl_r") is not None and o.get("outcome") not in (None, "scratch")
+        o["pnl_r"] for o in outcomes if o.get("pnl_r") is not None and o.get("outcome") not in (None, "scratch")
     ]
     if forward_trades:
         return forward_trades, "canonical_forward"

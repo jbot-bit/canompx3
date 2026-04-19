@@ -45,11 +45,11 @@ sys.stdout.reconfigure(line_buffering=True)
 
 # Timing buckets: (label, lo_min_inclusive, hi_min_exclusive)
 TIMING_BUCKETS = [
-    ("IMM",   0,    5),
-    ("EARLY", 5,   15),
-    ("MID_E", 15,  30),
-    ("MID_L", 30,  60),
-    ("LATE",  60, 99999),
+    ("IMM", 0, 5),
+    ("EARLY", 5, 15),
+    ("MID_E", 15, 30),
+    ("MID_L", 30, 60),
+    ("LATE", 60, 99999),
 ]
 
 # Representative combos: (entry_model, rr_target, confirm_bars)
@@ -75,6 +75,7 @@ FDR_Q = 0.05
 
 
 # -- Helpers --------------------------------------------------------------
+
 
 def classify_bucket(delay_min: float) -> str:
     """Classify break delay into a timing bucket label."""
@@ -130,25 +131,22 @@ def apply_bh_fdr(results: list[dict], q: float = FDR_Q) -> list[dict]:
         r["bh_threshold"] = bh_threshold
         r["bh_survives"] = survives
         tag = "SURVIVES" if survives else "rejected"
-        print(f"  [{rank}/{m}] p={r['p_val']:.6f} vs BH={bh_threshold:.6f} "
-              f"-> {tag}  ({r['label']})")
+        print(f"  [{rank}/{m}] p={r['p_val']:.6f} vs BH={bh_threshold:.6f} -> {tag}  ({r['label']})")
         if survives:
             survivors.append(r)
 
     return survivors
 
 
-def year_by_year_check(delays: np.ndarray, pnl_rs: np.ndarray,
-                       trading_days, cutoff: float, overall_direction: float) -> tuple[int, int]:
+def year_by_year_check(
+    delays: np.ndarray, pnl_rs: np.ndarray, trading_days, cutoff: float, overall_direction: float
+) -> tuple[int, int]:
     """Check year-by-year consistency for a cutoff split.
 
     Returns (years_consistent, years_total).
     """
     # Extract years
-    years_arr = np.array([
-        d.year if hasattr(d, 'year') else int(str(d)[:4])
-        for d in trading_days
-    ])
+    years_arr = np.array([d.year if hasattr(d, "year") else int(str(d)[:4]) for d in trading_days])
     unique_years = sorted(set(years_arr))
 
     consistent = 0
@@ -174,13 +172,9 @@ def year_by_year_check(delays: np.ndarray, pnl_rs: np.ndarray,
     return consistent, total
 
 
-def year_by_year_detail(delays: np.ndarray, pnl_rs: np.ndarray,
-                        trading_days, cutoff: float) -> list[dict]:
+def year_by_year_detail(delays: np.ndarray, pnl_rs: np.ndarray, trading_days, cutoff: float) -> list[dict]:
     """Detailed year-by-year breakdown for a cutoff split."""
-    years_arr = np.array([
-        d.year if hasattr(d, 'year') else int(str(d)[:4])
-        for d in trading_days
-    ])
+    years_arr = np.array([d.year if hasattr(d, "year") else int(str(d)[:4]) for d in trading_days])
     unique_years = sorted(set(years_arr))
     detail = []
 
@@ -215,6 +209,7 @@ def year_by_year_detail(delays: np.ndarray, pnl_rs: np.ndarray,
 
 # -- Data Loading ---------------------------------------------------------
 
+
 def load_data(con, instrument: str, session: str) -> list[dict]:
     """Load joined daily_features + orb_outcomes for one (instrument, session).
 
@@ -243,7 +238,8 @@ def load_data(con, instrument: str, session: str) -> list[dict]:
 
     rows = []
     for entry_model, rr_target, confirm_bars in REPRESENTATIVE_COMBOS:
-        result = con.execute(f"""
+        result = con.execute(
+            f"""
             SELECT
                 o.trading_day,
                 o.symbol,
@@ -271,12 +267,21 @@ def load_data(con, instrument: str, session: str) -> list[dict]:
               AND df.{delay_col} IS NOT NULL
               AND df.{size_col} >= {G4_MIN_SIZE}
             ORDER BY o.trading_day
-        """, [instrument, session, entry_model, rr_target, confirm_bars]).fetchall()
+        """,
+            [instrument, session, entry_model, rr_target, confirm_bars],
+        ).fetchall()
 
         col_names = [
-            "trading_day", "symbol", "orb_label", "entry_model",
-            "rr_target", "confirm_bars", "outcome", "pnl_r",
-            "break_delay_min", "orb_size",
+            "trading_day",
+            "symbol",
+            "orb_label",
+            "entry_model",
+            "rr_target",
+            "confirm_bars",
+            "outcome",
+            "pnl_r",
+            "break_delay_min",
+            "orb_size",
         ]
 
         for row in result:
@@ -289,6 +294,7 @@ def load_data(con, instrument: str, session: str) -> list[dict]:
 
 
 # -- Analysis Functions ---------------------------------------------------
+
 
 def analyze_distribution(rows: list[dict], instrument: str, session: str) -> dict:
     """Compute empirical distribution of break_delay_min for a session."""
@@ -329,8 +335,7 @@ def analyze_distribution(rows: list[dict], instrument: str, session: str) -> dic
     return dist
 
 
-def run_bucket_test(rows: list[dict], bucket_label: str,
-                    combo_tag: str, instrument: str, session: str) -> dict | None:
+def run_bucket_test(rows: list[dict], bucket_label: str, combo_tag: str, instrument: str, session: str) -> dict | None:
     """Welch's t-test: bucket vs rest for one combo.
 
     Returns result dict or None if insufficient data.
@@ -372,8 +377,7 @@ def run_bucket_test(rows: list[dict], bucket_label: str,
     }
 
 
-def run_spearman_test(rows: list[dict], combo_tag: str,
-                      instrument: str, session: str) -> dict | None:
+def run_spearman_test(rows: list[dict], combo_tag: str, instrument: str, session: str) -> dict | None:
     """Spearman rank correlation: break_delay vs pnl_r for monotonic trend."""
     combo_rows = [r for r in rows if r["combo_tag"] == combo_tag]
     if len(combo_rows) < MIN_GROUP_SIZE:
@@ -398,8 +402,7 @@ def run_spearman_test(rows: list[dict], combo_tag: str,
     }
 
 
-def run_cutoff_test(rows: list[dict], cutoff_min: float,
-                    combo_tag: str, instrument: str, session: str) -> dict | None:
+def run_cutoff_test(rows: list[dict], cutoff_min: float, combo_tag: str, instrument: str, session: str) -> dict | None:
     """Welch's t-test: fast (<= cutoff) vs slow (> cutoff) split."""
     combo_rows = [r for r in rows if r["combo_tag"] == combo_tag]
     if not combo_rows:
@@ -425,9 +428,7 @@ def run_cutoff_test(rows: list[dict], cutoff_min: float,
     delays_arr = np.array([r["break_delay_min"] for r in combo_rows])
     pnl_arr = np.array([r["pnl_r"] for r in combo_rows])
     tdays = [r["trading_day"] for r in combo_rows]
-    yr_consistent, yr_total = year_by_year_check(
-        delays_arr, pnl_arr, tdays, cutoff_min, delta
-    )
+    yr_consistent, yr_total = year_by_year_check(delays_arr, pnl_arr, tdays, cutoff_min, delta)
 
     return {
         "test_type": "cutoff",
@@ -450,14 +451,15 @@ def run_cutoff_test(rows: list[dict], cutoff_min: float,
 
 # -- Main -----------------------------------------------------------------
 
+
 def run_research(db_path: Path) -> None:
     output_dir = PROJECT_ROOT / "research" / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    all_results = []      # All t-test / cutoff results for BH FDR
+    all_results = []  # All t-test / cutoff results for BH FDR
     spearman_results = []  # Spearman tests (separate pool)
-    distributions = []     # Per-session delay distributions
-    detail_rows = []       # CSV detail rows
+    distributions = []  # Per-session delay distributions
+    detail_rows = []  # CSV detail rows
 
     with duckdb.connect(str(db_path), read_only=True) as con:
         for instrument in ACTIVE_ORB_INSTRUMENTS:
@@ -488,10 +490,11 @@ def run_research(db_path: Path) -> None:
                 if dist:
                     distributions.append(dist)
                     print(f"\n  Break Delay Distribution ({dist['n_unique_days']} days):")
-                    print(f"    Mean={dist['mean']}m, Median={dist['median']}m, "
-                          f"Std={dist['std']}m")
-                    print(f"    P5={dist['p5']}m, P25={dist['p25']}m, "
-                          f"P75={dist['p75']}m, P95={dist['p95']}m, Max={dist['max']}m")
+                    print(f"    Mean={dist['mean']}m, Median={dist['median']}m, Std={dist['std']}m")
+                    print(
+                        f"    P5={dist['p5']}m, P25={dist['p25']}m, "
+                        f"P75={dist['p75']}m, P95={dist['p95']}m, Max={dist['max']}m"
+                    )
                     print(f"    Buckets: ", end="")
                     for bl, _, _ in TIMING_BUCKETS:
                         cnt = dist["bucket_counts"].get(bl, 0)
@@ -508,8 +511,10 @@ def run_research(db_path: Path) -> None:
                         continue
 
                     combo_m = compute_metrics([r["pnl_r"] for r in combo_rows])
-                    print(f"\n  {combo_tag}: N={n_combo}, avgR={combo_m['avg_r']}, "
-                          f"WR={combo_m['wr']}, Sharpe={combo_m['sharpe']}")
+                    print(
+                        f"\n  {combo_tag}: N={n_combo}, avgR={combo_m['avg_r']}, "
+                        f"WR={combo_m['wr']}, Sharpe={combo_m['sharpe']}"
+                    )
 
                     # -- Bucket breakdown ----------------------------------
                     print(f"    {'Bucket':<8} {'N':>5} {'avgR':>8} {'WR':>7} {'Sharpe':>8}")
@@ -519,9 +524,9 @@ def run_research(db_path: Path) -> None:
                         if not bucket_rows:
                             continue
                         bm = compute_metrics([r["pnl_r"] for r in bucket_rows])
-                        wr_str = f"{bm['wr']:.1%}" if bm['wr'] is not None else "N/A"
-                        avg_str = f"{bm['avg_r']}" if bm['avg_r'] is not None else "N/A"
-                        sh_str = f"{bm['sharpe']}" if bm['sharpe'] is not None else "N/A"
+                        wr_str = f"{bm['wr']:.1%}" if bm["wr"] is not None else "N/A"
+                        avg_str = f"{bm['avg_r']}" if bm["avg_r"] is not None else "N/A"
+                        sh_str = f"{bm['sharpe']}" if bm["sharpe"] is not None else "N/A"
                         print(f"    {bl:<8} {bm['n']:>5} {avg_str:>8} {wr_str:>7} {sh_str:>8}")
 
                     # -- Bucket t-tests ------------------------------------
@@ -530,8 +535,7 @@ def run_research(db_path: Path) -> None:
                         if result:
                             all_results.append(result)
                             sig = " *" if result["p_val"] < 0.05 else ""
-                            print(f"    {bl} vs rest: delta={result['delta']:+.4f}, "
-                                  f"p={result['p_val']:.4f}{sig}")
+                            print(f"    {bl} vs rest: delta={result['delta']:+.4f}, p={result['p_val']:.4f}{sig}")
                             detail_rows.append(result)
 
                     # -- Spearman correlation ------------------------------
@@ -543,19 +547,21 @@ def run_research(db_path: Path) -> None:
 
                     # -- Cutoff scans --------------------------------------
                     print(f"    Cutoff scan:")
-                    print(f"      {'Cut':>5} {'N_fast':>7} {'N_slow':>7} {'avg_fast':>9} "
-                          f"{'avg_slow':>9} {'delta':>8} {'p':>8} {'yr':>6}")
+                    print(
+                        f"      {'Cut':>5} {'N_fast':>7} {'N_slow':>7} {'avg_fast':>9} "
+                        f"{'avg_slow':>9} {'delta':>8} {'p':>8} {'yr':>6}"
+                    )
                     for cutoff in CUTOFF_THRESHOLDS:
-                        result = run_cutoff_test(
-                            rows, cutoff, combo_tag, instrument, session
-                        )
+                        result = run_cutoff_test(rows, cutoff, combo_tag, instrument, session)
                         if result:
                             all_results.append(result)
                             sig = " *" if result["p_val"] < 0.05 else ""
-                            print(f"      {cutoff:>5} {result['n_fast']:>7} {result['n_slow']:>7} "
-                                  f"{result['mean_fast']:>+9.4f} {result['mean_slow']:>+9.4f} "
-                                  f"{result['delta']:>+8.4f} {result['p_val']:>8.4f}{sig}"
-                                  f"  {result['yr_consistent']}/{result['yr_total']}")
+                            print(
+                                f"      {cutoff:>5} {result['n_fast']:>7} {result['n_slow']:>7} "
+                                f"{result['mean_fast']:>+9.4f} {result['mean_slow']:>+9.4f} "
+                                f"{result['delta']:>+8.4f} {result['p_val']:>8.4f}{sig}"
+                                f"  {result['yr_consistent']}/{result['yr_total']}"
+                            )
                             detail_rows.append(result)
                         else:
                             # Not enough data for this cutoff
@@ -570,8 +576,7 @@ def run_research(db_path: Path) -> None:
     bucket_tests = [r for r in all_results if r.get("test_type") == "bucket"]
     cutoff_tests = [r for r in all_results if r.get("test_type") == "cutoff"]
 
-    print(f"\nTotal tests: {len(all_results)} ({len(bucket_tests)} bucket, "
-          f"{len(cutoff_tests)} cutoff)")
+    print(f"\nTotal tests: {len(all_results)} ({len(bucket_tests)} bucket, {len(cutoff_tests)} cutoff)")
     print(f"Spearman tests (separate, not in FDR pool): {len(spearman_results)}")
 
     # Apply BH FDR across ALL bucket + cutoff tests together
@@ -584,8 +589,7 @@ def run_research(db_path: Path) -> None:
         print(f"{'=' * 80}")
         for sp in sorted(spearman_results, key=lambda x: x["p_val"]):
             sig = " *" if sp["p_val"] < 0.05 else ""
-            print(f"  rho={sp['rho']:+.4f}, p={sp['p_val']:.4f}{sig}, "
-                  f"N={sp['n']}  {sp['label']}")
+            print(f"  rho={sp['rho']:+.4f}, p={sp['p_val']:.4f}{sig}, N={sp['n']}  {sp['label']}")
 
     # -- Year-by-year for BH survivors ------------------------------------
     if survivors:
@@ -612,61 +616,65 @@ def run_research(db_path: Path) -> None:
                     detail = year_by_year_detail(delays_arr, pnl_arr, tdays, cutoff)
                     for yd in detail:
                         if yd["delta"] is not None:
-                            print(f"    {yd['year']}: fast N={yd['n_fast']}, "
-                                  f"slow N={yd['n_slow']}, "
-                                  f"avgR_fast={yd['avg_r_fast']:+.4f}, "
-                                  f"avgR_slow={yd['avg_r_slow']:+.4f}, "
-                                  f"delta={yd['delta']:+.4f}")
+                            print(
+                                f"    {yd['year']}: fast N={yd['n_fast']}, "
+                                f"slow N={yd['n_slow']}, "
+                                f"avgR_fast={yd['avg_r_fast']:+.4f}, "
+                                f"avgR_slow={yd['avg_r_slow']:+.4f}, "
+                                f"delta={yd['delta']:+.4f}"
+                            )
                         else:
-                            print(f"    {yd['year']}: fast N={yd['n_fast']}, "
-                                  f"slow N={yd['n_slow']} (too few for split)")
+                            print(f"    {yd['year']}: fast N={yd['n_fast']}, slow N={yd['n_slow']} (too few for split)")
 
                 elif surv["test_type"] == "bucket":
                     bucket = surv["bucket"]
                     print(f"\n  --- {surv['label']} ---")
                     # Year-by-year bucket vs rest
-                    years_arr = np.array([
-                        r["trading_day"].year if hasattr(r["trading_day"], 'year')
-                        else int(str(r["trading_day"])[:4])
-                        for r in combo_rows
-                    ])
+                    years_arr = np.array(
+                        [
+                            r["trading_day"].year
+                            if hasattr(r["trading_day"], "year")
+                            else int(str(r["trading_day"])[:4])
+                            for r in combo_rows
+                        ]
+                    )
                     for year in sorted(set(years_arr)):
                         yr_rows = [r for r, y in zip(combo_rows, years_arr) if y == year]
                         in_b = [r["pnl_r"] for r in yr_rows if r["bucket"] == bucket]
                         out_b = [r["pnl_r"] for r in yr_rows if r["bucket"] != bucket]
                         if len(in_b) >= 5 and len(out_b) >= 5:
                             delta = float(np.mean(in_b) - np.mean(out_b))
-                            print(f"    {year}: in_bucket N={len(in_b)}, "
-                                  f"rest N={len(out_b)}, delta={delta:+.4f}")
+                            print(f"    {year}: in_bucket N={len(in_b)}, rest N={len(out_b)}, delta={delta:+.4f}")
                         else:
-                            print(f"    {year}: in_bucket N={len(in_b)}, "
-                                  f"rest N={len(out_b)} (too few)")
+                            print(f"    {year}: in_bucket N={len(in_b)}, rest N={len(out_b)} (too few)")
 
     # -- Connection to existing BRK_FAST5/FAST10 ---------------------------
     print(f"\n{'=' * 80}")
     print(f"  CONNECTION TO EXISTING FILTERS")
     print(f"{'=' * 80}")
 
-    relevant_cutoffs_5 = [r for r in all_results
-                          if r.get("test_type") == "cutoff" and r.get("cutoff_min") == 5]
-    relevant_cutoffs_10 = [r for r in all_results
-                           if r.get("test_type") == "cutoff" and r.get("cutoff_min") == 10]
+    relevant_cutoffs_5 = [r for r in all_results if r.get("test_type") == "cutoff" and r.get("cutoff_min") == 5]
+    relevant_cutoffs_10 = [r for r in all_results if r.get("test_type") == "cutoff" and r.get("cutoff_min") == 10]
 
     if relevant_cutoffs_5:
         print(f"\n  BRK_FAST5 (5 min cutoff) — existing filter in discovery grid:")
         for rc in sorted(relevant_cutoffs_5, key=lambda x: x["p_val"]):
             sig = " *" if rc.get("bh_survives") else ""
-            print(f"    p={rc['p_val']:.4f}, delta={rc['delta']:+.4f}, "
-                  f"N_fast={rc['n_fast']}, N_slow={rc['n_slow']}  "
-                  f"{rc['instrument']} {rc['session']} {rc['combo_tag']}{sig}")
+            print(
+                f"    p={rc['p_val']:.4f}, delta={rc['delta']:+.4f}, "
+                f"N_fast={rc['n_fast']}, N_slow={rc['n_slow']}  "
+                f"{rc['instrument']} {rc['session']} {rc['combo_tag']}{sig}"
+            )
 
     if relevant_cutoffs_10:
         print(f"\n  BRK_FAST10 (10 min cutoff) — existing filter in discovery grid:")
         for rc in sorted(relevant_cutoffs_10, key=lambda x: x["p_val"]):
             sig = " *" if rc.get("bh_survives") else ""
-            print(f"    p={rc['p_val']:.4f}, delta={rc['delta']:+.4f}, "
-                  f"N_fast={rc['n_fast']}, N_slow={rc['n_slow']}  "
-                  f"{rc['instrument']} {rc['session']} {rc['combo_tag']}{sig}")
+            print(
+                f"    p={rc['p_val']:.4f}, delta={rc['delta']:+.4f}, "
+                f"N_fast={rc['n_fast']}, N_slow={rc['n_slow']}  "
+                f"{rc['instrument']} {rc['session']} {rc['combo_tag']}{sig}"
+            )
 
     # Find the best cutoff across all tests
     cutoff_tests_with_p = [r for r in cutoff_tests if r["p_val"] < 0.05]
@@ -674,9 +682,11 @@ def run_research(db_path: Path) -> None:
         print(f"\n  Best raw cutoffs (p < 0.05, before FDR):")
         for ct in sorted(cutoff_tests_with_p, key=lambda x: x["p_val"])[:10]:
             surv = " [BH SURVIVOR]" if ct.get("bh_survives") else ""
-            print(f"    {ct['cutoff_min']}min: p={ct['p_val']:.4f}, "
-                  f"delta={ct['delta']:+.4f}, yr={ct['yr_consistent']}/{ct['yr_total']} "
-                  f"  {ct['instrument']} {ct['session']} {ct['combo_tag']}{surv}")
+            print(
+                f"    {ct['cutoff_min']}min: p={ct['p_val']:.4f}, "
+                f"delta={ct['delta']:+.4f}, yr={ct['yr_consistent']}/{ct['yr_total']} "
+                f"  {ct['instrument']} {ct['session']} {ct['combo_tag']}{surv}"
+            )
 
     # -- Summary -----------------------------------------------------------
     print(f"\n\n{'=' * 80}")
@@ -704,12 +714,16 @@ def run_research(db_path: Path) -> None:
     # -- Distribution summary table ----------------------------------------
     if distributions:
         print(f"\n  Session Window Break Delay Distributions:")
-        print(f"  {'Instrument':<6} {'Session':<16} {'N':>5} {'Mean':>6} {'Med':>5} "
-              f"{'P25':>5} {'P75':>5} {'P95':>6} {'Max':>6}")
+        print(
+            f"  {'Instrument':<6} {'Session':<16} {'N':>5} {'Mean':>6} {'Med':>5} "
+            f"{'P25':>5} {'P75':>5} {'P95':>6} {'Max':>6}"
+        )
         for d in distributions:
-            print(f"  {d['instrument']:<6} {d['session']:<16} {d['n_unique_days']:>5} "
-                  f"{d['mean']:>6.1f} {d['median']:>5.1f} {d['p25']:>5.1f} "
-                  f"{d['p75']:>5.1f} {d['p95']:>6.1f} {d['max']:>6.1f}")
+            print(
+                f"  {d['instrument']:<6} {d['session']:<16} {d['n_unique_days']:>5} "
+                f"{d['mean']:>6.1f} {d['median']:>5.1f} {d['p25']:>5.1f} "
+                f"{d['p75']:>5.1f} {d['p95']:>6.1f} {d['max']:>6.1f}"
+            )
 
     # -- Write detail CSV --------------------------------------------------
     detail_path = output_dir / "break_timing_detail.csv"
@@ -740,8 +754,7 @@ def run_research(db_path: Path) -> None:
         f.write(f"- Representative combos: {len(REPRESENTATIVE_COMBOS)}\n")
         f.write(f"- Timing buckets: {', '.join(bl for bl, _, _ in TIMING_BUCKETS)}\n")
         f.write(f"- Cutoff thresholds: {CUTOFF_THRESHOLDS} minutes\n")
-        f.write(f"- Tests: {len(all_results)} (bucket + cutoff), "
-                f"{len(spearman_results)} Spearman\n")
+        f.write(f"- Tests: {len(all_results)} (bucket + cutoff), {len(spearman_results)} Spearman\n")
         f.write(f"- Correction: BH FDR at q={FDR_Q}\n\n")
 
         f.write("## Break Delay Distributions\n\n")
@@ -749,9 +762,11 @@ def run_research(db_path: Path) -> None:
             f.write("| Instrument | Session | N | Mean | Median | P25 | P75 | P95 | Max |\n")
             f.write("|---|---|---|---|---|---|---|---|---|\n")
             for d in distributions:
-                f.write(f"| {d['instrument']} | {d['session']} | {d['n_unique_days']} | "
-                        f"{d['mean']} | {d['median']} | {d['p25']} | {d['p75']} | "
-                        f"{d['p95']} | {d['max']} |\n")
+                f.write(
+                    f"| {d['instrument']} | {d['session']} | {d['n_unique_days']} | "
+                    f"{d['mean']} | {d['median']} | {d['p25']} | {d['p75']} | "
+                    f"{d['p95']} | {d['max']} |\n"
+                )
         f.write("\n")
 
         f.write("## Results\n\n")
@@ -766,28 +781,37 @@ def run_research(db_path: Path) -> None:
             for s in survivors:
                 yr = f"{s.get('yr_consistent', '?')}/{s.get('yr_total', '?')}" if "yr_consistent" in s else "N/A"
                 # Escape pipe characters in label to avoid breaking markdown table
-                safe_label = s['label'].replace('|', '/')
-                f.write(f"| {safe_label} | {s['p_val']:.6f} | {s.get('bh_threshold', 0):.6f} | "
-                        f"{s['delta']:+.4f} | {yr} |\n")
+                safe_label = s["label"].replace("|", "/")
+                f.write(
+                    f"| {safe_label} | {s['p_val']:.6f} | {s.get('bh_threshold', 0):.6f} | {s['delta']:+.4f} | {yr} |\n"
+                )
             f.write("\n")
         else:
-            f.write("**No BH FDR survivors.** Break timing does not predict outcome "
-                    "quality after multiple-testing correction.\n\n")
+            f.write(
+                "**No BH FDR survivors.** Break timing does not predict outcome "
+                "quality after multiple-testing correction.\n\n"
+            )
 
         f.write("## Connection to Existing Filters\n\n")
         f.write("- `BRK_FAST5` (5 min) and `BRK_FAST10` (10 min) exist in `config.py`\n")
         f.write("- These are composite filters applied to CME_REOPEN, TOKYO_OPEN, LONDON_METALS\n")
         if not survivors:
-            f.write("- **Finding: No BH FDR evidence supports these thresholds.** "
-                    "Break speed filters may be capturing noise.\n")
-            f.write("- Recommendation: WATCH ONLY. Do not expand break speed filters "
-                    "without additional out-of-sample evidence.\n")
+            f.write(
+                "- **Finding: No BH FDR evidence supports these thresholds.** "
+                "Break speed filters may be capturing noise.\n"
+            )
+            f.write(
+                "- Recommendation: WATCH ONLY. Do not expand break speed filters "
+                "without additional out-of-sample evidence.\n"
+            )
         else:
             surv_cutoffs = [s for s in survivors if s.get("test_type") == "cutoff"]
             if surv_cutoffs:
                 best = min(surv_cutoffs, key=lambda x: x["p_val"])
-                f.write(f"- **Best surviving cutoff: {best.get('cutoff_min', '?')} min** "
-                        f"(p={best['p_val']:.6f}, delta={best['delta']:+.4f})\n")
+                f.write(
+                    f"- **Best surviving cutoff: {best.get('cutoff_min', '?')} min** "
+                    f"(p={best['p_val']:.6f}, delta={best['delta']:+.4f})\n"
+                )
         f.write("\n")
 
         f.write("## Spearman Correlations\n\n")
@@ -798,8 +822,10 @@ def run_research(db_path: Path) -> None:
                 f.write("\n| Combo | Instrument | Session | rho | p-value | N |\n")
                 f.write("|---|---|---|---|---|---|\n")
                 for s in sorted(sig_sp, key=lambda x: x["p_val"]):
-                    f.write(f"| {s['combo_tag']} | {s['instrument']} | {s['session']} | "
-                            f"{s['rho']:+.4f} | {s['p_val']:.4f} | {s['n']} |\n")
+                    f.write(
+                        f"| {s['combo_tag']} | {s['instrument']} | {s['session']} | "
+                        f"{s['rho']:+.4f} | {s['p_val']:.4f} | {s['n']} |\n"
+                    )
         else:
             f.write("No Spearman tests passed minimum sample size.\n")
         f.write("\n")
@@ -807,13 +833,14 @@ def run_research(db_path: Path) -> None:
         # Honest label per RESEARCH_RULES.md
         if not survivors:
             f.write("## Classification\n\n")
-            f.write("**NO-GO** -- Break timing as a standalone predictor. "
-                    "After BH FDR correction across all tests, no systematic relationship "
-                    "between break delay and trade outcome quality survives.\n")
+            f.write(
+                "**NO-GO** -- Break timing as a standalone predictor. "
+                "After BH FDR correction across all tests, no systematic relationship "
+                "between break delay and trade outcome quality survives.\n"
+            )
         else:
             f.write("## Classification\n\n")
-            f.write("**Statistical observation** -- requires walk-forward validation "
-                    "before deployment.\n")
+            f.write("**Statistical observation** -- requires walk-forward validation before deployment.\n")
 
     print(f"\n  Summary: {summary_path}")
     print(f"\n{'=' * 80}")
@@ -823,8 +850,7 @@ def run_research(db_path: Path) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Break timing research")
-    parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH,
-                        help="Path to gold.db")
+    parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH, help="Path to gold.db")
     args = parser.parse_args()
 
     run_research(args.db_path)

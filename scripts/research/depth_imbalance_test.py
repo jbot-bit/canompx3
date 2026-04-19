@@ -65,9 +65,7 @@ for INST in ["MNQ", "MES", "MGC"]:
                 if td in features:
                     continue
                 bt = brk["break_ts"]
-                mask = (chunk_ts >= bt - pd.Timedelta(seconds=60)) & (
-                    chunk_ts < bt - pd.Timedelta(seconds=5)
-                )
+                mask = (chunk_ts >= bt - pd.Timedelta(seconds=60)) & (chunk_ts < bt - pd.Timedelta(seconds=5))
                 pre = chunk[mask]
                 if len(pre) > 0:
                     bid_d = float(pre["bid_sz_00"].median())
@@ -137,13 +135,12 @@ for INST in ["MNQ", "MES", "MGC"]:
         se = np.sqrt(pooled * (1 - pooled) * (1 / len(lo) + 1 / len(hi)))
         z = sp / se if se > 0 else 0
         p = 2 * (1 - stats.norm.cdf(abs(z)))
-        sig = (
-            "***" if p < 0.005 else "**" if p < 0.01 else "*" if p < 0.05
-            else "." if p < 0.10 else " ns"
+        sig = "***" if p < 0.005 else "**" if p < 0.01 else "*" if p < 0.05 else "." if p < 0.10 else " ns"
+        print(
+            f"  {label:30s} lo={lo['is_win'].mean():.3f}(N={len(lo):5d}) "
+            f"hi={hi['is_win'].mean():.3f}(N={len(hi):5d}) "
+            f"diff={sp:+.3f} p={p:.4f}{sig}"
         )
-        print(f"  {label:30s} lo={lo['is_win'].mean():.3f}(N={len(lo):5d}) "
-              f"hi={hi['is_win'].mean():.3f}(N={len(hi):5d}) "
-              f"diff={sp:+.3f} p={p:.4f}{sig}")
 
     # Per-session for directional imbalance (if aggregate shows anything)
     print("  PER-SESSION (directional imbalance):")
@@ -164,10 +161,7 @@ for INST in ["MNQ", "MES", "MGC"]:
         se_s = np.sqrt(pooled_s * (1 - pooled_s) * (1 / len(lo_s) + 1 / len(hi_s)))
         z_s = sp_s / se_s if se_s > 0 else 0
         p_s = 2 * (1 - stats.norm.cdf(abs(z_s)))
-        sig_s = (
-            "***" if p_s < 0.005 else "**" if p_s < 0.01 else "*" if p_s < 0.05
-            else "." if p_s < 0.10 else " ns"
-        )
+        sig_s = "***" if p_s < 0.005 else "**" if p_s < 0.01 else "*" if p_s < 0.05 else "." if p_s < 0.10 else " ns"
         print(f"    {sess:22s} N={len(sub):4d} diff={sp_s:+.3f} p={p_s:.4f}{sig_s}")
 
     print()

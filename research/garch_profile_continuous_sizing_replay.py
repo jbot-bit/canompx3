@@ -89,8 +89,7 @@ def make_continuous_scenarios(
 ):
     work = trades_df.copy()
     work["raw_weight"] = [
-        norm.raw_weight(map_name, float(gp), str(sess), profiles)
-        for gp, sess in zip(work["gp"], work["orb_label"])
+        norm.raw_weight(map_name, float(gp), str(sess), profiles) for gp, sess in zip(work["gp"], work["orb_label"])
     ]
     is_mean = float(work.loc[~work["is_oos"], "raw_weight"].mean())
     norm_factor = 1.0 / is_mean if is_mean > 0 else 1.0
@@ -119,7 +118,9 @@ def make_continuous_scenarios(
         "pct_trades_zero": float((work["contracts"] == 0).mean()),
         "pct_trades_double": float((work["contracts"] == 2).mean()),
         "is_mean_desired_weight": float(work.loc[~work["is_oos"], "desired_weight"].mean()),
-        "oos_mean_desired_weight": float(work.loc[work["is_oos"], "desired_weight"].mean()) if bool(work["is_oos"].any()) else 0.0,
+        "oos_mean_desired_weight": float(work.loc[work["is_oos"], "desired_weight"].mean())
+        if bool(work["is_oos"].any())
+        else 0.0,
     }
     return scenarios, diagnostics
 

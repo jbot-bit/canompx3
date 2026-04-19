@@ -37,15 +37,16 @@ warnings.filterwarnings("ignore", message="All-NaN slice", category=RuntimeWarni
 _US_EASTERN = ZoneInfo("America/New_York")
 _UK_LONDON = ZoneInfo("Europe/London")
 
+
 def is_us_dst(trading_day: date) -> bool:
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_US_EASTERN)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_US_EASTERN)
     return dt.utcoffset().total_seconds() == -4 * 3600
 
+
 def is_uk_dst(trading_day: date) -> bool:
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_UK_LONDON)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_UK_LONDON)
     return dt.utcoffset().total_seconds() == 1 * 3600
+
 
 # =========================================================================
 # Constants
@@ -57,8 +58,13 @@ BREAK_WINDOW = 240
 APERTURE_MIN = 5
 
 SESSION_DST_TYPE = {
-    "0900": "US", "1000": "CLEAN", "1100": "CLEAN",
-    "1130": "CLEAN", "1800": "UK", "2300": "US", "0030": "US",
+    "0900": "US",
+    "1000": "CLEAN",
+    "1100": "CLEAN",
+    "1130": "CLEAN",
+    "1800": "UK",
+    "2300": "US",
+    "0030": "US",
 }
 
 INSTRUMENTS = ["MGC", "MNQ", "MES"]
@@ -75,6 +81,7 @@ DOW_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 # FOMC / NFP / Opex calendar
 # =========================================================================
 
+
 def build_fomc_dates(start_year=2020, end_year=2026):
     """Known FOMC announcement dates (Wed at 2pm ET → Thu Brisbane).
     Trading day in Brisbane = the day the announcement impacts overnight session.
@@ -82,25 +89,63 @@ def build_fomc_dates(start_year=2020, end_year=2026):
     # Major FOMC dates (announcement days, US calendar)
     fomc_us = [
         # 2020
-        "2020-01-29", "2020-03-03", "2020-03-15", "2020-04-29", "2020-06-10",
-        "2020-07-29", "2020-09-16", "2020-11-05", "2020-12-16",
+        "2020-01-29",
+        "2020-03-03",
+        "2020-03-15",
+        "2020-04-29",
+        "2020-06-10",
+        "2020-07-29",
+        "2020-09-16",
+        "2020-11-05",
+        "2020-12-16",
         # 2021
-        "2021-01-27", "2021-03-17", "2021-04-28", "2021-06-16",
-        "2021-07-28", "2021-09-22", "2021-11-03", "2021-12-15",
+        "2021-01-27",
+        "2021-03-17",
+        "2021-04-28",
+        "2021-06-16",
+        "2021-07-28",
+        "2021-09-22",
+        "2021-11-03",
+        "2021-12-15",
         # 2022
-        "2022-01-26", "2022-03-16", "2022-05-04", "2022-06-15",
-        "2022-07-27", "2022-09-21", "2022-11-02", "2022-12-14",
+        "2022-01-26",
+        "2022-03-16",
+        "2022-05-04",
+        "2022-06-15",
+        "2022-07-27",
+        "2022-09-21",
+        "2022-11-02",
+        "2022-12-14",
         # 2023
-        "2023-02-01", "2023-03-22", "2023-05-03", "2023-06-14",
-        "2023-07-26", "2023-09-20", "2023-11-01", "2023-12-13",
+        "2023-02-01",
+        "2023-03-22",
+        "2023-05-03",
+        "2023-06-14",
+        "2023-07-26",
+        "2023-09-20",
+        "2023-11-01",
+        "2023-12-13",
         # 2024
-        "2024-01-31", "2024-03-20", "2024-05-01", "2024-06-12",
-        "2024-07-31", "2024-09-18", "2024-11-07", "2024-12-18",
+        "2024-01-31",
+        "2024-03-20",
+        "2024-05-01",
+        "2024-06-12",
+        "2024-07-31",
+        "2024-09-18",
+        "2024-11-07",
+        "2024-12-18",
         # 2025
-        "2025-01-29", "2025-03-19", "2025-05-07", "2025-06-18",
-        "2025-07-30", "2025-09-17", "2025-10-29", "2025-12-17",
+        "2025-01-29",
+        "2025-03-19",
+        "2025-05-07",
+        "2025-06-18",
+        "2025-07-30",
+        "2025-09-17",
+        "2025-10-29",
+        "2025-12-17",
         # 2026
-        "2026-01-28", "2026-03-18",
+        "2026-01-28",
+        "2026-03-18",
     ]
     dates = set()
     for d_str in fomc_us:
@@ -145,11 +190,15 @@ def build_opex_dates(start_year=2020, end_year=2026):
 # Data loading (standalone engine)
 # =========================================================================
 
+
 def load_bars(con, instrument):
-    return con.execute("""
+    return con.execute(
+        """
         SELECT ts_utc, open, high, low, close
         FROM bars_1m WHERE symbol = ? ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def build_day_arrays(bars_df):
@@ -217,9 +266,11 @@ def scan_session(highs, lows, closes, bris_h, bris_m, rr=None):
             if np.isnan(c):
                 continue
             if c > oh:
-                break_dir, entry, break_at = "long", c, m; break
+                break_dir, entry, break_at = "long", c, m
+                break
             elif c < ol:
-                break_dir, entry, break_at = "short", c, m; break
+                break_dir, entry, break_at = "short", c, m
+                break
         if break_dir is None:
             continue
 
@@ -233,19 +284,31 @@ def scan_session(highs, lows, closes, bris_h, bris_m, rr=None):
                 continue
             last_close = c
             if break_dir == "long":
-                if l <= stop and h >= target: outcome_r = -1.0; break
-                if l <= stop: outcome_r = -1.0; break
-                if h >= target: outcome_r = rr; break
+                if l <= stop and h >= target:
+                    outcome_r = -1.0
+                    break
+                if l <= stop:
+                    outcome_r = -1.0
+                    break
+                if h >= target:
+                    outcome_r = rr
+                    break
             else:
-                if h >= stop and l <= target: outcome_r = -1.0; break
-                if h >= stop: outcome_r = -1.0; break
-                if l <= target: outcome_r = rr; break
+                if h >= stop and l <= target:
+                    outcome_r = -1.0
+                    break
+                if h >= stop:
+                    outcome_r = -1.0
+                    break
+                if l <= target:
+                    outcome_r = rr
+                    break
         if outcome_r is None:
-            outcome_r = ((last_close - entry) / os_val if break_dir == "long"
-                         else (entry - last_close) / os_val)
+            outcome_r = (last_close - entry) / os_val if break_dir == "long" else (entry - last_close) / os_val
 
         results[di] = {
-            "orb_size": float(os_val), "direction": break_dir,
+            "orb_size": float(os_val),
+            "direction": break_dir,
             "outcome_r": float(outcome_r),
         }
     return results
@@ -254,6 +317,7 @@ def scan_session(highs, lows, closes, bris_h, bris_m, rr=None):
 # =========================================================================
 # Q1: Day-of-week breakdown
 # =========================================================================
+
 
 def q1_day_of_week(data_cache):
     print(f"\n{'=' * 100}")
@@ -317,11 +381,19 @@ def q1_day_of_week(data_cache):
 
                     print(f"    {DOW_NAMES[dow]:>5s} {n:5d} {avg:+7.3f} {wr:5.1%} {tot:+8.1f}{marker}")
 
-                    all_rows.append({
-                        "instrument": instrument, "session": session, "filter": fname,
-                        "dow": dow, "dow_name": DOW_NAMES[dow],
-                        "n": n, "avg_r": avg, "wr": wr, "total_r": tot,
-                    })
+                    all_rows.append(
+                        {
+                            "instrument": instrument,
+                            "session": session,
+                            "filter": fname,
+                            "dow": dow,
+                            "dow_name": DOW_NAMES[dow],
+                            "n": n,
+                            "avg_r": avg,
+                            "wr": wr,
+                            "total_r": tot,
+                        }
+                    )
 
     return all_rows
 
@@ -329,6 +401,7 @@ def q1_day_of_week(data_cache):
 # =========================================================================
 # Q2: Skip-day filter simulation
 # =========================================================================
+
 
 def q2_skip_filter(data_cache, q1_rows):
     print(f"\n{'=' * 100}")
@@ -346,10 +419,9 @@ def q2_skip_filter(data_cache, q1_rows):
     for instrument, session, fname in sorted(combos):
         if instrument not in data_cache:
             continue
-        combo_rows = [r for r in q1_rows
-                      if r["instrument"] == instrument
-                      and r["session"] == session
-                      and r["filter"] == fname]
+        combo_rows = [
+            r for r in q1_rows if r["instrument"] == instrument and r["session"] == session and r["filter"] == fname
+        ]
 
         if not combo_rows:
             continue
@@ -396,15 +468,27 @@ def q2_skip_filter(data_cache, q1_rows):
         print(f"    {'Skip worst 2':>20s} {s2_n:5d} {s2_avg:+7.3f} {s2_tot:+8.1f} {s2_tot - total_r:+8.1f}")
         print(f"    {'Best day only':>20s} {b1_n:5d} {b1_avg:+7.3f} {b1_tot:+8.1f} {b1_tot - total_r:+8.1f}")
 
-        all_rows.append({
-            "instrument": instrument, "session": session, "filter": fname,
-            "worst_dow": DOW_NAMES[worst_1["dow"]],
-            "best_dow": DOW_NAMES[best_1["dow"]],
-            "baseline_n": total_n, "baseline_avgR": baseline_avg, "baseline_totR": total_r,
-            "skip1_n": s1_n, "skip1_avgR": s1_avg, "skip1_totR": s1_tot,
-            "skip2_n": s2_n, "skip2_avgR": s2_avg, "skip2_totR": s2_tot,
-            "best_only_n": b1_n, "best_only_avgR": b1_avg, "best_only_totR": b1_tot,
-        })
+        all_rows.append(
+            {
+                "instrument": instrument,
+                "session": session,
+                "filter": fname,
+                "worst_dow": DOW_NAMES[worst_1["dow"]],
+                "best_dow": DOW_NAMES[best_1["dow"]],
+                "baseline_n": total_n,
+                "baseline_avgR": baseline_avg,
+                "baseline_totR": total_r,
+                "skip1_n": s1_n,
+                "skip1_avgR": s1_avg,
+                "skip1_totR": s1_tot,
+                "skip2_n": s2_n,
+                "skip2_avgR": s2_avg,
+                "skip2_totR": s2_tot,
+                "best_only_n": b1_n,
+                "best_only_avgR": b1_avg,
+                "best_only_totR": b1_tot,
+            }
+        )
 
     return all_rows
 
@@ -412,6 +496,7 @@ def q2_skip_filter(data_cache, q1_rows):
 # =========================================================================
 # Q3: FOMC / NFP / Opex overlay
 # =========================================================================
+
 
 def q3_macro_overlay(data_cache):
     print(f"\n{'=' * 100}")
@@ -446,9 +531,7 @@ def q3_macro_overlay(data_cache):
                     continue
 
                 # Split by event type
-                for event_name, event_dates in [("FOMC", fomc_dates),
-                                                 ("NFP", nfp_dates),
-                                                 ("OPEX", opex_dates)]:
+                for event_name, event_dates in [("FOMC", fomc_dates), ("NFP", nfp_dates), ("OPEX", opex_dates)]:
                     on_event = []
                     off_event = []
                     for di, r in filtered.items():
@@ -473,18 +556,28 @@ def q3_macro_overlay(data_cache):
                     if abs(delta) > 0.15:
                         marker = " <<" if delta < -0.15 else " >>"
 
-                    print(f"  {instrument} {session} {fname} {event_name}: "
-                          f"ON={on_n:3d} avgR={on_avg:+.3f} WR={on_wr:.0%} | "
-                          f"OFF={off_n:3d} avgR={off_avg:+.3f} WR={off_wr:.0%} | "
-                          f"delta={delta:+.3f}{marker}")
+                    print(
+                        f"  {instrument} {session} {fname} {event_name}: "
+                        f"ON={on_n:3d} avgR={on_avg:+.3f} WR={on_wr:.0%} | "
+                        f"OFF={off_n:3d} avgR={off_avg:+.3f} WR={off_wr:.0%} | "
+                        f"delta={delta:+.3f}{marker}"
+                    )
 
-                    all_rows.append({
-                        "instrument": instrument, "session": session, "filter": fname,
-                        "event": event_name,
-                        "on_n": on_n, "on_avgR": on_avg, "on_wr": on_wr,
-                        "off_n": off_n, "off_avgR": off_avg, "off_wr": off_wr,
-                        "delta": delta,
-                    })
+                    all_rows.append(
+                        {
+                            "instrument": instrument,
+                            "session": session,
+                            "filter": fname,
+                            "event": event_name,
+                            "on_n": on_n,
+                            "on_avgR": on_avg,
+                            "on_wr": on_wr,
+                            "off_n": off_n,
+                            "off_avgR": off_avg,
+                            "off_wr": off_wr,
+                            "delta": delta,
+                        }
+                    )
 
     return all_rows
 
@@ -492,6 +585,7 @@ def q3_macro_overlay(data_cache):
 # =========================================================================
 # Q3b: BH FDR correction across all Q3 event overlay tests
 # =========================================================================
+
 
 def _bh_reject(p_values: np.ndarray, alpha: float = 0.05) -> np.ndarray:
     """Benjamini-Hochberg FDR correction. Returns bool array (True = reject null)."""
@@ -510,8 +604,7 @@ def _bh_reject(p_values: np.ndarray, alpha: float = 0.05) -> np.ndarray:
     return reject
 
 
-def _collect_event_stats(data_cache, rr: float, n_perm: int, rng: np.random.Generator
-                         ) -> list[dict]:
+def _collect_event_stats(data_cache, rr: float, n_perm: int, rng: np.random.Generator) -> list[dict]:
     """Run Q3-style event overlay for a given RR target and return per-combo stats."""
     fomc_dates = build_fomc_dates()
     nfp_dates = build_nfp_dates()
@@ -531,8 +624,7 @@ def _collect_event_stats(data_cache, rr: float, n_perm: int, rng: np.random.Gene
 
             for fname, flo, fhi in q3_filters:
                 filtered = {
-                    di: r for di, r in per_day.items()
-                    if r["orb_size"] >= flo and (fhi is None or r["orb_size"] < fhi)
+                    di: r for di, r in per_day.items() if r["orb_size"] >= flo and (fhi is None or r["orb_size"] < fhi)
                 }
                 if len(filtered) < 30:
                     continue
@@ -558,18 +650,20 @@ def _collect_event_stats(data_cache, rr: float, n_perm: int, rng: np.random.Gene
                         perm_deltas[i] = np.mean(outcomes[perm[:n_on]]) - np.mean(outcomes[perm[n_on:]])
                     p_raw = float(np.mean(np.abs(perm_deltas) >= abs(obs_delta)))
 
-                    rows.append({
-                        "instrument": instrument,
-                        "session": session,
-                        "filter": fname,
-                        "event": event_name,
-                        "on_n": int(len(on)),
-                        "off_n": int(len(off)),
-                        "on_avgR": float(np.mean(on)),
-                        "off_avgR": float(np.mean(off)),
-                        "delta": obs_delta,
-                        "p_raw": p_raw,
-                    })
+                    rows.append(
+                        {
+                            "instrument": instrument,
+                            "session": session,
+                            "filter": fname,
+                            "event": event_name,
+                            "on_n": int(len(on)),
+                            "off_n": int(len(off)),
+                            "on_avgR": float(np.mean(on)),
+                            "off_avgR": float(np.mean(off)),
+                            "delta": obs_delta,
+                            "p_raw": p_raw,
+                        }
+                    )
     return rows
 
 
@@ -615,7 +709,8 @@ def q3b_fdr_correction(data_cache, n_perm: int = 1000, alpha: float = 0.05):
         for r in sens_rows:
             key = (r["instrument"], r["session"], r["filter"], r["event"])
             sens_index.setdefault(key, {})[rr_label] = {
-                "delta": r["delta"], "p_raw": r["p_raw"],
+                "delta": r["delta"],
+                "p_raw": r["p_raw"],
             }
 
     # Merge sensitivity into primary rows
@@ -630,29 +725,32 @@ def q3b_fdr_correction(data_cache, n_perm: int = 1000, alpha: float = 0.05):
         deltas = [row["delta"], row.get("delta_rr15"), row.get("delta_rr25")]
         deltas = [d for d in deltas if d is not None]
         row["sensitivity_consistent"] = (
-            all(d > 0 for d in deltas) or all(d < 0 for d in deltas)
-        ) if len(deltas) == 3 else None
+            (all(d > 0 for d in deltas) or all(d < 0 for d in deltas)) if len(deltas) == 3 else None
+        )
 
     # --- Print survivors ---
     survivors = [r for r in primary if r["survives_bh"]]
     if survivors:
         print(f"\n  SURVIVORS (BH-corrected p<{alpha}):")
-        print(f"  {'Combo':<45} {'N_on':>5} {'delta_RR20':>10} {'p_raw':>7} "
-              f"{'d_RR15':>8} {'d_RR25':>8} {'consistent':>11}")
+        print(
+            f"  {'Combo':<45} {'N_on':>5} {'delta_RR20':>10} {'p_raw':>7} "
+            f"{'d_RR15':>8} {'d_RR25':>8} {'consistent':>11}"
+        )
         print(f"  {'-' * 100}")
         for r in sorted(survivors, key=lambda x: x["p_raw"]):
             combo = f"{r['instrument']} {r['session']} {r['filter']} {r['event']}"
             d15 = f"{r['delta_rr15']:+.3f}" if r.get("delta_rr15") is not None else "  n/a"
             d25 = f"{r['delta_rr25']:+.3f}" if r.get("delta_rr25") is not None else "  n/a"
             cons = str(r["sensitivity_consistent"])
-            print(f"  {combo:<45} {r['on_n']:5d} {r['delta']:+10.3f} "
-                  f"{r['p_raw']:7.4f} {d15:>8} {d25:>8} {cons:>11}")
+            print(f"  {combo:<45} {r['on_n']:5d} {r['delta']:+10.3f} {r['p_raw']:7.4f} {d15:>8} {d25:>8} {cons:>11}")
     else:
         print(f"\n  NO signals survive BH correction at FDR={alpha}.")
         print(f"  Strongest raw signal:")
         best = min(primary, key=lambda x: x["p_raw"])
-        print(f"    {best['instrument']} {best['session']} {best['filter']} {best['event']}: "
-              f"delta={best['delta']:+.3f} p_raw={best['p_raw']:.4f}")
+        print(
+            f"    {best['instrument']} {best['session']} {best['filter']} {best['event']}: "
+            f"delta={best['delta']:+.3f} p_raw={best['p_raw']:.4f}"
+        )
 
     # --- Near-misses (p_raw < 0.10, didn't survive BH) ---
     near_miss = [r for r in primary if not r["survives_bh"] and r["p_raw"] < 0.10]
@@ -668,6 +766,7 @@ def q3b_fdr_correction(data_cache, n_perm: int = 1000, alpha: float = 0.05):
 # =========================================================================
 # Consistency check: is the pattern stable across years?
 # =========================================================================
+
 
 def q4_yearly_stability(data_cache):
     print(f"\n{'=' * 100}")
@@ -727,6 +826,7 @@ def q4_yearly_stability(data_cache):
 # Main
 # =========================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="P2 Calendar Effects — day-of-week + macro overlay")
     parser.add_argument("--db-path", type=str, default=None)
@@ -737,6 +837,7 @@ def main():
     else:
         try:
             from pipeline.paths import GOLD_DB_PATH
+
             db_path = GOLD_DB_PATH
         except ImportError:
             db_path = Path("gold.db")
@@ -778,17 +879,13 @@ def main():
         out.mkdir(parents=True, exist_ok=True)
 
         if q1_rows:
-            pd.DataFrame(q1_rows).to_csv(out / "day_of_week_breakdown.csv",
-                                          index=False, float_format="%.4f")
+            pd.DataFrame(q1_rows).to_csv(out / "day_of_week_breakdown.csv", index=False, float_format="%.4f")
         if q2_rows:
-            pd.DataFrame(q2_rows).to_csv(out / "day_of_week_skip_filter.csv",
-                                          index=False, float_format="%.4f")
+            pd.DataFrame(q2_rows).to_csv(out / "day_of_week_skip_filter.csv", index=False, float_format="%.4f")
         if q3_rows:
-            pd.DataFrame(q3_rows).to_csv(out / "day_of_week_macro_overlay.csv",
-                                          index=False, float_format="%.4f")
+            pd.DataFrame(q3_rows).to_csv(out / "day_of_week_macro_overlay.csv", index=False, float_format="%.4f")
         if q3b_rows:
-            pd.DataFrame(q3b_rows).to_csv(out / "day_of_week_q3b_fdr.csv",
-                                           index=False, float_format="%.4f")
+            pd.DataFrame(q3b_rows).to_csv(out / "day_of_week_q3b_fdr.csv", index=False, float_format="%.4f")
 
         print(f"\n  CSVs saved to research/output/day_of_week_*.csv")
         print(f"  Total: {time.time() - t_total:.1f}s")

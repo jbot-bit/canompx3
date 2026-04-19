@@ -58,26 +58,30 @@ CURRENT_SESSIONS = {
 }
 
 # ORB parameters
-ORB_BARS = 5          # 5-minute ORB
-G4_MIN = 4.0          # Minimum ORB size (points)
-BREAK_WINDOW = 240    # 4 hours in minutes
+ORB_BARS = 5  # 5-minute ORB
+G4_MIN = 4.0  # Minimum ORB size (points)
+BREAK_WINDOW = 240  # 4 hours in minutes
 OUTCOME_WINDOW = 480  # 8 hours in minutes
 RR_TARGET = 2.0
-MIN_TRADES = 30       # Minimum for ranking
+MIN_TRADES = 30  # Minimum for ranking
 
 
 # =========================================================================
 # Data Loading
 # =========================================================================
 
+
 def load_bars(con, instrument):
     """Load all 1m bars for an instrument into a DataFrame."""
-    return con.execute("""
+    return con.execute(
+        """
         SELECT ts_utc, open, high, low, close
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def build_day_arrays(bars_df):
@@ -152,6 +156,7 @@ def _aggregate_trades(trades):
 # =========================================================================
 # Core Scan
 # =========================================================================
+
 
 def scan_candidate_time(bris_h, bris_m, highs, lows, closes, dst_mask):
     """Scan one candidate ORB start time across all trading days.
@@ -347,14 +352,14 @@ def _empty_result(n_days_valid):
 # Output Formatting
 # =========================================================================
 
+
 def print_ranked_table(inst_df, instrument, top_n=20, bottom_n=10):
     """Print top and bottom times for one instrument."""
     qualified = inst_df[inst_df["n_trades"] >= MIN_TRADES].copy()
 
     # --- Top N ---
     print(f"\n{'=' * 90}")
-    print(f"  {instrument} — TOP {top_n} TIMES by total_r "
-          f"(min {MIN_TRADES} trades)")
+    print(f"  {instrument} — TOP {top_n} TIMES by total_r (min {MIN_TRADES} trades)")
     print(f"{'=' * 90}")
 
     if len(qualified) == 0:
@@ -377,16 +382,14 @@ def print_ranked_table(inst_df, instrument, top_n=20, bottom_n=10):
     n_winter_hot = 0
     n_summer_hot = 0
     for _, row in top_for_dst.iterrows():
-        v = _dst_verdict(row["avg_r_winter"], row["avg_r_summer"],
-                         int(row["n_winter"]), int(row["n_summer"]))
+        v = _dst_verdict(row["avg_r_winter"], row["avg_r_summer"], int(row["n_winter"]), int(row["n_summer"]))
         if v == "STBL":
             n_stable += 1
         elif v == "W>>":
             n_winter_hot += 1
         elif v == "S>>":
             n_summer_hot += 1
-    print(f"    {n_stable} STABLE | {n_winter_hot} winter-dominant | "
-          f"{n_summer_hot} summer-dominant")
+    print(f"    {n_stable} STABLE | {n_winter_hot} winter-dominant | {n_summer_hot} summer-dominant")
 
     # Flag any top-20 time where the edge vanishes in one regime
     vanished = []
@@ -395,9 +398,13 @@ def print_ranked_table(inst_df, instrument, top_n=20, bottom_n=10):
         aw, asr = row["avg_r_winter"], row["avg_r_summer"]
         if nw >= 10 and ns >= 10:
             if aw > 0 and asr <= 0:
-                vanished.append(f"    {row['brisbane_time']}  W:+{aw:.3f}({nw}t) S:{asr:+.3f}({ns}t) — edge DIES in summer")
+                vanished.append(
+                    f"    {row['brisbane_time']}  W:+{aw:.3f}({nw}t) S:{asr:+.3f}({ns}t) — edge DIES in summer"
+                )
             elif asr > 0 and aw <= 0:
-                vanished.append(f"    {row['brisbane_time']}  W:{aw:+.3f}({nw}t) S:+{asr:.3f}({ns}t) — edge DIES in winter")
+                vanished.append(
+                    f"    {row['brisbane_time']}  W:{aw:+.3f}({nw}t) S:+{asr:.3f}({ns}t) — edge DIES in winter"
+                )
     if vanished:
         print(f"    WARNING — edge vanishes in one DST regime:")
         for v in vanished:
@@ -407,8 +414,10 @@ def print_ranked_table(inst_df, instrument, top_n=20, bottom_n=10):
     pos = len(qualified[qualified["avg_r"] > 0])
     neg = len(qualified[qualified["avg_r"] < 0])
     zero = len(qualified) - pos - neg
-    print(f"\n  {instrument} summary: {len(qualified)} times with >= {MIN_TRADES} trades "
-          f"| {pos} positive avgR | {neg} negative | {zero} zero")
+    print(
+        f"\n  {instrument} summary: {len(qualified)} times with >= {MIN_TRADES} trades "
+        f"| {pos} positive avgR | {neg} negative | {zero} zero"
+    )
 
 
 def _dst_verdict(avg_w, avg_s, n_w, n_s):
@@ -426,19 +435,23 @@ def _dst_verdict(avg_w, avg_s, n_w, n_s):
 
 
 def _print_table(df):
-    header = (f"  {'Time':>6s} {'':1s} {'N':>5s} {'avgR':>7s} {'totR':>8s} "
-              f"{'WR%':>6s} {'ORBsz':>6s}"
-              f" | {'W_N':>4s} {'W_avgR':>7s} {'S_N':>4s} {'S_avgR':>7s} {'DST':>4s}"
-              f"  Session")
+    header = (
+        f"  {'Time':>6s} {'':1s} {'N':>5s} {'avgR':>7s} {'totR':>8s} "
+        f"{'WR%':>6s} {'ORBsz':>6s}"
+        f" | {'W_N':>4s} {'W_avgR':>7s} {'S_N':>4s} {'S_avgR':>7s} {'DST':>4s}"
+        f"  Session"
+    )
     print(header)
-    print(f"  {'-' * 6} {'-'} {'-' * 5} {'-' * 7} {'-' * 8} "
-          f"{'-' * 6} {'-' * 6}"
-          f" + {'-' * 4} {'-' * 7} {'-' * 4} {'-' * 7} {'-' * 4}"
-          f"  {'-' * 22}")
+    print(
+        f"  {'-' * 6} {'-'} {'-' * 5} {'-' * 7} {'-' * 8} "
+        f"{'-' * 6} {'-' * 6}"
+        f" + {'-' * 4} {'-' * 7} {'-' * 4} {'-' * 7} {'-' * 4}"
+        f"  {'-' * 22}"
+    )
     for _, row in df.iterrows():
         marker = "*" if row["current_session"] else " "
         sess = row["current_session"] if row["current_session"] else ""
-        orb_str = f"{row['avg_orb_size']:5.1f}" if not np.isnan(row['avg_orb_size']) else "   --"
+        orb_str = f"{row['avg_orb_size']:5.1f}" if not np.isnan(row["avg_orb_size"]) else "   --"
         n_w = int(row["n_winter"])
         n_s = int(row["n_summer"])
         avg_w = row["avg_r_winter"]
@@ -465,26 +478,19 @@ def print_analysis_summary(results_df):
     # Q1: Are our current 11 sessions the best times?
     print(f"\n  Q1: Are current sessions the best times?")
     for instrument in INSTRUMENTS:
-        idf = results_df[
-            (results_df["instrument"] == instrument)
-            & (results_df["n_trades"] >= MIN_TRADES)
-        ]
+        idf = results_df[(results_df["instrument"] == instrument) & (results_df["n_trades"] >= MIN_TRADES)]
         if len(idf) == 0:
             continue
 
         top5 = idf.nlargest(5, "total_r")
         top_times = ", ".join(top5["brisbane_time"].values)
         current_in_top5 = sum(1 for s in top5["current_session"].values if s)
-        print(f"    {instrument} best 5: {top_times}  "
-              f"({current_in_top5}/5 are current sessions)")
+        print(f"    {instrument} best 5: {top_times}  ({current_in_top5}/5 are current sessions)")
 
     # Q2: Clusters of good times?
     print(f"\n  Q2: Time clusters with edge (top quartile by avgR, >= {MIN_TRADES} trades):")
     for instrument in INSTRUMENTS:
-        idf = results_df[
-            (results_df["instrument"] == instrument)
-            & (results_df["n_trades"] >= MIN_TRADES)
-        ].copy()
+        idf = results_df[(results_df["instrument"] == instrument) & (results_df["n_trades"] >= MIN_TRADES)].copy()
         if len(idf) == 0:
             continue
 
@@ -512,18 +518,17 @@ def print_analysis_summary(results_df):
             w_r = w_row.iloc[0]
             if s_r["n_trades"] < 10 and w_r["n_trades"] < 10:
                 continue
-            print(f"    {instrument} {label}: summer {summer} avgR={s_r['avg_r']:+.3f} N={s_r['n_trades']} | "
-                  f"winter {winter} avgR={w_r['avg_r']:+.3f} N={w_r['n_trades']}")
+            print(
+                f"    {instrument} {label}: summer {summer} avgR={s_r['avg_r']:+.3f} N={s_r['n_trades']} | "
+                f"winter {winter} avgR={w_r['avg_r']:+.3f} N={w_r['n_trades']}"
+            )
 
     # Q4: Dead zones
     print(f"\n  Q4: Dead zones (no instrument has positive avgR, >= {MIN_TRADES} trades):")
     dead_times = []
     for bris_h, bris_m in CANDIDATE_TIMES:
         time_str = f"{bris_h:02d}:{bris_m:02d}"
-        rows = results_df[
-            (results_df["brisbane_time"] == time_str)
-            & (results_df["n_trades"] >= MIN_TRADES)
-        ]
+        rows = results_df[(results_df["brisbane_time"] == time_str) & (results_df["n_trades"] >= MIN_TRADES)]
         if len(rows) == 0 or (rows["avg_r"] <= 0).all():
             dead_times.append(time_str)
 
@@ -535,28 +540,22 @@ def print_analysis_summary(results_df):
     # Q5: Shared time structure across instruments?
     print(f"\n  Q5: Do instruments share the same peak times?")
     for instrument in INSTRUMENTS:
-        idf = results_df[
-            (results_df["instrument"] == instrument)
-            & (results_df["n_trades"] >= MIN_TRADES)
-        ]
+        idf = results_df[(results_df["instrument"] == instrument) & (results_df["n_trades"] >= MIN_TRADES)]
         if len(idf) == 0:
             continue
         best = idf.nlargest(1, "total_r").iloc[0]
-        print(f"    {instrument} #1 time: {best['brisbane_time']} "
-              f"(avgR={best['avg_r']:+.3f}, N={best['n_trades']})")
+        print(f"    {instrument} #1 time: {best['brisbane_time']} (avgR={best['avg_r']:+.3f}, N={best['n_trades']})")
 
 
 # =========================================================================
 # Main
 # =========================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Full 24-hour ORB time scan across CME micro futures"
-    )
+    parser = argparse.ArgumentParser(description="Full 24-hour ORB time scan across CME micro futures")
     parser.add_argument(
-        "--db-path", type=str, default=None,
-        help="Path to gold.db (default: auto-resolve via pipeline.paths)"
+        "--db-path", type=str, default=None, help="Path to gold.db (default: auto-resolve via pipeline.paths)"
     )
     args = parser.parse_args()
 
@@ -564,16 +563,18 @@ def main():
         db_path = Path(args.db_path)
     else:
         from pipeline.paths import GOLD_DB_PATH
+
         db_path = GOLD_DB_PATH
 
     print(f"\n{'=' * 90}")
     print(f"  FULL 24-HOUR ORB TIME SCAN")
     print(f"  Database: {db_path}")
-    print(f"  Parameters: {ORB_BARS}m ORB | G{G4_MIN:.0f}+ filter | "
-          f"RR{RR_TARGET:.1f} target | {BREAK_WINDOW // 60}h break window | "
-          f"{OUTCOME_WINDOW // 60}h outcome window")
-    print(f"  Scanning {len(CANDIDATE_TIMES)} candidate times × "
-          f"{len(INSTRUMENTS)} instruments")
+    print(
+        f"  Parameters: {ORB_BARS}m ORB | G{G4_MIN:.0f}+ filter | "
+        f"RR{RR_TARGET:.1f} target | {BREAK_WINDOW // 60}h break window | "
+        f"{OUTCOME_WINDOW // 60}h outcome window"
+    )
+    print(f"  Scanning {len(CANDIDATE_TIMES)} candidate times × {len(INSTRUMENTS)} instruments")
     print(f"{'=' * 90}")
 
     con = duckdb.connect(str(db_path), read_only=True)
@@ -589,13 +590,11 @@ def main():
                 print(f"    No data for {instrument}, skipping.")
                 continue
 
-            print(f"    {len(bars_df):,} bars loaded in {time.time() - t_load:.1f}s. "
-                  f"Building day arrays...")
+            print(f"    {len(bars_df):,} bars loaded in {time.time() - t_load:.1f}s. Building day arrays...")
             t_build = time.time()
             all_days, opens, highs, lows, closes = build_day_arrays(bars_df)
             n_days = len(all_days)
-            print(f"    {n_days} trading days ({all_days[0]} to {all_days[-1]}) "
-                  f"built in {time.time() - t_build:.1f}s")
+            print(f"    {n_days} trading days ({all_days[0]} to {all_days[-1]}) built in {time.time() - t_build:.1f}s")
 
             # Free the DataFrame to save memory
             del bars_df
@@ -610,27 +609,21 @@ def main():
             t_scan = time.time()
 
             for i, (bris_h, bris_m) in enumerate(CANDIDATE_TIMES):
-                result = scan_candidate_time(
-                    bris_h, bris_m, highs, lows, closes, dst_mask
-                )
+                result = scan_candidate_time(bris_h, bris_m, highs, lows, closes, dst_mask)
 
                 if result is not None:
                     result["instrument"] = instrument
                     result["brisbane_time"] = f"{bris_h:02d}:{bris_m:02d}"
                     result["bris_h"] = bris_h
                     result["bris_m"] = bris_m
-                    result["current_session"] = CURRENT_SESSIONS.get(
-                        (bris_h, bris_m), ""
-                    )
+                    result["current_session"] = CURRENT_SESSIONS.get((bris_h, bris_m), "")
                     all_results.append(result)
 
                 if (i + 1) % 24 == 0:
                     elapsed = time.time() - t_scan
-                    print(f"      {instrument}: {i + 1}/96 times "
-                          f"({elapsed:.0f}s elapsed)")
+                    print(f"      {instrument}: {i + 1}/96 times ({elapsed:.0f}s elapsed)")
 
-            print(f"    {instrument} scan complete in "
-                  f"{time.time() - t_scan:.0f}s")
+            print(f"    {instrument} scan complete in {time.time() - t_scan:.0f}s")
 
             # Free arrays before next instrument
             del opens, highs, lows, closes

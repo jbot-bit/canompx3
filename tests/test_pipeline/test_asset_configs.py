@@ -145,8 +145,7 @@ class TestGetOutrightRoot:
         """Every instrument in ASSET_CONFIGS must resolve to its canonical root."""
         for instrument, expected_root in self.EXPECTED_ROOTS.items():
             assert get_outright_root(instrument) == expected_root, (
-                f"{instrument} should derive root {expected_root!r}, "
-                f"got {get_outright_root(instrument)!r}"
+                f"{instrument} should derive root {expected_root!r}, got {get_outright_root(instrument)!r}"
             )
 
     def test_coverage_matches_asset_configs(self):
@@ -159,9 +158,7 @@ class TestGetOutrightRoot:
             f"ASSET_CONFIGS has instruments not in EXPECTED_ROOTS: {missing_from_test}. "
             f"Add them to TestGetOutrightRoot.EXPECTED_ROOTS."
         )
-        assert not extra_in_test, (
-            f"EXPECTED_ROOTS has instruments not in ASSET_CONFIGS: {extra_in_test}."
-        )
+        assert not extra_in_test, f"EXPECTED_ROOTS has instruments not in ASSET_CONFIGS: {extra_in_test}."
 
     def test_mgc_post_phase_2_returns_mgc_not_gc(self):
         """Regression guard: post-Phase-2, MGC must derive 'MGC', NOT 'GC'.
@@ -244,8 +241,7 @@ class TestParentSymbol:
         """Every ASSET_CONFIGS entry must have the parent_symbol key (even if None)."""
         for inst, cfg in ASSET_CONFIGS.items():
             assert "parent_symbol" in cfg, (
-                f"{inst} config missing 'parent_symbol' field — "
-                f"Phase 3a requires all configs to declare it"
+                f"{inst} config missing 'parent_symbol' field — Phase 3a requires all configs to declare it"
             )
 
     def test_expected_coverage_matches_configs(self):
@@ -281,6 +277,4 @@ class TestParentSymbol:
         """Full coverage matrix — catches any drift between config and expectations."""
         for inst, expected_parent in self.EXPECTED.items():
             actual = ASSET_CONFIGS[inst]["parent_symbol"]
-            assert actual == expected_parent, (
-                f"{inst}.parent_symbol should be {expected_parent!r}, got {actual!r}"
-            )
+            assert actual == expected_parent, f"{inst}.parent_symbol should be {expected_parent!r}, got {actual!r}"

@@ -235,7 +235,9 @@ def emit(all_results: list[dict]) -> None:
         lines[:9]
         + [
             "**Verdict totals:** "
-            + ", ".join(f"{v}={counts.get(v, 0)}" for v in ["VALIDATED", "CONDITIONAL", "KILL_DOWNGRADE", "INFO_HEAVY"]),
+            + ", ".join(
+                f"{v}={counts.get(v, 0)}" for v in ["VALIDATED", "CONDITIONAL", "KILL_DOWNGRADE", "INFO_HEAVY"]
+            ),
             "",
         ]
         + lines[9:]

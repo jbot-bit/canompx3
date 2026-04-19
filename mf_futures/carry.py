@@ -22,7 +22,12 @@ def build_carry_input_slice(pair: FrontNextPair) -> CarryInputSlice:
     annualized_carry = None
     carry_available = False
     unavailable_reason = pair.unavailable_reason
-    if pair.carry_available and front_price is not None and next_price is not None and pair.calendar_gap_days is not None:
+    if (
+        pair.carry_available
+        and front_price is not None
+        and next_price is not None
+        and pair.calendar_gap_days is not None
+    ):
         annualized_carry = annualized_carry_from_curve(
             front_price=front_price,
             next_price=next_price,

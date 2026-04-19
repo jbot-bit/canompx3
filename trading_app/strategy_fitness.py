@@ -935,7 +935,7 @@ def diagnose_decay(
     # Get all siblings (same family, excluding self)
     siblings = con.execute(
         f"""
-        SELECT strategy_id FROM {deployable_validated_relation(con, alias='vs')}
+        SELECT strategy_id FROM {deployable_validated_relation(con, alias="vs")}
         WHERE family_hash = ?
           AND strategy_id != ?
     """,

@@ -43,21 +43,15 @@ INSTRUMENTS = ["MGC", "MNQ", "MES"]
 # Each edge: (session, instrument, gate_label, min_size, direction_filter, orb_minutes)
 # direction_filter: "long" = LONG-ONLY, None = BOTH directions
 EDGES_1000 = [
-    {"session": "1000", "instrument": "MGC", "gate": "G5+", "min_size": 5.0,
-     "direction": "long", "orb_minutes": 5},
-    {"session": "1000", "instrument": "MNQ", "gate": "G4+", "min_size": 4.0,
-     "direction": "long", "orb_minutes": 5},
-    {"session": "1000", "instrument": "MES", "gate": "G4+", "min_size": 4.0,
-     "direction": "long", "orb_minutes": 5},
+    {"session": "1000", "instrument": "MGC", "gate": "G5+", "min_size": 5.0, "direction": "long", "orb_minutes": 5},
+    {"session": "1000", "instrument": "MNQ", "gate": "G4+", "min_size": 4.0, "direction": "long", "orb_minutes": 5},
+    {"session": "1000", "instrument": "MES", "gate": "G4+", "min_size": 4.0, "direction": "long", "orb_minutes": 5},
 ]
 
 EDGES_0900 = [
-    {"session": "0900", "instrument": "MGC", "gate": "G5+", "min_size": 5.0,
-     "direction": None, "orb_minutes": 5},
-    {"session": "0900", "instrument": "MNQ", "gate": "G4+", "min_size": 4.0,
-     "direction": None, "orb_minutes": 5},
-    {"session": "0900", "instrument": "MES", "gate": "G3+", "min_size": 3.0,
-     "direction": None, "orb_minutes": 5},
+    {"session": "0900", "instrument": "MGC", "gate": "G5+", "min_size": 5.0, "direction": None, "orb_minutes": 5},
+    {"session": "0900", "instrument": "MNQ", "gate": "G4+", "min_size": 4.0, "direction": None, "orb_minutes": 5},
+    {"session": "0900", "instrument": "MES", "gate": "G3+", "min_size": 3.0, "direction": None, "orb_minutes": 5},
 ]
 
 # Fixed query parameters
@@ -69,6 +63,7 @@ RR_TARGET = 2.5
 # =========================================================================
 # Data Loading
 # =========================================================================
+
 
 def load_edge_data(con: duckdb.DuckDBPyConnection, edges: list[dict]) -> pd.DataFrame:
     """Load pnl_r for a set of edge specs, return wide DataFrame keyed on trading_day.
@@ -137,6 +132,7 @@ def load_edge_data(con: duckdb.DuckDBPyConnection, edges: list[dict]) -> pd.Data
 # Section 1: Same-Day Cross-Instrument Correlation
 # =========================================================================
 
+
 def analyze_correlation(wide_df: pd.DataFrame, label: str) -> list[dict]:
     """Compute pairwise correlation stats on overlapping days."""
     results = []
@@ -152,11 +148,17 @@ def analyze_correlation(wide_df: pd.DataFrame, label: str) -> list[dict]:
         n = len(overlap)
 
         if n < 15:
-            results.append({
-                "pair": f"{inst_a}/{inst_b}", "corr": None, "p_value": None,
-                "co_loss_pct": None, "co_win_pct": None, "n_overlap": n,
-                "note": "INSUFFICIENT (N < 15)",
-            })
+            results.append(
+                {
+                    "pair": f"{inst_a}/{inst_b}",
+                    "corr": None,
+                    "p_value": None,
+                    "co_loss_pct": None,
+                    "co_win_pct": None,
+                    "n_overlap": n,
+                    "note": "INSUFFICIENT (N < 15)",
+                }
+            )
             continue
 
         a_vals = overlap[col_a].values
@@ -166,11 +168,17 @@ def analyze_correlation(wide_df: pd.DataFrame, label: str) -> list[dict]:
         co_loss = float(((a_vals < 0) & (b_vals < 0)).sum() / n)
         co_win = float(((a_vals > 0) & (b_vals > 0)).sum() / n)
 
-        results.append({
-            "pair": f"{inst_a}/{inst_b}", "corr": corr, "p_value": p_val,
-            "co_loss_pct": co_loss, "co_win_pct": co_win, "n_overlap": n,
-            "note": "",
-        })
+        results.append(
+            {
+                "pair": f"{inst_a}/{inst_b}",
+                "corr": corr,
+                "p_value": p_val,
+                "co_loss_pct": co_loss,
+                "co_win_pct": co_win,
+                "n_overlap": n,
+                "note": "",
+            }
+        )
 
     return results
 
@@ -184,13 +192,16 @@ def print_correlation_section(results: list[dict], section_label: str):
         if r["corr"] is None:
             print(f"  {r['pair']:<12} {'---':>8} {'---':>10} {'---':>10} {'---':>10} {r['n_overlap']:>10}  {r['note']}")
         else:
-            print(f"  {r['pair']:<12} {r['corr']:>+8.3f} {r['p_value']:>10.4f}"
-                  f" {r['co_loss_pct']:>9.1%} {r['co_win_pct']:>9.1%} {r['n_overlap']:>10}")
+            print(
+                f"  {r['pair']:<12} {r['corr']:>+8.3f} {r['p_value']:>10.4f}"
+                f" {r['co_loss_pct']:>9.1%} {r['co_win_pct']:>9.1%} {r['n_overlap']:>10}"
+            )
 
 
 # =========================================================================
 # Section 2: Combined Portfolio Equity Curves
 # =========================================================================
+
 
 def build_portfolio_variants(wide_df: pd.DataFrame) -> dict[str, dict]:
     """Build portfolio variants and compute metrics for each.
@@ -298,6 +309,7 @@ def print_portfolio_section(variants: dict[str, dict], section_label: str):
 # Section 3: Marginal Value of Each Instrument
 # =========================================================================
 
+
 def analyze_marginal_value(wide_df: pd.DataFrame) -> list[dict]:
     """Compute marginal Sharpe / MaxDD improvement of adding instruments to MGC."""
     pnl_cols = [c for c in wide_df.columns if c.endswith("_pnl_r")]
@@ -333,28 +345,32 @@ def analyze_marginal_value(wide_df: pd.DataFrame) -> list[dict]:
     for inst in other_instruments:
         combined = portfolio_metrics(["MGC_pnl_r", f"{inst}_pnl_r"])
         if combined:
-            results.append({
-                "label": f"Adding {inst} to MGC",
-                "delta_sharpe": combined["sharpe"] - mgc_only["sharpe"],
-                "delta_maxdd": combined["maxdd"] - mgc_only["maxdd"],
-                "combined_sharpe": combined["sharpe"],
-                "combined_maxdd": combined["maxdd"],
-                "flag": "WORSE" if combined["sharpe"] < mgc_only["sharpe"] else "",
-            })
+            results.append(
+                {
+                    "label": f"Adding {inst} to MGC",
+                    "delta_sharpe": combined["sharpe"] - mgc_only["sharpe"],
+                    "delta_maxdd": combined["maxdd"] - mgc_only["maxdd"],
+                    "combined_sharpe": combined["sharpe"],
+                    "combined_maxdd": combined["maxdd"],
+                    "flag": "WORSE" if combined["sharpe"] < mgc_only["sharpe"] else "",
+                }
+            )
 
     # All three together
     if len(other_instruments) >= 1:
         all_cols = [f"{i}_pnl_r" for i in instruments]
         combined = portfolio_metrics(all_cols)
         if combined:
-            results.append({
-                "label": "All three",
-                "delta_sharpe": combined["sharpe"] - mgc_only["sharpe"],
-                "delta_maxdd": combined["maxdd"] - mgc_only["maxdd"],
-                "combined_sharpe": combined["sharpe"],
-                "combined_maxdd": combined["maxdd"],
-                "flag": "WORSE" if combined["sharpe"] < mgc_only["sharpe"] else "",
-            })
+            results.append(
+                {
+                    "label": "All three",
+                    "delta_sharpe": combined["sharpe"] - mgc_only["sharpe"],
+                    "delta_maxdd": combined["maxdd"] - mgc_only["maxdd"],
+                    "combined_sharpe": combined["sharpe"],
+                    "combined_maxdd": combined["maxdd"],
+                    "flag": "WORSE" if combined["sharpe"] < mgc_only["sharpe"] else "",
+                }
+            )
 
     return results
 
@@ -366,13 +382,13 @@ def print_marginal_section(results: list[dict], baseline_maxdd: float):
     for r in results:
         dd_dir = "improved" if r["delta_maxdd"] > 0 else "worsened"
         flag = f"  ** {r['flag']} **" if r["flag"] else ""
-        print(f"  {r['label']:<25} Sharpe {r['delta_sharpe']:>+.3f},"
-              f" MaxDD {dd_dir} {abs(r['delta_maxdd']):.1f}R{flag}")
+        print(f"  {r['label']:<25} Sharpe {r['delta_sharpe']:>+.3f}, MaxDD {dd_dir} {abs(r['delta_maxdd']):.1f}R{flag}")
 
 
 # =========================================================================
 # Section 4: Regime Analysis (by Calendar Year)
 # =========================================================================
+
 
 def analyze_regimes(wide_df: pd.DataFrame) -> pd.DataFrame:
     """Per-year stats and pairwise correlation."""
@@ -458,6 +474,7 @@ def print_regime_section(regime_df: pd.DataFrame, instruments: list[str]):
 # Recommendations
 # =========================================================================
 
+
 def generate_recommendations(
     marginal_results: list[dict],
     corr_results_1000: list[dict],
@@ -493,11 +510,9 @@ def generate_recommendations(
         elif marginal is None:
             recommendations[inst] = ("MONITOR", "No marginal data available")
         elif marginal["delta_sharpe"] <= 0:
-            recommendations[inst] = ("DO NOT ADD",
-                                     f"Marginal Sharpe {marginal['delta_sharpe']:+.3f} (no improvement)")
+            recommendations[inst] = ("DO NOT ADD", f"Marginal Sharpe {marginal['delta_sharpe']:+.3f} (no improvement)")
         elif corr_val is not None and corr_val > 0.4:
-            recommendations[inst] = ("DO NOT ADD",
-                                     f"Correlation {corr_val:.2f} > 0.4 (correlated drawdown risk)")
+            recommendations[inst] = ("DO NOT ADD", f"Correlation {corr_val:.2f} > 0.4 (correlated drawdown risk)")
         elif n_trades < 100 or (corr_val is not None and corr_val > 0.2):
             reason_parts = []
             if n_trades < 100:
@@ -506,8 +521,10 @@ def generate_recommendations(
                 reason_parts.append(f"corr={corr_val:.2f}")
             recommendations[inst] = ("MONITOR", "; ".join(reason_parts))
         else:
-            recommendations[inst] = ("ADD",
-                                     f"Sharpe +{marginal['delta_sharpe']:.3f}, corr={corr_val:.2f}, N={n_trades}")
+            recommendations[inst] = (
+                "ADD",
+                f"Sharpe +{marginal['delta_sharpe']:.3f}, corr={corr_val:.2f}, N={n_trades}",
+            )
 
     return recommendations
 
@@ -516,10 +533,10 @@ def generate_recommendations(
 # Main
 # =========================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description="Cross-Instrument Portfolio Analysis")
-    parser.add_argument("--db-path", type=str, default=None,
-                        help="Path to gold.db (default: auto-detect)")
+    parser.add_argument("--db-path", type=str, default=None, help="Path to gold.db (default: auto-detect)")
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
@@ -532,25 +549,31 @@ def main():
 
     try:
         # Verify data availability
-        counts = con.execute("""
+        counts = con.execute(
+            """
             SELECT symbol, COUNT(*) as n
             FROM orb_outcomes
             WHERE entry_model = ? AND confirm_bars = ? AND rr_target = ?
               AND pnl_r IS NOT NULL
             GROUP BY symbol
             ORDER BY symbol
-        """, [ENTRY_MODEL, CONFIRM_BARS, RR_TARGET]).fetchdf()
+        """,
+            [ENTRY_MODEL, CONFIRM_BARS, RR_TARGET],
+        ).fetchdf()
 
         if counts.empty:
             print("ERROR: No orb_outcomes data found for E1/CB2/RR2.5", file=sys.stderr)
             sys.exit(1)
 
         # Date range
-        date_range = con.execute("""
+        date_range = con.execute(
+            """
             SELECT MIN(trading_day) as min_day, MAX(trading_day) as max_day
             FROM orb_outcomes
             WHERE entry_model = ? AND pnl_r IS NOT NULL
-        """, [ENTRY_MODEL]).fetchdf()
+        """,
+            [ENTRY_MODEL],
+        ).fetchdf()
         min_day = date_range["min_day"].iloc[0]
         max_day = date_range["max_day"].iloc[0]
 
@@ -564,12 +587,15 @@ def main():
             inst = edge["instrument"]
             session = edge["session"]
             orb_min = edge["orb_minutes"]
-            n = con.execute("""
+            n = con.execute(
+                """
                 SELECT COUNT(*) FROM orb_outcomes
                 WHERE entry_model = ? AND confirm_bars = ? AND rr_target = ?
                   AND orb_label = ? AND orb_minutes = ? AND symbol = ?
                   AND pnl_r IS NOT NULL
-            """, [ENTRY_MODEL, CONFIRM_BARS, RR_TARGET, session, orb_min, inst]).fetchone()[0]
+            """,
+                [ENTRY_MODEL, CONFIRM_BARS, RR_TARGET, session, orb_min, inst],
+            ).fetchone()[0]
             edge_counts[(session, inst, orb_min)] = n
 
     finally:
@@ -595,25 +621,25 @@ def main():
         n = edge_counts.get(key, 0)
         dir_label = f" {edge['direction'].upper()}-ONLY" if edge["direction"] else " BOTH"
         status = "" if n > 0 else " <-- NO DATA (backfill needed?)"
-        print(f"  {edge['session']} {edge['instrument']} {edge['gate']}"
-              f" {edge['orb_minutes']}m{dir_label}: {n}{status}")
+        print(f"  {edge['session']} {edge['instrument']} {edge['gate']} {edge['orb_minutes']}m{dir_label}: {n}{status}")
 
     # Friction reference
     print("\nFriction (embedded in pnl_r, for reference):")
     for inst in INSTRUMENTS:
         try:
             spec = get_cost_spec(inst)
-            print(f"  {inst}: {spec.friction_in_points:.2f} pt"
-                  f" (${spec.total_friction:.2f} RT)")
+            print(f"  {inst}: {spec.friction_in_points:.2f} pt (${spec.total_friction:.2f} RT)")
         except ValueError:
             pass
 
     # ===================================================================
     # Section 1: Correlation
     # ===================================================================
-    has_1000_data = len(wide_1000) > 0 and any(
-        wide_1000[c].notna().any() for c in wide_1000.columns if c.endswith("_pnl_r")
-    ) if len(wide_1000.columns) > 0 else False
+    has_1000_data = (
+        len(wide_1000) > 0 and any(wide_1000[c].notna().any() for c in wide_1000.columns if c.endswith("_pnl_r"))
+        if len(wide_1000.columns) > 0
+        else False
+    )
 
     if has_1000_data:
         corr_1000 = analyze_correlation(wide_1000, "1000 LONG-ONLY")
@@ -654,8 +680,7 @@ def main():
     # Section 4: Regime Analysis
     # ===================================================================
     if has_1000_data:
-        active_instruments = [c.replace("_pnl_r", "")
-                              for c in wide_1000.columns if c.endswith("_pnl_r")]
+        active_instruments = [c.replace("_pnl_r", "") for c in wide_1000.columns if c.endswith("_pnl_r")]
         regime_df = analyze_regimes(wide_1000)
         print_regime_section(regime_df, active_instruments)
     else:

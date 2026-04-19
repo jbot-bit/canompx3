@@ -37,6 +37,7 @@ import pandas as pd
 
 try:
     from scipy.stats import pearsonr
+
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
@@ -53,8 +54,7 @@ _UK_LONDON = ZoneInfo("Europe/London")
 
 def is_us_dst(trading_day: date) -> bool:
     """True if US Eastern is in DST (EDT, UTC-4) on this date."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_US_EASTERN)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_US_EASTERN)
     offset = dt.utcoffset()
     assert offset is not None
     return offset.total_seconds() == -4 * 3600
@@ -62,8 +62,7 @@ def is_us_dst(trading_day: date) -> bool:
 
 def is_uk_dst(trading_day: date) -> bool:
     """True if UK is in BST (UTC+1) on this date."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_UK_LONDON)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_UK_LONDON)
     offset = dt.utcoffset()
     assert offset is not None
     return offset.total_seconds() == 1 * 3600
@@ -105,14 +104,18 @@ INSTRUMENTS = ["MGC", "MNQ", "MES"]
 # Data Loading (copied from research_overlap_analysis.py — standalone)
 # =========================================================================
 
+
 def load_bars(con, instrument):
     """Load all 1m bars for an instrument into a DataFrame."""
-    return con.execute("""
+    return con.execute(
+        """
         SELECT ts_utc, open, high, low, close
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def build_day_arrays(bars_df):
@@ -167,6 +170,7 @@ def build_dst_masks(trading_days):
 # Per-Day Scan Engine (break_window parameterized)
 # =========================================================================
 
+
 def parse_session_label(label):
     """Parse session label like '0930' or '1815' into (bris_h, bris_m)."""
     h = int(label[:2])
@@ -174,8 +178,7 @@ def parse_session_label(label):
     return h, m
 
 
-def scan_session_per_day(highs, lows, closes, bris_h, bris_m,
-                         aperture_min=5, break_window=240):
+def scan_session_per_day(highs, lows, closes, bris_h, bris_m, aperture_min=5, break_window=240):
     """Scan one session across all trading days, returning per-day results.
 
     Returns dict[day_index -> per-day result dict].
@@ -320,6 +323,7 @@ def scan_session_per_day(highs, lows, closes, bris_h, bris_m,
 # Overlap Metrics (copied from research_overlap_analysis.py)
 # =========================================================================
 
+
 def compute_overlap_metrics(existing_days, candidate_days):
     """Compute overlap metrics between two sessions' per-day results."""
     existing_g4 = {d for d, r in existing_days.items() if r["g4_pass"]}
@@ -356,8 +360,7 @@ def compute_overlap_metrics(existing_days, candidate_days):
 
     n_candidate_broke = n_both_broke + n_candidate_only
 
-    shared_break_pct = (n_both_broke / n_candidate_broke
-                        if n_candidate_broke > 0 else np.nan)
+    shared_break_pct = n_both_broke / n_candidate_broke if n_candidate_broke > 0 else np.nan
 
     r_correlation = np.nan
     r_pvalue = np.nan
@@ -405,15 +408,12 @@ def window_sensitivity(data_cache):
         bh_c, bm_c = parse_session_label(candidate)
 
         print(f"\n  {instrument} {existing} vs {candidate}:")
-        print(f"  {'Window':>8s} {'G4':>6s} {'Both':>6s} {'C_only':>7s} "
-              f"{'Shrd%':>8s} {'r':>8s} {'r_p':>8s}")
+        print(f"  {'Window':>8s} {'G4':>6s} {'Both':>6s} {'C_only':>7s} {'Shrd%':>8s} {'r':>8s} {'r_p':>8s}")
         print(f"  {'-' * 55}")
 
         for bw in Q1_WINDOWS:
-            e_results = scan_session_per_day(highs, lows, closes, bh_e, bm_e,
-                                             break_window=bw)
-            c_results = scan_session_per_day(highs, lows, closes, bh_c, bm_c,
-                                             break_window=bw)
+            e_results = scan_session_per_day(highs, lows, closes, bh_e, bm_e, break_window=bw)
+            c_results = scan_session_per_day(highs, lows, closes, bh_c, bm_c, break_window=bw)
             metrics = compute_overlap_metrics(e_results, c_results)
 
             if metrics is None:
@@ -428,41 +428,43 @@ def window_sensitivity(data_cache):
             rc_s = f"{rc:+7.3f}" if not np.isnan(rc) else "     --"
             rp_s = f"{rp:7.4f}" if not np.isnan(rp) else "     --"
 
-            print(f"  {bw:>6d}m {metrics['n_common_g4']:6d} "
-                  f"{metrics['n_both_broke']:6d} {metrics['n_candidate_only']:7d} "
-                  f"{sbp_s} {rc_s} {rp_s}")
+            print(
+                f"  {bw:>6d}m {metrics['n_common_g4']:6d} "
+                f"{metrics['n_both_broke']:6d} {metrics['n_candidate_only']:7d} "
+                f"{sbp_s} {rc_s} {rp_s}"
+            )
 
-            rows.append({
-                "instrument": instrument,
-                "existing_session": existing,
-                "candidate_session": candidate,
-                "break_window": bw,
-                "n_common_g4": metrics["n_common_g4"],
-                "n_both_broke": metrics["n_both_broke"],
-                "n_candidate_only": metrics["n_candidate_only"],
-                "shared_break_pct": sbp,
-                "r_correlation": rc,
-                "r_pvalue": rp,
-            })
+            rows.append(
+                {
+                    "instrument": instrument,
+                    "existing_session": existing,
+                    "candidate_session": candidate,
+                    "break_window": bw,
+                    "n_common_g4": metrics["n_common_g4"],
+                    "n_both_broke": metrics["n_both_broke"],
+                    "n_candidate_only": metrics["n_candidate_only"],
+                    "shared_break_pct": sbp,
+                    "r_correlation": rc,
+                    "r_pvalue": rp,
+                }
+            )
 
     # Highlight thresholds
     print("\n  THRESHOLD ANALYSIS:")
     for instrument, existing, candidate in Q1_PAIRS:
-        pair_rows = [r for r in rows
-                     if r["instrument"] == instrument
-                     and r["existing_session"] == existing
-                     and r["candidate_session"] == candidate]
-        below_80 = [r for r in pair_rows
-                    if not np.isnan(r["shared_break_pct"])
-                    and r["shared_break_pct"] < 0.80]
-        below_50 = [r for r in pair_rows
-                    if not np.isnan(r["shared_break_pct"])
-                    and r["shared_break_pct"] < 0.50]
+        pair_rows = [
+            r
+            for r in rows
+            if r["instrument"] == instrument
+            and r["existing_session"] == existing
+            and r["candidate_session"] == candidate
+        ]
+        below_80 = [r for r in pair_rows if not np.isnan(r["shared_break_pct"]) and r["shared_break_pct"] < 0.80]
+        below_50 = [r for r in pair_rows if not np.isnan(r["shared_break_pct"]) and r["shared_break_pct"] < 0.50]
 
         t80 = f"{below_80[0]['break_window']}m" if below_80 else "never"
         t50 = f"{below_50[0]['break_window']}m" if below_50 else "never"
-        print(f"    {instrument} {existing}v{candidate}: "
-              f"drops below 80% at {t80}, below 50% at {t50}")
+        print(f"    {instrument} {existing}v{candidate}: drops below 80% at {t80}, below 50% at {t50}")
 
     return rows
 
@@ -470,6 +472,7 @@ def window_sensitivity(data_cache):
 # =========================================================================
 # Q2: ORB Size Distribution by Time
 # =========================================================================
+
 
 def size_distribution(data_cache):
     """Q2: Does the edge come from WHEN or HOW BIG?"""
@@ -484,16 +487,17 @@ def size_distribution(data_cache):
         all_days, _opens, highs, lows, closes, us_mask, uk_mask = data_cache[instrument]
 
         print(f"\n  {instrument}")
-        print(f"  {'Sess':>6s} {'DST':>7s} {'N_orb':>6s} {'MedSz':>7s} {'MnSz':>7s} "
-              f"{'%G4':>5s} {'%G5':>5s} {'%G6':>5s} {'%G8':>5s} "
-              f"{'G4-6R':>7s} {'N':>4s} {'G6-8R':>7s} {'N':>4s} "
-              f"{'G8+R':>7s} {'N':>4s}")
+        print(
+            f"  {'Sess':>6s} {'DST':>7s} {'N_orb':>6s} {'MedSz':>7s} {'MnSz':>7s} "
+            f"{'%G4':>5s} {'%G5':>5s} {'%G6':>5s} {'%G8':>5s} "
+            f"{'G4-6R':>7s} {'N':>4s} {'G6-8R':>7s} {'N':>4s} "
+            f"{'G8+R':>7s} {'N':>4s}"
+        )
         print(f"  {'-' * 98}")
 
         for session in ALL_SESSIONS:
             bh, bm = parse_session_label(session)
-            per_day = scan_session_per_day(highs, lows, closes, bh, bm,
-                                           break_window=240)
+            per_day = scan_session_per_day(highs, lows, closes, bh, bm, break_window=240)
 
             dst_type = SESSION_DST_TYPE[session]
 
@@ -510,12 +514,10 @@ def size_distribution(data_cache):
                     regime_days = per_day
                 else:
                     mask = us_mask if dst_type == "US" else uk_mask
-                    regime_days = {d: r for d, r in per_day.items()
-                                   if mask[d] == regime_test}
+                    regime_days = {d: r for d, r in per_day.items() if mask[d] == regime_test}
 
                 # Valid ORB days (any valid_orb, regardless of G4)
-                valid_orb_days = {d: r for d, r in regime_days.items()
-                                  if r["valid_orb"]}
+                valid_orb_days = {d: r for d, r in regime_days.items() if r["valid_orb"]}
                 n_valid_orb = len(valid_orb_days)
 
                 if n_valid_orb == 0:
@@ -534,11 +536,14 @@ def size_distribution(data_cache):
 
                 # Size-band avgR (only on break-days within band)
                 def band_stats(days, lo, hi):
-                    band_days = [r for r in days.values()
-                                 if r["g4_pass"] and r["broke"]
-                                 and r["orb_size"] >= lo
-                                 and (r["orb_size"] < hi if hi is not None
-                                      else True)]
+                    band_days = [
+                        r
+                        for r in days.values()
+                        if r["g4_pass"]
+                        and r["broke"]
+                        and r["orb_size"] >= lo
+                        and (r["orb_size"] < hi if hi is not None else True)
+                    ]
                     if not band_days:
                         return np.nan, 0
                     avg_r = float(np.mean([r["outcome_r"] for r in band_days]))
@@ -552,43 +557,49 @@ def size_distribution(data_cache):
                 def _fr(v):
                     return f"{v:+7.3f}" if not np.isnan(v) else "     --"
 
-                print(f"  {session:>6s} {regime_name:>7s} {n_valid_orb:6d} "
-                      f"{median_orb:7.2f} {mean_orb:7.2f} "
-                      f"{pct_g4 * 100:4.0f}% {pct_g5 * 100:4.0f}% "
-                      f"{pct_g6 * 100:4.0f}% {pct_g8 * 100:4.0f}% "
-                      f"{_fr(g4g6_r)} {g4g6_n:4d} "
-                      f"{_fr(g6g8_r)} {g6g8_n:4d} "
-                      f"{_fr(g8p_r)} {g8p_n:4d}")
+                print(
+                    f"  {session:>6s} {regime_name:>7s} {n_valid_orb:6d} "
+                    f"{median_orb:7.2f} {mean_orb:7.2f} "
+                    f"{pct_g4 * 100:4.0f}% {pct_g5 * 100:4.0f}% "
+                    f"{pct_g6 * 100:4.0f}% {pct_g8 * 100:4.0f}% "
+                    f"{_fr(g4g6_r)} {g4g6_n:4d} "
+                    f"{_fr(g6g8_r)} {g6g8_n:4d} "
+                    f"{_fr(g8p_r)} {g8p_n:4d}"
+                )
 
-                rows.append({
-                    "instrument": instrument,
-                    "session": session,
-                    "dst_regime": regime_name,
-                    "n_valid_orb": n_valid_orb,
-                    "median_orb_size": median_orb,
-                    "mean_orb_size": mean_orb,
-                    "pct_g4": pct_g4,
-                    "pct_g5": pct_g5,
-                    "pct_g6": pct_g6,
-                    "pct_g8": pct_g8,
-                    "band_g4g6_avgR": g4g6_r,
-                    "band_g4g6_n": g4g6_n,
-                    "band_g6g8_avgR": g6g8_r,
-                    "band_g6g8_n": g6g8_n,
-                    "band_g8p_avgR": g8p_r,
-                    "band_g8p_n": g8p_n,
-                })
+                rows.append(
+                    {
+                        "instrument": instrument,
+                        "session": session,
+                        "dst_regime": regime_name,
+                        "n_valid_orb": n_valid_orb,
+                        "median_orb_size": median_orb,
+                        "mean_orb_size": mean_orb,
+                        "pct_g4": pct_g4,
+                        "pct_g5": pct_g5,
+                        "pct_g6": pct_g6,
+                        "pct_g8": pct_g8,
+                        "band_g4g6_avgR": g4g6_r,
+                        "band_g4g6_n": g4g6_n,
+                        "band_g6g8_avgR": g6g8_r,
+                        "band_g6g8_n": g6g8_n,
+                        "band_g8p_avgR": g8p_r,
+                        "band_g8p_n": g8p_n,
+                    }
+                )
 
     # Key comparison
     print("\n  KEY COMPARISON: At same size band, do different sessions produce different avgR?")
     for instrument in INSTRUMENTS:
         inst_rows = [r for r in rows if r["instrument"] == instrument]
         # G6-G8 band comparison (most common actionable band)
-        g6g8_rows = [(r["session"], r["dst_regime"], r["band_g6g8_avgR"], r["band_g6g8_n"])
-                     for r in inst_rows if r["band_g6g8_n"] >= 20]
+        g6g8_rows = [
+            (r["session"], r["dst_regime"], r["band_g6g8_avgR"], r["band_g6g8_n"])
+            for r in inst_rows
+            if r["band_g6g8_n"] >= 20
+        ]
         if g6g8_rows:
-            g6g8_rows.sort(key=lambda x: x[2] if not np.isnan(x[2]) else -999,
-                           reverse=True)
+            g6g8_rows.sort(key=lambda x: x[2] if not np.isnan(x[2]) else -999, reverse=True)
             print(f"\n    {instrument} G6-G8 band (N>=20):")
             for sess, regime, avgr, n in g6g8_rows:
                 print(f"      {sess:>6s} [{regime:>7s}]: avgR={avgr:+.3f} (N={n})")
@@ -599,6 +610,7 @@ def size_distribution(data_cache):
 # =========================================================================
 # Q3: ORB Size Correlation Between Low-R-Corr Pairs
 # =========================================================================
+
 
 def size_correlation(data_cache):
     """Q3: Are different outcomes because of different ORB sizes or noise?"""
@@ -612,15 +624,13 @@ def size_correlation(data_cache):
         print(f"  ERROR: {csv_path} not found. Run research_overlap_analysis.py first.")
         return []
 
-    oa_df = pd.read_csv(csv_path,
-                        dtype={"existing_session": str, "candidate_session": str})
+    oa_df = pd.read_csv(csv_path, dtype={"existing_session": str, "candidate_session": str})
     # Pad session labels back to 4 chars (CSV may drop leading zeros)
     for col in ("existing_session", "candidate_session"):
         oa_df[col] = oa_df[col].str.zfill(4)
     # Filter: r_correlation < 0.3 (or NaN) AND shared_break_pct > 0.90
     qualifying = oa_df[
-        ((oa_df["r_correlation"].isna()) | (oa_df["r_correlation"].abs() < 0.3))
-        & (oa_df["shared_break_pct"] > 0.90)
+        ((oa_df["r_correlation"].isna()) | (oa_df["r_correlation"].abs() < 0.3)) & (oa_df["shared_break_pct"] > 0.90)
     ]
 
     # Get unique pairs (instrument, existing, candidate)
@@ -634,9 +644,11 @@ def size_correlation(data_cache):
 
     rows = []
 
-    print(f"\n  {'Inst':>4s} {'Exist':>6s} {'Cand':>6s} {'DST':>7s} "
-          f"{'N_shr':>6s} {'OrbSzR':>7s} {'OrbSzP':>8s} "
-          f"{'MnAbsDf':>8s} {'SzConc':>7s}")
+    print(
+        f"\n  {'Inst':>4s} {'Exist':>6s} {'Cand':>6s} {'DST':>7s} "
+        f"{'N_shr':>6s} {'OrbSzR':>7s} {'OrbSzP':>8s} "
+        f"{'MnAbsDf':>8s} {'SzConc':>7s}"
+    )
     print(f"  {'-' * 72}")
 
     for _, pair in pair_keys.iterrows():
@@ -651,10 +663,8 @@ def size_correlation(data_cache):
         bh_e, bm_e = parse_session_label(existing)
         bh_c, bm_c = parse_session_label(candidate)
 
-        e_results = scan_session_per_day(highs, lows, closes, bh_e, bm_e,
-                                         break_window=240)
-        c_results = scan_session_per_day(highs, lows, closes, bh_c, bm_c,
-                                         break_window=240)
+        e_results = scan_session_per_day(highs, lows, closes, bh_e, bm_e, break_window=240)
+        c_results = scan_session_per_day(highs, lows, closes, bh_c, bm_c, break_window=240)
 
         # Determine DST type
         e_dst = SESSION_DST_TYPE.get(existing, "CLEAN")
@@ -680,18 +690,15 @@ def size_correlation(data_cache):
                 c_filt = c_results
             else:
                 mask = us_mask if pair_dst_type == "US" else uk_mask
-                e_filt = {d: r for d, r in e_results.items()
-                          if mask[d] == regime_test}
-                c_filt = {d: r for d, r in c_results.items()
-                          if mask[d] == regime_test}
+                e_filt = {d: r for d, r in e_results.items() if mask[d] == regime_test}
+                c_filt = {d: r for d, r in c_results.items() if mask[d] == regime_test}
 
             # Shared break-days (both G4+ AND broke)
             shared_days = []
             for d in set(e_filt.keys()) & set(c_filt.keys()):
                 e = e_filt[d]
                 c = c_filt[d]
-                if (e["g4_pass"] and e["broke"]
-                        and c["g4_pass"] and c["broke"]):
+                if e["g4_pass"] and e["broke"] and c["g4_pass"] and c["broke"]:
                     shared_days.append((e["orb_size"], c["orb_size"]))
 
             n_shared = len(shared_days)
@@ -714,32 +721,33 @@ def size_correlation(data_cache):
             # Size direction concordance: both above or both below respective medians
             e_med = np.median(e_sizes)
             c_med = np.median(c_sizes)
-            concordant = np.sum(
-                ((e_sizes >= e_med) & (c_sizes >= c_med))
-                | ((e_sizes < e_med) & (c_sizes < c_med))
-            )
+            concordant = np.sum(((e_sizes >= e_med) & (c_sizes >= c_med)) | ((e_sizes < e_med) & (c_sizes < c_med)))
             concordance = float(concordant / n_shared)
 
             # Console
             orb_r_s = f"{orb_r:+7.3f}" if not np.isnan(orb_r) else "     --"
             orb_p_s = f"{orb_p:8.4f}" if not np.isnan(orb_p) else "      --"
 
-            print(f"  {instrument:>4s} {existing:>6s} {candidate:>6s} "
-                  f"{regime_name:>7s} {n_shared:6d} "
-                  f"{orb_r_s} {orb_p_s} {mean_abs_diff:8.2f} "
-                  f"{concordance:6.1%}")
+            print(
+                f"  {instrument:>4s} {existing:>6s} {candidate:>6s} "
+                f"{regime_name:>7s} {n_shared:6d} "
+                f"{orb_r_s} {orb_p_s} {mean_abs_diff:8.2f} "
+                f"{concordance:6.1%}"
+            )
 
-            rows.append({
-                "instrument": instrument,
-                "existing_session": existing,
-                "candidate_session": candidate,
-                "dst_regime": regime_name,
-                "n_shared_breaks": n_shared,
-                "orb_size_r": orb_r,
-                "orb_size_p": orb_p,
-                "mean_abs_size_diff": mean_abs_diff,
-                "size_direction_concordance": concordance,
-            })
+            rows.append(
+                {
+                    "instrument": instrument,
+                    "existing_session": existing,
+                    "candidate_session": candidate,
+                    "dst_regime": regime_name,
+                    "n_shared_breaks": n_shared,
+                    "orb_size_r": orb_r,
+                    "orb_size_p": orb_p,
+                    "mean_abs_size_diff": mean_abs_diff,
+                    "size_direction_concordance": concordance,
+                }
+            )
 
     return rows
 
@@ -747,6 +755,7 @@ def size_correlation(data_cache):
 # =========================================================================
 # Honest Summary
 # =========================================================================
+
 
 def print_honest_summary(q1_rows, q2_rows, q3_rows):
     """Print honest summary of all three questions."""
@@ -766,33 +775,34 @@ def print_honest_summary(q1_rows, q2_rows, q3_rows):
             avg_min_sbp = np.nanmean([r["shared_break_pct"] for r in at_min])
             avg_240_sbp = np.nanmean([r["shared_break_pct"] for r in at_240])
             if avg_min_sbp > 0.80:
-                print(f"    REAL OVERLAP — even at {min_window}min window, "
-                      f"shared break = {avg_min_sbp * 100:.1f}% "
-                      f"(vs {avg_240_sbp * 100:.1f}% at 240min)")
+                print(
+                    f"    REAL OVERLAP — even at {min_window}min window, "
+                    f"shared break = {avg_min_sbp * 100:.1f}% "
+                    f"(vs {avg_240_sbp * 100:.1f}% at 240min)"
+                )
             elif avg_min_sbp < 0.50:
-                print(f"    ARTIFACT — at {min_window}min window, "
-                      f"shared break drops to {avg_min_sbp * 100:.1f}% "
-                      f"(from {avg_240_sbp * 100:.1f}% at 240min)")
+                print(
+                    f"    ARTIFACT — at {min_window}min window, "
+                    f"shared break drops to {avg_min_sbp * 100:.1f}% "
+                    f"(from {avg_240_sbp * 100:.1f}% at 240min)"
+                )
             else:
-                print(f"    PARTIAL ARTIFACT — at {min_window}min window, "
-                      f"shared break = {avg_min_sbp * 100:.1f}% "
-                      f"(from {avg_240_sbp * 100:.1f}% at 240min)")
+                print(
+                    f"    PARTIAL ARTIFACT — at {min_window}min window, "
+                    f"shared break = {avg_min_sbp * 100:.1f}% "
+                    f"(from {avg_240_sbp * 100:.1f}% at 240min)"
+                )
 
             # Per-pair details
             for instrument, existing, candidate in Q1_PAIRS:
-                pair_min = [r for r in at_min
-                            if r["instrument"] == instrument
-                            and r["existing_session"] == existing]
-                pair_240 = [r for r in at_240
-                            if r["instrument"] == instrument
-                            and r["existing_session"] == existing]
+                pair_min = [r for r in at_min if r["instrument"] == instrument and r["existing_session"] == existing]
+                pair_240 = [r for r in at_240 if r["instrument"] == instrument and r["existing_session"] == existing]
                 if pair_min and pair_240:
                     m_sbp = pair_min[0]["shared_break_pct"]
                     f_sbp = pair_240[0]["shared_break_pct"]
                     m_s = f"{m_sbp * 100:.1f}%" if not np.isnan(m_sbp) else "N/A"
                     f_s = f"{f_sbp * 100:.1f}%" if not np.isnan(f_sbp) else "N/A"
-                    print(f"      {instrument} {existing}v{candidate}: "
-                          f"{min_window}min={m_s}, 240min={f_s}")
+                    print(f"      {instrument} {existing}v{candidate}: {min_window}min={m_s}, 240min={f_s}")
         else:
             print("    INSUFFICIENT DATA for verdict")
     else:
@@ -802,9 +812,11 @@ def print_honest_summary(q1_rows, q2_rows, q3_rows):
     print("\n  Q2 VERDICT — SIZE vs TIME:")
     if q2_rows:
         # Compare avgR at G6-G8 band across sessions
-        g6g8 = [(r["instrument"], r["session"], r["dst_regime"],
-                 r["band_g6g8_avgR"], r["band_g6g8_n"])
-                for r in q2_rows if r["band_g6g8_n"] >= 20]
+        g6g8 = [
+            (r["instrument"], r["session"], r["dst_regime"], r["band_g6g8_avgR"], r["band_g6g8_n"])
+            for r in q2_rows
+            if r["band_g6g8_n"] >= 20
+        ]
 
         if g6g8:
             avgrs = [r[3] for r in g6g8 if not np.isnan(r[3])]
@@ -816,15 +828,12 @@ def print_honest_summary(q1_rows, q2_rows, q3_rows):
                 if spread > 0.3:
                     print(f"    TIME MATTERS TOO — at G6-G8, avgR spread = {spread:.3f}")
                 elif spread < 0.1:
-                    print(f"    SIZE IS EVERYTHING — at G6-G8, avgR spread = {spread:.3f} "
-                          f"(sessions converge)")
+                    print(f"    SIZE IS EVERYTHING — at G6-G8, avgR spread = {spread:.3f} (sessions converge)")
                 else:
                     print(f"    MIXED — at G6-G8, avgR spread = {spread:.3f}")
 
-                print(f"      Best:  {best[0]} {best[1]} [{best[2]}] "
-                      f"avgR={best[3]:+.3f} (N={best[4]})")
-                print(f"      Worst: {worst[0]} {worst[1]} [{worst[2]}] "
-                      f"avgR={worst[3]:+.3f} (N={worst[4]})")
+                print(f"      Best:  {best[0]} {best[1]} [{best[2]}] avgR={best[3]:+.3f} (N={best[4]})")
+                print(f"      Worst: {worst[0]} {worst[1]} [{worst[2]}] avgR={worst[3]:+.3f} (N={worst[4]})")
             else:
                 print("    INSUFFICIENT DATA (no G6-G8 rows with N>=20)")
         else:
@@ -842,16 +851,13 @@ def print_honest_summary(q1_rows, q2_rows, q3_rows):
             avg_conc = np.mean([r["size_direction_concordance"] for r in valid])
 
             if avg_orb_r > 0.7:
-                print(f"    SAME RISK STRUCTURE — orb_size_r = {avg_orb_r:+.3f} "
-                      f"(sizes move together)")
+                print(f"    SAME RISK STRUCTURE — orb_size_r = {avg_orb_r:+.3f} (sizes move together)")
             elif avg_orb_r < 0.3:
-                print(f"    GENUINE DIVERSIFIERS — orb_size_r = {avg_orb_r:+.3f} "
-                      f"(different ORB sizes on same days)")
+                print(f"    GENUINE DIVERSIFIERS — orb_size_r = {avg_orb_r:+.3f} (different ORB sizes on same days)")
             else:
                 print(f"    MODERATE CORRELATION — orb_size_r = {avg_orb_r:+.3f}")
 
-            print(f"      Mean |size_diff| = {avg_abs_diff:.2f}, "
-                  f"size concordance = {avg_conc:.1%}")
+            print(f"      Mean |size_diff| = {avg_abs_diff:.2f}, size concordance = {avg_conc:.1%}")
         else:
             print("    INSUFFICIENT DATA (no valid r values)")
     else:
@@ -884,13 +890,13 @@ def print_honest_summary(q1_rows, q2_rows, q3_rows):
 # Main
 # =========================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Edge structure analysis — three structural questions about overlap results."
     )
     parser.add_argument(
-        "--db-path", type=str, default=None,
-        help="Path to gold.db (default: auto-resolve via pipeline.paths)"
+        "--db-path", type=str, default=None, help="Path to gold.db (default: auto-resolve via pipeline.paths)"
     )
     args = parser.parse_args()
 
@@ -899,6 +905,7 @@ def main():
     else:
         try:
             from pipeline.paths import GOLD_DB_PATH
+
             db_path = GOLD_DB_PATH
         except ImportError:
             db_path = Path("gold.db")
@@ -906,8 +913,7 @@ def main():
     print(f"\n{'=' * 100}")
     print("  EDGE STRUCTURE ANALYSIS — Three Structural Questions")
     print(f"  Database: {db_path}")
-    print(f"  Parameters: G{G4_MIN:.0f}+ filter | RR{RR_TARGET:.1f} target | "
-          f"{OUTCOME_WINDOW // 60}h outcome window")
+    print(f"  Parameters: G{G4_MIN:.0f}+ filter | RR{RR_TARGET:.1f} target | {OUTCOME_WINDOW // 60}h outcome window")
     print(f"  scipy available: {HAS_SCIPY}")
     print(f"{'=' * 100}")
 
@@ -932,8 +938,7 @@ def main():
             us_mask, uk_mask = build_dst_masks(all_days)
             print(f"    {len(all_days)} trading days built in {time.time() - t_build:.1f}s")
 
-            data_cache[instrument] = (all_days, opens, highs, lows, closes,
-                                      us_mask, uk_mask)
+            data_cache[instrument] = (all_days, opens, highs, lows, closes, us_mask, uk_mask)
 
         if not data_cache:
             print("\n  No instrument data loaded. Exiting.")

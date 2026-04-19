@@ -77,9 +77,7 @@ for INST in ["MES", "MGC", "MNQ"]:
                 if td in pre_depth:
                     continue
                 bt = brk["break_ts"]
-                mask = (chunk_ts >= bt - pd.Timedelta(seconds=60)) & (
-                    chunk_ts < bt - pd.Timedelta(seconds=5)
-                )
+                mask = (chunk_ts >= bt - pd.Timedelta(seconds=60)) & (chunk_ts < bt - pd.Timedelta(seconds=5))
                 pre = chunk[mask]
                 if len(pre) > 0:
                     pre_depth[td] = {
@@ -136,8 +134,12 @@ for INST in ["MES", "MGC", "MNQ"]:
     p = 2 * (1 - stats.norm.cdf(abs(z)))
     sig = "***" if p < 0.005 else "**" if p < 0.01 else "*" if p < 0.05 else "." if p < 0.10 else " ns"
     direction = "THIN=BETTER" if sp < 0 else "THICK=BETTER"
-    print(f"  UNCONDITIONAL: lo={lo['is_win'].mean():.3f}(N={len(lo)}) hi={hi['is_win'].mean():.3f}(N={len(hi)}) diff={sp:+.3f} p={p:.4f}{sig} [{direction}]")
-    results_all.append({"inst": INST, "test": "unconditional", "diff": sp, "p": p, "direction": direction, "N": len(merged)})
+    print(
+        f"  UNCONDITIONAL: lo={lo['is_win'].mean():.3f}(N={len(lo)}) hi={hi['is_win'].mean():.3f}(N={len(hi)}) diff={sp:+.3f} p={p:.4f}{sig} [{direction}]"
+    )
+    results_all.append(
+        {"inst": INST, "test": "unconditional", "diff": sp, "p": p, "direction": direction, "N": len(merged)}
+    )
 
     # PER-SESSION
     print("  PER-SESSION:")
@@ -181,7 +183,17 @@ for INST in ["MES", "MGC", "MNQ"]:
                 se_a = np.sqrt(pooled_a * (1 - pooled_a) * (1 / len(lo_a) + 1 / len(hi_a)))
                 z_a = sp_a / se_a if se_a > 0 else 0
                 p_a = 2 * (1 - stats.norm.cdf(abs(z_a)))
-                sig_a = "***" if p_a < 0.005 else "**" if p_a < 0.01 else "*" if p_a < 0.05 else "." if p_a < 0.10 else " ns"
+                sig_a = (
+                    "***"
+                    if p_a < 0.005
+                    else "**"
+                    if p_a < 0.01
+                    else "*"
+                    if p_a < 0.05
+                    else "."
+                    if p_a < 0.10
+                    else " ns"
+                )
                 dir_a = "THIN=BETTER" if sp_a < 0 else "THICK=BETTER"
                 print(f"    {ag:10s} N={len(sub):4d} diff={sp_a:+.3f} p={p_a:.4f}{sig_a} [{dir_a}]")
         except ValueError:
@@ -194,7 +206,17 @@ print("=== CROSS-INSTRUMENT SUMMARY ===")
 rdf = pd.DataFrame(results_all)
 uncond = rdf[rdf["test"] == "unconditional"]
 for _, r in uncond.iterrows():
-    sig = "***" if r["p"] < 0.005 else "**" if r["p"] < 0.01 else "*" if r["p"] < 0.05 else "." if r["p"] < 0.10 else " ns"
+    sig = (
+        "***"
+        if r["p"] < 0.005
+        else "**"
+        if r["p"] < 0.01
+        else "*"
+        if r["p"] < 0.05
+        else "."
+        if r["p"] < 0.10
+        else " ns"
+    )
     print(f"  {r['inst']:4s} N={r['N']:5d} diff={r['diff']:+.3f} p={r['p']:.4f}{sig} [{r['direction']}]")
 
 dirs = list(uncond["direction"].values)
@@ -213,7 +235,9 @@ if K > 0:
         if surv:
             n_surv = rank
         m = "SURVIVES" if surv else "fails"
-        print(f"  {rank:2d}. {r['inst']:4s} {r['test']:22s} diff={r['diff']:+.3f} p={r['p']:.4f} thr={thr:.4f} {m} [{r['direction']}]")
+        print(
+            f"  {rank:2d}. {r['inst']:4s} {r['test']:22s} diff={r['diff']:+.3f} p={r['p']:.4f} thr={thr:.4f} {m} [{r['direction']}]"
+        )
         if rank >= 20:
             break
     print(f"\n  Survivors: {n_surv}/{K}")

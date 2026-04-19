@@ -65,7 +65,9 @@ def main() -> int:
     # Derived zero-lookahead features
     df["size_atr"] = np.where((df["atr_20"].notna()) & (df["atr_20"] > 0), df["size"] / df["atr_20"], np.nan)
     # session volume is OR window total; normalize to 1-minute proxy
-    df["vol_impulse"] = np.where((df["volume"].notna()) & (df["volume"] > 0), df["break_bar_volume"] / (df["volume"] / 5.0), np.nan)
+    df["vol_impulse"] = np.where(
+        (df["volume"].notna()) & (df["volume"] > 0), df["break_bar_volume"] / (df["volume"] / 5.0), np.nan
+    )
     df["year"] = pd.to_datetime(df["trading_day"]).dt.year
 
     # Global thresholds (fast pass)
@@ -73,7 +75,7 @@ def main() -> int:
     vol_q60 = df["vol_impulse"].quantile(0.60)
 
     # Components (all available at/before break bar close)
-    df["C_CONT"] = (df["break_bar_continues"] == True)
+    df["C_CONT"] = df["break_bar_continues"] == True
     df["C_BSP"] = df["break_delay_min"].notna() & (df["break_delay_min"] <= 10)
     df["C_RES"] = df["size_atr"].notna() & (df["size_atr"] >= size_q70)
     df["C_VIS"] = df["vol_impulse"].notna() & (df["vol_impulse"] >= vol_q60)

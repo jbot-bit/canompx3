@@ -484,8 +484,28 @@ def test_simulate_research_path_accounts_for_turnover_costs() -> None:
             build_front_next_pair(
                 "MGC",
                 [
-                    ContractObservation(date(2026, 1, day), "MGC", "MGCG6", 2026, 2, 100.0 + day - 1, 5000, 1000, expiry_date=date(2026, 2, 24)),
-                    ContractObservation(date(2026, 1, day), "MGC", "MGCJ6", 2026, 4, 99.0 + day - 1, 3000, 900, expiry_date=date(2026, 4, 28)),
+                    ContractObservation(
+                        date(2026, 1, day),
+                        "MGC",
+                        "MGCG6",
+                        2026,
+                        2,
+                        100.0 + day - 1,
+                        5000,
+                        1000,
+                        expiry_date=date(2026, 2, 24),
+                    ),
+                    ContractObservation(
+                        date(2026, 1, day),
+                        "MGC",
+                        "MGCJ6",
+                        2026,
+                        4,
+                        99.0 + day - 1,
+                        3000,
+                        900,
+                        expiry_date=date(2026, 4, 28),
+                    ),
                 ],
             )
         )
@@ -512,13 +532,17 @@ def test_simulate_research_path_accounts_for_turnover_costs() -> None:
 
 def test_summarize_walk_forward_builds_non_overlapping_windows() -> None:
     rows = [
-        type("Row", (), {
-            "trading_day": date(2026, 1, idx + 1),
-            "symbol": "GC",
-            "gross_pnl_usd": float(idx + 1),
-            "net_pnl_usd": float(idx if idx % 2 == 0 else -(idx + 1)),
-            "turnover_contracts": 1,
-        })()
+        type(
+            "Row",
+            (),
+            {
+                "trading_day": date(2026, 1, idx + 1),
+                "symbol": "GC",
+                "gross_pnl_usd": float(idx + 1),
+                "net_pnl_usd": float(idx if idx % 2 == 0 else -(idx + 1)),
+                "turnover_contracts": 1,
+            },
+        )()
         for idx in range(8)
     ]
 

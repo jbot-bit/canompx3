@@ -14,8 +14,7 @@ from pathlib import Path
 SYSTEM_AUTHORITY_MAP_RELATIVE_PATH = Path("docs/governance/system_authority_map.md")
 SYSTEM_AUTHORITY_RENDER_SCRIPT_RELATIVE_PATH = Path("scripts/tools/render_system_authority_map.py")
 SYSTEM_AUTHORITY_GENERATED_MARKER = (
-    "<!-- Auto-generated from pipeline/system_authority.py via "
-    "scripts/tools/render_system_authority_map.py -->"
+    "<!-- Auto-generated from pipeline/system_authority.py via scripts/tools/render_system_authority_map.py -->"
 )
 
 DOCTRINE_DOCS: tuple[str, ...] = (

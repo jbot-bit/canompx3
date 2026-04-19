@@ -122,10 +122,9 @@ def check_candidate_correlation(
             else:
                 rho = 0.0
 
-            same_session = (
-                candidate_lane.get("orb_label") == dlane.get("orb_label")
-                and candidate_lane.get("instrument") == dlane.get("instrument")
-            )
+            same_session = candidate_lane.get("orb_label") == dlane.get("orb_label") and candidate_lane.get(
+                "instrument"
+            ) == dlane.get("instrument")
 
             reasons = []
             if rho > rho_threshold:
@@ -133,21 +132,21 @@ def check_candidate_correlation(
             if same_session and subset_cov > subset_threshold:
                 reasons.append(f"subset={subset_cov:.1%}>{subset_threshold:.0%}")
 
-            pairs.append(PairResult(
-                candidate_id=candidate_lane.get("strategy_id", "?"),
-                deployed_id=dlane["strategy_id"],
-                shared_days=n_shared,
-                candidate_days=n_cand,
-                deployed_days=n_dep,
-                subset_coverage=subset_cov,
-                pearson_rho=rho,
-                reject=bool(reasons),
-                reason="; ".join(reasons) if reasons else "OK",
-            ))
+            pairs.append(
+                PairResult(
+                    candidate_id=candidate_lane.get("strategy_id", "?"),
+                    deployed_id=dlane["strategy_id"],
+                    shared_days=n_shared,
+                    candidate_days=n_cand,
+                    deployed_days=n_dep,
+                    subset_coverage=subset_cov,
+                    pearson_rho=rho,
+                    reject=bool(reasons),
+                    reason="; ".join(reasons) if reasons else "OK",
+                )
+            )
 
-        reject_reasons = tuple(
-            f"{p.deployed_id}: {p.reason}" for p in pairs if p.reject
-        )
+        reject_reasons = tuple(f"{p.deployed_id}: {p.reason}" for p in pairs if p.reject)
         worst_rho = max((p.pearson_rho for p in pairs), default=0.0)
         worst_subset = max((p.subset_coverage for p in pairs), default=0.0)
 

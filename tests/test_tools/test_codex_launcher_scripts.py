@@ -14,5 +14,5 @@ def test_wsl_launcher_scripts_call_mount_guard() -> None:
     assert 'wsl_mount_guard.py" --root "$ROOT"' in review
     assert 'python3 "$ROOT/scripts/tools/wsl_mount_guard.py" --root "$ROOT"' in worktree
     assert '--related-root "$SOURCE_ROOT"' in sync_guard
-    assert '--claim codex' in sync_guard
-    assert '--mode mutating' in sync_guard
+    assert "--claim codex" in sync_guard
+    assert "--mode mutating" in sync_guard

@@ -54,6 +54,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 # Data loading
 # =========================================================================
 
+
 def load_validated_outcomes(db_path: Path) -> pd.DataFrame:
     """Load all outcomes for validated strategies (E1/E2)."""
     con = duckdb.connect(str(db_path), read_only=True)
@@ -85,6 +86,7 @@ def load_validated_outcomes(db_path: Path) -> pd.DataFrame:
 # =========================================================================
 # Statistical tests
 # =========================================================================
+
 
 def run_test(on_pnl: np.ndarray, off_pnl: np.ndarray) -> dict:
     """Welch t-test between two groups."""
@@ -125,6 +127,7 @@ def year_consistency(df_sub: pd.DataFrame, col: str, expected_negative: bool) ->
 # Main
 # =========================================================================
 
+
 def run(db_path: Path):
     t0 = time.time()
 
@@ -140,7 +143,9 @@ def run(db_path: Path):
     print("\n  Loading validated strategy outcomes...")
     df = load_validated_outcomes(db_path)
     print(f"  Loaded {len(df):,} outcome rows across {df.symbol.nunique()} instruments")
-    print(f"  Unique strategies: {df.groupby(['symbol','orb_label','entry_model','rr_target','confirm_bars','orb_minutes']).ngroups}")
+    print(
+        f"  Unique strategies: {df.groupby(['symbol', 'orb_label', 'entry_model', 'rr_target', 'confirm_bars', 'orb_minutes']).ngroups}"
+    )
 
     # Add year column
     df["yr"] = pd.to_datetime(df["trading_day"]).dt.year
@@ -179,13 +184,21 @@ def run(db_path: Path):
     # Verify calendar signal counts
     print("\n  Calendar signal prevalence (unique trading days):")
     day_df = df.drop_duplicates(subset=["trading_day"])
-    for sig in ["is_nfp_day", "is_opex_day", "is_fomc", "is_cpi", "is_month_end",
-                "is_month_start", "is_quarter_end", "is_opex_week"]:
+    for sig in [
+        "is_nfp_day",
+        "is_opex_day",
+        "is_fomc",
+        "is_cpi",
+        "is_month_end",
+        "is_month_start",
+        "is_quarter_end",
+        "is_opex_week",
+    ]:
         n = day_df[sig].sum()
-        print(f"    {sig:20s}: {n:>4} days ({n/len(day_df)*100:.1f}%)")
+        print(f"    {sig:20s}: {n:>4} days ({n / len(day_df) * 100:.1f}%)")
     for dow_name in ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]:
         n = day_df[f"is_{dow_name}"].sum()
-        print(f"    is_{dow_name:9s}        : {n:>4} days ({n/len(day_df)*100:.1f}%)")
+        print(f"    is_{dow_name:9s}        : {n:>4} days ({n / len(day_df) * 100:.1f}%)")
 
     # Define all calendar signals to test
     calendar_signals = [
@@ -266,9 +279,11 @@ def run(db_path: Path):
         )
 
         # Print header
-        print(f"\n  {'Signal':12s} {'Inst':4s} {'Session':20s} "
-              f"{'Diff':>8s} {'p_bh':>8s} {'N_on':>6s} {'N_off':>7s} "
-              f"{'WR_on':>6s} {'WR_off':>7s} {'YrCons':>8s} {'Verdict':>12s}")
+        print(
+            f"\n  {'Signal':12s} {'Inst':4s} {'Session':20s} "
+            f"{'Diff':>8s} {'p_bh':>8s} {'N_on':>6s} {'N_off':>7s} "
+            f"{'WR_on':>6s} {'WR_off':>7s} {'YrCons':>8s} {'Verdict':>12s}"
+        )
         print(f"  {'-' * 105}")
 
         for _, row in survivors.iterrows():
@@ -280,9 +295,11 @@ def run(db_path: Path):
                 verdict = "WEAK"
             else:
                 verdict = "NOISE"
-            print(f"  {row['signal']:12s} {row['instrument']:4s} {row['session']:20s} "
-                  f"{row['diff']:>+8.4f} {row['p_bh']:>8.4f} {row['n_on']:>6d} {row['n_off']:>7d} "
-                  f"{row['wr_on']:>6.1%} {row['wr_off']:>7.1%} {yr_str:>8s}   {verdict} {direction}")
+            print(
+                f"  {row['signal']:12s} {row['instrument']:4s} {row['session']:20s} "
+                f"{row['diff']:>+8.4f} {row['p_bh']:>8.4f} {row['n_on']:>6d} {row['n_off']:>7d} "
+                f"{row['wr_on']:>6.1%} {row['wr_off']:>7.1%} {yr_str:>8s}   {verdict} {direction}"
+            )
 
     # ===================================================================
     # Actionable summary: only CONSISTENT survivors
@@ -299,16 +316,20 @@ def run(db_path: Path):
         if not avoid.empty:
             print("\n  --- AVOID (skip these days) ---")
             for _, row in avoid.iterrows():
-                print(f"    {row['signal']:12s} {row['instrument']:4s} {row['session']:20s} "
-                      f"diff={row['diff']:+.4f}R  p_bh={row['p_bh']:.4f}  "
-                      f"consistency={row['yr_consistent']:.0f}/{row['yr_total']:.0f}")
+                print(
+                    f"    {row['signal']:12s} {row['instrument']:4s} {row['session']:20s} "
+                    f"diff={row['diff']:+.4f}R  p_bh={row['p_bh']:.4f}  "
+                    f"consistency={row['yr_consistent']:.0f}/{row['yr_total']:.0f}"
+                )
 
         if not exploit.empty:
             print("\n  --- EXPLOIT (trade these days — do NOT skip!) ---")
             for _, row in exploit.iterrows():
-                print(f"    {row['signal']:12s} {row['instrument']:4s} {row['session']:20s} "
-                      f"diff={row['diff']:+.4f}R  p_bh={row['p_bh']:.4f}  "
-                      f"consistency={row['yr_consistent']:.0f}/{row['yr_total']:.0f}")
+                print(
+                    f"    {row['signal']:12s} {row['instrument']:4s} {row['session']:20s} "
+                    f"diff={row['diff']:+.4f}R  p_bh={row['p_bh']:.4f}  "
+                    f"consistency={row['yr_consistent']:.0f}/{row['yr_total']:.0f}"
+                )
 
         # Weak signals
         weak = survivors[(survivors.yr_pct >= 60) & (survivors.yr_pct < 75)]
@@ -316,8 +337,10 @@ def run(db_path: Path):
             print(f"\n  --- WEAK (60-74% consistency — monitor, don't act) ---")
             for _, row in weak.iterrows():
                 direction = "WORSE" if row["diff"] < 0 else "BETTER"
-                print(f"    {row['signal']:12s} {row['instrument']:4s} {row['session']:20s} "
-                      f"diff={row['diff']:+.4f}R  consistency={row['yr_consistent']:.0f}/{row['yr_total']:.0f}  {direction}")
+                print(
+                    f"    {row['signal']:12s} {row['instrument']:4s} {row['session']:20s} "
+                    f"diff={row['diff']:+.4f}R  consistency={row['yr_consistent']:.0f}/{row['yr_total']:.0f}  {direction}"
+                )
 
         noise = survivors[survivors.yr_pct < 60]
         if not noise.empty:
@@ -344,11 +367,11 @@ def run(db_path: Path):
             non = df[(df.symbol == inst) & (~df[cal_col])]
             diff = mean_r - non["pnl_r"].mean()
             # Check if this inst has any session where skipping is harmful
-            inst_survivors = survivors[
-                (survivors.instrument == inst) &
-                (survivors.signal == cal_type) &
-                (survivors["diff"] > 0)
-            ] if not survivors.empty else pd.DataFrame()
+            inst_survivors = (
+                survivors[(survivors.instrument == inst) & (survivors.signal == cal_type) & (survivors["diff"] > 0)]
+                if not survivors.empty
+                else pd.DataFrame()
+            )
             harmful_sessions = list(inst_survivors["session"]) if not inst_survivors.empty else []
             print(f"    {inst}: overall {cal_type} diff={diff:+.4f}R  (N={n})")
             if harmful_sessions:

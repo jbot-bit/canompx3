@@ -166,9 +166,7 @@ def _values_candidate_garch(
         if expr is None:
             out[s.strategy_id] = None
         else:
-            out[s.strategy_id] = round(
-                WEIGHT_GARCH * expr + WEIGHT_BASELINE * _effective_annual_r(s), 6
-            )
+            out[s.strategy_id] = round(WEIGHT_GARCH * expr + WEIGHT_BASELINE * _effective_annual_r(s), 6)
     return out
 
 
@@ -434,9 +432,7 @@ def _harness_sanity_gate(
 # ---------------------------------------------------------------------------
 
 
-def _mean_jaccard_over_rebalances(
-    a_rebalances: list[list[str]], b_rebalances: list[list[str]]
-) -> float:
+def _mean_jaccard_over_rebalances(a_rebalances: list[list[str]], b_rebalances: list[list[str]]) -> float:
     if not a_rebalances or not b_rebalances:
         return 0.0
     pairs = list(zip(a_rebalances, b_rebalances, strict=False))
@@ -539,9 +535,7 @@ def _oos_descriptive(
         "oos_r_per_fill_delta": round(oos_delta, 6),
         "direction_match": direction_match,
         "effect_ratio": round(effect_ratio, 4) if effect_ratio is not None else None,
-        "effect_ratio_pass_40pct": (
-            effect_ratio is not None and effect_ratio >= 0.40
-        ),
+        "effect_ratio_pass_40pct": (effect_ratio is not None and effect_ratio >= 0.40),
         "oos_trading_days": oos_candidate.trading_days_covered,
         "oos_total_fills_candidate": oos_candidate.total_fills,
         "oos_total_fills_primary_null": oos_primary_null.total_fills,
@@ -739,9 +733,7 @@ def main() -> None:
         gp_by_day = _build_garch_pct_by_day(con, metas)
 
         # Rebalance months: IS + OOS, with 2026-01 boundary for final IS forward window
-        month_to_rebalance = _first_trading_days_by_month(
-            con, IS_START_MONTH, date(as_of.year, as_of.month, 1)
-        )
+        month_to_rebalance = _first_trading_days_by_month(con, IS_START_MONTH, date(as_of.year, as_of.month, 1))
         if HOLDOUT_BOUNDARY not in month_to_rebalance:
             extra = _first_trading_days_by_month(con, HOLDOUT_BOUNDARY, HOLDOUT_BOUNDARY)
             month_to_rebalance.update(extra)
@@ -877,8 +869,7 @@ def main() -> None:
     destruction_passes_on_any = False
     if primary_eval:
         destruction_passes_on_any = any(
-            destruction_eval[surface_name]["primary_pass"]
-            for surface_name, _slots in SURFACES
+            destruction_eval[surface_name]["primary_pass"] for surface_name, _slots in SURFACES
         )
 
     # Dual-surface verdict
@@ -887,9 +878,7 @@ def main() -> None:
         verdict_B = _verdict_per_surface(primary_eval["B_rho_survivor_slots"])
     else:
         verdict_A = verdict_B = "N/A"
-    dual_verdict = _dual_surface_verdict(
-        verdict_A, verdict_B, harness_gate, destruction_passes_on_any
-    )
+    dual_verdict = _dual_surface_verdict(verdict_A, verdict_B, harness_gate, destruction_passes_on_any)
     print(f"[a4c] dual-surface verdict: {dual_verdict}")
 
     # Emit MD
@@ -921,7 +910,8 @@ def main() -> None:
         "is_summary": {
             surface: {
                 policy: {
-                    k: v for k, v in asdict(result).items()
+                    k: v
+                    for k, v in asdict(result).items()
                     if k not in ("monthly_outputs", "daily_pnl", "selected_by_rebalance")
                 }
                 for policy, result in is_results[surface].items()

@@ -291,7 +291,4 @@ def pair_observations_by_day(
     for observation in observations:
         grouped.setdefault(observation.trading_day, []).append(observation)
 
-    return [
-        build_front_next_pair(stats_symbol, grouped[trading_day])
-        for trading_day in sorted(grouped)
-    ]
+    return [build_front_next_pair(stats_symbol, grouped[trading_day]) for trading_day in sorted(grouped)]

@@ -127,11 +127,7 @@ def _load_canonical_forward_trades(
         filter_type=params["filter_type"],
         start_date=HOLDOUT_SACRED_FROM,
     )
-    return [
-        o["pnl_r"]
-        for o in outcomes
-        if o.get("pnl_r") is not None and o.get("outcome") not in (None, "scratch")
-    ]
+    return [o["pnl_r"] for o in outcomes if o.get("pnl_r") is not None and o.get("outcome") not in (None, "scratch")]
 
 
 def prepare_monitor_inputs(
@@ -263,10 +259,7 @@ def run_monitor(*, apply_pauses: bool = False, pause_days: int = 30) -> None:
         else:
             print("Alarm action: report only (no lane pause writes)")
         print("=" * 120)
-        print(
-            f"\n{'Lane':<40} {'N':>4} {'SR':>10} {'Thr':>8} {'Status':<10} "
-            f"{'Baseline':<28} {'Stream':<18}"
-        )
+        print(f"\n{'Lane':<40} {'N':>4} {'SR':>10} {'Thr':>8} {'Status':<10} {'Baseline':<28} {'Stream':<18}")
         print("-" * 120)
 
         results = []

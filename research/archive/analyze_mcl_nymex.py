@@ -64,6 +64,7 @@ CB_VALUES = [1, 2]
 # Weekday names
 WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri"]
 
+
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
@@ -71,19 +72,23 @@ def load_trading_days(db_path: Path) -> list[date]:
     """Get all trading days with MCL bars in the date range."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT DISTINCT CAST(ts_utc AS DATE) AS bar_date
             FROM bars_1m
             WHERE symbol = 'MCL'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY bar_date
-        """, [
-            datetime(START_DATE.year, START_DATE.month, START_DATE.day, tzinfo=UTC_TZ),
-            datetime(END_DATE.year, END_DATE.month, END_DATE.day, 23, 59, 59, tzinfo=UTC_TZ),
-        ]).fetchall()
+        """,
+            [
+                datetime(START_DATE.year, START_DATE.month, START_DATE.day, tzinfo=UTC_TZ),
+                datetime(END_DATE.year, END_DATE.month, END_DATE.day, 23, 59, 59, tzinfo=UTC_TZ),
+            ],
+        ).fetchall()
     finally:
         con.close()
     return [r[0] for r in rows]
+
 
 def load_session_bars(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load MCL 1m bars from 13:00 UTC to 23:00 UTC for the given calendar day.
@@ -92,26 +97,40 @@ def load_session_bars(db_path: Path, trading_day: date) -> pd.DataFrame:
     (09:00 Brisbane next day).
     """
     session_start = datetime(
-        trading_day.year, trading_day.month, trading_day.day,
-        SESSION_START_HOUR_UTC, 0, 0, tzinfo=UTC_TZ,
+        trading_day.year,
+        trading_day.month,
+        trading_day.day,
+        SESSION_START_HOUR_UTC,
+        0,
+        0,
+        tzinfo=UTC_TZ,
     )
     session_end = datetime(
-        trading_day.year, trading_day.month, trading_day.day,
-        23, 0, 0, tzinfo=UTC_TZ,
+        trading_day.year,
+        trading_day.month,
+        trading_day.day,
+        23,
+        0,
+        0,
+        tzinfo=UTC_TZ,
     )
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MCL'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [session_start, session_end]).fetchdf()
+        """,
+            [session_start, session_end],
+        ).fetchdf()
     finally:
         con.close()
     return df
+
 
 # ---------------------------------------------------------------------------
 # ORB computation
@@ -138,6 +157,7 @@ def compute_orb(bars: pd.DataFrame, orb_minutes: int) -> dict | None:
         "orb_range": orb_range,
         "orb_end_idx": orb_minutes,  # first bar AFTER ORB window
     }
+
 
 # ---------------------------------------------------------------------------
 # Breakout simulation (E1 with CB confirm)
@@ -181,8 +201,13 @@ def simulate_breakout(
                     stop_price = orb_low
                     target_price = entry_price + rr * orb_range
                     trade = _resolve_trade(
-                        bars, i + 1, entry_price, stop_price, target_price,
-                        "long", orb_range,
+                        bars,
+                        i + 1,
+                        entry_price,
+                        stop_price,
+                        target_price,
+                        "long",
+                        orb_range,
                     )
                     if trade is not None:
                         trades.append(trade)
@@ -200,8 +225,13 @@ def simulate_breakout(
                     stop_price = orb_high
                     target_price = entry_price - rr * orb_range
                     trade = _resolve_trade(
-                        bars, i + 1, entry_price, stop_price, target_price,
-                        "short", orb_range,
+                        bars,
+                        i + 1,
+                        entry_price,
+                        stop_price,
+                        target_price,
+                        "short",
+                        orb_range,
                     )
                     if trade is not None:
                         trades.append(trade)
@@ -211,6 +241,7 @@ def simulate_breakout(
             confirm_count_short = 0
 
     return trades
+
 
 # ---------------------------------------------------------------------------
 # Fade simulation (mean-reversion)
@@ -261,8 +292,13 @@ def simulate_fade(
                     # Only take if target is below entry
                     if target_price < entry_price:
                         trade = _resolve_trade(
-                            bars, i + 1, entry_price, stop_price, target_price,
-                            "short", orb_range,
+                            bars,
+                            i + 1,
+                            entry_price,
+                            stop_price,
+                            target_price,
+                            "short",
+                            orb_range,
                         )
                         if trade is not None:
                             trades.append(trade)
@@ -285,8 +321,13 @@ def simulate_fade(
                     # Only take if target is above entry
                     if target_price > entry_price:
                         trade = _resolve_trade(
-                            bars, i + 1, entry_price, stop_price, target_price,
-                            "long", orb_range,
+                            bars,
+                            i + 1,
+                            entry_price,
+                            stop_price,
+                            target_price,
+                            "long",
+                            orb_range,
                         )
                         if trade is not None:
                             trades.append(trade)
@@ -296,6 +337,7 @@ def simulate_fade(
             confirm_count_short = 0
 
     return trades
+
 
 # ---------------------------------------------------------------------------
 # Trade resolution
@@ -334,24 +376,21 @@ def _resolve_trade(
         # Ambiguous bar -> LOSS (conservative)
         if stop_hit and target_hit:
             pnl_points = stop_price - entry_price if is_long else entry_price - stop_price
-            return _build_trade(entry_price, stop_price, pnl_points, risk_points,
-                                direction, "stop", orb_range)
+            return _build_trade(entry_price, stop_price, pnl_points, risk_points, direction, "stop", orb_range)
 
         if stop_hit:
             pnl_points = stop_price - entry_price if is_long else entry_price - stop_price
-            return _build_trade(entry_price, stop_price, pnl_points, risk_points,
-                                direction, "stop", orb_range)
+            return _build_trade(entry_price, stop_price, pnl_points, risk_points, direction, "stop", orb_range)
 
         if target_hit:
             pnl_points = target_price - entry_price if is_long else entry_price - target_price
-            return _build_trade(entry_price, target_price, pnl_points, risk_points,
-                                direction, "target", orb_range)
+            return _build_trade(entry_price, target_price, pnl_points, risk_points, direction, "target", orb_range)
 
     # EOD exit at last bar close
     last_close = float(bars.iloc[-1]["close"])
     pnl_points = last_close - entry_price if is_long else entry_price - last_close
-    return _build_trade(entry_price, last_close, pnl_points, risk_points,
-                        direction, "eod", orb_range)
+    return _build_trade(entry_price, last_close, pnl_points, risk_points, direction, "eod", orb_range)
+
 
 def _build_trade(
     entry_price: float,
@@ -384,11 +423,11 @@ def _build_trade(
         "orb_range": orb_range,
     }
 
+
 # ---------------------------------------------------------------------------
 # Metrics formatting
 # ---------------------------------------------------------------------------
-def format_metrics(label: str, gross_pnls: np.ndarray, net_pnls: np.ndarray,
-                   years: float) -> str:
+def format_metrics(label: str, gross_pnls: np.ndarray, net_pnls: np.ndarray, years: float) -> str:
     """Format one line of the results table."""
     gross = compute_strategy_metrics(gross_pnls)
     net = compute_strategy_metrics(net_pnls)
@@ -399,16 +438,20 @@ def format_metrics(label: str, gross_pnls: np.ndarray, net_pnls: np.ndarray,
     net = annualize_sharpe(net, years)
 
     return (
-        f"{label:<28s} {gross['n']:>4d}  {net['wr']*100:5.1f}%  "
+        f"{label:<28s} {gross['n']:>4d}  {net['wr'] * 100:5.1f}%  "
         f"{gross['expr']:+7.3f}  {net['expr']:+7.3f}  "
         f"{net['sharpe']:6.3f}  {net['maxdd']:6.1f}  {net['total']:+6.1f}"
     )
 
+
 def print_header():
     """Print results table header."""
-    print(f"{'Variant':<28s} {'N':>4s}  {'WR':>5s}   {'GrossExpR':>7s}  "
-          f"{'NetExpR':>7s}  {'Sharpe':>6s}  {'MaxDD':>6s}  {'TotalR':>6s}")
+    print(
+        f"{'Variant':<28s} {'N':>4s}  {'WR':>5s}   {'GrossExpR':>7s}  "
+        f"{'NetExpR':>7s}  {'Sharpe':>6s}  {'MaxDD':>6s}  {'TotalR':>6s}"
+    )
     print("-" * 90)
+
 
 def print_weekday_breakdown(trades_by_weekday: dict[int, list[dict]], label: str):
     """Print per-weekday results for the given trade list."""
@@ -425,13 +468,13 @@ def print_weekday_breakdown(trades_by_weekday: dict[int, list[dict]], label: str
         tag = "  <-- EIA day" if wd == 2 else ""
         print(f"  {WEEKDAY_NAMES[wd]}  N={n:<4d}  WR={wr:5.1f}%  ExpR={expr:+.3f}{tag}")
 
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description="MCL NYMEX ORB breakout/fade research")
-    parser.add_argument("--db-path", type=str, default="C:/db/gold.db",
-                        help="Path to DuckDB database")
+    parser.add_argument("--db-path", type=str, default="C:/db/gold.db", help="Path to DuckDB database")
     args = parser.parse_args()
     db_path = Path(args.db_path)
 
@@ -443,10 +486,8 @@ def main():
     print(f"Instrument: MCL (Micro Crude Oil)")
     print(f"Session: NYMEX open (13:00 UTC / 2300 Brisbane)")
     print(f"Date range: {START_DATE} to {END_DATE}")
-    print(f"Cost model: point_value=${SPEC.point_value:.0f}, "
-          f"friction=${FRICTION:.2f} RT")
-    print(f"Min ORB range: {MIN_ORB_RANGE_POINTS:.2f} pts "
-          f"(= ${MIN_ORB_RANGE_POINTS * SPEC.point_value:.0f})")
+    print(f"Cost model: point_value=${SPEC.point_value:.0f}, friction=${FRICTION:.2f} RT")
+    print(f"Min ORB range: {MIN_ORB_RANGE_POINTS:.2f} pts (= ${MIN_ORB_RANGE_POINTS * SPEC.point_value:.0f})")
     print()
 
     # -----------------------------------------------------------------------
@@ -457,10 +498,7 @@ def main():
     print(f"  Found {len(trading_days)} calendar days with MCL bars")
 
     # Filter to weekdays only and within date range
-    valid_days = [
-        d for d in trading_days
-        if START_DATE <= d <= END_DATE and d.weekday() < 5
-    ]
+    valid_days = [d for d in trading_days if START_DATE <= d <= END_DATE and d.weekday() < 5]
     print(f"  Weekdays in range: {len(valid_days)}")
 
     years = (END_DATE - START_DATE).days / 365.25
@@ -502,11 +540,10 @@ def main():
                 continue
             orbs[d] = orb
 
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"=== NYMEX {orb_minutes}m ORB BREAKOUT ===")
-        print(f"{'='*60}")
-        print(f"Days with valid ORB: {len(orbs)}  "
-              f"(skipped: {skipped_no_orb} no-orb, {skipped_small} too-small)")
+        print(f"{'=' * 60}")
+        print(f"Days with valid ORB: {len(orbs)}  (skipped: {skipped_no_orb} no-orb, {skipped_small} too-small)")
         print()
 
         # -------------------------------------------------------------------
@@ -527,7 +564,11 @@ def main():
                     all_trades = []
                     for d, orb in orbs.items():
                         trades = simulate_breakout(
-                            day_bars[d], orb, rr, cb_val, dir_filter,
+                            day_bars[d],
+                            orb,
+                            rr,
+                            cb_val,
+                            dir_filter,
                         )
                         for t in trades:
                             t["weekday"] = d.weekday()
@@ -558,9 +599,9 @@ def main():
         # -------------------------------------------------------------------
         # FADE simulation
         # -------------------------------------------------------------------
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"=== NYMEX {orb_minutes}m ORB FADE ===")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print()
         print_header()
 
@@ -577,7 +618,11 @@ def main():
                 all_trades = []
                 for d, orb in orbs.items():
                     trades = simulate_fade(
-                        day_bars[d], orb, 1.0, cb_val, target_mode,
+                        day_bars[d],
+                        orb,
+                        1.0,
+                        cb_val,
+                        target_mode,
                     )
                     for t in trades:
                         t["weekday"] = d.weekday()
@@ -612,6 +657,7 @@ def main():
     print("DONE. Review net ExpR and Sharpe to identify viable variants.")
     print("Wednesday (EIA inventory report day) may show different behavior.")
     print()
+
 
 if __name__ == "__main__":
     main()

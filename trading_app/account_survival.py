@@ -414,11 +414,7 @@ def _scenario_from_trade_paths(trading_day: date, trades: list[TradePath]) -> Da
     max_delta = 0.0
 
     def _current_total_lots() -> int:
-        return sum(
-            lots_for_position(inst, n)
-            for inst, n in open_contracts_by_inst.items()
-            if n > 0
-        )
+        return sum(lots_for_position(inst, n) for inst, n in open_contracts_by_inst.items() if n > 0)
 
     for _ts, event_type, trade in events:
         if event_type == 0:
@@ -480,8 +476,7 @@ def _load_profile_daily_scenarios(
         if not lane_specs:
             lane_specs = load_allocation_lanes(profile.profile_id)
         effective_stop_by_strategy = {
-            lane.strategy_id: float(lane.planned_stop_multiplier or profile.stop_multiplier)
-            for lane in lane_specs
+            lane.strategy_id: float(lane.planned_stop_multiplier or profile.stop_multiplier) for lane in lane_specs
         }
 
         for lane in lane_defs:
@@ -852,8 +847,7 @@ def check_survival_report_gate(
     if report_age_days > max_age_days:
         return (
             False,
-            f"BLOCKED: Criterion 11 report is {report_age_days}d old (> {max_age_days}d). "
-            "Re-run account survival.",
+            f"BLOCKED: Criterion 11 report is {report_age_days}d old (> {max_age_days}d). Re-run account survival.",
         )
     if path_model != "trade_path_conservative":
         return False, f"BLOCKED: Criterion 11 report uses unsupported path model {path_model!r}"
@@ -890,11 +884,7 @@ def _print_summary(summary: SurvivalSummary) -> None:
         f"DD survival={summary.dd_survival_probability:.1%} | "
         f"operational pass={summary.operational_pass_probability:.1%} | "
         f"consistency pass="
-        + (
-            f"{summary.consistency_pass_probability:.1%}"
-            if summary.consistency_pass_probability is not None
-            else "n/a"
-        )
+        + (f"{summary.consistency_pass_probability:.1%}" if summary.consistency_pass_probability is not None else "n/a")
     )
     print(
         f"Breach rates: trailing_dd={summary.trailing_dd_breach_probability:.1%} | "

@@ -93,9 +93,9 @@ def load_strategy_df(con: duckdb.DuckDBPyConnection, row: pd.Series) -> pd.DataF
         JOIN daily_features d_l ON d_l.symbol='{lsym}' AND d_l.trading_day=o.trading_day AND d_l.orb_minutes=o.orb_minutes
         WHERE o.orb_minutes=5
           AND o.symbol='{fsym}' AND o.orb_label='{fsess}'
-          AND o.entry_model='{row['entry_model']}'
-          AND o.confirm_bars={int(row['confirm_bars'])}
-          AND o.rr_target={float(row['rr_target'])}
+          AND o.entry_model='{row["entry_model"]}'
+          AND o.confirm_bars={int(row["confirm_bars"])}
+          AND o.rr_target={float(row["rr_target"])}
           AND o.pnl_r IS NOT NULL
           AND o.entry_ts IS NOT NULL
         """
@@ -115,9 +115,9 @@ def load_strategy_df(con: duckdb.DuckDBPyConnection, row: pd.Series) -> pd.DataF
         JOIN daily_features d_f ON d_f.symbol=o.symbol AND d_f.trading_day=o.trading_day AND d_f.orb_minutes=o.orb_minutes
         WHERE o.orb_minutes=5
           AND o.symbol='{fsym}' AND o.orb_label='{fsess}'
-          AND o.entry_model='{row['entry_model']}'
-          AND o.confirm_bars={int(row['confirm_bars'])}
-          AND o.rr_target={float(row['rr_target'])}
+          AND o.entry_model='{row["entry_model"]}'
+          AND o.confirm_bars={int(row["confirm_bars"])}
+          AND o.rr_target={float(row["rr_target"])}
           AND o.pnl_r IS NOT NULL
           AND o.entry_ts IS NOT NULL
         """
@@ -158,10 +158,7 @@ def preset_mask(dfb: pd.DataFrame, preset: str) -> pd.Series:
     if preset == "base_plus_vol60":
         return dfb["f_vol_imp"].notna() & (dfb["f_vol_imp"] >= vq)
     if preset == "base_plus_both":
-        return (
-            dfb["f_delay"].notna() & (dfb["f_delay"] <= 15)
-            & dfb["f_vol_imp"].notna() & (dfb["f_vol_imp"] >= vq)
-        )
+        return dfb["f_delay"].notna() & (dfb["f_delay"] <= 15) & dfb["f_vol_imp"].notna() & (dfb["f_vol_imp"] >= vq)
     return pd.Series(True, index=dfb.index)
 
 
@@ -287,7 +284,8 @@ def main() -> int:
             and worst_test_avg > -0.10
             and slip_005 > 0
             and trim5 > 0
-            and pd.notna(boot_prob) and boot_prob >= 0.80
+            and pd.notna(boot_prob)
+            and boot_prob >= 0.80
         )
 
         verdict = "PROMOTE" if strict_pass else "KILL"
@@ -333,11 +331,15 @@ def main() -> int:
     splits = pd.DataFrame(split_rows)
 
     if summary.empty:
-        p_md.write_text("# Walk-forward stress report\n\nNo strategies passed minimum data requirements.", encoding="utf-8")
+        p_md.write_text(
+            "# Walk-forward stress report\n\nNo strategies passed minimum data requirements.", encoding="utf-8"
+        )
         print("No strategies passed minimum requirements.")
         return 0
 
-    summary = summary.sort_values(["verdict", "avg_r_selected", "uplift_selected_vs_base"], ascending=[True, False, False])
+    summary = summary.sort_values(
+        ["verdict", "avg_r_selected", "uplift_selected_vs_base"], ascending=[True, False, False]
+    )
     summary.to_csv(p_sum, index=False)
     splits.to_csv(p_split, index=False)
 

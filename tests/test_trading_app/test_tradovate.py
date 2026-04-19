@@ -162,8 +162,9 @@ class TestTradovateAuth:
         mock_post.return_value = fail_resp
 
         auth = TradovateAuth()
-        with patch("trading_app.live.tradovate.auth.time.sleep"), pytest.raises(
-            RuntimeError, match="auth failed after"
+        with (
+            patch("trading_app.live.tradovate.auth.time.sleep"),
+            pytest.raises(RuntimeError, match="auth failed after"),
         ):
             auth.get_token()
         assert auth.is_healthy is False
@@ -480,9 +481,7 @@ class TestRequestWithRetry:
         resp_429.status_code = 429
         mock_post.return_value = resp_429
 
-        with patch("trading_app.live.tradovate.http.time.sleep"), pytest.raises(
-            RateLimitExhausted
-        ):
+        with patch("trading_app.live.tradovate.http.time.sleep"), pytest.raises(RateLimitExhausted):
             request_with_retry("POST", "http://test/api", {})
 
     @patch("trading_app.live.tradovate.http.requests.get")

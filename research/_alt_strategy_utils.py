@@ -20,22 +20,28 @@ from pipeline.cost_model import CostSpec, get_cost_spec, to_r_multiple
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.walkforward import _add_months
 
-def load_daily_features(db_path: Path, start: date, end: date,
-                        orb_minutes: int = 5, symbol: str = "MGC") -> pd.DataFrame:
+
+def load_daily_features(
+    db_path: Path, start: date, end: date, orb_minutes: int = 5, symbol: str = "MGC"
+) -> pd.DataFrame:
     """Load daily_features for a date range."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT *
             FROM daily_features
             WHERE symbol = ?
               AND orb_minutes = ?
               AND trading_day BETWEEN ? AND ?
             ORDER BY trading_day
-        """, [symbol, orb_minutes, start, end]).fetchdf()
+        """,
+            [symbol, orb_minutes, start, end],
+        ).fetchdf()
     finally:
         con.close()
     return df
+
 
 def load_bars_for_day(db_path: Path, trading_day: date, symbol: str = "MGC") -> pd.DataFrame:
     """Load 1-minute bars for one trading day (09:00 Brisbane boundary).
@@ -43,20 +49,25 @@ def load_bars_for_day(db_path: Path, trading_day: date, symbol: str = "MGC") -> 
     Trading day boundary: 23:00 UTC previous calendar day to 23:00 UTC trading day.
     """
     from pipeline.build_daily_features import compute_trading_day_utc_range
+
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = ?
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [symbol, start_utc, end_utc]).fetchdf()
+        """,
+            [symbol, start_utc, end_utc],
+        ).fetchdf()
     finally:
         con.close()
     return df
+
 
 def compute_walk_forward_windows(
     test_start: date,
@@ -82,16 +93,19 @@ def compute_walk_forward_windows(
         train_start = _add_months(current_test_start, -train_months)
         train_end = current_test_start - timedelta(days=1)
 
-        windows.append({
-            "train_start": train_start,
-            "train_end": train_end,
-            "test_start": current_test_start,
-            "test_end": test_end_month - timedelta(days=1),
-        })
+        windows.append(
+            {
+                "train_start": train_start,
+                "train_end": train_end,
+                "test_start": current_test_start,
+                "test_end": test_end_month - timedelta(days=1),
+            }
+        )
 
         current_test_start = test_end_month
 
     return windows
+
 
 def compute_strategy_metrics(pnls: np.ndarray) -> dict | None:
     """Compute trading stats from array of R-multiples.
@@ -112,10 +126,15 @@ def compute_strategy_metrics(pnls: np.ndarray) -> dict | None:
     maxdd = float((cumul - peak).min())
     total = float(pnls.sum())
     return {
-        "n": n, "wr": wr, "expr": expr, "sharpe": sharpe,
-        "maxdd": maxdd, "total": total,
+        "n": n,
+        "wr": wr,
+        "expr": expr,
+        "sharpe": sharpe,
+        "maxdd": maxdd,
+        "total": total,
         "sharpe_ann": None,  # Populated by caller when trades_per_year is known
     }
+
 
 def annualize_sharpe(stats: dict, years: float) -> dict:
     """Add sharpe_ann to stats dict. years = OOS period length in years."""
@@ -123,6 +142,7 @@ def annualize_sharpe(stats: dict, years: float) -> dict:
         trades_per_year = stats["n"] / years
         stats["sharpe_ann"] = stats["sharpe"] * np.sqrt(trades_per_year)
     return stats
+
 
 def resolve_bar_outcome(
     bars: pd.DataFrame,
@@ -182,6 +202,7 @@ def resolve_bar_outcome(
             }
 
     return None  # No resolution within session
+
 
 def save_results(results: dict, path: Path) -> None:
     """Save results dict to JSON file."""

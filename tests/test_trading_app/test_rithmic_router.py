@@ -382,9 +382,7 @@ class TestRithmicSubmitMocked:
         # Simulate response with basket_id
         auth.run_async.return_value = [SimpleNamespace(basket_id="99001")]
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         spec = router.build_order_spec("long", "E1", 5200.0, "MESM6", qty=1)
         result = router.submit(spec)
 
@@ -398,9 +396,7 @@ class TestRithmicSubmitMocked:
         auth = _make_mock_auth()
         auth.run_async.return_value = [SimpleNamespace(basket_id="99002")]
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         spec = router.build_order_spec("long", "E2", 5210.50, "MESM6")
         result = router.submit(spec)
 
@@ -415,9 +411,7 @@ class TestRithmicSubmitMocked:
         auth = _make_mock_auth()
         auth.run_async.return_value = [SimpleNamespace(basket_id="99003")]
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         entry = router.build_order_spec("long", "E2", 5210.0, "MESM6")
         bracket = router.build_bracket_spec("long", "MESM6", 5210.0, 5205.0, 5220.0)
         merged = router.merge_bracket_into_entry(entry, bracket)
@@ -439,9 +433,7 @@ class TestRithmicSubmitMocked:
         from trading_app.live.rithmic.order_router import RithmicOrderRouter
 
         auth = _make_mock_auth()
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         router.update_market_price(5200.0)
         # 5500 is ~5.8% from 5200 — well beyond 0.5% collar
         spec = router.build_order_spec("long", "E2", 5500.0, "MESM6")
@@ -454,9 +446,7 @@ class TestRithmicSubmitMocked:
         auth = _make_mock_auth()
         auth.run_async.return_value = []  # Empty response
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
         result = router.submit(spec)
 
@@ -471,12 +461,8 @@ class TestRithmicSubmitMocked:
         auth = _make_mock_auth()
         auth.run_async.return_value = []
 
-        router_a = RithmicOrderRouter(
-            account_id=11111, auth=auth, tick_size=0.25, rithmic_account_id="11111"
-        )
-        router_b = RithmicOrderRouter(
-            account_id=22222, auth=auth, tick_size=0.25, rithmic_account_id="22222"
-        )
+        router_a = RithmicOrderRouter(account_id=11111, auth=auth, tick_size=0.25, rithmic_account_id="11111")
+        router_b = RithmicOrderRouter(account_id=22222, auth=auth, tick_size=0.25, rithmic_account_id="22222")
 
         spec_a = router_a.build_order_spec("long", "E1", 5200.0, "MESM6")
         spec_b = router_b.build_order_spec("long", "E1", 5200.0, "MESM6")
@@ -501,16 +487,13 @@ class TestRithmicSubmitMocked:
         auth = _make_mock_auth()
         auth.run_async.return_value = [SimpleNamespace(basket_id="99001")]
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
         router.submit(spec)
 
         # Verify run_async was called with the higher timeout
         call_kwargs = auth.run_async.call_args
         assert call_kwargs[1]["timeout"] == _ORDER_SUBMIT_TIMEOUT
-
 
     def test_submit_rejected_order_detected(self):
         """Rithmic rejection (rp_code != '0') sets status to 'rejected'."""
@@ -520,9 +503,7 @@ class TestRithmicSubmitMocked:
         # Simulate rejection: rp_code="1" (non-zero), empty basket_id
         auth.run_async.return_value = [SimpleNamespace(basket_id="", rp_code="1")]
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
         result = router.submit(spec)
 
@@ -538,9 +519,7 @@ class TestRithmicSubmitMocked:
         # rp_code="0" (success) but empty basket_id (unusual but possible)
         auth.run_async.return_value = [SimpleNamespace(basket_id="", rp_code="0")]
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
         result = router.submit(spec)
 
@@ -562,9 +541,7 @@ class TestRithmicCancelMocked:
         auth = _make_mock_auth()
         auth.run_async.return_value = None
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         router.cancel(99001)
         auth.run_async.assert_called_once()
 
@@ -592,9 +569,7 @@ class TestRithmicQueryOrderStatus:
         auth = _make_mock_auth()
         auth.run_async.return_value = [SimpleNamespace(basket_id="99001")]
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         # Submit to populate cache
         spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
         router.submit(spec)
@@ -608,13 +583,9 @@ class TestRithmicQueryOrderStatus:
         from trading_app.live.rithmic.order_router import RithmicOrderRouter
 
         auth = _make_mock_auth()
-        auth.run_async.return_value = SimpleNamespace(
-            status="Filled", avg_fill_price=5200.25
-        )
+        auth.run_async.return_value = SimpleNamespace(status="Filled", avg_fill_price=5200.25)
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         result = router.query_order_status(88888)
         assert result["order_id"] == 88888
         assert result["status"] == "Filled"
@@ -633,9 +604,7 @@ class TestRithmicOpenOrdersMocked:
             SimpleNamespace(symbol="MESM6", basket_id="101"),
         ]
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         orders = router.query_open_orders()
         assert len(orders) == 2
 
@@ -654,9 +623,7 @@ class TestRithmicOpenOrdersMocked:
             None,  # cancel order 101
         ]
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         cancelled = router.cancel_bracket_orders("MESM6")
         assert cancelled == 2
 
@@ -721,9 +688,7 @@ class TestRithmicEquityMocked:
 
         auth = _make_mock_auth()
         # Simulate AccountPnLPositionUpdate (template 451) — STRING fields
-        auth.run_async.return_value = [
-            SimpleNamespace(account_balance="47500.00", cash_on_hand="48000.00")
-        ]
+        auth.run_async.return_value = [SimpleNamespace(account_balance="47500.00", cash_on_hand="48000.00")]
 
         pos = RithmicPositions(auth=auth)
         equity = pos.query_equity(12345)
@@ -734,9 +699,7 @@ class TestRithmicEquityMocked:
 
         auth = _make_mock_auth()
         # account_balance is empty string (protobuf default for unset)
-        auth.run_async.return_value = [
-            SimpleNamespace(account_balance="", cash_on_hand="48000.00")
-        ]
+        auth.run_async.return_value = [SimpleNamespace(account_balance="", cash_on_hand="48000.00")]
 
         pos = RithmicPositions(auth=auth)
         equity = pos.query_equity(12345)
@@ -757,9 +720,7 @@ class TestRithmicEquityMocked:
         from trading_app.live.rithmic.positions import RithmicPositions
 
         auth = _make_mock_auth()
-        auth.run_async.return_value = [
-            SimpleNamespace(account_balance="", cash_on_hand="")
-        ]
+        auth.run_async.return_value = [SimpleNamespace(account_balance="", cash_on_hand="")]
 
         pos = RithmicPositions(auth=auth)
         equity = pos.query_equity(12345)
@@ -880,9 +841,7 @@ class TestFaultInjection:
         auth = _make_mock_auth()
         auth.run_async.side_effect = RuntimeError("Rithmic async bridge timed out after 20.0s")
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
         with pytest.raises(RuntimeError, match="timed out"):
             router.submit(spec)
@@ -894,9 +853,7 @@ class TestFaultInjection:
         auth = _make_mock_auth()
         auth.run_async.side_effect = RuntimeError("timed out")
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         with pytest.raises(RuntimeError):
             router.cancel(99001)
 
@@ -929,9 +886,7 @@ class TestFaultInjection:
         auth = _make_mock_auth()
         auth.run_async.side_effect = RuntimeError("connection reset")
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         result = router.query_order_status(99999)
         assert result["status"] == "Unknown"
         assert result["fill_price"] is None
@@ -944,9 +899,7 @@ class TestFaultInjection:
         # Response with no basket_id or rp_code attributes at all
         auth.run_async.return_value = [object()]
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
         result = router.submit(spec)
         # Should fall back to generated order_id
@@ -986,13 +939,9 @@ class TestFaultInjection:
 
         auth = _make_mock_auth()
         # Simulate get_order returning object with empty status
-        auth.run_async.return_value = SimpleNamespace(
-            status="", avg_fill_price=0.0
-        )
+        auth.run_async.return_value = SimpleNamespace(status="", avg_fill_price=0.0)
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         result = router.query_order_status(99999)
         assert result["status"] == "Unknown"
         assert result["fill_price"] is None
@@ -1002,13 +951,9 @@ class TestFaultInjection:
         from trading_app.live.rithmic.order_router import RithmicOrderRouter
 
         auth = _make_mock_auth()
-        auth.run_async.return_value = SimpleNamespace(
-            status="complete", avg_fill_price=5210.25
-        )
+        auth.run_async.return_value = SimpleNamespace(status="complete", avg_fill_price=5210.25)
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         result = router.query_order_status(99999)
         assert result["status"] == "complete"
         assert result["fill_price"] == 5210.25
@@ -1025,14 +970,12 @@ class TestFaultInjection:
                 SimpleNamespace(symbol="MESM6", basket_id="101"),
                 SimpleNamespace(symbol="MESM6", basket_id="102"),
             ],
-            None,                              # cancel 100: success
-            RuntimeError("cancel failed"),     # cancel 101: FAIL
-            None,                              # cancel 102: success
+            None,  # cancel 100: success
+            RuntimeError("cancel failed"),  # cancel 101: FAIL
+            None,  # cancel 102: success
         ]
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         cancelled = router.cancel_bracket_orders("MESM6")
         assert cancelled == 2  # 2 succeeded, 1 failed
 
@@ -1053,9 +996,7 @@ class TestFaultInjection:
         # Return a single object, not a list
         auth.run_async.return_value = SimpleNamespace(basket_id="88001", rp_code="0")
 
-        router = RithmicOrderRouter(
-            account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345"
-        )
+        router = RithmicOrderRouter(account_id=12345, auth=auth, tick_size=0.25, rithmic_account_id="12345")
         spec = router.build_order_spec("long", "E1", 5200.0, "MESM6")
         result = router.submit(spec)
         assert result["order_id"] == "88001"

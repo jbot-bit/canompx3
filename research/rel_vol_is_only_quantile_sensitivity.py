@@ -54,19 +54,19 @@ RESULT_PATH = PROJECT_ROOT / "docs/audit/results/2026-04-19-rel-vol-is-only-quan
 # Extracted from docs/audit/results/2026-04-15-comprehensive-deployed-lane-scan.md.
 SURVIVOR_CELLS = [
     # (instrument, session, orb_minutes, rr, direction)
-    ("MES", "COMEX_SETTLE",   5, 1.0, "short"),
-    ("MGC", "LONDON_METALS",  5, 1.0, "short"),
-    ("MES", "TOKYO_OPEN",     5, 1.5, "long"),
+    ("MES", "COMEX_SETTLE", 5, 1.0, "short"),
+    ("MGC", "LONDON_METALS", 5, 1.0, "short"),
+    ("MES", "TOKYO_OPEN", 5, 1.5, "long"),
     ("MNQ", "SINGAPORE_OPEN", 5, 1.0, "short"),
-    ("MES", "COMEX_SETTLE",   5, 1.5, "short"),
+    ("MES", "COMEX_SETTLE", 5, 1.5, "short"),
     ("MES", "SINGAPORE_OPEN", 5, 1.0, "short"),
     ("MES", "SINGAPORE_OPEN", 5, 1.0, "long"),
-    ("MNQ", "CME_PRECLOSE",   5, 1.0, "short"),
+    ("MNQ", "CME_PRECLOSE", 5, 1.0, "short"),
     ("MES", "SINGAPORE_OPEN", 5, 1.5, "long"),
-    ("MES", "CME_PRECLOSE",   5, 1.0, "short"),
-    ("MNQ", "BRISBANE_1025",  5, 1.0, "long"),
-    ("MES", "CME_PRECLOSE",   5, 1.5, "short"),
-    ("MGC", "LONDON_METALS",  5, 1.5, "short"),
+    ("MES", "CME_PRECLOSE", 5, 1.0, "short"),
+    ("MNQ", "BRISBANE_1025", 5, 1.0, "long"),
+    ("MES", "CME_PRECLOSE", 5, 1.5, "short"),
+    ("MGC", "LONDON_METALS", 5, 1.5, "short"),
 ]
 
 
@@ -230,8 +230,10 @@ def main() -> int:
     lines.append("|---|---|---:|---:|---|---:|---:|---:|---:|---:|---:|---|")
     n_drift = 0
     for r in rows:
+
         def fmt(v, spec="+.3f"):
             return f"{v:{spec}}" if v is not None else "—"
+
         lines.append(
             f"| {r.instrument} | {r.session} | {r.orb_minutes} | {r.rr} | {r.direction} "
             f"| {r.n_is} | {fmt(r.thresh_full, '.4f')} | {fmt(r.thresh_is_only, '.4f')} "

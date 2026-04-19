@@ -205,9 +205,9 @@ def main():
         t_bar = sum(scores[i] * ns[i] for i in range(len(quints))) / n_total
 
         numerator = sum(ns[i] * (wr_vals[i] - p_bar) * (scores[i] - t_bar) for i in range(len(quints)))
-        denominator = p_bar * (1 - p_bar) * sum(ns[i] * (scores[i] - t_bar)**2 for i in range(len(quints)))
+        denominator = p_bar * (1 - p_bar) * sum(ns[i] * (scores[i] - t_bar) ** 2 for i in range(len(quints)))
         if denominator > 0:
-            z_trend = numerator / (denominator ** 0.5)
+            z_trend = numerator / (denominator**0.5)
             p_trend = 2 * (1 - stats.norm.cdf(abs(z_trend)))
         else:
             z_trend, p_trend = 0, 1.0
@@ -220,7 +220,7 @@ def main():
         h = cohens_h(wr_q1, wr_q5)
         spread_pct = (wr_q1 - wr_q5) * 100
 
-        print(f"  WR Q1={wr_q1*100:.2f}%, Q5={wr_q5*100:.2f}%, spread={spread_pct:+.2f}%")
+        print(f"  WR Q1={wr_q1 * 100:.2f}%, Q5={wr_q5 * 100:.2f}%, spread={spread_pct:+.2f}%")
         print(f"  Cohen's h (Q1 vs Q5) = {h:.4f}")
         print(f"    (|h| < 0.2 = negligible, 0.2-0.5 = small, 0.5-0.8 = medium, >0.8 = large)")
 
@@ -256,9 +256,15 @@ def main():
 
         # Chi2 p-value
         quints = sorted(rsub["quintile"].unique())
-        table = np.array([[rsub[rsub["quintile"] == q]["win"].sum(),
-                          len(rsub[rsub["quintile"] == q]) - rsub[rsub["quintile"] == q]["win"].sum()]
-                         for q in quints])
+        table = np.array(
+            [
+                [
+                    rsub[rsub["quintile"] == q]["win"].sum(),
+                    len(rsub[rsub["quintile"] == q]) - rsub[rsub["quintile"] == q]["win"].sum(),
+                ]
+                for q in quints
+            ]
+        )
         _, p_chi2, _, _ = stats.chi2_contingency(table)
         all_pvals.append(p_chi2)
         all_labels.append(f"Chi2_{regime_name}")
@@ -271,9 +277,9 @@ def main():
             w1 = crosses["win"].sum()
             w2 = no_cross["win"].sum()
             p_pool = (w1 + w2) / (n1 + n2)
-            se = (p_pool * (1 - p_pool) * (1/n1 + 1/n2)) ** 0.5
+            se = (p_pool * (1 - p_pool) * (1 / n1 + 1 / n2)) ** 0.5
             if se > 0:
-                z = (w1/n1 - w2/n2) / se
+                z = (w1 / n1 - w2 / n2) / se
                 p_z = 2 * (1 - stats.norm.cdf(abs(z)))
             else:
                 p_z = 1.0
@@ -293,9 +299,15 @@ def main():
         quints = sorted(sdf["quintile"].unique())
         if len(quints) < 2:
             continue
-        table = np.array([[sdf[sdf["quintile"] == q]["win"].sum(),
-                          len(sdf[sdf["quintile"] == q]) - sdf[sdf["quintile"] == q]["win"].sum()]
-                         for q in quints])
+        table = np.array(
+            [
+                [
+                    sdf[sdf["quintile"] == q]["win"].sum(),
+                    len(sdf[sdf["quintile"] == q]) - sdf[sdf["quintile"] == q]["win"].sum(),
+                ]
+                for q in quints
+            ]
+        )
         try:
             _, p_chi2, _, _ = stats.chi2_contingency(table)
             all_pvals.append(p_chi2)
@@ -335,7 +347,9 @@ def main():
     for i in range(K):
         bonf_sig = "YES" if sorted_pvals[i] < bonf_threshold else "no"
         bh_sig = "YES" if bh_adjusted[i] < 0.05 else "no"
-        print(f"{i+1:>4} | {sorted_labels[i]:<25} | {sorted_pvals[i]:>10.6f} | {bh_adjusted[i]:>10.6f} | {bonf_sig:>10} | {bh_sig:>8}")
+        print(
+            f"{i + 1:>4} | {sorted_labels[i]:<25} | {sorted_pvals[i]:>10.6f} | {bh_adjusted[i]:>10.6f} | {bonf_sig:>10} | {bh_sig:>8}"
+        )
 
     n_bonf = sum(1 for p in all_pvals if p < bonf_threshold)
     n_bh = sum(1 for p in bh_adjusted if p < 0.05)
@@ -396,7 +410,7 @@ def main():
         if len(q1) > 0 and len(q5) > 0:
             wr1 = q1["win"].mean() * 100
             wr5 = q5["win"].mean() * 100
-            print(f"  {tercile:<8} | {wr1:>7.1f}% | {wr5:>7.1f}% | {wr1-wr5:>+7.1f}% | {len(tdf):>8}")
+            print(f"  {tercile:<8} | {wr1:>7.1f}% | {wr5:>7.1f}% | {wr1 - wr5:>+7.1f}% | {len(tdf):>8}")
 
     # ===== STEP 6: T7 ERA_DEPENDENT THRESHOLD AUDIT =====
     print("\n" + "=" * 70)
@@ -434,6 +448,7 @@ def main():
 
         # Durbin-Watson
         from statsmodels.stats.stattools import durbin_watson
+
         resid = win_series - win_series.mean()
         dw = durbin_watson(resid)
         print(f"\n  Durbin-Watson ({regime_name}): {dw:.4f}")

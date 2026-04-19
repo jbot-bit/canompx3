@@ -33,7 +33,12 @@ def valid_tag(tag: str) -> bool:
     if not isinstance(tag, str) or "_" not in tag:
         return False
     a, b = tag.split("_", 1)
-    return bool(a) and bool(b) and (re.fullmatch(r"[A-Za-z0-9]+", a) is not None) and (re.fullmatch(r"[A-Za-z0-9_]+", b) is not None)
+    return (
+        bool(a)
+        and bool(b)
+        and (re.fullmatch(r"[A-Za-z0-9]+", a) is not None)
+        and (re.fullmatch(r"[A-Za-z0-9_]+", b) is not None)
+    )
 
 
 def parse_tag(tag: str) -> tuple[str, str]:
@@ -114,9 +119,9 @@ def scan_pair(con: duckdb.DuckDBPyConnection, leader: str, follower: str) -> pd.
 
 def aggregate(ydf: pd.DataFrame) -> pd.DataFrame:
     rows = []
-    for (leader, follower, symbol, session, em, cb, rr), g in ydf.groupby([
-        "leader", "follower", "symbol", "session", "entry_model", "confirm_bars", "rr_target"
-    ]):
+    for (leader, follower, symbol, session, em, cb, rr), g in ydf.groupby(
+        ["leader", "follower", "symbol", "session", "entry_model", "confirm_bars", "rr_target"]
+    ):
         n_base = int(g["n_base"].sum())
         n_same = int(g["n_same"].sum())
         n_opp = int(g["n_opp"].sum())
@@ -147,28 +152,30 @@ def aggregate(ydf: pd.DataFrame) -> pd.DataFrame:
                 test_opp = float(g25["sum_opp"].sum()) / n_test_opp
 
         years_cov = max(1, int((g["n_base"] >= 200).sum()))
-        rows.append({
-            "leader": leader,
-            "follower": follower,
-            "symbol": symbol,
-            "session": session,
-            "entry_model": em,
-            "confirm_bars": int(cb),
-            "rr_target": float(rr),
-            "n_base": n_base,
-            "n_same": n_same,
-            "n_opp": n_opp,
-            "sigyr_same": n_same / years_cov,
-            "sigyr_opp": n_opp / years_cov,
-            "avg_same": avg_same,
-            "avg_opp": avg_opp,
-            "uplift_same_vs_opp": uplift_same_vs_opp,
-            "uplift_opp_vs_same": uplift_opp_vs_same,
-            "test2025_same": test_same,
-            "test2025_opp": test_opp,
-            "n_test_same": n_test_same,
-            "n_test_opp": n_test_opp,
-        })
+        rows.append(
+            {
+                "leader": leader,
+                "follower": follower,
+                "symbol": symbol,
+                "session": session,
+                "entry_model": em,
+                "confirm_bars": int(cb),
+                "rr_target": float(rr),
+                "n_base": n_base,
+                "n_same": n_same,
+                "n_opp": n_opp,
+                "sigyr_same": n_same / years_cov,
+                "sigyr_opp": n_opp / years_cov,
+                "avg_same": avg_same,
+                "avg_opp": avg_opp,
+                "uplift_same_vs_opp": uplift_same_vs_opp,
+                "uplift_opp_vs_same": uplift_opp_vs_same,
+                "test2025_same": test_same,
+                "test2025_opp": test_opp,
+                "n_test_same": n_test_same,
+                "n_test_opp": n_test_opp,
+            }
+        )
 
     return pd.DataFrame(rows)
 
@@ -202,11 +209,15 @@ def main() -> int:
     all_df = pd.concat(parts, ignore_index=True)
     all_df.to_csv(p_all, index=False)
 
-    top_same = all_df[(all_df["avg_same"] > 0) & (all_df["uplift_same_vs_opp"] > 0.18) & (all_df["test2025_same"].fillna(-999) > 0)].copy()
+    top_same = all_df[
+        (all_df["avg_same"] > 0) & (all_df["uplift_same_vs_opp"] > 0.18) & (all_df["test2025_same"].fillna(-999) > 0)
+    ].copy()
     top_same = top_same.sort_values(["avg_same", "uplift_same_vs_opp"], ascending=False)
     top_same.to_csv(p_top_same, index=False)
 
-    top_opp = all_df[(all_df["avg_opp"] > 0) & (all_df["uplift_opp_vs_same"] > 0.18) & (all_df["test2025_opp"].fillna(-999) > 0)].copy()
+    top_opp = all_df[
+        (all_df["avg_opp"] > 0) & (all_df["uplift_opp_vs_same"] > 0.18) & (all_df["test2025_opp"].fillna(-999) > 0)
+    ].copy()
     top_opp = top_opp.sort_values(["avg_opp", "uplift_opp_vs_same"], ascending=False)
     top_opp.to_csv(p_top_opp, index=False)
 
@@ -221,12 +232,16 @@ def main() -> int:
         "## Top SAME",
     ]
     for r in top_same.head(12).itertuples(index=False):
-        lines.append(f"- {r.leader}->{r.follower} {r.entry_model}/CB{r.confirm_bars}/RR{r.rr_target}: avg_same={r.avg_same:+.4f}, Δsame-opp={r.uplift_same_vs_opp:+.4f}, sig/yr={r.sigyr_same:.1f}, test25={r.test2025_same:+.4f}")
+        lines.append(
+            f"- {r.leader}->{r.follower} {r.entry_model}/CB{r.confirm_bars}/RR{r.rr_target}: avg_same={r.avg_same:+.4f}, Δsame-opp={r.uplift_same_vs_opp:+.4f}, sig/yr={r.sigyr_same:.1f}, test25={r.test2025_same:+.4f}"
+        )
 
     lines.append("")
     lines.append("## Top OPP")
     for r in top_opp.head(12).itertuples(index=False):
-        lines.append(f"- {r.leader}->{r.follower} {r.entry_model}/CB{r.confirm_bars}/RR{r.rr_target}: avg_opp={r.avg_opp:+.4f}, Δopp-same={r.uplift_opp_vs_same:+.4f}, sig/yr={r.sigyr_opp:.1f}, test25={r.test2025_opp:+.4f}")
+        lines.append(
+            f"- {r.leader}->{r.follower} {r.entry_model}/CB{r.confirm_bars}/RR{r.rr_target}: avg_opp={r.avg_opp:+.4f}, Δopp-same={r.uplift_opp_vs_same:+.4f}, sig/yr={r.sigyr_opp:.1f}, test25={r.test2025_opp:+.4f}"
+        )
 
     p_md.write_text("\n".join(lines), encoding="utf-8")
 

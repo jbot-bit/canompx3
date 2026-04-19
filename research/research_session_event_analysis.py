@@ -54,6 +54,7 @@ ADJACENT = {
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
+
 def sharpe(rs):
     """Sharpe ratio from list of R-multiples."""
     if len(rs) < 3:
@@ -63,9 +64,9 @@ def sharpe(rs):
     return m / s if s > 0 else 0.0
 
 
-def compute_filtered_dst_split(con, instrument, orb_label, entry_model,
-                                rr_target, confirm_bars, filter_type,
-                                orb_minutes=5, dst_driver="US"):
+def compute_filtered_dst_split(
+    con, instrument, orb_label, entry_model, rr_target, confirm_bars, filter_type, orb_minutes=5, dst_driver="US"
+):
     """Compute winter/summer split from filtered orb_outcomes.
 
     Applies the same filter logic as strategy_discovery:
@@ -97,10 +98,7 @@ def compute_filtered_dst_split(con, instrument, orb_label, entry_model,
           AND o.orb_minutes = $6
           AND o.outcome IN ('win', 'loss')
     """
-    rows = con.execute(
-        sql, [instrument, orb_label, entry_model,
-              rr_target, confirm_bars, orb_minutes]
-    ).fetchall()
+    rows = con.execute(sql, [instrument, orb_label, entry_model, rr_target, confirm_bars, orb_minutes]).fetchall()
 
     if not rows:
         return None
@@ -117,8 +115,7 @@ def compute_filtered_dst_split(con, instrument, orb_label, entry_model,
             if orb_size is None or orb_size < min_size:
                 continue
         # Skip VOL / DIR filters (can't apply without extra data)
-        if filter_type and (filter_type.startswith("VOL_")
-                            or filter_type.startswith("DIR_")):
+        if filter_type and (filter_type.startswith("VOL_") or filter_type.startswith("DIR_")):
             continue
 
         if is_summer:
@@ -130,8 +127,7 @@ def compute_filtered_dst_split(con, instrument, orb_label, entry_model,
 
     def metrics(rs):
         if not rs:
-            return {"n": 0, "avg_r": None, "total_r": 0.0,
-                    "wr": None, "sharpe": 0.0}
+            return {"n": 0, "avg_r": None, "total_r": 0.0, "wr": None, "sharpe": 0.0}
         wins = sum(1 for r in rs if r > 0)
         return {
             "n": len(rs),
@@ -150,6 +146,7 @@ def compute_filtered_dst_split(con, instrument, orb_label, entry_model,
 
 def load_time_scan(csv_path):
     """Load time scan CSV keyed by (instrument, bris_h, bris_m)."""
+
     def _float(val):
         if val is None or val.strip() == "":
             return None
@@ -197,22 +194,25 @@ def _empty_metrics():
 
 # ── Sections ───────────────────────────────────────────────────────────
 
+
 def section1_aggregate(con, out):
     """Section 1: Fixed vs Dynamic Aggregate Comparison."""
     out.append("## Section 1: Fixed vs Dynamic Aggregate Comparison")
     out.append("")
-    out.append("Top 20 positive-expectancy MGC strategies by Sharpe from "
-               "`experimental_strategies`, with filtered DST splits "
-               "computed from scratch.")
+    out.append(
+        "Top 20 positive-expectancy MGC strategies by Sharpe from "
+        "`experimental_strategies`, with filtered DST splits "
+        "computed from scratch."
+    )
     out.append("")
 
     for fixed, dynamic, dst_driver in SESSION_PAIRS:
-        out.append(f"### {fixed} (fixed) vs {dynamic} (dynamic) "
-                   f"--- DST driver: {dst_driver}")
+        out.append(f"### {fixed} (fixed) vs {dynamic} (dynamic) --- DST driver: {dst_driver}")
         out.append("")
 
         for label in [fixed, dynamic]:
-            strats = con.execute("""
+            strats = con.execute(
+                """
                 SELECT entry_model, rr_target, confirm_bars, filter_type,
                        sharpe_ratio, expectancy_r, sample_size
                 FROM experimental_strategies
@@ -220,11 +220,12 @@ def section1_aggregate(con, out):
                   AND expectancy_r > 0 AND sample_size >= 20
                 ORDER BY sharpe_ratio DESC
                 LIMIT 20
-            """, [label]).fetchall()
+            """,
+                [label],
+            ).fetchall()
 
             if not strats:
-                out.append(f"**{label}:** No positive-expectancy strategies "
-                           f"with N>=20 found.")
+                out.append(f"**{label}:** No positive-expectancy strategies with N>=20 found.")
                 out.append("")
                 continue
 
@@ -235,8 +236,8 @@ def section1_aggregate(con, out):
 
             for em, rr, cb, ft, sr, expr, ss in strats:
                 split = compute_filtered_dst_split(
-                    con, "MGC", label, em, rr, cb, ft,
-                    orb_minutes=5, dst_driver=dst_driver)
+                    con, "MGC", label, em, rr, cb, ft, orb_minutes=5, dst_driver=dst_driver
+                )
                 if split is None:
                     continue
                 w, s, c = split["winter"], split["summer"], split["combined"]
@@ -259,7 +260,8 @@ def section1_aggregate(con, out):
                     f"- Winter: mean avgR={fmt_r(statistics.mean(winter_rs))}, "
                     f"median={fmt_r(statistics.median(winter_rs))}, "
                     f"mean Sharpe={statistics.mean(winter_sharpes):.4f}, "
-                    f"mean N={sum(winter_ns)/len(winter_ns):.0f}")
+                    f"mean N={sum(winter_ns) / len(winter_ns):.0f}"
+                )
             else:
                 out.append("- Winter: no data")
             if summer_rs:
@@ -267,14 +269,16 @@ def section1_aggregate(con, out):
                     f"- Summer: mean avgR={fmt_r(statistics.mean(summer_rs))}, "
                     f"median={fmt_r(statistics.median(summer_rs))}, "
                     f"mean Sharpe={statistics.mean(summer_sharpes):.4f}, "
-                    f"mean N={sum(summer_ns)/len(summer_ns):.0f}")
+                    f"mean N={sum(summer_ns) / len(summer_ns):.0f}"
+                )
             else:
                 out.append("- Summer: no data")
             if combined_rs:
                 out.append(
                     f"- Combined: mean avgR="
                     f"{fmt_r(statistics.mean(combined_rs))}, "
-                    f"median={fmt_r(statistics.median(combined_rs))}")
+                    f"median={fmt_r(statistics.median(combined_rs))}"
+                )
             out.append("")
 
         out.append("---")
@@ -283,13 +287,14 @@ def section1_aggregate(con, out):
 
 def section2_matched_pair(con, out):
     """Section 2: Matched Pair Deep Dive for WINTER-DOM 0900 strategies."""
-    out.append("## Section 2: Matched Pair Deep Dive "
-               "--- WINTER-DOM 0900 Strategies")
+    out.append("## Section 2: Matched Pair Deep Dive --- WINTER-DOM 0900 Strategies")
     out.append("")
-    out.append("The 4 validated WINTER-DOM MGC 0900 strategies "
-               "(all E3/CB1/ORB_G5) compared with CME_OPEN using "
-               "identical parameters.  Splits computed from filtered "
-               "outcomes (double-break excluded, G5 size filter applied).")
+    out.append(
+        "The 4 validated WINTER-DOM MGC 0900 strategies "
+        "(all E3/CB1/ORB_G5) compared with CME_OPEN using "
+        "identical parameters.  Splits computed from filtered "
+        "outcomes (double-break excluded, G5 size filter applied)."
+    )
     out.append("")
 
     validated_0900 = con.execute("""
@@ -307,20 +312,22 @@ def section2_matched_pair(con, out):
         out.append("")
         return validated_0900
 
-    out.append("| Strategy | RR | 0900 W avgR (N) | 0900 S avgR (N) "
-               "| CME W avgR (N) | CME S avgR (N) | CME Comb avgR (N) "
-               "| Signal |")
-    out.append("|----------|----|-----------------|-----------------"
-               "|----------------|----------------|-------------------"
-               "|--------|")
+    out.append(
+        "| Strategy | RR | 0900 W avgR (N) | 0900 S avgR (N) "
+        "| CME W avgR (N) | CME S avgR (N) | CME Comb avgR (N) "
+        "| Signal |"
+    )
+    out.append(
+        "|----------|----|-----------------|-----------------"
+        "|----------------|----------------|-------------------"
+        "|--------|"
+    )
 
     for sid, em, rr, cb, ft, ss, expr, sr in validated_0900:
-        fixed_split = compute_filtered_dst_split(
-            con, "MGC", "0900", em, rr, cb, ft,
-            orb_minutes=5, dst_driver="US")
+        fixed_split = compute_filtered_dst_split(con, "MGC", "0900", em, rr, cb, ft, orb_minutes=5, dst_driver="US")
         dynamic_split = compute_filtered_dst_split(
-            con, "MGC", "CME_OPEN", em, rr, cb, ft,
-            orb_minutes=5, dst_driver="US")
+            con, "MGC", "CME_OPEN", em, rr, cb, ft, orb_minutes=5, dst_driver="US"
+        )
 
         fw = fixed_split["winter"] if fixed_split else _empty_metrics()
         fs = fixed_split["summer"] if fixed_split else _empty_metrics()
@@ -331,8 +338,7 @@ def section2_matched_pair(con, out):
         # Signal logic
         signal = "UNCLEAR"
         if dc["avg_r"] is not None and dc["avg_r"] > 0:
-            if (dw["avg_r"] is not None and dw["avg_r"] > 0
-                    and ds["avg_r"] is not None and ds["avg_r"] > 0):
+            if dw["avg_r"] is not None and dw["avg_r"] > 0 and ds["avg_r"] is not None and ds["avg_r"] > 0:
                 signal = "EVENT"
             else:
                 signal = "EVENT (partial)"
@@ -357,19 +363,16 @@ def section2_matched_pair(con, out):
     # ── With vs Without Filter ─────────────────────────────────────
     out.append("### Filter Effect: CME_OPEN with G5 vs NO_FILTER")
     out.append("")
-    out.append("Isolates whether the G5 filter is the reason CME_OPEN "
-               "diverges from the time-scan 0800 signal.")
+    out.append("Isolates whether the G5 filter is the reason CME_OPEN diverges from the time-scan 0800 signal.")
     out.append("")
     out.append("| RR | CME G5 avgR (N) | CME NoFilter avgR (N) | Delta |")
     out.append("|----|-----------------|----------------------|-------|")
 
     for sid, em, rr, cb, ft, ss, expr, sr in validated_0900:
-        with_f = compute_filtered_dst_split(
-            con, "MGC", "CME_OPEN", em, rr, cb, ft,
-            orb_minutes=5, dst_driver="US")
+        with_f = compute_filtered_dst_split(con, "MGC", "CME_OPEN", em, rr, cb, ft, orb_minutes=5, dst_driver="US")
         no_f = compute_filtered_dst_split(
-            con, "MGC", "CME_OPEN", em, rr, cb, "NO_FILTER",
-            orb_minutes=5, dst_driver="US")
+            con, "MGC", "CME_OPEN", em, rr, cb, "NO_FILTER", orb_minutes=5, dst_driver="US"
+        )
 
         wf_c = with_f["combined"] if with_f else _empty_metrics()
         nf_c = no_f["combined"] if no_f else _empty_metrics()
@@ -378,10 +381,7 @@ def section2_matched_pair(con, out):
             delta = wf_c["avg_r"] - nf_c["avg_r"]
 
         out.append(
-            f"| {rr} "
-            f"| {fmt_r(wf_c['avg_r'])} ({wf_c['n']}) "
-            f"| {fmt_r(nf_c['avg_r'])} ({nf_c['n']}) "
-            f"| {fmt_r(delta)} |"
+            f"| {rr} | {fmt_r(wf_c['avg_r'])} ({wf_c['n']}) | {fmt_r(nf_c['avg_r'])} ({nf_c['n']}) | {fmt_r(delta)} |"
         )
 
     out.append("")
@@ -389,24 +389,21 @@ def section2_matched_pair(con, out):
     # ── Entry model comparison ─────────────────────────────────────
     out.append("### Entry Model Effect: CME_OPEN E3 vs E1")
     out.append("")
-    out.append("Time scan uses E1; validated 0900 strategies use E3. "
-               "Does E1 at CME_OPEN show the edge the time scan sees?")
+    out.append(
+        "Time scan uses E1; validated 0900 strategies use E3. Does E1 at CME_OPEN show the edge the time scan sees?"
+    )
     out.append("")
-    out.append("| RR | CME E3/G5 avgR (N) | CME E1/G5 avgR (N) "
-               "| CME E1/G4 avgR (N) |")
-    out.append("|----|--------------------|--------------------|"
-               "--------------------|")
+    out.append("| RR | CME E3/G5 avgR (N) | CME E1/G5 avgR (N) | CME E1/G4 avgR (N) |")
+    out.append("|----|--------------------|--------------------|--------------------|")
 
     for sid, em, rr, cb, ft, ss, expr, sr in validated_0900:
-        e3_split = compute_filtered_dst_split(
-            con, "MGC", "CME_OPEN", "E3", rr, 1, ft,
-            orb_minutes=5, dst_driver="US")
+        e3_split = compute_filtered_dst_split(con, "MGC", "CME_OPEN", "E3", rr, 1, ft, orb_minutes=5, dst_driver="US")
         e1_g5 = compute_filtered_dst_split(
-            con, "MGC", "CME_OPEN", "E1", rr, 2, "ORB_G5",
-            orb_minutes=5, dst_driver="US")
+            con, "MGC", "CME_OPEN", "E1", rr, 2, "ORB_G5", orb_minutes=5, dst_driver="US"
+        )
         e1_g4 = compute_filtered_dst_split(
-            con, "MGC", "CME_OPEN", "E1", rr, 2, "ORB_G4",
-            orb_minutes=5, dst_driver="US")
+            con, "MGC", "CME_OPEN", "E1", rr, 2, "ORB_G4", orb_minutes=5, dst_driver="US"
+        )
 
         e3c = e3_split["combined"] if e3_split else _empty_metrics()
         e1g5c = e1_g5["combined"] if e1_g5 else _empty_metrics()
@@ -428,13 +425,14 @@ def section2_matched_pair(con, out):
 
 def section3_stable(con, out):
     """Section 3: STABLE Session Analysis --- 1800 vs LONDON_OPEN."""
-    out.append("## Section 3: STABLE Session Analysis "
-               "--- 1800 vs LONDON_OPEN")
+    out.append("## Section 3: STABLE Session Analysis --- 1800 vs LONDON_OPEN")
     out.append("")
-    out.append("Note: In winter (GMT), LONDON_OPEN resolves to 18:00 "
-               "Brisbane --- identical to the 1800 fixed session. "
-               "The winter columns should match.  The comparison is "
-               "purely about summer behavior (17:00 vs 18:00 Brisbane).")
+    out.append(
+        "Note: In winter (GMT), LONDON_OPEN resolves to 18:00 "
+        "Brisbane --- identical to the 1800 fixed session. "
+        "The winter columns should match.  The comparison is "
+        "purely about summer behavior (17:00 vs 18:00 Brisbane)."
+    )
     out.append("")
 
     strats_1800 = con.execute("""
@@ -452,32 +450,24 @@ def section3_stable(con, out):
         out.append("")
         return
 
-    out.append("| Params | 1800 W avgR (N) | 1800 S avgR (N) "
-               "| 1800 Verdict | LDN W avgR (N) | LDN S avgR (N) "
-               "| LDN Verdict |")
-    out.append("|--------|-----------------|-----------------|"
-               "-------------|----------------|----------------|"
-               "-------------|")
+    out.append(
+        "| Params | 1800 W avgR (N) | 1800 S avgR (N) | 1800 Verdict | LDN W avgR (N) | LDN S avgR (N) | LDN Verdict |"
+    )
+    out.append(
+        "|--------|-----------------|-----------------|-------------|----------------|----------------|-------------|"
+    )
 
     for em, rr, cb, ft, sr, expr, ss in strats_1800:
-        fsplit = compute_filtered_dst_split(
-            con, "MGC", "1800", em, rr, cb, ft,
-            orb_minutes=5, dst_driver="UK")
-        dsplit = compute_filtered_dst_split(
-            con, "MGC", "LONDON_OPEN", em, rr, cb, ft,
-            orb_minutes=5, dst_driver="UK")
+        fsplit = compute_filtered_dst_split(con, "MGC", "1800", em, rr, cb, ft, orb_minutes=5, dst_driver="UK")
+        dsplit = compute_filtered_dst_split(con, "MGC", "LONDON_OPEN", em, rr, cb, ft, orb_minutes=5, dst_driver="UK")
 
         fw = fsplit["winter"] if fsplit else _empty_metrics()
         fs = fsplit["summer"] if fsplit else _empty_metrics()
         dw = dsplit["winter"] if dsplit else _empty_metrics()
         ds = dsplit["summer"] if dsplit else _empty_metrics()
 
-        fv = classify_dst_verdict(
-            fw["avg_r"], fs["avg_r"], fw["n"], fs["n"]
-        ) if fsplit else "NO-DATA"
-        dv = classify_dst_verdict(
-            dw["avg_r"], ds["avg_r"], dw["n"], ds["n"]
-        ) if dsplit else "NO-DATA"
+        fv = classify_dst_verdict(fw["avg_r"], fs["avg_r"], fw["n"], fs["n"]) if fsplit else "NO-DATA"
+        dv = classify_dst_verdict(dw["avg_r"], ds["avg_r"], dw["n"], ds["n"]) if dsplit else "NO-DATA"
 
         params = f"{em}/RR{rr}/CB{cb}/{ft}"
         out.append(
@@ -509,17 +499,13 @@ def section3_stable(con, out):
     if not strats_0030:
         out.append("*No positive-expectancy 0030 strategies with N>=20.*")
     else:
-        out.append("| Params | 0030 W (N) | 0030 S (N) "
-                   "| US_EQ W (N) | US_EQ S (N) |")
-        out.append("|--------|-----------|-----------|"
-                   "------------|------------|")
+        out.append("| Params | 0030 W (N) | 0030 S (N) | US_EQ W (N) | US_EQ S (N) |")
+        out.append("|--------|-----------|-----------|------------|------------|")
         for em, rr, cb, ft, sr, expr, ss in strats_0030:
-            fsplit = compute_filtered_dst_split(
-                con, "MGC", "0030", em, rr, cb, ft,
-                orb_minutes=5, dst_driver="US")
+            fsplit = compute_filtered_dst_split(con, "MGC", "0030", em, rr, cb, ft, orb_minutes=5, dst_driver="US")
             dsplit = compute_filtered_dst_split(
-                con, "MGC", "US_EQUITY_OPEN", em, rr, cb, ft,
-                orb_minutes=5, dst_driver="US")
+                con, "MGC", "US_EQUITY_OPEN", em, rr, cb, ft, orb_minutes=5, dst_driver="US"
+            )
             fw = fsplit["winter"] if fsplit else _empty_metrics()
             fs = fsplit["summer"] if fsplit else _empty_metrics()
             dw = dsplit["winter"] if dsplit else _empty_metrics()
@@ -540,15 +526,15 @@ def section3_stable(con, out):
 
 def section4_adjacent_times(out):
     """Section 4: +/-1hr Adjacent Time Analysis from time scan CSV."""
-    out.append("## Section 4: Adjacent Time Analysis "
-               "(from time scan CSV)")
+    out.append("## Section 4: Adjacent Time Analysis (from time scan CSV)")
     out.append("")
-    out.append("Data from `orb_time_scan_full.csv` (RR=2.0, G4+, E1 entry, "
-               "US DST classification for winter/summer).")
+    out.append("Data from `orb_time_scan_full.csv` (RR=2.0, G4+, E1 entry, US DST classification for winter/summer).")
     out.append("")
-    out.append("**Caveat:** The time scan uses US DST for ALL sessions. "
-               "For 1800 (UK DST driver), the winter/summer split here "
-               "uses US DST, not UK DST. Interpret with care.")
+    out.append(
+        "**Caveat:** The time scan uses US DST for ALL sessions. "
+        "For 1800 (UK DST driver), the winter/summer split here "
+        "uses US DST, not UK DST. Interpret with care."
+    )
     out.append("")
 
     if not TIME_SCAN_CSV.exists():
@@ -561,13 +547,12 @@ def section4_adjacent_times(out):
     # ── Q1: Does the edge follow the event into summer? ────────────
     out.append("### Does the edge follow the event into summer?")
     out.append("")
-    out.append("Compare: fixed-time winter avgR vs event-shifted summer "
-               "avgR.  If both positive, edge may follow the event.")
+    out.append(
+        "Compare: fixed-time winter avgR vs event-shifted summer avgR.  If both positive, edge may follow the event."
+    )
     out.append("")
-    out.append("| Fixed | Fixed-Winter avgR (N) "
-               "| Event-Shifted Summer avgR (N) | Follows? |")
-    out.append("|-------|----------------------|------------------------------|"
-               "----------|")
+    out.append("| Fixed | Fixed-Winter avgR (N) | Event-Shifted Summer avgR (N) | Follows? |")
+    out.append("|-------|----------------------|------------------------------|----------|")
 
     for sess, adj in ADJACENT.items():
         fk = ("MGC", adj["winter_h"], adj["winter_m"])
@@ -599,8 +584,7 @@ def section4_adjacent_times(out):
     out.append("")
 
     # ── Q2: Does the fixed time retain value in summer? ────────────
-    out.append("### Does the fixed time retain value when the event "
-               "has moved away?")
+    out.append("### Does the fixed time retain value when the event has moved away?")
     out.append("")
     out.append("| Fixed | Fixed-Summer avgR (N) | Retains? |")
     out.append("|-------|-----------------------|----------|")
@@ -619,24 +603,17 @@ def section4_adjacent_times(out):
             else:
                 retains = "NO"
 
-        out.append(
-            f"| {sess} "
-            f"| {fmt_r(fs_avgr)} (N={fd.get('n_summer', '?')}) "
-            f"| {retains} |"
-        )
+        out.append(f"| {sess} | {fmt_r(fs_avgr)} (N={fd.get('n_summer', '?')}) | {retains} |")
 
     out.append("")
 
     # ── Full 4-point grid ──────────────────────────────────────────
     out.append("### Full 4-Point Comparison")
     out.append("")
-    out.append("Each cell: avgR at that (Brisbane time, DST regime) "
-               "from the time scan.")
+    out.append("Each cell: avgR at that (Brisbane time, DST regime) from the time scan.")
     out.append("")
-    out.append("| Session | Fixed-Winter | Fixed-Summer "
-               "| Shifted-Summer | Shifted-Winter |")
-    out.append("|---------|-------------|-------------|"
-               "---------------|---------------|")
+    out.append("| Session | Fixed-Winter | Fixed-Summer | Shifted-Summer | Shifted-Winter |")
+    out.append("|---------|-------------|-------------|---------------|---------------|")
 
     for sess, adj in ADJACENT.items():
         fk = ("MGC", adj["winter_h"], adj["winter_m"])
@@ -665,10 +642,8 @@ def section5_verdict(con, out, validated_0900):
     """Section 5: Verdict Table + Contradictions."""
     out.append("## Section 5: Verdict Table")
     out.append("")
-    out.append("| Session Pair | Edge Follows | Key Evidence "
-               "| Recommendation |")
-    out.append("|-------------|-------------|-------------|"
-               "----------------|")
+    out.append("| Session Pair | Edge Follows | Key Evidence | Recommendation |")
+    out.append("|-------------|-------------|-------------|----------------|")
 
     for fixed, dynamic, dst_driver in SESSION_PAIRS:
         if fixed == "0900" and validated_0900:
@@ -676,12 +651,10 @@ def section5_verdict(con, out, validated_0900):
             dyn_combined, fix_w, fix_s = [], [], []
             dyn_w, dyn_s = [], []
             for sid, em, rr, cb, ft, ss, expr, sr in validated_0900:
-                fs = compute_filtered_dst_split(
-                    con, "MGC", fixed, em, rr, cb, ft,
-                    orb_minutes=5, dst_driver=dst_driver)
+                fs = compute_filtered_dst_split(con, "MGC", fixed, em, rr, cb, ft, orb_minutes=5, dst_driver=dst_driver)
                 ds = compute_filtered_dst_split(
-                    con, "MGC", dynamic, em, rr, cb, ft,
-                    orb_minutes=5, dst_driver=dst_driver)
+                    con, "MGC", dynamic, em, rr, cb, ft, orb_minutes=5, dst_driver=dst_driver
+                )
                 if fs:
                     if fs["winter"]["avg_r"] is not None:
                         fix_w.append(fs["winter"]["avg_r"])
@@ -703,44 +676,40 @@ def section5_verdict(con, out, validated_0900):
 
             if m_dc > 0 and m_dw > 0 and m_ds > 0:
                 verdict = "EVENT"
-                evidence = (f"CME_OPEN +avgR both regimes "
-                            f"(W:{fmt_r(m_dw)}, S:{fmt_r(m_ds)})")
+                evidence = f"CME_OPEN +avgR both regimes (W:{fmt_r(m_dw)}, S:{fmt_r(m_ds)})"
             elif m_fw > 0 and m_fs <= 0 and m_dc <= 0:
                 verdict = "CLOCK (winter)"
-                evidence = (f"0900 winter edge ({fmt_r(m_fw)}), "
-                            f"CME_OPEN combined {fmt_r(m_dc)}")
+                evidence = f"0900 winter edge ({fmt_r(m_fw)}), CME_OPEN combined {fmt_r(m_dc)}"
             elif m_fw > 0 and m_dc > 0:
                 verdict = "UNCLEAR"
-                evidence = (f"Both positive: fixed W={fmt_r(m_fw)}, "
-                            f"dynamic comb={fmt_r(m_dc)}")
+                evidence = f"Both positive: fixed W={fmt_r(m_fw)}, dynamic comb={fmt_r(m_dc)}"
             elif m_fw > 0 and m_fs > 0:
                 verdict = "BOTH"
-                evidence = (f"Fixed works both regimes "
-                            f"(W:{fmt_r(m_fw)}, S:{fmt_r(m_fs)})")
+                evidence = f"Fixed works both regimes (W:{fmt_r(m_fw)}, S:{fmt_r(m_fs)})"
             else:
                 verdict = "UNCLEAR"
-                evidence = (f"F_W={fmt_r(m_fw)}, F_S={fmt_r(m_fs)}, "
-                            f"D={fmt_r(m_dc)}")
+                evidence = f"F_W={fmt_r(m_fw)}, F_S={fmt_r(m_fs)}, D={fmt_r(m_dc)}"
             rec = "See Section 2 deep dive"
         else:
             # Use top experimental strategy for this fixed session
-            top = con.execute("""
+            top = con.execute(
+                """
                 SELECT entry_model, rr_target, confirm_bars, filter_type
                 FROM experimental_strategies
                 WHERE instrument = 'MGC' AND orb_label = $1
                   AND expectancy_r > 0 AND sample_size >= 20
                 ORDER BY sharpe_ratio DESC
                 LIMIT 1
-            """, [fixed]).fetchone()
+            """,
+                [fixed],
+            ).fetchone()
 
             if top:
                 em, rr, cb, ft = top
-                fs = compute_filtered_dst_split(
-                    con, "MGC", fixed, em, rr, cb, ft,
-                    orb_minutes=5, dst_driver=dst_driver)
+                fs = compute_filtered_dst_split(con, "MGC", fixed, em, rr, cb, ft, orb_minutes=5, dst_driver=dst_driver)
                 ds = compute_filtered_dst_split(
-                    con, "MGC", dynamic, em, rr, cb, ft,
-                    orb_minutes=5, dst_driver=dst_driver)
+                    con, "MGC", dynamic, em, rr, cb, ft, orb_minutes=5, dst_driver=dst_driver
+                )
 
                 if fs and ds:
                     fw_r = fs["winter"]["avg_r"] or 0
@@ -760,10 +729,8 @@ def section5_verdict(con, out, validated_0900):
                         evidence = "Fixed winter works, dynamic fails"
                     else:
                         verdict = "UNCLEAR"
-                        evidence = (f"F_W={fmt_r(fw_r)}, "
-                                    f"F_S={fmt_r(fs_r)}, "
-                                    f"D_comb={fmt_r(dc_r)}")
-                    rec = (f"Params: {em}/RR{rr}/CB{cb}/{ft}")
+                        evidence = f"F_W={fmt_r(fw_r)}, F_S={fmt_r(fs_r)}, D_comb={fmt_r(dc_r)}"
+                    rec = f"Params: {em}/RR{rr}/CB{cb}/{ft}"
                 else:
                     verdict = "NO-DATA"
                     evidence = "Missing split data"
@@ -800,42 +767,44 @@ def section5_verdict(con, out, validated_0900):
     if TIME_SCAN_CSV.exists():
         ts = load_time_scan(TIME_SCAN_CSV)
         ts_0800 = ts.get(("MGC", 8, 0), {})
-        out.append(f"   - Time scan at 08:00 summer: "
-                   f"avgR={fmt_r(ts_0800.get('avg_r_summer'))} "
-                   f"(N={ts_0800.get('n_summer', '?')})")
-    out.append(f"   - CME_OPEN all strategies: "
-               f"mean expR={fmt_r(cme_avg[0])} "
-               f"(N={cme_avg[1]} strategies)")
-    out.append(f"   - CME_OPEN positive strategies: "
-               f"mean expR={fmt_r(cme_pos[0])} "
-               f"(N={cme_pos[1]} strategies)")
+        out.append(
+            f"   - Time scan at 08:00 summer: "
+            f"avgR={fmt_r(ts_0800.get('avg_r_summer'))} "
+            f"(N={ts_0800.get('n_summer', '?')})"
+        )
+    out.append(f"   - CME_OPEN all strategies: mean expR={fmt_r(cme_avg[0])} (N={cme_avg[1]} strategies)")
+    out.append(f"   - CME_OPEN positive strategies: mean expR={fmt_r(cme_pos[0])} (N={cme_pos[1]} strategies)")
     out.append("   - Explanation candidates:")
-    out.append("     - Time scan = RR2.0/E1/G4+; "
-               "validated 0900 = E3/various RR/G5")
+    out.append("     - Time scan = RR2.0/E1/G4+; validated 0900 = E3/various RR/G5")
     out.append("     - Entry model (E1 vs E3) may capture different edge")
-    out.append("     - CME_OPEN average pulled down by many negative "
-               "strategy combos (grid of 2376)")
+    out.append("     - CME_OPEN average pulled down by many negative strategy combos (grid of 2376)")
     out.append("")
 
-    out.append("2. **LONDON_OPEN winter = 1800 winter:** "
-               "In winter, LONDON_OPEN resolves to 18:00 Brisbane "
-               "(same as 1800). Winter metrics should be nearly identical "
-               "between the two. Any difference indicates data coverage "
-               "or rounding variance.")
+    out.append(
+        "2. **LONDON_OPEN winter = 1800 winter:** "
+        "In winter, LONDON_OPEN resolves to 18:00 Brisbane "
+        "(same as 1800). Winter metrics should be nearly identical "
+        "between the two. Any difference indicates data coverage "
+        "or rounding variance."
+    )
     out.append("")
 
-    out.append("3. **Sample sizes:** Dynamic sessions have fewer "
-               "outcome rows (~60-80% of fixed) because they were "
-               "added to the pipeline later. This reduces statistical "
-               "power for regime comparisons.")
+    out.append(
+        "3. **Sample sizes:** Dynamic sessions have fewer "
+        "outcome rows (~60-80% of fixed) because they were "
+        "added to the pipeline later. This reduces statistical "
+        "power for regime comparisons."
+    )
     out.append("")
 
-    out.append("4. **Time scan uses US DST universally:** The "
-               "winter/summer split in the time scan CSV always uses "
-               "US DST (EDT/EST). For the 1800/LONDON_OPEN pair "
-               "(UK DST driver), Section 4 numbers are classified by "
-               "US DST, not UK DST. This matters during the ~3-week "
-               "gap when US and UK DST don't overlap.")
+    out.append(
+        "4. **Time scan uses US DST universally:** The "
+        "winter/summer split in the time scan CSV always uses "
+        "US DST (EDT/EST). For the 1800/LONDON_OPEN pair "
+        "(UK DST driver), Section 4 numbers are classified by "
+        "US DST, not UK DST. This matters during the ~3-week "
+        "gap when US and UK DST don't overlap."
+    )
     out.append("")
 
     out.append("---")
@@ -843,6 +812,7 @@ def section5_verdict(con, out, validated_0900):
 
 
 # ── Main ───────────────────────────────────────────────────────────────
+
 
 def main():
     print(f"Database: {DB_PATH}")
@@ -864,27 +834,28 @@ def main():
     out = []
     out.append("# Session Time vs Market Event Analysis")
     out.append("")
-    out.append("**P0 Research:** Does the trading edge follow the "
-               "**clock time** (fixed Brisbane session) or the "
-               "**market event** (DST-adjusted dynamic session)?")
+    out.append(
+        "**P0 Research:** Does the trading edge follow the "
+        "**clock time** (fixed Brisbane session) or the "
+        "**market event** (DST-adjusted dynamic session)?"
+    )
     out.append("")
-    out.append("**Method:** All DST splits computed from scratch using "
-               "filtered `orb_outcomes` joined with `daily_features`. "
-               "Applies ORB size filter + double-break exclusion. "
-               "Never reads pre-computed `dst_verdict` / "
-               "`dst_winter_avg_r` / `dst_summer_avg_r` columns.")
+    out.append(
+        "**Method:** All DST splits computed from scratch using "
+        "filtered `orb_outcomes` joined with `daily_features`. "
+        "Applies ORB size filter + double-break exclusion. "
+        "Never reads pre-computed `dst_verdict` / "
+        "`dst_winter_avg_r` / `dst_summer_avg_r` columns."
+    )
     out.append("")
     out.append("**Fixed/Dynamic Pairs:**")
     out.append("")
     out.append("| Fixed | Dynamic | DST Driver | Summer Divergence |")
     out.append("|-------|---------|-----------|-------------------|")
     out.append("| 0900 | CME_OPEN | US | CME opens at 0800 in summer |")
-    out.append("| 1800 | LONDON_OPEN | UK | London opens at 1700 "
-               "in summer |")
-    out.append("| 0030 | US_EQUITY_OPEN | US | NYSE opens at 2330 "
-               "in summer |")
-    out.append("| 2300 | US_DATA_OPEN | US | 30min off both regimes "
-               "(special) |")
+    out.append("| 1800 | LONDON_OPEN | UK | London opens at 1700 in summer |")
+    out.append("| 0030 | US_EQUITY_OPEN | US | NYSE opens at 2330 in summer |")
+    out.append("| 2300 | US_DATA_OPEN | US | 30min off both regimes (special) |")
     out.append("")
     out.append("---")
     out.append("")

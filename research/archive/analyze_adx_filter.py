@@ -49,8 +49,8 @@ ENTRY_MODELS = ["E1", "E2"]
 
 REGIME_BOUNDARY = date(2025, 1, 1)
 
-def compute_adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
-                period: int = 14) -> np.ndarray:
+
+def compute_adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int = 14) -> np.ndarray:
     """Compute Wilder's ADX from high/low/close arrays.
 
     Returns array of same length with NaN for first ~2*period elements.
@@ -87,9 +87,9 @@ def compute_adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
     smooth_minus = np.zeros(n)
 
     # Seed
-    atr[period] = tr[1:period + 1].mean()
-    smooth_plus[period] = plus_dm[1:period + 1].mean()
-    smooth_minus[period] = minus_dm[1:period + 1].mean()
+    atr[period] = tr[1 : period + 1].mean()
+    smooth_plus[period] = plus_dm[1 : period + 1].mean()
+    smooth_minus[period] = minus_dm[1 : period + 1].mean()
 
     for i in range(period + 1, n):
         atr[i] = (atr[i - 1] * (period - 1) + tr[i]) / period
@@ -122,27 +122,31 @@ def compute_adx(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray,
 
     return adx
 
+
 def load_bars_5m_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 5-minute bars for one trading day."""
     from pipeline.build_daily_features import compute_trading_day_utc_range
+
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_5m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [start_utc, end_utc]).fetchdf()
+        """,
+            [start_utc, end_utc],
+        ).fetchdf()
     finally:
         con.close()
     return df
 
-def get_adx_at_break_time(
-    bars_5m: pd.DataFrame, break_ts: pd.Timestamp, period: int = 14
-) -> float | None:
+
+def get_adx_at_break_time(bars_5m: pd.DataFrame, break_ts: pd.Timestamp, period: int = 14) -> float | None:
     """Compute ADX_14 value at the time of ORB break.
 
     Uses all 5m bars up to and including the break bar.
@@ -167,12 +171,11 @@ def get_adx_at_break_time(
         return None
 
     subset = bars_5m[mask]
-    adx_values = compute_adx(
-        subset["high"].values, subset["low"].values, subset["close"].values, period
-    )
+    adx_values = compute_adx(subset["high"].values, subset["low"].values, subset["close"].values, period)
 
     last_adx = adx_values[-1]
     return float(last_adx) if not np.isnan(last_adx) else None
+
 
 def load_bars_5m_with_warmup(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 5m bars for current + previous trading day (for ADX warmup).
@@ -191,16 +194,20 @@ def load_bars_5m_with_warmup(db_path: Path, trading_day: date) -> pd.DataFrame:
 
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_5m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [start_utc, end_utc]).fetchdf()
+        """,
+            [start_utc, end_utc],
+        ).fetchdf()
     finally:
         con.close()
     return df
+
 
 def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Load ORB outcomes and compute ADX at break time for each.
@@ -211,7 +218,8 @@ def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.Data
     """
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        features = con.execute("""
+        features = con.execute(
+            """
             SELECT trading_day,
                    orb_0900_break_ts, orb_0900_size, orb_0900_break_dir,
                    orb_1000_break_ts, orb_1000_size, orb_1000_break_dir
@@ -219,15 +227,20 @@ def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.Data
             WHERE symbol = 'MGC' AND orb_minutes = 5
               AND trading_day BETWEEN ? AND ?
             ORDER BY trading_day
-        """, [start, end]).fetchdf()
+        """,
+            [start, end],
+        ).fetchdf()
 
-        outcomes = con.execute("""
+        outcomes = con.execute(
+            """
             SELECT trading_day, orb_label, entry_model, rr_target,
                    confirm_bars, pnl_r, outcome
             FROM orb_outcomes
             WHERE symbol = 'MGC'
               AND trading_day BETWEEN ? AND ?
-        """, [start, end]).fetchdf()
+        """,
+            [start, end],
+        ).fetchdf()
     finally:
         con.close()
 
@@ -239,7 +252,7 @@ def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.Data
 
     for idx, (_, row) in enumerate(features.iterrows()):
         if idx % 200 == 0:
-            print(f"    Computing ADX: day {idx+1}/{total}...")
+            print(f"    Computing ADX: day {idx + 1}/{total}...")
 
         td = row["trading_day"]
         if hasattr(td, "date") and callable(td.date):
@@ -266,9 +279,7 @@ def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.Data
     print(f"    ADX computed for {len(adx_map)} (day, session) pairs")
 
     outcomes["trading_day_str"] = outcomes["trading_day"].astype(str).str[:10]
-    outcomes["adx_at_break"] = outcomes.apply(
-        lambda r: adx_map.get((r["trading_day_str"], r["orb_label"])), axis=1
-    )
+    outcomes["adx_at_break"] = outcomes.apply(lambda r: adx_map.get((r["trading_day_str"], r["orb_label"])), axis=1)
 
     # Join ORB size from daily_features for size filtering
     features["trading_day_str"] = features["trading_day"].astype(str).str[:10]
@@ -280,11 +291,10 @@ def load_orb_outcomes_with_adx(db_path: Path, start: date, end: date) -> pd.Data
             if not pd.isna(sz):
                 size_map[(td_str, orb_label)] = sz
 
-    outcomes["orb_size"] = outcomes.apply(
-        lambda r: size_map.get((r["trading_day_str"], r["orb_label"])), axis=1
-    )
+    outcomes["orb_size"] = outcomes.apply(lambda r: size_map.get((r["trading_day_str"], r["orb_label"])), axis=1)
 
     return outcomes
+
 
 def run_walk_forward(
     db_path: Path,
@@ -312,14 +322,8 @@ def run_walk_forward(
     oos_filtered_dates = []
 
     for w in windows:
-        train_mask = (
-            (valid["trading_day_date"] >= w["train_start"])
-            & (valid["trading_day_date"] <= w["train_end"])
-        )
-        test_mask = (
-            (valid["trading_day_date"] >= w["test_start"])
-            & (valid["trading_day_date"] <= w["test_end"])
-        )
+        train_mask = (valid["trading_day_date"] >= w["train_start"]) & (valid["trading_day_date"] <= w["train_end"])
+        test_mask = (valid["trading_day_date"] >= w["test_start"]) & (valid["trading_day_date"] <= w["test_end"])
 
         train_data = valid[train_mask]
         test_data = valid[test_mask]
@@ -400,16 +404,18 @@ def run_walk_forward(
         final_valid = oos_final.dropna(subset=["pnl_r"])
         oos_filtered_dates.extend(final_valid["trading_day_date"].values)
 
-        window_results.append({
-            "test_start": str(w["test_start"]),
-            "test_end": str(w["test_end"]),
-            "selected": combo_label,
-            "train_sharpe": best_sharpe,
-            "oos_final": oos_f_stats,
-            "oos_size_only": oos_sized_stats,
-            "adx_applied": adx_thresh is not None,
-            "filter_rate": 1 - len(oos_final) / len(oos_sized) if len(oos_sized) > 0 else 0,
-        })
+        window_results.append(
+            {
+                "test_start": str(w["test_start"]),
+                "test_end": str(w["test_end"]),
+                "selected": combo_label,
+                "train_sharpe": best_sharpe,
+                "oos_final": oos_f_stats,
+                "oos_size_only": oos_sized_stats,
+                "adx_applied": adx_thresh is not None,
+                "filter_rate": 1 - len(oos_final) / len(oos_sized) if len(oos_sized) > 0 else 0,
+            }
+        )
 
     combined_filtered = None
     combined_unfiltered = None
@@ -435,6 +441,7 @@ def run_walk_forward(
         "combined_unfiltered": combined_unfiltered,
         "regime_split": regime_split,
     }
+
 
 def _print_go_no_go(combined: dict | None, regime_split: dict | None) -> None:
     """Print GO/NO-GO evaluation."""
@@ -465,6 +472,7 @@ def _print_go_no_go(combined: dict | None, regime_split: dict | None) -> None:
     verdict = "GO" if all_pass else "NO-GO"
     print(f"\n  VERDICT: {verdict}")
 
+
 def main():
     parser = argparse.ArgumentParser(description="ADX Trend Filter overlay analysis")
     parser.add_argument("--db-path", type=Path, default=GOLD_DB_PATH)
@@ -478,10 +486,13 @@ def main():
     print(sep)
     print()
     print("Tests: Does ADX > threshold improve G2/G4-filtered ORB breakout OOS performance?")
-    n_combos = (len(ORB_LABELS) * len(ENTRY_MODELS) * len(RR_TARGETS) * len(SIZE_FILTERS)
-                * (1 + len(ADX_THRESHOLDS)))  # +1 for size-only baseline
-    print(f"Grid: {len(ORB_LABELS)} ORBs x {len(ENTRY_MODELS)} EMs x {len(RR_TARGETS)} RR x "
-          f"{len(SIZE_FILTERS)} size filters x (1 baseline + {len(ADX_THRESHOLDS)} ADX) = {n_combos} combos")
+    n_combos = (
+        len(ORB_LABELS) * len(ENTRY_MODELS) * len(RR_TARGETS) * len(SIZE_FILTERS) * (1 + len(ADX_THRESHOLDS))
+    )  # +1 for size-only baseline
+    print(
+        f"Grid: {len(ORB_LABELS)} ORBs x {len(ENTRY_MODELS)} EMs x {len(RR_TARGETS)} RR x "
+        f"{len(SIZE_FILTERS)} size filters x (1 baseline + {len(ADX_THRESHOLDS)} ADX) = {n_combos} combos"
+    )
     print(f"Size filters: {list(SIZE_FILTERS.keys())}, ADX thresholds: {ADX_THRESHOLDS}")
     print()
 
@@ -497,36 +508,45 @@ def main():
             if f:
                 u_expr = f"{u['expr']:+.3f}" if u else "N/A"
                 adx_tag = " [+ADX]" if w["adx_applied"] else " [size only]"
-                print(f"  {w['test_start']} to {w['test_end']}: {w['selected']}{adx_tag}, "
-                      f"N={f['n']}, ExpR={f['expr']:+.3f} vs size-only={u_expr}")
+                print(
+                    f"  {w['test_start']} to {w['test_end']}: {w['selected']}{adx_tag}, "
+                    f"N={f['n']}, ExpR={f['expr']:+.3f} vs size-only={u_expr}"
+                )
                 if w["adx_applied"]:
                     adx_wins += 1
                 else:
                     size_wins += 1
 
-        print(f"\n  Walk-forward selected ADX in {adx_wins}/{adx_wins+size_wins} windows "
-              f"({size_wins} windows chose size-only)")
+        print(
+            f"\n  Walk-forward selected ADX in {adx_wins}/{adx_wins + size_wins} windows "
+            f"({size_wins} windows chose size-only)"
+        )
 
         if result["combined_filtered"]:
             cf = result["combined_filtered"]
             cu = result["combined_unfiltered"]
-            print(f"\n  COMBINED (ADX FILTERED): N={cf['n']}, WR={cf['wr']:.0%}, "
-                  f"ExpR={cf['expr']:+.3f}, Sharpe={cf['sharpe']:.3f}, "
-                  f"MaxDD={cf['maxdd']:+.1f}R, Total={cf['total']:+.1f}R")
+            print(
+                f"\n  COMBINED (ADX FILTERED): N={cf['n']}, WR={cf['wr']:.0%}, "
+                f"ExpR={cf['expr']:+.3f}, Sharpe={cf['sharpe']:.3f}, "
+                f"MaxDD={cf['maxdd']:+.1f}R, Total={cf['total']:+.1f}R"
+            )
             if cu:
-                print(f"  COMBINED (UNFILTERED):   N={cu['n']}, WR={cu['wr']:.0%}, "
-                      f"ExpR={cu['expr']:+.3f}, Sharpe={cu['sharpe']:.3f}, "
-                      f"MaxDD={cu['maxdd']:+.1f}R, Total={cu['total']:+.1f}R")
-                print(f"  ADX UPLIFT: ExpR {cf['expr'] - cu['expr']:+.3f}, "
-                      f"Sharpe {cf['sharpe'] - cu['sharpe']:+.3f}")
+                print(
+                    f"  COMBINED (UNFILTERED):   N={cu['n']}, WR={cu['wr']:.0%}, "
+                    f"ExpR={cu['expr']:+.3f}, Sharpe={cu['sharpe']:.3f}, "
+                    f"MaxDD={cu['maxdd']:+.1f}R, Total={cu['total']:+.1f}R"
+                )
+                print(f"  ADX UPLIFT: ExpR {cf['expr'] - cu['expr']:+.3f}, Sharpe {cf['sharpe'] - cu['sharpe']:+.3f}")
 
         if result["regime_split"]:
             rs = result["regime_split"]
             print("\n  REGIME SPLIT (filtered):")
             for label, stats in rs.items():
                 if stats:
-                    print(f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
-                          f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}")
+                    print(
+                        f"    {label}: N={stats['n']}, WR={stats['wr']:.0%}, "
+                        f"ExpR={stats['expr']:+.3f}, Sharpe={stats['sharpe']:.3f}"
+                    )
                 else:
                     print(f"    {label}: No data")
 
@@ -542,6 +562,7 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

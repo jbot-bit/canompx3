@@ -45,18 +45,18 @@ TRADING_DAYS_PER_YEAR = 252
 
 # Dollar per point for micro contracts (from cost_model.py CostSpec.point_value)
 DOLLAR_PER_POINT = {
-    "MGC": 10.0,   # $10 per point
-    "MNQ": 2.0,    # $2 per point
-    "MES": 5.0,    # $5 per point
-    "M2K": 5.0,    # $5 per point
+    "MGC": 10.0,  # $10 per point
+    "MNQ": 2.0,  # $2 per point
+    "MES": 5.0,  # $5 per point
+    "M2K": 5.0,  # $5 per point
 }
 
 # Total round-trip friction per contract (commission + spread + slippage)
 FRICTION = {
-    "MGC": 5.74,   # 1.74 + 2.00 + 2.00
-    "MNQ": 2.74,   # 1.24 + 0.50 + 1.00
-    "MES": 3.74,   # 1.24 + 1.25 + 1.25
-    "M2K": 3.24,   # 1.24 + 1.00 + 1.00
+    "MGC": 5.74,  # 1.74 + 2.00 + 2.00
+    "MNQ": 2.74,  # 1.24 + 0.50 + 1.00
+    "MES": 3.74,  # 1.24 + 1.25 + 1.25
+    "M2K": 3.24,  # 1.24 + 1.00 + 1.00
 }
 
 
@@ -83,15 +83,17 @@ def load_slot_trades_with_dollars(con, selected_slots):
         filter_types = set()
         orb_labels = set()
         for slot in inst_slots:
-            row = con.execute("""
+            row = con.execute(
+                """
                 SELECT instrument, orb_label, orb_minutes, entry_model,
                        rr_target, confirm_bars, filter_type
                 FROM validated_setups WHERE strategy_id = ?
-            """, [slot["head_strategy_id"]]).fetchone()
+            """,
+                [slot["head_strategy_id"]],
+            ).fetchone()
             if not row:
                 continue
-            cols = ["instrument", "orb_label", "orb_minutes", "entry_model",
-                    "rr_target", "confirm_bars", "filter_type"]
+            cols = ["instrument", "orb_label", "orb_minutes", "entry_model", "rr_target", "confirm_bars", "filter_type"]
             params = dict(zip(cols, row))
             slot_params[slot["head_strategy_id"]] = params
             filter_types.add(params["filter_type"])
@@ -104,22 +106,23 @@ def load_slot_trades_with_dollars(con, selected_slots):
         features = _load_daily_features(con, instrument, 5, None, None)
         has_vol = any(isinstance(f, VolumeFilter) for f in needed_filters.values())
         if has_vol:
-            _compute_relative_volumes(con, features, instrument,
-                                      sorted(orb_labels), needed_filters)
-        filter_days = _build_filter_day_sets(features, sorted(orb_labels),
-                                             needed_filters)
+            _compute_relative_volumes(con, features, instrument, sorted(orb_labels), needed_filters)
+        filter_days = _build_filter_day_sets(features, sorted(orb_labels), needed_filters)
 
         # Build a lookup: (trading_day, orb_label) -> ORB size in points
         orb_size_lookup = {}
         for label in orb_labels:
             col = f"orb_{label}_size"
             try:
-                rows = con.execute(f"""
+                rows = con.execute(
+                    f"""
                     SELECT trading_day, "{col}"
                     FROM daily_features
                     WHERE symbol = ? AND orb_minutes = 5
                       AND "{col}" IS NOT NULL AND "{col}" > 0
-                """, [instrument]).fetchall()
+                """,
+                    [instrument],
+                ).fetchall()
                 for r in rows:
                     orb_size_lookup[(r[0], label)] = r[1]
             except Exception:
@@ -130,21 +133,26 @@ def load_slot_trades_with_dollars(con, selected_slots):
             params = slot_params.get(sid)
             if not params:
                 continue
-            eligible = filter_days.get(
-                (params["filter_type"], params["orb_label"]), set()
-            )
+            eligible = filter_days.get((params["filter_type"], params["orb_label"]), set())
 
-            rows = con.execute("""
+            rows = con.execute(
+                """
                 SELECT trading_day, outcome, pnl_r
                 FROM orb_outcomes
                 WHERE symbol = ? AND orb_label = ? AND orb_minutes = ?
                   AND entry_model = ? AND rr_target = ? AND confirm_bars = ?
                   AND outcome IN ('win', 'loss')
                 ORDER BY trading_day
-            """, [
-                params["instrument"], params["orb_label"], params["orb_minutes"],
-                params["entry_model"], params["rr_target"], params["confirm_bars"],
-            ]).fetchall()
+            """,
+                [
+                    params["instrument"],
+                    params["orb_label"],
+                    params["orb_minutes"],
+                    params["entry_model"],
+                    params["rr_target"],
+                    params["confirm_bars"],
+                ],
+            ).fetchall()
 
             slot_label = f"{instrument}_{params['orb_label']}"
             slot_dprs = []
@@ -162,16 +170,18 @@ def load_slot_trades_with_dollars(con, selected_slots):
                     trade_dpr = 5 * dpp + friction
 
                 slot_dprs.append(trade_dpr)
-                all_trades.append({
-                    "trading_day": r[0],
-                    "outcome": r[1],
-                    "pnl_r": pnl_r,
-                    "pnl_dollars": pnl_r * trade_dpr,
-                    "dollar_per_r": trade_dpr,
-                    "instrument": instrument,
-                    "session": params["orb_label"],
-                    "slot_label": slot_label,
-                })
+                all_trades.append(
+                    {
+                        "trading_day": r[0],
+                        "outcome": r[1],
+                        "pnl_r": pnl_r,
+                        "pnl_dollars": pnl_r * trade_dpr,
+                        "dollar_per_r": trade_dpr,
+                        "instrument": instrument,
+                        "session": params["orb_label"],
+                        "slot_label": slot_label,
+                    }
+                )
 
             if slot_dprs:
                 slot_dollar_per_r[slot_label] = float(np.median(slot_dprs))
@@ -268,7 +278,7 @@ def compute_dollar_metrics(trades, adaptive_threshold_r=None, adaptive_scale=Non
         if n_days > 1:
             mean_d = sum(full) / n_days
             var = sum((v - mean_d) ** 2 for v in full) / (n_days - 1)
-            std = var ** 0.5
+            std = var**0.5
             if std > 0:
                 sharpe = (mean_d / std) * sqrt(TRADING_DAYS_PER_YEAR)
     else:
@@ -327,10 +337,10 @@ def compute_dollar_metrics(trades, adaptive_threshold_r=None, adaptive_scale=Non
 def main():
     parser = argparse.ArgumentParser(description="Prop Firm Fit Analysis")
     parser.add_argument("--db-path", default=None)
-    parser.add_argument("--dd-budget", type=float, default=None,
-                        help="Trailing DD budget in dollars (e.g. 2000, 2500, 3000)")
-    parser.add_argument("--personal-capital", type=float, default=None,
-                        help="Personal capital in dollars (e.g. 20000)")
+    parser.add_argument(
+        "--dd-budget", type=float, default=None, help="Trailing DD budget in dollars (e.g. 2000, 2500, 3000)"
+    )
+    parser.add_argument("--personal-capital", type=float, default=None, help="Personal capital in dollars (e.g. 20000)")
     args = parser.parse_args()
 
     db_path = Path(args.db_path) if args.db_path else GOLD_DB_PATH
@@ -346,7 +356,8 @@ def main():
             sid = slot["head_strategy_id"]
             row = con.execute(
                 "SELECT max_drawdown_r, entry_model, rr_target, confirm_bars, filter_type "
-                "FROM validated_setups WHERE strategy_id = ?", [sid],
+                "FROM validated_setups WHERE strategy_id = ?",
+                [sid],
             ).fetchone()
             slot["max_dd"] = row[0] if row and row[0] else 999
             slot["entry_model"] = row[1] if row else "?"
@@ -370,9 +381,8 @@ def main():
         print("=" * 90)
         print("ACTUAL $/R PER SLOT (from median ORB sizes of trades taken)")
         print("=" * 90)
-        print(f"\n  {'Slot':<25} {'Median$/R':>10} {'Filter':>10} "
-              f"{'Min ORB':>8} {'Notes':<25}")
-        print(f"  {'-'*25} {'-'*10} {'-'*10} {'-'*8} {'-'*25}")
+        print(f"\n  {'Slot':<25} {'Median$/R':>10} {'Filter':>10} {'Min ORB':>8} {'Notes':<25}")
+        print(f"  {'-' * 25} {'-' * 10} {'-' * 10} {'-' * 8} {'-' * 25}")
 
         for slot in ranked:
             label = f"{slot['instrument']}_{slot['session']}"
@@ -387,16 +397,15 @@ def main():
                 if g in filt:
                     min_orb = f"{int(g[1:])} pts"
                     break
-            print(f"  {label:<25} ${dpr:>8.0f} {filt:>10} "
-                  f"{min_orb:>8} 1R loss = ${dpr:.0f}")
+            print(f"  {label:<25} ${dpr:>8.0f} {filt:>10} {min_orb:>8} 1R loss = ${dpr:.0f}")
 
-        weighted_dpr = sum(
-            t["dollar_per_r"] for t in all_trades
-        ) / len(all_trades) if all_trades else 80
+        weighted_dpr = sum(t["dollar_per_r"] for t in all_trades) / len(all_trades) if all_trades else 80
 
         print(f"\n  Trade-weighted average $/R: ${weighted_dpr:.0f}")
-        print(f"  Range: ${min(t['dollar_per_r'] for t in all_trades):.0f} - "
-              f"${max(t['dollar_per_r'] for t in all_trades):.0f}")
+        print(
+            f"  Range: ${min(t['dollar_per_r'] for t in all_trades):.0f} - "
+            f"${max(t['dollar_per_r'] for t in all_trades):.0f}"
+        )
         print(f"  (Each trade uses the ACTUAL ORB size that day, not an average)")
 
         # =====================================================================
@@ -408,15 +417,15 @@ def main():
         print(f"{'=' * 90}\n")
 
         configs = [
-            ("6 slots, no adaptive",   6,  None, None),
-            ("10 slots, no adaptive",  10, None, None),
-            ("15 slots, no adaptive",  15, None, None),
+            ("6 slots, no adaptive", 6, None, None),
+            ("10 slots, no adaptive", 10, None, None),
+            ("15 slots, no adaptive", 15, None, None),
             ("All slots, no adaptive", n_total_slots, None, None),
-            ("6 slots, 0.5x @ 4R DD", 6,  4.0, 0.5),
-            ("10 slots, 0.25x @ 2R",  10, 2.0, 0.25),
-            ("10 slots, 0.5x @ 5R",   10, 5.0, 0.5),
-            ("15 slots, 0.25x @ 3R",  15, 3.0, 0.25),
-            ("15 slots, 0.5x @ 8R",   15, 8.0, 0.5),
+            ("6 slots, 0.5x @ 4R DD", 6, 4.0, 0.5),
+            ("10 slots, 0.25x @ 2R", 10, 2.0, 0.25),
+            ("10 slots, 0.5x @ 5R", 10, 5.0, 0.5),
+            ("15 slots, 0.25x @ 3R", 15, 3.0, 0.25),
+            ("15 slots, 0.5x @ 8R", 15, 8.0, 0.5),
         ]
 
         results = []
@@ -430,18 +439,21 @@ def main():
             m["n_slots"] = n_slots
             results.append(m)
 
-        print(f"  {'Config':<27} {'Slots':>5} {'MaxDD$':>9} {'MaxDD R':>8} "
-              f"{'Ann$':>10} {'Sharpe':>7} {'Worst Day':>10} {'Scaled%':>8}")
-        print(f"  {'-'*27} {'-'*5} {'-'*9} {'-'*8} "
-              f"{'-'*10} {'-'*7} {'-'*10} {'-'*8}")
+        print(
+            f"  {'Config':<27} {'Slots':>5} {'MaxDD$':>9} {'MaxDD R':>8} "
+            f"{'Ann$':>10} {'Sharpe':>7} {'Worst Day':>10} {'Scaled%':>8}"
+        )
+        print(f"  {'-' * 27} {'-' * 5} {'-' * 9} {'-' * 8} {'-' * 10} {'-' * 7} {'-' * 10} {'-' * 8}")
 
         for m in results:
             years = m["n_business_days"] / 252 if m["n_business_days"] > 0 else 1
             ann_dollars = m["total_dollars"] / years
-            print(f"  {m['label']:<27} {m['n_slots']:>5} "
-                  f"${m['max_dd_dollars']:>7,.0f} {m['max_dd_r']:>7.1f}R "
-                  f"${ann_dollars:>8,.0f} {m.get('sharpe', 0) or 0:>7.2f} "
-                  f"${m['worst_day_dollars']:>8,.0f} {m['scale_pct']:>7.1f}%")
+            print(
+                f"  {m['label']:<27} {m['n_slots']:>5} "
+                f"${m['max_dd_dollars']:>7,.0f} {m['max_dd_r']:>7.1f}R "
+                f"${ann_dollars:>8,.0f} {m.get('sharpe', 0) or 0:>7.2f} "
+                f"${m['worst_day_dollars']:>8,.0f} {m['scale_pct']:>7.1f}%"
+            )
 
         # =====================================================================
         # SECTION 3: PROP FIRM FIT TABLE
@@ -460,7 +472,7 @@ def main():
         for b in dd_budgets:
             header += f" {'$' + f'{b:,.0f}':>7}"
         print(header)
-        print(f"  {'-'*27}" + f" {'-'*7}" * len(dd_budgets))
+        print(f"  {'-' * 27}" + f" {'-' * 7}" * len(dd_budgets))
 
         for m in results:
             line = f"  {m['label']:<27}"
@@ -491,36 +503,31 @@ def main():
 
         for budget in dd_budgets:
             # Find best config that fits SAFELY (< 80% of budget)
-            safe_configs = [
-                m for m in results
-                if m["max_dd_dollars"] <= budget * 0.80
-            ]
+            safe_configs = [m for m in results if m["max_dd_dollars"] <= budget * 0.80]
             if safe_configs:
                 # Best = highest annual dollars among safe configs
-                best = max(safe_configs,
-                           key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
+                best = max(safe_configs, key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
                 years = best["n_business_days"] / 252 if best["n_business_days"] > 0 else 1
                 ann = best["total_dollars"] / years
                 margin_pct = (1 - best["max_dd_dollars"] / budget) * 100
                 print(f"  ${budget:>5,} DD budget -> {best['label']}")
                 print(f"    Max DD: ${best['max_dd_dollars']:,.0f} ({margin_pct:.0f}% safety margin)")
                 print(f"    Annual income: ${ann:,.0f}")
-                print(f"    Monthly income: ${ann/12:,.0f}")
+                print(f"    Monthly income: ${ann / 12:,.0f}")
                 print(f"    Trades/year: ~{best['total_trades'] / years:.0f}")
                 print(f"    Sharpe: {best.get('sharpe', 0) or 0:.2f}")
             else:
                 # Find tightest fit
                 tight = [m for m in results if m["max_dd_dollars"] <= budget]
                 if tight:
-                    best = max(tight,
-                               key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
+                    best = max(tight, key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
                     years = best["n_business_days"] / 252 if best["n_business_days"] > 0 else 1
                     ann = best["total_dollars"] / years
                     margin_pct = (1 - best["max_dd_dollars"] / budget) * 100
                     print(f"  ${budget:>5,} DD budget -> {best['label']} (TIGHT)")
                     print(f"    Max DD: ${best['max_dd_dollars']:,.0f} ({margin_pct:.0f}% margin — risky)")
                     print(f"    Annual income: ${ann:,.0f}")
-                    print(f"    Monthly income: ${ann/12:,.0f}")
+                    print(f"    Monthly income: ${ann / 12:,.0f}")
                 else:
                     print(f"  ${budget:>5,} DD budget -> NO SAFE CONFIG")
                     print(f"    Need to reduce slots or use aggressive adaptive sizing")
@@ -549,13 +556,9 @@ def main():
         ]
 
         for firm_name, firm_dd, firm_notes in prop_firms:
-            safe_configs = [
-                m for m in results
-                if m["max_dd_dollars"] <= firm_dd * 0.80
-            ]
+            safe_configs = [m for m in results if m["max_dd_dollars"] <= firm_dd * 0.80]
             if safe_configs:
-                best = max(safe_configs,
-                           key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
+                best = max(safe_configs, key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
                 years = best["n_business_days"] / 252 if best["n_business_days"] > 0 else 1
                 ann = best["total_dollars"] / years
                 margin_pct = (1 - best["max_dd_dollars"] / firm_dd) * 100
@@ -570,8 +573,7 @@ def main():
             else:
                 tight = [m for m in results if m["max_dd_dollars"] <= firm_dd]
                 if tight:
-                    best = max(tight,
-                               key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
+                    best = max(tight, key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
                     years = best["n_business_days"] / 252 if best["n_business_days"] > 0 else 1
                     ann = best["total_dollars"] / years
                     margin_pct = (1 - best["max_dd_dollars"] / firm_dd) * 100
@@ -588,8 +590,7 @@ def main():
             if best:
                 print(f"    Verdict: {verdict}")
                 print(f"    Best config: {best['label']}")
-                print(f"    Max DD: ${best['max_dd_dollars']:,.0f} "
-                      f"(safety margin: {margin_pct:.0f}%)")
+                print(f"    Max DD: ${best['max_dd_dollars']:,.0f} (safety margin: {margin_pct:.0f}%)")
                 print(f"    Annual income: ${ann:,.0f}")
                 print(f"    Monthly income: ${monthly:,.0f}")
                 print(f"    Est. days to pass eval: ~{days_to_eval:.0f} trading days")
@@ -618,8 +619,8 @@ def main():
         print(f"  AT 1 MICRO CONTRACT PER TRADE (all 15 slots):")
         print(f"    Max DD: ${dd_1c:,.0f} ({dd_pct_1c:.1f}% of account)")
         print(f"    Annual income: ${ann_1c:,.0f}")
-        print(f"    Monthly income: ${ann_1c/12:,.0f}")
-        print(f"    Return on capital: {ann_1c/capital*100:.1f}%")
+        print(f"    Monthly income: ${ann_1c / 12:,.0f}")
+        print(f"    Return on capital: {ann_1c / capital * 100:.1f}%")
         print(f"    Risk of ruin: VERY LOW (DD is {dd_pct_1c:.1f}% of account)")
         print()
 
@@ -630,8 +631,8 @@ def main():
         print(f"  AT 2 MICRO CONTRACTS PER TRADE:")
         print(f"    Max DD: ${dd_2c:,.0f} ({dd_pct_2c:.1f}% of account)")
         print(f"    Annual income: ${ann_2c:,.0f}")
-        print(f"    Monthly income: ${ann_2c/12:,.0f}")
-        print(f"    Return on capital: {ann_2c/capital*100:.1f}%")
+        print(f"    Monthly income: ${ann_2c / 12:,.0f}")
+        print(f"    Return on capital: {ann_2c / capital * 100:.1f}%")
         if dd_pct_2c > 25:
             print(f"    WARNING: DD exceeds 25% of account — aggressive")
         elif dd_pct_2c > 15:
@@ -647,8 +648,8 @@ def main():
         print(f"  AT 3 MICRO CONTRACTS PER TRADE:")
         print(f"    Max DD: ${dd_3c:,.0f} ({dd_pct_3c:.1f}% of account)")
         print(f"    Annual income: ${ann_3c:,.0f}")
-        print(f"    Monthly income: ${ann_3c/12:,.0f}")
-        print(f"    Return on capital: {ann_3c/capital*100:.1f}%")
+        print(f"    Monthly income: ${ann_3c / 12:,.0f}")
+        print(f"    Return on capital: {ann_3c / capital * 100:.1f}%")
         if dd_pct_3c > 25:
             print(f"    WARNING: DD exceeds 25% of account — aggressive")
         elif dd_pct_3c > 15:
@@ -669,19 +670,19 @@ def main():
         ann_rec = ann_1c * max_contracts
         dd_rec = dd_1c * max_contracts
         print(f"      Annual income: ${ann_rec:,.0f}")
-        print(f"      Monthly income: ${ann_rec/12:,.0f}")
-        print(f"      Max DD: ${dd_rec:,.0f} ({dd_rec/capital*100:.1f}% of account)")
+        print(f"      Monthly income: ${ann_rec / 12:,.0f}")
+        print(f"      Max DD: ${dd_rec:,.0f} ({dd_rec / capital * 100:.1f}% of account)")
         print()
 
         # Combined strategy: prop firm + personal capital
         print(f"  COMBINED STRATEGY (prop firm + personal capital):")
         print(f"    1. Start on prop firm ($2-3K trailing DD)")
         print(f"       Trade 1 contract. Build profit track record.")
-        print(f"       Income: ~${ann_1c/12:,.0f}/month from funded account")
+        print(f"       Income: ~${ann_1c / 12:,.0f}/month from funded account")
         print(f"    2. Simultaneously trade personal ${capital:,.0f} account")
         print(f"       Trade {max_contracts} contract(s). Keep withdrawals minimal.")
-        print(f"       Income: ~${ann_rec/12:,.0f}/month from personal account")
-        print(f"    3. Combined monthly income: ~${(ann_1c + ann_rec)/12:,.0f}")
+        print(f"       Income: ~${ann_rec / 12:,.0f}/month from personal account")
+        print(f"    3. Combined monthly income: ~${(ann_1c + ann_rec) / 12:,.0f}")
         print(f"    4. If prop firm evaluation fails (cost: $150-300):")
         print(f"       Personal account continues generating income")
         print(f"       Re-attempt prop firm evaluation next month")
@@ -696,8 +697,7 @@ def main():
         # Compute the actual equity curve day by day for the best 15-slot config
         selected_labels = {f"{s['instrument']}_{s['session']}" for s in ranked[:15]}
         trades_15 = sorted(
-            [t for t in all_trades if t["slot_label"] in selected_labels],
-            key=lambda t: t["trading_day"]
+            [t for t in all_trades if t["slot_label"] in selected_labels], key=lambda t: t["trading_day"]
         )
 
         # Simulate trailing DD
@@ -715,13 +715,15 @@ def main():
             if cum > peak:
                 peak = cum
             trailing_dd = peak - cum
-            trailing_dd_history.append({
-                "day": day,
-                "pnl": day_pnl,
-                "cum": cum,
-                "peak": peak,
-                "trailing_dd": trailing_dd,
-            })
+            trailing_dd_history.append(
+                {
+                    "day": day,
+                    "pnl": day_pnl,
+                    "cum": cum,
+                    "peak": peak,
+                    "trailing_dd": trailing_dd,
+                }
+            )
 
         # Find the 5 worst trailing DD moments
         worst_5 = sorted(trailing_dd_history, key=lambda x: -x["trailing_dd"])[:5]
@@ -741,11 +743,10 @@ def main():
         print()
         print("  THE 5 WORST TRAILING DD MOMENTS IN BACKTEST:")
         print(f"  {'Date':>12} {'Peak$':>10} {'Trough$':>10} {'Trailing DD':>12}")
-        print(f"  {'-'*12} {'-'*10} {'-'*10} {'-'*12}")
+        print(f"  {'-' * 12} {'-' * 10} {'-' * 10} {'-' * 12}")
         for w in worst_5:
             trough = w["cum"]
-            print(f"  {str(w['day']):>12} ${w['peak']:>8,.0f} ${trough:>8,.0f} "
-                  f"${w['trailing_dd']:>10,.0f}")
+            print(f"  {str(w['day']):>12} ${w['peak']:>8,.0f} ${trough:>8,.0f} ${w['trailing_dd']:>10,.0f}")
 
         # Monthly P&L for a running table
         print(f"\n  MONTHLY P&L (15 slots, 1 contract):")
@@ -759,7 +760,7 @@ def main():
         recent = sorted_months[-24:] if len(sorted_months) > 24 else sorted_months
 
         print(f"  {'Month':>8} {'P&L':>10} {'Running':>10}")
-        print(f"  {'-'*8} {'-'*10} {'-'*10}")
+        print(f"  {'-' * 8} {'-' * 10} {'-' * 10}")
         running = 0
         negative_months = 0
         for ym in recent:
@@ -771,8 +772,7 @@ def main():
             print(f"  {ym[0]}-{ym[1]:02d} ${pnl:>8,.0f} ${running:>8,.0f}{marker}")
 
         total_shown = len(recent)
-        print(f"\n  Loss months: {negative_months}/{total_shown} "
-              f"({negative_months/total_shown*100:.0f}%)")
+        print(f"\n  Loss months: {negative_months}/{total_shown} ({negative_months / total_shown * 100:.0f}%)")
 
         # =====================================================================
         # SECTION 8: THE BOTTOM LINE
@@ -785,23 +785,21 @@ def main():
         for budget_label, budget_val in [("$2,000", 2000), ("$3,000", 3000)]:
             safe = [m for m in results if m["max_dd_dollars"] <= budget_val * 0.80]
             if safe:
-                best = max(safe,
-                           key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
+                best = max(safe, key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
                 yrs = best["n_business_days"] / 252
                 ann = best["total_dollars"] / yrs
                 print(f"  PROP FIRM ({budget_label} trailing DD):")
                 print(f"    -> {best['label']}")
-                print(f"    -> ${ann/12:,.0f}/month, ${best['max_dd_dollars']:,.0f} max DD")
+                print(f"    -> ${ann / 12:,.0f}/month, ${best['max_dd_dollars']:,.0f} max DD")
             else:
                 tight = [m for m in results if m["max_dd_dollars"] <= budget_val]
                 if tight:
-                    best = max(tight,
-                               key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
+                    best = max(tight, key=lambda m: m["total_dollars"] / max(m["n_business_days"] / 252, 0.5))
                     yrs = best["n_business_days"] / 252
                     ann = best["total_dollars"] / yrs
                     print(f"  PROP FIRM ({budget_label} trailing DD):")
                     print(f"    -> {best['label']} (TIGHT — less than 20% margin)")
-                    print(f"    -> ${ann/12:,.0f}/month, ${best['max_dd_dollars']:,.0f} max DD")
+                    print(f"    -> ${ann / 12:,.0f}/month, ${best['max_dd_dollars']:,.0f} max DD")
                 else:
                     print(f"  PROP FIRM ({budget_label} trailing DD):")
                     print(f"    -> No safe configuration. Need smaller system or larger DD budget.")
@@ -809,8 +807,7 @@ def main():
 
         print(f"  PERSONAL CAPITAL (${capital:,.0f}):")
         print(f"    -> 15 slots, {max_contracts} contract(s)")
-        print(f"    -> ${ann_rec/12:,.0f}/month, ${dd_rec:,.0f} max DD "
-              f"({dd_rec/capital*100:.1f}% of account)")
+        print(f"    -> ${ann_rec / 12:,.0f}/month, ${dd_rec:,.0f} max DD ({dd_rec / capital * 100:.1f}% of account)")
         print()
         print(f"  COMBINED PLAY:")
         combined_monthly = ann_1c / 12 + ann_rec / 12

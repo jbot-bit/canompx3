@@ -98,10 +98,23 @@ def load_retired(con: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
         WHERE LOWER(status) = 'retired'
         ORDER BY retired_at DESC NULLS LAST, instrument, orb_label
     """).fetchall()
-    cols = ["strategy_id", "instrument", "orb_label", "orb_minutes", "rr_target",
-            "entry_model", "confirm_bars", "filter_type", "sample_size",
-            "expectancy_r", "sharpe_ann", "win_rate", "retired_at", "retirement_reason",
-            "execution_spec"]
+    cols = [
+        "strategy_id",
+        "instrument",
+        "orb_label",
+        "orb_minutes",
+        "rr_target",
+        "entry_model",
+        "confirm_bars",
+        "filter_type",
+        "sample_size",
+        "expectancy_r",
+        "sharpe_ann",
+        "win_rate",
+        "retired_at",
+        "retirement_reason",
+        "execution_spec",
+    ]
     return [dict(zip(cols, r)) for r in rows]
 
 
@@ -126,6 +139,7 @@ def compute_mode_a(con: duckdb.DuckDBPyConnection, spec: dict[str, Any]) -> Reti
 
     # Instrument must be in ACTIVE list for the re-validation to be meaningful
     from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
     if spec["instrument"] not in ACTIVE_ORB_INSTRUMENTS:
         audit.stay_retired_reasons.append(
             f"Instrument {spec['instrument']} not in ACTIVE_ORB_INSTRUMENTS (dead-for-ORB). Retirement-reason preserved."
@@ -152,9 +166,19 @@ def compute_mode_a(con: duckdb.DuckDBPyConnection, spec: dict[str, Any]) -> Reti
           AND d.{test_col}=? AND o.pnl_r IS NOT NULL AND o.trading_day < ?
         ORDER BY o.trading_day
     """
-    df = con.execute(sql, [spec["instrument"], sess, spec["orb_minutes"],
-                            spec["entry_model"], spec["confirm_bars"], spec["rr_target"],
-                            direction, HOLDOUT_SACRED_FROM]).df()
+    df = con.execute(
+        sql,
+        [
+            spec["instrument"],
+            sess,
+            spec["orb_minutes"],
+            spec["entry_model"],
+            spec["confirm_bars"],
+            spec["rr_target"],
+            direction,
+            HOLDOUT_SACRED_FROM,
+        ],
+    ).df()
     if len(df) == 0:
         audit.stay_retired_reasons.append("0 IS rows after JOIN — strategy spec may not match any orb_outcomes data.")
         return audit
@@ -166,10 +190,13 @@ def compute_mode_a(con: duckdb.DuckDBPyConnection, spec: dict[str, Any]) -> Reti
         if isinstance(filt_obj, CrossAssetATRFilter):
             source = filt_obj.source_instrument
             if source != spec["instrument"]:
-                src_rows = con.execute("""
+                src_rows = con.execute(
+                    """
                     SELECT trading_day, atr_20_pct FROM daily_features
                     WHERE symbol=? AND orb_minutes=5 AND atr_20_pct IS NOT NULL
-                """, [source]).fetchall()
+                """,
+                    [source],
+                ).fetchall()
                 src_map = {}
                 for td, pct in src_rows:
                     key = td.date() if hasattr(td, "date") else td
@@ -232,7 +259,9 @@ def compute_mode_a(con: duckdb.DuckDBPyConnection, spec: dict[str, Any]) -> Reti
         reasons_stay.append(f"Mode A years_positive={audit.mode_a_years_positive} < 4 (below per-year stability floor)")
 
     if not reasons_stay:
-        reasons_revive.append("Passes all 4 revive-candidate criteria: N>=100 AND ExpR>0.05 AND |t|>=3.00 AND years_positive>=4")
+        reasons_revive.append(
+            "Passes all 4 revive-candidate criteria: N>=100 AND ExpR>0.05 AND |t|>=3.00 AND years_positive>=4"
+        )
         audit.revive_candidate = True
     audit.revive_reasons = reasons_revive
     audit.stay_retired_reasons = reasons_stay
@@ -241,9 +270,11 @@ def compute_mode_a(con: duckdb.DuckDBPyConnection, spec: dict[str, Any]) -> Reti
 
 
 def _fmt(x, p=4):
-    if x is None: return "—"
+    if x is None:
+        return "—"
     if isinstance(x, float):
-        if math.isnan(x): return "nan"
+        if math.isnan(x):
+            return "nan"
         return f"{x:.{p}f}"
     return str(x)
 
@@ -260,7 +291,9 @@ def render(audits: list[RetiredAudit]) -> str:
     L.append("")
     L.append("## Motivation")
     L.append("")
-    L.append("Phase 3 of the 2026-04-19 overnight session re-validated the 38 ACTIVE lanes under Mode A. The session's adversarial self-audit (Correction 2 of 9) identified that 23 RETIRED lanes were NOT similarly re-validated. If any was retired on Mode B numbers where Mode A shows a viable edge, that's survivorship bias in the re-validation work itself.")
+    L.append(
+        "Phase 3 of the 2026-04-19 overnight session re-validated the 38 ACTIVE lanes under Mode A. The session's adversarial self-audit (Correction 2 of 9) identified that 23 RETIRED lanes were NOT similarly re-validated. If any was retired on Mode B numbers where Mode A shows a viable edge, that's survivorship bias in the re-validation work itself."
+    )
     L.append("")
     L.append("This audit recomputes Mode A IS stats for every retired lane and flags any that passes ALL of:")
     L.append("")
@@ -279,7 +312,9 @@ def render(audits: list[RetiredAudit]) -> str:
     L.append("")
     L.append("## Per-lane Mode A audit")
     L.append("")
-    L.append("| Instr | Session | Om | RR | Filter | Dir | Retired | Mode-A N | Mode-A ExpR | Mode-A Sharpe | Mode-A t | Yrs+ | Verdict |")
+    L.append(
+        "| Instr | Session | Om | RR | Filter | Dir | Retired | Mode-A N | Mode-A ExpR | Mode-A Sharpe | Mode-A t | Yrs+ | Verdict |"
+    )
     L.append("|---|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---|")
     for a in audits:
         verdict = "**REVIVE CANDIDATE**" if a.revive_candidate else "stay-retired"
@@ -297,14 +332,24 @@ def render(audits: list[RetiredAudit]) -> str:
         for a in audits:
             if not a.revive_candidate:
                 continue
-            L.append(f"### {a.instrument} {a.orb_label} O{a.orb_minutes} RR{a.rr_target} {a.filter_type or 'UNFILTERED'} {a.direction}")
+            L.append(
+                f"### {a.instrument} {a.orb_label} O{a.orb_minutes} RR{a.rr_target} {a.filter_type or 'UNFILTERED'} {a.direction}"
+            )
             L.append(f"- `strategy_id`: `{a.strategy_id}`")
             L.append(f"- Retirement date: {a.retired_at}")
             L.append(f"- Retirement reason (at the time): {a.retirement_reason}")
-            L.append(f"- Stored (Mode-B era): N={a.stored_n} ExpR={_fmt(a.stored_expr)} Sharpe_ann={_fmt(a.stored_sharpe, 2)}")
-            L.append(f"- Mode A canonical: N={a.mode_a_n} ExpR={_fmt(a.mode_a_expr)} Sharpe_ann={_fmt(a.mode_a_sharpe, 2)} WR={_fmt(a.mode_a_wr, 3)}")
-            L.append(f"- Mode A |t|={_fmt(a.mode_a_t, 2)} raw_p={_fmt(a.mode_a_raw_p)} years_positive={a.mode_a_years_positive}/{a.mode_a_years_total}")
-            L.append(f"- **Action:** committee review — consider reinstating OR pre-reg re-validation under current regime with Carver forecast-combiner framework if the retirement reason was regime-specific.")
+            L.append(
+                f"- Stored (Mode-B era): N={a.stored_n} ExpR={_fmt(a.stored_expr)} Sharpe_ann={_fmt(a.stored_sharpe, 2)}"
+            )
+            L.append(
+                f"- Mode A canonical: N={a.mode_a_n} ExpR={_fmt(a.mode_a_expr)} Sharpe_ann={_fmt(a.mode_a_sharpe, 2)} WR={_fmt(a.mode_a_wr, 3)}"
+            )
+            L.append(
+                f"- Mode A |t|={_fmt(a.mode_a_t, 2)} raw_p={_fmt(a.mode_a_raw_p)} years_positive={a.mode_a_years_positive}/{a.mode_a_years_total}"
+            )
+            L.append(
+                f"- **Action:** committee review — consider reinstating OR pre-reg re-validation under current regime with Carver forecast-combiner framework if the retirement reason was regime-specific."
+            )
             L.append("")
     L.append("## Stay-retired — summary of stay reasons")
     L.append("")
@@ -314,15 +359,24 @@ def render(audits: list[RetiredAudit]) -> str:
             continue
         key = a.stay_retired_reasons[0] if a.stay_retired_reasons else "no reason recorded"
         # Simplify the key
-        if "not in ACTIVE_ORB_INSTRUMENTS" in key: key = "instrument not active"
-        elif "N=0 after filter" in key or "0 IS rows" in key: key = "0 rows post-filter"
-        elif "Mode A N=" in key: key = "Mode A N<100 (sample-thin)"
-        elif "Mode A ExpR=" in key: key = "Mode A ExpR <= 0.05"
-        elif "Mode A |t|=" in key: key = "Mode A |t|<3.00"
-        elif "Mode A years_positive=" in key: key = "Mode A years_positive<4"
-        elif "filter_signal failed" in key: key = "filter failure"
-        elif "no column" in key: key = "session not in schema"
-        else: key = "other"
+        if "not in ACTIVE_ORB_INSTRUMENTS" in key:
+            key = "instrument not active"
+        elif "N=0 after filter" in key or "0 IS rows" in key:
+            key = "0 rows post-filter"
+        elif "Mode A N=" in key:
+            key = "Mode A N<100 (sample-thin)"
+        elif "Mode A ExpR=" in key:
+            key = "Mode A ExpR <= 0.05"
+        elif "Mode A |t|=" in key:
+            key = "Mode A |t|<3.00"
+        elif "Mode A years_positive=" in key:
+            key = "Mode A years_positive<4"
+        elif "filter_signal failed" in key:
+            key = "filter failure"
+        elif "no column" in key:
+            key = "session not in schema"
+        else:
+            key = "other"
         reason_counts[key] = reason_counts.get(key, 0) + 1
     L.append("| Primary reason to stay retired | Count |")
     L.append("|---|---:|")
@@ -350,9 +404,11 @@ def main() -> int:
             a = compute_mode_a(con, spec)
             audits.append(a)
             flag = "REVIVE" if a.revive_candidate else " "
-            print(f"  {flag:6} {i:2}/{len(retired)} {a.instrument:4} {a.orb_label:14} "
-                  f"O{a.orb_minutes} RR{a.rr_target} {(a.filter_type or 'UNF'):<20} "
-                  f"{a.direction:<5} N={a.mode_a_n:4} ExpR={_fmt(a.mode_a_expr, 3)} t={_fmt(a.mode_a_t, 2)}")
+            print(
+                f"  {flag:6} {i:2}/{len(retired)} {a.instrument:4} {a.orb_label:14} "
+                f"O{a.orb_minutes} RR{a.rr_target} {(a.filter_type or 'UNF'):<20} "
+                f"{a.direction:<5} N={a.mode_a_n:4} ExpR={_fmt(a.mode_a_expr, 3)} t={_fmt(a.mode_a_t, 2)}"
+            )
     finally:
         con.close()
 

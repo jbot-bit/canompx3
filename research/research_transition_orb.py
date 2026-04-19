@@ -35,15 +35,16 @@ import pandas as pd
 _US_EASTERN = ZoneInfo("America/New_York")
 _UK_LONDON = ZoneInfo("Europe/London")
 
+
 def is_us_dst(trading_day: date) -> bool:
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_US_EASTERN)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_US_EASTERN)
     return dt.utcoffset().total_seconds() == -4 * 3600
 
+
 def is_uk_dst(trading_day: date) -> bool:
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_UK_LONDON)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_UK_LONDON)
     return dt.utcoffset().total_seconds() == 1 * 3600
+
 
 # ── Constants ─────────────────────────────────────────────────────────────
 
@@ -55,31 +56,32 @@ RR_TARGET = 2.0
 # Based on volume analysis: MNQ vol by Bris hour
 DOMINANCE_BY_HOUR = {
     # Bris hour: (label, description)
-    8:  ("DEAD-ZONE",    "US closed, Asia not open"),
-    9:  ("HANDOFF",      "CME open, US→Asia transition"),
-    10: ("ASIA-ONLY",    "Tokyo open, US/EU asleep"),
-    11: ("ASIA-ONLY",    "Singapore/HK, US/EU asleep"),
-    12: ("ASIA-ONLY",    "Asia mid-session"),
-    13: ("ASIA-FADE",    "Asia winding down"),
-    14: ("DEAD-ZONE",    "Asia closed, EU not open"),
-    15: ("EU-EARLY",     "Europe pre-market"),
-    16: ("EU-EARLY",     "Europe opening"),
-    17: ("EU-EARLY",     "Europe morning"),
-    18: ("EU-MAIN",      "London open"),
-    19: ("EU-MAIN",      "Europe mid-session"),
-    20: ("EU-MAIN",      "Europe afternoon"),
-    21: ("EU-US-TRANS",  "Europe PM, US pre-market"),
-    22: ("CONTESTED",    "US+Europe overlap"),
-    23: ("CONTESTED",    "US+Europe overlap (peak)"),
-    0:  ("CONTESTED",    "US equity hours (peak vol)"),
-    1:  ("CONTESTED",    "US mid-session"),
-    2:  ("US-FADE",      "US afternoon, EU closed"),
-    3:  ("US-FADE",      "US late session"),
-    4:  ("US-FADE",      "US closing"),
-    5:  ("US-CLOSE",     "US post-close"),
-    6:  ("DEAD-ZONE",    "US closed, quiet"),
-    7:  ("DEAD-ZONE",    "US closed, Asia not open"),
+    8: ("DEAD-ZONE", "US closed, Asia not open"),
+    9: ("HANDOFF", "CME open, US→Asia transition"),
+    10: ("ASIA-ONLY", "Tokyo open, US/EU asleep"),
+    11: ("ASIA-ONLY", "Singapore/HK, US/EU asleep"),
+    12: ("ASIA-ONLY", "Asia mid-session"),
+    13: ("ASIA-FADE", "Asia winding down"),
+    14: ("DEAD-ZONE", "Asia closed, EU not open"),
+    15: ("EU-EARLY", "Europe pre-market"),
+    16: ("EU-EARLY", "Europe opening"),
+    17: ("EU-EARLY", "Europe morning"),
+    18: ("EU-MAIN", "London open"),
+    19: ("EU-MAIN", "Europe mid-session"),
+    20: ("EU-MAIN", "Europe afternoon"),
+    21: ("EU-US-TRANS", "Europe PM, US pre-market"),
+    22: ("CONTESTED", "US+Europe overlap"),
+    23: ("CONTESTED", "US+Europe overlap (peak)"),
+    0: ("CONTESTED", "US equity hours (peak vol)"),
+    1: ("CONTESTED", "US mid-session"),
+    2: ("US-FADE", "US afternoon, EU closed"),
+    3: ("US-FADE", "US late session"),
+    4: ("US-FADE", "US closing"),
+    5: ("US-CLOSE", "US post-close"),
+    6: ("DEAD-ZONE", "US closed, quiet"),
+    7: ("DEAD-ZONE", "US closed, Asia not open"),
 }
+
 
 # DST type by Brisbane hour (simplified: sessions before 15:00 = CLEAN or US, after = UK possible)
 # For this scan we classify all as CLEAN unless they fall in known DST-affected windows
@@ -103,15 +105,21 @@ def get_dst_type(bris_h, bris_m):
     # Most other times: report ALL (not splitting)
     return "ALL"
 
+
 # ── Data loading ──────────────────────────────────────────────────────────
 
+
 def load_bars(con, instrument):
-    return con.execute("""
+    return con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
+
 
 def build_day_arrays(bars_df):
     df = bars_df.copy()
@@ -147,6 +155,7 @@ def build_day_arrays(bars_df):
 
     return all_days, opens, highs, lows, closes, volumes
 
+
 def build_dst_masks(trading_days):
     n = len(trading_days)
     us_mask = np.zeros(n, dtype=bool)
@@ -156,10 +165,11 @@ def build_dst_masks(trading_days):
         uk_mask[i] = is_uk_dst(td)
     return us_mask, uk_mask
 
+
 # ── ORB scan engine ──────────────────────────────────────────────────────
 
-def scan_session_per_day(highs, lows, closes, bris_h, bris_m,
-                         aperture_min=5, break_window=240):
+
+def scan_session_per_day(highs, lows, closes, bris_h, bris_m, aperture_min=5, break_window=240):
     """Scan one session across all days. Returns dict[day_idx -> result]."""
     n_days = highs.shape[0]
     start_min = ((bris_h - 9) % 24) * 60 + bris_m
@@ -187,8 +197,13 @@ def scan_session_per_day(highs, lows, closes, bris_h, bris_m,
 
         if os_val < 0.001:  # Zero-width ORB
             results[day_idx] = {
-                "valid_orb": True, "g4_pass": False, "orb_size": float(os_val),
-                "broke": False, "direction": None, "outcome_r": np.nan, "entry": np.nan,
+                "valid_orb": True,
+                "g4_pass": False,
+                "orb_size": float(os_val),
+                "broke": False,
+                "direction": None,
+                "outcome_r": np.nan,
+                "entry": np.nan,
             }
             continue
 
@@ -216,9 +231,13 @@ def scan_session_per_day(highs, lows, closes, bris_h, bris_m,
 
         if break_dir is None:
             results[day_idx] = {
-                "valid_orb": True, "g4_pass": os_val >= G4_MIN,
+                "valid_orb": True,
+                "g4_pass": os_val >= G4_MIN,
                 "orb_size": float(os_val),
-                "broke": False, "direction": None, "outcome_r": np.nan, "entry": np.nan,
+                "broke": False,
+                "direction": None,
+                "outcome_r": np.nan,
+                "entry": np.nan,
             }
             continue
 
@@ -279,27 +298,33 @@ def scan_session_per_day(highs, lows, closes, bris_h, bris_m,
                 outcome_r = (entry - last_close) / os_val
 
         results[day_idx] = {
-            "valid_orb": True, "g4_pass": os_val >= G4_MIN,
+            "valid_orb": True,
+            "g4_pass": os_val >= G4_MIN,
             "orb_size": float(os_val),
-            "broke": True, "direction": break_dir,
-            "outcome_r": float(outcome_r), "entry": float(entry),
+            "broke": True,
+            "direction": break_dir,
+            "outcome_r": float(outcome_r),
+            "entry": float(entry),
             "mfe_r": float(max_fav),
         }
 
     return results
 
+
 # ── Volume profiling ─────────────────────────────────────────────────────
+
 
 def compute_volume_profile(volumes):
     """Average volume per minute-offset across all days."""
-    with np.errstate(all='ignore'):
+    with np.errstate(all="ignore"):
         avg_vol = np.nanmean(volumes, axis=0)
     return avg_vol
 
+
 # ── Main scan ────────────────────────────────────────────────────────────
 
-def run_time_scan(instrument, all_days, highs, lows, closes, volumes,
-                  us_mask, uk_mask):
+
+def run_time_scan(instrument, all_days, highs, lows, closes, volumes, us_mask, uk_mask):
     """Scan every 15 minutes and compute stats."""
     vol_profile = compute_volume_profile(volumes)
     n_days = len(all_days)
@@ -318,7 +343,7 @@ def run_time_scan(instrument, all_days, highs, lows, closes, volumes,
 
         # Volume at this time slot (average over the 5 ORB minutes)
         start_min = ((bris_h - 9) % 24) * 60 + bris_m
-        vol_slice = vol_profile[start_min:start_min + 5]
+        vol_slice = vol_profile[start_min : start_min + 5]
         avg_vol = float(np.nanmean(vol_slice)) if len(vol_slice) > 0 else 0.0
 
         # Dominance classification
@@ -337,32 +362,23 @@ def run_time_scan(instrument, all_days, highs, lows, closes, volumes,
 
         for regime_name, regime_mask in regimes:
             # Filter to regime days that have results
-            regime_days = {
-                di: r for di, r in results.items()
-                if regime_mask[di]
-            }
+            regime_days = {di: r for di, r in results.items() if regime_mask[di]}
 
             # All breaks (regardless of size filter)
-            break_days = [r for r in regime_days.values()
-                          if r.get("broke", False)]
+            break_days = [r for r in regime_days.values() if r.get("broke", False)]
 
             # G4+ breaks
             g4_breaks = [r for r in break_days if r.get("g4_pass", False)]
 
             # G8+ breaks
-            g8_breaks = [r for r in break_days
-                         if r.get("g4_pass", False) and r["orb_size"] >= 8.0]
+            g8_breaks = [r for r in break_days if r.get("g4_pass", False) and r["orb_size"] >= 8.0]
 
-            for filter_name, filtered in [("ALL_BREAKS", break_days),
-                                          ("G4+", g4_breaks),
-                                          ("G8+", g8_breaks)]:
+            for filter_name, filtered in [("ALL_BREAKS", break_days), ("G4+", g4_breaks), ("G8+", g8_breaks)]:
                 if len(filtered) < 5:
                     continue
 
-                outcomes = [r["outcome_r"] for r in filtered
-                            if not np.isnan(r["outcome_r"])]
-                mfes = [r.get("mfe_r", 0) for r in filtered
-                        if r.get("mfe_r") is not None]
+                outcomes = [r["outcome_r"] for r in filtered if not np.isnan(r["outcome_r"])]
+                mfes = [r.get("mfe_r", 0) for r in filtered if r.get("mfe_r") is not None]
 
                 if len(outcomes) < 5:
                     continue
@@ -373,37 +389,39 @@ def run_time_scan(instrument, all_days, highs, lows, closes, volumes,
                 med_orb = float(np.median([r["orb_size"] for r in filtered]))
                 med_mfe = float(np.median(mfes)) if mfes else 0.0
 
-                rows.append({
-                    "instrument": instrument,
-                    "bris_time": label,
-                    "bris_h": bris_h,
-                    "bris_m": bris_m,
-                    "dst_regime": regime_name,
-                    "size_filter": filter_name,
-                    "dominance": dom_label,
-                    "dom_desc": dom_desc,
-                    "avg_vol": round(avg_vol, 1),
-                    "n_breaks": len(filtered),
-                    "avg_r": round(avg_r, 4),
-                    "wr": round(wr, 4),
-                    "total_r": round(tot_r, 2),
-                    "median_orb_size": round(med_orb, 2),
-                    "median_mfe_r": round(med_mfe, 3),
-                })
+                rows.append(
+                    {
+                        "instrument": instrument,
+                        "bris_time": label,
+                        "bris_h": bris_h,
+                        "bris_m": bris_m,
+                        "dst_regime": regime_name,
+                        "size_filter": filter_name,
+                        "dominance": dom_label,
+                        "dom_desc": dom_desc,
+                        "avg_vol": round(avg_vol, 1),
+                        "n_breaks": len(filtered),
+                        "avg_r": round(avg_r, 4),
+                        "wr": round(wr, 4),
+                        "total_r": round(tot_r, 2),
+                        "median_orb_size": round(med_orb, 2),
+                        "median_mfe_r": round(med_mfe, 3),
+                    }
+                )
 
     return pd.DataFrame(rows)
 
+
 # ── Shared-break analysis ────────────────────────────────────────────────
+
 
 def shared_break_analysis(results_a, results_b, n_days, mask=None):
     """Compute % of shared break-days between two session scans."""
     if mask is None:
         mask = np.ones(n_days, dtype=bool)
 
-    breaks_a = {di for di, r in results_a.items()
-                if mask[di] and r.get("broke", False) and r.get("g4_pass", False)}
-    breaks_b = {di for di, r in results_b.items()
-                if mask[di] and r.get("broke", False) and r.get("g4_pass", False)}
+    breaks_a = {di for di, r in results_a.items() if mask[di] and r.get("broke", False) and r.get("g4_pass", False)}
+    breaks_b = {di for di, r in results_b.items() if mask[di] and r.get("broke", False) and r.get("g4_pass", False)}
 
     if not breaks_a or not breaks_b:
         return 0, 0, 0, 0.0
@@ -413,10 +431,8 @@ def shared_break_analysis(results_a, results_b, n_days, mask=None):
 
     # R correlation on shared days
     if len(shared) > 5:
-        r_a = [results_a[d]["outcome_r"] for d in shared
-               if not np.isnan(results_a[d]["outcome_r"])]
-        r_b = [results_b[d]["outcome_r"] for d in shared
-               if not np.isnan(results_b[d]["outcome_r"])]
+        r_a = [results_a[d]["outcome_r"] for d in shared if not np.isnan(results_a[d]["outcome_r"])]
+        r_b = [results_b[d]["outcome_r"] for d in shared if not np.isnan(results_b[d]["outcome_r"])]
         if len(r_a) > 5 and len(r_a) == len(r_b):
             corr = float(np.corrcoef(r_a, r_b)[0, 1])
         else:
@@ -426,13 +442,14 @@ def shared_break_analysis(results_a, results_b, n_days, mask=None):
 
     return len(breaks_a), len(breaks_b), len(shared), pct, corr if not np.isnan(corr) else 0.0
 
+
 # ── Main ─────────────────────────────────────────────────────────────────
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--db-path", default=None)
-    parser.add_argument("--instruments", default="MNQ,MES",
-                        help="Comma-separated instruments")
+    parser.add_argument("--instruments", default="MNQ,MES", help="Comma-separated instruments")
     args = parser.parse_args()
 
     if args.db_path:
@@ -465,13 +482,16 @@ def main():
         print(f"    {len(all_days)} trading days")
 
         data_cache[instrument] = {
-            "all_days": all_days, "highs": highs, "lows": lows,
-            "closes": closes, "volumes": volumes,
-            "us_mask": us_mask, "uk_mask": uk_mask,
+            "all_days": all_days,
+            "highs": highs,
+            "lows": lows,
+            "closes": closes,
+            "volumes": volumes,
+            "us_mask": us_mask,
+            "uk_mask": uk_mask,
         }
 
-        df = run_time_scan(instrument, all_days, highs, lows, closes, volumes,
-                           us_mask, uk_mask)
+        df = run_time_scan(instrument, all_days, highs, lows, closes, volumes, us_mask, uk_mask)
         all_results.append(df)
 
         # Print summary: best time slots by dominance category
@@ -482,20 +502,31 @@ def main():
         if len(g4) == 0:
             g4 = df[df["size_filter"] == "ALL_BREAKS"].copy()
 
-        for dom in ["DEAD-ZONE", "ASIA-FADE", "ASIA-ONLY", "EU-EARLY",
-                     "EU-MAIN", "EU-US-TRANS", "CONTESTED", "HANDOFF",
-                     "US-FADE", "US-CLOSE"]:
+        for dom in [
+            "DEAD-ZONE",
+            "ASIA-FADE",
+            "ASIA-ONLY",
+            "EU-EARLY",
+            "EU-MAIN",
+            "EU-US-TRANS",
+            "CONTESTED",
+            "HANDOFF",
+            "US-FADE",
+            "US-CLOSE",
+        ]:
             sub = g4[(g4["dominance"] == dom) & (g4["n_breaks"] >= 20)]
             if len(sub) == 0:
                 continue
             best = sub.sort_values("avg_r", ascending=False).head(3)
             print(f"\n    [{dom}]")
             for _, r in best.iterrows():
-                print(f"      {r['bris_time']} {r['dst_regime']:8s}  "
-                      f"avgR={r['avg_r']:+.3f}  N={r['n_breaks']:4d}  "
-                      f"vol={r['avg_vol']:7.0f}  "
-                      f"medMFE={r['median_mfe_r']:.2f}R  "
-                      f"medORB={r['median_orb_size']:.1f}")
+                print(
+                    f"      {r['bris_time']} {r['dst_regime']:8s}  "
+                    f"avgR={r['avg_r']:+.3f}  N={r['n_breaks']:4d}  "
+                    f"vol={r['avg_vol']:7.0f}  "
+                    f"medMFE={r['median_mfe_r']:.2f}R  "
+                    f"medORB={r['median_orb_size']:.1f}"
+                )
 
     # Combine and save
     combined = pd.concat(all_results, ignore_index=True)
@@ -521,36 +552,38 @@ def main():
         n_days = len(cache["all_days"])
 
         # Find top dead-zone candidates from the scan
-        g4 = combined[(combined["instrument"] == instrument) &
-                       (combined["size_filter"].isin(["G4+", "G8+", "ALL_BREAKS"])) &
-                       (combined["dominance"].isin(["DEAD-ZONE", "ASIA-FADE"])) &
-                       (combined["n_breaks"] >= 20) &
-                       (combined["avg_r"] > 0)]
+        g4 = combined[
+            (combined["instrument"] == instrument)
+            & (combined["size_filter"].isin(["G4+", "G8+", "ALL_BREAKS"]))
+            & (combined["dominance"].isin(["DEAD-ZONE", "ASIA-FADE"]))
+            & (combined["n_breaks"] >= 20)
+            & (combined["avg_r"] > 0)
+        ]
         if len(g4) == 0:
             continue
 
         # Deduplicate by time (take best filter per time)
-        g4_best = g4.sort_values("avg_r", ascending=False).drop_duplicates(
-            subset=["bris_time", "dst_regime"], keep="first").head(5)
+        g4_best = (
+            g4.sort_values("avg_r", ascending=False)
+            .drop_duplicates(subset=["bris_time", "dst_regime"], keep="first")
+            .head(5)
+        )
 
         print(f"\n  {instrument} — Top dead-zone candidates:")
         for _, cand in g4_best.iterrows():
             bh, bm = int(cand["bris_time"][:2]), int(cand["bris_time"][2:])
             cand_results = scan_session_per_day(h, l, c, bh, bm)
 
-            print(f"\n    {cand['bris_time']} ({cand['dominance']}) "
-                  f"avgR={cand['avg_r']:+.3f} N={cand['n_breaks']}")
+            print(f"\n    {cand['bris_time']} ({cand['dominance']}) avgR={cand['avg_r']:+.3f} N={cand['n_breaks']}")
 
             for est_label in established.get(instrument, []):
                 eh, em = int(est_label[:2]), int(est_label[2:])
                 est_results = scan_session_per_day(h, l, c, eh, em)
 
-                result = shared_break_analysis(
-                    cand_results, est_results, n_days)
+                result = shared_break_analysis(cand_results, est_results, n_days)
                 if len(result) == 5:
                     na, nb, shared, pct, corr = result
-                    print(f"      vs {est_label}: shared={pct:.0%} "
-                          f"({shared}/{min(na,nb)})  R-corr={corr:+.3f}")
+                    print(f"      vs {est_label}: shared={pct:.0%} ({shared}/{min(na, nb)})  R-corr={corr:+.3f}")
 
     # ── Honest Summary ──
     print("\n" + "=" * 80)
@@ -563,36 +596,44 @@ def main():
         inst_df = combined[combined["instrument"] == instrument]
 
         # Best established session (1000)
-        est_1000 = inst_df[(inst_df["bris_time"] == "1000") &
-                            (inst_df["size_filter"].isin(["G4+", "G8+"]))]
+        est_1000 = inst_df[(inst_df["bris_time"] == "1000") & (inst_df["size_filter"].isin(["G4+", "G8+"]))]
         if len(est_1000) > 0:
             best_est = est_1000.sort_values("avg_r", ascending=False).iloc[0]
-            print(f"    Established benchmark: 1000 {best_est['size_filter']} "
-                  f"avgR={best_est['avg_r']:+.3f} N={best_est['n_breaks']}")
+            print(
+                f"    Established benchmark: 1000 {best_est['size_filter']} "
+                f"avgR={best_est['avg_r']:+.3f} N={best_est['n_breaks']}"
+            )
 
         # Dead zone candidates that beat 1000
         benchmark = best_est["avg_r"] if len(est_1000) > 0 else 0
-        dead = inst_df[(inst_df["dominance"].isin(["DEAD-ZONE", "ASIA-FADE"])) &
-                        (inst_df["n_breaks"] >= 20) &
-                        (inst_df["avg_r"] > benchmark)]
+        dead = inst_df[
+            (inst_df["dominance"].isin(["DEAD-ZONE", "ASIA-FADE"]))
+            & (inst_df["n_breaks"] >= 20)
+            & (inst_df["avg_r"] > benchmark)
+        ]
         if len(dead) > 0:
             print(f"    Dead-zone slots BEATING benchmark:")
             for _, r in dead.sort_values("avg_r", ascending=False).head(5).iterrows():
-                print(f"      {r['bris_time']} {r['dst_regime']:8s} {r['size_filter']:12s} "
-                      f"avgR={r['avg_r']:+.3f} N={r['n_breaks']:4d} vol={r['avg_vol']:.0f}")
+                print(
+                    f"      {r['bris_time']} {r['dst_regime']:8s} {r['size_filter']:12s} "
+                    f"avgR={r['avg_r']:+.3f} N={r['n_breaks']:4d} vol={r['avg_vol']:.0f}"
+                )
         else:
             print(f"    No dead-zone slots beat the 1000 benchmark")
 
         # All time slots sorted by avgR (top 10)
-        best_overall = inst_df[inst_df["n_breaks"] >= 30].sort_values(
-            "avg_r", ascending=False).head(10)
+        best_overall = inst_df[inst_df["n_breaks"] >= 30].sort_values("avg_r", ascending=False).head(10)
         print(f"\n    Top 10 time slots overall (N>=30):")
         for _, r in best_overall.iterrows():
             marker = " ◄ DEAD-ZONE" if r["dominance"] in ["DEAD-ZONE", "ASIA-FADE"] else ""
-            marker2 = " ◄ ESTABLISHED" if r["bris_time"] in ["0900","1000","1100","1130","1800","0030","2300"] else ""
-            print(f"      {r['bris_time']} {r['dst_regime']:8s} {r['dominance']:14s} "
-                  f"{r['size_filter']:12s} avgR={r['avg_r']:+.3f} N={r['n_breaks']:4d} "
-                  f"vol={r['avg_vol']:7.0f}{marker}{marker2}")
+            marker2 = (
+                " ◄ ESTABLISHED" if r["bris_time"] in ["0900", "1000", "1100", "1130", "1800", "0030", "2300"] else ""
+            )
+            print(
+                f"      {r['bris_time']} {r['dst_regime']:8s} {r['dominance']:14s} "
+                f"{r['size_filter']:12s} avgR={r['avg_r']:+.3f} N={r['n_breaks']:4d} "
+                f"vol={r['avg_vol']:7.0f}{marker}{marker2}"
+            )
 
     print(f"\n  CAVEATS:")
     print(f"    - IN-SAMPLE only (~500 MNQ/MES days, ~2900 MGC days)")
@@ -606,6 +647,7 @@ def main():
     print(f"\n  Total runtime: {elapsed:.1f}s")
 
     con.close()
+
 
 if __name__ == "__main__":
     main()

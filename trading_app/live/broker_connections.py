@@ -26,8 +26,13 @@ BROKER_TYPES = {
         "fields": [
             {"key": "username", "label": "Username / Email", "type": "text", "required": True},
             {"key": "api_key", "label": "API Key", "type": "password", "required": True},
-            {"key": "base_url", "label": "Base URL", "type": "text", "required": False,
-             "default": "https://api.thefuturesdesk.projectx.com"},
+            {
+                "key": "base_url",
+                "label": "Base URL",
+                "type": "text",
+                "required": False,
+                "default": "https://api.thefuturesdesk.projectx.com",
+            },
         ],
     },
     "tradovate": {
@@ -46,8 +51,13 @@ BROKER_TYPES = {
             {"key": "user", "label": "Username", "type": "text", "required": True},
             {"key": "password", "label": "Password", "type": "password", "required": True},
             {"key": "gateway", "label": "Gateway URL", "type": "text", "required": True},
-            {"key": "system_name", "label": "System Name", "type": "text", "required": False,
-             "default": "Rithmic Paper Trading"},
+            {
+                "key": "system_name",
+                "label": "System Name",
+                "type": "text",
+                "required": False,
+                "default": "Rithmic Paper Trading",
+            },
         ],
     },
 }
@@ -65,7 +75,6 @@ class ConnectionState:
 
 
 class BrokerConnectionManager:
-
     def __init__(self):
         self._connections: list[dict] = []
         self._states: dict[str, ConnectionState] = {}
@@ -89,30 +98,38 @@ class BrokerConnectionManager:
 
     def _migrate_from_env(self) -> None:
         if os.environ.get("PROJECTX_API_KEY"):
-            self._connections.append({
-                "id": f"env-projectx-{uuid.uuid4().hex[:6]}",
-                "broker_type": "projectx", "display_name": "TopStepX (from .env)",
-                "enabled": True, "source": "env",
-                "credentials": {
-                    "username": os.environ.get("PROJECTX_USERNAME", ""),
-                    "api_key": os.environ.get("PROJECTX_API_KEY", ""),
-                    "base_url": os.environ.get("PROJECTX_BASE_URL", "https://api.thefuturesdesk.projectx.com"),
-                },
-            })
+            self._connections.append(
+                {
+                    "id": f"env-projectx-{uuid.uuid4().hex[:6]}",
+                    "broker_type": "projectx",
+                    "display_name": "TopStepX (from .env)",
+                    "enabled": True,
+                    "source": "env",
+                    "credentials": {
+                        "username": os.environ.get("PROJECTX_USERNAME", ""),
+                        "api_key": os.environ.get("PROJECTX_API_KEY", ""),
+                        "base_url": os.environ.get("PROJECTX_BASE_URL", "https://api.thefuturesdesk.projectx.com"),
+                    },
+                }
+            )
             log.info("Migrated ProjectX connection from .env")
         if os.environ.get("TRADOVATE_CID"):
-            self._connections.append({
-                "id": f"env-tradovate-{uuid.uuid4().hex[:6]}",
-                "broker_type": "tradovate", "display_name": "Tradovate (from .env)",
-                "enabled": False, "source": "env",
-                "credentials": {
-                    "user": os.environ.get("TRADOVATE_USER", ""),
-                    "password": os.environ.get("TRADOVATE_PASS", ""),
-                    "cid": os.environ.get("TRADOVATE_CID", ""),
-                    "sec": os.environ.get("TRADOVATE_SEC", ""),
-                    "demo": os.environ.get("TRADOVATE_DEMO", "0"),
-                },
-            })
+            self._connections.append(
+                {
+                    "id": f"env-tradovate-{uuid.uuid4().hex[:6]}",
+                    "broker_type": "tradovate",
+                    "display_name": "Tradovate (from .env)",
+                    "enabled": False,
+                    "source": "env",
+                    "credentials": {
+                        "user": os.environ.get("TRADOVATE_USER", ""),
+                        "password": os.environ.get("TRADOVATE_PASS", ""),
+                        "cid": os.environ.get("TRADOVATE_CID", ""),
+                        "sec": os.environ.get("TRADOVATE_SEC", ""),
+                        "demo": os.environ.get("TRADOVATE_DEMO", "0"),
+                    },
+                }
+            )
 
     def save(self) -> None:
         with self._lock:
@@ -126,14 +143,20 @@ class BrokerConnectionManager:
         result = []
         for conn in self._connections:
             state = self._states.get(conn["id"], ConnectionState())
-            result.append({
-                "id": conn["id"], "broker_type": conn["broker_type"],
-                "display_name": conn["display_name"], "enabled": conn.get("enabled", True),
-                "source": conn.get("source", "ui"), "status": state.status,
-                "last_error": state.last_error, "connected_at": state.connected_at,
-                "account_count": state.account_count,
-                "credentials": {k: "***" if v else "" for k, v in conn.get("credentials", {}).items()},
-            })
+            result.append(
+                {
+                    "id": conn["id"],
+                    "broker_type": conn["broker_type"],
+                    "display_name": conn["display_name"],
+                    "enabled": conn.get("enabled", True),
+                    "source": conn.get("source", "ui"),
+                    "status": state.status,
+                    "last_error": state.last_error,
+                    "connected_at": state.connected_at,
+                    "account_count": state.account_count,
+                    "credentials": {k: "***" if v else "" for k, v in conn.get("credentials", {}).items()},
+                }
+            )
         return result
 
     def get_enabled_connections(self) -> list[dict]:
@@ -148,8 +171,14 @@ class BrokerConnectionManager:
             if not field["required"] and field["key"] not in credentials:
                 credentials[field["key"]] = field.get("default", "")
         conn_id = f"{broker_type}-{uuid.uuid4().hex[:8]}"
-        conn = {"id": conn_id, "broker_type": broker_type, "display_name": display_name,
-                "enabled": True, "credentials": credentials, "source": "ui"}
+        conn = {
+            "id": conn_id,
+            "broker_type": broker_type,
+            "display_name": display_name,
+            "enabled": True,
+            "credentials": credentials,
+            "source": "ui",
+        }
         with self._lock:
             self._connections.append(conn)
             self._states[conn_id] = ConnectionState()
@@ -235,6 +264,7 @@ class BrokerConnectionManager:
             if credentials.get("base_url"):
                 os.environ["PROJECTX_BASE_URL"] = credentials["base_url"]
             from trading_app.live.projectx.auth import ProjectXAuth
+
             return ProjectXAuth()
         elif broker_type == "tradovate":
             if credentials.get("user"):
@@ -246,6 +276,7 @@ class BrokerConnectionManager:
             if credentials.get("sec"):
                 os.environ["TRADOVATE_SEC"] = credentials["sec"]
             from trading_app.live.tradovate.auth import TradovateAuth
+
             return TradovateAuth()
         elif broker_type == "rithmic":
             raise NotImplementedError("Rithmic requires running session")

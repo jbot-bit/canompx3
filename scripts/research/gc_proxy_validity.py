@@ -34,7 +34,8 @@ def gate_1(con: duckdb.DuckDBPyConnection) -> dict:
     print("GATE 1: BAR-LEVEL PRICE IDENTITY (raw bars_1m)")
     print("=" * 70)
 
-    row = con.execute("""
+    row = con.execute(
+        """
         WITH paired AS (
             SELECT
                 gc.open AS gc_o, mgc.open AS mgc_o,
@@ -63,18 +64,36 @@ def gate_1(con: duckdb.DuckDBPyConnection) -> dict:
             -- Volume ratio (negative control)
             AVG(gc_vol)::FLOAT / NULLIF(AVG(mgc_vol), 0)           AS vol_ratio
         FROM paired
-    """, [OVERLAP_START, OVERLAP_END]).fetchone()
+    """,
+        [OVERLAP_START, OVERLAP_END],
+    ).fetchone()
 
-    r = dict(zip([
-        "n", "open_corr", "high_corr", "low_corr", "range_corr",
-        "avg_h_diff", "med_h_diff", "p99_h_diff", "max_h_diff",
-        "avg_range_diff", "h_1tick", "vol_ratio",
-    ], row))
+    r = dict(
+        zip(
+            [
+                "n",
+                "open_corr",
+                "high_corr",
+                "low_corr",
+                "range_corr",
+                "avg_h_diff",
+                "med_h_diff",
+                "p99_h_diff",
+                "max_h_diff",
+                "avg_range_diff",
+                "h_1tick",
+                "vol_ratio",
+            ],
+            row,
+        )
+    )
 
     print(f"  Paired minute bars:  {r['n']:,}")
     print(f"  PRICE correlations:  open={r['open_corr']:.8f}  high={r['high_corr']:.8f}  low={r['low_corr']:.8f}")
     print(f"  RANGE correlation:   {r['range_corr']:.8f}")
-    print(f"  High diffs (pts):    avg={r['avg_h_diff']:.4f}  med={r['med_h_diff']:.4f}  p99={r['p99_h_diff']:.2f}  max={r['max_h_diff']:.2f}")
+    print(
+        f"  High diffs (pts):    avg={r['avg_h_diff']:.4f}  med={r['med_h_diff']:.4f}  p99={r['p99_h_diff']:.2f}  max={r['max_h_diff']:.2f}"
+    )
     print(f"  Range diff (pts):    avg={r['avg_range_diff']:.4f}")
     print(f"  High within 1 tick:  {r['h_1tick']:.1%}")
     print(f"  VOLUME ratio GC/MGC: {r['vol_ratio']:.1f}x  (DIFFERENT — as expected)")
@@ -98,7 +117,8 @@ def gate_2(con: duckdb.DuckDBPyConnection) -> dict:
     print("GATE 2: FILTER INPUT IDENTITY (computed from raw bars)")
     print("=" * 70)
 
-    row = con.execute("""
+    row = con.execute(
+        """
         WITH daily AS (
             SELECT symbol,
                    ts_utc::DATE AS day,
@@ -150,12 +170,23 @@ def gate_2(con: duckdb.DuckDBPyConnection) -> dict:
             AVG(ABS(gc.day_high - mgc.day_high)) AS avg_high_diff
         FROM gc JOIN mgc ON gc.day = mgc.day
         WHERE gc.gap_pct IS NOT NULL AND mgc.gap_pct IS NOT NULL
-    """, [OVERLAP_START, OVERLAP_END]).fetchone()
+    """,
+        [OVERLAP_START, OVERLAP_END],
+    ).fetchone()
 
     labels = [
-        "n", "range_corr", "avg_range_diff", "gap_corr", "avg_gap_diff",
-        "gap_r005_agree", "pdr_corr", "avg_pdr_diff", "vol_corr", "vol_ratio",
-        "high_corr", "avg_high_diff",
+        "n",
+        "range_corr",
+        "avg_range_diff",
+        "gap_corr",
+        "avg_gap_diff",
+        "gap_r005_agree",
+        "pdr_corr",
+        "avg_pdr_diff",
+        "vol_corr",
+        "vol_ratio",
+        "high_corr",
+        "avg_high_diff",
     ]
     r = dict(zip(labels, row))
 
@@ -173,8 +204,7 @@ def gate_2(con: duckdb.DuckDBPyConnection) -> dict:
     print(f"    Volume ratio GC/MGC: {r['vol_ratio']:.1f}x")
     print()
 
-    price_pass = (r["range_corr"] > 0.98 and r["pdr_corr"] > 0.98
-                  and r["gap_r005_agree"] > 0.95)
+    price_pass = r["range_corr"] > 0.98 and r["pdr_corr"] > 0.98 and r["gap_r005_agree"] > 0.95
     # Volume negative control: GC/MGC contract COUNT can be similar
     # (that's why micros exist — retail volume). The 10-100x difference
     # is in NOTIONAL value (100oz vs 10oz), not contract count.
@@ -210,7 +240,8 @@ def gate_3(con: duckdb.DuckDBPyConnection) -> dict:
 
     # FIX 1: Use LEFT JOIN to measure coverage (audit finding: silent fail)
     # FIX 2: Compare entry_price vs GC high/low containment, not just vs open
-    row = con.execute("""
+    row = con.execute(
+        """
         WITH mgc_trades AS (
             SELECT o.trading_day, o.orb_label, o.entry_model, o.rr_target,
                    o.entry_ts, o.entry_price, o.stop_price, o.target_price,
@@ -252,23 +283,32 @@ def gate_3(con: duckdb.DuckDBPyConnection) -> dict:
             SUM(CASE WHEN outcome = 'win' THEN 1 ELSE 0 END) AS n_win,
             SUM(CASE WHEN outcome = 'loss' THEN 1 ELSE 0 END) AS n_loss
         FROM with_gc
-    """, [OVERLAP_START, OVERLAP_END]).fetchone()
+    """,
+        [OVERLAP_START, OVERLAP_END],
+    ).fetchone()
 
     if row is None or row[0] == 0:
         print("  NO MATCHED TRADES — cannot verify outcome identity")
         return {"verdict": "FAIL — no data"}
 
     labels = [
-        "n_total", "n_matched", "coverage_pct", "contain_pct",
-        "long_trigger_pct", "short_trigger_pct", "avg_risk_range",
-        "avg_entry_vs_open", "n_win", "n_loss",
+        "n_total",
+        "n_matched",
+        "coverage_pct",
+        "contain_pct",
+        "long_trigger_pct",
+        "short_trigger_pct",
+        "avg_risk_range",
+        "avg_entry_vs_open",
+        "n_win",
+        "n_loss",
     ]
     r = dict(zip(labels, row))
 
     print(f"  Total MGC trades:         {r['n_total']:,}")
     print(f"  With GC bar at entry_ts:  {r['n_matched']:,} ({r['coverage_pct']:.1%} coverage)")
-    n_missing = r['n_total'] - r['n_matched']
-    print(f"  Missing GC bars:          {n_missing:,} ({n_missing/r['n_total']*100:.1f}%)")
+    n_missing = r["n_total"] - r["n_matched"]
+    print(f"  Missing GC bars:          {n_missing:,} ({n_missing / r['n_total'] * 100:.1f}%)")
     print()
     print(f"  GC bar CONTAINS entry:    {r['contain_pct']:.1%}")
     print(f"  Long would trigger on GC: {r['long_trigger_pct']:.1%}")
@@ -283,10 +323,12 @@ def gate_3(con: duckdb.DuckDBPyConnection) -> dict:
     print()
 
     # Verdict: coverage > 95% AND trigger rate > 93% AND containment > 90%
-    passed = (r["coverage_pct"] > 0.95
-              and r["contain_pct"] > 0.90
-              and r["long_trigger_pct"] > 0.93
-              and r["short_trigger_pct"] > 0.93)
+    passed = (
+        r["coverage_pct"] > 0.95
+        and r["contain_pct"] > 0.90
+        and r["long_trigger_pct"] > 0.93
+        and r["short_trigger_pct"] > 0.93
+    )
     r["entry_diff_pct_of_orb"] = entry_diff_pct
     r["verdict"] = "PASS" if passed else "FAIL"
     print(f"  VERDICT: {r['verdict']}")
@@ -305,7 +347,8 @@ def gate_4_adversarial(con: duckdb.DuckDBPyConnection) -> dict:
     print("=" * 70)
 
     # Find the 10 worst divergence days (largest price diff)
-    worst = con.execute("""
+    worst = con.execute(
+        """
         WITH daily_diff AS (
             SELECT gc.ts_utc::DATE AS day,
                    MAX(ABS(gc.high - mgc.high)) AS worst_high_diff,
@@ -321,7 +364,9 @@ def gate_4_adversarial(con: duckdb.DuckDBPyConnection) -> dict:
         FROM daily_diff
         ORDER BY worst_high_diff DESC
         LIMIT 10
-    """, [OVERLAP_START, OVERLAP_END]).fetchall()
+    """,
+        [OVERLAP_START, OVERLAP_END],
+    ).fetchall()
 
     print("  Top 10 worst-case divergence days:")
     print(f"  {'Date':<12} {'Worst High Diff':>15} {'Worst Low Diff':>15} {'Worst Open Diff':>16}")
@@ -337,11 +382,14 @@ def gate_4_adversarial(con: duckdb.DuckDBPyConnection) -> dict:
     # unless the ORB is right at the boundary.
     print(f"  Worst single-bar high diff: {max_diff:.2f} pts")
     print(f"  Typical G5 threshold: ~5 pts")
-    print(f"  Could worst case flip G5? {'POSSIBLY (within 1 pt of threshold)' if max_diff > 4 else 'NO — diff too small relative to threshold'}")
+    print(
+        f"  Could worst case flip G5? {'POSSIBLY (within 1 pt of threshold)' if max_diff > 4 else 'NO — diff too small relative to threshold'}"
+    )
     print()
 
     # Check: what fraction of days have ANY bar diff > 1 point?
-    row = con.execute("""
+    row = con.execute(
+        """
         WITH bar_diffs AS (
             SELECT gc.ts_utc::DATE AS day,
                    MAX(ABS(gc.high - mgc.high)) AS worst_diff
@@ -357,11 +405,13 @@ def gate_4_adversarial(con: duckdb.DuckDBPyConnection) -> dict:
             SUM(CASE WHEN worst_diff > 5.0 THEN 1 ELSE 0 END) AS days_over_5pt,
             SUM(CASE WHEN worst_diff > 10.0 THEN 1 ELSE 0 END) AS days_over_10pt
         FROM bar_diffs
-    """, [OVERLAP_START, OVERLAP_END]).fetchone()
+    """,
+        [OVERLAP_START, OVERLAP_END],
+    ).fetchone()
 
-    print(f"  Days with worst bar diff > 1 pt:  {row[1]}/{row[0]} ({row[1]/row[0]*100:.1f}%)")
-    print(f"  Days with worst bar diff > 5 pt:  {row[2]}/{row[0]} ({row[2]/row[0]*100:.1f}%)")
-    print(f"  Days with worst bar diff > 10 pt: {row[3]}/{row[0]} ({row[3]/row[0]*100:.1f}%)")
+    print(f"  Days with worst bar diff > 1 pt:  {row[1]}/{row[0]} ({row[1] / row[0] * 100:.1f}%)")
+    print(f"  Days with worst bar diff > 5 pt:  {row[2]}/{row[0]} ({row[2] / row[0] * 100:.1f}%)")
+    print(f"  Days with worst bar diff > 10 pt: {row[3]}/{row[0]} ({row[3] / row[0] * 100:.1f}%)")
     print()
 
     # Even on worst days, the diff is in individual bars, not sustained.
@@ -406,15 +456,16 @@ def main():
         print("FINAL SUMMARY")
         print("=" * 70)
         print(f"  Gate 1 (bar prices):    {g1['verdict']}  range_corr={g1['range_corr']:.6f}")
-        print(f"  Gate 2 (filter inputs): {g2['verdict']}  gap_corr={g2['gap_corr']:.6f}  pdr_corr={g2['pdr_corr']:.6f}")
-        print(f"  Gate 3 (outcomes):      {g3['verdict']}  coverage={g3.get('coverage_pct', 'N/A')}  trigger={g3.get('long_trigger_pct', 'N/A')}")
+        print(
+            f"  Gate 2 (filter inputs): {g2['verdict']}  gap_corr={g2['gap_corr']:.6f}  pdr_corr={g2['pdr_corr']:.6f}"
+        )
+        print(
+            f"  Gate 3 (outcomes):      {g3['verdict']}  coverage={g3.get('coverage_pct', 'N/A')}  trigger={g3.get('long_trigger_pct', 'N/A')}"
+        )
         print(f"  Gate 4 (adversarial):   {g4['verdict']}  worst={g4['max_diff']:.2f}pts")
         print()
 
-        all_pass = all(
-            g["verdict"] in ("PASS", "CAUTION")
-            for g in [g1, g2, g3, g4]
-        )
+        all_pass = all(g["verdict"] in ("PASS", "CAUTION") for g in [g1, g2, g3, g4])
 
         if all_pass:
             print("CONCLUSION: GC proxy is VALID for price-based filters.")
@@ -423,8 +474,10 @@ def main():
             print(f"  - {g1['n']:,} paired bars, price correlation > 0.9999")
             print(f"  - Filter inputs (gap, PDR, range) all correlate > 0.98")
             print(f"  - Volume DIFFERENT ({g2['vol_ratio']:.0f}x) confirming negative control")
-            print(f"  - {g3.get('n_matched', 0):,} trades: {g3.get('coverage_pct', 0):.1%} GC coverage, "
-                  f"{g3.get('long_trigger_pct', 0):.1%} trigger match")
+            print(
+                f"  - {g3.get('n_matched', 0):,} trades: {g3.get('coverage_pct', 0):.1%} GC coverage, "
+                f"{g3.get('long_trigger_pct', 0):.1%} trigger match"
+            )
             print()
             print("FILTER CLASSIFICATION:")
             print("  PRICE-SAFE (can use GC proxy):")

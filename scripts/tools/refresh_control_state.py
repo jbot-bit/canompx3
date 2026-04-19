@@ -57,7 +57,9 @@ def refresh_control_state(
 
     if refresh_c11 and (force or _needs_refresh(c11_before)):
         evaluate_profile_survival(profile_id=resolved_profile_id, db_path=db_path, write_state=True)
-        c11_result = RefreshResult(refreshed=True, reason=str(c11_before.get("reason") or c11_before.get("gate_msg") or "refreshed"))
+        c11_result = RefreshResult(
+            refreshed=True, reason=str(c11_before.get("reason") or c11_before.get("gate_msg") or "refreshed")
+        )
 
     if refresh_c12 and (force or _needs_refresh(c12_before)):
         run_monitor(apply_pauses=False)
@@ -82,12 +84,7 @@ def _print_state(label: str, lifecycle: dict[str, object]) -> None:
         f"valid={bool(c11.get('valid'))} gate_ok={bool(c11.get('gate_ok'))} "
         f"reason={c11.get('reason') or c11.get('gate_msg')}"
     )
-    print(
-        "  C12: "
-        f"valid={bool(c12.get('valid'))} "
-        f"reason={c12.get('reason')} "
-        f"counts={c12.get('counts')}"
-    )
+    print(f"  C12: valid={bool(c12.get('valid'))} reason={c12.get('reason')} counts={c12.get('counts')}")
     print(f"  blocked={lifecycle.get('blocked_strategy_ids', [])}")
 
 

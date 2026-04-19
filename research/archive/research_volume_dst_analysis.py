@@ -36,15 +36,13 @@ TZ_BRIS = ZoneInfo("Australia/Brisbane")
 
 def is_us_winter(trading_day: date) -> bool:
     """True if US Eastern is in standard time (EST, UTC-5)."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=TZ_US_EAST)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=TZ_US_EAST)
     return dt.utcoffset().total_seconds() == -5 * 3600
 
 
 def is_uk_winter(trading_day: date) -> bool:
     """True if UK is in standard time (GMT, UTC+0)."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=TZ_UK)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=TZ_UK)
     return dt.utcoffset().total_seconds() == 0
 
 
@@ -82,15 +80,15 @@ def brisbane_to_utc(hour: int, minute: int) -> tuple[int, int]:
     return utc_hour, minute
 
 
-def get_volume_at_time(con, symbol: str, utc_hour: int, utc_minute: int,
-                       n_bars: int = 5) -> list[dict]:
+def get_volume_at_time(con, symbol: str, utc_hour: int, utc_minute: int, n_bars: int = 5) -> list[dict]:
     """Get volume data for n_bars starting at given UTC time for all trading days.
 
     Returns list of dicts: {trading_day, orb_volume, post_orb_volume_60m}
     """
     # Query: for each day, get volume in the ORB window (first n_bars minutes)
     # and in the 60 minutes after
-    rows = con.execute("""
+    rows = con.execute(
+        """
         WITH day_bars AS (
             SELECT
                 ts_utc::DATE AS bar_date,
@@ -119,13 +117,15 @@ def get_volume_at_time(con, symbol: str, utc_hour: int, utc_minute: int,
         LEFT JOIN post_orb p ON o.bar_date = p.bar_date
         WHERE o.orb_volume > 0
         ORDER BY o.bar_date
-    """, [
-        symbol,
-        utc_hour * 60 + utc_minute,
-        utc_hour * 60 + utc_minute + n_bars,
-        utc_hour * 60 + utc_minute + n_bars,
-        utc_hour * 60 + utc_minute + n_bars + 60,
-    ]).fetchall()
+    """,
+        [
+            symbol,
+            utc_hour * 60 + utc_minute,
+            utc_hour * 60 + utc_minute + n_bars,
+            utc_hour * 60 + utc_minute + n_bars,
+            utc_hour * 60 + utc_minute + n_bars + 60,
+        ],
+    ).fetchall()
 
     return [{"trading_day": r[0], "orb_volume": r[1], "post_orb_vol": r[2]} for r in rows]
 
@@ -133,8 +133,7 @@ def get_volume_at_time(con, symbol: str, utc_hour: int, utc_minute: int,
 def compute_volume_stats(rows: list[dict]) -> dict:
     """Compute mean and median volume from list of volume dicts."""
     if not rows:
-        return {"n": 0, "mean_vol": None, "median_vol": None,
-                "mean_post": None, "median_post": None}
+        return {"n": 0, "mean_vol": None, "median_vol": None, "mean_post": None, "median_post": None}
 
     vols = [r["orb_volume"] for r in rows if r["orb_volume"] is not None]
     posts = [r["post_orb_vol"] for r in rows if r["post_orb_vol"] is not None]
@@ -167,8 +166,10 @@ def run_task1(con, output_dir: Path):
         print(f"\n{'=' * 60}")
         print(f"  {symbol}")
         print(f"{'=' * 60}")
-        print(f"{'Time':<8} | {'W Vol (mean/med)':<22} | {'S Vol (mean/med)':<22} | "
-              f"{'W/S Ratio':<10} | {'Post-ORB W':<12} | {'Post-ORB S':<12} | {'Post Ratio':<10}")
+        print(
+            f"{'Time':<8} | {'W Vol (mean/med)':<22} | {'S Vol (mean/med)':<22} | "
+            f"{'W/S Ratio':<10} | {'Post-ORB W':<12} | {'Post-ORB S':<12} | {'Post Ratio':<10}"
+        )
         print("-" * 110)
 
         for time_label, (hour, minute, dst_type) in sorted(ANALYSIS_TIMES.items()):
@@ -178,21 +179,30 @@ def run_task1(con, output_dir: Path):
             if dst_type == "NONE":
                 # No DST split needed — show combined only
                 stats = compute_volume_stats(vol_data)
-                mean_s = f"{stats['mean_vol']:.0f}" if stats['mean_vol'] else "N/A"
-                med_s = f"{stats['median_vol']:.0f}" if stats['median_vol'] else "N/A"
-                post_s = f"{stats['mean_post']:.1f}" if stats['mean_post'] else "N/A"
-                print(f"{time_label:<8} | {mean_s + '/' + med_s:<22} | {'(no DST)':<22} | "
-                      f"{'N/A':<10} | {post_s:<12} | {'N/A':<12} | {'N/A':<10}")
-                all_results.append({
-                    "symbol": symbol, "time": time_label,
-                    "dst_type": dst_type,
-                    "winter_n": stats["n"], "winter_mean": stats["mean_vol"],
-                    "winter_median": stats["median_vol"],
-                    "summer_n": None, "summer_mean": None, "summer_median": None,
-                    "ratio": None,
-                    "post_winter": stats["mean_post"], "post_summer": None,
-                    "post_ratio": None,
-                })
+                mean_s = f"{stats['mean_vol']:.0f}" if stats["mean_vol"] else "N/A"
+                med_s = f"{stats['median_vol']:.0f}" if stats["median_vol"] else "N/A"
+                post_s = f"{stats['mean_post']:.1f}" if stats["mean_post"] else "N/A"
+                print(
+                    f"{time_label:<8} | {mean_s + '/' + med_s:<22} | {'(no DST)':<22} | "
+                    f"{'N/A':<10} | {post_s:<12} | {'N/A':<12} | {'N/A':<10}"
+                )
+                all_results.append(
+                    {
+                        "symbol": symbol,
+                        "time": time_label,
+                        "dst_type": dst_type,
+                        "winter_n": stats["n"],
+                        "winter_mean": stats["mean_vol"],
+                        "winter_median": stats["median_vol"],
+                        "summer_n": None,
+                        "summer_mean": None,
+                        "summer_median": None,
+                        "ratio": None,
+                        "post_winter": stats["mean_post"],
+                        "post_summer": None,
+                        "post_ratio": None,
+                    }
+                )
             else:
                 # Split by winter/summer
                 is_winter_fn = is_us_winter if dst_type == "US" else is_uk_winter
@@ -201,7 +211,7 @@ def run_task1(con, output_dir: Path):
                 summer_rows = []
                 for r in vol_data:
                     td = r["trading_day"]
-                    if hasattr(td, 'date'):
+                    if hasattr(td, "date"):
                         td = td.date()
                     elif not isinstance(td, date):
                         td = date.fromisoformat(str(td)[:10])
@@ -213,38 +223,46 @@ def run_task1(con, output_dir: Path):
                 w_stats = compute_volume_stats(winter_rows)
                 s_stats = compute_volume_stats(summer_rows)
 
-                w_mean = f"{w_stats['mean_vol']:.0f}" if w_stats['mean_vol'] else "N/A"
-                w_med = f"{w_stats['median_vol']:.0f}" if w_stats['median_vol'] else "N/A"
-                s_mean = f"{s_stats['mean_vol']:.0f}" if s_stats['mean_vol'] else "N/A"
-                s_med = f"{s_stats['median_vol']:.0f}" if s_stats['median_vol'] else "N/A"
+                w_mean = f"{w_stats['mean_vol']:.0f}" if w_stats["mean_vol"] else "N/A"
+                w_med = f"{w_stats['median_vol']:.0f}" if w_stats["median_vol"] else "N/A"
+                s_mean = f"{s_stats['mean_vol']:.0f}" if s_stats["mean_vol"] else "N/A"
+                s_med = f"{s_stats['median_vol']:.0f}" if s_stats["median_vol"] else "N/A"
 
                 ratio = None
-                if w_stats['mean_vol'] and s_stats['mean_vol'] and s_stats['mean_vol'] > 0:
-                    ratio = w_stats['mean_vol'] / s_stats['mean_vol']
+                if w_stats["mean_vol"] and s_stats["mean_vol"] and s_stats["mean_vol"] > 0:
+                    ratio = w_stats["mean_vol"] / s_stats["mean_vol"]
                 ratio_s = f"{ratio:.2f}" if ratio else "N/A"
 
-                w_post = f"{w_stats['mean_post']:.1f}" if w_stats['mean_post'] else "N/A"
-                s_post = f"{s_stats['mean_post']:.1f}" if s_stats['mean_post'] else "N/A"
+                w_post = f"{w_stats['mean_post']:.1f}" if w_stats["mean_post"] else "N/A"
+                s_post = f"{s_stats['mean_post']:.1f}" if s_stats["mean_post"] else "N/A"
 
                 post_ratio = None
-                if w_stats['mean_post'] and s_stats['mean_post'] and s_stats['mean_post'] > 0:
-                    post_ratio = w_stats['mean_post'] / s_stats['mean_post']
+                if w_stats["mean_post"] and s_stats["mean_post"] and s_stats["mean_post"] > 0:
+                    post_ratio = w_stats["mean_post"] / s_stats["mean_post"]
                 pr_s = f"{post_ratio:.2f}" if post_ratio else "N/A"
 
-                print(f"{time_label:<8} | {w_mean + '/' + w_med:<22} | {s_mean + '/' + s_med:<22} | "
-                      f"{ratio_s:<10} | {w_post:<12} | {s_post:<12} | {pr_s:<10}")
+                print(
+                    f"{time_label:<8} | {w_mean + '/' + w_med:<22} | {s_mean + '/' + s_med:<22} | "
+                    f"{ratio_s:<10} | {w_post:<12} | {s_post:<12} | {pr_s:<10}"
+                )
 
-                all_results.append({
-                    "symbol": symbol, "time": time_label,
-                    "dst_type": dst_type,
-                    "winter_n": w_stats["n"], "winter_mean": w_stats["mean_vol"],
-                    "winter_median": w_stats["median_vol"],
-                    "summer_n": s_stats["n"], "summer_mean": s_stats["mean_vol"],
-                    "summer_median": s_stats["median_vol"],
-                    "ratio": ratio,
-                    "post_winter": w_stats["mean_post"], "post_summer": s_stats["mean_post"],
-                    "post_ratio": post_ratio,
-                })
+                all_results.append(
+                    {
+                        "symbol": symbol,
+                        "time": time_label,
+                        "dst_type": dst_type,
+                        "winter_n": w_stats["n"],
+                        "winter_mean": w_stats["mean_vol"],
+                        "winter_median": w_stats["median_vol"],
+                        "summer_n": s_stats["n"],
+                        "summer_mean": s_stats["mean_vol"],
+                        "summer_median": s_stats["median_vol"],
+                        "ratio": ratio,
+                        "post_winter": w_stats["mean_post"],
+                        "post_summer": s_stats["mean_post"],
+                        "post_ratio": post_ratio,
+                    }
+                )
 
     # Key analysis
     print("\n" + "=" * 80)
@@ -282,12 +300,24 @@ def run_task1(con, output_dir: Path):
     # Save CSV
     csv_path = output_dir / "volume_dst_analysis.csv"
     with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=[
-            "symbol", "time", "dst_type",
-            "winter_n", "winter_mean", "winter_median",
-            "summer_n", "summer_mean", "summer_median",
-            "ratio", "post_winter", "post_summer", "post_ratio",
-        ])
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "symbol",
+                "time",
+                "dst_type",
+                "winter_n",
+                "winter_mean",
+                "winter_median",
+                "summer_n",
+                "summer_mean",
+                "summer_median",
+                "ratio",
+                "post_winter",
+                "post_summer",
+                "post_ratio",
+            ],
+        )
         writer.writeheader()
         writer.writerows(all_results)
     print(f"\nSaved: {csv_path}")
@@ -303,14 +333,38 @@ def run_task2(con, output_dir: Path):
 
     # Candidates from time scan results
     candidates = [
-        {"time": "0930", "instrument": "MGC", "nearest": "0900",
-         "scan_avg_w": 0.14, "scan_avg_s": 0.18, "stability": "STABLE"},
-        {"time": "1900", "instrument": "MGC", "nearest": "1800",
-         "scan_avg_w": 0.43, "scan_avg_s": 0.48, "stability": "STABLE"},
-        {"time": "1045", "instrument": "MNQ", "nearest": "1000",
-         "scan_avg_w": 0.33, "scan_avg_s": 0.11, "stability": "WINTER-DOM"},
-        {"time": "1045", "instrument": "MES", "nearest": "1000",
-         "scan_avg_w": 0.35, "scan_avg_s": 0.10, "stability": "WINTER-DOM"},
+        {
+            "time": "0930",
+            "instrument": "MGC",
+            "nearest": "0900",
+            "scan_avg_w": 0.14,
+            "scan_avg_s": 0.18,
+            "stability": "STABLE",
+        },
+        {
+            "time": "1900",
+            "instrument": "MGC",
+            "nearest": "1800",
+            "scan_avg_w": 0.43,
+            "scan_avg_s": 0.48,
+            "stability": "STABLE",
+        },
+        {
+            "time": "1045",
+            "instrument": "MNQ",
+            "nearest": "1000",
+            "scan_avg_w": 0.33,
+            "scan_avg_s": 0.11,
+            "stability": "WINTER-DOM",
+        },
+        {
+            "time": "1045",
+            "instrument": "MES",
+            "nearest": "1000",
+            "scan_avg_w": 0.35,
+            "scan_avg_s": 0.10,
+            "stability": "WINTER-DOM",
+        },
     ]
 
     results = []
@@ -329,7 +383,8 @@ def run_task2(con, output_dir: Path):
 
         # 1. Count G4+ days (ORB size >= 4pt from 5-minute bars)
         # Query 5 bars, compute ORB, filter G4+
-        orb_rows = con.execute("""
+        orb_rows = con.execute(
+            """
             WITH orb_bars AS (
                 SELECT
                     ts_utc::DATE AS bar_date,
@@ -350,13 +405,15 @@ def run_task2(con, output_dir: Path):
             FROM daily_orb
             WHERE orb_size >= 4.0
             ORDER BY bar_date
-        """, [symbol, utc_h * 60 + utc_m, utc_h * 60 + utc_m + 4]).fetchall()
+        """,
+            [symbol, utc_h * 60 + utc_m, utc_h * 60 + utc_m + 4],
+        ).fetchall()
 
         g4_days = len(orb_rows)
         if orb_rows:
             first_day = orb_rows[0][0]
             last_day = orb_rows[-1][0]
-            if hasattr(first_day, 'date'):
+            if hasattr(first_day, "date"):
                 first_day = first_day.date()
                 last_day = last_day.date()
             span_years = max((last_day - first_day).days / 365.25, 0.5)
@@ -370,7 +427,8 @@ def run_task2(con, output_dir: Path):
         print(f"  Avg ORB size: {avg_orb:.1f} pts")
 
         # 2. Nearest session comparison
-        nearest_orbs = con.execute("""
+        nearest_orbs = con.execute(
+            """
             WITH orb_bars AS (
                 SELECT
                     ts_utc::DATE AS bar_date,
@@ -388,19 +446,21 @@ def run_task2(con, output_dir: Path):
                 HAVING COUNT(*) >= 4
             )
             SELECT bar_date FROM daily_orb WHERE orb_size >= 4.0
-        """, [symbol, n_utc_h * 60 + n_utc_m, n_utc_h * 60 + n_utc_m + 4]).fetchall()
+        """,
+            [symbol, n_utc_h * 60 + n_utc_m, n_utc_h * 60 + n_utc_m + 4],
+        ).fetchall()
 
         nearest_g4_days = set()
         for r in nearest_orbs:
             d = r[0]
-            if hasattr(d, 'date'):
+            if hasattr(d, "date"):
                 d = d.date()
             nearest_g4_days.add(d)
 
         cand_g4_days = set()
         for r in orb_rows:
             d = r[0]
-            if hasattr(d, 'date'):
+            if hasattr(d, "date"):
                 d = d.date()
             cand_g4_days.add(d)
 
@@ -435,33 +495,38 @@ def run_task2(con, output_dir: Path):
 
         print(f"  Verdict: {verdict}")
 
-        results.append({
-            "candidate": f"{symbol}_{time_label}",
-            "g4_per_year": round(g4_per_year, 0),
-            "avg_orb": round(avg_orb, 1),
-            "overlap_pct": round(overlap, 0),
-            "vol_ratio": round(vol_ratio, 2),
-            "stability": cand["stability"],
-            "verdict": verdict,
-        })
+        results.append(
+            {
+                "candidate": f"{symbol}_{time_label}",
+                "g4_per_year": round(g4_per_year, 0),
+                "avg_orb": round(avg_orb, 1),
+                "overlap_pct": round(overlap, 0),
+                "vol_ratio": round(vol_ratio, 2),
+                "stability": cand["stability"],
+                "verdict": verdict,
+            }
+        )
 
     # Summary table
     print(f"\n{'=' * 90}")
-    print(f"{'Candidate':<15} | {'G4+/yr':<8} | {'Avg ORB':<8} | {'Overlap':<8} | "
-          f"{'Vol Ratio':<10} | {'Stability':<12} | {'Verdict':<25}")
+    print(
+        f"{'Candidate':<15} | {'G4+/yr':<8} | {'Avg ORB':<8} | {'Overlap':<8} | "
+        f"{'Vol Ratio':<10} | {'Stability':<12} | {'Verdict':<25}"
+    )
     print("-" * 90)
     for r in results:
-        print(f"{r['candidate']:<15} | {r['g4_per_year']:<8.0f} | {r['avg_orb']:<8.1f} | "
-              f"{r['overlap_pct']:<7.0f}% | {r['vol_ratio']:<10.2f} | "
-              f"{r['stability']:<12} | {r['verdict']:<25}")
+        print(
+            f"{r['candidate']:<15} | {r['g4_per_year']:<8.0f} | {r['avg_orb']:<8.1f} | "
+            f"{r['overlap_pct']:<7.0f}% | {r['vol_ratio']:<10.2f} | "
+            f"{r['stability']:<12} | {r['verdict']:<25}"
+        )
 
     return results
 
 
 def main():
     parser = argparse.ArgumentParser(description="Volume DST analysis + new session candidates")
-    parser.add_argument("--db-path", type=str, default="C:/db/gold.db",
-                        help="Database path")
+    parser.add_argument("--db-path", type=str, default="C:/db/gold.db", help="Database path")
     args = parser.parse_args()
 
     db_path = Path(args.db_path)

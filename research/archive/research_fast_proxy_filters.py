@@ -83,12 +83,8 @@ def add_filters(df: pd.DataFrame) -> dict[str, pd.Series]:
             & df["size"].notna()
             & (df["size"] >= df["size_q75"])
         ),
-        "fast_break_only": (
-            df["break_delay_min"].notna() & (df["break_delay_min"] <= 15)
-        ),
-        "continue_only": (
-            df["break_bar_continues"] == True
-        ),
+        "fast_break_only": (df["break_delay_min"].notna() & (df["break_delay_min"] <= 15)),
+        "continue_only": (df["break_bar_continues"] == True),
     }
 
 
@@ -107,37 +103,41 @@ def summarize(df: pd.DataFrame, filters: dict[str, pd.Series], min_on: int) -> t
             base_avg = float(base["pnl_r"].mean())
             on_avg = float(on["pnl_r"].mean())
 
-            rows.append({
-                "filter": filt_name,
-                "symbol": sym,
-                "session": sess,
-                "n_base": len(base),
-                "n_on": len(on),
-                "on_rate": len(on) / len(base),
-                "avg_r_base": base_avg,
-                "avg_r_on": on_avg,
-                "uplift_avg_r": on_avg - base_avg,
-                "wr_base": float((base["pnl_r"] > 0).mean()),
-                "wr_on": float((on["pnl_r"] > 0).mean()),
-                "wr_uplift": float((on["pnl_r"] > 0).mean() - (base["pnl_r"] > 0).mean()),
-                "dd_base": _max_dd(base["pnl_r"]),
-                "dd_on": _max_dd(on["pnl_r"]),
-            })
+            rows.append(
+                {
+                    "filter": filt_name,
+                    "symbol": sym,
+                    "session": sess,
+                    "n_base": len(base),
+                    "n_on": len(on),
+                    "on_rate": len(on) / len(base),
+                    "avg_r_base": base_avg,
+                    "avg_r_on": on_avg,
+                    "uplift_avg_r": on_avg - base_avg,
+                    "wr_base": float((base["pnl_r"] > 0).mean()),
+                    "wr_on": float((on["pnl_r"] > 0).mean()),
+                    "wr_uplift": float((on["pnl_r"] > 0).mean() - (base["pnl_r"] > 0).mean()),
+                    "dd_base": _max_dd(base["pnl_r"]),
+                    "dd_on": _max_dd(on["pnl_r"]),
+                }
+            )
 
             for y, gy in on.groupby("year"):
                 base_y = base[base["year"] == y]
                 if base_y.empty:
                     continue
-                yearly_rows.append({
-                    "filter": filt_name,
-                    "symbol": sym,
-                    "session": sess,
-                    "year": int(y),
-                    "n_on": len(gy),
-                    "avg_r_on": float(gy["pnl_r"].mean()),
-                    "avg_r_base": float(base_y["pnl_r"].mean()),
-                    "uplift": float(gy["pnl_r"].mean() - base_y["pnl_r"].mean()),
-                })
+                yearly_rows.append(
+                    {
+                        "filter": filt_name,
+                        "symbol": sym,
+                        "session": sess,
+                        "year": int(y),
+                        "n_on": len(gy),
+                        "avg_r_on": float(gy["pnl_r"].mean()),
+                        "avg_r_base": float(base_y["pnl_r"].mean()),
+                        "uplift": float(gy["pnl_r"].mean() - base_y["pnl_r"].mean()),
+                    }
+                )
 
     s = pd.DataFrame(rows)
     y = pd.DataFrame(yearly_rows)
@@ -181,20 +181,22 @@ def oos_check(df: pd.DataFrame, filters: dict[str, pd.Series], min_on: int) -> p
             if len(tr_off) == 0 or len(te_off) == 0:
                 continue
 
-            rows.append({
-                "filter": filt_name,
-                "symbol": sym,
-                "session": sess,
-                "train_years": f"{min(years)}-{split_year-1}",
-                "test_year": int(split_year),
-                "n_train_on": len(tr_on),
-                "n_test_on": len(te_on),
-                "train_uplift": float(tr_on["pnl_r"].mean() - tr_off["pnl_r"].mean()) if len(tr_off) else np.nan,
-                "test_uplift": float(te_on["pnl_r"].mean() - te_off["pnl_r"].mean()) if len(te_off) else np.nan,
-                "train_avg_on": float(tr_on["pnl_r"].mean()),
-                "test_avg_on": float(te_on["pnl_r"].mean()),
-                "test_wr_on": float((te_on["pnl_r"] > 0).mean()),
-            })
+            rows.append(
+                {
+                    "filter": filt_name,
+                    "symbol": sym,
+                    "session": sess,
+                    "train_years": f"{min(years)}-{split_year - 1}",
+                    "test_year": int(split_year),
+                    "n_train_on": len(tr_on),
+                    "n_test_on": len(te_on),
+                    "train_uplift": float(tr_on["pnl_r"].mean() - tr_off["pnl_r"].mean()) if len(tr_off) else np.nan,
+                    "test_uplift": float(te_on["pnl_r"].mean() - te_off["pnl_r"].mean()) if len(te_off) else np.nan,
+                    "train_avg_on": float(tr_on["pnl_r"].mean()),
+                    "test_avg_on": float(te_on["pnl_r"].mean()),
+                    "test_wr_on": float((te_on["pnl_r"] > 0).mean()),
+                }
+            )
 
     o = pd.DataFrame(rows)
     if not o.empty:

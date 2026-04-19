@@ -48,9 +48,7 @@ def main() -> None:
     # Step 2: collect unique (trading_day, symbol, target_session, garch_pct)
     day_records: list[pd.DataFrame] = []
     for _, row in rows.iterrows():
-        filter_sql, join_sql = broad.exact_filter_sql(
-            row["filter_type"], row["orb_label"], row["instrument"]
-        )
+        filter_sql, join_sql = broad.exact_filter_sql(row["filter_type"], row["orb_label"], row["instrument"])
         if filter_sql is None:
             continue
         ts = row["orb_label"]
@@ -82,9 +80,7 @@ def main() -> None:
     target_pop = pd.concat(day_records, ignore_index=True)
     target_pop["trading_day"] = pd.to_datetime(target_pop["trading_day"]).dt.date
     target_pop["gp"] = pd.to_numeric(target_pop["gp"], errors="coerce")
-    target_days = target_pop.drop_duplicates(
-        subset=["trading_day", "symbol", "target_session"]
-    ).copy()
+    target_days = target_pop.drop_duplicates(subset=["trading_day", "symbol", "target_session"]).copy()
     print(f"Unique (day, symbol, target_session) rows: {len(target_days)}")
 
     # Step 3: compute target_start_ts per row
@@ -116,9 +112,7 @@ def main() -> None:
 
     # Step 5: for each target row, check if ANY prior session win resolved before start
     # Vectorized via merge + filter
-    merged = target_days.merge(
-        priors, on=["trading_day", "symbol"], how="left", suffixes=("", "_prior")
-    )
+    merged = target_days.merge(priors, on=["trading_day", "symbol"], how="left", suffixes=("", "_prior"))
     # Exclude same-session priors
     merged = merged[merged["orb_label"] != merged["target_session"]].copy()
     # Ensure tz-aware comparison — both exit_ts and target_start_ts should be UTC
@@ -131,9 +125,7 @@ def main() -> None:
 
     # Flag: any prior win per (trading_day, symbol, target_session)
     any_win_flags = (
-        prior_wins.groupby(["trading_day", "symbol", "target_session"])
-        .size()
-        .reset_index(name="n_prior_wins")
+        prior_wins.groupby(["trading_day", "symbol", "target_session"]).size().reset_index(name="n_prior_wins")
     )
     any_win_flags["any_prior_win"] = 1
 
@@ -146,13 +138,11 @@ def main() -> None:
     target_days["any_prior_win"] = target_days["any_prior_win"].fillna(0).astype(int)
     target_days["garch_high"] = (target_days["gp"] >= GARCH_HIGH).astype(int)
 
-    rdf = target_days[
-        ["trading_day", "symbol", "target_session", "garch_high", "any_prior_win"]
-    ].copy()
+    rdf = target_days[["trading_day", "symbol", "target_session", "garch_high", "any_prior_win"]].copy()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"DAY-LEVEL CARRY-GARCH COLLINEARITY")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"Population: {len(rdf)} (day, symbol, target_session) rows")
     print(f"garch_high rate: {rdf['garch_high'].mean():.3f}")
     print(f"any_prior_win rate: {rdf['any_prior_win'].mean():.3f}")
@@ -165,7 +155,9 @@ def main() -> None:
     if corr > 0.5:
         print("\n>> VERDICT: COLLINEAR (corr > 0.5). Park entire carry family.")
     elif corr > 0.3:
-        print("\n>> VERDICT: GREY ZONE (0.3 < corr < 0.5). Carry adds some independent info but is partially redundant with garch.")
+        print(
+            "\n>> VERDICT: GREY ZONE (0.3 < corr < 0.5). Carry adds some independent info but is partially redundant with garch."
+        )
     else:
         print("\n>> VERDICT: LOW COLLINEARITY (corr < 0.3). Portfolio-context path worth pre-registering.")
 

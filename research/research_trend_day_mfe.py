@@ -100,9 +100,7 @@ def compute_true_session_mfe(
     }
 
 
-def load_bars_1m_for_day(
-    con: duckdb.DuckDBPyConnection, instrument: str, trading_day
-) -> pd.DataFrame:
+def load_bars_1m_for_day(con: duckdb.DuckDBPyConnection, instrument: str, trading_day) -> pd.DataFrame:
     """Load all 1m bars for a trading day's UTC range."""
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
     sql = """
@@ -119,8 +117,7 @@ def load_bars_1m_for_day(
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
-def load_outcomes(con: duckdb.DuckDBPyConnection, instrument: str,
-                  limit: int | None = None) -> pd.DataFrame:
+def load_outcomes(con: duckdb.DuckDBPyConnection, instrument: str, limit: int | None = None) -> pd.DataFrame:
     """Load E1/E2 outcomes for a single instrument.
 
     Returns DataFrame with entry details needed for TRUE MFE computation.
@@ -157,9 +154,7 @@ def analyze_mfe_gap(df: pd.DataFrame) -> pd.DataFrame:
     valid["gap_r"] = valid["true_mfe_r"] - valid["capped_mfe_r"]
 
     rows = []
-    for (orb_label, orb_minutes, rr_target), grp in valid.groupby(
-        ["orb_label", "orb_minutes", "rr_target"]
-    ):
+    for (orb_label, orb_minutes, rr_target), grp in valid.groupby(["orb_label", "orb_minutes", "rr_target"]):
         n = len(grp)
         if n < MIN_TRADES:
             continue
@@ -170,27 +165,25 @@ def analyze_mfe_gap(df: pd.DataFrame) -> pd.DataFrame:
 
         t_stat, p_value = stats.ttest_1samp(gap, 0)
 
-        rows.append({
-            "orb_label": orb_label,
-            "orb_minutes": orb_minutes,
-            "rr_target": rr_target,
-            "n_trades": n,
-            "mean_gap": round(float(gap.mean()), 4),
-            "median_gap": round(float(gap.median()), 4),
-            "p90_gap": round(float(gap.quantile(0.90)), 4),
-            "p95_gap": round(float(gap.quantile(0.95)), 4),
-            "p99_gap": round(float(gap.quantile(0.99)), 4),
-            "unicorn_pct": round(
-                float((true_mfe > 3 * rr_target).sum()) / n * 100, 2
-            ),
-            "mega_unicorn_pct": round(
-                float((true_mfe > 5 * rr_target).sum()) / n * 100, 2
-            ),
-            "mean_true_mfe": round(float(true_mfe.mean()), 4),
-            "mean_capped_mfe": round(float(capped_mfe.mean()), 4),
-            "t_stat": round(float(t_stat), 3),
-            "p_value": float(p_value),
-        })
+        rows.append(
+            {
+                "orb_label": orb_label,
+                "orb_minutes": orb_minutes,
+                "rr_target": rr_target,
+                "n_trades": n,
+                "mean_gap": round(float(gap.mean()), 4),
+                "median_gap": round(float(gap.median()), 4),
+                "p90_gap": round(float(gap.quantile(0.90)), 4),
+                "p95_gap": round(float(gap.quantile(0.95)), 4),
+                "p99_gap": round(float(gap.quantile(0.99)), 4),
+                "unicorn_pct": round(float((true_mfe > 3 * rr_target).sum()) / n * 100, 2),
+                "mega_unicorn_pct": round(float((true_mfe > 5 * rr_target).sum()) / n * 100, 2),
+                "mean_true_mfe": round(float(true_mfe.mean()), 4),
+                "mean_capped_mfe": round(float(capped_mfe.mean()), 4),
+                "t_stat": round(float(t_stat), 3),
+                "p_value": float(p_value),
+            }
+        )
 
     if not rows:
         return pd.DataFrame()
@@ -234,14 +227,12 @@ PREDICTOR_COLS = [
     "prev_day_range",
     "garch_atr_ratio",
     "atr_vel_ratio",
-    "orb_size",              # session-specific ORB size, extracted per-row
-    "overnight_expansion",   # overnight_range / atr_20 (derived)
+    "orb_size",  # session-specific ORB size, extracted per-row
+    "overnight_expansion",  # overnight_range / atr_20 (derived)
 ]
 
 
-def load_predictor_features(
-    con: duckdb.DuckDBPyConnection, instrument: str
-) -> pd.DataFrame:
+def load_predictor_features(con: duckdb.DuckDBPyConnection, instrument: str) -> pd.DataFrame:
     """Load daily_features predictor columns for merging with outcomes.
 
     CRITICAL: daily_features has 3 rows per (trading_day, symbol) — one per
@@ -302,9 +293,7 @@ def test_unicorn_predictors(
     rows = []
     valid = df.dropna(subset=["true_mfe_r"]).copy()
 
-    for (orb_label, orb_minutes, rr_target), grp in valid.groupby(
-        ["orb_label", "orb_minutes", "rr_target"]
-    ):
+    for (orb_label, orb_minutes, rr_target), grp in valid.groupby(["orb_label", "orb_minutes", "rr_target"]):
         n = len(grp)
         if n < MIN_TRADES:
             continue
@@ -344,21 +333,23 @@ def test_unicorn_predictors(
             # Cohen's d (unicorn - non-unicorn)
             cohen = _cohen_d(uni_vals, non_vals)
 
-            rows.append({
-                "orb_label": orb_label,
-                "orb_minutes": int(orb_minutes),
-                "rr_target": float(rr_target),
-                "predictor": pred,
-                "n": int(mask_valid.sum()),
-                "n_unicorn": int(len(uni_vals)),
-                "mean_unicorn": round(float(np.mean(uni_vals)), 4),
-                "mean_non_unicorn": round(float(np.mean(non_vals)), 4),
-                "t_stat": round(float(t_stat), 3),
-                "p_value": float(p_value),
-                "cohen_d": round(float(cohen), 4),
-                "correlation": round(float(corr), 4),
-                "test_type": "welch_t",
-            })
+            rows.append(
+                {
+                    "orb_label": orb_label,
+                    "orb_minutes": int(orb_minutes),
+                    "rr_target": float(rr_target),
+                    "predictor": pred,
+                    "n": int(mask_valid.sum()),
+                    "n_unicorn": int(len(uni_vals)),
+                    "mean_unicorn": round(float(np.mean(uni_vals)), 4),
+                    "mean_non_unicorn": round(float(np.mean(non_vals)), 4),
+                    "t_stat": round(float(t_stat), 3),
+                    "p_value": float(p_value),
+                    "cohen_d": round(float(cohen), 4),
+                    "correlation": round(float(corr), 4),
+                    "test_type": "welch_t",
+                }
+            )
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
@@ -374,9 +365,7 @@ def test_overnight_expansion(df: pd.DataFrame) -> pd.DataFrame:
     rows = []
     valid = df.dropna(subset=["true_mfe_r", "overnight_expansion"]).copy()
 
-    for (orb_label, orb_minutes, rr_target), grp in valid.groupby(
-        ["orb_label", "orb_minutes", "rr_target"]
-    ):
+    for (orb_label, orb_minutes, rr_target), grp in valid.groupby(["orb_label", "orb_minutes", "rr_target"]):
         n = len(grp)
         if n < MIN_TRADES:
             continue
@@ -384,9 +373,7 @@ def test_overnight_expansion(df: pd.DataFrame) -> pd.DataFrame:
         # Create tertiles
         try:
             grp = grp.copy()
-            grp["oe_tertile"] = pd.qcut(
-                grp["overnight_expansion"], q=3, labels=["low", "mid", "high"]
-            )
+            grp["oe_tertile"] = pd.qcut(grp["overnight_expansion"], q=3, labels=["low", "mid", "high"])
         except ValueError:
             # Not enough unique values for tertiles
             continue
@@ -419,28 +406,28 @@ def test_overnight_expansion(df: pd.DataFrame) -> pd.DataFrame:
         for label in ["low", "mid", "high"]:
             t_grp = grp[grp["oe_tertile"] == label]
             if len(t_grp) > 0:
-                uni_rates[label] = round(
-                    float((t_grp["true_mfe_r"] > 3 * rr_target).mean()) * 100, 2
-                )
+                uni_rates[label] = round(float((t_grp["true_mfe_r"] > 3 * rr_target).mean()) * 100, 2)
             else:
                 uni_rates[label] = 0.0
 
-        rows.append({
-            "orb_label": orb_label,
-            "orb_minutes": int(orb_minutes),
-            "rr_target": float(rr_target),
-            "predictor": "overnight_expansion_tertile",
-            "n": n,
-            "n_unicorn": int(unicorn_flag.sum()),
-            "chi2": round(float(chi2), 3),
-            "p_value": float(chi2_p),  # chi-square p for BH FDR
-            "f_stat": round(float(f_stat), 3),
-            "anova_p": float(anova_p),
-            "uni_rate_low": uni_rates["low"],
-            "uni_rate_mid": uni_rates["mid"],
-            "uni_rate_high": uni_rates["high"],
-            "test_type": "chi2_anova",
-        })
+        rows.append(
+            {
+                "orb_label": orb_label,
+                "orb_minutes": int(orb_minutes),
+                "rr_target": float(rr_target),
+                "predictor": "overnight_expansion_tertile",
+                "n": n,
+                "n_unicorn": int(unicorn_flag.sum()),
+                "chi2": round(float(chi2), 3),
+                "p_value": float(chi2_p),  # chi-square p for BH FDR
+                "f_stat": round(float(f_stat), 3),
+                "anova_p": float(anova_p),
+                "uni_rate_low": uni_rates["low"],
+                "uni_rate_mid": uni_rates["mid"],
+                "uni_rate_high": uni_rates["high"],
+                "test_type": "chi2_anova",
+            }
+        )
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
@@ -514,10 +501,7 @@ def print_predictor_table(
             print(f"  {'-' * 78}")
 
             for _, r in show.iterrows():
-                p_str = (
-                    "<0.001" if r["p_value"] < 0.001
-                    else f"{r['p_value']:.4f}"
-                )
+                p_str = "<0.001" if r["p_value"] < 0.001 else f"{r['p_value']:.4f}"
                 fdr_str = "YES" if r.get("fdr_survives", False) else "NO"
                 print(
                     f"  {r['orb_label']:20s}| {r['orb_minutes']:>2d} "
@@ -547,10 +531,7 @@ def print_predictor_table(
             print(f"  {'-' * 90}")
 
             for _, r in show_oe.iterrows():
-                p_str = (
-                    "<0.001" if r["p_value"] < 0.001
-                    else f"{r['p_value']:.4f}"
-                )
+                p_str = "<0.001" if r["p_value"] < 0.001 else f"{r['p_value']:.4f}"
                 fdr_str = "YES" if r.get("fdr_survives", False) else "NO"
                 print(
                     f"  {r['orb_label']:20s}| {r['orb_minutes']:>2d} "
@@ -581,10 +562,19 @@ def save_csv_reports(
 
     # 1. Per-trade raw data
     raw_cols = [
-        "trading_day", "orb_label", "orb_minutes", "entry_model",
-        "rr_target", "outcome", "pnl_r", "capped_mfe_r",
-        "true_mfe_r", "true_mae_r", "session_close_r",
-        "time_to_mfe_min", "bars_after_entry",
+        "trading_day",
+        "orb_label",
+        "orb_minutes",
+        "entry_model",
+        "rr_target",
+        "outcome",
+        "pnl_r",
+        "capped_mfe_r",
+        "true_mfe_r",
+        "true_mae_r",
+        "session_close_r",
+        "time_to_mfe_min",
+        "bars_after_entry",
     ]
     available = [c for c in raw_cols if c in df.columns]
     raw_df = df[available].dropna(subset=["true_mfe_r"])
@@ -631,27 +621,33 @@ def print_unicorn_summary(summary: pd.DataFrame) -> None:
 # Main
 # ---------------------------------------------------------------------------
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Trend-Day MFE Discovery — TRUE session MFE from bars_1m"
-    )
+    parser = argparse.ArgumentParser(description="Trend-Day MFE Discovery — TRUE session MFE from bars_1m")
     parser.add_argument(
-        "--instrument", type=str, default=None,
+        "--instrument",
+        type=str,
+        default=None,
         help="Single instrument (default: all active)",
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Print row counts per session and exit",
     )
     parser.add_argument(
-        "--limit", type=int, default=None,
+        "--limit",
+        type=int,
+        default=None,
         help="Cap rows per instrument (for testing)",
     )
     parser.add_argument(
-        "--predictors", action="store_true",
+        "--predictors",
+        action="store_true",
         help="Enable predictor analysis (Task 3)",
     )
     parser.add_argument(
-        "--output-dir", type=str, default="research/output/",
+        "--output-dir",
+        type=str,
+        default="research/output/",
         help="Output directory for results",
     )
     args = parser.parse_args()
@@ -674,11 +670,7 @@ def main() -> None:
 
             # Row counts per session
             if len(df) > 0:
-                session_counts = (
-                    df.groupby("orb_label")
-                    .size()
-                    .sort_values(ascending=False)
-                )
+                session_counts = df.groupby("orb_label").size().sort_values(ascending=False)
                 for session, count in session_counts.items():
                     print(f"  {session:25s} {count:>7,}")
             print()
@@ -713,9 +705,7 @@ def main() -> None:
                     entry_ts = pd.Timestamp(row["entry_ts"])
 
                     # Filter to post-entry bars up to session end
-                    post_entry = day_bars[
-                        (day_bars["ts_utc"] > entry_ts) & (day_bars["ts_utc"] <= td_end_ts)
-                    ]
+                    post_entry = day_bars[(day_bars["ts_utc"] > entry_ts) & (day_bars["ts_utc"] <= td_end_ts)]
 
                     result = compute_true_session_mfe(
                         bars_1m=post_entry,
@@ -753,17 +743,12 @@ def main() -> None:
                 for _, r in valid.iterrows():
                     gap = r["true_mfe_r"] - r["capped_mfe_r"]
                     ok = "YES" if r["true_mfe_r"] >= r["capped_mfe_r"] - 0.001 else "NO"
-                    print(
-                        f"  {r['capped_mfe_r']:10.4f}  {r['true_mfe_r']:10.4f}  "
-                        f"{gap:10.4f}  {ok:>4s}"
-                    )
+                    print(f"  {r['capped_mfe_r']:10.4f}  {r['true_mfe_r']:10.4f}  {gap:10.4f}  {ok:>4s}")
 
                 # Aggregate check
                 check_df = df.dropna(subset=["true_mfe_r", "capped_mfe_r"])
                 n_valid = len(check_df)
-                n_ok = int(
-                    (check_df["true_mfe_r"] >= check_df["capped_mfe_r"] - 0.001).sum()
-                )
+                n_ok = int((check_df["true_mfe_r"] >= check_df["capped_mfe_r"] - 0.001).sum())
                 print(f"\n  Aggregate: {n_ok:,}/{n_valid:,} rows have true_mfe_r >= capped_mfe_r")
                 print()
 
@@ -811,10 +796,7 @@ def main() -> None:
 
                 n_pred = len(predictor_results)
                 n_oe = len(overnight_results)
-                print(
-                    f"    {n_pred} predictor tests, "
-                    f"{n_oe} overnight expansion tests"
-                )
+                print(f"    {n_pred} predictor tests, {n_oe} overnight expansion tests")
 
                 # Apply BH FDR across ALL tests
                 predictor_results, overnight_results = apply_bh_fdr_to_results(

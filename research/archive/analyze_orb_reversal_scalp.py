@@ -46,24 +46,16 @@ FRICTION_POINTS = COST_SPEC.friction_in_points  # 0.84 points
 # Data loading
 # ---------------------------------------------------------------------------
 
-def load_outcomes(db_path: Path, sessions: list[str], min_orb_size: float,
-                  start: date, end: date) -> pd.DataFrame:
+
+def load_outcomes(db_path: Path, sessions: list[str], min_orb_size: float, start: date, end: date) -> pd.DataFrame:
     """Load orb_outcomes with ORB levels for reversal analysis."""
     session_placeholders = ", ".join(["?"] * len(sessions))
 
     # Get ORB high/low/size and break_dir from daily_features
-    size_cases = " ".join(
-        f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_size" for s in sessions
-    )
-    high_cases = " ".join(
-        f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_high" for s in sessions
-    )
-    low_cases = " ".join(
-        f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_low" for s in sessions
-    )
-    dir_cases = " ".join(
-        f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_break_dir" for s in sessions
-    )
+    size_cases = " ".join(f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_size" for s in sessions)
+    high_cases = " ".join(f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_high" for s in sessions)
+    low_cases = " ".join(f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_low" for s in sessions)
+    dir_cases = " ".join(f"WHEN o.orb_label = '{s}' THEN d.orb_{s}_break_dir" for s in sessions)
 
     query = f"""
         SELECT
@@ -106,37 +98,40 @@ def load_outcomes(db_path: Path, sessions: list[str], min_orb_size: float,
 
     # Keep only one RR per (day, session, entry_model) — the reversal scalp
     # doesn't depend on the original RR target, so deduplicate
-    df = df.drop_duplicates(
-        subset=["trading_day", "orb_label", "entry_model", "confirm_bars"],
-        keep="first"
-    ).copy()
+    df = df.drop_duplicates(subset=["trading_day", "orb_label", "entry_model", "confirm_bars"], keep="first").copy()
 
     df["entry_ts"] = pd.to_datetime(df["entry_ts"], utc=True)
 
     print(f"Loaded {len(df)} unique trade entries ({df['trading_day'].nunique()} days)")
     return df
 
+
 def load_bars_for_day(db_path: Path, trading_day: date) -> pd.DataFrame:
     """Load 1-minute bars for one trading day."""
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
     con = duckdb.connect(str(db_path), read_only=True)
     try:
-        df = con.execute("""
+        df = con.execute(
+            """
             SELECT ts_utc, open, high, low, close, volume
             FROM bars_1m
             WHERE symbol = 'MGC'
               AND ts_utc >= ? AND ts_utc < ?
             ORDER BY ts_utc
-        """, [start_utc, end_utc]).fetchdf()
+        """,
+            [start_utc, end_utc],
+        ).fetchdf()
     finally:
         con.close()
     if not df.empty:
         df["ts_utc"] = pd.to_datetime(df["ts_utc"], utc=True)
     return df
 
+
 # ---------------------------------------------------------------------------
 # Reversal scalp simulation
 # ---------------------------------------------------------------------------
+
 
 def simulate_reversal_scalp(
     bars_df: pd.DataFrame,
@@ -179,21 +174,25 @@ def simulate_reversal_scalp(
             original_losing = check_close > entry_price
 
         if not original_losing:
-            results.append({
-                "check_min": check_min,
-                "triggered": False,
-            })
+            results.append(
+                {
+                    "check_min": check_min,
+                    "triggered": False,
+                }
+            )
             continue
 
         # Is price inside the ORB?
         inside_orb = orb_low <= check_close <= orb_high
         if not inside_orb:
             # Price already past the ORB on the other side — don't reverse
-            results.append({
-                "check_min": check_min,
-                "triggered": False,
-                "reason": "already_past_orb",
-            })
+            results.append(
+                {
+                    "check_min": check_min,
+                    "triggered": False,
+                    "reason": "already_past_orb",
+                }
+            )
             continue
 
         # --- REVERSAL SCALP ---
@@ -202,8 +201,8 @@ def simulate_reversal_scalp(
         rev_entry = check_close
         if is_long:
             # Reverse to short
-            rev_target = orb_low    # opposite edge (the original stop level)
-            rev_stop = orb_high     # the edge we broke through
+            rev_target = orb_low  # opposite edge (the original stop level)
+            rev_stop = orb_high  # the edge we broke through
             rev_dir = "short"
         else:
             # Reverse to long
@@ -224,15 +223,17 @@ def simulate_reversal_scalp(
         # Scan forward from check bar
         remaining_bars = post_entry.iloc[check_min:]
         if remaining_bars.empty:
-            results.append({
-                "check_min": check_min,
-                "triggered": True,
-                "rev_outcome": "no_bars",
-                "rev_entry": rev_entry,
-                "dist_to_target_pts": dist_to_target,
-                "dist_to_stop_pts": dist_to_stop,
-                "orb_size": orb_size,
-            })
+            results.append(
+                {
+                    "check_min": check_min,
+                    "triggered": True,
+                    "rev_outcome": "no_bars",
+                    "rev_entry": rev_entry,
+                    "dist_to_target_pts": dist_to_target,
+                    "dist_to_stop_pts": dist_to_stop,
+                    "orb_size": orb_size,
+                }
+            )
             continue
 
         rev_outcome = None
@@ -276,31 +277,34 @@ def simulate_reversal_scalp(
 
         pnl_dollars = pnl_points * COST_SPEC.point_value - COST_SPEC.total_friction
 
-        results.append({
-            "check_min": check_min,
-            "triggered": True,
-            "rev_dir": rev_dir,
-            "rev_entry": rev_entry,
-            "rev_target": rev_target,
-            "rev_stop": rev_stop,
-            "rev_outcome": rev_outcome,
-            "rev_exit_price": rev_exit_price,
-            "pnl_points": pnl_points,
-            "pnl_dollars": pnl_dollars,
-            "dist_to_target_pts": dist_to_target,
-            "dist_to_stop_pts": dist_to_stop,
-            "orb_size": orb_size,
-            "rev_bars_held": rev_bars_held,
-        })
+        results.append(
+            {
+                "check_min": check_min,
+                "triggered": True,
+                "rev_dir": rev_dir,
+                "rev_entry": rev_entry,
+                "rev_target": rev_target,
+                "rev_stop": rev_stop,
+                "rev_outcome": rev_outcome,
+                "rev_exit_price": rev_exit_price,
+                "pnl_points": pnl_points,
+                "pnl_dollars": pnl_dollars,
+                "dist_to_target_pts": dist_to_target,
+                "dist_to_stop_pts": dist_to_stop,
+                "orb_size": orb_size,
+                "rev_bars_held": rev_bars_held,
+            }
+        )
 
     return results
+
 
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
 
-def print_report(all_results: list[dict], check_minutes: list[int],
-                 start: date, end: date, min_orb_size: float):
+
+def print_report(all_results: list[dict], check_minutes: list[int], start: date, end: date, min_orb_size: float):
     """Print structured report."""
     print("=" * 90)
     print("ORB REVERSAL SCALP ANALYSIS")
@@ -369,21 +373,25 @@ def print_report(all_results: list[dict], check_minutes: list[int],
                 yearly = defaultdict(list)
                 for r in all_results:
                     for scalp in r["scalps"]:
-                        if (scalp.get("check_min") == check_min
-                                and scalp.get("triggered")
-                                and scalp.get("rev_outcome") in ("win", "loss", "scratch")
-                                and r["orb_label"] == session
-                                and r["entry_model"] == em):
+                        if (
+                            scalp.get("check_min") == check_min
+                            and scalp.get("triggered")
+                            and scalp.get("rev_outcome") in ("win", "loss", "scratch")
+                            and r["orb_label"] == session
+                            and r["entry_model"] == em
+                        ):
                             td = r["trading_day"]
-                            if hasattr(td, 'year'):
+                            if hasattr(td, "year"):
                                 yr = td.year
                             else:
                                 yr = pd.Timestamp(td).year
                             yearly[yr].append(scalp["pnl_dollars"])
 
-                print(f"\n  {check_min}-min check: {n} reversals "
-                      f"({len(orig_trades) - not_triggered - len(triggered) + len(triggered)} checked, "
-                      f"{n} inside ORB)")
+                print(
+                    f"\n  {check_min}-min check: {n} reversals "
+                    f"({len(orig_trades) - not_triggered - len(triggered) + len(triggered)} checked, "
+                    f"{n} inside ORB)"
+                )
                 print(f"    Win rate:     {wr:.1f}%  ({len(wins)}W / {len(losses)}L / {len(scratches)}S)")
                 print(f"    Avg PnL:      ${avg_pnl:+.2f}/trade")
                 print(f"    Total PnL:    ${total_pnl:+,.0f}  ({n} trades)")
@@ -405,10 +413,12 @@ def print_report(all_results: list[dict], check_minutes: list[int],
                         yr_n = len(yr_pnls)
                         yr_total = sum(yr_pnls)
                         yr_wr = sum(1 for p in yr_pnls if p > 0) / yr_n * 100
-                        print(f"      {yr}: {yr_n:3d} trades, "
-                              f"WR={yr_wr:5.1f}%, "
-                              f"Total=${yr_total:+,.0f}, "
-                              f"Avg=${yr_total/yr_n:+.0f}")
+                        print(
+                            f"      {yr}: {yr_n:3d} trades, "
+                            f"WR={yr_wr:5.1f}%, "
+                            f"Total=${yr_total:+,.0f}, "
+                            f"Avg=${yr_total / yr_n:+.0f}"
+                        )
 
     # Summary: best combos
     print("\n" + "=" * 90)
@@ -417,39 +427,40 @@ def print_report(all_results: list[dict], check_minutes: list[int],
 
     summary = []
     for (session, em, check_min), scalps in grouped.items():
-        actual = [s for s in scalps
-                  if s.get("triggered") and s.get("rev_outcome") in ("win", "loss", "scratch")]
+        actual = [s for s in scalps if s.get("triggered") and s.get("rev_outcome") in ("win", "loss", "scratch")]
         if len(actual) < 10:
             continue
         pnls = [s["pnl_dollars"] for s in actual]
         wr = sum(1 for p in pnls if p > 0) / len(pnls) * 100
         avg = np.mean(pnls)
         total = sum(pnls)
-        summary.append({
-            "label": f"{session} {em} @{check_min}min",
-            "n": len(actual),
-            "wr": wr,
-            "avg": avg,
-            "total": total,
-        })
+        summary.append(
+            {
+                "label": f"{session} {em} @{check_min}min",
+                "n": len(actual),
+                "wr": wr,
+                "avg": avg,
+                "total": total,
+            }
+        )
 
     summary.sort(key=lambda x: x["avg"], reverse=True)
     for s in summary:
-        print(f"  {s['label']:20s}  N={s['n']:<4d}  WR={s['wr']:5.1f}%  "
-              f"Avg=${s['avg']:+7.1f}  Total=${s['total']:+,.0f}")
+        print(
+            f"  {s['label']:20s}  N={s['n']:<4d}  WR={s['wr']:5.1f}%  Avg=${s['avg']:+7.1f}  Total=${s['total']:+,.0f}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="ORB reversal scalp analysis"
-    )
+    parser = argparse.ArgumentParser(description="ORB reversal scalp analysis")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
     parser.add_argument("--sessions", type=str, default=",".join(DEFAULT_SESSIONS))
-    parser.add_argument("--check-minutes", type=str,
-                        default=",".join(str(m) for m in DEFAULT_CHECK_MINUTES))
+    parser.add_argument("--check-minutes", type=str, default=",".join(str(m) for m in DEFAULT_CHECK_MINUTES))
     parser.add_argument("--min-orb-size", type=float, default=DEFAULT_MIN_ORB_SIZE)
     parser.add_argument("--start", type=date.fromisoformat, default=date(2021, 1, 1))
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
@@ -473,10 +484,7 @@ def main():
         return
 
     # Filter E1 to requested CB
-    mask = (
-        (outcomes_df["entry_model"] == "E3")
-        | (outcomes_df["confirm_bars"] == args.confirm_bars)
-    )
+    mask = (outcomes_df["entry_model"] == "E3") | (outcomes_df["confirm_bars"] == args.confirm_bars)
     outcomes_df = outcomes_df[mask].copy()
     print(f"After CB filter: {len(outcomes_df)} entries")
 
@@ -491,7 +499,7 @@ def main():
     all_results = []
 
     for day_idx, trading_day in enumerate(unique_days):
-        if hasattr(trading_day, 'date'):
+        if hasattr(trading_day, "date"):
             td = trading_day.date()
         elif isinstance(trading_day, np.datetime64):
             td = pd.Timestamp(trading_day).date()
@@ -516,13 +524,15 @@ def main():
                 check_minutes=check_minutes,
             )
 
-            all_results.append({
-                "trading_day": td,
-                "orb_label": trade["orb_label"],
-                "entry_model": trade["entry_model"],
-                "orb_size": float(trade["orb_size"]),
-                "scalps": scalps,
-            })
+            all_results.append(
+                {
+                    "trading_day": td,
+                    "orb_label": trade["orb_label"],
+                    "entry_model": trade["entry_model"],
+                    "orb_size": float(trade["orb_size"]),
+                    "scalps": scalps,
+                }
+            )
 
         if (day_idx + 1) % 100 == 0:
             elapsed = time.monotonic() - t0
@@ -534,6 +544,7 @@ def main():
     print(f"Done: {len(all_results)} entries processed in {elapsed:.1f}s")
 
     print_report(all_results, check_minutes, args.start, args.end, args.min_orb_size)
+
 
 if __name__ == "__main__":
     main()

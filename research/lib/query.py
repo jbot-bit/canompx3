@@ -84,8 +84,7 @@ def with_dst_split(
     # Ensure DST column is in the base query (caller must include it in extra_cols).
     if col_qualified not in base_sql and col_name not in base_sql:
         raise ValueError(
-            f"DST column '{col_qualified}' not found in base SQL. "
-            f"Add it to extra_cols: extra_cols=['{col_qualified}']"
+            f"DST column '{col_qualified}' not found in base SQL. Add it to extra_cols: extra_cols=['{col_qualified}']"
         )
     # Wrap base_sql as CTE — use unqualified column name since CTE strips table prefixes.
     on_sql = f"WITH base AS ({base_sql})\nSELECT * FROM base WHERE {col_name} = TRUE"

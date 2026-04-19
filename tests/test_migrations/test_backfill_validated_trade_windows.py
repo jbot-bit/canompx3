@@ -158,9 +158,7 @@ class TestBackfillValidatedTradeWindows:
 
     def test_strategy_id_scopes_to_single_row(self, tmp_path):
         db = _make_db(tmp_path)
-        report = migration.refresh_validated_trade_windows(
-            db_path=db, strategy_id="DRIFT_A", dry_run=False
-        )
+        report = migration.refresh_validated_trade_windows(db_path=db, strategy_id="DRIFT_A", dry_run=False)
         assert report.inspected == 1
         assert report.drifted == 1
         assert report.updated == 1
@@ -169,11 +167,15 @@ class TestBackfillValidatedTradeWindows:
 
     def test_main_exits_zero(self, tmp_path, monkeypatch, capsys):
         db = _make_db(tmp_path)
-        monkeypatch.setattr("sys.argv", [
-            "backfill_validated_trade_windows.py",
-            "--db-path", str(db),
-            "--dry-run",
-        ])
+        monkeypatch.setattr(
+            "sys.argv",
+            [
+                "backfill_validated_trade_windows.py",
+                "--db-path",
+                str(db),
+                "--dry-run",
+            ],
+        )
         exit_code = migration.main()
         assert exit_code == 0
         captured = capsys.readouterr()

@@ -23,12 +23,14 @@ from datetime import date, datetime, timedelta, timezone
 
 from pipeline.paths import GOLD_DB_PATH
 
+
 def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
     """Analyze 1000 session opposed IB breaks vs stop-loss outcomes."""
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         # Get all 1000 session trading days with ORB data
-        rows = con.execute("""
+        rows = con.execute(
+            """
             SELECT trading_day,
                    orb_1000_high, orb_1000_low, orb_1000_size,
                    orb_1000_break_dir, orb_1000_outcome,
@@ -40,7 +42,9 @@ def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
               AND orb_0900_high IS NOT NULL
               AND orb_0900_low IS NOT NULL
             ORDER BY trading_day
-        """, [instrument]).fetchall()
+        """,
+            [instrument],
+        ).fetchall()
 
         print(f"1000 session break days with 0900 IB data: {len(rows)}")
         print()
@@ -68,15 +72,16 @@ def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
 
             # Compute IB range from bars_1m (23:00 UTC to 01:00 UTC)
             prev_day = td - timedelta(days=1)
-            ib_start = datetime(prev_day.year, prev_day.month, prev_day.day,
-                                23, 0, tzinfo=timezone.utc)
-            ib_end = datetime(td.year, td.month, td.day,
-                              1, 0, tzinfo=timezone.utc)
+            ib_start = datetime(prev_day.year, prev_day.month, prev_day.day, 23, 0, tzinfo=timezone.utc)
+            ib_end = datetime(td.year, td.month, td.day, 1, 0, tzinfo=timezone.utc)
 
-            ib_bars = con.execute("""
+            ib_bars = con.execute(
+                """
                 SELECT high, low FROM bars_1m
                 WHERE symbol = ? AND ts_utc >= ? AND ts_utc < ?
-            """, [instrument, ib_start, ib_end]).fetchall()
+            """,
+                [instrument, ib_start, ib_end],
+            ).fetchall()
 
             if len(ib_bars) < 60:  # Need substantial IB data
                 continue
@@ -88,14 +93,16 @@ def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
             # After IB (01:00 UTC), find first bar that breaks IB high or low
             post_ib_start = ib_end
             # Look up to 07:00 UTC (end of Asia session)
-            post_ib_end = datetime(td.year, td.month, td.day,
-                                   7, 0, tzinfo=timezone.utc)
+            post_ib_end = datetime(td.year, td.month, td.day, 7, 0, tzinfo=timezone.utc)
 
-            post_ib_bars = con.execute("""
+            post_ib_bars = con.execute(
+                """
                 SELECT ts_utc, open, high, low, close FROM bars_1m
                 WHERE symbol = ? AND ts_utc >= ? AND ts_utc < ?
                 ORDER BY ts_utc
-            """, [instrument, post_ib_start, post_ib_end]).fetchall()
+            """,
+                [instrument, post_ib_start, post_ib_end],
+            ).fetchall()
 
             ib_break_dir = None
             ib_break_bar = None
@@ -113,7 +120,7 @@ def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
                 continue  # IB never broke
 
             # Is IB opposed to ORB break?
-            is_opposed = (break_dir != ib_break_dir)
+            is_opposed = break_dir != ib_break_dir
             if not is_opposed:
                 continue
 
@@ -136,7 +143,8 @@ def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
 
             # Did this trade get stopped out? (outcome contains loss info)
             # Use orb_outcomes table for precise result
-            outcome_rows = con.execute("""
+            outcome_rows = con.execute(
+                """
                 SELECT pnl_r, entry_price, stop_price, target_price
                 FROM orb_outcomes
                 WHERE symbol = ?
@@ -146,7 +154,9 @@ def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
                   AND confirm_bars = 1
                   AND rr_target = 2.5
                 LIMIT 1
-            """, [instrument, td]).fetchall()
+            """,
+                [instrument, td],
+            ).fetchall()
 
             if not outcome_rows:
                 continue
@@ -191,15 +201,17 @@ def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
                         # Savings = mtm_r - actual_pnl_r (how much better the early exit is)
                         r_saved = mtm_r - actual_pnl_r
                         total_r_saved += r_saved
-                        r_savings_list.append({
-                            "date": td,
-                            "break_dir": break_dir,
-                            "ib_break_dir": ib_break_dir,
-                            "actual_pnl_r": actual_pnl_r,
-                            "mtm_at_ib_break_r": round(mtm_r, 4),
-                            "r_saved": round(r_saved, 4),
-                            "stop_beyond_ib": stop_beyond_ib,
-                        })
+                        r_savings_list.append(
+                            {
+                                "date": td,
+                                "break_dir": break_dir,
+                                "ib_break_dir": ib_break_dir,
+                                "actual_pnl_r": actual_pnl_r,
+                                "mtm_at_ib_break_r": round(mtm_r, 4),
+                                "r_saved": round(r_saved, 4),
+                                "stop_beyond_ib": stop_beyond_ib,
+                            }
+                        )
 
         # Report
         print("=" * 60)
@@ -212,8 +224,7 @@ def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
 
         if total_opposed > 0:
             print(f"Opposed frequency: {total_opposed} days")
-            print(f"Loss rate when opposed: {opposed_stopped}/{total_opposed} = "
-                  f"{opposed_stopped/total_opposed:.1%}")
+            print(f"Loss rate when opposed: {opposed_stopped}/{total_opposed} = {opposed_stopped / total_opposed:.1%}")
 
         if r_savings_list:
             avg_savings = total_r_saved / len(r_savings_list)
@@ -244,21 +255,26 @@ def analyze_opposed_kill(db_path: Path = GOLD_DB_PATH, instrument: str = "MGC"):
                 r_savings_list.sort(key=lambda x: x["r_saved"])
                 print(f"\nWorst 5 (IB kill cost R):")
                 for s in r_savings_list[:5]:
-                    print(f"  {s['date']}: {s['break_dir']} trade, IB broke {s['ib_break_dir']}, "
-                          f"actual={s['actual_pnl_r']:+.3f}R, mtm_at_ib={s['mtm_at_ib_break_r']:+.3f}R, "
-                          f"saved={s['r_saved']:+.3f}R")
+                    print(
+                        f"  {s['date']}: {s['break_dir']} trade, IB broke {s['ib_break_dir']}, "
+                        f"actual={s['actual_pnl_r']:+.3f}R, mtm_at_ib={s['mtm_at_ib_break_r']:+.3f}R, "
+                        f"saved={s['r_saved']:+.3f}R"
+                    )
 
                 print(f"\nBest 5 (IB kill saved R):")
                 for s in r_savings_list[-5:]:
-                    print(f"  {s['date']}: {s['break_dir']} trade, IB broke {s['ib_break_dir']}, "
-                          f"actual={s['actual_pnl_r']:+.3f}R, mtm_at_ib={s['mtm_at_ib_break_r']:+.3f}R, "
-                          f"saved={s['r_saved']:+.3f}R")
+                    print(
+                        f"  {s['date']}: {s['break_dir']} trade, IB broke {s['ib_break_dir']}, "
+                        f"actual={s['actual_pnl_r']:+.3f}R, mtm_at_ib={s['mtm_at_ib_break_r']:+.3f}R, "
+                        f"saved={s['r_saved']:+.3f}R"
+                    )
 
         else:
             print("No opposed+stopped trades found to analyze savings.")
 
     finally:
         con.close()
+
 
 if __name__ == "__main__":
     analyze_opposed_kill()

@@ -143,9 +143,7 @@ class MultiInstrumentRunner:
 
         # Fail-closed: if ALL orchestrators crashed, surface failure to caller
         if failures == len(tasks):
-            raise RuntimeError(
-                f"All {failures} orchestrators failed — session did not complete"
-            )
+            raise RuntimeError(f"All {failures} orchestrators failed — session did not complete")
 
     async def _run_one(self, instrument: str, orch: SessionOrchestrator) -> None:
         """Run a single orchestrator with error isolation."""

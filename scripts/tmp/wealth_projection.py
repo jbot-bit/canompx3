@@ -7,37 +7,37 @@ print("LONG-TERM WEALTH MODEL — EVERY VARIABLE ACCOUNTED FOR")
 print("=" * 80)
 
 # ── INPUTS FROM 2026 OOS DATA ──
-NET_PER_CT_YR_USD = 2929       # from 67-day OOS, annualized, after comm+slip
-GROSS_PER_CT_YR = 7293         # before costs
-TRADES_PER_YR = 1712           # annualized total across 7 sessions
-COMM_RT = 1.98                 # AMP all-in
+NET_PER_CT_YR_USD = 2929  # from 67-day OOS, annualized, after comm+slip
+GROSS_PER_CT_YR = 7293  # before costs
+TRADES_PER_YR = 1712  # annualized total across 7 sessions
+COMM_RT = 1.98  # AMP all-in
 SLIP_PER_TRADE = 0.50
 
 # ── FIXED COSTS (USD/yr) ──
-AMP_DATA = 10 * 12             # $120
-DATABENTO = 199 * 12           # $2,388
-VPS = 20 * 12                  # $240
-SWIFT_FEES = 30 * 4            # $120 (quarterly transfers)
+AMP_DATA = 10 * 12  # $120
+DATABENTO = 199 * 12  # $2,388
+VPS = 20 * 12  # $240
+SWIFT_FEES = 30 * 4  # $120 (quarterly transfers)
 TOTAL_FIXED = AMP_DATA + DATABENTO + VPS + SWIFT_FEES  # $2,868
 
 # ── CURRENCY ──
-AUD_USD = 0.64                 # 1 AUD = 0.64 USD
-USD_TO_AUD = 1 / AUD_USD       # 1 USD = 1.5625 AUD
-FX_SPREAD = 0.005              # 0.5% bank spread
+AUD_USD = 0.64  # 1 AUD = 0.64 USD
+USD_TO_AUD = 1 / AUD_USD  # 1 USD = 1.5625 AUD
+FX_SPREAD = 0.005  # 0.5% bank spread
 EFFECTIVE_USD_AUD = USD_TO_AUD * (1 - FX_SPREAD)  # 1.554 AUD per USD
 
 # ── TAX (Australian) ──
 # US futures = assessable income. No 60/40 in AU.
 # Using blended marginal + medicare for side income
-TAX_RATE = 0.345               # 32.5% marginal + 2% medicare
+TAX_RATE = 0.345  # 32.5% marginal + 2% medicare
 
 # ── STRATEGY DECAY ──
-DECAY_MAINTAINED = 0.05        # 5%/yr if actively running discovery + monitoring
-DECAY_UNMAINTAINED = 0.25      # 25%/yr if you stop maintaining
+DECAY_MAINTAINED = 0.05  # 5%/yr if actively running discovery + monitoring
+DECAY_UNMAINTAINED = 0.25  # 25%/yr if you stop maintaining
 
 # ── PROP FIRM COSTS ──
-TOPSTEP_MONTHLY = 50           # per account
-BULENOX_ACTIVATION = 130       # one-time per account
+TOPSTEP_MONTHLY = 50  # per account
+BULENOX_ACTIVATION = 130  # one-time per account
 PROP_SPLIT = 0.90
 
 print()

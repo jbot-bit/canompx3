@@ -38,12 +38,13 @@ warnings.filterwarnings("ignore", message="All-NaN slice", category=RuntimeWarni
 
 _US_EASTERN = ZoneInfo("America/New_York")
 
+
 def is_us_dst(trading_day: date) -> bool:
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_US_EASTERN)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_US_EASTERN)
     offset = dt.utcoffset()
     assert offset is not None
     return offset.total_seconds() == -4 * 3600
+
 
 OUTCOME_WINDOW = 480
 RR_TARGET = 2.0
@@ -66,12 +67,15 @@ FILTERS = [
 
 
 def load_bars(con, instrument):
-    return con.execute("""
+    return con.execute(
+        """
         SELECT ts_utc, open, high, low, close, volume
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def build_day_arrays(bars_df):
@@ -159,9 +163,13 @@ def scan_session(highs, lows, closes, bris_h, bris_m):
 
         if break_dir is None:
             results[day_idx] = {
-                "orb_size": float(os_val), "broke": False,
-                "direction": None, "outcome_r": np.nan,
-                "entry": np.nan, "orb_high": float(oh), "orb_low": float(ol),
+                "orb_size": float(os_val),
+                "broke": False,
+                "direction": None,
+                "outcome_r": np.nan,
+                "entry": np.nan,
+                "orb_high": float(oh),
+                "orb_low": float(ol),
                 "break_min": -1,
             }
             continue
@@ -211,9 +219,13 @@ def scan_session(highs, lows, closes, bris_h, bris_m):
                 outcome_r = (entry - last_close) / os_val
 
         results[day_idx] = {
-            "orb_size": float(os_val), "broke": True,
-            "direction": break_dir, "outcome_r": float(outcome_r),
-            "entry": float(entry), "orb_high": float(oh), "orb_low": float(ol),
+            "orb_size": float(os_val),
+            "broke": True,
+            "direction": break_dir,
+            "outcome_r": float(outcome_r),
+            "entry": float(entry),
+            "orb_high": float(oh),
+            "orb_low": float(ol),
             "break_min": break_at - start_min,
         }
     return results
@@ -249,6 +261,7 @@ def stats(filtered):
 # Q1: Head-to-head comparison
 # =========================================================================
 
+
 def q1_head_to_head(data_cache):
     print(f"\n{'=' * 90}")
     print("  Q1: HEAD-TO-HEAD — 1000 vs 1015")
@@ -265,8 +278,10 @@ def q1_head_to_head(data_cache):
 
         print(f"\n  {instrument}  ({len(all_days)} days)")
         print(f"  {'Filter':>8s} | {'--- 1000 ---':>32s} | {'--- 1015 ---':>32s} | {'Delta':>7s}")
-        print(f"  {'':>8s} | {'N':>5s} {'avgR':>7s} {'WR':>6s} {'totR':>7s} | "
-              f"{'N':>5s} {'avgR':>7s} {'WR':>6s} {'totR':>7s} | {'avgR':>7s}")
+        print(
+            f"  {'':>8s} | {'N':>5s} {'avgR':>7s} {'WR':>6s} {'totR':>7s} | "
+            f"{'N':>5s} {'avgR':>7s} {'WR':>6s} {'totR':>7s} | {'avgR':>7s}"
+        )
         print(f"  {'-' * 85}")
 
         for fname, flo, fhi in FILTERS:
@@ -278,19 +293,33 @@ def q1_head_to_head(data_cache):
 
             delta = a1 - a0 if not (np.isnan(a0) or np.isnan(a1)) else np.nan
 
-            def _f(v): return f"{v:+7.3f}" if not np.isnan(v) else "     --"
-            def _w(v): return f"{v:5.1%}" if not np.isnan(v) else "   --"
+            def _f(v):
+                return f"{v:+7.3f}" if not np.isnan(v) else "     --"
+
+            def _w(v):
+                return f"{v:5.1%}" if not np.isnan(v) else "   --"
 
             marker = " <<" if (not np.isnan(delta) and delta > 0.05) else ""
-            print(f"  {fname:>8s} | {n0:5d} {_f(a0)} {_w(w0)} {_f(t0)} | "
-                  f"{n1:5d} {_f(a1)} {_w(w1)} {_f(t1)} | {_f(delta)}{marker}")
+            print(
+                f"  {fname:>8s} | {n0:5d} {_f(a0)} {_w(w0)} {_f(t0)} | "
+                f"{n1:5d} {_f(a1)} {_w(w1)} {_f(t1)} | {_f(delta)}{marker}"
+            )
 
-            rows.append({
-                "instrument": instrument, "filter": fname,
-                "n_1000": n0, "avgR_1000": a0, "wr_1000": w0, "totR_1000": t0,
-                "n_1015": n1, "avgR_1015": a1, "wr_1015": w1, "totR_1015": t1,
-                "delta_avgR": delta,
-            })
+            rows.append(
+                {
+                    "instrument": instrument,
+                    "filter": fname,
+                    "n_1000": n0,
+                    "avgR_1000": a0,
+                    "wr_1000": w0,
+                    "totR_1000": t0,
+                    "n_1015": n1,
+                    "avgR_1015": a1,
+                    "wr_1015": w1,
+                    "totR_1015": t1,
+                    "delta_avgR": delta,
+                }
+            )
 
     return rows
 
@@ -298,6 +327,7 @@ def q1_head_to_head(data_cache):
 # =========================================================================
 # Q2: What happens in the 1000-1015 window?
 # =========================================================================
+
 
 def q2_opening_noise(data_cache):
     print(f"\n{'=' * 90}")
@@ -332,8 +362,10 @@ def q2_opening_noise(data_cache):
         # - avg range (high-low)
         # - fraction where price has already crossed ORB
         print(f"\n  {'Min':>5s} | {'--- WINS ---':>36s} | {'--- LOSSES ---':>36s}")
-        print(f"  {'':>5s} | {'Vol':>6s} {'|Move|':>7s} {'Range':>6s} {'%Cross':>7s} | "
-              f"{'Vol':>6s} {'|Move|':>7s} {'Range':>6s} {'%Cross':>7s}")
+        print(
+            f"  {'':>5s} | {'Vol':>6s} {'|Move|':>7s} {'Range':>6s} {'%Cross':>7s} | "
+            f"{'Vol':>6s} {'|Move|':>7s} {'Range':>6s} {'%Cross':>7s}"
+        )
         print(f"  {'-' * 80}")
 
         def bar_stats(day_set, col_m, col_volumes, col_highs, col_lows, col_closes, col_opens, col_start):
@@ -358,8 +390,7 @@ def q2_opening_noise(data_cache):
 
             if not vols:
                 return np.nan, np.nan, np.nan, np.nan
-            return (float(np.mean(vols)), float(np.mean(moves)),
-                    float(np.mean(ranges)), float(np.mean(crosses)))
+            return (float(np.mean(vols)), float(np.mean(moves)), float(np.mean(ranges)), float(np.mean(crosses)))
 
         for offset_from_1000 in range(15):
             m = start_1000 + offset_from_1000
@@ -368,17 +399,32 @@ def q2_opening_noise(data_cache):
             lv, lm, lr, lc = bar_stats(losses, m, volumes, highs, lows, closes, opens, start_1000)
 
             time_label = f"10:{offset_from_1000:02d}"
-            def _f2(v): return f"{v:7.2f}" if not np.isnan(v) else "     --"
-            def _p(v): return f"{v:6.1%}" if not np.isnan(v) else "    --"
 
-            print(f"  {time_label:>5s} | {_f2(wv)} {_f2(wm)} {_f2(wr_val)} {_p(wc)} | "
-                  f"{_f2(lv)} {_f2(lm)} {_f2(lr)} {_p(lc)}")
+            def _f2(v):
+                return f"{v:7.2f}" if not np.isnan(v) else "     --"
 
-            rows.append({
-                "instrument": instrument, "minute": time_label,
-                "win_vol": wv, "win_move": wm, "win_range": wr_val, "win_cross_pct": wc,
-                "loss_vol": lv, "loss_move": lm, "loss_range": lr, "loss_cross_pct": lc,
-            })
+            def _p(v):
+                return f"{v:6.1%}" if not np.isnan(v) else "    --"
+
+            print(
+                f"  {time_label:>5s} | {_f2(wv)} {_f2(wm)} {_f2(wr_val)} {_p(wc)} | "
+                f"{_f2(lv)} {_f2(lm)} {_f2(lr)} {_p(lc)}"
+            )
+
+            rows.append(
+                {
+                    "instrument": instrument,
+                    "minute": time_label,
+                    "win_vol": wv,
+                    "win_move": wm,
+                    "win_range": wr_val,
+                    "win_cross_pct": wc,
+                    "loss_vol": lv,
+                    "loss_move": lm,
+                    "loss_range": lr,
+                    "loss_cross_pct": lc,
+                }
+            )
 
     return rows
 
@@ -386,6 +432,7 @@ def q2_opening_noise(data_cache):
 # =========================================================================
 # Q3: Overlap — same trades or different?
 # =========================================================================
+
 
 def q3_overlap(data_cache):
     print(f"\n{'=' * 90}")
@@ -452,8 +499,7 @@ def q3_overlap(data_cache):
 
             print(f"\n  {instrument} {fname}:")
             print(f"    1000 breaks: {n_1000:4d}  |  1015 breaks: {n_1015:4d}")
-            print(f"    Shared days: {n_both:4d} ({shared_pct_of_1000:.0%} of 1000, "
-                  f"{shared_pct_of_1015:.0%} of 1015)")
+            print(f"    Shared days: {n_both:4d} ({shared_pct_of_1000:.0%} of 1000, {shared_pct_of_1015:.0%} of 1015)")
             print(f"    Only-1000: {len(only_1000):4d}  |  Only-1015: {len(only_1015):4d}")
             print(f"    Direction agreement: {dir_agree:.0%}  |  R-correlation: {rc_s}")
             print(f"    1015-only avgR: {o15_s} (N={len(only_1015_rs)})")
@@ -463,13 +509,16 @@ def q3_overlap(data_cache):
                 avg_1000_shared = float(np.mean(r_vals_1000))
                 avg_1015_shared = float(np.mean(r_vals_1015))
                 delta = avg_1015_shared - avg_1000_shared
-                print(f"    Shared-day head-to-head: 1000={avg_1000_shared:+.3f} "
-                      f"vs 1015={avg_1015_shared:+.3f} (delta={delta:+.3f})")
+                print(
+                    f"    Shared-day head-to-head: 1000={avg_1000_shared:+.3f} "
+                    f"vs 1015={avg_1015_shared:+.3f} (delta={delta:+.3f})"
+                )
 
 
 # =========================================================================
 # Q4: LONG vs SHORT at 1015 (1000 is confirmed LONG-ONLY — is 1015 same?)
 # =========================================================================
+
 
 def q4_direction(data_cache):
     print(f"\n{'=' * 90}")
@@ -485,12 +534,10 @@ def q4_direction(data_cache):
 
         print(f"\n  {instrument}:")
         print(f"  {'Filter':>8s} | {'--- LONG ---':>22s} | {'--- SHORT ---':>22s} | {'BOTH':>7s}")
-        print(f"  {'':>8s} | {'N':>5s} {'avgR':>7s} {'WR':>6s} | "
-              f"{'N':>5s} {'avgR':>7s} {'WR':>6s} | {'avgR':>7s}")
+        print(f"  {'':>8s} | {'N':>5s} {'avgR':>7s} {'WR':>6s} | {'N':>5s} {'avgR':>7s} {'WR':>6s} | {'avgR':>7s}")
         print(f"  {'-' * 70}")
 
-        for fname, flo, fhi in [("G4+", 4.0, None), ("G5+", 5.0, None),
-                                  ("G6+", 6.0, None), ("G8+", 8.0, None)]:
+        for fname, flo, fhi in [("G4+", 4.0, None), ("G5+", 5.0, None), ("G6+", 6.0, None), ("G8+", 8.0, None)]:
             fb = filter_breaks(s1015, flo, fhi)
             longs = {d: r for d, r in fb.items() if r["direction"] == "long"}
             shorts = {d: r for d, r in fb.items() if r["direction"] == "short"}
@@ -499,16 +546,19 @@ def q4_direction(data_cache):
             ns, a_s, ws, _ = stats(shorts)
             nb, ab, _, _ = stats(fb)
 
-            def _f(v): return f"{v:+7.3f}" if not np.isnan(v) else "     --"
-            def _w(v): return f"{v:5.1%}" if not np.isnan(v) else "   --"
+            def _f(v):
+                return f"{v:+7.3f}" if not np.isnan(v) else "     --"
 
-            print(f"  {fname:>8s} | {nl:5d} {_f(al)} {_w(wl)} | "
-                  f"{ns:5d} {_f(a_s)} {_w(ws)} | {_f(ab)}")
+            def _w(v):
+                return f"{v:5.1%}" if not np.isnan(v) else "   --"
+
+            print(f"  {fname:>8s} | {nl:5d} {_f(al)} {_w(wl)} | {ns:5d} {_f(a_s)} {_w(ws)} | {_f(ab)}")
 
 
 # =========================================================================
 # Main
 # =========================================================================
+
 
 def main():
     parser = argparse.ArgumentParser(description="1015 vs 1000 head-to-head analysis")
@@ -520,6 +570,7 @@ def main():
     else:
         try:
             from pipeline.paths import GOLD_DB_PATH
+
             db_path = GOLD_DB_PATH
         except ImportError:
             db_path = Path("gold.db")
@@ -561,15 +612,13 @@ def main():
         output_dir.mkdir(parents=True, exist_ok=True)
 
         if q1_rows:
-            pd.DataFrame(q1_rows).to_csv(
-                output_dir / "1015_vs_1000_head_to_head.csv",
-                index=False, float_format="%.4f")
+            pd.DataFrame(q1_rows).to_csv(output_dir / "1015_vs_1000_head_to_head.csv", index=False, float_format="%.4f")
             print("\n  Q1 CSV: research/output/1015_vs_1000_head_to_head.csv")
 
         if q2_rows:
             pd.DataFrame(q2_rows).to_csv(
-                output_dir / "1015_vs_1000_opening_noise.csv",
-                index=False, float_format="%.4f")
+                output_dir / "1015_vs_1000_opening_noise.csv", index=False, float_format="%.4f"
+            )
             print("  Q2 CSV: research/output/1015_vs_1000_opening_noise.csv")
 
         print(f"\n  Total: {time.time() - t_total:.1f}s")

@@ -3067,20 +3067,20 @@ def check_htf_levels_integrity(con=None) -> list[str]:
             )
 
         week_fields = [
-            ("prev_week_high",  "w.wh"),
-            ("prev_week_low",   "w.wl"),
-            ("prev_week_open",  "w.wo"),
+            ("prev_week_high", "w.wh"),
+            ("prev_week_low", "w.wl"),
+            ("prev_week_open", "w.wo"),
             ("prev_week_close", "w.wc"),
             ("prev_week_range", "w.wr"),
-            ("prev_week_mid",   "w.wm"),
+            ("prev_week_mid", "w.wm"),
         ]
         month_fields = [
-            ("prev_month_high",  "m.mh"),
-            ("prev_month_low",   "m.ml"),
-            ("prev_month_open",  "m.mo"),
+            ("prev_month_high", "m.mh"),
+            ("prev_month_low", "m.ml"),
+            ("prev_month_open", "m.mo"),
             ("prev_month_close", "m.mc"),
             ("prev_month_range", "m.mr"),
-            ("prev_month_mid",   "m.mm"),
+            ("prev_month_mid", "m.mm"),
         ]
 
         diff_cases = [_diff_case(s, c, s) for s, c in week_fields + month_fields]
@@ -5708,7 +5708,12 @@ CHECKS = [
         False,
     ),
     ("Generated context-routing docs stay in sync with the registry", check_context_generated_docs, False, False),
-    ("Generated task views preserve strict truth-class boundaries", check_context_view_contracts, True, False),  # ADVISORY: context/ package not yet committed
+    (
+        "Generated task views preserve strict truth-class boundaries",
+        check_context_view_contracts,
+        True,
+        False,
+    ),  # ADVISORY: context/ package not yet committed
     (
         "AGENTS.md points cold-start agents to the deterministic context router",
         check_agents_mentions_context_resolver,

@@ -774,11 +774,7 @@ def build_profile_portfolio(
 
     with duckdb.connect(str(db_path), read_only=True) as con:
         has_deployment_scope = validated_setups_has_deployment_scope(con)
-        deployment_scope_sql = (
-            "COALESCE(deployment_scope, 'deployable')"
-            if has_deployment_scope
-            else "'deployable'"
-        )
+        deployment_scope_sql = "COALESCE(deployment_scope, 'deployable')" if has_deployment_scope else "'deployable'"
         for lane in lanes:
             row = con.execute(
                 f"""

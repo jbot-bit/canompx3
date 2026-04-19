@@ -51,7 +51,9 @@ class TestRunPreflight:
 
         with (
             patch.object(windows_agent_launch, "pick_python", return_value=["python"]),
-            patch.object(windows_agent_launch.subprocess, "run", return_value=type("R", (), {"returncode": 0})()) as run_mock,
+            patch.object(
+                windows_agent_launch.subprocess, "run", return_value=type("R", (), {"returncode": 0})()
+            ) as run_mock,
         ):
             windows_agent_launch.run_preflight(tmp_path, claim_tool="claude")
 
@@ -160,9 +162,7 @@ class TestCodexWslCommand:
         assert "exec ./scripts/infra/codex-project.sh --no-alt-screen" in command
 
     def test_builds_gold_db_project_command(self) -> None:
-        command = windows_agent_launch.build_codex_project_wsl_command(
-            "/mnt/c/repo", enable_gold_db=True
-        )
+        command = windows_agent_launch.build_codex_project_wsl_command("/mnt/c/repo", enable_gold_db=True)
 
         assert "exec ./scripts/infra/codex-project-gold-db.sh --no-alt-screen" in command
 
@@ -253,7 +253,10 @@ class TestWindowsBatchWrappers:
         assert 'if /I "%ACTION%"=="search" goto search_task' in content
         assert 'if /I "%ACTION%"=="green" goto green_task' in content
         assert 'if /I "%ACTION%"=="list" call :run_mode list' in content
-        assert 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\\infra\\windows-workstreams-gui.ps1"' in content
+        assert (
+            'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "scripts\\infra\\windows-workstreams-gui.ps1"'
+            in content
+        )
         assert "CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY" in content
         assert "MODE=%MODE% TASK=%TASK%" in content
         assert "call :run_mode green-claude" in content
@@ -268,16 +271,16 @@ class TestWindowsBatchWrappers:
             encoding="utf-8"
         )
 
-        assert 'param(' in content
+        assert "param(" in content
         assert '[string]$Action = ""' in content
         assert '[string]$Task = ""' in content
-        assert 'switch ($Action.ToLowerInvariant())' in content
+        assert "switch ($Action.ToLowerInvariant())" in content
         assert '"codex" { Invoke-LauncherMode -Mode "codex" -TaskName $Task; exit 0 }' in content
         assert '"claude" { Invoke-LauncherMode -Mode "claude" -TaskName $Task; exit 0 }' in content
         assert '"green-codex" { Invoke-LauncherMode -Mode "green-codex"; exit 0 }' in content
         assert '"green-claude" { Invoke-LauncherMode -Mode "green-claude"; exit 0 }' in content
         assert "CANOMPX3_WINDOWS_LAUNCH_ECHO_ONLY" in content
-        assert 'Open an isolated AI workstream' in content
+        assert "Open an isolated AI workstream" in content
 
 
 class TestWorkflowCommands:

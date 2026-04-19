@@ -140,15 +140,19 @@ def s1_shuffle_control():
     shuf_pos_fracs = [sum(1 for v in run if v > 0) / len(run) for run in shuf_runs if len(run)]
     real_pos_frac = tot_real_pos / max(tot_real_pos + tot_real_neg, 1)
 
-    print(f"  Real data: {tot_real_pos}/{tot_real_pos+tot_real_neg} positive = {real_pos_frac:.3f}")
-    print(f"  Shuffled ({N_SHUFFLES} runs): median positive frac = "
-          f"{np.median(shuf_pos_fracs):.3f}  range [{min(shuf_pos_fracs):.3f}, {max(shuf_pos_fracs):.3f}]")
+    print(f"  Real data: {tot_real_pos}/{tot_real_pos + tot_real_neg} positive = {real_pos_frac:.3f}")
+    print(
+        f"  Shuffled ({N_SHUFFLES} runs): median positive frac = "
+        f"{np.median(shuf_pos_fracs):.3f}  range [{min(shuf_pos_fracs):.3f}, {max(shuf_pos_fracs):.3f}]"
+    )
     # One-sided p: how many shuffles had positive_frac as extreme as real
     extreme = sum(1 for f in shuf_pos_fracs if f <= real_pos_frac)
     p = (extreme + 1) / (len(shuf_pos_fracs) + 1)
     print(f"  Shuffle p-value (positive_frac <= real): {p:.4f}")
-    print(f"  Verdict: {'PASS' if p < 0.05 else 'FAIL'} — methodology "
-          f"{'distinguishes real from shuffled' if p < 0.05 else 'may be biased'}")
+    print(
+        f"  Verdict: {'PASS' if p < 0.05 else 'FAIL'} — methodology "
+        f"{'distinguishes real from shuffled' if p < 0.05 else 'may be biased'}"
+    )
 
     return {
         "real_pos_frac": real_pos_frac,
@@ -208,17 +212,18 @@ def s3_direction_split():
                     if srl is None:
                         continue
                     if direction == "long":
-                        if srl > 0: lo_cells_pos += 1
-                        else: lo_cells_neg += 1
+                        if srl > 0:
+                            lo_cells_pos += 1
+                        else:
+                            lo_cells_neg += 1
                     else:
-                        if srl > 0: sh_cells_pos += 1
-                        else: sh_cells_neg += 1
-    print(f"  LONG: pos={lo_cells_pos}/{lo_cells_pos + lo_cells_neg} "
-          f"neg={lo_cells_neg}/{lo_cells_pos + lo_cells_neg}")
-    print(f"  SHORT: pos={sh_cells_pos}/{sh_cells_pos + sh_cells_neg} "
-          f"neg={sh_cells_neg}/{sh_cells_pos + sh_cells_neg}")
-    return {"long_pos": lo_cells_pos, "long_neg": lo_cells_neg,
-            "short_pos": sh_cells_pos, "short_neg": sh_cells_neg}
+                        if srl > 0:
+                            sh_cells_pos += 1
+                        else:
+                            sh_cells_neg += 1
+    print(f"  LONG: pos={lo_cells_pos}/{lo_cells_pos + lo_cells_neg} neg={lo_cells_neg}/{lo_cells_pos + lo_cells_neg}")
+    print(f"  SHORT: pos={sh_cells_pos}/{sh_cells_pos + sh_cells_neg} neg={sh_cells_neg}/{sh_cells_pos + sh_cells_neg}")
+    return {"long_pos": lo_cells_pos, "long_neg": lo_cells_neg, "short_pos": sh_cells_pos, "short_neg": sh_cells_neg}
 
 
 def s4_event_day_exclusion():
@@ -242,14 +247,18 @@ def s4_event_day_exclusion():
                 full = sr_lift(df, 70)
                 clean = sr_lift(df[~df["is_event"]], 70)
                 results[(apt, rr, direction)] = {
-                    "full_lift": full[0], "clean_lift": clean[0],
-                    "full_n_on": full[2], "clean_n_on": clean[2],
+                    "full_lift": full[0],
+                    "clean_lift": clean[0],
+                    "full_n_on": full[2],
+                    "clean_n_on": clean[2],
                 }
                 fs = f"{full[0]:+.3f}" if full[0] is not None else "n/a"
                 cs = f"{clean[0]:+.3f}" if clean[0] is not None else "n/a"
-                print(f"  O{apt} RR{rr} {direction}: full sr_lift={fs} "
-                      f"(N_on={full[2]}) vs no-events sr_lift={cs} "
-                      f"(N_on={clean[2]})")
+                print(
+                    f"  O{apt} RR{rr} {direction}: full sr_lift={fs} "
+                    f"(N_on={full[2]}) vs no-events sr_lift={cs} "
+                    f"(N_on={clean[2]})"
+                )
     return results
 
 
@@ -306,16 +315,23 @@ def s6_mae_mfe_decomp():
         wr_on = (on["pnl_r"] > 0).mean()
         wr_off = (off["pnl_r"] > 0).mean()
         print(f"  {direction}:")
-        print(f"    WR: {wr_on:.1%} on vs {wr_off:.1%} off (diff {wr_on-wr_off:+.1%})")
+        print(f"    WR: {wr_on:.1%} on vs {wr_off:.1%} off (diff {wr_on - wr_off:+.1%})")
         print(f"    AvgWin: {wins_on:+.3f} on vs {wins_off:+.3f} off")
         print(f"    AvgLoss: {losses_on:+.3f} on vs {losses_off:+.3f} off")
         print(f"    MAE: {mae_on:+.3f} on vs {mae_off:+.3f} off")
         print(f"    MFE: {mfe_on:+.3f} on vs {mfe_off:+.3f} off")
-        out[direction] = dict(wr_on=float(wr_on), wr_off=float(wr_off),
-                              wins_on=float(wins_on), wins_off=float(wins_off),
-                              losses_on=float(losses_on), losses_off=float(losses_off),
-                              mae_on=float(mae_on), mae_off=float(mae_off),
-                              mfe_on=float(mfe_on), mfe_off=float(mfe_off))
+        out[direction] = dict(
+            wr_on=float(wr_on),
+            wr_off=float(wr_off),
+            wins_on=float(wins_on),
+            wins_off=float(wins_off),
+            losses_on=float(losses_on),
+            losses_off=float(losses_off),
+            mae_on=float(mae_on),
+            mae_off=float(mae_off),
+            mfe_on=float(mfe_on),
+            mfe_off=float(mfe_off),
+        )
     return out
 
 
@@ -387,8 +403,8 @@ def emit(s1, s2, s3, s4, s5, s6, s7, s8):
         f"[{s1['shuf_range'][0]:.3f}, {s1['shuf_range'][1]:.3f}].",
         f"Shuffle p-value: {s1['shuf_p']:.4f}",
         "",
-        f"**Verdict:** {'PASS' if s1['shuf_p'] < 0.05 else 'FAIL'} — methodology " +
-        ('distinguishes real signal from shuffled noise.' if s1['shuf_p'] < 0.05 else 'may be biased.'),
+        f"**Verdict:** {'PASS' if s1['shuf_p'] < 0.05 else 'FAIL'} — methodology "
+        + ("distinguishes real signal from shuffled noise." if s1["shuf_p"] < 0.05 else "may be biased."),
         "",
         "---",
         "",
@@ -402,92 +418,110 @@ def emit(s1, s2, s3, s4, s5, s6, s7, s8):
 
     neg_years = sum(1 for n, pf, _ in s2.values() if pf < 0.3)
     total_yrs = len(s2)
-    lines += ["",
-              f"**{neg_years} of {total_yrs} years** show <30% positive fraction (strongly inverse).",
-              f"**Verdict:** {'CONSISTENT' if neg_years >= total_yrs * 0.6 else 'YEAR-DEPENDENT'}",
-              "",
-              "---",
-              "",
-              "## S3 — Direction split",
-              "",
-              f"LONG cells: {s3['long_pos']} positive / {s3['long_neg']} negative",
-              f"SHORT cells: {s3['short_pos']} positive / {s3['short_neg']} negative",
-              ""]
-    long_neg_frac = s3['long_neg'] / max(s3['long_pos'] + s3['long_neg'], 1)
-    short_neg_frac = s3['short_neg'] / max(s3['short_pos'] + s3['short_neg'], 1)
-    lines += [f"LONG inverse fraction: {long_neg_frac:.1%}",
-              f"SHORT inverse fraction: {short_neg_frac:.1%}",
-              "",
-              f"**Verdict:** " +
-              ('BOTH directions inverse' if long_neg_frac > 0.7 and short_neg_frac > 0.7 else
-               'DIRECTION-ASYMMETRIC' if abs(long_neg_frac - short_neg_frac) > 0.3 else
-               'PREDOMINANTLY LONG INVERSE' if long_neg_frac > short_neg_frac + 0.2 else
-               'MIXED'),
-              "",
-              "---",
-              "",
-              "## S4 — Event-day exclusion",
-              ""]
-    lines += ["| apt | rr | dir | full sr_lift (N_on) | clean sr_lift (N_on) | delta |",
-              "|---|---|---|---|---|---|"]
+    lines += [
+        "",
+        f"**{neg_years} of {total_yrs} years** show <30% positive fraction (strongly inverse).",
+        f"**Verdict:** {'CONSISTENT' if neg_years >= total_yrs * 0.6 else 'YEAR-DEPENDENT'}",
+        "",
+        "---",
+        "",
+        "## S3 — Direction split",
+        "",
+        f"LONG cells: {s3['long_pos']} positive / {s3['long_neg']} negative",
+        f"SHORT cells: {s3['short_pos']} positive / {s3['short_neg']} negative",
+        "",
+    ]
+    long_neg_frac = s3["long_neg"] / max(s3["long_pos"] + s3["long_neg"], 1)
+    short_neg_frac = s3["short_neg"] / max(s3["short_pos"] + s3["short_neg"], 1)
+    lines += [
+        f"LONG inverse fraction: {long_neg_frac:.1%}",
+        f"SHORT inverse fraction: {short_neg_frac:.1%}",
+        "",
+        f"**Verdict:** "
+        + (
+            "BOTH directions inverse"
+            if long_neg_frac > 0.7 and short_neg_frac > 0.7
+            else "DIRECTION-ASYMMETRIC"
+            if abs(long_neg_frac - short_neg_frac) > 0.3
+            else "PREDOMINANTLY LONG INVERSE"
+            if long_neg_frac > short_neg_frac + 0.2
+            else "MIXED"
+        ),
+        "",
+        "---",
+        "",
+        "## S4 — Event-day exclusion",
+        "",
+    ]
+    lines += ["| apt | rr | dir | full sr_lift (N_on) | clean sr_lift (N_on) | delta |", "|---|---|---|---|---|---|"]
     for (apt, rr, direction), v in s4.items():
-        full = v['full_lift'] if v['full_lift'] is not None else float('nan')
-        clean = v['clean_lift'] if v['clean_lift'] is not None else float('nan')
-        delta = clean - full if not np.isnan(full) and not np.isnan(clean) else float('nan')
-        lines.append(f"| O{apt} | {rr} | {direction} | {full:+.3f} ({v['full_n_on']}) | "
-                     f"{clean:+.3f} ({v['clean_n_on']}) | {delta:+.3f} |")
+        full = v["full_lift"] if v["full_lift"] is not None else float("nan")
+        clean = v["clean_lift"] if v["clean_lift"] is not None else float("nan")
+        delta = clean - full if not np.isnan(full) and not np.isnan(clean) else float("nan")
+        lines.append(
+            f"| O{apt} | {rr} | {direction} | {full:+.3f} ({v['full_n_on']}) | "
+            f"{clean:+.3f} ({v['clean_n_on']}) | {delta:+.3f} |"
+        )
     # If clean stays inverse, effect survives event removal
-    persistent = sum(1 for v in s4.values()
-                    if v['clean_lift'] is not None and v['clean_lift'] < -0.05)
-    lines += ["",
-              f"**{persistent} of {len(s4)} cells** still show inverse after event-day exclusion.",
-              "",
-              "---",
-              "",
-              "## S5 — Break-direction confounder",
-              "",
-              f"P(break=long | garch>=70): {s5['high_long_frac']:.3f}",
-              f"P(break=long | garch<70): {s5['low_long_frac']:.3f}",
-              f"Diff: {s5['diff']:+.3f}",
-              "",
-              f"**Verdict:** {'CONFOUNDER PRESENT' if abs(s5['diff']) > 0.05 else 'NO CONFOUND'} — garch "
-              + ('IS' if abs(s5['diff']) > 0.05 else 'is NOT') + " associated with break direction at NYSE_OPEN.",
-              "",
-              "---",
-              "",
-              "## S6 — MAE/MFE decomposition",
-              "",
-              "Is the inverse signal from WR change, bigger losses, or smaller wins?",
-              "",
-              "| dir | WR on | WR off | AvgWin on | AvgWin off | AvgLoss on | AvgLoss off | MAE on | MAE off |",
-              "|---|---|---|---|---|---|---|---|---|"]
+    persistent = sum(1 for v in s4.values() if v["clean_lift"] is not None and v["clean_lift"] < -0.05)
+    lines += [
+        "",
+        f"**{persistent} of {len(s4)} cells** still show inverse after event-day exclusion.",
+        "",
+        "---",
+        "",
+        "## S5 — Break-direction confounder",
+        "",
+        f"P(break=long | garch>=70): {s5['high_long_frac']:.3f}",
+        f"P(break=long | garch<70): {s5['low_long_frac']:.3f}",
+        f"Diff: {s5['diff']:+.3f}",
+        "",
+        f"**Verdict:** {'CONFOUNDER PRESENT' if abs(s5['diff']) > 0.05 else 'NO CONFOUND'} — garch "
+        + ("IS" if abs(s5["diff"]) > 0.05 else "is NOT")
+        + " associated with break direction at NYSE_OPEN.",
+        "",
+        "---",
+        "",
+        "## S6 — MAE/MFE decomposition",
+        "",
+        "Is the inverse signal from WR change, bigger losses, or smaller wins?",
+        "",
+        "| dir | WR on | WR off | AvgWin on | AvgWin off | AvgLoss on | AvgLoss off | MAE on | MAE off |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
     for direction, v in s6.items():
-        lines.append(f"| {direction} | {v['wr_on']:.1%} | {v['wr_off']:.1%} | {v['wins_on']:+.3f} | "
-                     f"{v['wins_off']:+.3f} | {v['losses_on']:+.3f} | {v['losses_off']:+.3f} | "
-                     f"{v['mae_on']:+.3f} | {v['mae_off']:+.3f} |")
-    lines += ["",
-              "---",
-              "",
-              "## S7 — Continuous regression",
-              "",
-              "If garch is a clean regime indicator, linear slope on pnl_r should be consistent.",
-              "",
-              "| Direction | N | slope | r | p |",
-              "|---|---|---|---|---|"]
+        lines.append(
+            f"| {direction} | {v['wr_on']:.1%} | {v['wr_off']:.1%} | {v['wins_on']:+.3f} | "
+            f"{v['wins_off']:+.3f} | {v['losses_on']:+.3f} | {v['losses_off']:+.3f} | "
+            f"{v['mae_on']:+.3f} | {v['mae_off']:+.3f} |"
+        )
+    lines += [
+        "",
+        "---",
+        "",
+        "## S7 — Continuous regression",
+        "",
+        "If garch is a clean regime indicator, linear slope on pnl_r should be consistent.",
+        "",
+        "| Direction | N | slope | r | p |",
+        "|---|---|---|---|---|",
+    ]
     for direction, v in s7.items():
         lines.append(f"| {direction} | {v['N']} | {v['slope']:+.5f} | {v['r']:+.3f} | {v['p']:.4f} |")
 
-    lines += ["",
-              "Negative slope = garch higher → pnl lower (inverse signal confirmed continuously).",
-              "",
-              "---",
-              "",
-              "## S8 — Tail behavior",
-              "",
-              "If the effect collapses or reverses at threshold 90, it's a mid-tail artifact, not a robust regime.",
-              "",
-              "| apt | rr | dir | @70 lift | @80 lift | @90 lift |",
-              "|---|---|---|---|---|---|"]
+    lines += [
+        "",
+        "Negative slope = garch higher → pnl lower (inverse signal confirmed continuously).",
+        "",
+        "---",
+        "",
+        "## S8 — Tail behavior",
+        "",
+        "If the effect collapses or reverses at threshold 90, it's a mid-tail artifact, not a robust regime.",
+        "",
+        "| apt | rr | dir | @70 lift | @80 lift | @90 lift |",
+        "|---|---|---|---|---|---|",
+    ]
     by_cell = {}
     for apt, rr, direction, th, srl, n_on in s8:
         by_cell.setdefault((apt, rr, direction), {})[th] = (srl, n_on)
@@ -500,13 +534,15 @@ def emit(s1, s2, s3, s4, s5, s6, s7, s8):
         s90 = f"{v90[0]:+.3f}" if v90[0] is not None else "—"
         lines.append(f"| O{apt} | {rr} | {direction} | {s70} ({v70[1]}) | {s80} ({v80[1]}) | {s90} ({v90[1]}) |")
 
-    lines += ["",
-              "---",
-              "",
-              "## Final stress-test verdict",
-              "",
-              "Each S-test either confirms or falsifies part of the base claim. Consolidated below.",
-              ""]
+    lines += [
+        "",
+        "---",
+        "",
+        "## Final stress-test verdict",
+        "",
+        "Each S-test either confirms or falsifies part of the base claim. Consolidated below.",
+        "",
+    ]
 
     OUTPUT_MD.write_text("\n".join(lines), encoding="utf-8")
     print(f"\n[report] {OUTPUT_MD}")

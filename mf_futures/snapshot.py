@@ -54,7 +54,7 @@ def load_daily_market_snapshots(
             f"""
             SELECT trading_day, daily_close
             FROM daily_features
-            WHERE {' AND '.join(where_parts)}
+            WHERE {" AND ".join(where_parts)}
             ORDER BY trading_day
             """,
             params,
@@ -74,8 +74,7 @@ def load_daily_market_snapshots(
 
     if not research_rows:
         raise ValueError(
-            f"no daily_features coverage for {instrument.research_symbol} "
-            f"(research source {research_symbol})"
+            f"no daily_features coverage for {instrument.research_symbol} (research source {research_symbol})"
         )
 
     stats_by_day = {
@@ -174,10 +173,7 @@ def load_carry_input_slices(
             )
         ]
 
-    return [
-        build_carry_input_slice(pair)
-        for pair in pair_observations_by_day(stats_symbol, observations)
-    ]
+    return [build_carry_input_slice(pair) for pair in pair_observations_by_day(stats_symbol, observations)]
 
 
 def build_kernel_input_slice(
@@ -193,8 +189,7 @@ def build_kernel_input_slice(
     usable = [snapshot for snapshot in snapshots if snapshot.trading_day <= as_of]
     if len(usable) < min_history:
         raise ValueError(
-            f"insufficient history for {instrument.research_symbol}: "
-            f"{len(usable)} rows < min_history {min_history}"
+            f"insufficient history for {instrument.research_symbol}: {len(usable)} rows < min_history {min_history}"
         )
 
     prices = tuple(snapshot.research_close for snapshot in usable)

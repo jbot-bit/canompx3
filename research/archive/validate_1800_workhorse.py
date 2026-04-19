@@ -42,6 +42,7 @@ VARIANTS = [
     {"id": "W5", "label": "E3 CB4 RR2.0 G6+", "cb": 4, "min_orb": 6.0, "agree": False},
 ]
 
+
 # ---------------------------------------------------------------------------
 # Data Loading
 # ---------------------------------------------------------------------------
@@ -50,7 +51,8 @@ def load_workhorse_data(db_path: Path) -> dict:
     con = duckdb.connect(str(db_path), read_only=True)
     try:
         # All CB4 and CB5 outcomes for 1800 E3 RR2.0
-        outcomes = con.execute("""
+        outcomes = con.execute(
+            """
             SELECT trading_day, confirm_bars, outcome, pnl_r,
                    entry_price, stop_price, target_price
             FROM orb_outcomes
@@ -59,7 +61,9 @@ def load_workhorse_data(db_path: Path) -> dict:
               AND orb_minutes = 5
               AND outcome IN ('win', 'loss')
             ORDER BY trading_day
-        """, [ORB_LABEL, ENTRY_MODEL]).fetchdf()
+        """,
+            [ORB_LABEL, ENTRY_MODEL],
+        ).fetchdf()
 
         # 5m daily_features for orb size + break direction
         df5 = con.execute("""
@@ -93,9 +97,7 @@ def load_workhorse_data(db_path: Path) -> dict:
         merged = merged[merged["orb_size"] >= v["min_orb"]].copy()
 
         # Exclude 2021
-        merged["year"] = merged["trading_day"].apply(
-            lambda d: d.year if hasattr(d, "year") else int(str(d)[:4])
-        )
+        merged["year"] = merged["trading_day"].apply(lambda d: d.year if hasattr(d, "year") else int(str(d)[:4]))
         merged = merged[merged["year"] != EXCLUDE_YEAR].copy()
 
         # AGREE filter
@@ -105,6 +107,7 @@ def load_workhorse_data(db_path: Path) -> dict:
         result[v["id"]] = merged.to_dict("records")
 
     return result
+
 
 # ---------------------------------------------------------------------------
 # Metrics
@@ -124,7 +127,7 @@ def compute_metrics(rows: list[dict], label: str = "") -> dict:
     if n > 1:
         mean = total_r / n
         var = sum((p - mean) ** 2 for p in pnls) / (n - 1)
-        std = var ** 0.5
+        std = var**0.5
         sharpe = mean / std if std > 0 else None
     else:
         sharpe = None
@@ -166,6 +169,7 @@ def compute_metrics(rows: list[dict], label: str = "") -> dict:
         "yearly": yearly,
     }
 
+
 # ---------------------------------------------------------------------------
 # Stress Testing
 # ---------------------------------------------------------------------------
@@ -193,6 +197,7 @@ def stress_test_pnl(rows: list[dict], multiplier: float) -> list[dict]:
         stressed.append(new_row)
     return stressed
 
+
 def find_breakeven_multiplier(rows: list[dict]) -> float:
     """Binary search for friction multiplier where ExpR = 0."""
     lo, hi = 1.0, 10.0
@@ -208,6 +213,7 @@ def find_breakeven_multiplier(rows: list[dict]) -> float:
             hi = mid
     return (lo + hi) / 2
 
+
 # ---------------------------------------------------------------------------
 # Walk-Forward
 # ---------------------------------------------------------------------------
@@ -222,12 +228,15 @@ def walk_forward_expanding(rows: list[dict]) -> list[dict]:
     for fold in folds:
         train = [r for r in rows if r["year"] in fold["train"]]
         test = [r for r in rows if r["year"] == fold["test"]]
-        results.append({
-            "fold": fold,
-            "is": compute_metrics(train, f"IS {fold['train']}"),
-            "oos": compute_metrics(test, f"OOS {fold['test']}"),
-        })
+        results.append(
+            {
+                "fold": fold,
+                "is": compute_metrics(train, f"IS {fold['train']}"),
+                "oos": compute_metrics(test, f"OOS {fold['test']}"),
+            }
+        )
     return results
+
 
 def leave_one_year_out(rows: list[dict]) -> list[dict]:
     """Leave-one-year-out cross-validation."""
@@ -235,24 +244,30 @@ def leave_one_year_out(rows: list[dict]) -> list[dict]:
     for leave_out in [2022, 2023, 2024, 2025]:
         train = [r for r in rows if r["year"] != leave_out and r["year"] != EXCLUDE_YEAR]
         test = [r for r in rows if r["year"] == leave_out]
-        results.append({
-            "leave_out": leave_out,
-            "is": compute_metrics(train, f"IS (excl {leave_out})"),
-            "oos": compute_metrics(test, f"OOS {leave_out}"),
-        })
+        results.append(
+            {
+                "leave_out": leave_out,
+                "is": compute_metrics(train, f"IS (excl {leave_out})"),
+                "oos": compute_metrics(test, f"OOS {leave_out}"),
+            }
+        )
     return results
+
 
 # ---------------------------------------------------------------------------
 # Formatting helpers
 # ---------------------------------------------------------------------------
 def fmt_pct(v, decimals=1):
-    return f"{v*100:.{decimals}f}%" if v is not None else "N/A"
+    return f"{v * 100:.{decimals}f}%" if v is not None else "N/A"
+
 
 def fmt_r(v, decimals=2):
     return f"{v:+.{decimals}f}R" if v is not None else "N/A"
 
+
 def fmt_f(v, decimals=2):
     return f"{v:.{decimals}f}" if v is not None else "N/A"
+
 
 def classify(n):
     if n >= 100:
@@ -260,6 +275,7 @@ def classify(n):
     if n >= 30:
         return "REGIME"
     return "INVALID"
+
 
 # ---------------------------------------------------------------------------
 # Report Generation
@@ -321,7 +337,7 @@ def generate_report(variant_data: dict) -> str:
         pre2025_trades = len(pre2025)
         pre2025_years = len(set(r["year"] for r in pre2025))
         if pre2025_years > 0 and pre2025_trades / pre2025_years < 5:
-            flags.append(f"PRE-2025 THIN: {pre2025_trades/pre2025_years:.1f} trades/year before 2025")
+            flags.append(f"PRE-2025 THIN: {pre2025_trades / pre2025_years:.1f} trades/year before 2025")
         if be_mult < 1.3:
             flags.append(f"FRAGILE EDGE: breakeven at {be_mult:.2f}x friction")
         long_r = sum(r["pnl_r"] for r in longs)
@@ -360,17 +376,21 @@ def generate_report(variant_data: dict) -> str:
     w()
     hdr = f"  {'ID':<4s} {'Strategy':<26s} {'N':>5s} {'WR':>7s} {'ExpR':>8s} {'Sharpe':>8s} {'MaxDD':>8s} {'PF':>6s} {'BE':>5s} {'Class':>7s}"
     w(hdr)
-    w(f"  {'-'*4} {'-'*26} {'-'*5} {'-'*7} {'-'*8} {'-'*8} {'-'*8} {'-'*6} {'-'*5} {'-'*7}")
+    w(f"  {'-' * 4} {'-' * 26} {'-' * 5} {'-' * 7} {'-' * 8} {'-' * 8} {'-' * 8} {'-' * 6} {'-' * 5} {'-' * 7}")
     for v in VARIANTS:
         vid = v["id"]
         m = results[vid]["metrics"]
         be = results[vid]["be_mult"]
         if m["N"] == 0:
-            w(f"  {vid:<4s} {v['label']:<26s} {'0':>5s} {'--':>7s} {'--':>8s} {'--':>8s} {'--':>8s} {'--':>6s} {'--':>5s} {'INVALID':>7s}")
+            w(
+                f"  {vid:<4s} {v['label']:<26s} {'0':>5s} {'--':>7s} {'--':>8s} {'--':>8s} {'--':>8s} {'--':>6s} {'--':>5s} {'INVALID':>7s}"
+            )
         else:
-            w(f"  {vid:<4s} {v['label']:<26s} {m['N']:>5d} {fmt_pct(m['win_rate']):>7s} "
-              f"{fmt_r(m['exp_r']):>8s} {fmt_f(m['sharpe']):>8s} {fmt_r(m['max_dd_r']):>8s} "
-              f"{fmt_f(m['profit_factor']):>6s} {be:>5.2f} {classify(m['N']):>7s}")
+            w(
+                f"  {vid:<4s} {v['label']:<26s} {m['N']:>5d} {fmt_pct(m['win_rate']):>7s} "
+                f"{fmt_r(m['exp_r']):>8s} {fmt_f(m['sharpe']):>8s} {fmt_r(m['max_dd_r']):>8s} "
+                f"{fmt_f(m['profit_factor']):>6s} {be:>5.2f} {classify(m['N']):>7s}"
+            )
     w()
 
     # === STRESS TESTS ===
@@ -384,8 +404,10 @@ def generate_report(variant_data: dict) -> str:
         w(f"  {vid}: {v['label']}")
         for mult in [1.0, 1.5, 2.0]:
             sr = results[vid]["stress"][mult]
-            w(f"    {mult:.1f}x friction: N={sr['N']}, ExpR={fmt_r(sr.get('exp_r'))}, "
-              f"Sharpe={fmt_f(sr.get('sharpe'))}, MaxDD={fmt_r(sr.get('max_dd_r'))}")
+            w(
+                f"    {mult:.1f}x friction: N={sr['N']}, ExpR={fmt_r(sr.get('exp_r'))}, "
+                f"Sharpe={fmt_f(sr.get('sharpe'))}, MaxDD={fmt_r(sr.get('max_dd_r'))}"
+            )
         w(f"    Breakeven multiplier: {results[vid]['be_mult']:.2f}x")
         w()
 
@@ -416,8 +438,10 @@ def generate_report(variant_data: dict) -> str:
         for loo in results[vid]["loo"]:
             is_m = loo["is"]
             oos_m = loo["oos"]
-            w(f"    Leave out {loo['leave_out']}: IS N={is_m['N']}, ExpR={fmt_r(is_m.get('exp_r'))} "
-              f"| OOS N={oos_m['N']}, ExpR={fmt_r(oos_m.get('exp_r'))}")
+            w(
+                f"    Leave out {loo['leave_out']}: IS N={is_m['N']}, ExpR={fmt_r(is_m.get('exp_r'))} "
+                f"| OOS N={oos_m['N']}, ExpR={fmt_r(oos_m.get('exp_r'))}"
+            )
         w()
 
     # === REGIME REALITY CHECK ===
@@ -430,7 +454,7 @@ def generate_report(variant_data: dict) -> str:
         hdr2 += f" {str(y):>6s}"
     hdr2 += f" {'Total':>6s}"
     w(hdr2)
-    w(f"  {'-'*4} {'-'*26}" + f" {'-'*6}" * (len(years_all) + 1))
+    w(f"  {'-' * 4} {'-' * 26}" + f" {'-' * 6}" * (len(years_all) + 1))
     for v in VARIANTS:
         vid = v["id"]
         row = f"  {vid:<4s} {v['label']:<26s}"
@@ -448,7 +472,7 @@ def generate_report(variant_data: dict) -> str:
         hdr3 += f" {str(y):>8s}"
     hdr3 += f" {'Total':>8s}"
     w(hdr3)
-    w(f"  {'-'*4} {'-'*26}" + f" {'-'*8}" * (len(years_all) + 1))
+    w(f"  {'-' * 4} {'-' * 26}" + f" {'-' * 8}" * (len(years_all) + 1))
     for v in VARIANTS:
         vid = v["id"]
         row = f"  {vid:<4s} {v['label']:<26s}"
@@ -473,17 +497,19 @@ def generate_report(variant_data: dict) -> str:
     w("  Pre-2025 vs 2025+ (per variant):")
     hdr4 = f"  {'ID':<4s} {'Strategy':<26s} {'Pre N':>6s} {'Pre ExpR':>10s} {'25+ N':>6s} {'25+ ExpR':>10s} {'25+ WR':>7s} {'25+ Sharpe':>11s} {'25+ MaxDD':>10s}"
     w(hdr4)
-    w(f"  {'-'*4} {'-'*26} {'-'*6} {'-'*10} {'-'*6} {'-'*10} {'-'*7} {'-'*11} {'-'*10}")
+    w(f"  {'-' * 4} {'-' * 26} {'-' * 6} {'-' * 10} {'-' * 6} {'-' * 10} {'-' * 7} {'-' * 11} {'-' * 10}")
     for v in VARIANTS:
         vid = v["id"]
         pre = results[vid]["pre2025"]
         post = results[vid]["post2025"]
-        w(f"  {vid:<4s} {v['label']:<26s} "
-          f"{pre['N']:>6d} {fmt_r(pre.get('exp_r')):>10s} "
-          f"{post['N']:>6d} {fmt_r(post.get('exp_r')):>10s} "
-          f"{fmt_pct(post.get('win_rate')):>7s} "
-          f"{fmt_f(post.get('sharpe')):>11s} "
-          f"{fmt_r(post.get('max_dd_r')):>10s}")
+        w(
+            f"  {vid:<4s} {v['label']:<26s} "
+            f"{pre['N']:>6d} {fmt_r(pre.get('exp_r')):>10s} "
+            f"{post['N']:>6d} {fmt_r(post.get('exp_r')):>10s} "
+            f"{fmt_pct(post.get('win_rate')):>7s} "
+            f"{fmt_f(post.get('sharpe')):>11s} "
+            f"{fmt_r(post.get('max_dd_r')):>10s}"
+        )
     w()
     w("  Key takeaway: If gold stays in the 2025+ volatility regime, 1800 becomes")
     w("  a WEEKLY+ session. The edge is real in this regime. The question is whether")
@@ -502,7 +528,7 @@ def generate_report(variant_data: dict) -> str:
     w()
     hdr5 = f"  {'ID':<4s} {'Strategy':<26s} {'L_N':>5s} {'L_ExpR':>8s} {'S_N':>5s} {'S_ExpR':>8s} {'%Long PnL':>10s}"
     w(hdr5)
-    w(f"  {'-'*4} {'-'*26} {'-'*5} {'-'*8} {'-'*5} {'-'*8} {'-'*10}")
+    w(f"  {'-' * 4} {'-' * 26} {'-' * 5} {'-' * 8} {'-' * 5} {'-' * 8} {'-' * 10}")
     for v in VARIANTS:
         vid = v["id"]
         ml = results[vid]["long"]
@@ -510,10 +536,12 @@ def generate_report(variant_data: dict) -> str:
         total = results[vid]["total_r"]
         long_r = ml.get("total_r", 0)
         pct_l = (long_r / total * 100) if total != 0 else 0
-        w(f"  {vid:<4s} {v['label']:<26s} "
-          f"{ml['N']:>5d} {fmt_r(ml.get('exp_r')):>8s} "
-          f"{ms['N']:>5d} {fmt_r(ms.get('exp_r')):>8s} "
-          f"{pct_l:>9.1f}%")
+        w(
+            f"  {vid:<4s} {v['label']:<26s} "
+            f"{ml['N']:>5d} {fmt_r(ml.get('exp_r')):>8s} "
+            f"{ms['N']:>5d} {fmt_r(ms.get('exp_r')):>8s} "
+            f"{pct_l:>9.1f}%"
+        )
     w()
 
     # === HONESTY FLAGS ===
@@ -559,6 +587,7 @@ def generate_report(variant_data: dict) -> str:
 
     return "\n".join(lines)
 
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -577,6 +606,7 @@ def main():
     ARTIFACT_PATH.parent.mkdir(parents=True, exist_ok=True)
     ARTIFACT_PATH.write_text(report, encoding="utf-8")
     print(f"\nReport saved to: {ARTIFACT_PATH}")
+
 
 if __name__ == "__main__":
     main()

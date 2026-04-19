@@ -81,11 +81,11 @@ def main() -> int:
     df["l_ts"] = pd.to_datetime(df["l_ts"], utc=True)
 
     base = (
-        df["f_dir"].isin(["long", "short"]) &
-        df["l_dir"].isin(["long", "short"]) &
-        (df["f_dir"] == df["l_dir"]) &
-        df["l_ts"].notna() &
-        (df["l_ts"] <= df["entry_ts"])
+        df["f_dir"].isin(["long", "short"])
+        & df["l_dir"].isin(["long", "short"])
+        & (df["f_dir"] == df["l_dir"])
+        & df["l_ts"].notna()
+        & (df["l_ts"] <= df["entry_ts"])
     )
     d = df[base].copy()
     if d.empty:
@@ -98,7 +98,9 @@ def main() -> int:
         "base": pd.Series(True, index=d.index),
         "non_nfp": ~(d["is_nfp_day"] == True),
         "non_shock_q90": d["rel_vol_US_DATA_OPEN"].notna() & (d["rel_vol_US_DATA_OPEN"] <= shock_q90),
-        "non_nfp_and_non_shock": (~(d["is_nfp_day"] == True)) & d["rel_vol_US_DATA_OPEN"].notna() & (d["rel_vol_US_DATA_OPEN"] <= shock_q90),
+        "non_nfp_and_non_shock": (~(d["is_nfp_day"] == True))
+        & d["rel_vol_US_DATA_OPEN"].notna()
+        & (d["rel_vol_US_DATA_OPEN"] <= shock_q90),
     }
 
     base_avg = float(d["pnl_r"].mean())
@@ -135,9 +137,17 @@ def main() -> int:
         # verdict
         verdict = "BASELINE" if name == "base" else "KILL"
         if name != "base":
-            if (avg_on >= 0.25 and delta_vs_base >= 0.08 and pd.notna(test_delta) and test_delta > 0 and pd.notna(pval) and pval <= 0.05 and len(on) >= 100):
+            if (
+                avg_on >= 0.25
+                and delta_vs_base >= 0.08
+                and pd.notna(test_delta)
+                and test_delta > 0
+                and pd.notna(pval)
+                and pval <= 0.05
+                and len(on) >= 100
+            ):
                 verdict = "PROMOTE"
-            elif (avg_on > base_avg and pd.notna(test_delta) and test_delta > 0 and len(on) >= 60):
+            elif avg_on > base_avg and pd.notna(test_delta) and test_delta > 0 and len(on) >= 60:
                 verdict = "WATCH"
 
         rows.append(

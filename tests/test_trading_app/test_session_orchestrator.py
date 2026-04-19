@@ -1472,7 +1472,9 @@ class TestF1OrchestratorRolloverWiring:
 
         positions = MagicMock()
         positions.query_account_metadata.return_value = {
-            "id": 20372221, "name": "50KTC-V2-451890-20372221", "simulated": True,
+            "id": 20372221,
+            "name": "50KTC-V2-451890-20372221",
+            "simulated": True,
         }
         order_router = MagicMock()
         order_router.account_id = 20372221
@@ -1499,7 +1501,9 @@ class TestF1OrchestratorRolloverWiring:
 
         positions = MagicMock()
         positions.query_account_metadata.return_value = {
-            "id": 11111111, "name": "50KXFA-451890-99999999", "simulated": False,
+            "id": 11111111,
+            "name": "50KXFA-451890-99999999",
+            "simulated": False,
         }
         order_router = MagicMock()
         order_router.account_id = 11111111
@@ -1578,6 +1582,7 @@ class TestF1OrchestratorRolloverWiring:
         # Caller-side guard — same shape as session_orchestrator.py:529
         if risk_mgr.limits.topstep_xfa_account_size is not None:
             from trading_app.live.session_orchestrator import _apply_broker_reality_check
+
             _apply_broker_reality_check(
                 positions=positions,
                 order_router=None,
@@ -1920,8 +1925,7 @@ class TestBracketOrders:
 
         # Gate 2: brackets_submitted counter still incremented
         assert orch._stats.brackets_submitted == 1, (
-            f"brackets_submitted should increment even on skip path, got "
-            f"{orch._stats.brackets_submitted}"
+            f"brackets_submitted should increment even on skip path, got {orch._stats.brackets_submitted}"
         )
 
         # Gate 3: bracket_order_ids stays empty (no separately-queryable legs)
@@ -1935,8 +1939,7 @@ class TestBracketOrders:
         # Gate 4: no 'BRACKET LEGS MISSING' notification
         missing_alarms = [n for n in notifications if "BRACKET LEGS MISSING" in n]
         assert missing_alarms == [], (
-            f"False 'BRACKET LEGS MISSING' alarm fired for atomic-bracket broker: "
-            f"{missing_alarms}"
+            f"False 'BRACKET LEGS MISSING' alarm fired for atomic-bracket broker: {missing_alarms}"
         )
 
         # Also verify the native-bracket spec was actually merged into entry

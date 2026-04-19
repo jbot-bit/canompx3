@@ -82,10 +82,7 @@ CELLS = [
     },
 ]
 
-RESULT_PATH = (
-    PROJECT_ROOT
-    / "docs/audit/results/2026-04-19-htf-path-a-overlap-decomposition.md"
-)
+RESULT_PATH = PROJECT_ROOT / "docs/audit/results/2026-04-19-htf-path-a-overlap-decomposition.md"
 
 # =============================================================================
 # SQL PREDICATES (copied from the two v1 scans — same direction='long' branch)
@@ -197,12 +194,8 @@ def decompose_cell(
     session: str,
     holdout: date,
 ) -> dict[str, Any]:
-    pw_trades = _load_on_filter_trades(
-        con, instrument, session, _predicate_pw_long(session), holdout
-    )
-    pm_trades = _load_on_filter_trades(
-        con, instrument, session, _predicate_pm_long(session), holdout
-    )
+    pw_trades = _load_on_filter_trades(con, instrument, session, _predicate_pw_long(session), holdout)
+    pm_trades = _load_on_filter_trades(con, instrument, session, _predicate_pm_long(session), holdout)
 
     pw_days = {td for td, _ in pw_trades}
     pm_days = {td for td, _ in pm_trades}
@@ -228,9 +221,7 @@ def decompose_cell(
         "overlap_days": len(overlap_days),
         "pm_only_days": len(pm_only_days),
         "pw_only_days": len(pw_only_days),
-        "overlap_pct_of_pm": (
-            100.0 * len(overlap_days) / len(pm_days) if pm_days else None
-        ),
+        "overlap_pct_of_pm": (100.0 * len(overlap_days) / len(pm_days) if pm_days else None),
         "overlap": _stats(overlap_pnl),
         "nonoverlap": _stats(nonoverlap_pnl),
         "combined": _stats(combined_pnl),
@@ -257,8 +248,12 @@ def _render(cells: list[dict[str, Any]], holdout: date) -> str:
     lines.append("")
     lines.append(f"**Generated:** {ts}")
     lines.append(f"**Script:** `research/htf_path_a_overlap_decomposition.py`")
-    lines.append(f"**IS window:** `trading_day < {holdout.isoformat()}` (Mode A, from `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`)")
-    lines.append(f"**Cell axes:** entry_model={ENTRY_MODEL}, confirm_bars={CONFIRM_BARS}, orb_minutes={ORB_MINUTES}, direction={DIRECTION}, rr={RR}")
+    lines.append(
+        f"**IS window:** `trading_day < {holdout.isoformat()}` (Mode A, from `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`)"
+    )
+    lines.append(
+        f"**Cell axes:** entry_model={ENTRY_MODEL}, confirm_bars={CONFIRM_BARS}, orb_minutes={ORB_MINUTES}, direction={DIRECTION}, rr={RR}"
+    )
     lines.append("")
     lines.append("## Purpose")
     lines.append("")
@@ -275,26 +270,13 @@ def _render(cells: list[dict[str, Any]], holdout: date) -> str:
         sess = c["session"]
         lines.append(f"## {inst} {sess} long RR{RR}")
         lines.append("")
-        lines.append(
-            f"- prev-week v1 fires (unique trading-days, IS): **{c['pw_fires']}**"
-        )
-        lines.append(
-            f"- prev-month v1 fires (unique trading-days, IS): **{c['pm_fires']}**"
-        )
-        lines.append(
-            f"- OVERLAP days (PM ∧ PW): **{c['overlap_days']}**"
-        )
-        lines.append(
-            f"- PM-only days (PM ∧ ¬PW): **{c['pm_only_days']}**"
-        )
-        lines.append(
-            f"- PW-only days (PW ∧ ¬PM): **{c['pw_only_days']}**"
-        )
+        lines.append(f"- prev-week v1 fires (unique trading-days, IS): **{c['pw_fires']}**")
+        lines.append(f"- prev-month v1 fires (unique trading-days, IS): **{c['pm_fires']}**")
+        lines.append(f"- OVERLAP days (PM ∧ PW): **{c['overlap_days']}**")
+        lines.append(f"- PM-only days (PM ∧ ¬PW): **{c['pm_only_days']}**")
+        lines.append(f"- PW-only days (PW ∧ ¬PM): **{c['pw_only_days']}**")
         ovpct = c["overlap_pct_of_pm"]
-        lines.append(
-            f"- Overlap as % of PM fires: "
-            + (f"**{ovpct:.1f}%**" if ovpct is not None else "—")
-        )
+        lines.append(f"- Overlap as % of PM fires: " + (f"**{ovpct:.1f}%**" if ovpct is not None else "—"))
         lines.append("")
         lines.append("| Subset | N | mean pnl_r | std | t | raw p |")
         lines.append("|---|---:|---:|---:|---:|---:|")
@@ -304,10 +286,7 @@ def _render(cells: list[dict[str, Any]], holdout: date) -> str:
             ("COMBINED (PM)", "combined"),
         ):
             s: SubsetStats = c[key]
-            lines.append(
-                f"| {label} | {s.n} | {_fmt(s.mean)} | {_fmt(s.std)} "
-                f"| {_fmt(s.t)} | {_fmt(s.raw_p, 4)} |"
-            )
+            lines.append(f"| {label} | {s.n} | {_fmt(s.mean)} | {_fmt(s.std)} | {_fmt(s.t)} | {_fmt(s.raw_p, 4)} |")
         lines.append("")
     lines.append("---")
     lines.append("")
@@ -335,10 +314,7 @@ def _render(cells: list[dict[str, Any]], holdout: date) -> str:
     lines.append("## Reproduction")
     lines.append("")
     lines.append("```")
-    lines.append(
-        "DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db "
-        "python research/htf_path_a_overlap_decomposition.py"
-    )
+    lines.append("DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db python research/htf_path_a_overlap_decomposition.py")
     lines.append("```")
     lines.append("")
     lines.append(
@@ -368,9 +344,7 @@ def main() -> int:
     holdout = HOLDOUT_SACRED_FROM
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
     try:
-        results = [
-            decompose_cell(con, c["instrument"], c["session"], holdout) for c in CELLS
-        ]
+        results = [decompose_cell(con, c["instrument"], c["session"], holdout) for c in CELLS]
     finally:
         con.close()
 
@@ -390,10 +364,7 @@ def main() -> int:
             ("  combined   ", "combined"),
         ):
             s = r[key]
-            print(
-                f"{label} N={s.n:3d} mean={_fmt(s.mean)} "
-                f"t={_fmt(s.t)} p={_fmt(s.raw_p, 4)}"
-            )
+            print(f"{label} N={s.n:3d} mean={_fmt(s.mean)} t={_fmt(s.t)} p={_fmt(s.raw_p, 4)}")
     return 0
 
 

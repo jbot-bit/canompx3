@@ -31,11 +31,19 @@ MIN_YEARS = 4
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def wr(s): return (s > 0).mean() if len(s) else np.nan
-def avg_r(s): return s.mean() if len(s) else np.nan
+
+def wr(s):
+    return (s > 0).mean() if len(s) else np.nan
+
+
+def avg_r(s):
+    return s.mean() if len(s) else np.nan
+
+
 def yr_consistency(df, col="pnl_r"):
     yrs = df.groupby("year")[col].mean()
     return (yrs > 0).sum(), len(yrs)
+
 
 def summarise(label, sym, df, col="pnl_r"):
     if len(df) < MIN_TRADES:
@@ -52,7 +60,9 @@ def summarise(label, sym, df, col="pnl_r"):
         "yr_pos": f"{pos}/{tot}",
     }
 
+
 # ── load daily features ───────────────────────────────────────────────────────
+
 
 def load_daily(sym: str) -> pd.DataFrame:
     con = duckdb.connect(str(DB_PATH), read_only=True)
@@ -139,6 +149,7 @@ def sim_trade(bars5: pd.DataFrame, entry_ts_utc, direction: str, stop_r: float, 
 # Build a consecutive-day streak and test fade vs follow at US equity open.
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def s1_consecutive_days(sym: str, df: pd.DataFrame) -> list[dict]:
     results = []
     df = df.copy().reset_index(drop=True)
@@ -166,17 +177,13 @@ def s1_consecutive_days(sym: str, df: pd.DataFrame) -> list[dict]:
             continue
 
         # FOLLOW: expect same direction
-        subset["pnl_r"] = np.where(
-            subset["dir_num"] == subset["today_dir"], RR, -1.0
-        )
+        subset["pnl_r"] = np.where(subset["dir_num"] == subset["today_dir"], RR, -1.0)
         r = summarise(f"S1_follow_{streak_min}d", sym, subset)
         if r:
             results.append(r)
 
         # FADE: expect reversal
-        subset["pnl_r"] = np.where(
-            subset["dir_num"] != subset["today_dir"], RR, -1.0
-        )
+        subset["pnl_r"] = np.where(subset["dir_num"] != subset["today_dir"], RR, -1.0)
         r = summarise(f"S1_fade_{streak_min}d", sym, subset)
         if r:
             results.append(r)
@@ -191,14 +198,12 @@ def s1_consecutive_days(sym: str, df: pd.DataFrame) -> list[dict]:
 #             continue in its direction?
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def s2_inside_day(sym: str, df: pd.DataFrame) -> list[dict]:
     results = []
     df = df.copy()
     # Inside day: today's high < prev high AND today's low > prev low
-    df["is_inside"] = (
-        (df["daily_high"] < df["prev_day_high"]) &
-        (df["daily_low"] > df["prev_day_low"])
-    )
+    df["is_inside"] = (df["daily_high"] < df["prev_day_high"]) & (df["daily_low"] > df["prev_day_low"])
 
     inside = df[df["is_inside"]].copy()
     if len(inside) < MIN_TRADES:
@@ -206,12 +211,8 @@ def s2_inside_day(sym: str, df: pd.DataFrame) -> list[dict]:
 
     # Did the day (daily_open → daily_close) continue in the prior day's direction?
     inside["today_dir"] = np.where(inside["daily_close"] > inside["daily_open"], "up", "down")
-    inside["pnl_follow"] = np.where(
-        inside["today_dir"] == inside["prev_day_direction"], RR, -1.0
-    )
-    inside["pnl_fade"] = np.where(
-        inside["today_dir"] != inside["prev_day_direction"], RR, -1.0
-    )
+    inside["pnl_follow"] = np.where(inside["today_dir"] == inside["prev_day_direction"], RR, -1.0)
+    inside["pnl_fade"] = np.where(inside["today_dir"] != inside["prev_day_direction"], RR, -1.0)
 
     inside["pnl_r"] = inside["pnl_follow"]
     r = summarise("S2_inside_follow_prevday", sym, inside)
@@ -226,9 +227,7 @@ def s2_inside_day(sym: str, df: pd.DataFrame) -> list[dict]:
     # Also check: inside day -> US open break direction (continuation of break)
     valid = inside[inside["us_open_dir"].notna()].copy()
     if len(valid) >= MIN_TRADES:
-        valid["pnl_r"] = np.where(
-            valid["us_open_outcome"] == "win", RR, -1.0
-        )
+        valid["pnl_r"] = np.where(valid["us_open_outcome"] == "win", RR, -1.0)
         r = summarise("S2_inside_usopen_outcome", sym, valid)
         if r:
             results.append(r)
@@ -242,6 +241,7 @@ def s2_inside_day(sym: str, df: pd.DataFrame) -> list[dict]:
 # Test: gap continuation vs gap fill (does price retrace to prior close by day end?)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def s3_gap(sym: str, df: pd.DataFrame) -> list[dict]:
     results = []
     df = df.copy()
@@ -252,15 +252,11 @@ def s3_gap(sym: str, df: pd.DataFrame) -> list[dict]:
     # Fill = by end of day, price returned to prev_day_close
     # Use daily_high/low vs prev_day_close
     df["gap_filled"] = np.where(
-        df["gap_dir"] == "up",
-        df["daily_low"] <= df["prev_day_close"],
-        df["daily_high"] >= df["prev_day_close"]
+        df["gap_dir"] == "up", df["daily_low"] <= df["prev_day_close"], df["daily_high"] >= df["prev_day_close"]
     )
     # Continuation = closed in gap direction
     df["gap_continued"] = np.where(
-        df["gap_dir"] == "up",
-        df["daily_close"] > df["daily_open"],
-        df["daily_close"] < df["daily_open"]
+        df["gap_dir"] == "up", df["daily_close"] > df["daily_open"], df["daily_close"] < df["daily_open"]
     )
 
     for tier, lo, hi in [("small", 0.1, 0.5), ("medium", 0.5, 1.5), ("large", 1.5, 9.9)]:
@@ -288,6 +284,7 @@ def s3_gap(sym: str, df: pd.DataFrame) -> list[dict]:
 # Signal: london_dir is known before US equity open
 # Test: does NY session (session_ny_high/low vs daily_open) follow London direction?
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def s4_london_to_ny(sym: str, df: pd.DataFrame) -> list[dict]:
     results = []
@@ -332,6 +329,7 @@ def s4_london_to_ny(sym: str, df: pd.DataFrame) -> list[dict]:
 # Test: do certain days have directional bias?
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def s5_day_of_week(sym: str, df: pd.DataFrame) -> list[dict]:
     results = []
     df = df.copy()
@@ -366,6 +364,7 @@ def s5_day_of_week(sym: str, df: pd.DataFrame) -> list[dict]:
 # But let's check overnight_high vs prev_day_high as a standalone filter
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def s6_overnight(sym: str, df: pd.DataFrame) -> list[dict]:
     results = []
     df = df.copy()
@@ -375,11 +374,9 @@ def s6_overnight(sym: str, df: pd.DataFrame) -> list[dict]:
     df["ovn_tagged_pdh"] = df["overnight_high"] >= df["prev_day_high"] * 0.9995
     df["ovn_tagged_pdl"] = df["overnight_low"] <= df["prev_day_low"] * 1.0005
 
-    df["ny_dir"] = np.where(
-        df["daily_close"] > df["daily_open"], "up", "down"
-    )
+    df["ny_dir"] = np.where(df["daily_close"] > df["daily_open"], "up", "down")
 
-    # Tagged PDH overnight → fade (short NY) 
+    # Tagged PDH overnight → fade (short NY)
     pdh_sub = df[df["ovn_tagged_pdh"] & ~df["ovn_tagged_pdl"]].copy()
     if len(pdh_sub) >= MIN_TRADES:
         pdh_sub["pnl_r"] = np.where(pdh_sub["ny_dir"] == "down", RR, -1.0)
@@ -400,9 +397,10 @@ def s6_overnight(sym: str, df: pd.DataFrame) -> list[dict]:
     if len(clean) >= MIN_TRADES:
         # Does prior day direction continue on clean overnight days?
         clean["pnl_r"] = np.where(
-            (clean["prev_day_direction"] == "up") & (clean["ny_dir"] == "up") |
-            (clean["prev_day_direction"] == "down") & (clean["ny_dir"] == "down"),
-            RR, -1.0
+            (clean["prev_day_direction"] == "up") & (clean["ny_dir"] == "up")
+            | (clean["prev_day_direction"] == "down") & (clean["ny_dir"] == "down"),
+            RR,
+            -1.0,
         )
         r = summarise("S6_ovn_clean_prevday_follow", sym, clean)
         if r:
@@ -414,6 +412,7 @@ def s6_overnight(sym: str, df: pd.DataFrame) -> list[dict]:
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def main():
     all_results = []
@@ -435,7 +434,9 @@ def main():
 
         except Exception as e:
             print(f"    ERROR: {e}")
-            import traceback; traceback.print_exc()
+            import traceback
+
+            traceback.print_exc()
 
     if not all_results:
         print("\nNo results passed filters.")

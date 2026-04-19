@@ -397,11 +397,7 @@ ACTIVE_ORB_INSTRUMENTS = sorted(
 # validator consumers MUST continue to use ACTIVE_ORB_INSTRUMENTS — switching
 # them would silently skip research work on MGC that we actually want running.
 DEPLOYABLE_ORB_INSTRUMENTS = sorted(
-    [
-        k
-        for k in ACTIVE_ORB_INSTRUMENTS
-        if ASSET_CONFIGS[k].get("deployable_expected", True)
-    ]
+    [k for k in ACTIVE_ORB_INSTRUMENTS if ASSET_CONFIGS[k].get("deployable_expected", True)]
 )
 
 
@@ -515,15 +511,11 @@ def get_outright_root(instrument: str) -> str:
     key = instrument.upper()
     cfg = ASSET_CONFIGS.get(key)
     if cfg is None:
-        raise ValueError(
-            f"Unknown instrument: {instrument!r}. "
-            f"Supported: {sorted(ASSET_CONFIGS.keys())}"
-        )
+        raise ValueError(f"Unknown instrument: {instrument!r}. Supported: {sorted(ASSET_CONFIGS.keys())}")
     pattern = cfg["outright_pattern"].pattern
     match = _OUTRIGHT_ROOT_RE.match(pattern)
     if match is None:
         raise ValueError(
-            f"Non-canonical outright_pattern for {key}: {pattern!r}. "
-            f"Expected format: ^<ROOT>[<MONTH_CODES>]\\d+$"
+            f"Non-canonical outright_pattern for {key}: {pattern!r}. Expected format: ^<ROOT>[<MONTH_CODES>]\\d+$"
         )
     return match.group(1)

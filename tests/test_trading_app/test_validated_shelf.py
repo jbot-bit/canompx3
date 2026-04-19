@@ -49,8 +49,7 @@ class TestValidatedShelfLifecycle:
                 """
             )
             assert deployable_validated_predicate(con, "vs") == (
-                "LOWER(vs.status) = 'active' AND "
-                "LOWER(COALESCE(vs.deployment_scope, 'deployable')) = 'deployable'"
+                "LOWER(vs.status) = 'active' AND LOWER(COALESCE(vs.deployment_scope, 'deployable')) = 'deployable'"
             )
         finally:
             con.close()

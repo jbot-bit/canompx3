@@ -42,6 +42,7 @@ import pandas as pd
 
 try:
     from scipy.stats import ttest_1samp
+
     HAS_SCIPY = True
 except ImportError:
     HAS_SCIPY = False
@@ -58,15 +59,13 @@ _UK_LONDON = ZoneInfo("Europe/London")
 
 def is_us_dst(trading_day: date) -> bool:
     """True if US Eastern is in DST (EDT, UTC-4) on this date."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_US_EASTERN)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_US_EASTERN)
     return dt.utcoffset().total_seconds() == -4 * 3600
 
 
 def is_uk_dst(trading_day: date) -> bool:
     """True if UK is in BST (UTC+1) on this date."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_UK_LONDON)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_UK_LONDON)
     return dt.utcoffset().total_seconds() == 1 * 3600
 
 
@@ -91,7 +90,7 @@ APERTURES = [5, 10, 15, 20, 30, 45, 60]
 
 # Fixed parameters (match production: E1 entry, CB1, RR2.0, G4+)
 G4_MIN = 4.0
-BREAK_WINDOW = 240    # 4 hours in minutes
+BREAK_WINDOW = 240  # 4 hours in minutes
 OUTCOME_WINDOW = 480  # 8 hours in minutes
 RR_TARGET = 2.0
 
@@ -100,14 +99,18 @@ RR_TARGET = 2.0
 # Data Loading (copied from research_orb_time_scan.py — standalone)
 # =========================================================================
 
+
 def load_bars(con, instrument):
     """Load all 1m bars for an instrument into a DataFrame."""
-    return con.execute("""
+    return con.execute(
+        """
         SELECT ts_utc, open, high, low, close
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def build_day_arrays(bars_df):
@@ -171,8 +174,8 @@ def build_dst_masks(trading_days):
 # Core Scan Engine
 # =========================================================================
 
-def scan_session_aperture(highs, lows, closes, bris_h, bris_m,
-                          aperture_min, dst_mask):
+
+def scan_session_aperture(highs, lows, closes, bris_h, bris_m, aperture_min, dst_mask):
     """Scan one session at one aperture across all trading days.
 
     Returns dict with aggregated metrics + raw trade lists for p-value.
@@ -356,6 +359,7 @@ def _empty_result(n_days_valid):
 # Statistical Tools
 # =========================================================================
 
+
 def compute_pvalue(trades_raw):
     """One-sample t-test: is mean significantly different from 0?"""
     if not HAS_SCIPY:
@@ -416,8 +420,7 @@ def classify_sample(n):
         return "CORE"
 
 
-def sensitivity_check(highs, lows, closes, bris_h, bris_m,
-                      aperture_min, dst_mask):
+def sensitivity_check(highs, lows, closes, bris_h, bris_m, aperture_min, dst_mask):
     """Run scan at aperture±2min. Returns ROBUST, FRAGILE, or SKIP."""
     if aperture_min <= 6:
         return "SKIP"  # Too small to perturb
@@ -427,8 +430,7 @@ def sensitivity_check(highs, lows, closes, bris_h, bris_m,
         test_aperture = aperture_min + delta
         if test_aperture < 3:
             continue
-        r = scan_session_aperture(highs, lows, closes, bris_h, bris_m,
-                                  test_aperture, dst_mask)
+        r = scan_session_aperture(highs, lows, closes, bris_h, bris_m, test_aperture, dst_mask)
         if r is None or r["n_trades"] < 5:
             results.append(np.nan)
         else:
@@ -447,6 +449,7 @@ def sensitivity_check(highs, lows, closes, bris_h, bris_m,
 # =========================================================================
 # Output Formatting
 # =========================================================================
+
 
 def print_instrument_table(inst_rows, instrument):
     """Print aperture comparison table for one instrument."""
@@ -468,11 +471,13 @@ def print_instrument_table(inst_rows, instrument):
                 break
 
         print(f"\n  {session} (DST: {SESSIONS[session]['dst_type']})")
-        header = (f"  {'Aper':>4s} {'N':>5s} {'avgR':>8s} {'delta':>7s} "
-                  f"{'totR':>8s} {'WR%':>6s} {'ORBsz':>6s} "
-                  f"{'p_raw':>8s} {'p_adj':>8s} "
-                  f"{'W_N':>4s} {'W_avgR':>7s} {'S_N':>4s} {'S_avgR':>7s} "
-                  f"{'Sens':>7s} {'Class':>11s}")
+        header = (
+            f"  {'Aper':>4s} {'N':>5s} {'avgR':>8s} {'delta':>7s} "
+            f"{'totR':>8s} {'WR%':>6s} {'ORBsz':>6s} "
+            f"{'p_raw':>8s} {'p_adj':>8s} "
+            f"{'W_N':>4s} {'W_avgR':>7s} {'S_N':>4s} {'S_avgR':>7s} "
+            f"{'Sens':>7s} {'Class':>11s}"
+        )
         print(header)
         print(f"  {'-' * 106}")
 
@@ -486,11 +491,11 @@ def print_instrument_table(inst_rows, instrument):
 
             avg_str = f"{avg_r:+8.4f}" if not np.isnan(avg_r) else "      --"
             delta_str = f"{delta:+7.4f}" if not np.isnan(delta) else "     --"
-            tot_str = f"{r['total_r']:+8.1f}" if r['total_r'] != 0 else "     0.0"
-            wr_str = f"{r['win_rate'] * 100:5.1f}%" if not np.isnan(r['win_rate']) else "    --%"
-            orb_str = f"{r['avg_orb_size']:6.1f}" if not np.isnan(r['avg_orb_size']) else "    --"
-            p_raw = f"{r['p_value']:8.4f}" if not np.isnan(r['p_value']) else "      --"
-            p_adj = f"{r['p_adj_bh']:8.4f}" if not np.isnan(r['p_adj_bh']) else "      --"
+            tot_str = f"{r['total_r']:+8.1f}" if r["total_r"] != 0 else "     0.0"
+            wr_str = f"{r['win_rate'] * 100:5.1f}%" if not np.isnan(r["win_rate"]) else "    --%"
+            orb_str = f"{r['avg_orb_size']:6.1f}" if not np.isnan(r["avg_orb_size"]) else "    --"
+            p_raw = f"{r['p_value']:8.4f}" if not np.isnan(r["p_value"]) else "      --"
+            p_adj = f"{r['p_adj_bh']:8.4f}" if not np.isnan(r["p_adj_bh"]) else "      --"
             nw = r["n_winter"]
             ns = r["n_summer"]
             aw = r["avg_r_winter"]
@@ -500,11 +505,13 @@ def print_instrument_table(inst_rows, instrument):
             sens = r["sensitivity_verdict"]
             cls = r["sample_class"]
 
-            print(f"  {r['aperture_min']:4d}{marker} {n:5d} {avg_str} {delta_str} "
-                  f"{tot_str} {wr_str} {orb_str} "
-                  f"{p_raw} {p_adj} "
-                  f"{nw:4d} {w_str} {ns:4d} {s_str} "
-                  f"{sens:>7s} {cls:>11s}")
+            print(
+                f"  {r['aperture_min']:4d}{marker} {n:5d} {avg_str} {delta_str} "
+                f"{tot_str} {wr_str} {orb_str} "
+                f"{p_raw} {p_adj} "
+                f"{nw:4d} {w_str} {ns:4d} {s_str} "
+                f"{sens:>7s} {cls:>11s}"
+            )
 
 
 def print_honest_summary(all_rows):
@@ -519,8 +526,10 @@ def print_honest_summary(all_rows):
     n_sig_raw = sum(1 for r in all_rows if not np.isnan(r["p_value"]) and r["p_value"] < 0.05)
     n_sig_bh = sum(1 for r in all_rows if not np.isnan(r["p_adj_bh"]) and r["p_adj_bh"] < 0.05)
 
-    print(f"\n  SCOPE: {n_combos} combinations tested "
-          f"({len(INSTRUMENTS)} instruments x {len(SESSIONS)} sessions x {len(APERTURES)} apertures)")
+    print(
+        f"\n  SCOPE: {n_combos} combinations tested "
+        f"({len(INSTRUMENTS)} instruments x {len(SESSIONS)} sessions x {len(APERTURES)} apertures)"
+    )
     print(f"  POSITIVE avg_r: {n_positive}/{n_combos}")
     print(f"  RAW p < 0.05: {n_sig_raw} (before correction)")
     print(f"  BH-ADJUSTED p < 0.05: {n_sig_bh} (after FDR correction)")
@@ -537,8 +546,7 @@ def print_honest_summary(all_rows):
             continue
         key = (r["instrument"], r["session"])
         base = baselines.get(key, np.nan)
-        if (not np.isnan(r["avg_r"]) and not np.isnan(base)
-                and r["avg_r"] > base and r["n_trades"] >= 30):
+        if not np.isnan(r["avg_r"]) and not np.isnan(base) and r["avg_r"] > base and r["n_trades"] >= 30:
             delta = r["avg_r"] - base
             beats_baseline.append(r | {"delta_vs_5m": delta})
 
@@ -550,23 +558,29 @@ def print_honest_summary(all_rows):
     else:
         for r in beats_baseline[:15]:
             p_str = f"p_adj={r['p_adj_bh']:.4f}" if not np.isnan(r["p_adj_bh"]) else "p_adj=NaN"
-            print(f"    {r['instrument']} {r['session']} {r['aperture_min']}m: "
-                  f"avgR={r['avg_r']:+.4f} (delta={r['delta_vs_5m']:+.4f} vs 5m) "
-                  f"N={r['n_trades']} {p_str} sens={r['sensitivity_verdict']} "
-                  f"[{r['sample_class']}]")
+            print(
+                f"    {r['instrument']} {r['session']} {r['aperture_min']}m: "
+                f"avgR={r['avg_r']:+.4f} (delta={r['delta_vs_5m']:+.4f} vs 5m) "
+                f"N={r['n_trades']} {p_str} sens={r['sensitivity_verdict']} "
+                f"[{r['sample_class']}]"
+            )
 
     # Specifically flag robust + significant + core/preliminary
     print("\n  STRONGEST CANDIDATES (beats 5m, BH p<0.05, ROBUST, N>=30):")
-    strong = [r for r in beats_baseline
-              if not np.isnan(r["p_adj_bh"]) and r["p_adj_bh"] < 0.05
-              and r["sensitivity_verdict"] == "ROBUST"]
+    strong = [
+        r
+        for r in beats_baseline
+        if not np.isnan(r["p_adj_bh"]) and r["p_adj_bh"] < 0.05 and r["sensitivity_verdict"] == "ROBUST"
+    ]
     if not strong:
         print("    None.")
     else:
         for r in strong:
-            print(f"    {r['instrument']} {r['session']} {r['aperture_min']}m: "
-                  f"avgR={r['avg_r']:+.4f} (delta={r['delta_vs_5m']:+.4f}) "
-                  f"N={r['n_trades']} p_adj={r['p_adj_bh']:.4f} [{r['sample_class']}]")
+            print(
+                f"    {r['instrument']} {r['session']} {r['aperture_min']}m: "
+                f"avgR={r['avg_r']:+.4f} (delta={r['delta_vs_5m']:+.4f}) "
+                f"N={r['n_trades']} p_adj={r['p_adj_bh']:.4f} [{r['sample_class']}]"
+            )
 
     # DID NOT SURVIVE
     print("\n  DID NOT SURVIVE:")
@@ -612,13 +626,11 @@ def print_honest_summary(all_rows):
 # Main
 # =========================================================================
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Multi-aperture ORB scan across CME micro futures"
-    )
+    parser = argparse.ArgumentParser(description="Multi-aperture ORB scan across CME micro futures")
     parser.add_argument(
-        "--db-path", type=str, default=None,
-        help="Path to gold.db (default: auto-resolve via pipeline.paths)"
+        "--db-path", type=str, default=None, help="Path to gold.db (default: auto-resolve via pipeline.paths)"
     )
     args = parser.parse_args()
 
@@ -627,6 +639,7 @@ def main():
     else:
         try:
             from pipeline.paths import GOLD_DB_PATH
+
             db_path = GOLD_DB_PATH
         except ImportError:
             db_path = Path("gold.db")
@@ -635,10 +648,14 @@ def main():
     print(f"\n{'=' * 110}")
     print("  MULTI-APERTURE ORB SCAN")
     print(f"  Database: {db_path}")
-    print(f"  Parameters: G{G4_MIN:.0f}+ filter | RR{RR_TARGET:.1f} target | "
-          f"{BREAK_WINDOW // 60}h break window | {OUTCOME_WINDOW // 60}h outcome window")
-    print(f"  Grid: {len(INSTRUMENTS)} instruments x {len(SESSIONS)} sessions x "
-          f"{len(APERTURES)} apertures = {n_combos} combinations")
+    print(
+        f"  Parameters: G{G4_MIN:.0f}+ filter | RR{RR_TARGET:.1f} target | "
+        f"{BREAK_WINDOW // 60}h break window | {OUTCOME_WINDOW // 60}h outcome window"
+    )
+    print(
+        f"  Grid: {len(INSTRUMENTS)} instruments x {len(SESSIONS)} sessions x "
+        f"{len(APERTURES)} apertures = {n_combos} combinations"
+    )
     print(f"  scipy available: {HAS_SCIPY}")
     print(f"{'=' * 110}")
 
@@ -660,16 +677,13 @@ def main():
             t_build = time.time()
             all_days, opens, highs, lows, closes = build_day_arrays(bars_df)
             n_days = len(all_days)
-            print(f"    {n_days} trading days ({all_days[0]} to {all_days[-1]}) "
-                  f"built in {time.time() - t_build:.1f}s")
+            print(f"    {n_days} trading days ({all_days[0]} to {all_days[-1]}) built in {time.time() - t_build:.1f}s")
             del bars_df
 
             # Build DST masks once
             us_mask, uk_mask = build_dst_masks(all_days)
-            print(f"    US DST: {int(us_mask.sum())} summer / "
-                  f"{n_days - int(us_mask.sum())} winter")
-            print(f"    UK DST: {int(uk_mask.sum())} summer / "
-                  f"{n_days - int(uk_mask.sum())} winter")
+            print(f"    US DST: {int(us_mask.sum())} summer / {n_days - int(us_mask.sum())} winter")
+            print(f"    UK DST: {int(uk_mask.sum())} summer / {n_days - int(uk_mask.sum())} winter")
 
             t_scan = time.time()
             combo_count = 0
@@ -689,10 +703,7 @@ def main():
                     dst_mask = np.zeros(n_days, dtype=bool)
 
                 for aperture in APERTURES:
-                    result = scan_session_aperture(
-                        highs, lows, closes, bris_h, bris_m,
-                        aperture, dst_mask
-                    )
+                    result = scan_session_aperture(highs, lows, closes, bris_h, bris_m, aperture, dst_mask)
 
                     if result is None:
                         result = _empty_result(n_days)
@@ -703,10 +714,7 @@ def main():
                     # Sensitivity check (only if positive avgR)
                     sens = "--"
                     if not np.isnan(result["avg_r"]) and result["avg_r"] > 0:
-                        sens = sensitivity_check(
-                            highs, lows, closes, bris_h, bris_m,
-                            aperture, dst_mask
-                        )
+                        sens = sensitivity_check(highs, lows, closes, bris_h, bris_m, aperture, dst_mask)
 
                     row = {
                         "instrument": instrument,
@@ -734,8 +742,7 @@ def main():
                     all_rows.append(row)
                     combo_count += 1
 
-            print(f"    {instrument}: {combo_count} combos scanned in "
-                  f"{time.time() - t_scan:.1f}s")
+            print(f"    {instrument}: {combo_count} combos scanned in {time.time() - t_scan:.1f}s")
             del opens, highs, lows, closes
 
     finally:

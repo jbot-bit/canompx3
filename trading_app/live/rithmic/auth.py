@@ -196,9 +196,7 @@ class RithmicAuth(BrokerAuth):
         """
         if self._client is not None and self._connected and self._loop is not None:
             try:
-                future = asyncio.run_coroutine_threadsafe(
-                    self._client.disconnect(), self._loop
-                )
+                future = asyncio.run_coroutine_threadsafe(self._client.disconnect(), self._loop)
                 future.result(timeout=5.0)
             except Exception as e:
                 log.warning("Rithmic disconnect error (non-fatal): %s", e)

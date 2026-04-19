@@ -45,15 +45,13 @@ _UK_LONDON = ZoneInfo("Europe/London")
 
 def is_us_dst(trading_day: date) -> bool:
     """True if US Eastern is in DST (EDT, UTC-4) on this date."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_US_EASTERN)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_US_EASTERN)
     return dt.utcoffset().total_seconds() == -4 * 3600
 
 
 def is_uk_dst(trading_day: date) -> bool:
     """True if UK is in BST (UTC+1) on this date."""
-    dt = datetime(trading_day.year, trading_day.month, trading_day.day,
-                  12, 0, 0, tzinfo=_UK_LONDON)
+    dt = datetime(trading_day.year, trading_day.month, trading_day.day, 12, 0, 0, tzinfo=_UK_LONDON)
     return dt.utcoffset().total_seconds() == 1 * 3600
 
 
@@ -68,11 +66,22 @@ APERTURE_MIN = 5
 
 # DST type for each session label
 SESSION_DST_TYPE = {
-    "0900": "US", "0930": "US", "1000": "CLEAN", "1015": "CLEAN",
-    "1100": "CLEAN", "1130": "CLEAN", "1245": "CLEAN",
-    "1545": "UK", "1615": "UK", "1645": "UK",
-    "1800": "UK", "1815": "UK", "1900": "CLEAN", "1915": "CLEAN",
-    "2300": "US", "0030": "US",
+    "0900": "US",
+    "0930": "US",
+    "1000": "CLEAN",
+    "1015": "CLEAN",
+    "1100": "CLEAN",
+    "1130": "CLEAN",
+    "1245": "CLEAN",
+    "1545": "UK",
+    "1615": "UK",
+    "1645": "UK",
+    "1800": "UK",
+    "1815": "UK",
+    "1900": "CLEAN",
+    "1915": "CLEAN",
+    "2300": "US",
+    "0030": "US",
 }
 
 # Band candidates from Q2 data
@@ -93,14 +102,18 @@ SHIFT_PCTS = [-0.20, -0.10, 0.0, 0.10, 0.20]
 # Data Loading (copied from research_edge_structure.py — standalone)
 # =========================================================================
 
+
 def load_bars(con, instrument):
     """Load all 1m bars for an instrument into a DataFrame."""
-    return con.execute("""
+    return con.execute(
+        """
         SELECT ts_utc, open, high, low, close
         FROM bars_1m
         WHERE symbol = ?
         ORDER BY ts_utc
-    """, [instrument]).fetchdf()
+    """,
+        [instrument],
+    ).fetchdf()
 
 
 def build_day_arrays(bars_df):
@@ -161,6 +174,7 @@ def parse_session_label(label):
 # =========================================================================
 # Per-Day Scan Engine (no G4 floor — returns ALL valid ORBs)
 # =========================================================================
+
 
 def scan_session_all_orbs(highs, lows, closes, bris_h, bris_m):
     """Scan one session across all trading days, returning ALL valid ORBs.
@@ -272,13 +286,15 @@ def scan_session_all_orbs(highs, lows, closes, bris_h, bris_m):
             else:
                 outcome_r = (entry - last_close) / os_val
 
-        results.append({
-            "day_idx": day_idx,
-            "orb_size": float(os_val),
-            "broke": True,
-            "direction": break_dir,
-            "outcome_r": float(outcome_r),
-        })
+        results.append(
+            {
+                "day_idx": day_idx,
+                "orb_size": float(os_val),
+                "broke": True,
+                "direction": break_dir,
+                "outcome_r": float(outcome_r),
+            }
+        )
 
     return results
 
@@ -287,10 +303,10 @@ def scan_session_all_orbs(highs, lows, closes, bris_h, bris_m):
 # Band & Floor Statistics
 # =========================================================================
 
+
 def compute_band_stats(break_days, lo, hi):
     """Compute stats for break-days within a size band [lo, hi)."""
-    filtered = [d for d in break_days
-                if d["orb_size"] >= lo and (d["orb_size"] < hi if hi is not None else True)]
+    filtered = [d for d in break_days if d["orb_size"] >= lo and (d["orb_size"] < hi if hi is not None else True)]
     n = len(filtered)
     if n == 0:
         return {"n": 0, "avg_r": np.nan, "wr": np.nan, "total_r": np.nan}
@@ -304,6 +320,7 @@ def compute_band_stats(break_days, lo, hi):
 # =========================================================================
 # Sensitivity Test
 # =========================================================================
+
 
 def run_sensitivity(data_cache):
     """Run the band sensitivity test for all candidates."""
@@ -382,22 +399,24 @@ def run_sensitivity(data_cache):
                     else:
                         row_str += f"  {stats['avg_r']:+6.3f}{marker}"
 
-                    candidate_rows.append({
-                        "instrument": instrument,
-                        "session": session,
-                        "dst_regime": regime_name,
-                        "baseline_lo": base_lo,
-                        "baseline_hi": base_hi,
-                        "lo_shift_pct": lo_s,
-                        "hi_shift_pct": hi_s,
-                        "actual_lo": adj_lo,
-                        "actual_hi": adj_hi,
-                        "n_breaks": stats["n"],
-                        "avg_r": stats["avg_r"],
-                        "wr": stats["wr"],
-                        "total_r": stats["total_r"],
-                        "test_type": "band",
-                    })
+                    candidate_rows.append(
+                        {
+                            "instrument": instrument,
+                            "session": session,
+                            "dst_regime": regime_name,
+                            "baseline_lo": base_lo,
+                            "baseline_hi": base_hi,
+                            "lo_shift_pct": lo_s,
+                            "hi_shift_pct": hi_s,
+                            "actual_lo": adj_lo,
+                            "actual_hi": adj_hi,
+                            "n_breaks": stats["n"],
+                            "avg_r": stats["avg_r"],
+                            "wr": stats["wr"],
+                            "total_r": stats["total_r"],
+                            "test_type": "band",
+                        }
+                    )
 
                 print(row_str)
 
@@ -411,26 +430,30 @@ def run_sensitivity(data_cache):
                 if stats["n"] == 0:
                     print(f"    floor>={floor_val:5.2f}: N=0{marker}")
                 else:
-                    print(f"    floor>={floor_val:5.2f}: N={stats['n']:4d}, "
-                          f"avgR={stats['avg_r']:+.3f}, WR={stats['wr']:.1%}, "
-                          f"totR={stats['total_r']:+.1f}{marker}")
+                    print(
+                        f"    floor>={floor_val:5.2f}: N={stats['n']:4d}, "
+                        f"avgR={stats['avg_r']:+.3f}, WR={stats['wr']:.1%}, "
+                        f"totR={stats['total_r']:+.1f}{marker}"
+                    )
 
-                candidate_rows.append({
-                    "instrument": instrument,
-                    "session": session,
-                    "dst_regime": regime_name,
-                    "baseline_lo": base_lo,
-                    "baseline_hi": base_hi,
-                    "lo_shift_pct": floor_mult - 1.0,
-                    "hi_shift_pct": np.nan,
-                    "actual_lo": floor_val,
-                    "actual_hi": np.nan,
-                    "n_breaks": stats["n"],
-                    "avg_r": stats["avg_r"],
-                    "wr": stats["wr"],
-                    "total_r": stats["total_r"],
-                    "test_type": "floor",
-                })
+                candidate_rows.append(
+                    {
+                        "instrument": instrument,
+                        "session": session,
+                        "dst_regime": regime_name,
+                        "baseline_lo": base_lo,
+                        "baseline_hi": base_hi,
+                        "lo_shift_pct": floor_mult - 1.0,
+                        "hi_shift_pct": np.nan,
+                        "actual_lo": floor_val,
+                        "actual_hi": np.nan,
+                        "n_breaks": stats["n"],
+                        "avg_r": stats["avg_r"],
+                        "wr": stats["wr"],
+                        "total_r": stats["total_r"],
+                        "test_type": "floor",
+                    }
+                )
 
             all_rows.extend(candidate_rows)
 
@@ -440,6 +463,7 @@ def run_sensitivity(data_cache):
 # =========================================================================
 # Honest Summary
 # =========================================================================
+
 
 def print_honest_summary(all_rows):
     """Print survival verdicts per candidate."""
@@ -453,14 +477,18 @@ def print_honest_summary(all_rows):
     # Group by (instrument, session, dst_regime, baseline_lo, baseline_hi)
     candidates = set()
     for r in all_rows:
-        candidates.add((r["instrument"], r["session"], r["dst_regime"],
-                         r["baseline_lo"], r["baseline_hi"]))
+        candidates.add((r["instrument"], r["session"], r["dst_regime"], r["baseline_lo"], r["baseline_hi"]))
 
     for inst, sess, regime, blo, bhi in sorted(candidates):
-        cand_rows = [r for r in all_rows
-                     if r["instrument"] == inst and r["session"] == sess
-                     and r["dst_regime"] == regime
-                     and r["baseline_lo"] == blo and r["baseline_hi"] == bhi]
+        cand_rows = [
+            r
+            for r in all_rows
+            if r["instrument"] == inst
+            and r["session"] == sess
+            and r["dst_regime"] == regime
+            and r["baseline_lo"] == blo
+            and r["baseline_hi"] == bhi
+        ]
 
         band_rows = [r for r in cand_rows if r["test_type"] == "band"]
         floor_rows = [r for r in cand_rows if r["test_type"] == "floor"]
@@ -468,10 +496,8 @@ def print_honest_summary(all_rows):
         label = f"{inst} {sess} [{regime}] G{blo:.0f}-G{bhi:.0f}"
 
         # Get baseline band stats
-        baseline_band = [r for r in band_rows
-                         if r["lo_shift_pct"] == 0.0 and r["hi_shift_pct"] == 0.0]
-        baseline_floor = [r for r in floor_rows
-                          if abs(r["lo_shift_pct"]) < 0.01]
+        baseline_band = [r for r in band_rows if r["lo_shift_pct"] == 0.0 and r["hi_shift_pct"] == 0.0]
+        baseline_floor = [r for r in floor_rows if abs(r["lo_shift_pct"]) < 0.01]
 
         if not baseline_band:
             did_not_survive.append((label, "No baseline data"))
@@ -482,20 +508,20 @@ def print_honest_summary(all_rows):
         bl_n = bl["n_breaks"]
 
         # Criterion 1: avgR positive at ALL band shifts
-        valid_band = [r for r in band_rows
-                      if r["actual_lo"] < r["actual_hi"]
-                      and r["n_breaks"] > 0]
+        valid_band = [r for r in band_rows if r["actual_lo"] < r["actual_hi"] and r["n_breaks"] > 0]
         any_negative = any(r["avg_r"] < 0 for r in valid_band if not np.isnan(r["avg_r"]))
 
         # Criterion 2: N >= 20 at all shifts
         any_low_n = any(r["n_breaks"] < 20 for r in valid_band)
 
         # Criterion 3: avgR doesn't drop >50% at ±20% shifts
-        extreme_shifts = [r for r in valid_band
-                          if (abs(r["lo_shift_pct"]) >= 0.19
-                              or abs(r["hi_shift_pct"]) >= 0.19)
-                          and r["n_breaks"] > 0
-                          and not np.isnan(r["avg_r"])]
+        extreme_shifts = [
+            r
+            for r in valid_band
+            if (abs(r["lo_shift_pct"]) >= 0.19 or abs(r["hi_shift_pct"]) >= 0.19)
+            and r["n_breaks"] > 0
+            and not np.isnan(r["avg_r"])
+        ]
         big_drop = False
         if bl_avgr > 0:
             big_drop = any(r["avg_r"] < bl_avgr * 0.5 for r in extreme_shifts)
@@ -539,8 +565,10 @@ def print_honest_summary(all_rows):
 
     print(f"\n  CAVEATS:")
     print(f"    - IN-SAMPLE only (no walk-forward)")
-    print(f"    - {len(BAND_CANDIDATES)} candidates x 28 tests = {len(BAND_CANDIDATES) * 28} tests"
-          f" -> Benjamini-Hochberg FDR required for discovery claims")
+    print(
+        f"    - {len(BAND_CANDIDATES)} candidates x 28 tests = {len(BAND_CANDIDATES) * 28} tests"
+        f" -> Benjamini-Hochberg FDR required for discovery claims"
+    )
     print(f"    - Band boundaries are fitted to Q2 data from the same sample")
     print(f"    - Selection bias: these 6 candidates were chosen because they looked good in Q2")
     print(f"    - ~500 MNQ/MES days — PRELIMINARY sample size for per-band tests")
@@ -556,13 +584,13 @@ def print_honest_summary(all_rows):
 # Main
 # =========================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Band-filter sensitivity test — do Q2 band boundaries survive ±20% shifts?"
     )
     parser.add_argument(
-        "--db-path", type=str, default=None,
-        help="Path to gold.db (default: auto-resolve via pipeline.paths)"
+        "--db-path", type=str, default=None, help="Path to gold.db (default: auto-resolve via pipeline.paths)"
     )
     args = parser.parse_args()
 
@@ -571,6 +599,7 @@ def main():
     else:
         try:
             from pipeline.paths import GOLD_DB_PATH
+
             db_path = GOLD_DB_PATH
         except ImportError:
             db_path = Path("gold.db")
@@ -578,8 +607,10 @@ def main():
     print(f"\n{'=' * 80}")
     print(f"  BAND-FILTER SENSITIVITY TEST")
     print(f"  Database: {db_path}")
-    print(f"  Parameters: RR{RR_TARGET:.1f} | {BREAK_WINDOW}min break window | "
-          f"{APERTURE_MIN}min aperture | {OUTCOME_WINDOW // 60}h outcome")
+    print(
+        f"  Parameters: RR{RR_TARGET:.1f} | {BREAK_WINDOW}min break window | "
+        f"{APERTURE_MIN}min aperture | {OUTCOME_WINDOW // 60}h outcome"
+    )
     print(f"  Candidates: {len(BAND_CANDIDATES)}")
     print(f"  Tests per candidate: 25 band + 3 floor = 28")
     print(f"{'=' * 80}")
@@ -607,8 +638,7 @@ def main():
             us_mask, uk_mask = build_dst_masks(all_days)
             print(f"    {len(all_days)} trading days built in {time.time() - t_build:.1f}s")
 
-            data_cache[instrument] = (all_days, opens, highs, lows, closes,
-                                      us_mask, uk_mask)
+            data_cache[instrument] = (all_days, opens, highs, lows, closes, us_mask, uk_mask)
 
         if not data_cache:
             print("\n  No instrument data loaded. Exiting.")

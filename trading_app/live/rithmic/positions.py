@@ -75,12 +75,14 @@ class RithmicPositions(BrokerPositions):
                 avg_price = 0.0
                 log.warning("avg_open_fill_price not numeric for %s: %r", symbol, raw_avg)
 
-            result.append({
-                "contract_id": symbol,
-                "side": "long" if quantity > 0 else "short",
-                "size": abs(quantity),
-                "avg_price": avg_price,
-            })
+            result.append(
+                {
+                    "contract_id": symbol,
+                    "side": "long" if quantity > 0 else "short",
+                    "size": abs(quantity),
+                    "avg_price": avg_price,
+                }
+            )
 
         if result:
             log.warning("Found %d open positions on Rithmic (account %s)", len(result), acct_id_str)

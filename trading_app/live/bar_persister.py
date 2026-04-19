@@ -62,6 +62,7 @@ class BarPersister:
         db_path = self._db_path
         if db_path is None:
             from pipeline.paths import GOLD_DB_PATH
+
             db_path = str(GOLD_DB_PATH)
 
         ts_min = min(b.ts_utc for b in bars)
@@ -87,7 +88,10 @@ class BarPersister:
             con.close()
             log.info(
                 "BarPersister: flushed %d bars for %s (%s to %s)",
-                len(rows), self.symbol, ts_min, ts_max,
+                len(rows),
+                self.symbol,
+                ts_min,
+                ts_max,
             )
             return len(rows)
         except (duckdb.Error, OSError) as e:

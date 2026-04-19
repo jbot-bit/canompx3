@@ -454,7 +454,9 @@ def render_console_summary(
     print("=" * 80)
     print("MGC CME_REOPEN E2 MICROSTRUCTURE PILOT")
     print("=" * 80)
-    print(f"Sample days: {summary.total_sample_days} ({summary.high_vol_days} high-vol, {summary.low_vol_days} low-vol)")
+    print(
+        f"Sample days: {summary.total_sample_days} ({summary.high_vol_days} high-vol, {summary.low_vol_days} low-vol)"
+    )
     print(f"ATR threshold: {summary.atr_threshold:.1f} percentile")
     print(f"Modeled entry slippage: {summary.modeled_entry_slippage_ticks} tick @ {summary.modeled_tick_size:.2f}")
     print(f"Sample years: {summary.sample_year_counts}")
@@ -467,10 +469,7 @@ def render_console_summary(
         for row in strategy_panel_df.head(8).itertuples(index=False):
             pilot_avg = "N/A" if pd.isna(row.pilot_avg_r) else f"{row.pilot_avg_r:.4f}"
             full_avg = "N/A" if pd.isna(row.full_expectancy_r) else f"{row.full_expectancy_r:.4f}"
-            print(
-                f"  {row.strategy_id} | {row.pilot_n:>3} | {pilot_avg:>10} | "
-                f"{full_avg:>16} | {row.filter_type}"
-            )
+            print(f"  {row.strategy_id} | {row.pilot_n:>3} | {pilot_avg:>10} | {full_avg:>16} | {row.filter_type}")
         print()
 
     if databento_info is not None:

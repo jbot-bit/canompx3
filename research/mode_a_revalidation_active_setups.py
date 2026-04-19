@@ -47,15 +47,12 @@ from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 from research.filter_utils import filter_signal
 
-RESULT_PATH = (
-    PROJECT_ROOT
-    / "docs/audit/results/2026-04-19-mode-a-revalidation-of-active-setups.md"
-)
+RESULT_PATH = PROJECT_ROOT / "docs/audit/results/2026-04-19-mode-a-revalidation-of-active-setups.md"
 
 # Divergence flagging thresholds
-N_RATIO_TOLERANCE = 0.10        # flag if |delta_N / stored_N| > 0.10
-EXPR_ABS_TOLERANCE = 0.03       # flag if |delta_ExpR| > 0.03
-SHARPE_ABS_TOLERANCE = 0.20     # flag if |delta_Sharpe| > 0.20
+N_RATIO_TOLERANCE = 0.10  # flag if |delta_N / stored_N| > 0.10
+EXPR_ABS_TOLERANCE = 0.03  # flag if |delta_ExpR| > 0.03
+SHARPE_ABS_TOLERANCE = 0.20  # flag if |delta_Sharpe| > 0.20
 
 
 @dataclass
@@ -120,9 +117,19 @@ def load_active_setups(con: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
         """
     ).fetchall()
     cols = [
-        "strategy_id", "instrument", "orb_label", "orb_minutes", "rr_target",
-        "entry_model", "confirm_bars", "filter_type", "sample_size",
-        "expectancy_r", "sharpe_ann", "win_rate", "last_trade_day",
+        "strategy_id",
+        "instrument",
+        "orb_label",
+        "orb_minutes",
+        "rr_target",
+        "entry_model",
+        "confirm_bars",
+        "filter_type",
+        "sample_size",
+        "expectancy_r",
+        "sharpe_ann",
+        "win_rate",
+        "last_trade_day",
         "execution_spec",
     ]
     return [dict(zip(cols, r)) for r in rows]
@@ -165,9 +172,14 @@ def compute_mode_a(
     df = con.execute(
         sql,
         [
-            spec["instrument"], sess, spec["orb_minutes"],
-            spec["entry_model"], spec["confirm_bars"], spec["rr_target"],
-            direction, HOLDOUT_SACRED_FROM,
+            spec["instrument"],
+            sess,
+            spec["orb_minutes"],
+            spec["entry_model"],
+            spec["confirm_bars"],
+            spec["rr_target"],
+            direction,
+            HOLDOUT_SACRED_FROM,
         ],
     ).df()
     if len(df) == 0:
@@ -194,9 +206,7 @@ def compute_mode_a(
                     key = td.date() if hasattr(td, "date") else td
                     src_map[key] = float(pct)
                 col = f"cross_atr_{source}_pct"
-                df[col] = df["trading_day"].apply(
-                    lambda d: src_map.get(d.date() if hasattr(d, "date") else d)
-                )
+                df[col] = df["trading_day"].apply(lambda d: src_map.get(d.date() if hasattr(d, "date") else d))
 
     if filter_type and filter_type != "UNFILTERED":
         try:
@@ -263,10 +273,7 @@ def classify_divergence(rv: LaneRevalidation) -> None:
     if rv.stored_last_trade_day is not None:
         if rv.stored_last_trade_day >= HOLDOUT_SACRED_FROM:
             rv.mode_b_contaminated = True
-            reasons.append(
-                f"last_trade_day={rv.stored_last_trade_day} >= {HOLDOUT_SACRED_FROM} "
-                "(Mode-B grandfathered)"
-            )
+            reasons.append(f"last_trade_day={rv.stored_last_trade_day} >= {HOLDOUT_SACRED_FROM} (Mode-B grandfathered)")
 
     rv.drift_reasons = reasons
     rv.material_drift = bool(reasons)
@@ -294,12 +301,16 @@ def render(results: list[LaneRevalidation]) -> str:
     lines.append(f"**Generated:** {ts}")
     lines.append(f"**Script:** `research/mode_a_revalidation_active_setups.py`")
     lines.append(f"**IS boundary:** `trading_day < {HOLDOUT_SACRED_FROM}` (Mode A)")
-    lines.append(f"**Canonical filter source:** `research.filter_utils.filter_signal` → `trading_app.config.ALL_FILTERS`")
+    lines.append(
+        f"**Canonical filter source:** `research.filter_utils.filter_signal` → `trading_app.config.ALL_FILTERS`"
+    )
     lines.append("")
     lines.append("## Summary")
     lines.append("")
     lines.append(f"- Total active lanes re-validated: **{n_total}**")
-    lines.append(f"- Lanes with material Mode A drift (|ΔN/N|>10% OR |ΔExpR|>0.03 OR |ΔSharpe|>0.20 OR Mode-B contaminated): **{n_drift}**")
+    lines.append(
+        f"- Lanes with material Mode A drift (|ΔN/N|>10% OR |ΔExpR|>0.03 OR |ΔSharpe|>0.20 OR Mode-B contaminated): **{n_drift}**"
+    )
     lines.append(f"- Lanes with last_trade_day >= 2026-01-01 (Mode-B grandfathered): **{n_mode_b}**")
     lines.append("")
     lines.append("## Thresholds")
@@ -318,7 +329,9 @@ def render(results: list[LaneRevalidation]) -> str:
     lines.append("")
     lines.append("## Per-lane re-validation")
     lines.append("")
-    lines.append("| Instr | Session | Om | RR | Filter | Dir | Stored N / Mode-A N | ΔN/N | Stored ExpR / Mode-A ExpR | ΔExpR | Stored Sh / Mode-A Sh | ΔSh | Yrs+ | Mode-B | Flag |")
+    lines.append(
+        "| Instr | Session | Om | RR | Filter | Dir | Stored N / Mode-A N | ΔN/N | Stored ExpR / Mode-A ExpR | ΔExpR | Stored Sh / Mode-A Sh | ΔSh | Yrs+ | Mode-B | Flag |"
+    )
     lines.append("|---|---|---:|---:|---|---|---|---:|---|---:|---|---:|---:|---|---|")
     for r in results:
         flag = "DRIFT" if r.material_drift else ""
@@ -336,10 +349,16 @@ def render(results: list[LaneRevalidation]) -> str:
     lines.append("## Materially-drifted lanes — detail")
     lines.append("")
     for r in [x for x in results if x.material_drift]:
-        lines.append(f"### {r.instrument} {r.orb_label} O{r.orb_minutes} RR{r.rr_target} {r.filter_type or 'UNFILTERED'} {r.direction}")
+        lines.append(
+            f"### {r.instrument} {r.orb_label} O{r.orb_minutes} RR{r.rr_target} {r.filter_type or 'UNFILTERED'} {r.direction}"
+        )
         lines.append(f"- `strategy_id`: `{r.strategy_id}`")
-        lines.append(f"- Stored: N={r.stored_n} ExpR={_fmt(r.stored_expr)} Sharpe_ann={_fmt(r.stored_sharpe, 2)} WR={_fmt(r.stored_wr, 3)} last_trade_day={r.stored_last_trade_day}")
-        lines.append(f"- Mode A: N={r.mode_a_n} ExpR={_fmt(r.mode_a_expr)} Sharpe_ann={_fmt(r.mode_a_sharpe, 2)} WR={_fmt(r.mode_a_wr, 3)}")
+        lines.append(
+            f"- Stored: N={r.stored_n} ExpR={_fmt(r.stored_expr)} Sharpe_ann={_fmt(r.stored_sharpe, 2)} WR={_fmt(r.stored_wr, 3)} last_trade_day={r.stored_last_trade_day}"
+        )
+        lines.append(
+            f"- Mode A: N={r.mode_a_n} ExpR={_fmt(r.mode_a_expr)} Sharpe_ann={_fmt(r.mode_a_sharpe, 2)} WR={_fmt(r.mode_a_wr, 3)}"
+        )
         lines.append(f"- Drift reasons: {', '.join(r.drift_reasons)}")
         if r.years_total:
             yr_str = " ".join(

@@ -57,6 +57,7 @@ DOW_NAMES = {1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri"}
 # Data loading
 # ---------------------------------------------------------------------------
 
+
 def load_data(db_path: Path, session: str, start: date, end: date) -> pd.DataFrame:
     """Load outcomes for a session joined with daily_features for prior levels."""
     prior = PRIOR_SESSIONS.get(session)
@@ -153,19 +154,24 @@ def load_data(db_path: Path, session: str, start: date, end: date) -> pd.DataFra
     print(f"Loaded {len(df)} {session} outcomes ({df['trading_day'].nunique()} days)")
     return df
 
+
 # ---------------------------------------------------------------------------
 # Reporting
 # ---------------------------------------------------------------------------
+
 
 def fmt(m: dict, db_rate: float = None) -> str:
     """Format metrics dict as a one-line summary."""
     if m is None or m["n"] == 0:
         return "N=0"
-    s = (f"N={m['n']:<5d}  WR={m['wr']*100:5.1f}%  ExpR={m['expr']:+.3f}  "
-         f"Sharpe={m['sharpe']:.3f}  MaxDD={m['maxdd']:.1f}R  Total={m['total']:+.1f}R")
+    s = (
+        f"N={m['n']:<5d}  WR={m['wr'] * 100:5.1f}%  ExpR={m['expr']:+.3f}  "
+        f"Sharpe={m['sharpe']:.3f}  MaxDD={m['maxdd']:.1f}R  Total={m['total']:+.1f}R"
+    )
     if db_rate is not None:
-        s += f"  DB={db_rate*100:.0f}%"
+        s += f"  DB={db_rate * 100:.0f}%"
     return s
+
 
 def db_rate(df: pd.DataFrame) -> float:
     """Compute double-break rate for a subset."""
@@ -174,12 +180,14 @@ def db_rate(df: pd.DataFrame) -> float:
         return 0.0
     return float(df.loc[valid, "double_break"].astype(bool).mean())
 
+
 def report_subset(df: pd.DataFrame, label: str):
     """Print one-line metrics for a subset."""
     pnls = df["pnl_r"].values
     m = compute_strategy_metrics(pnls)
     dbr = db_rate(df)
     print(f"  {label:30s}  {fmt(m, dbr)}")
+
 
 def report_session(df: pd.DataFrame, session: str):
     """Full report for one session."""
@@ -190,18 +198,16 @@ def report_session(df: pd.DataFrame, session: str):
     for em in ["E1", "E3"]:
         for rr in [1.0, 1.5, 2.0, 2.5, 3.0]:
             if em == "E3":
-                subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
-                            & (df["confirm_bars"] == 1)]
+                subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr) & (df["confirm_bars"] == 1)]
             else:  # E1
-                subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
-                            & (df["confirm_bars"] == 2)]
+                subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr) & (df["confirm_bars"] == 2)]
 
             if len(subset) < 30:
                 continue
 
-            print(f"\n{'='*100}")
+            print(f"\n{'=' * 100}")
             print(f"{session} {em} RR{rr}  |  Prior levels: MAX({prior_label})")
-            print(f"{'='*100}")
+            print(f"{'=' * 100}")
 
             # --- Baseline ---
             report_subset(subset, "Baseline (all)")
@@ -238,18 +244,18 @@ def report_session(df: pd.DataFrame, session: str):
             # --- Clearance margin distribution for CLEAR trades ---
             if len(clear) >= 10:
                 margins = clear["clearance_margin"].values
-                print(f"\n  CLEAR margin stats: "
-                      f"mean={np.mean(margins):.1f}pt  "
-                      f"median={np.median(margins):.1f}pt  "
-                      f"min={np.min(margins):.1f}pt  "
-                      f"max={np.max(margins):.1f}pt")
+                print(
+                    f"\n  CLEAR margin stats: "
+                    f"mean={np.mean(margins):.1f}pt  "
+                    f"median={np.median(margins):.1f}pt  "
+                    f"min={np.min(margins):.1f}pt  "
+                    f"max={np.max(margins):.1f}pt"
+                )
 
                 # Margin buckets
                 print(f"  CLEAR by margin bucket:")
-                for lo, hi, label in [(0, 2, "0-2pt"), (2, 5, "2-5pt"),
-                                       (5, 10, "5-10pt"), (10, 999, "10+pt")]:
-                    bucket = clear[(clear["clearance_margin"] >= lo)
-                                   & (clear["clearance_margin"] < hi)]
+                for lo, hi, label in [(0, 2, "0-2pt"), (2, 5, "2-5pt"), (5, 10, "5-10pt"), (10, 999, "10+pt")]:
+                    bucket = clear[(clear["clearance_margin"] >= lo) & (clear["clearance_margin"] < hi)]
                     if len(bucket) >= 3:
                         pnls = bucket["pnl_r"].values
                         m = compute_strategy_metrics(pnls)
@@ -260,9 +266,9 @@ def report_session(df: pd.DataFrame, session: str):
             chop = subset[subset["clearance"] == "CHOP"]
             if len(chop) >= 10:
                 chop_margins = chop["clearance_margin"].values  # negative = inside
-                print(f"\n  CHOP margin stats: "
-                      f"mean={np.mean(chop_margins):.1f}pt  "
-                      f"median={np.median(chop_margins):.1f}pt")
+                print(
+                    f"\n  CHOP margin stats: mean={np.mean(chop_margins):.1f}pt  median={np.median(chop_margins):.1f}pt"
+                )
 
                 # CHOP: near edge vs deep inside
                 near_edge = chop[chop["clearance_margin"] >= -2]
@@ -272,17 +278,21 @@ def report_session(df: pd.DataFrame, session: str):
                 if len(deep) >= 3:
                     report_subset(deep, "CHOP deep inside (<-2pt)")
 
+
 # ---------------------------------------------------------------------------
 # Summary table
 # ---------------------------------------------------------------------------
 
+
 def print_summary(all_results: dict):
     """Print a compact summary table across all sessions."""
-    print(f"\n\n{'#'*100}")
+    print(f"\n\n{'#' * 100}")
     print(f"SUMMARY: CLEAR vs CHOP across all sessions")
-    print(f"{'#'*100}")
-    print(f"\n{'Session':<8} {'EM':<4} {'RR':<5} {'Tag':<8} "
-          f"{'N':>5} {'WR':>6} {'ExpR':>7} {'Sharpe':>7} {'MaxDD':>7} {'DB%':>5}")
+    print(f"{'#' * 100}")
+    print(
+        f"\n{'Session':<8} {'EM':<4} {'RR':<5} {'Tag':<8} "
+        f"{'N':>5} {'WR':>6} {'ExpR':>7} {'Sharpe':>7} {'MaxDD':>7} {'DB%':>5}"
+    )
     print("-" * 80)
 
     for key in sorted(all_results.keys()):
@@ -292,22 +302,26 @@ def print_summary(all_results: dict):
             if tag in data:
                 m, dbr = data[tag]
                 if m and m["n"] >= 10:
-                    print(f"{session:<8} {em:<4} {rr:<5.1f} {tag:<8} "
-                          f"{m['n']:>5d} {m['wr']*100:>5.1f}% {m['expr']:>+6.3f} "
-                          f"{m['sharpe']:>7.3f} {m['maxdd']:>6.1f}R {dbr*100:>4.0f}%")
+                    print(
+                        f"{session:<8} {em:<4} {rr:<5.1f} {tag:<8} "
+                        f"{m['n']:>5d} {m['wr'] * 100:>5.1f}% {m['expr']:>+6.3f} "
+                        f"{m['sharpe']:>7.3f} {m['maxdd']:>6.1f}R {dbr * 100:>4.0f}%"
+                    )
+
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def run_analysis(db_path: Path, start: date, end: date):
     """Run entry clearance analysis for all applicable sessions."""
     all_results = {}
 
     for session in ["1000", "1100", "1800", "2300", "0030"]:
-        print(f"\n\n{'#'*100}")
+        print(f"\n\n{'#' * 100}")
         print(f"SESSION: {session}  |  Prior sessions: {', '.join(PRIOR_SESSIONS[session])}")
-        print(f"{'#'*100}")
+        print(f"{'#' * 100}")
 
         df = load_data(db_path, session, start, end)
         if df.empty:
@@ -320,11 +334,9 @@ def run_analysis(db_path: Path, start: date, end: date):
         for em in ["E1", "E3"]:
             for rr in [1.0, 1.5, 2.0, 2.5, 3.0]:
                 if em == "E3":
-                    subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
-                                & (df["confirm_bars"] == 1)]
+                    subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr) & (df["confirm_bars"] == 1)]
                 else:
-                    subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr)
-                                & (df["confirm_bars"] == 2)]
+                    subset = df[(df["entry_model"] == em) & (df["rr_target"] == rr) & (df["confirm_bars"] == 2)]
 
                 if len(subset) < 30:
                     continue
@@ -333,21 +345,18 @@ def run_analysis(db_path: Path, start: date, end: date):
                 all_results[key] = {}
 
                 pnls = subset["pnl_r"].values
-                all_results[key]["Baseline"] = (
-                    compute_strategy_metrics(pnls), db_rate(subset))
+                all_results[key]["Baseline"] = (compute_strategy_metrics(pnls), db_rate(subset))
 
                 for tag in ["CLEAR", "CHOP"]:
                     sub = subset[subset["clearance"] == tag]
                     if len(sub) > 0:
-                        all_results[key][tag] = (
-                            compute_strategy_metrics(sub["pnl_r"].values),
-                            db_rate(sub))
+                        all_results[key][tag] = (compute_strategy_metrics(sub["pnl_r"].values), db_rate(sub))
 
     print_summary(all_results)
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Entry Price Clearance Filter analysis")
+    parser = argparse.ArgumentParser(description="Entry Price Clearance Filter analysis")
     parser.add_argument("--db-path", type=Path, default=Path("C:/db/gold.db"))
     parser.add_argument("--start", type=date.fromisoformat, default=date(2022, 1, 1))
     parser.add_argument("--end", type=date.fromisoformat, default=date(2026, 2, 4))
@@ -360,6 +369,7 @@ def main():
     print(f"Prior levels are CUMULATIVE (MAX/MIN of ALL earlier sessions)")
 
     run_analysis(args.db_path, args.start, args.end)
+
 
 if __name__ == "__main__":
     main()

@@ -96,9 +96,7 @@ class TestCheckGitCleanlinessMocked:
         """A non-existent file fails at the is_file() guard BEFORE any
         subprocess call — proven by the mock never being invoked."""
         nonexistent = tmp_path / "nope.yaml"
-        with patch(
-            "trading_app.phase_4_discovery_gates.subprocess.run"
-        ) as mock_run:
+        with patch("trading_app.phase_4_discovery_gates.subprocess.run") as mock_run:
             with pytest.raises(HypothesisLoaderError, match="not found"):
                 check_git_cleanliness(nonexistent)
             mock_run.assert_not_called()
@@ -254,9 +252,7 @@ class TestCheckSingleUse:
             con,
         )
         # Confirm the table still exists and the legitimate row is still there
-        count = con.execute(
-            "SELECT COUNT(*) FROM experimental_strategies"
-        ).fetchone()
+        count = con.execute("SELECT COUNT(*) FROM experimental_strategies").fetchone()
         assert count is not None
         assert count[0] == 1
 

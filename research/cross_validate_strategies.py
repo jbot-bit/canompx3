@@ -44,6 +44,7 @@ def _sanitize(obj):
         return [_sanitize(v) for v in obj]
     return obj
 
+
 def load_orb_daily_pnl(db_path: Path, start: date, end: date) -> pd.DataFrame:
     """Load ORB strategy daily P&L from validated_setups + orb_outcomes.
 
@@ -78,7 +79,8 @@ def load_orb_daily_pnl(db_path: Path, start: date, end: date) -> pd.DataFrame:
 
         print(f"  ORB baseline: {orb_label} RR{rr_target} CB{confirm_bars} {entry_model}")
 
-        outcomes = con.execute("""
+        outcomes = con.execute(
+            """
             SELECT trading_day, pnl_r
             FROM orb_outcomes
             WHERE symbol = 'MGC'
@@ -88,7 +90,9 @@ def load_orb_daily_pnl(db_path: Path, start: date, end: date) -> pd.DataFrame:
               AND entry_model = ?
               AND trading_day BETWEEN ? AND ?
             ORDER BY trading_day
-        """, [orb_label, rr_target, confirm_bars, entry_model, start, end]).fetchdf()
+        """,
+            [orb_label, rr_target, confirm_bars, entry_model, start, end],
+        ).fetchdf()
     finally:
         con.close()
 
@@ -99,12 +103,14 @@ def load_orb_daily_pnl(db_path: Path, start: date, end: date) -> pd.DataFrame:
     outcomes["trading_day"] = pd.to_datetime(outcomes["trading_day"]).dt.date
     return outcomes
 
+
 def load_alt_results(artifact_path: Path) -> dict | None:
     """Load JSON artifact from an alt strategy run."""
     if not artifact_path.exists():
         return None
     with open(artifact_path) as f:
         return json.load(f)
+
 
 def analyze_correlation(orb_df: pd.DataFrame, alt_name: str, alt_results: dict) -> dict:
     """Check if alt strategy wins when ORB loses."""
@@ -138,6 +144,7 @@ def analyze_correlation(orb_df: pd.DataFrame, alt_name: str, alt_results: dict) 
         "oos_total": combined["total"],
     }
 
+
 def compute_portfolio_uplift(orb_df: pd.DataFrame, alt_results: dict, alt_name: str) -> dict | None:
     """Simulate adding alt strategy to ORB portfolio (equal weight)."""
     if orb_df.empty:
@@ -156,6 +163,7 @@ def compute_portfolio_uplift(orb_df: pd.DataFrame, alt_results: dict, alt_name: 
 
     annualize_sharpe(orb_stats, oos_years)
     return result
+
 
 def main():
     parser = argparse.ArgumentParser(description="Cross-validate alt strategies vs ORB")
@@ -183,8 +191,10 @@ def main():
             annualize_sharpe(orb_stats, oos_years)
             sha = orb_stats.get("sharpe_ann")
             sha_str = f", ShANN={sha:.3f}" if sha is not None else ""
-            print(f"  ORB baseline: N={orb_stats['n']}, WR={orb_stats['wr']:.0%}, "
-                  f"ExpR={orb_stats['expr']:+.3f}, Sharpe={orb_stats['sharpe']:.3f}{sha_str}")
+            print(
+                f"  ORB baseline: N={orb_stats['n']}, WR={orb_stats['wr']:.0%}, "
+                f"ExpR={orb_stats['expr']:+.3f}, Sharpe={orb_stats['sharpe']:.3f}{sha_str}"
+            )
 
             # ORB loss days
             orb_loss_days = orb_df[orb_df["orb_pnl_r"] < 0]
@@ -218,9 +228,11 @@ def main():
 
         sha = analysis.get("oos_sharpe_ann")
         sha_str = f", ShANN={sha:.3f}" if sha is not None else ""
-        print(f"  {name}: N={analysis['oos_n']}, WR={analysis['oos_wr']:.0%}, "
-              f"ExpR={analysis['oos_expr']:+.3f}, Sharpe={analysis['oos_sharpe']:.3f}{sha_str}, "
-              f"MaxDD={analysis['oos_maxdd']:+.1f}R, Total={analysis['oos_total']:+.1f}R")
+        print(
+            f"  {name}: N={analysis['oos_n']}, WR={analysis['oos_wr']:.0%}, "
+            f"ExpR={analysis['oos_expr']:+.3f}, Sharpe={analysis['oos_sharpe']:.3f}{sha_str}, "
+            f"MaxDD={analysis['oos_maxdd']:+.1f}R, Total={analysis['oos_total']:+.1f}R"
+        )
 
     # Summary
     print()
@@ -255,6 +267,7 @@ def main():
     print(sep)
     print("DONE")
     print(sep)
+
 
 if __name__ == "__main__":
     main()

@@ -8,6 +8,7 @@ Rules enforced structurally:
 3. Row count audit before/after every join
 4. Multiple comparison correction applied
 """
+
 import duckdb
 import numpy as np
 from scipy import stats
@@ -73,18 +74,15 @@ def get_pnl_array(instrument, session, em, rr, cb, size_min, extra_where=""):
           AND d.{size_col} >= {size_min}
           AND o.outcome IN ('win','loss','early_exit') AND o.pnl_r IS NOT NULL
           {extra_where}
-    """).fetchnumpy()['pnl_r']
+    """).fetchnumpy()["pnl_r"]
 
 
-def test_binary_split(name, instrument, session, em, rr, cb, size_min,
-                       col_expr, true_label, false_label):
+def test_binary_split(name, instrument, session, em, rr, cb, size_min, col_expr, true_label, false_label):
     """Test a binary predictor. Returns (delta, p, n_true, n_false)."""
     size_col = f"orb_{session}_size"
 
-    true_arr = get_pnl_array(instrument, session, em, rr, cb, size_min,
-                              f"AND ({col_expr}) = true")
-    false_arr = get_pnl_array(instrument, session, em, rr, cb, size_min,
-                               f"AND ({col_expr}) = false")
+    true_arr = get_pnl_array(instrument, session, em, rr, cb, size_min, f"AND ({col_expr}) = true")
+    false_arr = get_pnl_array(instrument, session, em, rr, cb, size_min, f"AND ({col_expr}) = false")
 
     n_t, n_f = len(true_arr), len(false_arr)
     if n_t < 20 or n_f < 20:
@@ -95,15 +93,18 @@ def test_binary_split(name, instrument, session, em, rr, cb, size_min,
     delta = m_f - m_t  # false - true (convention: "clean" minus "dirty")
 
     return {
-        'name': name,
-        'n_true': n_t, 'mean_true': m_t,
-        'n_false': n_f, 'mean_false': m_f,
-        'delta': delta, 't': t, 'p': p,
+        "name": name,
+        "n_true": n_t,
+        "mean_true": m_t,
+        "n_false": n_f,
+        "mean_false": m_f,
+        "delta": delta,
+        "t": t,
+        "p": p,
     }
 
 
-def test_bucket_split(name, instrument, session, em, rr, cb, size_min,
-                       bucket_expr, extra_where=""):
+def test_bucket_split(name, instrument, session, em, rr, cb, size_min, bucket_expr, extra_where=""):
     """Test a multi-bucket predictor."""
     size_col = f"orb_{session}_size"
 
@@ -125,9 +126,9 @@ def test_bucket_split(name, instrument, session, em, rr, cb, size_min,
 # MAIN SCAN
 # ================================================================
 
-INSTRUMENTS = ['MGC']
-SESSIONS_CLEAN = ['1000', '1100']  # No DST
-SESSIONS_DST = ['0900', '1800', '2300', '0030']  # DST-affected
+INSTRUMENTS = ["MGC"]
+SESSIONS_CLEAN = ["1000", "1100"]  # No DST
+SESSIONS_DST = ["0900", "1800", "2300", "0030"]  # DST-affected
 
 print("=" * 80)
 print("EDGE HUNTER v2 — Correct Joins, Zero Look-Ahead, Audited")
@@ -135,7 +136,7 @@ print("=" * 80)
 
 for inst in INSTRUMENTS:
     for sess in SESSIONS_CLEAN + SESSIONS_DST:
-        for em in ['E1', 'E3']:
+        for em in ["E1", "E3"]:
             for rr in [2.0, 2.5, 3.0]:
                 cb = 2
                 size_min = 4.0
@@ -156,103 +157,144 @@ for inst in INSTRUMENTS:
 
                 # 1. Earlier-session double-breaks (only for sessions that happen BEFORE target)
                 earlier_sessions = {
-                    '1000': ['0900'],
-                    '1100': ['0900', '1000'],
-                    '1800': ['0900', '1000', '1100'],
-                    '2300': ['0900', '1000', '1100', '1800'],
-                    '0030': ['0900', '1000', '1100', '1800', '2300'],
-                    '0900': [],  # nothing before 0900
+                    "1000": ["0900"],
+                    "1100": ["0900", "1000"],
+                    "1800": ["0900", "1000", "1100"],
+                    "2300": ["0900", "1000", "1100", "1800"],
+                    "0030": ["0900", "1000", "1100", "1800", "2300"],
+                    "0900": [],  # nothing before 0900
                 }
                 for earlier in earlier_sessions.get(sess, []):
                     col = f"d.orb_{earlier}_double_break"
                     r = test_binary_split(
-                        f"{earlier}_dbl_break", inst, sess, em, rr, cb, size_min,
-                        col, "YES_dbl", "NO_dbl")
+                        f"{earlier}_dbl_break", inst, sess, em, rr, cb, size_min, col, "YES_dbl", "NO_dbl"
+                    )
                     if r:
                         results.append(r)
 
                 # 2. Earlier-session outcomes
                 for earlier in earlier_sessions.get(sess, []):
                     # win vs loss only (exclude scratch)
-                    win_arr = get_pnl_array(inst, sess, em, rr, cb, size_min,
-                                            f"AND d.orb_{earlier}_outcome = 'win'")
-                    loss_arr = get_pnl_array(inst, sess, em, rr, cb, size_min,
-                                             f"AND d.orb_{earlier}_outcome = 'loss'")
+                    win_arr = get_pnl_array(inst, sess, em, rr, cb, size_min, f"AND d.orb_{earlier}_outcome = 'win'")
+                    loss_arr = get_pnl_array(inst, sess, em, rr, cb, size_min, f"AND d.orb_{earlier}_outcome = 'loss'")
                     if len(win_arr) >= 20 and len(loss_arr) >= 20:
                         t, p = stats.ttest_ind(win_arr, loss_arr, equal_var=False)
-                        results.append({
-                            'name': f"{earlier}_outcome(win_vs_loss)",
-                            'n_true': len(win_arr), 'mean_true': np.mean(win_arr),
-                            'n_false': len(loss_arr), 'mean_false': np.mean(loss_arr),
-                            'delta': np.mean(win_arr) - np.mean(loss_arr),
-                            't': t, 'p': p,
-                        })
+                        results.append(
+                            {
+                                "name": f"{earlier}_outcome(win_vs_loss)",
+                                "n_true": len(win_arr),
+                                "mean_true": np.mean(win_arr),
+                                "n_false": len(loss_arr),
+                                "mean_false": np.mean(loss_arr),
+                                "delta": np.mean(win_arr) - np.mean(loss_arr),
+                                "t": t,
+                                "p": p,
+                            }
+                        )
 
                 # 3. RSI at 0900 (known before all sessions)
                 rsi_rows = test_bucket_split(
-                    "RSI14_0900", inst, sess, em, rr, cb, size_min,
+                    "RSI14_0900",
+                    inst,
+                    sess,
+                    em,
+                    rr,
+                    cb,
+                    size_min,
                     """CASE WHEN d.rsi_14_at_CME_REOPEN < 30 THEN 'oversold'
                         WHEN d.rsi_14_at_CME_REOPEN < 50 THEN 'bearish'
                         WHEN d.rsi_14_at_CME_REOPEN < 70 THEN 'bullish'
                         ELSE 'overbought' END""",
-                    "AND d.rsi_14_at_CME_REOPEN IS NOT NULL")
+                    "AND d.rsi_14_at_CME_REOPEN IS NOT NULL",
+                )
                 if rsi_rows:
                     # Test extreme vs middle
-                    extreme = get_pnl_array(inst, sess, em, rr, cb, size_min,
-                                            "AND (d.rsi_14_at_CME_REOPEN < 30 OR d.rsi_14_at_CME_REOPEN >= 70) AND d.rsi_14_at_CME_REOPEN IS NOT NULL")
-                    middle = get_pnl_array(inst, sess, em, rr, cb, size_min,
-                                           "AND d.rsi_14_at_CME_REOPEN >= 30 AND d.rsi_14_at_CME_REOPEN < 70 AND d.rsi_14_at_CME_REOPEN IS NOT NULL")
+                    extreme = get_pnl_array(
+                        inst,
+                        sess,
+                        em,
+                        rr,
+                        cb,
+                        size_min,
+                        "AND (d.rsi_14_at_CME_REOPEN < 30 OR d.rsi_14_at_CME_REOPEN >= 70) AND d.rsi_14_at_CME_REOPEN IS NOT NULL",
+                    )
+                    middle = get_pnl_array(
+                        inst,
+                        sess,
+                        em,
+                        rr,
+                        cb,
+                        size_min,
+                        "AND d.rsi_14_at_CME_REOPEN >= 30 AND d.rsi_14_at_CME_REOPEN < 70 AND d.rsi_14_at_CME_REOPEN IS NOT NULL",
+                    )
                     if len(extreme) >= 20 and len(middle) >= 20:
                         t, p = stats.ttest_ind(middle, extreme, equal_var=False)
-                        results.append({
-                            'name': "RSI_middle_vs_extreme",
-                            'n_true': len(extreme), 'mean_true': np.mean(extreme),
-                            'n_false': len(middle), 'mean_false': np.mean(middle),
-                            'delta': np.mean(middle) - np.mean(extreme),
-                            't': t, 'p': p,
-                        })
+                        results.append(
+                            {
+                                "name": "RSI_middle_vs_extreme",
+                                "n_true": len(extreme),
+                                "mean_true": np.mean(extreme),
+                                "n_false": len(middle),
+                                "mean_false": np.mean(middle),
+                                "delta": np.mean(middle) - np.mean(extreme),
+                                "t": t,
+                                "p": p,
+                            }
+                        )
 
                 # 4. Day of week
-                for dow_name, dow_val in [('Mon', 1), ('Tue', 2), ('Wed', 3), ('Thu', 4), ('Fri', 5)]:
-                    on_day = get_pnl_array(inst, sess, em, rr, cb, size_min,
-                                           f"AND EXTRACT(dow FROM o.trading_day) = {dow_val}")
-                    off_day = get_pnl_array(inst, sess, em, rr, cb, size_min,
-                                            f"AND EXTRACT(dow FROM o.trading_day) != {dow_val}")
+                for dow_name, dow_val in [("Mon", 1), ("Tue", 2), ("Wed", 3), ("Thu", 4), ("Fri", 5)]:
+                    on_day = get_pnl_array(
+                        inst, sess, em, rr, cb, size_min, f"AND EXTRACT(dow FROM o.trading_day) = {dow_val}"
+                    )
+                    off_day = get_pnl_array(
+                        inst, sess, em, rr, cb, size_min, f"AND EXTRACT(dow FROM o.trading_day) != {dow_val}"
+                    )
                     if len(on_day) >= 15 and len(off_day) >= 30:
                         t, p = stats.ttest_ind(on_day, off_day, equal_var=False)
-                        results.append({
-                            'name': f"DOW_{dow_name}",
-                            'n_true': len(on_day), 'mean_true': np.mean(on_day),
-                            'n_false': len(off_day), 'mean_false': np.mean(off_day),
-                            'delta': np.mean(on_day) - np.mean(off_day),
-                            't': t, 'p': p,
-                        })
+                        results.append(
+                            {
+                                "name": f"DOW_{dow_name}",
+                                "n_true": len(on_day),
+                                "mean_true": np.mean(on_day),
+                                "n_false": len(off_day),
+                                "mean_false": np.mean(off_day),
+                                "delta": np.mean(on_day) - np.mean(off_day),
+                                "t": t,
+                                "p": p,
+                            }
+                        )
 
                 # 5. DST regime (for affected sessions)
                 if sess in SESSIONS_DST:
-                    dst_col = 'us_dst' if sess != '1800' else 'uk_dst'
+                    dst_col = "us_dst" if sess != "1800" else "uk_dst"
                     r = test_binary_split(
-                        f"DST_{dst_col}", inst, sess, em, rr, cb, size_min,
-                        f"d.{dst_col}", "DST_on", "DST_off")
+                        f"DST_{dst_col}", inst, sess, em, rr, cb, size_min, f"d.{dst_col}", "DST_on", "DST_off"
+                    )
                     if r:
                         results.append(r)
 
                 # 6. ORB size of earlier session (pre-entry data)
                 for earlier in earlier_sessions.get(sess, [])[:2]:  # limit to 2
                     ecol = f"orb_{earlier}_size"
-                    small = get_pnl_array(inst, sess, em, rr, cb, size_min,
-                                          f"AND d.{ecol} < 4 AND d.{ecol} IS NOT NULL")
-                    big = get_pnl_array(inst, sess, em, rr, cb, size_min,
-                                        f"AND d.{ecol} >= 4 AND d.{ecol} IS NOT NULL")
+                    small = get_pnl_array(
+                        inst, sess, em, rr, cb, size_min, f"AND d.{ecol} < 4 AND d.{ecol} IS NOT NULL"
+                    )
+                    big = get_pnl_array(inst, sess, em, rr, cb, size_min, f"AND d.{ecol} >= 4 AND d.{ecol} IS NOT NULL")
                     if len(small) >= 20 and len(big) >= 20:
                         t, p = stats.ttest_ind(big, small, equal_var=False)
-                        results.append({
-                            'name': f"{earlier}_size_big_vs_small",
-                            'n_true': len(big), 'mean_true': np.mean(big),
-                            'n_false': len(small), 'mean_false': np.mean(small),
-                            'delta': np.mean(big) - np.mean(small),
-                            't': t, 'p': p,
-                        })
+                        results.append(
+                            {
+                                "name": f"{earlier}_size_big_vs_small",
+                                "n_true": len(big),
+                                "mean_true": np.mean(big),
+                                "n_false": len(small),
+                                "mean_false": np.mean(small),
+                                "delta": np.mean(big) - np.mean(small),
+                                "t": t,
+                                "p": p,
+                            }
+                        )
 
                 # === REPORT ===
                 if not results:
@@ -260,19 +302,21 @@ for inst in INSTRUMENTS:
                     continue
 
                 # Sort by p-value
-                results.sort(key=lambda x: x['p'])
+                results.sort(key=lambda x: x["p"])
 
                 # Benjamini-Hochberg correction
                 n_tests = len(results)
                 for i, r in enumerate(results):
-                    r['rank'] = i + 1
-                    r['bh_threshold'] = 0.05 * r['rank'] / n_tests
-                    r['bh_significant'] = r['p'] <= r['bh_threshold']
+                    r["rank"] = i + 1
+                    r["bh_threshold"] = 0.05 * r["rank"] / n_tests
+                    r["bh_significant"] = r["p"] <= r["bh_threshold"]
 
                 for r in results:
-                    sig = "BH-SIG" if r['bh_significant'] else ""
-                    raw_sig = "***" if r['p'] < 0.005 else "**" if r['p'] < 0.01 else "*" if r['p'] < 0.05 else ""
-                    print(f"  {r['name']:<30} delta={r['delta']:>+.4f}  p={r['p']:.4f} {raw_sig:<4} N={r['n_true']}+{r['n_false']}  {sig}")
+                    sig = "BH-SIG" if r["bh_significant"] else ""
+                    raw_sig = "***" if r["p"] < 0.005 else "**" if r["p"] < 0.01 else "*" if r["p"] < 0.05 else ""
+                    print(
+                        f"  {r['name']:<30} delta={r['delta']:>+.4f}  p={r['p']:.4f} {raw_sig:<4} N={r['n_true']}+{r['n_false']}  {sig}"
+                    )
 
 con.close()
 print("\n\nDone. All results use corrected joins and zero look-ahead.")

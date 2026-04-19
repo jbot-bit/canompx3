@@ -28,6 +28,7 @@ import numpy as np
 import pandas as pd
 from pipeline.paths import GOLD_DB_PATH
 
+
 def run_analysis(db_path=None):
     if db_path is None:
         db_path = GOLD_DB_PATH
@@ -81,7 +82,7 @@ def run_analysis(db_path=None):
 
     # For each trade day, get bar closes at checkpoint times
     checkpoints_utc_offsets = {
-        "11:15": (1, 15),   # 15 min after ORB (quick check)
+        "11:15": (1, 15),  # 15 min after ORB (quick check)
         "11:30": (1, 30),
         "12:00": (2, 0),
         "12:30": (2, 30),
@@ -90,10 +91,10 @@ def run_analysis(db_path=None):
 
     results = []
     for _, row in outcomes.iterrows():
-        td = row['trading_day']
-        entry_price = row['entry_price']
-        break_dir = row['break_dir']
-        asia_open = row['asia_open']
+        td = row["trading_day"]
+        entry_price = row["entry_price"]
+        break_dir = row["break_dir"]
+        asia_open = row["asia_open"]
 
         # Get bars for this day around the checkpoint times
         bar_query = """
@@ -113,33 +114,33 @@ def run_analysis(db_path=None):
         if bars.empty:
             continue
 
-        bars['ts_utc'] = pd.to_datetime(bars['ts_utc'], utc=True)
+        bars["ts_utc"] = pd.to_datetime(bars["ts_utc"], utc=True)
 
         rec = {
-            'trading_day': td,
-            'entry_price': entry_price,
-            'break_dir': break_dir,
-            'asia_open': asia_open,
-            'outcome': row['outcome'],
-            'pnl_r': row['pnl_r'],
-            'orb_size': row['orb_size'],
+            "trading_day": td,
+            "entry_price": entry_price,
+            "break_dir": break_dir,
+            "asia_open": asia_open,
+            "outcome": row["outcome"],
+            "pnl_r": row["pnl_r"],
+            "orb_size": row["orb_size"],
         }
 
         # Get close at each checkpoint (nearest bar at or before checkpoint)
         for label, (hour, minute) in checkpoints_utc_offsets.items():
             checkpoint_ts = pd.Timestamp(f"{td}T{hour:02d}:{minute:02d}:00+00:00")
-            bars_before = bars[bars['ts_utc'] <= checkpoint_ts]
+            bars_before = bars[bars["ts_utc"] <= checkpoint_ts]
             if not bars_before.empty:
-                close_at = float(bars_before.iloc[-1]['close'])
-                if break_dir == 'long':
+                close_at = float(bars_before.iloc[-1]["close"])
+                if break_dir == "long":
                     mtm = close_at - entry_price
                 else:
                     mtm = entry_price - close_at
-                rec[f'mtm_{label}'] = mtm
-                rec[f'close_{label}'] = close_at
+                rec[f"mtm_{label}"] = mtm
+                rec[f"close_{label}"] = close_at
             else:
-                rec[f'mtm_{label}'] = None
-                rec[f'close_{label}'] = None
+                rec[f"mtm_{label}"] = None
+                rec[f"close_{label}"] = None
 
         results.append(rec)
 
@@ -158,16 +159,18 @@ def run_analysis(db_path=None):
     print("=" * 70)
 
     for label in ["11:15", "11:30", "12:00", "12:30", "13:00"]:
-        col = f'mtm_{label}'
+        col = f"mtm_{label}"
         valid = df[df[col].notna()]
         if valid.empty:
             continue
         mtm = valid[col]
         pct_positive = (mtm > 0).mean()
         pct_negative = (mtm < 0).mean()
-        print(f"  {label} Bris:  N={len(valid):>4}  "
-              f"Mean MTM={mtm.mean():>+.2f}  Median={mtm.median():>+.2f}  "
-              f"+ve={pct_positive:.0%}  -ve={pct_negative:.0%}")
+        print(
+            f"  {label} Bris:  N={len(valid):>4}  "
+            f"Mean MTM={mtm.mean():>+.2f}  Median={mtm.median():>+.2f}  "
+            f"+ve={pct_positive:.0%}  -ve={pct_negative:.0%}"
+        )
 
     # ================================================================
     # Reversal detection: does MTM go from positive to negative?
@@ -177,23 +180,23 @@ def run_analysis(db_path=None):
     print("  How often does a trade that's winning at 11:15 become losing by 12:30?")
     print("=" * 70)
 
-    both = df[df['mtm_11:15'].notna() & df['mtm_12:30'].notna()].copy()
-    winning_early = both[both['mtm_11:15'] > 0]
-    losing_early = both[both['mtm_11:15'] <= 0]
+    both = df[df["mtm_11:15"].notna() & df["mtm_12:30"].notna()].copy()
+    winning_early = both[both["mtm_11:15"] > 0]
+    losing_early = both[both["mtm_11:15"] <= 0]
 
     if len(winning_early) > 0:
-        reversed_by_1230 = (winning_early['mtm_12:30'] <= 0).sum()
-        still_winning = (winning_early['mtm_12:30'] > 0).sum()
+        reversed_by_1230 = (winning_early["mtm_12:30"] <= 0).sum()
+        still_winning = (winning_early["mtm_12:30"] > 0).sum()
         print(f"\n  Winning at 11:15 (N={len(winning_early)}):")
-        print(f"    Still winning at 12:30: {still_winning} ({still_winning/len(winning_early):.0%})")
-        print(f"    Reversed by 12:30:      {reversed_by_1230} ({reversed_by_1230/len(winning_early):.0%})")
+        print(f"    Still winning at 12:30: {still_winning} ({still_winning / len(winning_early):.0%})")
+        print(f"    Reversed by 12:30:      {reversed_by_1230} ({reversed_by_1230 / len(winning_early):.0%})")
 
     if len(losing_early) > 0:
-        recovered_by_1230 = (losing_early['mtm_12:30'] > 0).sum()
-        still_losing = (losing_early['mtm_12:30'] <= 0).sum()
+        recovered_by_1230 = (losing_early["mtm_12:30"] > 0).sum()
+        still_losing = (losing_early["mtm_12:30"] <= 0).sum()
         print(f"\n  Losing at 11:15 (N={len(losing_early)}):")
-        print(f"    Recovered by 12:30: {recovered_by_1230} ({recovered_by_1230/len(losing_early):.0%})")
-        print(f"    Still losing:       {still_losing} ({still_losing/len(losing_early):.0%})")
+        print(f"    Recovered by 12:30: {recovered_by_1230} ({recovered_by_1230 / len(losing_early):.0%})")
+        print(f"    Still losing:       {still_losing} ({still_losing / len(losing_early):.0%})")
 
     # ================================================================
     # Asia open reversion: does price cross back through asia open?
@@ -203,25 +206,29 @@ def run_analysis(db_path=None):
     print("  Does price cross back through Asia open (09:00 Brisbane) by 12:30?")
     print("=" * 70)
 
-    has_asia = df[df['asia_open'].notna() & df['close_12:30'].notna()].copy()
+    has_asia = df[df["asia_open"].notna() & df["close_12:30"].notna()].copy()
     if len(has_asia) > 0:
-        for direction in ['long', 'short']:
-            sub = has_asia[has_asia['break_dir'] == direction]
+        for direction in ["long", "short"]:
+            sub = has_asia[has_asia["break_dir"] == direction]
             if sub.empty:
                 continue
-            if direction == 'long':
+            if direction == "long":
                 # Long break: entry above asia open. Reversal = price drops below asia open
-                started_above = sub[sub['entry_price'] > sub['asia_open']]
+                started_above = sub[sub["entry_price"] > sub["asia_open"]]
                 if len(started_above) > 0:
-                    crossed_back = (started_above['close_12:30'] < started_above['asia_open']).sum()
+                    crossed_back = (started_above["close_12:30"] < started_above["asia_open"]).sum()
                     print(f"\n  {direction.upper()} breaks (entry above Asia open): N={len(started_above)}")
-                    print(f"    Price below Asia open by 12:30: {crossed_back} ({crossed_back/len(started_above):.0%})")
+                    print(
+                        f"    Price below Asia open by 12:30: {crossed_back} ({crossed_back / len(started_above):.0%})"
+                    )
             else:
-                started_below = sub[sub['entry_price'] < sub['asia_open']]
+                started_below = sub[sub["entry_price"] < sub["asia_open"]]
                 if len(started_below) > 0:
-                    crossed_back = (started_below['close_12:30'] > started_below['asia_open']).sum()
+                    crossed_back = (started_below["close_12:30"] > started_below["asia_open"]).sum()
                     print(f"\n  {direction.upper()} breaks (entry below Asia open): N={len(started_below)}")
-                    print(f"    Price above Asia open by 12:30: {crossed_back} ({crossed_back/len(started_below):.0%})")
+                    print(
+                        f"    Price above Asia open by 12:30: {crossed_back} ({crossed_back / len(started_below):.0%})"
+                    )
 
     # ================================================================
     # Mean MTM by outcome: winners vs losers trajectory
@@ -230,22 +237,23 @@ def run_analysis(db_path=None):
     print("MTM TRAJECTORY BY FINAL OUTCOME")
     print("=" * 70)
 
-    for outcome_type in ['win', 'loss', 'scratch']:
-        sub = df[df['outcome'] == outcome_type]
+    for outcome_type in ["win", "loss", "scratch"]:
+        sub = df[df["outcome"] == outcome_type]
         if sub.empty:
             continue
         print(f"\n  {outcome_type.upper()} trades (N={len(sub)}):")
         for label in ["11:15", "11:30", "12:00", "12:30", "13:00"]:
-            col = f'mtm_{label}'
+            col = f"mtm_{label}"
             valid = sub[sub[col].notna()]
             if valid.empty:
                 continue
             mtm = valid[col]
-            print(f"    {label}: Mean={mtm.mean():>+.2f}  Median={mtm.median():>+.2f}  "
-                  f"+ve={( mtm > 0).mean():.0%}")
+            print(f"    {label}: Mean={mtm.mean():>+.2f}  Median={mtm.median():>+.2f}  +ve={(mtm > 0).mean():.0%}")
+
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--db-path", type=Path, default=None)
     args = parser.parse_args()

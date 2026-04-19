@@ -65,12 +65,8 @@ def test_strategy_meta_extracts_human_readable_lane_fields():
 
 def test_legacy_lanes_reconstruct_all_profile_lanes_and_mark_ambiguous_shared_sessions():
     profile = ACCOUNT_PROFILES["topstep_50k_type_a"]
-    mnq_nyse = next(
-        lane for lane in profile.daily_lanes if lane.strategy_id == "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50"
-    )
-    mes_nyse = next(
-        lane for lane in profile.daily_lanes if lane.strategy_id == "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12"
-    )
+    mnq_nyse = next(lane for lane in profile.daily_lanes if lane.strategy_id == "MNQ_NYSE_OPEN_E2_RR1.0_CB1_OVNRNG_50")
+    mes_nyse = next(lane for lane in profile.daily_lanes if lane.strategy_id == "MES_NYSE_OPEN_E2_RR2.0_CB1_COST_LT12")
 
     cards = _legacy_lanes_to_lane_cards(
         lanes={
@@ -179,10 +175,7 @@ def test_profile_session_ambiguity_passes_for_shared_session_profiles():
 
 
 def test_choose_operator_profile_prefers_running_state_then_first_active_auto_profile():
-    assert (
-        _choose_operator_profile(None, {"account_name": "profile_topstep_50k_mes_auto"})
-        == "topstep_50k_mes_auto"
-    )
+    assert _choose_operator_profile(None, {"account_name": "profile_topstep_50k_mes_auto"}) == "topstep_50k_mes_auto"
     assert _choose_operator_profile(None, {}) == "topstep_50k_mnq_auto"
 
 
