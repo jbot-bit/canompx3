@@ -506,11 +506,24 @@ def enrich_scores_with_dsr_diagnostics(
       - var_sr_by_em from canonical experimental_strategies per EM
       - n_eff_raw from edge_families distinct family_hash count
       - per-lane sharpe/sample_size/skew/kurt from validated_setups
-    The Bailey-LdP 2014 Eq 9 N̂ correction
-    (`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`
-    Eq 9, page 14-15) is computed as `N̂ = ρ̂ + (1-ρ̂)·M` where ρ̂ is the
-    mean off-diagonal entry of `pairs` over `scores` and M = n_eff_raw.
-    If `pairs` is None, ρ̂ defaults to 0 and N̂ = M (raw fallback).
+
+    Two DSR framings are computed per lane, one per selection layer:
+      - `dsr_at_n_eff_raw` — VALIDATION-LAYER. Uses M=n_eff_raw, no
+        ρ̂ correction. Mirrors validator's framing exactly: "noise
+        floor across all validated families." This is what `dsr_score`
+        aliases.
+      - `dsr_at_n_hat_eq9` — ALLOCATION-LAYER. Uses Eq 9 with
+        INTERNALLY CONSISTENT population per Bailey-LdP 2014 lines 85-92
+        (`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`
+        — line 85 establishes M as the dependent-trial count being
+        deflated; line 87 bounds ρ ∈ (-1/(M-1), 1] requiring M > 1;
+        line 92 gives the formula `N̂ = ρ̂ + (1 - ρ̂)·M`):
+        ρ̂ = mean off-diagonal correlation among deployable pairs in
+        `pairs`, M = number of distinct deployable strategy_ids
+        appearing in those pairs. This is "noise floor for selecting
+        AMONG deployable allocation candidates."
+        If `pairs` is empty or m_deployable < 2, falls back to
+        n_hat_eq9 = n_eff_raw with avg_rho_hat = 0.
 
     DSR is INFORMATIONAL per `trading_app/dsr.py` line 35; populated
     fields are NOT consumed by `_effective_annual_r` or any selection
@@ -591,18 +604,48 @@ def enrich_scores_with_dsr_diagnostics(
     finally:
         con.close()
 
-    # Bailey-LdP 2014 Eq 9: N̂ = ρ̂ + (1-ρ̂)·M, with ρ̂ = mean off-diagonal pair rho
+    # Bailey-LdP 2014 Eq 9: N̂ = ρ̂ + (1-ρ̂)·M, with ρ̂ = mean off-diagonal
+    # pair rho. Per the literature extract (lines 85-92) ρ̂ and M must
+    # come from the same trial set — line 85 establishes M as the
+    # dependent-trial count being deflated to N̂; line 87 names ρ̂ the
+    # "average correlation between the trials"; line 92 gives the formula.
+    # We therefore derive M from the deployable candidate set that
+    # produced ρ̂ (the strategy_ids appearing in `pairs`), not from
+    # `n_eff_raw` (which is edge_families-wide and represents the
+    # validation-layer selection bias).
+    #
+    # This makes Eq 9 the ALLOCATOR-LAYER DSR ("noise floor for selection
+    # AMONG deployable candidates"), distinct from `dsr_at_n_eff_raw`
+    # which is the validation-layer DSR ("noise floor across all
+    # validated families"). Both are reported so the operator sees the
+    # noise floor at each selection layer.
     if pairs:
         eligible_ids = {s.strategy_id for s in scores}
-        rhos = [
-            rho for (a, b), rho in pairs.items()
-            if a in eligible_ids and b in eligible_ids
-        ]
+        eligible_pairs = {
+            key: rho for key, rho in pairs.items()
+            if key[0] in eligible_ids and key[1] in eligible_ids
+        }
+        rhos = list(eligible_pairs.values())
         avg_rho_hat = sum(rhos) / len(rhos) if rhos else 0.0
+        # M_deployable = distinct strategy_ids appearing in eligible pairs.
+        # Per literature line 87 ("ρ ∈ (-1/(M-1), 1], with M>1 for a
+        # correlation to exist"), ρ̂ is undefined for M < 2.
+        deployable_ids: set[str] = set()
+        for a, b in eligible_pairs.keys():
+            deployable_ids.add(a)
+            deployable_ids.add(b)
+        m_deployable = len(deployable_ids)
     else:
         avg_rho_hat = 0.0
+        m_deployable = 0
     avg_rho_hat = max(0.0, min(1.0, avg_rho_hat))  # clamp per Eq 9 domain
-    n_hat_eq9 = avg_rho_hat + (1.0 - avg_rho_hat) * n_eff_raw
+    if m_deployable >= 2:
+        n_hat_eq9 = avg_rho_hat + (1.0 - avg_rho_hat) * m_deployable
+    else:
+        # Insufficient deployable candidates for Eq 9. Fall back to raw N
+        # so the field is always populated; flagged via avg_rho_hat=0
+        # and m_deployable=0/1 in globals for operator visibility.
+        n_hat_eq9 = float(n_eff_raw)
 
     for s in scores:
         inputs = per_lane.get(s.strategy_id)
@@ -625,6 +668,7 @@ def enrich_scores_with_dsr_diagnostics(
     return {
         "n_eff_raw": n_eff_raw,
         "n_hat_eq9": round(n_hat_eq9, 4),
+        "m_deployable": m_deployable,
         "avg_rho_hat": round(avg_rho_hat, 4),
         "var_sr_em": {k: round(v, 6) for k, v in var_sr_em.items()},
     }
@@ -1035,11 +1079,20 @@ def save_allocation(
         data["dsr_diagnostics"] = {
             "n_eff_raw": dsr_globals.get("n_eff_raw"),
             "n_hat_eq9": dsr_globals.get("n_hat_eq9"),
+            "m_deployable": dsr_globals.get("m_deployable"),
             "avg_rho_hat": dsr_globals.get("avg_rho_hat"),
             "var_sr_em": dsr_globals.get("var_sr_em"),
             "doctrine": "DSR is INFORMATIONAL per trading_app/dsr.py:35; "
                         "diagnostic only, not consumed by selection.",
-            "lit_ref": "Bailey-Lopez de Prado 2014 Eq 9 N_hat = rho_hat + (1-rho_hat)*M",
+            "lit_ref": (
+                "Bailey-Lopez de Prado 2014 Eq 9 N_hat = rho_hat + (1-rho_hat)*M. "
+                "TWO selection layers reported: "
+                "(1) dsr_at_n_eff_raw uses M=n_eff_raw from edge_families "
+                "(validation-layer noise floor, no rho correction); "
+                "(2) dsr_at_n_hat_eq9 uses M=m_deployable with rho_hat "
+                "averaged across deployable pairs (allocation-layer noise "
+                "floor, internally consistent population per literature lines 85-92)."
+            ),
         }
 
     path.parent.mkdir(parents=True, exist_ok=True)
