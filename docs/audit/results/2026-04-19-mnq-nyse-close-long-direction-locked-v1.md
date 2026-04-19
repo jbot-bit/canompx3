@@ -9,13 +9,15 @@
 
 ## Family verdict
 
-**PROMOTE — 2/3 apertures pass all required gates strict.**
+**CLEAN PROMOTE: 1 aperture (O15). CONDITIONAL PROMOTE: 1 aperture (O5). FAIL: 1 aperture (O30).**
 
-| Aperture | N | avg_r | t | BH | C4 | C6 | C7 | C8 | C9 | Parity | Year | Boot | Corr | **STRICT** |
-|---:|---:|---:|---:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| 5 | 740 | +0.1180 | 3.60 | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | **PASS** |
-| 15 | 546 | +0.1792 | 4.66 | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | **PASS** |
-| 30 | 440 | +0.1915 | 4.50 | Y | Y | **N** | Y | Y | Y | Y | Y | Y | Y | **FAIL** (C6 only) |
+> **Correction (post code-review 2026-04-19):** earlier draft of this MD claimed "PROMOTE 2/3 apertures pass all required gates strict." That framing ignored `pre_registered_criteria.md` Criterion 4 addendum which blocks acceptance of any 3.00 ≤ t < 3.79 with-theory candidate until the HLZ 2015 stub is promoted from INDIRECT to DIRECT. O5 at t=3.60 falls in that band and is therefore CONDITIONAL, not clean PROMOTE. Only O15 (t=4.66 ≥ 3.79) is doctrinally unconditional.
+
+| Aperture | N | avg_r | t | BH | C4 (≥3.00) | C4-strict (≥3.79) | C6 | C7 | C8 | C9 | Parity | Year | Boot | Corr | **STRICT** |
+|---:|---:|---:|---:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| 5 | 740 | +0.1180 | 3.60 | Y | Y | **N** | Y | Y | Y | Y | Y | Y | Y | Y | **CONDITIONAL** (on HLZ stub promotion) |
+| 15 | 546 | +0.1792 | 4.66 | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | **PASS (clean)** |
+| 30 | 440 | +0.1915 | 4.50 | Y | Y | Y | **N** | Y | Y | Y | Y | Y | Y | Y | **FAIL** (C6 only) |
 
 ## Per-aperture detail (canonical pre-2026)
 
@@ -123,9 +125,23 @@ All three candidate apertures on MNQ NYSE_CLOSE show essentially zero overlap wi
 | Correlation (adversarial) | Jaccard < 0.70 vs all 36 live MNQ | Y | Y | Y |
 | **STRICT pass** | all required | **Y** | **Y** | **N (C6)** |
 
+## ADR: C8 2026-gate posture (added post code-review 2026-04-19)
+
+Criterion 8 (`pre_registered_criteria.md:162-168`) requires "OOS ExpR ≥ 0 AND OOS ExpR ≥ 0.40 × IS ExpR" and is enumerated as a required acceptance gate. This pre-reg applies it as a PRE-REGISTERED PASS/FAIL — the 0.40 ratio and positive-ExpR thresholds were committed in the YAML before any 2026 data was read; no post-hoc threshold tuning is permitted.
+
+This is in tension with `.claude/rules/strategy-awareness.md` which states "2026 holdout is SACRED. 3 pre-registered strategies only" (a stricter posture). Resolution: pre_registered_criteria.md v2.7 Amendment (2026-04-08) declares 2026 as sacred OOS, and v2.9 locked Criterion 8 as a gate applied at pre-registered thresholds. Pre-registered gate application ≠ tuning. Strategy-awareness.md's "3 pre-registered strategies only" language predates the v2.7 amendment and is a narrower contingency — reconciled by this ADR.
+
+**If C8 is later re-scoped to "read-only diagnostic"** (no gate): re-run this pre-reg with C8 downgraded to informational. Do NOT silently drop the gate from code.
+
 ## Verdict and recommended disposition
 
-**O5** and **O15** apertures PROMOTE under all required gates. **O30** FAILS the C6 pre-registered walk-forward efficiency gate (WFE=0.448 < 0.50) and is NOT eligible for promotion despite passing every other gate. O30's weaker WFE is driven by 2024 (-0.081) and a concentrated single-year contribution from 2020; the pattern is real but does not meet the locked walk-forward threshold.
+**O15** is the clean PROMOTE survivor — all required gates pass including Chordia-strict t ≥ 3.79 (t=4.66). No conditionality.
+
+**O5** is CONDITIONAL. Passes all gates EXCEPT C4-strict (t=3.60, band [3.00, 3.79)). Per `pre_registered_criteria.md:116` addendum, acceptance is blocked until the HLZ 2015 stub at `docs/institutional/literature/harvey_liu_zhu_2015_cross_section.md` is promoted from INDIRECT to DIRECT. Two unblock paths:
+  1. Extract the actual Harvey-Liu-Zhu 2015 paper content from its source PDF into the stub (promote to Tier 1 verbatim grounding), then re-visit this result with O5 reclassified to PASS.
+  2. Retighten this pre-reg's t-threshold to 3.79 (Chordia-strict, no theory exemption) and accept a 1-aperture PROMOTE outcome.
+
+**O30** FAILS the C6 pre-registered walk-forward efficiency gate (WFE=0.448 < 0.50) and is NOT eligible for promotion despite passing every other gate. O30's weaker WFE is driven by 2024 (-0.081) and a concentrated single-year contribution from 2020; the pattern is real but does not meet the locked walk-forward threshold.
 
 **Promotion artifact naming** (pre-reg recommendation): `MNQ_NYSE_CLOSE_E2_RR1.0_CB{5|15}_DIR_LONG` using the existing `DIR_LONG` filter from `trading_app/config.py:3050`. Follows the TOKYO_OPEN / MNQ SINGAPORE_OPEN live precedent of direction-locking at the filter layer rather than inventing a new strategy_id convention.
 

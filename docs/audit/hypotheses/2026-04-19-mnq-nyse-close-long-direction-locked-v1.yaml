@@ -27,12 +27,24 @@ motivation: |
 # ---------------------------------------------------------------------------
 theory:
   citation:
-    - Fitschen 2013 Chapter 3 — intraday trend-follow on stock indices: the
-      late-session (4pm ET / 7am Brisbane next day) window carries directional
-      closing flows that bias equity-index futures toward continuation rather
-      than mean-reversion.
-    - Extract file: docs/institutional/literature/fitschen_2013_intraday.md (stub
-      if not yet grounded, flagged in pre-reg integrity check).
+    - Fitschen 2013 Chapter 3 ("Path of Least Resistance") — grounds
+      intraday trend-follow on stock indices. Table 3.8 p.41 shows Nasdaq
+      hourly trend-follow outperforms baseline by +70% per day ("Stocks:
+      counter-trend on daily, trend-follow on intraday"). Fitschen's
+      mechanism (pp 42-43): trader-emotion-driven herd behavior supports
+      intraday momentum on equity-index futures.
+    - Extract file: docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+      (extracted 2026-04-15; verified this session 2026-04-19).
+  t_threshold_grounding:
+    - t >= 3.00 with-theory per pre_registered_criteria.md Criterion 4:
+      "Harvey-Liu-Zhu 2015 — currently indirect Tier 1 via Chordia et al
+      2018 p5 quote, see stub at literature/harvey_liu_zhu_2015_cross_section.md".
+    - Criterion 4 addendum: "Promote t >= 3.00 grounding from INDIRECT to
+      DIRECT before any 3.00 <= t < 3.79 with-theory candidate is accepted."
+    - **Implication for this pre-reg:** any aperture with 3.00 <= t < 3.79
+      is CONDITIONAL on HLZ stub promotion. O5 at t=3.60 falls in this
+      band and is accepted conditionally. Apertures at t >= 3.79 pass
+      regardless of HLZ stub status.
   mechanism: |
     US cash equity close (4pm ET) is a liquidity event. Market-on-close orders
     are directional and imbalance is public via the NYSE imbalance feed pre-
@@ -94,7 +106,7 @@ hypotheses:
 canonical_sources:
   - gold.db::orb_outcomes
   - gold.db::deployable_validated_setups  # correlation check only
-  - pipeline.cost_model.COST_SPECS         # pnl_r is cost-netted per outcome_builder.py:393
+  - pipeline.cost_model.COST_SPECS         # pnl_r is cost-netted: pipeline/cost_model.py:443 R = (pnl_points * point_value - total_friction) / risk_in_dollars; outcome_builder.py calls to_r_multiple() at lines 112, 188, 330, 383
   - pipeline.paths.GOLD_DB_PATH
 banned_sources:
   - validated_setups (derived)
