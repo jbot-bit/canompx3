@@ -231,3 +231,60 @@ def test_sr_code_paths_include_shared_derived_state():
 
     assert any(path.name == "sr_monitor.py" for path in paths)
     assert any(path.name == "derived_state.py" for path in paths)
+
+
+def test_run_monitor_reports_sr_at_alarm_not_at_stream_end():
+    """Contract: when a stream crosses threshold mid-way and then recovers,
+    the monitor breaks at first-crossing, reports ALARM, and the persisted
+    sr_stat is the alarm-trigger value (not the post-recovery final value).
+
+    Regression guard for the F-3 reconciliation in
+    docs/audit/results/2026-04-19-sr-monitor-stream-audit.md: a path-walk
+    reconstruction that computes final sr_stat without breaking on alarm
+    can disagree with the live monitor by multiple orders of magnitude
+    (e.g. NYSE_OPEN COST_LT12 on 2026-04-19: live 32.69 ALARM vs
+    audit 0.82 CONTINUE — same math, different reporting mode).
+
+    If this test fails, the run_monitor loop semantic has drifted and any
+    downstream consumer that treats `sr_stat` as "current health" may be
+    misreading alarm records as active signals (or vice versa).
+    """
+    monitor = ShiryaevRobertsMonitor(
+        expected_r=0.1, std_r=1.0, threshold=10.0, delta=-1.0
+    )
+
+    # Stream: adverse run drives SR above threshold, then recovery pulls it back.
+    adverse_run = [-1.0] * 20
+    recovery_run = [2.0] * 30
+    stream = adverse_run + recovery_run
+
+    status = "NO_DATA"
+    alarm_trade = None
+    for i, trade_r in enumerate(stream, 1):
+        if monitor.update(trade_r):
+            status = "ALARM"
+            alarm_trade = i
+            break
+    else:
+        if stream:
+            status = "CONTINUE"
+
+    assert status == "ALARM", "Stream must cross threshold for this regression guard"
+    assert alarm_trade is not None and alarm_trade <= len(adverse_run)
+    assert monitor.sr_stat >= monitor.threshold, (
+        "Reported sr_stat at break must be the alarm-trigger value "
+        f"(got {monitor.sr_stat:.3f} vs threshold {monitor.threshold:.2f})"
+    )
+
+    # Confirm the "post-recovery final" value would be much smaller if the
+    # loop had continued — this is what the audit path-walk computed.
+    continued = ShiryaevRobertsMonitor(
+        expected_r=0.1, std_r=1.0, threshold=10.0, delta=-1.0
+    )
+    for trade_r in stream:
+        continued.update(trade_r)
+    assert continued.sr_stat < monitor.sr_stat, (
+        "Post-recovery final sr_stat should be below the alarm-trigger value; "
+        "if they are equal, the recovery branch of this regression guard is "
+        "not exercising the reporting-mode difference it is meant to cover."
+    )

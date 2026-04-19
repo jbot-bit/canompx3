@@ -89,3 +89,44 @@ Confirmed: my original "OOS > stored → false alarm" reasoning on NYSE_OPEN and
 ---
 
 **Verdict:** Phase 3.1 reaches a stronger conclusion than the original audit: the 4 SR alarms are ~path-correct even after Mode-B baseline contamination is corrected. Only NYSE_OPEN COST_LT12 has a stream/state discrepancy worth investigating. Campaign plan Phase 3.2 rationale requires re-framing (from "false-alarm fix" to "EV-allocation correctness"), not cancellation.
+
+---
+
+## Addendum — F-3 reconciled (2026-04-19 session-2)
+
+**Status:** F-3 "unreconciled discrepancy" is RESOLVED. It was a reporting-mode mismatch in the audit script, not a live-monitor bug. O-2 and O-3 from Open items are no longer needed.
+
+**PREMISE → TRACE → EVIDENCE:**
+
+- **PREMISE:** live monitor reported `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` as ALARM with `SR=32.69`; this audit's path-walk reconstruction reported `SR=0.82` CONTINUE on the same N=71 stream with the same mu0=0.087 / sigma=0.993 / threshold=31.96.
+- **TRACE (executed not read):** `trading_app/sr_monitor.py:278-282` — the `run_monitor` loop calls `monitor.update(trade_r)` and `break`s as soon as `update()` returns True (first alarm crossing). Thus the printed / persisted `sr_stat` at `sr_monitor.py:288` and `:298` is the value **at the alarm-trigger trade**, not at end-of-stream.
+- **EVIDENCE (Python reproduction using canonical `_load_strategy_outcomes` stream and stored baseline):**
+
+  | Quantity | Value |
+  |---|---:|
+  | N | 71 |
+  | mu0 | 0.0870 |
+  | sigma (from `_compute_std_r`) | 0.9931 |
+  | threshold (calibrated ARL~60) | 31.96 |
+  | max sr_stat during stream | 32.688 |
+  | final sr_stat (post-recovery) | 0.811 |
+  | `alarm_triggered` | True |
+
+  The live monitor's reported `SR=32.69` is `max_during`; the audit's `SR=0.82` is `final`. Same math, different reporting mode. The stream did transiently cross threshold and then recover — the monitor correctly identifies this as an alarm event per Shiryaev-Roberts definition (alarm on first crossing, lane then moves to manual review).
+
+**CONCLUSION:**
+1. Lane is correctly alarmed. C11/C12 refresh verdict stands. No reactivation.
+2. No live-pipeline bug. No stream / filter-definition divergence.
+3. Audit's path-walk reconstruction should have reported `max_during`, not `final`, to be directly comparable with `run_monitor`'s break-on-alarm output. The disagreement never represented a real divergence.
+4. Regression guard added at `tests/test_trading_app/test_sr_monitor.py::test_run_monitor_reports_sr_at_alarm_not_at_stream_end` to lock in the break-on-alarm reporting contract — protects downstream consumers who read persisted `sr_stat` as lane-health from a silent future refactor.
+
+**Open items update:**
+- **O-1** (run `run_monitor` live) — DONE. Output above.
+- **O-2** (compare `_load_strategy_outcomes` vs direct `orb_outcomes`) — UNNECESSARY. Streams match; the reporting-mode was the only variable.
+- **O-3** (check `deployable_validated_relation` filter) — UNNECESSARY. Same reason.
+
+**Consumer-facing semantic caveat (non-blocking):** the persisted `sr_stat` field in `data/state/sr_state.json` is an alarm-event record, not a "current health" gauge. If a future consumer wants "current" SR after an alarm, a separate `sr_stat_continued` column would need to be added. Out of scope for this thread.
+
+**Session-2 artifacts:**
+- `tests/test_trading_app/test_sr_monitor.py::test_run_monitor_reports_sr_at_alarm_not_at_stream_end` — regression guard.
+- No production code touched. No drift impact (104 passed / 0 skipped / 6 advisory before and after).
