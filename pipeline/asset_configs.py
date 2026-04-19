@@ -446,10 +446,7 @@ def get_asset_config(instrument: str) -> dict:
     instrument = instrument.upper()
 
     if instrument not in ASSET_CONFIGS:
-        raise ValueError(
-            f"Unknown instrument '{instrument}'. "
-            f"Supported instruments: {sorted(ASSET_CONFIGS.keys())}"
-        )
+        raise ValueError(f"Unknown instrument '{instrument}'. Supported instruments: {sorted(ASSET_CONFIGS.keys())}")
 
     return ASSET_CONFIGS[instrument]
 
@@ -478,10 +475,7 @@ def require_dbn_available(instrument: str) -> Path:
         )
 
     if not dbn_path.exists():
-        raise FileNotFoundError(
-            f"DBN file not found for instrument '{instrument}'. "
-            f"Expected: {dbn_path}"
-        )
+        raise FileNotFoundError(f"DBN file not found for instrument '{instrument}'. Expected: {dbn_path}")
 
     if config["minimum_start_date"] is None:
         raise ValueError(
