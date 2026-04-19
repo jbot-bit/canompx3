@@ -77,7 +77,7 @@ Not above Chordia t>=3.00, but:
 
 **Caveat:** The 2026-04-19 MES broader scan already tested H2 MES CME_PRECLOSE COST_LT12 long RR1.0 (t=2.67, KILL), H3 MES CME_PRECLOSE ATR_P70 long RR1.0 (t=2.59, KILL). H35 CMX_G8_L RR1.5 is in a related family that's been chipped at multiple angles.
 
-**Action:** Optional shadow pre-reg. Low priority compared to Angles 1 and 2. A conservative read says "just track in the regular regime-check" — not every positive-near-miss needs a formal pre-reg.
+**Action (SUPERSEDED 2026-04-19 second-pass audit):** DOWNGRADED to "monitor via regime-check only; do NOT pre-register." Rationale: per `docs/audit/results/2026-04-19-second-pass-multi-angle-audit.md` Finding 3, the unfiltered MES COMEX_SETTLE long RR1.5 parent lane is negative in 6 of 8 years, and Finding 1 shows COMEX_SETTLE long is session-wide STABLE (no regime tailwind to ride). No mechanism case for a formal Pathway A pre-reg on this cell.
 
 ---
 
