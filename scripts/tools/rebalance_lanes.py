@@ -120,8 +120,10 @@ def main() -> None:
         # Diagnostic only; does NOT affect ranking or selection.
         dsr_globals = enrich_scores_with_dsr_diagnostics(scores, corr_matrix)
         print(
-            f"  DSR diagnostics: n_eff_raw={dsr_globals['n_eff_raw']}, "
-            f"n_hat_eq9={dsr_globals['n_hat_eq9']}, avg_rho={dsr_globals['avg_rho_hat']}"
+            f"  DSR diagnostics: validation-layer M={dsr_globals['n_eff_raw']}, "
+            f"allocation-layer M={dsr_globals['m_deployable']} "
+            f"(rho_hat={dsr_globals['avg_rho_hat']}, "
+            f"n_hat_eq9={dsr_globals['n_hat_eq9']})"
         )
 
         allocation = build_allocation(
