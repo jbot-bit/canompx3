@@ -227,10 +227,7 @@ def test_profile_session_ambiguity_passes_for_shared_session_profiles():
 
 
 def test_choose_operator_profile_prefers_running_state_then_first_active_auto_profile():
-    assert (
-        _choose_operator_profile(None, {"account_name": "profile_topstep_50k_mes_auto"})
-        == "topstep_50k_mes_auto"
-    )
+    assert _choose_operator_profile(None, {"account_name": "profile_topstep_50k_mes_auto"}) == "topstep_50k_mes_auto"
     assert _choose_operator_profile(None, {}) == "topstep_50k_mnq_auto"
 
 
