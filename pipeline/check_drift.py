@@ -5809,27 +5809,29 @@ CHECKS = [
 # Checks measured >0.3s by scripts/tools/profile_check_drift.py (2026-04-19).
 # `--fast` mode (used by post-edit hook) skips these for sub-5s real-time coverage.
 # Pre-commit hook + CI run the full set — no coverage loss end-to-end.
-SLOW_CHECK_LABELS = frozenset({
-    "All imports resolve",
-    "Generated task views preserve strict truth-class boundaries",
-    "ENTRY_MODELS sync",
-    "Phase 4 discovery SHA integrity (stamped hypothesis_file_sha must reference real file)",
-    "Canonical Claude client source (claude_client.py is the only place for Claude model IDs + anthropic.Anthropic)",
-    "SQL column convention: pipeline tables use 'symbol', trading app tables use 'instrument'",
-    "Timezone hygiene",
-    "Canonical orb_utc_window source (only pipeline/dst.py may define it)",
-    "validated_setups writes stay on canonical allowlist",
-    "No hardcoded scratch DB defaults in active code",
-    "family_rr_locks JOIN key completeness (6-column key in every JOIN)",
-    "No old session names in active code",
-    "Trading app hardcoded paths",
-    "No deprecated C:/db/gold.db in docstring usage examples",
-    "No raw orb_active reads outside asset_configs.py",
-    "@canonical-source annotations point to existing files",
-    "Naive datetime detection",
-    "No old fixed-clock session names in Python source",
-    "Trading app schema-query consistency",
-})
+SLOW_CHECK_LABELS = frozenset(
+    {
+        "All imports resolve",
+        "Generated task views preserve strict truth-class boundaries",
+        "ENTRY_MODELS sync",
+        "Phase 4 discovery SHA integrity (stamped hypothesis_file_sha must reference real file)",
+        "Canonical Claude client source (claude_client.py is the only place for Claude model IDs + anthropic.Anthropic)",
+        "SQL column convention: pipeline tables use 'symbol', trading app tables use 'instrument'",
+        "Timezone hygiene",
+        "Canonical orb_utc_window source (only pipeline/dst.py may define it)",
+        "validated_setups writes stay on canonical allowlist",
+        "No hardcoded scratch DB defaults in active code",
+        "family_rr_locks JOIN key completeness (6-column key in every JOIN)",
+        "No old session names in active code",
+        "Trading app hardcoded paths",
+        "No deprecated C:/db/gold.db in docstring usage examples",
+        "No raw orb_active reads outside asset_configs.py",
+        "@canonical-source annotations point to existing files",
+        "Naive datetime detection",
+        "No old fixed-clock session names in Python source",
+        "Trading app schema-query consistency",
+    }
+)
 
 
 def main():
