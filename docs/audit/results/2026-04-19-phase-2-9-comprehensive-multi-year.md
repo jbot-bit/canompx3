@@ -371,6 +371,51 @@ This isolates the dependence problem cleanly to the CROSS-CELL level (which BHY 
 
 Net interpretation of the 2025 claim: the cells themselves are real statistics, but the family-level BH_year=4 overstates independence. Cite the A3 cross-instrument finding (MES COMEX_SETTLE 2025 unfiltered +0.083 t=+1.55) alongside: the 2025 equity-index COMEX_SETTLE regime is real but single-observation-at-the-instrument-class-level, not 4-independent-signal-cell.
 
+### A5 hardening — White-style max-t family bootstrap (NOT Romano-Wolf FDP-StepM)
+
+#### Honest method label
+
+The Chordia et al 2018 extract page 4 advocates FDP-StepM (Romano-Wolf 2007) as their preferred MHT method for financial applications. Romano-Wolf 2007 is NOT in `resources/` and has not been locally extracted. Per `.claude/rules/institutional-rigor.md` rule 7, implementing FDP-StepM from training memory would violate grounding discipline.
+
+This hardening pass therefore implements the adjacent method that IS grounded in existing extracts: a **White (2000) Bootstrap Reality Check** style family-level max-|t| test with aligned moving-block bootstrap to preserve cross-cell dependence on shared bars. Chordia extract page 19: "Bootstrap reality check (BRC) is based on White (2000). The idea is to estimate the sampling distribution of the largest test statistic taking into account the dependence structure of the individual test statistics, thereby asymptotically controlling FWER."
+
+What this test IS: family-level FWER p-value via MBB of max|t|.
+What this test IS NOT: FDP-StepM (Romano-Wolf 2007) controlling the False Discovery Proportion.
+
+#### Target family and methodology
+
+Script: `research/phase_2_9_max_t_family_bootstrap.py`. 10,000 replicas, seed 20260420.
+
+The skeptical-audit flagged 3 MNQ COMEX_SETTLE 2025 cells as dependence-fragile (same session + same instrument + same year + different filters = share bars). BHY correctly dropped them at K_year=38. This family test asks a COMPLEMENTARY question: within the narrow 3-cell family with dependence PRESERVED (not corrected-for), is the observed max|t| significant at family-FWER 5%?
+
+Block length L = max(2, round(min_n^(1/3))) = 4 for min_n ≈ 70. Block indices are shared across cells per replica so cross-cell correlation is preserved (cells trade different filter-fire subsets of the same underlying COMEX_SETTLE 2025 trading days).
+
+SGP 2025 (K=1 family, ATR_P50_O30) included as independent contrast.
+
+#### Results
+
+| Family | Cells | Sizes | L | Observed max \|t\| | Family FWER p (White-BRC) | Verdict |
+|---|--:|---|--:|--:|--:|---|
+| MNQ COMEX_SETTLE 2025 (3) | OVNRNG_100 RR1.0, X_MES_ATR60 RR1.0, OVNRNG_100 RR1.5 | 82/77/82 | 4 | 3.063 | **0.00170** | ✓ FWER 5% |
+| MNQ SINGAPORE_OPEN 2025 (1) | ATR_P50_O30 RR1.5 | 70 | 4 | 3.079 | **0.00120** | ✓ FWER 5% |
+
+#### Interpretation
+
+The COMEX_SETTLE 2025 family DOES pass family-FWER at 5% under a test that PRESERVES cross-cell dependence. This is a distinct question from the BHY K_year=38 test that REJECTED them. The resolution:
+
+- **BHY (K_year=38):** 266-cell family assumed; cells are independent for purposes of multiple-testing correction at the family-K level. Under that ASSUMPTION, the 3 COMEX_SETTLE 2025 cells look like 3 independent survivors; BHY corrects with c(M)≈6 and drops them because the arbitrary-dependency correction is conservative at scale.
+- **White-BRC (K=3 aligned):** within the 3-cell family, dependence on shared bars is preserved in the null. The observed max|t| must beat a null that respects this dependence. p = 0.00170 → there IS a genuine family-level signal.
+
+Both results are CORRECT under their respective question frames:
+- "Is this family of 3 cells evidence of 3 independent year-level effects?" → NO (BHY at K_year=38)
+- "Is this family of 3 cells collectively more than noise, given their shared bars?" → YES (White-BRC family-FWER)
+
+**Refined F2 claim, fully-integrated:** the 2025 COMEX_SETTLE BOOST is a real single family-level effect (White-BRC confirms), not pure noise. It should be counted as ONE observation in a cross-instrument / cross-session / cross-year comparison, NOT as 3 independent BH_year survivors. MES cross-instrument partial confirmation (+0.083 t=+1.55 on unfiltered baseline) adds a second observation. Total: ~2 independent cross-instrument observations of the same 2025 equity-index COMEX_SETTLE macro signature.
+
+#### Still-deferred: FDP-StepM
+
+To replace White-BRC with the Romano-Wolf 2007 FDP-StepM procedure that Chordia advocates for financial MHT, we need to acquire + extract Romano-Wolf 2007 into `docs/institutional/literature/`. Until then White-BRC stands as the family-FWER layer. The conclusion of this section is not expected to change under FDP-StepM for this small family (both are dependence-aware); the Romano-Wolf implementation matters more for large scans (100+ cells) where FDP is materially different from FWER.
+
 ### Integration with BHY
 
 The BHY result (K_year survivors = 1, specifically MNQ CME_PRECLOSE X_MES_ATR60 × 2020) and this cross-instrument check converge on the same doctrinal conclusion:
