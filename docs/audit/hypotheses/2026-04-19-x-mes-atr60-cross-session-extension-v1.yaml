@@ -1,0 +1,191 @@
+# Hypothesis Registry — X_MES_ATR60 cross-session extension v1
+#
+# Locked:      2026-04-19T22:30:00+10:00
+# Author:      Phase 2.6 stage, approved 2026-04-19 by user
+# Committing commit hash: TO_FILL_AFTER_COMMIT
+# Data horizon: 6.65yr clean MNQ real-micro 2019-05-06+
+# Intended discovery holdout: 2026-01-01 (HOLDOUT_SACRED_FROM)
+#
+# Origin: Phase 2.5 portfolio subset-t sweep (commit 051c2851) identified
+# X_MES_ATR60 as Tier-1 dominant filter class (3 of 9 Chordia-PASS lanes).
+# Partial session coverage (passes on COMEX_SETTLE both RRs + CME_PRECLOSE
+# RR1.0; fails on NYSE_OPEN both RRs + US_DATA_1000 RR1.0) suggests
+# mechanism is US-equity-session-dependent. This pre-reg extends to
+# currently-untested US-session cells.
+#
+# Supersedes: docs/audit/hypotheses/2026-04-19-x-mes-atr60-cross-session-extension-stub.md
+# (stub deleted on lock)
+
+metadata:
+  name: "x-mes-atr60-cross-session-extension-v1"
+  purpose: |
+    Test X_MES_ATR60 (cross-asset MES ATR-60 regime conditioner) on 6 MNQ
+    cells where it is currently untested but where theory supports
+    extension. MES must be actively trading during the session for the
+    mechanism to apply; all 6 cells are US-session-aligned.
+
+  date_locked: "2026-04-19T22:30:00+10:00"
+  data_horizon_years_clean: 6.65
+  data_horizon_years_proxy: 0
+  data_source: "real CME Micro E-mini Nasdaq-100 futures 2019-05-06 onwards"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 6
+  pathway: "individual"
+  testing_mode: "individual"
+
+  bailey_compliance:
+    trials: 6
+    min_btl_required_years: 0.006  # 2*ln(6)/E[max_N]^2 trivial at N~300 per cell
+    available_years: 6.65
+    status: "PASS"
+
+  testing_discipline:
+    mandatory_downstream_gates_non_waivable:
+      - C6  # WFE >= 0.50
+      - C8  # 2026 OOS direction-match (informational since OOS N will be small)
+      - C9  # No era ExpR < -0.05 with N >= 50
+    deferred_to_deploy_gate:
+      - C11  # Account-death MC
+      - C12  # SR monitor
+
+  upstream_discovery_provenance:
+    role: PROVENANCE_ONLY
+    discovery_source: "Phase 2.5 portfolio subset-t sweep Tier-1 finding on X_MES_ATR60"
+    discovery_commit: "051c2851"
+    discovery_doc: "docs/audit/results/2026-04-19-portfolio-subset-t-sweep.md"
+    discovery_K: 38  # 38 lanes in the original sweep
+    note: |
+      Phase 2.5 identified 3 cells passing Chordia on X_MES_ATR60. This
+      pre-reg tests 6 NEW cells (not in the original 38 lanes). The K=38
+      from discovery is PROVENANCE_ONLY — the current 6-cell family has
+      its own K=6 independent of the discovery sample.
+
+hypotheses:
+  - id: 1
+    name: "MNQ CME_PRECLOSE X_MES_ATR60 RR1.5 long"
+    theory_citation: |
+      Chan 2013 Ch 7 (chan_2013_ch7_intraday_momentum.md): MES vol regime
+      predicts equity-index breakout edge. CME_PRECLOSE is 06:00 Bris ~
+      16:00 ET — active US late-session, MES trading resting-to-settle
+      transition. X_MES_ATR60 passing at RR1.0 (t=4.19) suggests same
+      mechanism should extend to wider RR targets on same session.
+    filter: {type: X_MES_ATR60}
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_PRECLOSE]
+      orb_minutes: [5]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      directions: [long]
+    expected_trial_count: 1
+    kill_criteria:
+      - "C3: p >= 0.05 at K=1 per-cell OR BH-FDR K=6 family fail"
+      - "C4: Chordia t < 3.00 (with-theory)"
+      - "C6: WFE < 0.50"
+      - "C7: N < 100"
+      - "C9: any era N>=50 ExpR < -0.05"
+
+  - id: 2
+    name: "MNQ CME_PRECLOSE X_MES_ATR60 RR2.0 long"
+    theory_citation: "Same mechanism as H1 at RR2.0 — extension of PASS-RR1.0 pattern to completion of RR axis."
+    filter: {type: X_MES_ATR60}
+    scope:
+      instruments: [MNQ]
+      sessions: [CME_PRECLOSE]
+      orb_minutes: [5]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      directions: [long]
+    expected_trial_count: 1
+    kill_criteria: &common_kill
+      - "C3: p >= 0.05 at K=1 per-cell OR BH-FDR K=6 family fail"
+      - "C4: Chordia t < 3.00 (with-theory)"
+      - "C6: WFE < 0.50"
+      - "C7: N < 100"
+      - "C9: any era N>=50 ExpR < -0.05"
+
+  - id: 3
+    name: "MNQ US_DATA_830 X_MES_ATR60 RR1.0 long"
+    theory_citation: |
+      US_DATA_830 is 23:30 Bris ~ 08:30 ET — pre-cash-open macro release
+      window. MES trading is active (pre-market futures). X_MES_ATR60
+      as regime gate should identify high-vol conditions where breakouts
+      from the ORB have follow-through. Untested cell — first cross-session
+      extension of the filter.
+    filter: {type: X_MES_ATR60}
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_830]
+      orb_minutes: [5]
+      rr_targets: [1.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      directions: [long]
+    expected_trial_count: 1
+    kill_criteria: *common_kill
+
+  - id: 4
+    name: "MNQ US_DATA_830 X_MES_ATR60 RR1.5 long"
+    theory_citation: "Same mechanism as H3 at RR1.5."
+    filter: {type: X_MES_ATR60}
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_830]
+      orb_minutes: [5]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      directions: [long]
+    expected_trial_count: 1
+    kill_criteria: *common_kill
+
+  - id: 5
+    name: "MNQ US_DATA_830 X_MES_ATR60 RR2.0 long"
+    theory_citation: "Same mechanism as H3 at RR2.0."
+    filter: {type: X_MES_ATR60}
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_830]
+      orb_minutes: [5]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      directions: [long]
+    expected_trial_count: 1
+    kill_criteria: *common_kill
+
+  - id: 6
+    name: "MNQ US_DATA_1000 X_MES_ATR60 RR2.0 long"
+    theory_citation: |
+      Phase 2.5 showed US_DATA_1000 RR1.0 FAILS (t=1.56). RR axis completion
+      test: may pass at wider RR where the MES vol regime produces larger
+      moves worthy of RR2.0 targeting. Adversarial inclusion — a null result
+      here reinforces the "RR1.0-only" hypothesis on US_DATA_1000.
+    filter: {type: X_MES_ATR60}
+    scope:
+      instruments: [MNQ]
+      sessions: [US_DATA_1000]
+      orb_minutes: [5]
+      rr_targets: [2.0]
+      entry_models: [E2]
+      confirm_bars: [1]
+      directions: [long]
+    expected_trial_count: 1
+    kill_criteria: *common_kill
+
+total_hypothesis_count: 6
+
+family_bh_fdr:
+  K: 6
+  q_threshold: 0.05
+  note: |
+    A cell is a family-level pass if its p-value survives BH-FDR at K=6
+    with q=0.05. Per-cell K=1 pass is weaker (individual hypothesis) but
+    acceptable per Pathway B individual testing mode.
+
+audit_outputs:
+  script: "research/phase_2_6_x_mes_atr60_cross_session_audit.py"
+  result_doc: "docs/audit/results/2026-04-19-x-mes-atr60-cross-session-audit.md"
+  output_csv: "research/output/phase_2_6_x_mes_atr60_cross_session_audit.csv"
