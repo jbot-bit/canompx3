@@ -1,5 +1,9 @@
 # Phase 2.8 — Multi-year regime stratification (ex-2020 / ex-2022 / ex-2024)
 
+> **SUPERSEDED FRAMING (2026-04-19).** The TL;DR and PATTERN labels below reflect a 3-year bare-threshold classifier without per-cell significance testing. Honest per-cell BH-FDR across 7 years refutes several v1 claims — in particular, the 3 `SINGLE_YEAR_DRAG` cells are NOT BH-significant at any K framing. Retirement verdicts for the 2 SGP PURE_DRAG lanes still stand (Phase 2.4 / 2.7 independently confirmed). Read the reframe addendum and v2 result in order:
+> 1. `docs/audit/results/2026-04-19-phase-2-8-reframe-addendum.md` (methodology critique, partial verdict)
+> 2. `docs/audit/results/2026-04-19-phase-2-9-comprehensive-multi-year.md` (7-year × 38-lane × BH at K_global/K_session/K_year)
+
 **Date:** 2026-04-19
 **Stage:** `docs/runtime/stages/phase-2-8-multi-year-regime-stratification.md` (to delete)
 **Script:** `research/phase_2_8_multi_year_regime_stratification.py`
