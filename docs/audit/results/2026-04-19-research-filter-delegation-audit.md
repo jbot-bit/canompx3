@@ -105,3 +105,94 @@ Scan's result doc at `docs/audit/results/2026-04-15-comprehensive-deployed-lane-
 ## Audit trail
 
 Commit-of-record for this audit: embedded in Phase 2 fix commit.
+
+---
+
+## Addendum — 2026-04-19 broader-regex sweep (campaign Phase 13)
+
+**Motivation:** the original audit's grep patterns were narrow (`overnight_range / atr_20`, `def compute_deployed_filter`, `vwap_signal`, `deployed_filter_signal`). A broader sweep using `if filter_type == "<CANONICAL>":` + hardcoded SQL fragment patterns (`d.atr_20_pct >=`, `d.overnight_range >=`, `"d\..* >= \d"`) found **3 additional genuine offenders** the original sweep missed, plus 1 older file.
+
+### Broader sweep patterns used
+
+- `grep -rn "if filter_type ==" research/ --include="*.py"` — captures per-filter inline branches
+- `grep -rn "d\.atr_20_pct >=\|d\.overnight_range >=\|d\.orb_.*_size" research/ --include="*.py"` — captures inline SQL gate literals
+- `grep -rn 'filter_sql.*:\|AND d\.' research/ --include="*.py"` — captures dict-of-SQL-strings patterns
+
+### Additional genuine offenders
+
+#### `research/garch_broad_exact_role_exhaustion.py` (last modified 2026-04-16, commit 7aaf256c) — **GENUINE OFFENDER**
+
+Lines 73-118 re-implement canonical filter logic inline as Python helper returning SQL strings. Hits 6 canonical filter families: `ATR_P*`, `OVNRNG_*`, `X_MES_ATR60`, `VWAP_MID_ALIGNED`, `VWAP_BP_ALIGNED`. Each is a re-implementation of `ALL_FILTERS[key].matches_row`. Output is raw SQL (design-wise different from `compute_deployed_filter`), but semantically equivalent drift hazard: if inline SQL differs from canonical by 1 edge-case, every downstream result is contaminated.
+
+**Verdict:** FIX. Restructure to load outcomes+features via `strategy_fitness._load_strategy_outcomes` which already handles all filter delegation canonically, OR load daily_features to DataFrame, apply `filter_signal(df, filter_type, orb_label)`, materialize fire-day set, inject via temp table.
+
+#### `research/garch_validated_role_exhaustion.py` (last modified 2026-04-16, commit 7aaf256c) — **GENUINE OFFENDER**
+
+Lines 73-97+ similarly re-implement filter SQL branches inline. Hits 8 canonical filter families: `ORB_G5`, `COST_LT12`, `OVNRNG_100`, `ATR_P50`, `ATR_P70`, `VWAP_MID_ALIGNED`, `VWAP_BP_ALIGNED`, `X_MES_ATR60`. The `OVNRNG_100` entry is `overnight_range >= 100.0` (correct absolute by luck of author choice, not by delegation). Still fragile.
+
+**Verdict:** FIX. Same approach.
+
+#### `research/garch_comex_settle_institutional_battery.py` (last modified 2026-04-15, commit 553c8089 "research: garch COMEX_SETTLE — institutional trader discipline, RULE 4 K_lane PASS") — **GENUINE OFFENDER**
+
+Lines 92-99 hardcode filter SQL as tuple data embedded in a list of candidates:
+```python
+("MNQ", "SINGAPORE_OPEN", 30, 1.5, "long", "d.atr_20_pct >= 50.0"),
+...
+("MNQ", "COMEX_SETTLE", 5, 1.5, "long", "d.overnight_range >= 100.0"),
+```
+
+The commit message claims "institutional trader discipline" while violating the filter-delegation rule — ironic.
+
+**Verdict:** FIX OR DEPRECATE. If one-shot and results already captured, add header note + retire. If reusable, refactor to delegation.
+
+#### `research/break_delay_filtered.py` (last modified 2026-03-30, commit 3edde387 "research: break delay TRIPLY DEAD") — **GENUINE OFFENDER (LOW PRIORITY)**
+
+Lines 26-47 hardcode filter SQL like `atr_20_pct >= 60`, `rel_vol_COMEX_SETTLE >= 1.2`. Pre-2026-04-18 (before delegation rule landed). Commit message confirms "TRIPLY DEAD — zero signal". Mis-implemented filter can only inflate survival rates; DEAD verdict is resilient to filter drift.
+
+**Verdict:** LOW-PRIORITY. Accept "negative-verdict resilient" argument OR add deprecation header.
+
+### Classification summary (updated after addendum)
+
+| File | Status | Priority | Action |
+|---|---|---|---|
+| `research/comprehensive_deployed_lane_scan.py` | GENUINE OFFENDER | HIGH | FIX (original audit) |
+| `research/garch_broad_exact_role_exhaustion.py` | GENUINE OFFENDER | HIGH — 6 filters | FIX |
+| `research/garch_validated_role_exhaustion.py` | GENUINE OFFENDER | HIGH — 8 filters | FIX |
+| `research/garch_comex_settle_institutional_battery.py` | GENUINE OFFENDER | MEDIUM — likely one-shot | FIX or DEPRECATE |
+| `research/break_delay_filtered.py` | GENUINE OFFENDER | LOW — negative verdict resilient | DEPRECATE |
+| `research/garch_partner_state_provenance_audit.py` | false positive | — | no-op |
+| `research/research_trend_day_mfe.py` | false positive | — | no-op |
+
+### Downstream contamination check
+
+Each of the 3 NEW high/medium offenders produced outputs during their last run. Their output docs must carry a WARN header indicating potential inline-filter contamination until the fix lands. Specific output-doc enumeration is a follow-up task, not done in this addendum.
+
+### Methodology lesson
+
+The original sweep's narrow regex missed the `if filter_type == "<name>":` pattern because it was looking for function declarations or specific bug patterns. Future filter-delegation sweeps must include:
+- Per-branch inline pattern: `grep -rn "if filter_type ==" research/`
+- SQL-literal pattern: `grep -rn "d\.atr_20_pct >=\|d\.overnight_range >=" research/`
+- Dict-of-SQL pattern: `grep -rn '".*AND d\.' research/`
+
+### X_MES_ATR60 sub-finding (relates to v3.2 amendment I-4)
+
+The I-4 correction added `DATA_PIPELINE_GAP` sub-classification for lanes firing at 0% due to missing pipeline columns. However, canonical `trading_app/strategy_fitness.py::_load_strategy_outcomes` lines 430-431 DO enrich `CrossAssetATRFilter` at runtime:
+```python
+if isinstance(filt, CrossAssetATRFilter):
+    _enrich_cross_asset_atr(con, feat_dicts, filt.source_instrument)
+```
+
+So X_MES_ATR60 fires correctly when measured via the canonical `_load_strategy_outcomes` path (used by SR monitor, fitness tracker, live bot). The fire-rate audit's 0% finding for the 5 X_MES_ATR60 lanes was likely measured via direct `SELECT * FROM daily_features` without runtime enrichment — an **audit methodology artifact**, not a live pipeline gap.
+
+**Implication for amendment I-4:** the `DATA_PIPELINE_GAP` sub-label should be applied ONLY when fire-rate-via-canonical-`_load_strategy_outcomes` is 0, NOT when direct SQL against `daily_features` is 0. The amendment should clarify that fire-rate measurement MUST use the canonical runtime-enriched path, not naive SQL.
+
+**Action:** either tighten I-4 wording (campaign Phase follow-up), OR verify the `fire_rate_audit.md` was done via canonical path. If via canonical → 0% is real pipeline gap. If via naive SQL → re-measure required.
+
+### Follow-up tasks
+
+1. Apply fixes to 3 HIGH/MEDIUM-priority offenders (garch_broad_exact_role_exhaustion, garch_validated_role_exhaustion, garch_comex_settle_institutional_battery) OR mark deprecated if single-use. Each requires design-proposal-gate per `.claude/rules/institutional-rigor.md`.
+2. Enumerate contaminated output docs across `docs/audit/results/2026-04-1[5-6]-garch-*.md` and add WARN headers.
+3. Verify `fire_rate_audit.md` measurement path (canonical vs naive SQL) and reconcile I-4 sub-classification accordingly.
+4. Add broader-regex methodology pattern to future filter-delegation sweep SOPs.
+
+**End of addendum.**
