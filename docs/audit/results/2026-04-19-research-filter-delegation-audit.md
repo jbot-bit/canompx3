@@ -195,4 +195,57 @@ So X_MES_ATR60 fires correctly when measured via the canonical `_load_strategy_o
 3. Verify `fire_rate_audit.md` measurement path (canonical vs naive SQL) and reconcile I-4 sub-classification accordingly.
 4. Add broader-regex methodology pattern to future filter-delegation sweep SOPs.
 
-**End of addendum.**
+**End of broader-regex addendum.**
+
+---
+
+## Addendum 2 — 2026-04-19 hardcoded-commission sweep (campaign follow-up)
+
+Triggered by real finding in PR #14 (File 2 filter-delegation fix) — inline SQL `(2.74 / risk_dollars) < 0.12` violated the canonical cost model in two ways:
+
+1. **Stale commission constant.** `2.74` = pre-Rithmic MNQ round-trip commission. Current canonical `pipeline.cost_model.COST_SPECS['MNQ'].commission_rt = $1.42`.
+2. **Missing slippage component.** Canonical `CostRatioFilter.matches_row` uses `100 × total_friction / (raw_risk + total_friction)` — TOTAL friction (commission + slippage). Inline used commission alone.
+
+### Broader-sweep results — additional offenders
+
+Grep pattern: `"2\.74\|2\.44\|commission.*= *[0-9]\."` against `research/**/*.py`:
+
+| File | Line | Violation | Priority | Proposed fix |
+|---|---|---|---|---|
+| `research/garch_validated_scope_honest_test.py` | 55-56 | Identical `(2.74 / NULLIF(o.risk_dollars, 0)) < 0.12` COST_LT12 inline to PR #14's target | **HIGH** (same bug class, active research file) | Delegate via `filter_signal(df, 'COST_LT12', orb_label)` — same pattern as PR #14 |
+| `research/research_prop_firm_fit.py` | 57 | Hardcoded dict `{"MNQ": 2.74, ...}` with comment `# 1.24 + 0.50 + 1.00` (pre-Rithmic breakdown) | MED (prop-firm fit calculator — may be single-use or active) | Source from `pipeline.cost_model.COST_SPECS[sym].commission_rt + slippage`; do NOT replicate the constant |
+| `research/tmp_dd_anatomy.py` | 23 | `FRICTION = {"MGC": 5.74, "MNQ": 2.74, "MES": 3.74, "M2K": 3.24}` — pre-Rithmic friction dict across 4 instruments | LOW (`tmp_` prefix = scratch/temp) | Deprecate or fix: either delete if unused, or replace with `COST_SPECS[sym].total_friction` per instrument |
+| `research/tmp_dd_budget_configs.py` | 23 | Same `FRICTION` dict as `tmp_dd_anatomy.py` | LOW (`tmp_` prefix = scratch) | Same treatment |
+
+### Canonical source for commission / friction
+
+```python
+from pipeline.cost_model import COST_SPECS
+mnq_commission_rt = COST_SPECS['MNQ'].commission_rt  # 1.42 (Rithmic, current)
+mnq_total_friction = COST_SPECS['MNQ'].total_friction  # commission_rt + slippage
+mnq_point_value = COST_SPECS['MNQ'].point_value
+```
+
+**Any research file hardcoding these values without the above source is drift-prone.** Acceptable exception: a historical/archive script explicitly dated and scoped to a bygone commission regime, with a top-of-file comment declaring the frozen value.
+
+### Downstream-contamination assessment
+
+Docs potentially affected (outputs produced by these 4 scripts) must be inspected for WARN headers:
+
+- `garch_validated_scope_honest_test.py` → produces docs matching `docs/audit/results/2026-04-*-garch-validated-scope-honest*.md` — any cells using COST_LT12 may over-admit trades that fail the canonical cost screen. Magnitude: small (~0.3% per PR #14 empirical data).
+- `research_prop_firm_fit.py` → may produce capital-allocation / prop-firm projections. Using `2.74` instead of `1.42` overstates per-trade cost by ~2× on MNQ. **Material for scaling-decision docs.**
+- `tmp_dd_anatomy.py`, `tmp_dd_budget_configs.py` → `tmp_` scratch scripts — likely ad-hoc, outputs (if any) should be verified / retired.
+
+### Plan for follow-up fixes
+
+1. **Next filter-delegation PR:** apply the PR #14 pattern to `garch_validated_scope_honest_test.py`. Parity test expected to surface the SAME 2-row COST_LT12 divergence class — this is a feature of the fix, not a defect.
+2. **`research_prop_firm_fit.py`:** design-proposal-gate — before fixing, verify whether the file is still consumed (output docs, CI, other scripts). If yes, fix. If no, deprecate with a top-of-file note.
+3. **`tmp_*` scratch scripts:** propose deletion. Their outputs (if any) are already captured elsewhere; `tmp_` prefix is the project convention for "not canonical." If any output doc references them as source-of-truth, migrate + retire.
+
+### Historical-failure-log entry (backtesting-methodology.md RULE 11)
+
+Entry to append:
+
+> **2026-04-19: Commission-value drift (pre-Rithmic hardcoded `2.74` in research scripts).** Inline commission filter SQL in multiple research files hardcoded the pre-Rithmic MNQ commission (`2.74`) instead of sourcing from `pipeline.cost_model.COST_SPECS`. After Rithmic integration (Q1 2026), canonical commission dropped to `1.42` but these scripts retained the stale value. Compounded by a structural error — inline formula `(commission / risk_dollars)` ignored slippage, while canonical `CostRatioFilter` uses `total_friction / (raw_risk + total_friction)`. Net effect: stale inline admitted trades the canonical screen correctly rejects. Caught by PR #14 parity test (2 divergent rows on MNQ NYSE_OPEN RR1.5 long IS; fix commit 9baa3b50). **Lesson:** any hardcoded commission/friction constant in research/ is drift bait. Source from COST_SPECS, or declare the frozen-historical value at top-of-file with date scope.
+
+**End of addendum 2.**
