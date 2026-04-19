@@ -15,82 +15,58 @@ from scripts.tools.pinecone_snapshots import (
 
 @pytest.fixture
 def seeded_snapshot_db(tmp_path):
-    """Temp gold.db with minimal validated_setups + edge_families rows for MNQ.
+    """Temp gold.db with one ROBUST MNQ candidate seeded against canonical schema.
+
+    Schema is built via canonical builders (pipeline.init_db.DAILY_FEATURES_SCHEMA
+    + trading_app.db_manager.init_trading_app_schema) so future schema migrations
+    automatically flow into this fixture without manual sync.
 
     Covers both portfolio_state and fitness_report snapshot assertions:
     they check for markdown table headers (always present) and at least one
-    active instrument name (mentioned only if there's a row). One MNQ row
-    per table is sufficient.
+    active instrument name (mentioned only if there's a row).
     """
+    from pipeline.init_db import DAILY_FEATURES_SCHEMA
+    from trading_app.db_manager import init_trading_app_schema
+
     db_path = tmp_path / "gold.db"
+    # daily_features must exist first because orb_outcomes has an FK into it.
     con = duckdb.connect(str(db_path))
-    con.execute("""
-        CREATE TABLE validated_setups (
-            strategy_id VARCHAR PRIMARY KEY,
-            instrument VARCHAR,
-            orb_label VARCHAR,
-            entry_model VARCHAR,
-            orb_minutes INTEGER,
-            rr_target DOUBLE,
-            confirm_bars INTEGER,
-            filter_type VARCHAR,
-            expectancy_r DOUBLE,
-            win_rate DOUBLE,
-            sample_size INTEGER,
-            sharpe_ann DOUBLE,
-            sharpe_ratio DOUBLE,
-            max_drawdown_r DOUBLE,
-            status VARCHAR,
-            fdr_significant BOOLEAN,
-            wf_passed BOOLEAN,
-            years_tested INTEGER,
-            all_years_positive BOOLEAN,
-            yearly_results VARCHAR,
-            fdr_adjusted_p DOUBLE,
-            wf_windows VARCHAR,
-            wfe DOUBLE,
-            skewness DOUBLE,
-            kurtosis_excess DOUBLE,
-            stop_multiplier DOUBLE,
-            oos_exp_r DOUBLE,
-            noise_risk BOOLEAN
+    try:
+        con.execute(DAILY_FEATURES_SCHEMA)
+    finally:
+        con.close()
+    init_trading_app_schema(db_path=db_path)
+
+    con = duckdb.connect(str(db_path))
+    try:
+        con.execute(
+            """
+            INSERT INTO validated_setups (
+                strategy_id, instrument, orb_label, entry_model, orb_minutes,
+                rr_target, confirm_bars, filter_type, status,
+                sample_size, win_rate, expectancy_r, sharpe_ann, max_drawdown_r,
+                years_tested, all_years_positive, stress_test_passed,
+                fdr_significant, wf_passed, stop_multiplier
+            ) VALUES ('MNQ_TOKYO_OPEN_E2_CB1_ORB_G5_RR1.5', 'MNQ', 'TOKYO_OPEN',
+                      'E2', 5, 1.5, 1, 'ORB_G5', 'active',
+                      150, 0.52, 0.18, 1.1, 3.0,
+                      6, TRUE, TRUE,
+                      TRUE, TRUE, 1.0)
+            """
         )
-    """)
-    con.execute("""
-        CREATE TABLE edge_families (
-            family_id VARCHAR PRIMARY KEY,
-            instrument VARCHAR,
-            head_strategy_id VARCHAR,
-            robustness_status VARCHAR,
-            member_count INTEGER,
-            pbo DOUBLE,
-            cv_expectancy DOUBLE,
-            trade_tier VARCHAR
+        con.execute(
+            """
+            INSERT INTO edge_families (
+                family_hash, instrument, member_count, trade_day_count,
+                head_strategy_id, head_expectancy_r, head_sharpe_ann,
+                robustness_status, cv_expectancy, trade_tier, pbo
+            ) VALUES ('MNQ_TOKYO_OPEN_ORB_G5', 'MNQ', 3, 150,
+                      'MNQ_TOKYO_OPEN_E2_CB1_ORB_G5_RR1.5', 0.18, 1.1,
+                      'ROBUST', 0.15, 'CORE', 0.20)
+            """
         )
-    """)
-    con.execute(
-        """
-        INSERT INTO validated_setups
-            (strategy_id, instrument, orb_label, entry_model, orb_minutes,
-             rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
-             sample_size, sharpe_ann, sharpe_ratio, max_drawdown_r, status,
-             fdr_significant, wf_passed, stop_multiplier, oos_exp_r, noise_risk)
-        VALUES ('MNQ_TOKYO_OPEN_E2_CB1_ORB_G5_RR1.5', 'MNQ', 'TOKYO_OPEN', 'E2',
-                5, 1.5, 1, 'ORB_G5', 0.18, 0.52, 150, 1.1, 1.1, 3.0, 'active',
-                TRUE, TRUE, 1.0, 0.20, FALSE)
-        """
-    )
-    con.execute(
-        """
-        INSERT INTO edge_families
-            (family_id, instrument, head_strategy_id, robustness_status,
-             member_count, pbo, cv_expectancy, trade_tier)
-        VALUES ('MNQ_TOKYO_OPEN_ORB_G5', 'MNQ',
-                'MNQ_TOKYO_OPEN_E2_CB1_ORB_G5_RR1.5', 'ROBUST',
-                3, 0.20, 0.15, 'CORE')
-        """
-    )
-    con.close()
+    finally:
+        con.close()
     return db_path
 
 

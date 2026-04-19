@@ -26,48 +26,46 @@ PYTHON = sys.executable
 def seeded_pulse_db(tmp_path):
     """Temp gold.db with one active validated_setups row per active instrument.
 
+    Schema is built via canonical builders (pipeline.init_db.DAILY_FEATURES_SCHEMA
+    + trading_app.db_manager.init_trading_app_schema) so future schema migrations
+    flow into this fixture automatically.
+
     project_pulse reports `Strategy fitness:` only when fitness_summary is
     non-empty, which requires at least one validated_setups row. The test
     runs the pulse via subprocess with DUCKDB_PATH pointing here.
     """
+    from pipeline.init_db import DAILY_FEATURES_SCHEMA
+    from trading_app.db_manager import init_trading_app_schema
+
     db_path = tmp_path / "gold.db"
+    # daily_features must exist first because orb_outcomes has an FK into it.
     con = duckdb.connect(str(db_path))
-    con.execute(
-        """
-        CREATE TABLE validated_setups (
-            strategy_id VARCHAR PRIMARY KEY,
-            instrument VARCHAR,
-            orb_label VARCHAR,
-            entry_model VARCHAR,
-            orb_minutes INTEGER,
-            rr_target DOUBLE,
-            confirm_bars INTEGER,
-            filter_type VARCHAR,
-            expectancy_r DOUBLE,
-            win_rate DOUBLE,
-            sample_size INTEGER,
-            sharpe_ann DOUBLE,
-            status VARCHAR,
-            fdr_significant BOOLEAN,
-            wf_passed BOOLEAN,
-            stop_multiplier DOUBLE
-        )
-        """
-    )
-    for inst in ("MNQ", "MES"):
-        con.execute(
-            """
-            INSERT INTO validated_setups
-                (strategy_id, instrument, orb_label, entry_model, orb_minutes,
-                 rr_target, confirm_bars, filter_type, expectancy_r, win_rate,
-                 sample_size, sharpe_ann, status, fdr_significant, wf_passed,
-                 stop_multiplier)
-            VALUES (?, ?, 'TOKYO_OPEN', 'E2', 5, 1.5, 1, 'ORB_G5',
-                    0.18, 0.52, 150, 1.1, 'active', TRUE, TRUE, 1.0)
-            """,
-            [f"{inst}_TOKYO_OPEN_E2_CB1_ORB_G5_RR1.5", inst],
-        )
-    con.close()
+    try:
+        con.execute(DAILY_FEATURES_SCHEMA)
+    finally:
+        con.close()
+    init_trading_app_schema(db_path=db_path)
+
+    con = duckdb.connect(str(db_path))
+    try:
+        for inst in ("MNQ", "MES"):
+            con.execute(
+                """
+                INSERT INTO validated_setups (
+                    strategy_id, instrument, orb_label, entry_model, orb_minutes,
+                    rr_target, confirm_bars, filter_type, status,
+                    sample_size, win_rate, expectancy_r, sharpe_ann, max_drawdown_r,
+                    years_tested, all_years_positive, stress_test_passed,
+                    fdr_significant, wf_passed, stop_multiplier
+                ) VALUES (?, ?, 'TOKYO_OPEN', 'E2', 5, 1.5, 1, 'ORB_G5', 'active',
+                          150, 0.52, 0.18, 1.1, 3.0,
+                          6, TRUE, TRUE,
+                          TRUE, TRUE, 1.0)
+                """,
+                [f"{inst}_TOKYO_OPEN_E2_CB1_ORB_G5_RR1.5", inst],
+            )
+    finally:
+        con.close()
     return db_path
 
 
