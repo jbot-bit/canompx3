@@ -1,0 +1,199 @@
+version: 1
+status: DRAFT
+date: 2026-04-19
+slug: phase-2-9-comprehensive-multi-year-stratification
+title: "Phase 2.9 — Comprehensive 7-year × 38-lane multi-year stratification with per-cell subset-t + multi-framing BH + symmetric DRAG/BOOST labels (K=266)"
+owner: claude
+parent_spec: null
+sibling_spec: "docs/audit/results/2026-04-19-phase-2-8-reframe-addendum.md § 7 honest next test"
+
+testing_mode: family
+pathway: A_family
+
+deployment_not_done_here: |
+  This audit does NOT promote any lane. It tests a methodology-level hypothesis
+  about the Phase 2.8 v1 result: whether the "no recurring regime, 34/38
+  VOL_NEUTRAL" framing survives (a) comprehensive year coverage, (b) per-cell
+  significance testing, (c) symmetric DRAG/BOOST labelling, (d) session-level
+  cross-section. Retirement verdicts for the 2 SGP PURE_DRAG lanes stand.
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/prompts/prereg-writer-prompt.md"
+  notes:
+    - "Pathway A — Chordia t >= 3.00 with-theory (session-directional regime hypothesis grounded in Phase 2.8 addendum § 2.3 cross-section observation)."
+    - "Mode A strict: trading_day < HOLDOUT_SACRED_FROM (2026-01-01). All 7 stratified years are IS."
+    - "Canonical filter delegation via research.filter_utils.filter_signal + research.mode_a_revalidation_active_setups.compute_mode_a."
+    - "K_global = 266 cells pre-committed. No post-hoc expansion."
+
+empirical_grounding:
+  source: "docs/audit/results/2026-04-19-phase-2-8-reframe-addendum.md § 2.3"
+  observation: |
+    Phase 2.8 v1 CSV shows directional asymmetry in delta2024 by session that
+    the v1 PATTERN classification (bare 0.03 threshold, DRAG-only label) smothered:
+      Session         n_lanes  mean_delta2024
+      CME_PRECLOSE      3       +0.032   (2024 drag)
+      EUROPE_FLOW       10      +0.017   (2024 drag)
+      COMEX_SETTLE      8       -0.003   (flat)
+      US_DATA_1000      5       -0.018   (2024 tailwind)
+      NYSE_OPEN         6       -0.010   (2024 tailwind)
+      TOKYO_OPEN        4       -0.015   (2024 tailwind)
+      SINGAPORE_OPEN    2       -0.029   (2024 tailwind)
+    This suggests 2024 was a session-directional regime (Asia/US-morning
+    trended, Europe-flow / CME-close ranged), not a universal high-vol event.
+  role: "PROVENANCE_ONLY — this observation motivates the need for a proper multi-year × session-level test. The hypothesis below is the testable claim, not the observation itself."
+  data_snooping_guard: |
+    The new test enumerates all 38 active lanes × 7 years = 266 cells with
+    pre-committed test geometry. No lane or year was selected based on its
+    delta value. Session-level aggregation is a pre-committed first-class
+    output, not a post-hoc discovery cut.
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  worktree: "C:/Users/joshd/canompx3/.worktrees/campaign-2026-04-19-phase-2"
+  committed_required_before_run: true
+  db_path_override: "DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db (worktree has no local gold.db; Check 37 expected)"
+
+hypotheses:
+  - id: H1
+    claim: "At least one session has at least 2 of 7 years with per-cell subset-t magnitude passing Chordia t >= 3.00 (with-theory) in the same direction, AND those years survive BH-FDR at K_session (K=n_lanes_in_session × 7)."
+    direction: two_sided
+    null: "Session-year ExpR deltas are drawn from a null distribution with no structural session-level regime pattern — observed delta magnitudes are consistent with bare-threshold noise."
+    theory_citation: |
+      Harvey-Liu 2015 § BHY haircut (verified in docs/institutional/literature/
+      harvey_liu_2015_backtesting.md) — when a hypothesis family has structure
+      (here: same session across years), per-family BH is the correct K, not
+      K_global. Chordia 2018 t >= 3.00 with-theory applies because the theory
+      (session-type × regime asymmetry) is pre-registered, not discovered
+      during the scan.
+    kill: "If H1 fails — 0 sessions have 2+ significant-same-direction years at K_session BH — revert to Phase 2.8 v1 framing and close this thread."
+
+  - id: H2
+    claim: "At least one year of 2019-2025 has at least 3 lanes with per-cell subset-t magnitude passing Chordia t >= 3.00 in the SAME direction, surviving BH-FDR at K_year=38."
+    direction: two_sided
+    null: "Year-level deltas are lane-independent; no structural year-regime alignment."
+    theory_citation: |
+      Same Harvey-Liu 2015 family-K argument. Structural year-regime has macro
+      interpretation (Fed cycle, election year, vol regime) supported by
+      Chan 2008 p120 regime-switching discussion; theory pre-registered.
+    kill: "If H2 fails — 0 years have 3+ same-direction BH-survivors at K_year — revert to Phase 2.8 v1 framing."
+
+  - id: H3
+    claim: "At least one Phase 2.5 Tier-1 or Phase 2.7 GOLD candidate lane has a year for which ex-that-year subset-t drops below 1.96 while full-sample subset-t is >= 3.00. Framed as a 'fragility disclosure' on the GOLD pool."
+    direction: one_sided
+    null: "GOLD candidates' full-sample subset-t is evenly distributed across years — no single year is load-bearing."
+    theory_citation: |
+      Bailey-LdP 2014 § DSR (docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md)
+      — a strategy's Sharpe/t-stat can be artificially inflated by an
+      unusually-good recent year. This hypothesis formalizes that check at
+      the lane level.
+    kill: "If H3 fails — no GOLD lane has year-fragility — GOLD pool confidence unchanged. Finding is a disclosure, not a de-promotion."
+
+scope:
+  lanes:
+    source: "research.mode_a_revalidation_active_setups.load_active_setups()"
+    count_expected: 38
+    note: "Same active set as Phase 2.5 (subset-t sweep) and Phase 2.8 v1. Includes the 2 SGP PURE_DRAG lanes and the 14 Phase 2.5 Tier-4 retirement candidates — they are ALREADY in the active set; not additional."
+  years:
+    list: [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+    count: 7
+    window: "All years pre-2026-01-01 Mode A IS. 2025 is partial (through 2025-12-31 if data exists; otherwise through the last pre-holdout trading day)."
+  k_framings:
+    - name: K_global
+      value: 266
+      note: "38 × 7."
+    - name: K_session
+      value: "variable per session × 7 years"
+      note: "e.g. EUROPE_FLOW K_session = 10 × 7 = 70."
+    - name: K_year
+      value: 38
+      note: "per year across lanes."
+    - name: K_lane
+      value: 7
+      note: "per lane across years; used for the fragility disclosure."
+
+upstream_discovery_provenance:
+  origin: "Phase 2.8 v1 result doc + reframe addendum"
+  role: PROVENANCE_ONLY
+  note: "Phase 2.8 v1's bare-threshold classifications are not input features to this scan. The 38 lane identifiers ARE shared (same active-setups query) but that is a canonical-source inheritance, not a provenance hint."
+
+testing_discipline:
+  per_cell:
+    subset_t: "full_n-sample subset-t (one-sample vs zero), matching Chordia's promotion threshold usage."
+    p_value: "two-sided normal tail of subset-t. No permutation per cell (266 cells × permutation = expensive; bootstrap at session level only)."
+  bh_fdr:
+    q: 0.10
+    framings_reported: ["K_global=266", "K_session (variable)", "K_year=38"]
+    note: "Promotion candidate survives at K_session OR K_year per Harvey-Liu 2015 family-K doctrine. K_global is reported as headline context only."
+  mandatory_downstream_gates_non_waivable:
+    - "dir_match across years (sign(delta) consistent across BH survivors in same session)."
+    - "fire_rate: no cell with n_year < 30 may survive to promotion."
+    - "arithmetic_only flag: if |wr_spread| < 3% AND |delta| > 0.10 within a year, flag."
+  minbtl_budget:
+    formula: "MinBTL = 2 · ln(K) / E[max_N]^2"
+    K: 266
+    e_max_n_target: 600  # approximate mean full_n across 38 active lanes
+    budget_pass_check: "Script must compute and print pass/fail at run time."
+
+symmetric_labelling:
+  drag: "year_expr - ex_year_expr < -0.03 AND per-cell BH survivor"
+  boost: "year_expr - ex_year_expr > +0.03 AND per-cell BH survivor"
+  v1_asymmetry_fix: "Phase 2.8 v1 flagged DRAG only with a bare threshold. v2 flags both BOOST and DRAG only when BH-FDR supports the label."
+
+outputs:
+  - path: "research/output/phase_2_9_main.csv"
+    schema: "strategy_id, instrument, session, orb_minutes, rr_target, filter_type, year, n_year, year_expr, ex_year_expr, delta, subset_t, p, bh_global_rank, bh_session_rank, bh_year_rank, pattern_v2"
+    expected_rows: 266
+  - path: "research/output/phase_2_9_session_year_heat.csv"
+    schema: "session, year, n_lanes, weighted_mean_expr, weighted_delta, survivor_count_at_K_session"
+    expected_rows: "7 sessions × 7 years = 49"
+  - path: "research/output/phase_2_9_gold_fragility.csv"
+    schema: "strategy_id, full_subset_t, worst_ex_year, worst_ex_year_subset_t, fragility_flag"
+    expected_rows: "~9 Phase 2.5 Tier-1 + Phase 2.7 GOLD candidates"
+  - path: "docs/audit/results/2026-04-19-phase-2-9-comprehensive-multi-year.md"
+    type: "result doc"
+
+kill_criteria:
+  - numeric: "H1 survivors at K_session BH < 1 session-year-direction cell."
+    action: "Revert to Phase 2.8 v1 framing. Close Phase 2.9 thread."
+  - numeric: "H2 survivors at K_year BH < 3 same-direction cells in any single year."
+    action: "H2 refuted. Year-regime claim closed."
+  - numeric: "H3 survivors = 0 (no GOLD lane has ex-year subset-t drop below 1.96)."
+    action: "H3 refuted. GOLD pool confidence unchanged. Note in result doc as clean-signal confirmation."
+
+mandatory_canonical_delegations:
+  - name: compute_mode_a
+    import: "from research.mode_a_revalidation_active_setups import compute_mode_a"
+    purpose: "lane-level IS metrics + subset-t"
+  - name: load_active_setups
+    import: "from research.mode_a_revalidation_active_setups import load_active_setups"
+    purpose: "38 active lane enumeration"
+  - name: filter_signal
+    import: "from research.filter_utils import filter_signal"
+    purpose: "canonical filter delegation per research-truth-protocol"
+  - name: HOLDOUT_SACRED_FROM
+    import: "from trading_app.holdout_policy import HOLDOUT_SACRED_FROM"
+    purpose: "Mode A IS upper bound"
+  - name: GOLD_DB_PATH
+    import: "from pipeline.paths import GOLD_DB_PATH"
+  - name: SESSION_CATALOG
+    import: "from pipeline.dst import SESSION_CATALOG"
+
+post_commit_checklist:
+  - "Pre-reg YAML committed on branch research/campaign-2026-04-19-phase-2 BEFORE script executed."
+  - "Script + tests committed SEPARATELY from result doc to make the provenance trail auditable."
+  - "Result doc cites exact commit SHAs for pre-reg, script, and CSV outputs."
+  - "Drift check run; Check 37 is expected failure (no local gold.db in worktree)."
+  - "Self-review pass per institutional-rigor rule 1 with line citations."
+
+iteration_checkpoints:
+  - checkpoint: "After pre-reg YAML drafted."
+    action: "Pause; show pre-reg to user for approval before writing script."
+  - checkpoint: "After script + tests written."
+    action: "Show file list + test output + drift check output to user before running script."
+  - checkpoint: "After script run."
+    action: "Show BH survivor counts, heat-map shape, one-line verdict. Await confirmation before committing result doc."
