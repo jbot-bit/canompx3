@@ -1,3 +1,13 @@
+---
+paths:
+  - "pipeline/**"
+  - "trading_app/**"
+  - "scripts/**"
+  - "research/**"
+  - "docs/institutional/**"
+  - "docs/specs/**"
+---
+
 # Institutional Rigor — Working-Style Hard Rule
 
 **Non-negotiable.** The user has been explicit: we do the proper long-term institutional-grounded fix. We do not band-aid. We do not skip. We review our own work before claiming done.

@@ -203,7 +203,16 @@ TRIPLE_JOIN_ALLOWLIST_DIRS = {"archive", "tests"}
 TRIPLE_QUOTE_PATTERN = re.compile(r'(?:"""(.*?)"""|\'\'\'(.*?)\'\'\')', re.DOTALL)
 
 # Regex to detect SQL blocks (contain SQL keywords)
-SQL_KEYWORD_PATTERN = re.compile(r"\b(?:SELECT|INSERT|FROM|JOIN)\b", re.IGNORECASE)
+# Real SQL contains both a verb (SELECT/INSERT) AND a source clause (FROM/JOIN/USING).
+# A docstring narrative usually has only one ("see the SELECT", "we JOIN against X")
+# and would false-positive the triple-join check. Require both groups to match.
+_SQL_VERB_PATTERN = re.compile(r"\b(?:SELECT|INSERT|UPDATE|DELETE|WITH)\b", re.IGNORECASE)
+_SQL_SOURCE_PATTERN = re.compile(r"\b(?:FROM|JOIN|USING)\b", re.IGNORECASE)
+
+
+def _looks_like_sql(block: str) -> bool:
+    """Heuristic: real SQL has a verb AND a source clause. Docstrings usually have one."""
+    return bool(_SQL_VERB_PATTERN.search(block) and _SQL_SOURCE_PATTERN.search(block))
 
 # Regex to detect JOIN daily_features
 JOIN_DF_PATTERN = re.compile(r"\bJOIN\s+daily_features\b", re.IGNORECASE)
@@ -251,8 +260,8 @@ def check_triple_join_guard() -> list[str]:
             block = match.group(1) or match.group(2)
             if not block:
                 continue
-            # Only check SQL blocks
-            if not SQL_KEYWORD_PATTERN.search(block):
+            # Only check blocks that look like real SQL (verb + source clause)
+            if not _looks_like_sql(block):
                 continue
             # Check for JOIN daily_features without orb_minutes
             join_match = JOIN_DF_PATTERN.search(block)

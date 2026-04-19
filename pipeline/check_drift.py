@@ -5743,9 +5743,52 @@ CHECKS = [
 ]  # end CHECKS
 
 
+# Checks measured >0.3s by scripts/tools/profile_check_drift.py (2026-04-19).
+# `--fast` mode (used by post-edit hook) skips these for sub-5s real-time coverage.
+# Pre-commit hook + CI run the full set — no coverage loss end-to-end.
+SLOW_CHECK_LABELS = frozenset({
+    "All imports resolve",
+    "Generated task views preserve strict truth-class boundaries",
+    "ENTRY_MODELS sync",
+    "Phase 4 discovery SHA integrity (stamped hypothesis_file_sha must reference real file)",
+    "Canonical Claude client source (claude_client.py is the only place for Claude model IDs + anthropic.Anthropic)",
+    "SQL column convention: pipeline tables use 'symbol', trading app tables use 'instrument'",
+    "Timezone hygiene",
+    "Canonical orb_utc_window source (only pipeline/dst.py may define it)",
+    "validated_setups writes stay on canonical allowlist",
+    "No hardcoded scratch DB defaults in active code",
+    "family_rr_locks JOIN key completeness (6-column key in every JOIN)",
+    "No old session names in active code",
+    "Trading app hardcoded paths",
+    "No deprecated C:/db/gold.db in docstring usage examples",
+    "No raw orb_active reads outside asset_configs.py",
+    "@canonical-source annotations point to existing files",
+    "Naive datetime detection",
+    "No old fixed-clock session names in Python source",
+    "Trading app schema-query consistency",
+})
+
+
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Pipeline drift detection")
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help=(
+            "Skip slow checks (>0.3s) — used by post-edit hook for real-time coverage. "
+            "Pre-commit and CI run the full set so coverage is preserved end-to-end."
+        ),
+    )
+    args = parser.parse_args()
+    fast_mode = args.fast
+
     print("=" * 60)
-    print("PIPELINE DRIFT CHECK")
+    if fast_mode:
+        print(f"PIPELINE DRIFT CHECK (FAST — skipping {len(SLOW_CHECK_LABELS)} slow checks)")
+    else:
+        print("PIPELINE DRIFT CHECK")
     print("=" * 60)
     print()
 
@@ -5765,7 +5808,11 @@ def main():
         except Exception as exc:
             print(f"  WARNING: could not open DB ({exc}) — DB-dependent checks will skip")
 
+    fast_skipped = 0  # tracks --fast skips separately from DB-unavailable skips
     for i, (label, check_fn, is_advisory, requires_db) in enumerate(CHECKS, 1):
+        if fast_mode and label in SLOW_CHECK_LABELS:
+            fast_skipped += 1
+            continue
         print(f"Check {i}: {label}...")
 
         # DB-dependent checks can be skipped if DB unavailable.
@@ -5805,8 +5852,11 @@ def main():
 
     # Summary — blocking_count tracks actual passes (not computed from total)
     print("=" * 60)
+    fast_part = f", {fast_skipped} skipped (--fast)" if fast_skipped else ""
     summary_line = (
-        f"{blocking_count} checks passed [OK], {skip_count} skipped (DB unavailable), {advisory_count} advisory"
+        f"{blocking_count} checks passed [OK], "
+        f"{skip_count} skipped (DB unavailable){fast_part}, "
+        f"{advisory_count} advisory"
     )
     if all_violations:
         print(f"DRIFT DETECTED: {len(all_violations)} violation(s) across {summary_line}")

@@ -1,3 +1,11 @@
+---
+paths:
+  - "pipeline/**"
+  - "trading_app/**"
+  - "scripts/**"
+  - "research/**"
+---
+
 # Integrity Guardian — Behavioral Rules
 
 Seven non-negotiable rules for every change. Violations are caught by `scripts/tools/audit_behavioral.py`.

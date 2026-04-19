@@ -1,3 +1,14 @@
+---
+paths:
+  - "research/**"
+  - "trading_app/strategy_*"
+  - "trading_app/holdout_policy.py"
+  - "pipeline/build_daily_features.py"
+  - "pipeline/cost_model.py"
+  - "docs/audit/**"
+  - "docs/institutional/**"
+---
+
 # Backtesting Methodology — Mandatory Rules
 
 **Authority:** governs every backtest, every discovery scan, every research-claim test. Complementary to `quant-audit-protocol.md`, `research-truth-protocol.md`, `RESEARCH_RULES.md`, `docs/institutional/pre_registered_criteria.md`.
