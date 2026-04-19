@@ -112,7 +112,7 @@ def refresh_validated_trade_windows(
 
         updated = 0
         if drifted and not dry_run:
-            for sid, f, l, n in drifted:
+            for sid, first_day, last_day, n in drifted:
                 con.execute(
                     """
                     UPDATE validated_setups
@@ -121,7 +121,7 @@ def refresh_validated_trade_windows(
                         trade_day_count = ?
                     WHERE strategy_id = ?
                     """,
-                    [f, l, n, sid],
+                    [first_day, last_day, n, sid],
                 )
                 updated += 1
             con.commit()

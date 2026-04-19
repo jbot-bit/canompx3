@@ -16,8 +16,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import duckdb
 import numpy as np
 from scipy import stats as sp_stats
-from pipeline.paths import GOLD_DB_PATH
+
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+from pipeline.paths import GOLD_DB_PATH
 
 HOLDOUT_DATE = "2026-01-01"
 ENTRY_MODEL = "E2"
@@ -250,7 +251,7 @@ def run_ibs_continuous(con):
 
     print(f"\nTotal combos: {len(results)}")
     print(f"|r| >= 0.05: {len(sig)}")
-    print(f"\nTop 15 (most negative r = strongest mean-reversion):")
+    print("\nTop 15 (most negative r = strongest mean-reversion):")
     hdr = f"{'Inst':<5} {'Session':<18} {'O':>3} {'RR':>4} {'N':>6} {'r':>7} {'p_r':>9} {'rho':>7}"
     print(hdr)
     print("-" * len(hdr))
@@ -363,7 +364,7 @@ def run_nr7_standard(con):
 
     print(f"\nTotal tests: K={K}, BH FDR survivors: {sig_count}")
 
-    print(f"\nDirection flip diagnostic:")
+    print("\nDirection flip diagnostic:")
     for key, counts in sorted(directions.items()):
         flips = "FLIPS" if counts["pos"] >= 3 and counts["neg"] >= 3 else "one-sided"
         print(f"  {key[0]} RR{key[1]}: {counts['pos']} positive, {counts['neg']} negative lift -> {flips}")
@@ -381,7 +382,7 @@ def run_nr7_standard(con):
         )
     if len(all_results) > 20:
         print(f"  ... ({len(all_results) - 20} more rows)")
-        print(f"\n  Bottom 5 (strongest NEGATIVE lift — NR7 HURTS):")
+        print("\n  Bottom 5 (strongest NEGATIVE lift — NR7 HURTS):")
         for r in all_results[-5:]:
             print(
                 f"  {r['inst']:<5} {r['session']:<18} {r['rr']:>4} "
@@ -711,48 +712,48 @@ def verdict(h1_results, h2_results, h3_results, h4_results):
     h1_k = len(h1_results)
     h1_top = h1_results[0] if h1_results else None
 
-    print(f"\n  IBS (external claim: t=4.65):")
+    print("\n  IBS (external claim: t=4.65):")
     print(f"    BH FDR survivors: {h1_sig}/{h1_k}")
     if h1_top:
         print(
             f"    Strongest: {h1_top['inst']} {h1_top['session']} O{h1_top['aper']} RR{h1_top['rr']} Q1 t={h1_top['t_q1']:.2f}"
         )
-    print(f"    Holdout: Q1 REVERSES on both MNQ and MES at top combo")
-    print(f"    Direction flips: Q1>Q4 at CME_PRECLOSE, Q4>Q1 at NYSE_OPEN/TOKYO_OPEN")
+    print("    Holdout: Q1 REVERSES on both MNQ and MES at top combo")
+    print("    Direction flips: Q1>Q4 at CME_PRECLOSE, Q4>Q1 at NYSE_OPEN/TOKYO_OPEN")
     if h1_sig > 0:
-        print(f"    -> IN-SAMPLE SIGNAL EXISTS (prior NO-GO had RR2.0 gap)")
-        print(f"    -> HOLDOUT KILLS IT (both instruments reverse)")
-        print(f"    -> VERDICT: DEAD (confirmed with corrected specification)")
+        print("    -> IN-SAMPLE SIGNAL EXISTS (prior NO-GO had RR2.0 gap)")
+        print("    -> HOLDOUT KILLS IT (both instruments reverse)")
+        print("    -> VERDICT: DEAD (confirmed with corrected specification)")
     else:
-        print(f"    -> VERDICT: DEAD (no BH FDR survivors)")
+        print("    -> VERDICT: DEAD (no BH FDR survivors)")
 
     # NR7 standard
     h3_sig = sum(1 for r in h3_results if r.get("bh_sig"))
     h3_k = len(h3_results)
-    print(f"\n  NR7 standard (external claim: t=3.13):")
+    print("\n  NR7 standard (external claim: t=3.13):")
     print(f"    BH FDR survivors: {h3_sig}/{h3_k}")
-    print(f"    Fire rate: 32-33% (Crabel designed for ~14%)")
-    print(f"    Direction flips: confirmed across sessions")
+    print("    Fire rate: 32-33% (Crabel designed for ~14%)")
+    print("    Direction flips: confirmed across sessions")
     if h3_sig > 0:
-        print(f"    -> Some survivors but direction inconsistency = not systematic")
-    print(f"    -> VERDICT: DEAD (direction flips + fire rate structural problem)")
+        print("    -> Some survivors but direction inconsistency = not systematic")
+    print("    -> VERDICT: DEAD (direction flips + fire rate structural problem)")
 
     # NR7 session range
     h4_sig = sum(1 for r in h4_results if r.get("bh_sig"))
     h4_k = len(h4_results)
-    print(f"\n  NR7 session-range (Blueprint reopen test):")
+    print("\n  NR7 session-range (Blueprint reopen test):")
     print(f"    BH FDR survivors: {h4_sig}/{h4_k}")
     if h4_sig > 0:
-        print(f"    -> Novel specification warrants investigation")
+        print("    -> Novel specification warrants investigation")
     else:
-        print(f"    -> VERDICT: DEAD (reopen condition tested and failed)")
+        print("    -> VERDICT: DEAD (reopen condition tested and failed)")
 
-    print(f"\n  EXTERNAL CLAIMS:")
-    print(f"\n  EXTERNAL CLAIMS:")
-    print(f"    t=4.65 (IBS): We find t=3.89 (N=74, corrected). Killed by holdout.")
-    print(f"    t=3.13 (NR7): 0 BH FDR survivors (corrected). Killed by direction flips.")
-    print(f"    Methodology gap: external analysis likely lacked holdout enforcement + BH FDR.")
-    print(f"    Note: initial run had 3x N-inflation (missing orb_minutes=5 guard). Fixed.")
+    print("\n  EXTERNAL CLAIMS:")
+    print("\n  EXTERNAL CLAIMS:")
+    print("    t=4.65 (IBS): We find t=3.89 (N=74, corrected). Killed by holdout.")
+    print("    t=3.13 (NR7): 0 BH FDR survivors (corrected). Killed by direction flips.")
+    print("    Methodology gap: external analysis likely lacked holdout enforcement + BH FDR.")
+    print("    Note: initial run had 3x N-inflation (missing orb_minutes=5 guard). Fixed.")
 
 
 # ── Main ───────────────────────────────────────────────────────────────
@@ -760,7 +761,7 @@ def verdict(h1_results, h2_results, h3_results, h4_results):
 
 def main():
     print("IBS/NR7 External Claim Verification")
-    print(f"Hypothesis: docs/audit/hypotheses/2026-04-13-ibs-nr7-external-retest.yaml")
+    print("Hypothesis: docs/audit/hypotheses/2026-04-13-ibs-nr7-external-retest.yaml")
     print(f"Holdout: {HOLDOUT_DATE}")
     print(f"DB: {GOLD_DB_PATH}")
     print()

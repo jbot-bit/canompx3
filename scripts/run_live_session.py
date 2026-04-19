@@ -329,9 +329,7 @@ def main() -> None:
         if args.raw_baseline:
             print("--profile and --raw-baseline are mutually exclusive.")
             sys.exit(1)
-        from trading_app.prop_profiles import ACCOUNT_PROFILES
-
-        from trading_app.prop_profiles import effective_daily_lanes
+        from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
         profile = ACCOUNT_PROFILES[args.profile]
         profile_instruments = sorted({lane.instrument for lane in effective_daily_lanes(profile)})

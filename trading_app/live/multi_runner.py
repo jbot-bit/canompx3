@@ -44,9 +44,7 @@ class MultiInstrumentRunner:
     ):
         if instruments is None:
             if profile_id is not None:
-                from trading_app.prop_profiles import ACCOUNT_PROFILES
-
-                from trading_app.prop_profiles import effective_daily_lanes
+                from trading_app.prop_profiles import ACCOUNT_PROFILES, effective_daily_lanes
 
                 profile = ACCOUNT_PROFILES[profile_id]
                 instruments = sorted({lane.instrument for lane in effective_daily_lanes(profile)})

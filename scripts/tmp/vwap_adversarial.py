@@ -6,6 +6,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 import duckdb
 import numpy as np
 from scipy import stats
+
 from pipeline.paths import GOLD_DB_PATH
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
@@ -125,7 +126,7 @@ for sess in ["NYSE_OPEN", "COMEX_SETTLE", "EUROPE_FLOW", "CME_PRECLOSE", "TOKYO_
 
 # TEST 5: Permutation test
 print("\n=== TEST 5: 5000-permutation null test ===")
-all_pnl = con.execute(f"""
+all_pnl = con.execute("""
     SELECT o.pnl_r
     FROM orb_outcomes o
     WHERE o.entry_model = 'E2' AND o.symbol = 'MNQ' AND o.orb_label = 'US_DATA_1000'

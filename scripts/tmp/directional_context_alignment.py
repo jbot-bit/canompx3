@@ -24,6 +24,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 import duckdb  # noqa: E402
+
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
 
 HOLDOUT_DATE = "2026-01-01"
@@ -378,7 +379,6 @@ def main() -> None:
 
             # Use the 4-state take/veto p-value (more informative than binary)
             tv = is_result["take_veto"]
-            tv_oos = oos_result.get("take_veto", {})
             all_p_values.append((label, tv["p"]))
 
             take_r = tv["take_avg_r"] or 0
@@ -403,7 +403,6 @@ def main() -> None:
             # OOS
             if oos_result.get("n", 0) > 0:
                 tv_o = oos_result.get("take_veto", {})
-                b_o = oos_result.get("binary", {})
                 print(
                     f"         OOS N={oos_result['n']} "
                     f"take={tv_o.get('n_take', 0)}({(tv_o.get('take_avg_r') or 0):+.4f}) "
@@ -521,7 +520,6 @@ def main() -> None:
     print("=" * 70)
 
     p_vals = [p for _, p in all_p_values]
-    labels = [l for l, _ in all_p_values]
     sig = bh_fdr(p_vals)
 
     survivors = []

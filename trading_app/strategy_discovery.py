@@ -26,6 +26,7 @@ import pandas as pd
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import (
+    DOW_MISALIGNED_SESSIONS,
     DST_AFFECTED_SESSIONS,
     classify_dst_verdict,
     is_winter_for_session,
@@ -44,7 +45,6 @@ from trading_app.config import (
     get_filters_for_grid,
     is_e2_lookahead_filter,
 )
-from pipeline.dst import DOW_MISALIGNED_SESSIONS
 from trading_app.db_manager import compute_trade_day_hash, init_trading_app_schema
 from trading_app.hypothesis_loader import (
     HypothesisLoaderError,

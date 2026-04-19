@@ -125,8 +125,8 @@ def compute_metric(df: pd.DataFrame, feature: str, direction: str) -> dict | Non
         valid["grp"] = valid["qbin"] == bins_u[-1]
     else:
         valid["grp"] = valid["qbin"] == bins_u[0]
-    in_group = valid[valid["grp"] == True]
-    out_group = valid[valid["grp"] == False]
+    in_group = valid[valid["grp"].astype(bool)]
+    out_group = valid[~valid["grp"].astype(bool)]
     if len(in_group) < MIN_BIN_N or len(out_group) < MIN_BIN_N:
         return None
     return {

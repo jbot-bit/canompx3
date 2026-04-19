@@ -4,6 +4,7 @@ import sys
 
 sys.stdout.reconfigure(encoding="utf-8")
 import duckdb
+
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.prop_profiles import ACCOUNT_PROFILES
 
@@ -88,10 +89,10 @@ print(f"  Average sessions/day: {r2[0]}, P95: {r2[1]}")
 print("\n=== DRAWDOWN BUDGET ===")
 print("  TopStep 50K Express trailing DD: $2,000")
 print("  TopStep 50K Express daily loss limit: $1,000")
-print(f"  Average risk per trade (O5, S0.75): ~$37.50")
-print(f"  Worst case 6 lanes all stop out: ~$225 (11% of trailing DD)")
-print(f"  Worst case 7 lanes all stop out: ~$262 (13% of trailing DD)")
-print(f"  Worst case 10 lanes all stop out: ~$375 (19% of trailing DD)")
+print("  Average risk per trade (O5, S0.75): ~$37.50")
+print("  Worst case 6 lanes all stop out: ~$225 (11% of trailing DD)")
+print("  Worst case 7 lanes all stop out: ~$262 (13% of trailing DD)")
+print("  Worst case 10 lanes all stop out: ~$375 (19% of trailing DD)")
 print()
 print("  CONCLUSION: 6 lanes is NOT a DD constraint.")
 print("  The 6-slot limit is from the SCALING PLAN Day-1 cap (2 lots max),")
@@ -131,7 +132,7 @@ labels = list(best_per_session.keys())
 n = len(labels)
 
 # Print header
-header = f"{'':20s}" + "".join(f"{l[:8]:>10s}" for l in labels)
+header = f"{'':20s}" + "".join(f"{label[:8]:>10s}" for label in labels)
 print(header)
 
 for i in range(n):
@@ -179,7 +180,7 @@ for config_name, lane_set in [
 ]:
     daily_sum = []
     for d in all_days:
-        total = sum(daily_pnl[l].get(d, 0) for l in lane_set)
+        total = sum(daily_pnl[lane].get(d, 0) for lane in lane_set)
         daily_sum.append(total)
     arr = np.array(daily_sum)
     nonzero = arr[arr != 0]

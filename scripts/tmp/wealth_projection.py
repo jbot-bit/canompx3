@@ -1,7 +1,5 @@
 """10-year wealth projection with ALL variables."""
 
-import numpy as np
-
 print("=" * 80)
 print("LONG-TERM WEALTH MODEL — EVERY VARIABLE ACCOUNTED FOR")
 print("=" * 80)
@@ -47,7 +45,7 @@ print(f"  Strategy decay: {DECAY_MAINTAINED:.0%}/yr (maintained), {DECAY_UNMAINT
 print(f"  AUD/USD: {AUD_USD} -> 1 USD = {EFFECTIVE_USD_AUD:.3f} AUD after spread")
 print(f"  Tax rate: {TAX_RATE:.1%} (AU marginal + medicare)")
 print(f"  Fixed costs: ${TOTAL_FIXED:,}/yr (Databento + VPS + data + SWIFT)")
-print(f"  Reinvest: 50% of after-tax profits for first 5 years")
+print("  Reinvest: 50% of after-tax profits for first 5 years")
 print()
 
 # ── SCENARIO MODELING ──

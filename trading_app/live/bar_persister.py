@@ -18,7 +18,6 @@ Safety:
 
 import logging
 import threading
-from datetime import datetime
 
 import duckdb
 

@@ -51,7 +51,7 @@ def run_cross_validation() -> None:
     gc_cols = [d[0] for d in con.description]
 
     print(f"{'=' * 100}")
-    print(f"GC -> MGC CROSS-VALIDATION REPORT")
+    print("GC -> MGC CROSS-VALIDATION REPORT")
     print(f"{'=' * 100}")
     print(f"GC strategies: {len(gc_strats)}")
     print(f"MGC cost: ${mgc_cost.total_friction:.2f} friction")
@@ -60,7 +60,7 @@ def run_cross_validation() -> None:
     results = []
 
     for row in gc_strats:
-        strat = dict(zip(gc_cols, row))
+        strat = dict(zip(gc_cols, row, strict=True))
         sid = strat["strategy_id"]
         orb_label = strat["orb_label"]
         filter_type = strat["filter_type"]
@@ -240,7 +240,7 @@ def run_cross_validation() -> None:
     print(f"INSUFFICIENT_DATA: {len(insufficient)}  (N<30 — cannot judge)")
 
     if confirmed:
-        print(f"\nCONFIRMED strategies for MGC deployment:")
+        print("\nCONFIRMED strategies for MGC deployment:")
         for r in confirmed:
             mgc_sid = r["gc_sid"].replace("GC_", "MGC_")
             print(f"  {mgc_sid}: ExpR={r['mgc_expr']:.3f} WR={r['mgc_wr']:.1%} N={r['mgc_n']}")

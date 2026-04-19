@@ -28,22 +28,23 @@ from pipeline.cost_model import get_cost_spec, risk_in_dollars
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import apply_tight_stop
-from trading_app.derived_state import build_profile_fingerprint
 from trading_app.derived_state import (
     build_code_fingerprint,
     build_db_identity,
+    build_profile_fingerprint,
     build_state_envelope,
     get_git_head,
     validate_state_envelope,
 )
+from trading_app.prop_firm_policies import get_payout_policy
 from trading_app.prop_profiles import (
+    AccountProfile,
     get_account_tier,
     get_firm_spec,
     get_profile,
     get_profile_lane_definitions,
     resolve_profile_id,
 )
-from trading_app.prop_firm_policies import get_payout_policy
 from trading_app.strategy_fitness import _load_strategy_outcomes
 from trading_app.topstep_scaling_plan import lots_for_position, max_lots_for_xfa
 

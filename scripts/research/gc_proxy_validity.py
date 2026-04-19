@@ -78,6 +78,9 @@ def gate_1(con: duckdb.DuckDBPyConnection) -> dict:
                 "range_corr",
                 "avg_h_diff",
                 "med_h_diff",
+                # NOTE: when adding columns here, also extend the SELECT in the
+                # SQL above. strict=True (added below) raises ValueError on
+                # length mismatch.
                 "p99_h_diff",
                 "max_h_diff",
                 "avg_range_diff",
@@ -85,6 +88,7 @@ def gate_1(con: duckdb.DuckDBPyConnection) -> dict:
                 "vol_ratio",
             ],
             row,
+            strict=True,
         )
     )
 
@@ -188,7 +192,7 @@ def gate_2(con: duckdb.DuckDBPyConnection) -> dict:
         "high_corr",
         "avg_high_diff",
     ]
-    r = dict(zip(labels, row))
+    r = dict(zip(labels, row, strict=True))
 
     print(f"  Trading days compared: {r['n']}")
     print()
@@ -303,7 +307,7 @@ def gate_3(con: duckdb.DuckDBPyConnection) -> dict:
         "n_win",
         "n_loss",
     ]
-    r = dict(zip(labels, row))
+    r = dict(zip(labels, row, strict=True))
 
     print(f"  Total MGC trades:         {r['n_total']:,}")
     print(f"  With GC bar at entry_ts:  {r['n_matched']:,} ({r['coverage_pct']:.1%} coverage)")
@@ -381,7 +385,7 @@ def gate_4_adversarial(con: duckdb.DuckDBPyConnection) -> dict:
     # If the worst ORB size diff is < 1 point, it can't flip a G5 decision
     # unless the ORB is right at the boundary.
     print(f"  Worst single-bar high diff: {max_diff:.2f} pts")
-    print(f"  Typical G5 threshold: ~5 pts")
+    print("  Typical G5 threshold: ~5 pts")
     print(
         f"  Could worst case flip G5? {'POSSIBLY (within 1 pt of threshold)' if max_diff > 4 else 'NO — diff too small relative to threshold'}"
     )
@@ -472,7 +476,7 @@ def main():
             print()
             print("EVIDENCE:")
             print(f"  - {g1['n']:,} paired bars, price correlation > 0.9999")
-            print(f"  - Filter inputs (gap, PDR, range) all correlate > 0.98")
+            print("  - Filter inputs (gap, PDR, range) all correlate > 0.98")
             print(f"  - Volume DIFFERENT ({g2['vol_ratio']:.0f}x) confirming negative control")
             print(
                 f"  - {g3.get('n_matched', 0):,} trades: {g3.get('coverage_pct', 0):.1%} GC coverage, "

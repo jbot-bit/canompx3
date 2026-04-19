@@ -25,7 +25,6 @@ from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.lane_correlation import _load_lane_daily_pnl, _pearson
 
-
 # ── Phase 1: Load all validated MNQ strategies ───────────────────────
 
 
@@ -42,7 +41,7 @@ def load_validated_strategies(con: duckdb.DuckDBPyConnection) -> list[dict]:
         ORDER BY es.expectancy_r DESC
     """).fetchall()
     cols = [d[0] for d in con.description]
-    return [dict(zip(cols, r)) for r in rows]
+    return [dict(zip(cols, r, strict=True)) for r in rows]
 
 
 # ── Phase 2: Build daily P&L series for each strategy ────────────────
@@ -304,7 +303,7 @@ def main():
         )
 
     # Verify pairwise rho among selected
-    print(f"\n  Selected pairwise correlations:")
+    print("\n  Selected pairwise correlations:")
     sel_ids = [s["strategy_id"] for s in selected]
     for i, a in enumerate(sel_ids):
         for j, b in enumerate(sel_ids):
@@ -340,7 +339,7 @@ def main():
 
     # Show current deployed pairwise correlations too
     if len(deployed_strats) >= 2:
-        print(f"\n  Current deployed pairwise correlations:")
+        print("\n  Current deployed pairwise correlations:")
         for i, a in enumerate(deployed):
             for j, b in enumerate(deployed):
                 if j <= i:
@@ -377,7 +376,7 @@ def main():
         risk_per_trade_dollars=avg_risk,
         stop_mult=0.75,
     )
-    print(f"\n  RECOMMENDED portfolio:")
+    print("\n  RECOMMENDED portfolio:")
     print(f"    Survival rate: {c11_rec['survival_rate']:.1%}")
     print(f"    Avg final P&L: ${c11_rec['avg_final_pnl']:.0f}")
     print(f"    Median final:  ${c11_rec['median_final_pnl']:.0f}")
@@ -393,7 +392,7 @@ def main():
             risk_per_trade_dollars=avg_risk,
             stop_mult=0.75,
         )
-        print(f"\n  CURRENT deployed portfolio:")
+        print("\n  CURRENT deployed portfolio:")
         print(f"    Survival rate: {c11_cur['survival_rate']:.1%}")
         print(f"    Avg final P&L: ${c11_cur['avg_final_pnl']:.0f}")
         print(f"    Median final:  ${c11_cur['median_final_pnl']:.0f}")

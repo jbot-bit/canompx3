@@ -2,6 +2,7 @@
 
 import duckdb
 import numpy as np
+
 from pipeline.paths import GOLD_DB_PATH
 
 con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)

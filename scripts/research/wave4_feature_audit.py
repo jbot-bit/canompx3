@@ -26,7 +26,6 @@ from pathlib import Path
 
 import duckdb
 import pandas as pd
-import numpy as np
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -136,8 +135,8 @@ def binary_test(df: pd.DataFrame, col: str) -> dict | None:
     valid = df.dropna(subset=[col, "pnl_r"])
     if len(valid) < MIN_TOTAL_N:
         return None
-    true_rows = valid[valid[col] == True]
-    false_rows = valid[valid[col] == False]
+    true_rows = valid[valid[col].astype(bool)]
+    false_rows = valid[~valid[col].astype(bool)]
     if len(true_rows) < MIN_BIN_N or len(false_rows) < MIN_BIN_N:
         return None
     wr_t = (true_rows["pnl_r"] > 0).mean()
@@ -281,7 +280,7 @@ def main():
             for sess in clean_sessions:
                 try:
                     df = load_all_presession_data(con, inst, sess)
-                except Exception as e:
+                except Exception:
                     continue
                 if len(df) < MIN_TOTAL_N:
                     continue

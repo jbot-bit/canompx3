@@ -126,8 +126,8 @@ def compute_metric(df: pd.DataFrame, feature: str, ftype: str, direction: str) -
     else:
         return None
 
-    in_group = valid[valid["grp"] == True]
-    out_group = valid[valid["grp"] == False]
+    in_group = valid[valid["grp"].astype(bool)]
+    out_group = valid[~valid["grp"].astype(bool)]
     if len(in_group) < MIN_BIN_N or len(out_group) < MIN_BIN_N:
         return None
     return {
@@ -172,7 +172,6 @@ def t4_sensitivity(df: pd.DataFrame, feature: str, ftype: str, direction: str) -
     if len(valid) < 200:
         return {"error": "insufficient N"}
     # Test Q20, Q40, Q50, Q60, Q80 thresholds
-    expected_sign = 1 if direction == "HIGH" else -1
     results = {}
     for pct, p in [("Q20", 0.20), ("Q40", 0.40), ("Q50", 0.50), ("Q60", 0.60), ("Q80", 0.80)]:
         thresh = valid[feature].quantile(p)
@@ -217,7 +216,7 @@ def t6_null_bootstrap(df: pd.DataFrame, feature: str, ftype: str, direction: str
         else:
             valid["grp"] = valid["qbin"] == bins_u[0]
 
-    if len(valid[valid["grp"] == True]) < MIN_BIN_N or len(valid[valid["grp"] == False]) < MIN_BIN_N:
+    if len(valid[valid["grp"].astype(bool)]) < MIN_BIN_N or len(valid[~valid["grp"].astype(bool)]) < MIN_BIN_N:
         return {"error": "bin too small"}
 
     pnl = np.asarray(valid["pnl_r"].values, dtype=float)

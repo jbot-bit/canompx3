@@ -35,7 +35,7 @@ def check_equity_cooldown(portfolio_name: str, instrument: str) -> tuple[bool, s
     After an equity halt (max DD breached), a 24h cooldown is enforced.
     This prevents emotional re-entry after a major loss event.
     """
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
 
     from trading_app.live.session_safety_state import SessionSafetyState
 

@@ -73,7 +73,7 @@ def load_session_data(con, instrument: str, session: str) -> pd.DataFrame:
     comp_tier_col = f"orb_{session}_compression_tier"
 
     # Check which columns exist for this session
-    cols_exist = con.sql(f"DESCRIBE daily_features").fetchall()
+    cols_exist = con.sql("DESCRIBE daily_features").fetchall()
     col_names = {c[0] for c in cols_exist}
 
     select_cols = ["o.trading_day", "o.pnl_r", "df.daily_close", "df.atr_20"]

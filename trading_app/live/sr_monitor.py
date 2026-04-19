@@ -11,10 +11,10 @@ standardized trade outcome stream.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from functools import lru_cache
 import math
 import random
+from dataclasses import dataclass, field
+from functools import lru_cache
 
 
 def _score_coefficients(delta: float, variance_ratio: float) -> tuple[float, float, float]:

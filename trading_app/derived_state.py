@@ -10,9 +10,9 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Sequence
 
 import duckdb
 
