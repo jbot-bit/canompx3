@@ -202,8 +202,16 @@ TRIPLE_JOIN_ALLOWLIST_DIRS = {"archive", "tests"}
 # Regex to extract triple-quoted strings (""" or ''')
 TRIPLE_QUOTE_PATTERN = re.compile(r'(?:"""(.*?)"""|\'\'\'(.*?)\'\'\')', re.DOTALL)
 
-# Regex to detect SQL blocks (contain SQL keywords)
-SQL_KEYWORD_PATTERN = re.compile(r"\b(?:SELECT|INSERT|FROM|JOIN)\b", re.IGNORECASE)
+# Regex to detect SQL blocks. Tightened (2026-04-19) to require BOTH
+# SELECT AND FROM tokens — a single bare 'JOIN' or 'FROM' previously
+# matched English prose docstrings (e.g., "Load orb_outcomes JOIN
+# daily_features for one cell."), creating false positives for the
+# triple-join guard. Real SQL queries that touch daily_features always
+# have both SELECT and FROM; prose almost never has both as standalone
+# tokens. This combination is the cheapest robust discriminator.
+SQL_KEYWORD_PATTERN = re.compile(
+    r"\bSELECT\b.*?\bFROM\b", re.IGNORECASE | re.DOTALL
+)
 
 # Regex to detect JOIN daily_features
 JOIN_DF_PATTERN = re.compile(r"\bJOIN\s+daily_features\b", re.IGNORECASE)
