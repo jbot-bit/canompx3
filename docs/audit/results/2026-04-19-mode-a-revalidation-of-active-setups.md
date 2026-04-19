@@ -1,6 +1,6 @@
 # Mode A canonical re-validation of active validated_setups
 
-**Generated:** 2026-04-18T15:56:27+00:00
+**Generated:** 2026-04-19T06:47:46+00:00
 **Script:** `research/mode_a_revalidation_active_setups.py`
 **IS boundary:** `trading_day < 2026-01-01` (Mode A)
 **Canonical filter source:** `research.filter_utils.filter_signal` → `trading_app.config.ALL_FILTERS`
