@@ -299,9 +299,7 @@ def load_lane(con, instrument, session):
         monkeypatch.setattr(audit_behavioral, "TRIPLE_JOIN_SCAN_DIRS", [tmp_path / "research"])
         monkeypatch.setattr(audit_behavioral, "PROJECT_ROOT", tmp_path)
         violations = audit_behavioral.check_triple_join_guard()
-        assert len(violations) == 0, (
-            f"Prose docstring incorrectly flagged. Violations: {violations}"
-        )
+        assert len(violations) == 0, f"Prose docstring incorrectly flagged. Violations: {violations}"
 
 
 # ── Check 6: Double-break look-ahead scanner ─────────────────────────

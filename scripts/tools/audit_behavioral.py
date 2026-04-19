@@ -209,9 +209,7 @@ TRIPLE_QUOTE_PATTERN = re.compile(r'(?:"""(.*?)"""|\'\'\'(.*?)\'\'\')', re.DOTAL
 # triple-join guard. Real SQL queries that touch daily_features always
 # have both SELECT and FROM; prose almost never has both as standalone
 # tokens. This combination is the cheapest robust discriminator.
-SQL_KEYWORD_PATTERN = re.compile(
-    r"\bSELECT\b.*?\bFROM\b", re.IGNORECASE | re.DOTALL
-)
+SQL_KEYWORD_PATTERN = re.compile(r"\bSELECT\b.*?\bFROM\b", re.IGNORECASE | re.DOTALL)
 
 # Regex to detect JOIN daily_features
 JOIN_DF_PATTERN = re.compile(r"\bJOIN\s+daily_features\b", re.IGNORECASE)
