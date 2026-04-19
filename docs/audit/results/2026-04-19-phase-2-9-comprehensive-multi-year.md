@@ -346,6 +346,31 @@ The CME_PRECLOSE vs SINGAPORE_OPEN contrast is now institutionally clear:
 - CME_PRECLOSE BOOST survives BH + BHY + 2-instrument cross-check — ROBUST at all 3 layers.
 - SINGAPORE_OPEN BOOST survives BH + BHY — but fails 2-instrument cross-check (MES negative every year). Narrower: MNQ-specific filter signal, not session regime.
 
+### A4 hardening — moving-block bootstrap on 2025 K_year BH survivors
+
+Purpose: test whether the parametric subset-t p-values on the 4 2025 BH_year survivor cells are inflated by within-year serial correlation. BHY addresses cross-cell dependence; block bootstrap addresses within-cell dependence. Together they cover both dependence directions.
+
+Methodology: Politis-Romano (1994) overlapping moving-block bootstrap. Block length `L = max(2, round(n^(1/3)))` per Hall-Horowitz-Jing 1995; n here = 70-82 → L=4. Demean pnl series, form (n − L + 1) overlapping blocks, resample ceil(n/L) blocks with replacement, compute replica mean. p_bootstrap = (|rep_expr| ≥ |obs_expr|) proportion with Phipson-Smyth 2010 continuity correction (+1/+1). Seed = 20260419 for reproducibility. Replicas = 10,000.
+
+Script: `research/phase_2_9_block_bootstrap_2025.py`.
+
+Results (columns: n, block length L, observed year_expr, parametric t, parametric p, bootstrap p, consistent at q=0.10):
+
+| Cell | n | L | obs_expr | parametric_t | parametric_p | bootstrap_p | consistent |
+|---|--:|--:|--:|--:|--:|--:|:-:|
+| MNQ_COMEX_SETTLE_OVNRNG_100 RR1.0 | 82 | 4 | +0.292 | +2.98 | 0.00384 | **0.00030** | ✓ |
+| MNQ_COMEX_SETTLE_X_MES_ATR60 RR1.0 | 77 | 4 | +0.310 | +3.06 | 0.00303 | **0.00090** | ✓ |
+| MNQ_COMEX_SETTLE_OVNRNG_100 RR1.5 | 82 | 4 | +0.357 | +2.74 | 0.00755 | **0.00200** | ✓ |
+| MNQ_SINGAPORE_OPEN_ATR_P50_O30 RR1.5 | 70 | 4 | +0.434 | +3.08 | 0.00298 | **0.00080** | ✓ |
+
+**Verdict (A4):** 4/4 bootstrap p-values are ≤ parametric — in fact strictly smaller. The parametric Student-t was CONSERVATIVE, not inflated, for these 2025 cells. Within-cell serial correlation is NOT driving the per-cell significance.
+
+This isolates the dependence problem cleanly to the CROSS-CELL level (which BHY already corrected for). Refined framing:
+- **Per-cell:** each 2025 survivor is a genuinely significant per-cell observation (parametric p=0.003-0.008, bootstrap p=0.0003-0.002). They are not within-cell artifacts.
+- **Cross-cell:** 3 of 4 share session + instrument + direction → ~2 independent observations, not 4. BHY correctly drops them at K_year.
+
+Net interpretation of the 2025 claim: the cells themselves are real statistics, but the family-level BH_year=4 overstates independence. Cite the A3 cross-instrument finding (MES COMEX_SETTLE 2025 unfiltered +0.083 t=+1.55) alongside: the 2025 equity-index COMEX_SETTLE regime is real but single-observation-at-the-instrument-class-level, not 4-independent-signal-cell.
+
 ### Integration with BHY
 
 The BHY result (K_year survivors = 1, specifically MNQ CME_PRECLOSE X_MES_ATR60 × 2020) and this cross-instrument check converge on the same doctrinal conclusion:
