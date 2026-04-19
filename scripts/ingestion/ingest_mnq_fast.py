@@ -29,7 +29,7 @@ import duckdb
 import numpy as np
 import pandas as pd
 
-from pipeline.asset_configs import get_asset_config
+from pipeline.asset_configs import get_asset_config, require_dbn_available
 from pipeline.ingest_dbn_mgc import (
     choose_front_contract,
     run_final_gates,
@@ -72,6 +72,7 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
+    require_dbn_available(INSTRUMENT)
     config = get_asset_config(INSTRUMENT)
     symbol = config["symbol"]
     dbn_path = config["dbn_path"]

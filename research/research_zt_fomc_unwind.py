@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 import databento as db
 import pandas as pd
 
-from pipeline.asset_configs import get_asset_config
+from pipeline.asset_configs import get_asset_config, require_dbn_available
 from pipeline.calendar_filters import _FOMC_DATES_RAW
 
 NY_TZ = ZoneInfo("America/New_York")
@@ -345,7 +345,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    dbn_dir = args.dbn_dir or get_asset_config("ZT")["dbn_path"]
+    if args.dbn_dir is not None:
+        dbn_dir = args.dbn_dir
+    else:
+        require_dbn_available("ZT")
+        dbn_dir = get_asset_config("ZT")["dbn_path"]
     events, summary, tick_size = run_study(dbn_dir)
     write_outputs(args.output_prefix, events, summary, tick_size)
 

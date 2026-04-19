@@ -26,14 +26,23 @@ Each asset defines:
   instruments. Consumed by `pipeline.data_era` for PARENT/MICRO
   classification (Phase 3a foundation, Apr 2026).
 
-FAIL-CLOSED: get_asset_config() aborts if:
-- Unknown instrument
-- dbn_path is None (data not available)
-- dbn_path points to non-existent file
+API split (2026-04-19, PR-A refactor):
+- get_asset_config(instrument) -> dict
+    Metadata-only. Raises ValueError for unknown instrument. Never touches the
+    filesystem. Safe for tests and callers that only need config metadata.
+- require_dbn_available(instrument) -> Path
+    Fail-closed DBN access. Raises ValueError for unknown instrument / missing
+    dbn_path entry / missing minimum_start_date. Raises FileNotFoundError if
+    the DBN file/dir does not exist on disk. Call this from any code path that
+    will actually open the DBN store.
+
+Prior to 2026-04-19 get_asset_config() performed both roles via sys.exit(1).
+That coupled "I need metadata" and "I need the DBN on disk" and made the
+module unimportable in CI / test contexts. Callers that need DBN access now
+opt into it explicitly. See docs/runtime/stages/pr-a-asset-configs-lazy-dbn.md.
 """
 
 import re
-import sys
 from datetime import date
 from pathlib import Path
 
@@ -421,39 +430,67 @@ def get_deployable_instruments() -> list[str]:
 
 
 def get_asset_config(instrument: str) -> dict:
-    """
-    Return validated config for the given instrument.
+    """Return metadata config for the given instrument.
 
-    FAIL-CLOSED:
-    - Prints error and calls sys.exit(1) if instrument unknown
-    - Prints error and calls sys.exit(1) if dbn_path is None
-    - Prints error and calls sys.exit(1) if dbn_path file does not exist
+    Metadata-only. Does NOT touch the filesystem. Safe to call from tests or
+    any context that only needs symbol / outright_pattern / minimum_start_date
+    / enabled_sessions / parent_symbol / etc.
+
+    Callers that will actually open the DBN store must additionally call
+    `require_dbn_available(instrument)` — this function does NOT validate
+    dbn_path existence.
+
+    Raises:
+        ValueError: if `instrument` is not in ASSET_CONFIGS.
     """
     instrument = instrument.upper()
 
     if instrument not in ASSET_CONFIGS:
-        print(f"FATAL: Unknown instrument '{instrument}'")
-        print(f"       Supported instruments: {sorted(ASSET_CONFIGS.keys())}")
-        sys.exit(1)
+        raise ValueError(
+            f"Unknown instrument '{instrument}'. "
+            f"Supported instruments: {sorted(ASSET_CONFIGS.keys())}"
+        )
 
-    config = ASSET_CONFIGS[instrument]
+    return ASSET_CONFIGS[instrument]
 
-    if config["dbn_path"] is None:
-        print(f"FATAL: No DBN file configured for instrument '{instrument}'")
-        print(f"       To add {instrument} support, provide a DBN file path in pipeline/asset_configs.py")
-        sys.exit(1)
 
-    if not config["dbn_path"].exists():
-        print(f"FATAL: DBN file not found for instrument '{instrument}'")
-        print(f"       Expected: {config['dbn_path']}")
-        sys.exit(1)
+def require_dbn_available(instrument: str) -> Path:
+    """Fail-closed DBN path validator. Returns dbn_path after checking disk.
+
+    Call this from every code path that will open the raw DBN store. Kept
+    separate from `get_asset_config` so tests and metadata-only callers never
+    trigger filesystem validation.
+
+    Raises:
+        ValueError: if `instrument` is unknown, dbn_path entry is None, or
+            minimum_start_date is None (config incomplete).
+        FileNotFoundError: if dbn_path is configured but does not exist on
+            disk.
+    """
+    config = get_asset_config(instrument)
+
+    dbn_path = config["dbn_path"]
+    if dbn_path is None:
+        raise ValueError(
+            f"No DBN file configured for instrument '{instrument}'. "
+            f"To add {instrument} support, provide a DBN file path in "
+            "pipeline/asset_configs.py"
+        )
+
+    if not dbn_path.exists():
+        raise FileNotFoundError(
+            f"DBN file not found for instrument '{instrument}'. "
+            f"Expected: {dbn_path}"
+        )
 
     if config["minimum_start_date"] is None:
-        print(f"FATAL: No minimum_start_date configured for instrument '{instrument}'")
-        print("       Set minimum_start_date in pipeline/asset_configs.py after validating data coverage")
-        sys.exit(1)
+        raise ValueError(
+            f"No minimum_start_date configured for instrument '{instrument}'. "
+            "Set minimum_start_date in pipeline/asset_configs.py after "
+            "validating data coverage"
+        )
 
-    return config
+    return dbn_path
 
 
 def list_instruments() -> list[str]:

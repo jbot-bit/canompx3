@@ -189,10 +189,14 @@ def main():
             print(f"  Step {i}: {name} - {desc}")
         print("No steps executed (dry run).")
 
-        # Still validate that the instrument config is loadable
+        # Still validate that the instrument config is loadable AND that the
+        # DBN store is present on disk — the whole point of --dry-run is to
+        # catch config/data issues before executing steps. require_dbn_available
+        # performs the filesystem check that get_asset_config no longer does.
         logger.info("Validating instrument config...")
-        from pipeline.asset_configs import get_asset_config
+        from pipeline.asset_configs import get_asset_config, require_dbn_available
 
+        require_dbn_available(instrument)
         config = get_asset_config(instrument)
         logger.info(f"  Config loaded for {instrument} [OK]")
         logger.info(f"  DBN: {config['dbn_path']}")

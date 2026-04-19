@@ -38,7 +38,7 @@ import databento as db
 import duckdb
 import pandas as pd
 
-from pipeline.asset_configs import get_asset_config
+from pipeline.asset_configs import get_asset_config, require_dbn_available
 from pipeline.ingest_dbn_mgc import (
     CheckpointManager,
     check_merge_integrity,
@@ -83,8 +83,11 @@ def get_ingest_config(instrument: str) -> dict:
     (e.g., GC for MGC, RTY for M2K, ES for the ES backfill entry).
 
     Returns dict with keys: symbol, outright_pattern, prefix_len,
-    minimum_start_date, data_dir.
+    minimum_start_date, data_dir. Fails closed via require_dbn_available since
+    this wrapper's sole purpose is to prepare an ingestion run that opens
+    data_dir.
     """
+    require_dbn_available(instrument)
     config = get_asset_config(instrument)
 
     return {
