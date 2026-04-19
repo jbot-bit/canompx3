@@ -199,7 +199,12 @@ class TestAssetConfigMesPattern:
         path = ASSET_CONFIGS["MES"]["dbn_path"]
         if not path.exists():
             pytest.skip(
+<<<<<<< HEAD
                 f"MES DBN data not present (expected at {path}). Local-data sentinel — by design absent on CI runners."
+=======
+                f"MES DBN data not present (expected at {path}). "
+                "Local-data sentinel — by design absent on CI runners."
+>>>>>>> d707dc89 (test(env-aware): skip 2 local-data sentinel tests when data absent)
             )
         assert path.is_dir(), f"MES dbn_path is not a directory: {path}"
 
