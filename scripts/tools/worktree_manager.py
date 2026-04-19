@@ -194,9 +194,17 @@ def ensure_symlink(target: Path, link_path: Path) -> None:
         return
     if not target.exists():
         return
-    rel_target = os.path.relpath(target, link_path.parent)
+    # Prefer a relative symlink so the worktree stays portable. On Windows,
+    # os.path.relpath raises ValueError when target and link_path.parent are
+    # on different drives (e.g. CI project root on D:\ vs pytest tmp_path on
+    # C:\). In that case fall back to an absolute target — still a valid
+    # symlink, just not portable across rename of either root.
     try:
-        link_path.symlink_to(rel_target, target_is_directory=target.is_dir())
+        link_target: str | Path = os.path.relpath(target, link_path.parent)
+    except ValueError:
+        link_target = target.resolve()
+    try:
+        link_path.symlink_to(link_target, target_is_directory=target.is_dir())
     except OSError:
         pass
 
