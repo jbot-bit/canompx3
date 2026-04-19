@@ -127,7 +127,7 @@ an even more negative off-signal mean). Shipped canonical gate template:
       AND dir_match
       AND abs(t_IS) >= 3.0           # Chordia (with theory) OR 3.79 (no-theory)
       AND N_IS >= 50                 # deployable sample floor
-      AND years_positive_IS >= 4/7   # per-year stability
+      AND years_positive_IS >= 4     # absolute count of positive years (years with N>=10)
       AND bootstrap_p < 0.10         # moving-block centered-H0, block=5, B=10000
       AND ExpR_on_IS > 0             # positive-mean floor — REQUIRED
   )
@@ -135,6 +135,89 @@ an even more negative off-signal mean). Shipped canonical gate template:
 If a family-scan pre-reg omits the `ExpR_on_IS > 0` gate, reject the pre-reg
 during self-review. Origin: 2026-04-18 VWAP comprehensive scan code review
 caught this theoretical loophole in the H1 gate spec.
+
+CRITICAL — "years_positive" is an ABSOLUTE count, not a ratio. The 2026-04-19
+code review caught a scan implementation using `per_year_positive / per_year_total
+>= 4/7` where per_year_total excluded years with N<10. Under thin-year scenarios
+the ratio passes where absolute count fails. Write pre-reg gate clauses as
+`years_positive_IS >= 4` (absolute) and state in the H1 gate that years with
+N<10 are excluded from the positive count (power floor) but denominator is
+always 7 (the full IS window length for a 2019-2025 ORB dataset). Update scan
+implementations to use `c.per_year_positive >= 4` (not a ratio).
+
+BASELINE CROSS-CHECK — distinguish sanity smoke-test from harness cross-check
+
+Pre-regs often include a K2-like kill criterion that compares the scan's
+baseline computation against the pre-reg's committed baseline values.
+There are TWO distinct test types, and the pre-reg should name them
+honestly:
+
+1. **Baseline sanity smoke-test.** Pre-reg baseline values and scan baseline
+   values are BOTH computed via the same code path (e.g., both via
+   `research.filter_utils.filter_signal`). The test confirms reproducibility
+   of the same code against the same DB state — a smoke-test that the scan
+   runs at all, not a drift check. Label K2 as "baseline sanity smoke-test"
+   in this case; threshold is typically < 0.001 ExpR absolute.
+
+2. **Harness cross-check (genuine drift detection).** Pre-reg baseline values
+   are computed via a DIFFERENT path from what the scan uses. E.g., pre-reg
+   baseline is direct SQL predicate (`WHERE d.overnight_range >= 100.0 ...`),
+   scan baseline is `filter_signal` delegation. An absolute-ExpR difference
+   > ~0.005 then indicates a filter-implementation drift between the two
+   paths. This IS a real harness cross-check. Label explicitly as "harness
+   cross-check (independent-method)"; recommended threshold < 0.005.
+
+Do NOT call a same-path comparison a "harness cross-check." That overstates
+what the test protects against. The 2026-04-19 code review caught this label
+error in the MES mirror pre-reg's K2. For any new pre-reg with non-trivial
+signal claims, strongly recommend writing an independent-method baseline in
+addition to the same-path smoke-test. Origin: 2026-04-19 overnight session
+code review finding.
+
+PATHWAY A THEORY CITATION — filter-mechanism specificity required
+
+When writing a Pathway A pre-reg, the `theory_citation` for each hypothesis
+must specifically address the FILTER MECHANISM being tested, not just the
+broader strategy class. Examples:
+
+- ✓ Good: "OVNRNG_100 on intraday ORB breakouts — grounded by Fitschen Ch 3
+  Table 3.8 (intraday trend-follow on equity indices) for the strategy class,
+  AND by Aronson 2007 Ch 11 (overnight-range as volatility proxy for regime
+  identification) for the filter mechanism."
+- ✓ Also acceptable (within-class refinement, explicit): "Fitschen Ch 3
+  grounds the ORB breakout class. VWAP_MID_ALIGNED is a within-class
+  refinement — no filter-mechanism-specific literature citation, tested
+  here as a refinement on an already-grounded strategy class."
+- ✗ Reject: "Fitschen Ch 3 grounds intraday trend-follow, therefore
+  VWAP_MID_ALIGNED at Chordia t>=3.00 with-theory is justified." This
+  stretches Fitschen to cover a specific mechanism Fitschen does not
+  discuss.
+
+If a Pathway A pre-reg lacks specific filter-mechanism grounding, either
+cite a separate source for the filter or explicitly tag as
+within-class-refinement. Do NOT promote the strategy-class citation to
+cover the specific filter. Origin: 2026-04-19 code review AI #4.
+
+QUANTILE LOOK-AHEAD CHECK — mandatory for percentile-binned features
+
+When a pre-reg uses a percentile-binned feature (e.g., `rel_vol_HIGH_Q3`
+defined as rel_vol > 67th percentile of a cell's distribution), the
+percentile MUST be computed IS-only, not over IS+OOS together. Computing
+over the full sample is a subtle look-ahead — IS fires depend on OOS
+distribution.
+
+Scan implementations that use helpers like `bucket_high(vals, 67)` where
+`vals` contains IS+OOS data are look-ahead-contaminated. The fix is to
+compute the threshold on IS-only data, then apply to all rows. A
+sensitivity check comparing IS-only to full-sample quantile results can
+document robustness of findings against this class of bias.
+
+Origin: 2026-04-19 code review AI #2 on the rel_vol cross-scan overlap
+decomposition. The specific 5-survivor finding was validated ROBUST under
+IS-only quantile (Meff and max-Jaccard unchanged to 3 decimals), but the
+check itself is mandatory going forward. See
+`.claude/rules/backtesting-methodology.md` § Historical failure log for
+the "Quantile-over-full-sample" class entry.
 
 EXPECTED NEGATIVE-CONTROL BLOCK (family scans only)
 

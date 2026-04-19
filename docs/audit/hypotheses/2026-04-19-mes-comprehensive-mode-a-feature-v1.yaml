@@ -1,0 +1,207 @@
+version: 1
+status: LOCKED
+date: 2026-04-19
+slug: mes-comprehensive-mode-a-feature-v1
+title: "MES comprehensive Mode A Pathway A feature scan — 5 sessions × 4 filters × 2 directions (K=40)"
+owner: claude
+parent_spec: null
+sibling_spec: "docs/audit/hypotheses/2026-04-19-mes-broader-mode-a-rediscovery-v1.yaml (precedes on CME_PRECLOSE+US_DATA_1000)"
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/prompts/prereg-writer-prompt.md"
+  notes:
+    - "Pathway A — Chordia t >= 3.00 with-theory. Theory: Fitschen Ch 3 p.41 commodity/equity-index intraday trend-follow; ORB size-filter (ORB_G5/G8) and volatility-filter (ATR_P70) both belong to Fitschen's within-class size-and-vol refinement. Friction filter (COST_LT12) is Chordia-style cost-discipline screen."
+    - "Canonical filter delegation via research.filter_utils.filter_signal."
+    - "Mode A: trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01)."
+    - "Scope chosen PRE-BASELINE to prevent cherry-picking: the 5 highest-N MES sessions (excluding already-tested CME_PRECLOSE and US_DATA_1000 from commit 03a1fb74, and low-N CME_REOPEN/NYSE_CLOSE) × 4 canonical filter classes × both directions."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "d8ad96f2"
+  committed_required_before_run: true
+
+scope:
+  instruments:
+    - id: MES
+      source: "pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS"
+      verification: "MES in ACTIVE_ORB_INSTRUMENTS. ~6.7 years IS data per session."
+  sessions:
+    - TOKYO_OPEN
+    - SINGAPORE_OPEN
+    - EUROPE_FLOW
+    - LONDON_METALS
+    - COMEX_SETTLE
+  session_rationale: |
+    5 MES sessions with N_IS >= 1600 Mode A (per canonical orb_outcomes
+    inspection 2026-04-19): TOKYO 1721, SINGAPORE 1721, EUROPE_FLOW 1718,
+    LONDON_METALS 1717, COMEX_SETTLE 1642. Excluded: CME_PRECLOSE (Phase 7
+    tested, 1 CONTINUE produced), US_DATA_1000 (Phase 7 tested, 3 KILLs,
+    H4/H5 shadowed), NYSE_OPEN/US_DATA_830 (kept for future pre-reg to
+    bound K=40), CME_REOPEN/NYSE_CLOSE (N<800). Session list locked
+    BEFORE computing filter-on baselines.
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  directions:
+    - long
+    - short
+  rr_target: 1.5
+  filter_classes:
+    - ORB_G5     # size top quintile
+    - ORB_G8     # size top octile
+    - COST_LT12  # friction screen
+    - ATR_P70    # vol top 30
+  filter_source: "trading_app.config.ALL_FILTERS"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+    effective_coverage: "MES native ~6.7 years (2019-08 through 2025-12)"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM (descriptive only; never used to select or tune)"
+    policy: "Mode A sacred."
+  tuning_against_oos: false
+
+feature_definition:
+  canonical_source_of_truth: "trading_app.config.ALL_FILTERS"
+  delegation_wrapper: "research.filter_utils.filter_signal(df, filter_key, orb_label)"
+  trade_time_knowable: true
+  first_complete_time: "All 4 filters resolve at ORB window close."
+  lookahead_check: "PASS — all 4 filter keys use only ORB/pre-ORB/prior-day features (§ RULE 6.1 safe)."
+
+primary_schema:
+  k_family: 40
+  k_global: 40
+  k_lane: 40
+  k_session: 8    # 4 filters × 2 directions per session
+  k_instrument: 40
+  primary_promotion_gate: "K_family BH-FDR q < 0.05"
+  family_cells_structured_as: |
+    5 sessions × 4 filters × 2 directions = 40 cells.
+    Cell IDs: "H{idx:02d}_{session_abbr}_{filter}_{dir_abbr}_RR15".
+    Example: H01_TOK_ORBG5_L_RR15, H02_TOK_ORBG5_S_RR15, ..., H40_CMX_ATRP70_S_RR15.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  note: |
+    Closes the MES coverage gap left by Phase 7 (commit 03a1fb74), which
+    tested only 6 cells on CME_PRECLOSE and US_DATA_1000. This pre-reg
+    extends to 5 more sessions × 4 filter classes × 2 directions. Structured
+    family scan — no cherry-picking of cells by baseline approx_t.
+    Baselines will be computed by the scan harness at run-time (not by
+    pre-reg writer) to eliminate selection bias. K2 smoke-test compares
+    harness result to an independent-SQL re-run of the same path.
+
+hypotheses_schema:
+  id_format: "H{idx:02d}_{session_abbr}_{filter_short}_{dir_abbr}_RR15"
+  session_abbr:
+    TOKYO_OPEN: "TOK"
+    SINGAPORE_OPEN: "SGP"
+    EUROPE_FLOW: "EUR"
+    LONDON_METALS: "LDM"
+    COMEX_SETTLE: "CMX"
+  filter_short:
+    ORB_G5: "G5"
+    ORB_G8: "G8"
+    COST_LT12: "COST"
+    ATR_P70: "ATR"
+  dir_abbr:
+    long: "L"
+    short: "S"
+  theory_citation_for_all_cells:
+    source: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+    extract: "Table 3.9 (p.41) commodity/equity-index intraday trend-follow. ORB_G5/G8 size filter + ATR_P70 vol filter + COST_LT12 friction screen — all within-class refinements on an already-grounded intraday breakout strategy."
+  per_cell_gate:
+    - "bh_pass_family (q_family < 0.05)"
+    - "abs(t_IS) >= 3.00"
+    - "N_IS_on >= 100"
+    - "years_positive_IS >= 4 (absolute, over 7 years 2019-2025; N<10 years excluded from positive count)"
+    - "bootstrap_p < 0.10 (moving-block centered-H0, block=5, B=10000)"
+    - "ExpR_on_IS > 0"
+
+trial_budget:
+  primary_selection_trials: 40
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2 per Bailey et al 2013"
+    N_trials: 40
+    expected_max_N: 1721
+    minbtl_value: "2 * ln(40) / 1721^2 ≈ 2.5e-6 — well within data horizon"
+    within_cap: true
+
+kill_criteria:
+  - id: K1
+    metric: "Number of H01-H40 that pass all 6 gate clauses"
+    threshold: 0
+    action: "PERMANENT KILL on the zero-cell family. MES coverage gap closed with negative evidence."
+  - id: K2
+    metric: "Baseline sanity smoke-test: |harness baseline - independent SQL baseline| per cell"
+    threshold: 0.001
+    action: "SMOKE FAIL — harness-implementation discrepancy."
+  - id: K3
+    metric: "Any cell flagged tautology (|T0|>0.70), extreme_fire (<5% or >95%), or arithmetic_only (|WR_spread|<3% AND |Delta_IS|>0.10)"
+    threshold: 1
+    action: "FLAG — exclude flagged cells from survivor set per RULE 8."
+
+decision_rule:
+  continue_if: "At least 1 of H01-H40 passes all 6 gate clauses AND no K2 smoke fail AND not K3-flagged."
+  park_if: "At least 1 cell passes BH-FDR family but fails EXACTLY ONE of {bootstrap_p, years_positive} with N_IS_on >= 100. Shadow pre-reg follow-up required."
+  kill_if: "K1 fires (zero cells pass) OR K2 smoke fail."
+
+methodology_rules_applied:
+  - rule: "backtesting-methodology.md RULE 1 — look-ahead"
+    application: "All 4 filters are trade-time-knowable at ORB close. No session/overnight window-derived features used."
+  - rule: "backtesting-methodology.md RULE 3 — IS/OOS discipline"
+    application: "Strict Mode A IS."
+  - rule: "backtesting-methodology.md RULE 4 — multi-framing BH-FDR"
+    application: "K_family = K_global = 40."
+  - rule: "research-truth-protocol.md § Canonical filter delegation"
+    application: "filter_signal applied canonically."
+  - rule: "prereg-writer-prompt.md § Pathway A filter-mechanism specificity"
+    application: "Within-class refinement grounded in Fitschen Ch 3."
+
+outputs_required_after_run:
+  - "Per-cell N_on_IS, ExpR_on_IS, WR_on_IS, std_on_IS, t_IS, raw_p_IS."
+  - "Per-cell bootstrap_p (moving-block, block=5, B=10000, seed=42)."
+  - "Per-cell T0 tautology corr against orb_size, atr_20, overnight_range."
+  - "Per-cell fire_rate, extreme_fire flag, arithmetic_only flag."
+  - "BH-FDR q_family per cell."
+  - "Per-year breakdown 2019-2025."
+  - "OOS descriptive stats — NOT used to select."
+  - "Kill/Park/Continue verdict per cell."
+  - "Result doc: docs/audit/results/2026-04-19-mes-comprehensive-mode-a-feature-v1-scan.md"
+
+execution_gate:
+  allowed_now:
+    - "Stamp commit_sha, transition to LOCKED in follow-up commit."
+    - "Run the scan AFTER commit_sha stamped."
+  forbidden_now:
+    - "Running the scan before commit_sha is stamped."
+    - "Modifying any gate threshold or kill criterion after first run."
+    - "Widening the family to additional sessions, filters, or directions post-run."
+
+blast_radius:
+  upstream_docs_referenced:
+    - "Phase 7 sibling spec (2026-04-19-mes-broader-mode-a-rediscovery-v1.yaml)"
+    - "Phase 7 sibling result (2026-04-19-mes-broader-mode-a-rediscovery-v1-scan.md)"
+  downstream_docs_created:
+    - "docs/audit/results/2026-04-19-mes-comprehensive-mode-a-feature-v1-scan.md (on run)"
+  production_code_touched: "NONE."
+  db_writes: "NONE. Read-only scan."
+  gold_db_read_only: true
+
+not_done_by_this_pre_reg:
+  - "Does NOT test RR=1.0 or 2.0 (bounded to RR=1.5 to keep K=40)."
+  - "Does NOT test apertures 15 or 30 (bounded to 5-minute ORB)."
+  - "Does NOT test NYSE_OPEN / US_DATA_830 (separate pre-reg if pursued — reserved for K=40 budget on next session pair)."
+  - "Does NOT test volume filters (OVNRNG_100, rel_vol HIGH/LOW) or VWAP filters — separate family."
+  - "Does NOT write to validated_setups or experimental_strategies."

@@ -92,3 +92,11 @@ DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db python research/rel_vol_cross_scan_o
 
 No randomness. Fire masks replicated from `research.comprehensive_deployed_lane_scan.bucket_high`. No writes to `validated_setups` / `experimental_strategies`.
 
+## Inherited methodology caveat
+
+The fire-mask definition here uses `bucket_high(rel_vol, 67)` which computes the 67th percentile over the full cell distribution (IS + OOS combined) and then applies it to gate IS rows. That is a subtle look-ahead — IS fires depend on OOS distribution. This audit DELIBERATELY replicates the audited scan's convention so the decomposition compares like-for-like fire counts (our N_on matches the 2026-04-15 scan's N_on to within ±2 rows per cell). It does not fix the underlying look-ahead.
+
+A sensitivity check was run on 2026-04-19 (`research/rel_vol_cross_scan_overlap_decomposition.py --quantile-method is_only`) with the 67th percentile computed IS-only. Result: Meff = 4.817, max Jaccard = 0.491 / 0.490 — identical to 3 decimals. Union fire-days 850 vs 852 (2-day difference). **The specific K_eff ≈ 4 finding is ROBUST under look-ahead correction** — the MES/MNQ COMEX_SETTLE short pair's 0.49 Jaccard is structural, not an upstream quantile artifact.
+
+See companion document `docs/audit/results/2026-04-19-rel-vol-cross-scan-overlap-decomposition-is-only-quantile.md` for the IS-only numbers. See `.claude/rules/backtesting-methodology.md` § Historical failure log ("Quantile-over-full-sample as feature look-ahead") for the class-level rule.
+
