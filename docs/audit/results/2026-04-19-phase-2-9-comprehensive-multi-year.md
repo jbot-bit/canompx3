@@ -304,6 +304,48 @@ Notes:
 
 **Corrected framing:** instead of "4 independent 2025 BH_year survivors," the finding is "in 2025, COMEX_SETTLE turned positive on both MES and MNQ — a regime-consistent observation on 2 correlated instruments, with MNQ showing stronger magnitude than MES."
 
+### SINGAPORE_OPEN 2022/2024/2025 BOOST — cross-instrument check (hardening)
+
+Raw `orb_outcomes` query on MES + MNQ SINGAPORE_OPEN E2 CB1 RR1.5 unfiltered baseline (canonical query against `orb_outcomes` WHERE symbol IN (MES, MNQ), session=SINGAPORE_OPEN, RR1.5, E2, CB1, per-year grouped):
+
+**MES SINGAPORE_OPEN unfiltered, O15:**
+
+| Year | N | expr | t |
+|---|--:|--:|--:|
+| 2019 | 170 | −0.163 | −2.23 |
+| 2020 | 258 | +0.005 | +0.08 |
+| 2021 | 259 | −0.125 | −1.98 |
+| 2022 | 258 | −0.076 | −1.15 |
+| 2023 | 258 | −0.223 | **−3.75** |
+| 2024 | 259 | −0.253 | **−4.18** |
+| 2025 | 257 | −0.074 | −1.11 |
+
+**MES SINGAPORE_OPEN unfiltered, O30:**
+
+| Year | N | expr | t |
+|---|--:|--:|--:|
+| 2019 | 167 | −0.122 | −1.56 |
+| 2020 | 255 | +0.061 | +0.88 |
+| 2021 | 256 | −0.061 | −0.91 |
+| 2022 | 257 | −0.117 | −1.72 |
+| 2023 | 257 | −0.130 | −2.03 |
+| 2024 | 257 | −0.236 | **−3.75** |
+| 2025 | 255 | −0.019 | −0.27 |
+
+**MNQ SINGAPORE_OPEN unfiltered, O30 (for contrast):** 2019 −0.04, 2020 +0.05, 2021 +0.02, 2022 +0.07, 2023 +0.10, 2024 +0.09, 2025 **+0.180 (t=+2.42)**.
+
+**Verdict (hardening correction to F1's SGP component):**
+
+MES SINGAPORE_OPEN is STRUCTURALLY NEGATIVE across every year 2019-2025 — not one positive year in 7. This is why Phase 2.5 has zero MES SGP lanes: the session is a structural loser on MES at the unfiltered baseline. The Phase 2.7 / Phase 2.9 SGP ATR_P50 BOOST finding is **MNQ-specific**, not multi-instrument like CME_PRECLOSE. MES provides NEGATIVE cross-instrument evidence: the same session on the sister equity-index contract has no edge.
+
+**Reframed F1 claim:**
+- **CME_PRECLOSE 2020/2022 BOOST** — multi-instrument (MES COST_LT08 + ORB_G8, MNQ X_MES_ATR60) → session-level regime signal.
+- **SINGAPORE_OPEN 2022/2024/2025 BOOST** — MNQ-only, and even on MNQ the unfiltered baseline is only marginally positive (2025 SGP O30 unfiltered = +0.180 t=+2.42). The Phase 2.9 BH/BHY survivors (MNQ ATR_P50_O15 2024 / ATR_P50_O30 2025) sharpen a mild MNQ-SGP baseline via a filter; they are NOT a cross-session regime signal. Honest label: **MNQ-SGP-ATR_P50 filter-specific edge, not a SINGAPORE_OPEN session regime**.
+
+The CME_PRECLOSE vs SINGAPORE_OPEN contrast is now institutionally clear:
+- CME_PRECLOSE BOOST survives BH + BHY + 2-instrument cross-check — ROBUST at all 3 layers.
+- SINGAPORE_OPEN BOOST survives BH + BHY — but fails 2-instrument cross-check (MES negative every year). Narrower: MNQ-specific filter signal, not session regime.
+
 ### Integration with BHY
 
 The BHY result (K_year survivors = 1, specifically MNQ CME_PRECLOSE X_MES_ATR60 × 2020) and this cross-instrument check converge on the same doctrinal conclusion:
@@ -319,10 +361,10 @@ Institutionally-defensible headline after A3:
 
 ## Verdict
 
-Phase 2.8 v1's "no recurring regime" headline is narrowly correct — no single year shows BH-significant DRAG alignment across 3+ lanes. But v1's broader implications (34/38 robust, SGP 2024 DRAG confirmed, 2024 the notable year) are not the strongest honest reads. The real signals in 7-year comprehensive testing — robust to both BH/BHY framing AND cross-instrument decomposition — are:
-- **CME_PRECLOSE 2020/2022 BOOST** across 3 lanes on 2 instruments (MES COST_LT08 + ORB_G8 + MNQ X_MES_ATR60) — robust to every framing
-- **SINGAPORE_OPEN 2022/2024/2025 BOOST** on 2 ATR_P50 lanes (BHY-robust on 2024-O15 and 2025-O30; single-instrument so cross-instrument check not available)
-- **2025 COMEX_SETTLE BOOST** — cross-instrument confirmed on MES + MNQ, but ~2 independent observations not 4
+Phase 2.8 v1's "no recurring regime" headline is narrowly correct — no single year shows BH-significant DRAG alignment across 3+ lanes. But v1's broader implications (34/38 robust, SGP 2024 DRAG confirmed, 2024 the notable year) are not the strongest honest reads. The real signals in 7-year comprehensive testing — with the honest rigor label earned at each layer — are:
+- **CME_PRECLOSE 2020/2022 BOOST** across 3 lanes on 2 instruments (MES COST_LT08 + ORB_G8 + MNQ X_MES_ATR60) — **session-level regime, robust BH + BHY + cross-instrument**
+- **SINGAPORE_OPEN 2022/2024/2025 BOOST** on 2 MNQ ATR_P50 lanes (BHY-robust on 2024-O15 and 2025-O30) — **MNQ-specific filter-session edge, NOT a session regime; MES SGP is structurally negative every year 2019-2025 (failing cross-instrument check)**
+- **2025 COMEX_SETTLE BOOST** — cross-instrument confirmed on MES + MNQ, but represents **~2 independent observations, not 4 BH_year survivors** (3 of 4 share session + instrument + direction = dependence-fragile)
 - **GOLD pool clean** — no fragility, robust to FDR method choice
 
 The v1 SINGLE_YEAR_DRAG labels on the 3 flagged cells are not BH-supported AND not BHY-supported. Retirements stand (independent audits), but the v1 Phase 2.8 statistical case for those retirements was weaker than presented.
