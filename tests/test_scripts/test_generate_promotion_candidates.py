@@ -37,9 +37,7 @@ def _unused_triplet() -> tuple[str, str, str]:
     for triplet in candidates:
         if triplet not in covered:
             return triplet
-    raise RuntimeError(
-        "All candidate triplets collide with LIVE_PORTFOLIO — extend the whitelist."
-    )
+    raise RuntimeError("All candidate triplets collide with LIVE_PORTFOLIO — extend the whitelist.")
 
 
 @pytest.fixture
