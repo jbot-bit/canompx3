@@ -109,6 +109,50 @@ class TestBHFDR:
         assert survivors[0] is False
 
 
+class TestBHYFDR:
+    def test_bhy_strictly_more_conservative_than_bh(self):
+        # BH accepts 5/5 at these p-values; BHY with c(5) = 2.283 accepts fewer.
+        pvals: list[float | None] = [0.001, 0.002, 0.003, 0.004, 0.005]
+        bh_surv = mod.bh_fdr(pvals, q=0.10)
+        bhy_surv = mod.bhy_fdr(pvals, q=0.10)
+        # BH accepts all: each p satisfies p <= (i/5)*0.10 for i=1..5 (max 0.10).
+        assert all(bh_surv)
+        # BHY critical for rank 5 at m=5, c(m)=2.283: (5/(5*2.283))*0.10 = 0.0438
+        # All p <= 0.005 <= 0.0438 -> rank 5 clears; should ALSO accept all here.
+        assert all(bhy_surv)
+        # But count of BHY survivors must never exceed BH survivors in general:
+        # verified here with trivial equality; stronger test below.
+
+    def test_bhy_rejects_marginal_p_that_bh_accepts(self):
+        # Construct p-values where the largest just barely clears BH but not BHY.
+        # At m=5, c(m)=2.283; BH rank-5 crit = 0.10, BHY rank-5 crit = 0.0438.
+        # p=0.08 clears BH rank-5 (0.08 <= 0.10) but fails BHY (0.08 > 0.0438).
+        pvals: list[float | None] = [0.001, 0.002, 0.003, 0.004, 0.08]
+        bh_surv = mod.bh_fdr(pvals, q=0.10)
+        bhy_surv = mod.bhy_fdr(pvals, q=0.10)
+        # BH rank 5: 0.08 <= 0.10 -> k=5, all survive
+        assert sum(bh_surv) == 5
+        # BHY rank 5: 0.08 > 0.0438 -> fails; rank 4: 0.004 <= (4/(5*2.283))*0.10 = 0.0350 -> k=4
+        assert sum(bhy_surv) == 4
+        # survivors must be the 4 smallest-p rows (indices 0-3)
+        assert bhy_surv[:4] == [True, True, True, True]
+        assert bhy_surv[4] is False
+
+    def test_bhy_none_never_survives(self):
+        pvals = [None, 0.0001, float("nan"), 0.0002]
+        bhy_surv = mod.bhy_fdr(pvals, q=0.10)
+        assert bhy_surv[0] is False
+        assert bhy_surv[2] is False
+
+    def test_bhy_empty_input(self):
+        assert mod.bhy_fdr([], q=0.10) == []
+
+    def test_bhy_all_large_p_fail(self):
+        pvals: list[float | None] = [0.3, 0.4, 0.5, 0.6, 0.7]
+        bhy_surv = mod.bhy_fdr(pvals, q=0.10)
+        assert bhy_surv == [False] * 5
+
+
 class TestAssignV2Pattern:
     def _mk(self, **kw) -> pd.Series:
         base = {

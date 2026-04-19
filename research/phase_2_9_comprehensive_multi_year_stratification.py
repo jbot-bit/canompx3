@@ -128,6 +128,49 @@ def bh_fdr(pvalues: list[float | None], q: float) -> list[bool]:
     return survivors
 
 
+def bhy_fdr(pvalues: list[float | None], q: float) -> list[bool]:
+    """Benjamini-Yekutieli (2001) step-up procedure at FDR level q.
+
+    Canonical reference: Harvey-Liu 2015 p16 (`docs/institutional/literature/
+    harvey_liu_2015_backtesting.md`), which adopts Benjamini-Yekutieli 2001:
+
+        let c(M) = sum_{j=1}^M (1/j)
+        k = max { i : P(i) <= (i / (M * c(M))) * q }
+        reject H(i) for all i <= k.
+
+    Stricter than BH-1995 by factor c(M): at M = 266, c(M) ~= 6.32, so every
+    critical value is ~6.3x smaller than standard BH. Trade: power reduction
+    for validity under arbitrary dependency (vs BH's independence / positive-
+    regression-dependency requirement).
+
+    Harvey-Liu p16 verbatim: "In the original work by Benjamini and Hochberg
+    [1995], c(M) is set equal to one and the test works when p-values are
+    independent or positively dependent. We adopt the choice in Benjamini
+    and Yekutieli [2001] by setting c(M) equal to sum_{j=1}^M 1/j. This
+    allows our test to work under arbitrary dependency for the test
+    statistics."
+
+    Same None/NaN denominator convention as bh_fdr.
+    """
+    n = len(pvalues)
+    survivors = [False] * n
+    if n == 0:
+        return survivors
+    c_m = sum(1.0 / j for j in range(1, n + 1))
+    indexed = [(p, i) for i, p in enumerate(pvalues) if p is not None and not math.isnan(p)]
+    indexed.sort(key=lambda x: x[0])
+    k = 0
+    for rank, (p, _) in enumerate(indexed, start=1):
+        crit = (rank / (n * c_m)) * q
+        if p <= crit:
+            k = rank
+    if k > 0:
+        for rank, (_, orig) in enumerate(indexed, start=1):
+            if rank <= k:
+                survivors[orig] = True
+    return survivors
+
+
 def build_main_rows(con: duckdb.DuckDBPyConnection, specs: list[dict[str, Any]]) -> pd.DataFrame:
     """For each (lane, year): compute only-year + ex-year stats, subset_t, p, delta."""
     rows: list[dict[str, Any]] = []
@@ -207,21 +250,32 @@ def build_main_rows(con: duckdb.DuckDBPyConnection, specs: list[dict[str, Any]])
 
 
 def add_bh_flags(df: pd.DataFrame, q: float) -> pd.DataFrame:
-    """Add K_global, K_session, K_year BH survival flags in-place and return."""
+    """Add K_global/K_session/K_year survival flags for both BH and BHY.
+
+    BH (Benjamini-Hochberg 1995) is the primary gate; BHY (Benjamini-
+    Yekutieli 2001 via Harvey-Liu 2015) is a conservative replication
+    column used to verify that the substantive findings don't rely on the
+    positive-regression-dependency assumption of standard BH.
+    """
     df = df.copy()
-    # K_global over whole 266-cell family
+    # K_global over whole family
     p_global = df["year_p"].tolist()
     df["bh_global"] = bh_fdr(p_global, q)
+    df["bhy_global"] = bhy_fdr(p_global, q)
     # K_session: per session across years & lanes-in-session
     df["bh_session"] = False
+    df["bhy_session"] = False
     for _, sub in df.groupby("session"):
-        sv = bh_fdr(sub["year_p"].tolist(), q)
-        df.loc[sub.index, "bh_session"] = sv
-    # K_year: per year across all 38 lanes
+        p_list = sub["year_p"].tolist()
+        df.loc[sub.index, "bh_session"] = bh_fdr(p_list, q)
+        df.loc[sub.index, "bhy_session"] = bhy_fdr(p_list, q)
+    # K_year: per year across all lanes
     df["bh_year"] = False
+    df["bhy_year"] = False
     for _, sub in df.groupby("year"):
-        sv = bh_fdr(sub["year_p"].tolist(), q)
-        df.loc[sub.index, "bh_year"] = sv
+        p_list = sub["year_p"].tolist()
+        df.loc[sub.index, "bh_year"] = bh_fdr(p_list, q)
+        df.loc[sub.index, "bhy_year"] = bhy_fdr(p_list, q)
     return df
 
 
@@ -390,7 +444,11 @@ def main() -> int:
         n_global = int(df_main["bh_global"].sum())
         n_session = int(df_main["bh_session"].sum())
         n_year = int(df_main["bh_year"].sum())
-        print(f"BH survivors: K_global={n_global}, K_session={n_session}, K_year={n_year}")
+        print(f"BH  survivors: K_global={n_global}, K_session={n_session}, K_year={n_year}")
+        n_bhy_global = int(df_main["bhy_global"].sum())
+        n_bhy_session = int(df_main["bhy_session"].sum())
+        n_bhy_year = int(df_main["bhy_year"].sum())
+        print(f"BHY survivors: K_global={n_bhy_global}, K_session={n_bhy_session}, K_year={n_bhy_year}")
 
         # Heat map
         df_heat = build_heat_map(df_main)

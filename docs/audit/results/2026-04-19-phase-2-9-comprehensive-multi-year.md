@@ -181,16 +181,90 @@ All three cells fail BH at every framing (standard CHT two-sided p > 0.05, well 
 - Pre-reg committed before script run: `b74dafe3` (pre-reg + stage file).
 - Script + tests committed separately from result doc for provenance: TBD commits.
 - CSVs deterministic: re-running the script with the same git SHA produces identical rows (ordering by `strategy_id, year`).
-- 34 unit tests passing (`pytest tests/test_research/test_phase_2_9_comprehensive_multi_year_stratification.py -q`).
+- 39 unit tests passing (`pytest tests/test_research/test_phase_2_9_comprehensive_multi_year_stratification.py -q`) — includes 5 BHY tests added in the robustness pass.
 - Drift check: 5 pre-existing worktree failures (Check 37 cascade — no local gold.db), all expected per pre-reg.
 - Canonical delegations verified at run time: `compute_mode_a` vs `_window_stats` div=0.00e+00 on the probe lane.
+
+## BHY (arbitrary-dependency) robustness replication
+
+The result doc's § Institutional methodology notes flagged standard BH-1995 as defensible under the positive-regression-dependency regime but noted BHY (Benjamini-Yekutieli 2001, advocated by Harvey-Liu 2015 p16) as strictly-more-conservative under arbitrary dependency. The § Next steps item 5 proposed running BHY as a sensitivity check. This section reports the run. Numbers are queried directly from `research/output/phase_2_9_main.csv` (3 new columns `bhy_global`, `bhy_session`, `bhy_year`).
+
+### Survivor counts at BH q=0.10 (primary) vs BHY q=0.10 (robustness)
+
+| Framing | BH survivors | BHY survivors | BHY retention |
+|---|--:|--:|--:|
+| K_global (K=266) | 1 | 0 | 0 / 1 |
+| K_session (variable per session) | 12 | 5 | 5 / 12 |
+| K_year (K=38) | 8 | 1 | 1 / 8 |
+| **Total unique cells (any framing)** | **15** | **5** | **5 / 15** |
+
+At m=266, c(m) = ∑_{j=1}^266 (1/j) ≈ 6.02, so every BHY critical value is ~6× stricter than BH. The 5 BHY survivors are the subset of BH survivors that clear the tighter cutoff.
+
+### BHY survivor cells (the robust subset)
+
+All 5 K_session BHY survivors have |t| ≥ 3.08 — clearing the Chordia 2018 with-theory threshold (t ≥ 3.00) not just BH:
+
+| Lane | Session | Year | N_year | year_expr | year_t | year_p |
+|---|---|--:|--:|--:|--:|--:|
+| MES_CME_PRECLOSE_COST_LT08 | CME_PRECLOSE | 2022 | 29 | +0.490 | 3.40 | 0.0020 |
+| MNQ_CME_PRECLOSE_X_MES_ATR60 | CME_PRECLOSE | 2020 | 56 | +0.424 | 4.00 | 0.0002 |
+| MNQ_CME_PRECLOSE_X_MES_ATR60 | CME_PRECLOSE | 2022 | 56 | +0.396 | 3.47 | 0.0010 |
+| MNQ_SINGAPORE_OPEN_ATR_P50_O15 | SINGAPORE_OPEN | 2024 | 111 | +0.358 | 3.34 | 0.0011 |
+| MNQ_SINGAPORE_OPEN_ATR_P50_O30 | SINGAPORE_OPEN | 2025 | 70 | +0.434 | 3.08 | 0.0030 |
+
+K_year BHY has only 1 survivor: `MNQ_CME_PRECLOSE_X_MES_ATR60 × 2020`, the same cell that topped K_global.
+
+### What BHY drops and why it matters
+
+10 cells pass BH but fail BHY (list here grouped by the substantive claim each supports):
+
+**2025 MNQ COMEX_SETTLE BOOST concentration (3 cells DROPPED):**
+- `OVNRNG_100 RR1.0 × 2025` (t=2.98, p=0.0038)
+- `X_MES_ATR60 RR1.0 × 2025` (t=3.06, p=0.0030)
+- `OVNRNG_100 RR1.5 × 2025` (t=2.74, p=0.0076)
+
+**2025 MNQ SINGAPORE_OPEN BOOST (1 cell DROPPED at K_year, retained at K_session):**
+- `ATR_P50_O30 × 2025` (t=3.08, p=0.0030) — retained at K_session BHY, dropped at K_year BHY
+
+**CME_PRECLOSE 2019-2020 UNEVALUABLE cells (3 DROPPED):**
+- `MES COST_LT08 × 2020` (n=19, t=2.72) — already suggestive-only at BH (n<30)
+- `MES ORB_G8 × 2020` (n=24, t=3.07) — already suggestive-only
+- `MNQ X_MES_ATR60 × 2019` (n=14, t=−2.64) — already suggestive-only; only DRAG-side cell that passed BH, now fully dropped under BHY
+
+**Other (3 DROPPED):**
+- `MES CME_PRECLOSE ORB_G8 × 2022` (t=2.56)
+- `SGP ATR_P50_O15 × 2022` (t=2.45)
+- `SGP ATR_P50_O30 × 2022` (t=2.63)
+
+### Impact on the per-hypothesis verdicts
+
+- **H1 (session regime asymmetry):** CONFIRMED under BHY. Both sessions with BH_session survivors (CME_PRECLOSE, SINGAPORE_OPEN) retain BHY_session survivors. All 5 BHY survivors are BOOST; zero DRAG. The session-structural-asymmetry claim is robust to arbitrary-dependency correction.
+- **H2 (year regime alignment, 2025 BOOST concentration):** **WEAKENED** under BHY. The BH_year=2025 finding rested on 4 same-direction cells; BHY_year drops to 0 at 2025. Mechanistically plausible that the 3 dropped 2025 cells (all MNQ COMEX_SETTLE + same direction) share underlying bars — exactly the non-PRDS-safe dependency that BHY is designed to guard against. **The "2025 year regime" claim should be downgraded from confirmed to BH-only; BHY provides no confirmation.** Phase 2.10 investigation of 2025 (proposed in § Next steps 1) must account for the dependency structure.
+- **H3 (GOLD fragility):** UNCHANGED. Fragility is a per-lane full-t vs ex-year-t comparison, not an FDR pass/fail — BHY has no mechanical impact.
+- **v1 SINGLE_YEAR_DRAG refutation:** STRENGTHENED. The 3 v1 DRAG cells with |t| = 0.58 / 0.99 / 1.08 fail both BH and BHY at every framing. BHY reinforces the v1 correction.
+
+### Institutional-grade honest framing
+
+Under standard BH (1995), Phase 2.9 supports:
+- Session asymmetry (CME_PRECLOSE, SINGAPORE_OPEN)
+- 2025 year-regime BOOST concentration
+- GOLD pool clean
+- v1 DRAG labels refuted
+
+Under BHY (2001, arbitrary-dependency-safe), Phase 2.9 supports:
+- Session asymmetry — SAME
+- 2025 year-regime — NOT supported (claim is dependence-fragile)
+- GOLD pool clean — SAME
+- v1 DRAG labels refuted — strengthened
+
+The institutionally-defensible reading is the intersection: session-level CME_PRECLOSE / SINGAPORE_OPEN BOOST (both tests), GOLD clean, v1 DRAG refuted. The 2025 year-regime finding should be treated as BH-only evidence requiring a dependence-structure investigation before doctrine.
 
 ## Verdict
 
 Phase 2.8 v1's "no recurring regime" headline is narrowly correct — no single year shows BH-significant DRAG alignment across 3+ lanes. But v1's broader implications (34/38 robust, SGP 2024 DRAG confirmed, 2024 the notable year) are not the strongest honest reads. The real signals in 7-year comprehensive testing are:
-- 2025 BOOST concentration (4 BH-survivor cells, all same-direction positive)
-- CME_PRECLOSE 2020/2022 BOOST across 3 lanes (volatility-regime tailwind)
-- SINGAPORE_OPEN 2022/2024/2025 BOOST on 2 ATR_P50 lanes (lane-level persistence)
-- GOLD pool clean — no fragility
+- CME_PRECLOSE 2020/2022 BOOST across 3 lanes (volatility-regime tailwind) — BH and BHY robust
+- SINGAPORE_OPEN 2022/2024/2025 BOOST on 2 ATR_P50 lanes (lane-level persistence) — BH and BHY robust on 2024-O15 and 2025-O30
+- 2025 BOOST concentration (4 cells, all same-direction) — BH supported, BHY does NOT confirm (dependence-fragile claim)
+- GOLD pool clean — no fragility, robust to FDR method choice
 
-The v1 SINGLE_YEAR_DRAG labels on the 3 flagged cells are not BH-supported. Retirements stand (independent audits), but the v1 Phase 2.8 statistical case for those retirements was weaker than presented.
+The v1 SINGLE_YEAR_DRAG labels on the 3 flagged cells are not BH-supported AND not BHY-supported. Retirements stand (independent audits), but the v1 Phase 2.8 statistical case for those retirements was weaker than presented.
