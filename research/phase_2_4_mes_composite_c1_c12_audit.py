@@ -24,9 +24,7 @@ from __future__ import annotations
 
 import math
 import sys
-from datetime import date
 from pathlib import Path
-from typing import Any
 
 import duckdb
 import numpy as np
@@ -36,8 +34,15 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from pipeline.data_era import micro_launch_day  # noqa: E402
 from pipeline.paths import GOLD_DB_PATH  # noqa: E402
 from research.filter_utils import filter_signal  # noqa: E402
+from research.mode_a_revalidation_active_setups import (  # noqa: E402
+    C4_T_WITH_THEORY,
+    C7_MIN_N,
+    C9_ERA_THRESHOLD,
+    C9_MIN_N_PER_ERA,
+)
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM  # noqa: E402
 
 OUTPUT_DIR = PROJECT_ROOT / "research" / "output"
@@ -51,18 +56,24 @@ CONFIRM_BARS = 1
 RR_TARGET = 1.5
 DIRECTION = "long"
 
-# Thresholds from pre_registered_criteria.md
-C4_T_THRESHOLD = 3.00  # Chordia with-theory (grounded in pre-reg § theory_citation)
-C6_WFE_THRESHOLD = 0.50
-C7_MIN_N = 100
-C9_MIN_N_PER_ERA = 50
-C9_ERA_THRESHOLD = -0.05
-C10_MICRO_LAUNCH = date(2019, 5, 6)
-T0_TAUT_THRESHOLD = 0.90
+# C6 Walk-Forward Efficiency threshold — no shared canonical source exists yet
+# across trading_app/ or research/ for this constant; mirrored pattern from
+# research/htf_path_a_prev_week_v1_scan.py:76 which inlines the same value.
+# @research-source docs/institutional/pre_registered_criteria.md § Criterion 6
+# @research-source docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md
+# @revalidated-for 2026-04-19 (matches pre_registered_criteria.md v2.7 + Amendment 3.0)
+C6_WFE_THRESHOLD: float = 0.50
+
+# T0 tautology threshold is a methodology constant from backtesting-methodology.md § RULE 7
+# Shared deviation from the quant-audit-protocol threshold of 0.70 is intentional — this
+# audit tests a COMPOSITE that is a logical subset of both constituent filters (rho up to
+# ~0.9 is expected by construction). The 0.90 threshold flags TRUE repackaging only.
+# @research-source .claude/rules/backtesting-methodology.md § RULE 7
+T0_TAUT_THRESHOLD: float = 0.90
 
 
-def fetch_universe(con, instrument: str, direction: str, rr: float, is_cutoff) -> pd.DataFrame:
-    """Fetch full long-break universe with daily_features joined (triple-join)."""
+def fetch_universe(con, instrument: str, direction: str, rr: float) -> pd.DataFrame:
+    """Fetch full (IS+OOS) break universe with daily_features joined (triple-join)."""
     sql = """
         SELECT o.trading_day, o.pnl_r, o.outcome, d.*
         FROM orb_outcomes o
@@ -164,7 +175,7 @@ def main() -> int:
 
     try:
         # === Full universe (IS + OOS) ===
-        df_all = fetch_universe(con, INSTRUMENT, DIRECTION, RR_TARGET, None)
+        df_all = fetch_universe(con, INSTRUMENT, DIRECTION, RR_TARGET)
         df_all["td"] = pd.to_datetime(df_all["trading_day"]).dt.date
         is_mask = df_all["td"].values < HOLDOUT_SACRED_FROM
         oos_mask = df_all["td"].values >= HOLDOUT_SACRED_FROM
@@ -182,12 +193,12 @@ def main() -> int:
         expr_is = float(comp_is.mean()) if n_is else None
         sd_is = float(comp_is.std(ddof=1)) if n_is > 1 else None
         t_is = t_stat(expr_is, sd_is, n_is) if expr_is is not None else float("nan")
-        wr_is = float(np.mean(df_is["outcome"].astype(str) == "win")) if n_is else None
-        # Recompute WR on filtered subset
-        if n_is:
-            wr_is_on = float((df_is["outcome"][fire_is].astype(str) == "win").mean())
-        else:
-            wr_is_on = None
+        # C4 requires win-rate on the filtered subset, not the full break universe.
+        wr_is_on = (
+            float((df_is["outcome"][fire_is].astype(str) == "win").mean())
+            if n_is
+            else None
+        )
 
         # OOS composite
         pnl_oos = df_oos["pnl_r"].to_numpy() if len(df_oos) else np.array([])
@@ -198,8 +209,10 @@ def main() -> int:
         # p-value — two-sided t-test on IS composite vs null (ExpR=0)
         if n_is > 1 and sd_is and sd_is > 0:
             from scipy import stats
-            t_stat_exact, p_val = stats.ttest_1samp(comp_is, 0.0)
-            p_val = float(p_val)
+            _t_unused, p_raw = stats.ttest_1samp(comp_is, 0.0)
+            # ttest_1samp's t-statistic matches our manual t_is up to float tolerance;
+            # we report t_is (derived from ExpR/sd/sqrt(N)) for audit transparency.
+            p_val = float(p_raw)
         else:
             p_val = float("nan")
 
@@ -214,7 +227,7 @@ def main() -> int:
         c3 = bool(p_val < 0.05) if not math.isnan(p_val) else False
 
         # C4 Chordia t
-        c4 = bool(t_is >= C4_T_THRESHOLD) if not math.isnan(t_is) else False
+        c4 = bool(t_is >= C4_T_WITH_THEORY) if not math.isnan(t_is) else False
 
         # C6 WFE (walk-forward on IS composite)
         wfe, folds = walk_forward_efficiency(df_is, fire_is)
@@ -223,29 +236,41 @@ def main() -> int:
         # C7 sample size
         c7 = bool(n_is >= C7_MIN_N)
 
-        # C8 OOS: positive-sign consistency AND ExpR not negative when N>=5
-        if n_oos >= 5:
+        # C8 OOS: positive-sign consistency AND ExpR not negative.
+        # Per .claude/rules/backtesting-methodology.md RULE 3.2:
+        #   N_oos < 5         → UNEVALUABLE (can't compute reliably)
+        #   5 <= N_oos < 30   → DIRECTIONAL (evidence is directional-only, low power)
+        #   N_oos >= 30       → CONFIRMATORY (full-power OOS check)
+        # Pass/fail logic unchanged — the criterion is still met if the sign
+        # matches and OOS is positive. Power tier disambiguates how strong the
+        # pass is. A DIRECTIONAL pass is honest evidence, not CONFIRMATORY.
+        if n_oos < 5:
+            c8_power_tier = "UNEVALUABLE"
+            c8_direction_match = None
+            c8_positive = None
+            c8 = False
+        else:
+            c8_power_tier = "DIRECTIONAL" if n_oos < 30 else "CONFIRMATORY"
             c8_direction_match = bool(
                 expr_is is not None and expr_oos is not None
                 and ((expr_is > 0 and expr_oos > 0) or (expr_is < 0 and expr_oos < 0))
             )
             c8_positive = bool(expr_oos > 0) if expr_oos is not None else False
             c8 = c8_direction_match and c8_positive
-        else:
-            c8 = False
-            c8_direction_match = None
-            c8_positive = None
 
         # C9 era stability
         yb = year_break(df_is, fire_is)
         c9_fail_years = [y for y in yb if y["n"] >= C9_MIN_N_PER_ERA and y["expr"] is not None and y["expr"] < C9_ERA_THRESHOLD]
         c9 = len(c9_fail_years) == 0
 
-        # C10 MICRO-only (first composite trade >= 2019-05-06)
+        # C10 MICRO-only (first composite trade >= instrument's MICRO-launch date).
+        # Delegates to canonical pipeline.data_era.micro_launch_day — never inline
+        # the launch date.
+        micro_launch = micro_launch_day(INSTRUMENT)
         if n_is:
             first_trade_day = df_is.loc[fire_is, "trading_day"].min()
             first_date = pd.Timestamp(first_trade_day).date()
-            c10 = bool(first_date >= C10_MICRO_LAUNCH)
+            c10 = bool(first_date >= micro_launch)
         else:
             first_date = None
             c10 = False
@@ -269,7 +294,7 @@ def main() -> int:
             t0_g5_pass = t0_sgp_pass = False
 
         # T5 direction symmetry — short composite should NOT exceed long composite
-        df_short = fetch_universe(con, INSTRUMENT, "short", RR_TARGET, None)
+        df_short = fetch_universe(con, INSTRUMENT, "short", RR_TARGET)
         df_short = df_short[df_short["trading_day"].apply(lambda d: pd.Timestamp(d).date() < HOLDOUT_SACRED_FROM)]
         if len(df_short):
             fire_short = composite_fire(df_short)
@@ -282,7 +307,7 @@ def main() -> int:
         t5_pass = (expr_short is None) or (expr_is is None) or (expr_short <= expr_is)
 
         # T8 MNQ direction consistency (from prior Phase 2.4 audit)
-        df_mnq = fetch_universe(con, "MNQ", DIRECTION, RR_TARGET, None)
+        df_mnq = fetch_universe(con, "MNQ", DIRECTION, RR_TARGET)
         df_mnq = df_mnq[df_mnq["trading_day"].apply(lambda d: pd.Timestamp(d).date() < HOLDOUT_SACRED_FROM)]
         fire_mnq = composite_fire(df_mnq)
         mnq_pnl = df_mnq["pnl_r"].to_numpy()[fire_mnq] if len(df_mnq) else np.array([])
@@ -294,10 +319,11 @@ def main() -> int:
             {"criterion": "C1_pre_reg_exists", "pass": c1, "value": str(prereg_path.exists())},
             {"criterion": "C2_minBTL", "pass": c2, "value": "K=1 trivial"},
             {"criterion": "C3_BH_FDR", "pass": c3, "value": f"p={p_val:.5f}"},
-            {"criterion": "C4_chordia_t", "pass": c4, "value": f"t={t_is:.3f} (threshold {C4_T_THRESHOLD})"},
+            {"criterion": "C4_chordia_t", "pass": c4, "value": f"t={t_is:.3f} (threshold {C4_T_WITH_THEORY})"},
             {"criterion": "C6_WFE", "pass": c6, "value": f"wfe={wfe:.3f} (threshold {C6_WFE_THRESHOLD})"},
             {"criterion": "C7_N_deployable", "pass": c7, "value": f"N={n_is} (threshold {C7_MIN_N})"},
-            {"criterion": "C8_OOS_sign_consistent", "pass": c8, "value": f"N_oos={n_oos} expr_oos={expr_oos if expr_oos is None else f'{expr_oos:+.4f}'}"},
+            {"criterion": "C8_OOS_sign_consistent", "pass": c8,
+             "value": f"N_oos={n_oos} expr_oos={expr_oos if expr_oos is None else f'{expr_oos:+.4f}'} power_tier={c8_power_tier}"},
             {"criterion": "C9_era_stability", "pass": c9, "value": f"fail_years={[(y['year'], y['n'], round(y['expr'], 4) if y['expr'] else None) for y in c9_fail_years]}"},
             {"criterion": "C10_micro_only", "pass": c10, "value": f"first_trade={first_date}"},
             {"criterion": "T0_tautology_g5", "pass": t0_g5_pass, "value": f"rho={rho_comp_g5:.3f}"},
@@ -344,7 +370,10 @@ def main() -> int:
             print(line)
         print()
         print(f"VERDICT: {verdict}")
-        print(f"Written: {csv_path.relative_to(PROJECT_ROOT)}")
+        try:
+            print(f"Written: {csv_path.relative_to(PROJECT_ROOT)}")
+        except ValueError:
+            print(f"Written: {csv_path}")
     finally:
         con.close()
 

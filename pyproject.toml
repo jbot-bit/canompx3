@@ -58,6 +58,9 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 asyncio_mode = "auto"
 norecursedirs = ["local_db", ".venv", "DB", "*.egg-info"]
+markers = [
+    "integration: end-to-end tests that require gold.db and run real pipelines (skip on CI without DB)",
+]
 
 [dependency-groups]
 dev = [

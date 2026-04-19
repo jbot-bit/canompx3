@@ -28,7 +28,7 @@ The visible "lift" came from comparing a filtered subset to an unfiltered MES EU
 | C5 | Deflated Sharpe (informational) | > 0.95 | not computed (N_eff unknown) | ⚠ |
 | C6 | Walk-forward efficiency | ≥ 0.50 | WFE=0.717 (4 folds) | ✅ |
 | C7 | Deployable sample | N ≥ 100 | N=112 | ✅ |
-| C8 | 2026 OOS consistency | sign match + positive | N=5, ExpR=+0.830 | ✅ (low-power) |
+| C8 | 2026 OOS consistency | sign match + positive | N=5, ExpR=+0.830, power_tier=DIRECTIONAL | ✅ (DIRECTIONAL, not CONFIRMATORY — per backtesting-methodology.md RULE 3.2, 5≤N<30 is directional-only evidence) |
 | C9 | Era stability | no year ExpR<−0.05 w/ N≥50 | no qualifying era failures | ✅ |
 | C10 | MICRO-only era | first trade ≥ 2019-05-06 | 2019-08-06 | ✅ |
 | T0 | Tautology (vs g5) | \|rho\| ≤ 0.90 | 0.687 | ✅ |
