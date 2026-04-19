@@ -606,11 +606,45 @@ class TestStaleScratchDb:
 
     def test_catches_missing_canonical(self, tmp_path, monkeypatch):
         # Point the canonical DB resolver at a path that doesn't exist
+        # AND ensure CI env not set (preserve local fail-closed behavior)
         nonexistent_db = tmp_path / "nonexistent" / "gold.db"
         monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", str(nonexistent_db))
+        monkeypatch.delenv("CI", raising=False)
+        monkeypatch.delenv("SKIP_DB_CHECKS", raising=False)
         violations = check_drift.check_stale_scratch_db()
         assert len(violations) > 0
         assert "not found" in violations[0].lower() or "Canonical" in violations[0]
+
+    def test_skips_in_ci_when_db_missing(self, tmp_path, monkeypatch, capsys):
+        """CI=true env → check 37 returns [] (silent skip with CI banner)
+        instead of violation. Preserves local fail-closed; CI gets clean."""
+        nonexistent_db = tmp_path / "nonexistent" / "gold.db"
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", str(nonexistent_db))
+        monkeypatch.setenv("CI", "true")
+        violations = check_drift.check_stale_scratch_db()
+        assert violations == [], f"CI env should silence the missing-DB check; got {violations}"
+        captured = capsys.readouterr()
+        assert "SKIPPED" in captured.out, "CI banner should print so logs show what was skipped"
+
+    def test_skip_db_check_for_ci_helper_local_returns_violation(self, monkeypatch):
+        """Helper unit test: no CI env → returns the violation message."""
+        monkeypatch.delenv("CI", raising=False)
+        monkeypatch.delenv("SKIP_DB_CHECKS", raising=False)
+        result = check_drift._skip_db_check_for_ci("  test reason")
+        assert result == ["  test reason"]
+
+    def test_skip_db_check_for_ci_helper_ci_returns_empty(self, monkeypatch):
+        """Helper unit test: CI=true → returns [] (silent skip)."""
+        monkeypatch.setenv("CI", "true")
+        result = check_drift._skip_db_check_for_ci("  test reason")
+        assert result == []
+
+    def test_skip_db_check_for_ci_helper_skip_db_checks_env(self, monkeypatch):
+        """Helper unit test: SKIP_DB_CHECKS=1 (manual override outside CI) → skip."""
+        monkeypatch.delenv("CI", raising=False)
+        monkeypatch.setenv("SKIP_DB_CHECKS", "1")
+        result = check_drift._skip_db_check_for_ci("  test reason")
+        assert result == []
 
     def test_passes_with_db_no_scratch(self, tmp_path, monkeypatch):
         """If canonical DB exists and no scratch copy, no violation."""

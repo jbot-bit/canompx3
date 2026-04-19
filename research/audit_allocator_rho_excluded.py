@@ -64,13 +64,21 @@ RESULT_MD = Path("docs/audit/results/2026-04-18-allocator-rho-audit-excluded-lan
 RESULT_CSV = Path("docs/audit/results/2026-04-18-allocator-rho-matrix.csv")
 LANE_ALLOCATION_JSON = Path("docs/runtime/lane_allocation.json")
 
-if RESULT_MD.exists():
-    print(
-        f"REFUSING TO RE-RUN. Result file already exists: {RESULT_MD}\n"
-        f"This audit's scope is locked to the {REBALANCE_DATE} rebalance. Re-running\n"
-        f"with tuned parameters violates the one-shot audit discipline."
-    )
-    sys.exit(1)
+def _refuse_rerun_if_result_exists() -> None:
+    """One-shot audit discipline guard. Called from main(), NOT at module load.
+
+    Module-level sys.exit(1) on import made this script unimportable, killing
+    pytest collection of tests/test_research/test_allocator_rho_audit.py.
+    Tests need to import the helper functions (bootstrap_rho_ci, classify_excluded,
+    etc.) without triggering the rerun guard.
+    """
+    if RESULT_MD.exists():
+        print(
+            f"REFUSING TO RE-RUN. Result file already exists: {RESULT_MD}\n"
+            f"This audit's scope is locked to the {REBALANCE_DATE} rebalance. Re-running\n"
+            f"with tuned parameters violates the one-shot audit discipline."
+        )
+        sys.exit(1)
 
 # =============================================================================
 # Novel helpers — tested in tests/test_research/test_allocator_rho_audit.py
@@ -534,6 +542,7 @@ def write_result_md(
 
 
 def main() -> None:
+    _refuse_rerun_if_result_exists()
     print("=" * 70)
     print("ALLOCATOR RHO AUDIT — EXCLUDED LANES")
     print("Phase 1 / A2a of multi-phase audit roadmap")

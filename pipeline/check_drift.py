@@ -62,6 +62,28 @@ def _get_db_path() -> Path:
     return GOLD_DB_PATH
 
 
+def _skip_db_check_for_ci(skip_msg: str) -> list[str]:
+    """When CI=true (set automatically by GitHub Actions) or SKIP_DB_CHECKS=1
+    is set, return [] (silent skip — runner counts it as skip_count).
+    Otherwise return [skip_msg] as a violation (preserves local fail-closed
+    behavior — missing DB locally indicates broken setup).
+
+    Per CLAUDE.md "Database Location & Workflow": gold.db lives on local
+    disk only ("no cloud sync"). CI runners legitimately have no DB; local
+    devs are expected to. Same check, two contexts, env-controlled response.
+    No `continue-on-error` band-aid — drift stays a hard gate everywhere;
+    only the missing-DB case is treated correctly per context.
+    """
+    import os
+
+    if os.environ.get("CI", "").lower() == "true" or os.environ.get("SKIP_DB_CHECKS", "") == "1":
+        # Print so CI logs show WHICH check skipped and WHY — avoids the
+        # misleading "PASSED" label when nothing was actually verified.
+        print(f"  SKIPPED (CI/SKIP_DB_CHECKS env set): {skip_msg.strip()}")
+        return []
+    return [skip_msg]
+
+
 def _table_exists(con, table_name: str) -> bool:
     """Return True if the table exists in the connected DuckDB database."""
     row = con.execute(
@@ -1606,8 +1628,7 @@ def check_stale_scratch_db() -> list[str]:
     violations = []
     canonical_db = _get_db_path()
     if not canonical_db.exists():
-        violations.append(f"  Canonical DB not found at {canonical_db}. Run pipeline to create it.")
-        return violations
+        return _skip_db_check_for_ci(f"  Canonical DB not found at {canonical_db}. Run pipeline to create it.")
     scratch_db = Path("C:/db/gold.db")
     if scratch_db.exists():
         violations.append(
@@ -3269,7 +3290,9 @@ def check_family_rr_locks_coverage(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return ["SKIPPED"]
+                return _skip_db_check_for_ci(
+                    "  FAMILY RR LOCKS SKIPPED: gold.db not found — cannot verify lock coverage"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
         # Check table exists
@@ -3280,7 +3303,7 @@ def check_family_rr_locks_coverage(con=None) -> list[str]:
             ).fetchall()
         ]
         if not tables:
-            return ["SKIPPED"]
+            return _skip_db_check_for_ci("  FAMILY RR LOCKS SKIPPED: family_rr_locks table not present in DB")
 
         # Count families in validated_setups without a matching lock
         missing = con.execute("""
@@ -3893,7 +3916,9 @@ def check_holdout_contamination(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return ["  HOLDOUT CHECK SKIPPED: gold.db not found — cannot verify holdout integrity"]
+                return _skip_db_check_for_ci(
+                    "  HOLDOUT CHECK SKIPPED: gold.db not found — cannot verify holdout integrity"
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -4631,9 +4656,9 @@ def check_phase_4_sha_integrity(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return [
-                    "  PHASE 4 SHA INTEGRITY SKIPPED: gold.db not found — cannot verify hypothesis file SHA integrity"
-                ]
+                return _skip_db_check_for_ci(
+                    "  PHASE 4 SHA INTEGRITY SKIPPED: gold.db not found — cannot verify hypothesis file SHA integrity"  # noqa: E501
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 
@@ -4718,10 +4743,10 @@ def check_prop_profiles_validated_alignment(con=None) -> list[str]:
 
             db_path = _get_db_path()
             if not db_path.exists():
-                return [
+                return _skip_db_check_for_ci(
                     "  PROP PROFILES ALIGNMENT SKIPPED: gold.db not found — "
                     "cannot verify deployed lane validation backing"
-                ]
+                )
             con = duckdb.connect(str(db_path), read_only=True)
             _own_con = True
 

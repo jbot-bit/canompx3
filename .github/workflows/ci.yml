@@ -34,16 +34,15 @@ jobs:
         run: uv run pyright
         continue-on-error: true
 
-      - name: Drift check (static analysis — advisory in CI, hard gate locally)
-        # 5 of 110 drift checks (37, 61, 80, 92, 95) are fail-closed when
-        # gold.db is missing — by design for LOCAL workflow where missing DB
-        # = broken setup. CI has no DB by policy (CLAUDE.md "local disk, no
-        # cloud sync"), so these will always fire here. Keep the run for the
-        # OTHER 105 checks (DB-independent — schema sync, import cycles,
-        # canonical sources, etc.) but mark advisory so CI gate is honest:
-        # local enforcement is the real gate. Same precedent as pyright above.
+      - name: Drift check (static analysis — hard gate; CI=true triggers DB-skip helper)
+        # 5 of 110 checks (37, 61, 80, 92, 95) are fail-closed when gold.db
+        # is missing — correct for LOCAL workflow where missing DB = broken
+        # setup. CI has no DB by policy (CLAUDE.md "local disk, no cloud
+        # sync"). pipeline.check_drift._skip_db_check_for_ci() returns []
+        # (silent skip, runner counts it as skip_count) when CI=true is set
+        # (auto by GitHub Actions). Local without DB still fails. Same
+        # check, env-controlled response — no `continue-on-error` band-aid.
         run: uv run python pipeline/check_drift.py
-        continue-on-error: true
 
       - name: Behavioral audit
         run: uv run python scripts/tools/audit_behavioral.py
