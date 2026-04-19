@@ -4,6 +4,22 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-19 CI-green campaign — landed)
+
+5-PR stack consolidated and merged via PR #19 (squash) at commit `9fe6b968`, then format cleanup via PR #20 at `eaee4645`. Main CI now green across all 13 gates including Tests with coverage on Windows runner.
+
+What landed:
+- `pipeline/asset_configs.get_asset_config` split into metadata-only API + explicit `require_dbn_available` (PR-A: removed sys.exit coupling that made the module unimportable in CI/test contexts)
+- Canonical-schema temp-DB fixtures for 27 DB-dependent tests (PR-B: `seeded_promotion_db`, `seeded_snapshot_db`, `seeded_pulse_db`, extended `live_config_db`)
+- `scripts/tools/worktree_manager.ensure_symlink` falls back to absolute target on cross-drive (PR-C: catches `os.path.relpath` ValueError on Windows D:\ vs C:\ tmp_path)
+- 5 stale profile assertions reconciled via synthetic shared-NYSE_OPEN injection (PR-D: profile rebuild on 2026-04-19 removed the shared-session lanes those tests relied on)
+- PR-9 foundation: workflow ui/ removal, ruff format sweep (398 files), 84 lint errors cleared, UTF-8 re-encoding (8 files), check 37 honors DUCKDB_PATH, audit_behavioral SQL detector tightened, check 96 ast-aware
+
+Env-aware skipif pattern (NOT a blanket skip — DO NOT delete):
+- `tests/test_pipeline/test_gc_mgc_mapping.py::test_mes_dbn_path_exists` — local-data sentinel, asserts MES DBN dir present locally; pytest.skip on CI where data is by design absent (CLAUDE.md "no cloud sync")
+- `tests/test_mf_futures/test_kernel.py::test_load_carry_input_slices_unlocks_annualized_carry_when_expiry_is_supported` — same pattern, requires raw MGC statistics files
+- Same env-aware pattern as `pipeline.check_drift._skip_db_check_for_ci`. The local-fail-loud + CI-skip-honest contract is intentional. Future "why are these skipped, delete them" cleanup MUST NOT regress this signal.
+
 ## Update (2026-04-19 GC -> MGC translation audit)
 
 ### What changed
