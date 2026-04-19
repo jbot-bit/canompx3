@@ -23,7 +23,7 @@ metadata:
     - docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md  # t >= 3.79 no-theory
     - .claude/rules/backtesting-methodology.md   # RULE 3.2 directional-only; RULE 8.1 fire-rate
     - .claude/rules/quant-audit-protocol.md      # storytelling-bias Seven Sins guard
-  committed_sha: "TO_FILL_AFTER_COMMIT"
+  committed_sha: "a1332f12"  # lock commit: prereg(htf-shadow) lock + add recorder + initialise empty ledger
   head_sha_at_draft: 2eb92bee         # v3 hardening commit follows
   do_not_run_discovery: true
   scope_note: >
@@ -437,4 +437,4 @@ pre_reg_checklist:
   - "[ ] single-day outlier cap replaces era sub-stability gate"
   - "[ ] authority list is accurate (Bailey 2013 MinBTL removed; FST added)"
   - "[ ] Aronson training-memory citation explicitly labeled"
-  - "[ ] committed_sha = TO_FILL_AFTER_COMMIT"
+  - "[x] committed_sha = a1332f12"
