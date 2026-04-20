@@ -91,7 +91,10 @@ def _seed_gold_db(path: Path) -> None:
         INSERT INTO paper_trades VALUES
         ('2026-04-19', 'NYSE_OPEN', '2026-04-19 14:30:00+00', 'long', 20000, 19900, 20100, 20080,
          '2026-04-19 14:40:00+00', 'target', 0.8, 1.5, 'MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12',
-         'NYSE_OPEN_test', 'MNQ', 5, 1.0, 'COST_LT12', 'E2', 'live', 160.0, 'ok')
+         'NYSE_OPEN_test', 'MNQ', 5, 1.0, 'COST_LT12', 'E2', 'live', 160.0, 'ok'),
+        ('2026-04-19', 'TOKYO_OPEN', '2026-04-19 00:30:00+00', 'long', 19000, 18900, 19150, 18950,
+         '2026-04-19 00:45:00+00', 'stop', -0.5, 0.0, 'MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12',
+         'TOKYO_OPEN_test', 'MNQ', 5, 1.5, 'COST_LT12', 'E2', 'backfill', NULL, 'modeled')
         """
     )
     con.close()
@@ -146,11 +149,14 @@ def test_build_report_merges_modeled_realized_and_events(tmp_path):
 
     assert nyse["validated_expectancy_r"] == 0.087
     assert nyse["completed_trades"] == 1
+    assert nyse["paper_trade_rows"] == 1
     assert nyse["avg_pnl_r"] == 0.8
     assert nyse["filled_events"] == 1
     assert nyse["mechanism_status"] == "COMPLETED_ROWS"
 
     assert tokyo["completed_trades"] == 0
+    assert tokyo["paper_trade_rows"] == 1
+    assert tokyo["avg_pnl_r"] is None
     assert tokyo["skipped_events"] == 1
     assert tokyo["mechanism_status"] == "EVENTS_ONLY"
 
@@ -174,3 +180,58 @@ def test_build_report_fail_closed_when_tables_missing(tmp_path):
         assert lane["completed_trades"] == 0
         assert lane["total_events"] == 0
         assert lane["mechanism_status"] == "NO_EVIDENCE"
+
+
+def test_build_report_ignores_pre_rebalance_rows(tmp_path):
+    allocation = tmp_path / "lane_allocation.json"
+    gold_db = tmp_path / "gold.db"
+    journal_db = tmp_path / "live_journal.db"
+    _write_allocation(allocation)
+
+    con = duckdb.connect(str(gold_db))
+    con.execute(
+        """
+        CREATE TABLE paper_trades (
+            trading_day DATE,
+            orb_label VARCHAR,
+            entry_time TIMESTAMPTZ,
+            direction VARCHAR,
+            entry_price DOUBLE,
+            stop_price DOUBLE,
+            target_price DOUBLE,
+            exit_price DOUBLE,
+            exit_time TIMESTAMPTZ,
+            exit_reason VARCHAR,
+            pnl_r DOUBLE,
+            slippage_ticks DOUBLE,
+            strategy_id VARCHAR,
+            lane_name VARCHAR,
+            instrument VARCHAR,
+            orb_minutes INTEGER,
+            rr_target DOUBLE,
+            filter_type VARCHAR,
+            entry_model VARCHAR,
+            execution_source VARCHAR,
+            pnl_dollar DOUBLE,
+            notes VARCHAR
+        )
+        """
+    )
+    con.execute(
+        """
+        INSERT INTO paper_trades VALUES
+        ('2026-04-10', 'NYSE_OPEN', '2026-04-10 14:30:00+00', 'long', 20000, 19900, 20100, 20080,
+         '2026-04-10 14:40:00+00', 'target', 0.8, 1.5, 'MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12',
+         'NYSE_OPEN_test', 'MNQ', 5, 1.0, 'COST_LT12', 'E2', 'live', 160.0, 'old')
+        """
+    )
+    con.close()
+    duckdb.connect(str(journal_db)).close()
+
+    report = build_report(allocation_path=allocation, db_path=gold_db, journal_path=journal_db, days=None)
+
+    nyse = report["lanes"][0]
+    assert report["window_start_trading_day"] == "2026-04-18"
+    assert nyse["completed_trades"] == 0
+    assert nyse["paper_trade_rows"] == 0
+    assert nyse["mechanism_status"] == "NO_EVIDENCE"

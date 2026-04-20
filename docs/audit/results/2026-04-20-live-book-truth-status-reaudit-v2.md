@@ -6,6 +6,12 @@
 
 **Same-day correction:** fresh verification showed `trading_app/prop_portfolio.py` is healthy, not broken. Phase 1 truth-surface repair also updated `TRADING_RULES.md`, `trading_app/prop_profiles.py`, and `RESEARCH_RULES.md` to remove stale live-book wording. The scale-readiness verdict in this audit does not change.
 
+**Same-day hardening follow-up:** the first implementation pass on this branch was later code-reviewed and tightened. Two important operator-surface fixes were applied after this audit text was written:
+- `scripts/tools/live_attribution_report.py` now treats only `live` / `shadow` rows as completed real evidence and floors current-book evidence at allocator `rebalance_date`.
+- `trading_app/live/session_orchestrator.py` now skips the `paper_trades` bridge when entry context is incomplete instead of fabricating a completed live row.
+
+Those fixes strengthen the audit surface. They do not change the audit verdict: current active lanes still have no realized current-window evidence.
+
 ## Evidence Rules
 
 Trusted, in order:

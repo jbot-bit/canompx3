@@ -4,6 +4,67 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 night — code-review hardening pass completed)
+
+Follow-up to the explicit user request to "audit your audit" and then code-review the branch work itself. This pass fixed the concrete review findings rather than treating the earlier implementation as done.
+
+### Review findings addressed
+
+1. **False evidence classification in `live_attribution_report.py`**
+   - Fixed: backfill-only rows no longer promote a lane to `COMPLETED_ROWS`.
+   - Fixed: realized PnL/slippage aggregates now use only `execution_source IN ('live', 'shadow')`.
+   - Added rebalance-window scoping:
+     - report now computes `window_start_trading_day`
+     - default floor is `max(rebalance_date, now-days)` when `--days` is passed
+     - without `--days`, the report still floors at `rebalance_date`
+
+2. **Fabricated / low-integrity completed-trade bridge rows in `_record_exit()`**
+   - Fixed: `paper_trades` bridge now requires both:
+     - real `entry_time`
+     - real `journal_trade_id`
+   - If either is missing, bridge is skipped with a warning instead of fabricating a completed live row.
+   - Fixed: bridged rows now use the true entry timestamp supplied by position state, not the exit event timestamp.
+
+3. **Stale historical evidence satisfying current-book visibility**
+   - Fixed: `check_live_attribution_health()` now accepts and uses a `since_trading_day` floor.
+   - `run_checks()` now loads the current allocator `rebalance_date` and scopes the live-attribution warning to that window.
+   - Smoke-run confirms canonical output now says:
+     - `WARN: no live attribution evidence yet for current lane(s): NYSE_OPEN since 2026-04-18`
+
+### Shared helper added to avoid ad-hoc allocator parsing
+
+Added in `trading_app/prop_profiles.py`:
+- `load_allocation_payload(...)`
+- `load_allocation_rebalance_date(...)`
+
+Purpose:
+- centralize profile-validated access to `lane_allocation.json`
+- avoid each operator/audit surface re-parsing allocator metadata differently
+
+### Verification after hardening
+
+Targeted verification:
+- `python3 -m py_compile trading_app/prop_profiles.py trading_app/pre_session_check.py trading_app/live/session_orchestrator.py scripts/tools/live_attribution_report.py tests/test_tools/test_live_attribution_report.py tests/test_trading_app/test_pre_session_check.py tests/test_trading_app/test_session_orchestrator.py` -> PASS
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_tools/test_live_attribution_report.py tests/test_trading_app/test_pre_session_check.py tests/test_trading_app/test_session_orchestrator.py -q` -> `174 passed`
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m ruff check trading_app/prop_profiles.py trading_app/pre_session_check.py trading_app/live/session_orchestrator.py scripts/tools/live_attribution_report.py tests/test_tools/test_live_attribution_report.py tests/test_trading_app/test_pre_session_check.py tests/test_trading_app/test_session_orchestrator.py` -> `All checks passed`
+
+Broader regression verification:
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_trading_app/test_paper_trade_store.py tests/test_trading_app/test_trade_journal.py tests/test_trading_app/test_session_orchestrator.py tests/test_trading_app/test_paper_trade_logger.py tests/test_trading_app/test_prop_profiles.py tests/test_trading_app/test_prop_portfolio.py tests/test_trading_app/test_pre_session_check.py tests/test_tools/test_live_attribution_report.py -q` -> `315 passed`
+
+Real smoke runs:
+- report:
+  - `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python scripts/tools/live_attribution_report.py --allocation-path /mnt/c/Users/joshd/canompx3/docs/runtime/lane_allocation.json --db-path /mnt/c/Users/joshd/canompx3/gold.db --journal-path /mnt/c/Users/joshd/canompx3/live_journal.db`
+  - outcome: all 6 current lanes still correctly show `NO_EVIDENCE`
+- pre-session:
+  - `DUCKDB_PATH=/mnt/c/Users/joshd/canompx3/gold.db /mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m trading_app.pre_session_check --session NYSE_OPEN --profile topstep_50k_mnq_auto`
+  - outcome: still `NO-GO` for real blockers, and live-attribution warning is now explicitly rebalance-scoped
+
+### Current honest state after hardening
+
+- The branch-side audit/operator surfaces are materially more trustworthy than before.
+- The branch still does **not** prove live mechanism health, because the canonical DBs still have zero current-window event rows and zero completed live/shadow rows for the 6 active strategies.
+- That remaining blocker is reality, not code.
+
 ## Update (2026-04-20 evening — audit-of-audit completed; Phase 2 instrumentation landed and verified)
 
 This worktree was re-audited before further edits because the user explicitly questioned whether Codex had enough repo awareness to modify canonical truth safely.

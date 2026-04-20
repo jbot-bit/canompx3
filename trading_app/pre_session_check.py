@@ -203,6 +203,7 @@ def check_live_attribution_health(
     *,
     db_path: Path = GOLD_DB_PATH,
     journal_path: Path = LIVE_JOURNAL_DB_PATH,
+    since_trading_day: date | None = None,
 ) -> tuple[bool, str]:
     """Warn when current lane attribution still has no real evidence.
 
@@ -228,14 +229,18 @@ def check_live_attribution_health(
             if "paper_trades" in tables:
                 cols = {row[1] for row in con.execute("PRAGMA table_info('paper_trades')").fetchall()}
                 exec_source_expr = "execution_source" if "execution_source" in cols else "'unknown'"
+                filters = [f"strategy_id IN ({placeholders})", f"{exec_source_expr} IN ('live', 'shadow')"]
+                params: list[object] = list(strategy_ids)
+                if since_trading_day is not None:
+                    filters.append("trading_day >= ?")
+                    params.append(since_trading_day)
                 row = con.execute(
                     f"""
                     SELECT COUNT(*)
                     FROM paper_trades
-                    WHERE strategy_id IN ({placeholders})
-                      AND {exec_source_expr} IN ('live', 'shadow')
+                    WHERE {' AND '.join(filters)}
                     """,
-                    strategy_ids,
+                    params,
                 ).fetchone()
                 live_rows = int(row[0]) if row else 0
     except Exception as e:
@@ -253,9 +258,14 @@ def check_live_attribution_health(
                     ).fetchall()
                 }
                 if "live_signal_events" in tables:
+                    filters = [f"strategy_id IN ({placeholders})"]
+                    params = list(strategy_ids)
+                    if since_trading_day is not None:
+                        filters.append("trading_day >= ?")
+                        params.append(since_trading_day)
                     row = con.execute(
-                        f"SELECT COUNT(*) FROM live_signal_events WHERE strategy_id IN ({placeholders})",
-                        strategy_ids,
+                        f"SELECT COUNT(*) FROM live_signal_events WHERE {' AND '.join(filters)}",
+                        params,
                     ).fetchone()
                     event_rows = int(row[0]) if row else 0
     except Exception as e:
@@ -266,6 +276,8 @@ def check_live_attribution_health(
     if event_rows > 0:
         return True, f"WARN: live attribution has {event_rows} event rows but 0 completed live/shadow rows yet"
     lane_labels = ", ".join(sorted(lane["orb_label"] for lane in lanes))
+    if since_trading_day is not None:
+        return True, f"WARN: no live attribution evidence yet for current lane(s): {lane_labels} since {since_trading_day}"
     return True, f"WARN: no live attribution evidence yet for current lane(s): {lane_labels}"
 
 
@@ -573,6 +585,10 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
     ok, msg = check_topstep_xfa_aggregate_cap()
     results.append(("TopStep 5-XFA cap", ok, msg))
 
+    from trading_app.prop_profiles import load_allocation_rebalance_date
+
+    allocation_floor = load_allocation_rebalance_date(resolved_profile_id)
+
     with duckdb.connect(str(GOLD_DB_PATH), read_only=True) as con:
         configure_connection(con)
 
@@ -627,7 +643,7 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
         slip_msg = check_slippage_pilot_progress(con)
         results.append(("Slippage pilot", True, slip_msg))
 
-    ok, msg = check_live_attribution_health(lanes)
+    ok, msg = check_live_attribution_health(lanes, since_trading_day=allocation_floor)
     results.append(("Live attribution", ok, msg))
 
     # DD budget check (from daily_lanes)

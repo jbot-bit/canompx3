@@ -1046,13 +1046,34 @@ class TestNotifications:
         orch.cost_spec.tick_size = 0.1
 
         event = _exit_event(price=2355.0, pnl_r=1.5)
-        orch._record_exit(event, entry_price=2350.5, journal_trade_id="trade-123")
+        entry_time = datetime(2026, 3, 7, 1, 2, tzinfo=UTC)
+        orch._record_exit(event, entry_price=2350.5, entry_time=entry_time, journal_trade_id="trade-123")
 
         mock_write.assert_called_once()
         record = mock_write.call_args.args[0]
         assert record.strategy_id == STRATEGY_ID
         assert record.execution_source == "live"
         assert record.pnl_r == 1.5
+        assert record.entry_time == entry_time
+        assert record.exit_time == event.timestamp
+
+    @patch("trading_app.live.session_orchestrator.write_completed_trade")
+    def test_record_exit_skips_bridge_without_entry_context(self, mock_write):
+        orch = build_orchestrator()
+        orch._lane_metadata_map = {
+            STRATEGY_ID: {
+                "lane_name": "CME_REOPEN_test",
+                "orb_minutes": 5,
+                "rr_target": 2.0,
+                "filter_type": "ORB_G5",
+                "entry_model": "E2",
+            }
+        }
+
+        event = _exit_event(price=2355.0, pnl_r=1.5)
+        orch._record_exit(event, entry_price=2350.5, journal_trade_id=None)
+
+        mock_write.assert_not_called()
 
     def test_notify_skips_when_no_telegram(self):
         """_notify() is a no-op when telegram module unavailable."""

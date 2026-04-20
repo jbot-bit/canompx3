@@ -1460,6 +1460,7 @@ class SessionOrchestrator:
         self,
         event,
         entry_price: float,
+        entry_time: datetime | None = None,
         exit_fill_price: float | None = None,
         entry_slippage: float | None = None,
         journal_trade_id: str | None = None,
@@ -1539,6 +1540,19 @@ class SessionOrchestrator:
             self._safety_state.save()
             return
 
+        if entry_time is None or journal_trade_id is None:
+            log.warning(
+                "Skipping paper_trades attribution bridge for %s — incomplete entry context "
+                "(entry_time=%s, trade_id=%s)",
+                event.strategy_id,
+                entry_time,
+                journal_trade_id,
+            )
+            self._safety_state.daily_pnl_r = self.engine.daily_pnl_r
+            self._safety_state.trading_day = str(self.trading_day)
+            self._safety_state.save()
+            return
+
         risk_pts = event.risk_points or strategy.median_risk_points or 0.0
         mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
         stop_dist = risk_pts * mult if risk_pts else None
@@ -1554,7 +1568,7 @@ class SessionOrchestrator:
                 PaperTradeRecord(
                     trading_day=self.trading_day,
                     orb_label=strategy.orb_label,
-                    entry_time=event.timestamp,
+                    entry_time=entry_time,
                     direction=event.direction,
                     entry_price=entry_price,
                     stop_price=stop_price,
@@ -2224,6 +2238,7 @@ class SessionOrchestrator:
                 self._record_exit(
                     event,
                     entry_price,
+                    entry_time=pos_rec.entered_at if pos_rec else None,
                     entry_slippage=pos_rec.entry_slippage if pos_rec else None,
                     journal_trade_id=jtid,
                 )
@@ -2273,6 +2288,7 @@ class SessionOrchestrator:
                     self._record_exit(
                         event,
                         entry_price,
+                        entry_time=closed_rec.entered_at if closed_rec else None,
                         entry_slippage=closed_rec.entry_slippage if closed_rec else None,
                         journal_trade_id=exit_jtid,
                     )
@@ -2326,6 +2342,7 @@ class SessionOrchestrator:
             self._record_exit(
                 event,
                 entry_price,
+                entry_time=closed_rec.entered_at if closed_rec else None,
                 exit_fill_price=exit_fill,
                 entry_slippage=closed_rec.entry_slippage if closed_rec else None,
                 journal_trade_id=exit_jtid,

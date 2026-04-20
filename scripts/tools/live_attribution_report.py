@@ -19,7 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -64,10 +64,15 @@ def _table_columns(con: duckdb.DuckDBPyConnection | None, table_name: str) -> se
         return set()
 
 
-def _date_floor(days: int | None) -> datetime | None:
-    if days is None:
+def _window_floor(*, rebalance_date: date | None, days: int | None) -> date | None:
+    floors: list[date] = []
+    if rebalance_date is not None:
+        floors.append(rebalance_date)
+    if days is not None:
+        floors.append((datetime.now(UTC) - timedelta(days=days)).date())
+    if not floors:
         return None
-    return datetime.now(UTC) - timedelta(days=days)
+    return max(floors)
 
 
 def _load_modeled_priors(
@@ -99,7 +104,7 @@ def _load_completed_trade_stats(
     con: duckdb.DuckDBPyConnection | None,
     strategy_ids: list[str],
     *,
-    since: datetime | None,
+    since_trading_day: date | None,
 ) -> dict[str, dict[str, Any]]:
     if con is None or "paper_trades" not in _table_names(con):
         return {}
@@ -107,9 +112,9 @@ def _load_completed_trade_stats(
     cols = _table_columns(con, "paper_trades")
     filters = [f"strategy_id IN ({','.join('?' * len(strategy_ids))})"]
     params: list[Any] = list(strategy_ids)
-    if since is not None:
-        filters.append("entry_time >= ?")
-        params.append(since)
+    if since_trading_day is not None:
+        filters.append("trading_day >= ?")
+        params.append(since_trading_day)
 
     exec_source_expr = "execution_source" if "execution_source" in cols else "'unknown'"
     pnl_dollar_expr = "pnl_dollar" if "pnl_dollar" in cols else "NULL"
@@ -118,12 +123,13 @@ def _load_completed_trade_stats(
         f"""
         SELECT
             strategy_id,
-            COUNT(*) AS completed_trades,
-            ROUND(SUM(COALESCE(pnl_r, 0)), 4) AS cum_pnl_r,
-            ROUND(AVG(pnl_r), 4) AS avg_pnl_r,
-            ROUND(AVG(slippage_ticks), 4) AS avg_slippage_ticks,
-            ROUND(SUM(COALESCE({pnl_dollar_expr}, 0)), 2) AS cum_pnl_dollar,
-            MAX(trading_day) AS last_trade_day,
+            COUNT(*) AS paper_trade_rows,
+            SUM(CASE WHEN {exec_source_expr} IN ('live', 'shadow') THEN 1 ELSE 0 END) AS completed_trades,
+            ROUND(SUM(CASE WHEN {exec_source_expr} IN ('live', 'shadow') THEN COALESCE(pnl_r, 0) ELSE 0 END), 4) AS cum_pnl_r,
+            ROUND(AVG(CASE WHEN {exec_source_expr} IN ('live', 'shadow') THEN pnl_r END), 4) AS avg_pnl_r,
+            ROUND(AVG(CASE WHEN {exec_source_expr} IN ('live', 'shadow') THEN slippage_ticks END), 4) AS avg_slippage_ticks,
+            ROUND(SUM(CASE WHEN {exec_source_expr} IN ('live', 'shadow') THEN COALESCE({pnl_dollar_expr}, 0) ELSE 0 END), 2) AS cum_pnl_dollar,
+            MAX(CASE WHEN {exec_source_expr} IN ('live', 'shadow') THEN trading_day END) AS last_trade_day,
             SUM(CASE WHEN {exec_source_expr} = 'live' THEN 1 ELSE 0 END) AS live_rows,
             SUM(CASE WHEN {exec_source_expr} = 'shadow' THEN 1 ELSE 0 END) AS shadow_rows,
             SUM(CASE WHEN {exec_source_expr} = 'backfill' THEN 1 ELSE 0 END) AS backfill_rows
@@ -135,15 +141,16 @@ def _load_completed_trade_stats(
     ).fetchall()
     return {
         row[0]: {
-            "completed_trades": row[1],
-            "cum_pnl_r": row[2],
-            "avg_pnl_r": row[3],
-            "avg_slippage_ticks": row[4],
-            "cum_pnl_dollar": row[5],
-            "last_trade_day": str(row[6]) if row[6] is not None else None,
-            "live_rows": row[7],
-            "shadow_rows": row[8],
-            "backfill_rows": row[9],
+            "paper_trade_rows": row[1],
+            "completed_trades": row[2],
+            "cum_pnl_r": row[3],
+            "avg_pnl_r": row[4],
+            "avg_slippage_ticks": row[5],
+            "cum_pnl_dollar": row[6],
+            "last_trade_day": str(row[7]) if row[7] is not None else None,
+            "live_rows": row[8],
+            "shadow_rows": row[9],
+            "backfill_rows": row[10],
         }
         for row in rows
     }
@@ -153,16 +160,16 @@ def _load_event_stats(
     con: duckdb.DuckDBPyConnection | None,
     strategy_ids: list[str],
     *,
-    since: datetime | None,
+    since_trading_day: date | None,
 ) -> dict[str, dict[str, Any]]:
     if con is None or "live_signal_events" not in _table_names(con):
         return {}
 
     filters = [f"strategy_id IN ({','.join('?' * len(strategy_ids))})"]
     params: list[Any] = list(strategy_ids)
-    if since is not None:
-        filters.append("created_at >= ?")
-        params.append(since)
+    if since_trading_day is not None:
+        filters.append("trading_day >= ?")
+        params.append(since_trading_day)
 
     rows = con.execute(
         f"""
@@ -210,14 +217,21 @@ def build_report(
     allocation = load_allocation(allocation_path)
     lanes = allocation["lanes"]
     strategy_ids = [lane["strategy_id"] for lane in lanes]
-    since = _date_floor(days)
+    rebalance_date = None
+    raw_rebalance = allocation.get("rebalance_date")
+    if isinstance(raw_rebalance, str):
+        try:
+            rebalance_date = date.fromisoformat(raw_rebalance)
+        except ValueError:
+            rebalance_date = None
+    since_trading_day = _window_floor(rebalance_date=rebalance_date, days=days)
 
     gold_con = _safe_connect(db_path)
     journal_con = _safe_connect(journal_path)
     try:
         modeled = _load_modeled_priors(gold_con, strategy_ids)
-        completed = _load_completed_trade_stats(gold_con, strategy_ids, since=since)
-        events = _load_event_stats(journal_con, strategy_ids, since=since)
+        completed = _load_completed_trade_stats(gold_con, strategy_ids, since_trading_day=since_trading_day)
+        events = _load_event_stats(journal_con, strategy_ids, since_trading_day=since_trading_day)
     finally:
         if gold_con is not None:
             gold_con.close()
@@ -231,6 +245,7 @@ def build_report(
         completed_row = completed.get(strategy_id, {})
         event_row = events.get(strategy_id, {})
         completed_trades = int(completed_row.get("completed_trades", 0) or 0)
+        paper_trade_rows = int(completed_row.get("paper_trade_rows", 0) or 0)
         total_events = int(event_row.get("total_events", 0) or 0)
         if completed_trades > 0:
             mechanism_status = "COMPLETED_ROWS"
@@ -255,6 +270,7 @@ def build_report(
                 "validated_sample_size": modeled_row.get("validated_sample_size"),
                 "validated_status": modeled_row.get("validated_status"),
                 "completed_trades": completed_trades,
+                "paper_trade_rows": paper_trade_rows,
                 "cum_pnl_r": completed_row.get("cum_pnl_r", 0.0),
                 "avg_pnl_r": completed_row.get("avg_pnl_r"),
                 "avg_slippage_ticks": completed_row.get("avg_slippage_ticks"),
@@ -279,6 +295,7 @@ def build_report(
         "db_path": str(db_path),
         "journal_path": str(journal_path),
         "days": days,
+        "window_start_trading_day": since_trading_day.isoformat() if since_trading_day is not None else None,
         "profile_id": allocation.get("profile_id"),
         "rebalance_date": allocation.get("rebalance_date"),
         "modeled_prior_warning": (
@@ -293,7 +310,8 @@ def render_report(report: dict[str, Any]) -> str:
     lines = []
     lines.append("LIVE ATTRIBUTION REPORT")
     lines.append(
-        f"profile={report['profile_id']} rebalance_date={report['rebalance_date']} lookback_days={report['days'] or 'ALL'}"
+        f"profile={report['profile_id']} rebalance_date={report['rebalance_date']} "
+        f"lookback_days={report['days'] or 'ALL'} window_start={report['window_start_trading_day'] or 'ALL'}"
     )
     lines.append(report["modeled_prior_warning"])
     lines.append("")
@@ -320,7 +338,7 @@ def render_report(report: dict[str, Any]) -> str:
             f"- {lane['strategy_id']}: events={lane['total_events']} "
             f"(submitted={lane['submitted_events']}, filled={lane['filled_events']}, "
             f"skipped={lane['skipped_events']}, rejected={lane['rejected_events']}), "
-            f"completed={lane['completed_trades']}, live_rows={lane['live_rows']}, "
+            f"completed={lane['completed_trades']}, paper_trade_rows={lane['paper_trade_rows']}, live_rows={lane['live_rows']}, "
             f"shadow_rows={lane['shadow_rows']}, last_trade={lane['last_trade_day']}, "
             f"last_event={lane['last_event_at']}"
         )

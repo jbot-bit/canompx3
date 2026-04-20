@@ -23,6 +23,7 @@ Topstep-alone promotion climb.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from trading_app.config import ENTRY_MODELS
@@ -1040,29 +1041,11 @@ def load_allocation_lanes(
     corrupt JSON, or any parse error. This ensures resolve_daily_lanes()
     returns an empty list, which check_allocation_staleness() then blocks.
     """
-    import json
-
-    if allocation_path:
-        path = Path(allocation_path)
-    else:
-        path = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
-
-    if not path.exists():
+    data = load_allocation_payload(profile_id, allocation_path=allocation_path)
+    if data is None:
         return ()
 
-    try:
-        data = json.loads(path.read_text())
-    except (json.JSONDecodeError, OSError):
-        return ()
-
-    # Profile must match — fail-closed on mismatch
-    if data.get("profile_id") != profile_id:
-        return ()
-
-    lanes_data = data.get("lanes")
-    if not isinstance(lanes_data, list):
-        return ()
-
+    lanes_data = data["lanes"]
     specs: list[DailyLaneSpec] = []
     for entry in lanes_data:
         # Only deploy DEPLOY/PROVISIONAL lanes (not PAUSE/STALE)
@@ -1091,6 +1074,57 @@ def load_allocation_lanes(
         )
 
     return tuple(specs)
+
+
+def load_allocation_payload(
+    profile_id: str,
+    allocation_path: str | Path | None = None,
+) -> dict | None:
+    """Load the canonical allocator payload for one profile.
+
+    Returns ``None`` on missing file, profile mismatch, corrupt JSON, or missing
+    lane list. This keeps callers fail-closed while centralizing allocator truth.
+    """
+    import json
+
+    if allocation_path:
+        path = Path(allocation_path)
+    else:
+        path = Path(__file__).resolve().parents[1] / "docs" / "runtime" / "lane_allocation.json"
+
+    if not path.exists():
+        return None
+
+    try:
+        data = json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    if data.get("profile_id") != profile_id:
+        return None
+
+    lanes_data = data.get("lanes")
+    if not isinstance(lanes_data, list):
+        return None
+
+    return data
+
+
+def load_allocation_rebalance_date(
+    profile_id: str,
+    allocation_path: str | Path | None = None,
+) -> date | None:
+    """Return the allocation rebalance date for one profile, if available."""
+    data = load_allocation_payload(profile_id, allocation_path=allocation_path)
+    if data is None:
+        return None
+    raw = data.get("rebalance_date")
+    if not isinstance(raw, str):
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
 
 
 def effective_daily_lanes(profile: AccountProfile) -> tuple[DailyLaneSpec, ...]:

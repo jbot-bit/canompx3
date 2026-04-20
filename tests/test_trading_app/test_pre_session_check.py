@@ -550,3 +550,29 @@ class TestLiveAttributionHealth:
 
         assert ok is True
         assert "1 completed live/shadow rows" in msg
+
+    def test_ignores_pre_rebalance_live_rows(self, tmp_path):
+        db_path = tmp_path / "gold.db"
+        journal_path = tmp_path / "live_journal.db"
+        duck = __import__("duckdb")
+
+        con = duck.connect(str(db_path))
+        con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, execution_source VARCHAR, trading_day DATE)")
+        con.execute("INSERT INTO paper_trades VALUES ('SID_A', 'live', '2026-04-10')")
+        con.close()
+
+        con = duck.connect(str(journal_path))
+        con.execute("CREATE TABLE live_signal_events (strategy_id VARCHAR, trading_day DATE)")
+        con.execute("INSERT INTO live_signal_events VALUES ('SID_A', '2026-04-10')")
+        con.close()
+
+        ok, msg = check_live_attribution_health(
+            [self._lane("SID_A", "NYSE_OPEN")],
+            db_path=db_path,
+            journal_path=journal_path,
+            since_trading_day=date(2026, 4, 18),
+        )
+
+        assert ok is True
+        assert "since 2026-04-18" in msg
+        assert "no live attribution evidence" in msg
