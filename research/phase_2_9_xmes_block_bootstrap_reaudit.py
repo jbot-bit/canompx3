@@ -43,6 +43,13 @@ ORB_MINUTES = 5
 
 def run_cell(con, cell_id, filter_key, rr, priority):
     df = load_lane(con, ORB_LABEL, ORB_MINUTES, rr)
+
+    # Canonical filter column-name alignment.
+    # load_lane names MES ATR as `mes_atr_20_pct`; CrossAssetATRFilter reads
+    # `cross_atr_MES_pct`. Alias so filter_signal dispatches against the
+    # canonical column name the filter's matches_df expects.
+    df["cross_atr_MES_pct"] = df["mes_atr_20_pct"]
+
     variant_mask = filter_signal(df, filter_key, ORB_LABEL)
 
     is_mask = (df["trading_day"] < HOLDOUT).to_numpy()
