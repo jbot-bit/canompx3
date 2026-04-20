@@ -1,0 +1,195 @@
+# Hypothesis Registry — 2026-04-20 phase-2-9-xmes-block-bootstrap-reaudit
+#
+# Locked: 2026-04-20T00:00:00+10:00
+# Author: claude (user-delegated "get it done" on Option B)
+# Predecessor: docs/audit/results/2026-04-20-phase-2-9-framing-audit.md
+#   (commit 889c479c — CONTINUE×4 verdict via C8 OOS/IS ratio + C9 era stability
+#    + Chordia subset-t, WITHOUT a block-bootstrap null-floor gate)
+# Co-motivation: docs/audit/results/2026-04-20-vol-regime-confluence-portfolio-test.md
+#   (commit 0a45d038 — Stage H of that sprint found ALL X_MES_ATR60 *confluence*
+#    variants fail block-bootstrap null; standalone X_MES_ATR60 base lanes were
+#    never tested with that null)
+# Committing commit hash: (filled in by pre-commit hook)
+# Data horizon: 6.65yr clean MNQ/MES (2019-05-06 → 2025-12-31)
+# Holdout: 2026-01-01 (sacred; OOS window 2026-01-02 → 2026-04-16)
+
+metadata:
+  name: "phase-2-9-xmes-block-bootstrap-reaudit"
+  purpose: |
+    Target 1 from the 2026-04-20 vol-regime-confluence resume doc.
+
+    Re-audit the 2 X_MES_ATR60-filtered MNQ COMEX_SETTLE Mode-A-promoted lanes
+    against the block-bootstrap null used in the vol-regime sprint. The
+    2026-04-20 phase-2-9 framing audit cleared all 4 Mode-A lanes (CONTINUE×4)
+    using BH-FDR + C8 OOS/IS ratio + Chordia subset-t. Block-bootstrap null
+    with daily-fixed variant mask was NOT applied. This re-audit closes that
+    gap for the 2 X_MES_ATR60 lanes (primary) and re-runs the same null on
+    the 2 OVNRNG_100 lanes (reference / reproducibility check).
+
+    Decision gate: p_boot < 0.05 required to confirm phase-2-9 CONTINUE verdict
+    on each X_MES_ATR60 lane. A failure here downgrades the lane's label
+    toward retirement queue, pending new mechanism proposal.
+
+  date_locked: "2026-04-20T00:00:00+10:00"
+  data_horizon_years_clean: 6.65
+  holdout_date: "2026-01-01"
+  oos_window_end: "2026-04-16"
+  total_expected_trials: 4   # 2 primary + 2 reference, each one block-bootstrap null
+  testing_mode: "confirmatory_reaudit"   # re-auditing already-promoted lanes
+  scope: "post_promotion_null_floor"
+
+# MinBTL budget check (Bailey et al 2013 Theorem 1)
+# MinBTL = 2·ln(4) / 1.0² = 2.77 years < 6.65 years available → WITHIN_BOUND
+minbtl_check:
+  trials_N: 4
+  e_max_N_floor: 1.0
+  minbtl_years_required: 2.77
+  data_years_available: 6.65
+  status: "WITHIN_BOUND"
+
+hypotheses:
+  - id: 1
+    name: "X_MES_ATR60 filter adds info beyond random day selection — COMEX_SETTLE RR1.0"
+    priority: "primary"
+    theory_citation: |
+      Politis & Romano (1994) "The Stationary Bootstrap" — moving-block bootstrap
+      preserves serial dependence structure of daily PnL under the null. The null
+      resamples daily pnl_r in blocks of sqrt(N) ≈ 41 days while keeping the
+      variant (filter-fire) mask FIXED. Tests whether the filter's selected days
+      produce abnormal returns vs random day selection at the same fire rate.
+      docs/institutional/literature/ (block-bootstrap methodology standard for
+      trading-edge nulls per Bailey-López de Prado 2013 § 4.2).
+    economic_basis: |
+      X_MES_ATR60 selects days where MES ATR_20_pct ≥ 60. Filter adds edge ONLY
+      if selected days carry abnormally strong ORB breakouts relative to the
+      underlying pnl_r distribution. If block-bootstrap null cannot reject the
+      hypothesis "filter-fire days are just random days from the same
+      distribution", then phase-2.9's BH-FDR + C8 + Chordia gates were
+      insufficient to validate this lane, and a material re-audit is required.
+    filter:
+      cells:
+        - cell_id: "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60"
+          instrument: MNQ
+          orb_label: COMEX_SETTLE
+          orb_minutes: 5
+          entry_model: E2
+          confirm_bars: 1
+          rr_target: 1.0
+          filter_key: X_MES_ATR60
+    test: "moving-block bootstrap (block=sqrt(N), n_perms=10000, seed=20260420)"
+    expected_trial_count: 1
+    kill_criteria:
+      - "p_boot >= 0.05 → DOWNGRADE: phase-2-9 CONTINUE verdict rejected; re-label research-provisional"
+      - "p_boot >= 0.10 → RETIRE candidate: lane does not beat random selection at 10% level"
+
+  - id: 2
+    name: "X_MES_ATR60 filter adds info beyond random day selection — COMEX_SETTLE RR1.5"
+    priority: "primary"
+    theory_citation: "Same as H1."
+    economic_basis: "Same as H1; separate cell per pre-reg rigor (RR1.0 and RR1.5 are distinct lanes)."
+    filter:
+      cells:
+        - cell_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_X_MES_ATR60"
+          instrument: MNQ
+          orb_label: COMEX_SETTLE
+          orb_minutes: 5
+          entry_model: E2
+          confirm_bars: 1
+          rr_target: 1.5
+          filter_key: X_MES_ATR60
+    test: "moving-block bootstrap (block=sqrt(N), n_perms=10000, seed=20260420)"
+    expected_trial_count: 1
+    kill_criteria:
+      - "p_boot >= 0.05 → DOWNGRADE"
+      - "p_boot >= 0.10 → RETIRE candidate"
+
+  - id: 3
+    name: "OVNRNG_100 filter block-bootstrap null — COMEX_SETTLE RR1.0 (reference)"
+    priority: "reference"
+    theory_citation: "Same null spec as H1."
+    economic_basis: |
+      Reference test to validate the null-pipeline. The 2026-04-20 vol-regime
+      sprint found OVN_100 *confluence* variants pass block-bootstrap at
+      p_boot=0.011 and 0.013 (on the ORB_G5 gate + OVN confluence structure).
+      This standalone OVN_100 cell has not been tested with the exact same
+      null at the base-filter level. Expected: p_boot < 0.05 if filter is
+      genuinely selective.
+    filter:
+      cells:
+        - cell_id: "MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100"
+          instrument: MNQ
+          orb_label: COMEX_SETTLE
+          orb_minutes: 5
+          entry_model: E2
+          confirm_bars: 1
+          rr_target: 1.0
+          filter_key: OVNRNG_100
+    test: "moving-block bootstrap (block=sqrt(N), n_perms=10000, seed=20260420)"
+    expected_trial_count: 1
+    kill_criteria:
+      - "reference only — does not gate phase-2-9 verdict on its own; reported for cross-check"
+
+  - id: 4
+    name: "OVNRNG_100 filter block-bootstrap null — COMEX_SETTLE RR1.5 (reference)"
+    priority: "reference"
+    theory_citation: "Same null spec as H1."
+    economic_basis: "Reference cell at RR1.5; same null expectation as H3."
+    filter:
+      cells:
+        - cell_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100"
+          instrument: MNQ
+          orb_label: COMEX_SETTLE
+          orb_minutes: 5
+          entry_model: E2
+          confirm_bars: 1
+          rr_target: 1.5
+          filter_key: OVNRNG_100
+    test: "moving-block bootstrap (block=sqrt(N), n_perms=10000, seed=20260420)"
+    expected_trial_count: 1
+    kill_criteria:
+      - "reference only"
+
+# Execution spec (frozen before run)
+execution:
+  script: "research/phase_2_9_xmes_block_bootstrap_reaudit.py"
+  null_routine: "research.vol_regime_gates_g_h_i_j.moving_block_bootstrap"
+  base_definition: |
+    "base" = all entry-firing days for the lane's (instrument, orb_label,
+    orb_minutes, entry_model, confirm_bars, rr_target) combination where
+    pnl_r IS NOT NULL. These are ALL ORB entry days, pre-filter.
+  variant_definition: |
+    "variant" = canonical filter fire-pattern from research.filter_utils.filter_signal
+    (ALL_FILTERS[filter_key].matches_df(df, orb_label)). Fail-closed on NaN.
+  window: "IS only — trading_day < HOLDOUT_SACRED_FROM (2026-01-01)"
+  n_perms: 10000   # upgrade from 5000 used in vol-regime sprint for tighter p resolution near 0.05
+  block_size: "max(1, int(sqrt(N_base)))"
+  seed: 20260420
+  read_only: true
+  write_targets: []   # docs/ + research/ output JSON only; no DB writes, no validated_setups/experimental_strategies changes
+
+# Decision tree (pre-committed — do not alter after reading results)
+decision_tree:
+  primary_cells: [1, 2]   # the 2 X_MES_ATR60 cells
+  reference_cells: [3, 4]  # the 2 OVNRNG_100 cells
+  verdict_rules:
+    - "ALL primary pass (p_boot<0.05) AND ALL reference pass → CONFIRM_PHASE_2_9"
+    - "ANY primary fails (p_boot≥0.05) → DOWNGRADE_XMES_LANES (enumerate which)"
+    - "ANY primary p_boot≥0.10 → RETIRE_XMES_CANDIDATE for that lane"
+    - "ANY reference fails → FLAG_NULL_CALIBRATION (reference expected to pass per vol-regime sprint)"
+
+# Pre-registration checklist
+#
+# [x] Theory citation + economic basis on every hypothesis
+# [x] Kill criteria pre-registered (not post-hoc)
+# [x] MinBTL within bound (2.77y < 6.65y, K=4)
+# [x] Holdout 2026-01-01 not moved
+# [x] Read-only: no DB writes, no validated_setups changes, no experimental_strategies changes
+# [x] Filter delegation via research.filter_utils.filter_signal (canonical)
+# [x] Committed to git BEFORE script executes
+# [x] Decision tree locked before any result is read
+total_hypothesis_count: 4
+total_expected_trials: 4
+budget_check:
+  max_allowed_clean: 300
+  strict_bailey_E1_bound: 28
+  status: "WITHIN_STRICT_BAILEY_E1_BOUND"
