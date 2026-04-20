@@ -100,7 +100,7 @@ def main():
     if not (("pipeline" in file_path or "trading_app" in file_path) and file_path.endswith(".py")):
         sys.exit(0)
 
-    # --- Phase 1: Drift check (FAST tier, ~3-5s) with 30s debounce ---
+    # --- Phase 1: Drift check (FAST tier, ~18-20s wall) with 30s debounce ---
     # Pre-commit hook + CI run the FULL drift check (no `--fast`) for end-to-end coverage.
     # Hook uses `--fast` to skip the 19 checks measured >0.3s by profile_check_drift.py
     # (full check is 50-130s — far exceeds the 30s hook timeout).

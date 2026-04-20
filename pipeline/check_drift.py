@@ -5807,8 +5807,11 @@ CHECKS = [
 
 
 # Checks measured >0.3s by scripts/tools/profile_check_drift.py (2026-04-19).
-# `--fast` mode (used by post-edit hook) skips these for sub-5s real-time coverage.
+# `--fast` mode (used by post-edit hook) skips these for ~18-20s real-time coverage.
 # Pre-commit hook + CI run the full set — no coverage loss end-to-end.
+# NOTE: this set may overlap CHECKS marked is_advisory=True. Skipped advisories
+# are tallied under "skipped (--fast)", not "advisory" — full mode still runs
+# them in pre-commit/CI, so end-to-end advisory coverage is preserved.
 SLOW_CHECK_LABELS = frozenset(
     {
         "All imports resolve",
@@ -5830,6 +5833,7 @@ SLOW_CHECK_LABELS = frozenset(
         "Naive datetime detection",
         "No old fixed-clock session names in Python source",
         "Trading app schema-query consistency",
+        "Document authority registry exists and core docs advertise their roles",
     }
 )
 
