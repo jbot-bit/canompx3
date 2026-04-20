@@ -259,37 +259,102 @@ hypotheses:
   - id: 1
     name: "Portfolio-general vol-regime confluence conditioner on MNQ live book"
     theory_citation: |
-      Canonical citations via docs/institutional/literature/:
+      AMENDMENT 2 (2026-04-20, pre-run): Corrected theory grounding after
+      reading local literature/ extracts. Original draft cited Carver Ch 9-10
+      for binary filter — INCORRECT: Carver Ch 9-10 grounds CONTINUOUS sizing
+      (mechanism_priors.md §4 Role R3), not binary take/skip (Role R1).
+      Actual grounding chain below.
 
-      1. Fitschen (2013) Ch 3 — intraday trend-follow in commodity and stock-index
-         futures. Grounds the ORB-continuation premise. High-vol regimes produce
-         wider intraday range, facilitating follow-through beyond the
-         order-flow imbalance at breakout.
-         File: docs/institutional/literature/fitschen_2013_ch3.md (if exists)
-         or resources/systematic_trading/fitschen_Ch3.pdf.
+      Canonical citations via docs/institutional/literature/ (verbatim extracts
+      read and verified on 2026-04-20):
 
-      2. Carver (2015) Ch 9-10 — Systematic Trading. Volatility targeting and
-         forecast combination. Grounds vol-regime-conditional sizing/entry as
-         risk-scaled behavior: exposure is a function of volatility state, not
-         a constant.
-         File: docs/institutional/literature/carver_2015_ch9_10.md (if exists).
+      1. PRIMARY MECHANISM — Chan (2008) Ch 7 § Regime Switching.
+         docs/institutional/literature/chan_2008_ch7_regime_switching.md
 
-      3. Bailey, Borwein, López de Prado, Zhu (2013) § Proposition 2 —
-         compensation effect under distributional shift. Sub-sample ExpR on a
-         non-stationary distribution diverges from full-sample ExpR; testing
-         whether the "high-vol sub-sample" carries concentrated edge is a
-         distributional-partition question, not a discovery question.
-         File: docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md.
+         Chan 2008 book pp.106-107 (verbatim):
+         "For stop loss to be beneficial, we must believe that we are in a
+         momentum, or trending, regime. [...] Otherwise, if the market is
+         mean reverting within that lifetime, we will eventually recoup our
+         losses if we didn't exit the position too quickly."
 
-      4. Harvey & Liu (2015) p.16 — BHY dependence-aware FDR. Cells share the
-         underlying pnl_r stream (within a lane) so K-framing must respect
-         dependence: BH-FDR at K=14 (the primary family), K=variant-level
-         K=3 per lane, and K=variant=7 for cross-lane-same-variant.
-         File: docs/institutional/literature/harvey_liu_2015_backtesting.md.
+         Chan 2008 book p.120 (verbatim):
+         "high- vs. low-volatility regimes [...] volatility regime switching
+         seems to be most amenable to classical econometric tools such as the
+         generalized autoregressive conditional heteroskedasticity (GARCH)
+         model."
 
-      5. Chordia et al (2018) — Two Million Trading Strategies. Chordia-strict
-         t >= 3.00 applies here (theory IS specified: Carver + Fitschen above),
-         not t >= 3.79.
+         Chan 2008 book p.121 (verbatim):
+         "Turning points models [...] Enter all possible variables that might
+         predict a turning point or regime switch. Variables such as current
+         volatility; last-period return; or changes in macroeconomic numbers..."
+
+         Mechanism chain from Chan 2008 Ch 7:
+         (a) ORB E2 with fixed ATR-scaled stop is a momentum-regime strategy;
+         (b) in mean-reverting regimes, fixed-stop is anti-edge (pp.106-107);
+         (c) vol-regime is GARCH-tractable and state-classifiable via current
+             observable features (pp.120-121);
+         (d) therefore: gating ORB entry on a vol-regime BINARY filter
+             (OVNRNG_100, X_MES_ATR60, session_london_range >= 100) filters
+             out low-vol mean-reverting regimes where fixed-stop is anti-edge.
+
+         This is a Role-R1 (binary filter) application per mechanism_priors.md.
+         Distinct from Carver's Role-R3 continuous sizing framework.
+
+      2. ORB PREMISE — Fitschen (2013) Ch 3 "Path of Least Resistance."
+         docs/institutional/literature/fitschen_2013_path_of_least_resistance.md
+
+         Table 3.8 p.41 verbatim: "instruments that have a trending tendency
+         on one time frame don't necessarily have the same trending tendency
+         in other time frames." Stocks trend-follow on hourly (+70% over
+         baseline); commodities trend both daily and hourly (+40%).
+
+         Grounds: ORB intraday trend-follow works on MNQ (stock index).
+         Does NOT ground vol-regime gating directly — that's Chan 2008 Ch 7.
+
+      3. SECONDARY MECHANISM — Chan (2013) Ch 7 § Intraday Momentum.
+         docs/institutional/literature/chan_2013_ch7_intraday_momentum.md
+
+         p.155 verbatim: "the triggering of stops. Such triggers often lead
+         to the so-called breakout strategies. [...] The execution of these
+         stop orders often leads to momentum because a cascading effect may
+         trigger stop orders placed further away from the open price as well."
+
+         Grounds: ORB E2 stop-triggered entry is institutionally recognized
+         momentum mechanism. Near-peer Sharpe 1.4 on FSTX equity-index future
+         over 8 years provides a reference benchmark.
+
+      4. STATISTICAL — Bailey, Borwein, López de Prado, Zhu (2013) § Prop 2.
+         docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md
+
+         p.12 Prop 2: sub-sample ExpR on a non-stationary distribution may
+         diverge from full-sample ExpR (compensation effect). Testing whether
+         the high-vol sub-sample carries concentrated edge is a
+         distributional-partition test. Requires per-era stability (Criterion 9)
+         to guard against non-stationarity artifacts.
+
+         Also grounds MinBTL: 2·ln(17)/1.0² = 5.67yr required, 6.65yr available.
+
+      5. STATISTICAL — Harvey & Liu (2015) § BHY p.16.
+         docs/institutional/literature/harvey_liu_2015_backtesting.md
+
+         p.16 verbatim: "In the end, we advocate the BHY method."
+         BH-FDR at K=17 (primary family) applied per pre_registered_criteria.md
+         Criterion 3.
+
+      6. STATISTICAL — Chordia, Goyal, Saretto (2018).
+         docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md
+
+         Chordia strict: t >= 3.79 without theory. With theory citation,
+         Harvey-Liu-Zhu (2015) recommendation of t >= 3.0 applies. Because
+         the above theory chain (Chan 2008 Ch 7 + Fitschen Ch 3 + Chan 2013
+         Ch 7) is literature-grounded (all three extracts committed),
+         t >= 3.00 is the applicable Chordia threshold per
+         pre_registered_criteria.md Criterion 4.
+
+      CITATION DISCIPLINE NOTE: every extract cited is read verbatim from
+      docs/institutional/literature/. No training-memory claims. Per
+      institutional-rigor.md § 7 ("Ground in local resources before training
+      memory") and research-truth-protocol.md § Phase 0 Literature Grounding.
 
     economic_basis: |
       The hypothesis is NOT that overnight_range >= 100 or mes_atr_20_pct >= 60
