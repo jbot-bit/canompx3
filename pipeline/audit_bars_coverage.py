@@ -20,25 +20,17 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import duckdb
-import pandas as pd
-
-from pipeline.ingest_dbn_daily import DAILY_FILE_PATTERN
-from pipeline.ingest_dbn_mgc import (
-    GC_OUTRIGHT_PATTERN,
-    choose_front_contract,
-)
+# Heavy deps (pandas ~3.6s, databento ~2.2s, duckdb ~0.2s) AND the canonical
+# pipeline.ingest_dbn_* imports (which transitively load those heavy deps,
+# total ~6s) are lazy-loaded inside the functions that actually use them.
+# This file is a CLI tool with zero production importers, so the import-resolve
+# check shouldn't pay 6+s for a module nobody imports as a library.
+# PEP 8 endorses delayed imports for performance.
 
 # ---------------------------------------------------------------------------
-# Reuse canonical pipeline logic — no copies, single source of truth
+# Light constants — paths only, no heavy deps
 # ---------------------------------------------------------------------------
 from pipeline.paths import DAILY_DBN_DIR, GOLD_DB_PATH, PROJECT_ROOT
-
-try:
-    import databento as db
-except ImportError:
-    print("FATAL: databento package not installed (pip install databento)")
-    sys.exit(1)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -90,6 +82,9 @@ def _calendar_dates_for_trading_day(trading_day: date) -> list[date]:
 
 def _build_file_index() -> dict[date, Path]:
     """Build calendar_date -> file_path index across all data dirs."""
+    # Lazy: ingest_dbn_daily transitively loads pandas/databento (~6s).
+    from pipeline.ingest_dbn_daily import DAILY_FILE_PATTERN
+
     index = {}
     for data_dir in DATA_DIRS:
         if not data_dir.exists():
@@ -211,6 +206,15 @@ def audit_day(trading_day: date, file_index: dict[date, Path]) -> dict:
 
     Returns dict with keys: trading_day, raw_count, db_count, status, detail
     """
+    # Lazy heavy deps — only loaded when this function actually runs.
+    import pandas as pd
+
+    try:
+        import databento as db
+    except ImportError:
+        print("FATAL: databento package not installed (pip install databento)")
+        sys.exit(1)
+
     result = {"trading_day": trading_day, "raw_count": None}
 
     start_utc, end_utc = _trading_day_utc_range(trading_day)
@@ -260,6 +264,9 @@ def audit_day(trading_day: date, file_index: dict[date, Path]) -> dict:
     combined = pd.concat(all_dfs, ignore_index=True)
 
     # Choose front contract (same logic as pipeline)
+    # Lazy: ingest_dbn_mgc is light but consistent with the lazy-import pattern above.
+    from pipeline.ingest_dbn_mgc import GC_OUTRIGHT_PATTERN, choose_front_contract
+
     volumes = combined.groupby("symbol")["volume"].sum().to_dict()
     front = choose_front_contract(volumes, outright_pattern=GC_OUTRIGHT_PATTERN, prefix_len=2)
     if front is None:
@@ -303,6 +310,9 @@ def query_db_source_symbols(con, trading_day: date) -> list[str]:
 
 
 def main():
+    # Lazy heavy dep — only loaded when this CLI actually runs.
+    import duckdb
+
     parser = argparse.ArgumentParser(description="Audit bars_1m coverage: raw .dbn.zst vs gold.db")
     parser.add_argument(
         "--random-count",
