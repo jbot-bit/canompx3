@@ -4,6 +4,63 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-21 autonomous #4 — PR #48 sizer rule SIZER_ALIVE on MES + MGC at capital-neutral OOS; shadow-deploy design next)
+
+Completes the ROI-table #1 priority from the 2026-04-21 skeptical re-audit. After PR #56 (DSR audit downgraded PR #51) and the PR #48 OOS β₁ replication (MES + MGC OOS-CONFIRMED at t≥+2.0), the final question before shadow-deployment was: does a CONCRETE, capital-neutral, IS-trained sizer rule produce positive OOS uplift per unit capital?
+
+### What was added
+
+- Pre-reg (LOCKED): `docs/audit/hypotheses/2026-04-21-pr48-sizer-rule-oos-backtest-v1.yaml`
+- Runner: `research/pr48_sizer_rule_oos_backtest_v1.py`
+- Result: `docs/audit/results/2026-04-21-pr48-sizer-rule-oos-backtest-v1.md`
+
+### Rule (pre-committed, capital-neutral)
+
+- Rank basis: `rel_vol_{session}` per (instrument, session, direction) lane.
+- IS thresholds: per-lane 5-quantile cutpoints of IS `rel_vol` (pre-2026-01-01).
+- Multipliers: `{Q1: 0.5, Q2: 0.75, Q3: 1.0, Q4: 1.25, Q5: 1.5}` — mean multiplier = 1.0 strictly enforced.
+- OOS bucketing: `np.searchsorted(is_thresholds, oos_rel_vol)` — no OOS leak.
+- Fallback: lanes with N_IS < 100 get uniform size=1.0 (no rule applied).
+- Scope: E2 CB1, aperture 5m, RR=1.5, pooled direction, all sessions per instrument.
+- K_family = 3 independent instrument-level hypotheses (Pathway B).
+
+### Canonical result
+
+| Instrument | N_OOS | Uniform ExpR | Sizer ExpR | Delta | Paired t | one-tail p | Verdict |
+|---|---:|---:|---:|---:|---:|---:|---|
+| MNQ | 771 | +0.0590 | +0.0652 | +0.0063 | +0.440 | 0.330 | SIZER_WEAK |
+| **MES** | **702** | **-0.0902** | **-0.0600** | **+0.0302** | **+2.084** | **0.019** | **SIZER_ALIVE** |
+| **MGC** | **601** | **+0.0696** | **+0.1013** | **+0.0317** | **+2.000** | **0.023** | **SIZER_ALIVE** |
+
+- MES: rule REDUCES losses by 33% at capital-neutral. Lane still net-negative uniformly, but sizer converts participation signal into differential edge.
+- MGC: rule ADDS 45% to OOS expectancy. Uniform already positive; sizer takes it higher.
+- MNQ: sign-right but power-low (consistent with OOS β₁ weak-right-sign result).
+
+### Per-quintile diagnostics (check monotonicity holds OOS)
+
+Per-quintile mean pnl_r per instrument logged in result doc. MES + MGC show near-monotonic quintile progression on OOS — same shape as IS, which is why the sizer rule works.
+
+### Institutional implication
+
+**PR #48 moves from "ALIVE pattern" to "deploy-candidate on MES + MGC".** Both instruments clear the pre-committed Pathway B K=1 paired-t gate at capital-neutral OOS. The participation-shape finding from April 20 is now a genuine sizer-overlay candidate, distinct from (and institutionally cleaner than) the PR #51 family which failed DSR.
+
+This is the first Carver Ch 10-style continuous-sizer deploy candidate in the portfolio.
+
+### Updated queue
+
+1. Keep `H04` on its existing shadow path.
+2. Keep `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` short `F5_BELOW_PDL` as CONDITIONAL_UNVERIFIED shadow-only.
+3. MNQ `US_DATA_1000` O5 long primary route `NOT_F6_INSIDE_PDR` — RESEARCH_SURVIVOR, shadow-design stage.
+4. PR #51 cells MISCLASSIFIED per PR #56 — Pathway B K=1 rewrite is the remaining legitimate path.
+5. MES/MGC single-filter ORB dead (PR #53 + PR #55). Single-filter discovery path closed.
+6. **NEW top priority:** shadow-deployment design for PR #48 participation-sizer on MES + MGC.
+   - Freeze the IS-trained per-lane quintile thresholds as a canonical constant.
+   - Define the exact per-trade flow: compute OOS rel_vol at trade time → bucket into frozen thresholds → apply size multiplier → submit order at multiplier × base_size.
+   - Route through the existing allocator as an additional multiplier on the instrument-level size calculation.
+   - Shadow monitor: fire-rate-per-quintile (should match IS 20/20/20/20/20), paired-t rolling 100-trade window, divergence alert if |monthly_delta| < 0 for 60d consecutive.
+   - MNQ stays OUT of sizer-overlay until OOS accrues more data (currently WEAK).
+7. Sizer-rule v2 future pre-regs: (a) alternative rank-basis features (atr_vel_ratio, break_delay_min); (b) per-direction (long-only vs short-only rule); (c) MNQ-specific sizer calibration with expanded OOS.
+
 ## Update (2026-04-20 late-late-late — HTF branch closed: integrity repaired, simple v1 family dead)
 
 Follow-on to the "HTF thing" request. User wanted this handled as an

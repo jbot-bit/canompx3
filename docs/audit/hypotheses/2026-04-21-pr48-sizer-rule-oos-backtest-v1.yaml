@@ -1,0 +1,108 @@
+pre_reg_id: "pr48-sizer-rule-oos-backtest-v1"
+date: "2026-04-21"
+status: "LOCKED"
+testing_mode: "individual"
+pathway: "B"
+pathway_rationale: |
+  Bounded confirmatory follow-on to PR #48 OOS β₁ replication (which OOS-
+  CONFIRMED the participation monotonic-up pattern on MES + MGC). The β₁
+  OOS replication tests whether the PATTERN holds; this pre-reg tests
+  whether a CONCRETE DEPLOYABLE SIZER RULE — quintile-linear, IS-trained
+  thresholds, mean-multiplier-neutral — converts the pattern into positive
+  OOS expectancy uplift per unit capital over uniform sizing.
+
+  This is the distinction the PR #48 OOS replication doc flagged as its
+  next bounded step: "a production sizer rule needs IS-trained thresholds
+  applied to OOS rel_vol — a separate stronger test, to be run before
+  any capital action."
+
+  K_family = 3 independent instrument-level hypotheses (Pathway B per
+  pre_registered_criteria.md Amendment 3.0). No family multiplicity trap.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  parent_audit:
+    - "PR #48 `28279719` — IS β₁ significant universally (MNQ t=+9.59, MES t=+11.80, MGC t=+7.54)."
+    - "2026-04-21 OOS β₁ replication — MES OOS β=+0.365 t=+2.49 p=0.007; MGC OOS β=+0.423 t=+2.52 p=0.006; MNQ OOS β=+0.144 t=+0.96 (sign-right, power-low)."
+
+theory_citations:
+  grounded_in_local_extracts:
+    - path: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+      use: "Forecast-scaled sizing. Rank of participation is the forecast; multiplier scales position. Mean multiplier preserved at 1.0 keeps total capital-deployed neutral vs baseline for an honest comparison."
+    - path: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "Intraday breakout continuation; high participation = greater follow-through probability. Sizer rule codifies this as position scaling, not trade filter."
+    - path: "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+      use: "MinBTL budget trivially satisfied at K=3."
+
+scope:
+  instruments: ["MNQ", "MES", "MGC"]
+  entry_model: "E2"
+  confirm_bars: 1
+  aperture: 5
+  rr_target: 1.5
+  direction: "pooled (long + short)"
+  is_window: "trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01)"
+  oos_window: "2026-01-01 <= trading_day (Mode A sacred)"
+  sessions: "all sessions with data per instrument (canonical SELECT DISTINCT orb_label)"
+  max_K: 3
+
+rule_specification:
+  rank_basis: "rel_vol_{session} per (instrument, session, direction) lane — same feature as PR #48"
+  is_thresholds: |
+    Compute 5-quantile cutoffs of IS rel_vol per lane. Each OOS trade
+    is bucketed by searchsorting its rel_vol into the IS cutoffs → quintile 1..5.
+  multipliers:
+    Q1: 0.5
+    Q2: 0.75
+    Q3: 1.0
+    Q4: 1.25
+    Q5: 1.5
+  multiplier_mean: 1.0  # enforces capital-neutrality for honest comparison
+  fallback: "if N_IS < 100 in a given lane, that lane uses uniform size=1.0 (no rule applied)"
+
+hypothesis:
+  H1_per_instrument: |
+    For each instrument, within the pooled OOS sample (all lanes, aperture 5m,
+    RR=1.5):
+      mean(pnl_r_oos * size_mult) > mean(pnl_r_oos * 1.0)
+      paired t-test: t >= +2.0 (one-tailed, H1: sizer > uniform)
+      NOT mechanical: rule adds >0 R per trade on average vs uniform.
+
+testing_discipline:
+  K_family: 3
+  paired_t_threshold: 2.0
+  one_tailed_alpha: 0.05
+  MinBTL_check: "2·ln(3) / 9 ~= 0.24 yrs; IS window >=6 yrs all instruments. Trivially satisfied."
+  mandatory_integrity_gates:
+    - "IS-OOS leak check: OOS thresholds never computed on OOS data; only on IS."
+    - "Mean multiplier = 1.0 strictly enforced so comparison is capital-neutral."
+    - "Fallback to uniform if N_IS<100 per lane prevents sparse-lane distortion."
+    - "Per-quintile per-instrument N_OOS reported for transparency."
+
+decision_rules:
+  verdicts_per_instrument:
+    - verdict: "SIZER_ALIVE"
+      criteria: "delta (weighted - uniform) > 0 AND paired t >= +2.0"
+    - verdict: "SIZER_WEAK"
+      criteria: "delta > 0 AND paired t in [0, +2.0)"
+    - verdict: "SIZER_NULL"
+      criteria: "delta ~= 0 AND |t| < 1.0"
+    - verdict: "SIZER_ADVERSE"
+      criteria: "delta < 0 (rule subtracts from OOS expectancy)"
+  family_summary:
+    ">=1 SIZER_ALIVE": "that instrument's participation-sizer rule is deploy-eligible; shadow-design the canonical step"
+    "all SIZER_NULL or SIZER_WEAK": "pattern holds but rule gives no discriminable edge; rule needs redesign or OOS is too thin"
+    "any SIZER_ADVERSE": "quintile-linear framing WRONG on that instrument; investigate shape before redesign"
+
+non_actions:
+  - "Does NOT write to validated_setups / edge_families / lane_allocation / live_config."
+  - "Does NOT deploy. No capital action."
+  - "Does NOT tune multipliers — Q1..Q5 = 0.5/0.75/1.0/1.25/1.5 pre-committed."
+  - "Does NOT test alternative rank-basis features (atr_vel_ratio, break_delay_min, etc.)."
+  - "Does NOT re-rank on OOS data; rank basis is IS-trained thresholds only."
+
+outputs:
+  result_md: "docs/audit/results/2026-04-21-pr48-sizer-rule-oos-backtest-v1.md"
+  script: "research/pr48_sizer_rule_oos_backtest_v1.py"
+
+commit_sha: "TO_FILL_AFTER_COMMIT"
