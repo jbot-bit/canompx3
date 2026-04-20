@@ -58,6 +58,342 @@ Result: clean diff; broken truncated pointer no longer present.
 
 - `.claude/rules/backtesting-methodology.md`
 - `HANDOFF.md`
+## Update (2026-04-20 late night — MNQ live-context overlay family PRE-REGISTERED DRAFT; no execution yet)
+
+Follow-on to the "golden egg / confluence" thread. User direction tightened: stop narrating local interactions loosely, formalize them as a planned pre-reg, and do not run a fresh scan until scope, family budget, and canonical data rules are locked.
+
+### What was audited before writing the pre-reg
+
+- Existing evidence reviewed:
+  - `docs/audit/results/2026-04-20-bull-short-avoidance-deployed-lane-verify.md`
+  - `docs/audit/results/2026-04-20-bull-short-pooled-deployed-oos.md`
+  - `docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v2-gap-fill.md`
+  - `docs/audit/results/2026-04-15-volume-confluence-scan.md`
+  - `docs/audit/results/2026-04-15-t0-t8-audit-volume-cells.md`
+  - `docs/audit/results/2026-04-15-rel-vol-mechanism-decomposition.md`
+  - `docs/audit/results/2026-04-15-garch-consolidated-stress.md`
+  - `docs/audit/results/2026-04-15-garch-all-sessions-universality.md`
+  - `docs/audit/results/2026-04-19-second-pass-multi-angle-audit.md`
+- Canonical rule / policy surfaces checked:
+  - `RESEARCH_RULES.md`
+  - `.claude/rules/backtesting-methodology.md`
+  - `trading_app/holdout_policy.py`
+  - `TRADING_RULES.md`
+  - `docs/runtime/lane_allocation.json`
+- Canonical data availability confirmed in `gold.db` / active shelf for exact deployed-lane work:
+  - `daily_features.prev_day_direction`
+  - `daily_features.is_opex`
+  - `daily_features.rel_vol_COMEX_SETTLE`
+  - `orb_outcomes.F6_INSIDE_PDR`
+  - active lanes include:
+    - `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12`
+    - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5`
+
+### What was concluded before pre-registering
+
+- Broad pooled claim "bull-day short avoidance works across deployed MNQ shorts" is dead.
+- The only still-interesting local interaction from the re-audit is:
+  - `MNQ × NYSE_OPEN × short-side × prev_day_direction`
+- Repo evidence also suggests two adjacent machine-detectable context families worth exact-lane testing rather than hand-waving:
+  - `calendar × session` (`is_opex`)
+  - `volume / structure confluence × session` (`rel_vol_COMEX_SETTLE`, `F6_INSIDE_PDR`)
+
+### New draft pre-reg
+
+- File added:
+  - `docs/audit/hypotheses/2026-04-20-mnq-live-context-overlays-v1.yaml`
+- Status:
+  - `PRE_REGISTERED_DRAFT`
+- Important lock:
+  - **Do not run this family yet.**
+  - First commit the YAML and stamp the exact commit SHA into downstream results / commands so the scan is genuinely pre-registered.
+
+### Scope locked in the draft
+
+- Exact deployed lanes only:
+  - `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12`
+  - `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5`
+- Exact feature family only:
+  - `prev_day_direction`
+  - `is_opex`
+  - `rel_vol_COMEX_SETTLE`
+  - `F6_INSIDE_PDR`
+- Honest family budget:
+  - 5 primary hypotheses
+  - each must pass both unfiltered and filtered views
+  - family accounting budget = `K=10`
+
+### Hypotheses captured
+
+- `H01_NYO_SHORT_PREV_BEAR`
+  - On the exact NYSE_OPEN live lane, short-side `prev_day_direction='bear'` rows outperform short-side `bull` rows.
+- `H02_NYO_LANE_OPEX_TRUE`
+  - On the exact NYSE_OPEN live lane, `is_opex=TRUE` outperforms `FALSE`.
+- `H03_CMX_SHORT_RELVOL_Q3`
+  - On the exact COMEX_SETTLE live lane, short-side `rel_vol_COMEX_SETTLE > IS-only P67` outperforms off-signal rows.
+- `H04_CMX_SHORT_RELVOL_Q3_AND_F6`
+  - On the exact COMEX_SETTLE live lane, the strict confluence `rel_vol_HIGH_Q3 AND F6_INSIDE_PDR` outperforms off-signal rows.
+- `H05_CMX_LANE_OPEX_TRUE`
+  - On the exact COMEX_SETTLE live lane, `is_opex=TRUE` is a penalty state relative to `FALSE`.
+
+### Guardrails already written into the YAML
+
+- Two-pass requirement:
+  - every overlay claim must be reported on both unfiltered lane rows and canonical filtered rows
+- No lookahead:
+  - `rel_vol` threshold must be computed on IS-only rows
+- Abort conditions:
+  - any K mismatch
+  - any OOS threshold leakage
+  - any lane / eligibility mismatch against active canonical shelf
+- Reporting contract:
+  - print threshold, row counts, IS / OOS metrics, and failure-to-pass reasons
+
+### Next step
+
+- Commit the pre-reg first.
+- Only then either:
+  - adapt an existing research harness to this exact family, or
+  - write a dedicated runner that emits one result doc for the five locked hypotheses.
+- Until that happens, treat the YAML as the current plan-of-record, not as evidence.
+
+## Update (2026-04-20 late night — asset-universe pipeline audit DESIGN + truth-surface hardening COMPLETE)
+
+Follow-on to the rates diversification arrival audit. User direction tightened: do not trust metadata, verify the actual pipeline state asset-by-asset, and do not keep moving ad hoc. This pass produced a plan-of-record plus one verified infrastructure hardening fix.
+
+### What was verified
+
+- Canonical sources reviewed before action:
+  - `docs/plans/PIPELINE_VERIFICATION_MASTER.md`
+  - `docs/plans/2026-04-07-canonical-data-redownload.md`
+  - `docs/plans/2026-04-09-phase4-hypothesis-redesign-findings.md`
+  - `docs/institutional/pre_registered_criteria.md`
+  - `docs/plans/diversification-candidate-shortlist.md`
+  - `pipeline/asset_configs.py`
+- Direct `gold.db` / filesystem matrix built for every configured asset:
+  - raw DBN store existence + filename match
+  - `bars_1m`
+  - `bars_5m`
+  - `daily_features`
+  - `orb_outcomes`
+  - `validated_setups`
+- Important finding: directory existence alone was overstating availability.
+  - `GC` config path existed, but the directory only contained `MGC` files
+  - `ES` config path existed, but the directory only contained `MES` files
+  - `NQ` raw path is missing
+  - dead ORB legacy assets (`M2K/M6E/MBT/MCL/SIL`) still have partial tables in `gold.db`, but their configured raw stores are absent
+
+### Designed classification
+
+- **Full rigor now:** `MNQ`, `MES`, `MGC`
+  - raw stores verify
+  - end-to-end ORB layers exist
+  - `MGC` remains research-only / non-deployable because of horizon, not because the pipeline is missing
+- **Research-only raw candidates, not ORB-rigor now:** `2YY`, `ZT`
+  - direct raw + `bars_1m`/`bars_5m` exist
+  - no ORB build layers by design
+  - current tested rates families remain NO-GO
+- **Support/proxy assets needing cleanup before honest use:** `GC`, `ES`, `NQ`
+  - meaningful to proxy/parent policy
+  - not canonically rebuildable today
+- **Dead ORB legacy assets:** `M2K`, `M6E`, `MBT`, `MCL`, `SIL`
+  - do not reopen same ORB thesis just because tables still exist
+
+### Plan-of-record written
+
+- New design doc:
+  - `docs/plans/2026-04-20-asset-universe-pipeline-audit-design.md`
+- Design locks the gates in this order:
+  1. raw-store integrity
+  2. canonical build depth
+  3. policy eligibility
+  4. mechanism-specific research plan
+  5. only then discovery / validation spend
+
+### Infrastructure hardening fix landed and verified
+
+- `pipeline/asset_configs.py`
+  - `require_dbn_available()` now fails closed if a configured DBN store exists but contains no files matching the instrument's canonical outright root
+  - `list_available_instruments()` now uses the same stricter check instead of raw path existence
+- Tests added/updated:
+  - `tests/test_pipeline/test_asset_configs.py`
+  - new coverage for wrong-symbol directories and stricter available-instruments filtering
+- Verification:
+  - `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_asset_configs.py -q` → `40 passed`
+  - `list_available_instruments()` now returns the verified set:
+    - `['2YY', 'MES', 'MGC', 'MNQ', 'ZT']`
+
+### Practical impact
+
+- Rebuild orchestration will no longer treat `GC/ES` as available merely because their directories exist
+- Asset-universe decisions can now distinguish:
+  - actually rebuildable
+  - partially built legacy
+  - support-only / cleanup-needed
+  - dead thesis
+- Next highest-EV follow-on is **not** broad retesting. It is:
+  1. resolve `GC/ES/NQ` parent/proxy status cleanly
+  2. only then choose the next new-candidate onboarding path under a locked Stage-1 spec
+  3. current shortlist still points to agriculture before more rates
+
+## Update (2026-04-20 Brisbane evening — rates diversification arrival audit COMPLETE; 2YY NO-GO, ZT directional family NO-GO)
+
+Follow-on to the live-book / diversification audit thread. User direction was explicit: continue autonomously, verify from canonical sources, widen beyond the current 6-lane book, and do not trust metadata or thin 2026 slices for decision-making.
+
+### What was verified first
+
+- Canonical market-data estate was checked before any download:
+  - `MNQ`, `MES`, `MGC` real-micro `ohlcv-1m` raw files are already on disk under `data/raw/databento/ohlcv-1m/`.
+  - `gold.db` already contained broader instrument coverage than the active shelf reflects:
+    - `GC`, `M2K`, `M6E`, `MBT`, `MES`, `MGC`, `MNQ`, `SIL` all have `bars_1m`
+    - `GC`, `M2K`, `M6E`, `MBT`, `MES`, `MGC`, `MNQ`, `SIL` have downstream artifacts to varying degrees
+  - Active validated shelf remains narrow:
+    - `MNQ`: 36 active
+    - `MES`: 2 active
+    - `GC`: 17 retired, 0 active
+- Prior same-cell audit conclusion stands:
+  - current active filter variants are overwhelmingly better subsets / cosmetic refinements, not distinct trade species
+  - no strict same-cell `DISTINCT_EDGE` survivor was found across active `MNQ/MES/MGC` shelf variants
+
+### Decision: rates was the highest-EV distinct-mechanism expansion
+
+Grounding used:
+
+- `docs/plans/diversification-research-program.md`
+- `docs/plans/diversification-candidate-shortlist.md`
+- `docs/plans/2yy-data-availability-gate.md`
+- `docs/plans/2yy-direct-data-evidence-note.md`
+- `docs/plans/2026-03-15-zt-stage1-triage-gate.md`
+
+Why this branch was chosen:
+
+- repo docs rank rates as the first-wave candidate for genuinely different macro drivers
+- user explicitly approved Databento download / ingest
+- direct vendor probe succeeded in-session and quoted both full-history pulls at `$0`
+
+### Data landed this session
+
+No code edits were required. Canonical repo helpers were used for the pull and standard pipeline entrypoints for ingest/build.
+
+- Downloaded:
+  - `DB/2YY_DB/backfill-2YY-2010-06-06-to-2026-04-20.ohlcv-1m.dbn.zst` (`~0.7 MB`)
+  - `DB/ZT_DB/backfill-ZT-2010-06-06-to-2026-04-20.ohlcv-1m.dbn.zst` (`~40.7 MB`)
+- Ingested into `gold.db`:
+  - `2YY`: `55,328` `bars_1m` rows, `2021-08-17 -> 2026-04-09`
+  - `ZT`: `1,511,342` `bars_1m` rows, `2021-02-01 -> 2026-04-20`
+- Built research-layer `bars_5m`:
+  - `2YY`: `39,907` rows
+  - `ZT`: `358,361` rows
+
+### Verified conclusions
+
+#### 1. `2YY` fails the practical data-quality gate for exact `8:30 ET` event work
+
+Fresh canonical check on `bars_1m` around the required `08:20-08:50 America/New_York` window:
+
+- total trading days in DB: `1,189`
+- days with any `08:20-08:50 ET` coverage: `731` (`61.5%`)
+- median bars in the full `08:20-08:50 ET` window: `3`
+- days with full `30/30` one-minute coverage in that window: `0`
+- days with full `08:30-08:34 ET` shock window: `14`
+- median bars in the `08:30-08:34 ET` shock window: `0`
+
+Decision:
+
+- `2YY` is **NO-GO as the primary Stage-1 vehicle** for the narrow `CPI/NFP` event-study framing.
+- This is a data-reality failure, not a theory failure.
+
+Direct verification performed after arrival:
+
+- exact `CPI/NFP` window check on fresh `gold.db` minute bars
+- `CPI`: `54` events in range, `0` with fully usable pre/shock/follow windows
+- `NFP`: `56` events in range, `0` with fully usable pre/shock/follow windows
+- median `08:30-08:34 ET` shock-window coverage on both families: `1` bar
+- conclusion confirmed: the narrow Stage-1 event-study is not honest on this tape
+
+#### 2. `ZT` passes arrival / structure, but the simple directional event family is already NO-GO
+
+Fresh arrival facts:
+
+- total trading days in DB: `1,625`
+- days with any `08:20-08:50 ET` coverage: `1,348` (`83.0%`)
+- median bars in that window: `30`
+- days with full `30/30` one-minute coverage in that window: `1,235`
+- days with full `08:30-08:34 ET` shock window: `1,338`
+- median shock-window bars: `5`
+
+Repo resource cross-check:
+
+- `scripts/tools/_bundle_misc_research.md` already contains prior `ZT` Stage-1 findings:
+  - `zt_cpi_nfp_findings.md`
+  - `zt_event_viability_findings.md`
+- Those findings show:
+  - large event shocks do exist in `ZT`
+  - but the tested `CPI/NFP/FOMC` continuation / failed-first-move directional cells did **not** survive scrutiny
+  - repeated verdict across the bundle: `THIN/FAIL`, no surviving directional cell, stop before widening the same family
+
+Decision:
+
+- `ZT` is **structurally viable as a rates instrument**
+- the specific simple directional `CPI/NFP/FOMC` family is **already NO-GO**
+- do **not** reopen the same rates directional family unless a materially sharper single-mechanism thesis exists
+
+Direct verification performed after arrival:
+
+- reran the Stage-1 logic directly from fresh `gold.db` minute bars using the same:
+  - `CPI/NFP/FOMC` date sets
+  - pre / shock / follow windows
+  - continuation / failed-first-move definitions
+  - two-sided binomial p-value check
+- recompute matched the prior repo findings in substance:
+  - `CPI`: `61` usable events, all directional cells `THIN/FAIL`
+  - `NFP`: `58` usable events after the fresh pull extension, all directional cells `THIN/FAIL`
+  - `FOMC`: `41` usable events after the fresh pull extension, all directional cells `THIN/FAIL`
+- no directional cell reached friction sanity or statistical significance
+
+### What this means for the broader search
+
+- Do **not** spend more budget on:
+  - `2YY` simple event-window directional research
+  - `ZT` continuation / failed-first-move reruns
+  - broad Treasury scans
+- The next highest-EV distinct candidate from the repo shortlist is agriculture:
+  - `MZC` first, then `MZS`
+  - use standard `ZC` / `ZS` as research proxy if the micro-specific history is too short
+
+### Ag vendor viability probe (read-only, no onboarding yet)
+
+Databento full-history / current-history probe from this session:
+
+- `MZC.FUT` (`2025-02-01 -> 2026-04-20`): size quoted `3,109,456`, cost `$0`
+- `MZS.FUT` (`2025-02-01 -> 2026-04-20`): size quoted `6,307,224`, cost `$0`
+- `ZC.FUT` (`2025-02-01 -> 2026-04-20`): size quoted `94,562,384`, cost `$0`
+- `ZS.FUT` (`2025-02-01 -> 2026-04-20`): size quoted `129,592,176`, cost `$0`
+
+Current repo truth:
+
+- no `MZC/MZS/ZC/ZS` entries in `pipeline/asset_configs.py`
+- no ag-specific Stage-1 pre-registered spec exists yet beyond the shortlist memo
+
+### Recommended next move
+
+Do **not** improvise ag onboarding from the shortlist paragraph alone.
+
+Next disciplined step:
+
+1. write / lock a narrow `MZC` Stage-1 spec (likely USDA-report response structure, one crop only, standard `ZC` proxy allowed if explicitly declared)
+2. only then decide whether to pull `MZC` / `ZC` data into canonical paths
+
+### Files / data changed this session
+
+- No repo code files changed
+- Shared state updated:
+  - `HANDOFF.md`
+- Local data state changed:
+  - `DB/2YY_DB/backfill-2YY-2010-06-06-to-2026-04-20.ohlcv-1m.dbn.zst`
+  - `DB/ZT_DB/backfill-ZT-2010-06-06-to-2026-04-20.ohlcv-1m.dbn.zst`
+  - `gold.db` now contains `2YY` + `ZT` `bars_1m`
+  - `gold.db` now contains `2YY` + `ZT` `bars_5m`
 
 ## Update (2026-04-20 late-night — MNQ TBBO gap-fill v2 COMPLETE — Phase D COMEX_SETTLE unblocked)
 
