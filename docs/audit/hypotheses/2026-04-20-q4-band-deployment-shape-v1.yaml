@@ -1,5 +1,5 @@
 version: 1
-status: DRAFT
+status: LOCKED
 date: 2026-04-20
 slug: q4-band-deployment-shape-v1
 title: "Q4-band deployment-shape pre-reg — MNQ 5m Q4 rel_vol upsize rule, pathway from CONFIRMED_UNIVERSAL mechanism to capital action"
@@ -37,7 +37,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "aa9999a7"
 
 testing_mode: deployment_contract
 pathway: N_A
