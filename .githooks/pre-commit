@@ -83,13 +83,24 @@ fi
 echo "  PASSED"
 
 # 2. Drift check (~2 seconds)
+# Commit-time coverage must remain the FULL drift set. The post-edit hook's
+# debounce file only suppresses repeated FAST drift runs while editing; it must
+# never suppress the full commit-time gate, or slow-check regressions can slip
+# through unnoticed.
 echo "[2/6] Drift check..."
 if ! "$PYTHON" pipeline/check_drift.py > /dev/null 2>&1; then
     echo "BLOCKED: Drift detected."
-    "$PYTHON" pipeline/check_drift.py
+    "$PYTHON" pipeline/check_drift.py 2>&1 | awk '
+        /^Check .*\.\.\.$/ { header=$0; next }
+        /^  FAILED:/ { if (header) { print header; header="" } print; infail=1; next }
+        infail && NF==0 { infail=0; next }
+        infail { print; next }
+        /^====/ || /^DRIFT / || /^NO DRIFT/ { print }
+    '
     exit 1
+else
+    echo "  PASSED"
 fi
-echo "  PASSED"
 
 # 3. Staged-file-aware FAST tests — pre-commit must finish in <30s.
 #    - pipeline/ changes  → tests/test_pipeline/ (~11s, 636 tests)
