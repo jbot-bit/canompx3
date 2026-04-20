@@ -832,3 +832,159 @@ class TestDataContinuity:
         assert len(violations) == 0
         captured = capsys.readouterr()
         assert "WARNING" not in captured.out
+
+
+# ── Stage 2: routed filter required columns populated ──────────────────────
+
+
+class TestRoutedFilterColumnsPopulated:
+    """New check: every routed filter's required daily_features column must
+    be populated at >= 50% across ACTIVE_ORB_INSTRUMENTS. Catches ghost
+    deployments like the 2026-04-06 PIT_MIN / pit_range_atr gap."""
+
+    def test_passes_when_all_columns_populated(self):
+        """Against the live DB after the 2026-04-20 backfill, the check
+        must return no violations."""
+        import duckdb
+        from pipeline.paths import GOLD_DB_PATH
+
+        if not GOLD_DB_PATH.exists():
+            pytest.skip("gold.db not available")
+        con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+        try:
+            violations = check_drift.check_routed_filter_columns_populated(con=con)
+        finally:
+            con.close()
+        # No blocking violations expected after pit_range_atr backfill.
+        assert violations == [], f"Expected clean pass, got: {violations}"
+
+    def test_flags_zero_populated_column(self, tmp_path):
+        """Inject a schema with a column present but 0%-populated; the
+        check must flag it if that column is required by a routed filter."""
+        import duckdb
+
+        db_path = tmp_path / "ghost.db"
+        con = duckdb.connect(str(db_path))
+        # Replicate the minimal daily_features columns required by
+        # routed filters, with pit_range_atr present but NULL.
+        con.execute(
+            """
+            CREATE TABLE daily_features (
+                trading_day DATE,
+                symbol VARCHAR,
+                orb_minutes INTEGER,
+                pit_range_atr DOUBLE,
+                atr_20 DOUBLE,
+                atr_20_pct DOUBLE,
+                overnight_range DOUBLE,
+                overnight_range_pct DOUBLE,
+                gap_open_points DOUBLE,
+                garch_forecast_vol_pct DOUBLE,
+                prev_day_range DOUBLE,
+                day_of_week INTEGER,
+                is_nfp_day BOOLEAN,
+                is_opex_day BOOLEAN,
+                is_friday BOOLEAN
+            );
+            INSERT INTO daily_features VALUES
+                ('2025-01-01', 'MNQ', 5, NULL, 150.0, 75.0, 80.0, 60.0, 5.0, 80.0, 200.0, 2, FALSE, FALSE, FALSE),
+                ('2025-01-01', 'MES', 5, NULL, 150.0, 75.0, 80.0, 60.0, 5.0, 80.0, 200.0, 2, FALSE, FALSE, FALSE),
+                ('2025-01-01', 'MGC', 5, NULL, 150.0, 75.0, 80.0, 60.0, 5.0, 80.0, 200.0, 2, FALSE, FALSE, FALSE);
+            """
+        )
+        violations = check_drift.check_routed_filter_columns_populated(con=con)
+        con.close()
+
+        # PIT_MIN is routed to CME_REOPEN; pit_range_atr is required but 0% populated.
+        assert any("pit_range_atr" in v and "PIT_MIN" in v for v in violations), (
+            f"Expected pit_range_atr/PIT_MIN violation, got: {violations}"
+        )
+
+    def test_con_none_returns_empty(self):
+        """When DB is unavailable, check must fail-safe with empty output."""
+        violations = check_drift.check_routed_filter_columns_populated(con=None)
+        assert violations == []
+
+
+# ── Stage 3: pooled-finding annotation schema ─────────────────────────────
+
+
+class TestPooledFindingAnnotations:
+    """New check: audit-result files on/after 2026-04-20 claiming pooled
+    findings must carry per_cell_breakdown_path, flip_rate_pct, and
+    (when flip_rate_pct >= 25) heterogeneity_ack front-matter."""
+
+    def test_flags_missing_breakdown_path(self, tmp_path, monkeypatch):
+        """File declares pooled_finding: true but omits per_cell_breakdown_path."""
+        results_dir = tmp_path / "docs" / "audit" / "results"
+        results_dir.mkdir(parents=True)
+        (results_dir / "2026-05-01-example-pooled.md").write_text(
+            "---\npooled_finding: true\nflip_rate_pct: 10\n---\n\n# Example\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        violations = check_drift.check_pooled_finding_annotations()
+        assert any("per_cell_breakdown_path missing" in v for v in violations), (
+            f"Expected per_cell_breakdown_path violation, got: {violations}"
+        )
+
+    def test_flags_high_flip_rate_without_ack(self, tmp_path, monkeypatch):
+        """flip_rate_pct >= 25 without heterogeneity_ack=true must fail."""
+        results_dir = tmp_path / "docs" / "audit" / "results"
+        results_dir.mkdir(parents=True)
+        (results_dir / "2026-05-01-example-pooled.md").write_text(
+            "---\n"
+            "pooled_finding: true\n"
+            "per_cell_breakdown_path: docs/audit/results/2026-05-01-example-pooled.md\n"
+            "flip_rate_pct: 30\n"
+            "---\n\n# Example\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        violations = check_drift.check_pooled_finding_annotations()
+        assert any("heterogeneity_ack" in v for v in violations), (
+            f"Expected heterogeneity_ack violation, got: {violations}"
+        )
+
+    def test_accepts_complete_front_matter(self, tmp_path, monkeypatch):
+        """Properly-annotated file with low flip rate must pass clean."""
+        results_dir = tmp_path / "docs" / "audit" / "results"
+        results_dir.mkdir(parents=True)
+        (results_dir / "2026-05-01-example-pooled.md").write_text(
+            "---\n"
+            "pooled_finding: true\n"
+            "per_cell_breakdown_path: docs/audit/results/2026-05-01-example-pooled.md\n"
+            "flip_rate_pct: 8\n"
+            "---\n\n# Example\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        violations = check_drift.check_pooled_finding_annotations()
+        assert violations == [], f"Expected clean pass, got: {violations}"
+
+    def test_exempts_pre_sentinel_files(self, tmp_path, monkeypatch):
+        """Files dated before the sentinel are exempt from the schema."""
+        results_dir = tmp_path / "docs" / "audit" / "results"
+        results_dir.mkdir(parents=True)
+        (results_dir / "2026-04-19-example-pooled.md").write_text(
+            "---\npooled_finding: true\n---\n\n# Example\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        violations = check_drift.check_pooled_finding_annotations()
+        assert violations == []
+
+    def test_ignores_files_without_front_matter(self, tmp_path, monkeypatch):
+        """A new file that omits front-matter entirely is not flagged by
+        this check — rule requires the declaration to trigger. Undeclared
+        pooled claims are a social-discipline problem handled by the rule
+        file, not by this mechanical check."""
+        results_dir = tmp_path / "docs" / "audit" / "results"
+        results_dir.mkdir(parents=True)
+        (results_dir / "2026-05-01-no-frontmatter.md").write_text(
+            "# A new audit result with no front-matter at all.\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(check_drift, "PROJECT_ROOT", tmp_path)
+        violations = check_drift.check_pooled_finding_annotations()
+        assert violations == []
