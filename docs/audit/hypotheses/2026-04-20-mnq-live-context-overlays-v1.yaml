@@ -33,7 +33,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "c6ece8a1"
   committed_required_before_run: true
   commit_sha_note: "SHA of the final lock commit used by the execution harness."
 
