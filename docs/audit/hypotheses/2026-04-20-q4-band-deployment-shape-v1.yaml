@@ -1,0 +1,240 @@
+version: 1
+status: DRAFT
+date: 2026-04-20
+slug: q4-band-deployment-shape-v1
+title: "Q4-band deployment-shape pre-reg — MNQ 5m Q4 rel_vol upsize rule, pathway from CONFIRMED_UNIVERSAL mechanism to capital action"
+owner: claude
+parent_chain:
+  - "2026-04-20-participation-optimum-universality-v1.yaml (lock 677bf381, run merged PR #41 commit 126ed6b8) — CONFIRMED_UNIVERSAL mechanism"
+  - "2026-04-20-participation-optimum-mes-universality-v1.yaml (lock 77e33f06, run merged PR #42 commit 75b0d0bc) — MES NO_REPLICATION at MNQ strength"
+  - "2026-04-20-q1-h04-mechanism-shape-validation-v1.yaml (lock c93ba90d, run merged PR #41) — Q1 KILL (linear framing)"
+
+deployment_not_done_here: |
+  This pre-reg IS a deployment-shape contract but DOES NOT self-execute.
+  It defines:
+    - eligibility (which MNQ lanes the rule applies to)
+    - trigger (when to upsize)
+    - sizing (how much)
+    - gates (what OOS evidence upgrades or kills the rule)
+    - caveats (what's explicitly forbidden)
+  Capital action — editing docs/runtime/lane_allocation.json or
+  trading_app/prop_profiles.py or any live execution pathway — requires
+  user-issued explicit command that cites this pre-reg's lock SHA.
+  No automated process may act on this document.
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/institutional-rigor.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+    - "docs/institutional/literature/bailey_lopez_de_prado_2014_dsr.md"
+    - "docs/institutional/literature/carver_2015_ch11_portfolios.md"
+    - "docs/institutional/literature/fitschen_2013_ch3_breakouts.md"
+    - "memory/feedback_oos_power_floor.md"
+    - "memory/feedback_per_lane_breakdown_required.md"
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+
+testing_mode: deployment_contract
+pathway: N_A
+
+scope:
+  instrument: MNQ
+  instrument_rationale: |
+    MES failed the strict Chordia-with-theory threshold (t=-1.834 vs -3.0)
+    even though directional replication was 95.5%. Conservative: deploy only
+    where the parent universality passed at full strength. MES deployment
+    requires a separate follow-on pre-reg with Kelly-proportional (reduced)
+    sizing.
+  eligibility:
+    qualifying_lane_criteria: |
+      Lane qualifies if ALL of:
+        (a) MNQ 5m ORB E2 CB1 RR1.5
+        (b) Currently in the deployed portfolio (lane_allocation.json DEPLOY set)
+        (c) Per-cell β₂ on the parent universality scan is NEGATIVE (21/24
+            cells; the 3 flipped cells are EXCLUDED)
+    excluded_cells:
+      - {session: COMEX_SETTLE, direction: long, reason: "β₂=+0.0123 t=+1.14"}
+      - {session: NYSE_OPEN,    direction: short, reason: "β₂=+0.0112 t=+1.42 — also flipped on MES, potential session-specific mechanism"}
+      - {session: US_DATA_830,  direction: short, reason: "β₂=+0.0002 t=+0.04 (~zero, probably noise)"}
+    note: |
+      Of the 6 current MNQ DEPLOY lanes (per lane_allocation 2026-04-18),
+      check each against excluded_cells before applying the rule.
+
+trigger_rule:
+  name: Q4_REL_VOL_UPSIZE
+  definition: |
+    On a lane's fire-day (ORB_G5 or deployed-filter fire, per lane's
+    canonical entry criteria), if:
+      rel_vol_{session} is in the Q4 band (between P60 and P80 of the
+      IS-frozen quintile breakpoints from parent universality scan
+      lock 677bf381)
+    then APPLY upsize.
+    If rel_vol is in Q1/Q2/Q3/Q5 or NaN → baseline sizing (1.0x).
+  breakpoints_source: |
+    Per-session IS-frozen quintile breakpoints must be computed per lane
+    from the canonical IS universe (trading_day < 2026-01-01, MNQ 5m E2
+    CB1 RR1.5, direction matching lane, UNFILTERED pre-ORB_G5). These are
+    NOT the pooled breakpoints from the universality run; they are per-cell.
+    The parent universality runner already computed per-cell regressions;
+    breakpoints must be computed using the same canonical load.
+  breakpoints_freeze_policy: |
+    Once per lane, compute the P60 and P80 on rel_vol_{session} from IS
+    only. Record in this pre-reg as a BREAKPOINTS_TABLE section (TO BE
+    FILLED after parent-scan output is joined to per-session freeze).
+    After freeze, no recalibration without a superseding pre-reg.
+
+sizing_rule:
+  initial_phase: SHADOW_ONLY
+  initial_phase_definition: |
+    Phase 0 (SHADOW_ONLY): log the trigger-fire mask for each qualifying
+    lane to an append-only CSV (docs/audit/shadow_ledgers/q4-band-*.csv).
+    No capital action. No sizing change. This phase accumulates OOS
+    evidence specifically for THIS trigger-rule, not the binary H04.
+  progression_ladder:
+    phase_0_SHADOW_ONLY:
+      condition: "Pre-reg locked + commit_sha stamped"
+      capital_action: "NONE"
+      duration: "Until gate_1 evidence accumulates"
+    phase_1_MICRO_UPSIZE:
+      gates_all_required:
+        - "Pooled across qualifying lanes, cumulative OOS fires on Q4 trigger >= 60 (K_eff across 21 lanes)"
+        - "Pooled OOS ExpR on trigger-fire days >= +0.15R (Harvey-Liu 40-50% haircut from IS +0.42R gives honest floor ~+0.21R; +0.15R is a modestly conservative gate)"
+        - "OOS dir_match holds at power >= 30% (RULE 3.3 paired report)"
+        - "No per-lane OOS with N>=10 and Delta_OOS <= -0.25R (catastrophic single-lane veto)"
+      capital_action: "Upsize 1.15x on trigger-fire days per qualifying lane; baseline 1.0x off-trigger; no trades skipped"
+      sizing_rationale: |
+        1.15x is Harvey-Liu-haircut-compatible. IS effect is ~+0.42R on
+        Q4 cell; haircut 50% = +0.21R per-trade OOS expected; Kelly-
+        proportional upsize at 15% over baseline preserves <1.5 Kelly
+        cap per Carver Ch 11.
+    phase_2_UPSIZE:
+      gates_all_required:
+        - "phase_1 held continuously for >= 120 calendar days"
+        - "Pooled OOS fires >= 200"
+        - "Pooled OOS ExpR on trigger-fire days >= +0.20R"
+        - "Dir_match at power >= 50%"
+        - "Per-lane dir_match on 18/21 cells"
+      capital_action: "Upsize 1.35x on trigger-fire days"
+    phase_3_FULL_UPSIZE:
+      gates_all_required:
+        - "phase_2 held continuously for >= 180 calendar days"
+        - "Pooled OOS fires >= 500"
+        - "Pooled OOS ExpR >= +0.25R"
+        - "Dir_match at power >= 80%"
+      capital_action: "Upsize 1.50x on trigger-fire days"
+      rationale: "Matches pre-registered projected IS-uplift ceiling after full haircut convergence."
+  reversal_rule:
+    triggers:
+      - "Pooled OOS ExpR drops below +0.10R on trigger-fire days over a 30-day rolling window"
+      - "Dir_match flips with power >= 50%"
+      - "Any single lane shows N>=20 OOS trigger-fire trades with Delta <= -0.30R"
+      - "Allocator correlation between qualifying lanes exceeds 0.35 on 30-day rolling (per canonical correlation monitor PR #35)"
+    action: "Immediate revert to previous phase; if on phase_1, revert to phase_0 SHADOW_ONLY"
+
+kill_criteria:
+  K_kill_1_mechanism_revoked:
+    condition: "A fresh pooled universality rerun (on updated IS) produces β₂ >= 0 OR t > -3.0"
+    action: "KILL rule; revert all qualifying lanes to baseline sizing."
+  K_kill_2_deployment_breakage:
+    condition: "Any qualifying lane OOS N>=50 produces Delta_OOS <= -0.20R on trigger-fire days"
+    action: "KILL rule for that lane specifically; keep rule active on others."
+  K_kill_3_allocator_drift:
+    condition: "Allocator correlation monitor (PR #35) flags qualifying-lane cross-correlation > 0.40 for 10+ consecutive days"
+    action: "PAUSE rule; investigate concentration risk; resume only if cause identified + a lane is dropped from qualifying set."
+  K_kill_4_rule_3_3_violation:
+    condition: "Any deployment-advancement decision made without paired power report"
+    action: "PAUSE all active phases; audit monitor; revert to last safe phase."
+  K_kill_5_canonical_drift:
+    condition: "The canonical universality runner produces a β₂ or per-lane agreement that differs from parent run (commit 126ed6b8) by more than expected drift tolerance (3 standard errors)"
+    action: "SCAN_ABORT; do not execute sizing changes until drift is resolved."
+
+ev_projection:
+  note: "Informational only. NOT a deployment commitment."
+  is_observed_q4_expr: 0.42
+  pooled_q4_fire_rate_estimate: 0.20
+  harvey_liu_haircut: 0.50
+  oos_expected_per_trade_expr_post_haircut: 0.21
+  qualifying_lanes: 21
+  current_mnq_deploy_lanes_at_baseline_sizing: 6
+  lane_annual_trades_estimate: 100
+  copies: 2
+  per_copy_per_lane_annual_q4_trades: 20
+  phase_3_full_upsize_factor: 1.5
+  per_trade_extra_r: "0.5 upsize * 0.21 OOS = +0.105R expected per Q4 fire"
+  per_lane_per_copy_annual_dollar_uplift: "20 fires * 0.105R * 150 risk_dollars = $315/yr"
+  six_deploy_lanes_times_two_copies: 12
+  annual_portfolio_uplift_estimate: "$315 * 12 = $3,780/yr at phase_3 full-upsize"
+  realistic_first_year_projection: |
+    Phase ladder takes 9-12 months to clear.
+    Phase 1 (1.15x): ~$1,100/yr
+    Phase 2 (1.35x): ~$2,500/yr
+    Phase 3 (1.50x): ~$3,800/yr
+    First 12 months (mixed phases, mostly phase 1-2): ~$1,500-2,000
+  caveats:
+    - "Harvey-Liu 50% haircut may be optimistic — real OOS effect could be 30-40% of IS"
+    - "Allocator correlation impact is an unmeasured risk; Phase 1 must monitor"
+    - "Qualifying-lane set will shrink when cells are excluded during per-cell breakpoint freeze"
+    - "Q4 fire rate varies per cell (17-22% seen on MNQ universality run)"
+    - "Deployment at multiple prop firms (Bulenox etc) multiplies uplift linearly but is outside this pre-reg's scope"
+
+allocator_integration:
+  surface_to_modify: "trading_app.prop_profiles.ACCOUNT_PROFILES[<profile>].lane_configs[<lane_id>].sizing_overlay"
+  method: |
+    Sizing overlay is a per-lane function of canonical features at trade-time.
+    The Q4_REL_VOL_UPSIZE overlay:
+      def q4_sizing(trade_row) -> float:
+          breakpoints = FROZEN_BREAKPOINTS[lane_id]  # from this pre-reg
+          rel_vol = trade_row[f"rel_vol_{session}"]
+          if pd.isna(rel_vol):
+              return 1.0
+          if breakpoints.p60 <= rel_vol <= breakpoints.p80:
+              return CURRENT_PHASE_SIZING  # 1.15 / 1.35 / 1.50 based on phase state
+          return 1.0
+  integration_with_existing_cost_gate:
+    note: "COST_LT12 / cost_model.py gates are TRADE-LEVEL eligibility (whether to trade at all); Q4 sizing is SIZE-LEVEL modifier (how much size). They compose additively: first pass cost gate, then apply sizing overlay."
+  correlation_monitoring:
+    reference: "scripts/reports/monitor_lane_correlation_rolling.py (PR #35)"
+    requirement: "Monitor must be running and must not be in ALARM state for any qualifying-lane pair before advancement to phase_1 or beyond."
+
+implementation_integrity_checklist:
+  - "FROZEN_BREAKPOINTS table per qualifying lane is committed to this pre-reg before phase_1 advance"
+  - "Shadow ledger is append-only CSV; one row per trading_day per qualifying lane"
+  - "No automated process may advance phases without user-issued command"
+  - "Every phase-advance decision prints the power report + dir_match + per-lane agreement"
+  - "Every sizing-overlay call cites this pre-reg lock SHA in the audit log"
+  - "Canonical filter delegation enforced: per-lane's deployed filter (ORB_G5, COST_LT*, etc.) is not changed by this rule"
+  - "Correlation monitor is active + non-ALARM before each advance"
+  - "No writes to orb_outcomes, daily_features, validated_setups, bars_1m"
+  - "lane_allocation.json and prop_profiles.py changes require a separate explicit commit citing this pre-reg"
+
+execution_gate:
+  allowed_autonomously:
+    - "Committing this file (DRAFT → LOCKED)"
+    - "Stamping commit_sha"
+    - "Writing a shadow-phase monitor script"
+    - "Running the shadow monitor (read-only, append-only ledger)"
+    - "Computing FROZEN_BREAKPOINTS table (data analysis, no canonical-layer writes)"
+  forbidden_autonomously:
+    - "Editing lane_allocation.json"
+    - "Editing trading_app/prop_profiles.py to add sizing_overlay fields"
+    - "Advancing phases (phase_0 → phase_1, phase_1 → phase_2, etc.)"
+    - "Changing any live execution pathway"
+    - "Reverting phases without first re-reading current state"
+
+not_done_by_this_pre_reg:
+  - "Does NOT activate the rule — merge of the YAML is documentation-only"
+  - "Does NOT compute FROZEN_BREAKPOINTS — that is a separate step before phase_1"
+  - "Does NOT deploy on MES (separate pre-reg required per MES_NO_REPLICATION finding)"
+  - "Does NOT apply to 15m or 30m lanes (mechanism is 5m-specific)"
+  - "Does NOT override H04 shadow prereg (lock b5b7bfbf); that contract stands for the binary H04 signal"
+  - "Does NOT resolve the 3 flipped cells — those are EXCLUDED until a direction-asymmetry probe pre-reg is run"
+
+resume_phrases:
+  - "Q4 shadow phase — start monitor"
+  - "Q4 freeze breakpoints — run the per-lane P60/P80 computation and update pre-reg"
+  - "Q4 phase 1 advance — evaluate gates"
