@@ -22,7 +22,7 @@ import pandas as pd
 
 from pipeline.paths import GOLD_DB_PATH
 from research.filter_utils import filter_signal
-from research.vol_regime_gates_g_h_i_j import load_lane, moving_block_bootstrap
+from research.vol_regime_gates_g_h_i_j import moving_block_bootstrap
 from trading_app.holdout_policy import HOLDOUT_SACRED_FROM
 
 HOLDOUT = pd.Timestamp(HOLDOUT_SACRED_FROM)
@@ -41,15 +41,47 @@ ORB_LABEL = "COMEX_SETTLE"
 ORB_MINUTES = 5
 
 
+def load_lane_canonical(con, orb_label: str, orb_minutes: int, rr: float) -> pd.DataFrame:
+    """Load lane with column names matching the canonical filter-contract.
+
+    The two filters under test read:
+      - OvernightRangeAbsFilter: `overnight_range`
+      - CrossAssetATRFilter(source_instrument='MES'): `cross_atr_MES_pct`
+
+    Emits both at SQL time so `filter_signal -> matches_df` dispatches without
+    any downstream column-aliasing. `cross_atr_MES_pct` is derived from
+    `daily_features.atr_20_pct WHERE symbol='MES' AND orb_minutes=5`, matching
+    the canonical cross-asset-enrichment pattern documented in
+    docs/handoffs/2026-04-19-filter-delegation-campaign-handover.md § F2.
+    """
+    q = """
+    WITH mnq_feat AS (
+      SELECT trading_day, symbol, orb_minutes, overnight_range
+      FROM daily_features WHERE symbol='MNQ'
+    ),
+    mes_atr AS (
+      SELECT trading_day, atr_20_pct AS cross_atr_MES_pct
+      FROM daily_features WHERE symbol='MES' AND orb_minutes=5
+    )
+    SELECT o.trading_day, o.symbol, o.pnl_r,
+           m.overnight_range,
+           x.cross_atr_MES_pct
+    FROM orb_outcomes o
+    JOIN mnq_feat m
+      ON o.trading_day=m.trading_day AND o.symbol=m.symbol AND o.orb_minutes=m.orb_minutes
+    LEFT JOIN mes_atr x ON o.trading_day=x.trading_day
+    WHERE o.symbol='MNQ' AND o.orb_label=? AND o.orb_minutes=?
+      AND o.entry_model='E2' AND o.confirm_bars=1 AND o.rr_target=?
+      AND o.pnl_r IS NOT NULL
+    ORDER BY o.trading_day
+    """
+    df = con.execute(q, [orb_label, orb_minutes, rr]).df()
+    df["trading_day"] = pd.to_datetime(df["trading_day"])
+    return df
+
+
 def run_cell(con, cell_id, filter_key, rr, priority):
-    df = load_lane(con, ORB_LABEL, ORB_MINUTES, rr)
-
-    # Canonical filter column-name alignment.
-    # load_lane names MES ATR as `mes_atr_20_pct`; CrossAssetATRFilter reads
-    # `cross_atr_MES_pct`. Alias so filter_signal dispatches against the
-    # canonical column name the filter's matches_df expects.
-    df["cross_atr_MES_pct"] = df["mes_atr_20_pct"]
-
+    df = load_lane_canonical(con, ORB_LABEL, ORB_MINUTES, rr)
     variant_mask = filter_signal(df, filter_key, ORB_LABEL)
 
     is_mask = (df["trading_day"] < HOLDOUT).to_numpy()
