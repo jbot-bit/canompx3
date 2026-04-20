@@ -203,6 +203,7 @@ def test_seed_bridges_narrow_incremental_range():
             assert r["prev_month_high"] is not None, f"prev_month_high NULL on {r['trading_day']} — Check 59 regression"
             assert r["prev_month_low"] is not None
             assert r["prev_month_range"] == round(r["prev_month_high"] - r["prev_month_low"], 4)
+            assert r["prev_week_range"] == round(r["prev_week_high"] - r["prev_week_low"], 4)
     finally:
         con.close()
         os.unlink(path)

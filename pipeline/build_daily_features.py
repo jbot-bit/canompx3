@@ -727,9 +727,12 @@ def _load_htf_seed_rows(con: duckdb.DuckDBPyConnection, symbol: str, start_day: 
     rows bridge that gap.
 
     HTF fields are orb-agnostic, so orb_minutes=5 is a sufficient representative
-    slice. Seed range is [first-of-prior-calendar-month, start_day) — covers
-    prev_month fully and the trailing week overlap. Empty result (fresh install)
-    yields an empty list; HTF then behaves exactly as pre-change.
+    slice — matches the canonical convention in scripts/backfill_htf_levels.py
+    _rows_for_symbol() (line 81) so both callers feed _apply_htf_level_fields()
+    identical input shapes. Seed range is [first-of-prior-calendar-month,
+    start_day) — covers prev_month fully and the trailing week overlap. Empty
+    result (fresh install) yields an empty list; HTF then behaves exactly as
+    pre-change.
     """
     htf_seed_start = _htf_prior_month_key(start_day)
     records = con.execute(
