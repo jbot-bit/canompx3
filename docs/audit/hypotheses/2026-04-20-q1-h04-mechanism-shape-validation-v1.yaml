@@ -1,0 +1,246 @@
+version: 1
+status: DRAFT
+date: 2026-04-20
+slug: q1-h04-mechanism-shape-validation-v1
+title: "Q1 — H04 mechanism-shape validation: rel_vol gradient × F6_INSIDE_PDR state on MNQ COMEX_SETTLE short, IS + 2026 OOS descriptive"
+owner: claude
+parent_prereg: "docs/audit/hypotheses/2026-04-20-mnq-live-context-overlays-v1.yaml"
+parent_result: "docs/audit/results/2026-04-20-mnq-live-context-overlays-v1.md"
+sibling_prereg: "docs/audit/hypotheses/2026-04-20-h04-cmx-short-relvol-q3-f6-shadow-v1.yaml"
+parent_lock_sha: "c6ece8a1"
+sibling_lock_sha: "b5b7bfbf"
+
+deployment_not_done_here: |
+  This pre-reg does NOT authorize any capital action. It is a mechanism-shape
+  confirmation/falsification layer that sits between the merged H04 parent
+  prereg (family selection) and the merged H04 shadow prereg (operational
+  deployment contract). A positive verdict here unblocks continued shadow-phase
+  accrual under the sibling prereg; it does NOT bypass sibling gate_1 N>=30.
+  A negative verdict here is sufficient to kill H04 regardless of shadow
+  accumulation state.
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+    - "docs/institutional/literature/fitschen_2013_ch3_breakouts.md"
+    - "memory/feedback_oos_power_floor.md"
+    - "memory/feedback_per_lane_breakdown_required.md"
+  notes:
+    - "Mechanism-level test, not cell-inspection. Tests the SHAPE of the interaction across the rel_vol gradient, not the point estimate of any one cell."
+    - "Pathway B K=1 theory-driven per pre_registered_criteria.md Amendment 3.0."
+    - "ORB_G5 filter is known pass-through in 2026 per memory/orb_g5_filter_degenerate_2026. Cell structure conditional on ORB_G5 is therefore tested against a filter that no longer selects in OOS — this is itself part of the mechanism-falsification story."
+    - "Binary-threshold snooping explicitly rejected: the merged parent prereg fixed a P67 cut post-hoc; this test replaces it with the full rel_vol gradient."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+  commit_sha_note: "Stamp in a follow-up commit that only restamps this field."
+
+testing_mode: individual
+pathway: B_theory_driven
+
+scope:
+  instrument: MNQ
+  deployed_lane_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+  lane_definition:
+    session: COMEX_SETTLE
+    orb_minutes: 5
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+    deployed_filter: ORB_G5
+    direction: short
+  unit_under_test:
+    name: "H04 interaction shape"
+    definition: |
+      The expected-return function E[pnl_r | rel_vol_quintile, F6_INSIDE_PDR]
+      on the deployed lane. Mechanism prediction:
+        (a) within F6_INSIDE_PDR=TRUE, E[pnl_r] is monotonically increasing in rel_vol quintile.
+        (b) within F6_INSIDE_PDR=FALSE, the rel_vol slope is shallow or absent.
+        (c) the cross-over interaction surplus is positive:
+            ((F6_TRUE, Q5) - (F6_TRUE, Q1)) - ((F6_FALSE, Q5) - (F6_FALSE, Q1)) > 0
+  features_explicitly_out_of_scope:
+    - "Any other session, instrument, aperture, RR, direction, filter"
+    - "Any new feature beyond rel_vol_COMEX_SETTLE and F6_INSIDE_PDR"
+    - "Any deployment or allocator action"
+
+feature_definitions:
+  - feature_name: rel_vol_COMEX_SETTLE
+    column_source: "daily_features.rel_vol_COMEX_SETTLE"
+    canonical_source_of_truth: "pipeline/build_daily_features.py -> daily_features.rel_vol_{session}"
+    trade_time_knowable: true
+    first_complete_time: "ORB end"
+    temporal_alignment_note: "RULE 6.1 safe ORB-end feature. Quintile breakpoints must be IS-only."
+    lookahead_check: "PASS when quintile thresholds are computed on IS subset then applied to OOS."
+  - feature_name: F6_INSIDE_PDR
+    column_source: "computed predicate: (orb_mid > prev_day_low) AND (orb_mid < prev_day_high)"
+    canonical_source_of_truth: "research/mnq_live_context_overlays_v1.py::_f6_inside_pdr — single canonical helper"
+    trade_time_knowable: true
+    first_complete_time: "ORB end"
+    temporal_alignment_note: "prev_day levels fixed before ORB; midpoint knowable at ORB end."
+    lookahead_check: "PASS"
+
+calibration:
+  quintile_source:
+    rel_vol_COMEX_SETTLE_quintile_breakpoints: "IS-only (trading_day < 2026-01-01) short-lane ORB_G5-filtered rows"
+  lock_policy: |
+    Quintile breakpoints are frozen once computed from the locked IS universe
+    and then applied unchanged to both IS and OOS cell assignment. No
+    recalibration after first metric inspection.
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "Mode A sacred, descriptive only"
+  tuning_against_oos: false
+
+is_recomputation_contract:
+  purpose: "Must replicate parent result H04 filtered-pass cell within tolerance."
+  parity_cell:
+    filtered_rv_HI_f6: "ExpR within ±0.015 of parent value 0.3855"
+    cell_N_tolerance: "within ±3 rows of parent N=128 (small drift permitted from filter reapplication)"
+    delta_IS_tolerance: "within ±0.020 of parent delta 0.3579"
+  parity_rationale: "Small drift vs the original run acceptable because this pre-reg recomputes ORB_G5 canonically via filter_signal; parent used the same path per 2026-04-19 filter-delegation audit discipline."
+
+primary_hypothesis:
+  id: H_MECH_SHAPE
+  type: primary_individual
+  theory_citation: |
+    Fitschen 2013 Ch 3 (breakout-continuation requires both participation and
+    non-compressed prior context) grounds ORB short continuation as requiring
+    elevated order-flow participation at ORB end. Compressed range with
+    elevated participation (F6_INSIDE_PDR=TRUE AND rel_vol_HI) is the
+    mechanism-priors trapped-liquidity subset: the market has sustained
+    pressure to break the prior-day range boundary. Compressed range with
+    LOW participation is dead-range chop. Non-compressed range (F6=FALSE) is
+    already breakout-directional so participation matters less. This predicts
+    the interaction shape defined in scope.unit_under_test above.
+  statement: |
+    On the deployed lane, E[pnl_r | rel_vol_quintile, F6] is monotonically
+    increasing in rel_vol_quintile WITHIN the F6_INSIDE_PDR=TRUE subset, and
+    the slope within F6=TRUE exceeds the slope within F6=FALSE. Tested on IS
+    and on 2026 OOS descriptively.
+
+pass_gates:
+  is_replication:
+    required: true
+    tolerance: "is_recomputation_contract must pass"
+    failure_action: "SCAN ABORT — integrity failure"
+  is_shape:
+    required: true
+    metric: "Spearman rank correlation of (quintile, ExpR) within F6=TRUE cells"
+    threshold_gte: 0.5
+    supplementary_metric: "interaction_surplus_IS > 0"
+    failure_action: "KILL — mechanism shape not present in IS"
+  oos_shape_direction:
+    required_if_power_ge: "STATISTICALLY_USELESS"
+    metric: "sign(interaction_surplus_OOS) == sign(interaction_surplus_IS)"
+    threshold_note: "With N_OOS per cell likely 3-5, sign is weak evidence at best; treated descriptively under RULE 3.3."
+    failure_action: "downgrade verdict but DO NOT kill (power-floor protected)"
+
+kill_criteria:
+  K_kill_1_is_shape_absent:
+    condition: "Spearman(quintile, ExpR) within F6=TRUE < 0.5 on IS"
+    action: "KILL the mechanism hypothesis; H04 deployment path is not supported."
+  K_kill_2_interaction_surplus_negative_IS:
+    condition: "interaction_surplus_IS <= 0"
+    action: "KILL — implies F6 and rel_vol are anti-interactive in IS, contradicts theory."
+  K_kill_3_integrity_failure:
+    condition: "is_recomputation_contract fails; or filter delegation bypassed; or look-ahead detected"
+    action: "SCAN ABORT"
+  K_kill_4_oos_catastrophic_contradiction:
+    condition: |
+      OOS N in the top F6-quintile cell >= 10 AND OOS ExpR on that cell <= -0.15R
+      AND OOS interaction_surplus <= -0.15R
+    action: "KILL — OOS refutes mechanism with material sample. Note: N=10 is a soft threshold; if reached, verdict is CONTRADICTED rather than UNVERIFIED_ALIVE."
+
+not_kill_conditions:
+  description: "Explicit per RULE 3.3 and feedback_oos_power_floor."
+  items:
+    - "Any OOS cell with N < 5: report NaN, no sign test performed."
+    - "OOS interaction_surplus sign flip at pooled OOS N < 30 across top cells: UNVERIFIED_ALIVE, not KILL."
+    - "OOS Spearman within F6=TRUE that disagrees with IS: descriptive only at current N; not load-bearing for kill."
+
+verdict_labels:
+  CONFIRMED: "IS shape passes AND OOS direction preserves AND pooled OOS N across top cells >= 30"
+  UNVERIFIED_ALIVE: "IS shape passes AND (OOS direction preserves OR pooled OOS N < 30)"
+  CONTRADICTED: "K_kill_4 conditions met"
+  KILL: "K_kill_1 or K_kill_2 fires"
+  SCAN_ABORT: "K_kill_3 fires"
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2"
+    N_trials: 1
+    expected_max_N: 760
+    minbtl_value: "2 * ln(1) / 760^2 = 0"
+    within_cap: true
+    cap_reference: "backtesting-methodology.md RULE 4.2 — K=1 Pathway B waives MinBTL bound."
+
+methodology_rules_applied:
+  - rule: "backtesting-methodology.md RULE 2 — overlay testing unfiltered + filtered"
+    application: "NOT applied: this is a mechanism-shape validation test on the exact deployed lane, not a new overlay candidate. Tested on filtered subset only, per pre_registered_criteria.md Amendment 3.0 Pathway B convention for theory-driven confirmatory tests."
+    deviation_justification: "Pathway B K=1 tests the canonical deployed configuration; unfiltered pass is confirmatory-redundant."
+  - rule: "backtesting-methodology.md RULE 3 — sacred holdout"
+    application: "Quintile breakpoints computed on IS only. OOS used descriptively."
+  - rule: "backtesting-methodology.md RULE 3.3 — OOS power floor"
+    application: "All OOS metrics paired with power milestone labels."
+  - rule: "backtesting-methodology.md RULE 6 — trade-time knowability"
+    application: "rel_vol_COMEX_SETTLE and F6_INSIDE_PDR both ORB-end-knowable."
+  - rule: "backtesting-methodology.md RULE 9 — canonical layers"
+    application: "orb_outcomes + daily_features + triple-join + orb_minutes=5 CTE guard; no validated_setups."
+  - rule: "backtesting-methodology.md RULE 14 — per-cell breakdown"
+    application: "Single-lane by design; per-quintile breakdown emitted."
+
+implementation_integrity_checklist:
+  - "IS/OOS split emitted explicitly and no OOS rows used in quintile calibration"
+  - "Printed quintile breakpoints derived from IS-only short ORB_G5-filtered rows"
+  - "Canonical deployed-filter fire mask emitted via research.filter_utils.filter_signal('ORB_G5', ...)"
+  - "F6_INSIDE_PDR computed via single canonical formula: (orb_mid > prev_day_low) AND (orb_mid < prev_day_high)"
+  - "Two time-period counts emitted per cell: N_IS and N_OOS"
+  - "Parity check against parent result H04 cell must pass before any other metric is emitted"
+  - "Spearman rank correlation reported with 10k-permutation p"
+  - "Interaction surplus reported with 10k-permutation p (IS and OOS)"
+  - "OOS power per top-cell via research.oos_power"
+  - "Year-by-year IS table and per-month OOS table emitted"
+  - "Short-direction-only filter enforced before any cell split"
+  - "No writes to orb_outcomes, daily_features, validated_setups, live_config, or lane_allocation.json"
+
+outputs_required_after_run:
+  - "5x2 ExpR matrix (rv quintile x F6 state) for IS"
+  - "5x2 ExpR matrix for OOS"
+  - "5x2 N matrix for IS and OOS"
+  - "Parity line showing parent-result H04 cell and this run's H04 cell (must be within tolerance)"
+  - "Spearman rank correlation within F6=TRUE for IS and OOS; raw p via 10k permutation"
+  - "Interaction surplus IS and OOS with 10k-permutation p"
+  - "OOS power per top-cell and paired dir_match label"
+  - "Year-by-year IS breakdown per cell"
+  - "Per-month 2026 OOS breakdown"
+  - "Verdict line: CONFIRMED / UNVERIFIED_ALIVE / CONTRADICTED / KILL / SCAN_ABORT"
+  - "Result doc path docs/audit/results/2026-04-20-q1-h04-mechanism-shape-validation-v1.md"
+
+execution_gate:
+  allowed_now:
+    - "Commit this file, stamp commit_sha, write runner, run, commit result doc"
+    - "Open PR"
+  forbidden_now:
+    - "Any capital action conditional on this result"
+    - "Adding features or cells mid-run"
+    - "Re-fitting quintile breakpoints after seeing OOS"
+
+not_done_by_this_pre_reg:
+  - "Does NOT deploy, upsize, skip, or alter any lane"
+  - "Does NOT bypass the merged H04 shadow prereg's gate_1 N>=30"
+  - "Does NOT evaluate other lanes, directions, or features"
+  - "Does NOT pre-register a follow-on skip rule on the rv_LO * F6 cell"
