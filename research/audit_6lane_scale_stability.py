@@ -1,5 +1,24 @@
 """6-lane deployed portfolio scale-stability audit.
 
+.. deprecated:: 2026-04-21
+    **BUG**: ``parse_strategy_id`` (line 35) extracts aperture_overlay but
+    ``load_lane_universe`` (line 84) hardcodes ``o.orb_minutes = 5``, ignoring
+    the parsed ``_O15`` suffix on L2 and L6 DEPLOY lanes. L2 and L6 backtests
+    returned wrong 5-minute ORB outcomes; canonical live deployment runs those
+    two lanes at 15-minute ORB.
+
+    Fixed in ``research/audit_lane_baseline_decomposition_v2.py`` (PR #57)
+    which imports canonical ``trading_app.eligibility.builder.parse_strategy_id``
+    and passes the parsed ``orb_minutes`` into SQL. See
+    ``docs/audit/results/2026-04-21-correction-aperture-audit-rerun.md``.
+
+    L2 and L6 fire-rate / lift numbers from this script are UNTRUSTWORTHY.
+    L1, L3, L4, L5 numbers happen to be correct (no ``_O`` suffix → default 5).
+
+    Do not run this script for new analysis. If you need fire-rate stability,
+    delegate via ``trading_app.eligibility.builder.parse_strategy_id`` and
+    build SQL from the parsed ``orb_minutes``.
+
 For each of the 6 currently-deployed lanes (per lane_allocation.json),
 compute fire-rate-by-year and lift-by-year to detect scale-artifact
 signatures like the one found at L4 OVNRNG_50_FAST10 (see correction
