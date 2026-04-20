@@ -20,15 +20,28 @@ the alternative (fail-closed) would block trading on unknown dates.
 
 import logging
 from datetime import date, datetime, time
+from functools import lru_cache
 from zoneinfo import ZoneInfo
 
-import exchange_calendars as xcals
 import pandas as pd
 
 log = logging.getLogger(__name__)
 
-_CMES = xcals.get_calendar("CMES")
 _ET = ZoneInfo("America/New_York")
+
+
+@lru_cache(maxsize=1)
+def _get_cmes():
+    """Return the cached CMES exchange_calendars handle.
+
+    Lazy-loaded because `import exchange_calendars` + `get_calendar('CMES')`
+    is ~1.9s of work paid by every importer of this module — even importers
+    that never call any function below. PEP 8 endorses delayed imports for
+    performance; @lru_cache(maxsize=1) memoizes the singleton.
+    """
+    import exchange_calendars as xcals
+
+    return xcals.get_calendar("CMES")
 
 
 def is_cme_holiday(trading_day: date) -> bool:
@@ -38,7 +51,7 @@ def is_cme_holiday(trading_day: date) -> bool:
     """
     ts = pd.Timestamp(trading_day)
     try:
-        sessions = _CMES.sessions_in_range(ts, ts)
+        sessions = _get_cmes().sessions_in_range(ts, ts)
         return len(sessions) == 0
     except (ValueError, KeyError, IndexError):
         log.warning(
@@ -55,10 +68,10 @@ def is_early_close(trading_day: date) -> bool:
     """
     ts = pd.Timestamp(trading_day)
     try:
-        sessions = _CMES.sessions_in_range(ts, ts)
+        sessions = _get_cmes().sessions_in_range(ts, ts)
         if len(sessions) == 0:
             return False  # Full holiday or weekend
-        close_utc = _CMES.session_close(ts)
+        close_utc = _get_cmes().session_close(ts)
         # Normal close: 22:00 UTC (EDT) or 23:00 UTC (EST) = 5:00 PM CT
         # Early close: 17:00 UTC (EDT) or 18:00 UTC (EST) = 12:00 PM CT
         # Threshold: if close hour < 20 UTC, it's an early close
@@ -75,10 +88,10 @@ def session_close_utc(trading_day: date) -> datetime | None:
     """Actual exchange close time in UTC. None if holiday/weekend."""
     ts = pd.Timestamp(trading_day)
     try:
-        sessions = _CMES.sessions_in_range(ts, ts)
+        sessions = _get_cmes().sessions_in_range(ts, ts)
         if len(sessions) == 0:
             return None
-        return _CMES.session_close(ts).to_pydatetime()
+        return _get_cmes().session_close(ts).to_pydatetime()
     except (ValueError, KeyError, IndexError):
         log.warning("Cannot get close time for %s", trading_day)
         return None
@@ -102,7 +115,7 @@ def is_market_open_at(utc_time: datetime) -> bool:
     if ts.tzinfo is None:
         ts = ts.tz_localize("UTC")
     try:
-        return _CMES.is_open_on_minute(ts)
+        return _get_cmes().is_open_on_minute(ts)
     except (ValueError, KeyError, IndexError):
         # ValueError/KeyError: date outside library coverage (post-Apr 2027)
         # IndexError: edge case in library internals
