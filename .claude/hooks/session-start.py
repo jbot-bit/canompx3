@@ -17,6 +17,11 @@ try:
 except Exception:  # pragma: no cover - hook fallback path
     build_brief = None
 
+try:
+    from scripts.tools.task_route_packet import read_task_route_packet
+except Exception:  # pragma: no cover - hook fallback path
+    read_task_route_packet = None
+
 
 def _legacy_startup_lines() -> list[str]:
     lines = ["NEW SESSION — Auto-orientation:"]
@@ -92,6 +97,15 @@ def _superpower_lines(mode: str) -> list[str]:
         return []
 
 
+def _task_route_lines() -> list[str]:
+    if read_task_route_packet is None:
+        return []
+    try:
+        return read_task_route_packet(PROJECT_ROOT)
+    except Exception:
+        return []
+
+
 def main() -> None:
     try:
         event = json.load(sys.stdin)
@@ -100,17 +114,28 @@ def main() -> None:
 
     session_type = event.get("session_type", "startup")
     lines: list[str] = []
+    task_route_lines = _task_route_lines()
 
     if session_type == "startup":
-        lines = _superpower_lines("session-start") or _legacy_startup_lines()
+        lines = task_route_lines or _superpower_lines("session-start") or _legacy_startup_lines()
     elif session_type == "resume":
-        lines = ["RESUMED SESSION — Re-grounding context:"]
-        lines.extend(_superpower_lines("interactive") or ["Check HANDOFF.md for last known state."])
+        if task_route_lines:
+            lines = ["RESUMED SESSION — Task route restored:"]
+            lines.extend(task_route_lines)
+        else:
+            lines = ["RESUMED SESSION — Re-grounding context:"]
+            lines.extend(_superpower_lines("interactive") or ["Check HANDOFF.md for last known state."])
     elif session_type == "compact":
         pass
     elif session_type == "clear":
-        lines = ["CONTEXT CLEARED — Re-grounding context:"]
-        lines.extend(_superpower_lines("interactive") or ["Re-read docs/runtime/stages/*.md if active work exists."])
+        if task_route_lines:
+            lines = ["CONTEXT CLEARED — Task route restored:"]
+            lines.extend(task_route_lines)
+        else:
+            lines = ["CONTEXT CLEARED — Re-grounding context:"]
+            lines.extend(
+                _superpower_lines("interactive") or ["Re-read docs/runtime/stages/*.md if active work exists."]
+            )
 
     if lines:
         print("\n".join(lines), file=sys.stderr)

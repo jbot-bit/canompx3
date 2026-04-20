@@ -228,6 +228,7 @@ Users*
 
 # Local managed-worktree metadata
 .canompx3-worktree.local.json
+.session/
 
 # Config dir (hypercorn/secret_key — not for VCS)
 config/

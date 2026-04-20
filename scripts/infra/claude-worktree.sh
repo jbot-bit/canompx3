@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MANAGER="$ROOT/scripts/tools/worktree_manager.py"
+TASK_ROUTE_PACKET="$ROOT/scripts/tools/task_route_packet.py"
 
 usage() {
   cat <<'EOF'
@@ -39,6 +40,20 @@ case "$cmd" in
     fi
     WT="$(python3 "$MANAGER" "${CREATE_ARGS[@]}")"
     cd "$WT"
+    TASK_TEXT="${CANOMPX3_STARTUP_TASK:-}"
+    if [[ -z "$TASK_TEXT" ]]; then
+      TASK_TEXT="$workstream"
+      if [[ -n "$PURPOSE" ]]; then
+        TASK_TEXT="$PURPOSE: $workstream"
+      fi
+    fi
+    if [[ -f "$TASK_ROUTE_PACKET" ]]; then
+      if command -v python3 >/dev/null 2>&1; then
+        python3 "$TASK_ROUTE_PACKET" --root "$WT" --tool claude --task "$TASK_TEXT" --briefing-level mutating >/dev/null || true
+      elif command -v python >/dev/null 2>&1; then
+        python "$TASK_ROUTE_PACKET" --root "$WT" --tool claude --task "$TASK_TEXT" --briefing-level mutating >/dev/null || true
+      fi
+    fi
     PREFLIGHT="$WT/scripts/tools/session_preflight.py"
     if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
       if command -v python3 >/dev/null 2>&1; then

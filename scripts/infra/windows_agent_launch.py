@@ -101,6 +101,25 @@ def invoke_manager(arguments: list[str]) -> tuple[bool, str]:
     return False, message
 
 
+def prepare_task_route_packet(
+    root: Path,
+    *,
+    tool: str,
+    task_text: str | None = None,
+    briefing_level: str = "mutating",
+    clear: bool = False,
+) -> None:
+    packet_writer = root / "scripts" / "tools" / "task_route_packet.py"
+    if not packet_writer.exists():
+        return
+    command = pick_python() + [str(packet_writer), "--root", str(root)]
+    if clear or not task_text:
+        command.append("--clear")
+    else:
+        command.extend(["--tool", tool, "--task", task_text, "--briefing-level", briefing_level])
+    subprocess.run(command, cwd=root, check=False)
+
+
 def get_managed_workstreams() -> list[dict[str, Any]]:
     success, output = invoke_manager(["list", "--managed-only", "--json"])
     if not success:
@@ -259,6 +278,8 @@ def find_claude_cli() -> str:
 def open_claude_workstream(workstream_name: str, purpose: str | None) -> int:
     worktree_path, _ = ensure_managed_worktree("claude", workstream_name, purpose)
     run_preflight(worktree_path, claim_tool="claude", context="generic", mode="mutating")
+    task_text = f"{purpose}: {workstream_name}" if purpose else workstream_name
+    prepare_task_route_packet(worktree_path, tool="claude", task_text=task_text, briefing_level="mutating")
     return subprocess.call([find_claude_cli(), "-C", str(worktree_path)])
 
 
@@ -319,6 +340,7 @@ def open_codex_green_baseline() -> int:
 
 def open_claude_green_baseline() -> int:
     worktree_path = _green_baseline_worktree()
+    prepare_task_route_packet(worktree_path, tool="claude", clear=True)
     return subprocess.call([find_claude_cli(), "-C", str(worktree_path)])
 
 

@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 MANAGER="$ROOT/scripts/tools/worktree_manager.py"
+TASK_ROUTE_PACKET="$ROOT/scripts/tools/task_route_packet.py"
 
 usage() {
   cat <<'EOF'
@@ -40,10 +41,28 @@ case "$cmd" in
       CREATE_ARGS+=(--purpose "$PURPOSE")
     fi
     WT="$(python3 "$MANAGER" "${CREATE_ARGS[@]}")"
-    if [[ "$cmd" == "search" ]]; then
-      exec env CANOMPX3_ROOT="$WT" "$ROOT/scripts/infra/codex-project-search.sh" "$@"
+    TASK_TEXT="${CANOMPX3_STARTUP_TASK:-}"
+    if [[ -z "$TASK_TEXT" ]]; then
+      TASK_TEXT="$workstream"
+      if [[ -n "$PURPOSE" ]]; then
+        TASK_TEXT="$PURPOSE: $workstream"
+      fi
     fi
-    exec env CANOMPX3_ROOT="$WT" "$ROOT/scripts/infra/codex-project.sh" "$@"
+    if [[ -f "$TASK_ROUTE_PACKET" ]]; then
+      BRIEFING_LEVEL="mutating"
+      if [[ "$cmd" == "search" ]]; then
+        BRIEFING_LEVEL="read_only"
+      fi
+      python3 "$TASK_ROUTE_PACKET" \
+        --root "$WT" \
+        --tool codex \
+        --task "$TASK_TEXT" \
+        --briefing-level "$BRIEFING_LEVEL" >/dev/null || true
+    fi
+    if [[ "$cmd" == "search" ]]; then
+      exec env CANOMPX3_ROOT="$WT" CANOMPX3_STARTUP_TASK="$TASK_TEXT" "$ROOT/scripts/infra/codex-project-search.sh" "$@"
+    fi
+    exec env CANOMPX3_ROOT="$WT" CANOMPX3_STARTUP_TASK="$TASK_TEXT" "$ROOT/scripts/infra/codex-project.sh" "$@"
     ;;
   close)
     workstream="${1:-}"

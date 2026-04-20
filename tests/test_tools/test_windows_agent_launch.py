@@ -103,14 +103,20 @@ class TestOpenClaudeWorkstream:
                 return_value=(tmp_path, "Build / edit"),
             ) as ensure_mock,
             patch.object(windows_agent_launch, "run_preflight") as preflight_mock,
+            patch.object(windows_agent_launch, "prepare_task_route_packet") as packet_mock,
             patch.object(windows_agent_launch, "find_claude_cli", return_value=r"C:\Users\joshd\.local\bin\claude.exe"),
             patch.object(windows_agent_launch.subprocess, "call", return_value=0) as call_mock,
         ):
             exit_code = windows_agent_launch.open_claude_workstream("task-a", "Build / edit")
-
         assert exit_code == 0
         ensure_mock.assert_called_once_with("claude", "task-a", "Build / edit")
         preflight_mock.assert_called_once_with(tmp_path, claim_tool="claude", context="generic", mode="mutating")
+        packet_mock.assert_called_once_with(
+            tmp_path,
+            tool="claude",
+            task_text="Build / edit: task-a",
+            briefing_level="mutating",
+        )
         call_mock.assert_called_once_with([r"C:\Users\joshd\.local\bin\claude.exe", "-C", str(tmp_path)])
 
 

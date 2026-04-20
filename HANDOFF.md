@@ -4,6 +4,66 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late night — startup routing hardened for token efficiency without dropping rigor)
+
+Follow-up to the hook-noise / startup-tax audit. The repo had strong
+`context_resolver` doctrine but weak operational enforcement: Codex launchers
+did not prepare task-scoped context, Claude startup/compact hooks still
+re-injected broad summaries when a narrow route was available, and the task
+registry did not match this kind of workflow/tooling audit cleanly.
+
+### What landed
+
+- Added shared startup packet writer:
+  - `scripts/tools/task_route_packet.py`
+  - writes/clears `.session/task-route.md` (gitignored) from canonical
+    `build_system_brief(...)`
+- Added deterministic route for operator/tooling audits:
+  - `context/registry.py`
+  - new task id: `repo_workflow_audit`
+- Codex launchers now prepare/clear the startup packet:
+  - `scripts/infra/codex-project.sh`
+  - `scripts/infra/codex-project-search.sh`
+  - `scripts/infra/codex-worktree.sh`
+- Claude worktree / Windows launcher now prepare the same packet:
+  - `scripts/infra/claude-worktree.sh`
+  - `scripts/infra/windows_agent_launch.py`
+- Claude startup surfaces now prefer the compact packet when present:
+  - `.claude/hooks/session-start.py`
+  - `.claude/hooks/post-compact-reinject.py`
+- Stage awareness was compressed so it still warns about active stages /
+  missing blast radius, but with less repeated prompt overhead:
+  - `.claude/hooks/stage-awareness.py`
+- Codex startup doc updated so Codex explicitly reads `.session/task-route.md`
+  before broad repo wandering:
+  - `CODEX.md`
+- Generated context docs were re-rendered:
+  - `docs/context/README.md`
+  - `docs/context/source-catalog.md`
+  - `docs/context/task-routes.md`
+  - `docs/context/institutional-contracts.md`
+
+### Practical effect
+
+- Rigor is still enforced through the same canonical sources and system brief.
+- Token savings come from narrower startup payloads and less repeated context
+  prose, not from removing guards.
+- Worktree/task launches now have a real shared “task packet” path instead of
+  relying on memory or broad startup narration.
+
+### Verification
+
+- `./.venv-wsl/bin/python scripts/tools/context_resolver.py --task "Does my project use context resolver properly and where are tokens being wasted in hooks and launchers?" --format json`
+- `./.venv-wsl/bin/python scripts/tools/task_route_packet.py --root . --tool codex --task "Audit startup routing and token waste" --format json`
+- `bash -n scripts/infra/codex-project.sh scripts/infra/codex-project-search.sh scripts/infra/codex-worktree.sh scripts/infra/claude-worktree.sh`
+- `./.venv-wsl/bin/python scripts/tools/render_context_catalog.py`
+- `./.venv-wsl/bin/python -m pytest tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_tools/test_task_route_packet.py tests/test_tools/test_windows_agent_launch.py tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_codex_launcher_scripts.py tests/test_pipeline/test_system_brief.py -q`
+- `./.venv-wsl/bin/python -m ruff check context/registry.py scripts/tools/task_route_packet.py scripts/infra/windows_agent_launch.py .claude/hooks/session-start.py .claude/hooks/post-compact-reinject.py .claude/hooks/stage-awareness.py tests/test_context/test_registry.py tests/test_tools/test_context_resolver.py tests/test_tools/test_task_route_packet.py tests/test_tools/test_windows_agent_launch.py tests/test_tools/test_windows_agent_launch_light.py tests/test_tools/test_codex_launcher_scripts.py`
+- `git diff --check`
+- `./.venv-wsl/bin/python -m py_compile scripts/tools/task_route_packet.py scripts/infra/windows_agent_launch.py .claude/hooks/session-start.py .claude/hooks/post-compact-reinject.py .claude/hooks/stage-awareness.py`
+
+Result: all listed checks passed; focused pytest sweep was `53 passed`.
+
 ## Update (2026-04-20 late-night — hook-noise follow-up: full drift coverage restored)
 
 Follow-up to `chore/reduce-hook-token-burn` after an audit of commit

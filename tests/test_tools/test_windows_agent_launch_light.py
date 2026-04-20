@@ -118,10 +118,12 @@ def test_open_claude_green_baseline_uses_claude_cli() -> None:
 
     with (
         patch.object(module, "_green_baseline_worktree", return_value=Path(r"C:\repo\.worktrees\tasks\green-baseline")),
+        patch.object(module, "prepare_task_route_packet") as packet_mock,
         patch.object(module, "find_claude_cli", return_value=r"C:\tools\claude.exe"),
         patch.object(module.subprocess, "call", return_value=0) as call_mock,
     ):
         exit_code = module.open_claude_green_baseline()
 
     assert exit_code == 0
+    packet_mock.assert_called_once_with(Path(r"C:\repo\.worktrees\tasks\green-baseline"), tool="claude", clear=True)
     call_mock.assert_called_once_with([r"C:\tools\claude.exe", "-C", r"C:\repo\.worktrees\tasks\green-baseline"])

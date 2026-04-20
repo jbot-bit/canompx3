@@ -5,6 +5,7 @@ DEFAULT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROOT="${CANOMPX3_ROOT:-$DEFAULT_ROOT}"
 VENV="$ROOT/.venv-wsl"
 PREFLIGHT="$ROOT/scripts/tools/session_preflight.py"
+TASK_ROUTE_PACKET="$ROOT/scripts/tools/task_route_packet.py"
 PROFILE="${CANOMPX3_CODEX_PROFILE:-canompx3}"
 
 if [[ ! -f "$VENV/bin/python" ]]; then
@@ -30,6 +31,18 @@ fi
 
 if [[ "${CANOMPX3_SKIP_PREFLIGHT:-0}" != "1" && -f "$PREFLIGHT" ]]; then
   "$VENV/bin/python" "$PREFLIGHT" --quiet --context codex-wsl --claim codex --mode mutating
+fi
+
+if [[ -f "$TASK_ROUTE_PACKET" ]]; then
+  if [[ -n "${CANOMPX3_STARTUP_TASK:-}" ]]; then
+    "$VENV/bin/python" "$TASK_ROUTE_PACKET" \
+      --root "$ROOT" \
+      --tool codex \
+      --task "$CANOMPX3_STARTUP_TASK" \
+      --briefing-level mutating >/dev/null || true
+  else
+    "$VENV/bin/python" "$TASK_ROUTE_PACKET" --root "$ROOT" --clear >/dev/null || true
+  fi
 fi
 
 CODEX_ARGS=(

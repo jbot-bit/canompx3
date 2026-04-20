@@ -32,6 +32,16 @@ Generated canonical task routes for cold-start orientation.
 - Canonical owners: `trading_app/prop_profiles.py`, `trading_app/lifecycle_state.py`, `pipeline/db_contracts.py`
 - Live views: `trading_context`, `system_brief`
 
+## `repo_workflow_audit`
+
+- Purpose: Audit startup, routing, launcher, or hook workflow surfaces for rigor, token efficiency, and operator clarity.
+- Verification profile: `investigation`
+- Briefing contract: `orientation_briefing`
+- Packs: `coding_runtime_pack`, `project_orientation_pack`
+- Doctrine: `AGENTS.md`, `CLAUDE.md`, `CODEX.md`, `docs/governance/document_authority.md`, `docs/governance/system_authority_map.md`
+- Canonical owners: `context/registry.py`, `pipeline/system_brief.py`, `scripts/tools/context_resolver.py`, `scripts/tools/session_preflight.py`, `scripts/tools/task_route_packet.py`, `scripts/infra/windows_agent_launch.py`, `scripts/infra/claude-worktree.sh`, `scripts/infra/codex-project.sh`, `scripts/infra/codex-worktree.sh`
+- Live views: `verification_context`, `system_brief`
+
 ## `research_investigation`
 
 - Purpose: Investigate performance changes, edge behavior, or discovery questions using canonical research truth.
