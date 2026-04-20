@@ -4,6 +4,59 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-21 autonomous #3 — MAJOR: PR #51's 5 CANDIDATE_READYs ALL FAIL Deflated Sharpe (Phase 0 C5))
+
+Confirmatory audit against Phase 0 pre_registered_criteria.md C5 — which PR #51 never computed. All 5 previously-claimed CANDIDATE_READY cells FAIL Bailey-López de Prado 2014 DSR >= 0.95.
+
+### What was added
+
+- Runner: `research/mnq_pr51_dsr_audit_v1.py`
+- Result: `docs/audit/results/2026-04-21-mnq-pr51-dsr-audit-v1.md`
+
+### Method
+
+- Recompute the PR #51 family (MNQ unfiltered cross-family, K=105) exactly — reproduced to the cell.
+- Per Bailey-LdP 2014 Eq. 2 (`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`):
+  `DSR = Z[((SR − SR_0)·√(T−1)) / √(1 − γ₃·SR + (γ₄−1)/4·SR²)]`
+  with `SR_0 = √V[SR] · ((1−γ)·Z⁻¹[1 − 1/N] + γ·Z⁻¹[1 − 1/(N·e)])`.
+- Implementation sanity-checked against Bailey's worked example (pp 9-10): my SR_0 = 0.1132 and DSR = 0.9004 match paper to 4 decimals exactly. PASS.
+
+### Canonical result
+
+- Family (reproduced): K = 105 cells with N_IS ≥ 100.
+- Family mean trade SR = +0.0186; family V[SR] = 0.00414.
+- Bailey SR_0 (DSR rejection threshold, trade-level) = **+0.1640**.
+
+| Cell | Trade SR | DSR | Phase 0 C5 |
+|---|---:|---:|---|
+| MNQ 5m RR=1.0 NYSE_OPEN | (below SR_0) | 0.0006 | **FAIL** |
+| MNQ 5m RR=1.5 NYSE_OPEN | (below SR_0) | 0.0003 | **FAIL** |
+| MNQ 15m RR=1.0 NYSE_OPEN | (below SR_0) | 0.0070 | **FAIL** |
+| MNQ 15m RR=1.0 US_DATA_1000 | (below SR_0) | 0.0067 | **FAIL** |
+| MNQ 15m RR=1.5 US_DATA_1000 | (below SR_0) | 0.0016 | **FAIL** |
+
+- DSR PASS (≥ 0.95): **0 of 5**
+- DSR FAIL: 5 of 5
+
+### Institutional implication
+
+- The 5 PR #51 cells that cleared H1 (t≥3.0 + BH-FDR q<0.05), C6 (WFE≥0.50), C8 (OOS/IS≥0.40), and C9 (era stability) do NOT clear C5 (DSR≥0.95).
+- **BH-FDR at q<0.05 is NECESSARY but NOT SUFFICIENT for Phase 0 promotion.** With K=105 alternative configurations, the expected max SR under a zero-edge null (SR_0 = +0.164 trade-level) exceeds every observed cell SR. Each cell looks significant individually but does not beat the family-selection-corrected null.
+- Per pre_registered_criteria.md, these cells must be re-classified as **RESEARCH_SURVIVOR** until either (a) a stricter per-cell pre-reg is written that bounds K appropriately (Pathway B, K=1), or (b) an independence-correction per Bailey Exhibit 4 materially reduces effective N.
+- **Shadow-deployment of these 5 cells is now institutionally blocked** until a Phase 0 C5 passing path is documented.
+- Independence caveat: DSR assumes independent trials. If the 105 cells share significant calendar overlap (same days), effective N < 105, lowering SR_0, raising DSR. This could rescue some cells. A future Bailey Exhibit 4 correction on the 105-cell correlation matrix would produce the canonical DSR. This audit's result is the upper-bound-conservative DSR.
+
+### Updated queue
+
+1. Keep `H04` on its existing narrow shadow path.
+2. Keep `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` short `F5_BELOW_PDL` as CONDITIONAL_UNVERIFIED shadow-only.
+3. MNQ `US_DATA_1000` O5 long primary route `NOT_F6_INSIDE_PDR` — RESEARCH_SURVIVOR, shadow-design stage.
+4. MES/MGC dead for single-filter ORB 5m (PR #53 + PR #55, both 0 survivors).
+5. **NEW top queue item:** PR #51 claim is institutionally downgraded. Before any MNQ-discovery follow-up:
+   - (a) Compute Bailey Exhibit 4 effective-N correction for the 105-cell correlation matrix. If effective N yields DSR >= 0.95 for any cell, that cell becomes the first true Phase 0 survivor.
+   - (b) If no cells survive the correction, the path forward is Pathway-B K=1 per pre_registered_criteria.md Amendment 3.0 — a theory-driven single-cell test with prior economic rationale, bypassing Pathway A family multiplicity.
+   - (c) In parallel, PR #48 participation-shape UNIVERSAL finding (t=+9.59/+11.80/+7.54 cross-instrument) has a MUCH stronger DSR profile at family K=3 instruments. Shadow-deployment design for that finding is now the highest-EV institutional move — it bypasses the Pathway A selection-bias trap that PR #51 fell into.
+
 ## Update (2026-04-20 late-late-late — HTF branch closed: integrity repaired, simple v1 family dead)
 
 Follow-on to the "HTF thing" request. User wanted this handled as an
