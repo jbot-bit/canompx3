@@ -66,6 +66,68 @@ already validated.
 - Do not widen back to overnight levels, retest entries, or next-liquidity
   targets without a new pre-reg.
 
+## Update (2026-04-21 later — standalone sweep-reclaim v2 executed and closed)
+
+Follow-on to the locked standalone family on branch
+`research/sweep-reclaim-lock`.
+
+### What was implemented
+
+- canonical runner:
+  - `research/sweep_reclaim_standalone_v2.py`
+- focused helper tests:
+  - `tests/test_research/test_sweep_reclaim_standalone_v2.py`
+- outputs:
+  - `research/output/sweep_reclaim_standalone_v2_trades.csv`
+  - `research/output/sweep_reclaim_standalone_v2_cells.csv`
+  - `docs/audit/results/2026-04-21-sweep-reclaim-standalone-v2.md`
+- postmortem / next-step notes:
+  - `docs/plans/2026-04-21-sweep-reclaim-standalone-v2-postmortem.md`
+  - `docs/plans/2026-04-21-next-opportunity-after-sweep-reclaim-v2.md`
+
+### Canonical result
+
+Exact family tested:
+
+- `MNQ`, `MES`
+- `EUROPE_FLOW`, `NYSE_OPEN`
+- `prev_day_high`, `prev_day_low`
+- entry = reclaim close
+- stop = one tick beyond known sweep extreme by reclaim close
+- target = fixed `1.5R`
+- honest `K=8`
+
+Verdict:
+
+- `0 / 8` `CANDIDATE_READY`
+- `0 / 8` `RESEARCH_SURVIVOR`
+- `8 / 8` `DEAD`
+
+This is not just an `N>=100` issue. Pooled IS results are also negative:
+
+- `MES`: `N=181`, `ExpR=-0.1699`
+- `MNQ`: `N=216`, `ExpR=-0.0671`
+- `EUROPE_FLOW`: `N=121`, `ExpR=-0.1850`
+- `NYSE_OPEN`: `N=276`, `ExpR=-0.0828`
+- `prev_day_high`: `N=228`, `ExpR=-0.1455`
+- `prev_day_low`: `N=169`, `ExpR=-0.0714`
+
+So the exact standalone family is closed, not just underpowered.
+
+### Correct interpretation
+
+- `sweep-reclaim-v1` event study remains valid reconnaissance only
+- `sweep-reclaim-standalone-v2` is now actually tested and dead
+- this does **not** kill the broader liquidity/displacement branch
+- it **does** kill this exact standalone geometry
+
+### Best next opportunity
+
+- near-term EV: continue exact-lane ORB conditioner work
+- next standalone discovery family: `opening-drive pullback continuation`
+  (must be pre-registered separately; do not recycle this family with rescue
+  tweaks)
+
 Follow-on to the "HTF thing" request. User wanted this handled as an
 institutional research branch, not a one-row patch. The resulting branch has
 two outcomes:
