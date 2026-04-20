@@ -20,9 +20,9 @@ from pipeline.log import get_logger
 
 logger = get_logger(__name__)
 
-import duckdb
-import pandas as pd
-
+# pandas + duckdb lazy-loaded inside the functions that use them
+# (each in exactly one site; pandas alone is ~5s import). PEP 8 endorses
+# delayed imports for performance.
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import (
@@ -165,6 +165,8 @@ def _flush_batch_df(con, insert_batch: list[list]) -> None:
     # drift check treating this as embedded SQL — the word "INSERT" plus
     # "INTO" patterns in a docstring trigger false positives in
     # pipeline.check_drift.check_schema_query_consistency_trading_app.)
+    import pandas as pd
+
     expected_width = len(_BATCH_COLUMNS)
     for i, row in enumerate(insert_batch):
         if len(row) != expected_width:
@@ -1255,6 +1257,8 @@ def run_discovery(
             f"hypotheses={len(scope_predicate.hypotheses)} "
             f"mode={'proxy' if on_proxy_data else 'clean'}"
         )
+
+    import duckdb
 
     if not dry_run:
         init_trading_app_schema(db_path=db_path)
