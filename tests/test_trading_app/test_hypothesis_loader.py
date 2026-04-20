@@ -708,6 +708,58 @@ class TestScopePredicate:
         with pytest.raises(HypothesisLoaderError, match="no hypotheses"):
             extract_scope_predicate({"hypotheses": []}, instrument="MNQ")
 
+    def test_proxy_mode_rejects_micro_only_filter(self):
+        meta = {
+            "metadata": {
+                "data_source_mode": "proxy",
+                "data_source_disclosure": "GC parent futures 2010-2025",
+            },
+            "hypotheses": [
+                _make_scoped_hypothesis(
+                    hypothesis_id=1,
+                    filter_type="ATR70_VOL",
+                    instruments=["MGC"],
+                )
+            ],
+        }
+        with pytest.raises(HypothesisLoaderError, match="micro-only filter.type"):
+            extract_scope_predicate(meta, instrument="MGC")
+
+    def test_proxy_mode_accepts_price_safe_filter(self):
+        meta = {
+            "metadata": {
+                "data_source_mode": "proxy",
+                "data_source_disclosure": "GC parent futures 2010-2025",
+            },
+            "hypotheses": [
+                _make_scoped_hypothesis(
+                    hypothesis_id=1,
+                    filter_type="OVNRNG_100",
+                    instruments=["MGC"],
+                )
+            ],
+        }
+        pred = extract_scope_predicate(meta, instrument="MGC")
+        assert len(pred.hypotheses) == 1
+        assert pred.hypotheses[0].filter_type == "OVNRNG_100"
+
+    def test_proxy_mode_rejects_unknown_filter(self):
+        meta = {
+            "metadata": {
+                "data_source_mode": "proxy",
+                "data_source_disclosure": "GC parent futures 2010-2025",
+            },
+            "hypotheses": [
+                _make_scoped_hypothesis(
+                    hypothesis_id=1,
+                    filter_type="DEFINITELY_UNKNOWN_FILTER",
+                    instruments=["MGC"],
+                )
+            ],
+        }
+        with pytest.raises(HypothesisLoaderError, match="not registered in ALL_FILTERS"):
+            extract_scope_predicate(meta, instrument="MGC")
+
 
 class TestTestingMode:
     """Amendment 3.0: testing_mode field exposed at top level."""

@@ -1,4 +1,15 @@
+---
+paths:
+  - "pipeline/**"
+  - "trading_app/**"
+  - "scripts/**"
+  - "docs/runtime/stages/**"
+  - "docs/runtime/STAGE_STATE.md"
+---
 # Stage-Gate Protocol (AUTO-ENFORCED)
+
+**Load-policy:** auto-injected when editing production code or stage files. Stage status (none/TRIVIAL/IMPLEMENTATION) is still surfaced on every user prompt via the `stage-awareness.py` hook — so non-code turns get a 1-line status without loading the full protocol.
+
 
 ## Stage files live in `docs/runtime/stages/<slug>.md`
 
