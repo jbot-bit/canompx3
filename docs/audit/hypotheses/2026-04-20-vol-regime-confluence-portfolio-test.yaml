@@ -141,67 +141,89 @@ temporal_alignment_gate:
     (moderate — warrants T0 fire-mask correlation check, not tautological).
 
 # ---- The 17 cells ----
+# AMENDMENT 1 (2026-04-20, pre-run): Lane identity correction — verified from
+# validated_setups that the "_O15" suffix in strategy_id = orb_minutes=15 (NOT
+# a compound filter type). Two live lanes use 15-min ORB aperture:
+#   SINGAPORE_OPEN (O15): filter_type=ATR_P50
+#   US_DATA_1000 (O15):   filter_type=ORB_G5
+# The other 4 lanes are orb_minutes=5. Cells below annotate orb_minutes per lane.
+# Scope change: NONE. Trial count unchanged (still 17). Feature temporal-alignment
+# gate still applies (15m ORB starting AT 11:00 still fires DURING 09-17 Asian
+# window, so OVN excluded from SINGAPORE_OPEN regardless of ORB aperture).
 cells:
   # --- 4 lanes × 3 variants = 12 cells (OVN-valid lanes) ---
   - id: 1
     lane: "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5"
+    orb_minutes: 5
     base_filter: "ORB_G5"
     variant: "ovn_only"
     description: "F_ORB_G5 AND overnight_range >= 100"
   - id: 2
     lane: "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5"
+    orb_minutes: 5
     base_filter: "ORB_G5"
     variant: "xmes_only"
     description: "F_ORB_G5 AND mes_atr_20_pct >= 60"
   - id: 3
     lane: "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5"
+    orb_minutes: 5
     base_filter: "ORB_G5"
     variant: "ovn_or_xmes"
     description: "F_ORB_G5 AND (overnight_range >= 100 OR mes_atr_20_pct >= 60)"
 
   - id: 4
     lane: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+    orb_minutes: 5
     base_filter: "ORB_G5"
     variant: "ovn_only"
   - id: 5
     lane: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+    orb_minutes: 5
     base_filter: "ORB_G5"
     variant: "xmes_only"
   - id: 6
     lane: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+    orb_minutes: 5
     base_filter: "ORB_G5"
     variant: "ovn_or_xmes"
 
   - id: 7
     lane: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+    orb_minutes: 5
     base_filter: "COST_LT12"
     variant: "ovn_only"
   - id: 8
     lane: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+    orb_minutes: 5
     base_filter: "COST_LT12"
     variant: "xmes_only"
   - id: 9
     lane: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+    orb_minutes: 5
     base_filter: "COST_LT12"
     variant: "ovn_or_xmes"
 
   - id: 10
     lane: "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
-    base_filter: "ORB_G5_O15"
+    orb_minutes: 15
+    base_filter: "ORB_G5"
     variant: "ovn_only"
   - id: 11
     lane: "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
-    base_filter: "ORB_G5_O15"
+    orb_minutes: 15
+    base_filter: "ORB_G5"
     variant: "xmes_only"
   - id: 12
     lane: "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
-    base_filter: "ORB_G5_O15"
+    orb_minutes: 15
+    base_filter: "ORB_G5"
     variant: "ovn_or_xmes"
 
   # --- 2 lanes × 1 variant = 2 cells (OVN-excluded lanes, XMES only) ---
   - id: 13
     lane: "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15"
-    base_filter: "ATR_P50_O15"
+    orb_minutes: 15
+    base_filter: "ATR_P50"
     variant: "xmes_only"
     note: "OVN excluded by RULE 1.2"
   - id: 14
@@ -217,16 +239,19 @@ cells:
   # threshold=20 and threshold=30 as secondary within same cell for direction verify).
   - id: 15
     lane: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+    orb_minutes: 5
     base_filter: "ORB_G5"
     variant: "london_range_only"
     description: "F_ORB_G5 AND session_london_range >= 100 (pre-committed threshold, matching OVNRNG_100 for symmetry; see london_threshold_rationale)"
   - id: 16
     lane: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+    orb_minutes: 5
     base_filter: "COST_LT12"
     variant: "london_range_only"
   - id: 17
     lane: "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
-    base_filter: "ORB_G5_O15"
+    orb_minutes: 15
+    base_filter: "ORB_G5"
     variant: "london_range_only"
 
 # ---- Hypothesis set ----
