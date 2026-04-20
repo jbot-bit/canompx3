@@ -68,9 +68,7 @@ class TestBuildManifestFromCache:
             "atr_20",
         }
         sample = manifest[0]
-        assert required_fields.issubset(sample.keys()), (
-            f"Missing required fields: {required_fields - sample.keys()}"
-        )
+        assert required_fields.issubset(sample.keys()), f"Missing required fields: {required_fields - sample.keys()}"
 
     def test_manifest_orb_high_never_dummy(self):
         """Prior caller passed dummy `orb_level ± 1.0` — guard against
@@ -81,10 +79,7 @@ class TestBuildManifestFromCache:
         assert len(valid_rows) > 0
         for row in valid_rows[:10]:
             delta = abs(float(row["orb_high"]) - float(row["orb_low"]))
-            assert delta != 1.0, (
-                f"Suspect dummy orb bounds for {row['trading_day']} "
-                f"{row['orb_label']}: delta=1.0"
-            )
+            assert delta != 1.0, f"Suspect dummy orb bounds for {row['trading_day']} {row['orb_label']}: delta=1.0"
 
     def test_manifest_excludes_days_missing_daily_features(self):
         """Cached files with no daily_features row (e.g., data gap) must be
@@ -96,8 +91,7 @@ class TestBuildManifestFromCache:
         for row in manifest:
             if row.get("orb_high") is None or row.get("orb_low") is None:
                 assert row.get("error") is not None, (
-                    f"Row {row['trading_day']} {row['orb_label']} has null "
-                    f"bounds but no error marker"
+                    f"Row {row['trading_day']} {row['orb_label']} has null bounds but no error marker"
                 )
 
 
@@ -135,6 +129,5 @@ class TestRepriceCacheIntegration:
             if r.get("error") is not None:
                 continue
             assert r["orb_high"] != r["orb_low"], (
-                f"Dummy bounds pollution for {r['trading_day']} "
-                f"{r['orb_label']}: high == low"
+                f"Dummy bounds pollution for {r['trading_day']} {r['orb_label']}: high == low"
             )

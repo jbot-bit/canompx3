@@ -69,9 +69,7 @@ def _run_reprice_from_published_row(row: pd.Series) -> RepricedEntry:
     tbbo_df = load_tbbo_df(cache_path)
     assert not tbbo_df.empty, f"Cached TBBO empty after front-month filter: {day}"
 
-    orb_start_utc, orb_end_utc_dt = _orb_utc_window(
-        date.fromisoformat(day), MGC_ORB_LABEL, MGC_ORB_MINUTES
-    )
+    orb_start_utc, orb_end_utc_dt = _orb_utc_window(date.fromisoformat(day), MGC_ORB_LABEL, MGC_ORB_MINUTES)
     assert orb_start_utc is not None
     orb_end_utc = orb_end_utc_dt.isoformat()
 
@@ -100,26 +98,19 @@ class TestMgcCachedFileRegression:
         manifest, published = _require_mgc_fixtures()
         manifest_row = manifest[manifest["trading_day"] == "2017-04-26"].iloc[0]
         published_row = published[
-            (published["trading_day"] == "2017-04-26")
-            & (published["symbol_pulled"] == "MGC.FUT")
+            (published["trading_day"] == "2017-04-26") & (published["symbol_pulled"] == "MGC.FUT")
         ].iloc[0]
 
         result = _run_reprice_from_published_row(manifest_row)
 
         assert result.error is None, f"Expected no error, got {result.error}"
-        assert result.actual_slippage_ticks == pytest.approx(
-            float(published_row["actual_slippage_ticks"]), abs=0.1
-        ), (
+        assert result.actual_slippage_ticks == pytest.approx(float(published_row["actual_slippage_ticks"]), abs=0.1), (
             f"MGC 2017-04-26 slippage regression: "
             f"got {result.actual_slippage_ticks}, "
             f"published {published_row['actual_slippage_ticks']}"
         )
-        assert result.trigger_trade_price == pytest.approx(
-            float(published_row["trigger_trade_price"]), abs=0.05
-        )
-        assert result.estimated_fill_price == pytest.approx(
-            float(published_row["estimated_fill_price"]), abs=0.05
-        )
+        assert result.trigger_trade_price == pytest.approx(float(published_row["trigger_trade_price"]), abs=0.05)
+        assert result.estimated_fill_price == pytest.approx(float(published_row["estimated_fill_price"]), abs=0.05)
 
     def test_mgc_2018_01_18_event_day_extreme_slippage_preserved(self):
         """Known event day (gap-open): 2018-01-18 long MGC. Published
@@ -131,17 +122,14 @@ class TestMgcCachedFileRegression:
         manifest, published = _require_mgc_fixtures()
         manifest_row = manifest[manifest["trading_day"] == "2018-01-18"].iloc[0]
         published_row = published[
-            (published["trading_day"] == "2018-01-18")
-            & (published["symbol_pulled"] == "MGC.FUT")
+            (published["trading_day"] == "2018-01-18") & (published["symbol_pulled"] == "MGC.FUT")
         ].iloc[0]
 
         result = _run_reprice_from_published_row(manifest_row)
 
         assert result.error is None, f"Expected no error, got {result.error}"
         # Tolerance ±1 tick on a 263-tick outlier to allow for tiny floating drift.
-        assert result.actual_slippage_ticks == pytest.approx(
-            float(published_row["actual_slippage_ticks"]), abs=1.0
-        ), (
+        assert result.actual_slippage_ticks == pytest.approx(float(published_row["actual_slippage_ticks"]), abs=1.0), (
             f"MGC 2018-01-18 event-day regression: "
             f"got {result.actual_slippage_ticks}, published "
             f"{published_row['actual_slippage_ticks']}. Silent drift on this "
@@ -161,6 +149,5 @@ class TestLoadTbboDfFrontMonth:
         assert not df.empty
         unique_symbols = df["symbol"].unique()
         assert len(unique_symbols) == 1, (
-            f"load_tbbo_df returned {len(unique_symbols)} symbols "
-            f"({list(unique_symbols)}); front-month filter broken"
+            f"load_tbbo_df returned {len(unique_symbols)} symbols ({list(unique_symbols)}); front-month filter broken"
         )

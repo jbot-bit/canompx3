@@ -997,6 +997,7 @@ def build_features_for_day(
     Returns a dict matching daily_features column names.
     """
     import pandas as pd  # noqa: F401  # used via DuckDB replacement scan on features_df
+
     # Use pre-loaded bars if available, otherwise fetch (slow path)
     if bars_df is None:
         bars_df = get_bars_for_trading_day(con, symbol, trading_day)
