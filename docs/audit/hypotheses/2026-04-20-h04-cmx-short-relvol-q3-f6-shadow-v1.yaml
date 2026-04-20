@@ -1,0 +1,279 @@
+version: 1
+status: LOCKED
+date: 2026-04-20
+slug: h04-cmx-short-relvol-q3-f6-shadow-v1
+title: "H04 narrow shadow / deployment-shape pre-reg — MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5 short confluence (rel_vol_HIGH_Q3 AND F6_INSIDE_PDR)"
+owner: claude
+parent_prereg: "docs/audit/hypotheses/2026-04-20-mnq-live-context-overlays-v1.yaml"
+parent_result: "docs/audit/results/2026-04-20-mnq-live-context-overlays-v1.md"
+parent_lock_sha: "c6ece8a1"
+
+deployment_not_done_here: |
+  This file is DRAFT. It formalizes the shadow-phase and promotion-gate path for
+  the single H04 survivor from the parent family. No capital action, no allocator
+  change, no filter deployment is permitted until:
+    (1) this file is committed and its lock commit SHA is stamped back in,
+    (2) an OOS promotion gate in this file is met under canonical recomputation,
+    (3) user explicitly approves promotion.
+  Shadow-phase execution (signal-only logging against paper_trades on the
+  existing deployed lane) IS permitted after lock.
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "memory/feedback_oos_power_floor.md"
+    - "memory/feedback_per_lane_breakdown_required.md"
+    - "memory/feedback_pooled_not_lane_specific.md"
+    - "trading_app/holdout_policy.py"
+  notes:
+    - "Scope is a single deployed lane × single composite signal × single direction. No broadening."
+    - "No new thresholds are calibrated in this pre-reg. The frozen IS-only rel_vol cut from the parent run is reused unchanged."
+    - "OOS is Mode A sacred. Shadow accumulation does not constitute tuning."
+    - "RULE 3.3: OOS dir_match is not a hard kill below 50% power against the IS effect size."
+    - "RULE 14: H04 is single-lane single-session so pooled-vs-per-cell heterogeneity is trivial, but year-by-year heterogeneity is tracked and gated below."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "b5b7bfbf"
+  committed_required_before_run: true
+  commit_sha_note: "Stamp in a follow-up commit that only restamps this field and the MEMORY index entry."
+
+scope:
+  instrument: MNQ
+  deployed_lane_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+  lane_definition:
+    session: COMEX_SETTLE
+    orb_minutes: 5
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+    deployed_filter: ORB_G5
+    direction: short
+  signal_definition:
+    name: H04_CMX_SHORT_RELVOL_Q3_AND_F6
+    components:
+      - "rel_vol_COMEX_SETTLE > frozen_is_threshold"
+      - "F6_INSIDE_PDR == TRUE"
+      - "direction == short"
+    composite_rule: "AND"
+  frozen_thresholds:
+    rel_vol_COMEX_SETTLE_gt: 2.012172
+    threshold_origin: "Parent prereg IS-only P67 on MNQ COMEX_SETTLE short-lane rows, computed under trading_day < 2026-01-01"
+    threshold_locked_commit: "c6ece8a1"
+    recalibration_allowed: false
+  features_explicitly_out_of_scope:
+    - "Any other session, instrument, aperture, RR, or direction"
+    - "Any additional overlay (is_opex, prev_day_direction, volatility regime, etc.)"
+    - "Any re-threshold of rel_vol, F6_INSIDE_PDR, or composite rule"
+
+ground_truth_from_parent_result:
+  is_filtered_pass:
+    N_total: 760
+    N_on_IS: 128
+    N_off_IS: 598
+    ExpR_on_IS: 0.3855
+    ExpR_off_IS: 0.0276
+    Delta_IS: 0.3579
+    raw_p_IS: 0.0014
+    q_family: 0.0048
+    q_lane: 0.0029
+    years_positive_eligible: 5
+    years_eligible: 6
+    year_2019_eligible: false
+    year_2020_delta: -0.1613
+  oos_filtered_pass:
+    N_on_OOS: 5
+    dir_match: null_under_rule_3_2
+    note: "N_on_OOS < 30 per backtesting-methodology.md RULE 3.2 — directional only, not confirmatory."
+  known_caveats:
+    - "Filtered IS pass fire rate = 128/760 = 16.8% — within valid band (RULE 8.1 extreme_fire=false)."
+    - "Year 2020 flips sign in filtered pass (-0.1613R). Year 2019 ineligible (N_on=6 below eligibility)."
+    - "OOS thin (N=5) and dominant OOS slice still accumulating."
+
+is_recomputation_contract:
+  purpose: "Anchor shadow-phase and promotion-phase recomputations to a fixed canonical pipeline so drift is detectable."
+  canonical_inputs:
+    - table: orb_outcomes
+      columns_required: [instrument, trading_day, orb_minutes, session, F6_INSIDE_PDR, direction, entry_model, confirm_bars, rr_target, pnl_r]
+    - table: daily_features
+      columns_required: [trading_day, symbol, orb_minutes, rel_vol_COMEX_SETTLE]
+      cte_guard: "daily_features CTE must filter orb_minutes = 5 to avoid 3x row inflation (RULE 9)."
+  deployed_filter_delegation:
+    required_path: "research.filter_utils.filter_signal('ORB_G5', ...)"
+    banned_inline: true
+    banned_inline_reason: "2026-04-19 filter-delegation audit showed inline re-implementations silently diverge (OVNRNG_100 incident, 20× fire-rate gap)."
+  repro_metric_set:
+    - "Recompute filtered-pass IS metrics and assert exact match to ground_truth_from_parent_result.is_filtered_pass"
+    - "Match tolerance: Delta_IS within 1e-4, N counts exact"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+    use: "Reproduction + monitoring drift check only. NO threshold re-fit."
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "Mode A sacred. Observational only until a promotion gate below is met."
+  tuning_against_oos: false
+
+oos_power_floor:
+  rationale: "feedback_oos_power_floor.md — binary OOS dir_match veto is a methodological error below 50% power vs the IS effect size."
+  is_effect_size:
+    delta_is: 0.3579
+    assumed_pooled_std_r_units: 1.5
+    cohens_d_estimate: 0.239
+    cohens_d_source: "Delta_IS / assumed_pooled_std. Treated as a lower-bound d; actual pairwise std may narrow this."
+  power_milestones:
+    - label: "10% power"
+      n_on_oos_approx: 18
+      action_if_dir_match_fails: "NO VETO. Verdict = UNVERIFIED_ALIVE."
+    - label: "50% power"
+      n_on_oos_approx: 77
+      action_if_dir_match_fails: "PARK. Do not promote. No kill."
+    - label: "80% power"
+      n_on_oos_approx: 275
+      action_if_dir_match_fails: "KILL ELIGIBLE (see kill_criteria below). Still requires raw_p_OOS < 0.05 opposing sign."
+  power_reporting_contract:
+    - "Every monitoring run MUST print cohens_d, N_on_OOS, and the implied power percentile."
+    - "Every dir_match reading MUST be labeled with its power milestone."
+
+shadow_phase:
+  purpose: "Accumulate OOS fires under canonical signal recomputation without any capital change."
+  mechanism:
+    - "Daily batch: recompute fire-mask on each new trading_day where the deployed lane is eligible."
+    - "Log fire vs no-fire alongside the lane's actual outcome from paper_trades (if signal/demo) or orb_outcomes (if historical backfill)."
+    - "No entry modification, no sizing change, no filter change on the live allocator."
+  logging_target:
+    ledger_path: "docs/audit/shadow_ledgers/h04-cmx-short-relvol-q3-f6-shadow-ledger.csv"
+    columns_required:
+      - trading_day
+      - signal_fire
+      - rel_vol_COMEX_SETTLE
+      - F6_INSIDE_PDR
+      - lane_outcome_r
+      - cumulative_N_on_OOS
+      - cumulative_delta_oos_vs_off
+  executor: "Append-only; new rows only, never rewrite prior rows."
+  minimum_observation_window:
+    calendar_days: 120
+    minimum_N_on_OOS: 30
+    whichever_comes_last: true
+
+promotion_gates:
+  gate_0_SHADOW_start:
+    precondition: "This pre-reg locked + commit_sha stamped."
+    effect: "Shadow logging begins on the next trading_day."
+    capital_action: "NONE."
+
+  gate_1_PROMOTED_HALF_UPSIZE:
+    all_required:
+      - "N_on_OOS >= 30"
+      - "dir_match == TRUE (sign(Delta_OOS_observed) == sign(Delta_IS))"
+      - "raw_p_OOS <= 0.20 (one-sided descriptive, directional)"
+      - "No month in the OOS accumulation window has flipped sign with N_on_month >= 8 without a later recovery month"
+      - "IS recomputation still passes is_recomputation_contract within tolerance"
+      - "Fire rate in OOS within 8% to 28% band (soft guard, not hard)"
+    capital_action: "Upsize on signal-fire days only, from 1.0x to 1.25x lane unit. Off-signal days unchanged at 1.0x. No skip. RR and stop unchanged."
+    rationale: "Asymmetric upsize preserves base lane edge (off-signal ExpR still positive per IS) while giving partial credit to the IS confluence. 1.25x rather than 1.5x because OOS power is below 50% at this gate."
+    reversal_rule: "Immediate revert to 1.0x on ANY of: two consecutive OOS months with dir_match flip, raw_p_OOS rising above 0.40, or fire rate leaving [5%, 40%]."
+
+  gate_2_PROMOTED_FULL_UPSIZE:
+    all_required:
+      - "gate_1 currently held continuously for >= 90 calendar days"
+      - "N_on_OOS >= 77 (50% power milestone)"
+      - "dir_match == TRUE"
+      - "raw_p_OOS <= 0.05"
+      - "Delta_OOS >= 0.15 (approx. 42% of IS effect — honest shrinkage expectation per Harvey-Liu 2015)"
+    capital_action: "Upsize on signal-fire days from 1.25x to 1.5x lane unit. Off-signal unchanged."
+    reversal_rule: "Same triggers as gate_1 reversal_rule. On trigger, drop to 1.0x (full revert, not step-down)."
+
+  gate_3_FULL_FILTER_PROMOTION:
+    all_required:
+      - "gate_2 currently held continuously for >= 180 calendar days"
+      - "N_on_OOS >= 275 (80% power milestone)"
+      - "dir_match == TRUE on full OOS and on most recent 90-day sub-window"
+      - "raw_p_OOS <= 0.01"
+      - "Off-signal OOS ExpR stable (no collapse to <= -0.10R that would destabilize the lane)"
+    capital_action: "Under consideration only. Skipping off-signal rows is BANNED at this gate — promotion at gate_3 means a new pre-reg is required to evaluate a skip rule against the then-current allocator correlation gate."
+    rationale: "Skipping off-signal trades would change the lane's allocator correlation profile and requires a fresh overlap-decomposition audit per 2026-04-19 ORB_G5 cross-session overlap work."
+
+kill_criteria:
+  K_kill_1_IS_recompute_drift:
+    condition: "is_recomputation_contract fails (Delta_IS or N counts drift beyond tolerance)."
+    action: "SHADOW ABORT. Raise audit flag; do not silently re-fit."
+  K_kill_2_filter_delegation_bypass:
+    condition: "Any monitoring script re-implements ORB_G5 or rel_vol threshold inline instead of delegating to canonical filter_signal."
+    action: "SHADOW ABORT. Treat prior shadow log as contaminated."
+  K_kill_3_catastrophic_OOS:
+    condition: "N_on_OOS >= 50 AND Delta_OOS <= -0.15 AND raw_p_OOS <= 0.05 opposing sign."
+    action: "KILL. Retire H04 from the validated-signal queue. Update MEMORY."
+  K_kill_4_lane_decommission:
+    condition: "Allocator retires MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5 from DEPLOY."
+    action: "KILL. Overlay is meaningless off a decommissioned base lane."
+  K_kill_5_threshold_tampering:
+    condition: "rel_vol_COMEX_SETTLE frozen threshold 2.012172 is modified by any process other than a new pre-reg that explicitly supersedes this one."
+    action: "SHADOW ABORT + audit flag."
+  K_kill_6_rule_3_3_violation:
+    condition: "Any monitoring output emits a dir_match-based kill recommendation without also emitting the OOS power number."
+    action: "SHADOW ABORT. Rewrite monitor to comply, re-run."
+
+not_kill_conditions:
+  description: "Explicit per RULE 3.3 / feedback_oos_power_floor: these are NOT kills."
+  items:
+    - "N_on_OOS < 30 AND dir_match flips. Verdict = UNVERIFIED_ALIVE."
+    - "30 <= N_on_OOS < 77 AND dir_match flips but raw_p_OOS > 0.20. Verdict = PARK."
+    - "A single OOS month flipping sign with N_on_month >= 8 is a SOFT WARNING only; promotion is held but the signal is not killed."
+
+monitoring_contract:
+  cadence: "Weekly. Ran as part of the regular shadow-ledger pass."
+  emit_per_run:
+    - "Current phase label (SHADOW, PROMOTED_HALF_UPSIZE, PROMOTED_FULL_UPSIZE, KILLED, SHADOW_ABORT)"
+    - "Cumulative N_on_OOS, N_off_OOS, Delta_OOS, ExpR_on_OOS, ExpR_off_OOS"
+    - "raw_p_OOS (two-sample, one-sided toward IS sign, descriptive)"
+    - "Current power milestone bucket"
+    - "dir_match label + power qualifier"
+    - "Year-by-year OOS breakdown as soon as 2026 months close"
+    - "IS recomputation parity line (Delta_IS match: YES/NO)"
+  drift_guards:
+    - "Fire rate deviation: OOS fire rate within 8% to 28% of IS fire rate (16.8%)."
+    - "Off-signal ExpR sanity: stays within [-0.20, +0.30] band; outside band raises SOFT WARNING, not kill."
+  gate_advancement_authority: "User-only. No monitoring script may advance phase. Monitor prints a recommendation only."
+
+implementation_integrity_checklist:
+  - "Every monitoring run imports frozen threshold 2.012172 from this pre-reg file, not from a recomputation."
+  - "Every monitoring run calls research.filter_utils.filter_signal('ORB_G5', ...) for the filter mask."
+  - "Every monitoring run re-verifies IS parity before emitting OOS metrics."
+  - "Every promotion-gate emission must include the power-milestone label."
+  - "Every dir_match emission must include the paired OOS power number."
+  - "No monitoring script writes to orb_outcomes, daily_features, validated_setups, live_config, or lane_allocation.json."
+  - "Shadow ledger is append-only CSV; no in-place edits."
+
+heterogeneity_gate:
+  rationale: "Single-lane single-session — pooled-vs-per-cell heterogeneity is trivially self. But IS year-by-year shows 2020 flipped and 2019 ineligible. Track OOS months to prevent a single-month outlier from driving promotion."
+  month_level:
+    minimum_months_required_for_promotion: 4
+    per_month_minimum_N_on: 2
+    sign_agreement_required: ">= 60% of months with N_on_month >= 2 agree with IS sign"
+
+execution_gate:
+  allowed_now:
+    - "User review of this DRAFT"
+    - "Commit this file and stamp commit_sha in a follow-up commit"
+    - "Only after lock commit: create h04-cmx-short-relvol-q3-f6-shadow-ledger.csv header row"
+    - "Only after lock commit: build or adapt a weekly monitor in scripts/reports/ that complies with this contract"
+  forbidden_now:
+    - "Running any shadow log before the lock commit exists"
+    - "Adding new signal components, features, or lanes to this file post-lock"
+    - "Quietly changing frozen threshold 2.012172"
+    - "Claiming deployment readiness from this DRAFT"
+    - "Using a dir_match flip to kill H04 below the 50% power milestone"
+
+not_done_by_this_pre_reg:
+  - "Does NOT run the shadow log"
+  - "Does NOT alter live trading rules, filters, allocator weights, or execution overlays"
+  - "Does NOT re-open the broader live-context overlay family"
+  - "Does NOT evaluate a skip-off-signal rule (banned until gate_3 with a fresh pre-reg)"
+  - "Does NOT promote H04 directly to deployment"
