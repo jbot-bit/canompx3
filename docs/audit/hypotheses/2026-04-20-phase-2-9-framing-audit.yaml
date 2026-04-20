@@ -1,0 +1,193 @@
+# Hypothesis Registry — 2026-04-20 phase-2-9-framing-audit
+#
+# Locked: 2026-04-20T00:00:00+10:00
+# Author: claude (autonomous session, user-delegated "do it properly")
+# Predecessor: docs/audit/results/2026-04-19-phase-2-9-comprehensive-multi-year.md
+#   (on branch campaign-2026-04-19-phase-2, not main)
+# Committing commit hash: (filled in by pre-commit hook)
+# Data horizon: 6.65yr clean MNQ/MES (2019-05-06 → 2025-12-31 per Criterion 2 Amendment 2.8)
+# Intended discovery holdout: 2026-01-01 (sacred; all OOS days 2026-01-02 → 2026-04-16)
+
+metadata:
+  name: "phase-2-9-framing-audit"
+  purpose: |
+    Audit 4 MNQ COMEX_SETTLE Mode-A-discovered lanes (promoted 2026-04-11) against
+    three gates that were not explicit in the Phase 2.9 comprehensive multi-year
+    scan:
+      (a) fire-rate stationarity across the 7-year IS window,
+      (b) era stability per Criterion 9,
+      (c) live OOS arithmetic vs stored oos_exp_r.
+    Additionally correct Phase 2.9 result doc line 295 A3 table, which omitted MNQ
+    2019-2023 COMEX_SETTLE baseline data with a misleading "availability" caveat
+    (live DB has full ~249-row/year coverage 2019-2023 on MNQ).
+  date_locked: "2026-04-20T00:00:00+10:00"
+  data_horizon_years_clean: 6.65
+  data_horizon_years_proxy: 0.0  # MNQ 2019+ is real-micro, no proxy needed
+  holdout_date: "2026-01-01"
+  oos_window_end: "2026-04-16"
+  oos_days_available: 69
+  total_expected_trials: 16
+  data_source_mode: "clean"
+  testing_mode: "confirmatory"  # audit of already-promoted lanes, not discovery
+  scope: "post_promotion_robustness"
+
+# MinBTL budget check (Bailey et al 2013 Theorem 1)
+# MinBTL = 2·ln(16) / 1.0² = 5.545 years < 6.65 years available → within strict E=1.0 bound
+minbtl_check:
+  trials_N: 16
+  e_max_N_floor: 1.0
+  minbtl_years_required: 5.545
+  data_years_available: 6.65
+  status: "WITHIN_BOUND"
+
+hypotheses:
+  - id: 1
+    name: "Fire-rate stationarity on OVNRNG_100 and X_MES_ATR60 filters across 7 years"
+    theory_citation: |
+      Bailey, Borwein, López de Prado, Zhu (2013) "Pseudo-Mathematics and Financial
+      Charlatanism" § Proposition 2 (compensation effect under global constraint) —
+      grounds the expectation that stationary filters should fire at stable rates
+      across IS data with similar macro regime coverage.
+      docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md.
+      Harvey & Liu (2015) "Backtesting" p.16 grounds BHY over BH when dependence
+      is present; filter fire-rate drift is a dependence-structure change.
+      docs/institutional/literature/harvey_liu_2015_backtesting.md.
+    economic_basis: |
+      OVNRNG_100 is an absolute threshold (overnight_range ≥ 100 pts); X_MES_ATR60 is
+      absolute (MES ATR ≥ 60 pts). Both filter semantic meaning is stable ONLY if the
+      underlying distributions are stationary. Vol regime expansion 2024-2025 (AI rally,
+      rate-cut anticipation per 2025 WGC/CME macro context) could push more days over
+      these absolute thresholds without any change in filter selectivity, meaning
+      the filter's character has drifted even if its rule has not. This hypothesis
+      tests whether the filter fires at a consistent rate across 2019-2025 years.
+    filter:
+      columns:
+        - overnight_range     # for OVNRNG_100
+        - mes_atr             # for X_MES_ATR60
+      cells:
+        - MNQ_COMEX_SETTLE_E2_RR1.0_CB1_OVNRNG_100
+        - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_OVNRNG_100
+        - MNQ_COMEX_SETTLE_E2_RR1.0_CB1_X_MES_ATR60
+        - MNQ_COMEX_SETTLE_E2_RR1.5_CB1_X_MES_ATR60
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [1.0, 1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+      years: [2019, 2020, 2021, 2022, 2023, 2024, 2025]
+    test: "chi-square goodness-of-fit: observed per-year fire counts vs expected equal-rate"
+    expected_trial_count: 4  # 4 cells × 1 test
+    kill_criteria:
+      - "chi-square p < 0.05 on ANY cell → filter semantic drifted; flag WATCH verdict"
+      - "chi-square p < 0.01 on ANY cell → material drift; recommend filter redefinition (out of scope)"
+
+  - id: 2
+    name: "Mode-A OOS live arithmetic vs stored oos_exp_r"
+    theory_citation: |
+      .claude/rules/integrity-guardian.md rule 7 — "Never trust metadata — always verify."
+      Stored validated_setups.oos_exp_r is a snapshot at promotion time (2026-04-11);
+      canonical orb_outcomes continues to accumulate. Verification re-reads canonical
+      and compares.
+    economic_basis: |
+      validated_setups.oos_exp_r is computed at promotion and not updated as OOS trades
+      accumulate. Any drift between live canonical mean and stored value indicates
+      either (a) new 2026 OOS trades have shifted the mean, or (b) promotion-time
+      value was incorrect. Either case requires explicit reporting before the value
+      is cited for any downstream decision. Rule: integrity-guardian § 7.
+    filter:
+      columns: [pnl_r]
+      cells: same as H1
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [1.0, 1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      window: "2026-01-02 → 2026-04-16"  # OOS per holdout_policy.HOLDOUT_SACRED_FROM
+    test: "mean(pnl_r) on filter-fire days, canonical, compared to stored oos_exp_r"
+    expected_trial_count: 4
+    kill_criteria:
+      - "|live − stored| > 0.010 R on ANY cell → flag metadata drift; halt, root-cause"
+
+  - id: 3
+    name: "Era stability on each cell (Criterion 9)"
+    theory_citation: |
+      pre_registered_criteria.md § Criterion 9. Era stability: ExpR ≥ −0.05 per era
+      with N ≥ 50 on filtered cells. Source: 2026-04-07 audit finding that several
+      deployed MNQ lanes showed zero or negative edge in pre-2020 data.
+    economic_basis: |
+      A strategy that was negative in a specific macro regime is era-dependent and
+      should deploy with regime gating or narrower scope, not as a general-case edge.
+      Eras chosen to reflect MNQ microstructure regimes: 2019-2020 (COVID + early-
+      micro thin liquidity), 2021-2022 (Fed hike cycle), 2023 (stabilization),
+      2024-2025 (AI rally + vol expansion).
+    filter:
+      columns: [pnl_r, trading_day]
+      cells: same as H1
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [1.0, 1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      eras:
+        - "2019-01-01 → 2020-12-31"
+        - "2021-01-01 → 2022-12-31"
+        - "2023-01-01 → 2023-12-31"
+        - "2024-01-01 → 2025-12-31"
+    test: "per-era ExpR, N, with ≥50 threshold for judgement"
+    expected_trial_count: 4
+    kill_criteria:
+      - "Any era with N ≥ 50 and ExpR < −0.05 on ANY cell → flag FLAG verdict; era-dependent"
+
+  - id: 4
+    name: "2026 OOS raw t-stat and sign-match"
+    theory_citation: |
+      pre_registered_criteria.md § Criterion 8 (OOS positive, ≥ 0.40 × IS).
+      .claude/rules/backtesting-methodology.md RULE 3.1 (dir_match requirement)
+      and RULE 3.2 (N < 5 → NaN; N < 30 → directional-only evidence).
+    economic_basis: |
+      The OOS window is 69 days — below the 150-day institutional-rigor threshold but
+      above the 30-day directional-only threshold. Report t and sign without
+      claiming significance. If sign flips → regime-ended; freeze immediately.
+    filter:
+      columns: [pnl_r]
+      cells: same as H1
+    scope:
+      instruments: [MNQ]
+      sessions: [COMEX_SETTLE]
+      rr_targets: [1.0, 1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      window: "2026-01-02 → 2026-04-16"
+    test: "per-cell OOS t-stat (one-sample t vs 0), sign-compare to IS ExpR sign"
+    expected_trial_count: 4
+    kill_criteria:
+      - "N < 5 → NaN (underpowered; do not cite)"
+      - "sign(OOS delta) != sign(IS delta) on ANY cell → freeze; no Phase 2.10 work"
+
+# D5 (full MNQ 2019-2025 unfiltered baseline) is REPORTING ONLY, not a test — it
+# corrects Phase 2.9 result doc line 295 A3 table omission. No trial count.
+# D5 pulls orb_outcomes pnl_r on MNQ COMEX_SETTLE O5 E2 CB1 RR1.0 unfiltered,
+# grouped by year 2019-2025. Provides the data the Phase 2.9 doc omitted.
+
+total_hypothesis_count: 4
+total_expected_trials: 16
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  strict_bailey_E1_bound: 28  # per Amendment 2.8, MNQ 6.65yr → N ≤ 28
+  status: "WITHIN_STRICT_BAILEY_E1_BOUND"
+
+# Pre-registration checklist
+#
+# [x] Every hypothesis has a theory citation (not just "ORB is a thing")
+# [x] Every hypothesis has an economic_basis explaining WHY
+# [x] Sum of expected_trial_count is within budget (16 ≤ 28 strict Bailey)
+# [x] Kill criteria are pre-registered (not post-hoc)
+# [x] No hypothesis uses volume filters on parent-proxy data (C10) — MNQ 2019+ is real micro
+# [x] Holdout date is 2026-01-01 and will not be moved after results are seen
+# [x] File is committed to git BEFORE discovery runs (this is Stage 1 of staged execution)
+# [x] Audit framing (not discovery); does not write to experimental_strategies or validated_setups
