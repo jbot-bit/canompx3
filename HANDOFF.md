@@ -4,6 +4,48 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late night — data-first guard prompt spam reduced; stale investigation mode fixed)
+
+Follow-up to the startup/token-efficiency work. After the route-packet and
+startup-hook compression, the highest remaining Claude-side EV/ROI issue was
+`.claude/hooks/data-first-guard.py`:
+
+- it emitted long UserPromptSubmit directives repeatedly for the same mode
+- once a prompt entered `investigation_mode`, later clear implementation
+  prompts could still inherit stricter read-blocking until timeout/reset
+
+### What landed
+
+- `.claude/hooks/data-first-guard.py`
+  - shortened prompt-side directive text substantially
+  - added per-directive cooldown suppression (`15` minutes) so identical
+    routing guidance is not re-emitted every matching prompt
+  - keeps the read-side enforcement path intact
+  - clears stale `investigation_mode` and resets read count when the user has
+    clearly switched into implement / commit / design / research / orient /
+    resume mode without an investigation keyword
+- added focused tests:
+  - `tests/test_tools/test_data_first_guard.py`
+  - covers repeated-directive suppression
+  - covers stale investigation-mode reset on implementation prompts
+  - covers normal investigation prompt activation
+
+### Why this matters
+
+- reduces repeated prompt-token burn on Claude without removing the actual
+  safety/control behavior
+- fixes a subtle state bug where coding tasks could be penalized by a prior
+  investigation prompt
+
+### Verification
+
+- `./.venv-wsl/bin/python -m pytest tests/test_tools/test_data_first_guard.py -q`
+- `./.venv-wsl/bin/python -m ruff check .claude/hooks/data-first-guard.py tests/test_tools/test_data_first_guard.py`
+- `./.venv-wsl/bin/python -m py_compile .claude/hooks/data-first-guard.py tests/test_tools/test_data_first_guard.py`
+- `git diff --check`
+
+Result: all checks passed; focused pytest sweep was `3 passed`.
+
 ## Update (2026-04-20 late night — pre-commit restage bug fixed for ignored tracked files)
 
 Follow-up to `fa9db503` startup-routing work. A normal commit on that change
