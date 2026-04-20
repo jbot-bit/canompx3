@@ -21,8 +21,9 @@ from pipeline.log import get_logger
 logger = get_logger(__name__)
 
 # pandas + duckdb lazy-loaded inside the functions that use them
-# (each in exactly one site; pandas alone is ~5s import). PEP 8 endorses
-# delayed imports for performance.
+# (each in exactly one site). PEP 8 endorses delayed imports for
+# performance — cost is modest on warm OS-cache (~0.3s pandas alone)
+# but noticeable on cold boot where the DLL is not in filesystem cache.
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.cost_model import get_cost_spec
 from pipeline.dst import (
