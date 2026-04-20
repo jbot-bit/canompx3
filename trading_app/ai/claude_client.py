@@ -19,8 +19,10 @@ Model strategy (see docs/runtime/stages/claude-api-modernization.md):
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
-import anthropic
+if TYPE_CHECKING:
+    import anthropic
 
 CLAUDE_STRUCTURED_MODEL = "claude-sonnet-4-6"
 CLAUDE_REASONING_MODEL = "claude-opus-4-7"
@@ -35,6 +37,12 @@ def get_client(api_key: str | None = None) -> anthropic.Anthropic:
     Raises:
         ValueError: when no key is available from either argument or environment.
     """
+    # Lazy import — anthropic SDK is ~5-9s to import. Only get_client() needs it;
+    # the canonical CLAUDE_*_MODEL string constants above are free. PEP 8 endorses
+    # delayed imports for performance. Module-level model strings remain the
+    # single source of truth (enforced by check_canonical_claude_client_source).
+    import anthropic
+
     resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not resolved_key:
         raise ValueError("ANTHROPIC_API_KEY required. Pass api_key or set env var.")
