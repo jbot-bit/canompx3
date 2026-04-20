@@ -58,6 +58,65 @@ Result: clean diff; broken truncated pointer no longer present.
 
 - `.claude/rules/backtesting-methodology.md`
 - `HANDOFF.md`
+## Update (2026-04-20 late night — MNQ live-context overlay family RUN COMPLETE; 1 continue, 2 park, 2 kill)
+
+Follow-through on the pre-regged "golden egg / confluence" bundle. The family was locked in git first, then executed from canonical `orb_outcomes + daily_features` with `HOLDOUT_SACRED_FROM = 2026-01-01` respected throughout:
+
+- IS / calibration:
+  - `trading_day < 2026-01-01`
+  - `rel_vol_COMEX_SETTLE` threshold frozen on IS-only COMEX short-lane rows
+- OOS:
+  - `trading_day >= 2026-01-01`
+  - used immediately as proper forward slice, but still interpreted with power caution per thin `N_on_OOS`
+
+### Locked pre-reg / runner / result surfaces
+
+- Pre-reg:
+  - `docs/audit/hypotheses/2026-04-20-mnq-live-context-overlays-v1.yaml`
+  - final lock SHA stamped: `c6ece8a1`
+- Runner:
+  - `research/mnq_live_context_overlays_v1.py`
+- Result doc:
+  - `docs/audit/results/2026-04-20-mnq-live-context-overlays-v1.md`
+
+### What survived
+
+- `H04_CMX_SHORT_RELVOL_Q3_AND_F6` → **CONTINUE**
+  - lane: `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5`
+  - filtered IS: `Δ=+0.3579R`, `raw_p=0.0014`, `q_family=0.0048`, `q_lane=0.0029`
+  - `years_positive_filtered=5`
+  - OOS still thin (`N_on_OOS=5`), so not "confirmed live edge" yet, but it is the only clean survivor under the locked family rules
+
+### What parked
+
+- `H01_NYO_SHORT_PREV_BEAR` → **PARK**
+  - strong IS on both passes, but filtered OOS sign flipped at `N_on_OOS=19`
+- `H03_CMX_SHORT_RELVOL_Q3` → **PARK**
+  - strong IS on both passes, but filtered OOS sign flipped at `N_on_OOS=14`
+
+These are not dead on IS math, but they are not clean continues either. Treat as shadow-only / watchlist candidates unless a new pre-reg explicitly narrows the unresolved OOS issue.
+
+### What died
+
+- `H02_NYO_LANE_OPEX_TRUE` → **KILL**
+  - raw p missed badly and fire rate is extreme / thin
+- `H05_CMX_LANE_OPEX_TRUE` → **KILL**
+  - q-values passed, but the feature is still extreme-fire (`~4%`) so it fails the family guardrail
+
+### Important correction caught before run
+
+- The draft pre-reg originally claimed scalar `k_lane: 5`, which was wrong under two-pass accounting.
+- Fixed before execution:
+  - NYSE_OPEN lane bucket = `4` tests
+  - COMEX_SETTLE lane bucket = `6` tests
+- This was recorded as a non-substantive pre-run correction in the YAML before the final restamp.
+
+### Practical next move
+
+- Do **not** reopen the full family right away.
+- Highest-EV follow-on is the narrow survivor:
+  - `COMEX_SETTLE short rel_vol_HIGH_Q3 AND F6_INSIDE_PDR`
+- If the user wants action rather than more scan churn, the next disciplined step is a **shadow / deployment-shape pre-reg for H04 only**, not another broad family.
 ## Update (2026-04-20 late night — MNQ live-context overlay family PRE-REGISTERED DRAFT; no execution yet)
 
 Follow-on to the "golden egg / confluence" thread. User direction tightened: stop narrating local interactions loosely, formalize them as a planned pre-reg, and do not run a fresh scan until scope, family budget, and canonical data rules are locked.
