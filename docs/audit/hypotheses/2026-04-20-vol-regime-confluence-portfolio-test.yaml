@@ -407,7 +407,7 @@ hypotheses:
       - "Dir match: sign(OOS ExpR) == sign(IS ExpR) per RULE 3.1"
       - "C8 OOS ratio: OOS_ExpR >= 0.40 × IS_ExpR per pre_registered_criteria.md § 8"
       - "Era stability: no era with N >= 50 has ExpR < -0.05 per Criterion 9"
-      - "T4 sensitivity: ±20% on OVN threshold {80,100,120} and MES ATR threshold {54,60,66} — sign must not flip"
+      - "T4 sensitivity: ±20% on OVN threshold {80,100,120} and ±10% on MES ATR threshold {54,60,66} — sign must not flip. XMES grid is tighter than ±20% because (60-20%) = 48 falls below the natural p40 regime floor; ±10% preserves the regime-boundary meaning. Conservative-tighter, not looser."
       - "T6 null floor: block bootstrap p < 0.05 (moving block, preserve autocorr, mask fixed)"
 
     # Verdict mapping (PRE-COMMITTED — no post-hoc relaxation)

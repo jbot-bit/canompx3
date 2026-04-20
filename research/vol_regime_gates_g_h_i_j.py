@@ -282,11 +282,20 @@ def stage_j_ovn_p75_reframe(df, base_mask, variant, xmes_thr=60.0):
     pnl_p75 = is_df.loc[conf, "pnl_r"].to_numpy()
     n, expr, t = _t_stat(pnl_p75)
 
-    fire_rate = float(ovn_p75_mask[252:].mean()) if len(ovn_p75_mask) > 252 else 0.0
+    # Fire rate reporting: distinguish OVN_P75-only vs combined
+    ovn_only_rate = float(ovn_p75_mask[252:].mean()) if len(ovn_p75_mask) > 252 else 0.0
+    if variant == "ovn_only":
+        reported_rate = ovn_only_rate
+        rate_label = "ovn_p75_fire_rate"
+    else:  # ovn_or_xmes
+        combined = (new_variant[252:] == 1).mean() if len(new_variant) > 252 else 0.0
+        reported_rate = float(combined)
+        rate_label = "combined_ovn_p75_or_xmes_fire_rate"
 
     return {
         "variant": variant,
-        "p75_fire_rate": round(fire_rate, 3),
+        rate_label: round(reported_rate, 3),
+        "ovn_p75_only_fire_rate": round(ovn_only_rate, 3),
         "n": n,
         "expr": round(expr, 4),
         "t": round(t, 2),
@@ -339,7 +348,8 @@ def main():
         if "skipped" in j:
             print(f"  J OVN_P75: {j['skipped']}")
         else:
-            print(f"  J OVN_P75: n={j['n']}  expr={j['expr']:+.4f}  t={j['t']:+.2f}  fire_rate={j['p75_fire_rate']:.2f}")
+            rate = j.get("combined_ovn_p75_or_xmes_fire_rate", j.get("ovn_p75_fire_rate", 0.0))
+            print(f"  J OVN_P75: n={j['n']}  expr={j['expr']:+.4f}  t={j['t']:+.2f}  fire_rate={rate:.2f}  ovn_p75_only={j['ovn_p75_only_fire_rate']:.2f}")
         print()
 
     # Persist

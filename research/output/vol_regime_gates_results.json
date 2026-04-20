@@ -95,7 +95,8 @@
     },
     "J_ovn_p75": {
       "variant": "ovn_only",
-      "p75_fire_rate": 0.279,
+      "ovn_p75_fire_rate": 0.279,
+      "ovn_p75_only_fire_rate": 0.279,
       "n": 385,
       "expr": 0.216,
       "t": 3.6,
@@ -344,7 +345,8 @@
     },
     "J_ovn_p75": {
       "variant": "ovn_or_xmes",
-      "p75_fire_rate": 0.279,
+      "combined_ovn_p75_or_xmes_fire_rate": 0.516,
+      "ovn_p75_only_fire_rate": 0.279,
       "n": 804,
       "expr": 0.1567,
       "t": 3.81,
@@ -447,7 +449,8 @@
     },
     "J_ovn_p75": {
       "variant": "ovn_only",
-      "p75_fire_rate": 0.282,
+      "ovn_p75_fire_rate": 0.282,
+      "ovn_p75_only_fire_rate": 0.282,
       "n": 412,
       "expr": 0.1808,
       "t": 3.16,
