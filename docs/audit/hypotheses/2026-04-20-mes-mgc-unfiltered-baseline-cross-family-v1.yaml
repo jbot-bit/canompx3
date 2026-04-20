@@ -1,0 +1,112 @@
+pre_reg_id: "mes-mgc-unfiltered-baseline-cross-family-v1"
+date: "2026-04-20"
+status: "LOCKED"
+testing_mode: "family"
+pathway: "A"
+pathway_rationale: |
+  Cross-instrument extension of PR #51 `2ed62dc3` (MNQ unfiltered-baseline
+  cross-family, K=105, 5 CANDIDATE_READY cells). PR #51's result doc
+  explicitly deferred MES and MGC to a "future pre-reg" — this IS that
+  pre-reg.
+
+  PR #48 `28279719` established that the participation-shape (monotonic-up)
+  reframe is UNIVERSAL across MNQ + MES + MGC, which motivates the
+  hypothesis that unfiltered-baseline expectancy may also be cross-
+  instrument-present on equity index (MES) and metals (MGC), not only
+  micro-NQ. Conversely, if the PR #51 MNQ CANDIDATE_READY cells
+  (NYSE_OPEN, US_DATA_1000 at 5m RR=1.0/1.5, 15m RR=1.0/1.5) fail to
+  replicate on MES/MGC, this informs whether those MNQ cells are instrument-
+  specific or market-wide.
+
+  MES has 11 distinct sessions with data, MGC has 9 (metals-relevant
+  sessions only). Both instruments tested in ONE honest K_family with a
+  single BH-FDR application, not split into two post-hoc families.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  parent_audit:
+    - "PR #48 `28279719` — monotonic-up UNIVERSAL on MNQ + MES + MGC (cross-instrument participation-shape)."
+    - "PR #51 `2ed62dc3` — MNQ unfiltered-baseline cross-family, K=105, 5 CANDIDATE_READY cells; explicitly deferred MES/MGC."
+
+theory_citations:
+  grounded_in_local_extracts:
+    - path: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "Grounds intraday trend-follow on commodities + stock indices — core ORB premise applies to both MES and MGC."
+    - path: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      use: "Intraday momentum continuation after range-break; applies to equity indices and metals."
+    - path: "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+      use: "MinBTL = 2·ln(K) / E[max_N²]. With K ≤ 180, MinBTL ≈ 1.16 yrs. IS window ≥ 6 yrs on both instruments — satisfied."
+    - path: "docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md"
+      use: "Chordia t ≥ 3.00 with prior theory per pre_registered_criteria.md C4."
+    - path: "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+      use: "BH-FDR family discipline at q < 0.05 per Phase 0 C3."
+
+scope:
+  instruments: ["MES", "MGC"]
+  entry_model: "E2"
+  confirm_bars: 1
+  filter: "none (unfiltered baseline — the lane IS the cell)"
+  is_window: "trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01)"
+  oos_window: "2026-01-01 ≤ trading_day (read-only, Mode A sacred holdout)"
+  family_axes:
+    apertures: [5, 15, 30]
+    rr_targets: [1.0, 1.5, 2.0]
+    sessions: "full canonical MES + MGC active universe via SELECT DISTINCT orb_label FROM orb_outcomes per instrument"
+    directions: "pooled (both long and short in the same cell)"
+  max_K: 180  # (11 MES + 9 MGC) × 3 apts × 3 RRs — actual K after INSUFFICIENT_N skips may be lower
+  min_n_per_cell: 100
+
+hypothesis:
+  H1_family: |
+    Within the MES + MGC unfiltered-baseline cross-instrument family
+    (K ≤ 180), at least one cell passes all four pre-registered gates:
+      H1 IS: Net ExpR > 0 AND one-sample t ≥ +3.0 (Chordia with-theory)
+             AND BH-FDR q < 0.05 at K_family
+      C6:   WFE ≥ 0.50 via 3-fold expanding walk-forward on IS
+      C8:   Net ExpR OOS / Net ExpR IS ≥ 0.40 AND N_OOS ≥ 50
+      C9:   No calendar year with N≥50 having Net ExpR < -0.05
+  family_kill_if: "Zero cells pass all four gates."
+
+testing_discipline:
+  K_family: 180  # pre-committed upper bound
+  BH_FDR_alpha: 0.05
+  Chordia_t_threshold: 3.00
+  MinBTL_check: "2·ln(180) / 9 ≈ 1.16 yrs. IS window ≥ 6 yrs both instruments — satisfied."
+  mandatory_downstream_gates_non_waivable:
+    - "C6 (WFE ≥ 0.50)"
+    - "C8 (OOS ≥ 0.40 × IS AND N_OOS ≥ 50)"
+    - "C9 (era stability, no year N≥50 with Net ExpR < -0.05)"
+  integrity_gates:
+    - "unfiltered baseline only — no filter overlays"
+    - "pnl_r used directly as net (canonical per pipeline/cost_model.py)"
+    - "single BH-FDR across both instruments combined (no post-hoc family split)"
+    - "canonical session enumeration via SELECT DISTINCT orb_label (no hardcoded list)"
+
+decision_rules:
+  verdicts_per_cell:
+    - verdict: "CANDIDATE_READY"
+      criteria: "H1 pass (t AND BH-FDR) AND C6 pass AND C8 pass AND C9 pass AND N_IS ≥ 100"
+    - verdict: "RESEARCH_SURVIVOR"
+      criteria: "H1 pass AND at least one of C6/C8/C9 fails"
+    - verdict: "KILL_IS"
+      criteria: "H1 fail (t OR BH-FDR)"
+    - verdict: "SCAN_ABORT"
+      criteria: "N_IS < 100 (data-availability skip)"
+  family_summary:
+    "≥1 CANDIDATE_READY shared with MNQ (#51) sessions (NYSE_OPEN, US_DATA_1000)": "Cross-instrument signal — unfiltered baseline expectancy is not MNQ-specific on those sessions"
+    "≥1 CANDIDATE_READY on sessions NOT in MNQ (#51) set": "New session territory specific to MES/MGC"
+    "Zero CANDIDATE_READY on MES/MGC": "The unfiltered-baseline signal from MNQ #51 does NOT generalise cross-instrument"
+
+non_actions:
+  - "Does NOT write to validated_setups / edge_families / lane_allocation / live_config."
+  - "Does NOT modify any live allocator contract (topstep_50k_mnq_auto unchanged)."
+  - "Does NOT apply monotonic-rank sizing overlay (separate follow-on)."
+  - "Does NOT test filter overlays (future pre-regs)."
+  - "Does NOT re-test MNQ (PR #51 already canonical for MNQ)."
+  - "Does NOT perform parameter tuning — all axes pre-committed before any query."
+
+outputs:
+  result_md: "docs/audit/results/2026-04-20-mes-mgc-unfiltered-baseline-cross-family-v1.md"
+  script: "research/mes_mgc_unfiltered_baseline_cross_family_v1.py"
+
+commit_sha: "TO_FILL_AFTER_COMMIT"

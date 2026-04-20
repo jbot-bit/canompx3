@@ -4,6 +4,62 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 autonomous — MES + MGC unfiltered-baseline cross-family: ZERO survivors, MNQ signal does NOT generalise)
+
+Autonomous cross-instrument extension of PR #51 `2ed62dc3` (MNQ unfiltered-baseline cross-family).
+PR #51's result doc explicitly deferred MES + MGC to a future pre-reg. This is that pre-reg + scan.
+
+### What was added
+
+- Pre-reg (LOCKED):
+  - `docs/audit/hypotheses/2026-04-20-mes-mgc-unfiltered-baseline-cross-family-v1.yaml`
+- Runner:
+  - `research/mes_mgc_unfiltered_baseline_cross_family_v1.py`
+- Result:
+  - `docs/audit/results/2026-04-20-mes-mgc-unfiltered-baseline-cross-family-v1.md`
+
+### Canonical result
+
+- Instruments tested: MES, MGC
+- Entry model: E2, CB1; apertures 5/15/30; RR 1.0/1.5/2.0; pooled direction
+- K_family = 176 cells (MES=95, MGC=81, cells with N_IS≥100)
+- CANDIDATE_READY: **0**
+- RESEARCH_SURVIVOR: 0
+- KILL_IS: 176
+
+Every MES and MGC cell failed H1 (t ≥ +3.0 Chordia with-theory gate) at the
+family BH-FDR stage. The strongest MES cell in IS (`MES 15m CME_PRECLOSE RR=1.0`,
+N=180, ExpR=+0.1974) still did not clear t ≥ 3.0 after its own variance, and
+every other cell had |t| < 3 or negative ExpR.
+
+### Cross-instrument interpretation (pre-reg decision rule)
+
+Per the pre-reg family_summary:
+- "Zero CANDIDATE_READY on MES/MGC" = **"The unfiltered-baseline signal from
+  MNQ #51 does NOT generalise cross-instrument"**
+
+So the 5 MNQ CANDIDATE_READYs in PR #51 (5m RR=1.0/1.5 NYSE_OPEN; 15m RR=1.0
+NYSE_OPEN; 15m RR=1.0/1.5 US_DATA_1000) are **instrument-specific, not
+market-wide**. Any MES or MGC deployment must come from filtered overlays,
+not an unfiltered baseline.
+
+Sanity-verified against direct SQL: MES 5m RR=1.0 NYSE_OPEN scan reports
+N=1702, ExpR=+0.0032, t=+0.147 — canonical query reproduces exactly.
+
+### Updated queue
+
+1. Keep `H04` on its existing narrow shadow/deployment-shape path.
+2. Keep `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` short `F5_BELOW_PDL` as
+   `CONDITIONAL_UNVERIFIED` shadow-only.
+3. MNQ `US_DATA_1000` O5 long primary-route = `NOT_F6_INSIDE_PDR` (RESEARCH_SURVIVOR,
+   C8 fails on thin OOS) — next step is shadow design, not more broad scans.
+4. MES / MGC unfiltered baseline: **DEAD for discovery**. Future MES/MGC work
+   must start with a filter family (size, volatility, session, or level-based),
+   not an unfiltered sweep.
+5. Next autonomous candidate: MNQ filter-overlay family on the 5 PR #51
+   CANDIDATE_READY cells (do the deployed filters add or subtract from the
+   unfiltered baseline) — bounded follow-on that doesn't duplicate prior work.
+
 ## Update (2026-04-20 late-late-late — HTF branch closed: integrity repaired, simple v1 family dead)
 
 Follow-on to the "HTF thing" request. User wanted this handled as an
