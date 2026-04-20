@@ -1,0 +1,653 @@
+[
+  {
+    "cell_id": 5,
+    "lane": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5",
+    "variant": "ovn_only",
+    "G_sensitivity": {
+      "grid": [
+        {
+          "ovn_thr": 80.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 739,
+          "expr": 0.1672,
+          "t": 3.89
+        },
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 517,
+          "expr": 0.2099,
+          "t": 4.07
+        },
+        {
+          "ovn_thr": 120.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 367,
+          "expr": 0.2257,
+          "t": 3.67
+        }
+      ],
+      "sign_flip": false,
+      "pass": true
+    },
+    "H_null_bootstrap": {
+      "observed_variant_expr": 0.2099419729206963,
+      "null_mean": 0.09421564704061897,
+      "null_p95": 0.177185667311412,
+      "null_p05": 0.012087678916827868,
+      "p_boot": 0.01259748050389922,
+      "n_perms": 5000,
+      "block_size": 39,
+      "pass": true
+    },
+    "I_per_year_and_2019": {
+      "yearly": {
+        "2019": {
+          "n": 6,
+          "expr": -0.6321,
+          "t": -1.72
+        },
+        "2020": {
+          "n": 100,
+          "expr": 0.2719,
+          "t": 2.35
+        },
+        "2021": {
+          "n": 62,
+          "expr": 0.2203,
+          "t": 1.5
+        },
+        "2022": {
+          "n": 116,
+          "expr": 0.0051,
+          "t": 0.05
+        },
+        "2023": {
+          "n": 20,
+          "expr": -0.082,
+          "t": -0.32
+        },
+        "2024": {
+          "n": 70,
+          "expr": 0.3048,
+          "t": 2.18
+        },
+        "2025": {
+          "n": 143,
+          "expr": 0.358,
+          "t": 3.64
+        }
+      },
+      "positive_years": 5,
+      "negative_years": 0,
+      "full_is_n": 517,
+      "full_is_expr": 0.2099,
+      "full_is_t": 4.07,
+      "exclude_2019_n": 511,
+      "exclude_2019_expr": 0.2198,
+      "exclude_2019_t": 4.23,
+      "delta_excluding_2019": 0.0099,
+      "collapses_without_2019": false,
+      "pass_no_2019_dependence": true
+    },
+    "J_ovn_p75": {
+      "variant": "ovn_only",
+      "p75_fire_rate": 0.279,
+      "n": 385,
+      "expr": 0.216,
+      "t": 3.6,
+      "note": "IS-only rolling 252d percentile >= 75 substituted for OVN >= 100. First 252 days skipped (warmup). Compare to scan v1 OVN=100 absolute."
+    }
+  },
+  {
+    "cell_id": 6,
+    "lane": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5",
+    "variant": "xmes_only",
+    "G_sensitivity": {
+      "grid": [
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 54.0,
+          "lon_thr": 100.0,
+          "n": 761,
+          "expr": 0.1506,
+          "t": 3.57
+        },
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 682,
+          "expr": 0.1592,
+          "t": 3.57
+        },
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 66.0,
+          "lon_thr": 100.0,
+          "n": 585,
+          "expr": 0.1744,
+          "t": 3.61
+        }
+      ],
+      "sign_flip": false,
+      "pass": true
+    },
+    "H_null_bootstrap": {
+      "observed_variant_expr": 0.15915395894428153,
+      "null_mean": 0.09369186970674488,
+      "null_p95": 0.16634642228739005,
+      "null_p05": 0.0195858651026393,
+      "p_boot": 0.07178564287142572,
+      "n_perms": 5000,
+      "block_size": 39,
+      "pass": false
+    },
+    "I_per_year_and_2019": {
+      "yearly": {
+        "2019": {
+          "n": 23,
+          "expr": -0.0579,
+          "t": -0.25
+        },
+        "2020": {
+          "n": 138,
+          "expr": 0.0911,
+          "t": 0.93
+        },
+        "2021": {
+          "n": 57,
+          "expr": 0.3303,
+          "t": 2.17
+        },
+        "2022": {
+          "n": 150,
+          "expr": 0.0569,
+          "t": 0.59
+        },
+        "2023": {
+          "n": 32,
+          "expr": 0.0934,
+          "t": 0.45
+        },
+        "2024": {
+          "n": 149,
+          "expr": 0.1619,
+          "t": 1.7
+        },
+        "2025": {
+          "n": 133,
+          "expr": 0.3221,
+          "t": 3.13
+        }
+      },
+      "positive_years": 6,
+      "negative_years": 0,
+      "full_is_n": 682,
+      "full_is_expr": 0.1592,
+      "full_is_t": 3.57,
+      "exclude_2019_n": 659,
+      "exclude_2019_expr": 0.1667,
+      "exclude_2019_t": 3.67,
+      "delta_excluding_2019": 0.0076,
+      "collapses_without_2019": false,
+      "pass_no_2019_dependence": true
+    },
+    "J_ovn_p75": {
+      "skipped": "variant 'xmes_only' does not use OVN"
+    }
+  },
+  {
+    "cell_id": 7,
+    "lane": "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5",
+    "variant": "ovn_or_xmes",
+    "G_sensitivity": {
+      "grid": [
+        {
+          "ovn_thr": 80.0,
+          "xmes_thr": 54.0,
+          "lon_thr": 100.0,
+          "n": 1002,
+          "expr": 0.1308,
+          "t": 3.57
+        },
+        {
+          "ovn_thr": 80.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 964,
+          "expr": 0.1305,
+          "t": 3.49
+        },
+        {
+          "ovn_thr": 80.0,
+          "xmes_thr": 66.0,
+          "lon_thr": 100.0,
+          "n": 914,
+          "expr": 0.1347,
+          "t": 3.5
+        },
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 54.0,
+          "lon_thr": 100.0,
+          "n": 897,
+          "expr": 0.143,
+          "t": 3.68
+        },
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 844,
+          "expr": 0.1524,
+          "t": 3.81
+        },
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 66.0,
+          "lon_thr": 100.0,
+          "n": 781,
+          "expr": 0.1578,
+          "t": 3.78
+        },
+        {
+          "ovn_thr": 120.0,
+          "xmes_thr": 54.0,
+          "lon_thr": 100.0,
+          "n": 841,
+          "expr": 0.1488,
+          "t": 3.71
+        },
+        {
+          "ovn_thr": 120.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 780,
+          "expr": 0.1535,
+          "t": 3.68
+        },
+        {
+          "ovn_thr": 120.0,
+          "xmes_thr": 66.0,
+          "lon_thr": 100.0,
+          "n": 709,
+          "expr": 0.1627,
+          "t": 3.71
+        }
+      ],
+      "sign_flip": false,
+      "pass": true
+    },
+    "H_null_bootstrap": {
+      "observed_variant_expr": 0.15241836492890995,
+      "null_mean": 0.09369391654028436,
+      "null_p95": 0.15959121445497634,
+      "null_p05": 0.027536504739336512,
+      "p_boot": 0.0683863227354529,
+      "n_perms": 5000,
+      "block_size": 39,
+      "pass": false
+    },
+    "I_per_year_and_2019": {
+      "yearly": {
+        "2019": {
+          "n": 25,
+          "expr": -0.045,
+          "t": -0.2
+        },
+        "2020": {
+          "n": 162,
+          "expr": 0.1426,
+          "t": 1.58
+        },
+        "2021": {
+          "n": 90,
+          "expr": 0.1662,
+          "t": 1.37
+        },
+        "2022": {
+          "n": 172,
+          "expr": 0.0311,
+          "t": 0.35
+        },
+        "2023": {
+          "n": 52,
+          "expr": 0.0259,
+          "t": 0.16
+        },
+        "2024": {
+          "n": 164,
+          "expr": 0.1684,
+          "t": 1.86
+        },
+        "2025": {
+          "n": 179,
+          "expr": 0.3206,
+          "t": 3.64
+        }
+      },
+      "positive_years": 6,
+      "negative_years": 0,
+      "full_is_n": 844,
+      "full_is_expr": 0.1524,
+      "full_is_t": 3.81,
+      "exclude_2019_n": 819,
+      "exclude_2019_expr": 0.1584,
+      "exclude_2019_t": 3.89,
+      "delta_excluding_2019": 0.006,
+      "collapses_without_2019": false,
+      "pass_no_2019_dependence": true
+    },
+    "J_ovn_p75": {
+      "variant": "ovn_or_xmes",
+      "p75_fire_rate": 0.279,
+      "n": 804,
+      "expr": 0.1567,
+      "t": 3.81,
+      "note": "IS-only rolling 252d percentile >= 75 substituted for OVN >= 100. First 252 days skipped (warmup). Compare to scan v1 OVN=100 absolute."
+    }
+  },
+  {
+    "cell_id": 1,
+    "lane": "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5",
+    "variant": "ovn_only",
+    "G_sensitivity": {
+      "grid": [
+        {
+          "ovn_thr": 80.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 763,
+          "expr": 0.1356,
+          "t": 3.25
+        },
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 535,
+          "expr": 0.1776,
+          "t": 3.54
+        },
+        {
+          "ovn_thr": 120.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 376,
+          "expr": 0.1597,
+          "t": 2.65
+        }
+      ],
+      "sign_flip": false,
+      "pass": true
+    },
+    "H_null_bootstrap": {
+      "observed_variant_expr": 0.17757252336448598,
+      "null_mean": 0.0633679220186916,
+      "null_p95": 0.14649676635514017,
+      "null_p05": -0.018977009345794375,
+      "p_boot": 0.011197760447910418,
+      "n_perms": 5000,
+      "block_size": 39,
+      "pass": true
+    },
+    "I_per_year_and_2019": {
+      "yearly": {
+        "2019": {
+          "n": 6,
+          "expr": 0.4506,
+          "t": 0.98
+        },
+        "2020": {
+          "n": 101,
+          "expr": 0.0469,
+          "t": 0.41
+        },
+        "2021": {
+          "n": 67,
+          "expr": 0.2305,
+          "t": 1.64
+        },
+        "2022": {
+          "n": 121,
+          "expr": 0.1659,
+          "t": 1.54
+        },
+        "2023": {
+          "n": 20,
+          "expr": 0.3481,
+          "t": 1.38
+        },
+        "2024": {
+          "n": 74,
+          "expr": 0.2238,
+          "t": 1.65
+        },
+        "2025": {
+          "n": 146,
+          "expr": 0.1954,
+          "t": 2.02
+        }
+      },
+      "positive_years": 5,
+      "negative_years": 0,
+      "full_is_n": 535,
+      "full_is_expr": 0.1776,
+      "full_is_t": 3.54,
+      "exclude_2019_n": 529,
+      "exclude_2019_expr": 0.1745,
+      "exclude_2019_t": 3.45,
+      "delta_excluding_2019": -0.0031,
+      "collapses_without_2019": false,
+      "pass_no_2019_dependence": true
+    },
+    "J_ovn_p75": {
+      "variant": "ovn_only",
+      "p75_fire_rate": 0.282,
+      "n": 412,
+      "expr": 0.1808,
+      "t": 3.16,
+      "note": "IS-only rolling 252d percentile >= 75 substituted for OVN >= 100. First 252 days skipped (warmup). Compare to scan v1 OVN=100 absolute."
+    }
+  },
+  {
+    "cell_id": 10,
+    "lane": "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12",
+    "variant": "xmes_only",
+    "G_sensitivity": {
+      "grid": [
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 54.0,
+          "lon_thr": 100.0,
+          "n": 803,
+          "expr": 0.1137,
+          "t": 3.36
+        },
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 717,
+          "expr": 0.118,
+          "t": 3.29
+        },
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 66.0,
+          "lon_thr": 100.0,
+          "n": 613,
+          "expr": 0.109,
+          "t": 2.8
+        }
+      ],
+      "sign_flip": false,
+      "pass": true
+    },
+    "H_null_bootstrap": {
+      "observed_variant_expr": 0.11801659693165968,
+      "null_mean": 0.08259354025104604,
+      "null_p95": 0.1386402649930265,
+      "null_p05": 0.026253451882845197,
+      "p_boot": 0.14657068586282743,
+      "n_perms": 5000,
+      "block_size": 40,
+      "pass": false
+    },
+    "I_per_year_and_2019": {
+      "yearly": {
+        "2019": {
+          "n": 32,
+          "expr": -0.3041,
+          "t": -1.88
+        },
+        "2020": {
+          "n": 143,
+          "expr": 0.0383,
+          "t": 0.47
+        },
+        "2021": {
+          "n": 58,
+          "expr": 0.1393,
+          "t": 1.1
+        },
+        "2022": {
+          "n": 155,
+          "expr": 0.1087,
+          "t": 1.39
+        },
+        "2023": {
+          "n": 32,
+          "expr": 0.0265,
+          "t": 0.15
+        },
+        "2024": {
+          "n": 161,
+          "expr": 0.2639,
+          "t": 3.62
+        },
+        "2025": {
+          "n": 136,
+          "expr": 0.1516,
+          "t": 1.83
+        }
+      },
+      "positive_years": 6,
+      "negative_years": 1,
+      "full_is_n": 717,
+      "full_is_expr": 0.118,
+      "full_is_t": 3.29,
+      "exclude_2019_n": 685,
+      "exclude_2019_expr": 0.1377,
+      "exclude_2019_t": 3.76,
+      "delta_excluding_2019": 0.0197,
+      "collapses_without_2019": false,
+      "pass_no_2019_dependence": true
+    },
+    "J_ovn_p75": {
+      "skipped": "variant 'xmes_only' does not use OVN"
+    }
+  },
+  {
+    "cell_id": 13,
+    "lane": "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12",
+    "variant": "xmes_only",
+    "G_sensitivity": {
+      "grid": [
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 54.0,
+          "lon_thr": 100.0,
+          "n": 563,
+          "expr": 0.1727,
+          "t": 3.53
+        },
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 60.0,
+          "lon_thr": 100.0,
+          "n": 516,
+          "expr": 0.1763,
+          "t": 3.45
+        },
+        {
+          "ovn_thr": 100.0,
+          "xmes_thr": 66.0,
+          "lon_thr": 100.0,
+          "n": 459,
+          "expr": 0.1457,
+          "t": 2.69
+        }
+      ],
+      "sign_flip": false,
+      "pass": true
+    },
+    "H_null_bootstrap": {
+      "observed_variant_expr": 0.17628546511627907,
+      "null_mean": 0.12964670631782946,
+      "null_p95": 0.21431420542635668,
+      "null_p05": 0.04323489341085271,
+      "p_boot": 0.1803639272145571,
+      "n_perms": 5000,
+      "block_size": 30,
+      "pass": false
+    },
+    "I_per_year_and_2019": {
+      "yearly": {
+        "2019": {
+          "n": 9,
+          "expr": 0.2599,
+          "t": 0.65
+        },
+        "2020": {
+          "n": 108,
+          "expr": 0.3071,
+          "t": 2.77
+        },
+        "2021": {
+          "n": 46,
+          "expr": 0.1863,
+          "t": 1.1
+        },
+        "2022": {
+          "n": 129,
+          "expr": 0.1718,
+          "t": 1.67
+        },
+        "2023": {
+          "n": 8,
+          "expr": -0.1322,
+          "t": -0.31
+        },
+        "2024": {
+          "n": 92,
+          "expr": 0.1534,
+          "t": 1.27
+        },
+        "2025": {
+          "n": 124,
+          "expr": 0.0941,
+          "t": 0.89
+        }
+      },
+      "positive_years": 5,
+      "negative_years": 0,
+      "full_is_n": 516,
+      "full_is_expr": 0.1763,
+      "full_is_t": 3.45,
+      "exclude_2019_n": 507,
+      "exclude_2019_expr": 0.1748,
+      "exclude_2019_t": 3.39,
+      "delta_excluding_2019": -0.0015,
+      "collapses_without_2019": false,
+      "pass_no_2019_dependence": true
+    },
+    "J_ovn_p75": {
+      "skipped": "variant 'xmes_only' does not use OVN"
+    }
+  }
+]
