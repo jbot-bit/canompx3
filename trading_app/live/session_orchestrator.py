@@ -33,6 +33,7 @@ from trading_app.live.live_market_state import LiveORBBuilder
 from trading_app.live.performance_monitor import PerformanceMonitor, TradeRecord
 from trading_app.live.position_tracker import PositionState, PositionTracker
 from trading_app.live.trade_journal import TradeJournal, generate_trade_id
+from trading_app.paper_trade_store import PaperTradeRecord, write_completed_trade
 from trading_app.portfolio import Portfolio, PortfolioStrategy
 from trading_app.risk_manager import RiskLimits, RiskManager
 
@@ -214,6 +215,17 @@ class SessionOrchestrator:
 
         # Strategy lookup map for resolving entry_model from strategy_id on TradeEvents
         self._strategy_map: dict[str, PortfolioStrategy] = {s.strategy_id: s for s in self.portfolio.strategies}
+        self._lane_metadata_map: dict[str, dict] = {}
+        if portfolio is not None and portfolio.name.startswith("profile_"):
+            try:
+                from trading_app.prop_profiles import get_profile_lane_definitions
+
+                profile_id = portfolio.name.removeprefix("profile_")
+                self._lane_metadata_map = {
+                    lane["strategy_id"]: lane for lane in get_profile_lane_definitions(profile_id)
+                }
+            except Exception:
+                log.warning("Could not load profile lane metadata for attribution bridge", exc_info=True)
 
         # ORB cap map: orb_label -> max risk in points (risk management gate).
         # Values are compared against event.risk_points (stop distance, NOT raw ORB size).
@@ -1412,6 +1424,38 @@ class SessionOrchestrator:
         net_pts = gross_pts - self.cost_spec.friction_in_points
         return net_pts / risk_pts if risk_pts > 0 else 0.0
 
+    def _record_signal_event(
+        self,
+        *,
+        strategy_id: str,
+        event_type: str,
+        reason: str | None = None,
+        engine_price: float | None = None,
+        fill_price: float | None = None,
+        slippage_pts: float | None = None,
+        contracts: int = 1,
+        order_id: str | int | None = None,
+        trade_id: str | None = None,
+    ) -> None:
+        """Persist a durable event-level attribution record (fail-open)."""
+        try:
+            self.journal.record_signal_event(
+                trading_day=self.trading_day,
+                instrument=self.instrument,
+                strategy_id=strategy_id,
+                event_type=event_type,
+                reason=reason,
+                engine_price=engine_price,
+                fill_price=fill_price,
+                slippage_pts=slippage_pts,
+                contracts=contracts,
+                broker=self._broker_name,
+                order_id=order_id,
+                trade_id=trade_id,
+            )
+        except Exception:
+            log.critical("Signal event attribution FAILED for %s", strategy_id, exc_info=True)
+
     def _record_exit(
         self,
         event,
@@ -1466,11 +1510,13 @@ class SessionOrchestrator:
             log.warning(alert)
             self._notify(alert)
 
+        # Compute dollar P&L once so both journal + attribution bridge can reuse it.
+        risk_pts = event.risk_points or strategy.median_risk_points or 0.0
+        point_value = getattr(self.cost_spec, "point_value", None)
+        pnl_dollars = actual_r * risk_pts * point_value * event.contracts if risk_pts and point_value else None
+
         # Persist exit to trade journal (fail-open)
         if journal_trade_id:
-            # Compute dollar P&L for prop firm accounting
-            risk_pts = event.risk_points or strategy.median_risk_points or 0.0
-            pnl_dollars = actual_r * risk_pts * self.cost_spec.point_value * event.contracts if risk_pts else None
             self.journal.record_exit(
                 trade_id=journal_trade_id,
                 engine_exit=event.price,
@@ -1483,6 +1529,56 @@ class SessionOrchestrator:
                 order_id_exit=order_id_exit,
                 cusum_alarm=alert is not None,
             )
+
+        lane_meta = getattr(self, "_lane_metadata_map", {}).get(event.strategy_id)
+        if lane_meta is None:
+            # The paper_trades bridge is only canonical for profile-backed live books.
+            # Test harnesses and non-profile portfolios should not write synthetic rows.
+            self._safety_state.daily_pnl_r = self.engine.daily_pnl_r
+            self._safety_state.trading_day = str(self.trading_day)
+            self._safety_state.save()
+            return
+
+        risk_pts = event.risk_points or strategy.median_risk_points or 0.0
+        mult = getattr(strategy, "stop_multiplier", 1.0) or 1.0
+        stop_dist = risk_pts * mult if risk_pts else None
+        sign = 1 if event.direction == "long" else -1
+        stop_price = entry_price - sign * stop_dist if stop_dist is not None else None
+        target_price = entry_price + sign * stop_dist * strategy.rr_target if stop_dist is not None else None
+        tick_size = getattr(self.cost_spec, "tick_size", None)
+        slippage_ticks = slippage_pts / tick_size if tick_size else 0.0
+        execution_source = "shadow" if self.signal_only else "live"
+        notes = f"mode={execution_source}; broker={self._broker_name}; trade_id={journal_trade_id or ''}"
+        try:
+            write_completed_trade(
+                PaperTradeRecord(
+                    trading_day=self.trading_day,
+                    orb_label=strategy.orb_label,
+                    entry_time=event.timestamp,
+                    direction=event.direction,
+                    entry_price=entry_price,
+                    stop_price=stop_price,
+                    target_price=target_price,
+                    exit_price=exit_price,
+                    exit_time=event.timestamp,
+                    exit_reason=event.event_type.lower(),
+                    pnl_r=actual_r,
+                    slippage_ticks=round(slippage_ticks, 4),
+                    strategy_id=event.strategy_id,
+                    lane_name=(lane_meta or {}).get("lane_name", strategy.orb_label),
+                    instrument=strategy.instrument,
+                    orb_minutes=(lane_meta or {}).get("orb_minutes", strategy.orb_minutes),
+                    rr_target=(lane_meta or {}).get("rr_target", strategy.rr_target),
+                    filter_type=(lane_meta or {}).get("filter_type", strategy.filter_type),
+                    entry_model=(lane_meta or {}).get("entry_model", strategy.entry_model),
+                    execution_source=execution_source,
+                    pnl_dollar=pnl_dollars,
+                    notes=notes,
+                ),
+                db_path=GOLD_DB_PATH,
+            )
+        except Exception:
+            log.critical("paper_trades live attribution FAILED for %s", event.strategy_id, exc_info=True)
 
         # Persist daily P&L for crash recovery (daily loss circuit breaker)
         self._safety_state.daily_pnl_r = self.engine.daily_pnl_r
@@ -1697,6 +1793,13 @@ class SessionOrchestrator:
                 log.critical(msg)
                 self._notify(msg)
                 self._write_signal_record({"type": record_type, "strategy_id": event.strategy_id, "reason": reason})
+                self._record_signal_event(
+                    strategy_id=event.strategy_id,
+                    event_type=record_type,
+                    reason=reason,
+                    engine_price=event.price,
+                    contracts=event.contracts,
+                )
                 return
 
             # ORB cap check — risk management gate (prevents oversized trades).
@@ -1720,6 +1823,13 @@ class SessionOrchestrator:
                             "risk_pts": event.risk_points,
                             "cap_pts": orb_cap,
                         }
+                    )
+                    self._record_signal_event(
+                        strategy_id=event.strategy_id,
+                        event_type="ORB_CAP_SKIP",
+                        reason=f"risk_pts={event.risk_points} >= cap_pts={orb_cap}",
+                        engine_price=event.price,
+                        contracts=event.contracts,
                     )
                     return
 
@@ -1745,6 +1855,13 @@ class SessionOrchestrator:
                             "cap_dollars": self._max_risk_per_trade,
                         }
                     )
+                    self._record_signal_event(
+                        strategy_id=event.strategy_id,
+                        event_type="MAX_RISK_SKIP",
+                        reason=f"risk_dollars={risk_dollars:.2f} > cap_dollars={self._max_risk_per_trade:.2f}",
+                        engine_price=event.price,
+                        contracts=event.contracts,
+                    )
                     return
 
             # HWM DD halt gate — fail-closed on prop accounts.
@@ -1760,6 +1877,13 @@ class SessionOrchestrator:
                     )
                     self._notify(f"ENTRY BLOCKED (DD HALT): {event.strategy_id} — {reason}")
                     self._write_signal_record({"type": "ENTRY_BLOCKED_DD_HALT", "strategy_id": event.strategy_id})
+                    self._record_signal_event(
+                        strategy_id=event.strategy_id,
+                        event_type="ENTRY_BLOCKED_DD_HALT",
+                        reason=reason,
+                        engine_price=event.price,
+                        contracts=event.contracts,
+                    )
                     return
 
             # Regime gate — block entries for strategies paused by allocator.
@@ -1771,6 +1895,13 @@ class SessionOrchestrator:
                     event.strategy_id,
                 )
                 self._write_signal_record({"type": "REGIME_PAUSED", "strategy_id": event.strategy_id})
+                self._record_signal_event(
+                    strategy_id=event.strategy_id,
+                    event_type="REGIME_PAUSED",
+                    reason="allocator paused session regime",
+                    engine_price=event.price,
+                    contracts=event.contracts,
+                )
                 return
 
             if self.signal_only:
@@ -1779,6 +1910,13 @@ class SessionOrchestrator:
                 )
                 if record is None:
                     log.warning("Duplicate entry REJECTED for %s (signal-only)", event.strategy_id)
+                    self._record_signal_event(
+                        strategy_id=event.strategy_id,
+                        event_type="ENTRY_REJECTED_DUPLICATE",
+                        reason="signal-only duplicate active position",
+                        engine_price=event.price,
+                        contracts=event.contracts,
+                    )
                     return
                 log.info(
                     "⚡ SIGNAL [%s]: %s %s @ %.2f  ← trade this manually on Tradovate/TradingView",
@@ -1799,6 +1937,13 @@ class SessionOrchestrator:
                     entry_model=strategy.entry_model,
                     engine_entry=event.price,
                     contracts=event.contracts,
+                )
+                self._record_signal_event(
+                    strategy_id=event.strategy_id,
+                    event_type="ENTRY_SIGNALLED",
+                    engine_price=event.price,
+                    contracts=event.contracts,
+                    trade_id=trade_id,
                 )
 
                 self._write_signal_record(
@@ -1823,6 +1968,13 @@ class SessionOrchestrator:
                 log.critical("CIRCUIT BREAKER OPEN — skipping ENTRY for %s", event.strategy_id)
                 self._notify(f"CIRCUIT BREAKER OPEN — skipping ENTRY for {event.strategy_id}")
                 self._write_signal_record({"type": "CIRCUIT_BREAKER", "strategy_id": event.strategy_id})
+                self._record_signal_event(
+                    strategy_id=event.strategy_id,
+                    event_type="ENTRY_BLOCKED_CIRCUIT_BREAKER",
+                    reason="circuit breaker open",
+                    engine_price=event.price,
+                    contracts=event.contracts,
+                )
                 return
 
             # Post-market buffer: block entries within 10 minutes of firm close
@@ -1831,6 +1983,13 @@ class SessionOrchestrator:
                 msg = f"POST-MARKET BUFFER: skipping ENTRY for {event.strategy_id} ({mins_to_close:.0f}min to close)"
                 log.warning(msg)
                 self._notify(msg)
+                self._record_signal_event(
+                    strategy_id=event.strategy_id,
+                    event_type="ENTRY_BLOCKED_POST_MARKET_BUFFER",
+                    reason=f"{mins_to_close:.0f}min_to_close",
+                    engine_price=event.price,
+                    contracts=event.contracts,
+                )
                 return
 
             # Check position tracker BEFORE broker submit — reject duplicates
@@ -1840,6 +1999,13 @@ class SessionOrchestrator:
             )
             if pre_record is None:
                 log.warning("Duplicate entry REJECTED for %s — not submitting to broker", event.strategy_id)
+                self._record_signal_event(
+                    strategy_id=event.strategy_id,
+                    event_type="ENTRY_REJECTED_DUPLICATE",
+                    reason="duplicate active position before broker submit",
+                    engine_price=event.price,
+                    contracts=event.contracts,
+                )
                 return
 
             spec = self.order_router.build_order_spec(
@@ -1910,6 +2076,13 @@ class SessionOrchestrator:
             except Exception as e:
                 self._circuit_breaker.record_failure()
                 log.error("ENTRY order failed for %s: %s", event.strategy_id, e)
+                self._record_signal_event(
+                    strategy_id=event.strategy_id,
+                    event_type="ENTRY_SUBMIT_FAILED",
+                    reason=str(e),
+                    engine_price=event.price,
+                    contracts=event.contracts,
+                )
                 # Rollback position tracker — order never reached broker.
                 # Safe: single event loop + GIL means no concurrent modification.
                 self._positions.pop(event.strategy_id)
@@ -1956,6 +2129,16 @@ class SessionOrchestrator:
                 broker=self._broker_name,
                 order_id_entry=order_id,
                 contracts=event.contracts,
+            )
+            self._record_signal_event(
+                strategy_id=event.strategy_id,
+                event_type="ENTRY_FILLED" if fill_price is not None else "ENTRY_SUBMITTED",
+                engine_price=event.price,
+                fill_price=fill_price,
+                slippage_pts=(fill_price - event.price) if fill_price is not None else None,
+                contracts=event.contracts,
+                order_id=order_id,
+                trade_id=trade_id,
             )
 
             self._write_signal_record(
@@ -2169,6 +2352,13 @@ class SessionOrchestrator:
                     "reason": getattr(event, "reason", ""),
                 }
             )
+            self._record_signal_event(
+                strategy_id=event.strategy_id,
+                event_type="ENTRY_REJECTED",
+                reason=getattr(event, "reason", ""),
+                engine_price=event.price,
+                contracts=event.contracts,
+            )
 
     # Kill switch: emergency flatten if feed dies with open positions.
     # 5 minutes of silence = assume feed is dead. This is the last line of defense.
@@ -2360,10 +2550,34 @@ class SessionOrchestrator:
                                         trade_id=record.journal_trade_id,
                                         fill_entry=fill_price,
                                     )
+                                self._record_signal_event(
+                                    strategy_id=record.strategy_id,
+                                    event_type="ENTRY_FILLED",
+                                    engine_price=record.engine_entry_price,
+                                    fill_price=fill_price,
+                                    slippage_pts=(
+                                        fill_price - record.engine_entry_price
+                                        if record.engine_entry_price is not None
+                                        else None
+                                    ),
+                                    contracts=record.contracts,
+                                    order_id=record.entry_order_id,
+                                    trade_id=record.journal_trade_id,
+                                )
                             log.info("Fill confirmed for %s: %s", record.strategy_id, status)
                             self._stats.fill_polls_confirmed += 1
                         elif status["status"] in ("Cancelled", "Rejected"):
                             self._positions.pop(record.strategy_id)
+                            event_type = "ENTRY_CANCELLED" if status["status"] == "Cancelled" else "ENTRY_REJECTED"
+                            self._record_signal_event(
+                                strategy_id=record.strategy_id,
+                                event_type=event_type,
+                                reason=str(status),
+                                engine_price=record.engine_entry_price,
+                                contracts=record.contracts,
+                                order_id=record.entry_order_id,
+                                trade_id=record.journal_trade_id,
+                            )
                             # R2-C3: notify engine to remove ghost trade from active_trades.
                             # Without this, the engine keeps emitting EXIT events for a
                             # position that was never filled at the broker.

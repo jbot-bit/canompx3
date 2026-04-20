@@ -1,0 +1,75 @@
+# Hypothesis Registry — 2026-04-20 scale-ready-gate-audit
+#
+# Locked: 2026-04-20T15:15:00+10:00
+# Author: codex
+# Purpose: define a fail-closed audit for whether the current live book is allowed
+# to scale beyond `copies=2`.
+
+metadata:
+  name: "scale-ready-gate-audit"
+  purpose: |
+    Replace the undefined "proving loop" note on `topstep_50k_mnq_auto` with an
+    explicit audit gate that can return READY / CONDITIONALLY_READY / NOT_READY.
+  date_locked: "2026-04-20T15:15:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 4
+  testing_mode: "confirmatory"
+  scope: "governance_gate"
+
+authority:
+  proof_hierarchy:
+    - "current code / current files"
+    - "direct command output"
+    - "paper_trades and current control surfaces"
+    - "verbatim local resource text"
+  non_trusted_as_evidence:
+    - "comment-only aspirations"
+    - "allocator arithmetic alone"
+    - "FIT labels alone"
+
+hypotheses:
+  - id: 1
+    name: "Current-lane realized attribution exists and is sufficient for mechanism review"
+    scope:
+      tables: ["paper_trades"]
+      current_book: "docs/runtime/lane_allocation.json"
+    expected_trial_count: 1
+    kill_criteria:
+      - "zero current-lane rows → NOT_READY"
+
+  - id: 2
+    name: "Operator truth surfaces are healthy"
+    scope:
+      files:
+        - "trading_app/prop_portfolio.py"
+        - "TRADING_RULES.md"
+        - "trading_app/prop_profiles.py"
+        - "docs/runtime/lane_allocation.json"
+    expected_trial_count: 1
+    kill_criteria:
+      - "portfolio resolver fails → NOT_READY"
+      - "live doctrine contradicts code/JSON → NOT_READY"
+
+  - id: 3
+    name: "Scale-blocking cost and exposure debt is closed"
+    scope:
+      sources:
+        - "docs/runtime/debt-ledger.md"
+        - "TRADING_RULES.md correlation guard"
+    expected_trial_count: 1
+    kill_criteria:
+      - "deployed-session slippage debt still open → CONDITIONALLY_READY at best"
+      - "corr_lookup still empty for scale decision → CONDITIONALLY_READY at best"
+
+  - id: 4
+    name: "Current book is not being presented beyond its evidence class"
+    scope:
+      policy_files:
+        - "RESEARCH_RULES.md"
+        - "docs/institutional/pre_registered_criteria.md"
+    expected_trial_count: 1
+    kill_criteria:
+      - "book remains research-provisional with no clean Mode A re-audit path → NOT_READY"
+
+total_hypothesis_count: 4
+total_expected_trials: 4

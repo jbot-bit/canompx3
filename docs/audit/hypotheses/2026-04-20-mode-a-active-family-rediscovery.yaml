@@ -1,0 +1,66 @@
+# Hypothesis Registry — 2026-04-20 mode-a-active-family-rediscovery
+#
+# Locked: 2026-04-20T15:30:00+10:00
+# Author: codex
+# Purpose: pre-register the clean Mode A rediscovery of the currently active live
+# families only. No broadened search allowed.
+
+metadata:
+  name: "mode-a-active-family-rediscovery"
+  purpose: |
+    Re-run clean Mode A rediscovery for the currently active live families only,
+    using the sacred `2026-01-01` holdout boundary. This is not an open-ended
+    discovery expansion. It is a provenance-repair check on the actual live book.
+  date_locked: "2026-04-20T15:30:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 24
+  data_source_mode: "clean"
+  testing_mode: "confirmatory"
+  scope: "active_live_families_only"
+
+authority:
+  proof_hierarchy:
+    - "canonical discovery layers only: orb_outcomes, daily_features, bars_1m"
+    - "current code / canonical filter implementations"
+    - "verbatim local resource text"
+  non_trusted_as_evidence:
+    - "validated_setups as discovery truth"
+    - "lane_allocation.json as proof of edge"
+    - "2026 in-scope selection"
+
+minbtl_check:
+  trials_N: 24
+  e_max_N_floor: 1.0
+  minbtl_years_required: 6.356
+  data_years_available: 6.65
+  status: "WITHIN_BOUND"
+
+hypotheses:
+  - id: 1
+    name: "The active 6 family definitions survive clean Mode A rediscovery unchanged"
+    theory_citation: |
+      Lopez de Prado (2020) verbatim: backtests cannot prove a strategy is a true
+      positive; theories must lead. Bailey et al. (2013) verbatim: hidden trial
+      counts and overfitting mislead capital allocation.
+    economic_basis: |
+      The current live families are already the deployed candidates. The honest
+      question is not "what else wins?" but "do these exact families survive when
+      rediscovered under the clean-holdout protocol they were supposed to meet?"
+    scope:
+      families:
+        - "MNQ EUROPE_FLOW E2 ORB_G5 RR1.5"
+        - "MNQ SINGAPORE_OPEN E2 ATR_P50_O15 RR1.5"
+        - "MNQ COMEX_SETTLE E2 ORB_G5 RR1.5"
+        - "MNQ NYSE_OPEN E2 COST_LT12 RR1.0"
+        - "MNQ TOKYO_OPEN E2 COST_LT12 RR1.5"
+        - "MNQ US_DATA_1000 E2 ORB_G5_O15 RR1.5"
+      trials_per_family: 4
+      total_trials: 24
+    expected_trial_count: 24
+    kill_criteria:
+      - "family not rediscovered under clean Mode A → current live family remains provisional"
+      - "family rediscovered only with materially different thresholds / RR / structure → current live family remains provisional"
+      - "any use of 2026 data in selection → audit invalid"
+
+total_hypothesis_count: 1
+total_expected_trials: 24

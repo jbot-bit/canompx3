@@ -4,6 +4,186 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 evening — audit-of-audit completed; Phase 2 instrumentation landed and verified)
+
+This worktree was re-audited before further edits because the user explicitly questioned whether Codex had enough repo awareness to modify canonical truth safely.
+
+### Hard correction that survived re-audit
+
+- Earlier audit language implying `trading_app/prop_portfolio.py` was currently broken was false.
+- Fresh direct verification in this worktree showed:
+  - `python3 -m py_compile trading_app/prop_portfolio.py` -> PASS
+  - `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m trading_app.prop_portfolio --help` -> PASS
+  - `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_trading_app/test_prop_portfolio.py -q` -> `46 passed`
+- Phase 1 truth-surface repair was therefore kept, but the false runtime-failure claim was removed from audit outputs.
+
+### Phase 1 truth-surface repair status
+
+- `TRADING_RULES.md`
+  - live-book section now matches the current allocator-driven 6-lane MNQ live book
+  - explicit distinction added:
+    - operationally active / deployable
+    - research-provisional
+    - not institutional proof
+- `trading_app/prop_profiles.py`
+  - active profile notes no longer hardcode a stale live lane count
+- `RESEARCH_RULES.md`
+  - current-language deployed-lane wording no longer hardcodes a stale count
+
+Verification:
+- `python3 -m py_compile trading_app/prop_profiles.py trading_app/prop_portfolio.py` -> PASS
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_trading_app/test_prop_profiles.py tests/test_trading_app/test_prop_portfolio.py -q` -> `107 passed`
+
+### Phase 2 live-attribution instrumentation status
+
+What landed:
+- new shared store:
+  - `trading_app/paper_trade_store.py`
+- backfill hardening:
+  - `trading_app/paper_trade_logger.py`
+  - modeled backfill rows can no longer overwrite real `live` / `shadow` rows
+- manual live logger routed through shared helper:
+  - `trading_app/log_trade.py`
+- durable signal-event journal:
+  - `trading_app/live/trade_journal.py`
+  - new table `live_signal_events`
+- live orchestrator bridge:
+  - `trading_app/live/session_orchestrator.py`
+  - completed profile-backed exits now bridge into `paper_trades`
+  - skip/reject/submitted/filled outcomes now persist to `live_signal_events`
+
+Important hardening decision:
+- `paper_trade_store.write_completed_trade(...)` no longer assumes a pre-migrated DB via `init_trading_app_schema()`.
+- It now ensures the `paper_trades` schema it actually needs directly.
+- This removed a hidden coupling to unrelated canonical tables like `daily_features` when bootstrapping a fresh DB for tests or isolated use.
+
+### Verification runbook and results
+
+Commands run:
+- `python3 -m py_compile trading_app/paper_trade_store.py trading_app/paper_trade_logger.py trading_app/log_trade.py trading_app/live/trade_journal.py trading_app/live/session_orchestrator.py tests/test_trading_app/test_paper_trade_store.py tests/test_trading_app/test_trade_journal.py tests/test_trading_app/test_session_orchestrator.py`
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_trading_app/test_paper_trade_store.py tests/test_trading_app/test_trade_journal.py tests/test_trading_app/test_session_orchestrator.py tests/test_trading_app/test_paper_trade_logger.py -q`
+  - result: `170 passed`
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_trading_app/test_paper_trade_store.py tests/test_trading_app/test_trade_journal.py tests/test_trading_app/test_session_orchestrator.py tests/test_trading_app/test_paper_trade_logger.py tests/test_trading_app/test_prop_profiles.py tests/test_trading_app/test_prop_portfolio.py -q`
+  - result: `277 passed`
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m ruff check trading_app/paper_trade_store.py trading_app/paper_trade_logger.py trading_app/log_trade.py trading_app/live/trade_journal.py trading_app/live/session_orchestrator.py tests/test_trading_app/test_paper_trade_store.py tests/test_trading_app/test_trade_journal.py tests/test_trading_app/test_session_orchestrator.py tests/test_trading_app/test_paper_trade_logger.py tests/test_trading_app/test_prop_profiles.py tests/test_trading_app/test_prop_portfolio.py`
+  - result: `All checks passed`
+
+### What is still blocked
+
+- Phase 2 gate is not complete yet in the audit sense.
+- Current 6 strategy IDs still have no realized rows in `paper_trades`.
+- The instrumentation path is now implemented and verified, but first real runtime rows are still required.
+
+### Next operator / audit surface now implemented
+
+- new read-only report:
+  - `scripts/tools/live_attribution_report.py`
+- locked first mechanism-audit pre-reg:
+  - `docs/audit/hypotheses/2026-04-20-first-live-mechanism-audit.yaml`
+- canonical pre-session warning:
+  - `trading_app/pre_session_check.py`
+  - warns when current session lane(s) still have zero event rows and zero live/shadow completed rows
+
+Verification:
+- `python3 -m py_compile scripts/tools/live_attribution_report.py tests/test_tools/test_live_attribution_report.py` -> PASS
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_tools/test_live_attribution_report.py -q` -> `2 passed`
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m ruff check scripts/tools/live_attribution_report.py tests/test_tools/test_live_attribution_report.py` -> `All checks passed`
+- `python3 -m py_compile trading_app/pre_session_check.py tests/test_trading_app/test_pre_session_check.py` -> PASS
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_trading_app/test_pre_session_check.py -q` -> `33 passed`
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m ruff check trading_app/pre_session_check.py tests/test_trading_app/test_pre_session_check.py` -> `All checks passed`
+
+Command Claude should run once real rows start arriving:
+
+```bash
+/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python scripts/tools/live_attribution_report.py \
+  --allocation-path docs/runtime/lane_allocation.json \
+  --db-path /mnt/c/Users/joshd/canompx3/gold.db \
+  --journal-path /mnt/c/Users/joshd/canompx3/live_journal.db
+```
+
+Smoke-run note:
+- Running pre-session in the worktree requires canonical DB override because this worktree does not carry its own `gold.db`.
+- Verified command:
+```bash
+DUCKDB_PATH=/mnt/c/Users/joshd/canompx3/gold.db \
+/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m trading_app.pre_session_check \
+  --session NYSE_OPEN --profile topstep_50k_mnq_auto
+```
+- Output included:
+  - `WARN: no live attribution evidence yet for current lane(s): NYSE_OPEN`
+  - plus independent genuine NO-GO blockers already present (`Data stale`, `Criterion 11 survival`)
+
+### Next admissible move
+
+- Stop here on implementation.
+- Next step is runtime collection / first mechanism-audit pass once real rows exist for the current 6 strategy IDs.
+- Only after that:
+  - Phase 3 scale-ready gate
+  - Phase 4 cost/risk closure
+  - Phase 5 clean Mode A rediscovery
+
+## Update (2026-04-20 afternoon — live-book re-audit worktree; second-pass verdict tightened)
+
+Isolated worktree created at `/tmp/canompx3-live-book-reaudit` on branch `codex/live-book-reaudit` to avoid touching the user's active checkout.
+
+### What landed
+
+- Re-audit result doc:
+  - `docs/audit/results/2026-04-20-live-book-truth-status-reaudit-v2.md`
+- Locked next-phases plan:
+  - `docs/plans/2026-04-20-live-book-next-phases.md`
+- Locked scale gate pre-reg:
+  - `docs/audit/hypotheses/2026-04-20-scale-ready-gate-audit.yaml`
+- Locked live-attribution pre-reg:
+  - `docs/audit/hypotheses/2026-04-20-live-attribution-restoration-audit.yaml`
+- Locked clean Mode A rediscovery pre-reg:
+  - `docs/audit/hypotheses/2026-04-20-mode-a-active-family-rediscovery.yaml`
+
+### What changed vs the first audit
+
+- The first pass was directionally right but still gave the scale thesis too much room.
+- The second pass tightened the line:
+  - `under-deployed` remains true only in arithmetic terms
+  - `scale is the highest-confidence lever` is **killed**
+  - `discovery is not the main issue` is **killed**
+  - clean Mode A rediscovery of active families is back on the critical path
+
+### Direct proof that survived
+
+- Active profile is still `topstep_50k_mnq_auto` at `copies=2`, `stop_multiplier=0.75`, allocator-driven
+- Current allocation is 6 MNQ lanes
+- `paper_trades` has zero rows for those 6 current strategy IDs
+- `trading_app/prop_portfolio.py` is currently healthy:
+  - `python3 -m py_compile trading_app/prop_portfolio.py` passes
+  - `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m trading_app.prop_portfolio --help` passes
+  - `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_trading_app/test_prop_portfolio.py -q` passes (`46 passed`)
+- Phase 1 truth-surface repair completed:
+  - `TRADING_RULES.md` live-book section now matches the current 6-lane MNQ allocator book
+  - `trading_app/prop_profiles.py` active-profile notes no longer hardcode a stale live lane count
+  - `RESEARCH_RULES.md` current-language deployed-lane wording no longer hardcodes a stale count
+- `corr_lookup` is still empty in doctrine / runtime discussion
+- Current active validated set count = 38, discovery dates `2026-04-11` to `2026-04-13`
+- Current 6 lanes still resolve `FIT` under `strategy_fitness`, but that was explicitly downgraded to monitoring-only evidence, not proof
+
+### Important implication
+
+- No honest path exists from current evidence to "scale now".
+- Next executable order is:
+  1. truth-surface repair
+  2. live attribution restoration
+  3. scale-ready gate
+  4. cost / risk closure
+  5. clean Mode A rediscovery
+
+### Worktree environment note
+
+- This isolated worktree does **not** carry its own `gold.db` file or fully bootstrapped `.venv-wsl`.
+- DB-backed checks in this re-audit were pointed explicitly at the canonical database:
+  - `/mnt/c/Users/joshd/canompx3/gold.db`
+- Python checks that needed repo dependencies used:
+  - `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python`
+- Do not assume `/tmp/canompx3-live-book-reaudit` is self-contained for runtime or DB access without additional setup.
+
 ## Update (2026-04-20 late — MNQ TBBO pilot LANDED; closure = conservative vs modeled)
 
 Follow-on to the evening H0 rerun + MNQ pilot blocker. User direction: "proper planning, no ad-hoc." Plan v2 audited, approved, executed end-to-end across 4 stages.

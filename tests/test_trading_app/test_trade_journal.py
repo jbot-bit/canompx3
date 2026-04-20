@@ -35,6 +35,7 @@ class TestTradeJournalInit:
         con = duckdb.connect(str(journal_path))
         tables = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
         assert "live_trades" in tables
+        assert "live_signal_events" in tables
         con.close()
         j.close()
 
@@ -201,6 +202,41 @@ class TestRecordExit:
         row = journal._con.execute("SELECT exit_reason, actual_r FROM live_trades WHERE trade_id = ?", [tid]).fetchone()
         assert row[0] == "scratch"
         assert row[1] == pytest.approx(-0.15)
+
+
+class TestSignalEvents:
+    def test_record_signal_event_persists_row(self, journal):
+        journal.record_signal_event(
+            trading_day=date(2026, 3, 14),
+            instrument="MNQ",
+            strategy_id="mnq_test_strat",
+            event_type="ENTRY_BLOCKED_CIRCUIT_BREAKER",
+            reason="circuit breaker open",
+            engine_price=19500.0,
+            contracts=2,
+            broker="tradovate",
+            order_id=12345,
+            trade_id="trade-1",
+        )
+
+        row = journal._con.execute(
+            """
+            SELECT strategy_id, event_type, reason, engine_price, contracts, broker, order_id, trade_id, session_mode
+            FROM live_signal_events
+            """
+        ).fetchone()
+
+        assert row == (
+            "mnq_test_strat",
+            "ENTRY_BLOCKED_CIRCUIT_BREAKER",
+            "circuit breaker open",
+            19500.0,
+            2,
+            "tradovate",
+            "12345",
+            "trade-1",
+            "test",
+        )
 
 
 class TestDailySummary:

@@ -211,6 +211,7 @@ def build_orchestrator(components: FakeBrokerComponents | None = None) -> Sessio
     orch.auth = c.auth
     orch.portfolio = portfolio
     orch._strategy_map = {s.strategy_id: s for s in portfolio.strategies}
+    orch._lane_metadata_map = {}
     orch.cost_spec = MagicMock()
     orch.cost_spec.friction_in_points = 0.5
     orch.risk_mgr = MagicMock()
@@ -929,6 +930,7 @@ class TestCircuitBreaker:
         orch._write_signal_record.assert_called()
         call_args = orch._write_signal_record.call_args[0][0]
         assert call_args["type"] == "CIRCUIT_BREAKER"
+        assert orch.journal.record_signal_event.call_args.kwargs["event_type"] == "ENTRY_BLOCKED_CIRCUIT_BREAKER"
 
     async def test_circuit_breaker_allows_exit_even_when_open(self):
         """Circuit breaker open must NOT block exits — can't leave positions open."""
@@ -1027,6 +1029,30 @@ class TestNotifications:
         orch._record_exit(event, entry_price=2350.5)
 
         orch._notify.assert_called_once_with("CUSUM ALARM: test_strat")
+
+    @patch("trading_app.live.session_orchestrator.write_completed_trade")
+    def test_record_exit_bridges_profile_lane_to_paper_trades(self, mock_write):
+        orch = build_orchestrator()
+        orch._lane_metadata_map = {
+            STRATEGY_ID: {
+                "lane_name": "CME_REOPEN_test",
+                "orb_minutes": 5,
+                "rr_target": 2.0,
+                "filter_type": "ORB_G5",
+                "entry_model": "E2",
+            }
+        }
+        orch.cost_spec.point_value = 10.0
+        orch.cost_spec.tick_size = 0.1
+
+        event = _exit_event(price=2355.0, pnl_r=1.5)
+        orch._record_exit(event, entry_price=2350.5, journal_trade_id="trade-123")
+
+        mock_write.assert_called_once()
+        record = mock_write.call_args.args[0]
+        assert record.strategy_id == STRATEGY_ID
+        assert record.execution_source == "live"
+        assert record.pnl_r == 1.5
 
     def test_notify_skips_when_no_telegram(self):
         """_notify() is a no-op when telegram module unavailable."""
@@ -2001,6 +2027,8 @@ class TestReserveThenSubmit:
         await orch._handle_event(_entry_event(2355.0))
         # Price unchanged — still first entry
         assert orch._positions.get(STRATEGY_ID).engine_entry_price == 2350.5
+        signal_calls = orch.journal.record_signal_event.call_args_list
+        assert signal_calls[-1].kwargs["event_type"] == "ENTRY_REJECTED_DUPLICATE"
 
 
 # ---------------------------------------------------------------------------
@@ -2033,6 +2061,7 @@ class TestFillPoller:
         record = orch._positions.get(STRATEGY_ID)
         assert record is not None
         assert record.fill_entry_price == 2350.5
+        assert orch.journal.record_signal_event.call_args.kwargs["event_type"] == "ENTRY_FILLED"
 
     async def test_cancelled_order_popped(self):
         """Cancelled order -> position removed from tracker."""
@@ -2054,6 +2083,7 @@ class TestFillPoller:
 
         # Position should be removed
         assert orch._positions.get(STRATEGY_ID) is None
+        assert orch.journal.record_signal_event.call_args.kwargs["event_type"] == "ENTRY_CANCELLED"
 
     async def test_poller_survives_query_failure(self):
         """query_order_status raises -> poller continues polling."""
@@ -2668,6 +2698,7 @@ class TestOrbCapGate:
         assert record["type"] == "ORB_CAP_SKIP"
         assert record["risk_pts"] == 200.0
         assert record["cap_pts"] == 150.0
+        assert orch.journal.record_signal_event.call_args.kwargs["event_type"] == "ORB_CAP_SKIP"
 
 
 @pytest.mark.asyncio

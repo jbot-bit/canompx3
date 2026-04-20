@@ -1,0 +1,77 @@
+# Hypothesis Registry — 2026-04-20 first-live-mechanism-audit
+#
+# Locked: 2026-04-20T21:40:00+10:00
+# Author: codex
+# Purpose: define the first admissible mechanism-audit pass once the new
+# Phase 2 attribution path begins producing real rows.
+
+metadata:
+  name: "first-live-mechanism-audit"
+  purpose: |
+    Establish a fail-closed, resource-grounded first mechanism audit for the
+    current allocator-managed live book using:
+    - `docs/runtime/lane_allocation.json`
+    - `paper_trades`
+    - `live_signal_events`
+    - `validated_setups` as modeled comparator only
+  date_locked: "2026-04-20T21:40:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 4
+  testing_mode: "confirmatory"
+  scope: "live_mechanism_review"
+
+authority:
+  proof_hierarchy:
+    - "current code / current files"
+    - "direct command output"
+    - "paper_trades and live_signal_events"
+    - "verbatim local resource text"
+  non_trusted_as_evidence:
+    - "allocator arithmetic alone"
+    - "validated_setups presented as live truth"
+    - "event rows without current-book strategy_id linkage"
+
+hypotheses:
+  - id: 1
+    name: "The current allocator snapshot defines the only admissible strategy-id target set"
+    scope:
+      source: "docs/runtime/lane_allocation.json"
+    expected_trial_count: 1
+    kill_criteria:
+      - "strategy-id target set drifts without a new allocator snapshot → HALT"
+
+  - id: 2
+    name: "Current-book event rows are distinguishable as submitted / filled / skipped / rejected"
+    scope:
+      source: "live_signal_events"
+    expected_trial_count: 1
+    kill_criteria:
+      - "event types collapse multiple mechanisms into one bucket → FAIL"
+
+  - id: 3
+    name: "Completed trade rows are attributable by strategy_id and execution_source"
+    scope:
+      source: "paper_trades"
+      required_fields:
+        - "strategy_id"
+        - "trading_day"
+        - "pnl_r"
+        - "slippage_ticks"
+        - "execution_source"
+    expected_trial_count: 1
+    kill_criteria:
+      - "completed rows still absent for the current book → WAITING"
+      - "completed rows exist but cannot distinguish modeled vs live/shadow → FAIL"
+
+  - id: 4
+    name: "Modeled priors are used only as comparator baselines, not as proof"
+    scope:
+      sources:
+        - "validated_setups"
+        - "docs/runtime/lane_allocation.json"
+    expected_trial_count: 1
+    kill_criteria:
+      - "report or audit language upgrades modeled priors into institutional proof → FAIL"
+
+total_hypothesis_count: 4
+total_expected_trials: 4

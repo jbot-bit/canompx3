@@ -1,0 +1,79 @@
+# Hypothesis Registry — 2026-04-20 live-attribution-restoration-audit
+#
+# Locked: 2026-04-20T15:25:00+10:00
+# Author: codex
+# Purpose: define the minimum evidence needed to restore lane-level live
+# attribution for the current live book.
+
+metadata:
+  name: "live-attribution-restoration-audit"
+  purpose: |
+    Establish a fail-closed audit for restoring current-lane evidence in
+    `paper_trades` and adjacent live execution surfaces. This is not a strategy
+    discovery run. It is an instrumentation / evidence-restoration audit.
+  date_locked: "2026-04-20T15:25:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 4
+  testing_mode: "confirmatory"
+  scope: "live_execution_evidence"
+
+authority:
+  proof_hierarchy:
+    - "current code / current files"
+    - "direct command output"
+    - "paper_trades and live execution paths"
+    - "verbatim local resource text"
+  non_trusted_as_evidence:
+    - "backfilled modeled rows presented as real live evidence"
+    - "profile-level summaries without per-strategy attribution"
+
+hypotheses:
+  - id: 1
+    name: "Current 6 strategy IDs are present and stable as the attribution target set"
+    scope:
+      sources:
+        - "docs/runtime/lane_allocation.json"
+        - "trading_app/prop_profiles.py"
+    expected_trial_count: 1
+    kill_criteria:
+      - "book identity ambiguous or shifting during restoration → HALT"
+
+  - id: 2
+    name: "Live execution path emits enough information to distinguish fired / skipped / filled / missed outcomes"
+    scope:
+      surfaces:
+        - "paper_trade_logger"
+        - "paper_trader"
+        - "live orchestrator / journals"
+    expected_trial_count: 1
+    kill_criteria:
+      - "cannot distinguish skipped from not-fired or filled from missed → audit FAIL"
+
+  - id: 3
+    name: "Lane-level slippage and realized pnl are attributable by strategy_id"
+    scope:
+      table: "paper_trades"
+      required_fields:
+        - "strategy_id"
+        - "trading_day"
+        - "pnl_r"
+        - "execution_source"
+        - "slippage_ticks"
+    expected_trial_count: 1
+    kill_criteria:
+      - "strategy_id-level attribution missing → FAIL"
+      - "slippage or pnl fields missing for current-lane events → FAIL"
+
+  - id: 4
+    name: "Restored attribution remains operational evidence, not research proof"
+    scope:
+      policy_files:
+        - "RESEARCH_RULES.md"
+        - "docs/institutional/pre_registered_criteria.md"
+    expected_trial_count: 1
+    kill_criteria:
+      - "attribution restoration is used to overclaim institutional proof without clean Mode A rediscovery → FAIL"
+
+total_hypothesis_count: 4
+total_expected_trials: 4
+
