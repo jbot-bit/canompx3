@@ -1,5 +1,21 @@
 """6-lane unfiltered baseline stress-test.
 
+.. deprecated:: 2026-04-21
+    **BUG**: inherits ``load_lane_universe`` from
+    ``research.audit_6lane_scale_stability`` which hardcodes
+    ``o.orb_minutes = 5``, ignoring the ``_O15`` aperture suffix on
+    L2 and L6. L2 and L6 numbers from this script are wrong.
+
+    SUPERSEDED by ``research/audit_lane_baseline_decomposition_v2.py``
+    (PR #57) which uses canonical parser. See
+    ``docs/audit/results/2026-04-21-correction-aperture-audit-rerun.md``.
+
+    The 2×2 classification in PR #52's MD was: L2 FILTER_IS_THE_EDGE,
+    L6 FILTER_VESTIGIAL. Correct classifications at canonical aperture
+    are L2 FILTER_CORRELATES_WITH_EDGE, L6 FILTER_UNTESTABLE_BASELINE_EDGE.
+
+    Do not run this script for new analysis. Use v2.
+
 For each of the 6 currently-DEPLOYED lanes (per `docs/runtime/lane_allocation.json`),
 decompose the lane's edge into UNFILTERED-baseline contribution and FILTER contribution.
 

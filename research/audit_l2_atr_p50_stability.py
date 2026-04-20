@@ -1,5 +1,21 @@
 """L2 MNQ_SINGAPORE_OPEN ATR_P50 filter stability audit.
 
+.. deprecated:: 2026-04-21
+    **BUG**: hardcodes ``o.orb_minutes = 5`` (line 61) for a lane whose
+    canonical strategy_id is ``MNQ_SINGAPORE_OPEN_..._ATR_P50_O15``
+    (canonical ``orb_minutes = 15``). All numbers in this audit were
+    computed from wrong 5-minute ORB outcomes.
+
+    At canonical 15-minute aperture, L2 unfiltered IS ExpR = +0.050R
+    (t=+1.86), NOT -0.010R (t=-0.38). The "fully filter-dependent"
+    framing of this audit is wrong.
+
+    SUPERSEDED by Section B of
+    ``research/audit_lane_baseline_decomposition_v2.py`` (PR #57).
+    See ``docs/audit/results/2026-04-21-correction-aperture-audit-rerun.md``.
+
+    Do not run this script for new analysis.
+
 Context: PR #52 found L2 is FULLY filter-dependent (unfiltered IS ExpR=-0.010,
 Welch fire-vs-non-fire p=0.002 with Δ=+0.073R). If the ATR_P50 edge has
 decayed in recent years, the lane has no remaining edge.
