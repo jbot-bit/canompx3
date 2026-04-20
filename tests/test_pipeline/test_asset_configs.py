@@ -12,6 +12,7 @@ from pipeline.asset_configs import (
     get_asset_config,
     get_deployable_instruments,
     get_outright_root,
+    list_available_instruments,
     list_instruments,
     require_dbn_available,
 )
@@ -264,6 +265,7 @@ class TestRequireDbnAvailable:
     def test_missing_minimum_start_date_raises_value_error(self, tmp_path):
         ghost_dir = tmp_path / "present_dbn"
         ghost_dir.mkdir()
+        (ghost_dir / "backfill-MNQ-2026-01-01-to-2026-01-02.ohlcv-1m.dbn.zst").write_text("stub")
         original_path = ASSET_CONFIGS["MNQ"]["dbn_path"]
         original_min_date = ASSET_CONFIGS["MNQ"]["minimum_start_date"]
         ASSET_CONFIGS["MNQ"]["dbn_path"] = ghost_dir
@@ -278,6 +280,7 @@ class TestRequireDbnAvailable:
     def test_returns_path_on_success(self, tmp_path):
         ghost_dir = tmp_path / "present_dbn"
         ghost_dir.mkdir()
+        (ghost_dir / "backfill-MNQ-2026-01-01-to-2026-01-02.ohlcv-1m.dbn.zst").write_text("stub")
         original = ASSET_CONFIGS["MNQ"]["dbn_path"]
         ASSET_CONFIGS["MNQ"]["dbn_path"] = ghost_dir
         try:
@@ -286,6 +289,40 @@ class TestRequireDbnAvailable:
             assert result == ghost_dir
         finally:
             ASSET_CONFIGS["MNQ"]["dbn_path"] = original
+
+    def test_existing_dir_with_wrong_symbol_files_raises(self, tmp_path):
+        ghost_dir = tmp_path / "wrong_symbol_dbn"
+        ghost_dir.mkdir()
+        (ghost_dir / "backfill-MES-2026-01-01-to-2026-01-02.ohlcv-1m.dbn.zst").write_text("stub")
+        original = ASSET_CONFIGS["MNQ"]["dbn_path"]
+        ASSET_CONFIGS["MNQ"]["dbn_path"] = ghost_dir
+        try:
+            with pytest.raises(FileNotFoundError, match="contains no matching raw DBN files"):
+                require_dbn_available("MNQ")
+        finally:
+            ASSET_CONFIGS["MNQ"]["dbn_path"] = original
+
+
+class TestListAvailableInstruments:
+    def test_filters_out_existing_dirs_with_wrong_symbol_files(self, tmp_path):
+        good_dir = tmp_path / "good"
+        bad_dir = tmp_path / "bad"
+        good_dir.mkdir()
+        bad_dir.mkdir()
+        (good_dir / "backfill-MNQ-2026-01-01-to-2026-01-02.ohlcv-1m.dbn.zst").write_text("stub")
+        (bad_dir / "backfill-MES-2026-01-01-to-2026-01-02.ohlcv-1m.dbn.zst").write_text("stub")
+
+        original_mnq = ASSET_CONFIGS["MNQ"]["dbn_path"]
+        original_mgc = ASSET_CONFIGS["MGC"]["dbn_path"]
+        ASSET_CONFIGS["MNQ"]["dbn_path"] = good_dir
+        ASSET_CONFIGS["MGC"]["dbn_path"] = bad_dir
+        try:
+            available = list_available_instruments()
+            assert "MNQ" in available
+            assert "MGC" not in available
+        finally:
+            ASSET_CONFIGS["MNQ"]["dbn_path"] = original_mnq
+            ASSET_CONFIGS["MGC"]["dbn_path"] = original_mgc
 
     def test_non_canonical_pattern_raises(self, monkeypatch):
         """Helper raises ValueError if outright_pattern is structurally non-canonical.

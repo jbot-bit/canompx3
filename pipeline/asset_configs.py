@@ -462,7 +462,8 @@ def require_dbn_available(instrument: str) -> Path:
         ValueError: if `instrument` is unknown, dbn_path entry is None, or
             minimum_start_date is None (config incomplete).
         FileNotFoundError: if dbn_path is configured but does not exist on
-            disk.
+            disk, or if a DBN directory exists but contains no files for the
+            instrument's canonical outright root.
     """
     config = get_asset_config(instrument)
 
@@ -476,6 +477,13 @@ def require_dbn_available(instrument: str) -> Path:
 
     if not dbn_path.exists():
         raise FileNotFoundError(f"DBN file not found for instrument '{instrument}'. Expected: {dbn_path}")
+
+    if not _dbn_store_has_matching_files(instrument, dbn_path):
+        root = get_outright_root(instrument)
+        raise FileNotFoundError(
+            f"DBN store for instrument '{instrument}' exists but contains no matching raw DBN files "
+            f"for root '{root}'. Expected under: {dbn_path}"
+        )
 
     if config["minimum_start_date"] is None:
         raise ValueError(
@@ -501,10 +509,10 @@ def get_enabled_sessions(instrument: str) -> list[str]:
 
 
 def list_available_instruments() -> list[str]:
-    """Return sorted list of instruments that have DBN files on disk."""
+    """Return sorted list of instruments with matching raw DBN files on disk."""
     available = []
     for name, cfg in ASSET_CONFIGS.items():
-        if cfg["dbn_path"] is not None and cfg["dbn_path"].exists():
+        if cfg["dbn_path"] is not None and _dbn_store_has_matching_files(name, cfg["dbn_path"]):
             available.append(name)
     return sorted(available)
 
@@ -550,3 +558,22 @@ def get_outright_root(instrument: str) -> str:
             f"Non-canonical outright_pattern for {key}: {pattern!r}. Expected format: ^<ROOT>[<MONTH_CODES>]\\d+$"
         )
     return match.group(1)
+
+
+def _dbn_store_has_matching_files(instrument: str, dbn_path: Path) -> bool:
+    """Return True if the DBN store contains at least one matching raw file.
+
+    Match on the canonical outright root rather than the instrument name because
+    some micro instruments intentionally use parent-data roots (for example
+    `M2K -> RTY`, `MBT -> BTC`, `M6E -> 6E`).
+    """
+    if not dbn_path.exists():
+        return False
+
+    root = get_outright_root(instrument)
+    pattern = re.compile(rf"(^|[^A-Z0-9]){re.escape(root)}([^A-Z0-9]|$)")
+
+    if dbn_path.is_file():
+        return bool(pattern.search(dbn_path.name.upper()))
+
+    return any(pattern.search(path.name.upper()) for path in dbn_path.rglob("*.dbn.zst"))

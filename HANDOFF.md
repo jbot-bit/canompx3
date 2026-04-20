@@ -4,6 +4,103 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late-late — GC proxy rule enforced in loader; MZC Stage 1 says ZC proxy is mandatory)
+
+Follow-on to the asset-universe / proxy-policy thread. User asked the right operational question: `GC` has different volume/liquidity than `MGC`, so does the project actually know how to handle that, or are we relying on memory? Answer after verification: the repo mostly knew, but one enforcement gap existed and is now closed.
+
+### What was verified
+
+- Existing code already distinguishes price-safe vs micro-only filters:
+  - `trading_app/config.py`
+    - `StrategyFilter.requires_micro_data` defaults `False` for price-derived filters
+    - `VolumeFilter.requires_micro_data` is `True`
+    - `OrbVolumeFilter.requires_micro_data` is `True`
+    - `ATR70_VOL` is a hybrid contaminated filter because it includes `rel_vol`
+  - `pipeline/check_drift.py`
+    - active micro-only filters are rejected on parent/proxy lanes
+    - active micro-only filters are also checked against micro-launch timing
+- Institutional policy already says `GC` may be used for `MGC` only on price-safe filters, not on volume/liquidity/execution questions
+- Doc inconsistency found:
+  - `docs/institutional/pre_registered_criteria.md` still listed `ATR70_VOL` under PRICE-SAFE even though code correctly treats it as volume-contaminated / micro-only
+
+### What landed
+
+- Fixed the policy doc:
+  - `docs/institutional/pre_registered_criteria.md`
+    - removed `ATR70_VOL` from PRICE-SAFE
+    - added it to VOLUME-UNSAFE / micro-only
+- Closed the real enforcement gap:
+  - `trading_app/hypothesis_loader.py`
+    - proxy-mode hypothesis files now fail closed if they use:
+      - any `requires_micro_data` filter (e.g. `ATR70_VOL`, `ORB_VOL_*`, `VOL_RV*`)
+      - or an unknown/unclassifiable filter in proxy mode
+  - `tests/test_trading_app/test_hypothesis_loader.py`
+    - new tests cover:
+      - proxy mode rejects `ATR70_VOL`
+      - proxy mode accepts price-safe `OVNRNG_100`
+      - proxy mode rejects unknown filters
+
+### Verification
+
+- `./.venv-wsl/bin/python -m pytest tests/test_trading_app/test_hypothesis_loader.py -q`
+  - `58 passed`
+
+Net result:
+
+- the project now ENFORCES `GC for MGC price-only proxy research`
+- it no longer relies on memory or doc-reading alone
+
+### Practical rule now encoded
+
+- Allowed on `GC -> MGC` proxy path:
+  - price-safe filters only (`ORB_G*`, `GAP_*`, `PDR_*`, `ATR_P*`, `OVNRNG_*`, `COST_LT*`, `DIR_*`, etc.)
+- Forbidden on `GC -> MGC` proxy path:
+  - `ORB_VOL_*`
+  - `VOL_RV*`
+  - `ATR70_VOL`
+  - any execution/slippage/payoff-shape question
+
+### Ag branch progress
+
+- Wrote Stage-1 spec:
+  - `docs/plans/2026-04-20-mzc-stage1-spec.md`
+- Verified official USDA event-window grounding:
+  - WASDE monthly releases at `12:00 PM ET`
+  - NASS report calendar confirms `Acreage` / `Grain Stocks` at `12:00 PM ET`
+- Databento vendor probe:
+  - `MZC.FUT` `2025-02-01 -> 2026-04-20`
+    - cost `$0`
+    - size `3,109,456`
+  - `ZC.FUT` `2010-06-06 -> 2026-04-20`
+    - cost `$0`
+    - size `1,197,474,432`
+- Direct event-window tape checks on:
+  - `2025-06-30` (`Acreage/Grain Stocks`)
+  - `2026-03-31` (`Prospective Plantings`)
+  - `2026-04-09` (`WASDE`)
+- Finding:
+  - `MZC` is too sparse to serve as the sole Stage-2 research tape around the exact `12:00 PM ET` shock window
+  - `ZC` is dense and should be the primary research proxy
+- Stage-1 findings written:
+  - `docs/plans/2026-04-20-mzc-stage1-findings.md`
+  - verdict: `GO_TO_STAGE_2`, but only with `ZC` as the primary research proxy and `MZC` as the translation / execution target
+
+### Raw ag data state
+
+- Landed:
+  - `DB/MZC_DB/backfill-MZC-2025-02-01-to-2026-04-20.ohlcv-1m.dbn.zst`
+- In progress at time of note:
+  - `ZC.FUT` full-history raw download to `DB/ZC_DB/backfill-ZC-2010-06-06-to-2026-04-20.ohlcv-1m.dbn.zst`
+  - long-running pull; do not assume failure just because it is slow
+
+### Recommended next step
+
+- If the `ZC` raw pull completes cleanly:
+  1. verify file landed
+  2. decide whether to onboard `ZC` as a research-only proxy asset
+  3. write the narrow Stage-2 `ZC` USDA-response design
+- Do NOT broaden to `MZS/ZS` yet
+
 ## Update (2026-04-20 late night — data-first guard prompt spam reduced; stale investigation mode fixed)
 
 Follow-up to the startup/token-efficiency work. After the route-packet and

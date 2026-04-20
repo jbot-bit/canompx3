@@ -664,6 +664,9 @@ def extract_scope_predicate(
             "Hypothesis file has no hypotheses list or it is empty. Cannot build scope predicate."
         )
 
+    source_meta = meta.get("metadata", {}) if isinstance(meta.get("metadata"), dict) else {}
+    proxy_mode = source_meta.get("data_source_mode") == "proxy"
+
     filtered: list[HypothesisScope] = []
     total_trials = 0
 
@@ -696,6 +699,23 @@ def extract_scope_predicate(
         filter_type = filter_block.get("type")
         if not isinstance(filter_type, str) or not filter_type:
             raise HypothesisLoaderError(f"{h_tag} filter.type must be a non-empty string")
+
+        if proxy_mode:
+            from trading_app.config import ALL_FILTERS
+
+            filter_obj = ALL_FILTERS.get(filter_type)
+            if filter_obj is None:
+                raise HypothesisLoaderError(
+                    f"{h_tag} uses filter.type {filter_type!r} in proxy mode, but the filter is not "
+                    "registered in ALL_FILTERS so proxy-safety cannot be classified. "
+                    "Proxy hypotheses must use known, classifiable filters."
+                )
+            if filter_obj.requires_micro_data:
+                raise HypothesisLoaderError(
+                    f"{h_tag} uses micro-only filter.type {filter_type!r} in proxy mode. "
+                    "Proxy hypotheses may only use price-safe filters; requires_micro_data "
+                    "filters are invalid on parent/proxy data."
+                )
 
         sessions_raw = scope.get("sessions")
         if not isinstance(sessions_raw, list) or not sessions_raw:

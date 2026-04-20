@@ -804,7 +804,7 @@ Monthly granularity confirms Q3/Q4 2019 does NOT normalize. Jan 2020 = 71.4% G8 
 - ORB size filters: ORB_G4, ORB_G5, ORB_G6, ORB_G8 (and all CONT/DOW/FAST/L12 variants)
 - Gap filters: GAP_R005, GAP_R015
 - Prior day range: PDR_R080, PDR_R105, PDR_R125
-- ATR percentile: ATR_P30, ATR_P50, ATR_P70, ATR70_VOL
+- ATR percentile: ATR_P30, ATR_P50, ATR_P70
 - Overnight range: OVNRNG_10, OVNRNG_25, OVNRNG_50, OVNRNG_100 (and FAST variants)
 - Cost ratio: COST_LT08, COST_LT10, COST_LT12, COST_LT15 (and FAST variants) — threshold scales with ORB size in points, not contract size
 - Direction: DIR_LONG, DIR_SHORT
@@ -814,8 +814,9 @@ Monthly granularity confirms Q3/Q4 2019 does NOT normalize. Jan 2020 = 71.4% G8 
 **VOLUME-UNSAFE** — micro-only, no proxy:
 - ORB volume: ORB_VOL_2K, ORB_VOL_4K, ORB_VOL_8K, ORB_VOL_16K
 - Relative volume: VOL_RV12_N20, VOL_RV15_N20, VOL_RV20_N20, VOL_RV25_N20, VOL_RV30_N20
+- Hybrid volume filters: ATR70_VOL (includes `rel_vol`)
 
-**Basis:** Price-safe filters use only price-derived inputs (OHLC, range, gap). GC and MGC share identical price discovery (corr=0.99999). Volume-unsafe filters use contract-level volume/OI which differs structurally between parent and micro.
+**Basis:** Price-safe filters use only price-derived inputs (OHLC, range, gap). GC and MGC share identical price discovery (corr=0.99999). Volume-unsafe filters use contract-level volume/OI, or hybrid filters that include volume-derived inputs, which differ structurally between parent and micro.
 
 ### Regime-awareness requirement (NEW)
 
