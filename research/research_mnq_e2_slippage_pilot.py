@@ -644,7 +644,19 @@ def main():
     parser.add_argument("--all", action="store_true", help="Full fresh-pull pipeline: manifest + cost + pull + reprice")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--sessions",
+        nargs="+",
+        default=None,
+        metavar="SESSION",
+        help="Override PILOT_SESSIONS for targeted pulls (e.g. --sessions EUROPE_FLOW COMEX_SETTLE US_DATA_1000).",
+    )
     args = parser.parse_args()
+
+    if args.sessions:
+        global PILOT_SESSIONS
+        PILOT_SESSIONS = list(args.sessions)
+        print(f"PILOT_SESSIONS override: {PILOT_SESSIONS}")
 
     if args.reprice_cache:
         manifest_cache = build_manifest_from_cache(CACHE_DIR)
