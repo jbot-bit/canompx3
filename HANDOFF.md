@@ -4,6 +4,34 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late-night — hook-noise follow-up: full drift coverage restored)
+
+Follow-up to `chore/reduce-hook-token-burn` after an audit of commit
+`6ae317fe`. The branch's token-noise reduction changed `.githooks/pre-commit`
+to skip commit-time `pipeline/check_drift.py` entirely when the post-edit
+debounce file was younger than 30s. That violated the stated contract in both
+`.claude/hooks/post-edit-pipeline.py` and `pipeline/check_drift.py`, which say
+post-edit uses `--fast` but pre-commit and CI preserve full drift coverage.
+
+### What landed (branch `chore/reduce-hook-token-burn-fixup`)
+
+- Removed the pre-commit debounce skip path that printed
+  `SKIPPED (post-edit drift passed …s ago)`
+- Kept the failed-checks-only output filter on drift failure
+- Restored commit-time execution of the full drift suite so slow checks cannot
+  be silently bypassed after a fast post-edit pass
+
+### Verification
+
+- `bash -n .githooks/pre-commit`
+- `git diff --check`
+- `rg -n "_DRIFT_SKIP|SKIPPED \\(post-edit drift passed|last_drift_ok" .githooks/pre-commit .claude/hooks/post-edit-pipeline.py`
+- `rg -n "full set — no coverage loss end-to-end|Pre-commit hook \\+ CI run the full set|SKIPPED \\(post-edit drift passed" .claude/hooks/post-edit-pipeline.py pipeline/check_drift.py .githooks/pre-commit`
+
+Result: hook syntax clean; skip path removed from pre-commit; post-edit still
+owns the debounce file for fast edit-time checks only; coverage contract is now
+consistent again.
+
 ## Update (2026-04-20 late-night — hook-noise follow-up: broken rule pointer fixed)
 
 Follow-up to branch `chore/reduce-hook-token-burn` commit `6ae317fe`.

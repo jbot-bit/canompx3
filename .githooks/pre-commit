@@ -82,22 +82,13 @@ if ! "$RUFF" format --check pipeline/ trading_app/ scripts/ tests/ > /dev/null 2
 fi
 echo "  PASSED"
 
-# 2. Drift check (~2 seconds) — honor post-edit debounce file to skip if
-# recently checked in this session. Post-edit hook writes .claude/hooks/.last_drift_ok
-# after a successful fast-drift run; skip if within 30s to avoid dumping the
-# full check list into the user's context on every commit.
+# 2. Drift check (~2 seconds)
+# Commit-time coverage must remain the FULL drift set. The post-edit hook's
+# debounce file only suppresses repeated FAST drift runs while editing; it must
+# never suppress the full commit-time gate, or slow-check regressions can slip
+# through unnoticed.
 echo "[2/6] Drift check..."
-_DRIFT_DEBOUNCE="$SCRIPT_DIR/.claude/hooks/.last_drift_ok"
-_DRIFT_SKIP=0
-if [ -f "$_DRIFT_DEBOUNCE" ]; then
-    _AGE=$(( $(date +%s) - $(stat -c %Y "$_DRIFT_DEBOUNCE" 2>/dev/null || stat -f %m "$_DRIFT_DEBOUNCE" 2>/dev/null || echo 0) ))
-    if [ "$_AGE" -lt 30 ]; then
-        _DRIFT_SKIP=1
-    fi
-fi
-if [ "$_DRIFT_SKIP" = "1" ]; then
-    echo "  SKIPPED (post-edit drift passed ${_AGE}s ago)"
-elif ! "$PYTHON" pipeline/check_drift.py > /dev/null 2>&1; then
+if ! "$PYTHON" pipeline/check_drift.py > /dev/null 2>&1; then
     echo "BLOCKED: Drift detected."
     "$PYTHON" pipeline/check_drift.py 2>&1 | awk '
         /^Check .*\.\.\.$/ { header=$0; next }
