@@ -1,0 +1,158 @@
+version: 1
+status: LOCKED
+date: 2026-04-20
+slug: participation-optimum-mes-universality-v1
+title: "Participation-optimum universality test on MES — confirmatory replication of MNQ finding"
+owner: claude
+parent_prereg: "docs/audit/hypotheses/2026-04-20-participation-optimum-universality-v1.yaml"
+parent_result: "docs/audit/results/2026-04-20-participation-optimum-universality-v1.md"
+parent_lock_sha: "677bf381"
+parent_run_verdict: "CONFIRMED_UNIVERSAL on MNQ 5m (β₂=-0.00156, t=-5.189, 21/24 cells)"
+parent_merged_to_main: "126ed6b8 (PR #41)"
+
+deployment_not_done_here: |
+  DRAFT. Confirmatory test on a second equity-index instrument. A positive
+  verdict here does NOT authorize MES deployment on its own — it strengthens
+  the pooled mechanism claim and unblocks a broader deployment-shape pre-reg
+  that covers both MNQ and MES Q4-band lanes. No capital action.
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/fitschen_2013_ch3_breakouts.md"
+    - "docs/institutional/literature/chordia_et_al_2018.md"
+    - "memory/feedback_per_lane_breakdown_required.md"
+  notes:
+    - "Pathway B K=1 confirmatory replication. Prior theory strong (MNQ already confirmed universal at t=-5.189)."
+    - "RULE 14 per-lane breakdown mandatory."
+    - "Same test geometry as MNQ run — instrument-swap only."
+    - "MES has 11 active sessions at E2 CB1 RR1.5 5m (missing BRISBANE_1025 vs MNQ's 12)."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "77e33f06"
+  committed_required_before_run: true
+
+testing_mode: individual
+pathway: B_theory_driven
+
+scope:
+  instrument: MES
+  sessions_in_scope:
+    - CME_PRECLOSE
+    - CME_REOPEN
+    - COMEX_SETTLE
+    - EUROPE_FLOW
+    - LONDON_METALS
+    - NYSE_CLOSE
+    - NYSE_OPEN
+    - SINGAPORE_OPEN
+    - TOKYO_OPEN
+    - US_DATA_1000
+    - US_DATA_830
+  sessions_source: "canonical DISTINCT on MES orb_outcomes E2 CB1 RR1.5 5m"
+  directions_in_scope: [long, short]
+  aperture_primary: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.5
+  filter_applied: "NONE"
+  out_of_scope:
+    - "MGC (different asset class — separate mechanism claim)"
+    - "Apertures other than 5m (mechanism established as 5m-specific on MNQ)"
+    - "Entry-model / RR invariance (separate pre-regs)"
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    policy: "Mode A sacred, descriptive only"
+  tuning_against_oos: false
+
+primary_hypothesis:
+  id: H_MES_PARTICIPATION_OPTIMUM
+  type: primary_individual
+  theory_citation: |
+    Fitschen 2013 Ch 3 predicts the participation-optimum mechanism in
+    ORB breakout continuation. MNQ universality run (parent commit 677bf381)
+    empirically confirmed this with t=-5.189 at p≈0 and 87.5% per-lane
+    agreement. MES is a directly-analogous equity-index micro-future with
+    similar microstructure (cash-index arb, session/calendar drivers). The
+    mechanism should replicate.
+  statement: |
+    Pooled across MES active sessions × both directions × 5m × E2 × CB1
+    × RR1.5, UNFILTERED, IS (trading_day < 2026-01-01):
+    the coefficient β₂ on rel_vol² in the pooled OLS
+      pnl_r = β₀ + β₁·rel_vol + β₂·rel_vol² + lane_FE + ε
+    is SIGNIFICANTLY NEGATIVE (one-tailed t ≤ -3.0, p < 0.05) AND
+    per-lane sign-agreement ≥ 50% (K=22 cells).
+
+pass_gates:
+  integrity:
+    required: true
+    checks:
+      - "All 11 sessions × 2 directions × 5m × E2 × CB1 × RR1.5 cells loaded canonically"
+      - "rel_vol_{session} non-null on >= 90% of IS rows"
+  primary_beta2_negative:
+    required: true
+    threshold: "β₂ < 0 AND one-tailed p < 0.05 AND t ≤ -3.0"
+    failure_action: "KILL MES_NO_REPLICATION"
+  per_lane_sign_agreement_RULE_14:
+    required: true
+    metric: "Fraction of per-lane cells (K=22 max, N≥50 each) with β₂ < 0"
+    threshold_gte: 0.50
+    action: |
+      agreement >= 0.50: CONFIRMED_UNIVERSAL_MES
+      agreement in [0.25, 0.50): CONFIRMED_HETEROGENEOUS_MES
+      agreement < 0.25: KILL_SIMPSON_MES
+
+kill_criteria:
+  K_kill_1: {condition: "primary_beta2_negative fails", action: "KILL MES_NO_REPLICATION"}
+  K_kill_2: {condition: "integrity fails", action: "SCAN_ABORT"}
+  K_kill_3: {condition: "β₂ pooled-negative AND per-lane agreement < 0.25", action: "KILL_SIMPSON_MES"}
+
+verdict_labels:
+  CONFIRMED_UNIVERSAL_MES: "pooled + per-lane both pass ≥ 50%"
+  CONFIRMED_HETEROGENEOUS_MES: "pooled passes, per-lane 25-50%"
+  MES_NO_REPLICATION: "pooled fails → MNQ finding is equity-micro-specific not universal equity-index"
+  KILL_SIMPSON_MES: "pooled significant but per-lane < 25%"
+  SCAN_ABORT: "integrity failure"
+
+trial_budget:
+  primary_pooled_tests: 1
+  secondary_per_cell_tests: 22
+  chordia_pooled_t_threshold: 3.0
+  chordia_per_cell_t_threshold: 3.79
+
+implementation_integrity_checklist:
+  - "Runner is a simple instrument-swap of research/participation_optimum_universality_v1.py"
+  - "SESSIONS list updated to MES's 11 active sessions (no BRISBANE_1025)"
+  - "Per-session rel_vol column dynamically looked up"
+  - "Direction derived via entry_price > stop_price"
+  - "OLS with HC3 robust SE"
+  - "One-tailed t on β₂ < 0"
+  - "lane_FE categorical per (session × direction), K=22"
+  - "No writes to canonical layers"
+
+outputs_required_after_run:
+  - "Pooled regression table"
+  - "Per-cell 22-row table"
+  - "Sign-agreement fraction"
+  - "Verdict line"
+  - "Cross-instrument comparison table (MNQ pooled vs MES pooled)"
+  - "Result doc: docs/audit/results/2026-04-20-participation-optimum-mes-universality-v1.md"
+
+execution_gate:
+  allowed_now:
+    - "Commit, stamp SHA, run, commit result, PR"
+  forbidden_now:
+    - "Any capital action"
+    - "Re-scoping mid-run"
+
+not_done_by_this_pre_reg:
+  - "MGC universality (separate asset class)"
+  - "Entry-model / RR invariance"
+  - "Deployment — requires separate deployment-shape pre-reg"
