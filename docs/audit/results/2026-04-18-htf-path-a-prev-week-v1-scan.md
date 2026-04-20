@@ -1,8 +1,8 @@
 # HTF Path A prev-week v1 — Family Scan Results
 
-**Generated:** 2026-04-18T08:13:34+00:00
-**Scan script HEAD SHA:** `668d2680b2e50cad0c2e1195e32a191be6d3cfea`
-**Canonical DB:** `C:\Users\joshd\canompx3\gold.db`
+**Generated:** 2026-04-20T11:49:07+00:00
+**Scan script HEAD SHA:** `39cfc98dd23e405e7afda652db7e0eaeb4d6221f`
+**Canonical DB:** `/mnt/c/Users/joshd/canompx3/gold.db`
 **Holdout (Mode A):** `trading_day >= 2026-01-01` — imported from `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`
 **Pre-registration:** `docs/audit/hypotheses/2026-04-18-htf-path-a-prev-week-v1.yaml`
 
@@ -123,30 +123,30 @@
 
 | # | inst | session | dir | RR | verdict |
 |--|-----|---------|-----|----|---|
-| 1 | MNQ | TOKYO_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.5422872715705904); |t|<3.79 (0.6103308232966013); WFE>0.95 LEAKAGE_SUSPECT (580.099); era_unstable; BH_family_fail |
-| 2 | MNQ | TOKYO_OPEN | long | 2 | KILL: raw_p>=0.05 (0.7418399451674176); |t|<3.79 (0.3298427258608297); WFE>0.95 LEAKAGE_SUSPECT (1207.250); era_unstable; BH_family_fail |
-| 3 | MNQ | TOKYO_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.18095320977853047); |t|<3.79 (1.3476176541236058); WFE<0.5 (0.212); BH_family_fail |
-| 4 | MNQ | TOKYO_OPEN | short | 2 | KILL: raw_p>=0.05 (0.2571806924504598); |t|<3.79 (1.1398598565629094); WFE>0.95 LEAKAGE_SUSPECT (1.363); BH_family_fail |
-| 5 | MNQ | EUROPE_FLOW | long | 1.5 | KILL: raw_p>=0.05 (0.8196716154978865); |t|<3.79 (-0.2282162868123685); WFE_none; era_unstable; BH_family_fail |
-| 6 | MNQ | EUROPE_FLOW | long | 2 | KILL: raw_p>=0.05 (0.7457384508673073); |t|<3.79 (-0.32463719956934833); WFE_none; era_unstable; BH_family_fail |
-| 7 | MNQ | EUROPE_FLOW | short | 1.5 | KILL: raw_p>=0.05 (0.1383483152307723); |t|<3.79 (1.4939083388369236); dir_mismatch; WFE<0.5 (-1.106); BH_family_fail |
-| 8 | MNQ | EUROPE_FLOW | short | 2 | KILL: raw_p>=0.05 (0.08782550331491201); |t|<3.79 (1.7238482510508366); dir_mismatch; WFE<0.5 (-0.171); BH_family_fail |
+| 1 | MNQ | TOKYO_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.5422872715705909); |t|<3.79 (0.6103308232966004); WFE>0.95 LEAKAGE_SUSPECT (580.099); era_unstable; BH_family_fail |
+| 2 | MNQ | TOKYO_OPEN | long | 2 | KILL: raw_p>=0.05 (0.7418399451674178); |t|<3.79 (0.32984272586082936); WFE>0.95 LEAKAGE_SUSPECT (1207.250); era_unstable; BH_family_fail |
+| 3 | MNQ | TOKYO_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.18095320977853047); |t|<3.79 (1.347617654123606); WFE<0.5 (0.212); BH_family_fail |
+| 4 | MNQ | TOKYO_OPEN | short | 2 | KILL: raw_p>=0.05 (0.25718069245046005); |t|<3.79 (1.1398598565629092); WFE>0.95 LEAKAGE_SUSPECT (1.363); BH_family_fail |
+| 5 | MNQ | EUROPE_FLOW | long | 1.5 | KILL: raw_p>=0.05 (0.8196716154978865); |t|<3.79 (-0.22821628681236858); WFE_none; era_unstable; BH_family_fail |
+| 6 | MNQ | EUROPE_FLOW | long | 2 | KILL: raw_p>=0.05 (0.7457384508673077); |t|<3.79 (-0.32463719956934756); WFE_none; era_unstable; BH_family_fail |
+| 7 | MNQ | EUROPE_FLOW | short | 1.5 | KILL: raw_p>=0.05 (0.1383483152307723); |t|<3.79 (1.4939083388369243); dir_mismatch; WFE<0.5 (-1.106); BH_family_fail |
+| 8 | MNQ | EUROPE_FLOW | short | 2 | KILL: raw_p>=0.05 (0.08782550331491223); |t|<3.79 (1.7238482510508364); dir_mismatch; WFE<0.5 (-0.171); BH_family_fail |
 | 9 | MNQ | NYSE_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.28261202179893496); |t|<3.79 (1.077168740366025); WFE>0.95 LEAKAGE_SUSPECT (1.838); era_unstable; BH_family_fail |
-| 10 | MNQ | NYSE_OPEN | long | 2 | KILL: raw_p>=0.05 (0.7710426186011763); |t|<3.79 (0.29142490289365935); WFE_none; era_unstable; BH_family_fail |
-| 11 | MNQ | NYSE_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.3094281513219026); |t|<3.79 (1.020506956032853); dir_mismatch; WFE>0.95 LEAKAGE_SUSPECT (1.842); era_unstable; BH_family_fail |
-| 12 | MNQ | NYSE_OPEN | short | 2 | KILL: raw_p>=0.05 (0.6670791746014895); |t|<3.79 (0.43126075887500787); dir_mismatch; WFE>0.95 LEAKAGE_SUSPECT (7.093); era_unstable; BH_family_fail |
-| 13 | MES | TOKYO_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.17651625358392464); |t|<3.79 (-1.3568870856733826); WFE_none; era_unstable; BH_family_fail |
-| 14 | MES | TOKYO_OPEN | long | 2 | KILL: raw_p>=0.05 (0.13698487054913167); |t|<3.79 (-1.4937766712652174); WFE_none; era_unstable; BH_family_fail |
-| 15 | MES | TOKYO_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.13248943170403482); |t|<3.79 (1.5179664766574363); WFE<0.5 (-2.226); BH_family_fail |
-| 16 | MES | TOKYO_OPEN | short | 2 | KILL: raw_p>=0.05 (0.6004006464772464); |t|<3.79 (0.5256635005910684); WFE<0.5 (-3.836); BH_family_fail |
+| 10 | MNQ | NYSE_OPEN | long | 2 | KILL: raw_p>=0.05 (0.7710426186011763); |t|<3.79 (0.2914249028936594); WFE_none; era_unstable; BH_family_fail |
+| 11 | MNQ | NYSE_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.30942815132190304); |t|<3.79 (1.0205069560328524); dir_mismatch; WFE>0.95 LEAKAGE_SUSPECT (1.842); era_unstable; BH_family_fail |
+| 12 | MNQ | NYSE_OPEN | short | 2 | KILL: raw_p>=0.05 (0.6670791746014895); |t|<3.79 (0.4312607588750078); dir_mismatch; WFE>0.95 LEAKAGE_SUSPECT (7.093); era_unstable; BH_family_fail |
+| 13 | MES | TOKYO_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.17651625358392464); |t|<3.79 (-1.3568870856733828); WFE_none; era_unstable; BH_family_fail |
+| 14 | MES | TOKYO_OPEN | long | 2 | KILL: raw_p>=0.05 (0.13698487054913167); |t|<3.79 (-1.4937766712652172); WFE_none; era_unstable; BH_family_fail |
+| 15 | MES | TOKYO_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.1324894317040346); |t|<3.79 (1.5179664766574368); WFE<0.5 (-2.226); BH_family_fail |
+| 16 | MES | TOKYO_OPEN | short | 2 | KILL: raw_p>=0.05 (0.6004006464772464); |t|<3.79 (0.5256635005910686); WFE<0.5 (-3.836); BH_family_fail |
 | 17 | MES | EUROPE_FLOW | long | 1.5 | KILL: WFE_none; era_unstable |
 | 18 | MES | EUROPE_FLOW | long | 2 | KILL: WFE_none; era_unstable |
-| 19 | MES | EUROPE_FLOW | short | 1.5 | KILL: raw_p>=0.05 (0.9378540474222259); |t|<3.79 (-0.07817622306921139); WFE_none; BH_family_fail |
-| 20 | MES | EUROPE_FLOW | short | 2 | KILL: raw_p>=0.05 (0.5885443646710389); |t|<3.79 (-0.5428114757484631); WFE_none; BH_family_fail |
-| 21 | MES | NYSE_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.34659240530538504); |t|<3.79 (-0.9431115513752727); WFE_none; era_unstable; BH_family_fail |
-| 22 | MES | NYSE_OPEN | long | 2 | KILL: raw_p>=0.05 (0.39093726089906555); |t|<3.79 (-0.8596223272880529); arithmetic_only; WFE_none; era_unstable; BH_family_fail |
-| 23 | MES | NYSE_OPEN | short | 1.5 | KILL: |t|<3.79 (2.2621055730050657); dir_mismatch; WFE<0.5 (-2.976); BH_family_fail |
-| 24 | MES | NYSE_OPEN | short | 2 | KILL: raw_p>=0.05 (0.12584051392522388); |t|<3.79 (1.5416322268731362); dir_mismatch; WFE<0.5 (-3.041); BH_family_fail |
+| 19 | MES | EUROPE_FLOW | short | 1.5 | KILL: raw_p>=0.05 (0.9378540474222259); |t|<3.79 (-0.07817622306921117); WFE_none; BH_family_fail |
+| 20 | MES | EUROPE_FLOW | short | 2 | KILL: raw_p>=0.05 (0.5885443646710389); |t|<3.79 (-0.542811475748463); WFE_none; BH_family_fail |
+| 21 | MES | NYSE_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.34659240530538504); |t|<3.79 (-0.9431115513752723); WFE_none; era_unstable; BH_family_fail |
+| 22 | MES | NYSE_OPEN | long | 2 | KILL: raw_p>=0.05 (0.3909372608990662); |t|<3.79 (-0.8596223272880517); arithmetic_only; WFE_none; era_unstable; BH_family_fail |
+| 23 | MES | NYSE_OPEN | short | 1.5 | KILL: |t|<3.79 (2.262105573005065); dir_mismatch; WFE<0.5 (-2.976); BH_family_fail |
+| 24 | MES | NYSE_OPEN | short | 2 | KILL: raw_p>=0.05 (0.12584051392522366); |t|<3.79 (1.541632226873137); dir_mismatch; WFE<0.5 (-3.041); BH_family_fail |
 
 ## Methodology notes
 
@@ -164,5 +164,5 @@
 ## Reproduction
 
 ```
-DUCKDB_PATH=C:\Users\joshd\canompx3\gold.db python research/htf_path_a_prev_week_v1_scan.py
+DUCKDB_PATH=/mnt/c/Users/joshd/canompx3/gold.db python research/htf_path_a_prev_week_v1_scan.py
 ```

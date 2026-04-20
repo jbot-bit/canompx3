@@ -1,8 +1,8 @@
 # HTF Path A prev-month v1 — Family Scan Results
 
-**Generated:** 2026-04-18T13:16:21+00:00
-**Scan script HEAD SHA:** `3eac853f8f967f4238172124d30b7b9a4a7a56dd`
-**Canonical DB:** `C:\Users\joshd\canompx3\gold.db`
+**Generated:** 2026-04-20T11:49:08+00:00
+**Scan script HEAD SHA:** `39cfc98dd23e405e7afda652db7e0eaeb4d6221f`
+**Canonical DB:** `/mnt/c/Users/joshd/canompx3/gold.db`
 **Holdout (Mode A):** `trading_day >= 2026-01-01` — imported from `trading_app.holdout_policy.HOLDOUT_SACRED_FROM`
 **Pre-registration:** `docs/audit/hypotheses/2026-04-18-htf-path-a-prev-month-v1.yaml`
 
@@ -123,30 +123,30 @@
 
 | # | inst | session | dir | RR | verdict |
 |--|-----|---------|-----|----|---|
-| 1 | MNQ | TOKYO_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.30107372847223024); |t|<3.79 (1.0359023284644646); WFE_none; era_unstable; BH_family_fail |
-| 2 | MNQ | TOKYO_OPEN | long | 2 | KILL: raw_p>=0.05 (0.3331238028975345); |t|<3.79 (0.9693899829189498); WFE_none; BH_family_fail |
+| 1 | MNQ | TOKYO_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.30107372847223046); |t|<3.79 (1.0359023284644642); WFE_none; era_unstable; BH_family_fail |
+| 2 | MNQ | TOKYO_OPEN | long | 2 | KILL: raw_p>=0.05 (0.3331238028975352); |t|<3.79 (0.9693899829189487); WFE_none; BH_family_fail |
 | 3 | MNQ | TOKYO_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.10204473799560287); |t|<3.79 (1.6537706894282234); WFE>0.95 LEAKAGE_SUSPECT (1.628); BH_family_fail |
-| 4 | MNQ | TOKYO_OPEN | short | 2 | KILL: raw_p>=0.05 (0.15970671537175818); |t|<3.79 (1.4190996225764843); WFE>0.95 LEAKAGE_SUSPECT (2.718); BH_family_fail |
+| 4 | MNQ | TOKYO_OPEN | short | 2 | KILL: raw_p>=0.05 (0.15970671537175818); |t|<3.79 (1.4190996225764838); WFE>0.95 LEAKAGE_SUSPECT (2.718); BH_family_fail |
 | 5 | MNQ | EUROPE_FLOW | long | 1.5 | KILL: raw_p>=0.05 (0.6652115971922123); |t|<3.79 (-0.4331423624127495); WFE_none; era_unstable; BH_family_fail |
-| 6 | MNQ | EUROPE_FLOW | long | 2 | KILL: raw_p>=0.05 (0.8279191301610385); |t|<3.79 (-0.21755539292955942); WFE_none; era_unstable; BH_family_fail |
-| 7 | MNQ | EUROPE_FLOW | short | 1.5 | KILL: raw_p>=0.05 (0.7667143292444858); |t|<3.79 (-0.2976737473435548); dir_mismatch; WFE_none; BH_family_fail |
-| 8 | MNQ | EUROPE_FLOW | short | 2 | KILL: raw_p>=0.05 (0.8848333095197831); |t|<3.79 (-0.14530211572134716); dir_mismatch; WFE_none; BH_family_fail |
-| 9 | MNQ | NYSE_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.5433671067991908); |t|<3.79 (0.60860072782045); WFE_none; era_unstable; BH_family_fail |
-| 10 | MNQ | NYSE_OPEN | long | 2 | KILL: raw_p>=0.05 (0.5945664171282445); |t|<3.79 (-0.5330368150192095); WFE_none; era_unstable; BH_family_fail |
-| 11 | MNQ | NYSE_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.5871250963690076); |t|<3.79 (-0.5451839519930067); arithmetic_only; WFE_none; BH_family_fail |
-| 12 | MNQ | NYSE_OPEN | short | 2 | KILL: raw_p>=0.05 (0.3096717193240559); |t|<3.79 (-1.0227475880416137); arithmetic_only; WFE_none; BH_family_fail |
-| 13 | MES | TOKYO_OPEN | long | 1.5 | KILL: |t|<3.79 (-3.6337174503263068); WFE_none; era_unstable |
+| 6 | MNQ | EUROPE_FLOW | long | 2 | KILL: raw_p>=0.05 (0.8279191301610382); |t|<3.79 (-0.2175553929295595); WFE_none; era_unstable; BH_family_fail |
+| 7 | MNQ | EUROPE_FLOW | short | 1.5 | KILL: raw_p>=0.05 (0.7667143292444858); |t|<3.79 (-0.2976737473435546); dir_mismatch; WFE_none; BH_family_fail |
+| 8 | MNQ | EUROPE_FLOW | short | 2 | KILL: raw_p>=0.05 (0.8848333095197831); |t|<3.79 (-0.14530211572134702); dir_mismatch; WFE_none; BH_family_fail |
+| 9 | MNQ | NYSE_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.5433671067991903); |t|<3.79 (0.6086007278204506); WFE_none; era_unstable; BH_family_fail |
+| 10 | MNQ | NYSE_OPEN | long | 2 | KILL: raw_p>=0.05 (0.5945664171282437); |t|<3.79 (-0.5330368150192103); WFE_none; era_unstable; BH_family_fail |
+| 11 | MNQ | NYSE_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.5871250963690078); |t|<3.79 (-0.5451839519930068); arithmetic_only; WFE_none; BH_family_fail |
+| 12 | MNQ | NYSE_OPEN | short | 2 | KILL: raw_p>=0.05 (0.3096717193240561); |t|<3.79 (-1.0227475880416128); arithmetic_only; WFE_none; BH_family_fail |
+| 13 | MES | TOKYO_OPEN | long | 1.5 | KILL: |t|<3.79 (-3.633717450326304); WFE_none; era_unstable |
 | 14 | MES | TOKYO_OPEN | long | 2 | KILL: WFE_none; era_unstable |
-| 15 | MES | TOKYO_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.1840042439812617); |t|<3.79 (1.3398226416013417); WFE>0.95 LEAKAGE_SUSPECT (1.798); BH_family_fail |
-| 16 | MES | TOKYO_OPEN | short | 2 | KILL: |t|<3.79 (2.2463649964193126); WFE>0.95 LEAKAGE_SUSPECT (1.616); BH_family_fail |
+| 15 | MES | TOKYO_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.1840042439812617); |t|<3.79 (1.3398226416013415); WFE>0.95 LEAKAGE_SUSPECT (1.798); BH_family_fail |
+| 16 | MES | TOKYO_OPEN | short | 2 | KILL: |t|<3.79 (2.2463649964193118); WFE>0.95 LEAKAGE_SUSPECT (1.616); BH_family_fail |
 | 17 | MES | EUROPE_FLOW | long | 1.5 | KILL: WFE_none; era_unstable |
-| 18 | MES | EUROPE_FLOW | long | 2 | KILL: |t|<3.79 (-3.5291474188266228); WFE_none; era_unstable |
-| 19 | MES | EUROPE_FLOW | short | 1.5 | KILL: raw_p>=0.05 (0.40921846478111723); |t|<3.79 (-0.8296269790842865); WFE_none; BH_family_fail |
-| 20 | MES | EUROPE_FLOW | short | 2 | KILL: |t|<3.79 (-2.323662212227903); dir_mismatch; WFE_none; BH_family_fail |
-| 21 | MES | NYSE_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.6204538394111287); |t|<3.79 (-0.495726726745608); WFE_none; era_unstable; BH_family_fail |
-| 22 | MES | NYSE_OPEN | long | 2 | KILL: raw_p>=0.05 (0.2827781741294553); |t|<3.79 (-1.0761836682161883); arithmetic_only; WFE_none; era_unstable; BH_family_fail |
-| 23 | MES | NYSE_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.7222278146557146); |t|<3.79 (0.3566100522574535); WFE>0.95 LEAKAGE_SUSPECT (16.431); BH_family_fail |
-| 24 | MES | NYSE_OPEN | short | 2 | KILL: raw_p>=0.05 (0.9903690157852068); |t|<3.79 (-0.012106087163431568); WFE_none; BH_family_fail |
+| 18 | MES | EUROPE_FLOW | long | 2 | KILL: |t|<3.79 (-3.5291474188266267); WFE_none; era_unstable |
+| 19 | MES | EUROPE_FLOW | short | 1.5 | KILL: raw_p>=0.05 (0.40921846478111745); |t|<3.79 (-0.8296269790842863); WFE_none; BH_family_fail |
+| 20 | MES | EUROPE_FLOW | short | 2 | KILL: |t|<3.79 (-2.323662212227902); dir_mismatch; WFE_none; BH_family_fail |
+| 21 | MES | NYSE_OPEN | long | 1.5 | KILL: raw_p>=0.05 (0.620453839411129); |t|<3.79 (-0.4957267267456075); WFE_none; era_unstable; BH_family_fail |
+| 22 | MES | NYSE_OPEN | long | 2 | KILL: raw_p>=0.05 (0.2827781741294546); |t|<3.79 (-1.0761836682161896); arithmetic_only; WFE_none; era_unstable; BH_family_fail |
+| 23 | MES | NYSE_OPEN | short | 1.5 | KILL: raw_p>=0.05 (0.7222278146557148); |t|<3.79 (0.3566100522574533); WFE>0.95 LEAKAGE_SUSPECT (16.431); BH_family_fail |
+| 24 | MES | NYSE_OPEN | short | 2 | KILL: raw_p>=0.05 (0.9903690157852068); |t|<3.79 (-0.012106087163431539); WFE_none; BH_family_fail |
 
 ## Methodology notes
 
@@ -164,78 +164,5 @@
 ## Reproduction
 
 ```
-DUCKDB_PATH=C:\Users\joshd\canompx3\gold.db python research/htf_path_a_prev_month_v1_scan.py
+DUCKDB_PATH=/mnt/c/Users/joshd/canompx3/gold.db python research/htf_path_a_prev_month_v1_scan.py
 ```
-
-## Closure recommendation (per lock-and-run directive)
-
-Prev-month v1 replicates the prev-week v1 pattern: 24 pre-registered cells, zero survivors under the Pathway A "take the trade" direction, FAMILY KILL FK1.
-
-Combined across both HTF families (prev-week v1 + prev-month v1 = K=48 pre-registered trials on identical 6.65yr clean MNQ/MES data), no cell has cleared the Chordia t ≥ 3.79 no-theory gate in the pre-registered direction. The HTF-level-break-as-filter research class is therefore **near-closed**, per the user lock-and-run directive.
-
-**Closure criteria before any further HTF-level-break pre-reg:**
-- a structurally new mechanism story distinct from "liquidity sweep" (prev-week) and "calendar-institutional rebalancing" (prev-month), OR
-- at least one Pathway-A-qualifying literature extract added to `docs/institutional/literature/` on level-based S/R mechanisms. Candidate sources: Dalton *Mind Over Markets*, Murphy *Technical Analysis of the Financial Markets*. Both are absent from `resources/` and require acquisition. Chan *Algorithmic Trading* Ch 4 was previously listed here; on 2026-04-19 verification of the book's TOC (see `docs/institutional/literature/chan_2013_toc_determination.md`) it was confirmed to be "Mean Reversion of Stocks and ETFs" — a category error for level-break grounding, and is removed from this list. AND
-- an explicit statement of how the new mechanism differs from the two killed families and why the new literature raises the prior above 30% genuine
-
-**Not in closure scope (not a reopen):**
-- The MES EUROPE_FLOW long signed-inverted shadow (`docs/audit/hypotheses/2026-04-18-htf-mes-europe-flow-long-skip-rule-shadow.yaml`) remains LOCKED as a zero-capital observational contract. Prev-month v1 cells #17/#18 (MES EUROPE_FLOW long) replicate the same wrong-sign significance seen in prev-week v1 cells #17/#18, and prev-month v1 now ALSO shows the pattern on MES TOKYO_OPEN long (cells #13/#14 here, t = -3.63 / -3.79). This strengthens the observational case for the shadow but does NOT authorise a direct discovery pre-reg on the inverted direction — that remains subject to the peek-penalty and single-lane discipline already in the shadow YAML.
-
-**Honest status:** HTF-level-break-as-filter (take-aligned direction) is closed. The wrong-sign residual-anomaly lane is under observation. Research effort should move to a new mechanism class until one of the closure-criteria items above is met.
-
----
-
-## Adversarial-audit addendum — 2026-04-19
-
-**Context.** The § Closure recommendation paragraph above frames the MES EUROPE_FLOW long wrong-sign finding as prev-month v1 *replicating* prev-week v1, and frames MES TOKYO_OPEN long as *also showing the pattern*. A post-commit adversarial audit showed that framing is **overstated on MES EUROPE_FLOW and wrong on MES TOKYO_OPEN**. The numbers below correct the record; they do not change the primary FAMILY KILL FK1 verdict.
-
-**Reproducible via `research/htf_path_a_overlap_decomposition.py`** (committed with this addendum revision). Output markdown at `docs/audit/results/2026-04-19-htf-path-a-overlap-decomposition.md` is regenerated on each run.
-
-### Fire-overlap between prev-week v1 and prev-month v1
-
-Counts are trades actually taken — trading_days where both the HTF predicate fired AND `orb_outcomes` carries a non-null `pnl_r` for the (E2, CB=1, O15, direction='long', RR=2.0) cell. This is the canonical population the t-tests below run on. Counts from `daily_features` fires alone would be 2-3 trading-days higher per lane (days without a trade row).
-
-| Lane | PW trades | PM trades | Both | Overlap (% of PM trades also PW) |
-|---|---:|---:|---:|---:|
-| MES EUROPE_FLOW long | 213 | 341 | 146 | 42.8% |
-| MES TOKYO_OPEN long | 181 | 309 | 121 | 39.2% |
-
-### Overlap decomposition — MES EUROPE_FLOW long RR2.0 (cell #18)
-
-| Subset | N | mean pnl_r | t | raw p |
-|---|---:|---:|---:|---:|
-| OVERLAP (PM ∧ PW) | 146 | -0.353 | **-4.018** | 0.0001 |
-| NON-OVERLAP (PM-only, ¬PW) | 195 | -0.119 | -1.384 | 0.168 |
-| Combined (cell as scanned) | 341 | -0.219 | -3.53 | 0.0005 |
-
-The cell's combined-sample significance is carried by the OVERLAP subset — those are largely the same days prev-week v1 already flagged. The prev-month-specific contribution (non-overlap) is not significant at the raw level and would not clear any BH-FDR framing in isolation. Calling it "replication" conflates cross-family agreement with cross-family redundancy.
-
-### Overlap decomposition — MES TOKYO_OPEN long RR2.0 (cell #14)
-
-| Subset | N | mean pnl_r | t | raw p |
-|---|---:|---:|---:|---:|
-| OVERLAP (PM ∧ PW) | 121 | -0.193 | -1.863 | 0.065 |
-| NON-OVERLAP (PM-only, ¬PW) | 188 | -0.275 | **-3.367** | **0.0009** |
-| Combined (cell as scanned) | 309 | -0.243 | -3.79 | 0.0002 |
-
-On MES TOKYO_OPEN the pattern is the opposite — the non-overlap subset carries the signal. This is **a genuinely new independent observation**, not a replication of prev-week v1. Prev-week v1 scanned this lane in its cells #13/#14 and did not produce a wrong-sign significance; prev-month v1 does, driven by days prev-week v1 did not flag.
-
-### Implications — what this changes, what it does not
-
-1. **Primary verdict unchanged.** FAMILY KILL FK1 on the take-direction stands. Zero of 24 cells clear the pre-registered gate. Combined K=48 across prev-week v1 and prev-month v1 remains zero-survivor in the pre-registered direction.
-2. **Evidence for the existing MES EUROPE_FLOW long shadow is NOT strengthened by prev-month v1.** The prev-month MES EUROPE_FLOW wrong-sign result is 43%-overlap-driven. Treat prev-week v1 as the primary evidence line for that shadow.
-3. **MES TOKYO_OPEN long is OUT OF SCOPE for the existing shadow.** The shadow pre-reg (`2026-04-18-htf-mes-europe-flow-long-skip-rule-shadow.yaml`) is single-lane by construction. The non-overlap TOKYO_OPEN finding is a standalone residual observation — it must not trigger scope expansion of that shadow.
-4. **If MES TOKYO_OPEN long is pursued**, it requires a separate peek-penalized pre-reg (single lane, fresh-OOS only, Carver-style forecast combination not in scope). Alternatively, file as a research note and move on.
-
-### Reproduction
-
-```
-DUCKDB_PATH=C:/Users/joshd/canompx3/gold.db python research/htf_path_a_overlap_decomposition.py
-```
-
-Script: `research/htf_path_a_overlap_decomposition.py`. Result markdown (regenerated each run): `docs/audit/results/2026-04-19-htf-path-a-overlap-decomposition.md`. IS window `trading_day < HOLDOUT_SACRED_FROM` imported from `trading_app.holdout_policy`. Predicate SQL copied verbatim from the long-direction branch of `research/htf_path_a_prev_week_v1_scan.py::_predicate_sql` and `research/htf_path_a_prev_month_v1_scan.py::_predicate_sql`. T-test formula matches `_t_test` in those scans (scipy `stats.t.cdf`). No randomness — canonical IS query reproduces the same numbers exactly on the same DB state.
-
-### Historical failure pointer
-
-This addendum is a local instance of the class described in `.claude/rules/backtesting-methodology.md` § RULE 12 ("Every top survivor references the same feature class" → spurious global vs spurious family): two scans over the same feature family can agree from redundancy rather than independence. Cross-scan overlap must be decomposed before claiming replication. Appended to the § Historical failure log of that file in the commit that revises this addendum.
-

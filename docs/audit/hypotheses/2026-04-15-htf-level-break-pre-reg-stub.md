@@ -1,6 +1,6 @@
-# Pre-Reg Stub — HTF Level Break Hypothesis (Path A, DEFERRED)
+# Pre-Reg Stub — HTF Level Break Hypothesis (Path A, DEFERRED / PARTIALLY CLOSED)
 
-**Status:** DEFERRED — not started. Stub held open pending completion of Path C (finish H2/rel_vol book) and then a design session to firm the pre-reg into a runnable hypothesis.
+**Status:** DEFERRED at creation; updated 2026-04-20 after verification. The simple v1 "take the break through prev-week / prev-month level" family was implemented, pre-registered, and FAMILY-KILLED on 2026-04-18. This stub now remains open only for structurally new HTF mechanisms, not for the already-killed v1 family.
 
 **Created:** 2026-04-15
 **Parent handover:** `docs/handoffs/2026-04-15-session-handover.md` § Tier 1
@@ -16,18 +16,25 @@ Mechanism prior: Fitschen Ch 3 (intraday trend-follow on commodities + stock ind
 
 ---
 
-## Required pipeline features (not yet built)
+## Feature state (2026-04-20 correction)
 
-Add to `pipeline/build_daily_features.py` (or a new module called from it):
+The original version of this stub said the HTF fields below were "not yet built."
+That is now stale. As verified on 2026-04-20:
+
+- `prev_week_*` and `prev_month_*` are already built in `pipeline/build_daily_features.py`
+- canonical population path is `_apply_htf_level_fields(...)`
+- narrow-run seed loading was fixed in commit `234c7d0d`
+- one lingering stale row in `gold.db` (`MGC 2026-04-17 O5`) was repaired via `scripts/backfill_htf_levels.py`
+- v1 scan results are already on disk:
+  - `docs/audit/results/2026-04-18-htf-path-a-prev-week-v1-scan.md`
+  - `docs/audit/results/2026-04-18-htf-path-a-prev-month-v1-scan.md`
+  - both verdicts = `FAMILY KILL`
+
+What remains unbuilt are the *touched-to-date / first-touch* features and any
+new rolling-high / rolling-low variants:
 
 | Feature | Definition | Storage |
 |---------|-----------|---------|
-| `prev_week_high` | max(session_high) for Mon-Fri of PRIOR week (ISO week) | daily_features |
-| `prev_week_low` | min(session_low) for prior week | daily_features |
-| `prev_week_close` | close of last bar of prior week | daily_features |
-| `prev_month_high` | max(session_high) for calendar PRIOR month | daily_features |
-| `prev_month_low` | min(session_low) for prior month | daily_features |
-| `prev_month_close` | close of last bar of prior month | daily_features |
 | `week_high_touched_to_date` | boolean: has current week already traded through prev_week_high? | daily_features (needs day-by-day accumulation) |
 | `month_high_touched_to_date` | boolean equivalent for month | daily_features |
 
@@ -54,7 +61,7 @@ Per `docs/institutional/pre_registered_criteria.md`:
 |--------|-------|-------------------------------|
 | Fitschen 2013 Ch 3 intraday trend-follow | ✅ in `docs/institutional/literature/` | — |
 | Murphy (technical analysis on levels) | ❌ | priority before pre-reg |
-| Chan Ch 4 level mean-reversion | ✅ `resources/Algorithmic_Trading_Chan.pdf` | extract needed |
+| Chan Ch 4 level mean-reversion | ❌ category error for HTF break grounding | removed 2026-04-19 after TOC verification |
 | Dalton *Markets in Profile* | ❌ | priority for Path A.2 (Market Profile) |
 | O'Neill *How to Make Money in Stocks* (new highs) | ❌ | optional; not commodities-specific |
 
@@ -74,4 +81,10 @@ Per `docs/institutional/pre_registered_criteria.md`:
 - After any non-ORB terminal work (Phase E) reports so the level-design doesn't duplicate effort.
 - Before starting, revisit `docs/audit/hypotheses/phase-e-non-orb-strategy-class.md` to ensure non-duplication with parallel non-ORB design.
 
-**Next action when resumed:** design session (mode: plan) to convert this stub into a proper pre-reg file `docs/audit/hypotheses/YYYY-MM-DD-htf-level-break.md` per the pre_registered_criteria template. No code until pre-reg is committed.
+**Next action when resumed:** only reopen if the new pre-reg is structurally different from the killed v1 family. Acceptable reopen shapes:
+
+1. first-touch / touched-to-date gating once those features exist
+2. distance-to-HTF-level / inside-vs-outside range conditioning rather than simple break-through predicates
+3. literature-grounded HTF level theory that changes the prior and the evaluation pathway
+
+Do not reopen the simple "prev-week / prev-month break-aligned take filter" family.

@@ -184,7 +184,7 @@ kill_criteria:
   - id: K1_family_zero_survivors
     metric: count of H1 survivors
     threshold_lt: 1
-    action: "VWAP family marked DOCTRINE-CLOSED for now. Update HANDOFF.md with kill verdict. Recommend non-VWAP next path (HTF Phase A build per surface map)."
+    action: "VWAP family marked DOCTRINE-CLOSED for now. Update HANDOFF.md with kill verdict. Recommend a non-VWAP next path, but do not blindly queue the old HTF Phase A build item without re-checking branch state."
   - id: K2_l6_positive_control_fails
     metric: H3_l6_positive_control pass count
     threshold_lt: 1
@@ -204,7 +204,7 @@ decision_rule:
   park_if: "H1 survivors == 1 OR 2"
   park_action: "Document the 1-2 survivors as 'promising but family-level under-power'. Defer per-cell Pathway B until next discovery cycle. Do NOT deploy."
   kill_if: "H1 survivors == 0"
-  kill_action: "K1 fires. VWAP family DOCTRINE-CLOSED. Move to next surface-map item (HTF Phase A build, per recommendation in surface map)."
+  kill_action: "K1 fires. VWAP family DOCTRINE-CLOSED. Choose the next still-open mechanism family; do not assume the old HTF Phase A build item is still pending."
 
 methodology_rules_applied:
   - rule: backtesting-methodology.md Rule 1 (feature temporal alignment)
@@ -287,5 +287,5 @@ not_done_by_this_pre_reg:
 post_run_actions:
   - commit result md
   - update HANDOFF.md with one-line verdict
-  - if K1 (family kill) fires: log VWAP family closure in HANDOFF + memory; recommend HTF Phase A build as next session focus
+  - if K1 (family kill) fires: log VWAP family closure in HANDOFF + memory; verify whether HTF Phase A is still open before naming it as next-session focus
   - if continue_if fires: write a separate cross-factor pre-reg for rel_vol × VWAP for next session

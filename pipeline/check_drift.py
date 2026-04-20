@@ -3220,6 +3220,108 @@ def check_htf_levels_integrity(con=None) -> list[str]:
     return violations
 
 
+def check_htf_aperture_consistency(con=None) -> list[str]:
+    """Verify HTF fields are identical across apertures for each day/symbol.
+
+    ``prev_week_*`` / ``prev_month_*`` are derived from completed higher-timeframe
+    daily OHLC aggregates. They are orb-agnostic by definition, so a single
+    ``(symbol, trading_day)`` must never carry different HTF values across the
+    O5/O15/O30 duplicate rows. This catches partial stale-miss / partial repair
+    states that can survive when one aperture is rebuilt or repaired and a
+    sibling aperture is left untouched.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
+        htf_cols = [
+            "prev_week_high",
+            "prev_week_low",
+            "prev_week_open",
+            "prev_week_close",
+            "prev_week_range",
+            "prev_week_mid",
+            "prev_month_high",
+            "prev_month_low",
+            "prev_month_open",
+            "prev_month_close",
+            "prev_month_range",
+            "prev_month_mid",
+        ]
+
+        diff_exprs = ",\n                       ".join(
+            [
+                (
+                    "CASE WHEN COUNT(DISTINCT COALESCE(CAST("
+                    f"{col} AS VARCHAR), '__NULL__')) > 1 THEN '{col}(aperture_diff)' END AS {col}"
+                )
+                for col in htf_cols
+            ]
+        )
+
+        sql = f"""
+            WITH grouped AS (
+                SELECT symbol,
+                       trading_day,
+                       {diff_exprs}
+                FROM daily_features
+                WHERE symbol IN ({active_syms})
+                GROUP BY symbol, trading_day
+                HAVING COUNT(*) > 1
+            )
+            SELECT symbol,
+                   trading_day,
+                   COALESCE(prev_week_high, '')   AS e1,
+                   COALESCE(prev_week_low, '')    AS e2,
+                   COALESCE(prev_week_open, '')   AS e3,
+                   COALESCE(prev_week_close, '')  AS e4,
+                   COALESCE(prev_week_range, '')  AS e5,
+                   COALESCE(prev_week_mid, '')    AS e6,
+                   COALESCE(prev_month_high, '')  AS e7,
+                   COALESCE(prev_month_low, '')   AS e8,
+                   COALESCE(prev_month_open, '')  AS e9,
+                   COALESCE(prev_month_close, '') AS e10,
+                   COALESCE(prev_month_range, '') AS e11,
+                   COALESCE(prev_month_mid, '')   AS e12
+            FROM grouped
+            WHERE prev_week_high  IS NOT NULL
+               OR prev_week_low   IS NOT NULL
+               OR prev_week_open  IS NOT NULL
+               OR prev_week_close IS NOT NULL
+               OR prev_week_range IS NOT NULL
+               OR prev_week_mid   IS NOT NULL
+               OR prev_month_high IS NOT NULL
+               OR prev_month_low  IS NOT NULL
+               OR prev_month_open IS NOT NULL
+               OR prev_month_close IS NOT NULL
+               OR prev_month_range IS NOT NULL
+               OR prev_month_mid   IS NOT NULL
+            LIMIT 20
+        """
+        bad = con.execute(sql).fetchall()
+        for row in bad:
+            sym, td = row[0], row[1]
+            diverged = [msg for msg in row[2:] if msg and msg != ""]
+            violations.append(f"  {sym} {td}: HTF aperture divergence → {'; '.join(diverged)}")
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_htf_aperture_consistency: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 def check_data_continuity(con=None) -> list[str]:
     """Check #58: Warn on unexpected gaps in trading days per instrument.
 
@@ -5594,6 +5696,12 @@ CHECKS = [
     (
         "HTF level fields match canonical week/month SQL aggregation",
         check_htf_levels_integrity,
+        False,
+        True,
+    ),  # requires_db
+    (
+        "HTF fields consistent across apertures for each trading_day × symbol",
+        check_htf_aperture_consistency,
         False,
         True,
     ),  # requires_db

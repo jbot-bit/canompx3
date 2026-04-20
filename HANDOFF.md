@@ -4,6 +4,97 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late-late-late — HTF branch closed: integrity repaired, simple v1 family dead)
+
+Follow-on to the "HTF thing" request. User wanted this handled as an
+institutional research branch, not a one-row patch. The resulting branch has
+two outcomes:
+
+1. the stale HTF integrity issue is repaired and guarded
+2. the simple HTF prev-week / prev-month break-aligned family is now explicitly
+   closed unless a new mechanism is pre-registered
+
+### What was verified
+
+- The failing hook/drift issue was real but narrow:
+  - `MGC 2026-04-17` had `prev_week_*` / `prev_month_*` NULL on the `O5` row
+  - sibling `O15` / `O30` rows on the same day were populated
+  - canonical SQL confirmed this was a single-row stale miss, not a global HTF
+    aggregation failure
+- Root-cause code had already been fixed by commit `234c7d0d`
+  - `pipeline.build_daily_features()` now seeds `_apply_htf_level_fields(...)`
+    with prior history via `_load_htf_seed_rows(...)`
+  - so narrow incremental builds no longer zero out HTF fields
+- One-shot repair succeeded:
+  - `./.venv-wsl/bin/python scripts/backfill_htf_levels.py --symbols MGC`
+  - output: `MGC: 1120 rows, 1114 non-null prev_week_high`
+- Structural fire-rate remains valid for the old v1 family:
+  - `./.venv-wsl/bin/python research/verify_htf_fire_rate.py`
+  - all 6 prev-week v1 cells are in the `[5%, 95%]` band on pre-holdout data
+- Canonical scans were re-run on current DB state:
+  - `./.venv-wsl/bin/python research/htf_path_a_prev_week_v1_scan.py`
+  - `./.venv-wsl/bin/python research/htf_path_a_prev_month_v1_scan.py`
+  - `./.venv-wsl/bin/python research/htf_path_a_overlap_decomposition.py`
+  - verdict unchanged:
+    - prev-week v1 = `FAMILY KILL`
+    - prev-month v1 = `FAMILY KILL`
+
+### What landed
+
+- New drift guard:
+  - `pipeline/check_drift.py`
+    - added `check_htf_aperture_consistency()`
+    - fails if HTF fields differ across O5/O15/O30 rows for the same
+      `(symbol, trading_day)`
+  - `tests/test_pipeline/test_check_drift_db.py`
+    - coverage for divergence catch + clean pass
+- HTF docs corrected so the repo stops lying to itself:
+  - `docs/audit/hypotheses/2026-04-15-htf-level-break-pre-reg-stub.md`
+    - no longer claims `prev_week_*` / `prev_month_*` are "not yet built"
+    - explicitly says the simple v1 family is already killed
+  - `docs/audit/hypotheses/2026-04-15-htf-sr-untested-axes-roadmap.md`
+    - axis 6 now points to the *next* mechanism layer
+      (first-touch / touched-to-date / distance / rolling levels), not the
+      already-killed simple weekly/monthly break family
+  - `docs/audit/results/2026-04-18-vwap-comprehensive-family-scan.md`
+  - `docs/audit/hypotheses/2026-04-18-vwap-comprehensive-family-scan.yaml`
+  - `research/vwap_comprehensive_family_scan.py`
+    - old "next step = build HTF Phase A" guidance corrected; simple HTF v1 is
+      no longer an unopened branch
+- New synthesis doc:
+  - `docs/plans/2026-04-20-htf-branch-closeout.md`
+    - states what was repaired, what was re-run, where the simple HTF thesis
+      failed, and what would justify reopening HTF work
+
+### Verification
+
+- `./.venv-wsl/bin/python -m pytest tests/test_pipeline/test_check_drift_db.py -q`
+  - `36 passed`
+- `./.venv-wsl/bin/python -m ruff check pipeline/check_drift.py tests/test_pipeline/test_check_drift_db.py research/vwap_comprehensive_family_scan.py`
+  - passed
+- `./.venv-wsl/bin/python -m py_compile pipeline/check_drift.py tests/test_pipeline/test_check_drift_db.py research/vwap_comprehensive_family_scan.py`
+  - passed
+- `git diff --check`
+  - passed
+- `./.venv-wsl/bin/python pipeline/check_drift.py`
+  - HTF checks now pass:
+    - `Check 59` passed
+    - `Check 60` passed
+  - remaining failures are unrelated baseline import issues:
+    - `trading_app.ai.claude_client`: missing `anthropic`
+    - `trading_app.ai.query_agent`: missing `anthropic`
+
+### Net decision
+
+- **Closed:** simple HTF level-break-as-filter family
+  - prev-week high/low break-aligned take filters
+  - prev-month high/low break-aligned take filters
+- **Open only if structurally new:**
+  - first-touch / touched-to-date state
+  - distance-to-HTF-level or inside/outside-range conditioning
+  - rolling-level variants
+  - literature-grounded level-theory pathway that changes the prior
+
 ## Update (2026-04-20 late-late — GC proxy rule enforced in loader; MZC Stage 1 says ZC proxy is mandatory)
 
 Follow-on to the asset-universe / proxy-policy thread. User asked the right operational question: `GC` has different volume/liquidity than `MGC`, so does the project actually know how to handle that, or are we relying on memory? Answer after verification: the repo mostly knew, but one enforcement gap existed and is now closed.
