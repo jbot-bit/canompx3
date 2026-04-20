@@ -218,6 +218,55 @@ startup-hook compression, the highest remaining Claude-side EV/ROI issue was
   - covers stale investigation-mode reset on implementation prompts
   - covers normal investigation prompt activation
 
+## Update (2026-04-21 — liquidity/displacement prompt material is now saved as audited ideation, not evidence)
+
+User pasted a large external "liquidity -> displacement -> rebalance"
+framework and explicitly wanted it saved and used for future hypotheses /
+preregs / profit-finding without letting it become chart-lore.
+
+### What landed
+
+- New prompt guide:
+  - `docs/prompts/LIQUIDITY_DISPLACEMENT_TRANSLATOR.md`
+- Pointer added from:
+  - `docs/institutional/mechanism_priors.md`
+- Integration hook added to:
+  - `docs/prompts/prereg-writer-prompt.md`
+
+### What the guide does
+
+- classifies external liquidity/FVG/sweep prompts as **IDEATION_ONLY**
+- grounds future use in local doctrine + local `resources/`
+- maps discretionary terms into repo-safe objective translations
+- forces role declaration:
+  - standalone
+  - filter
+  - conditioner
+  - allocator
+  - confluence
+- identifies the highest-EV starter families from this material:
+  - `sweep -> reclaim reversal`
+  - `opening-drive pullback continuation`
+  - `failure-of-sweep opposite-side trade`
+
+### What it explicitly forbids
+
+- using "institutional footprint" / "only real model" rhetoric as proof
+- importing FVG / IFVG ontology directly
+- market-ranking claims as evidence
+- turning a prompt into a broad uncontrolled family
+- using 2026 OOS to design a new family
+
+### Net decision
+
+These external prompts are now durable project inputs, but only as:
+
+- prior-belief generators
+- pre-reg candidate shapers
+- vocabulary-to-geometry translators
+
+They are **not** evidence and do not bypass local institutional gates.
+
 ### Why this matters
 
 - reduces repeated prompt-token burn on Claude without removing the actual

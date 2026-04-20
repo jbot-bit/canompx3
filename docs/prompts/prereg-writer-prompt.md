@@ -57,6 +57,10 @@ A. READ FIRST
 - `.claude/rules/research-truth-protocol.md`
 - `docs/institutional/pre_registered_criteria.md`
 - Parent spec (if supplied)
+- If the source idea uses liquidity / sweep / displacement / FVG style language:
+  - `docs/prompts/LIQUIDITY_DISPLACEMENT_TRANSLATOR.md`
+  - `docs/specs/level_interaction_v1.md`
+  - `docs/institutional/mechanism_priors.md`
 
 B. VERIFY SCOPE VIA CANONICAL QUERIES
 Run (or instruct the user to run) the minimum set of queries to verify every scope field. For a deployed lane, confirm the exact `strategy_id` exists in `validated_setups`. For a feature, confirm the column exists in `daily_features`. For a filter, confirm it's in `ALL_FILTERS` and read its matches_row implementation.

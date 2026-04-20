@@ -224,6 +224,7 @@ Priors don't validate; testing does.
 
 ## 12. Referenced from
 
+- `docs/prompts/LIQUIDITY_DISPLACEMENT_TRANSLATOR.md` — audited translation layer for external sweep/displacement/FVG-style prompts
 - `CLAUDE.md` § Research methodology grounding — **ADD POINTER**
 - `.claude/rules/institutional-rigor.md` § 7 — **ADD POINTER**
 - `docs/institutional/README.md` — **ADD POINTER**
