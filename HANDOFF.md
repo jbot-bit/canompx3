@@ -4,6 +4,34 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late night — pre-commit restage bug fixed for ignored tracked files)
+
+Follow-up to `fa9db503` startup-routing work. A normal commit on that change
+tripped a real hook bug: `.githooks/pre-commit` auto-formats staged Python
+files, then re-stages them with plain `git add`, which fails for tracked files
+under ignored paths like `.claude/hooks/*`.
+
+### What landed
+
+- `.githooks/pre-commit`
+  - replaced the `xargs git add` restage step with a per-file loop
+  - uses `git check-ignore -q` to detect ignored paths
+  - uses `git add -f -- <file>` only for ignored tracked files
+  - uses normal `git add -- <file>` otherwise
+
+### Why this matters
+
+- hook-managed formatting no longer forces `--no-verify` for legitimate edits
+  under ignored-but-tracked surfaces such as `.claude/hooks/*`
+- fixes a real workflow regression without weakening any validation gates
+
+### Verification
+
+- `bash -n .githooks/pre-commit`
+- `git diff --check`
+
+Result: syntax clean; diff clean.
+
 ## Update (2026-04-20 late night — startup routing hardened for token efficiency without dropping rigor)
 
 Follow-up to the hook-noise / startup-tax audit. The repo had strong

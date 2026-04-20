@@ -76,7 +76,16 @@ if ! "$RUFF" format --check pipeline/ trading_app/ scripts/ tests/ > /dev/null 2
     # Re-stage only the files that were already staged (don't add new files)
     STAGED_FOR_FMT=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
     if [ -n "$STAGED_FOR_FMT" ]; then
-        echo "$STAGED_FOR_FMT" | xargs git add
+        while IFS= read -r staged_file; do
+            [ -z "$staged_file" ] && continue
+            if git check-ignore -q "$staged_file"; then
+                git add -f -- "$staged_file"
+            else
+                git add -- "$staged_file"
+            fi
+        done <<EOF
+$STAGED_FOR_FMT
+EOF
     fi
     echo "  Auto-formatted and re-staged"
 fi
