@@ -18,16 +18,25 @@ Usage:
     python pipeline/build_daily_features.py --instrument MGC --start 2024-01-01 --end 2024-01-31 --dry-run
 """
 
+from __future__ import annotations
+
 import argparse
 import statistics
 import sys
 from bisect import bisect_left
 from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
-import duckdb
-import numpy as np
-import pandas as pd
+# duckdb / numpy / pandas lazy-loaded inside the 7 functions that use them at
+# runtime (PEP 8 delayed imports). Annotations reference pd.DataFrame,
+# pd.Timestamp, np.ndarray, duckdb.DuckDBPyConnection — PEP 563 stringifies
+# them, TYPE_CHECKING keeps static-checker resolution intact without a
+# runtime import.
+if TYPE_CHECKING:
+    import duckdb
+    import numpy as np
+    import pandas as pd
 
 from pipeline.asset_configs import get_asset_config, list_instruments
 from pipeline.calendar_filters import day_of_week, is_friday, is_monday, is_nfp_day, is_opex_day, is_tuesday
@@ -167,6 +176,8 @@ def get_bars_for_trading_day(con: duckdb.DuckDBPyConnection, symbol: str, tradin
     Returns DataFrame with columns: ts_utc, open, high, low, close, volume, source_symbol
     ts_utc is timezone-aware (UTC).
     """
+    import pandas as pd
+
     start_utc, end_utc = compute_trading_day_utc_range(trading_day)
 
     query = """
@@ -717,6 +728,8 @@ def compute_garch_forecast(daily_closes: list[float], min_obs: int = 252) -> flo
       - All returns are zero (constant prices)
       - Model fails to converge
     """
+    import numpy as np
+
     if len(daily_closes) < min_obs:
         return None
 
@@ -769,6 +782,9 @@ def compute_rsi_at_cme_reopen(
 
     Returns RSI value (0-100) or None if insufficient data.
     """
+    import numpy as np
+    import pandas as pd
+
     # 09:00 Brisbane on trading_day = 23:00 UTC on (trading_day - 1)
     orb_0900_utc = datetime(
         trading_day.year, trading_day.month, trading_day.day, TRADING_DAY_START_HOUR_LOCAL, 0, 0, tzinfo=BRISBANE_TZ
@@ -820,6 +836,8 @@ def _wilders_rsi(closes: np.ndarray, period: int = 14) -> float | None:
 
     Returns the final RSI value, or None if insufficient data.
     """
+    import numpy as np
+
     if len(closes) < period + 1:
         return None
 
@@ -978,6 +996,8 @@ def build_features_for_day(
 
     Returns a dict matching daily_features column names.
     """
+    import pandas as pd  # noqa: F401  # used via DuckDB replacement scan on features_df
+
     # Use pre-loaded bars if available, otherwise fetch (slow path)
     if bars_df is None:
         bars_df = get_bars_for_trading_day(con, symbol, trading_day)
@@ -1166,6 +1186,9 @@ def build_daily_features(
 
     Returns number of rows written.
     """
+    import numpy as np
+    import pandas as pd
+
     # Load cost model (optional — only if instrument is validated)
     try:
         cost_spec = get_cost_spec(symbol)
@@ -1730,6 +1753,8 @@ def verify_daily_features(
 
 
 def main():
+    import duckdb
+
     parser = argparse.ArgumentParser(description="Build daily_features from bars_1m and bars_5m")
     parser.add_argument("--instrument", type=str, required=True, help=f"Instrument ({', '.join(list_instruments())})")
     parser.add_argument("--start", type=str, required=True, help="Start date YYYY-MM-DD")

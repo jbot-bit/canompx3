@@ -7,9 +7,14 @@ scripts/tools/select_family_rr.py.
 
 from __future__ import annotations
 
-import numpy as np
-import pandas as pd
-from scipy import stats
+from typing import TYPE_CHECKING
+
+# numpy / pandas / scipy lazy-loaded inside jobson_korkie_p (the only runtime
+# user). per_trade_sharpe takes a pd.Series annotation but uses only Series
+# methods on the input — no runtime pandas needed here. PEP 563 stringifies
+# the pd.Series annotation; TYPE_CHECKING preserves static-checker resolution.
+if TYPE_CHECKING:
+    import pandas as pd  # noqa: F401  # used in pd.Series annotation
 
 
 def per_trade_sharpe(pnl: pd.Series) -> float:
@@ -50,6 +55,9 @@ def jobson_korkie_p(
         rho: Assumed correlation between the two return streams.
              Use 0.7 for same-trade-subset comparisons (meta-label filter).
     """
+    import numpy as np
+    from scipy import stats
+
     n_eff = min(n_a, n_b)
     if n_eff < 5:
         return 1.0  # insufficient data, treat as equal

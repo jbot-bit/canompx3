@@ -10,10 +10,13 @@ Usage:
     python trading_app/outcome_builder.py --instrument MGC --start 2024-01-01 --end 2024-12-31 --dry-run
 """
 
+from __future__ import annotations
+
 import sys
 import time
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pipeline.log import get_logger
 
@@ -22,9 +25,11 @@ logger = get_logger(__name__)
 # Force unbuffered stdout
 sys.stdout.reconfigure(line_buffering=True)  # type: ignore[union-attr]
 
-import duckdb
-import numpy as np
-import pandas as pd
+# pandas / numpy / duckdb lazy-loaded inside the 5 functions that use them.
+# Annotations reference pd.DataFrame — PEP 563 stringifies them, TYPE_CHECKING
+# keeps static-checker resolution intact without a runtime import.
+if TYPE_CHECKING:
+    import pandas as pd
 
 from pipeline.asset_configs import get_enabled_sessions
 from pipeline.build_daily_features import compute_trading_day_utc_range
@@ -71,6 +76,8 @@ def _check_fill_bar_exit(
     For E1: entry is at bar open, so full bar OHLC is post-fill.
     For E2/E3: entry is intra-bar at ORB level, check bar OHLC against levels.
     """
+    import pandas as pd
+
     fill_bar = bars_df[bars_df["ts_utc"] == pd.Timestamp(entry_ts)]
     if fill_bar.empty:
         return None
@@ -141,6 +148,8 @@ def _annotate_time_stop(
     Mirrors execution_engine EARLY_EXIT logic: at the first bar past threshold,
     if MTM < 0, exit at bar close.
     """
+    import pandas as pd
+
     result["ts_outcome"] = None
     result["ts_pnl_r"] = None
     result["ts_exit_ts"] = None
@@ -212,6 +221,9 @@ def _compute_outcomes_all_rr(
     Avoids redundant entry detection and DataFrame slicing across RR targets.
     Returns list of outcome dicts (one per RR target).
     """
+    import numpy as np
+    import pandas as pd
+
     null_result = {
         "entry_ts": None,
         "entry_price": None,
@@ -449,6 +461,9 @@ def compute_single_outcome(
             canonical lookup triple (trading_day, orb_label, orb_minutes)
             is incomplete.
     """
+    import numpy as np
+    import pandas as pd
+
     result = {
         "entry_ts": None,
         "entry_price": None,
@@ -667,6 +682,10 @@ def build_outcomes(
 
     Returns count of rows written.
     """
+    import duckdb
+    import numpy as np
+    import pandas as pd
+
     if db_path is None:
         db_path = GOLD_DB_PATH
 

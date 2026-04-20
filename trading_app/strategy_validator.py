@@ -29,8 +29,9 @@ import time
 from datetime import UTC, date, datetime
 from pathlib import Path
 
-import duckdb
-
+# duckdb lazy-loaded inside the 4 functions that use it (PEP 8 — delayed
+# imports for performance; duckdb's own import is modest but deferring keeps
+# this module's cold-import path free of the binary DLL load).
 from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
 from pipeline.audit_log import get_git_sha
 from pipeline.cost_model import get_cost_spec, stress_test_costs
@@ -983,6 +984,8 @@ def _check_criterion_8_oos(
     orb_label_str: str = str(orb_label)
     is_expr_f: float = float(is_expr)  # type: ignore[arg-type]
 
+    import duckdb
+
     effective_db = db_path if db_path is not None else GOLD_DB_PATH
     oos_pnl_r: list[float] = []
     with duckdb.connect(str(effective_db), read_only=True) as oos_con:
@@ -1284,6 +1287,8 @@ def run_validation(
     if workers is None:
         workers = min(8, max(1, (os.cpu_count() or 2) - 1))
     use_parallel = workers > 1 and enable_walkforward
+
+    import duckdb
 
     # ── Phase A: Load strategies + serial cull (phases 1-5) ──────────
     with duckdb.connect(str(db_path)) as con:
@@ -2351,6 +2356,8 @@ def _check_mode_a_holdout_integrity(db_path: Path | None, instrument: str) -> No
         # Fail-open: if the DB isn't there, discovery hasn't run anyway.
         # The discovery CLI gate would have caught contamination at entry.
         return
+
+    import duckdb
 
     sacred_year = str(HOLDOUT_SACRED_FROM.year)
     with duckdb.connect(str(effective_path), read_only=True) as con:
