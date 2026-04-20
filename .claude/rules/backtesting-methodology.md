@@ -284,7 +284,7 @@ Canonical check: run the scan, then re-run with a `mae_r` or `outcome` column in
 
 ## Historical failure log
 
-**Moved to `.claude/rules/backtesting-methodology-failure-log.md`** (no frontmatter, does not auto-inject).
+**Moved to `.claude/rules/backtesting-methodology-failure-log.md`** (self-scoped frontmatter — only auto-injects when that file is edited; `Read` on demand otherwise).
 
 Read that file when appending a new entry or investigating a past incident. Every fresh backtesting failure still gets logged there, cited by date slug.
 

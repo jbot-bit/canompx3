@@ -1,6 +1,10 @@
+---
+paths:
+  - ".claude/rules/backtesting-methodology-failure-log.md"
+---
 # Backtesting Methodology — Historical Failure Log
 
-**Companion to `.claude/rules/backtesting-methodology.md`.** No frontmatter → never auto-injects. Read on demand when:
+**Companion to `.claude/rules/backtesting-methodology.md`.** Frontmatter scoped so this only injects when the file itself is being edited (e.g. appending a new failure entry). Read on demand via `Read` for all other uses:
 - Logging a new failure mode (append + cite in `backtesting-methodology.md`'s rules)
 - Investigating a specific past incident (search by date slug)
 - Onboarding / calibration

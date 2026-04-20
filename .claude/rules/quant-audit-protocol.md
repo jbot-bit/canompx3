@@ -260,7 +260,7 @@ IMPLEMENTATION NOTE (if VALIDATED or ARITHMETIC_ONLY):
 
 ## KNOWN FAILURE PATTERNS
 
-**Moved to `.claude/rules/quant-audit-failure-patterns.md`** (no frontmatter, does not auto-inject).
+**Moved to `.claude/rules/quant-audit-failure-patterns.md`** (self-scoped frontmatter — only auto-injects when that file is edited; `Read` on demand otherwise).
 
 Read that file when logging a new confirmed failure pattern or when a specific pattern (e.g. `cost_risk_pct` tautology, `double_break` lookahead) is referenced.
 
