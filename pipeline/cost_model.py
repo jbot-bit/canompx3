@@ -141,11 +141,32 @@ COST_SPECS = {
         tick_size=0.25,  # Same tick size as MNQ
         min_ticks_floor=10,  # 10 ticks = 2.5pt = $50 minimum risk
     ),
-    # TODO(remediation-2026-03-25): MNQ slippage model is 1 tick ($0.50).
-    # MGC tbbo pilot showed mean=6.75 ticks (vs 1 modeled), std=41.57, max=263.
-    # MNQ tbbo pilot has NOT been run yet — research/research_mnq_e2_slippage_pilot.py exists.
-    # Run MNQ pilot before adjusting production slippage.
-    # Break-even analysis (scripts/tools/slippage_scenario.py):
+    # MNQ slippage model: 1 tick round-trip ($1.00 = 2 ticks × $0.50/tick).
+    #
+    # MNQ TBBO pilot (2026-04-20, N=114, 2021-02-10 to 2026-02-12,
+    # 6 sessions: CME_PRECLOSE, LONDON_METALS, NYSE_OPEN, SINGAPORE_OPEN,
+    # TOKYO_OPEN, US_DATA_830): MEDIAN=0 ticks, p95=0.35 ticks, MAX=+2 ticks,
+    # 100% of days ≤ 2 ticks. Modeled slippage is CONSERVATIVE vs measured
+    # on routine days. Deployed-lane subset (NYSE_OPEN / SINGAPORE_OPEN /
+    # TOKYO_OPEN, N=56): median=0, max=+1 tick, 100% ≤ 1 tick. Mean=-0.93
+    # is dominated by 4 BBO-staleness rows (spread ≥ 3 ticks at trigger);
+    # floor-at-zero conservative read gives mean ≈ +0.1 tick.
+    # Full doc: docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v1.md
+    #
+    # MGC TBBO pilot earlier (research/output/mgc_e2_slippage_analysis.json):
+    # N=40, MEDIAN=0, mean=6.75 dominated by ONE day (2018-01-18 gap-open
+    # event, 263 ticks). Trimmed mean ≈0.18 ticks. Honest central tendency
+    # is "both instruments fill at modeled routinely."
+    #
+    # STILL OPEN:
+    # - MNQ sample missing EUROPE_FLOW / COMEX_SETTLE / US_DATA_1000 (3 of 5
+    #   deployed sessions absent from cache)
+    # - Event-day tail NOT measured for MNQ (sample had no MGC-2018-type gap)
+    # - MES TBBO pilot has NOT been run. Book-wide event-day tail unquantified.
+    # - Phase D MNQ COMEX_SETTLE pilot gate (2026-05-15) benefits from a
+    #   targeted COMEX_SETTLE TBBO pull before evaluation.
+    #
+    # Break-even analysis (scripts/tools/slippage_scenario.py) for REFERENCE:
     #   COMEX_SETTLE: 4.9 extra ticks to zero (FRAGILE)
     #   SINGAPORE_OPEN: 6.0 extra ticks to zero
     #   NYSE_CLOSE: 15.4 extra ticks (robust)

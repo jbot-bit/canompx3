@@ -4,6 +4,57 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late — MNQ TBBO pilot LANDED; closure = conservative vs modeled)
+
+Follow-on to the evening H0 rerun + MNQ pilot blocker. User direction: "proper planning, no ad-hoc." Plan v2 audited, approved, executed end-to-end across 4 stages.
+
+### What landed
+
+- **Stage 0 pre-flight.** Stage file `docs/runtime/stages/mnq-tbbo-pilot-v2.md` (YAML scope_lock). Blast-radius agent confirmed: cost_model.py comment-only (0 runtime impact; 139 importers unaffected); MNQ pilot script 0 importers; canonical `reprice_e2_entry` untouched.
+- **Stage 1 canonical regression tests** (`tests/test_research/test_reprice_e2_entry_regression.py`, 3/3 GREEN). Reproduces published MGC values on 2017-04-26 (clean 0-tick) and 2018-01-18 (263-tick event-day) cached files; protects against silent canonical drift that would invalidate parent-audit §4.
+- **Stage 2 caller rewrite + tests** (`tests/test_research/test_mnq_pilot_caller.py`, 9/9 GREEN). Replaced `reprice_entry` → `reprice_e2_entry`; removed dummy `orb_high/orb_low` (fetches real values via triple-join on `daily_features`); added `--reprice-cache` mode that reverse-engineers manifest from 119 cached filenames.
+- **Stage 3 pilot run + result doc.** `research/data/tbbo_mnq_pilot/slippage_results_cache_v2.csv` — 114 valid / 5 legitimate error rows (4× no_trigger_trade_found, 1× daily_features missing). Result doc: `docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v1.md`.
+- **Stage 4 verify + commit.** All Stage 1+2 tests green (81 including surrounding suites); cost_model/databento tests green. 17 drift violations detected BUT all in pre-existing syntax-errored files outside scope (pipeline/audit_bars_coverage.py, daily_backfill.py, health_check.py, ingest_statistics.py; trading_app/account_survival.py — ruff-churn working-tree leftovers from earlier terminal, not this work).
+
+### Verdict — MNQ slippage is CONSERVATIVE vs modeled on the 119-day cache
+
+- **MEDIAN = 0 ticks** (same as MGC)
+- **p95 = 0.35 ticks**, **MAX = +2 ticks** (100% of days ≤ modeled 2-tick round-trip)
+- Deployed-lane subset (NYSE_OPEN/SINGAPORE_OPEN/TOKYO_OPEN, N=56): median=0, max=+1, 100% ≤ 1 tick
+- No MGC-type event-day tail in 2021-2026 sample (no equivalent of MGC 2018-01-18 gap)
+- Negative-slippage outliers (4 rows) are BBO-staleness artifacts during wide-spread fast moves, NOT real favorable fills
+
+**Operational impact:** 6 live MNQ lanes' backtested ExpR is NOT materially optimistic under measured routine-day slippage. No deployment change needed. No lane flips to negative EV.
+
+### Critical audit-of-parent finding
+
+MGC "mean 6.75 ticks vs modeled 2 = 3.4× modeled" cited in 2026-04-20-mgc-adversarial-reexamination.md §4 is dominated by ONE outlier day (2018-01-18 gap-open, 263 ticks). Trimmed mean ≈ 0.18 ticks. **The honest central-tendency comparison for MGC is median=0, same as MNQ.** Both instruments fill at-modeled routinely. Updated debt-ledger frames this correctly.
+
+### What to watch
+
+- MNQ sample **MISSING from deployed lanes:** EUROPE_FLOW, COMEX_SETTLE, US_DATA_1000. 3 of 5 unique deployed sessions absent from the 119-file cache.
+- Event-day tail NOT measured for MNQ (2021-2026 sample had no equivalent of MGC 2018 gap).
+- MES TBBO pilot has NOT been run. Book-wide event-day tail risk unquantified.
+- Phase D MNQ COMEX_SETTLE pilot gate (2026-05-15) benefits from a targeted COMEX_SETTLE TBBO pull before evaluation.
+- Pre-existing working-tree syntax errors on ~5 trading_app/pipeline files (ruff-churn from earlier terminal) — NOT related to this work but blocks full `pytest tests/` and `check_drift` clean runs. User needs to resolve separately (stash or repair).
+
+### Next move
+
+- **Optional follow-up (not scheduled):** Databento pull for the 3 missing deployed MNQ sessions (EUROPE_FLOW/COMEX_SETTLE/US_DATA_1000) + MES pilot. Cost via `--estimate-cost` first.
+- **Pre-requisite for clean full-suite tests:** user resolves ~5 pre-existing syntax-errored files in working tree (unrelated to this sprint).
+- Debt-ledger: `mnq-tbbo-pilot-script-broken` CLOSED. `cost-realism-slippage-pilot` UPDATED with partial-measurement status.
+
+### Files touched (scope_lock enforced)
+
+- `research/research_mnq_e2_slippage_pilot.py` (rewrite)
+- `pipeline/cost_model.py` (comment-only, lines 144-185 MNQ TODO block; COST_SPECS numeric values unchanged)
+- `docs/runtime/debt-ledger.md` (close `mnq-tbbo-pilot-script-broken`; update `cost-realism-slippage-pilot`)
+- `docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v1.md` (new)
+- `docs/runtime/stages/mnq-tbbo-pilot-v2.md` (stage file)
+- `tests/test_research/test_reprice_e2_entry_regression.py` (new)
+- `tests/test_research/test_mnq_pilot_caller.py` (new)
+- `HANDOFF.md` (this entry)
+
 ## Update (2026-04-20 evening — H0 rerun PASSED; MNQ pilot blocked by script bug)
 
 Follow-on to the morning MGC audit session. Handover said: (a) fix H0 script + rerun, (b) schedule MNQ TBBO pilot.
