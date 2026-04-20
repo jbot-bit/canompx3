@@ -1,341 +1,278 @@
-"""H0 — MGC Real-Slippage Sensitivity on Native Low-R v1 Killed Cells.
+#!/usr/bin/env python3
+"""H0 — MGC real-slippage sensitivity on native_low_r_v1 killed cells.
 
 Pre-reg: docs/audit/hypotheses/2026-04-20-mgc-real-slippage-sensitivity.yaml
+Parent audit: docs/audit/results/2026-04-20-mgc-adversarial-reexamination.md §9 H0
 
-Question: do any of the 5 cells that survived native_low_r_v1 (at K=16 BH)
-and were subsequently killed in path_accurate_subr_v1 STILL show
-ExpR > +0.05R under a plausible range of slippage assumptions?
+Confirmatory audit (K=0 MinBTL trials). Question: does the 2026-04-19 MGC
+thread closure hold under a range of friction assumptions, or is it an
+artifact of one under-modeled slippage choice?
 
-Not discovery — confirmatory audit. Trial cost from MinBTL budget: 0.
+Design per research-truth-protocol.md § Canonical filter delegation and
+institutional-rigor.md Rule 4 (never re-encode canonical logic):
 
-Slippage grid (ticks round-trip): [2 (modeled), 4, 6.75 (pilot mean), 10].
+- Cell identity, filter application, and LR-target rewrite are inherited
+  directly from the canonical upstream `research_mgc_payoff_compression_audit`
+  (the same module `research_mgc_native_low_r_v1.py` uses). Re-implementing
+  here would re-enter the failure class of the first H0 attempt (2026-04-20
+  HALT — filter_type re-encoding, direction inference, date-window mismatch).
+- Slippage sensitivity is applied by replacing the MGC CostSpec's
+  `slippage` field with each grid value and recomputing per-row
+  `lower_X_pnl_r` using the canonical `pipeline.cost_model` math.
 
-For each trade in each cell, recompute pnl_r with adjusted friction:
+Grid: [2, 4, 6.75, 10] ticks round-trip. MGC tick = $1 so dollars = ticks.
+Modeled = 2 ticks. Pilot mean = 6.75 ticks. High-stress = 10 ticks.
 
-    new_pnl_r = (pnl_points * point_value - friction_adjusted) / risk_adjusted
-    where friction_adjusted = commission + spread_doubled + slippage_adjusted
-          risk_adjusted     = |entry - stop| * point_value + friction_adjusted
-
-Slippage_adjusted in DOLLARS = ticks_rt * tick_value = ticks_rt * $1 for MGC.
-
-For LR05/LR075 targets (low-R exits at 0.5R or 0.75R), if mfe reached
-target before stop, exit at target; else use stored full-RR outcome.
-Because mfe_r is friction-inclusive at the ORIGINAL modeled slippage,
-we adjust the target-hit R-value by the slippage delta too.
+Halt condition (pre-reg §baseline_cross_check):
+  Baseline reproduction at slippage=2 must match native_low_r_v1 reported
+  ExpR values within ±0.002R for all 5 cells. Otherwise HALT.
 """
 
 from __future__ import annotations
 
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 
-import duckdb
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from pipeline.paths import GOLD_DB_PATH
+from pipeline.cost_model import CostSpec, get_cost_spec, to_r_multiple
+from research.research_mgc_payoff_compression_audit import (
+    FAMILIES,
+    build_family_trade_matrix,
+    load_rows,
+)
 
 OUTPUT_DIR = PROJECT_ROOT / "research" / "output"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-IS_START = "2022-06-13"
-IS_END = "2026-01-01"
+HOLDOUT_START = pd.Timestamp("2026-01-01")
 
-# MGC cost spec — canonical from pipeline.cost_model
-MGC_COMMISSION_RT = 1.74
-MGC_SPREAD_DOUBLED = 2.00
-MGC_MODELED_SLIPPAGE = 2.00  # = 2 ticks * $1
-MGC_POINT_VALUE = 10.0
-MGC_TICK_SIZE = 0.10
-MGC_MIN_TICKS_FLOOR = 10
-MGC_MIN_RISK_FLOOR_POINTS = MGC_MIN_TICKS_FLOOR * MGC_TICK_SIZE
+# Slippage grid (MGC tick_size=0.10, point_value=10.0 → $1/tick, so ticks == dollars)
+SLIPPAGE_GRID_DOLLARS = [2.00, 4.00, 6.75, 10.00]
 
-# Slippage grid in TICKS ROUND-TRIP (MGC has $1/tick so $ = ticks)
-SLIPPAGE_GRID_TICKS = [2, 4, 6.75, 10]
-
-# The 5 native_low_r_v1 BH survivors. Columns: (slug, session, filter_type,
-# orb_minutes, entry_model, confirm_bars, rr_source, direction, lr_target)
-# rr_source is the orb_outcomes RR the audit used (always 1.0 for low-R rewrites)
-# direction is inferred from native_low_r_v1 — all long
-CELLS = [
-    dict(slug="NYSE_OPEN_OVNRNG_50_RR1_LR075", session="NYSE_OPEN",
-         filter_type="OVNRNG_50", orb_minutes=5, entry_model="E2",
-         confirm_bars=1, rr_source=1.0, direction="long", lr_target=0.75),
-    dict(slug="US_DATA_1000_ATR_P70_RR1_LR05", session="US_DATA_1000",
-         filter_type="ATR_P70", orb_minutes=5, entry_model="E2",
-         confirm_bars=1, rr_source=1.0, direction="long", lr_target=0.5),
-    dict(slug="US_DATA_1000_OVNRNG_10_RR1_LR05", session="US_DATA_1000",
-         filter_type="OVNRNG_10", orb_minutes=5, entry_model="E2",
-         confirm_bars=1, rr_source=1.0, direction="long", lr_target=0.5),
-    dict(slug="US_DATA_1000_BROAD_RR1_LR05", session="US_DATA_1000",
-         filter_type=None, orb_minutes=5, entry_model="E2",
-         confirm_bars=1, rr_source=1.0, direction="long", lr_target=0.5),
-    dict(slug="NYSE_OPEN_BROAD_RR1_LR05", session="NYSE_OPEN",
-         filter_type=None, orb_minutes=5, entry_model="E2",
-         confirm_bars=1, rr_source=1.0, direction="long", lr_target=0.5),
+# Five cells killed in path_accurate_subr_v1; source = native_low_r_v1 BH survivors
+# (family_id, variant_col, reported_native_low_r_v1_exp_r)
+CELLS: list[tuple[str, str, float]] = [
+    ("NYSE_OPEN_OVNRNG_50_RR1", "lower_0_75_pnl_r", 0.2226),
+    ("US_DATA_1000_ATR_P70_RR1", "lower_0_5_pnl_r", 0.0710),
+    ("US_DATA_1000_OVNRNG_10_RR1", "lower_0_5_pnl_r", 0.0685),
+    ("US_DATA_1000_BROAD_RR1", "lower_0_5_pnl_r", 0.0488),
+    ("NYSE_OPEN_BROAD_RR1", "lower_0_5_pnl_r", 0.0380),
 ]
 
-# Reported native_low_r_v1 IS ExpR (for baseline cross-check reproduction)
-NATIVE_LOW_R_V1_BASELINE = {
-    "NYSE_OPEN_OVNRNG_50_RR1_LR075": 0.2226,
-    "US_DATA_1000_ATR_P70_RR1_LR05": 0.0710,
-    "US_DATA_1000_OVNRNG_10_RR1_LR05": 0.0685,
-    "US_DATA_1000_BROAD_RR1_LR05": 0.0488,
-    "NYSE_OPEN_BROAD_RR1_LR05": 0.0380,
+# Family → canonical FamilySpec (for filter look-up); built once from FAMILIES
+FAMILY_BY_ID = {f.family_id: f for f in FAMILIES}
+
+# Variant col → conservative target fraction of R (matches
+# `research_mgc_payoff_compression_audit.conservative_lower_target_pnl`)
+VARIANT_TARGET_R = {
+    "lower_0_5_pnl_r": 0.5,
+    "lower_0_75_pnl_r": 0.75,
 }
 
+MGC_MODELED_SPEC = get_cost_spec("MGC")
+MGC_MODELED_SLIPPAGE = MGC_MODELED_SPEC.slippage  # $2.00 — canonical modeled
 
-def connect():
-    return duckdb.connect(str(GOLD_DB_PATH), read_only=True)
+
+def spec_at_slippage(slippage_dollars: float) -> CostSpec:
+    """MGC CostSpec with slippage field replaced; commission + spread unchanged."""
+    return replace(MGC_MODELED_SPEC, slippage=float(slippage_dollars))
 
 
-def load_cell_trades(con, cell: dict) -> pd.DataFrame:
-    """Load orb_outcomes + daily_features for one cell, long direction, IS window.
+def target_net_r_at(spec: CostSpec, entry: float, stop: float, target_r: float) -> float | None:
+    """Port of `research_mgc_payoff_compression_audit.target_net_r`, spec-parameterized."""
+    risk_points = abs(float(entry) - float(stop))
+    if risk_points <= 0:
+        return None
+    return round(to_r_multiple(spec, float(entry), float(stop), risk_points * target_r), 4)
 
-    Returns per-trade records with entry_price, stop_price, pnl_r (stored),
-    mfe_r (stored), outcome, trading_day.
+
+def recompute_lower_target_pnl(
+    row: pd.Series,
+    spec: CostSpec,
+    target_r: float,
+) -> float | None:
+    """Spec-parameterized port of `conservative_lower_target_pnl`.
+
+    Matches the canonical logic:
+      - if ambiguous_bar AND outcome='loss': return recomputed pnl_r (not rescued)
+      - elif mfe_r (recomputed at new spec) >= net_target (at new spec): exit at net_target
+      - else: return recomputed pnl_r
+
+    mfe points are invariant to friction; we back them out from the stored mfe_r
+    (which was computed at modeled spec via `pnl_points_to_r` — friction in denom only):
+        mfe_points = stored_mfe_r × risk_modeled / point_value
+    Then re-project into the new spec's R-frame (friction in denom only):
+        mfe_r_new = mfe_points × point_value / risk_new
     """
-    # Direction is inferred: long = entry_price > stop_price.
-    dir_sql = "(o.entry_price > o.stop_price)" if cell["direction"] == "long" else "(o.entry_price < o.stop_price)"
-    filter_sql = ""
-    params = [
-        cell["session"],
-        cell["orb_minutes"],
-        cell["entry_model"],
-        cell["confirm_bars"],
-        cell["rr_source"],
-        IS_START,
-        IS_END,
-    ]
-
-    df_sql = f"""
-    WITH ox AS (
-      SELECT
-        o.trading_day,
-        o.entry_price,
-        o.stop_price,
-        o.pnl_r,
-        o.mfe_r,
-        o.outcome
-      FROM orb_outcomes o
-      {"JOIN daily_features d ON o.trading_day=d.trading_day AND o.symbol=d.symbol AND o.orb_minutes=d.orb_minutes" if cell["filter_type"] else ""}
-      WHERE o.symbol='MGC'
-        AND o.orb_label = ?
-        AND o.orb_minutes = ?
-        AND o.entry_model = ?
-        AND o.confirm_bars = ?
-        AND o.rr_target = ?
-        AND {dir_sql}
-        AND o.trading_day >= ?::DATE
-        AND o.trading_day <  ?::DATE
-        AND o.pnl_r IS NOT NULL
-        {filter_sql}
-    )
-    SELECT * FROM ox ORDER BY trading_day
-    """
-    # Apply filter_type if present. Canonical filter IDs:
-    #  OVNRNG_50:   daily_features.overnight_range >= 50.0
-    #  OVNRNG_10:   daily_features.overnight_range >= 10.0
-    #  ATR_P70:     daily_features.atr_20_pct >= 0.70
-    #  (None = broad, no filter)
-    if cell["filter_type"] == "OVNRNG_50":
-        df_sql = df_sql.replace("{filter_sql}", "AND d.overnight_range >= 50.0")
-    elif cell["filter_type"] == "OVNRNG_10":
-        df_sql = df_sql.replace("{filter_sql}", "AND d.overnight_range >= 10.0")
-    elif cell["filter_type"] == "ATR_P70":
-        df_sql = df_sql.replace("{filter_sql}", "AND d.atr_20_pct >= 0.70")
-    else:
-        df_sql = df_sql.replace("{filter_sql}", "")
-
-    return con.execute(df_sql, params).df()
-
-
-def compute_friction_dollars(slippage_ticks_rt: float) -> float:
-    """Total MGC friction in dollars at given slippage_ticks_rt."""
-    slippage_dollars = slippage_ticks_rt * MGC_TICK_SIZE * MGC_POINT_VALUE  # ticks * $/tick
-    return MGC_COMMISSION_RT + MGC_SPREAD_DOUBLED + slippage_dollars
-
-
-def recompute_pnl_r(row, slippage_ticks_rt: float, lr_target: float) -> float:
-    """Recompute a single trade's R at adjusted slippage, applying LR target rewrite.
-
-    Low-R target rewrite rule (from native_low_r_v1):
-      if mfe_r >= lr_target → exit at lr_target R (winner at lr_target)
-      else → use stored pnl_r behavior (loser at -1R, or small winner below target)
-
-    But both mfe_r and stored pnl_r were computed at modeled slippage. We adjust
-    both via the friction delta.
-    """
-    entry = float(row["entry_price"])
-    stop = float(row["stop_price"])
-    raw_stop_dist_points = abs(entry - stop)
-    # Enforce min-risk-floor per cost_model.risk_in_dollars semantics
-    stop_dist_points = max(raw_stop_dist_points, MGC_MIN_RISK_FLOOR_POINTS)
-    raw_risk_dollars = stop_dist_points * MGC_POINT_VALUE
-
-    friction_new = compute_friction_dollars(slippage_ticks_rt)
-    risk_new = raw_risk_dollars + friction_new
-
-    # Convert stored pnl_r (at modeled friction) back to pnl_points, then reapply
-    # at new friction.
-    friction_modeled = compute_friction_dollars(MGC_MODELED_SLIPPAGE / (MGC_TICK_SIZE * MGC_POINT_VALUE))
-    # Actually MGC_MODELED_SLIPPAGE=2.00 dollars; ticks_rt = 2.00 / $1 per tick = 2 ticks
-    # So: friction_modeled = 1.74 + 2.00 + 2.00 = 5.74
-    risk_modeled = raw_risk_dollars + friction_modeled
-
-    stored_pnl_r = float(row["pnl_r"])
-    stored_mfe_r = float(row["mfe_r"])
+    entry = row["entry_price"]
+    stop = row["stop_price"]
+    stored_pnl_r = row["pnl_r"]
+    stored_mfe_r = row["mfe_r"]
     outcome = row["outcome"]
+    ambiguous = bool(row.get("ambiguous_bar", False))
 
-    # Reconstruct pnl_points from stored pnl_r at modeled friction:
-    # pnl_r = (pnl_points * point_value - friction_modeled) / risk_modeled  [if winner at target]
-    # For losers (pnl_r = -1.0 by convention), pnl_points = -stop_dist_points
-    if outcome == "loss" or stored_pnl_r <= -0.9:
-        # Loss: exits at stop, pnl_points = -stop_dist_points
-        pnl_points = -stop_dist_points
-    else:
-        # Winner: back out pnl_points
-        pnl_points = (stored_pnl_r * risk_modeled + friction_modeled) / MGC_POINT_VALUE
+    if pd.isna(stored_pnl_r) or pd.isna(entry) or pd.isna(stop):
+        return None
 
-    # mfe_r is computed without friction deducted from numerator (pnl_points_to_r):
-    # mfe_r = (mfe_points * point_value) / risk_modeled  (no friction subtraction)
-    # Back out mfe_points:
-    mfe_points = stored_mfe_r * risk_modeled / MGC_POINT_VALUE
+    raw_stop_dist = abs(float(entry) - float(stop))
+    if raw_stop_dist <= 0:
+        return None
 
-    # Now apply LR target rewrite: did MFE reach the lr_target in R-terms
-    # under the NEW friction model?
-    # Target in points such that to_r_multiple(target_points) = lr_target:
-    #   lr_target = (target_points * point_value - friction_new) / risk_new
-    #   target_points = (lr_target * risk_new + friction_new) / point_value
-    target_points = (lr_target * risk_new + friction_new) / MGC_POINT_VALUE
+    pv = spec.point_value
+    friction_modeled = MGC_MODELED_SPEC.total_friction
+    friction_new = spec.total_friction
+    risk_modeled = raw_stop_dist * pv + friction_modeled
+    risk_new = raw_stop_dist * pv + friction_new
 
-    if mfe_points >= target_points:
-        # Winner at LR target under new friction
-        new_pnl_r = (target_points * MGC_POINT_VALUE - friction_new) / risk_new
-    else:
-        # Did NOT reach target; apply new friction to original outcome
-        if outcome == "loss":
-            # Loser at full stop
-            new_pnl_r = (-stop_dist_points * MGC_POINT_VALUE - friction_new) / risk_new
-        else:
-            # Winner below target (partial win at stored pnl_points)
-            new_pnl_r = (pnl_points * MGC_POINT_VALUE - friction_new) / risk_new
+    # Recompute stored pnl_r at new spec (invariant: back out gross points, re-apply)
+    pnl_points = (float(stored_pnl_r) * risk_modeled + friction_modeled) / pv
+    pnl_r_new = (pnl_points * pv - friction_new) / risk_new
 
-    return new_pnl_r
+    if ambiguous and outcome == "loss":
+        return float(pnl_r_new)
+
+    net_target_new = target_net_r_at(spec, entry, stop, target_r)
+    if net_target_new is None:
+        return float(pnl_r_new)
+
+    if pd.notna(stored_mfe_r):
+        mfe_points = float(stored_mfe_r) * risk_modeled / pv
+        mfe_r_new = mfe_points * pv / risk_new
+        if mfe_r_new >= net_target_new:
+            return float(net_target_new)
+
+    return float(pnl_r_new)
 
 
-def analyze_cell(con, cell: dict) -> dict:
-    df = load_cell_trades(con, cell)
-    result = {
-        "slug": cell["slug"],
-        "n_is_trades": len(df),
-        "baseline_reported": NATIVE_LOW_R_V1_BASELINE.get(cell["slug"]),
-        "by_slippage": {},
-    }
+def build_sensitivity() -> dict:
+    """Load canonical trade matrix, recompute LR variants across slippage grid."""
+    rows = load_rows(end_exclusive=str(HOLDOUT_START.date()))
+    trades = build_family_trade_matrix(rows)
+    if trades.empty:
+        raise SystemExit("Empty trade matrix — canonical upstream failed to produce rows.")
+    trades["trading_day"] = pd.to_datetime(trades["trading_day"])
+    is_trades = trades[trades["trading_day"] < HOLDOUT_START].copy()
 
-    if len(df) == 0:
-        result["error"] = "NO TRADES LOADED — check filter logic"
-        return result
+    results: list[dict] = []
+    for family_id, variant_col, reported in CELLS:
+        cell_rows = is_trades[is_trades["family_id"] == family_id].copy()
+        target_r = VARIANT_TARGET_R[variant_col]
+        n = len(cell_rows)
+        baseline_pipeline = float(cell_rows[variant_col].mean()) if n else float("nan")
 
-    for sl_ticks in SLIPPAGE_GRID_TICKS:
-        pnl_r_new = df.apply(
-            lambda row: recompute_pnl_r(row, sl_ticks, cell["lr_target"]),
-            axis=1,
+        per_slippage: dict[float, dict] = {}
+        for slip in SLIPPAGE_GRID_DOLLARS:
+            spec = spec_at_slippage(slip)
+            recomputed_values = [
+                recompute_lower_target_pnl(row, spec, target_r)
+                for _, row in cell_rows.iterrows()
+            ]
+            recomputed = pd.Series(recomputed_values, dtype=float)
+            exp_r = float(recomputed.mean())
+            wr = float((recomputed > 0).mean())
+            avg_win = float(recomputed[recomputed > 0].mean()) if (recomputed > 0).any() else 0.0
+            avg_loss = float(recomputed[recomputed <= 0].mean()) if (recomputed <= 0).any() else 0.0
+            year_breakdown: dict[int, dict] = {}
+            if n:
+                years = cell_rows["trading_day"].dt.year
+                for y in sorted(years.unique()):
+                    mask = (years == y).to_numpy()
+                    if int(mask.sum()) >= 10:
+                        year_breakdown[int(y)] = {
+                            "n": int(mask.sum()),
+                            "exp_r": float(recomputed[mask].mean()),
+                        }
+            per_slippage[float(slip)] = {
+                "exp_r": exp_r,
+                "win_rate": wr,
+                "avg_win_r": avg_win,
+                "avg_loss_r": avg_loss,
+                "per_year": year_breakdown,
+            }
+
+        results.append({
+            "cell_slug": f"{family_id}_{variant_col.replace('lower_', 'LR').replace('_pnl_r', '').replace('_', '')}",
+            "family_id": family_id,
+            "variant_col": variant_col,
+            "target_r": target_r,
+            "n_is_trades": n,
+            "baseline_pipeline": baseline_pipeline,
+            "baseline_native_low_r_v1_reported": reported,
+            "by_slippage_dollars": per_slippage,
+        })
+    return {"cells": results}
+
+
+def evaluate_baseline_cross_check(payload: dict) -> bool:
+    """Return True if every cell matches its native_low_r_v1 reported ExpR
+    within ±0.002R at slippage=2 (modeled). Per pre-reg §baseline_cross_check."""
+    ok = True
+    print("\n=== BASELINE CROSS-CHECK (modeled slippage = $2 = 2 ticks) ===")
+    for cell in payload["cells"]:
+        reported = cell["baseline_native_low_r_v1_reported"]
+        pipeline_val = cell["baseline_pipeline"]
+        recomputed_2 = cell["by_slippage_dollars"][2.0]["exp_r"]
+        diff_pipeline = abs(pipeline_val - reported)
+        diff_recomp = abs(recomputed_2 - reported)
+        status_pipe = "OK" if diff_pipeline <= 0.002 else "MISMATCH"
+        status_recomp = "OK" if diff_recomp <= 0.002 else "MISMATCH"
+        print(
+            f"  {cell['cell_slug']:<45} "
+            f"reported={reported:+.4f} "
+            f"pipeline={pipeline_val:+.4f} [{status_pipe}] "
+            f"recomp@2={recomputed_2:+.4f} [{status_recomp}]"
         )
-        exp_r = float(pnl_r_new.mean())
-        win_rate = float((pnl_r_new > 0).mean())
-        avg_win_r = float(pnl_r_new[pnl_r_new > 0].mean()) if (pnl_r_new > 0).any() else 0.0
-        avg_loss_r = float(pnl_r_new[pnl_r_new <= 0].mean()) if (pnl_r_new <= 0).any() else 0.0
+        if diff_pipeline > 0.002 or diff_recomp > 0.002:
+            ok = False
+    return ok
 
-        # Per-year breakdown
-        per_year = {}
-        if "trading_day" in df.columns:
-            years = pd.to_datetime(df["trading_day"]).dt.year
-            for y in sorted(years.unique()):
-                mask = (years == y).to_numpy()
-                if mask.sum() >= 10:
-                    per_year[int(y)] = {
-                        "n": int(mask.sum()),
-                        "exp_r": float(pnl_r_new[mask].mean()),
-                    }
 
-        result["by_slippage"][sl_ticks] = {
-            "exp_r": exp_r,
-            "win_rate": win_rate,
-            "avg_win_r": avg_win_r,
-            "avg_loss_r": avg_loss_r,
-            "per_year": per_year,
-        }
+def print_sensitivity_summary(payload: dict) -> None:
+    print("\n=== SENSITIVITY CURVE (IS ExpR per cell per slippage-ticks) ===")
+    header = f"{'Cell':<45} " + " ".join(f"{s:>8}" for s in SLIPPAGE_GRID_DOLLARS)
+    print(header)
+    for cell in payload["cells"]:
+        vals = [cell["by_slippage_dollars"][s]["exp_r"] for s in SLIPPAGE_GRID_DOLLARS]
+        print(f"  {cell['cell_slug']:<43} " + " ".join(f"{v:+.4f}" for v in vals))
 
-    return result
+
+def print_kill_criteria(payload: dict) -> None:
+    print("\n=== KILL CRITERIA EVALUATION (per pre-reg §kill_criteria) ===")
+    for cell in payload["cells"]:
+        by_slip = cell["by_slippage_dollars"]
+        exp_at_4 = by_slip[4.0]["exp_r"]
+        exp_at_675 = by_slip[6.75]["exp_r"]
+        exp_at_10 = by_slip[10.0]["exp_r"]
+        if exp_at_10 > 0.05:
+            verdict = "A_pilot_not_binding: survives even at 10-tick — mechanism question, opens H3"
+        elif exp_at_675 > 0.05:
+            verdict = "A_closure_soft_at_pilot_mean: shadow-track candidate"
+        elif exp_at_4 < 0:
+            verdict = "A_closure_confirmed_strong: below zero by 4 ticks"
+        else:
+            verdict = "SOFT decay: positive at modest friction, below +0.05R by pilot mean"
+        print(f"  {cell['cell_slug']:<45} {verdict}")
 
 
 def main() -> None:
-    con = connect()
-    try:
-        all_results = []
-        for cell in CELLS:
-            print(f"\n--- {cell['slug']} ---")
-            r = analyze_cell(con, cell)
-            print(f"  N IS trades: {r['n_is_trades']}")
-            print(f"  Baseline reported (native_low_r_v1): {r.get('baseline_reported')}")
-            for sl, s in r.get("by_slippage", {}).items():
-                marker = "  <---" if s["exp_r"] < 0.05 else "  PASS"
-                print(f"    slippage={sl} ticks: ExpR={s['exp_r']:+.4f} WR={s['win_rate']:.3f}{marker}")
-            all_results.append(r)
+    payload = build_sensitivity()
+    cross_check_ok = evaluate_baseline_cross_check(payload)
+    out_path = OUTPUT_DIR / "mgc_real_slippage_sensitivity_v1.json"
+    out_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+    print(f"\nWrote {out_path}")
 
-        # Cross-check at slippage=2 (modeled) vs baseline reported
-        print("\n=== BASELINE CROSS-CHECK (slippage=2 ticks vs native_low_r_v1 reported) ===")
-        halt = False
-        for r in all_results:
-            rep = r.get("baseline_reported")
-            if rep is None:
-                continue
-            recomp = r["by_slippage"].get(2, {}).get("exp_r")
-            if recomp is None:
-                continue
-            diff = abs(recomp - rep)
-            status = "OK" if diff <= 0.005 else "MISMATCH"
-            print(f"  {r['slug']}: reported={rep:+.4f}, recomputed={recomp:+.4f}, |diff|={diff:.4f} [{status}]")
-            if diff > 0.010:
-                halt = True
-        if halt:
-            print("  HALT — recomputation path disagrees with native_low_r_v1 by >0.01R.")
-            print("  Investigate before drawing audit conclusions.")
+    if not cross_check_ok:
+        print("\nHALT — baseline cross-check failed. Do not draw sensitivity conclusions.")
+        raise SystemExit(1)
 
-        out = OUTPUT_DIR / "mgc_real_slippage_sensitivity_v1.json"
-        out.write_text(json.dumps(all_results, indent=2, default=str), encoding="utf-8")
-        print(f"\nWrote {out}")
-
-        print("\n=== SENSITIVITY SUMMARY ===")
-        print(f"{'Cell':<45} {'2':>8} {'4':>8} {'6.75':>8} {'10':>8}")
-        for r in all_results:
-            if "by_slippage" not in r:
-                continue
-            vals = [r["by_slippage"].get(s, {}).get("exp_r", float("nan")) for s in SLIPPAGE_GRID_TICKS]
-            print(f"  {r['slug']:<45} " + " ".join(f"{v:+.4f}" for v in vals))
-
-        # Kill criteria evaluation
-        print("\n=== KILL CRITERIA EVALUATION (pre-reg) ===")
-        for r in all_results:
-            if "by_slippage" not in r:
-                continue
-            exp_at_675 = r["by_slippage"].get(6.75, {}).get("exp_r", float("nan"))
-            exp_at_10 = r["by_slippage"].get(10, {}).get("exp_r", float("nan"))
-            if exp_at_10 > 0.05:
-                verdict = "SURVIVES at all slippage — mechanism-driven, opens H3 for investigation"
-            elif exp_at_675 > 0.05:
-                verdict = "SURVIVES at pilot mean — add to shadow-track registry"
-            elif exp_at_675 > 0 and exp_at_10 < 0:
-                verdict = "SOFT closure — declines monotonically with slippage but stays above zero at pilot"
-            else:
-                verdict = "ROBUST closure — already below +0.05R at modest friction increase"
-            print(f"  {r['slug']}: {verdict}")
-    finally:
-        con.close()
+    print_sensitivity_summary(payload)
+    print_kill_criteria(payload)
 
 
 if __name__ == "__main__":

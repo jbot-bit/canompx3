@@ -4,6 +4,34 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 evening — H0 rerun PASSED; MNQ pilot blocked by script bug)
+
+Follow-on to the morning MGC audit session. Handover said: (a) fix H0 script + rerun, (b) schedule MNQ TBBO pilot.
+
+### What landed
+
+- **Phase 1 — H0 fix + rerun.** `research/research_mgc_real_slippage_sensitivity_v1.py` rewritten to delegate to canonical upstream (`research.research_mgc_payoff_compression_audit::{FAMILIES, load_rows, build_family_trade_matrix}` — the same module `research_mgc_native_low_r_v1.py` uses). Slippage sensitivity applied via `dataclasses.replace(MGC_SPEC, slippage=X)` piped through `pipeline.cost_model.to_r_multiple`. Baseline cross-check at slippage=2 PASSES on all 5 cells at 0.0000 diff (prior attempt mismatched by 0.10-0.27R). Result doc `docs/audit/results/2026-04-20-mgc-real-slippage-sensitivity-v1.md` REWRITTEN (no longer HALTED). Verdict: **closure stands**. 2 cells (NYSE_OPEN_OVNRNG_50_LR075, US_DATA_1000_ATR_P70_LR05) are slippage-robust — stay above +0.05R even at 10-tick friction — but both were killed by path-accuracy in `path_accurate_subr_v1`, which is the binding constraint not friction. 3 cells show soft decay and fall below +0.05R at or before 6.75 ticks. No cell rescued to deployable.
+- **Phase 2 — MNQ pilot BLOCKED.** `research/research_mnq_e2_slippage_pilot.py` does not run: line 271/302 imports `reprice_entry` but the canonical function is `reprice_e2_entry` (`research/databento_microstructure.py:255`). Additionally: `reprice_e2_entry` requires `model_entry_ts_utc` (break-confirmation bar close) which the pilot script doesn't derive — it passes `orb_end_utc` which is wrong for E2 CB1. The existing `research/data/tbbo_mnq_pilot/slippage_results.csv` (60 rows, 13 valid) has outlier slippages of 460-980 ticks on several 2023-2025 days, indicating the reprice logic picks up late cross events not the first break — correctness issue. Manifest/cache out-of-sync (47 of 60 current-seed manifest days absent from 119-file cache, which is from an earlier seed). Added to `debt-ledger.md` as `mnq-tbbo-pilot-script-broken`. Running requires either a rewrite + correctness audit, OR Databento spend (~47 days) — not run autonomously without user authorization.
+
+### What to watch
+
+- H0 cells NYSE_OPEN_OVNRNG_50_LR075 and US_DATA_1000_ATR_P70_LR05 are slippage-robust AND path-accuracy-killed. Pre-reg `A_pilot_not_binding` interpretation opens an H3-style mechanism question: why does path-accuracy kill them if friction doesn't? NOT a shadow-track or deployment candidate — a mechanism audit candidate. Out of scope until user prioritizes.
+- MNQ TBBO pilot remains the highest book-wide-value item. Every deployed MNQ lane's backtest ExpR carries unmeasured modeled-vs-real friction optimism.
+- Debt-ledger has two linked entries now: `cost-realism-slippage-pilot` (book-wide debt) + `mnq-tbbo-pilot-script-broken` (specific blocker).
+
+### Next move
+
+- **User decision point:** Fix the MNQ pilot script (rewrite + correctness audit on known-good day before any Databento spend), OR defer MNQ pilot and move to the X_MGC_* conditioner class / MES pilot / other priority.
+- Phase 2 was scheduled, not executed. Schedule item remains open.
+
+### Files touched
+
+- `research/research_mgc_real_slippage_sensitivity_v1.py` (rewritten, now runs + passes baseline cross-check)
+- `docs/audit/results/2026-04-20-mgc-real-slippage-sensitivity-v1.md` (rewritten, no longer HALTED)
+- `research/output/mgc_real_slippage_sensitivity_v1.json` (new output, trustworthy)
+- `docs/runtime/debt-ledger.md` (added `mnq-tbbo-pilot-script-broken`)
+- `HANDOFF.md` (this entry)
+
 ## Update (2026-04-20 MGC adversarial re-examination — audit complete, H1 run, H0 HALTED)
 
 Session triggered by user pushback on the 2026-04-19 "MGC path-accurate sub-R v1" closure, with successive concerns: (a) MGC > GC contract-size handling; (b) MGC/GC volume differences; (c) full upstream/downstream blast-radius audit; (d) gold regime 2024-2026; (e) pre-reg discipline with no bias/look-ahead/pigeonholing.
