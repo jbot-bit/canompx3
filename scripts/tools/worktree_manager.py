@@ -51,6 +51,32 @@ class ManagedWorktreeInfo:
     dirty: bool = False
 
 
+def orphaned_pruned_worktree_artifacts(worktrees: list[WorktreeInfo]) -> list[str]:
+    reports: list[str] = []
+    for wt in worktrees:
+        if not wt.prunable:
+            continue
+        path = Path(wt.path)
+        if not path.exists():
+            continue
+
+        markers: list[str] = []
+        if (path / WORKTREE_META).exists():
+            markers.append(WORKTREE_META)
+        if (path / LOCAL_WORKTREE_META).exists():
+            markers.append(LOCAL_WORKTREE_META)
+
+        claim_dir = path / ".canompx3-runtime" / "active-sessions"
+        claim_count = len(list(claim_dir.glob("*.json"))) if claim_dir.exists() else 0
+        if claim_count:
+            noun = "claim" if claim_count == 1 else "claims"
+            markers.append(f"{claim_count} active-session {noun}")
+
+        if markers:
+            reports.append(f"{path} ({', '.join(markers)})")
+    return reports
+
+
 def _run_git(*args: str, cwd: Path = PROJECT_ROOT) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
@@ -584,9 +610,14 @@ def cmd_handoff(args: argparse.Namespace) -> int:
 
 def cmd_prune(_args: argparse.Namespace) -> int:
     before = list_worktrees()
+    orphan_reports = orphaned_pruned_worktree_artifacts(before)
     prune_worktrees()
     after = list_worktrees()
     print(f"Pruned worktree metadata. Before={len(before)} After={len(after)}")
+    if orphan_reports:
+        print("Orphaned worktree directories remain on disk:")
+        for report in orphan_reports:
+            print(f"  {report}")
     return 0
 
 

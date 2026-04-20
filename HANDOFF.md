@@ -4,6 +4,36 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late-night — worktree prune now reports orphaned local metadata)
+
+Follow-up to the stale runtime/worktree audit after hook-branch cleanup.
+Supported prune (`python3 scripts/tools/worktree_manager.py prune`) correctly
+removed two broken Windows-side worktree registrations from git metadata, but
+the orphan directories still held local `.canompx3-worktree.json` files and
+stale `.canompx3-runtime/active-sessions/*.json` claims. Current preflight
+already ignores those stale claims (`fresh_only=True` yields zero), so the
+remaining risk was operator confusion, not active blocking.
+
+### What landed (branch `fix/worktree-prune-orphan-report`)
+
+- `scripts/tools/worktree_manager.py`:
+  - added `orphaned_pruned_worktree_artifacts(...)`
+  - `cmd_prune` now reports pruned worktree directories that still exist on
+    disk and carry local worktree metadata and/or stale active-session claim
+    files
+- `tests/test_tools/test_worktree_manager.py`:
+  - added direct helper coverage
+  - added CLI-level `cmd_prune` output coverage
+
+### Verification
+
+- `git diff --check`
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_tools/test_worktree_manager.py -q`
+- `python3 scripts/tools/worktree_manager.py prune`
+
+Result: targeted suite passes (`19 passed`); prune remains non-destructive and
+now surfaces orphaned metadata instead of silently leaving it behind.
+
 ## Update (2026-04-20 late-night — MNQ TBBO gap-fill v2 COMPLETE — Phase D COMEX_SETTLE unblocked)
 
 Follow-on to the PR #25 / PR #26 merges. Researcher-framework audit flagged lazy-imports Phase 4 as DEAD work (cold-import on live path is rounding-error vs 6-hour session runtime). Redirected to the highest-EV open item: MNQ TBBO coverage gap on the 3 deployed sessions missing from the v1 119-file cache.

@@ -1,5 +1,6 @@
 """Tests for scripts.tools.worktree_manager."""
 
+import argparse
 import json
 import subprocess
 from pathlib import Path
@@ -41,6 +42,61 @@ class TestParseWorktreeList:
         assert len(items) == 2
         assert items[0].path == "/repo"
         assert items[1].prunable is not None
+
+
+class TestPruneReporting:
+    def test_orphaned_pruned_worktree_artifacts_reports_local_metadata_and_claims(self, tmp_path: Path) -> None:
+        orphan = tmp_path / "daily-backfill-fix"
+        orphan.mkdir(parents=True)
+        (orphan / worktree_manager.WORKTREE_META).write_text("{}", encoding="utf-8")
+        claim_dir = orphan / ".canompx3-runtime" / "active-sessions"
+        claim_dir.mkdir(parents=True)
+        (claim_dir / "codex-stale.json").write_text("{}", encoding="utf-8")
+
+        reports = worktree_manager.orphaned_pruned_worktree_artifacts(
+            [
+                worktree_manager.WorktreeInfo(
+                    path=str(orphan),
+                    prunable="gitdir file points to non-existent location",
+                )
+            ]
+        )
+
+        assert len(reports) == 1
+        assert str(orphan) in reports[0]
+        assert worktree_manager.WORKTREE_META in reports[0]
+        assert "1 active-session claim" in reports[0]
+
+    def test_cmd_prune_prints_orphan_warning(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        orphan = tmp_path / "daily-backfill-fix"
+        orphan.mkdir(parents=True)
+        (orphan / worktree_manager.WORKTREE_META).write_text("{}", encoding="utf-8")
+        claim_dir = orphan / ".canompx3-runtime" / "active-sessions"
+        claim_dir.mkdir(parents=True)
+        (claim_dir / "codex-stale.json").write_text("{}", encoding="utf-8")
+
+        before = [
+            worktree_manager.WorktreeInfo(path="/repo", head="abc", branch="refs/heads/main"),
+            worktree_manager.WorktreeInfo(
+                path=str(orphan),
+                head="def",
+                branch="refs/heads/wt-codex-old",
+                prunable="gitdir file points to non-existent location",
+            ),
+        ]
+        after = [before[0]]
+
+        with (
+            patch.object(worktree_manager, "list_worktrees", side_effect=[before, after]),
+            patch.object(worktree_manager, "prune_worktrees"),
+        ):
+            rc = worktree_manager.cmd_prune(argparse.Namespace())
+
+        out = capsys.readouterr().out
+        assert rc == 0
+        assert "Pruned worktree metadata. Before=2 After=1" in out
+        assert "Orphaned worktree directories remain on disk:" in out
+        assert str(orphan) in out
 
 
 class TestManagedWorktrees:
