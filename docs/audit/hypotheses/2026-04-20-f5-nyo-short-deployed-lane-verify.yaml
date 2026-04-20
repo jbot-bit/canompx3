@@ -1,0 +1,73 @@
+version: 1
+status: LOCKED
+date: 2026-04-20
+slug: f5-nyo-short-deployed-lane-verify
+title: "MNQ NYSE_OPEN short F5_BELOW_PDL on exact COST_LT12 lane — exact-lane verify (K=1)"
+owner: codex
+
+purpose: |
+  Verify whether the F5_BELOW_PDL TAKE effect found in the locked
+  prior-day-direction-split ORB family survives on the exact deployed
+  NYSE_OPEN lane. This is an exact-lane conditioner verification, not a pooled
+  claim and not a deployment instruction.
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "resources/Algorithmic_Trading_Chan.pdf"
+    - "resources/Robert Carver - Systematic Trading.pdf"
+    - "resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf"
+  notes:
+    - "Pathway B, K=1 exact-lane verify."
+    - "Mode A strict: 2026+ is descriptive OOS only unless power is sufficient."
+    - "Canonical filter delegation via research.filter_utils.filter_signal is mandatory."
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+  session: NYSE_OPEN
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  direction: short
+  deployed_filter: COST_LT12
+  signal: F5_BELOW_PDL
+
+feature_definition:
+  orb_mid: "(orb_NYSE_OPEN_high + orb_NYSE_OPEN_low) / 2.0"
+  F5_BELOW_PDL: "orb_mid < prev_day_low"
+
+data_policy:
+  data_source: "gold.db canonical layers only: orb_outcomes + daily_features"
+  is_window: "trading_day < 2026-01-01"
+  oos_window: "trading_day >= 2026-01-01"
+  tuning_against_oos: false
+
+test_definition:
+  comparison: "Compare F5_BELOW_PDL on-signal vs off-signal pnl_r inside the exact deployed short lane."
+  statistics:
+    - "Welch two-sample t-test on pnl_r"
+    - "moving-block bootstrap on IS pnl_r with labels fixed"
+  survivor_requirements:
+    - "IS delta >= +0.05"
+    - "IS ExpR_on > 0"
+    - "Welch p_IS < 0.05"
+    - "Block-bootstrap p_IS < 0.05"
+    - "N_on_IS >= 100"
+    - "N_off_IS >= 100"
+    - "At least 5 eligible IS years with sign-consistent delta"
+    - "If N_on_OOS >= 30 and N_off_OOS >= 30, OOS delta sign must match IS"
+
+kill_criteria:
+  - "IS Welch p >= 0.05"
+  - "IS block-bootstrap p >= 0.05"
+  - "IS ExpR_on <= 0"
+  - "IS delta < +0.05"
+
+explicitly_out_of_scope:
+  - "Any other session or lane"
+  - "Any long-direction hypothesis"
+  - "Any pooled multi-lane claim"
+  - "Any capital, sizing, or allocator change"

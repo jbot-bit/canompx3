@@ -1,0 +1,79 @@
+version: 1
+status: DRAFT
+date: 2026-04-20
+slug: usdata1000-long-not-f6-candidate-lane-v1
+title: "MNQ US_DATA_1000 O5 long NOT_F6 candidate lane v1"
+owner: codex
+
+purpose: |
+  Preserve the next bounded validation contract implied by the verified paired
+  `US_DATA_1000` long family. The current role-design synthesis says the best
+  ORB integration is not `F5` standalone, but a candidate long lane that skips
+  `F6_INSIDE_PDR` states and treats `F5_BELOW_PDL` as a higher-quality
+  descriptor inside that allowed set.
+
+grounding:
+  resources:
+    - "resources/Algorithmic_Trading_Chan.pdf"
+    - "resources/Robert Carver - Systematic Trading.pdf"
+    - "resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf"
+    - "resources/Two_Million_Trading_Strategies_FDR.pdf"
+  doctrine:
+    - "RESEARCH_RULES.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/institutional/pre_registered_criteria.md"
+  derived_from:
+    - "docs/audit/results/2026-04-20-usdata1000-long-f5-f6-paired-v1.md"
+    - "docs/plans/2026-04-20-usdata1000-paired-role-design.md"
+
+scope:
+  instrument: MNQ
+  session: US_DATA_1000
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  direction: long
+  rr_targets:
+    - 1.0
+    - 1.5
+  primary_gate: NOT_F6_INSIDE_PDR
+  secondary_descriptor: F5_BELOW_PDL
+
+family_accounting:
+  k_family: 2
+  arithmetic: "2 rr targets for the pre-specified NOT_F6 candidate lane"
+
+signal_definitions:
+  orb_mid: "(orb_US_DATA_1000_high + orb_US_DATA_1000_low) / 2.0"
+  F6_INSIDE_PDR: "orb_mid > prev_day_low AND orb_mid < prev_day_high"
+  NOT_F6_INSIDE_PDR: "NOT F6_INSIDE_PDR"
+  F5_BELOW_PDL: "orb_mid < prev_day_low"
+
+current_design_truth:
+  rr_1_0:
+    baseline_n_is: 882
+    baseline_exp_r_is: 0.0418
+    not_f6_n_is: 369
+    not_f6_exp_r_is: 0.1602
+    f5_n_is: 136
+    f5_exp_r_is: 0.3258
+  rr_1_5:
+    baseline_n_is: 867
+    baseline_exp_r_is: 0.0621
+    not_f6_n_is: 364
+    not_f6_exp_r_is: 0.2291
+    f5_n_is: 135
+    f5_exp_r_is: 0.4022
+
+intended_role:
+  primary: "candidate lane / binary filter route"
+  secondary: "F5 acts as a higher-quality sub-state inside NOT_F6"
+  not_allowed:
+    - "standalone claim from this draft alone"
+    - "capital action"
+    - "allocator action"
+    - "live deployment"
+
+status_note: |
+  Draft only. This preserves the next bounded validation contract and the
+  correct route implied by the paired family. It is not yet executed.

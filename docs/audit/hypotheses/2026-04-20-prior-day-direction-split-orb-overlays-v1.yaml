@@ -1,0 +1,97 @@
+version: 1
+status: LOCKED
+date: 2026-04-20
+slug: prior-day-direction-split-orb-overlays-v1
+title: "MNQ prior-day positional ORB overlays v1 — direction-split context family (K=36)"
+owner: codex
+
+purpose: |
+  Test whether a small set of prior-day positional states improves MNQ ORB trade
+  quality in a direction-specific way on a fixed O5/E2/CB1 surface. This is a
+  context-overlay family, not a new entry model and not a standalone strategy
+  family.
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/institutional/edge-finding-playbook.md"
+  notes:
+    - "Mode A strict: 2026-01-01 onwards is sacred OOS and may not be used for selection."
+    - "This family allows both TAKE and AVOID interpretations; role is derived from the sign of the same pre-registered delta, not from post-hoc doubling of hypotheses."
+    - "No threshold fitting is allowed. Feature formulas are deterministic."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: false
+
+scope:
+  instrument: MNQ
+  sessions:
+    - NYSE_OPEN
+    - COMEX_SETTLE
+    - US_DATA_1000
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_targets:
+    - 1.0
+    - 1.5
+  directions:
+    - long
+    - short
+  features:
+    - F1_NEAR_PDH_15
+    - F5_BELOW_PDL
+    - F6_INSIDE_PDR
+
+data_policy:
+  data_source: "gold.db canonical layers only: orb_outcomes + daily_features"
+  is_window: "trading_day < 2026-01-01"
+  oos_window: "trading_day >= 2026-01-01"
+  tuning_against_oos: false
+
+feature_definitions:
+  orb_mid: "(orb_{session}_high + orb_{session}_low) / 2.0"
+  F1_NEAR_PDH_15: "abs(orb_mid - prev_day_high) / atr_20 < 0.15"
+  F5_BELOW_PDL: "orb_mid < prev_day_low"
+  F6_INSIDE_PDR: "orb_mid > prev_day_low AND orb_mid < prev_day_high"
+
+family_accounting:
+  k_family: 36
+  arithmetic: "3 sessions x 2 rr targets x 2 directions x 3 features"
+
+test_definition:
+  comparison: "For each cell, compare on-signal vs off-signal pnl_r within the same instrument/session/rr/direction slice."
+  statistic: "Welch two-sample t-test on pnl_r; delta_is = ExpR_on_IS - ExpR_off_IS"
+  role_mapping:
+    TAKE: "delta_is >= +0.05 and ExpR_on_IS > 0"
+    AVOID: "delta_is <= -0.05 and ExpR_off_IS > 0"
+  primary_survivor_requirements:
+    - "BH-FDR q_family < 0.05 at K=36"
+    - "abs(t_is) >= 3.00 (theory-grounded family)"
+    - "N_on_IS >= 100"
+    - "N_off_IS >= 100"
+    - "abs(delta_is) >= 0.05"
+    - "role in {TAKE, AVOID}"
+    - "If N_on_OOS >= 30 and N_off_OOS >= 30, sign(delta_oos) must match sign(delta_is)"
+  secondary_diagnostics:
+    - "eligible years = years where N_on >= 10 and N_off >= 10"
+    - "report years_consistent = eligible years with sign(delta_year) == sign(delta_is)"
+    - "report fire rate and OOS counts for every cell"
+
+kill_criteria:
+  - "0 primary survivors at family K=36"
+  - "Any apparent survivor fails the role-mapping test (neither TAKE nor AVOID)"
+  - "Any apparent survivor relies on N_on_IS < 100 or N_off_IS < 100"
+
+explicitly_out_of_scope:
+  - "Any instrument other than MNQ"
+  - "Any session other than NYSE_OPEN, COMEX_SETTLE, US_DATA_1000"
+  - "Any aperture other than O5"
+  - "Any RR other than 1.0 or 1.5"
+  - "Any feature outside F1_NEAR_PDH_15, F5_BELOW_PDL, F6_INSIDE_PDR"
+  - "Any entry-model rewrite (for example E_RETEST)"
+  - "Any standalone event geometry"

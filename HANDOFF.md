@@ -4,6 +4,273 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 final-night — paired US_DATA_1000 branch executed, not just drafted)
+
+Follow-on to the grounded prior-day positional work. The `US_DATA_1000` paired
+branch has now been run canonically instead of being left as a draft idea.
+
+### What was executed
+
+- pre-reg promoted from draft to locked:
+  - `docs/audit/hypotheses/2026-04-20-usdata1000-long-f5-f6-paired-v1.yaml`
+- runner added:
+  - `research/usdata1000_long_f5_f6_paired_v1.py`
+- result written:
+  - `docs/audit/results/2026-04-20-usdata1000-long-f5-f6-paired-v1.md`
+
+### Canonical result
+
+Bounded family:
+
+- instrument `MNQ`
+- session `US_DATA_1000`
+- `O5`, `E2`, `CB1`
+- direction `long`
+- paired hypotheses:
+  - `F5_BELOW_PDL` → TAKE
+  - `F6_INSIDE_PDR` → AVOID
+- honest `K = 4`
+
+Verdict:
+
+- **ALIVE**
+- all 4 locked cells passed under the bounded family accounting
+
+Cells:
+
+1. `RR1.0 F5_BELOW_PDL TAKE`
+   - `delta_is = +0.3370`
+   - `q_family = 0.0003`
+   - `n_on_is / n_off_is = 136 / 745`
+2. `RR1.5 F5_BELOW_PDL TAKE`
+   - `delta_is = +0.4046`
+   - `q_family = 0.0006`
+   - `n_on_is / n_off_is = 135 / 731`
+3. `RR1.0 F6_INSIDE_PDR AVOID`
+   - `delta_is = -0.2017`
+   - `q_family = 0.0017`
+   - `n_on_is / n_off_is = 513 / 368`
+4. `RR1.5 F6_INSIDE_PDR AVOID`
+   - `delta_is = -0.2849`
+   - `q_family = 0.0006`
+   - `n_on_is / n_off_is = 503 / 363`
+
+Important handling note:
+
+- this strengthens the case that the branch should be handled as
+  **paired context states**, not as one pooled “prior-day bias” story
+- `F5` is a washed-out TAKE state
+- `F6` is an inside-range AVOID state
+- neither result authorizes live capital changes by itself
+
+### Updated queue
+
+1. keep `H04` on its existing narrow shadow/deployment-shape path
+2. keep `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` short `F5_BELOW_PDL` as
+   **CONDITIONAL_UNVERIFIED shadow-only**
+3. next highest-EV branch is no longer “run the US_DATA draft” — that is done
+4. the next branch should be a bounded validation / role-design step for the
+   verified `US_DATA_1000` paired family, not another broad prior-day scan
+
+## Update (2026-04-20 ultra-final — US_DATA_1000 role-design completed)
+
+Follow-on to the paired-family execution. The next bounded task was to decide
+how the verified `US_DATA_1000` long pair should actually be used inside ORB.
+
+### What was added
+
+- deterministic role-design runner:
+  - `research/usdata1000_long_paired_role_design_v1.py`
+- role-design note:
+  - `docs/plans/2026-04-20-usdata1000-paired-role-design.md`
+- preserved next candidate-lane draft:
+  - `docs/audit/hypotheses/2026-04-20-usdata1000-long-not-f6-candidate-lane-v1.yaml`
+
+### Canonical role decision
+
+Input family:
+
+- `docs/audit/results/2026-04-20-usdata1000-long-f5-f6-paired-v1.md`
+
+Key IS metrics from canonical `gold.db`:
+
+- `RR1.0`
+  - baseline: `N=881`, `ExpR=+0.0409`
+  - `F5` only: `N=136`, `ExpR=+0.3258`
+  - `F6` state: `N=513`, `ExpR=-0.0434`
+  - neutral: `N=232`, `ExpR=+0.0601`
+  - `NOT_F6`: `N=368`, `ExpR=+0.1583`
+- `RR1.5`
+  - baseline: `N=866`, `ExpR=+0.0606`
+  - `F5` only: `N=135`, `ExpR=+0.4022`
+  - `F6` state: `N=503`, `ExpR=-0.0588`
+  - neutral: `N=228`, `ExpR=+0.1219`
+  - `NOT_F6`: `N=363`, `ExpR=+0.2261`
+
+Decision:
+
+- the pair is **not best handled as a standalone `F5` lane**
+- the best ORB integration is a **binary `NOT_F6_INSIDE_PDR` candidate lane**
+- `F5_BELOW_PDL` should be treated as a higher-quality sub-state inside that
+  allowed set, not the primary lane definition
+
+Reason:
+
+- `F5` has the best per-trade quality but is much sparser
+- `NOT_F6` keeps about 2.7x the IS sample of `F5` while still materially
+  improving ExpR over baseline
+- the in-sample ordering `F5 > neutral > F6` holds at both `RR1.0` and `RR1.5`
+
+Important caution:
+
+- 2026 OOS remains thin and negative on these `US_DATA_1000` O5 long states
+- do **not** treat the role-design note as a promotion or live-readiness claim
+- this is a route decision, not a deploy verdict
+
+### Updated queue
+
+1. keep `H04` on its existing narrow shadow/deployment-shape path
+2. keep `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` short `F5_BELOW_PDL` as
+   **CONDITIONAL_UNVERIFIED shadow-only**
+3. `MNQ US_DATA_1000 O5 long` is now understood as:
+   - primary route: `NOT_F6_INSIDE_PDR` candidate lane
+   - secondary descriptor: `F5_BELOW_PDL`
+4. next bounded task, if continuing this branch, is **candidate-lane validation
+   or shadow design for `NOT_F6_INSIDE_PDR`**, not more broad prior-day scans
+
+## Update (2026-04-20 late-night — context opportunity map grounded in /resources + canonical reruns)
+
+Follow-on to the user correction that this branch must be grounded in
+`/resources`, not just repo-memory or post-hoc summaries.
+
+### What was newly grounded
+
+Read from raw `/resources` PDFs before continuing:
+
+- `resources/Algorithmic_Trading_Chan.pdf`
+- `resources/Robert Carver - Systematic Trading.pdf`
+- `resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf`
+- `resources/Two_Million_Trading_Strategies_FDR.pdf`
+
+These were used to lock the role framing:
+
+- Chan -> bounded executable strategy families are valid research units
+- Carver -> useful signals can be conditioners / sizers, not only standalone systems
+- López de Prado -> theory-first, small pre-registered family
+- Chordia -> honest family-level MHT / FDR
+
+### Canonical reruns and net role verdict
+
+1. `research/orb_retest_entry_pilot_v1.py`
+   - still DEAD for bounded ORB retest continuation
+2. `research/mnq_live_context_overlays_v1.py`
+   - still reproduces the H04 survivor exactly
+3. `research/bull_short_avoidance_pooled_deployed_oos.py`
+   - **DEAD**
+   - pooled deployed-short prior-day-direction route is not a hidden allocator edge
+   - pooled IS delta only `+0.0061R`, block-bootstrap `p=0.8676`
+
+### New discovery family that was locked + run
+
+- Pre-reg:
+  - `docs/audit/hypotheses/2026-04-20-prior-day-direction-split-orb-overlays-v1.yaml`
+- Runner:
+  - `research/prior_day_direction_split_orb_overlays_v1.py`
+- Result:
+  - `docs/audit/results/2026-04-20-prior-day-direction-split-orb-overlays-v1.md`
+
+Family outcome:
+
+- honest `K = 36`
+- `7` primary survivors, but only **4 unique shapes** after collapsing RR duplicates
+
+Unique surviving shapes:
+
+1. `NYSE_OPEN` short `F5_BELOW_PDL` -> `TAKE`
+   - survives at RR `1.0` and `1.5`
+2. `US_DATA_1000` long `F5_BELOW_PDL` -> `TAKE`
+   - survives at RR `1.0` and `1.5`
+3. `US_DATA_1000` long `F6_INSIDE_PDR` -> `AVOID`
+   - survives at RR `1.0` and `1.5`
+4. `COMEX_SETTLE` long `F6_INSIDE_PDR` -> `AVOID`
+   - survives at RR `1.0` only
+
+Important adjacency note:
+
+- `US_DATA_1000` long `F5_BELOW_PDL` and `F6_INSIDE_PDR` are parallel, not duplicates
+- binary-mask correlation about `-0.51`
+- overlap `0`
+
+### Exact live-lane follow-up that was locked + run
+
+- Pre-reg:
+  - `docs/audit/hypotheses/2026-04-20-f5-nyo-short-deployed-lane-verify.yaml`
+- Runner:
+  - `research/f5_nyo_short_deployed_lane_verify.py`
+- Result:
+  - `docs/audit/results/2026-04-20-f5-nyo-short-deployed-lane-verify.md`
+
+Lane:
+
+- `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` short
+
+Verdict:
+
+- **CONDITIONAL_UNVERIFIED**
+- strong IS evidence:
+  - `N_on=117`, `N_off=708`
+  - `ExpR_on=+0.3559`, `ExpR_off=+0.0519`
+  - `delta=+0.3040`
+  - Welch `p=0.0009`
+  - block-bootstrap `p=0.0020`
+- positive in every eligible IS year
+- OOS still power-thin:
+  - `N_on=8`, `N_off=33`
+  - `delta=-0.1478`
+  - RULE 3.3 tier `STATISTICALLY_USELESS`
+
+### New durable map
+
+- `docs/plans/2026-04-20-context-opportunity-map-grounded.md`
+
+Net ranking from that note:
+
+1. keep `H04` on its existing narrow shadow/deployment-shape path
+2. best new exact-lane opportunity:
+   - `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` short conditioned on `F5_BELOW_PDL`
+3. best parallel new-lane discovery branch:
+   - `MNQ_US_DATA_1000 O5 long` paired family
+     - `F5_BELOW_PDL` TAKE
+     - `F6_INSIDE_PDR` AVOID
+4. pooled prior-day short allocator/sizer route is closed DEAD
+
+### Practical implication
+
+Corrected biggest miss:
+
+- prior-day **direction** pooled short logic was the wrong feature family and is now dead
+- prior-day **positional** states (`below PDL`, `inside PDR`) are alive
+
+So the right next question is NOT another pooled short allocator scan.
+The right next question is the deployment-shape / shadow path for the exact
+`NYSE_OPEN` short `F5_BELOW_PDL` live lane, plus the paired `US_DATA_1000`
+long discovery branch.
+
+### Additional durable artifacts added after the grounded reruns
+
+- pooled dead-route closeout:
+  - `docs/audit/results/2026-04-20-bull-short-avoidance-pooled-deployed-oos.md`
+- next exact-lane shadow/deployment-shape draft:
+  - `docs/audit/hypotheses/2026-04-20-f5-nyo-short-shadow-v1.yaml`
+- next paired discovery-branch draft:
+  - `docs/audit/hypotheses/2026-04-20-usdata1000-long-f5-f6-paired-v1.yaml`
+
+Current queue after this update:
+
+1. keep `H04` on its already-locked path
+2. if continuing the exact-lane route, graduate the `F5 NYSE_OPEN short` shadow draft from DRAFT to committed shadow contract
+3. if continuing new discovery rather than shadowing, run the `US_DATA_1000 long F5/F6 paired` family next
+
 ## Update (2026-04-20 late-late-late — HTF branch closed: integrity repaired, simple v1 family dead)
 
 Follow-on to the "HTF thing" request. User wanted this handled as an

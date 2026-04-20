@@ -1,0 +1,119 @@
+version: 1
+status: LOCKED
+date: 2026-04-20
+slug: usdata1000-long-f5-f6-paired-v1
+title: "US_DATA_1000 long paired positional states v1 — F5_BELOW_PDL TAKE vs F6_INSIDE_PDR AVOID"
+owner: codex
+
+purpose: |
+  Preserve the next paired discovery branch from the grounded opportunity map.
+  This is a small follow-on family centered on the adjacent long-side
+  `US_DATA_1000` opportunity: washed-out states help, inside-range states hurt.
+
+grounding:
+  resources:
+    - "resources/Algorithmic_Trading_Chan.pdf"
+    - "resources/Robert Carver - Systematic Trading.pdf"
+    - "resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf"
+    - "resources/Two_Million_Trading_Strategies_FDR.pdf"
+  doctrine:
+    - "RESEARCH_RULES.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/institutional/edge-finding-playbook.md"
+  note: |
+    Carver is the key reason this should be treated as a paired TAKE/AVOID
+    context family instead of forcing one side into a standalone-strategy frame.
+
+parent_family: "docs/audit/results/2026-04-20-prior-day-direction-split-orb-overlays-v1.md"
+
+scope:
+  instrument: MNQ
+  session: US_DATA_1000
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  direction: long
+  rr_targets:
+    - 1.0
+    - 1.5
+  hypotheses:
+    - F5_BELOW_PDL_TAKE
+    - F6_INSIDE_PDR_AVOID
+
+family_accounting:
+  k_family: 4
+  arithmetic: "2 rr targets x 2 pre-specified signed hypotheses"
+
+signal_definitions:
+  orb_mid: "(orb_US_DATA_1000_high + orb_US_DATA_1000_low) / 2.0"
+  F5_BELOW_PDL: "orb_mid < prev_day_low"
+  F6_INSIDE_PDR: "orb_mid > prev_day_low AND orb_mid < prev_day_high"
+  relationship_note: "States are adjacent and mutually exclusive; prior family showed binary-mask correlation about -0.51 and overlap 0."
+
+ground_truth_from_parent:
+  F5_BELOW_PDL:
+    rr_1_0:
+      delta_is: 0.3370
+      q_family: 0.0030
+      n_on_is: 136
+      n_off_is: 745
+      delta_oos: 0.1155
+    rr_1_5:
+      delta_is: 0.4046
+      q_family: 0.0041
+      n_on_is: 135
+      n_off_is: 731
+      delta_oos: 0.0335
+  F6_INSIDE_PDR:
+    rr_1_0:
+      delta_is: -0.2017
+      q_family: 0.0086
+      n_on_is: 513
+      n_off_is: 368
+      delta_oos: -0.0223
+    rr_1_5:
+      delta_is: -0.2849
+      q_family: 0.0041
+      n_on_is: 503
+      n_off_is: 363
+      delta_oos: 0.2272
+
+primary_test:
+  F5_BELOW_PDL_TAKE:
+    requirements:
+      - "delta_is >= +0.05"
+      - "ExpR_on_IS > 0"
+      - "t_is >= 3.0"
+      - "BH-FDR family q < 0.05 at K=4"
+      - "N_on_IS >= 100"
+      - "N_off_IS >= 100"
+  F6_INSIDE_PDR_AVOID:
+    requirements:
+      - "delta_is <= -0.05"
+      - "ExpR_off_IS > 0"
+      - "abs(t_is) >= 3.0"
+      - "BH-FDR family q < 0.05 at K=4"
+      - "N_on_IS >= 100"
+      - "N_off_IS >= 100"
+
+oos_rule:
+  if_powered:
+    - "If N_on_OOS >= 30 and N_off_OOS >= 30 on a cell, sign(delta_oos) must match sign(delta_is)"
+  if_unpowered:
+    - "Treat OOS sign as descriptive only"
+
+kill_criteria:
+  - "Neither paired hypothesis survives at K=4"
+  - "Any survivor loses role coherence (F5 no longer TAKE or F6 no longer AVOID)"
+  - "Any survivor relies on N_on_IS < 100 or N_off_IS < 100"
+
+explicitly_out_of_scope:
+  - "Any session other than US_DATA_1000"
+  - "Any direction other than long"
+  - "Any instrument other than MNQ"
+  - "Any standalone trade-geometry rewrite"
+  - "Any capital or allocator action"
+
+status_note: |
+  Locked for execution on 2026-04-20. This is a bounded paired context-family
+  verify, not a deployment instruction and not a standalone trade-family claim.

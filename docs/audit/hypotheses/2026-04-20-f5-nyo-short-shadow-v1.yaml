@@ -1,0 +1,113 @@
+version: 1
+status: DRAFT
+date: 2026-04-20
+slug: f5-nyo-short-shadow-v1
+title: "F5 NYSE_OPEN short shadow / deployment-shape pre-reg — MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12 conditioned on F5_BELOW_PDL"
+owner: codex
+
+purpose: |
+  Formalize the shadow-phase and deployment-shape path for the exact-lane
+  F5_BELOW_PDL candidate on MNQ NYSE_OPEN short. This is a conditioner /
+  deployment-shape contract only. No capital or allocator change is permitted by
+  this file alone.
+
+parent_result: "docs/audit/results/2026-04-20-f5-nyo-short-deployed-lane-verify.md"
+parent_family: "docs/audit/results/2026-04-20-prior-day-direction-split-orb-overlays-v1.md"
+
+grounding:
+  resources:
+    - "resources/Algorithmic_Trading_Chan.pdf"
+    - "resources/Robert Carver - Systematic Trading.pdf"
+    - "resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf"
+  doctrine:
+    - "RESEARCH_RULES.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+  note: |
+    Chan grounds the bounded executable family. Carver grounds conditioner /
+    sizing roles. López de Prado grounds theory-first, small-family testing.
+
+scope:
+  instrument: MNQ
+  strategy_id: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+  session: NYSE_OPEN
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  direction: short
+  deployed_filter: COST_LT12
+  signal: F5_BELOW_PDL
+
+signal_definition:
+  orb_mid: "(orb_NYSE_OPEN_high + orb_NYSE_OPEN_low) / 2.0"
+  fire_rule: "orb_mid < prev_day_low"
+  role: "conditioner / deployment-shape only"
+
+ground_truth_from_parent:
+  is:
+    n_on: 117
+    n_off: 708
+    exp_on: 0.3559
+    exp_off: 0.0519
+    delta: 0.3040
+    welch_p: 0.0009
+    bootstrap_p: 0.0020
+  oos:
+    n_on: 8
+    n_off: 33
+    delta: -0.1478
+    power_tier: "STATISTICALLY_USELESS"
+  verdict: "CONDITIONAL_UNVERIFIED"
+
+is_recomputation_contract:
+  canonical_inputs:
+    - "orb_outcomes"
+    - "daily_features"
+  required_filter_delegation: "research.filter_utils.filter_signal('COST_LT12', 'NYSE_OPEN')"
+  tolerance:
+    delta_is_abs: 0.01
+    n_counts_exact: true
+
+shadow_phase:
+  allowed:
+    - "signal-only logging"
+    - "paper-only deployment-shape simulation"
+  forbidden:
+    - "live capital changes"
+    - "allocator changes"
+    - "trade skipping"
+  logging_targets:
+    - trading_day
+    - signal_fire
+    - lane_outcome_r
+    - cumulative_n_on_oos
+    - cumulative_delta_oos_vs_off
+
+promotion_concept:
+  stage_1:
+    description: "deployment-shape only"
+    action: "on-signal days eligible for partial upsize review only"
+    minimums:
+      - "N_on_OOS >= 30"
+      - "N_off_OOS >= 30"
+      - "sign(delta_oos) == sign(delta_is)"
+      - "raw_p_oos <= 0.20 descriptive"
+  stage_2:
+    description: "promotion candidate"
+    action: "requires new pre-reg with explicit capital-action logic"
+    minimums:
+      - "N_on_OOS >= 60"
+      - "N_off_OOS >= 60"
+      - "raw_p_oos <= 0.05"
+      - "delta_oos >= 0.10"
+
+kill_criteria:
+  - "IS recomputation parity fails"
+  - "signal definition changes without a superseding pre-reg"
+  - "exact lane is retired from deployment"
+  - "after N_on_OOS >= 30 and N_off_OOS >= 30, OOS remains opposing-sign with meaningful negative delta"
+
+status_note: |
+  Draft only. This should not be executed as a shadow contract until committed and
+  restamped. It exists to preserve the exact next action and the correct role.
