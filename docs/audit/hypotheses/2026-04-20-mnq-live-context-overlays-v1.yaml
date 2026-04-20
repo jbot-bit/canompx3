@@ -33,7 +33,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "7d2a3dec"
   committed_required_before_run: true
 
 scope:
