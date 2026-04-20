@@ -1,0 +1,130 @@
+pre_reg_id: "mnq-30m-rr10-unfiltered-lane-discovery-v1"
+date: "2026-04-20"
+testing_mode: "individual"
+pathway: "B"
+pathway_rationale: |
+  Pathway-B K=1-per-cell confirmatory test of an UNEXPLORED deployment
+  dimension surfaced by the post-PR #48 landscape audit (2026-04-20 late).
+  None of the 6 currently-deployed MNQ lanes is 30m — they are all 5m.
+  validated_setups contains exactly 1 MNQ 30m row (SINGAPORE_OPEN RR=1.5,
+  not deployed).
+
+  The PR #48 shape-map (`docs/audit/results/2026-04-20-participation-shape-cross-instrument-v1.md`,
+  merged `28279719`) established that MNQ 30m is pure MONOTONIC_UP at
+  RR=1.0 (β₁=+0.138 t=+5.17) and RR=1.5 (β₁=+0.128 t=+3.74), with no
+  inverted-U curvature (unlike 5m). The post-PR #48 landscape scan
+  observed that several MNQ 30m RR=1.0 sessions have COST-SURVIVING
+  RAW ExpR (not net-of-cost-adjusted but AFTER-cost on unfiltered E2
+  baseline):
+
+    CME_PRECLOSE    n=   67   Net ExpR = +0.2067   (too thin)
+    NYSE_OPEN       n= 1270   Net ExpR = +0.0871
+    US_DATA_1000    n= 1388   Net ExpR = +0.0780
+    NYSE_CLOSE      n=  197   Net ExpR = +0.0664
+    COMEX_SETTLE    n= 1384   Net ExpR = +0.0041
+
+  This pre-reg tests the top-4 by (N × ExpR) product as independent
+  K=1 Pathway-B replication cells. Each is a standalone unfiltered
+  lane candidate (not a filter overlay). The hypothesis is that the
+  positive unfiltered Net ExpR observed in the landscape scan is a
+  real cost-surviving edge that passes Phase 0 discovery-level criteria
+  (C3 BH-FDR, C4 Chordia, C6 WFE, C7 N, C8 OOS, C9 era-stability).
+
+  Full validated_setups promotion (C5 DSR, C11 account-death MC, C12
+  Shiryaev-Roberts monitor) is OUT OF SCOPE for this pre-reg — those
+  are deployment gates, not discovery gates. Any cell that passes
+  this pre-reg becomes a candidate for Phase 0 validated_setups
+  promotion via a separate, downstream process.
+
+parent_chain:
+  - "PR #48 `28279719` — monotonic-up universal; MNQ 30m confirmed monotonic at RR=1.0 and RR=1.5."
+  - "2026-04-20 post-PR #48 landscape audit — identified 5 positive-ExpR-net-of-cost MNQ 30m RR=1.0 sessions."
+
+theory_citations:
+  grounded_in_local_extracts:
+    - path: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: |
+        Fitschen 2013 Ch 3 grounds intraday trend-follow on equity indices
+        (Table 3.8 p.41). MNQ is the micro-NASDAQ futures contract.
+        Applies at the hourly-equivalent timescale (30m aperture is within
+        Fitschen's tested horizon).
+    - path: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      use: |
+        Chan 2013 Ch 7 stop-cascade mechanism (p.157 verbatim) predicts
+        that ORB breakouts at 30m produce sustained momentum via cascading
+        stop-order execution. Mechanism is NOT aperture-specific and
+        applies to 30m as well as 5m.
+
+scope:
+  instrument: "MNQ"
+  aperture: 30
+  entry_model: "E2"
+  confirm_bars: 1
+  rr_target: 1.0
+  filter: "none (unfiltered baseline — this IS the lane)"
+  is_window: "trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01)"
+  oos_window: "2026-01-01 ≤ trading_day (read-only, Mode A sacred)"
+  cells_tested:
+    - orb_label: "US_DATA_1000"
+      expected_n_is: 1388
+      expected_net_expr_is: +0.0780
+    - orb_label: "NYSE_OPEN"
+      expected_n_is: 1270
+      expected_net_expr_is: +0.0871
+    - orb_label: "COMEX_SETTLE"
+      expected_n_is: 1384
+      expected_net_expr_is: +0.0041
+    - orb_label: "NYSE_CLOSE"
+      expected_n_is: 197
+      expected_net_expr_is: +0.0664
+
+hypothesis:
+  H1_per_cell: |
+    For each cell (MNQ × <session> × 30m × E2 × CB1 × RR=1.0 × unfiltered),
+    the IS net-of-cost ExpR is > 0 AND HC3-robust t on IS pnl_r mean
+    is > +3.0 (Chordia with-theory) AND one-tailed p < 0.05.
+  kill_if_per_cell: |
+    IS net-of-cost ExpR ≤ 0 OR t ≤ +3.0 OR one-tailed p ≥ 0.05.
+
+testing_discipline:
+  K_framing: |
+    4 independent Pathway-B K=1 tests, each a pre-committed cell-specific
+    replication. No BH-FDR applied (theory-driven, cell-specific; matches
+    the PR #41/#42/#45/#48 pattern). Chordia t ≥ 3.00 with-theory per cell.
+  mandatory_downstream_gates_non_waivable:
+    - "C6 (WFE ≥ 0.50) — computed via 3-fold expanding walk-forward on IS"
+    - "C8 (OOS ExpR ≥ 0.40 × IS) — read-only on sacred Mode A holdout"
+    - "C9 (era stability: no calendar year with N≥50 having ExpR < -0.05)"
+  integrity_gates:
+    - "unfiltered baseline (no filter_type applied)"
+    - "cost model: MNQ $2.74 RT per pipeline.cost_model.COST_SPECS"
+    - "IS ExpR reported both raw and net-of-cost"
+
+decision_rules:
+  verdicts_per_cell:
+    - verdict: "<CELL>_CANDIDATE_READY"
+      criteria: "H1 pass AND C6 pass AND C8 pass AND C9 pass AND N ≥ 100"
+      meaning: "Cell is a candidate for Phase 0 validated_setups promotion via downstream review. THIS PRE-REG DOES NOT PROMOTE."
+    - verdict: "<CELL>_RESEARCH_SURVIVOR"
+      criteria: "H1 pass AND at least one of C6/C8/C9 fails"
+      meaning: "Real IS edge but fails at least one Phase 0 deploy-gate. Not deployable under current discipline. Document for future work."
+    - verdict: "<CELL>_KILL_IS"
+      criteria: "H1 fail"
+      meaning: "IS hypothesis rejected at the Chordia threshold. Cell closed."
+    - verdict: "<CELL>_SCAN_ABORT"
+      criteria: "N < 100 OR data integrity fail"
+      meaning: "Fail-closed; investigate."
+
+non_actions:
+  - "Does NOT write to validated_setups, edge_families, live_config, or lane_allocation.json."
+  - "Does NOT modify Q4-band MNQ contract (PR #43)."
+  - "Does NOT revise PR #48 shape-map verdicts."
+  - "Does NOT apply monotonic-rank sizing — that is a SEPARATE follow-on pre-reg. This test is baseline unfiltered cell viability only."
+  - "Does NOT test 5m / 15m, RR=1.5/2.0, or any filter overlay — those are future pre-regs."
+  - "Does NOT perform parameter tuning; all thresholds pre-committed before any query."
+
+outputs:
+  result_md: "docs/audit/results/2026-04-20-mnq-30m-rr10-unfiltered-lane-discovery-v1.md"
+  script: "research/mnq_30m_rr10_unfiltered_lane_discovery_v1.py"
+
+commit_sha: "TO_FILL_AFTER_COMMIT"
