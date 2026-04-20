@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from scipy import stats
 
 
 def per_trade_sharpe(pnl: pd.Series) -> float:
@@ -62,4 +61,8 @@ def jobson_korkie_p(
 
     diff = abs(sharpe_a - sharpe_b)
     z = diff / np.sqrt(se_sq)
-    return float(2 * (1 - stats.norm.cdf(z)))
+    # Lazy import — scipy.stats is ~3-4s to import. Only this function uses it.
+    # PEP 8 explicitly endorses delayed imports for performance.
+    from scipy import stats as scipy_stats
+
+    return float(2 * (1 - scipy_stats.norm.cdf(z)))
