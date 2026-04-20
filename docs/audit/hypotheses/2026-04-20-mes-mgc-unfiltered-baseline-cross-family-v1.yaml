@@ -109,4 +109,4 @@ outputs:
   result_md: "docs/audit/results/2026-04-20-mes-mgc-unfiltered-baseline-cross-family-v1.md"
   script: "research/mes_mgc_unfiltered_baseline_cross_family_v1.py"
 
-commit_sha: "TO_FILL_AFTER_COMMIT"
+commit_sha: "94c93d804997b8c5ac50c55b1e3fb5c59f1b1e07"
