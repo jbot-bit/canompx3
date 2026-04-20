@@ -1,0 +1,255 @@
+version: 1
+status: DRAFT
+date: 2026-04-20
+slug: participation-optimum-universality-v1
+title: "Participation-optimum universality test — rel_vol inverted-U across MNQ sessions × directions × apertures, unfiltered"
+owner: claude
+parent_chain:
+  - "docs/audit/hypotheses/2026-04-20-mnq-live-context-overlays-v1.yaml (lock c6ece8a1) — parent family finding H04"
+  - "docs/audit/hypotheses/2026-04-20-q1-h04-mechanism-shape-validation-v1.yaml (lock c93ba90d, run 87da7101) — Q1 killed linear-interaction framing; 5x2 matrix revealed Q4 peak not Q5"
+purpose: |
+  Q1 killed the linear-additive confluence narrative. The Q1 5x2 matrix
+  revealed a non-monotonic pattern (Q4 peak, Q5 attenuation) on the single
+  COMEX_SETTLE short lane. This pre-reg asks the RIGHT question without
+  tunnel vision: is that inverted-U pattern a GENERAL mechanism across
+  the MNQ portfolio, or was it COMEX-specific?
+
+  If the β₂ coefficient on rel_vol² is significantly negative across the
+  pooled MNQ universe, the participation-optimum is a real mechanism
+  (Fitschen Ch 3 grounded) that applies beyond the one lane we inspected.
+  If β₂ is not significant pooled, the Q4-peak observation was a COMEX-
+  specific artefact and no new deployment path is warranted.
+
+deployment_not_done_here: |
+  DRAFT. A positive verdict here does NOT authorize deployment; it
+  authorizes writing a follow-on deployment-shape pre-reg for lanes
+  where the mechanism held.
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/quant-audit-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/fitschen_2013_ch3_breakouts.md"
+    - "docs/institutional/literature/chordia_et_al_2018.md"
+    - "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+    - "docs/institutional/literature/aronson_2007_evidence_based_ta.md"
+    - "memory/feedback_per_lane_breakdown_required.md"
+    - "memory/feedback_pooled_not_lane_specific.md"
+  notes:
+    - "Honest-post-hoc follow-up on the Q1 5x2 observation. Selection-bias source is explicit: Q4-peak was SEEN in COMEX data before this pre-reg was drafted."
+    - "RULE 14: per-lane breakdown mandatory; pooled claim must be accompanied by per-cell sign-agreement report."
+    - "Pathway B K=1 primary pooled test; secondary per-lane scan with BH-FDR at K=24 cells."
+    - "UNFILTERED test — we are probing the MECHANISM, not an overlay. Filter overlays are a separate class of question."
+    - "5m aperture primary; 15m and 30m apertures as robustness-only secondary (reported, not voting in primary verdict)."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+testing_mode: individual
+pathway: B_theory_driven
+
+scope:
+  instrument: MNQ
+  instrument_rationale: |
+    Keeping instrument constant at MNQ avoids conflating instrument-level
+    microstructure differences with the participation-optimum test. MES
+    and MGC universality are separate follow-on questions not in this
+    pre-reg.
+  sessions_in_scope:
+    - BRISBANE_1025
+    - CME_PRECLOSE
+    - CME_REOPEN
+    - COMEX_SETTLE
+    - EUROPE_FLOW
+    - LONDON_METALS
+    - NYSE_CLOSE
+    - NYSE_OPEN
+    - SINGAPORE_OPEN
+    - TOKYO_OPEN
+    - US_DATA_1000
+    - US_DATA_830
+  sessions_source: "canonical DISTINCT on MNQ orb_outcomes where orb_minutes=5 AND entry_model='E2' AND confirm_bars=1 AND rr_target=1.5 AND pnl_r IS NOT NULL"
+  directions_in_scope:
+    - long
+    - short
+  aperture_primary: 5
+  aperture_robustness:
+    - 15
+    - 30
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.5
+  filter_applied: "NONE — unfiltered lane universe per mechanism-testing discipline"
+  out_of_scope:
+    - "MES, MGC instruments (separate tests)"
+    - "Overlay filters (ORB_G5, OVNRNG_100, VWAP_*, COST_LT*) — separate questions"
+    - "Entry models E3, E4 — separate geometric-entry mechanism"
+    - "RR 1.0, 2.0 — RR affects arithmetic, not entry mechanism"
+
+feature_definitions:
+  - feature_name: rel_vol_session
+    column_source: "daily_features.rel_vol_{session}"
+    canonical_source_of_truth: "pipeline/build_daily_features.py"
+    trade_time_knowable: true
+    first_complete_time: "ORB end"
+    lookahead_check: "PASS"
+    per_session_column_map:
+      BRISBANE_1025: daily_features.rel_vol_BRISBANE_1025
+      CME_PRECLOSE: daily_features.rel_vol_CME_PRECLOSE
+      CME_REOPEN: daily_features.rel_vol_CME_REOPEN
+      COMEX_SETTLE: daily_features.rel_vol_COMEX_SETTLE
+      EUROPE_FLOW: daily_features.rel_vol_EUROPE_FLOW
+      LONDON_METALS: daily_features.rel_vol_LONDON_METALS
+      NYSE_CLOSE: daily_features.rel_vol_NYSE_CLOSE
+      NYSE_OPEN: daily_features.rel_vol_NYSE_OPEN
+      SINGAPORE_OPEN: daily_features.rel_vol_SINGAPORE_OPEN
+      TOKYO_OPEN: daily_features.rel_vol_TOKYO_OPEN
+      US_DATA_1000: daily_features.rel_vol_US_DATA_1000
+      US_DATA_830: daily_features.rel_vol_US_DATA_830
+  - feature_name: rel_vol_squared
+    column_source: "computed: rel_vol_session ** 2"
+    trade_time_knowable: true
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "Mode A sacred, descriptive only — NOT a kill gate"
+  tuning_against_oos: false
+
+primary_hypothesis:
+  id: H_PARTICIPATION_OPTIMUM_UNIVERSAL
+  type: primary_individual
+  theory_citation: |
+    Fitschen 2013 Ch 3 grounds ORB breakout continuation as a
+    participation-dependent mechanism: adequate order-flow at breakout
+    is required to sustain directional move. Aronson 2007 Ch 7
+    (non-random price motion / EMH literature) + order-flow
+    microstructure priors (mechanism-priors.md, untested section on
+    exhaustion at extreme participation) predict extreme-tail
+    participation coincides with exhaustion / reversal events where
+    the breakout-continuation pattern breaks down. This combined
+    prediction is a non-monotonic inverted-U: peak at moderate
+    participation, attenuation at extreme participation.
+  statement: |
+    Pooled across MNQ active sessions × both directions × 5m ORB × E2
+    × CB1 × RR1.5, UNFILTERED, IS (trading_day < 2026-01-01):
+    the coefficient β₂ on rel_vol² in the pooled regression
+      pnl_r = β₀ + β₁·rel_vol_session + β₂·rel_vol_session² + γ·lane_FE + ε
+    is SIGNIFICANTLY NEGATIVE (one-tailed t, p < 0.05).
+    lane_FE = categorical (session × direction), 24 cells.
+
+pass_gates:
+  integrity:
+    required: true
+    checks:
+      - "All 12 sessions × 2 directions × 5m × E2 × CB1 × RR1.5 cells loaded canonically"
+      - "rel_vol column per session non-null on >= 90% of canonical rows"
+      - "Direction derived from entry_price > stop_price"
+      - "No look-ahead (rel_vol is ORB-end, pnl_r is post-outcome — features set at t <= entry)"
+  primary_beta2_negative:
+    required: true
+    metric: "β₂ one-tailed t-statistic on pooled OLS regression"
+    threshold: "β₂ < 0 AND one-tailed p < 0.05 AND t ≤ -3.0 (Chordia with prior theory)"
+    failure_action: "KILL LANE_SPECIFIC — Q4-peak observation was COMEX artefact"
+  per_lane_sign_agreement_RULE_14:
+    required: true
+    metric: "Fraction of per-lane cells where β₂ point-estimate is negative"
+    threshold_gte: 0.50
+    heterogeneity_threshold: 0.25
+    action: |
+      agreement >= 0.50: verdict CONFIRMED_UNIVERSAL
+      agreement in [0.25, 0.50): verdict CONFIRMED_HETEROGENEOUS (warn, follow-up needed)
+      agreement < 0.25: verdict LANE_SPECIFIC (pooled passed by Simpson's-paradox averaging)
+
+secondary_robustness:
+  aperture_15m:
+    required: false
+    note: "Same regression on 15m aperture; report β₂ sign + significance. Informational only."
+  aperture_30m:
+    required: false
+    note: "Same regression on 30m aperture; report β₂ sign + significance. Informational only."
+
+kill_criteria:
+  K_kill_1:
+    condition: "primary_beta2_negative fails (β₂ >= 0 or p >= 0.05 or t > -3.0)"
+    action: "KILL — participation-optimum is NOT a universal mechanism on MNQ at 5m E2; Q4-peak was lane-specific."
+  K_kill_2:
+    condition: "integrity fails"
+    action: "SCAN_ABORT"
+  K_kill_3:
+    condition: "β₂ pooled-negative AND per-lane sign-agreement < 0.25"
+    action: |
+      KILL_SIMPSON — pooled looks right but per-cell reality disagrees so strongly
+      that the pooled result is a Simpson's-paradox artefact. Per RULE 14.
+
+verdict_labels:
+  CONFIRMED_UNIVERSAL: "β₂ pooled-negative AND >= 50% per-lane cells show negative β₂"
+  CONFIRMED_HETEROGENEOUS: "β₂ pooled-negative AND 25-50% per-lane cells agree"
+  LANE_SPECIFIC: "β₂ pooled not significant but COMEX_SETTLE short cell alone shows β₂ < 0"
+  NULL: "No pooled significance AND COMEX_SETTLE short cell not significant either"
+  KILL_SIMPSON: "K_kill_3"
+  SCAN_ABORT: "K_kill_2"
+
+trial_budget:
+  primary_pooled_tests: 1
+  secondary_per_cell_tests: 24
+  bh_fdr_per_cell_alpha: 0.05
+  chordia_per_cell_t_threshold: 3.79
+  chordia_pooled_t_threshold: 3.0
+  rationale: |
+    K=1 pooled primary. K=24 per-cell secondary uses Chordia-strict 3.79
+    because the per-cell mechanism is not individually theory-grounded
+    — only the pooled universality claim is.
+
+methodology_rules_applied:
+  - "backtesting-methodology.md RULE 3 — IS only for the test; OOS descriptive"
+  - "backtesting-methodology.md RULE 4 — per-cell K with BH-FDR"
+  - "backtesting-methodology.md RULE 6 — rel_vol is ORB-end trade-time-knowable"
+  - "backtesting-methodology.md RULE 9 — orb_outcomes JOIN daily_features triple-join, orb_minutes=5 CTE guard"
+  - "backtesting-methodology.md RULE 14 — per-lane breakdown accompanies pooled claim"
+  - "research-truth-protocol.md — canonical layers only; no validated_setups"
+  - "institutional-rigor.md Rule 4 — canonical feature definitions, no re-encoding"
+  - "quant-audit-protocol.md Step 5 — decision rules defined pre-result"
+
+implementation_integrity_checklist:
+  - "Per-session rel_vol column dynamically looked up; no hardcoded column strings outside the mapping table"
+  - "Direction derived via (entry_price > stop_price) ? long : short"
+  - "OLS regression via statsmodels with HC3 robust SE (microstructure residual heteroskedasticity safe)"
+  - "One-tailed β₂ test using t-statistic + df"
+  - "lane_FE as categorical dummy per (session, direction) cell, K=24"
+  - "Per-cell regression uses only that cell's rows, no pooling"
+  - "Parity assertion: COMEX_SETTLE short 5m unfiltered β₂ should be < 0 AND Q4 cell should be the peak — this matches Q1 observation"
+  - "OOS rows excluded from regression fit; OOS descriptive only if reported"
+  - "Result doc emits: pooled β₂/SE/t/p/n, per-cell table with β₂ sign and t, agreement fraction, pooled-vs-per-cell RULE-14 label"
+  - "No writes to orb_outcomes, daily_features, validated_setups, lane_allocation.json"
+
+outputs_required_after_run:
+  - "Pooled regression table: β₀, β₁, β₂, SE, t, p (one-tailed on β₂)"
+  - "Per-cell regression table: 24 rows (session × direction), each with n, β₁, β₂, t, p, sign"
+  - "Sign-agreement fraction"
+  - "Verdict line"
+  - "Parity assertion result (COMEX_SETTLE short β₂ sign)"
+  - "Robustness table for 15m and 30m apertures"
+  - "OOS descriptive block per RULE 3.3 (fraction of 2026 OOS rows available, count per cell)"
+
+execution_gate:
+  allowed_now:
+    - "Commit, stamp SHA, write runner, run, commit result"
+    - "Bundle with Q1 run in same PR"
+  forbidden_now:
+    - "Any capital action"
+    - "Re-scoping mid-run (add/remove sessions, directions, apertures)"
+
+not_done_by_this_pre_reg:
+  - "MES/MGC universality"
+  - "Entry-model invariance (E3/E4)"
+  - "RR invariance (1.0/2.0)"
+  - "Filter-conditional peak testing"
+  - "Any capital or allocator action"
