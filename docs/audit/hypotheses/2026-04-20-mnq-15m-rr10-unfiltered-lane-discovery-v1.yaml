@@ -113,4 +113,4 @@ outputs:
   result_md: "docs/audit/results/2026-04-20-mnq-15m-rr10-unfiltered-lane-discovery-v1.md"
   script: "research/mnq_15m_rr10_unfiltered_lane_discovery_v1.py"
 
-commit_sha: "TO_FILL_AFTER_COMMIT"
+commit_sha: "c3e72464"
