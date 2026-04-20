@@ -4,6 +4,60 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late-night — Three hardening fixes — ghost-deployment class closed)
+
+Branch: `research/hardening-three-fixes` pushed to origin (commit `0617cc80`, 9 files +979/-1). Branched from `origin/main`, clean diff scope. PR not opened.
+
+### What landed
+
+1. **`pit_range_atr` ghost-deployment closed.** 2026-04-06 commit `f776bc13` added schema + ingester + filter + research script but never committed backfill code. `daily_features.pit_range_atr` was 0/35,112 populated; `PIT_MIN` filter was routed to CME_REOPEN and fail-closed on NULL — any future strategy using it would silently take zero trades.
+   - `pipeline/backfill_pit_range_atr.py` — canonical backfill + forward-flow post-pass. Zero-look-ahead formula mirrors `scripts/research/exchange_range_t2t8.py:152`. Idempotent UPDATE.
+   - `pipeline/build_daily_features.py` — hook at end of `build_daily_features()` invokes `enrich_date_range`; fail-open on missing `exchange_statistics`.
+   - Live coverage after backfill: MES 96.3%, MGC 94.7%, MNQ 96.4%, overall 96.0%. Matches research's 97.2% ceiling (structural gap: US holidays + pre-launch MES Q1 2019 + atr_20 warmup).
+   - Pass rates at PIT_MIN≥0.10 match 2026-04-06 deployment memo (MES 84% / MGC 76% / MNQ 81% vs memo's 83/82/78).
+
+2. **Drift check #85 — `check_routed_filter_columns_populated`.** Iterates `ACTIVE_ORB_INSTRUMENTS × SESSION_CATALOG`, walks `get_filters_for_grid` output through composites to leaves, cross-references every `describe()` atom `feature_column` against live `daily_features` population. Fails at <50%. Runtime-injected columns (`cross_atr_*_pct` from `_inject_cross_asset_atrs`) emitted as INFO to stderr — they have their own integrity surface and shouldn't be flagged here.
+
+3. **Drift check #86 — `check_pooled_finding_annotations` + rule + template.** RULE 14 (aa3399b3) mechanically enforced on new `docs/audit/results/*.md` files dated ≥ 2026-04-20. Files declaring `pooled_finding: true` must carry `per_cell_breakdown_path` and `flip_rate_pct` YAML front-matter. When `flip_rate_pct >= 25`, `heterogeneity_ack: true` is required. Files pre-sentinel are grandfathered; editing an older file opts it into the schema.
+   - New: `.claude/rules/pooled-finding-rule.md`, `docs/audit/results/TEMPLATE-pooled-finding.md`.
+
+### Hardening coverage — what class of bug cannot recur
+
+| Bug pattern | Blocked by |
+|---|---|
+| New filter registered + routed, required column 0%-populated | Drift check #85 |
+| Derived column in schema with no writer module (ghost deploy) | Drift check #85 |
+| Backfill that was one-off-SQL, forgotten after DB rebuild | Drift check #85 |
+| "Universal" pooled claim written without per-cell evidence | Drift check #86 |
+| Pooled claim with ≥25% cell flip rate missing heterogeneity flag | Drift check #86 |
+
+### Verification
+
+- 1,191 pipeline tests pass
+- 88 drift checks pass (none skipped except standard --fast)
+- 8 new regression tests in `tests/test_pipeline/test_check_drift_db.py`
+
+### Zero live-trade impact
+
+No deployed lane routes `PIT_MIN` today. The filter now actually works if a future Pathway-B test on CME_REOPEN promotes it.
+
+### Design + stage artifacts
+
+- `docs/plans/2026-04-20-hardening-three-fixes-design.md`
+- `docs/runtime/stages/hardening-three-fixes.md`
+
+### Memory updated
+
+- `memory/exchange_range_signal.md` → status RESOLVED with canonical-source pointer.
+
+### What another session must know
+
+- Branch `research/deploy-lane-oos-dir-match-audit` had uncommitted work in the main working directory when this session started (other terminal). I stashed + switched to `origin/main` before branching, then popped the stash on return. That terminal's state is preserved; `auto_trivial.md` and `live-book-aplus-review-fixes.md` in `docs/runtime/stages/` belong to that terminal and were NOT committed on my branch.
+- PR for `research/hardening-three-fixes` NOT opened — awaiting OK.
+- Pre-existing Check 59 HTF MGC 2026-04-17 divergence surfaces unrelated to this work.
+
+---
+
 ## Update (2026-04-20 late-night — MNQ TBBO gap-fill v2 COMPLETE — Phase D COMEX_SETTLE unblocked)
 
 Follow-on to the PR #25 / PR #26 merges. Researcher-framework audit flagged lazy-imports Phase 4 as DEAD work (cold-import on live path is rounding-error vs 6-hour session runtime). Redirected to the highest-EV open item: MNQ TBBO coverage gap on the 3 deployed sessions missing from the v1 119-file cache.
