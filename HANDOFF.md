@@ -4,6 +4,9 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+Pickup brief for the current branch:
+- `docs/plans/2026-04-20-live-book-pickup-brief.md`
+
 ## Update (2026-04-20 night — code-review hardening pass completed)
 
 Follow-up to the explicit user request to "audit your audit" and then code-review the branch work itself. This pass fixed the concrete review findings rather than treating the earlier implementation as done.
