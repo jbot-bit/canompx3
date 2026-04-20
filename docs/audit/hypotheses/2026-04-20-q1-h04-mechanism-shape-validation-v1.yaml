@@ -1,5 +1,5 @@
 version: 1
-status: DRAFT
+status: LOCKED
 date: 2026-04-20
 slug: q1-h04-mechanism-shape-validation-v1
 title: "Q1 — H04 mechanism-shape validation: rel_vol gradient × F6_INSIDE_PDR state on MNQ COMEX_SETTLE short, IS + 2026 OOS descriptive"
@@ -37,7 +37,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "c93ba90d"
   committed_required_before_run: true
   commit_sha_note: "Stamp in a follow-up commit that only restamps this field."
 
