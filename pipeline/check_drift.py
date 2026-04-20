@@ -5834,6 +5834,31 @@ SLOW_CHECK_LABELS = frozenset(
 )
 
 
+def _assert_slow_labels_valid() -> None:
+    """Fail-closed: every label in SLOW_CHECK_LABELS must map to a real check.
+
+    Without this guard, renaming a check label in CHECKS silently removes it
+    from the --fast skip set; fast mode then runs the slow check every
+    post-edit hook invocation, exceeds the 30s hook timeout, and fails
+    silently (see .claude/hooks/post-edit-pipeline.py TimeoutExpired branch).
+
+    Runs at import time so any drift is a hard ImportError, not a delayed
+    UX regression.
+    """
+    known_labels = {label for label, *_ in CHECKS}
+    stale = SLOW_CHECK_LABELS - known_labels
+    if stale:
+        raise RuntimeError(
+            "SLOW_CHECK_LABELS references label(s) not present in CHECKS: "
+            f"{sorted(stale)}. Either the check was renamed/removed without "
+            "updating SLOW_CHECK_LABELS, or the label string has a typo. "
+            "Re-run scripts/tools/profile_check_drift.py and update the set."
+        )
+
+
+_assert_slow_labels_valid()
+
+
 def main():
     import argparse
 

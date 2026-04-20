@@ -1648,3 +1648,63 @@ class TestCanonicalClaudeClientSource:
         assert any("rogue_ai.py" in v and "anthropic.Anthropic(" in v for v in violations), (
             f"Missing direct-construction violation: {violations}"
         )
+
+
+class TestSlowCheckLabelsConsistency:
+    """Guard: SLOW_CHECK_LABELS must be a subset of the labels registered in CHECKS.
+
+    Without this guard, renaming a check label in CHECKS silently removes it
+    from the --fast skip set. The post-edit hook would then run the slow
+    check every edit, exceed its 30s timeout, and fail silently
+    (see .claude/hooks/post-edit-pipeline.py TimeoutExpired branch, added
+    in commit f22052ad). The guard runs at import time and fails closed.
+    """
+
+    def test_current_slow_labels_are_all_in_checks(self):
+        """Every label currently in SLOW_CHECK_LABELS must map to a real check."""
+        from pipeline import check_drift
+
+        known_labels = {label for label, *_ in check_drift.CHECKS}
+        stale = check_drift.SLOW_CHECK_LABELS - known_labels
+        assert stale == set(), (
+            f"SLOW_CHECK_LABELS contains label(s) not in CHECKS: {sorted(stale)}. "
+            "Either a check was renamed/removed without updating SLOW_CHECK_LABELS, "
+            "or there is a typo. Re-run scripts/tools/profile_check_drift.py."
+        )
+
+    def test_assert_passes_on_clean_state(self):
+        """The guard function itself must not raise on the current module state."""
+        from pipeline import check_drift
+
+        check_drift._assert_slow_labels_valid()
+
+    def test_assert_raises_on_stale_label(self, monkeypatch):
+        """Simulate a rename drift: a label in SLOW_CHECK_LABELS but not in CHECKS."""
+        from pipeline import check_drift
+
+        poisoned = frozenset(check_drift.SLOW_CHECK_LABELS | {"Definitely not a real check label xyzzy"})
+        monkeypatch.setattr(check_drift, "SLOW_CHECK_LABELS", poisoned)
+
+        with pytest.raises(RuntimeError) as excinfo:
+            check_drift._assert_slow_labels_valid()
+
+        msg = str(excinfo.value)
+        assert "Definitely not a real check label xyzzy" in msg, (
+            f"RuntimeError should name the stale label in its diagnostic. Got: {msg}"
+        )
+        assert "SLOW_CHECK_LABELS" in msg, (
+            f"RuntimeError should name the offending set in its diagnostic. Got: {msg}"
+        )
+
+    def test_assert_raises_on_all_stale(self, monkeypatch):
+        """Edge case: if CHECKS were emptied, every slow label becomes stale."""
+        from pipeline import check_drift
+
+        monkeypatch.setattr(check_drift, "CHECKS", [])
+
+        with pytest.raises(RuntimeError) as excinfo:
+            check_drift._assert_slow_labels_valid()
+
+        msg = str(excinfo.value)
+        sample = next(iter(check_drift.SLOW_CHECK_LABELS))
+        assert sample in msg, f"Expected stale label '{sample}' in diagnostic. Got: {msg}"
