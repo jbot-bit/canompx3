@@ -718,6 +718,40 @@ def _apply_htf_level_fields(rows: list[dict]) -> None:
                 mo_agg["close"] = today_close
 
 
+def _load_htf_seed_rows(con: duckdb.DuckDBPyConnection, symbol: str, start_day: date) -> list[dict]:
+    """Load the prior calendar month of daily_features rows as HTF seed.
+
+    _apply_htf_level_fields() walks rows in trading_day order building running
+    week/month aggregates; on narrow incremental runs (e.g. a 2-day range) no
+    prior history is in `rows`, so every HTF field resolves to NULL. Seed
+    rows bridge that gap.
+
+    HTF fields are orb-agnostic, so orb_minutes=5 is a sufficient representative
+    slice. Seed range is [first-of-prior-calendar-month, start_day) — covers
+    prev_month fully and the trailing week overlap. Empty result (fresh install)
+    yields an empty list; HTF then behaves exactly as pre-change.
+    """
+    htf_seed_start = _htf_prior_month_key(start_day)
+    records = con.execute(
+        """SELECT trading_day, daily_open, daily_high, daily_low, daily_close
+             FROM daily_features
+            WHERE symbol = ? AND orb_minutes = 5
+              AND trading_day >= ? AND trading_day < ?
+            ORDER BY trading_day""",
+        [symbol, htf_seed_start, start_day],
+    ).fetchall()
+    return [
+        {
+            "trading_day": r[0],
+            "daily_open": r[1],
+            "daily_high": r[2],
+            "daily_low": r[3],
+            "daily_close": r[4],
+        }
+        for r in records
+    ]
+
+
 def compute_garch_forecast(daily_closes: list[float], min_obs: int = 252) -> float | None:
     """
     Fit GARCH(1,1) on trailing daily close-to-close log returns.
@@ -1488,7 +1522,14 @@ def build_daily_features(
     # Post-pass: HTF prev-week / prev-month level aggregates.
     # Single source of truth: _apply_htf_level_fields() — also used by the
     # one-shot backfill at scripts/backfill_htf_levels.py.
-    _apply_htf_level_fields(rows)
+    #
+    # Seed with the prior calendar month of existing daily_features rows so
+    # the function can compute prev_week_* / prev_month_* correctly on narrow
+    # incremental runs. Without the seed, a 2-day range produces NULL HTF
+    # (Check 59 stale_miss). Seed rows are mutated by the call but NOT
+    # written to DB — only `rows` is persisted downstream.
+    htf_seed = _load_htf_seed_rows(con, symbol, trading_days[0])
+    _apply_htf_level_fields(htf_seed + rows)
 
     # Post-pass: relative volume per session.
     #
