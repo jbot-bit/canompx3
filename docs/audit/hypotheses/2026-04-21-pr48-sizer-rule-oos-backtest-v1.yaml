@@ -105,4 +105,4 @@ outputs:
   result_md: "docs/audit/results/2026-04-21-pr48-sizer-rule-oos-backtest-v1.md"
   script: "research/pr48_sizer_rule_oos_backtest_v1.py"
 
-commit_sha: "TO_FILL_AFTER_COMMIT"
+commit_sha: "d227f8edeee2131ac04865f86adfa0ced807acaf"
