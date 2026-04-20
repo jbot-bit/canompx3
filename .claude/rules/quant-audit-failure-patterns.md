@@ -1,6 +1,10 @@
+---
+paths:
+  - ".claude/rules/quant-audit-failure-patterns.md"
+---
 # Quant Audit — Known Failure Patterns
 
-**Companion to `.claude/rules/quant-audit-protocol.md`.** No frontmatter → never auto-injects.
+**Companion to `.claude/rules/quant-audit-protocol.md`.** Frontmatter scopes auto-injection to edits of this file itself (e.g. appending a new pattern). All other callers must `Read` on demand.
 
 Split out 2026-04-20 to stop the failure-pattern block from re-injecting on every edit to `trading_app/strategy_*`, `trading_app/outcome_*`, `research/**`, `scripts/tools/backtest*`.
 
