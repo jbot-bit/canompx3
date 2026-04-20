@@ -267,6 +267,22 @@ These external prompts are now durable project inputs, but only as:
 
 They are **not** evidence and do not bypass local institutional gates.
 
+### Applied immediately to the open thread
+
+- Added decision surface:
+  - `docs/plans/2026-04-21-liquidity-translation-apply-on-open-thread.md`
+- Added next-family starter:
+  - `docs/audit/hypotheses/2026-04-21-sweep-reclaim-standalone-v2-starter.yaml`
+
+Net effect:
+
+- dead ORB retest continuation stays dead
+- old `sweep-reclaim-v1` is explicitly reclassified as reconnaissance, not a
+  kill on standalone sweep/reclaim
+- the next honest family is now preserved as a bounded standalone
+  sweep-reclaim reversal starter, with scope-reduction requirements before any
+  lock/run
+
 ### Why this matters
 
 - reduces repeated prompt-token burn on Claude without removing the actual

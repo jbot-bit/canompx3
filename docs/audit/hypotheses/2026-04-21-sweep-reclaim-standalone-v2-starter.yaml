@@ -1,0 +1,142 @@
+version: 1
+status: DRAFT
+date: 2026-04-21
+slug: sweep-reclaim-standalone-v2-starter
+title: "Sweep reclaim standalone reversal v2 starter"
+owner: codex
+parent_spec: docs/plans/2026-04-21-liquidity-translation-apply-on-open-thread.md
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - docs/prompts/LIQUIDITY_DISPLACEMENT_TRANSLATOR.md
+    - docs/specs/level_interaction_v1.md
+    - docs/institutional/mechanism_priors.md
+    - docs/institutional/pre_registered_criteria.md
+    - RESEARCH_RULES.md
+  notes:
+    - resources/Algorithmic_Trading_Chan.pdf
+    - resources/Robert Carver - Systematic Trading.pdf
+    - resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf
+    - resources/Two_Million_Trading_Strategies_FDR.pdf
+
+reproducibility:
+  repo_root: canompx3
+  commit_sha: TO_FILL_AFTER_COMMIT
+  committed_required_before_run: true
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  source:
+    - docs/audit/results/2026-04-19-sweep-reclaim-v1.md
+    - docs/plans/2026-04-21-liquidity-translation-apply-on-open-thread.md
+  note: >
+    The v1 sweep-reclaim event study is motivation only. It is not the current
+    family test and does not define the K burden for this starter.
+
+scope:
+  instruments:
+    - MNQ
+    - MES
+  sessions:
+    - NYSE_OPEN
+    - EUROPE_FLOW
+  orb_minutes:
+    - 5
+  directions:
+    - long
+    - short
+  levels:
+    - prev_day_high
+    - prev_day_low
+    - overnight_high
+    - overnight_low
+  interaction_requirements:
+    interaction_kind: close_through
+    swept: true
+    reclaimed: true
+    reclaim_lookahead_bars: 2
+  trade_geometry:
+    entry_mode_candidates:
+      - reclaim_close
+      - first_retest_of_reclaimed_level
+    stop_mode: beyond_sweep_extreme
+    target_mode_candidates:
+      - next_ex_ante_liquidity_level
+      - fixed_rr
+  event_window_minutes:
+    - 60
+  holdout_boundary_source: trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+
+data_policy:
+  is_window: trading_day < 2026-01-01
+  oos_window: trading_day >= 2026-01-01
+  tuning_against_oos: false
+
+mechanism_statement: >
+  A swept close-through of an ex-ante liquidity level that subsequently
+  reclaims back to the original side may define a trapped-break reversal trade
+  species distinct from ORB continuation. The family tests whether a bounded
+  trade definition around that reclaim has positive expectancy after costs.
+
+translation_rules_locked:
+  - No FVG / IFVG ontology.
+  - No "institutional footprint" language as evidence.
+  - Levels must be ex-ante and chronology-safe.
+  - One role only: standalone reversal.
+
+hypothesis_family:
+  primary_question: >
+    Does a standalone sweep-reclaim reversal trade, defined from the local
+    level-interaction contract and bounded execution geometry, survive honest
+    family testing on MNQ/MES at NYSE_OPEN and EUROPE_FLOW?
+  current_role: standalone
+
+candidate_k_construction:
+  instruments: 2
+  sessions: 2
+  levels: 4
+  directions: 2
+  entry_modes: 2
+  target_modes: 2
+  indicative_max_k: 64
+  note: >
+    This is intentionally not locked yet. Before pre-reg lock, one entry mode
+    and one target mode must be chosen so the final family K is materially
+    smaller than this starter upper bound.
+
+kill_criteria:
+  - id: K1
+    metric: scope_bloat
+    threshold: >
+      Reject lock if final family keeps multiple entry modes and multiple target
+      modes in the same run.
+    action: REDUCE_SCOPE_BEFORE_LOCK
+  - id: K2
+    metric: ontology_leak
+    threshold: >
+      Reject lock if any setup term depends on undefined FVG / IFVG /
+      inducement / absorption language.
+    action: REWRITE_WITH_GEOMETRY_ONLY
+  - id: K3
+    metric: chronology
+    threshold: >
+      Reject lock if any chosen level is not chronology-safe for the target
+      session under pipeline.session_guard.
+    action: DROP_LEVEL_OR_SESSION
+
+next_actions_required_before_lock:
+  - Choose exactly one entry mode.
+  - Choose exactly one target mode.
+  - Verify which levels are chronology-safe for each session.
+  - Compute final K and MinBTL on the reduced family.
+  - Decide whether overnight_high/low are admissible for EUROPE_FLOW and NYSE_OPEN in the existing guard model.
+  - Write numeric H1/C6/C8/C9 thresholds after final scope is frozen.
+
+not_done_by_this_starter:
+  - no execution code
+  - no backtest run
+  - no family verdict
+  - no live deployment recommendation
