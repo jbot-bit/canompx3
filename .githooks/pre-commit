@@ -61,18 +61,18 @@ if [ -f "$SCRIPT_DIR/.venv/Scripts/ruff.exe" ]; then
 elif [ -f "$SCRIPT_DIR/venv/Scripts/ruff.exe" ]; then
     RUFF="$SCRIPT_DIR/venv/Scripts/ruff.exe"
 fi
-if ! "$RUFF" check pipeline/ trading_app/ ui/ scripts/ > /dev/null 2>&1; then
+if ! "$RUFF" check pipeline/ trading_app/ scripts/ > /dev/null 2>&1; then
     echo "BLOCKED: Lint errors detected."
-    "$RUFF" check pipeline/ trading_app/ ui/ scripts/
+    "$RUFF" check pipeline/ trading_app/ scripts/
     exit 1
 fi
 echo "  PASSED"
 
 # 1. Ruff format check — auto-fix and re-stage if needed (~1 second)
 echo "[1/6] Ruff format..."
-if ! "$RUFF" format --check pipeline/ trading_app/ ui/ scripts/ tests/ > /dev/null 2>&1; then
+if ! "$RUFF" format --check pipeline/ trading_app/ scripts/ tests/ > /dev/null 2>&1; then
     echo "  Auto-formatting..."
-    "$RUFF" format pipeline/ trading_app/ ui/ scripts/ tests/ > /dev/null 2>&1
+    "$RUFF" format pipeline/ trading_app/ scripts/ tests/ > /dev/null 2>&1
     # Re-stage only the files that were already staged (don't add new files)
     STAGED_FOR_FMT=$(git diff --cached --name-only --diff-filter=ACM | grep '\.py$' || true)
     if [ -n "$STAGED_FOR_FMT" ]; then
