@@ -4,6 +4,87 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+<!-- BEGIN RELVOL_RESET_RECOVERY_2026-04-21 -->
+## Update (2026-04-21 reset recovery — likely lost Codex/Claude terminal state stored)
+
+User reported a machine reset with 2 Claude terminals + 1 Codex terminal open and
+asked to recover anything relevant, especially the Codex state. Recovery pass ran
+from this checkout after startup docs + preflight.
+
+### Most likely MES/MGC research terminal lineage
+
+- Main checkout is on branch: `research/pr48-sizer-rule-oos-backtest`
+- HEAD at recovery time: `ec8198f3` — `PR #59 sizer-rule skeptical re-audit: MISCLASSIFIED as deploy-candidate; Q5-FILTER form dominates`
+- Relevant MES/MGC branch timeline from reflog:
+  - `research/mes-mgc-unfiltered-baseline` → `94c93d80` / `7bcdf23b`
+  - `research/mes-mgc-filter-overlay-v2` → `6df90a6b`
+  - `research/pr48-sizer-rule-oos-backtest` → `d227f8ed`, `7fc0b90c`, `ec8198f3`
+- If someone asks "what was Codex probably doing before the reset?", this
+  `pr48-sizer-rule-oos-backtest` branch is the highest-confidence answer for the
+  MES/MGC work.
+
+### Working tree state at recovery time
+
+- `git status --short --branch -uno` on main checkout:
+  - `M pipeline/check_drift.py`
+  - `M tests/test_pipeline/test_check_drift_db.py`
+- Untracked rel_vol lineage artifact on entry:
+  - `docs/audit/hypotheses/2026-04-21-rel-vol-filter-form-v1.yaml`
+- Important: these diffs disappear under
+  `git diff --ignore-cr-at-eol --ignore-space-at-eol`, so no semantic
+  uncommitted logic was found there during recovery. Treat them as line-ending /
+  editor-churn unless proven otherwise.
+
+### Other surviving session artefacts
+
+- Physical directory still exists:
+  - `/mnt/c/Users/joshd/canompx3-6lane-baseline`
+- But its `.git` marker points to a Windows-style gitdir:
+  - `gitdir: C:/Users/joshd/canompx3/.git/worktrees/canompx3-6lane-baseline`
+- Result: from WSL this worktree currently looks broken / prunable even though the
+  directory still exists. If that terminal mattered, inspect or repair the
+  worktree pointer before removing anything.
+- Old `/tmp/canompx3-*` worktrees listed by `git worktree list` were missing on
+  disk during recovery. They look like stale metadata, not surviving active work.
+
+### Non-MES/MGC preserved work found
+
+- Stash inventory at recovery time:
+  - `stash@{2026-04-21 00:36:07 +1000}` on `research/l6-us-data-1000-2026-diagnostic`
+  - `stash@{2026-04-20 11:27:03 +1000}` on `perf/lazy-imports-broad-sweep`
+  - `stash@{2026-04-19 18:45:42 +1000}` on `main`
+- That stash contains 3 new files / 437 insertions:
+  - `research/audit_l6_us_data_2026_breakdown.py`
+  - `docs/audit/results/2026-04-21-l6-us-data-2026-diagnostic.md`
+  - `docs/runtime/stages/l6-us-data-1000-2026-diagnostic.md`
+- This appears unrelated to the user's "MES/MGC something" memory, but it is a
+  real preserved work item and should not be forgotten.
+
+### Cleanup completed after recovery
+
+- Repaired the surviving worktree so WSL now sees it as a valid git worktree:
+  - `/mnt/c/Users/joshd/canompx3-6lane-baseline`
+  - branch: `research/ovnrng-router-rolling-cv`
+  - HEAD: `4dfd3000`
+- Pruned dead reset leftovers from `git worktree` metadata:
+  - `canompx3-hook-followup`
+  - `canompx3-liquidity-prompt`
+  - `canompx3-live-book-finalize`
+  - `canompx3-mes-mgc-filter-overlay`
+  - `canompx3-opening-drive-v1`
+  - `canompx3-sweep-reclaim-lock`
+  - `canompx3-worktree-prune`
+- Cleared non-semantic line-ending churn in:
+  - main MES/MGC checkout
+  - repaired `canompx3-6lane-baseline` worktree
+- After cleanup, the only real workspaces left in `git worktree list` are:
+  - `/mnt/c/Users/joshd/canompx3` → `research/pr48-sizer-rule-oos-backtest`
+  - `/mnt/c/Users/joshd/canompx3-6lane-baseline` → `research/ovnrng-router-rolling-cv`
+- WSL-home clone `/home/joshd/canompx3` exists but was very dirty during
+  recovery and is NOT the safe place to resume this MES/MGC thread without a
+  separate sync/cleanup pass.
+<!-- END RELVOL_RESET_RECOVERY_2026-04-21 -->
+
 ## Update (2026-04-21 autonomous #5 — PR #59 sizer-rule re-audit: MISCLASSIFIED as deploy-candidate; Q5-FILTER form dominates)
 
 Direct follow-on to #4. User pressed a skeptical re-audit
