@@ -471,32 +471,42 @@ Many filter variants produce the SAME trade set.
 
 ## Live Portfolio Configuration
 
-*Source: `trading_app/prop_profiles.py` (ACCOUNT_PROFILES)*
+*Current truth sources: `trading_app/prop_profiles.py` + `docs/runtime/lane_allocation.json`*
 
-### Active Lanes (TopStep Primary)
+### Active Live Book (`topstep_50k_mnq_auto`)
 
-Allocator-driven primary deployment lives on TopStep via [`topstep_50k_mnq_auto`](/mnt/c/Users/joshd/canompx3/trading_app/prop_profiles.py).
-All lanes are E2 / CB1 with 0.75x stop sizing and explicit ORB caps.
+- The primary active deployment is [`topstep_50k_mnq_auto`](/mnt/c/Users/joshd/canompx3/trading_app/prop_profiles.py): TopStep 50K Express, `copies=2`, `stop_multiplier=0.75`, MNQ-only, allocator-managed.
+- Live lanes are loaded dynamically from `docs/runtime/lane_allocation.json`. If prose and allocator JSON disagree, allocator JSON wins.
+- Evidence class for the current live book:
+  - operationally active / deployable
+  - research-provisional under restored Mode A
+  - not production-grade institutional proof
 
-| # | Session | Instrument | Filter | RR | Status | Notes |
-|---|---------|------------|--------|----|--------|-------|
-| 1 | CME_REOPEN | MGC | ORB_G6 | 2.5 | TRADE | Highest trailing annual R in current allocator book |
-| 2 | SINGAPORE_OPEN | MNQ | COST_LT12 | 2.0 | TRADE | Strong trailing regime score |
-| 3 | COMEX_SETTLE | MNQ | OVNRNG_100 | 1.5 | TRADE | Hot session, capped at 80 pts |
-| 4 | EUROPE_FLOW | MNQ | COST_LT10 | 3.0 | TRADE | Wider target, capped at 120 pts |
-| 5 | TOKYO_OPEN | MNQ | COST_LT10 | 2.0 | TRADE | Current fifth deployed lane |
+Current allocator snapshot (`rebalance_date = 2026-04-18`):
 
-### Conditional / Secondary Routing
-| Account | Firm | Instrument | Sessions | Role |
-|---------|------|------------|----------|------|
-| topstep_50k_mnq_auto | TopStep | MNQ + MGC | CME_REOPEN, SINGAPORE_OPEN, COMEX_SETTLE, EUROPE_FLOW, TOKYO_OPEN | Active primary deployment |
-| topstep_50k | TopStep | MGC | TOKYO_OPEN | Conditional shadow lane only |
-| tradeify_50k | Tradeify | MNQ | CME_PRECLOSE, NYSE_CLOSE, COMEX_SETTLE, US_DATA_1000, TOKYO_OPEN | Automation candidate, inactive until broker/runtime parity |
-| self_funded_50k | Self-Funded | All | All sessions | Phase 3, inactive |
+| # | Session | Instrument | Filter | RR | Regime | Status |
+|---|---------|------------|--------|----|--------|--------|
+| 1 | EUROPE_FLOW | MNQ | ORB_G5 | 1.5 | HOT | DEPLOY |
+| 2 | SINGAPORE_OPEN | MNQ | ATR_P50 | 1.5 | HOT | DEPLOY |
+| 3 | COMEX_SETTLE | MNQ | ORB_G5 | 1.5 | HOT | DEPLOY |
+| 4 | NYSE_OPEN | MNQ | COST_LT12 | 1.0 | HOT | DEPLOY |
+| 5 | TOKYO_OPEN | MNQ | COST_LT12 | 1.5 | HOT | DEPLOY |
+| 6 | US_DATA_1000 | MNQ | ORB_G5 | 1.5 | FLAT | DEPLOY |
+
+### Other Profile States
+| Account | Firm | Instrument scope | Current state | Notes |
+|---------|------|------------------|---------------|-------|
+| topstep_50k_mnq_auto | TopStep | MNQ only | Active | Primary live allocator book |
+| topstep_50k | TopStep | MGC TOKYO_OPEN only | Inactive / conditional | Shadow lane only; no size increase until forward gate clears |
+| tradeify_50k | Tradeify | MNQ only | Inactive | Automation candidate; blocked on broker/runtime parity |
+| topstep_50k_mes_auto | TopStep | MES only | Inactive | Separate instrument-diversification candidate |
 
 ### Portfolio Risk
 - Apex is removed from the active project path. Official Apex compliance/rule conflicts make it non-usable for this system.
 - Primary active bot profile is `topstep_50k_mnq_auto`.
+- Current live book remains research-provisional under Mode A. Do not describe it as institutionally proven.
+- No scaling until re-audited under Mode A and an explicit scale-ready gate is passed.
+- `corr_lookup` is currently empty for scaling logic; treat multi-contract or multi-firm scale as blocked until it is populated and verified.
 - `topstep_50k` remains conditional only. Do not size up the MGC TOKYO_OPEN lane until the forward gate is cleared.
 - `tradeify_50k` stays inactive until Tradovate execution/runtime parity is fully verified.
 
@@ -639,18 +649,15 @@ When multiple strategies fire on the same ORB break (same session × aperture), 
 Backtester (outcome_builder) labels unresolved trades as "scratch" with `pnl_r=NULL`, excluding them from win/loss/ExpR statistics. The execution engine marks scratches to market at session end, producing real P&L. Layer 2 audit confirmed scratches average +0.40R net favorable excursion (MES). **Live performance will exceed backtested performance on scratch-heavy strategies.** This is a conservative backtest bias — not a concern, but worth knowing when comparing live results to historical ExpR.
 
 ### Manual Execution Session Focus
-The 11-strategy portfolio spans 5 active sessions (6 with spec coverage). All US-anchored session times shift ±1 hour with US DST. Resolve exact times via `pipeline/dst.py SESSION_CATALOG`.
+The current allocator-managed live book spans 6 sessions:
+- `EUROPE_FLOW`
+- `SINGAPORE_OPEN`
+- `COMEX_SETTLE`
+- `NYSE_OPEN`
+- `TOKYO_OPEN`
+- `US_DATA_1000`
 
-| Session | Brisbane (US summer) | Brisbane (US winter) |
-|---------|---------------------|---------------------|
-| COMEX_SETTLE | 03:30 | 04:30 |
-| CME_PRECLOSE | 05:45 | 06:45 |
-| NYSE_CLOSE | 06:00 | 07:00 |
-| CME_REOPEN | 08:00 | 09:00 |
-| BRISBANE_1025 | 10:25 | 10:25 (no DST) |
-| SINGAPORE_OPEN | 11:00 | 11:00 (no DST) |
-
-Manual execution of all 5 active sessions by one person is not viable (03:30–11:00 summer, 04:30–11:00 winter). **Select session focus based on account constraints.** Recommended manual focus: CME_PRECLOSE + NYSE_CLOSE (adjacent, 8 strategies). Full coverage requires automation (Tradeify/TopStep allow; Apex prohibits).
+Resolve exact local times via `pipeline/dst.py SESSION_CATALOG`. Do not use older 5-session prose snapshots as current routing truth. Full live-book coverage requires automation.
 
 ### Correlation Guard (Pre-Scaling)
 `corr_lookup` in the portfolio is currently empty `{}`. The risk manager falls back to simple position counting (`max_concurrent=3`). This is acceptable for single-contract trading. **Before scaling to multi-contract or adding correlated instruments, populate `corr_lookup` from empirical session-level return correlations.** Without it, the effective exposure calculation in `risk_manager.py:99-120` is a no-op.

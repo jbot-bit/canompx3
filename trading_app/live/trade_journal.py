@@ -46,6 +46,26 @@ CREATE TABLE IF NOT EXISTS live_trades (
 );
 """
 
+LIVE_SIGNAL_EVENTS_SCHEMA = """
+CREATE TABLE IF NOT EXISTS live_signal_events (
+    event_id         TEXT PRIMARY KEY,
+    trading_day      DATE NOT NULL,
+    instrument       TEXT NOT NULL,
+    strategy_id      TEXT NOT NULL,
+    event_type       TEXT NOT NULL,
+    reason           TEXT,
+    engine_price     DOUBLE,
+    fill_price       DOUBLE,
+    slippage_pts     DOUBLE,
+    contracts        INTEGER DEFAULT 1,
+    broker           TEXT,
+    order_id         TEXT,
+    trade_id         TEXT,
+    session_mode     TEXT NOT NULL,
+    created_at       TIMESTAMPTZ DEFAULT now()
+);
+"""
+
 
 def generate_trade_id() -> str:
     """Generate a unique trade ID (UUID4)."""
@@ -66,6 +86,7 @@ class TradeJournal:
             self._con = duckdb.connect(str(self._db_path))
             configure_connection(self._con, writing=True)
             self._con.execute(LIVE_TRADES_SCHEMA)
+            self._con.execute(LIVE_SIGNAL_EVENTS_SCHEMA)
             log.info("TradeJournal opened: %s (mode=%s)", self._db_path, mode)
         except Exception:
             log.critical("TradeJournal FAILED to open %s — trades will NOT be persisted", db_path, exc_info=True)
@@ -191,6 +212,54 @@ class TradeJournal:
             )
         except Exception:
             log.critical("TradeJournal.record_exit FAILED for %s", trade_id, exc_info=True)
+
+    def record_signal_event(
+        self,
+        *,
+        trading_day: date,
+        instrument: str,
+        strategy_id: str,
+        event_type: str,
+        reason: str | None = None,
+        engine_price: float | None = None,
+        fill_price: float | None = None,
+        slippage_pts: float | None = None,
+        contracts: int = 1,
+        broker: str | None = None,
+        order_id: str | int | None = None,
+        trade_id: str | None = None,
+    ) -> None:
+        """Persist a non-summary live attribution event (skip/reject/fill/pending)."""
+        if self._con is None:
+            return
+        try:
+            self._con.execute(
+                """
+                INSERT INTO live_signal_events (
+                    event_id, trading_day, instrument, strategy_id, event_type,
+                    reason, engine_price, fill_price, slippage_pts, contracts,
+                    broker, order_id, trade_id, session_mode
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                [
+                    generate_trade_id(),
+                    trading_day,
+                    instrument,
+                    strategy_id,
+                    event_type,
+                    reason,
+                    engine_price,
+                    fill_price,
+                    slippage_pts,
+                    contracts,
+                    broker,
+                    str(order_id) if order_id is not None else None,
+                    trade_id,
+                    self._mode,
+                ],
+            )
+        except Exception:
+            log.critical("TradeJournal.record_signal_event FAILED for %s", strategy_id, exc_info=True)
 
     def daily_summary(self, trading_day: date) -> dict:
         """Query completed trades for a trading day. Returns summary dict."""

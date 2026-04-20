@@ -29,6 +29,7 @@ from pipeline.db_config import configure_connection
 from pipeline.log import get_logger
 from pipeline.paths import GOLD_DB_PATH
 from trading_app.config import ALL_FILTERS, CrossAssetATRFilter
+from trading_app.paper_trade_store import PaperTradeRecord, delete_backfill_rows, upsert_backfill_trade
 
 logger = get_logger(__name__)
 
@@ -237,15 +238,9 @@ def backfill(
             # Idempotent DELETE before filter check (ensures stale rows are cleared
             # even if the filter_type becomes unknown — audit finding #11)
             if sync and since is not None:
-                con.execute(
-                    "DELETE FROM paper_trades WHERE strategy_id = ? AND trading_day >= ?",
-                    [lane.strategy_id, since],
-                )
+                delete_backfill_rows(con, strategy_id=lane.strategy_id, since=since)
             elif not sync:
-                con.execute(
-                    "DELETE FROM paper_trades WHERE strategy_id = ?",
-                    [lane.strategy_id],
-                )
+                delete_backfill_rows(con, strategy_id=lane.strategy_id)
 
             # 3. Apply filter via matches_row (canonical filter interface)
             strat_filter = ALL_FILTERS.get(lane.filter_type)
@@ -303,41 +298,31 @@ def backfill(
                 continue
 
             if filtered_rows:
-                insert_data = [
-                    (
-                        r[0],
-                        r[1],
-                        r[2],
-                        r[3],
-                        r[4],
-                        r[5],
-                        r[6],
-                        r[7],
-                        r[8],
-                        r[9],
-                        r[10],
-                        lane.strategy_id,
-                        f"{lane.orb_label}_{lane.filter_type[:12]}",
-                        lane.instrument,
-                        lane.orb_minutes,
-                        lane.rr_target,
-                        lane.filter_type,
-                        lane.entry_model,
+                for r in filtered_rows:
+                    upsert_backfill_trade(
+                        con,
+                        PaperTradeRecord(
+                            trading_day=r[0],
+                            orb_label=r[1],
+                            entry_time=r[2],
+                            direction=r[3],
+                            entry_price=r[4],
+                            stop_price=r[5],
+                            target_price=r[6],
+                            exit_price=r[7],
+                            exit_time=r[8],
+                            exit_reason=r[9],
+                            pnl_r=r[10],
+                            strategy_id=lane.strategy_id,
+                            lane_name=lane.lane_name,
+                            instrument=lane.instrument,
+                            orb_minutes=lane.orb_minutes,
+                            rr_target=lane.rr_target,
+                            filter_type=lane.filter_type,
+                            entry_model=lane.entry_model,
+                            execution_source="backfill",
+                        ),
                     )
-                    for r in filtered_rows
-                ]
-                con.executemany(
-                    """
-                    INSERT INTO paper_trades (
-                        trading_day, orb_label, entry_time, direction,
-                        entry_price, stop_price, target_price, exit_price,
-                        exit_time, exit_reason, pnl_r,
-                        strategy_id, lane_name, instrument,
-                        orb_minutes, rr_target, filter_type, entry_model
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    insert_data,
-                )
 
             con.commit()
 

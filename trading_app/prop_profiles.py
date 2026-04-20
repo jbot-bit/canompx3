@@ -448,21 +448,17 @@ ACCOUNT_PROFILES: dict[str, AccountProfile] = {
         # in pre_session_check.py (BLOCK after 60 days, WARNING after 35).
         #
         # Prior hardcoded lanes (2026-04-13 reconstruction) moved to
-        # allocator output. History: 6 unique sessions, max pairwise
-        # rho=0.060. Now 7 sessions with US_DATA_1000 VWAP addition.
+        # allocator output. Allowed-session universe currently spans 7
+        # sessions, but the live lane count is defined by
+        # docs/runtime/lane_allocation.json at runtime.
         daily_lanes=(),
         payout_policy_id="topstep_express_standard",
         notes=(
-            "7-lane MNQ auto profile — DYNAMIC (allocator-managed). "
-            "Lanes loaded from lane_allocation.json at runtime. "
-            "Prior 6-lane profile reconstructed 2026-04-13 via "
-            "correlation audit (max rho=0.060, +41% ExpR). "
-            "7th lane: US_DATA_1000 VWAP (ExpR=+0.210, N=701). "
-            "Each lane is the best-ExpR strategy from its session's "
-            "independent correlation family. Audit script: "
-            "scripts/research/portfolio_correlation_audit.py. "
-            "All lanes validated via BH FDR + walk-forward + Criterion 11 "
-            "Monte Carlo. Enforced by drift check 94."
+            "Allocator-managed MNQ auto profile — DYNAMIC. "
+            "Lanes loaded from lane_allocation.json at runtime; live lane count is not hardcoded here. "
+            "Current profile is active at 2 copies with 0.75x stop sizing and MNQ-only routing. "
+            "Prior hardcoded profile moved to allocator output on 2026-04-13. "
+            "Drift check 94 enforces that every allocated lane exists in validated_setups with status='active'."
         ),
     ),
     # =========================================================================

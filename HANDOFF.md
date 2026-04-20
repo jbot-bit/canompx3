@@ -4,6 +4,164 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late-night — MNQ TBBO gap-fill v2 COMPLETE — Phase D COMEX_SETTLE unblocked)
+
+Follow-on to the PR #25 / PR #26 merges. Researcher-framework audit flagged lazy-imports Phase 4 as DEAD work (cold-import on live path is rounding-error vs 6-hour session runtime). Redirected to the highest-EV open item: MNQ TBBO coverage gap on the 3 deployed sessions missing from the v1 119-file cache.
+
+### What landed (branch `research/mnq-tbbo-gap-fill-3-sessions`)
+
+- **Script arg added:** `research/research_mnq_e2_slippage_pilot.py` gained `--sessions` CLI flag (nargs+, optional, overrides `PILOT_SESSIONS` global when present). Institutional fix — not monkey-patch. Backward compatible: absent → current 6-session default.
+- **Databento pull:** 30 TBBO files for the 3 missing deployed MNQ sessions (EUROPE_FLOW / COMEX_SETTLE / US_DATA_1000), 10 days per session, 2 ATR regimes × 5 days/bucket. Subscription-absorbed spend, metadata estimate $0.19.
+- **Reprice on full cache:** 149 cache files → 142 valid repriced rows. Added to `research/data/tbbo_mnq_pilot/slippage_results_cache_v2.csv` (overwritten from v1's 114-row version).
+
+### Verdict — MNQ slippage CONSERVATIVE across ALL 9 deployed sessions
+
+- **Median = 0 ticks** (unchanged from v1, now stratified across 9 sessions)
+- **100 % of 142 samples ≤ 2-tick modeled slippage** (max = +2)
+- **COMEX_SETTLE specifically: N=10, median=0, mean=0.0** — Phase D 2026-05-15 gate has no slippage-based blocker
+- **EUROPE_FLOW: N=9, median=0, mean=−0.2** — clean
+- **US_DATA_1000: N=9, median=0, mean=−0.4** — clean
+- Mean of −0.79 book-wide is outlier-sensitive (BBO-staleness artifacts during fast moves) — not real favorable fills; see v1 interpretation
+
+### Operational impact
+
+- 6 live MNQ lanes' backtested ExpR not materially optimistic under measured routine-day slippage — every deployed MNQ session now has TBBO evidence backing the modeling
+- No lane flips to negative EV
+- No deployment changes needed
+- Phase D 2026-05-15 MNQ COMEX_SETTLE evaluation can proceed without friction-modeling caveats
+
+### Debt-ledger update
+
+- `cost-realism-slippage-pilot` **MNQ portion FULLY CLOSED.** MGC portion partially closed (v1). Only MES pilot remains for book-wide close.
+- Remaining MNQ known-unknown: event-day tail (2021-2026 sample has no MGC-2018-type gap equivalent). Not a refuted concern, a not-in-sample concern.
+
+### What this session did NOT do
+
+- MES TBBO pilot (next highest EV; subscription makes it cheap)
+- Phase D other prep work (daily-append status verification, pre-gate criteria preview)
+- Lazy-imports Phase 4 — explicitly killed as low-ROI after researcher-framework audit
+- Capital deployment changes
+
+### Next moves
+
+- Decide MES TBBO pilot — closes the last book-wide cost-realism debt; same pattern as MNQ v2 (one CLI flag, one pull, one reprice)
+- Optional: Phase D pre-gate dry-run (read-only, no deployment) to surface any non-slippage gates before 2026-05-15
+
+### Files touched
+
+- `research/research_mnq_e2_slippage_pilot.py` — added `--sessions` arg + global override block
+- `research/data/tbbo_mnq_pilot/*.dbn.zst` — 30 new cache files
+- `research/data/tbbo_mnq_pilot/manifest.json` — overwritten with gap-fill manifest
+- `research/data/tbbo_mnq_pilot/slippage_results_cache_v2.csv` — overwritten with full 142-row result
+- `docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v2-gap-fill.md` — new
+- `docs/runtime/debt-ledger.md` — `cost-realism-slippage-pilot` entry updated (MNQ fully closed)
+- `HANDOFF.md` — this entry
+
+## Update (2026-04-20 evening — audit-of-audit completed; Phase 2 instrumentation landed and verified)
+
+This worktree was re-audited before further edits because the user explicitly questioned whether Codex had enough repo awareness to modify canonical truth safely.
+
+### Hard correction that survived re-audit
+
+- Earlier audit language implying `trading_app/prop_portfolio.py` was currently broken was false.
+- Fresh direct verification in this worktree showed:
+  - `python3 -m py_compile trading_app/prop_portfolio.py` -> PASS
+  - `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m trading_app.prop_portfolio --help` -> PASS
+  - `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_trading_app/test_prop_portfolio.py -q` -> `46 passed`
+- Phase 1 truth-surface repair was therefore kept, but the false runtime-failure claim was removed from audit outputs.
+
+### Phase 1 truth-surface repair status
+
+- `TRADING_RULES.md`
+  - live-book section now matches the current allocator-driven 6-lane MNQ live book
+  - explicit distinction added:
+    - operationally active / deployable
+    - research-provisional
+    - not institutional proof
+- `trading_app/prop_profiles.py`
+  - active profile notes no longer hardcode a stale live lane count
+- `RESEARCH_RULES.md`
+  - current-language deployed-lane wording no longer hardcodes a stale count
+
+### Phase 2 live-attribution instrumentation status
+
+What landed (codex/live-book-reaudit → rehabilitated onto main via cherry-pick):
+- new shared store:
+  - `trading_app/paper_trade_store.py`
+- backfill hardening:
+  - `trading_app/paper_trade_logger.py`
+  - modeled backfill rows can no longer overwrite real `live` / `shadow` rows
+- manual live logger routed through shared helper:
+  - `trading_app/log_trade.py`
+- durable signal-event journal:
+  - `trading_app/live/trade_journal.py`
+  - new table `live_signal_events`
+- live orchestrator bridge:
+  - `trading_app/live/session_orchestrator.py`
+  - completed profile-backed exits now bridge into `paper_trades`
+  - skip/reject/submitted/filled outcomes now persist to `live_signal_events`
+
+### 2026-04-20 branch rehabilitation
+
+The codex branch had four process failures that required rehabilitation before merge:
+1. empty commit message body on a 3000-line change
+2. stale branch base (would have reverted the lazy-import sweep in `build_daily_features.py`, `stats.py`, `entry_rules.py` if merged as-is)
+3. undisclosed scope (described as "thin operator warning + read-only report"; actual scope ~10× that)
+4. CRLF line-ending pollution across every touched file (no `.gitattributes` existed in the repo)
+
+Fix: rehabilitated onto a fresh `live-book-rehab` branch by cherry-picking only the two live-book commits from `origin/codex/live-book-reaudit` (dropping the stale lazy-import reverts naturally because they were on other commits on the same branch). `.gitattributes` added. Full honest commit messages written. Independent re-verification of every test claim.
+
+### First real OOS runtime evidence for the current 6 lanes
+
+`trading_app/paper_trade_logger` was run against canonical `gold.db` for `topstep_50k_mnq_auto`, producing 402 backfilled paper_trades rows across the current 6 allocator lanes on the sacred Mode A holdout window (2026-01-02 → 2026-04-16):
+
+| Lane | Trades | cumR | avgR |
+|------|--------|------|------|
+| MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5 | 72 | +21.08 | +0.293 |
+| MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15 | 66 | +8.85 | +0.161 |
+| MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12 | 70 | +10.71 | +0.153 |
+| MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12 | 71 | +9.66 | +0.136 |
+| MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15 | 54 | +3.33 | +0.062 |
+| MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5 | 69 | +0.38 | +0.006 |
+
+Rows are `execution_source='backfill'` (OOS modeled, not live) — Codex's `check_live_attribution_health` correctly excludes them from the "live evidence" count.
+
+OOS vs validated priors: 4/6 beat validated ExpR; SINGAPORE_OPEN underperforms (-43%); **COMEX_SETTLE is essentially dead on OOS** (+0.006R avg vs +0.112 validated, -95%). Flag for pre-reg mode-a-active-family-rediscovery audit.
+
+### Criterion 11 account-survival Monte Carlo — GATE PASSED
+
+`python -m trading_app.account_survival --profile topstep_50k_mnq_auto --paths 5000 --seed 42` against canonical `gold.db`, as-of 2026-04-20, horizon 90d, 2031 source days:
+
+- **DD survival = 82.9%**, operational pass = 82.9% (gate ≥ 70% PASS)
+- Breach rates: trailing_dd=17.1%, daily_loss=0.0%, consistency=0.0%, scaling=0.0%
+- Final balance p05/p50/p95 = -$1,369 / +$1,624 / +$4,642
+- Max DD p50/p95 = $1,281 / $2,153
+- Scaling feasible = True
+
+### What is still blocked
+
+- Phase 2 live mechanism-audit gate is not complete yet in the strict audit sense.
+- Current 6 strategy IDs still have no `execution_source='live'` or `='shadow'` rows in `paper_trades` (all 402 are `backfill`).
+- The instrumentation path is now implemented and verified, but first real runtime live-broker rows are still required to run the pre-reg'd `first-live-mechanism-audit.yaml`.
+- The strategy-truth audit (`mode-a-active-family-rediscovery.yaml`) is NOT blocked — it can run now on the OOS backfill.
+
+### Next operator / audit surface now implemented
+
+- new read-only report:
+  - `scripts/tools/live_attribution_report.py`
+- locked first mechanism-audit pre-reg:
+  - `docs/audit/hypotheses/2026-04-20-first-live-mechanism-audit.yaml`
+- canonical pre-session warning:
+  - `trading_app/pre_session_check.py`
+  - warns when current session lane(s) still have zero event rows and zero live/shadow completed rows
+
+### Next admissible move
+
+- Phase 2 Phase 3 scale-ready gate + Phase 4 cost/risk closure + Phase 5 clean Mode A rediscovery.
+- COMEX_SETTLE OOS collapse needs its own audit before scaling.
+
+---
+
 ## Update (2026-04-20 night — broad lazy-import sweep COMPLETE — 7 commits, ~3.8s cold-import savings)
 
 Follow-on session after the 2026-04-20 MGC/MNQ TBBO pilot work. User asked to resume the second terminal's broad lazy-import sweep (stage file `broad_lazy_sweep_phase1.md` had been staged but never completed). Executed Phase 1, Phase 1b, A+ review-fix, Phase 2 (via stats), Phase 3, Phase 3b.

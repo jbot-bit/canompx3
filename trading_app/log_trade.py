@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.cost_model import COST_SPECS
 from pipeline.db_config import configure_connection
 from pipeline.paths import GOLD_DB_PATH
+from trading_app.paper_trade_store import PaperTradeRecord, write_completed_trade
 
 # Lane definitions — imported from canonical source (prop_profiles.py)
 from trading_app.prop_profiles import get_profile_lane_definitions, resolve_profile_id
@@ -137,42 +138,37 @@ def log_trade(args):
 
     now = datetime.now(UTC)
 
-    # Write to DB (separate connection — read connection already closed above)
+    write_completed_trade(
+        PaperTradeRecord(
+            trading_day=today,
+            orb_label=session,
+            entry_time=now,
+            direction=direction,
+            entry_price=entry_price,
+            stop_price=stop_price,
+            target_price=target_price,
+            exit_price=exit_price,
+            exit_time=now,
+            exit_reason=exit_reason,
+            pnl_r=round(pnl_r, 4),
+            slippage_ticks=float(slippage_entry + slippage_exit),
+            strategy_id=lane["strategy_id"],
+            lane_name=lane["lane_name"],
+            instrument=instrument,
+            orb_minutes=lane["orb_minutes"],
+            rr_target=lane["rr_target"],
+            filter_type=lane["filter_type"],
+            entry_model=lane["entry_model"],
+            execution_source="live",
+            pnl_dollar=round(pnl_dollar, 2),
+            notes=notes,
+        ),
+        db_path=GOLD_DB_PATH,
+    )
+
+    # Get updated stats (separate write connection kept short-lived)
     with duckdb.connect(str(GOLD_DB_PATH)) as con_w:
         configure_connection(con_w, writing=True)
-        con_w.execute(
-            """INSERT INTO paper_trades
-               (trading_day, orb_label, entry_time, direction, entry_price, stop_price,
-                target_price, exit_price, exit_time, exit_reason, pnl_r, slippage_ticks,
-                strategy_id, lane_name, instrument, orb_minutes, rr_target, filter_type,
-                entry_model, execution_source, pnl_dollar, notes)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            [
-                today,
-                session,
-                now.isoformat(),
-                direction,
-                entry_price,
-                stop_price,
-                target_price,
-                exit_price,
-                now.isoformat(),
-                exit_reason,
-                round(pnl_r, 4),
-                slippage_entry,
-                lane["strategy_id"],
-                lane["lane_name"],
-                instrument,
-                lane["orb_minutes"],
-                lane["rr_target"],
-                lane["filter_type"],
-                lane["entry_model"],
-                "live",
-                round(pnl_dollar, 2),
-                notes,
-            ],
-        )
-
         # Get updated stats
         stats = con_w.execute(
             """SELECT COUNT(*) as n, ROUND(SUM(pnl_r), 2) as cum_r,

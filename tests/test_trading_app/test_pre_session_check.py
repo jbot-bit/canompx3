@@ -16,6 +16,7 @@ from trading_app.pre_session_check import (
     check_dd_circuit_breaker,
     check_hwm_tracker,
     check_lane_lifecycle,
+    check_live_attribution_health,
     check_manual_halt,
     check_topstep_xfa_aggregate_cap,
 )
@@ -479,3 +480,73 @@ class TestTopstepXfaAggregateCap:
         """Sanity check on the actual ACCOUNT_PROFILES — must be ≤ 5 right now."""
         ok, msg = check_topstep_xfa_aggregate_cap()
         assert ok is True, f"Repo state breaches 5-XFA cap: {msg}"
+
+
+class TestLiveAttributionHealth:
+    def _lane(self, strategy_id: str, orb_label: str) -> dict:
+        return {"strategy_id": strategy_id, "orb_label": orb_label}
+
+    def test_warns_when_no_evidence_exists(self, tmp_path):
+        db_path = tmp_path / "gold.db"
+        journal_path = tmp_path / "live_journal.db"
+        duck = __import__("duckdb")
+        duck.connect(str(db_path)).close()
+        duck.connect(str(journal_path)).close()
+
+        ok, msg = check_live_attribution_health(
+            [self._lane("SID_A", "NYSE_OPEN")],
+            db_path=db_path,
+            journal_path=journal_path,
+        )
+
+        assert ok is True
+        assert "WARN" in msg
+        assert "NYSE_OPEN" in msg
+
+    def test_warns_when_only_event_rows_exist(self, tmp_path):
+        db_path = tmp_path / "gold.db"
+        journal_path = tmp_path / "live_journal.db"
+        duck = __import__("duckdb")
+
+        con = duck.connect(str(db_path))
+        con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, execution_source VARCHAR)")
+        con.close()
+
+        con = duck.connect(str(journal_path))
+        con.execute("CREATE TABLE live_signal_events (strategy_id VARCHAR)")
+        con.execute("INSERT INTO live_signal_events VALUES ('SID_A')")
+        con.close()
+
+        ok, msg = check_live_attribution_health(
+            [self._lane("SID_A", "NYSE_OPEN")],
+            db_path=db_path,
+            journal_path=journal_path,
+        )
+
+        assert ok is True
+        assert "event rows" in msg
+        assert "0 completed" in msg
+
+    def test_passes_when_completed_rows_exist(self, tmp_path):
+        db_path = tmp_path / "gold.db"
+        journal_path = tmp_path / "live_journal.db"
+        duck = __import__("duckdb")
+
+        con = duck.connect(str(db_path))
+        con.execute("CREATE TABLE paper_trades (strategy_id VARCHAR, execution_source VARCHAR)")
+        con.execute("INSERT INTO paper_trades VALUES ('SID_A', 'live')")
+        con.close()
+
+        con = duck.connect(str(journal_path))
+        con.execute("CREATE TABLE live_signal_events (strategy_id VARCHAR)")
+        con.execute("INSERT INTO live_signal_events VALUES ('SID_A')")
+        con.close()
+
+        ok, msg = check_live_attribution_health(
+            [self._lane("SID_A", "NYSE_OPEN")],
+            db_path=db_path,
+            journal_path=journal_path,
+        )
+
+        assert ok is True
+        assert "1 completed live/shadow rows" in msg

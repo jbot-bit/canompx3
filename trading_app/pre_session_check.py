@@ -20,7 +20,7 @@ import duckdb
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pipeline.db_config import configure_connection
-from pipeline.paths import GOLD_DB_PATH
+from pipeline.paths import GOLD_DB_PATH, LIVE_JOURNAL_DB_PATH
 from trading_app.lifecycle_state import read_lifecycle_state
 
 STATE_DIR = Path(__file__).resolve().parents[1] / "data" / "state"
@@ -196,6 +196,77 @@ def check_slippage_pilot_progress(con) -> str:
         return f"MNQ slippage pilot: {n}/30 live trades with slippage recorded"
     except (OSError, RuntimeError) as e:
         return f"MNQ slippage pilot: cannot query ({e})"
+
+
+def check_live_attribution_health(
+    lanes: list[dict],
+    *,
+    db_path: Path = GOLD_DB_PATH,
+    journal_path: Path = LIVE_JOURNAL_DB_PATH,
+) -> tuple[bool, str]:
+    """Warn when current lane attribution still has no real evidence.
+
+    This is advisory, not a hard gate. It makes the Phase 2 evidence gap
+    visible in the canonical pre-session operator surface.
+    """
+    strategy_ids = [lane["strategy_id"] for lane in lanes]
+    if not strategy_ids:
+        return True, "Live attribution: no lanes resolved for this session"
+
+    placeholders = ",".join("?" * len(strategy_ids))
+
+    live_rows = 0
+    try:
+        with duckdb.connect(str(db_path), read_only=True) as con:
+            configure_connection(con)
+            tables = {
+                row[0]
+                for row in con.execute(
+                    "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+                ).fetchall()
+            }
+            if "paper_trades" in tables:
+                cols = {row[1] for row in con.execute("PRAGMA table_info('paper_trades')").fetchall()}
+                exec_source_expr = "execution_source" if "execution_source" in cols else "'unknown'"
+                row = con.execute(
+                    f"""
+                    SELECT COUNT(*)
+                    FROM paper_trades
+                    WHERE strategy_id IN ({placeholders})
+                      AND {exec_source_expr} IN ('live', 'shadow')
+                    """,
+                    strategy_ids,
+                ).fetchone()
+                live_rows = int(row[0]) if row else 0
+    except Exception as e:
+        return True, f"WARN: live attribution check could not read paper_trades ({e})"
+
+    event_rows = 0
+    try:
+        if journal_path.exists():
+            with duckdb.connect(str(journal_path), read_only=True) as con:
+                configure_connection(con)
+                tables = {
+                    row[0]
+                    for row in con.execute(
+                        "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+                    ).fetchall()
+                }
+                if "live_signal_events" in tables:
+                    row = con.execute(
+                        f"SELECT COUNT(*) FROM live_signal_events WHERE strategy_id IN ({placeholders})",
+                        strategy_ids,
+                    ).fetchone()
+                    event_rows = int(row[0]) if row else 0
+    except Exception as e:
+        return True, f"WARN: live attribution check could not read live_signal_events ({e})"
+
+    if live_rows > 0:
+        return True, f"Live attribution: {live_rows} completed live/shadow rows, {event_rows} event rows"
+    if event_rows > 0:
+        return True, f"WARN: live attribution has {event_rows} event rows but 0 completed live/shadow rows yet"
+    lane_labels = ", ".join(sorted(lane["orb_label"] for lane in lanes))
+    return True, f"WARN: no live attribution evidence yet for current lane(s): {lane_labels}"
 
 
 def check_hwm_tracker() -> tuple[bool, str]:
@@ -555,6 +626,9 @@ def run_checks(session: str, profile_id: str | None = None) -> bool:
         # Slippage pilot progress
         slip_msg = check_slippage_pilot_progress(con)
         results.append(("Slippage pilot", True, slip_msg))
+
+    ok, msg = check_live_attribution_health(lanes)
+    results.append(("Live attribution", ok, msg))
 
     # DD budget check (from daily_lanes)
     try:
