@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#
+# pre-push hook — runs verify_branch_scope to catch stale-base and
+# undocumented-large-scope before the push reaches the remote.
+#
+# Origin: 2026-04-20 codex/live-book-reaudit incident.
+#
+# Setup: git config core.hooksPath .githooks
+# Bypass: VERIFY_BRANCH_SCOPE_SKIP=1 git push ...
+#
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Resolve python (same logic as pre-commit)
+PYTHON="python"
+if [ -f "$SCRIPT_DIR/.venv/Scripts/python.exe" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/Scripts/python.exe"
+elif [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/.venv/bin/python"
+elif [ -f "$SCRIPT_DIR/venv/Scripts/python.exe" ]; then
+    PYTHON="$SCRIPT_DIR/venv/Scripts/python.exe"
+elif [ -f "$SCRIPT_DIR/venv/bin/python" ]; then
+    PYTHON="$SCRIPT_DIR/venv/bin/python"
+fi
+
+exec "$PYTHON" "$SCRIPT_DIR/scripts/tools/verify_branch_scope.py"

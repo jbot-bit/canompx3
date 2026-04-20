@@ -87,7 +87,9 @@ If the resolver is unavailable or ambiguous, fall back to:
 
 ## Guardrails
 
-Five layers enforce quality: pre-commit hook (`.githooks/pre-commit`), drift detection (`pipeline/check_drift.py` — count self-reported at runtime), Claude Code hooks (auto-run drift/tests on file edits), GitHub Actions CI, and built-in pipeline validation gates. Setup: `git config core.hooksPath .githooks`
+Six layers enforce quality: pre-commit hook (`.githooks/pre-commit` — lint + format + drift + CRLF guard + staged-file-aware tests), commit-msg hook (`.githooks/commit-msg` — body required for substantial diffs), pre-push hook (`.githooks/pre-push` — branch staleness + scope-doc check via `scripts/tools/verify_branch_scope.py`), drift detection (`pipeline/check_drift.py` — count self-reported at runtime), Claude Code hooks (auto-run drift/tests on file edits), GitHub Actions CI, plus built-in pipeline validation gates.
+
+**One-shot setup (per clone/worktree):** `bash scripts/tools/setup_git_hooks.sh` — wires up `core.hooksPath=.githooks` and verifies executability. Without this, all git hooks are silently dormant (this is how the 2026-04-20 codex/live-book-reaudit CRLF + empty-body + stale-base incident slipped through). See `docs/governance/agent_handoff_protocol.md` for what each hook enforces.
 
 ### Project Truth Protocol
 Discovery uses ONLY canonical layers (`bars_1m`, `daily_features`, `orb_outcomes`). Derived layers (`validated_setups`, `edge_families`, `live_config`, docs) are **banned for truth-finding**. Full rules → `RESEARCH_RULES.md` § Discovery Layer Discipline. Enforcement → `.claude/rules/research-truth-protocol.md`.

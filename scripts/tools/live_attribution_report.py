@@ -49,9 +49,7 @@ def _table_names(con: duckdb.DuckDBPyConnection | None) -> set[str]:
         return set()
     return {
         row[0]
-        for row in con.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
-        ).fetchall()
+        for row in con.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='main'").fetchall()
     }
 
 
@@ -128,7 +126,7 @@ def _load_completed_trade_stats(
             SUM(CASE WHEN {exec_source_expr} = 'shadow' THEN 1 ELSE 0 END) AS shadow_rows,
             SUM(CASE WHEN {exec_source_expr} = 'backfill' THEN 1 ELSE 0 END) AS backfill_rows
         FROM paper_trades
-        WHERE {' AND '.join(filters)}
+        WHERE {" AND ".join(filters)}
         GROUP BY strategy_id
         """,
         params,
@@ -182,7 +180,7 @@ def _load_event_stats(
                 END) AS rejected_events,
             MAX(created_at) AS last_event_at
         FROM live_signal_events
-        WHERE {' AND '.join(filters)}
+        WHERE {" AND ".join(filters)}
         GROUP BY strategy_id
         """,
         params,
@@ -297,9 +295,7 @@ def render_report(report: dict[str, Any]) -> str:
     )
     lines.append(report["modeled_prior_warning"])
     lines.append("")
-    lines.append(
-        f"{'Session':<16} {'Status':<14} {'Events':>6} {'Trades':>6} {'AvgR':>8} {'AvgSlip':>8} {'Model':>8}"
-    )
+    lines.append(f"{'Session':<16} {'Status':<14} {'Events':>6} {'Trades':>6} {'AvgR':>8} {'AvgSlip':>8} {'Model':>8}")
     lines.append("-" * 78)
     for lane in report["lanes"]:
         avg_r = f"{lane['avg_pnl_r']:+.4f}" if lane["avg_pnl_r"] is not None else "   n/a  "

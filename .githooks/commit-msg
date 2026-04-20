@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+#
+# commit-msg hook — enforce commit message adequacy proportional to diff size.
+#
+# Rule: if staged diff is "substantial" (more than N files or M lines), the
+# commit message MUST have a body (more than just a one-line subject).
+# This catches the 2026-04-20 codex/live-book-reaudit incident where a
+# 3000-line change landed with an empty commit body.
+#
+# Thresholds (tunable at top of file):
+#   SUBSTANTIAL_FILES=5    — body required at this many files or above
+#   SUBSTANTIAL_LINES=100  — body required at this many insertions+deletions
+#   MIN_BODY_CHARS=100     — minimum non-subject-line body length
+#
+# Bypass: COMMIT_MSG_SKIP=1 git commit ... (use sparingly, audit trail preserved
+# by the explicit env var name).
+#
+# Setup: git config core.hooksPath .githooks
+#
+
+set -e
+
+# Bypass for emergency
+if [ "${COMMIT_MSG_SKIP:-}" = "1" ]; then
+    exit 0
+fi
+
+# Skip for merge commits, reverts, fixup/squash, cherry-pick (git handles messages)
+if git rev-parse --verify MERGE_HEAD >/dev/null 2>&1; then
+    exit 0
+fi
+if [ -f ".git/CHERRY_PICK_HEAD" ] || [ -f ".git/REVERT_HEAD" ]; then
+    exit 0
+fi
+
+MSG_FILE="$1"
+# Strip comments and blank leading/trailing lines
+MSG_BODY=$(grep -v '^#' "$MSG_FILE" | awk 'NF {p=1} p')
+
+# A typical fixup/squash/revert subject: allow regardless of size
+if echo "$MSG_BODY" | head -1 | grep -qE '^(fixup!|squash!|amend!|Revert )'; then
+    exit 0
+fi
+
+# Measure staged diff
+FILES_CHANGED=$(git diff --cached --name-only | wc -l | tr -d ' ')
+LINES_CHANGED=$(git diff --cached --shortstat 2>/dev/null | grep -oE '[0-9]+ (insertion|deletion)' | awk '{s+=$1} END {print s+0}')
+LINES_CHANGED=${LINES_CHANGED:-0}
+
+SUBSTANTIAL_FILES=5
+SUBSTANTIAL_LINES=100
+MIN_BODY_CHARS=100
+
+if [ "$FILES_CHANGED" -lt "$SUBSTANTIAL_FILES" ] && [ "$LINES_CHANGED" -lt "$SUBSTANTIAL_LINES" ]; then
+    exit 0  # Small change, no body required
+fi
+
+# Large change — require body
+# Body = everything after the first line, non-empty
+BODY_LINES=$(echo "$MSG_BODY" | tail -n +2 | grep -v '^$' || true)
+BODY_CHARS=$(echo "$BODY_LINES" | wc -c | tr -d ' ')
+
+if [ -z "$BODY_LINES" ] || [ "$BODY_CHARS" -lt "$MIN_BODY_CHARS" ]; then
+    echo "BLOCKED: Commit message body required for substantial changes." >&2
+    echo "" >&2
+    echo "  Files changed: $FILES_CHANGED (threshold $SUBSTANTIAL_FILES)" >&2
+    echo "  Lines changed: $LINES_CHANGED (threshold $SUBSTANTIAL_LINES)" >&2
+    echo "  Current body: $BODY_CHARS chars (minimum $MIN_BODY_CHARS)" >&2
+    echo "" >&2
+    echo "Institutional-rigor rule: every substantial commit records WHY." >&2
+    echo "Origin: 2026-04-20 codex/live-book-reaudit 3000-line commit with empty body." >&2
+    echo "" >&2
+    echo "To bypass in genuine emergency: COMMIT_MSG_SKIP=1 git commit ..." >&2
+    exit 1
+fi
+
+exit 0

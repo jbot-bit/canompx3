@@ -53,6 +53,42 @@ if git diff --name-only -- HANDOFF.md 2>/dev/null | grep -q 'HANDOFF.md'; then
     git add HANDOFF.md
 fi
 
+# 0b. CRLF guard — block CR bytes in staged index blobs.
+# Uses Python for binary-safe CR detection (Git Bash grep strips CR on read).
+# Respects .gitattributes: skips `binary` files and files marked `eol=crlf`
+# (Windows scripts). Catches `--no-renormalize` bypass + any pre-policy pollution.
+# Origin: 2026-04-20 incident — codex/live-book-reaudit committed CRLF on every
+# touched file because the repo had no .gitattributes at that time.
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -n "$STAGED_FILES" ]; then
+    CRLF_REPORT=$(echo "$STAGED_FILES" | "$PYTHON" -c '
+import subprocess, sys
+violators = []
+for f in sys.stdin.read().splitlines():
+    if not f:
+        continue
+    attrs = subprocess.run(["git", "check-attr", "-a", "--", f],
+                           capture_output=True, text=True).stdout
+    if ": binary: set" in attrs or ": eol: crlf" in attrs:
+        continue
+    blob = subprocess.run(["git", "show", f":{f}"], capture_output=True).stdout
+    if b"\r" in blob:
+        violators.append(f)
+if violators:
+    print("\n".join(violators))
+    sys.exit(1)
+')
+    if [ -n "$CRLF_REPORT" ]; then
+        echo "BLOCKED: CRLF line endings detected in staged text files:"
+        echo "$CRLF_REPORT" | sed 's/^/  /'
+        echo ""
+        echo "Repo policy (.gitattributes): LF-only for text files."
+        echo "Fix: dos2unix <file>   OR   python -c \"import pathlib,sys; p=pathlib.Path(sys.argv[1]); p.write_bytes(p.read_bytes().replace(b'\\r\\n', b'\\n'))\" <file>"
+        echo "Then re-stage: git add <file>"
+        exit 1
+    fi
+fi
+
 # 0. Ruff lint check (~1 second)
 echo "[0/6] Ruff lint..."
 RUFF="ruff"
