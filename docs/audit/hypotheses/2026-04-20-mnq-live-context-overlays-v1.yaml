@@ -1,5 +1,5 @@
 version: 1
-status: PRE_REGISTERED_DRAFT
+status: LOCKED
 date: 2026-04-20
 slug: mnq-live-context-overlays-v1
 title: "MNQ live-context overlays — exact deployed NYSE_OPEN / COMEX_SETTLE lanes × 5 instant-detectable hypotheses (K=10)"
@@ -33,8 +33,27 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "7d2a3dec"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
   committed_required_before_run: true
+  commit_sha_note: "SHA of the final lock commit used by the execution harness."
+
+pre_run_correction_2026_04_20:
+  corrected: true
+  correction_scope: "LOCK_METADATA + RULE4_K_ARITHMETIC"
+  substantive_rules_modified: false
+  what_changed:
+    - "status: PRE_REGISTERED_DRAFT -> LOCKED before first execution"
+    - "commit_sha reset to TO_FILL_AFTER_COMMIT so the final locked content can be restamped"
+    - "primary_schema.k_lane corrected from scalar 5 to lane-specific counts under two-pass accounting"
+    - "Rule 4 application text clarified to report lane-specific q_lane for NYSE_OPEN and COMEX_SETTLE separately"
+  what_did_NOT_change:
+    - "scope"
+    - "H01-H05 statements"
+    - "all numeric pass thresholds"
+    - "kill criteria"
+    - "decision_rule"
+  reviewer: "codex"
+  triggered_by: "Pre-run audit found k_lane=5 did not match actual two-pass lane buckets (NYSE_OPEN=4 tests, COMEX_SETTLE=6 tests)."
 
 scope:
   instrument: MNQ
@@ -153,10 +172,12 @@ upstream_discovery_provenance:
 primary_schema:
   k_family: 10
   k_global: 10
-  k_lane: 5
+  k_lane:
+    MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12: 4
+    MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5: 6
   k_session: 2
   k_instrument: 10
-  primary_promotion_gate: "K_family BH-FDR q < 0.05"
+  primary_promotion_gate: "K_family BH-FDR q < 0.05; lane-specific q_lane is reported secondarily at K=4 (NYSE_OPEN) and K=6 (COMEX_SETTLE)"
   family_cells_structured_as: |
     Five primary hypotheses. Each hypothesis must pass BOTH:
       Pass A = unfiltered lane universe
@@ -342,7 +363,7 @@ methodology_rules_applied:
   - rule: "backtesting-methodology.md RULE 3 — sacred holdout"
     application: "All thresholds and selection use IS only; OOS descriptive only."
   - rule: "backtesting-methodology.md RULE 4 — BH-FDR"
-    application: "Current family K=10, lane K=5."
+    application: "Current family K=10. Lane-specific q_lane is reported separately for NYSE_OPEN (K=4) and COMEX_SETTLE (K=6) under two-pass accounting."
   - rule: "backtesting-methodology.md RULE 6 — trade-time knowability"
     application: "All five features are prior-day, calendar, or ORB-end complete."
   - rule: "prereg-writer prompt — quantile look-ahead check"
@@ -363,7 +384,7 @@ outputs_required_after_run:
   - "For rel_vol hypotheses: frozen IS-only threshold value"
   - "T0 tautology corr vs deployed filter proxies"
   - "Arithmetic-only and extreme-fire flags"
-  - "BH-FDR q_family and q_lane"
+  - "BH-FDR q_family and lane-specific q_lane (NYSE_OPEN K=4, COMEX_SETTLE K=6)"
   - "Result doc path under docs/audit/results/2026-04-20-*.md"
 
 execution_gate:
