@@ -1,0 +1,248 @@
+# Hypothesis Registry — 2026-04-20 live-book-truth-status-audit
+#
+# Locked: 2026-04-20T14:30:00+10:00
+# Author: codex (user-directed audit-first session)
+# Purpose: resource-grounded audit of the "profitability bottleneck" diagnosis
+# for the current live prop book. This is a confirmatory audit, not discovery.
+# Committing commit hash: (filled in by pre-commit hook)
+# Data horizon: MNQ canonical truth layers through 2026-04-16 / 2026-04-17
+# Intended holdout boundary: 2026-01-01 (Mode A sacred holdout)
+
+metadata:
+  name: "live-book-truth-status-audit"
+  purpose: |
+    Audit the current diagnosis that the live book's primary profitability leak is
+    under-deployment rather than discovery, and determine which parts are proven,
+    provisional, or false under canonical code, canonical data, and verbatim local
+    resource texts. This audit explicitly separates:
+      (a) operational truth,
+      (b) modeled allocator / shelf truth,
+      (c) clean research truth.
+  date_locked: "2026-04-20T14:30:00+10:00"
+  data_horizon_years_clean: 6.65
+  data_horizon_years_proxy: 0.0
+  holdout_date: "2026-01-01"
+  oos_window_end: "2026-04-17"
+  total_expected_trials: 6
+  data_source_mode: "clean"
+  testing_mode: "confirmatory"
+  scope: "live_book_truth_status"
+
+authority:
+  proof_hierarchy:
+    - "current code / current files"
+    - "git state / direct command output"
+    - "canonical data tables (orb_outcomes, daily_features, bars_1m, paper_trades)"
+    - "verbatim local resource text only"
+    - "docs only for intent or declared policy, never as proof when direct proof exists"
+  non_trusted_as_evidence:
+    - "metadata headers in extract files"
+    - "criticality labels"
+    - "project-synthesis / application sections in literature extract files"
+    - "prior summaries, hand-wavy repo narratives, or memory files"
+    - "derived-layer claims when canonical tables can answer directly"
+
+minbtl_check:
+  trials_N: 6
+  e_max_N_floor: 1.0
+  minbtl_years_required: 3.584
+  data_years_available: 6.65
+  status: "WITHIN_BOUND"
+
+canonical_sources_required:
+  - "gold.db::orb_outcomes"
+  - "gold.db::daily_features"
+  - "gold.db::bars_1m"
+  - "gold.db::paper_trades"
+  - "gold.db::validated_setups (provenance / current shelf status only, not discovery truth)"
+  - "trading_app/prop_profiles.py"
+  - "docs/runtime/lane_allocation.json"
+  - "trading_app/strategy_fitness.py"
+  - "docs/institutional/pre_registered_criteria.md"
+  - "RESEARCH_RULES.md"
+
+verbatim_resource_sources_required:
+  - "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+  - "docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md"
+  - "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+  - "docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md"
+  - "docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md"
+  - "docs/institutional/literature/pepelyshev_polunchenko_2015_cusum_sr.md"
+
+prohibited:
+  - "No rollout, closure, or scale recommendation before claim classification is complete"
+  - "No using validated_setups or lane_allocation.json as discovery proof"
+  - "No trusting extract-file metadata or project-written 'application' sections as evidence"
+  - "No upgrading FIT regime labels into clean OOS proof"
+  - "No annual_r * copies arithmetic presented as realized profitability"
+  - "No holdout relaxation, no post-hoc widening of the claim set"
+
+hypotheses:
+  - id: 1
+    name: "Current diagnosis overstates evidence quality by collapsing operational truth, modeled shelf truth, and clean research truth"
+    theory_citation: |
+      Lopez de Prado (2020) verbatim: "Contrary to popular belief, backtesting
+      is not a research tool. Backtests can never prove that a strategy is a true
+      positive..." Bailey & López de Prado (2014) verbatim: a backtest without
+      controlling for the search involved is worthless regardless of reported
+      performance.
+    economic_basis: |
+      If the diagnosis uses allocator-selected winners and research-provisional
+      shelf rows as if they were equivalent to clean-holdout proof, the resulting
+      capital-allocation conclusion is overstated. This is not a subtle distinction:
+      it changes whether "scale now" is admissible or premature.
+    scope:
+      claims:
+        - "the active book is under-deployed"
+        - "discovery is not the main problem"
+        - "scale is the highest-confidence lever"
+      canonical_checks:
+        - "Mode A holdout doctrine"
+        - "current deployed-lane status under institutional criteria"
+        - "selection-path provenance of active validated_setups"
+    test: |
+      Compare the diagnosis language against:
+        (a) direct code / DB proof of current operations,
+        (b) direct institutional classification of current lanes,
+        (c) direct research holdout rules.
+      PASS only if the diagnosis keeps those layers distinct.
+    expected_trial_count: 1
+    kill_criteria:
+      - "If the diagnosis promotes research-provisional shelf evidence as if it were clean validation evidence, classify MISCLASSIFIED"
+      - "If the diagnosis treats allocator outputs as realized proof, classify MISCLASSIFIED"
+
+  - id: 2
+    name: "Missing realized attribution on the current six lanes is the main live-truth gap"
+    theory_citation: |
+      Harvey & Liu (2015) verbatim: OOS is often not truly OOS and trial-and-error
+      can masquerade as validation. Pepelyshev & Polunchenko (2015) verbatim:
+      live surveillance is required for on-the-go structural-break detection.
+    economic_basis: |
+      If current-lane fills, skips, slippage, and realized pnl are absent, the live
+      mechanism is unobserved. In that case modeled profitability cannot be promoted
+      into confident operational truth.
+    scope:
+      strategy_ids_source: "docs/runtime/lane_allocation.json current 6 lanes"
+      tables:
+        - "paper_trades"
+    test: |
+      Direct count and content check on paper_trades for the six currently allocated
+      strategy_ids. PASS only if live / current-lane realized rows exist and are
+      sufficient to evaluate mechanism behavior.
+    expected_trial_count: 1
+    kill_criteria:
+      - "If paper_trades has zero current-lane rows, classify current live attribution as UNPROVEN and the diagnosis claim as VALID (blind spot real)"
+
+  - id: 3
+    name: "Routine-day MNQ slippage is not yet proven to be the primary profitability bottleneck"
+    theory_citation: |
+      Bailey et al. (2013) verbatim: hidden trial counts and overfit backtests
+      mislead investors. This applies equally to overconfident post-hoc friction
+      stories. The cost claim must rest on direct measurement, not narrative.
+    economic_basis: |
+      If measured routine-day slippage is conservative on observed sample but the
+      observed sample omits some deployed sessions and event tails, then the honest
+      classification is partial closure, not full closure and not primary-bottleneck
+      proof.
+    scope:
+      source_files:
+        - "docs/runtime/debt-ledger.md"
+        - "docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v1.md"
+      direct_checks:
+        - "coverage of deployed sessions"
+        - "event-tail completeness"
+    test: |
+      PASS only if measured slippage coverage includes the deployed sessions and
+      event-tail risk relevant to the current live book. Otherwise classify ALIVE,
+      not VALID.
+    expected_trial_count: 1
+    kill_criteria:
+      - "If missing deployed-session or event-tail coverage remains open, slippage-closure claim cannot be VALID"
+
+  - id: 4
+    name: "Scale 2→5 is not admissible as a high-confidence action until a canonical proving-loop / scale-ready gate exists and is passed"
+    theory_citation: |
+      Bailey et al. (2013) verbatim: good backtests can be indicators of negative
+      future results when trial counts are hidden. Lopez de Prado (2020) verbatim:
+      poorly performing or incomplete backtests are opportunities to fix the
+      research process, not tweak toward rollout.
+    economic_basis: |
+      A profile note saying "scale to 5 after proving loop" is not a proving-loop
+      definition. Without a canonical gate, the scale argument is arithmetic, not
+      governance.
+    scope:
+      code_surfaces:
+        - "trading_app/prop_profiles.py"
+        - "docs/institutional/pre_registered_criteria.md"
+        - "RESEARCH_RULES.md"
+    test: |
+      Search for an explicit scale-ready or proving-loop criterion in current code
+      and canonical doctrine. PASS only if such a gate exists and current evidence
+      proves it passed.
+    expected_trial_count: 1
+    kill_criteria:
+      - "If proving-loop / scale-ready criteria are undefined, any 'highest-confidence scale lever' claim is downgraded to ALIVE at best"
+
+  - id: 5
+    name: "Current operator truth surfaces are broken enough to block confident capital-allocation conclusions"
+    theory_citation: |
+      Feynman epigraph quoted in Bailey et al. (2013): vague theories and indefinite
+      computation can be made to match any desired conclusion. Operational truth
+      surfaces must work or they stop being proof surfaces.
+    economic_basis: |
+      If the daily portfolio resolver is syntactically broken and doctrine surfaces
+      are stale relative to code, operator trust is compromised. That directly lowers
+      the admissible confidence of any next-step recommendation.
+    scope:
+      files:
+        - "trading_app/prop_portfolio.py"
+        - "TRADING_RULES.md"
+        - "trading_app/prop_profiles.py"
+        - "docs/runtime/lane_allocation.json"
+    test: |
+      PASS only if direct command execution and current files show aligned operator
+      surfaces. FAIL if the portfolio resolver crashes or docs describe a different
+      book than current code/JSON.
+    expected_trial_count: 1
+    kill_criteria:
+      - "If prop_portfolio.py fails to compile, classify control-plane claim as VALID"
+      - "If TRADING_RULES.md active-lane surface disagrees with code/JSON, classify doctrine drift claim as VALID"
+
+  - id: 6
+    name: "Discovery / rediscovery was prematurely ruled out"
+    theory_citation: |
+      Lopez de Prado (2020) verbatim: theories, not backtests, must justify edges.
+      Harvey & Liu (2015) verbatim: OOS testing can fail to be truly OOS.
+      Current institutional criteria classify deployed lanes as research-provisional
+      until clean Mode A rediscovery / forward evidence closes the gap.
+    economic_basis: |
+      If the current deployed families are still research-provisional under Mode A,
+      then stating "more discovery is not the move" is too broad. Broad brute-force
+      discovery may be wrong, but clean rediscovery of the active families is still
+      a required truth-restoration step.
+    scope:
+      policy_files:
+        - "RESEARCH_RULES.md"
+        - "docs/institutional/pre_registered_criteria.md"
+    test: |
+      PASS only if canonical doctrine explicitly says clean Mode A rediscovery is
+      unnecessary for current live-book confidence. Otherwise classify the
+      diagnosis' anti-discovery framing as MISCLASSIFIED.
+    expected_trial_count: 1
+    kill_criteria:
+      - "If deployed lanes are still research-provisional under Mode A, 'discovery is not the move' is overbroad and misclassified"
+
+total_hypothesis_count: 6
+total_expected_trials: 6
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  strict_bailey_E1_bound: 28
+  status: "WITHIN_STRICT_BAILEY_E1_BOUND"
+
+# Checklist
+# [x] Audit claims are explicit and separately testable
+# [x] Proof hierarchy bans metadata / summary trust
+# [x] Holdout boundary fixed at 2026-01-01
+# [x] No implementation or rollout claim is allowed before classification
+# [x] Discovery-layer truth is kept separate from derived-layer operational surfaces
