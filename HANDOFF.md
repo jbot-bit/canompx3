@@ -4,6 +4,33 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late-night — hook-noise follow-up: broken rule pointer fixed)
+
+Follow-up to branch `chore/reduce-hook-token-burn` commit `6ae317fe`.
+Audit found one doc regression in the auto-loaded rule layer:
+`.claude/rules/backtesting-methodology.md` ended with a truncated
+"Historical failure log" pointer (`**Moved to **`) after the failure-log
+split. That weakened the canonical cross-reference the commit was meant to
+preserve.
+
+### What landed (branch `chore/reduce-hook-token-burn-fixup`)
+
+- Restored the canonical pointer to
+  `.claude/rules/backtesting-methodology-failure-log.md`
+  in `.claude/rules/backtesting-methodology.md`
+
+### Verification
+
+- `git diff --check`
+- `rg -n "Moved to .*backtesting-methodology-failure-log|Moved to \\*\\*" .claude/rules/backtesting-methodology.md .claude/rules/quant-audit-protocol.md`
+
+Result: clean diff; broken truncated pointer no longer present.
+
+### Scope
+
+- `.claude/rules/backtesting-methodology.md`
+- `HANDOFF.md`
+
 ## Update (2026-04-20 late-night — MNQ TBBO gap-fill v2 COMPLETE — Phase D COMEX_SETTLE unblocked)
 
 Follow-on to the PR #25 / PR #26 merges. Researcher-framework audit flagged lazy-imports Phase 4 as DEAD work (cold-import on live path is rounding-error vs 6-hour session runtime). Redirected to the highest-EV open item: MNQ TBBO coverage gap on the 3 deployed sessions missing from the v1 119-file cache.
