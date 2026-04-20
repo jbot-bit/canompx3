@@ -4,6 +4,45 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 MGC adversarial re-examination — audit complete, H1 run, H0 HALTED)
+
+Session triggered by user pushback on the 2026-04-19 "MGC path-accurate sub-R v1" closure, with successive concerns: (a) MGC > GC contract-size handling; (b) MGC/GC volume differences; (c) full upstream/downstream blast-radius audit; (d) gold regime 2024-2026; (e) pre-reg discipline with no bias/look-ahead/pigeonholing.
+
+### What landed
+
+- Master audit doc: `docs/audit/results/2026-04-20-mgc-adversarial-reexamination.md` (§1-§10). Captures inventory of 14 MGC research scripts + 14 pre-regs (retracts my earlier "never tested" claim), contract-size R-space invariance verification (line-cited in `pipeline/cost_model.py:102-126, 439-469`), data-era integrity confirmation (`data_era.py:114-148`, Phase 2 relabel 2026-04-08), volume blast-radius audit (rel_vol symbol-local in `build_daily_features.py:1513-1519`, E2 look-ahead exclusion list in `config.py:3560-3568`, drift check landed in `check_drift.py:2102-2201`), gold regime 2024-2026 grounding (WGC/CME/BRICS citations), MinBTL bound for MGC 3.8yr horizon (~30 trial budget), adversarial audit of my own 5 prior POV claims (3 retracted/revised), and §9.5 three additional angles found on self-audit.
+- Debt-ledger entry: `docs/runtime/debt-ledger.md` now lists `cost-realism-slippage-pilot` — MGC TBBO pilot (n=40, median=0, mean=6.75 ticks, skewed) documented as book-wide debt, not MGC-specific. MNQ/MES pilots not yet run.
+- H1 pre-reg + execution: `docs/audit/hypotheses/2026-04-20-mgc-portfolio-diversifier.yaml` LOCKED; `research/research_mgc_portfolio_diversifier_v1.py` ran; `docs/audit/results/2026-04-20-mgc-portfolio-diversifier-v1.md` written. Verdict: MIXED. MGC-vs-book max|corr|=0.070 (C1 PASS strongly — genuine diversifier structurally), but unfiltered MGC stream has mean -0.86R/day and σ = 5.8× book σ (C3 KILL at uniform 1-contract weighting); OVNRNG_100 variant has 4 fires/1039 days (C4 KILL underpowered). Vol-matched diversifier math (MGC at book-σ scale, ρ=0.05) yields ΔSR ≈ -0.035 at 10% weight. **Diversifier thesis does not rescue MGC from closure** at prudent weightings.
+- H0 pre-reg + execution: `docs/audit/hypotheses/2026-04-20-mgc-real-slippage-sensitivity.yaml` LOCKED. `research/research_mgc_real_slippage_sensitivity_v1.py` ran. `docs/audit/results/2026-04-20-mgc-real-slippage-sensitivity-v1.md` HALTED — baseline cross-check failed (recomputed ExpR at slippage=2 ticks mismatched native_low_r_v1 reported values by 0.10-0.27R). Script retained for post-mortem; no conclusion drawn. Root-cause hypotheses enumerated in result doc.
+
+### What to watch
+
+- **Pilot underpowered.** The 6.75-tick mean is n=40 with median=0 and std=41.57. Any cost-realism conclusion using a single-point 6.75-tick value is fragile. Needs larger MGC pilot before firm claims.
+- **Filter delegation discipline.** H0 HALT root cause is almost certainly inline filter re-encoding in the script (exactly what `research-truth-protocol.md` § Canonical filter delegation prohibits). Next attempt MUST use `research.filter_utils.filter_signal(df, filter_key, orb_label)`.
+- **MNQ / MES TBBO pilots not run.** Every deployed-book backtest `pnl_r` is modeled-friction optimistic by an unknown amount. Book-wide debt, not MGC-specific.
+- **MGC closure is soft/in-waiting, not hard-kill.** `asset_configs.ASSET_CONFIGS['MGC']['deployable_expected']=False` plus active shadow-track pre-reg (`2026-04-19-mgc-orbg5-long-signal-only-shadow-v1.yaml`) with 4 underpowered positive cells. Per Bailey et al 2013, 3.8yr of MGC real-micro data allows ~30 independent trials before overfitting risk becomes prohibitive. Treat MGC as "statistically underpowered, waiting for data accumulation" rather than dead.
+
+### Next move (pre-reg discipline respected)
+
+- **DO NOT** reopen broad MGC discovery; ~30-trial MinBTL budget is tight.
+- **DO** fix H0 script (delegate to `filter_utils.filter_signal`; reproduce baseline cross-check) before drawing any slippage-sensitivity conclusion.
+- **DO** schedule MNQ TBBO slippage pilot (`research/research_mnq_e2_slippage_pilot.py` exists, not run). Outcome feeds book-wide cost realism.
+- **DO NOT** extend H0 conclusions to "MGC is definitely closed under real slippage" — the HALT means we DON'T KNOW; closure stands on prior grounds (path-accurate sub-R v1) unchallenged by this session.
+- **DO NOT** cite H1 result as "MGC has portfolio value" — result is that correlation IS low but the tested sizings don't produce material Sharpe lift.
+
+### Files touched
+
+- `docs/audit/results/2026-04-20-mgc-adversarial-reexamination.md` (new, ~15kb)
+- `docs/audit/results/2026-04-20-mgc-portfolio-diversifier-v1.md` (new)
+- `docs/audit/results/2026-04-20-mgc-real-slippage-sensitivity-v1.md` (new, HALTED)
+- `docs/audit/hypotheses/2026-04-20-mgc-portfolio-diversifier.yaml` (new, LOCKED)
+- `docs/audit/hypotheses/2026-04-20-mgc-real-slippage-sensitivity.yaml` (new, LOCKED)
+- `docs/runtime/debt-ledger.md` (added `cost-realism-slippage-pilot`)
+- `research/research_mgc_portfolio_diversifier_v1.py` (new)
+- `research/research_mgc_real_slippage_sensitivity_v1.py` (new, output not trustworthy)
+- `research/output/mgc_portfolio_diversifier_v1.json` (new)
+- `research/output/mgc_real_slippage_sensitivity_v1.json` (new, flagged do-not-cite)
+
 ## Update (2026-04-19 CI-green campaign — landed)
 
 5-PR stack consolidated and merged via PR #19 (squash) at commit `9fe6b968`, then format cleanup via PR #20 at `eaee4645`. Main CI now green across all 13 gates including Tests with coverage on Windows runner.
