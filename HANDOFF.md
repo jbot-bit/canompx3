@@ -138,6 +138,67 @@ Important caution:
 4. next bounded task, if continuing this branch, is **candidate-lane validation
    or shadow design for `NOT_F6_INSIDE_PDR`**, not more broad prior-day scans
 
+## Update (2026-04-20 finish-pass — candidate lane executed, shadow path locked)
+
+Follow-on to the role-design note. The `NOT_F6_INSIDE_PDR` candidate-lane
+validation has now been run canonically.
+
+### What was executed
+
+- pre-reg locked:
+  - `docs/audit/hypotheses/2026-04-20-usdata1000-long-not-f6-candidate-lane-v1.yaml`
+- runner:
+  - `research/usdata1000_long_not_f6_candidate_lane_v1.py`
+- result:
+  - `docs/audit/results/2026-04-20-usdata1000-long-not-f6-candidate-lane-v1.md`
+
+### Candidate-lane verdict
+
+- family `K = 2`
+- `CANDIDATE_READY = 0`
+- `RESEARCH_SURVIVOR = 2`
+
+Per-cell:
+
+1. `RR1.0`
+   - `N_IS = 368`
+   - `ExpR_IS = +0.1583`
+   - `t_IS = +3.2767`
+   - `q_BH = 0.0006`
+   - `WFE = 1.260`
+   - `N_OOS = 13`
+   - `ExpR_OOS = -0.0982`
+   - verdict: `RESEARCH_SURVIVOR`
+2. `RR1.5`
+   - `N_IS = 363`
+   - `ExpR_IS = +0.2261`
+   - `t_IS = +3.6306`
+   - `q_BH = 0.0003`
+   - `WFE = 1.173`
+   - `N_OOS = 13`
+   - `ExpR_OOS = -0.2509`
+   - verdict: `RESEARCH_SURVIVOR`
+
+Interpretation:
+
+- `NOT_F6` is the correct primary route
+- it clears H1/C6/C9
+- it fails C8 because forward OOS is still too thin and currently negative
+- so this remains **research-provisional**, not candidate-ready and not promotable
+
+### What was preserved as the honest next step
+
+- signal-only shadow contract:
+  - `docs/audit/hypotheses/2026-04-20-usdata1000-long-not-f6-shadow-v1.yaml`
+
+This is the correct continuation because the branch now has:
+
+- verified pair
+- verified role design
+- verified candidate-lane validation
+
+and the only missing piece is enough forward OOS.
+
 ## Update (2026-04-20 late-night — context opportunity map grounded in /resources + canonical reruns)
 
 Follow-on to the user correction that this branch must be grounded in

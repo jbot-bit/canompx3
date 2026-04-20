@@ -1,0 +1,100 @@
+version: 1
+status: LOCKED
+date: 2026-04-20
+slug: usdata1000-long-not-f6-shadow-v1
+title: "MNQ US_DATA_1000 O5 long NOT_F6 signal-only shadow v1"
+owner: codex
+
+purpose: |
+  Start the honest next phase for the `MNQ US_DATA_1000 O5 E2 long
+  NOT_F6_INSIDE_PDR` candidate lane after bounded validation returned
+  RESEARCH_SURVIVOR on both RR cells. This is a signal-only shadow contract to
+  accumulate forward OOS without any live capital action.
+
+grounding:
+  resources:
+    - "resources/Algorithmic_Trading_Chan.pdf"
+    - "resources/Robert Carver - Systematic Trading.pdf"
+    - "resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf"
+    - "resources/Two_Million_Trading_Strategies_FDR.pdf"
+  doctrine:
+    - "RESEARCH_RULES.md"
+    - "docs/institutional/edge-finding-playbook.md"
+    - "docs/institutional/pre_registered_criteria.md"
+  derived_from:
+    - "docs/audit/results/2026-04-20-usdata1000-long-not-f6-candidate-lane-v1.md"
+    - "docs/plans/2026-04-20-usdata1000-paired-role-design.md"
+
+scope:
+  instrument: MNQ
+  session: US_DATA_1000
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  direction: long
+  rr_targets:
+    - 1.0
+    - 1.5
+  signal: NOT_F6_INSIDE_PDR
+  descriptor: F5_BELOW_PDL
+
+signal_definitions:
+  orb_mid: "(orb_US_DATA_1000_high + orb_US_DATA_1000_low) / 2.0"
+  F6_INSIDE_PDR: "orb_mid > prev_day_low AND orb_mid < prev_day_high"
+  NOT_F6_INSIDE_PDR: "NOT F6_INSIDE_PDR"
+  F5_BELOW_PDL: "orb_mid < prev_day_low"
+
+validated_start_point:
+  rr_1_0:
+    n_is: 368
+    exp_r_is: 0.1583
+    t_is: 3.2767
+    wfe: 1.2602
+    n_oos: 13
+    exp_r_oos: -0.0982
+    verdict: "RESEARCH_SURVIVOR"
+  rr_1_5:
+    n_is: 363
+    exp_r_is: 0.2261
+    t_is: 3.6306
+    wfe: 1.1734
+    n_oos: 13
+    exp_r_oos: -0.2509
+    verdict: "RESEARCH_SURVIVOR"
+
+shadow_phase:
+  allowed:
+    - "signal-only logging"
+    - "paper-only candidate lane replay"
+    - "split logging for F5 descriptor inside NOT_F6"
+  forbidden:
+    - "validated_setups writes"
+    - "lane_allocation edits"
+    - "live capital changes"
+    - "runtime auto-trading changes"
+  logging_targets:
+    - trading_day
+    - rr_target
+    - signal_fire
+    - descriptor_f5_fire
+    - pnl_r_if_taken
+    - cumulative_n_oos
+    - cumulative_exp_r_oos
+
+promotion_gate:
+  description: "re-open candidate-lane validation only after forward OOS is no longer thin"
+  minimums:
+    - "N_OOS >= 50 for a cell"
+    - "OOS/IS >= 0.40"
+    - "OOS ExpR positive"
+    - "No major mechanism contradiction vs F5/F6 paired family"
+
+kill_criteria:
+  - "After N_OOS >= 30, OOS ExpR remains materially negative on both RR cells"
+  - "Signal definition changes without superseding pre-reg"
+  - "Canonical paired-family route is invalidated by a later audit"
+
+status_note: |
+  Locked as a signal-only shadow contract. This is the honest continuation for a
+  research-provisional candidate lane with thin forward OOS. It is not a live
+  deployment instruction.

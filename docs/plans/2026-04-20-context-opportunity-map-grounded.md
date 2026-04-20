@@ -233,6 +233,13 @@ That role-design step is now done. The next bounded contract to preserve is the
 `NOT_F6_INSIDE_PDR` candidate lane, with `F5_BELOW_PDL` treated as a secondary
 priority descriptor rather than the primary gate.
 
+That candidate-lane validation is also now done:
+
+- `docs/audit/results/2026-04-20-usdata1000-long-not-f6-candidate-lane-v1.md`
+- verdict: both RR cells are `RESEARCH_SURVIVOR`, not `CANDIDATE_READY`
+
+So the honest next step is a signal-only shadow path, not promotion.
+
 ### Rank 3
 
 Only after the above:

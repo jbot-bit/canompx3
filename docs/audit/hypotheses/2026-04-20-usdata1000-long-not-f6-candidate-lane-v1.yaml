@@ -1,5 +1,5 @@
 version: 1
-status: DRAFT
+status: LOCKED
 date: 2026-04-20
 slug: usdata1000-long-not-f6-candidate-lane-v1
 title: "MNQ US_DATA_1000 O5 long NOT_F6 candidate lane v1"
@@ -43,6 +43,15 @@ family_accounting:
   k_family: 2
   arithmetic: "2 rr targets for the pre-specified NOT_F6 candidate lane"
 
+testing_mode: family
+pathway: A
+pathway_rationale: |
+  This is a bounded candidate-lane validation family, not a broad exploratory
+  scan. The pair-discovery and role-design work already isolated the route.
+  The remaining question is whether the resulting `NOT_F6_INSIDE_PDR` lane
+  clears the same lane-quality gates used in the repo's unfiltered baseline
+  candidate work.
+
 signal_definitions:
   orb_mid: "(orb_US_DATA_1000_high + orb_US_DATA_1000_low) / 2.0"
   F6_INSIDE_PDR: "orb_mid > prev_day_low AND orb_mid < prev_day_high"
@@ -74,6 +83,32 @@ intended_role:
     - "allocator action"
     - "live deployment"
 
+gate_definition:
+  H1:
+    - "Net ExpR IS > 0"
+    - "one-sample t_IS >= +3.0"
+    - "BH-FDR q < 0.05 at K=2"
+  C6:
+    - "WFE >= 0.50"
+  C8:
+    - "N_OOS >= 50"
+    - "Net ExpR OOS / Net ExpR IS >= 0.40"
+  C9:
+    - "No calendar year with N>=50 having Net ExpR < -0.05"
+
+decision_rules:
+  per_cell:
+    - verdict: "CANDIDATE_READY"
+      criteria: "H1 + C6 + C8 + C9"
+    - verdict: "RESEARCH_SURVIVOR"
+      criteria: "H1 passes but at least one downstream gate fails"
+    - verdict: "KILL_IS"
+      criteria: "H1 fails"
+
+outputs:
+  result_md: "docs/audit/results/2026-04-20-usdata1000-long-not-f6-candidate-lane-v1.md"
+  script: "research/usdata1000_long_not_f6_candidate_lane_v1.py"
+
 status_note: |
-  Draft only. This preserves the next bounded validation contract and the
-  correct route implied by the paired family. It is not yet executed.
+  Locked for execution on 2026-04-20. This validates the candidate lane only.
+  No deployment or capital action is authorized by this file.
