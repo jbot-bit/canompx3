@@ -190,16 +190,41 @@ def upsert_backfill_trade(
     return True
 
 
+class PaperTradeCollisionError(RuntimeError):
+    """Raised when a real-execution row already owns the (strategy_id, trading_day) key."""
+
+
 def write_completed_trade(
     record: PaperTradeRecord,
     *,
     db_path: Path | str | None = None,
 ) -> None:
-    """Write real execution evidence, replacing any modeled row for the same key."""
+    """Write real execution evidence, replacing any modeled row for the same key.
+
+    Fail-closed: if a non-backfill row already owns (strategy_id, trading_day),
+    raise PaperTradeCollisionError rather than silently overwrite. The live
+    journal remains the durable event record; attribution must not lose a
+    completed trade through a silent DELETE.
+    """
     target = Path(db_path) if db_path else GOLD_DB_PATH
     with duckdb.connect(str(target)) as con:
         configure_connection(con, writing=True)
         ensure_paper_trades_schema(con)
+        existing = con.execute(
+            """
+            SELECT COALESCE(execution_source, 'backfill')
+            FROM paper_trades
+            WHERE strategy_id = ? AND trading_day = ?
+            """,
+            [record.strategy_id, record.trading_day],
+        ).fetchone()
+        if existing is not None and existing[0] != "backfill":
+            raise PaperTradeCollisionError(
+                f"paper_trades already has a {existing[0]} row for "
+                f"strategy_id={record.strategy_id} trading_day={record.trading_day}; "
+                f"refusing to overwrite. Resolve upstream (enforce one-trade-per-day "
+                f"at the engine tier) or replay from live_journal.db."
+            )
         con.execute(
             "DELETE FROM paper_trades WHERE strategy_id = ? AND trading_day = ?",
             [record.strategy_id, record.trading_day],
