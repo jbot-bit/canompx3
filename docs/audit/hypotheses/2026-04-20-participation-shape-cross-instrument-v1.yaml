@@ -1,0 +1,168 @@
+pre_reg_id: "participation-shape-cross-instrument-v1"
+date: "2026-04-20"
+testing_mode: "individual"
+pathway: "B"
+pathway_rationale: |
+  Cross-instrument Pathway-B K=1 confirmatory on the monotonic-up
+  specification of rel_vol → pnl_r, applied independently to each active
+  instrument (MNQ, MES, MGC). Reframe driven by post-PR #45 audit which
+  identified two overreaches in the prior chain (PRs #41/#42/#45):
+
+    1. **Specification overreach:** all three prior PRs locked the
+       inverted-U (quadratic β₂<0) form inherited from the MNQ runner
+       without independent theory-grounding of inverted-U on any
+       instrument. Local-literature search for an "exhaustion at extreme
+       participation" mechanism (Aronson Ch 7) returned ZERO keyword
+       hits on 2026-04-20. The inverted-U form is empirical-only on
+       MNQ, not theory-grounded on MES/MGC.
+    2. **Baseline conflation on MGC:** MGC E2 unfiltered is cost-dead
+       (raw pooled ExpR -0.13, net-after-friction -0.35). Shape-fit on
+       a losing distribution conflates signal and noise. Rank-based
+       tests (this pre-reg) are invariant to within-lane level shifts
+       and avoid the conflation.
+    3. **Tunnel vision on single-lane / single-instrument.** CLAUDE.md
+       cross-session default applies. This pre-reg tests the same
+       specification across all three active instruments (MNQ / MES /
+       MGC) at the matched aperture-5m-RR1.5 scope that PRs #41/#42/#45
+       used, so per-instrument verdicts are directly comparable to the
+       previous inverted-U verdicts on identical data.
+
+  Secondary outputs widen the shape-map to aperture × RR so future
+  pre-regs have a full descriptive surface without further discovery
+  scans.
+
+parent_chain:
+  - "MNQ inverted-U CONFIRMED — PR #41 / 126ed6b8"
+  - "MES inverted-U NO_REPLICATION at threshold — PR #42 / 75b0d0bc"
+  - "MGC inverted-U NO_REPLICATION — PR #45 / ce78fd7e"
+  - "Q4-band deployment-shape LOCKED doc-only — PR #43 / a22930f0 (untouched)"
+
+theory_citations:
+  grounded_in_local_extracts:
+    - path: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      verbatim_p41: "In the case of commodities, both daily bars and hourly bars have a tendency to trend."
+      verbatim_p34: "Clearly the path of least resistance in the commodity world is up."
+      verbatim_table_3_8_p41: "stocks: counter-trend on daily, trend-follow on intraday."
+      use: |
+        Establishes intraday trend-follow premise on BOTH commodities
+        (MGC) AND stock-indices (MNQ, MES). Supports a rel_vol → pnl_r
+        test on any active instrument.
+    - path: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      verbatim_p155: "the triggering of stops. Such triggers often lead to the so-called breakout strategies."
+      verbatim_p157: "The execution of these stop orders often leads to momentum because a cascading effect may trigger stop orders placed further away from the open price as well."
+      use: |
+        Mechanism for monotonic-up: more participation at the break =
+        more stops triggered = more cascade = more continuation. Chan
+        describes NO reversal/exhaustion at extreme participation;
+        predicts monotonic-up, not inverted-U, on any asset where stop
+        cascades operate.
+  withdrawn:
+    - citation: "Aronson (2006) Ch 7 exhaustion prior at extreme participation"
+      reason: |
+        Full-document keyword search on 2026-04-20 of
+        `resources/Evidence_Based_Technical_Analysis_Aronson.pdf` (544
+        pages) returned ZERO hits for "exhaustion", "participation",
+        "volume spike", or "reversal at extreme". Prior-draft citation
+        was training-memory-only. Withdrawn to preserve institutional
+        rigor rule 7 (prefer local sources; label unverified training
+        memory).
+
+scope:
+  instruments: ["MNQ", "MES", "MGC"]
+  primary_aperture: 5
+  primary_entry_model: "E2"
+  primary_confirm_bars: 1
+  primary_rr_target: 1.5
+  filter: "none (unfiltered baseline — matches PRs #41/#42/#45 for direct comparability)"
+  is_window: "trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01)"
+  oos_window: "not used — IS-only specification-shape audit"
+  sessions: "full canonical active universe per instrument, discovered via SELECT DISTINCT orb_label FROM orb_outcomes WHERE symbol=<inst> AND orb_minutes=5 AND pnl_r IS NOT NULL"
+  directions: ["long", "short"]
+  secondary_shape_map:
+    apertures: [5, 15, 30]
+    rr_targets: [1.0, 1.5, 2.0]
+    note: |
+      Descriptive map (β₁ rank-coefficient + β₂ quadratic-coefficient)
+      per (instrument × aperture × RR). NOT a discovery K — no
+      cell-level hypothesis testing. Purpose: inform future
+      theory-driven pre-regs with full shape context.
+
+hypothesis:
+  H1_MNQ: |
+    MNQ pooled OLS pnl_r ~ rank_within_lane(rel_vol) + lane_FE, HC3 SE,
+    one-tailed β₁ > 0, t ≥ +3.0, p < 0.05.
+    Interpretation if PASS: the MNQ inverted-U (PR #41) and monotonic-up
+    can coexist (non-monotonic-at-extremes but still upward-trending
+    overall). Informs whether MNQ inverted-U was a shape artefact.
+  H1_MES: |
+    MES pooled OLS (same spec as H1_MNQ, same scope).
+    Interpretation if PASS: MES has a gold-style monotonic-up mechanism
+    that the PR #42 inverted-U spec missed.
+  H1_MGC: |
+    MGC pooled OLS (same spec as H1_MNQ, same scope).
+    Interpretation if PASS: the post-audit per-session quintile pattern
+    on MGC reflects a true pooled mechanism, not sampling noise.
+  kill_if: "β₁ ≤ 0 OR t < +3.0 OR one-tailed p ≥ 0.05 (per-instrument)."
+  expected_n_per_instrument: ">= 7000 IS rows (matches prior MNQ/MES/MGC universality runners)"
+
+testing_discipline:
+  K_framing: |
+    Three independent Pathway-B K=1 tests, each a pre-committed replication
+    of the same specification on independent data (MNQ / MES / MGC).
+    This is the standard three-instrument K=1 replication structure used
+    by the predecessor universality PRs (#41, #42, #45). NO family-wise
+    FDR applied — each instrument is its own sub-study under Chordia t
+    ≥ 3.00 with-theory. This is NOT multiple-hypothesis discovery.
+  secondary_shape_map:
+    K_interpretation: "descriptive only, no decision rules, no FDR"
+    purpose: "provenance for future pre-regs"
+  mandatory_downstream_gates_non_waivable:
+    - "C6 (WFE) — N/A for IS-only specification-shape audit"
+    - "C8 (OOS positive) — N/A for IS-only specification-shape audit"
+    - "C9 (era stability) — report per-year β₁ sign per instrument (informational)"
+  integrity_gates:
+    - "per-instrument: rel_vol non-null coverage on IS ≥ 90% (fail-closed otherwise)"
+    - "per-instrument: pooled N ≥ 1000 (fail-closed otherwise)"
+    - "triple-join orb_outcomes × daily_features on (trading_day, symbol, orb_minutes)"
+    - "CTE reads of daily_features filter orb_minutes = N-under-test (RULE 9)"
+    - "rank computed WITHIN-lane to prevent cross-lane scale contamination"
+    - "per-lane agreement % reported (RULE 14)"
+
+decision_rules:
+  verdicts_per_instrument:
+    - verdict: "<INST>_MONOTONIC_CONFIRMED"
+      criteria: "pooled β₁ > 0 AND t ≥ +3.0 AND p < 0.05 AND per-cell agreement ≥ 50%"
+    - verdict: "<INST>_MONOTONIC_HETEROGENEOUS"
+      criteria: "pooled significant AND 25% ≤ agreement < 50%"
+    - verdict: "<INST>_SIMPSON_MONOTONIC"
+      criteria: "pooled significant AND agreement < 25%"
+    - verdict: "<INST>_NO_MONOTONIC"
+      criteria: "NOT (pooled β₁ > 0 AND t ≥ +3.0 AND p < 0.05)"
+    - verdict: "<INST>_SCAN_ABORT"
+      criteria: "rel_vol non-null < 90% OR pooled N < 1000"
+  cross_instrument_combined:
+    "3/3 CONFIRMED": "monotonic-up is the universal ORB-at-5m-RR1.5 spec; PR #41 inverted-U is a shape-artefact on top of an underlying monotonic trend"
+    "2/3 CONFIRMED (incl MGC)": "monotonic-up is asset-class-conditional; gold has it, at least one equity-index also does"
+    "MGC only CONFIRMED": "gold-specific monotonic-up mechanism, not a universal spec"
+    "0/3 CONFIRMED": "monotonic-up rejected; the inverted-U on MNQ is a real shape distinct from participation-direction"
+
+secondary_shape_map_outputs:
+  purpose: "Descriptive, informs future pre-regs — NOT part of H1 decision."
+  tables:
+    - "9-cell (instrument × aperture) grid at RR=1.5: β₁ (rank), β₂ (quadratic), N"
+    - "9-cell (instrument × RR) grid at 5m: β₁, β₂, N"
+    - "27-cell (instrument × aperture × RR) shape-classification: INVERTED_U / MONOTONIC_UP / BOTH / NULL (per-cell by sign + significance of β₁ and β₂ independently, t≥2.0 threshold for descriptive classification)"
+
+non_actions:
+  - "Does NOT modify Q4-band MNQ deployment-shape contract (PR #43)."
+  - "Does NOT revise PRs #41/#42/#45 verdicts (those tests were correct under their own pre-regs)."
+  - "Does NOT touch lane_allocation.json / prop_profiles / validated_setups."
+  - "Does NOT propose deployment on any lane."
+  - "Does NOT test filtered universes, size filters, or multi-variate specifications — those are future pre-regs."
+  - "Does NOT perform OOS validation."
+
+outputs:
+  result_md: "docs/audit/results/2026-04-20-participation-shape-cross-instrument-v1.md"
+  script: "research/participation_shape_cross_instrument_v1.py"
+
+commit_sha: "TO_FILL_AFTER_COMMIT"
