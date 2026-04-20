@@ -1,0 +1,188 @@
+version: 1
+status: LOCKED
+date: 2026-04-20
+slug: nyse-open-ovnrng-fast10-v1
+title: "MNQ NYSE_OPEN 5m E2 RR1.0 CB1 OVNRNG_50_FAST10 — Pathway-B K=1 confirmatory test of an upstream 772-cell adjacency candidate"
+owner: claude
+
+# ============================================================================
+# HONEST PROVENANCE DISCLOSURE
+# ============================================================================
+# This cell (MNQ, NYSE_OPEN, 5m, E2, RR1.0, CB1, OVNRNG_50_FAST10) was
+# identified as a promising candidate AFTER running an adjacency scan of
+# 772 cells (NYSE_OPEN × {5,15,30} × RR{1.0,1.5,2.0} × 88 filter families)
+# in research/audit_l4_nyse_open_decay.py during session 2026-04-20.
+# That scan was UNPROTECTED (no pre-reg) because it was a DESCRIPTIVE
+# reference-frame against L4's SR-alarm audit — not a discovery scan.
+# It still observed IS=+0.137 / OOS=+0.137 at this cell, so the confirmatory
+# test here CANNOT re-use those numbers as "independent evidence".
+#
+# This pre-reg treats the 772-cell scan as UPSTREAM PROVENANCE ONLY and
+# applies PATHWAY-B discipline (K=1, Chordia-strict t≥3.79, all 12
+# pre_registered_criteria gates) to the confirmatory run.
+# ============================================================================
+
+upstream_discovery_provenance:
+  scan_script: "research/audit_l4_nyse_open_decay.py"
+  scan_run_at: "2026-04-20 12:05 UTC"
+  scan_commit_sha: "a46ef923"
+  scan_universe_size_K: 772
+  scan_framing: "descriptive reference frame (no BH-FDR, no promotion)"
+  role: "PROVENANCE_ONLY"
+  observed_at_scan:
+    is_n: 1099
+    is_wr: 0.587
+    is_expr: 0.1368
+    oos_n: 64
+    oos_wr: 0.578
+    oos_expr: 0.1372
+    dir_match: true
+
+parent_chain:
+  - "Upstream: L4 NYSE_OPEN COST_LT12 decay audit (2026-04-20) — audit concluded L4 ALARM is a stale SR sequential-test artefact; adjacency scan surfaced this cell as a candidate with stronger IS selectivity (fire_rate 0.62 vs 0.99) and higher IS/OOS ExpR."
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/quant-audit-protocol.md"
+    - ".claude/rules/institutional-rigor.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/fitschen_2013_ch3_breakouts.md"
+    - "docs/institutional/literature/chordia_etal_2018_two_million.md"
+    - "docs/institutional/literature/bailey_lopez_de_prado_2014_dsr.md"
+    - "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+    - "memory/feedback_oos_power_floor.md"
+    - "memory/feedback_per_lane_breakdown_required.md"
+    - "memory/feedback_pooled_not_lane_specific.md"
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "a46ef923"
+  runner: "research/confirm_nyse_open_ovnrng_fast10.py"
+
+testing_mode: individual
+pathway: B
+testing_discipline:
+  mandatory_downstream_gates_non_waivable: [C6, C8, C9]
+
+# ----------------------------------------------------------------------------
+# Hypothesis
+# ----------------------------------------------------------------------------
+hypothesis:
+  scope:
+    instrument: MNQ
+    session: NYSE_OPEN
+    orb_minutes: 5
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.0
+    direction: both
+    filter: OVNRNG_50_FAST10
+  mode_A:
+    is_window_end_exclusive: 2026-01-01
+    oos_window_start_inclusive: 2026-01-01
+    oos_window_end_inclusive: 2026-04-19
+  H1:
+    claim: |
+      Conditioning MNQ NYSE_OPEN 5m E2 RR1.0 CB1 breakout trades on
+      (overnight_range ≥ 50 points) AND (break delay ≤ 10 min) produces
+      positive expectancy in-sample AND maintains positive expectancy with
+      direction match in the 2026 Mode-A OOS window.
+    theory_citation: |
+      Fitschen 2013 Ch 3 grounds intraday trend-follow breakouts for stock
+      index futures during US sessions. Elevated prior-session range is a
+      volatility-regime filter (higher vol → stronger continuation). Fast
+      break (≤10 min post ORB close) is a conviction signal — early breaks
+      have higher directional carry-through. NYSE_OPEN is the highest-
+      liquidity US session, reducing friction drag.
+    mechanism_class: "volatility-regime AND conviction-speed gate"
+
+# ----------------------------------------------------------------------------
+# Pre-committed kill criteria (evaluated AFTER the run)
+# ----------------------------------------------------------------------------
+kill_criteria:
+  # All criteria are from docs/institutional/pre_registered_criteria.md
+  # Any single FAIL → KILL. All PASS → PROVISIONAL GO (shadow deployment only).
+  C3_chordia_t_no_theory:
+    rule: "|t| >= 3.00 (Chordia with theory — Fitschen Ch 3 grounds ORB breakouts)"
+    numeric_threshold: 3.00
+    fail_action: KILL
+  C4_bh_fdr:
+    rule: "K=1 (Pathway B) — no BH-FDR correction, but report K=1 explicitly"
+    fail_action: NA
+  C5_dsr:
+    rule: "Deflated Sharpe Ratio (Bailey-LdP 2014) > 0.95 — applied with K_upstream=772 to deflate"
+    numeric_threshold: 0.95
+    fail_action: DOWNGRADE_TO_CONDITIONAL
+  C6_wfe:
+    rule: "WFE = OOS_Sharpe_annualized / IS_Sharpe_annualized ≥ 0.50"
+    numeric_threshold: 0.50
+    fail_action: KILL
+  C7_deployable_N:
+    rule: "OOS trade count ≥ 30 for directional-only, ≥ 100 for confirmatory — current OOS n=64 → DIRECTIONAL-ONLY verdict at best, not confirmatory"
+    numeric_threshold_directional: 30
+    numeric_threshold_confirmatory: 100
+    current_expected: 64
+    fail_action: DOWNGRADE_TO_SHADOW
+  C8_oos_exp_r:
+    rule: "OOS ExpR ≥ 0.40 × IS ExpR (Mode-A OOS principle)"
+    numeric_threshold_relative: 0.40
+    fail_action: KILL
+  C9_era_stability:
+    rule: "No year 2019-2025 with ExpR < -0.05 at N ≥ 50"
+    numeric_threshold: -0.05
+    fail_action: KILL
+  C10_data_era_compat:
+    rule: "OVNRNG_50 uses daily_features.overnight_range (validity domain: sessions starting ≥17:00 Brisbane). NYSE_OPEN starts 00:30 next day → CLEAN. FAST10 uses break_delay_min (knowable at break-bar close). CLEAN."
+    fail_action: KILL
+  T0_tautology:
+    rule: "|corr(OVNRNG_50_FAST10_sig, COST_LT12_sig)| ≤ 0.70 AND |corr(..., ORB_G5_sig)| ≤ 0.70 — independence from deployed L4 gate"
+    numeric_threshold: 0.70
+    fail_action: DOWNGRADE_TO_REDUNDANT
+  T1_wr_monotonicity:
+    rule: "IS WR of OVNRNG_50_FAST10 fires ≥ unfiltered WR by at least 2 percentage points (signal, not arithmetic-only)"
+    numeric_threshold_pct: 2.0
+    fail_action: FLAG_ARITHMETIC_ONLY
+  T4_sensitivity:
+    rule: "Expectancy remains positive across: OVNRNG_25/75 × FAST5/15 neighbors"
+    fail_action: FLAG_PARAMETER_SENSITIVE
+  T6_null_floor:
+    rule: "One-sample t-test vs 0 one-tailed p ≤ 0.05"
+    numeric_threshold_p: 0.05
+    fail_action: KILL
+  T8_cross_instrument:
+    rule: "Directional-consistency on MGC and MES NYSE_OPEN 5m E2 RR1.0 OVNRNG_50_FAST10 (all positive or all directionally same as MNQ on IS)"
+    fail_action: FLAG_INSTRUMENT_SPECIFIC
+
+# ----------------------------------------------------------------------------
+# MinBTL budget
+# ----------------------------------------------------------------------------
+minbtl_check:
+  N_trials_in_this_pre_reg: 1
+  observed_max_N_trades: 64   # OOS only; IS ~1099 not the constraint
+  MinBTL_formula: "2 * ln(N_trials) / E[max_N]^2"
+  MinBTL_value: 0.0  # ln(1) = 0 → trivially below any threshold
+  verdict: "PASS (K=1 Pathway B — MinBTL bound does not bind)"
+
+# ----------------------------------------------------------------------------
+# Deployment guardrail — this pre-reg CANNOT deploy
+# ----------------------------------------------------------------------------
+deployment_posture:
+  phase: NOT_DEPLOYABLE_VIA_THIS_PREREG
+  reason: |
+    Pathway-B K=1 PASS on this pre-reg produces a SHADOW candidate only.
+    Capital action requires:
+    (a) separate deployment-contract pre-reg (analogous to
+        2026-04-20-q4-band-deployment-shape-v1.yaml)
+    (b) explicit user command citing this lock SHA
+    (c) account-survival 90d Monte Carlo re-run with the added lane to
+        confirm Criterion 11 still passes ≥70%.
+    No automated process may act on this document.
+
+# ----------------------------------------------------------------------------
+# Expected outputs
+# ----------------------------------------------------------------------------
+expected_outputs:
+  results_file: "docs/audit/results/2026-04-20-nyse-open-ovnrng-fast10-confirm.md"
+  verdict_values: [CONFIRMED, KILLED, SHADOW_CONDITIONAL, UNVERIFIED]
