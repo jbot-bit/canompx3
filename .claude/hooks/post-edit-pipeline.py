@@ -138,8 +138,42 @@ def main():
             # Invalidate debounce on failure
             _DEBOUNCE_FILE.unlink(missing_ok=True)
             print(f"DRIFT DETECTED after editing {file_path}", file=sys.stderr)
-            print(result.stdout, file=sys.stderr)
-            print(result.stderr, file=sys.stderr)
+            # Emit ONLY the failed check blocks + the final summary line, not the
+            # full PASSED/ADVISORY listing (~100 lines = ~8k tokens per hook fire).
+            # Parses `check_drift.py --fast` output: each check is
+            #   "Check N: <label>..."
+            #   "  PASSED [OK]" | "  FAILED:" (with details lines following until blank)
+            stdout_lines = result.stdout.splitlines()
+            emit: list[str] = []
+            i = 0
+            while i < len(stdout_lines):
+                line = stdout_lines[i]
+                if line.startswith("Check ") and line.rstrip().endswith("..."):
+                    # Look ahead: is next non-empty line "  FAILED:"?
+                    j = i + 1
+                    while j < len(stdout_lines) and not stdout_lines[j].strip():
+                        j += 1
+                    if j < len(stdout_lines) and stdout_lines[j].strip().startswith("FAILED:"):
+                        # Emit from the header through the end of this block
+                        # (next blank line, or next "Check ", whichever comes first)
+                        emit.append(line)
+                        k = i + 1
+                        while k < len(stdout_lines):
+                            nxt = stdout_lines[k]
+                            if nxt.startswith("Check "):
+                                break
+                            emit.append(nxt)
+                            k += 1
+                        i = k
+                        continue
+                # Always keep the separator + final summary (last ~5 lines)
+                if line.startswith("====") or line.startswith("DRIFT ") or line.startswith("NO DRIFT"):
+                    emit.append(line)
+                i += 1
+            filtered = "\n".join(emit).strip()
+            print(filtered if filtered else result.stdout, file=sys.stderr)
+            if result.stderr:
+                print(result.stderr, file=sys.stderr)
             sys.exit(2)
         # Mark successful drift check
         _DEBOUNCE_FILE.touch()
