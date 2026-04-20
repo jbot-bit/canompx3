@@ -1,0 +1,381 @@
+# Hypothesis Registry — 2026-04-20 vol-regime-confluence-portfolio-test
+#
+# Locked: 2026-04-20T16:00:00+10:00
+# Author: Claude (institutional researcher, autonomous session)
+# Committing commit hash: (filled in by pre-commit hook)
+# Data horizon: 6.65yr clean MNQ/MES (2019-05-06 through 2025-12-31)
+# Intended discovery holdout: 2026-01-01 (Mode A sacred)
+# OOS accumulating window: 2026-01-02 through 2026-04-16 (69 trading days)
+# Predecessor:
+#   - docs/audit/results/2026-04-20-phase-2-9-framing-audit.md (framing audit, COMEX_SETTLE only)
+#   - Exploratory overlap-decomposition on MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5 dated 2026-04-20 afternoon
+#     (post-Phase-2.9-framing self-critique surfaced the "post-hoc, single-lane" weakness of the
+#     exploratory finding; THIS pre-reg is the portfolio-general re-test that resolves that weakness)
+
+metadata:
+  name: "vol-regime-confluence-portfolio-test"
+  purpose: |
+    Determine whether the observed vol-regime confluence effect
+    (F_lane ∧ OVNRNG_100) and (F_lane ∧ X_MES_ATR60) — where F_lane is the
+    lane's currently-deployed filter — is a PORTFOLIO-GENERAL conditioner on
+    the MNQ live book, or a COMEX_SETTLE-SPECIFIC artifact. Four lanes are
+    tested for full 3-variant confluence; two lanes are limited to the
+    cross-asset MES ATR variant due to RULE 1.2 temporal-alignment gate
+    (overnight_range is a 09:00-17:00 Brisbane feature; SINGAPORE_OPEN at
+    11:00 and TOKYO_OPEN at 10:00 start DURING that window — look-ahead).
+
+    This pre-reg is a hypothesis test on ALREADY-PROMOTED lane edge shape,
+    NOT a broader discovery. No new filter is being discovered here; we are
+    asking whether two existing canonical filters (OVNRNG_100, X_MES_ATR60)
+    add marginal information to each deployed lane's existing filter.
+
+    Decision outcome target: route Phase 5 (clean Mode A rediscovery of
+    active families) properly. If the confluence effect is portfolio-
+    general, Phase 5 must pre-reg an allocator-level vol-regime
+    conditioner. If it is COMEX_SETTLE-specific, Phase 5 queues one
+    lane-local pre-reg alongside the existing 6 family rediscoveries.
+
+  date_locked: "2026-04-20T16:00:00+10:00"
+  holdout_date: "2026-01-01"
+  oos_window_end: "2026-04-16"
+  oos_days_available: 69
+  data_horizon_years_clean: 6.65
+  data_horizon_years_proxy: 0.0  # MNQ/MES 2019+ is real-micro, no proxy
+  data_source_mode: "clean"
+  testing_mode: "family"  # Pathway A — BH-FDR across the 17-cell family
+  pathway: "A"
+  scope: "post_promotion_portfolio_generalization"
+  total_expected_trials: 17
+
+# ---- MinBTL budget check (Bailey et al 2013 Theorem 1) ----
+# MinBTL_years = 2·ln(N_trials) / E[max_N]²
+# With N=17, E=1.0 (strict Bailey lower bound): MinBTL = 2·ln(17) = 5.666 years
+# Data horizon = 6.65 years → headroom = 6.65 - 5.67 = 0.98 years (15% headroom)
+# Status: WITHIN STRICT BAILEY E=1.0 BOUND
+minbtl_check:
+  trials_N: 17
+  e_max_N_floor: 1.0
+  minbtl_years_required: 5.666
+  data_years_available: 6.65
+  headroom_years: 0.984
+  status: "WITHIN_BOUND"
+
+# ---- RULE 1.2 temporal-alignment gate (overnight_range validity) ----
+# Overnight window: 09:00-17:00 Brisbane (source: pipeline/build_daily_features.py:449-456).
+# NAMING CAVEAT (2026-04-20): "overnight_range" is US-centric legacy naming — it actually
+# measures the ASIAN SESSION range (09:00-17:00 Brisbane = first 8h of trading day) because
+# Asia runs while US is sleeping. It is NOT the Brisbane-local personal-overnight window
+# (17:00 Brisbane → 09:00 next-day Brisbane = London+NY+post-NY). For a Brisbane-local
+# overnight feature we would need a new canonical column in build_daily_features.py
+# (out of scope for this test).
+#
+# overnight_range is KNOWABLE (no look-ahead) only for ORB sessions starting at 17:00
+# Brisbane or later — i.e., AFTER the Asian session closes.
+# Session starts verified via pipeline.dst.SESSION_CATALOG resolver on 2024-01-15/07-15.
+temporal_alignment_gate:
+  overnight_range_valid_at_or_after: "17:00 Brisbane"
+  per_lane:
+    EUROPE_FLOW:
+      winter_start_brisbane: "17:00"
+      summer_start_brisbane: "18:00"
+      ovn_valid: true
+      note: "Winter start == threshold (17:00); RULE 1.2 allows equality — the 09-17 window is closed at 17:00:00 exactly."
+    SINGAPORE_OPEN:
+      winter_start_brisbane: "11:00"
+      summer_start_brisbane: "11:00"
+      ovn_valid: false
+      note: "Starts DURING overnight window. OVN excluded from this lane's test."
+    COMEX_SETTLE:
+      winter_start_brisbane: "04:30 (next day)"
+      summer_start_brisbane: "03:30 (next day)"
+      ovn_valid: true
+    NYSE_OPEN:
+      winter_start_brisbane: "00:30 (next day)"
+      summer_start_brisbane: "23:30 (same day)"
+      ovn_valid: true
+    TOKYO_OPEN:
+      winter_start_brisbane: "10:00"
+      summer_start_brisbane: "10:00"
+      ovn_valid: false
+      note: "Starts DURING overnight window. OVN excluded from this lane's test."
+    US_DATA_1000:
+      winter_start_brisbane: "01:00 (next day)"
+      summer_start_brisbane: "00:00 (next day)"
+      ovn_valid: true
+  # X_MES_ATR60 uses mes_atr_20_pct which is 20-day rolling on prior closes.
+  # Valid at all session starts — no temporal gate required.
+  #
+  # NEW: session_london_range (18:00-23:00 Brisbane window per RULE 1.2) —
+  # closest canonical proxy for "US overnight" / "London → NY open" vol measurement.
+  # Valid only for ORB sessions starting >= 23:00 Brisbane (after London close).
+  session_london_range_per_lane:
+    EUROPE_FLOW:
+      london_valid: false
+      note: "ORB starts 17/18 Brisbane = AT or DURING London session open. session_london_range is look-ahead. EXCLUDED."
+    SINGAPORE_OPEN:
+      london_valid: false
+      note: "ORB at 11:00 Brisbane is far before London; feature not yet populated. EXCLUDED."
+    COMEX_SETTLE:
+      london_valid: true
+      note: "ORB at 03:30-04:30 next day — London fully closed."
+    NYSE_OPEN:
+      london_valid: true
+      note: "ORB at 23:30-00:30 — London session closed at 23:00."
+    TOKYO_OPEN:
+      london_valid: false
+      note: "ORB at 10:00 Brisbane is far before London. EXCLUDED."
+    US_DATA_1000:
+      london_valid: true
+      note: "ORB at 00:00-01:00 next day — London closed."
+
+  london_threshold_rationale: |
+    Threshold `session_london_range >= 100` pre-committed on 2026-04-20 BEFORE
+    running the scan. Rationale: symmetry with the canonical filter OVNRNG_100
+    (overnight_range >= 100), avoiding any threshold-picking driven by per-cell
+    results. IS distribution of MNQ session_london_range (read ONCE during
+    pre-reg drafting for threshold-sanity check, NOT for cell selection — N=1721
+    pre-2026 IS days):
+      median=84.5  p60=98.8  p75=126.8
+    Threshold=100 lands between p60 and p75 — matches OVN's fire-rate
+    neighborhood. Raw-range correlation with overnight_range is 0.554 on IS
+    (moderate — warrants T0 fire-mask correlation check, not tautological).
+
+# ---- The 17 cells ----
+cells:
+  # --- 4 lanes × 3 variants = 12 cells (OVN-valid lanes) ---
+  - id: 1
+    lane: "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5"
+    base_filter: "ORB_G5"
+    variant: "ovn_only"
+    description: "F_ORB_G5 AND overnight_range >= 100"
+  - id: 2
+    lane: "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5"
+    base_filter: "ORB_G5"
+    variant: "xmes_only"
+    description: "F_ORB_G5 AND mes_atr_20_pct >= 60"
+  - id: 3
+    lane: "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5"
+    base_filter: "ORB_G5"
+    variant: "ovn_or_xmes"
+    description: "F_ORB_G5 AND (overnight_range >= 100 OR mes_atr_20_pct >= 60)"
+
+  - id: 4
+    lane: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+    base_filter: "ORB_G5"
+    variant: "ovn_only"
+  - id: 5
+    lane: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+    base_filter: "ORB_G5"
+    variant: "xmes_only"
+  - id: 6
+    lane: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+    base_filter: "ORB_G5"
+    variant: "ovn_or_xmes"
+
+  - id: 7
+    lane: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+    base_filter: "COST_LT12"
+    variant: "ovn_only"
+  - id: 8
+    lane: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+    base_filter: "COST_LT12"
+    variant: "xmes_only"
+  - id: 9
+    lane: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+    base_filter: "COST_LT12"
+    variant: "ovn_or_xmes"
+
+  - id: 10
+    lane: "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
+    base_filter: "ORB_G5_O15"
+    variant: "ovn_only"
+  - id: 11
+    lane: "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
+    base_filter: "ORB_G5_O15"
+    variant: "xmes_only"
+  - id: 12
+    lane: "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
+    base_filter: "ORB_G5_O15"
+    variant: "ovn_or_xmes"
+
+  # --- 2 lanes × 1 variant = 2 cells (OVN-excluded lanes, XMES only) ---
+  - id: 13
+    lane: "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15"
+    base_filter: "ATR_P50_O15"
+    variant: "xmes_only"
+    note: "OVN excluded by RULE 1.2"
+  - id: 14
+    lane: "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12"
+    base_filter: "COST_LT12"
+    variant: "xmes_only"
+    note: "OVN excluded by RULE 1.2"
+
+  # --- 3 lanes × 1 variant = 3 cells (London session vol-regime — added 2026-04-20) ---
+  # Uses session_london_range (18:00-23:00 Brisbane) as proxy for "US overnight"
+  # / "London → NY open" vol expansion. Threshold calibrated to median on IS
+  # (approx >= 25 pts for MNQ, to be confirmed from data; scan will report both
+  # threshold=20 and threshold=30 as secondary within same cell for direction verify).
+  - id: 15
+    lane: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+    base_filter: "ORB_G5"
+    variant: "london_range_only"
+    description: "F_ORB_G5 AND session_london_range >= 100 (pre-committed threshold, matching OVNRNG_100 for symmetry; see london_threshold_rationale)"
+  - id: 16
+    lane: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+    base_filter: "COST_LT12"
+    variant: "london_range_only"
+  - id: 17
+    lane: "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
+    base_filter: "ORB_G5_O15"
+    variant: "london_range_only"
+
+# ---- Hypothesis set ----
+hypotheses:
+  - id: 1
+    name: "Portfolio-general vol-regime confluence conditioner on MNQ live book"
+    theory_citation: |
+      Canonical citations via docs/institutional/literature/:
+
+      1. Fitschen (2013) Ch 3 — intraday trend-follow in commodity and stock-index
+         futures. Grounds the ORB-continuation premise. High-vol regimes produce
+         wider intraday range, facilitating follow-through beyond the
+         order-flow imbalance at breakout.
+         File: docs/institutional/literature/fitschen_2013_ch3.md (if exists)
+         or resources/systematic_trading/fitschen_Ch3.pdf.
+
+      2. Carver (2015) Ch 9-10 — Systematic Trading. Volatility targeting and
+         forecast combination. Grounds vol-regime-conditional sizing/entry as
+         risk-scaled behavior: exposure is a function of volatility state, not
+         a constant.
+         File: docs/institutional/literature/carver_2015_ch9_10.md (if exists).
+
+      3. Bailey, Borwein, López de Prado, Zhu (2013) § Proposition 2 —
+         compensation effect under distributional shift. Sub-sample ExpR on a
+         non-stationary distribution diverges from full-sample ExpR; testing
+         whether the "high-vol sub-sample" carries concentrated edge is a
+         distributional-partition question, not a discovery question.
+         File: docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md.
+
+      4. Harvey & Liu (2015) p.16 — BHY dependence-aware FDR. Cells share the
+         underlying pnl_r stream (within a lane) so K-framing must respect
+         dependence: BH-FDR at K=14 (the primary family), K=variant-level
+         K=3 per lane, and K=variant=7 for cross-lane-same-variant.
+         File: docs/institutional/literature/harvey_liu_2015_backtesting.md.
+
+      5. Chordia et al (2018) — Two Million Trading Strategies. Chordia-strict
+         t >= 3.00 applies here (theory IS specified: Carver + Fitschen above),
+         not t >= 3.79.
+
+    economic_basis: |
+      The hypothesis is NOT that overnight_range >= 100 or mes_atr_20_pct >= 60
+      are new filters. They are already registered in trading_app.config.ALL_FILTERS
+      and are already components of 4 research-provisional MNQ COMEX_SETTLE
+      validated_setups rows promoted 2026-04-11.
+
+      The hypothesis IS that vol-regime state — detected via either the local-
+      MNQ overnight range or the cross-asset sustained-vol (MES ATR top 40%) —
+      is a UNIVERSAL conditioner that raises marginal per-trade ExpR on every
+      lane currently deployed on MNQ, not just COMEX_SETTLE.
+
+      Mechanism candidate: when vol is expanding, ORB breakouts have more room
+      to run before reverting (Fitschen Ch 3 premise). When vol is contracting,
+      intraday range is tighter and breakouts revert faster. This should
+      generalize across sessions IF the mechanism is vol-regime and not session-
+      specific microstructure.
+
+      Competing null (must be refuted by the scan): the COMEX_SETTLE-observed
+      confluence effect is microstructural to that session's timing (post-
+      COMEX-settlement flow) and does NOT appear on EUROPE_FLOW, NYSE_OPEN,
+      SINGAPORE_OPEN, TOKYO_OPEN, US_DATA_1000.
+
+    expected_trial_count: 17
+
+    # BH-FDR multi-framing (RULE 4)
+    multi_framing:
+      K_primary: 17           # the full family of cells
+      K_lane:
+        EUROPE_FLOW:        3
+        COMEX_SETTLE:       4   # adds london_range_only variant
+        NYSE_OPEN:          4   # adds london_range_only variant
+        US_DATA_1000:       4   # adds london_range_only variant
+        SINGAPORE_OPEN:     1
+        TOKYO_OPEN:         1
+      K_variant:
+        ovn_only:           4  # 4 OVN-valid lanes
+        xmes_only:          6  # all 6 lanes
+        ovn_or_xmes:        4  # 4 OVN-valid lanes
+        london_range_only:  3  # 3 post-London-close lanes
+      reporting_rule: "Primary accept at K=17 BH-FDR. Secondary per-variant at K=3,4,6. Per-lane at K=1-4 for provenance only."
+
+    # Pass gates (each cell, per pre_registered_criteria.md)
+    cell_pass_gates:
+      - "T0 tautology: |corr(variant_fire_mask, base_filter_fire_mask)| < 0.70 per RULE 7"
+      - "Fire-rate band: 5% <= fire_rate <= 95% per RULE 8.1"
+      - "Arithmetic-only: NOT (|wr_spread| < 3% AND |delta_IS| > 0.10) per RULE 8.2"
+      - "Chordia: |t| >= 3.00 on IS ExpR vs zero"
+      - "BH-FDR primary: survives BH q < 0.05 at K=14"
+      - "Dir match: sign(OOS ExpR) == sign(IS ExpR) per RULE 3.1"
+      - "C8 OOS ratio: OOS_ExpR >= 0.40 × IS_ExpR per pre_registered_criteria.md § 8"
+      - "Era stability: no era with N >= 50 has ExpR < -0.05 per Criterion 9"
+      - "T4 sensitivity: ±20% on OVN threshold {80,100,120} and MES ATR threshold {54,60,66} — sign must not flip"
+      - "T6 null floor: block bootstrap p < 0.05 (moving block, preserve autocorr, mask fixed)"
+
+    # Verdict mapping (PRE-COMMITTED — no post-hoc relaxation)
+    verdict_decision_tree:
+      portfolio_general:
+        trigger: "4 or more of 6 lanes have at least 1 variant passing ALL cell_pass_gates"
+        implication: "Vol-regime confluence is a BOOK-WIDE conditioner. Phase 5 pre-reg should propose allocator-level vol-regime size-multiplier or admission-gate, NOT lane-specific filters."
+      coexists_both:
+        trigger: "2 or 3 of 6 lanes have passing variants"
+        implication: "Effect is lane-dependent. Phase 5 pre-reg queues per-lane filter candidates on the passing lanes; does NOT claim portfolio-wide mechanism."
+      comex_settle_specific:
+        trigger: "Only COMEX_SETTLE has passing variants"
+        implication: "Effect is session-specific microstructure. Prior exploratory overlap-decomposition was correct arithmetic but wrong framing. Phase 5 queues one COMEX_SETTLE confluence candidate; no broader claim admissible."
+      dead:
+        trigger: "Zero lanes have passing variants"
+        implication: "Confluence effect does NOT generalize. Prior exploratory finding was post-hoc noise. Phase 5 does not carry forward any vol-regime variant. Close the question."
+
+    # Kill criteria (beyond verdict tree — these kill the SCAN not just the hypothesis)
+    scan_kill_criteria:
+      - "If any cell shows |t| > 10 on IS without theory-matching magnitude: HALT, investigate look-ahead or pipeline bug per RULE 1.4 smell test"
+      - "If the pressure-test (Stage L, injecting shuffled mask) does NOT produce p >= 0.5: HALT, null bootstrap implementation is broken"
+      - "If independent SQL verification (Stage K) diverges from filter_signal path by more than 0.5% on any cell N: HALT, filter-delegation drift per 2026-04-19 incident"
+
+# ---- Provenance-only (NOT part of primary K) ----
+provenance_only:
+  ovn_p75_reframe:
+    description: |
+      Substitute rolling-252-day percentile (OVN_P75) for the absolute
+      OVNRNG_100 threshold on survivor cells. This directly addresses the
+      non-stationarity problem (OVN fire rate 4%→58% across 2019-2025 years).
+      If OVN_P75 variant preserves the edge at stable fire rate, the
+      portfolio-general hypothesis gets stronger claim; if it collapses,
+      the effect was partially a distribution-drift artifact.
+    k_framing: "provenance only — not part of primary K=14"
+    trials_extra: 0  # re-uses same pnl_r stream, just swaps filter threshold
+
+  exclude_2019_sensitivity:
+    description: |
+      Re-run the scan with IS restricted to 2020-01-01 through 2025-12-31
+      (excluding 2019 thin-micro drag year per Amendment 2.8 liquidity note).
+      Confluence effect should persist; if it collapses, 2019 drag was the
+      dominant driver and the finding is weaker than the 7-year arithmetic
+      suggests.
+    k_framing: "provenance only"
+
+# ---- Pre-registration checklist ----
+#
+# [x] Every hypothesis has theory citation (not just "ORB is a thing")
+# [x] Every hypothesis has economic_basis explaining WHY
+# [x] Sum of expected_trial_count within budget (17 ≤ 28 strict Bailey E=1.0)
+# [x] Kill criteria pre-registered (not post-hoc)
+# [x] No hypothesis uses volume filters on parent-proxy data (C10) — MNQ 2019+ real micro
+# [x] Holdout date is 2026-01-01 and will not be moved after results are seen
+# [x] File committed to git BEFORE discovery runs (Stage A of staged execution)
+# [x] testing_mode declared: family (Pathway A)
+# [x] pathway field set (A)
+# [x] Upstream scan K values go under upstream_discovery_provenance, NOT current K
+# [x] Kill criteria numeric (not "reconsider" / "investigate")
+# [x] RULE 1.2 temporal-alignment gate applied (OVN excluded from 2 lanes)
+# [x] Canonical filter delegation required (research.filter_utils.filter_signal)
+# [x] Triple-join discipline declared (trading_day + symbol + orb_minutes)
