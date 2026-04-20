@@ -1,5 +1,20 @@
 # MNQ unfiltered-baseline cross-family — v1
 
+> **AMENDMENT 2026-04-21 (DSR audit, PR #56):** the 5 cells labelled
+> CANDIDATE_READY below are **MISCLASSIFIED**. They pass H1 (BH-FDR q<0.05,
+> t>=+3.0), C6 (WFE>=0.50), C8 (OOS/IS>=0.40), C9 (era stability) but FAIL
+> Phase 0 C5 (Deflated Sharpe Ratio >= 0.95 per Bailey-López de Prado 2014
+> Eq. 2). DSR values 0.0003–0.0081 even after Bailey Exhibit 4 effective-N
+> correction (ρ̂ = +0.058, N̂ = 99.0 — family is near-independent, so the
+> raw-M=105 framing was NOT overconservative). BH-FDR at q<0.05 is
+> NECESSARY but NOT SUFFICIENT at family K=105; the selection-bias-inflated
+> expected-max-SR null (SR_0 = +0.164 trade-level) exceeds every cell's
+> observed SR. See `2026-04-21-mnq-pr51-dsr-audit-v1.md` and
+> `2026-04-21-mnq-pr51-dsr-audit-v2-effective-n.md` for the full derivation.
+> These 5 cells are not Phase 0-compliant and are institutionally blocked
+> from shadow-deployment. Pathway B K=1 (theory-driven, single-cell) per
+> `pre_registered_criteria.md` Amendment 3.0 is the remaining legitimate path.
+
 **Pre-reg:** `docs/audit/hypotheses/2026-04-20-mnq-unfiltered-baseline-cross-family-v1.yaml`
 
 **Script:** `research/mnq_unfiltered_baseline_cross_family_v1.py`
