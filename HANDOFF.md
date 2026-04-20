@@ -6,6 +6,66 @@
 
 ## Update (2026-04-20 late-late-late — HTF branch closed: integrity repaired, simple v1 family dead)
 
+## Update (2026-04-21 — liquidity translation applied all the way to a locked standalone family)
+
+Follow-on to the liquidity / displacement prompt translator work. The repo now
+has a real locked follow-on family instead of leaving the sweep/reclaim thread
+at ideology or event-study level.
+
+### What was decided
+
+- The old `ORB E_RETEST` continuation route stays dead.
+- `docs/audit/results/2026-04-19-sweep-reclaim-v1.md` is reconnaissance only.
+  It is not a strategy verdict and should not be used to kill the standalone
+  family.
+- The earlier `v2-starter` draft was reduced to one honest bounded family:
+  - `docs/audit/hypotheses/2026-04-21-sweep-reclaim-standalone-v2.yaml`
+  - rationale note:
+    `docs/plans/2026-04-21-sweep-reclaim-standalone-v2-lock.md`
+
+### Locked scope
+
+- Instruments: `MNQ`, `MES`
+- Sessions: `EUROPE_FLOW`, `NYSE_OPEN`
+- Levels: `prev_day_high`, `prev_day_low`
+- Mechanism: swept `close_through` + reclaim within `2` bars
+- Role: standalone reversal
+- Entry: `reclaim_close`
+- Stop: beyond sweep extreme
+- Target: fixed `1.5R`
+- Direction is implied by level side, not an extra search axis
+- Honest family burden: `K=8`
+
+### Why this matters
+
+The repo had built the right thin abstraction (`level_interaction_v1`) but was
+still stuck between:
+
+- dead ORB execution variants
+- null event studies
+- loose external prompt language
+
+This lock closes that gap. We now have a small, geometry-only standalone family
+that can be run without pretending the whole liquidity / displacement prompt is
+already validated.
+
+### Grounding / verification done before lock
+
+- `docs/specs/level_interaction_v1.md`
+- `research/lib/level_interactions.py`
+- `pipeline/session_guard.py`
+- `docs/institutional/mechanism_priors.md`
+- canonical `gold.db` surface checks:
+  - `daily_features`, `bars_1m`, `orb_outcomes` exist
+  - pre-2026 `MNQ` / `MES` coverage exists for `EUROPE_FLOW` and `NYSE_OPEN`
+  - `prev_day_high` / `prev_day_low` are chronology-safe for both sessions
+
+### Net decision
+
+- Next honest run, if resumed, is this locked `K=8` standalone family.
+- Do not widen back to overnight levels, retest entries, or next-liquidity
+  targets without a new pre-reg.
+
 Follow-on to the "HTF thing" request. User wanted this handled as an
 institutional research branch, not a one-row patch. The resulting branch has
 two outcomes:

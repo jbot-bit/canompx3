@@ -1,0 +1,177 @@
+version: 1
+status: LOCKED
+date: 2026-04-21
+slug: sweep-reclaim-standalone-v2
+title: "Sweep reclaim standalone reversal v2"
+owner: codex
+supersedes_note: >
+  Reduces the earlier v2 starter drafted on branch
+  research/liquidity-translation-apply into a locked family.
+parent_spec: docs/plans/2026-04-21-sweep-reclaim-standalone-v2-lock.md
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - docs/prompts/LIQUIDITY_DISPLACEMENT_TRANSLATOR.md
+    - docs/specs/level_interaction_v1.md
+    - docs/institutional/mechanism_priors.md
+    - docs/institutional/pre_registered_criteria.md
+    - RESEARCH_RULES.md
+  notes:
+    - resources/Algorithmic_Trading_Chan.pdf
+    - resources/Robert Carver - Systematic Trading.pdf
+    - resources/Lopez_de_Prado_ML_for_Asset_Managers.pdf
+    - resources/Two_Million_Trading_Strategies_FDR.pdf
+
+reproducibility:
+  repo_root: canompx3
+  commit_sha: TO_FILL_AFTER_COMMIT
+  committed_required_before_run: true
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  source:
+    - docs/audit/results/2026-04-19-sweep-reclaim-v1.md
+    - docs/plans/2026-04-21-liquidity-translation-apply-on-open-thread.md
+  note: >
+    The v1 sweep-reclaim event study is reconnaissance only. It motivates this
+    family but does not define the trade geometry, the K burden, or the pass
+    criteria for this standalone reversal test.
+
+scope:
+  instruments:
+    - MNQ
+    - MES
+  sessions:
+    - EUROPE_FLOW
+    - NYSE_OPEN
+  orb_minutes:
+    - 5
+  levels:
+    - prev_day_high
+    - prev_day_low
+  side_mapping:
+    prev_day_high: short
+    prev_day_low: long
+  chronology_verified:
+    session_guard_safe:
+      prev_day_high:
+        - EUROPE_FLOW
+        - NYSE_OPEN
+      prev_day_low:
+        - EUROPE_FLOW
+        - NYSE_OPEN
+  interaction_requirements:
+    interaction_kind: close_through
+    swept: true
+    reclaimed: true
+    reclaim_lookahead_bars: 2
+  session_entry_window_minutes: 60
+  trade_geometry:
+    role: standalone_reversal
+    entry_mode: reclaim_close
+    stop_mode: beyond_sweep_extreme
+    target_mode: fixed_rr
+    rr_targets:
+      - 1.5
+  holdout_boundary_source: trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+
+data_policy:
+  mode: A
+  is_window: trading_day < 2026-01-01
+  oos_window: trading_day >= 2026-01-01
+  tuning_against_oos: false
+  common_start_date: 2019-05-06
+
+mechanism_statement: >
+  When price sweeps and closes through a prior-day extreme, then reclaims back
+  inside within two bars, the breach may represent a trapped-break reversal
+  rather than valid continuation. This family tests that idea as a bounded
+  standalone trade with explicit entry, stop, target, and cost geometry. It is
+  not an ORB filter and does not rely on FVG / IFVG ontology.
+
+translation_rules_locked:
+  - No FVG / IFVG / inducement / absorption ontology.
+  - Levels must be ex-ante and chronology-safe under pipeline.session_guard.
+  - One role only: standalone reversal.
+  - Direction is implied by level side, not treated as a separate search axis.
+  - No target-at-next-liquidity claims in v2; fixed RR only.
+
+hypothesis_family:
+  primary_question: >
+    Do swept-and-reclaimed prior-day extreme reversals, traded from the reclaim
+    close with stop beyond the sweep extreme and fixed 1.5R target, produce
+    positive after-cost expectancy in at least one locked MNQ/MES session-level
+    cell?
+  current_role: standalone
+
+family_budget:
+  k_locked: 8
+  construction:
+    instruments: 2
+    sessions: 2
+    levels: 2
+    entry_modes: 1
+    target_modes: 1
+    rr_targets: 1
+  m_in_btl_years:
+    strict_e1_0: 4.16
+    relaxed_e1_2: 2.89
+  clean_data_years_available_note: >
+    MNQ/MES pre-2026 history from 2019-05-06 to 2025-12-31 exceeds the locked
+    MinBTL requirement for K=8. This family is materially smaller than the
+    starter upper bound and comfortably within the clean-cap regime.
+
+hypotheses:
+  H1_per_cell: >
+    A cell is a primary survivor if pre-2026 after-cost ExpR is positive,
+    one-sided p-value survives BH-FDR at q<=0.05 across the locked K=8 family,
+    and N_IS >= 100.
+  diagnostic_gates:
+    - C6 (walk-forward efficiency): WFE >= 0.50 on locked IS walk-forward
+    - C8 (sacred OOS): OOS ExpR >= 0 and OOS ExpR >= 0.40 x IS ExpR when N_OOS >= 20
+    - C9 (era stability): no calendar year with N >= 20 has ExpR < -0.05
+
+classification_contract:
+  candidate_ready:
+    criteria: H1_per_cell pass AND C6 pass AND C8 pass AND C9 pass
+  research_survivor:
+    criteria: H1_per_cell pass AND at least one of C6/C8/C9 fails
+  dead:
+    criteria: H1_per_cell fail
+
+kill_criteria:
+  - id: K1
+    metric: methodology_integrity
+    threshold: >
+      Any use of levels beyond prev_day_high/prev_day_low, any 2026-driven
+      selection, or any geometry other than reclaim_close / stop beyond sweep
+      extreme / fixed 1.5R invalidates the family.
+    action: HALT_AND_RE_AUDIT
+  - id: K2
+    metric: scope_bloat
+    threshold: >
+      Any reintroduction of multiple entry modes, target modes, or overnight
+      levels without a new pre-reg is forbidden.
+    action: FILE_NEW_PREREG
+  - id: K3
+    metric: ontology_leak
+    threshold: >
+      Any result framed as FVG / IFVG / institutional-footprint evidence is
+      invalid. Geometry-only language is mandatory.
+    action: REWRITE_AND_REVIEW
+
+verification_before_run:
+  - Verify canonical source tables exist in gold.db: daily_features, bars_1m
+  - Verify symbol/session coverage for MNQ/MES, O5, EUROPE_FLOW/NYSE_OPEN
+  - Verify session_guard chronology safety for prev_day_high/prev_day_low
+  - Fill reproducibility.commit_sha after commit
+
+not_in_scope:
+  - overnight_high / overnight_low
+  - first_retest entry variants
+  - next-liquidity target variants
+  - ORB filter / conditioner / allocator roles
+  - live deployment recommendation
