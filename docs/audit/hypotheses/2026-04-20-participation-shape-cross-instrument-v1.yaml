@@ -165,4 +165,4 @@ outputs:
   result_md: "docs/audit/results/2026-04-20-participation-shape-cross-instrument-v1.md"
   script: "research/participation_shape_cross_instrument_v1.py"
 
-commit_sha: "TO_FILL_AFTER_COMMIT"
+commit_sha: "dab4df0b"
