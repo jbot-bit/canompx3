@@ -1,0 +1,36 @@
+# Canonical line-ending policy for canompx3.
+#
+# Policy: text files stored in the repo with LF line endings.
+# Rationale: avoids CRLF/LF diff noise from cross-platform editing
+# (Windows Git clients, WSL tools, Codex / agents writing with
+# OS-native endings). First introduced 2026-04-20 after the
+# codex/live-book-reaudit audit caught CRLF pollution on every
+# touched file. No retroactive `git add --renormalize .` — files
+# renormalize gradually as they are next touched, avoiding a
+# one-shot commit that would conflict with every open branch.
+
+* text=auto eol=lf
+
+# Binary formats — never convert
+*.db        binary
+*.duckdb    binary
+*.sqlite    binary
+*.parquet   binary
+*.pdf       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.zip       binary
+*.gz        binary
+*.tar       binary
+
+# Script types that should always be LF (executed by bash/sh even on Windows)
+*.sh        text eol=lf
+*.bash      text eol=lf
+
+# Windows-specific — keep CRLF
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
