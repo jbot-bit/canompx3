@@ -546,6 +546,72 @@ startup-hook compression, the highest remaining Claude-side EV/ROI issue was
   - covers stale investigation-mode reset on implementation prompts
   - covers normal investigation prompt activation
 
+## Update (2026-04-21 early — US_DATA_1000 NOT_F6 shadow path is now real, not just a YAML stub)
+
+Follow-on to the `research/usdata1000-role-design-codex` branch. The branch
+was already closed at discovery / candidate-lane validation level:
+
+- paired family verified:
+  - `F5_BELOW_PDL` = TAKE
+  - `F6_INSIDE_PDR` = AVOID
+- role design verified:
+  - primary route = `NOT_F6_INSIDE_PDR`
+  - `F5_BELOW_PDL` remains a higher-quality sub-state inside that route
+- candidate-lane validation verified:
+  - RR `1.0` and `1.5` both `RESEARCH_SURVIVOR`
+  - neither `CANDIDATE_READY` because forward OOS is thin and negative
+
+What was missing was the actual post-peek shadow machinery. That is now landed.
+
+### What landed
+
+- Shadow prereg tightened:
+  - `docs/audit/hypotheses/2026-04-20-usdata1000-long-not-f6-shadow-v1.yaml`
+    - explicit `fresh_oos_window.peeked_through = 2026-04-16`
+    - explicit `fresh_oos_window.start = 2026-04-17`
+    - recorder paths now locked:
+      - script = `research/shadow_usdata1000_long_not_f6.py`
+      - ledger = `docs/audit/shadow_ledgers/usdata1000-long-not-f6-shadow-ledger.md`
+      - status md = `docs/audit/results/usdata1000-long-not-f6-shadow-status.md`
+- New recorder:
+  - `research/shadow_usdata1000_long_not_f6.py`
+    - canonical only: `daily_features` + `orb_outcomes`
+    - idempotent append-only ledger by `trading_day`
+    - enforces fresh-OOS start strictly after the peeked candidate-lane slice
+    - logs both RR `1.0` and RR `1.5` outcomes plus `F5` descriptor state
+- New artifacts:
+  - `docs/audit/shadow_ledgers/usdata1000-long-not-f6-shadow-ledger.md`
+  - `docs/audit/results/usdata1000-long-not-f6-shadow-status.md`
+
+### What was verified
+
+- Canonical DB max trade day for this lane universe is still `2026-04-16`
+- Therefore fresh shadow window (`2026-04-17+`) currently has **0** eligible
+  post-peek trade days
+- This is the correct outcome:
+  - shadow infra is initialized
+  - no double-counting of already-consumed OOS
+  - no live-capital or allocator changes
+
+### Verification
+
+- `./.venv-wsl/bin/python -m py_compile research/shadow_usdata1000_long_not_f6.py`
+  - passed
+- `./.venv-wsl/bin/python -m ruff check research/shadow_usdata1000_long_not_f6.py`
+  - passed
+- `./.venv-wsl/bin/python research/shadow_usdata1000_long_not_f6.py`
+  - passed
+  - initialized ledger + status surfaces
+  - appended `0` rows as expected
+
+### Net decision
+
+- `research/usdata1000-role-design-codex` is now operationally complete.
+- Do **not** promote or revisit candidate review until fresh OOS accumulates.
+- To continue this branch later, the only required action is to rerun:
+  - `./.venv-wsl/bin/python research/shadow_usdata1000_long_not_f6.py`
+  after new `MNQ` data ingest extends past `2026-04-16`.
+
 ### Why this matters
 
 - reduces repeated prompt-token burn on Claude without removing the actual

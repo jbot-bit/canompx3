@@ -80,6 +80,18 @@ shadow_phase:
     - pnl_r_if_taken
     - cumulative_n_oos
     - cumulative_exp_r_oos
+  fresh_oos_window:
+    peeked_through: 2026-04-16
+    start: 2026-04-17
+    note: >
+      Candidate-lane validation already consumed the 2026-01-01 to 2026-04-16
+      OOS slice. Shadow recording must start strictly after that boundary.
+  recorder:
+    script: "research/shadow_usdata1000_long_not_f6.py"
+    ledger: "docs/audit/shadow_ledgers/usdata1000-long-not-f6-shadow-ledger.md"
+    status_md: "docs/audit/results/usdata1000-long-not-f6-shadow-status.md"
+    cadence: "append-only as new post-2026-04-16 trade days arrive"
+    idempotent_key: "trading_day"
 
 promotion_gate:
   description: "re-open candidate-lane validation only after forward OOS is no longer thin"
