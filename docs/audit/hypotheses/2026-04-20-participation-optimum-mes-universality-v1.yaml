@@ -1,5 +1,5 @@
 version: 1
-status: DRAFT
+status: LOCKED
 date: 2026-04-20
 slug: participation-optimum-mes-universality-v1
 title: "Participation-optimum universality test on MES — confirmatory replication of MNQ finding"
@@ -32,7 +32,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "77e33f06"
   committed_required_before_run: true
 
 testing_mode: individual
