@@ -1,8 +1,10 @@
 from datetime import UTC, date, datetime
 
 import duckdb
+import pytest
 
 from trading_app.paper_trade_store import (
+    PaperTradeCollisionError,
     PaperTradeRecord,
     ensure_paper_trades_schema,
     upsert_backfill_trade,
@@ -89,3 +91,22 @@ class TestPaperTradeStore:
 
         assert inserted is True
         assert row == ("shadow", -0.5, "source=shadow")
+
+    def test_live_write_refuses_to_overwrite_existing_live_row(self, tmp_path):
+        """A second real-execution write on the same key must fail closed."""
+        db_path = tmp_path / "paper_trades.db"
+        first = _record(execution_source="live", pnl_r=1.25)
+        write_completed_trade(first, db_path=db_path)
+
+        second = _record(execution_source="live", pnl_r=-0.5)
+        with pytest.raises(PaperTradeCollisionError):
+            write_completed_trade(second, db_path=db_path)
+
+        con = duckdb.connect(str(db_path))
+        row = con.execute(
+            "SELECT execution_source, pnl_r FROM paper_trades WHERE strategy_id = ?",
+            [first.strategy_id],
+        ).fetchone()
+        con.close()
+
+        assert row == ("live", 1.25)

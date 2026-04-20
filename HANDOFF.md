@@ -7,6 +7,36 @@
 Pickup brief for the current branch:
 - `docs/plans/2026-04-20-live-book-pickup-brief.md`
 
+## Update (2026-04-20 late night — live-book A+ follow-ups closed)
+
+Finished the three remaining mechanical follow-ups from
+`docs/plans/2026-04-20-live-book-aplus-handover-codex.md` on
+`codex/live-book-reaudit-fix`.
+
+### Landed
+
+- `trading_app/pre_session_check.py`
+  - narrowed the two advisory `check_live_attribution_health()` read handlers
+    from `except Exception` to `except (duckdb.Error, OSError)`
+- `scripts/tools/live_attribution_report.py`
+  - cleaned `LIKE 'ENTRY_BLOCKED%%'` to `LIKE 'ENTRY_BLOCKED%'`
+- `tests/test_trading_app/test_paper_trade_store.py`
+  - added a regression test proving a second real-execution write on the same
+    `(strategy_id, trading_day)` raises `PaperTradeCollisionError` and preserves
+    the original live row
+
+### Verification
+
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m py_compile trading_app/pre_session_check.py scripts/tools/live_attribution_report.py tests/test_trading_app/test_paper_trade_store.py` -> PASS
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m ruff check trading_app/pre_session_check.py scripts/tools/live_attribution_report.py tests/test_trading_app/test_paper_trade_store.py` -> `All checks passed!`
+- `/mnt/c/Users/joshd/canompx3/.venv-wsl/bin/python -m pytest tests/test_trading_app/test_paper_trade_store.py tests/test_tools/test_live_attribution_report.py tests/test_trading_app/test_pre_session_check.py tests/test_trading_app/test_session_orchestrator.py tests/test_trading_app/test_trade_journal.py -q` -> `204 passed`
+
+### Remaining
+
+- The A+ review follow-up list from the handover doc is now fully closed.
+- Drift check #59 concurrent-writer contention remains a separate runtime issue
+  and was not part of this patch.
+
 ## Update (2026-04-20 night — code-review hardening pass completed)
 
 Follow-up to the explicit user request to "audit your audit" and then code-review the branch work itself. This pass fixed the concrete review findings rather than treating the earlier implementation as done.

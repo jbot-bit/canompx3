@@ -179,7 +179,7 @@ def _load_event_stats(
             SUM(CASE WHEN event_type IN ('ENTRY_SUBMITTED', 'ENTRY_SIGNALLED') THEN 1 ELSE 0 END) AS submitted_events,
             SUM(CASE WHEN event_type = 'ENTRY_FILLED' THEN 1 ELSE 0 END) AS filled_events,
             SUM(CASE
-                    WHEN event_type LIKE 'ENTRY_BLOCKED%%'
+                    WHEN event_type LIKE 'ENTRY_BLOCKED%'
                       OR event_type IN ('ORB_CAP_SKIP', 'MAX_RISK_SKIP', 'REGIME_PAUSED')
                     THEN 1 ELSE 0
                 END) AS skipped_events,

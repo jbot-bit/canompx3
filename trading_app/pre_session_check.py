@@ -243,7 +243,7 @@ def check_live_attribution_health(
                     params,
                 ).fetchone()
                 live_rows = int(row[0]) if row else 0
-    except Exception as e:
+    except (duckdb.Error, OSError) as e:
         return True, f"WARN: live attribution check could not read paper_trades ({e})"
 
     event_rows = 0
@@ -268,7 +268,7 @@ def check_live_attribution_health(
                         params,
                     ).fetchone()
                     event_rows = int(row[0]) if row else 0
-    except Exception as e:
+    except (duckdb.Error, OSError) as e:
         return True, f"WARN: live attribution check could not read live_signal_events ({e})"
 
     if live_rows > 0:
