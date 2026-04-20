@@ -1,0 +1,107 @@
+pre_reg_id: "mnq-unfiltered-baseline-cross-family-v1"
+date: "2026-04-20"
+testing_mode: "family"
+pathway: "A"
+pathway_rationale: |
+  Broader family-scan addressing user pushback that PRs #49 and #50 tunnel-
+  vision on RR=1.0 only. Scope widens to the full MNQ unfiltered-baseline
+  family: aperture × RR × session, with BH-FDR at the family K.
+
+  Post-PR #50 outcome: MNQ 5m is fully explored (6 of 6 deployed lanes),
+  but 15m and 30m together contain ZERO deployed lanes and ONE total
+  validated_setups row (MNQ SINGAPORE_OPEN 30m RR=1.5). That means ~71
+  uncovered (aperture × RR × session) combinations on the 15m/30m
+  apertures alone. Plus RR=1.5 and RR=2.0 at 5m with a full session
+  universe is ALSO partially covered. This scan tests them all in one
+  honest Pathway-A family.
+
+  Prior scan-freshness confirmation: the canonical `orb_outcomes` layer
+  was refreshed through 2026-04-20; prior 15m/30m dismissals (if any, per
+  user recollection) would be on stale data. This scan verifies freshly.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  parent_audit:
+    - "PR #48 `28279719` — monotonic-up universal on MNQ × (5m,15m,30m) × (RR1.0,1.5,2.0)."
+    - "PR #49 `0b27c01c` — MNQ 30m RR=1.0 K=4 audit found 2 RESEARCH_SURVIVORs."
+    - "PR #50 `ec4a14de` — MNQ 15m RR=1.0 K=3 audit found 2 CANDIDATE_READY cells."
+
+theory_citations:
+  grounded_in_local_extracts:
+    - path: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+    - path: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+    - path: "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+      use: "MinBTL budget — K ≤ 300 per Bailey 2013. This scan: K ≤ 108 combos, well within budget."
+    - path: "docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md"
+      use: "Chordia t ≥ 3.00 with theory per Phase 0 pre_registered_criteria.md C4."
+    - path: "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+      use: "BH-FDR family discipline per Phase 0 C3."
+
+scope:
+  instrument: "MNQ"
+  entry_model: "E2"
+  confirm_bars: 1
+  filter: "none (unfiltered baseline — the lane IS the cell)"
+  is_window: "trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01)"
+  oos_window: "2026-01-01 ≤ trading_day (read-only)"
+  family_axes:
+    apertures: [5, 15, 30]
+    rr_targets: [1.0, 1.5, 2.0]
+    sessions: "full canonical MNQ active universe via SELECT DISTINCT orb_label FROM orb_outcomes"
+    directions: "pooled (both long and short in the same cell)"
+  max_K: 108  # 3 × 3 × 12 (some sessions will be INSUFFICIENT_N on 15m/30m, script auto-skips)
+  min_n_per_cell: 100
+
+hypothesis:
+  H1_family: |
+    Within the MNQ unfiltered-baseline family (K ≤ 108), at least one cell
+    passes all four pre-registered gates:
+      H1 IS: Net ExpR > 0 AND HC3 one-sample t ≥ +3.0 (Chordia with-theory)
+             AND BH-FDR q < 0.05 at K_family
+      C6:   WFE ≥ 0.50 via 3-fold expanding walk-forward on IS
+      C8:   Net ExpR OOS / Net ExpR IS ≥ 0.40 AND N_OOS ≥ 50
+      C9:   No calendar year with N≥50 having Net ExpR < -0.05
+  family_kill_if: "Zero cells pass all four gates."
+
+testing_discipline:
+  K_family: 108  # pre-committed; actual K after data-availability may be lower
+  BH_FDR_alpha: 0.05
+  Chordia_t_threshold: 3.00
+  MinBTL_check: "2·ln(108) / (expected-t²) ≈ 2·4.68 / 9 = 1.04 yrs. IS window is 6+ yrs — MinBTL satisfied."
+  mandatory_downstream_gates_non_waivable:
+    - "C6 (WFE ≥ 0.50)"
+    - "C8 (OOS ≥ 0.40 × IS AND N_OOS ≥ 50)"
+    - "C9 (era stability, no year N≥50 with Net ExpR < -0.05)"
+  integrity_gates:
+    - "unfiltered baseline only — no filter overlays"
+    - "pnl_r used directly as net (canonical per cost_model.py:464)"
+    - "triple-join orb_outcomes × daily_features where applicable (N/A here as no daily_features required)"
+
+decision_rules:
+  verdicts_per_cell:
+    - verdict: "CANDIDATE_READY"
+      criteria: "H1 pass (t AND BH-FDR) AND C6 pass AND C8 pass AND C9 pass AND N_IS ≥ 100"
+    - verdict: "RESEARCH_SURVIVOR"
+      criteria: "H1 pass AND at least one of C6/C8/C9 fails"
+    - verdict: "KILL_IS"
+      criteria: "H1 fail (t OR BH-FDR)"
+    - verdict: "SCAN_ABORT"
+      criteria: "N_IS < 100"
+  family_summary:
+    "≥1 CANDIDATE_READY not already in PR #49/#50": "Genuine new unexplored deployment territory surfaced by the scan"
+    "CANDIDATE_READY set = PR #49/#50 set": "Scan confirms prior findings; no new regions"
+    "Zero CANDIDATE_READY": "Family has no deployment-ready cells beyond what PRs #49/#50 already showed"
+
+non_actions:
+  - "Does NOT write to validated_setups / edge_families / lane_allocation / live_config."
+  - "Does NOT modify Q4-band MNQ contract (PR #43)."
+  - "Does NOT apply monotonic-rank sizing overlay (separate follow-on)."
+  - "Does NOT test MES or MGC (future pre-regs)."
+  - "Does NOT test filter overlays."
+  - "Does NOT perform parameter tuning; axes pre-committed before any query."
+
+outputs:
+  result_md: "docs/audit/results/2026-04-20-mnq-unfiltered-baseline-cross-family-v1.md"
+  script: "research/mnq_unfiltered_baseline_cross_family_v1.py"
+
+commit_sha: "TO_FILL_AFTER_COMMIT"
