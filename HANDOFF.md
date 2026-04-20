@@ -4,7 +4,62 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-21 autonomous #5 — PR #59 sizer-rule re-audit: MISCLASSIFIED as deploy-candidate; Q5-FILTER form dominates)
+
+Direct follow-on to #4. User pressed a skeptical re-audit
+("Stop. Did we evaluate this properly?"). Re-audit ran per-lane,
+per-direction, bootstrap CI, Sharpe, Spearman, filter-alternative on
+the same OOS. Result: **sizer form is dominated by filter form on both
+MES and MGC**, and MES sizer-Sharpe is still negative.
+
+### Re-audit verdicts (supersede #4 interpretation; PR #59 artifacts unchanged)
+
+| Instrument | PR #59 verdict | Re-audit verdict |
+|---|---|---|
+| MNQ | SIZER_WEAK | **DEAD (as sizer)** — bootstrap 95% CI crosses zero; Spearman p=0.12. |
+| MES | SIZER_ALIVE | **MISCLASSIFIED** — sizer Sharpe still negative (-0.082 → -0.050). Q5-FILTER uplift +0.20R vs +0.030R sizer delta. |
+| MGC | SIZER_ALIVE | **ALIVE, sub-optimal form** — Q5-FILTER uplift +0.19R vs +0.032R sizer delta. Pattern real, rule shape wrong. |
+
+### Evidence (from re-audit)
+
+- Bootstrap CI lower bounds: MNQ -0.022, MES +0.002, MGC +0.0004 (MGC
+  essentially touching zero).
+- Spearman rank-predictiveness p: MNQ 0.12, MES 0.002, MGC 0.002.
+- Sharpe change (uniform → sizer): MNQ +0.050 → +0.052 (≈0); MES
+  -0.082 → -0.050 (still NEG); MGC +0.059 → +0.081 (+0.022 uplift).
+- Q5-only filter ExpR: MNQ +0.010 (N=137), **MES +0.112 (N=155)**,
+  **MGC +0.263 (N=95)**.
+- Q4+Q5 filter ExpR: MNQ +0.085 (N=320, ~1.5x pooled uniform), MES
+  -0.011 (drag from Q4), MGC +0.194 (N=222).
+- Per-lane heterogeneity: MNQ 55% lanes flip sign (heterogeneity
+  artefact); MES 20%; MGC 24% (borderline).
+- Per-direction: MES long t=+1.85, short t=+1.12 — neither alone
+  clears pre-committed t≥2.0 gate.
+
+### Deliverables
+
+- Script: `research/pr48_sizer_rule_skeptical_reaudit_v1.py`
+- Doc: `docs/audit/results/2026-04-21-pr48-sizer-rule-skeptical-reaudit-v1.md`
+  (classification + alternative-framings ROI + 4 outputs)
+
+### Queue consequence
+
+- Queue item #6 (shadow-deployment design for sizer) is **REMOVED** —
+  sizer form not deploy-eligible.
+- **NEW queue top:** filter-form pre-reg (Q5-only and Q4+Q5) IS-trained
+  thresholds on MGC + MES. Mark current OOS as semi-contaminated (filter
+  form was peeked at in re-audit); require ≥50 additional OOS trades
+  per instrument before moving from RESEARCH_SURVIVOR to CANDIDATE_READY.
+  MNQ excluded from filter-form pre-reg (Spearman insig, pattern dead).
+
 ## Update (2026-04-21 autonomous #4 — PR #48 sizer rule SIZER_ALIVE on MES + MGC at capital-neutral OOS; shadow-deploy design next)
+
+**AMENDMENT 2026-04-21:** this update's "deploy-candidate" framing was
+corrected by autonomous #5 (re-audit). See Update #5 above. PR #59
+artifacts (pre-reg, script, result MD) remain correct within their
+declared scope; the **interpretation** is superseded. Sizer form is
+dominated by filter form on MES/MGC. Queue item #6 below is CANCELLED.
+
 
 Completes the ROI-table #1 priority from the 2026-04-21 skeptical re-audit. After PR #56 (DSR audit downgraded PR #51) and the PR #48 OOS β₁ replication (MES + MGC OOS-CONFIRMED at t≥+2.0), the final question before shadow-deployment was: does a CONCRETE, capital-neutral, IS-trained sizer rule produce positive OOS uplift per unit capital?
 
