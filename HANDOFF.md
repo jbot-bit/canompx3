@@ -4,6 +4,54 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 late-night — MNQ TBBO gap-fill v2 COMPLETE — Phase D COMEX_SETTLE unblocked)
+
+Follow-on to the PR #25 / PR #26 merges. Researcher-framework audit flagged lazy-imports Phase 4 as DEAD work (cold-import on live path is rounding-error vs 6-hour session runtime). Redirected to the highest-EV open item: MNQ TBBO coverage gap on the 3 deployed sessions missing from the v1 119-file cache.
+
+### What landed (branch `research/mnq-tbbo-v2-gap-fill-isolated`)
+
+- **Script arg added:** `research/research_mnq_e2_slippage_pilot.py` gained `--sessions` CLI flag (nargs+, optional, overrides `PILOT_SESSIONS` global when present). Institutional fix — not monkey-patch. Backward compatible: absent → current 6-session default.
+- **Databento pull:** 30 TBBO files for the 3 missing deployed MNQ sessions (EUROPE_FLOW / COMEX_SETTLE / US_DATA_1000), 10 days per session, 2 ATR regimes × 5 days/bucket. Subscription-absorbed spend, metadata estimate $0.19.
+- **Reprice on full cache:** 149 cache files → 142 valid repriced rows. Added to `research/data/tbbo_mnq_pilot/slippage_results_cache_v2.csv` (overwritten from v1's 114-row version; file is gitignored as local data).
+- **Worktree isolation note:** This work was executed in an isolated worktree off `origin/main` at `1de1418e` after detecting another terminal was concurrently operating in the main working directory (`C:/Users/joshd/canompx3/`). PR branch built from clean state; no cross-terminal state disturbed.
+
+### Verdict — MNQ slippage CONSERVATIVE across ALL 9 deployed sessions
+
+- **Median = 0 ticks** (unchanged from v1, now stratified across 9 sessions)
+- **100 % of 142 samples ≤ 2-tick modeled slippage** (max = +2)
+- **COMEX_SETTLE specifically: N=10, median=0, mean=0.0** — Phase D 2026-05-15 gate has no slippage-based blocker
+- **EUROPE_FLOW: N=9, median=0, mean=−0.2** — clean
+- **US_DATA_1000: N=9, median=0, mean=−0.4** — clean
+- Mean of −0.79 book-wide is outlier-sensitive (BBO-staleness artifacts during fast moves) — not real favorable fills; see v1 interpretation
+
+### Operational impact
+
+- 6 live MNQ lanes' backtested ExpR not materially optimistic under measured routine-day slippage — every deployed MNQ session now has TBBO evidence backing the modeling
+- No lane flips to negative EV
+- No deployment changes needed
+- Phase D 2026-05-15 MNQ COMEX_SETTLE evaluation can proceed without friction-modeling caveats
+
+### Debt-ledger update
+
+- `cost-realism-slippage-pilot` **MNQ portion FULLY CLOSED.** MGC portion partially closed (v1). Only MES pilot remains for book-wide close.
+- Remaining MNQ known-unknown: event-day tail (2021-2026 sample has no MGC-2018-type gap equivalent). Not a refuted concern, a not-in-sample concern.
+
+### What this session did NOT do
+
+- MES TBBO pilot (next highest EV; subscription makes it cheap)
+- Phase D other prep work (daily-append status verification, pre-gate criteria preview)
+- Lazy-imports Phase 4 — explicitly killed as low-ROI after researcher-framework audit
+- Capital deployment changes
+
+### Files touched (isolated-worktree commit)
+
+- `research/research_mnq_e2_slippage_pilot.py` — added `--sessions` arg + global override block
+- `docs/audit/results/2026-04-20-mnq-e2-slippage-pilot-v2-gap-fill.md` — new
+- `docs/runtime/debt-ledger.md` — `cost-realism-slippage-pilot` entry updated (MNQ fully closed)
+- `HANDOFF.md` — this entry
+
+Data artifacts (30 new `.dbn.zst` files + updated `manifest.json` + `slippage_results_cache_v2.csv`) live under `research/data/tbbo_mnq_pilot/` in the user's main working directory and are gitignored — not included in this PR.
+
 ## Update (2026-04-20 night — broad lazy-import sweep COMPLETE — 7 commits, ~3.8s cold-import savings)
 
 Follow-on session after the 2026-04-20 MGC/MNQ TBBO pilot work. User asked to resume the second terminal's broad lazy-import sweep (stage file `broad_lazy_sweep_phase1.md` had been staged but never completed). Executed Phase 1, Phase 1b, A+ review-fix, Phase 2 (via stats), Phase 3, Phase 3b.
