@@ -4,6 +4,54 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-21 autonomous #2 — MES + MGC filter-overlay family: DEAD at 5m; cross-instrument single-filter-ORB door closed)
+
+Autonomous follow-on to PR #53 (MES + MGC unfiltered-baseline null, K=176, still open at time of writing). PR #53 established that MNQ PR #51's unfiltered-baseline signal does NOT generalise to MES/MGC. The natural institutional next question — "can any canonical filter rescue MES or MGC?" — is now answered by a second Pathway A family scan.
+
+### What was added
+
+- Pre-reg (LOCKED): `docs/audit/hypotheses/2026-04-21-mes-mgc-filter-overlay-family-v1.yaml`
+- Runner: `research/mes_mgc_filter_overlay_family_v1.py`
+- Result: `docs/audit/results/2026-04-21-mes-mgc-filter-overlay-family-v1.md`
+
+### Method
+
+- Instruments: MES + MGC. Aperture: 5m (single, data-richest). RRs: 1.0, 1.5, 2.0.
+- Sessions per instrument: non-Asian-window only (overnight_range look-ahead exclusion per `OvernightRangeAbsFilter` docstring). MES × 8, MGC × 6 = 14 instrument-sessions.
+- Filters: one per canonical mechanism family (no parameter-sweep tunnel): `COST_LT12`, `ORB_G5`, `OVNRNG_50`, `ATR_P50`, `VWAP_MID_ALIGNED`.
+- K_max = 14 × 3 × 5 = 210. MinBTL ~1.19 yrs; IS ≥ 6 yrs both instruments — satisfied per Bailey 2013.
+- Canonical filter delegation via `research.filter_utils.filter_signal` (no re-encoding).
+- Triple-join `orb_outcomes × daily_features` on (trading_day, symbol, orb_minutes).
+
+### Canonical result
+
+- Total enumerated: 210 cells
+- Runnable K_family (SCAN_ABORT excluded): 171
+- **CANDIDATE_READY: 0**
+- RESEARCH_SURVIVOR: 0
+- KILL_IS: 171
+- SCAN_ABORT: 39 (N_on_IS < 100 — low fire rate combos, primarily `OVNRNG_50` and `VWAP_MID_ALIGNED` on thin MGC sessions)
+
+Sanity-verified: `MES NYSE_OPEN 5m RR=1.0 ORB_G5` cell reports fire_rate 85.1%, N_on=1448, ExpR=+0.0203, t=+0.845 — matches direct SQL + canonical `filter_signal` call exactly.
+
+### Cross-instrument deployment verdict (combined PR #53 + this)
+
+- **MES + MGC are DEAD for single-filter ORB at 5m aperture** under E2 CB1 pooled direction.
+- Neither unfiltered baseline (K=176, 0/0/176) nor 5-mechanism filter overlay (K=171, 0/0/171) produces ONE cell that clears Phase 0 gates.
+- Broad negative finding, not tunnel-vision: two independent family tests, each with one honest BH-FDR, pre-registered K budgets, canonical delegation, triple-join discipline.
+
+### Updated queue
+
+1. Keep `H04` on narrow shadow/deployment-shape path.
+2. Keep `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` short `F5_BELOW_PDL` as `CONDITIONAL_UNVERIFIED` shadow-only.
+3. MNQ `US_DATA_1000` O5 long primary route = `NOT_F6_INSIDE_PDR` (RESEARCH_SURVIVOR; shadow-design is next, not more scans).
+4. MES/MGC dead for single-filter ORB at 5m. Future MES/MGC discovery requires either:
+   - different aperture (15m, 30m) with filter overlays — PR #53 already showed unfiltered null there too;
+   - multi-filter combinations (combinatorial pre-reg with bounded K);
+   - different entry model (E2 only active; E0 purged);
+   - participation-shape sizing overlay (PR #48 universal — not a filter).
+5. Next autonomous candidate avoids tunnel — either (a) MNQ filter-overlay family on the 5 PR #51 CANDIDATE_READY cells (does a filter ADD edge vs unfiltered baseline that's already CANDIDATE_READY?), or (b) per-year heterogeneity audit of those 5 cells (detect era dependence hidden by IS pooling).
+
 ## Update (2026-04-20 late-late-late — HTF branch closed: integrity repaired, simple v1 family dead)
 
 Follow-on to the "HTF thing" request. User wanted this handled as an

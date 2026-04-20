@@ -1,0 +1,152 @@
+pre_reg_id: "mes-mgc-filter-overlay-family-v1"
+date: "2026-04-21"
+status: "LOCKED"
+testing_mode: "family"
+pathway: "A"
+pathway_rationale: |
+  Direct completion of PR #53 `94c93d80` (MES + MGC unfiltered-baseline
+  cross-family, K=176, 0 survivors). PR #53 established that the MNQ PR #51
+  unfiltered-baseline signal is instrument-specific and does NOT generalise
+  to MES or MGC on any aperture × RR × session × unfiltered combination.
+
+  The next logical institutional question — flagged explicitly in PR #53's
+  "Updated queue" item #4 — is whether any canonical filter family can
+  rescue any MES or MGC cell. If yes, filter overlays are the viable
+  MES/MGC deployment path. If no, MES/MGC are dead for single-filter ORB
+  discovery at 5m aperture, and future work must explore either different
+  apertures, multi-filter combinations, or different entry models.
+
+  Scope is intentionally bounded per Bailey 2013 MinBTL budget. Single
+  aperture (5m — the most data-rich aperture on both instruments, matches
+  2 of 5 MNQ #51 CANDIDATE_READYs). One representative filter per
+  mechanism family (avoids parameter-sweep tunnel): COST_LT12 (cost
+  screen), ORB_G5 (size), OVNRNG_50 (overnight range), ATR_P50 (volatility
+  regime), VWAP_MID_ALIGNED (VWAP alignment). OVNRNG_50 is look-ahead for
+  Asian-window sessions so scope excludes those sessions per its canonical
+  docstring warning.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  parent_audit:
+    - "PR #48 `28279719` — monotonic-up UNIVERSAL on MNQ + MES + MGC."
+    - "PR #51 `2ed62dc3` — MNQ unfiltered-baseline cross-family K=105, 5 CANDIDATE_READYs."
+    - "PR #53 (commit 94c93d80) — MES + MGC unfiltered-baseline cross-family K=176, 0 survivors."
+
+theory_citations:
+  grounded_in_local_extracts:
+    - path: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "Grounds intraday breakout continuation on commodities and stock indices."
+    - path: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      use: "Post-break momentum; filters that gate on pre-break context align with the theoretical regime."
+    - path: "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+      use: "MinBTL = 2·ln(K) / E[max_t²]. K=210 upper bound, assumed E[max_t²]~9 → MinBTL ~1.19 yrs. IS window >=6 yrs both instruments — satisfied."
+    - path: "docs/institutional/literature/chordia_et_al_2018_two_million_strategies.md"
+      use: "Chordia t >= 3.00 with-theory per pre_registered_criteria.md C4."
+    - path: "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+      use: "BH-FDR family discipline at q < 0.05."
+
+scope:
+  instruments: ["MES", "MGC"]
+  entry_model: "E2"
+  confirm_bars: 1
+  aperture: 5   # single aperture — most data-rich; cross-aperture is a future pre-reg if any cell survives
+  rr_targets: [1.0, 1.5, 2.0]
+  directions: "pooled (long + short in same cell)"
+  is_window: "trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01)"
+  oos_window: "2026-01-01 <= trading_day (read-only)"
+  sessions_per_instrument:
+    MES:
+      - "NYSE_OPEN"
+      - "US_DATA_830"
+      - "US_DATA_1000"
+      - "COMEX_SETTLE"
+      - "CME_PRECLOSE"
+      - "NYSE_CLOSE"
+      - "LONDON_METALS"
+      - "EUROPE_FLOW"
+    MGC:
+      - "NYSE_OPEN"
+      - "US_DATA_830"
+      - "US_DATA_1000"
+      - "COMEX_SETTLE"
+      - "LONDON_METALS"
+      - "EUROPE_FLOW"
+  sessions_excluded_and_why:
+    - "TOKYO_OPEN, SINGAPORE_OPEN, CME_REOPEN (Asian window) — overnight_range look-ahead per OvernightRangeAbsFilter docstring. Excluded for the entire family to keep one clean K, not just for OVNRNG_50."
+    - "BRISBANE_1025 — same look-ahead exclusion."
+  filters:
+    - key: "COST_LT12"
+      mechanism: "cost screen (friction/risk ratio)"
+      rationale: "Canonical minimum-viable-trade-size filter; already in MNQ live config."
+    - key: "ORB_G5"
+      mechanism: "ORB size (points >= 5)"
+      rationale: "Size-regime filter; canonical family used in 5 of 6 live MNQ lanes."
+    - key: "OVNRNG_50"
+      mechanism: "absolute overnight range (points)"
+      rationale: "Overnight-activity predictor of US-session follow-through."
+    - key: "ATR_P50"
+      mechanism: "volatility regime (own atr_20_pct >= 50)"
+      rationale: "Intraday-trend-follow regime gate (Chan 2013 Ch 7)."
+    - key: "VWAP_MID_ALIGNED"
+      mechanism: "VWAP alignment (orb_mid vs pre-session VWAP)"
+      rationale: "Institutional-average alignment; canonical on MNQ US_DATA_1000."
+  max_K: 210  # (8 MES + 6 MGC) × 3 RRs × 5 filters. Actual K after SCAN_ABORT skips may be lower.
+  min_n_on_is: 100
+  min_n_oos: 50
+
+hypothesis:
+  H1_family: |
+    Within the MES + MGC filter-overlay family (K <= 210), at least one
+    (instrument × session × RR × filter) cell passes all four gates:
+      H1 IS: Net ExpR filter-on > 0 AND one-sample t >= +3.0 (Chordia)
+             AND BH-FDR q < 0.05 at K_family
+             AND fire_rate in [0.05, 0.95] (RULE 8.1)
+      C6:   WFE >= 0.50 via 3-fold expanding walk-forward on IS filter-on
+      C8:   Net ExpR OOS / Net ExpR IS >= 0.40 AND N_OOS >= 50 (filter-on)
+      C9:   No calendar year with N_on >= 50 having Net ExpR < -0.05
+  family_kill_if: "Zero cells pass all four gates."
+
+testing_discipline:
+  K_family: 210
+  BH_FDR_alpha: 0.05
+  Chordia_t_threshold: 3.00
+  MinBTL_check: "2·ln(210) / 9 ~= 1.19 yrs. IS window >=6 yrs both instruments — satisfied."
+  canonical_filter_delegation: "REQUIRED via research.filter_utils.filter_signal per research-truth-protocol.md § Canonical filter delegation (2026-04-18 MANDATORY)."
+  mandatory_downstream_gates_non_waivable:
+    - "C6 (WFE >= 0.50)"
+    - "C8 (OOS >= 0.40 × IS AND N_OOS >= 50)"
+    - "C9 (era stability, no year N>=50 with Net ExpR < -0.05)"
+  integrity_gates:
+    - "canonical filter delegation only — no re-encoding"
+    - "daily_features triple-join on (trading_day, symbol, orb_minutes) per RULE 9"
+    - "CTE guard: daily_features reads filter WHERE orb_minutes=5 when reading non-ORB-specific columns"
+    - "fire_rate in [5%, 95%] required (RULE 8.1 extreme_fire)"
+
+decision_rules:
+  verdicts_per_cell:
+    - verdict: "CANDIDATE_READY"
+      criteria: "H1 pass (t AND BH-FDR AND fire_rate gate) AND C6 pass AND C8 pass AND C9 pass AND N_on_IS >= 100"
+    - verdict: "RESEARCH_SURVIVOR"
+      criteria: "H1 pass AND at least one of C6/C8/C9 fails"
+    - verdict: "KILL_IS"
+      criteria: "H1 fail (t OR BH-FDR OR extreme_fire)"
+    - verdict: "SCAN_ABORT"
+      criteria: "N_on_IS < 100 (fire rate too low to test deployable)"
+  family_summary:
+    ">=1 CANDIDATE_READY": "Viable MES/MGC filter-overlay lane found — pre-reg confirmatory-validation stage would be next (NOT deployment)"
+    "Zero CANDIDATE_READY, >=1 RESEARCH_SURVIVOR": "Signal exists in IS but downstream gates fail — watch list, no action"
+    "Zero CANDIDATE_READY, zero RESEARCH_SURVIVOR": "MES/MGC single-filter ORB at 5m is DEAD — future work must change aperture, entry model, or filter composition"
+
+non_actions:
+  - "Does NOT write to validated_setups / edge_families / lane_allocation / live_config."
+  - "Does NOT modify any live allocator contract."
+  - "Does NOT test multi-filter combinations (future pre-regs)."
+  - "Does NOT test apertures other than 5m (future pre-regs if survivors emerge)."
+  - "Does NOT test MNQ (PR #51 canonical for MNQ)."
+  - "Does NOT perform parameter tuning — axes pre-committed before any query."
+
+outputs:
+  result_md: "docs/audit/results/2026-04-21-mes-mgc-filter-overlay-family-v1.md"
+  script: "research/mes_mgc_filter_overlay_family_v1.py"
+
+commit_sha: "TO_FILL_AFTER_COMMIT"
