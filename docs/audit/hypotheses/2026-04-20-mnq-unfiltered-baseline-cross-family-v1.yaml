@@ -104,4 +104,4 @@ outputs:
   result_md: "docs/audit/results/2026-04-20-mnq-unfiltered-baseline-cross-family-v1.md"
   script: "research/mnq_unfiltered_baseline_cross_family_v1.py"
 
-commit_sha: "TO_FILL_AFTER_COMMIT"
+commit_sha: "b4089f9c"
