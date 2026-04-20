@@ -1,0 +1,116 @@
+pre_reg_id: "mnq-15m-rr10-unfiltered-lane-discovery-v1"
+date: "2026-04-20"
+testing_mode: "individual"
+pathway: "B"
+pathway_rationale: |
+  Parallel of the PR #49 Pathway-B K=1×4 audit but at 15m instead of 30m.
+  Post-PR #48 landscape audit identified that the participation-shape
+  cross-instrument PR (`28279719`) established MNQ 15m is MONOTONIC_UP at
+  RR=1.0 (β₁=+0.174, t=+6.94), RR=1.5 (β₁=+0.163, t=+5.09), and RR=2.0
+  (β₁=+0.177, t=+4.70). Post-PR-#49 baseline landscape re-scan at 15m
+  (canonical pnl_r used directly as net-of-cost) surfaced additional
+  untested survivors:
+
+    CME_PRECLOSE    n= 289   Net ExpR = +0.2192   t = +4.063
+    NYSE_OPEN       n=1545   Net ExpR = +0.0974   t = +3.958
+    US_DATA_1000    n=1594   Net ExpR = +0.0966   t = +4.037
+    NYSE_CLOSE      n= 327   Net ExpR = +0.1169   t = +2.307   (below threshold)
+
+  This pre-reg tests the 3 cells that pre-cleared Chordia t ≥ +3.0 in
+  the landscape scan as independent K=1 Pathway-B confirmatory replications.
+  Each is a standalone unfiltered lane candidate.
+
+  validated_setups currently contains ZERO MNQ 15m rows. This is genuine
+  unexplored deployment territory, not previously-dismissed.
+
+parent_chain:
+  - "PR #48 `28279719` — monotonic-up universal; MNQ 15m confirmed monotonic at all RRs."
+  - "PR #49 `0b27c01c` — analogous 30m audit found 2 RESEARCH_SURVIVORs (US_DATA_1000, NYSE_OPEN)."
+  - "2026-04-20 post-PR #49 15m landscape scan — identified 3 cells with Chordia-cleared IS t."
+
+theory_citations:
+  grounded_in_local_extracts:
+    - path: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: |
+        Fitschen 2013 Ch 3 grounds intraday trend-follow on equity indices.
+        MNQ 15m is within Fitschen's tested intraday horizon (closer to
+        the hourly-bar test than 5m is).
+    - path: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+      use: |
+        Chan 2013 Ch 7 stop-cascade mechanism applies at 15m aperture —
+        not aperture-specific. p.157 verbatim: "The execution of these
+        stop orders often leads to momentum because a cascading effect
+        may trigger stop orders placed further away from the open price
+        as well."
+
+scope:
+  instrument: "MNQ"
+  aperture: 15
+  entry_model: "E2"
+  confirm_bars: 1
+  rr_target: 1.0
+  filter: "none (unfiltered baseline)"
+  is_window: "trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01)"
+  oos_window: "2026-01-01 ≤ trading_day (read-only, Mode A sacred)"
+  cells_tested:
+    - orb_label: "CME_PRECLOSE"
+      expected_n_is: 289
+      expected_net_expr_is: +0.2192
+      landscape_t: +4.063
+    - orb_label: "NYSE_OPEN"
+      expected_n_is: 1545
+      expected_net_expr_is: +0.0974
+      landscape_t: +3.958
+    - orb_label: "US_DATA_1000"
+      expected_n_is: 1594
+      expected_net_expr_is: +0.0966
+      landscape_t: +4.037
+
+hypothesis:
+  H1_per_cell: |
+    For each cell (MNQ × <session> × 15m × E2 × CB1 × RR=1.0 × unfiltered),
+    the IS Net ExpR (canonical pnl_r; already net-of-cost) is > 0 AND
+    HC3-robust one-sample t on IS pnl_r mean is > +3.0 (Chordia with-theory)
+    AND one-tailed p < 0.05.
+  kill_if_per_cell: |
+    IS Net ExpR ≤ 0 OR t ≤ +3.0 OR one-tailed p ≥ 0.05.
+
+testing_discipline:
+  K_framing: |
+    3 independent Pathway-B K=1 tests, each a pre-committed cell-specific
+    replication. Same discipline as PR #49.
+  mandatory_downstream_gates_non_waivable:
+    - "C6 (WFE ≥ 0.50) — computed via 3-fold expanding walk-forward on IS"
+    - "C8 (OOS ExpR ≥ 0.40 × IS, N_OOS ≥ 50) — read-only on sacred Mode A holdout"
+    - "C9 (era stability: no calendar year with N≥50 having ExpR < -0.05)"
+  integrity_gates:
+    - "unfiltered baseline (no filter_type applied)"
+    - "pnl_r used directly as net (canonical per pipeline/cost_model.py:464)"
+
+decision_rules:
+  verdicts_per_cell:
+    - verdict: "<CELL>_CANDIDATE_READY"
+      criteria: "H1 pass AND C6 pass AND C8 pass AND C9 pass AND N ≥ 100"
+      meaning: "Candidate for Phase 0 validated_setups promotion via downstream review. THIS PRE-REG DOES NOT PROMOTE."
+    - verdict: "<CELL>_RESEARCH_SURVIVOR"
+      criteria: "H1 pass AND at least one of C6/C8/C9 fails"
+      meaning: "Real IS edge but fails at least one Phase 0 deploy-gate under this pre-reg. Document for future work."
+    - verdict: "<CELL>_KILL_IS"
+      criteria: "H1 fail"
+      meaning: "IS hypothesis rejected. Cell closed."
+    - verdict: "<CELL>_SCAN_ABORT"
+      criteria: "N < 100 OR data integrity fail"
+      meaning: "Fail-closed."
+
+non_actions:
+  - "Does NOT write to validated_setups / edge_families / lane_allocation / live_config."
+  - "Does NOT modify Q4-band MNQ contract (PR #43) or any other contract."
+  - "Does NOT apply monotonic-rank sizing (separate follow-on)."
+  - "Does NOT test 5m or 30m (30m covered by PR #49)."
+  - "Does NOT test RR=1.5 or 2.0 (future pre-regs)."
+
+outputs:
+  result_md: "docs/audit/results/2026-04-20-mnq-15m-rr10-unfiltered-lane-discovery-v1.md"
+  script: "research/mnq_15m_rr10_unfiltered_lane_discovery_v1.py"
+
+commit_sha: "TO_FILL_AFTER_COMMIT"
