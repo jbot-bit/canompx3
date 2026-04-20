@@ -4,6 +4,72 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-20 night — broad lazy-import sweep COMPLETE — 7 commits, ~3.8s cold-import savings)
+
+Follow-on session after the 2026-04-20 MGC/MNQ TBBO pilot work. User asked to resume the second terminal's broad lazy-import sweep (stage file `broad_lazy_sweep_phase1.md` had been staged but never completed). Executed Phase 1, Phase 1b, A+ review-fix, Phase 2 (via stats), Phase 3, Phase 3b.
+
+### What landed (branch `perf/lazy-imports-broad-sweep`, 7 commits ahead of `origin/perf/lazy-imports-broad-sweep`)
+
+| Commit | Module | Before | After | Delta |
+|--------|--------|--------|-------|-------|
+| `1f48adbf` | `trading_app/strategy_discovery.py` | 0.385s | — | architectural cleanup |
+| `c354c9d0` | `trading_app/strategy_validator.py` | 0.386s | — | architectural cleanup |
+| `a7639999` | `trading_app/outcome_builder.py` | 0.395s | — | architectural cleanup |
+| `48d8be3d` | docs-only (A+ review fix on stale "5s" comment) | — | — | — |
+| `19f13b8c` | `pipeline/build_daily_features.py` | 0.348s | 0.044s | **-0.303s (8×)** |
+| `03868235` | `pipeline/stats.py` | 0.988s | 0.002s | **-0.986s (500×)** |
+| `58763a90` | `trading_app/entry_rules.py` | 0.435s | 0.020s | **-0.415s (25×)** |
+
+Phase 3 + stats + entry_rules unlocked the downstream cascade. FINAL measured downstream (5-run median, isolated subprocess):
+- `trading_app.strategy_discovery` 0.385s → 0.098s (-0.287s, 4×) — pandas no longer loaded on bare import
+- `trading_app.strategy_validator` 0.386s → 0.088s (-0.298s, 4×)
+- `trading_app.outcome_builder` 0.395s → 0.061s (-0.334s, 6×) — pandas no longer loaded on bare import
+- `trading_app.walkforward` ~0.4s → 0.090s (-0.31s, 4×)
+- `trading_app.live_config` 1.363s → 0.454s (-0.909s, 3×)
+
+**Total measurable cold-import savings: ~3.8s across 8 modules.**
+
+Plan § 7 acceptance (Sum of Phase 1+2+3 ≤ 10s): PASS (0.73s actual). Plan target met with headroom.
+
+### Pattern used (all commits)
+
+PEP 8 delayed imports + PEP 563 `from __future__ import annotations` + PEP 484 `TYPE_CHECKING` guard for annotation-only symbols + per-function lazy `import pd / np / duckdb` at runtime sites. Template matches PR #24 `trading_app/ai/claude_client.py` (commit `6594ae3b`).
+
+### Correctness verification (every commit)
+
+- Tests: 410 passed across 6 companion suites (strategy_discovery 63, strategy_validator 128, outcome_builder 31, entry_rules 64, build_daily_features 83, live_config 41). No regressions.
+- Drift: `python -m pipeline.check_drift` returns 0 violations (isolated — stashed other-terminal ruff-churn working-tree mods on ~30 unrelated files).
+- CLI smokes: `python -m pipeline.build_daily_features --help`, `python -m trading_app.strategy_discovery --help` etc. all work.
+- Behavioral: `jobson_korkie_p(1.5, 1.2, 100, 100, rho=0.7) = 0.016412` (unchanged vs pre-edit).
+- Blast radius: 0 external callers affected. Grep confirmed zero module-attribute access to `.pd / .np / .duckdb` and zero `from X import *`.
+- Self-review via `/code-review` skill: graded A+ after stale-comment fix (`48d8be3d`). Findings: zero CRITICAL, zero HIGH, 1 MEDIUM (fixed), 1 LOW (cosmetic — stage file line-number drift, not worth amending; stage file now deleted).
+
+### Honest framing
+
+- Plan's "5.1s/11.9s" discovery-table numbers reflected a cold-OS-boot state, NOT warm-cache dev session. Current machine warm-cache baselines were re-measured before every phase (lesson learned in first iteration: trusting plan numbers overclaimed a ~0ms win as ~5s). All commit messages cite measured-on-current-state numbers with 5-run medians, isolated subprocesses.
+- The first 3 commits (strategy_discovery/validator/outcome_builder, Phase 1/1b) appeared as noise-level wins in isolation; their deferrals became visible only after Phase 3 + stats + entry_rules fixed the binding transitive chain. Architectural correctness per PEP 8 independent of measured win.
+
+### Deferred (per plan § 4 + safety)
+
+- `trading_app/execution_engine.py` — live trading hot-path; lazy-load risks first-call latency. Needs broker-mock benchmark.
+- `trading_app/paper_trader.py` — same.
+- `trading_app/portfolio.py` — 0.4s cold, pulls pd/np/duckdb; imported by `execution_engine` at module-top. Skipped by transitive association with the deferred zone; a lazy-load here would only shift first-pd-import to first Portfolio method call, which is hit during live trading startup. Needs its own plan with explicit benchmark.
+- `trading_app/live/bot_dashboard.py` — fastapi restructure, its own design proposal.
+
+### Next moves
+
+- Push branch: `git push -u origin perf/lazy-imports-broad-sweep`
+- Open PR against `main`: title "perf: broad lazy-import sweep — ~3.8s cold-import savings across 8 modules"
+- Deferred work listed above remains open for a future session with explicit broker-mock / benchmark scaffolding.
+- Working-tree still has ~30 unrelated modified files (other terminal's ruff-churn). Separate cleanup responsibility — not this session's scope.
+
+### Files touched (scope_lock enforced across 7 commits)
+
+- `trading_app/strategy_discovery.py`, `trading_app/strategy_validator.py`, `trading_app/outcome_builder.py`, `trading_app/entry_rules.py`, `pipeline/build_daily_features.py`, `pipeline/stats.py`
+- `docs/plans/2026-04-20-broad-lazy-import-sweep.md` (unchanged — plan is done as specified)
+- `docs/runtime/stages/broad_lazy_sweep_phase1b.md`, `broad_lazy_sweep_review_fix_and_phase3.md`, `broad_lazy_sweep_stats_and_entry_rules.md` (all created + deleted in-session; closure commit removes them)
+- `HANDOFF.md` (this entry)
+
 ## Update (2026-04-20 late — MNQ TBBO pilot LANDED; closure = conservative vs modeled)
 
 Follow-on to the evening H0 rerun + MNQ pilot blocker. User direction: "proper planning, no ad-hoc." Plan v2 audited, approved, executed end-to-end across 4 stages.
