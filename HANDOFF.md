@@ -8211,3 +8211,21 @@ Decide per branch whether to push.
 3. Decide whether to push the 6 local-only commits above.
 4. Decide whether to remove `canompx3-6lane-baseline` worktree (post-merge).
 5. 18 older PRs need merge/close decisions (none time-critical per memory).
+
+## Update (2026-04-21 transplant shortlist decision sheet)
+
+- Added `docs/plans/2026-04-21-transplant-target-shortlist.md`.
+- Ran a structured shortlist for external transplant candidates scored on:
+  - data compatibility
+  - licensing
+  - testability
+  - maintenance burden
+  - integration blast radius
+- Top 3 targets selected:
+  1. `unionai-oss/pandera` (primary)
+  2. `great-expectations/great_expectations` (secondary)
+  3. `dagster-io/dagster` (conditional/phase-2)
+- Excluded from immediate transplant path due licensing/fit risk:
+  - `polakowo/vectorbt` (Apache-2.0 + Commons Clause)
+  - `kernc/backtesting.py` (AGPL-3.0)
+  - `mementum/backtrader` (GPL-3.0)
