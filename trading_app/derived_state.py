@@ -73,7 +73,7 @@ def _fetch_one(con: duckdb.DuckDBPyConnection, query: str, default: str) -> str:
     value = row[0]
     if value is None:
         return default
-    if isinstance(value, (date, datetime)):
+    if isinstance(value, date | datetime):
         return value.isoformat()
     return str(value)
 
