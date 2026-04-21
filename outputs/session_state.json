@@ -1,12 +1,12 @@
 {
-  "phase": "phase-6-golden-egg-report",
+  "phase": "phase-7-pcc-escalation-memo",
   "running_trial_count": 20,
   "trial_cap": 300,
   "data_mode": "duckdb_readonly",
   "worktree": "/tmp/canompx3-orthogonal-hunt",
   "branch": "research/orthogonal-golden-egg-hunt-v1",
   "last_commit_sha": "0e81741145273d0b4304d046bf3f689ec781d045",
-  "timestamp": "2026-04-21T03:55:22Z",
+  "timestamp": "2026-04-21T04:04:30Z",
   "canonical_db_path": "/mnt/c/Users/joshd/canompx3/gold.db",
   "holdout_sacred_from": "2026-01-01",
   "remote_heads": {
@@ -30,6 +30,7 @@
     "Phase 3 abort on mes-session-boundary-v1: the locked ASIA_RANGE_ATR_Q67_HIGH feature uses session_asia_high/low, which are only complete after 17:00 Brisbane and therefore invalid for BRISBANE_1025, TOKYO_OPEN, and SINGAPORE_OPEN. The family was blocked before extraction instead of being silently trimmed.",
     "Phase 3 completed for mgc-microstructure-v1: ORB range/volume concentration features were timing-valid because they use only the five ORB formation bars before E2 entry, but the family still died cleanly on canonical data with zero BH-FDR survivors, family null p-values 0.4263/0.3944, and coverage limited to US_DATA_830 because BRISBANE_1025 had zero scoped trades.",
     "Phase 5 completed: session-wide multiple-testing reconciliation consumed the 20 executed trials already in the ledger and confirmed that zero family-level survivors propagated into a session-level candidate set. Harvey-Liu and DSR remained supplementary only; no current-session candidate reached the Chordia band.",
-    "Phase 6 completed: the golden-egg report closed the hunt with zero GOLD and zero SILVER candidates. The highest-EV output of the session is the posture-shortening PCC evidence, not an orthogonal deployable hedge; the fork memo therefore recommends escalating PCC findings rather than expanding candidate promotion."
+    "Phase 6 completed: the golden-egg report closed the hunt with zero GOLD and zero SILVER candidates. The highest-EV output of the session is the posture-shortening PCC evidence, not an orthogonal deployable hedge; the fork memo therefore recommends escalating PCC findings rather than expanding candidate promotion.",
+    "Phase 7 completed: PCC evidence was condensed into a one-page escalation memo for the baseline workstream. It explicitly rules out a generic Phase B calibration bug, confirms grandfathering is provisional-only, and prioritizes TOKYO_OPEN, SINGAPORE_OPEN, then US_DATA_1000 for clean Mode A rediscovery once Terminal 1 resolves posture."
   ]
 }
