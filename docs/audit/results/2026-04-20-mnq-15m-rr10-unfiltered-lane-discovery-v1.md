@@ -1,5 +1,16 @@
 # MNQ 15m E2 CB1 RR=1.0 unfiltered lane discovery — v1
 
+> **AMENDMENT 2026-04-21 (DSR audit, PR #56):** this doc's 2 CANDIDATE_READY
+> cells (NYSE_OPEN 15m RR=1.0 and US_DATA_1000 15m RR=1.0) were
+> subsequently re-tested inside PR #51's larger Pathway A K=105 family.
+> Under the PR #51 family framing they FAIL Phase 0 C5 (Deflated Sharpe)
+> with DSR ~= 0.007-0.008 even after Bailey Exhibit 4 effective-N correction
+> (rho_hat=+0.058, N_eff=99.0). They are therefore **MISCLASSIFIED**
+> under the PR #51 family. Legitimate route forward: Pathway B K=1
+> theory-driven pre-reg per `pre_registered_criteria.md` Amendment 3.0,
+> bypassing family multiplicity. See `2026-04-21-mnq-pr51-dsr-audit-v1.md`
+> and `2026-04-21-mnq-pr51-dsr-audit-v2-effective-n.md`.
+
 **Pre-reg:** `docs/audit/hypotheses/2026-04-20-mnq-15m-rr10-unfiltered-lane-discovery-v1.yaml`
 
 **Script:** `research/mnq_15m_rr10_unfiltered_lane_discovery_v1.py`
