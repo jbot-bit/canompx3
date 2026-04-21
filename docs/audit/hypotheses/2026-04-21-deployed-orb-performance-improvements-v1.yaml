@@ -1,0 +1,254 @@
+version: 1
+status: LOCKED
+date: 2026-04-21
+slug: deployed-orb-performance-improvements-v1
+title: "Exact deployed ORB lanes — adjacent-session participation and volatility-state confluences (K=24)"
+owner: codex
+testing_mode: family
+pathway: A_family
+
+purpose: |
+  Identify whether a small, pre-trade-safe set of confluence overlays can
+  improve the currently deployed ORB surface without broadening into a fresh
+  discovery program. This replay is intentionally scoped to the exact active
+  lanes on the active profile and asks only whether adding one additional
+  overlay to each lane improves the filtered live universe.
+
+authority:
+  primary:
+    - "CLAUDE.md"
+    - "RESEARCH_RULES.md"
+    - "TRADING_RULES.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "pipeline/session_guard.py"
+  notes:
+    - "Canonical truth-finding surfaces only: daily_features + orb_outcomes."
+    - "Derived tables and live ledgers are banned for truth-finding."
+    - "2026-01-01 onwards is sacred forward data and is descriptive only."
+    - "Thresholds for any 2025 OOS-CV evaluation must be fit on pre-2025 rows only."
+
+reproducibility:
+  repo_root: "/tmp/canompx3-ml-sizing-v1"
+  committed_required_before_run: true
+  commit_sha_note: "Use the git commit that first locks this file before executing the replay."
+
+deployment_not_done_here: |
+  This file authorizes research only. No lane changes, sizing overrides,
+  shadow routing, or live deployment are permitted from this branch based on
+  these results alone.
+
+baseline:
+  active_profile_id: "topstep_50k_mnq_auto"
+  active_lane_count: 6
+  exact_pre_2026_uniform_weighted_expectancy_r: 0.096415
+  exact_pre_2026_total_trades: 8161
+  discovery_budget_note: |
+    Using the project prompt's heuristic, N=8161 supports roughly 50
+    independent trials. This family locks K=24 and stays below that heuristic
+    ceiling. It is also below the hard 300-trial clean-data cap in Criterion 2.
+
+data_policy:
+  discovery_is_window: "trading_day < 2025-01-01"
+  oos_cv_window: "2025-01-01 <= trading_day < 2026-01-01"
+  forward_window: "trading_day >= 2026-01-01"
+  holdout_date: "2026-01-01"
+  threshold_fit_window: "pre-2025 only"
+  threshold_lock_rule: |
+    Continuous thresholds are fit once from the exact filtered lane universe
+    using only pre-2025 rows, then frozen and applied unchanged to 2025 OOS-CV
+    and the 2026+ forward-monitor slice.
+  tuning_against_2025_or_2026: false
+
+scope:
+  profile_id: "topstep_50k_mnq_auto"
+  instrument: "MNQ"
+  entry_model: "E2"
+  exact_live_lanes:
+    - lane_id: "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5"
+      session: "EUROPE_FLOW"
+      orb_minutes: 5
+      rr_target: 1.5
+      confirm_bars: 1
+      base_filter: "ORB_G5"
+    - lane_id: "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15"
+      session: "SINGAPORE_OPEN"
+      orb_minutes: 15
+      rr_target: 1.5
+      confirm_bars: 1
+      base_filter: "ATR_P50"
+    - lane_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+      session: "COMEX_SETTLE"
+      orb_minutes: 5
+      rr_target: 1.5
+      confirm_bars: 1
+      base_filter: "ORB_G5"
+    - lane_id: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+      session: "NYSE_OPEN"
+      orb_minutes: 5
+      rr_target: 1.0
+      confirm_bars: 1
+      base_filter: "COST_LT12"
+    - lane_id: "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12"
+      session: "TOKYO_OPEN"
+      orb_minutes: 5
+      rr_target: 1.5
+      confirm_bars: 1
+      base_filter: "COST_LT12"
+    - lane_id: "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
+      session: "US_DATA_1000"
+      orb_minutes: 15
+      rr_target: 1.5
+      confirm_bars: 1
+      base_filter: "ORB_G5"
+
+family_k:
+  global_k: 24
+  bh_q: 0.10
+  cells_structured_as: |
+    Twelve lane-feature hypotheses. Each feature is tested at two locked
+    thresholds on the exact filtered lane universe:
+      - high state = feature >= IS_P75
+      - extreme state = feature >= IS_P90
+    Honest K = 12 hypotheses × 2 thresholds = 24 tests.
+
+hypotheses:
+  - id: H01_EUROPE_LM_VOLUME
+    lane_id: "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5"
+    feature_name: "orb_LONDON_METALS_volume"
+    feature_role: "adjacent_session_participation"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "ORB end for LONDON_METALS, before EUROPE_FLOW decision"
+    theory_citation: "RESEARCH_RULES.md mechanism test; London participation precedes Europe-flow continuation."
+    economic_basis: "Higher London-metals ORB volume indicates genuine European participation rather than thin drift, which should improve EUROPE_FLOW breakout follow-through."
+  - id: H02_EUROPE_ATR_VEL
+    lane_id: "MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5"
+    feature_name: "atr_vel_ratio"
+    feature_role: "volatility_state"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "Known before session start from prior data"
+    theory_citation: "RESEARCH_RULES.md mechanism test; volatility clustering / expanding-state hypothesis."
+    economic_basis: "Higher ATR velocity indicates expanding realized volatility, which should help continuation-type breakouts survive friction."
+  - id: H03_SING_TOKYO_VOLUME
+    lane_id: "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15"
+    feature_name: "orb_TOKYO_OPEN_volume"
+    feature_role: "adjacent_session_participation"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "ORB end for TOKYO_OPEN, before SINGAPORE_OPEN decision"
+    theory_citation: "TRADING_RULES.md session playbook; Asia participation should carry from Tokyo into Singapore."
+    economic_basis: "Higher Tokyo participation should identify active Asia-session trend days where the subsequent Singapore breakout has more follow-through."
+  - id: H04_SING_ATR_VEL
+    lane_id: "MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15"
+    feature_name: "atr_vel_ratio"
+    feature_role: "volatility_state"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "Known before session start from prior data"
+    theory_citation: "RESEARCH_RULES.md mechanism test; expanding volatility improves breakout quality."
+    economic_basis: "ATR velocity may separate quiet ATR_P50 days from genuinely expanding days where the Singapore lane can push beyond the already existing base filter."
+  - id: H05_COMEX_NYO_VOLUME
+    lane_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+    feature_name: "orb_NYSE_OPEN_volume"
+    feature_role: "adjacent_session_participation"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "ORB end for NYSE_OPEN, before COMEX_SETTLE decision"
+    theory_citation: "TRADING_RULES.md cross-market participation priors; stronger US cash-open participation should carry into the afternoon session."
+    economic_basis: "Large NYSE cash-open participation should mark strong US session trend days that persist into the COMEX settle window."
+  - id: H06_COMEX_ATR_VEL
+    lane_id: "MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5"
+    feature_name: "atr_vel_ratio"
+    feature_role: "volatility_state"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "Known before session start from prior data"
+    theory_citation: "RESEARCH_RULES.md mechanism test; volatility clustering / expanding-state hypothesis."
+    economic_basis: "An expanding volatility backdrop should make afternoon continuation lanes more selective and less dependent on static size gating alone."
+  - id: H07_NYO_US830_VOLUME
+    lane_id: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+    feature_name: "orb_US_DATA_830_volume"
+    feature_role: "adjacent_session_participation"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "ORB end for US_DATA_830, before NYSE_OPEN decision"
+    theory_citation: "TRADING_RULES.md session playbook; stronger data-release participation should improve the cash-open breakout lane."
+    economic_basis: "When the 8:30 ET data window trades with high participation, the subsequent NYSE open breakout should be more likely to carry."
+  - id: H08_NYO_ATR_VEL
+    lane_id: "MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12"
+    feature_name: "atr_vel_ratio"
+    feature_role: "volatility_state"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "Known before session start from prior data"
+    theory_citation: "RESEARCH_RULES.md mechanism test; expanding volatility improves breakout quality."
+    economic_basis: "ATR velocity may improve the cost-gated NYSE lane by identifying cash opens with enough state expansion to justify the breakout."
+  - id: H09_TOKYO_CME_VOLUME
+    lane_id: "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12"
+    feature_name: "orb_CME_REOPEN_volume"
+    feature_role: "adjacent_session_participation"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "ORB end for CME_REOPEN, before TOKYO_OPEN decision"
+    theory_citation: "TRADING_RULES.md session playbook; CME reopen participation may identify active Asia-session handoff days."
+    economic_basis: "Stronger CME reopen participation should signal a more active overnight handoff into the Asia session and improve Tokyo breakout continuation."
+  - id: H10_TOKYO_ATR_VEL
+    lane_id: "MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12"
+    feature_name: "atr_vel_ratio"
+    feature_role: "volatility_state"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "Known before session start from prior data"
+    theory_citation: "RESEARCH_RULES.md mechanism test; expanding volatility improves breakout quality."
+    economic_basis: "ATR velocity may differentiate genuine Tokyo trend days from low-energy opens that survive the cost filter but lack continuation."
+  - id: H11_US1000_NYO_VOLUME
+    lane_id: "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
+    feature_name: "orb_NYSE_OPEN_volume"
+    feature_role: "adjacent_session_participation"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "ORB end for NYSE_OPEN, before US_DATA_1000 decision"
+    theory_citation: "TRADING_RULES.md session playbook; cash-open participation should carry into the 10:00 ET post-open lane."
+    economic_basis: "Higher NYSE cash-open participation should identify true trend days that persist into the 10:00 ET breakout window."
+  - id: H12_US1000_ATR_VEL
+    lane_id: "MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15"
+    feature_name: "atr_vel_ratio"
+    feature_role: "volatility_state"
+    feature_type: continuous
+    threshold_rules: ["IS_P75", "IS_P90"]
+    trade_time_knowable: "Known before session start from prior data"
+    theory_citation: "RESEARCH_RULES.md mechanism test; expanding volatility improves breakout quality."
+    economic_basis: "ATR velocity may separate post-open lanes with enough energy for continuation from nominally large ORBs that still lack follow-through."
+
+feature_exclusions:
+  banned_for_this_family:
+    - "Any break-bar dependent field: rel_vol_*, orb_*_break_*, orb_*_double_break"
+    - "Any full-day field: daily_high, daily_low, daily_close, day_type"
+    - "Any feature blocked by pipeline.session_guard for the target session"
+    - "Any feature tautological with the active base filter (same-session ORB size for ORB_G* lanes, ATR percentile for ATR_P50 lane)"
+
+evaluation_protocol:
+  baseline_question: "Within the exact filtered live lane, does the overlay-on subset outperform the overlay-off subset?"
+  primary_statistics:
+    - "N_IS_on, N_IS_off, avg_r_IS_on, avg_r_IS_off, delta_IS"
+    - "one_tailed_welch_p_IS(on vs off)"
+    - "BH-adjusted p at global K=24, q=0.10"
+    - "N_OOS_on, avg_r_OOS_on, avg_r_OOS_off, delta_OOS"
+    - "Sharpe_IS_on, Sharpe_OOS_on, WFE = Sharpe_OOS_on / Sharpe_IS_on"
+    - "Forward 2026+ descriptive metrics only"
+  survivor_criteria:
+    - "BH-adjusted p < 0.10 at K=24"
+    - "delta_IS > 0"
+    - "N_OOS_on >= 30"
+    - "avg_r_OOS_on > 0"
+    - "WFE >= 0.50 when Sharpe_IS_on > 0"
+  forward_policy:
+    - "2026+ rows are descriptive only and cannot rescue or kill a 2025 OOS-CV miss."
+    - "A negative 2026 sign flip is flagged WATCH, not used for selection."
+
+kill_criteria:
+  - "If any feature is not trade-time knowable for its target lane, the affected hypothesis is invalid."
+  - "If any threshold is fit using 2025 or 2026 rows, the run is invalid."
+  - "If no cell beats BH q=0.10 at K=24 with positive 2025 OOS-CV expectancy, the family is dead for promotion."
+  - "If survivors are driven by extreme fire-rate artifacts or near-empty 2025 slices, treat them as dead."
