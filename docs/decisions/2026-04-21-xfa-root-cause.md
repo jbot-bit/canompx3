@@ -77,7 +77,7 @@ Dashboard path (`trading_app/live/bot_dashboard.py` L1484) passes `--signal-only
 
 ### Broker credentials — unverified state
 
-`trading_app/live/rithmic/auth.py` L49–L63 reads `RITHMIC_USER` / `RITHMIC_PASSWORD` / `RITHMIC_APPKEY` from env. If absent, a broker factory call would fail. This worktree does **not** have those env vars set (per shell env), so even flipping `--live` would not actually connect.
+`trading_app/live/rithmic/auth.py` L49–L65 reads six Rithmic env vars: `RITHMIC_USER` (required), `RITHMIC_PASSWORD` (required), `RITHMIC_GATEWAY` (required), plus three optional with defaults — `RITHMIC_SYSTEM_NAME` (default `"Rithmic Paper Trading"`), `RITHMIC_APP_NAME` (default `"CANO"`), `RITHMIC_APP_VERSION` (default `"1.0.0"`). The hard-required trio comes from the fail-fast guard at L61-L65: `raise RuntimeError("Rithmic credentials not configured. Set RITHMIC_USER, RITHMIC_PASSWORD, RITHMIC_GATEWAY environment variables.")`. This worktree does **not** have those three hard-required vars set (per shell env), so even flipping `--live` would not actually connect.
 
 **Not verified in this audit:** whether the production machine / systemd service / docker image that runs the bot has Rithmic env vars set. Cannot verify from a local worktree.
 
@@ -91,7 +91,7 @@ Directive § Phase 2.1 asks: "is it (a) a code gap, (b) a flag/config switch, (c
 |---|---|---|
 | (a) code gap | **NO** | F-1 fully wired since 2026-04-14; 239 tests pass; broker-aware auto-disable since 2026-04-15 |
 | (b) flag/config switch | **YES (primary)** | `--live` / `--demo` / `--signal-only` CLI arg; signal-only is the safest default |
-| (c) credential issue | **LIKELY (contributory)** | `RITHMIC_USER` / `RITHMIC_PASSWORD` / `RITHMIC_APPKEY` required; production env state not verified from this worktree |
+| (c) credential issue | **LIKELY (contributory)** | `RITHMIC_USER` / `RITHMIC_PASSWORD` / `RITHMIC_GATEWAY` required per auth.py L61-L65; production env state not verified from this worktree |
 | (d) risk gate deliberately paused | **YES (co-primary)** | `signal_only=True` default is an explicit ops safety choice; `--live` path requires human "CONFIRM" input |
 | (e) ops dependency on broker build | **PARTIAL** | Broker code exists (`trading_app/live/rithmic/`, `projectx/`, `tradovate/`); account binding to real XFA is the unfinished ops step, not a code dependency |
 | (f) unknown | NO | all routes traced |
