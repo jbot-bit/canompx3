@@ -11,3 +11,4 @@ Cap: `300` total parameterized trials for this session.
 | 2026-04-21T02:57:25Z | pcc-6 | mode_a_readiness_scan | 0 | 0 | 300 | Relative Mode A rerun priority scan for the six live lanes; no hypothesis parameterization. |
 | 2026-04-21T02:59:55Z | pcc-2 | dsr_driver_recheck | 0 | 0 | 300 | Recomputed DSR drivers match the Phase B lineage within rounding; no arithmetic drift. |
 | 2026-04-21T03:10:17Z | pcc-1 | phase_b_calibration_probe | 0 | 0 | 300 | Synthetic calibration probe confirms the Phase B gate logic can emit KEEP for a strong clean-holdout candidate and separately degrade weak, contaminated, and SR-alarmed cases. |
+| 2026-04-21T03:15:33Z | phase-1 | orthogonal_pov_map | 0 | 0 | 300 | Ranked the mandated candidate families, selected the top 3 posture-blocker-proof directions, and fenced off the dropped families for this session. |
