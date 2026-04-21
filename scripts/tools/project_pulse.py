@@ -2137,7 +2137,7 @@ def format_text(report: PulseReport) -> str:
         if report.survival_summary:
             ss = report.survival_summary
             op = ss.get("operational_pass_probability")
-            op_str = f"{float(op):.1%}" if isinstance(op, (float, int)) else "?"
+            op_str = f"{float(op):.1%}" if isinstance(op, float | int) else "?"
             lines.append(
                 "  "
                 f"C11 {('PASS' if ss.get('gate_ok') else 'BLOCK')} {op_str} | "
@@ -2303,7 +2303,7 @@ def format_markdown(report: PulseReport) -> str:
         if report.survival_summary:
             ss = report.survival_summary
             op = ss.get("operational_pass_probability")
-            op_str = f"{float(op):.1%}" if isinstance(op, (float, int)) else "?"
+            op_str = f"{float(op):.1%}" if isinstance(op, float | int) else "?"
             lines.append(
                 f"- **Criterion 11**: {'PASS' if ss.get('gate_ok') else 'BLOCK'} {op_str} | "
                 f"as_of={ss.get('as_of_date')} | age={ss.get('report_age_days')}d"
