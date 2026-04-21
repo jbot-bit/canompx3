@@ -12,6 +12,18 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 
 ---
 
+## Quick Commands
+
+```bash
+# Always invoke Python via `-m` — script-style invocation fails with ModuleNotFoundError on sibling imports
+python -m pipeline.check_drift              # Integrity gates (105 checks)
+python -m pytest tests/ -x -q               # Full test suite
+python scripts/tools/context_resolver.py --task "<request>" --format markdown  # Task router
+```
+Python 3.11 in `.venv/Scripts/python.exe` (Windows). Env activation is implicit via `VIRTUAL_ENV=.venv` in `.claude/settings.json`.
+
+---
+
 ## Document Authority
 
 Canonical registry for document roles: `docs/governance/document_authority.md`.
@@ -37,6 +49,9 @@ Fallback if unavailable or ambiguous: `AGENTS.md`, `docs/governance/document_aut
 - **Idempotent:** All operations safe to re-run (INSERT OR REPLACE / DELETE+INSERT)
 - **Pre-computed outcomes:** 5/15/30m ORB apertures, reused for all discovery
 - **One-way dependency:** pipeline/ → trading_app/ (never reversed)
+
+### Top-Level Layout
+`pipeline/` (ingestion, DST, outcomes) · `trading_app/` (strategy discovery, validation, MCP server, allocator) · `research/` (scans, audits, hypothesis tests) · `scripts/tools/` (context_resolver, project_pulse, system_context) · `docs/` (governance, institutional, postmortems, specs) · `resources/` (PDFs for literature grounding) · `tests/` (pytest).
 
 ### Time & Calendar Model
 - Local timezone: `Australia/Brisbane` (UTC+10, no DST)
@@ -65,6 +80,8 @@ Fallback if unavailable or ambiguous: `AGENTS.md`, `docs/governance/document_aut
 ## MCP Server (gold-db)
 
 `gold-db` MCP server (`trading_app/mcp_server.py`) — 4 read-only tools. **ALWAYS prefer over raw SQL.** Tools: `list_available_queries`, `query_trading_db` (18 templates, row cap 5000), `get_strategy_fitness` (always `summary_only=True` for portfolio-wide), `get_canonical_context`. See `.claude/rules/mcp-usage.md` for intent→tool mapping.
+
+**Pyright LSP is live.** For Python **symbol** lookups (function/class/method/module name) prefer the `LSP` tool over `Grep`: `findReferences` for callers, `goToDefinition` for source, `hover` for signature+docstring, `workspaceSymbol` for fuzzy search. Fall back to `Grep` only for string literals, SQL, config keys, comments, or non-Python files.
 
 ---
 
