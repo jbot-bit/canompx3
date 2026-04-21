@@ -7932,3 +7932,14 @@ Referenced in Criterion 12 but not implemented. Paper: `resources/real_time_stra
 ### Stale note corrected
 
 - Prior note that COMEX would remain on `OVNRNG_100` was stale. Canonical script output selected `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5` on 2026-04-18. Script output wins.
+
+## 2026-04-21 — Topstep `...846` verified live readiness
+
+- Branch: `research/topstep-846-live-readiness`
+- Verified against live broker account discovery and read-only preflight only.
+- Account suffix `846` resolves uniquely to `EXPRESS-V2-451890-53179846 #21944866`.
+- Broker metadata for `#21944866`: `canTrade=True`, `simulated=True`, `isVisible=True`.
+- Read-only orphan check returned `open_positions=0`.
+- `scripts/run_live_session.py --preflight` was patched to verify explicit account binding and broker state before claiming readiness.
+- Exact verified preflight for `--profile topstep_50k_mnq_auto --broker projectx --account-suffix 846 --copies 1 --live --preflight` returned `6/6 passed`.
+- Non-blocking caveat: `daily_features` warned `atr_vel_regime=None`; current profile does not use `ATR_VEL`, so runtime remained launchable but not warning-free.

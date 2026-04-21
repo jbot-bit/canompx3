@@ -62,6 +62,38 @@ honest live-ready path yet.
 
 ## Operational interpretation for account `...846`
 
+## Verified runtime state
+
+Verified live against the broker on 2026-04-21 from this worktree using
+read-only account discovery and preflight only:
+
+- ProjectX returned three active accounts:
+  - `50KTC-V2-451890-20372221 #20859313`
+  - `50KTC-V2-451890-67605663 #21390438`
+  - `EXPRESS-V2-451890-53179846 #21944866`
+- Account suffix `846` resolves uniquely to
+  `EXPRESS-V2-451890-53179846 #21944866`
+- Broker metadata for `#21944866` reported:
+  - `canTrade=True`
+  - `simulated=True`
+  - `isVisible=True`
+- Read-only orphan check returned `open_positions=0`
+- Exact preflight rerun with account binding:
+  - `--profile topstep_50k_mnq_auto`
+  - `--broker projectx`
+  - `--account-suffix 846`
+  - `--copies 1`
+  - `--live --preflight`
+  - result: `6/6 passed`
+
+Non-blocking runtime caveats from that same verified preflight:
+
+- `daily_features` warned `atr_vel_regime = None`
+- the warning is non-blocking for this profile because the six active lanes do
+  not depend on `ATR_VEL`
+- regime gating paused 2 strategies at current state; that is expected runtime
+  gating, not a launch blocker
+
 ### If `...846` is an Express Funded / TopstepX account
 
 This is the likely case if you were able to choose "no daily loss limit" in the
@@ -105,8 +137,12 @@ python scripts/run_live_session.py --profile topstep_50k_mnq_auto --broker proje
 
 ## Verdict
 
-- **XFA / TopstepX funded account ending `846`: READY_PENDING_CREDS_AND_PREFLIGHT**
+- **Verified current runtime status for `EXPRESS ...846`: READY_FOR_SUPERVISED_LIVE_LAUNCH**
+- **Remaining caveat:** preflight still carries a non-blocking `daily_features`
+  warning (`atr_vel_regime=None`), so this is operationally ready but not
+  "warning-free"
 - **LFA ending `846`: BLOCKED_PENDING_LFA_RUNTIME_SUPPORT**
 
 The critical missing piece was not generic live infra. It was exact account
-binding and fail-closed account-type hygiene.
+binding and fail-closed account-type hygiene, and that gap is now closed and
+verified against the actual broker account.

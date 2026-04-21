@@ -36,16 +36,68 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 from trading_app.live.instance_lock import acquire_instance_lock, release_instance_lock
-from trading_app.live.session_orchestrator import SessionOrchestrator
+from trading_app.live.session_orchestrator import SessionOrchestrator, _select_broker_account
 
 
-def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=None) -> bool:
+def _run_account_binding_check(
+    components: dict,
+    *,
+    demo: bool,
+    account_id: int = 0,
+    account_suffix: str | None = None,
+) -> dict[str, object]:
+    """Read-only account selection + broker-state verification for preflight.
+
+    This deliberately avoids constructing a live/demo SessionOrchestrator,
+    which would start cleanup logic for brackets/orders. We verify the exact
+    account binding and orphan state using the same selector as runtime.
+    """
+
+    contracts_cls = components["contracts_class"]
+    contracts = contracts_cls(auth=components["auth"], demo=demo)
+    selected_account_id, selected_account_name = _select_broker_account(
+        contracts,
+        explicit_account_id=account_id,
+        account_suffix=account_suffix,
+    )
+
+    positions = components["positions_class"](auth=components["auth"])
+    metadata_fn = getattr(positions, "query_account_metadata", None)
+    metadata = metadata_fn(selected_account_id) if callable(metadata_fn) else None
+    if callable(metadata_fn) and metadata is None:
+        raise RuntimeError(f"Selected broker account {selected_account_id} metadata lookup failed")
+
+    can_trade = metadata.get("canTrade") if isinstance(metadata, dict) else None
+    orphans = positions.query_open(selected_account_id)
+    if orphans:
+        raise RuntimeError(
+            f"Selected broker account {selected_account_name}#{selected_account_id} has {len(orphans)} open position(s)"
+        )
+
+    return {
+        "account_id": selected_account_id,
+        "account_name": selected_account_name,
+        "can_trade": can_trade,
+        "orphans": 0,
+    }
+
+
+def _run_preflight(
+    instrument: str,
+    broker: str | None,
+    demo: bool,
+    portfolio=None,
+    *,
+    account_id: int = 0,
+    account_suffix: str | None = None,
+) -> bool:
     """Pre-flight validation. Returns True if all checks pass."""
 
     from trading_app.live.broker_factory import create_broker_components, get_broker_name
 
     checks_passed = 0
-    checks_total = 5  # NOTE: must match number of check blocks (1-5) below — update if adding/removing checks
+    has_warnings = False
+    checks_total = 6  # NOTE: must match number of check blocks (1-6) below — update if adding/removing checks
 
     # 1. Auth check
     broker_name = broker or get_broker_name()
@@ -59,8 +111,33 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
         print(f"FAILED: {e}")
         components = None
 
-    # 2. Portfolio check
-    print(f"[2/{checks_total}] Portfolio check ({instrument})...", end=" ", flush=True)
+    # 2. Account binding + broker-state check
+    print(f"[2/{checks_total}] Account binding / broker state...", end=" ", flush=True)
+    if components is not None:
+        try:
+            acct = _run_account_binding_check(
+                components,
+                demo=demo,
+                account_id=account_id,
+                account_suffix=account_suffix,
+            )
+            can_trade = acct["can_trade"]
+            can_trade_text = "unknown" if can_trade is None else str(bool(can_trade))
+            print(
+                f"OK ({acct['account_name']} #{acct['account_id']}, canTrade={can_trade_text}, open_positions=0)"
+            )
+            checks_passed += 1
+        except NotImplementedError as e:
+            print(f"WARN: broker state check unavailable ({e})")
+            has_warnings = True
+            checks_passed += 1
+        except Exception as e:
+            print(f"FAILED: {e}")
+    else:
+        print("SKIPPED (auth failed)")
+
+    # 3. Portfolio check
+    print(f"[3/{checks_total}] Portfolio check ({instrument})...", end=" ", flush=True)
     try:
         if portfolio is not None:
             pf = portfolio
@@ -84,11 +161,11 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
     except Exception as e:
         print(f"FAILED: {e}")
 
-    # 3. Daily features freshness
+    # 4. Daily features freshness
     # R2-M5: use Brisbane trading day, not date.today() (Windows system time).
     # For late-night sessions (NYSE_OPEN at 00:30 Brisbane), date.today() gives
     # yesterday's date, validating stale data and producing a false-positive pass.
-    print(f"[3/{checks_total}] Daily features freshness...", end=" ", flush=True)
+    print(f"[4/{checks_total}] Daily features freshness...", end=" ", flush=True)
     try:
         from datetime import datetime, timedelta
         from zoneinfo import ZoneInfo
@@ -123,6 +200,7 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
                 )
             else:
                 print(f"WARN: {', '.join(missing)} = None — run pipeline/build_daily_features.py")
+                has_warnings = True
                 checks_passed += 1
         else:
             print(f"OK (atr_20={atr}, atr_vel={vel})")
@@ -130,8 +208,8 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
     except Exception as e:
         print(f"FAILED: {e}")
 
-    # 4. Contract resolution
-    print(f"[4/{checks_total}] Contract resolution...", end=" ", flush=True)
+    # 5. Contract resolution
+    print(f"[5/{checks_total}] Contract resolution...", end=" ", flush=True)
     if components is not None:
         try:
             contracts_cls = components["contracts_class"]
@@ -144,9 +222,9 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
     else:
         print("SKIPPED (auth failed)")
 
-    # 5. Component self-tests (notifications, brackets, fill poller)
+    # 6. Component self-tests (notifications, brackets, fill poller)
     all_pass = True  # default if check 5 fails entirely
-    print(f"[5/{checks_total}] Component self-tests...", end=" ", flush=True)
+    print(f"[6/{checks_total}] Component self-tests...", end=" ", flush=True)
     orch = None
     try:
         orch = SessionOrchestrator(
@@ -165,6 +243,7 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
             failed = [k for k, v in test_results.items() if not v]
             print(f"WARNINGS: {', '.join(failed)}")
             # Don't fail preflight for component warnings — they're informational
+            has_warnings = True
             checks_passed += 1
     except Exception as e:
         print(f"FAILED: {e}")
@@ -180,7 +259,7 @@ def _run_preflight(instrument: str, broker: str | None, demo: bool, portfolio=No
 
     print(f"\nPreflight: {checks_passed}/{checks_total} passed")
     if checks_passed == checks_total:
-        if not all_pass:
+        if has_warnings or not all_pass:
             print("All checks passed, but component warnings present. Review above.\n")
         else:
             print("All clear — ready to trade.\n")
@@ -433,12 +512,26 @@ def main() -> None:
                 print(f"Preflight: {inst}")
                 print(f"{'=' * 50}")
                 inst_portfolio = build_profile_portfolio(profile_id=args.profile, instrument=inst)
-                ok = _run_preflight(inst, args.broker, demo, portfolio=inst_portfolio)
+                ok = _run_preflight(
+                    inst,
+                    args.broker,
+                    demo,
+                    portfolio=inst_portfolio,
+                    account_id=args.account_id,
+                    account_suffix=args.account_suffix,
+                )
                 if not ok:
                     all_ok = False
             sys.exit(0 if all_ok else 1)
         else:
-            ok = _run_preflight(args.instrument, args.broker, demo, portfolio=raw_portfolio)
+            ok = _run_preflight(
+                args.instrument,
+                args.broker,
+                demo,
+                portfolio=raw_portfolio,
+                account_id=args.account_id,
+                account_suffix=args.account_suffix,
+            )
             sys.exit(0 if ok else 1)
 
     # Default to signal-only if no mode specified (safest default)
