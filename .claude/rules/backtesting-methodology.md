@@ -135,6 +135,29 @@ K_global at very large K (e.g., K>10,000) is strong confirmatory evidence but no
 
 Per Bailey et al 2013, `MinBTL = 2·ln(N_trials) / E[max_N]²`. With the 7+ year IS window, N_trials up to ~300 on clean MNQ data or ~2000 on proxy-extended. Pre-commit before running.
 
+### 4.3 Per-cell significance requirement for classification thresholds
+
+**Any classifier, labeler, or pattern-assignment step that uses a bare numeric threshold on a cell-level metric must also compute and report the per-cell p-value.** Examples: `|delta| > 0.03`, `wr_spread > 5%`, `lift > 0.10`. A threshold label may not be presented as confirmed if the same cell fails per-cell significance at the appropriate K framing.
+
+Minimum required output columns:
+- `label_raw` — the bare-threshold classification
+- `year_t` or equivalent per-cell subset-t
+- `year_p` — two-sided p-value for the cell
+- `label_confirmed` — a BH-FDR-conditioned label that downgrades `label_raw` to `_unconfirmed` when the cell fails the relevant FDR gate
+
+**Why this rule exists.** Phase 2.8 v1 used a bare-threshold classifier to label cells as `SINGLE_YEAR_DRAG` based on `|delta|`, `n`, and `year_expr`, without a per-cell significance test. Later honest t-tests at `K_global`, `K_session`, and `K_year` showed those cells had weak |t| and large p-values; the narrative label was stronger than the evidence. The retirement verdicts survived on other grounds, but the classifier itself was statistically unsupported.
+
+Reference implementation: `research/phase_2_9_comprehensive_multi_year_stratification.py::assign_v2_pattern` uses a raw candidate label only as an intermediate state, then downgrades to `_unconfirmed` unless the cell survives BH-FDR at the relevant framing.
+
+Grounding: Harvey-Liu 2015 warns that both in-sample selection and out-of-sample success can be lucky. Bare-threshold labels are in-sample selections. Benjamini-Hochberg 1995 provides the canonical FDR gate for promoting those labels.
+
+This rule forbids:
+- verdict labels sourced from `|delta| > threshold` alone
+- counts like "N lanes show drag" derived from a bare-threshold classifier without p-values
+- final pattern labels such as `DRAG`, `BOOST`, or `RECURRING_REGIME` that skip BH-FDR confirmation
+
+This rule allows a transient `label_raw` or `label_candidate` field, provided the final published output also includes the per-cell p-value and the BH-conditioned confirmed label.
+
 ---
 
 ## RULE 5: Comprehensive scope — no hand-picking
