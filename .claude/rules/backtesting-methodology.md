@@ -181,8 +181,7 @@ If you can't answer (1)-(3) with certainty, do NOT use the feature. Write a prov
 - `gap_open_points`, `gap_type` (known at session open)
 - `garch_forecast_vol`, `garch_atr_ratio`, `garch_forecast_vol_pct` (forecast made at prior close)
 - `is_nfp_day`, `is_opex_day`, `is_friday`, `is_monday`, `day_of_week` (calendar, priori)
-- `orb_{s}_size`, `orb_{s}_high`, `orb_{s}_low`, `orb_{s}_break_dir` (known at ORB end, before entry for E2)
-- `orb_{s}_break_delay_min`, `orb_{s}_break_bar_continues`, `orb_{s}_break_bar_volume` (known at break-bar close, before E2 CB1 entry)
+- `orb_{s}_size`, `orb_{s}_high`, `orb_{s}_low` (known at ORB end, before entry for E2)
 - `orb_{s}_vwap`, `orb_{s}_pre_velocity` (computed over pre-ORB interval)
 - `orb_{s}_compression_z`, `orb_{s}_compression_tier` (computed pre-ORB)
 - `rel_vol_{s}` (ORB volume vs session-avg historical — known at ORB end)
@@ -196,6 +195,13 @@ If you can't answer (1)-(3) with certainty, do NOT use the feature. Write a prov
 ### 6.3 Banned (look-ahead)
 
 - `double_break`, `*_mae_r`, `*_mfe_r`, `*_outcome`, `pnl_r`, any `*_fill_price`-derived feature used as a PREDICTOR
+- **E2-look-ahead break-bar features** (valid for E1/E3 only, banned for E2 regardless of `confirm_bars`):
+  - `orb_{s}_break_ts`, `orb_{s}_break_delay_min`, `orb_{s}_break_bar_continues`, `orb_{s}_break_bar_volume`
+  - `orb_{s}_break_dir` when used as a *predictor* (direction-segmentation of an already-taken trade is fine; using it to decide whether to take the trade is E2-look-ahead)
+  - Why: E2 (stop-market) fires on the first bar whose **range** crosses the ORB boundary (wick-touch counts, including fakeouts). `daily_features` defines the "break bar" by **close-outside-ORB**, which can be a later bar. Real-data measurement on `MNQ EUROPE_FLOW E2 CB1 O5 RR1.5` IS (1,718 trades 2019-2025): `entry_ts < break_ts` on 709 trades = **41.3%** (per-year range 37.4%–48.6%), so break-bar features are post-entry for ~4 in 10 E2 trades, every year.
+  - Canonical authority: `trading_app/config.py:3540-3568` (`E2_EXCLUDED_FILTER_PREFIXES` / `E2_EXCLUDED_FILTER_SUBSTRINGS` — registered filters `BRK_FAST*`, `BRK_CONT`, `VOL_RV*`, `ATR70_VOL` are gated via `_e2_look_ahead_reason()` and return `NOT_APPLICABLE_ENTRY_MODEL` on E2).
+  - Range-cross vs close-cross code sources: `trading_app/entry_rules.py:157-216 detect_break_touch()` vs `pipeline/build_daily_features.py:285-340 detect_break()`.
+  - Postmortem: `docs/postmortems/2026-04-21-e2-break-bar-lookahead.md`.
 
 ---
 
