@@ -1309,26 +1309,57 @@ def collect_fitness_deep(db_path: Path) -> tuple[dict, list[PulseItem]]:
     return summary, items
 
 
+def _managed_worktree_metadata(canonical: Path) -> list[dict]:
+    """Return metadata for managed worktrees without crawling full repo trees."""
+    try:
+        from scripts.tools.worktree_manager import WORKTREE_META, list_worktrees, read_metadata
+    except Exception:
+        return []
+
+    canonical_resolved = canonical.resolve()
+    managed_by_path: dict[Path, dict] = {}
+
+    try:
+        worktrees = list_worktrees(canonical)
+    except Exception:
+        worktrees = []
+
+    for info in worktrees:
+        path = Path(info.path).resolve()
+        if path == canonical_resolved:
+            continue
+        meta_path = path / WORKTREE_META
+        if not meta_path.exists():
+            continue
+        data = read_metadata(path)
+        if data:
+            managed_by_path[path] = data
+
+    # Fallback for tests and partial metadata states: scan only the known
+    # shallow worktree roots, never the full nested repo contents.
+    worktree_root = canonical / ".worktrees"
+    if worktree_root.exists():
+        shallow_patterns = (
+            f"*/{WORKTREE_META}",
+            f"*/*/{WORKTREE_META}",
+            f"*/*/*/{WORKTREE_META}",
+        )
+        for pattern in shallow_patterns:
+            for meta_path in worktree_root.glob(pattern):
+                path = meta_path.parent.resolve()
+                if path == canonical_resolved or path in managed_by_path:
+                    continue
+                data = read_metadata(path)
+                if data:
+                    managed_by_path[path] = data
+
+    return list(managed_by_path.values())
+
+
 def collect_worktrees(canonical: Path) -> list[PulseItem]:
     """Detect open managed worktrees. Summarizes when >3 to reduce noise."""
     items: list[PulseItem] = []
-    wt_base = canonical / ".worktrees"
-
-    if not wt_base.exists():
-        return items
-
-    worktrees: list[dict] = []
-    try:
-        meta_files = list(wt_base.rglob(".canompx3-worktree.json"))
-    except OSError:
-        # rglob can fail on Windows with broken symlinks/junctions in worktrees
-        return items
-    for meta_file in meta_files:
-        try:
-            data = json.loads(meta_file.read_text(encoding="utf-8"))
-            worktrees.append(data)
-        except (json.JSONDecodeError, OSError):
-            continue
+    worktrees = _managed_worktree_metadata(canonical)
 
     if not worktrees:
         return items
@@ -1563,30 +1594,19 @@ def collect_upcoming_sessions(db_path: Path) -> list[dict]:
 def collect_worktree_conflicts(canonical: Path) -> list[PulseItem]:
     """Detect file overlap between active worktrees (merge conflict radar)."""
     items: list[PulseItem] = []
-    wt_base = canonical / ".worktrees"
-    if not wt_base.exists():
-        return items
 
     # Collect modified files per worktree branch
     worktree_files: dict[str, set[str]] = {}
-    try:
-        _meta_files = list(wt_base.rglob(".canompx3-worktree.json"))
-    except OSError:
-        return items
-    for meta_file in _meta_files:
-        try:
-            data = json.loads(meta_file.read_text(encoding="utf-8"))
-            branch = data.get("branch", "")
-            name = data.get("name", "?")
-            if not branch:
-                continue
-            r = _run_git(canonical, "diff", "--name-only", f"main...{branch}")
-            if r and r.returncode == 0:
-                files = {f.strip() for f in r.stdout.splitlines() if f.strip()}
-                if files:
-                    worktree_files[name] = files
-        except (json.JSONDecodeError, OSError):
+    for data in _managed_worktree_metadata(canonical):
+        branch = data.get("branch", "")
+        name = data.get("name", "?")
+        if not branch:
             continue
+        r = _run_git(canonical, "diff", "--name-only", f"main...{branch}")
+        if r and r.returncode == 0:
+            files = {f.strip() for f in r.stdout.splitlines() if f.strip()}
+            if files:
+                worktree_files[name] = files
 
     # Find overlaps
     names = list(worktree_files.keys())
@@ -1952,7 +1972,7 @@ def build_pulse(
     handoff_context, handoff_items = collect_handoff(root)
     worktree_items = collect_worktrees(canonical)
     claim_items = collect_session_claims(root)
-    conflict_items = collect_worktree_conflicts(canonical)
+    conflict_items = [] if fast else collect_worktree_conflicts(canonical)
     git_items = collect_git_state(root)
     action_items = collect_action_queue(canonical)
     ralph_items = collect_ralph_deferred(root)

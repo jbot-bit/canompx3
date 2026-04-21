@@ -3,10 +3,13 @@
 Stage 1 of claude-api-modernization. See docs/runtime/stages/claude-api-modernization.md.
 """
 
+import importlib.util
 import os
 from unittest.mock import patch
 
 import pytest
+
+ANTHROPIC_AVAILABLE = importlib.util.find_spec("anthropic") is not None
 
 
 # Retired/deprecated model IDs from shared/models.md (cached 2026-04-15).
@@ -95,6 +98,16 @@ class TestGetClient:
             with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
                 get_client()
 
+    def test_get_client_without_sdk_raises_import_error(self):
+        """Missing optional Anthropic SDK should fail closed with a clear message."""
+        from trading_app.ai import claude_client
+
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "sk-test-fake"}, clear=True):
+            with patch.object(claude_client, "_load_anthropic", side_effect=ImportError("missing sdk")):
+                with pytest.raises(ImportError, match="missing sdk"):
+                    claude_client.get_client()
+
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_get_client_returns_anthropic_client(self):
         """With ANTHROPIC_API_KEY set, return a configured anthropic.Anthropic."""
         import anthropic
@@ -106,6 +119,7 @@ class TestGetClient:
 
         assert isinstance(client, anthropic.Anthropic)
 
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_get_client_accepts_explicit_key(self):
         """Explicit api_key arg overrides env var (useful for tests / multi-tenant)."""
         import anthropic

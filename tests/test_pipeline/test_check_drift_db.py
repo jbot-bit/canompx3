@@ -5,6 +5,7 @@ Covers checks 29, 35, 42, 43, 50, 54-58.
 Each test creates a temp DuckDB, injects data, and verifies the check.
 """
 
+from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -93,6 +94,16 @@ DAILY_FEATURES_HTF_SCHEMA = """
         prev_month_close DOUBLE,
         prev_month_range DOUBLE,
         prev_month_mid DOUBLE
+    );
+"""
+
+DAILY_FEATURES_GARCH_SCHEMA = """
+    CREATE TABLE daily_features (
+        trading_day DATE,
+        symbol VARCHAR,
+        orb_minutes INTEGER,
+        garch_forecast_vol DOUBLE,
+        garch_forecast_vol_pct DOUBLE
     );
 """
 
@@ -852,6 +863,51 @@ class TestDataContinuity:
         assert len(violations) == 0
         captured = capsys.readouterr()
         assert "WARNING" not in captured.out
+
+
+# ── Recent GARCH feature coverage ─────────────────────────────────────
+
+
+class TestRecentGarchFeatureCoverage:
+    """Late-history GARCH state should not revert to NULL on recent rows."""
+
+    def test_catches_recent_nulls_after_warmup(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "test_garch_recent_nulls.db"
+        con = duckdb.connect(str(db_path))
+        con.execute(DAILY_FEATURES_GARCH_SCHEMA)
+        for i in range(320):
+            td = date.fromordinal(date(2024, 1, 1).toordinal() + i)
+            garch = None if i >= 315 else 0.10 + i / 1000.0
+            gpct = None if i >= 315 else 50.0
+            con.execute(
+                "INSERT INTO daily_features VALUES (?, 'MNQ', 5, ?, ?)",
+                [td, garch, gpct],
+            )
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_recent_garch_feature_coverage()
+        assert len(violations) == 1
+        assert "MNQ O5" in violations[0]
+        assert "5 NULL row(s)" in violations[0]
+
+    def test_ignores_early_history_warmup_and_passes_recent_coverage(self, tmp_path, monkeypatch):
+        db_path = tmp_path / "test_garch_recent_covered.db"
+        con = duckdb.connect(str(db_path))
+        con.execute(DAILY_FEATURES_GARCH_SCHEMA)
+        for i in range(320):
+            td = date.fromordinal(date(2024, 1, 1).toordinal() + i)
+            garch = None if i < 40 else 0.10 + i / 1000.0
+            gpct = None if i < 40 else 50.0
+            con.execute(
+                "INSERT INTO daily_features VALUES (?, 'MNQ', 5, ?, ?)",
+                [td, garch, gpct],
+            )
+        con.close()
+
+        monkeypatch.setattr(check_drift, "GOLD_DB_PATH_FOR_CHECKS", db_path)
+        violations = check_drift.check_recent_garch_feature_coverage()
+        assert violations == []
 
 
 # ── HTF aperture consistency ──────────────────────────────────────────

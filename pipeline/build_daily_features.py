@@ -755,6 +755,50 @@ def _load_htf_seed_rows(con: duckdb.DuckDBPyConnection, symbol: str, start_day: 
     ]
 
 
+def _load_postpass_seed_rows(
+    con: duckdb.DuckDBPyConnection,
+    symbol: str,
+    orb_minutes: int,
+    start_day: date,
+    lookback_rows: int = 252,
+) -> list[dict]:
+    """Load prior daily_features rows as seed for rolling post-pass features.
+
+    Incremental builds compute only the requested `[start_day, end_day]` rows in
+    memory, but several post-pass features are defined on prior-only rolling
+    history:
+
+    - gap_open_points / prev_day_* / gap_type / day_type
+    - atr_20 and atr_20_pct
+    - overnight_range_pct
+    - garch_forecast_vol / garch_forecast_vol_pct
+    - compression z-scores
+
+    Without prior seed rows, narrow rebuilds behave as if history started at
+    `start_day`, causing late-series NULLs or degraded values. We load the last
+    `lookback_rows` rows for the same symbol × aperture and prepend them to the
+    in-memory batch. Seed rows are mutated during the post-pass but are NOT
+    written back — only freshly built rows persist downstream.
+    """
+    records = con.execute(
+        """
+        SELECT *
+        FROM daily_features
+        WHERE symbol = ?
+          AND orb_minutes = ?
+          AND trading_day < ?
+        ORDER BY trading_day DESC
+        LIMIT ?
+        """,
+        [symbol, orb_minutes, start_day, lookback_rows],
+    ).fetchall()
+    if not records:
+        return []
+    cols = [desc[0] for desc in con.description]
+    seed = [dict(zip(cols, row, strict=False)) for row in reversed(records)]
+    return seed
+
+
 def compute_garch_forecast(daily_closes: list[float], min_obs: int = 252) -> float | None:
     """
     Fit GARCH(1,1) on trailing daily close-to-close log returns.
@@ -1323,22 +1367,30 @@ def build_daily_features(
         if (i + 1) % 50 == 0:
             logger.info(f"  Processed {i + 1}/{len(trading_days)} trading days...")
 
-    # Post-pass: compute gap_open_points and ATR(20)
+    # Post-pass: rolling prior-only features.
+    #
+    # Seed with the prior `daily_features` rows for the same symbol × aperture
+    # so narrow incremental rebuilds preserve the true rolling state instead of
+    # behaving like fresh history.
+    postpass_seed = _load_postpass_seed_rows(con, symbol, orb_minutes, trading_days[0])
+    post_rows = postpass_seed + rows
+
+    # Compute gap_open_points and ATR(20).
     # Both need previous day data, so computed after all rows are built.
     #
     # True Range = max(H - L, |H - prevClose|, |L - prevClose|)
     # ATR(20) = simple moving average of last 20 True Range values
     # First 20 rows get partial averages (best available), row 0 gets H-L only.
     true_ranges = []
-    for i in range(len(rows)):
-        prev_close = rows[i - 1].get("daily_close") if i > 0 else None
-        today_open = rows[i].get("daily_open")
-        today_high = rows[i].get("daily_high")
-        today_low = rows[i].get("daily_low")
+    for i in range(len(post_rows)):
+        prev_close = post_rows[i - 1].get("daily_close") if i > 0 else None
+        today_open = post_rows[i].get("daily_open")
+        today_high = post_rows[i].get("daily_high")
+        today_low = post_rows[i].get("daily_low")
 
         # gap_open_points (existing logic)
         if prev_close is not None and today_open is not None:
-            rows[i]["gap_open_points"] = round(today_open - prev_close, 4)
+            post_rows[i]["gap_open_points"] = round(today_open - prev_close, 4)
 
         # True Range
         if today_high is not None and today_low is not None:
@@ -1354,9 +1406,9 @@ def build_daily_features(
         # ATR(20) = SMA of last 20 True Range values, prior days only (no look-ahead)
         lookback = [v for v in true_ranges[max(0, i - 20) : i] if v is not None]
         if lookback:
-            rows[i]["atr_20"] = round(sum(lookback) / len(lookback), 4)
+            post_rows[i]["atr_20"] = round(sum(lookback) / len(lookback), 4)
         else:
-            rows[i]["atr_20"] = None
+            post_rows[i]["atr_20"] = None
 
         # ATR Velocity: today's ATR_20 vs 5-day prior average.
         # Uses ROWS [i-5 .. i-1] — prior days only, no look-ahead.
@@ -1364,19 +1416,19 @@ def build_daily_features(
         # Min 5 prior days for stable denominator.
         # @research-source research/research_mgc_compressed_spring.py
         # @revalidated-for E1/E2 event-based sessions (Mar 2026)
-        atr_today = rows[i]["atr_20"]
-        prior_atrs = [rows[j]["atr_20"] for j in range(max(0, i - 5), i) if rows[j].get("atr_20") is not None]
+        atr_today = post_rows[i]["atr_20"]
+        prior_atrs = [post_rows[j]["atr_20"] for j in range(max(0, i - 5), i) if post_rows[j].get("atr_20") is not None]
         if atr_today is not None and len(prior_atrs) >= 5:
             avg_5d = sum(prior_atrs) / len(prior_atrs)
             if avg_5d > 0:
                 vel = atr_today / avg_5d
-                rows[i]["atr_vel_ratio"] = round(vel, 4)
+                post_rows[i]["atr_vel_ratio"] = round(vel, 4)
                 if vel > 1.05:
-                    rows[i]["atr_vel_regime"] = "Expanding"
+                    post_rows[i]["atr_vel_regime"] = "Expanding"
                 elif vel < 0.95:
-                    rows[i]["atr_vel_regime"] = "Contracting"
+                    post_rows[i]["atr_vel_regime"] = "Contracting"
                 else:
-                    rows[i]["atr_vel_regime"] = "Stable"
+                    post_rows[i]["atr_vel_regime"] = "Stable"
 
         # ATR percentile: rank of today's ATR_20 among prior 252 trading days.
         # Used by CombinedATRVolumeFilter (ATR70+VOL): trade only in top 30% vol regime.
@@ -1385,28 +1437,44 @@ def build_daily_features(
         if atr_today is not None:
             atr_lookback = 252
             prior_atrs_pct = [
-                rows[j]["atr_20"] for j in range(max(0, i - atr_lookback), i) if rows[j].get("atr_20") is not None
+                post_rows[j]["atr_20"]
+                for j in range(max(0, i - atr_lookback), i)
+                if post_rows[j].get("atr_20") is not None
             ]
             if len(prior_atrs_pct) >= 60:
                 sorted_prior = sorted(prior_atrs_pct)
                 rank = bisect_left(sorted_prior, atr_today)
-                rows[i]["atr_20_pct"] = round(rank / len(sorted_prior) * 100, 2)
+                post_rows[i]["atr_20_pct"] = round(rank / len(sorted_prior) * 100, 2)
 
         # Overnight range percentile: rank of today's overnight_range among prior 60 trading days.
         # Used by OvernightRangeFilter for April 2026 research hypothesis.
         # Prior-only window [i-60:i], no look-ahead. Min 20 prior days for stable ranking.
-        orn_today = rows[i].get("overnight_range")
+        orn_today = post_rows[i].get("overnight_range")
         if orn_today is not None:
             orn_lookback = 60
             prior_orns = [
-                rows[j]["overnight_range"]
+                post_rows[j]["overnight_range"]
                 for j in range(max(0, i - orn_lookback), i)
-                if rows[j].get("overnight_range") is not None
+                if post_rows[j].get("overnight_range") is not None
             ]
             if len(prior_orns) >= 20:
                 sorted_orn = sorted(prior_orns)
                 orn_rank = bisect_left(sorted_orn, orn_today)
-                rows[i]["overnight_range_pct"] = round(orn_rank / len(sorted_orn) * 100, 2)
+                post_rows[i]["overnight_range_pct"] = round(orn_rank / len(sorted_orn) * 100, 2)
+
+        # GARCH(1,1) forward vol forecast from trailing daily closes.
+        # Uses rows[0..i-1] daily_close values — prior days only, no look-ahead.
+        prior_closes = [post_rows[j]["daily_close"] for j in range(i) if post_rows[j].get("daily_close") is not None]
+        garch_vol = compute_garch_forecast(prior_closes)
+        if garch_vol is not None:
+            post_rows[i]["garch_forecast_vol"] = garch_vol
+            # Convert annualized vol to implied daily ATR-equivalent points,
+            # then ratio against ATR-20 for apples-to-apples comparison.
+            # garch_atr_ratio ~1.0 means GARCH agrees with ATR; >1 = GARCH sees more vol.
+            last_close = prior_closes[-1] if prior_closes else None
+            if atr_today is not None and atr_today > 0 and last_close is not None:
+                implied_daily_atr = (garch_vol / (252**0.5)) * last_close
+                post_rows[i]["garch_atr_ratio"] = round(implied_daily_atr / atr_today, 4)
 
         # GARCH forecast vol percentile: rank of today's garch_forecast_vol among
         # prior 252 trading days. Used by GARCHForecastVolPctFilter (Wave 5 G5).
@@ -1417,7 +1485,9 @@ def build_daily_features(
         # WFE 1.00 p=0.042. Deployed as rolling percentile instead of absolute
         # threshold to handle cross-instrument distribution variance
         # (MNQ Q20 ~0.16 vs MES Q20 ~0.11) and regime drift.
-        rows[i]["garch_forecast_vol_pct"] = _prior_rank_pct(rows, i, "garch_forecast_vol", lookback=252, min_prior=60)
+        post_rows[i]["garch_forecast_vol_pct"] = _prior_rank_pct(
+            post_rows, i, "garch_forecast_vol", lookback=252, min_prior=60
+        )
 
         # Per-session ORB compression z-score (prior 20 days, no look-ahead).
         # Compression = rolling z-score of (orb_size / atr_20).
@@ -1428,14 +1498,14 @@ def build_daily_features(
         if atr_today is not None and atr_today > 0:
             for sess_label in COMPRESSION_SESSIONS:
                 size_col = f"orb_{sess_label}_size"
-                size_today = rows[i].get(size_col)
+                size_today = post_rows[i].get(size_col)
                 if size_today is None:
                     continue
                 ratio_today = size_today / atr_today
                 prior_ratios = []
                 for j in range(max(0, i - 20), i):
-                    s = rows[j].get(size_col)
-                    a = rows[j].get("atr_20")
+                    s = post_rows[j].get(size_col)
+                    a = post_rows[j].get("atr_20")
                     if s is not None and a is not None and a > 0:
                         prior_ratios.append(s / a)
                 if len(prior_ratios) < 5:
@@ -1446,80 +1516,66 @@ def build_daily_features(
                 if std_r <= 0:
                     continue
                 z = (ratio_today - mean_r) / std_r
-                rows[i][f"orb_{sess_label}_compression_z"] = round(z, 4)
+                post_rows[i][f"orb_{sess_label}_compression_z"] = round(z, 4)
                 if z < -0.5:
-                    rows[i][f"orb_{sess_label}_compression_tier"] = "Compressed"
+                    post_rows[i][f"orb_{sess_label}_compression_tier"] = "Compressed"
                 elif z > 0.5:
-                    rows[i][f"orb_{sess_label}_compression_tier"] = "Expanded"
+                    post_rows[i][f"orb_{sess_label}_compression_tier"] = "Expanded"
                 else:
-                    rows[i][f"orb_{sess_label}_compression_tier"] = "Neutral"
-
-        # GARCH(1,1) forward vol forecast from trailing daily closes.
-        # Uses rows[0..i-1] daily_close values — prior days only, no look-ahead.
-        prior_closes = [rows[j]["daily_close"] for j in range(i) if rows[j].get("daily_close") is not None]
-        garch_vol = compute_garch_forecast(prior_closes)
-        if garch_vol is not None:
-            rows[i]["garch_forecast_vol"] = garch_vol
-            # Convert annualized vol to implied daily ATR-equivalent points,
-            # then ratio against ATR-20 for apples-to-apples comparison.
-            # garch_atr_ratio ~1.0 means GARCH agrees with ATR; >1 = GARCH sees more vol.
-            last_close = prior_closes[-1] if prior_closes else None
-            if atr_today is not None and atr_today > 0 and last_close is not None:
-                implied_daily_atr = (garch_vol / (252**0.5)) * last_close
-                rows[i]["garch_atr_ratio"] = round(implied_daily_atr / atr_today, 4)
+                    post_rows[i][f"orb_{sess_label}_compression_tier"] = "Neutral"
 
         # Prior day reference levels + gap_type + liquidity sweep labels + day_type.
         # All use rows[i-1] for prior-day data — no look-ahead.
-        prev_high = rows[i - 1].get("daily_high") if i > 0 else None
-        prev_low = rows[i - 1].get("daily_low") if i > 0 else None
-        prev_close = rows[i - 1].get("daily_close") if i > 0 else None
-        prev_open = rows[i - 1].get("daily_open") if i > 0 else None
+        prev_high = post_rows[i - 1].get("daily_high") if i > 0 else None
+        prev_low = post_rows[i - 1].get("daily_low") if i > 0 else None
+        prev_close = post_rows[i - 1].get("daily_close") if i > 0 else None
+        prev_open = post_rows[i - 1].get("daily_open") if i > 0 else None
 
-        rows[i]["prev_day_high"] = prev_high
-        rows[i]["prev_day_low"] = prev_low
-        rows[i]["prev_day_close"] = prev_close
+        post_rows[i]["prev_day_high"] = prev_high
+        post_rows[i]["prev_day_low"] = prev_low
+        post_rows[i]["prev_day_close"] = prev_close
 
         if prev_high is not None and prev_low is not None:
-            rows[i]["prev_day_range"] = round(prev_high - prev_low, 4)
+            post_rows[i]["prev_day_range"] = round(prev_high - prev_low, 4)
         if prev_close is not None and prev_open is not None:
-            rows[i]["prev_day_direction"] = "bull" if prev_close >= prev_open else "bear"
+            post_rows[i]["prev_day_direction"] = "bull" if prev_close >= prev_open else "bear"
 
         # gap_type: classify gap_open_points relative to prior range
-        gap_pts = rows[i].get("gap_open_points")
-        prev_range = rows[i].get("prev_day_range")
+        gap_pts = post_rows[i].get("gap_open_points")
+        prev_range = post_rows[i].get("prev_day_range")
         if gap_pts is not None and prev_range is not None and prev_range > 0:
             threshold = 0.1 * prev_range
             if gap_pts > threshold:
-                rows[i]["gap_type"] = "gap_up"
+                post_rows[i]["gap_type"] = "gap_up"
             elif gap_pts < -threshold:
-                rows[i]["gap_type"] = "gap_down"
+                post_rows[i]["gap_type"] = "gap_down"
             else:
-                rows[i]["gap_type"] = "inside"
+                post_rows[i]["gap_type"] = "inside"
         elif gap_pts is not None:
-            rows[i]["gap_type"] = "none"
+            post_rows[i]["gap_type"] = "none"
 
         # Liquidity sweep labels — compare pre-session high/low to prior day high/low
-        pre_1000_high = rows[i].get("pre_1000_high")
-        pre_1000_low = rows[i].get("pre_1000_low")
-        overnight_high = rows[i].get("overnight_high")
-        overnight_low = rows[i].get("overnight_low")
+        pre_1000_high = post_rows[i].get("pre_1000_high")
+        pre_1000_low = post_rows[i].get("pre_1000_low")
+        overnight_high = post_rows[i].get("overnight_high")
+        overnight_low = post_rows[i].get("overnight_low")
 
         if pre_1000_high is not None and prev_high is not None:
-            rows[i]["took_pdh_before_1000"] = bool(pre_1000_high > prev_high)
+            post_rows[i]["took_pdh_before_1000"] = bool(pre_1000_high > prev_high)
         if pre_1000_low is not None and prev_low is not None:
-            rows[i]["took_pdl_before_1000"] = bool(pre_1000_low < prev_low)
+            post_rows[i]["took_pdl_before_1000"] = bool(pre_1000_low < prev_low)
         if overnight_high is not None and prev_high is not None:
-            rows[i]["overnight_took_pdh"] = bool(overnight_high > prev_high)
+            post_rows[i]["overnight_took_pdh"] = bool(overnight_high > prev_high)
         if overnight_low is not None and prev_low is not None:
-            rows[i]["overnight_took_pdl"] = bool(overnight_low < prev_low)
+            post_rows[i]["overnight_took_pdl"] = bool(overnight_low < prev_low)
 
         # Retrospective day type (atr_20 already computed in this loop pass)
-        rows[i]["day_type"] = classify_day_type(
-            rows[i].get("daily_open"),
-            rows[i].get("daily_high"),
-            rows[i].get("daily_low"),
-            rows[i].get("daily_close"),
-            rows[i].get("atr_20"),
+        post_rows[i]["day_type"] = classify_day_type(
+            post_rows[i].get("daily_open"),
+            post_rows[i].get("daily_high"),
+            post_rows[i].get("daily_low"),
+            post_rows[i].get("daily_close"),
+            post_rows[i].get("atr_20"),
         )
 
     # Post-pass: HTF prev-week / prev-month level aggregates.

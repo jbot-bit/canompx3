@@ -4,6 +4,141 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-21 hardened follow-through — rolling GARCH builder fixed, cross-instrument repair applied, shadow path unblocked)
+
+Follow-on to the earlier GARCH `R3` shadow scaffold block. The path is no
+longer blocked on data integrity.
+
+### What was actually wrong
+
+- `pipeline/build_daily_features.py` had two coupled rolling-state bugs:
+  - narrow incremental rebuilds computed post-pass rolling features from the
+    in-memory batch only, without seeding prior `daily_features` history
+  - `garch_forecast_vol_pct` was computed before the current row's
+    `garch_forecast_vol`, so recent rebuild windows could emit late-history
+    NULLs even with enough prior closes
+- This was not MNQ-specific. The same late-history GARCH coverage failure was
+  present on `MES` and `MGC`, which the new drift check exposed.
+
+### What landed
+
+- Builder hardening:
+  - `pipeline/build_daily_features.py`
+    - added `_load_postpass_seed_rows(...)`
+    - all rolling post-pass features now run on `postpass_seed + rows`
+    - `garch_forecast_vol` now computes before
+      `garch_forecast_vol_pct`
+- Drift guard:
+  - `pipeline/check_drift.py`
+    - added `check_recent_garch_feature_coverage()`
+- Regression coverage:
+  - `tests/test_pipeline/test_build_daily_features_incremental_seed.py`
+  - `tests/test_pipeline/test_check_drift_db.py`
+  - `tests/test_research/test_garch_r3_shadow_ledger.py`
+- Research scaffold hardening:
+  - `research/garch_r3_shadow_ledger.py`
+    - empty feature-gap state now returns a typed empty DataFrame instead of
+      crashing on `.sort_values(...)`
+
+### Canonical repair work executed
+
+- Snapshot backups created in `gold.db` before repair:
+  - `backup_mnq_garch_repair_daily_features_20260421`
+  - `backup_mnq_garch_repair_orb_outcomes_20260421`
+  - `backup_mes_garch_repair_daily_features_20260421`
+  - `backup_mes_garch_repair_orb_outcomes_20260421`
+  - `backup_mgc_garch_repair_daily_features_20260421`
+  - `backup_mgc_garch_repair_orb_outcomes_20260421`
+- Child-first scoped rebuild executed for `MNQ`, `MES`, and `MGC` on
+  `2026-04-07 .. 2026-04-19` across `O5/O15/O30`:
+  - clear `orb_outcomes` in-range first
+  - rebuild `daily_features`
+  - rebuild `orb_outcomes`
+- Downstream provenance refresh executed:
+  - `./.venv-wsl/bin/python scripts/migrations/backfill_validated_trade_windows.py`
+  - result: `inspected=9 drifted=6 updated=6`
+
+### Current truth-state
+
+- Raw canonical GARCH coverage:
+  - `MNQ`: recent late-history NULLs cleared
+  - `MES`: recent late-history NULLs cleared
+  - `MGC`: recent late-history NULLs cleared
+- Shadow artifact rerun:
+  - `docs/audit/results/2026-04-21-garch-r3-session-clipped-shadow.md`
+  - status now `READY_FOR_FORWARD_MONITORING`
+  - `406` trades
+  - missing-state fallback trades: `0`
+  - raw feature-gap rows: `0`
+
+### Verification evidence
+
+- Focused tests:
+  - `./.venv-wsl/bin/pytest tests/test_research/test_garch_r3_shadow_ledger.py tests/test_pipeline/test_build_daily_features_incremental_seed.py tests/test_pipeline/test_check_drift_db.py -q`
+  - `41 passed`
+- `scripts/tools/audit_behavioral.py`
+  - passed
+- `scripts/tools/audit_integrity.py`
+  - passed
+- `ruff check`
+  - passed on touched files
+- `ruff format --check`
+  - passed on touched files
+- `git diff --check`
+  - passed
+- `pipeline/check_drift.py`
+  - now only the pre-existing optional AI dependency gap remains:
+    - `trading_app.ai.claude_client`: missing `anthropic`
+    - `trading_app.ai.query_agent`: missing `anthropic`
+  - prior GARCH coverage and native trade-window provenance failures are fixed
+- Full `pytest tests/ -x -q`
+  - still blocked by the same pre-existing `anthropic` import failure during
+    collection of `tests/test_trading_app/test_ai/test_query_agent.py`
+
+## Update (2026-04-21 grounded follow-through — garch R3 scaffold built, launch blocked by raw feature gaps)
+
+Follow-on to the stale-lock / adjacent-edge audit. The highest-EV surviving
+path was converted into an actual research artifact instead of staying
+chat-only:
+
+- action queue doc added:
+  - `docs/plans/2026-04-21-post-stale-lock-action-queue.md`
+- research scaffold added:
+  - `research/garch_r3_shadow_ledger.py`
+- emitted artifacts:
+  - `data/forward_monitoring/garch-r3-session-clipped-shadow-topstep-50k-mnq-auto-trades.csv`
+  - `data/forward_monitoring/garch-r3-session-clipped-shadow-topstep-50k-mnq-auto-daily.csv`
+  - `docs/audit/results/2026-04-21-garch-r3-session-clipped-shadow.md`
+
+Grounded result:
+
+- path is **not** killed on mechanism
+- path is currently **BLOCKED** on data integrity / provenance
+- raw canonical check found `daily_features.garch_forecast_vol_pct` NULL on 21
+  MNQ O5/O15 holdout rows:
+  - 2026-04-07
+  - 2026-04-08
+  - 2026-04-09
+  - 2026-04-10
+  - 2026-04-12
+  - 2026-04-13
+  - 2026-04-14
+  - 2026-04-15
+  - 2026-04-16
+  - 2026-04-17
+  - 2026-04-19
+- eligible-trade fallback rate = `20 / 396 = 5.1%`, which exceeds the prereg
+  launch gate (`>5%` => block)
+
+Important verification chain:
+
+- lane set came from `load_allocation_lanes('topstep_50k_mnq_auto')`
+- trade rows came from raw `orb_outcomes`
+- state rows came from raw `daily_features`
+- ledger `pnl_r_base = -0.75` on sampled loss rows is explained by the active
+  profile stop policy (`0.75x`) via canonical `apply_tight_stop(...)`, not by
+  made-up postprocessing
+
 ## Update (2026-04-20 late-late-late — HTF branch closed: integrity repaired, simple v1 family dead)
 
 Follow-on to the "HTF thing" request. User wanted this handled as an
@@ -8076,5 +8211,3 @@ Decide per branch whether to push.
 3. Decide whether to push the 6 local-only commits above.
 4. Decide whether to remove `canompx3-6lane-baseline` worktree (post-merge).
 5. 18 older PRs need merge/close decisions (none time-critical per memory).
-
-

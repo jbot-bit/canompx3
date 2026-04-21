@@ -3382,6 +3382,77 @@ def check_data_continuity(con=None) -> list[str]:
     return []  # Always pass — advisory only
 
 
+def check_recent_garch_feature_coverage(con=None) -> list[str]:
+    """Fail if late-history GARCH state goes NULL on active instruments/apertures.
+
+    `garch_forecast_vol` and `garch_forecast_vol_pct` are rolling prior-only
+    features. Once a symbol × aperture partition has well past the warm-up
+    period, recent rows should not revert to NULL unless the feature builder
+    lost prior seed history or ordering.
+
+    This is intentionally scoped to late-series recent rows only:
+    early-history warm-up NULLs are legitimate; sudden recent NULLs are not.
+    """
+    violations = []
+    _own_con = False
+    try:
+        from pipeline.asset_configs import ACTIVE_ORB_INSTRUMENTS
+
+        if con is None:
+            import duckdb
+
+            db_path = _get_db_path()
+            if not db_path.exists():
+                return violations
+            con = duckdb.connect(str(db_path), read_only=True)
+            _own_con = True
+
+        active_syms = ", ".join(f"'{s}'" for s in ACTIVE_ORB_INSTRUMENTS)
+        rows = con.execute(
+            f"""
+            WITH ranked AS (
+                SELECT symbol,
+                       orb_minutes,
+                       trading_day,
+                       garch_forecast_vol,
+                       garch_forecast_vol_pct,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY symbol, orb_minutes
+                           ORDER BY trading_day DESC
+                       ) AS rn_recent,
+                       COUNT(*) OVER (
+                           PARTITION BY symbol, orb_minutes
+                       ) AS n_total
+                FROM daily_features
+                WHERE symbol IN ({active_syms})
+            )
+            SELECT symbol,
+                   orb_minutes,
+                   MIN(trading_day) AS first_bad_day,
+                   MAX(trading_day) AS last_bad_day,
+                   COUNT(*) AS bad_rows
+            FROM ranked
+            WHERE n_total >= 300
+              AND rn_recent <= 20
+              AND (garch_forecast_vol IS NULL OR garch_forecast_vol_pct IS NULL)
+            GROUP BY symbol, orb_minutes
+            ORDER BY symbol, orb_minutes
+            """
+        ).fetchall()
+        for sym, orb_minutes, first_bad_day, last_bad_day, bad_rows in rows:
+            violations.append(
+                f"  {sym} O{orb_minutes}: recent late-history GARCH coverage has {bad_rows} NULL row(s) "
+                f"from {first_bad_day} to {last_bad_day}. Rolling post-pass state likely lost seed history "
+                f"or ordering."
+            )
+    except (ImportError, OSError) as e:
+        print(f"    SKIP check_recent_garch_feature_coverage: {type(e).__name__}: {e}")
+    finally:
+        if _own_con and con is not None:
+            con.close()
+    return violations
+
+
 def check_family_rr_locks_coverage(con=None) -> list[str]:
     """Every active instrument must have family_rr_locks rows covering its validated strategies."""
     errors = []
@@ -5711,6 +5782,12 @@ CHECKS = [
         True,
         True,
     ),  # ADVISORY, requires_db
+    (
+        "Recent late-history GARCH feature coverage is intact",
+        check_recent_garch_feature_coverage,
+        False,
+        True,
+    ),  # requires_db
     (
         "family_rr_locks coverage (all active families have locked RR)",
         check_family_rr_locks_coverage,
