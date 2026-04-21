@@ -8211,3 +8211,29 @@ Decide per branch whether to push.
 3. Decide whether to push the 6 local-only commits above.
 4. Decide whether to remove `canompx3-6lane-baseline` worktree (post-merge).
 5. 18 older PRs need merge/close decisions (none time-critical per memory).
+
+## Update (2026-04-21 ORB priors reusable-components harvest matrix)
+
+- Added plan doc:
+  - `docs/plans/2026-04-21-orb-priors-component-harvest.md`
+- Delivered a reusable-components matrix for ORB-prior roles (R1-R8) with required columns:
+  - proxy
+  - data needs
+  - test shape
+  - risk
+  - classification (`Plug-In` / `Adapt` / `Reject`)
+- Current classification result:
+  - Plug-In: `R1`, `R2`
+  - Adapt: `R3`, `R4`, `R6`, `R7`, `R8`
+  - Reject (for now): `R5`
+- Intent was alignment with existing project doctrine (mechanism priors + pre-registered criteria + fail-closed architecture), not introducing new trading claims.
+
+## Update (2026-04-21 ORB priors matrix revision — optimal sequencing + `/resources` grounding check)
+
+- Revised `docs/plans/2026-04-21-orb-priors-component-harvest.md` to address review feedback.
+- Added explicit grounding section that checks `/resources` availability and fails closed when mechanism support is missing.
+- Added an optimization rubric (utility/complexity, evidence strength, blast radius, failure severity) and an ordered phase plan.
+- Classification unchanged but now justified under stricter grounding language:
+  - Plug-In: `R1`, `R2`
+  - Adapt: `R3`, `R4`, `R6`, `R7`, `R8`
+  - Reject: `R5`
