@@ -1,12 +1,12 @@
 {
-  "phase": "phase-3-mgc-regime-ortho-v1",
+  "phase": "phase-3-blocked-mes-session-boundary-v1",
   "running_trial_count": 12,
   "trial_cap": 300,
   "data_mode": "duckdb_readonly",
   "worktree": "/tmp/canompx3-orthogonal-hunt",
   "branch": "research/orthogonal-golden-egg-hunt-v1",
-  "last_commit_sha": "79dfc9cadfd750fe55a4b30393cb46d5a62afa57",
-  "timestamp": "2026-04-21T03:36:11Z",
+  "last_commit_sha": "082317c829aa8bfd5b76919fa15b2e961fb7b02c",
+  "timestamp": "2026-04-21T03:38:39Z",
   "canonical_db_path": "/mnt/c/Users/joshd/canompx3/gold.db",
   "holdout_sacred_from": "2026-01-01",
   "remote_heads": {
@@ -26,6 +26,7 @@
     "PCC-1 completed: synthetic calibration probe shows the Phase B gate logic can emit KEEP for a strong clean-holdout candidate, so the live-book problem remains provenance/posture rather than intrinsic framework bias.",
     "Phase 1 completed: the orthogonal POV map ranks regime conditioners, session-boundary effects, and bars_1m microstructure as the top 3 fork-D hunt directions; sizing and exit-side work stay second-tier.",
     "Phase 2 completed: three locked family pre-registrations now exist for the top-3 orthogonal directions, and no extraction metrics have been inspected beyond Phase 0 inventory data.",
-    "Phase 3 completed for mgc-regime-ortho-v1: canonical family scan returned zero BH-FDR survivors; BRISBANE_1025 had zero scoped trades, LONDON_METALS PREV_WEEK long was the strongest cell (t=2.602, q=0.0587) but failed family correction, and both family nulls kept the observed max-t inside noise."
+    "Phase 3 completed for mgc-regime-ortho-v1: canonical family scan returned zero BH-FDR survivors; BRISBANE_1025 had zero scoped trades, LONDON_METALS PREV_WEEK long was the strongest cell (t=2.602, q=0.0587) but failed family correction, and both family nulls kept the observed max-t inside noise.",
+    "Phase 3 abort on mes-session-boundary-v1: the locked ASIA_RANGE_ATR_Q67_HIGH feature uses session_asia_high/low, which are only complete after 17:00 Brisbane and therefore invalid for BRISBANE_1025, TOKYO_OPEN, and SINGAPORE_OPEN. The family was blocked before extraction instead of being silently trimmed."
   ]
 }
