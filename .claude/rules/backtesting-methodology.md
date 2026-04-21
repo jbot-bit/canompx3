@@ -86,6 +86,10 @@ Canonical implementation: `research/comprehensive_deployed_lane_scan.py::test_ce
 
 ## RULE 3: IS/OOS discipline — sacred holdout
 
+**3.4 Router/allocator hypotheses require multi-fold evidence.** Single-fold walk-forward (e.g., 50/50 chronological split) is INSUFFICIENT for any router, allocator, session-selector, or regime-conditional signal. Require EITHER (a) ≥3 rolling folds of annual test periods with ≥3 wins and mean ΔSR_ann ≥ +0.30, OR (b) combinatorial-purged CV (LdP 2020 Ch 8) with embargo matching the signal's decision horizon. Single-fold WF remains acceptable for stationary-signal discovery on deployed-lane overlays; NOT for signals whose map can drift across vol regimes. See failure-log entry 2026-04-21 (ovnrng-router-rolling-cv, commit `4dfd3000`) for the motivating incident.
+
+**3.5 Post-hoc criterion creep is post-hoc REJECTION (mirror of post-hoc rescue).** If a new gate (Sharpe threshold, Spearman p, bootstrap CI, etc.) is discovered MID-AUDIT after the pre-reg's locked gate has already been evaluated, the correct institutional response is: (a) the original pre-reg verdict STANDS on its locked gate; (b) the new criterion becomes its own pre-registered follow-on test on fresh data. NEVER retroactively invalidate a legitimate pre-reg pass by applying new criteria to the same data. This is structurally identical to post-hoc rescue (adding new gates to save a failing pre-reg) and violates Bailey-LdP 2014 §3 / Harvey-Liu 2015 §2. See failure-log entry 2026-04-21 (PR #59 sizer re-audit and PR #51 DSR audit both exhibited this pathology).
+
 - `HOLDOUT_SACRED_FROM = 2026-01-01` per `trading_app/holdout_policy.py`.
 - IS window: `trading_day < 2026-01-01`.
 - OOS window: `2026-01-01 ≤ trading_day < 2026-04-07` (or current cutoff).
