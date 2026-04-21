@@ -1,5 +1,11 @@
 # Remediation — PR #51 + PR #50 DSR kill was POST_HOC
 
+## Resolution — 2026-04-21 (ACCEPT)
+
+> DSR is cross-check only per Amendment 2.1 pending ONC N_eff. Cells passed the binding pre-reg gates H1/C6/C8/C9 honestly; a non-binding cross-check cannot post-hoc kill them (RULE 3.4 violation). Status: research-grade with DSR-PENDING; re-evaluate after ONC lands (Decision #5).
+
+---
+
 **Date:** 2026-04-21
 **Branch:** `research/ovnrng-router-rolling-cv` (Claude terminal, 6lane-baseline worktree)
 **Source finding:** `docs/audit/results/2026-04-21-post-hoc-rejection-sweep.md` (commit `39315b52`)
@@ -44,13 +50,13 @@ ExpR values match exactly. Sample sizes differ (PR #51 N is lower due to its scr
 
 ### Action 1 — Restore CANDIDATE_READY + DSR-PENDING status
 
-| Cell | PR | Prior status | Remediated status |
+| Cell | PR | Pre-remediation (2026-04-20) | Current status (ACCEPTED 2026-04-21) |
 |---|---|---|---|
-| MNQ 15m RR=1.0 NYSE_OPEN | #50, #51 | "MISCLASSIFIED" (DSR kill) | **CANDIDATE_READY, DSR-PENDING** |
-| MNQ 15m RR=1.0 US_DATA_1000 | #50, #51 | "MISCLASSIFIED" (DSR kill) | **CANDIDATE_READY, DSR-PENDING** |
-| MNQ 15m RR=1.5 US_DATA_1000 | #51 | "MISCLASSIFIED" (DSR kill) | **CANDIDATE_READY, DSR-PENDING** |
-| MNQ 5m RR=1.0 NYSE_OPEN | #51 | "MISCLASSIFIED" (DSR kill) | **CANDIDATE_READY, DSR-PENDING** |
-| MNQ 5m RR=1.5 NYSE_OPEN | #51 | "MISCLASSIFIED" (DSR kill) | **CANDIDATE_READY, DSR-PENDING** |
+| MNQ 15m RR=1.0 NYSE_OPEN | #50, #51 | "MISCLASSIFIED" (DSR kill) | **CANDIDATE_READY (DSR-PENDING)** |
+| MNQ 15m RR=1.0 US_DATA_1000 | #50, #51 | "MISCLASSIFIED" (DSR kill) | **CANDIDATE_READY (DSR-PENDING)** |
+| MNQ 15m RR=1.5 US_DATA_1000 | #51 | "MISCLASSIFIED" (DSR kill) | **CANDIDATE_READY (DSR-PENDING)** |
+| MNQ 5m RR=1.0 NYSE_OPEN | #51 | "MISCLASSIFIED" (DSR kill) | **CANDIDATE_READY (DSR-PENDING)** |
+| MNQ 5m RR=1.5 NYSE_OPEN | #51 | "MISCLASSIFIED" (DSR kill) | **CANDIDATE_READY (DSR-PENDING)** |
 
 **DSR-PENDING** means: this cell passed all pre-registered gates (H1/C6/C8/C9) and is institutionally on-track, but automatic promotion to deploy-eligible is HELD pending the N_eff resolution workstream (see Action 3). The cell is not dead, not MISCLASSIFIED, and not retroactively invalidated.
 
