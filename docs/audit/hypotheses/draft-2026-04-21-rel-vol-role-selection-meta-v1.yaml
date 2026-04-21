@@ -1,0 +1,283 @@
+pre_reg_id: "rel-vol-role-selection-meta-v1"
+date: "2026-04-21"
+status: "DRAFT_PENDING_REVIEW"
+testing_mode: "meta_framework"
+pathway: "B"
+authored_by: "Claude terminal (6lane-baseline worktree)"
+reviewed_by: "PENDING"
+
+# ============================================================
+# DRAFT — META-FRAMEWORK. DOES NOT EXECUTE DIRECTLY.
+# This is a ROLE-SELECTION framework, not a single-test pre-reg.
+# It organizes the rel_vol work across 3 instruments × 4 roles
+# into a 12-cell matrix. Existing and future per-cell pre-regs
+# slot into this framework as implementations.
+#
+# Lock condition: this meta-framework must be user-reviewed before
+# any per-cell sub-pre-reg is authored beyond what already exists.
+# Individual per-cell pre-regs may continue their own lifecycles.
+# ============================================================
+
+motivation: |
+  The rel_vol lineage has been running as a series of form-selection
+  experiments (linear sizer → filter Q5-only → filter Q4+Q5 → biphasic
+  exhaustion). Each form was treated as THE question, retrospectively
+  challenged when the data didn't cooperate. The real question
+  underneath is role-selection:
+
+    "For each instrument (MNQ, MES, MGC), what is the correct
+     deployment ROLE of the rel_vol_session signal: FILTER, SIZER,
+     ALLOCATOR, or NOTHING?"
+
+  Form-selection is subordinate: once role is chosen, form-within-role
+  is a narrower pre-reg. This meta-framework establishes the scoring
+  metric and decision rules per role so role-comparison is principled
+  rather than ad-hoc.
+
+grounded_in_local_extracts:
+  - path: "docs/institutional/mechanism_priors.md"
+    use: "R1 FILTER before R3 POSITION-SIZE hierarchy when signal is
+          tail/binary (as MGC Q5-only suggested). R2 REGIME ALLOCATOR
+          when signal is volatility-regime conditional."
+  - path: "docs/institutional/pre_registered_criteria.md"
+    use: "Every role's pre-reg inherits C1-C12 criteria; role-specific
+          metrics are additions, not substitutions."
+  - path: "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+    use: "MinBTL budget applies at the K = (instruments × roles)
+          level. 3 × 4 = 12, well under 300."
+  - path: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    use: "Forecast-scaled sizing is R3 SIZER canonical form. Carver
+          explicitly frames continuous scaling as inferior to binary
+          filter when effect is tail-concentrated."
+  - path: "docs/institutional/literature/harvey_liu_2015_backtesting.md"
+    use: "Pre-registered role decision avoids the garden-of-forking-
+          paths; report all 12 cells, not the winning 1."
+
+axes:
+  instruments: ["MNQ", "MES", "MGC"]
+  roles:
+    - role_id: "FILTER"
+      description: "Binary gate — trade iff condition met, skip otherwise. Includes Q5-only, Q4+Q5, skip-Q5, Q4-only, and any binary predicate form."
+      native_metric_primary: "conditional ExpR on fired trades"
+      native_metric_secondary: "fired-trade Sharpe"
+      sample_size_floor: "N_fired >= 100 IS, N_fired >= 50 fresh OOS"
+    - role_id: "SIZER"
+      description: "Continuous scaling — multiplier per trade, capital-neutral. Includes quintile-linear (PR #59 form), curvature (PR #59 re-audit H3), and any continuous-multiplier form."
+      native_metric_primary: "paired-t(weighted - uniform) on same trades"
+      native_metric_secondary: "weighted Sharpe - uniform Sharpe"
+      sample_size_floor: "N_pairs >= 300 IS, N_pairs >= 100 fresh OOS"
+    - role_id: "ALLOCATOR"
+      description: "Portfolio-level capital weight per (instrument, session) lane, binned by regime variable. Includes vol-regime session routers (the PR #62 / #63 ovnrng style)."
+      native_metric_primary: "ΔSR_ann(router vs uniform) on rolling 4-fold CV (LdP 2020)"
+      native_metric_secondary: "per-fold win rate + map-stability across folds"
+      sample_size_floor: ">=3 rolling folds of >=150 trades each"
+    - role_id: "NOTHING"
+      description: "Null case: signal does not deploy. Used when no role passes its gate. Must be the pre-committed default."
+      native_metric_primary: "N/A (default)"
+  cell_count: 12  # 3 × 4
+
+hypothesis:
+  H_per_cell: |
+    For each of the 12 cells, the cell's role passes OR fails at its
+    native metric per the gates below. Role-selection per instrument
+    is the role with highest net institutional score (see Scoring
+    below). If no role passes any gate, the instrument defaults to
+    NOTHING.
+
+  H_cross_cell: |
+    Each role that passes on multiple instruments is tested for
+    cross-instrument homogeneity. If agreement >= 2 of 3 instruments
+    on the SAME form of the SAME role, that form is universal.
+    Heterogeneous findings (only 1 of 3) are instrument-specific.
+
+scoring:
+  filter_role_score:
+    pass_condition: "conditional ExpR > unfiltered ExpR AND Welch t(fired, non-fired) >= +2.0 AND fire_rate in [5%, 40%] AND N_fired >= 100 IS"
+    deploy_gate: "fresh OOS conditional ExpR > 0 AND N_fresh >= 50 AND era stability (no year N>=30 with ExpR < -0.05 on fired)"
+
+  sizer_role_score:
+    pass_condition: "paired-t(weighted - uniform) >= +2.0 AND weighted Sharpe >= 0 AND per-lane cell-flip <= 25%"
+    deploy_gate: "fresh OOS paired-t >= +1.5 AND N_fresh >= 100 AND institutional stack (C5 DSR post-N_eff, C6 WFE, C9 era) clears"
+
+  allocator_role_score:
+    pass_condition: "rolling 4-fold CV: >=3 wins AND mean ΔSR_ann >= +0.30 AND map-stability <= 2 unique sessions per bin"
+    deploy_gate: "LdP 2020 CPCV fold SR on fresh regime >= +0.50 AND no catastrophic (ΔSR <= -1.0) fold"
+
+  nothing_default:
+    pass_condition: "always passes (null case)"
+    deploy_gate: "N/A"
+
+  institutional_overlay:
+    notes: |
+      Every role's deploy gate is ADDITIONAL TO the standing
+      non-waivable criteria in pre_registered_criteria.md:
+      C1 (mechanism), C2 (sample power), C3 (BH-FDR at role K),
+      C6 (WFE), C9 (era stability), C11 (account-death MC).
+      DSR (C5) is cross-check pending N_eff resolution (Amendment 2.1).
+
+decision_rule_per_instrument:
+  - "If exactly 1 role passes: that role is the deployment candidate."
+  - "If 2+ roles pass: choose the role with higher net EV after
+     per-trade cost model + capital constraint (MinBTL-compliant)."
+  - "If 0 roles pass: instrument defaults to NOTHING. Document as
+     dead for rel_vol. Do not combine sub-threshold roles."
+
+non_action_constraints:
+  - "Does NOT lock any per-cell pre-reg. Per-cell locks happen in sub-pre-regs."
+  - "Does NOT execute any role on canonical data yet."
+  - "Does NOT modify validated_setups / edge_families / lane_allocation / live_config."
+  - "2026-01-01..2026-04-21 OOS is CONTAMINATED (sizer peek + filter Q4/Q5 peek from PR #59 re-audit)."
+  - "Fresh OOS window starts 2026-04-22 for all role re-evaluations; pre-2026-04-22 OOS is informational only."
+
+cell_inventory:
+
+  # MNQ rel_vol cells
+  - cell: "MNQ × FILTER"
+    status: "DRAFT_PENDING_REVIEW"
+    sub_pre_reg: "docs/audit/hypotheses/draft-2026-04-21-mnq-participation-exhaustion-v1.yaml"
+    mechanism: "biphasic (Q1-Q4 rise + Q5 crash — exhaustion)"
+    forms: ["H1 skip-Q5 exhaustion filter", "H2 Q4-only peak", "H3 curvature feature"]
+    prior_evidence: "PR #59 re-audit OOS quintiles +0.016 / +0.035 / +0.064 / +0.142 / +0.010"
+    blocker: "Pattern discovered in same-OOS peek; IS-only verification required BEFORE lock."
+    next_action: "IS-only quintile verification query on MNQ (separate task post-Codex)."
+
+  - cell: "MNQ × SIZER"
+    status: "DEAD"
+    sub_pre_reg: "docs/audit/hypotheses/2026-04-21-pr48-sizer-rule-oos-backtest-v1.yaml"
+    verdict: "KILL — Spearman p=0.12, 55% lane cell-flip, pooled delta +0.006R t=+0.44"
+    evidence: "PR #59 main + re-audit (commits d227f8ed, ec8198f3)"
+
+  - cell: "MNQ × ALLOCATOR"
+    status: "UNTESTED"
+    sub_pre_reg: "TO_BE_DESIGNED"
+    mechanism: "hypothetical: weight MNQ sessions by rel_vol regime bin"
+    prior_evidence: "ovnrng allocator (different feature) DEAD in PR #63; no rel_vol-keyed allocator tested"
+    next_action: "Design MNQ allocator sub-pre-reg OR defer pending MNQ filter verdict"
+
+  - cell: "MNQ × NOTHING"
+    status: "DEFAULT_CANDIDATE"
+    condition: "Assigned if MNQ filter and MNQ allocator both fail gates"
+
+  # MES rel_vol cells
+  - cell: "MES × FILTER"
+    status: "LOCKED (execution pending by Codex)"
+    sub_pre_reg: "docs/audit/hypotheses/2026-04-21-rel-vol-filter-form-v1.yaml"
+    mechanism: "tail / binary (Q5-only or Q4+Q5)"
+    prior_evidence: "PR #59 re-audit OOS: Q5-only +0.112R N=155, Q4+Q5 -0.011R N=296"
+    lock_commit: "336aa73c"
+    blocker: "Same-OOS peek; fresh-OOS accrual gate required per pre-reg's contamination_declaration."
+    next_action: "Codex running this NOW — do not touch from this terminal."
+
+  - cell: "MES × SIZER"
+    status: "DEAD (NOT_DEPLOYABLE)"
+    sub_pre_reg: "docs/audit/hypotheses/2026-04-21-pr48-sizer-rule-oos-backtest-v1.yaml"
+    verdict: "Pre-reg gate PASSED narrowly (delta +0.030R t=+2.084) BUT Sharpe gate fails: uniform SR -0.082, sizer SR -0.050 (both negative = not alpha). Institutional stack REJECT per Codex clearance (commit 3df2acb1)."
+    evidence: "PR #59 main + Codex institutional clearance"
+
+  - cell: "MES × ALLOCATOR"
+    status: "UNTESTED"
+    sub_pre_reg: "TO_BE_DESIGNED"
+    mechanism: "hypothetical: weight MES sessions by rel_vol regime"
+    prior_evidence: "None — rel_vol-keyed allocator never tested on MES"
+    next_action: "Design MES allocator sub-pre-reg only if MES filter passes fresh OOS"
+
+  - cell: "MES × NOTHING"
+    status: "DEFAULT_CANDIDATE_HIGH_PROBABILITY"
+    reasoning: "Sizer DEAD, filter depends on fresh-OOS accrual; if filter fails fresh OOS, MES defaults to NOTHING"
+
+  # MGC rel_vol cells
+  - cell: "MGC × FILTER"
+    status: "LOCKED (execution pending by Codex)"
+    sub_pre_reg: "docs/audit/hypotheses/2026-04-21-rel-vol-filter-form-v1.yaml"
+    mechanism: "tail-continuation (Q5-only dominant)"
+    prior_evidence: "PR #59 re-audit OOS: Q5-only +0.263R N=95, Q4+Q5 +0.194R N=222, monotonic -0.026/-0.023/+0.033/+0.143/+0.263"
+    lock_commit: "336aa73c"
+    blocker: "Same-OOS peek; fresh-OOS accrual gate"
+    next_action: "Codex running this NOW — do not touch"
+
+  - cell: "MGC × SIZER"
+    status: "RESEARCH_SURVIVOR_PRE_REG_PASS"
+    sub_pre_reg: "docs/audit/hypotheses/2026-04-21-pr48-sizer-rule-oos-backtest-v1.yaml"
+    verdict: "Pre-reg gate PASSED honestly (delta +0.032R t=+2.000 p=0.023, bootstrap CI [+0.0008, +0.062], Spearman p=0.002, Sharpe +0.059→+0.081, monotonic quintile progression). Institutional stack REJECT for SHADOW-DEPLOY per Codex clearance (commit 3df2acb1) — WFE / N_eff / era-stability gates not cleared."
+    evidence: "PR #48 OOS β₁ + PR #59 sizer OOS + Codex institutional clearance"
+    note: "Pre-reg pass STANDS as legitimate research; not the deployment answer. Institutional clearance REJECT is not post-hoc rescue — it's forward-gated downstream gates."
+
+  - cell: "MGC × ALLOCATOR"
+    status: "UNTESTED"
+    sub_pre_reg: "TO_BE_DESIGNED"
+    mechanism: "hypothetical: weight MGC sessions by rel_vol regime (participation-continuation regime in Q4-Q5 sessions gets higher weight)"
+    prior_evidence: "None — rel_vol-keyed allocator never tested on MGC"
+    next_action: "Design MGC allocator sub-pre-reg if filter+sizer consensus doesn't emerge"
+
+  - cell: "MGC × NOTHING"
+    status: "UNLIKELY_DEFAULT"
+    reasoning: "MGC has legitimate pre-reg-passed research (sizer) + likely filter survival on fresh OOS; NOTHING default is low probability"
+
+testing_discipline:
+  K_family: 12
+  BH_FDR_alpha: 0.05
+  MinBTL_check: "2·ln(12) / 9 = 0.55 yrs; IS window >=6 yrs per instrument. Trivially satisfied."
+  per_cell_heterogeneity_gate: "every per-cell result must include per-lane breakdown and <=25% cell-flip rate"
+  mandatory_downstream_gates_non_waivable:
+    - "C6 (WFE >= 0.50) at per-cell level"
+    - "C8 (fresh OOS N >= 50 per role_floor)"
+    - "C9 (era stability per role)"
+  integrity_gates:
+    - "No same-OOS peek across cells — each cell gets its own fresh-OOS accrual window"
+    - "Role-selection decision made at 12-cell matrix level, not per-cell"
+    - "NOTHING default is pre-committed if all active roles fail — never backfill with sub-threshold role"
+
+reporting:
+  required_outputs:
+    - "12-cell scorecard: instrument × role × {gate_status, native_metric, deploy_gate_status}"
+    - "Cross-instrument consistency check: if same role passes on 2+ instruments, same form?"
+    - "Portfolio-impact summary: given role-selection outcome, what changes in 6-lane allocator structure?"
+
+roadmap:
+  phase_1_filter_cells_fresh_OOS:
+    start_date: "2026-04-22 (post-Codex filter-form runner)"
+    duration: "accrual until N_fresh >= 50 per instrument (est. 4-6 weeks)"
+    decision: "filter cells PASS / FAIL their deploy gates"
+
+  phase_2_allocator_cells_design:
+    trigger: "phase 1 complete"
+    scope: "Design allocator sub-pre-regs for instruments where filter fails or is weak"
+    duration: "2-3 weeks design"
+
+  phase_3_role_selection_final:
+    trigger: "phase 2 complete + any allocator sub-pre-reg locked + fresh-OOS accrual"
+    scope: "Final role-selection decision per instrument + portfolio allocator re-design"
+
+# ============================================================
+# USER REVIEW CHECKPOINTS
+# ============================================================
+# Before this meta-framework LOCKs (status → LOCKED):
+#
+#   1. Approve the 4-role taxonomy (FILTER/SIZER/ALLOCATOR/NOTHING)
+#      or request additions (e.g., EXECUTION_TIMING role).
+#
+#   2. Approve the per-role native metrics and deploy gates.
+#      Particularly: is ALLOCATOR's rolling 4-fold CV with >=3
+#      wins + mean ΔSR >= +0.30 the right bar? Or stricter CPCV?
+#
+#   3. Approve the contamination rule: any role that has been
+#      peeked at on 2026-01-01..2026-04-21 must wait for fresh
+#      OOS accrual post-2026-04-22 before locking its deploy gate.
+#
+#   4. Approve the NOTHING default: instruments where all active
+#      roles fail default to NOTHING, not backfill with a sub-
+#      threshold role.
+#
+#   5. Decide whether to design the allocator cells NOW (pre-
+#      empting a phase-2 delay) or defer until filter results are
+#      in (conservative, less work).
+#
+# Once all 5 checkpoints are approved, rename to
+# `2026-04-{N}-rel-vol-role-selection-meta-v1.yaml` and lock.
+# ============================================================
+
+open_questions:
+  - "Should ALLOCATOR role include a session-weight-by-prev-day-rel_vol variant (not just current-day)? The ovnrng router failed on current-day — prev-day might have different stability."
+  - "Parsimony preference: if FILTER role produces the same net EV as SIZER role (unlikely given Sharpe gate), prefer FILTER by Carver 2015 Ch 10 (binary is more robust to regime shift)?"
+  - "Cross-role composition: is FILTER + SIZER stackable (filter-first, then size within filter)? Or mutually exclusive by design?"
+  - "Does NOTHING default need a minimum observation window (e.g., 2 years fresh OOS) before the role-out decision is final?"
