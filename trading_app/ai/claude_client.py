@@ -19,14 +19,24 @@ Model strategy (see docs/runtime/stages/claude-api-modernization.md):
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING, Any
 
-import anthropic
+if TYPE_CHECKING:
+    import anthropic
 
 CLAUDE_STRUCTURED_MODEL = "claude-sonnet-4-6"
 CLAUDE_REASONING_MODEL = "claude-opus-4-7"
 
 
-def get_client(api_key: str | None = None) -> anthropic.Anthropic:
+def _load_anthropic():
+    try:
+        import anthropic
+    except ModuleNotFoundError as exc:
+        raise ImportError("anthropic SDK not installed; install `anthropic` to use trading_app.ai") from exc
+    return anthropic
+
+
+def get_client(api_key: str | None = None) -> Any:
     """Return a configured `anthropic.Anthropic` client.
 
     Args:
@@ -38,4 +48,5 @@ def get_client(api_key: str | None = None) -> anthropic.Anthropic:
     resolved_key = api_key or os.environ.get("ANTHROPIC_API_KEY")
     if not resolved_key:
         raise ValueError("ANTHROPIC_API_KEY required. Pass api_key or set env var.")
+    anthropic = _load_anthropic()
     return anthropic.Anthropic(api_key=resolved_key)

@@ -5,6 +5,7 @@ Stage 3 of claude-api-modernization: migrated to canonical `claude_client`,
 interpretation, prompt caching on the grounding prompt.
 """
 
+import importlib.util
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -15,6 +16,8 @@ from trading_app.ai.query_agent import (
     QueryResult,
     _generate_warnings,
 )
+
+ANTHROPIC_AVAILABLE = importlib.util.find_spec("anthropic") is not None
 
 
 class TestGenerateWarnings:
@@ -199,6 +202,7 @@ class TestSDKSurfaceGuards:
     network, no mock — to validate our call shape.
     """
 
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_messages_parse_exists_with_required_params(self):
         """Every kwarg _extract_intent passes must exist on the real SDK."""
         import inspect
@@ -216,6 +220,7 @@ class TestSDKSurfaceGuards:
         missing = required_for_our_call - set(sig.parameters)
         assert not missing, f"SDK surface changed: parse() missing {missing}"
 
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_messages_parse_rejects_cache_control_kwarg(self):
         """Regression guard: cache_control is NOT a top-level kwarg on parse().
 
@@ -232,6 +237,7 @@ class TestSDKSurfaceGuards:
             "SDK now accepts cache_control on parse() — can simplify _extract_intent to pass it at top level."
         )
 
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_extract_intent_call_shape_binds_to_real_sdk(self):
         """Validate the exact kwargs our code passes against the REAL SDK sig.
 
@@ -268,6 +274,7 @@ class TestSDKSurfaceGuards:
         except TypeError as exc:
             pytest.fail(f"_extract_intent call shape invalid against anthropic SDK: {exc}")
 
+    @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="anthropic SDK not installed")
     def test_messages_create_thinking_adaptive_shape(self):
         """Validate Pass-2 (_interpret_results) kwargs against real SDK sig.
 

@@ -1952,7 +1952,7 @@ def build_pulse(
     handoff_context, handoff_items = collect_handoff(root)
     worktree_items = collect_worktrees(canonical)
     claim_items = collect_session_claims(root)
-    conflict_items = collect_worktree_conflicts(canonical)
+    conflict_items = [] if fast else collect_worktree_conflicts(canonical)
     git_items = collect_git_state(root)
     action_items = collect_action_queue(canonical)
     ralph_items = collect_ralph_deferred(root)
