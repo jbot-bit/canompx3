@@ -15,6 +15,7 @@ Multi-instrument futures data pipeline — builds clean, replayable local datase
 ## Document Authority
 
 Canonical registry for document roles: `docs/governance/document_authority.md`.
+Claude Code rule index (categorized): `.claude/rules/_INDEX.md`.
 
 **Conflict resolution:** Code → CLAUDE.md. Trading logic → `TRADING_RULES.md`. Research → `RESEARCH_RULES.md`. Features → check `docs/specs/*.md` BEFORE building. Research routing → `docs/STRATEGY_BLUEPRINT.md`. **Research methodology / statistical thresholds / institutional standards → `docs/institutional/` (literature-grounded passages + locked criteria).**
 

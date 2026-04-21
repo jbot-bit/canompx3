@@ -170,6 +170,37 @@ RESUME_DIRECTIVE = (
     "RESUME: Re-read HANDOFF.md, recent git history, and active stage state before continuing."
 )
 
+# Skill-specific routing (extension of auto-skill-routing.md table).
+# Each (regex, directive) fires additively when a prompt matches — emitted alongside
+# the mode directives above. These cover skills not implied by mode alone.
+# No overlap with DESIGN/IMPLEMENT/COMMIT/RESEARCH/ORIENT/RESUME routes.
+SKILL_ROUTES = [
+    (
+        re.compile(r"\b(my book|my portfolio|what.?s live|my trades|trade tonight|my playbook|my strats|what am i trading|show me my stuff|what.?s deployed|what.?s running)\b", re.IGNORECASE),
+        "ROUTE: /trade-book — deployed portfolio with full strategy details.",
+    ),
+    (
+        re.compile(r"\b(how.?s it going|performing|decay|regime|fitness|healthy|anything dying|portfolio health)\b", re.IGNORECASE),
+        "ROUTE: /regime-check — portfolio fitness and regime health.",
+    ),
+    (
+        re.compile(r"\b(didn.?t we test|wasn.?t that dead|what did we find|remind me|history of|no.?go\?|past research)\b", re.IGNORECASE),
+        "ROUTE: /pinecone-assistant — project history and prior findings.",
+    ),
+    (
+        re.compile(r"\b(review|check my work|bloomey|seven sins|before i commit|anything wrong|code review)\b", re.IGNORECASE),
+        "ROUTE: /code-review — institutional review (seven sins, canonical integrity).",
+    ),
+    (
+        re.compile(r"\b(next|keep going|continue|what now|what.?s next|more)\b", re.IGNORECASE),
+        "ROUTE: /next — auto-determine next concrete task from stage/handoff/queue.",
+    ),
+    (
+        re.compile(r"\b(stage done|task done|complete|finished|that.?s it|all done)\b", re.IGNORECASE),
+        "ROUTE: /verify done — stage acceptance (lint/types/gates).",
+    ),
+]
+
 WARN_THRESHOLD = 4    # After N consecutive Reads, warn
 BLOCK_THRESHOLD = 12  # After N consecutive Reads, BLOCK (raised from 7 — research sessions legitimately read more)
 
@@ -279,6 +310,11 @@ def handle_user_prompt(event):
         directives.append(RESUME_DIRECTIVE)
     elif matched_orient:
         directives.append(ORIENT_DIRECTIVE)
+
+    # ── Skill routing (additive — emits specific /skill nudges) ──────
+    for pattern, directive in SKILL_ROUTES:
+        if pattern.search(prompt):
+            directives.append(directive)
 
     # ── Emit directives ──────────────────────────────────────────────
     if _should_emit_directives(state, directives):
