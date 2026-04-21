@@ -1,0 +1,147 @@
+version: 1
+status: LOCKED
+date: 2026-04-21
+slug: mgc-microstructure-v1
+title: "MGC ORB-formation microstructure conditioners on uncovered sessions — fixed family scan (K=8)"
+owner: codex
+parent_spec: "docs/audit/2026-04-21-orthogonal-pov-map.md"
+sibling_spec:
+  - "docs/audit/hypotheses/2026-04-21-mgc-regime-ortho-v1.yaml"
+  - "docs/audit/hypotheses/2026-04-21-mes-session-boundary-v1.yaml"
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+  notes:
+    - "Mechanistic distinction from the NO-GO break-speed / break-delay family: these features are measured inside ORB formation before entry, not on post-break velocity."
+    - "Theory state remains without_theory because the local literature set does not directly ground ORB-internal concentration metrics."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  parent_commit_sha: "f4da26b4"
+  committed_required_before_run: true
+  lock_commit_sha_note: "Execution must use the commit that first introduces this file on a reachable branch."
+
+mechanism_prior:
+  summary: |
+    Mechanism priors support liquidity and displacement as ORB drivers, but the
+    specific claim that concentration of range or volume inside the ORB predicts
+    cleaner continuation is not directly grounded by a local extract. This family
+    is therefore explicitly treated as without-theory even though it remains
+    mechanism-shaped and pre-specified.
+  citations:
+    - "docs/institutional/mechanism_priors.md"
+  theory_state: without_theory
+
+scope:
+  instrument: MGC
+  sessions:
+    - BRISBANE_1025
+    - US_DATA_830
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  directions:
+    - long
+    - short
+  live_six_overlap_vector: "none — instrument MGC is absent from the live six"
+  no_go_distinction: "uses pre-entry ORB-formation concentration metrics, not post-break speed or delay"
+
+data_policy:
+  canonical_inputs:
+    - table: orb_outcomes
+      columns: [trading_day, symbol, orb_label, orb_minutes, entry_model, confirm_bars, rr_target, direction, pnl_r, outcome]
+      filter_predicate: "symbol='MGC' AND orb_label in ('BRISBANE_1025','US_DATA_830') AND orb_minutes=5 AND entry_model='E2' AND confirm_bars=1 AND rr_target=1.0"
+    - table: bars_1m
+      columns: [ts, symbol, open, high, low, close, volume]
+      filter_predicate: "symbol='MGC' on the 5-minute ORB formation bars for BRISBANE_1025 and US_DATA_830 only"
+  holdout_fence:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+feature_definitions:
+  - feature_name: ORB_RANGE_CONCENTRATION_Q67_HIGH
+    formula: "max(bar_range_1m_inside_orb) / total_orb_range >= q67_IS(max(bar_range_1m_inside_orb) / total_orb_range)"
+    trade_time_knowable: true
+    first_complete_time: "ORB close"
+    lookahead_check: PASS
+  - feature_name: ORB_VOLUME_CONCENTRATION_Q67_HIGH
+    formula: "max(volume_1m_inside_orb) / sum(volume_1m_inside_orb) >= q67_IS(max(volume_1m_inside_orb) / sum(volume_1m_inside_orb))"
+    trade_time_knowable: true
+    first_complete_time: "ORB close"
+    lookahead_check: PASS
+
+primary_schema:
+  k_family: 8
+  family_cells_structured_as: "2 sessions × 2 ORB-internal concentration predicates × 2 directions"
+  primary_promotion_gate: "K_family BH-FDR q < 0.05"
+
+trial_budget:
+  primary_selection_trials: 8
+  schema_locked_before_any_metric: true
+  counted_against_session_cap: true
+
+decision_criteria:
+  wfe_floor: 0.50
+  n_trades_min: 100
+  chordia_t_threshold: 3.79
+  chordia_framework_source: "docs/institutional/pre_registered_criteria.md"
+  multiple_testing_primary: bh_fdr_pathway_selection
+  harvey_liu_supplementary: true
+  dsr_role: cross_check_only
+  dsr_rho_set: [0.3, 0.5, 0.7]
+  cost_stress: [1.0, 1.5, 2.0]
+  nulls:
+    - destruction_shuffle
+    - rng_null
+    - positive_control
+    - negative_control
+
+posture_blocker_proof:
+  grandfathering_dependency: none
+  chordia_theory_state: without_theory
+  theory_state_pre_specified_cite: "docs/institutional/mechanism_priors.md"
+  dsr_onc_dependency: no
+  holdout_clean_at_discovery: true
+  projected_phase_b_replay_if_success: KEEP
+  same_blocker_as_live_six: no
+
+hypotheses:
+  - id: H01_BRI_RANGECONC_LONG
+    statement: "On MGC BRISBANE_1025 long trades, ORB_RANGE_CONCENTRATION_Q67_HIGH improves ExpR versus its complement."
+  - id: H02_BRI_RANGECONC_SHORT
+    statement: "On MGC BRISBANE_1025 short trades, ORB_RANGE_CONCENTRATION_Q67_HIGH improves ExpR versus its complement."
+  - id: H03_USD830_RANGECONC_LONG
+    statement: "On MGC US_DATA_830 long trades, ORB_RANGE_CONCENTRATION_Q67_HIGH improves ExpR versus its complement."
+  - id: H04_USD830_RANGECONC_SHORT
+    statement: "On MGC US_DATA_830 short trades, ORB_RANGE_CONCENTRATION_Q67_HIGH improves ExpR versus its complement."
+  - id: H05_BRI_VOLCONC_LONG
+    statement: "On MGC BRISBANE_1025 long trades, ORB_VOLUME_CONCENTRATION_Q67_HIGH improves ExpR versus its complement."
+  - id: H06_BRI_VOLCONC_SHORT
+    statement: "On MGC BRISBANE_1025 short trades, ORB_VOLUME_CONCENTRATION_Q67_HIGH improves ExpR versus its complement."
+  - id: H07_USD830_VOLCONC_LONG
+    statement: "On MGC US_DATA_830 long trades, ORB_VOLUME_CONCENTRATION_Q67_HIGH improves ExpR versus its complement."
+  - id: H08_USD830_VOLCONC_SHORT
+    statement: "On MGC US_DATA_830 short trades, ORB_VOLUME_CONCENTRATION_Q67_HIGH improves ExpR versus its complement."
+
+kill_conditions:
+  - "Zero cells survive BH-FDR at K=8."
+  - "Any derived microstructure feature cannot be computed without leaking post-ORB information."
+  - "Any survivor depends on coverage < 95% of the scoped ORB rows."
+
+success_action: "Advance surviving cells to Phase 4 adversarial audit."
+failure_action: "Log the family to the NO-GO registry with its exact microstructure distinction."
+
+outputs_required_after_run:
+  - "Per-cell N_on_IS, ExpR_on_IS, WR_on_IS, t_IS, raw_p_IS, q_family"
+  - "WFE, cost stress, null distributions, and descriptive 2026 OOS"
+  - "Result doc: docs/audit/results/2026-04-21-mgc-microstructure-v1.md"
+  - "Execution script: research/mgc_microstructure_v1.py"

@@ -1,0 +1,156 @@
+version: 1
+status: LOCKED
+date: 2026-04-21
+slug: mes-session-boundary-v1
+title: "MES Asia-boundary conviction filters on uncovered sessions — fixed family scan (K=12)"
+owner: codex
+parent_spec: "docs/audit/2026-04-21-orthogonal-pov-map.md"
+sibling_spec:
+  - "docs/audit/hypotheses/2026-04-21-mgc-regime-ortho-v1.yaml"
+  - "docs/audit/hypotheses/2026-04-21-mgc-microstructure-v1.yaml"
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+  notes:
+    - "Mechanistic distinction from the NO-GO gap-direction family: this family tests session-boundary conviction magnitude, not gap-direction alignment."
+    - "The selected sessions are uncovered by the active live-six tuple set even though the instrument family remains equity-index."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  parent_commit_sha: "f4da26b4"
+  committed_required_before_run: true
+  lock_commit_sha_note: "Execution must use the commit that first introduces this file on a reachable branch."
+
+mechanism_prior:
+  summary: |
+    Chan grounds intraday momentum from overnight stop cascades and opening-gap
+    conviction. This family tests whether pre-session conviction magnitude at the
+    Asia boundary improves MES ORB continuation on uncovered sessions, without
+    reusing the live-six session/filter tuples.
+  citations:
+    - "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+    - "docs/institutional/mechanism_priors.md"
+  theory_state: with_theory
+
+scope:
+  instrument: MES
+  sessions:
+    - BRISBANE_1025
+    - TOKYO_OPEN
+    - SINGAPORE_OPEN
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  directions:
+    - long
+    - short
+  live_six_overlap_vector: "partial instrument overlap only; sessions and features are outside the active live-six tuples"
+  no_go_distinction: "tests gap magnitude and Asia-range conviction, not gap-direction alignment or blanket calendar skips"
+
+data_policy:
+  canonical_inputs:
+    - table: orb_outcomes
+      columns: [trading_day, symbol, orb_label, orb_minutes, entry_model, confirm_bars, rr_target, direction, pnl_r, outcome]
+      filter_predicate: "symbol='MES' AND orb_label in ('BRISBANE_1025','TOKYO_OPEN','SINGAPORE_OPEN') AND orb_minutes=5 AND entry_model='E2' AND confirm_bars=1 AND rr_target=1.0"
+    - table: daily_features
+      columns: [trading_day, symbol, orb_minutes, gap_open_points, session_asia_high, session_asia_low, atr_20]
+      filter_predicate: "symbol='MES' AND orb_minutes=5"
+  holdout_fence:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+feature_definitions:
+  - feature_name: GAP_ABS_Q67_HIGH
+    formula: "abs(gap_open_points) >= q67_IS(abs(gap_open_points))"
+    trade_time_knowable: true
+    first_complete_time: "session open"
+    lookahead_check: PASS
+  - feature_name: ASIA_RANGE_ATR_Q67_HIGH
+    formula: "(session_asia_high - session_asia_low) / atr_20 >= q67_IS((session_asia_high - session_asia_low) / atr_20)"
+    trade_time_knowable: true
+    first_complete_time: "before BRISBANE_1025 / TOKYO_OPEN / SINGAPORE_OPEN entry decisions"
+    lookahead_check: PASS
+
+primary_schema:
+  k_family: 12
+  family_cells_structured_as: "3 sessions × 2 conviction predicates × 2 directions"
+  primary_promotion_gate: "K_family BH-FDR q < 0.05"
+
+trial_budget:
+  primary_selection_trials: 12
+  schema_locked_before_any_metric: true
+  counted_against_session_cap: true
+
+decision_criteria:
+  wfe_floor: 0.50
+  n_trades_min: 100
+  chordia_t_threshold: 3.00
+  chordia_framework_source: "docs/institutional/pre_registered_criteria.md"
+  multiple_testing_primary: bh_fdr_pathway_selection
+  harvey_liu_supplementary: true
+  dsr_role: cross_check_only
+  dsr_rho_set: [0.3, 0.5, 0.7]
+  cost_stress: [1.0, 1.5, 2.0]
+  nulls:
+    - destruction_shuffle
+    - rng_null
+    - positive_control
+    - negative_control
+
+posture_blocker_proof:
+  grandfathering_dependency: none
+  chordia_theory_state: with_theory
+  theory_state_pre_specified_cite: "docs/institutional/literature/chan_2013_ch7_intraday_momentum.md"
+  dsr_onc_dependency: no
+  holdout_clean_at_discovery: true
+  projected_phase_b_replay_if_success: KEEP
+  same_blocker_as_live_six: no
+
+hypotheses:
+  - id: H01_BRI_GAPABS_LONG
+    statement: "On MES BRISBANE_1025 long trades, GAP_ABS_Q67_HIGH improves ExpR versus its complement."
+  - id: H02_BRI_GAPABS_SHORT
+    statement: "On MES BRISBANE_1025 short trades, GAP_ABS_Q67_HIGH improves ExpR versus its complement."
+  - id: H03_TOK_GAPABS_LONG
+    statement: "On MES TOKYO_OPEN long trades, GAP_ABS_Q67_HIGH improves ExpR versus its complement."
+  - id: H04_TOK_GAPABS_SHORT
+    statement: "On MES TOKYO_OPEN short trades, GAP_ABS_Q67_HIGH improves ExpR versus its complement."
+  - id: H05_SGP_GAPABS_LONG
+    statement: "On MES SINGAPORE_OPEN long trades, GAP_ABS_Q67_HIGH improves ExpR versus its complement."
+  - id: H06_SGP_GAPABS_SHORT
+    statement: "On MES SINGAPORE_OPEN short trades, GAP_ABS_Q67_HIGH improves ExpR versus its complement."
+  - id: H07_BRI_ASIARANGE_LONG
+    statement: "On MES BRISBANE_1025 long trades, ASIA_RANGE_ATR_Q67_HIGH improves ExpR versus its complement."
+  - id: H08_BRI_ASIARANGE_SHORT
+    statement: "On MES BRISBANE_1025 short trades, ASIA_RANGE_ATR_Q67_HIGH improves ExpR versus its complement."
+  - id: H09_TOK_ASIARANGE_LONG
+    statement: "On MES TOKYO_OPEN long trades, ASIA_RANGE_ATR_Q67_HIGH improves ExpR versus its complement."
+  - id: H10_TOK_ASIARANGE_SHORT
+    statement: "On MES TOKYO_OPEN short trades, ASIA_RANGE_ATR_Q67_HIGH improves ExpR versus its complement."
+  - id: H11_SGP_ASIARANGE_LONG
+    statement: "On MES SINGAPORE_OPEN long trades, ASIA_RANGE_ATR_Q67_HIGH improves ExpR versus its complement."
+  - id: H12_SGP_ASIARANGE_SHORT
+    statement: "On MES SINGAPORE_OPEN short trades, ASIA_RANGE_ATR_Q67_HIGH improves ExpR versus its complement."
+
+kill_conditions:
+  - "Zero cells survive BH-FDR at K=12."
+  - "Any feature shows IS coverage < 95% on the scoped universe."
+  - "A survivor only appears through one session while the other two sessions are negative at N>=100."
+
+success_action: "Advance surviving cells to Phase 4 adversarial audit."
+failure_action: "Log the family to the NO-GO registry with the mechanistic distinction preserved."
+
+outputs_required_after_run:
+  - "Per-cell N_on_IS, ExpR_on_IS, WR_on_IS, t_IS, raw_p_IS, q_family"
+  - "WFE, cost stress, null distributions, and descriptive 2026 OOS"
+  - "Result doc: docs/audit/results/2026-04-21-mes-session-boundary-v1.md"
+  - "Execution script: research/mes_session_boundary_v1.py"

@@ -1,0 +1,160 @@
+version: 1
+status: LOCKED
+date: 2026-04-21
+slug: mgc-regime-ortho-v1
+title: "MGC regime-orthogonal ORB filters on uncovered sessions — fixed family scan (K=12)"
+owner: codex
+parent_spec: "docs/audit/2026-04-21-orthogonal-pov-map.md"
+sibling_spec:
+  - "docs/audit/hypotheses/2026-04-21-mes-session-boundary-v1.yaml"
+  - "docs/audit/hypotheses/2026-04-21-mgc-microstructure-v1.yaml"
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+  notes:
+    - "Mode A strict: IS uses trading_day < trading_app.holdout_policy.HOLDOUT_SACRED_FROM (2026-01-01); OOS is descriptive only."
+    - "This family is explicitly outside the posture-blocked live-six vector space because the instrument is MGC and none of the live-six tuples use MGC."
+    - "Mechanistic distinction from the NO-GO 'vol-regime adaptive parameter switching': this is a fixed R1 filter family on a single instrument/session set, not a regime-switching parameter policy."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  parent_commit_sha: "f4da26b4"
+  committed_required_before_run: true
+  lock_commit_sha_note: "Execution must use the commit that first introduces this file on a reachable branch."
+
+mechanism_prior:
+  summary: |
+    Fitschen grounds intraday trend-follow on commodities, and the blueprint's
+    vol-spike reversal audit already shows that higher realized-vol states can
+    improve ORB follow-through rather than degrade it. This family tests whether
+    pre-registered regime descriptors available before entry (`atr_vel_ratio`,
+    `prev_week_range`) improve MGC ORB continuation on uncovered sessions without
+    reusing the live-six filter menu.
+  citations:
+    - "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/STRATEGY_BLUEPRINT.md"
+  theory_state: with_theory
+
+scope:
+  instrument: MGC
+  sessions:
+    - BRISBANE_1025
+    - LONDON_METALS
+    - US_DATA_830
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  directions:
+    - long
+    - short
+  live_six_overlap_vector: "none — instrument MGC is absent from the live six"
+  no_go_distinction: "fixed single-family regime filters, not adaptive parameter switching"
+
+data_policy:
+  canonical_inputs:
+    - table: orb_outcomes
+      columns: [trading_day, symbol, orb_label, orb_minutes, entry_model, confirm_bars, rr_target, direction, pnl_r, outcome]
+      filter_predicate: "symbol='MGC' AND orb_label in ('BRISBANE_1025','LONDON_METALS','US_DATA_830') AND orb_minutes=5 AND entry_model='E2' AND confirm_bars=1 AND rr_target=1.0"
+    - table: daily_features
+      columns: [trading_day, symbol, orb_minutes, atr_vel_ratio, prev_week_range, atr_20]
+      filter_predicate: "symbol='MGC' AND orb_minutes=5"
+  holdout_fence:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+feature_definitions:
+  - feature_name: ATR_VEL_RATIO_Q67_HIGH
+    formula: "atr_vel_ratio >= q67_IS(atr_vel_ratio)"
+    trade_time_knowable: true
+    first_complete_time: "session open; prior rolling state only"
+    lookahead_check: PASS
+  - feature_name: PREV_WEEK_RANGE_Q67_HIGH
+    formula: "prev_week_range >= q67_IS(prev_week_range)"
+    trade_time_knowable: true
+    first_complete_time: "before the current trading day begins"
+    lookahead_check: PASS
+
+primary_schema:
+  k_family: 12
+  family_cells_structured_as: "3 sessions × 2 regime predicates × 2 directions"
+  primary_promotion_gate: "K_family BH-FDR q < 0.05"
+
+trial_budget:
+  primary_selection_trials: 12
+  schema_locked_before_any_metric: true
+  counted_against_session_cap: true
+
+decision_criteria:
+  wfe_floor: 0.50
+  n_trades_min: 100
+  chordia_t_threshold: 3.00
+  chordia_framework_source: "docs/institutional/pre_registered_criteria.md"
+  multiple_testing_primary: bh_fdr_pathway_selection
+  harvey_liu_supplementary: true
+  dsr_role: cross_check_only
+  dsr_rho_set: [0.3, 0.5, 0.7]
+  cost_stress: [1.0, 1.5, 2.0]
+  nulls:
+    - destruction_shuffle
+    - rng_null
+    - positive_control
+    - negative_control
+
+posture_blocker_proof:
+  grandfathering_dependency: none
+  chordia_theory_state: with_theory
+  theory_state_pre_specified_cite: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+  dsr_onc_dependency: no
+  holdout_clean_at_discovery: true
+  projected_phase_b_replay_if_success: KEEP
+  same_blocker_as_live_six: no
+
+hypotheses:
+  - id: H01_BRI_ATRVEL_LONG
+    statement: "On MGC BRISBANE_1025 long trades, ATR_VEL_RATIO_Q67_HIGH improves ExpR versus its complement."
+  - id: H02_BRI_ATRVEL_SHORT
+    statement: "On MGC BRISBANE_1025 short trades, ATR_VEL_RATIO_Q67_HIGH improves ExpR versus its complement."
+  - id: H03_LDM_ATRVEL_LONG
+    statement: "On MGC LONDON_METALS long trades, ATR_VEL_RATIO_Q67_HIGH improves ExpR versus its complement."
+  - id: H04_LDM_ATRVEL_SHORT
+    statement: "On MGC LONDON_METALS short trades, ATR_VEL_RATIO_Q67_HIGH improves ExpR versus its complement."
+  - id: H05_USD830_ATRVEL_LONG
+    statement: "On MGC US_DATA_830 long trades, ATR_VEL_RATIO_Q67_HIGH improves ExpR versus its complement."
+  - id: H06_USD830_ATRVEL_SHORT
+    statement: "On MGC US_DATA_830 short trades, ATR_VEL_RATIO_Q67_HIGH improves ExpR versus its complement."
+  - id: H07_BRI_PREVWEEK_LONG
+    statement: "On MGC BRISBANE_1025 long trades, PREV_WEEK_RANGE_Q67_HIGH improves ExpR versus its complement."
+  - id: H08_BRI_PREVWEEK_SHORT
+    statement: "On MGC BRISBANE_1025 short trades, PREV_WEEK_RANGE_Q67_HIGH improves ExpR versus its complement."
+  - id: H09_LDM_PREVWEEK_LONG
+    statement: "On MGC LONDON_METALS long trades, PREV_WEEK_RANGE_Q67_HIGH improves ExpR versus its complement."
+  - id: H10_LDM_PREVWEEK_SHORT
+    statement: "On MGC LONDON_METALS short trades, PREV_WEEK_RANGE_Q67_HIGH improves ExpR versus its complement."
+  - id: H11_USD830_PREVWEEK_LONG
+    statement: "On MGC US_DATA_830 long trades, PREV_WEEK_RANGE_Q67_HIGH improves ExpR versus its complement."
+  - id: H12_USD830_PREVWEEK_SHORT
+    statement: "On MGC US_DATA_830 short trades, PREV_WEEK_RANGE_Q67_HIGH improves ExpR versus its complement."
+
+kill_conditions:
+  - "Zero cells survive BH-FDR at K=12."
+  - "Any feature shows IS coverage < 90% on the scoped universe."
+  - "Any survivor is explained entirely by one year with all other eligible years negative."
+
+success_action: "Advance surviving cells to Phase 4 adversarial audit."
+failure_action: "Log the family to the NO-GO registry with the surviving mechanistic lesson, if any."
+
+outputs_required_after_run:
+  - "Per-cell N_on_IS, ExpR_on_IS, WR_on_IS, t_IS, raw_p_IS, q_family"
+  - "WFE, cost stress, null distributions, and descriptive 2026 OOS"
+  - "Result doc: docs/audit/results/2026-04-21-mgc-regime-ortho-v1.md"
+  - "Execution script: research/mgc_regime_ortho_v1.py"
