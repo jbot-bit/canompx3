@@ -1,12 +1,12 @@
 {
-  "phase": "phase-5-session-multiple-testing-reconciliation",
+  "phase": "phase-6-golden-egg-report",
   "running_trial_count": 20,
   "trial_cap": 300,
   "data_mode": "duckdb_readonly",
   "worktree": "/tmp/canompx3-orthogonal-hunt",
   "branch": "research/orthogonal-golden-egg-hunt-v1",
-  "last_commit_sha": "16cf700e29e5a8089fb44e84f09c6726039b385c",
-  "timestamp": "2026-04-21T03:54:03Z",
+  "last_commit_sha": "0e81741145273d0b4304d046bf3f689ec781d045",
+  "timestamp": "2026-04-21T03:55:22Z",
   "canonical_db_path": "/mnt/c/Users/joshd/canompx3/gold.db",
   "holdout_sacred_from": "2026-01-01",
   "remote_heads": {
@@ -29,6 +29,7 @@
     "Phase 3 completed for mgc-regime-ortho-v1: canonical family scan returned zero BH-FDR survivors; BRISBANE_1025 had zero scoped trades, LONDON_METALS PREV_WEEK long was the strongest cell (t=2.602, q=0.0587) but failed family correction, and both family nulls kept the observed max-t inside noise.",
     "Phase 3 abort on mes-session-boundary-v1: the locked ASIA_RANGE_ATR_Q67_HIGH feature uses session_asia_high/low, which are only complete after 17:00 Brisbane and therefore invalid for BRISBANE_1025, TOKYO_OPEN, and SINGAPORE_OPEN. The family was blocked before extraction instead of being silently trimmed.",
     "Phase 3 completed for mgc-microstructure-v1: ORB range/volume concentration features were timing-valid because they use only the five ORB formation bars before E2 entry, but the family still died cleanly on canonical data with zero BH-FDR survivors, family null p-values 0.4263/0.3944, and coverage limited to US_DATA_830 because BRISBANE_1025 had zero scoped trades.",
-    "Phase 5 completed: session-wide multiple-testing reconciliation consumed the 20 executed trials already in the ledger and confirmed that zero family-level survivors propagated into a session-level candidate set. Harvey-Liu and DSR remained supplementary only; no current-session candidate reached the Chordia band."
+    "Phase 5 completed: session-wide multiple-testing reconciliation consumed the 20 executed trials already in the ledger and confirmed that zero family-level survivors propagated into a session-level candidate set. Harvey-Liu and DSR remained supplementary only; no current-session candidate reached the Chordia band.",
+    "Phase 6 completed: the golden-egg report closed the hunt with zero GOLD and zero SILVER candidates. The highest-EV output of the session is the posture-shortening PCC evidence, not an orthogonal deployable hedge; the fork memo therefore recommends escalating PCC findings rather than expanding candidate promotion."
   ]
 }
