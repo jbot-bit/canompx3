@@ -4,6 +4,46 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-21 portfolio monotonic allocator pre-reg — no replay yet)
+
+Isolated worktree advanced to branch `research/profile-monotonic-allocator-v1`.
+This step only locks the profile-level hypothesis for a lane-aware monotonic
+allocator replay on the active `topstep_50k_mnq_auto` book. No replay code was
+run and no live-path behavior changed.
+
+### Artifact
+
+- `docs/audit/hypotheses/2026-04-21-profile-lane-aware-monotonic-allocator-v1.yaml`
+
+### Canonical framing locked
+
+- Baseline surface is `trading_app/account_survival.py`, not a `portfolio.py`
+  shortcut, because the profile stop and live-like rules matter.
+- Active profile is the current 6-lane MNQ-only `topstep_50k_mnq_auto` book.
+- Prior global allocator routes are already known:
+  - garch continuous sizing failed to beat `BASE_1X`
+  - routing-only ranker was identical to baseline due zero collision days
+- Therefore the new test is explicitly a **lane-aware monotonic overlay**, not a
+  global vol-state map and not a slot-ranking allocator.
+
+### Safety stance
+
+- Feature contract is fail-closed through `pipeline/session_guard.py` **and**
+  ORB-completion knowability.
+- Calendar flags were deliberately excluded from v1 even though earlier
+  research treats them as trade-time-known, because the current
+  `session_guard.py` does not explicitly whitelist them. If calendar flags are
+  wanted in a later replay, the guard must be amended in a separate approved
+  change first.
+- Break-bar family, `rel_vol_*`, and post-break fields remain banned for this E2
+  pre-entry sizing role.
+
+### Next step
+
+- User review of the locked hypothesis file.
+- If approved, next action is replay implementation/execution for 2025 OOS-CV
+  only; 2026+ remains sacred and untouched.
+
 ## Update (2026-04-21 autonomous — exact deployed ORB improvement protocol executed, 0/24 survivors)
 
 Institutional replay executed from a locked hypothesis family on isolated

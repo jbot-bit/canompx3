@@ -1,0 +1,202 @@
+date: 2026-04-21
+title: Profile lane-aware monotonic allocator replay
+status: active
+testing_mode: individual
+purpose: >
+  Test whether a lane-aware, monotonic, pre-trade-safe sizing overlay can
+  improve the 2025 out-of-sample economic performance of the deployed
+  `topstep_50k_mnq_auto` book versus the static 1x baseline, using the live-like
+  replay path in `trading_app/account_survival.py`.
+
+authority_chain:
+  - CLAUDE.md
+  - RESEARCH_RULES.md
+  - TRADING_RULES.md
+  - docs/institutional/pre_registered_criteria.md
+  - trading_app/account_survival.py
+  - pipeline/session_guard.py
+  - trading_app/meta_labeling/monotonic.py
+
+profile:
+  profile_id: topstep_50k_mnq_auto
+  canonical_surface: trading_app/account_survival.py
+  account_size: 50000
+  stop_multiplier: 0.75
+  copies: 2
+  lane_count: 6
+
+evaluation_windows:
+  train_is_end_exclusive: 2025-01-01
+  oos_cv_start: 2025-01-01
+  oos_cv_end_inclusive: 2025-12-31
+  sacred_holdout_start: 2026-01-01
+
+baseline_hurdle:
+  description: >
+    The hurdle is the realized economic performance of the static 1-contract
+    deployed book replayed through `account_survival.py` with profile stop and
+    firm rules intact. No proxy baseline and no portfolio.py-only shortcut.
+  pre_2025_reference:
+    total_pnl_dollars: 28364.33
+    annualized_sharpe: 1.6029
+    max_drawdown_dollars: -3534.68
+    calmar: 1.0005
+    max_pairwise_corr_abs: 0.0769
+
+research_posture:
+  prior_allocator_findings:
+    - 2026-04-16 garch continuous sizing replay failed to beat BASE_1X economically.
+    - 2026-04-16 routing-only portfolio ranking replay was identical to baseline due zero collision days.
+  v1_hypothesis: >
+    A gentle, lane-aware monotonic overlay using only session-guard-safe and
+    ORB-completion-known features may improve allocation around an already-good
+    book, even though global garch sizing and scarce-slot routing did not.
+  no_rescue_claim: >
+    This is not a rescue model for a broken profile. Failure means static sizing
+    remains optimal for this book.
+
+feature_safety_contract:
+  rules:
+    - "Every feature must explicitly pass pipeline/session_guard.py for the target lane session."
+    - "Every feature must also be knowable at ORB completion or earlier."
+    - "Same-session break-bar, break-delay, continuation, and post-break outcome fields are banned."
+    - "rel_vol_* and orb_*_break_bar_volume are banned for E2 pre-entry sizing."
+    - "overnight_* and other window features are excluded unless explicitly guard-safe for the lane."
+  explicit_v1_exclusions:
+    - is_nfp_day
+    - is_opex_day
+    - is_monday
+    - is_tuesday
+    - is_friday
+    - day_of_week
+  exclusion_rationale: >
+    Repo research treats calendar flags as trade-time-known, but the current
+    `session_guard.py` implementation does not explicitly whitelist them. Under
+    the fail-closed v1 rule, they are excluded rather than assumed safe.
+
+lane_feature_contract:
+  - strategy_id: MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5
+    lane_role: ORB_G5 expansion lane
+    features:
+      - name: atr_vel_ratio
+        direction: high_better
+        rationale: expanding realized volatility should favor breakout follow-through
+      - name: atr_20_pct
+        direction: high_better
+        rationale: higher background volatility should support directional extension
+      - name: orb_EUROPE_FLOW_size
+        direction: high_better
+        rationale: this lane already requires ORB_G5; larger qualifying ORBs align with the live filter thesis
+      - name: orb_EUROPE_FLOW_compression_z
+        direction: high_better
+        rationale: more expanded ORB state should imply higher session energy than compressed states
+  - strategy_id: MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15
+    lane_role: ATR-filtered expansion lane
+    features:
+      - name: atr_vel_ratio
+        direction: high_better
+        rationale: expanding realized volatility should favor breakout follow-through
+      - name: atr_20_pct
+        direction: high_better
+        rationale: higher background volatility should support directional extension
+      - name: orb_SINGAPORE_OPEN_size
+        direction: high_better
+        rationale: within an ATR_P50 lane, larger realized session ORB should reflect stronger local participation
+  - strategy_id: MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5
+    lane_role: ORB_G5 expansion lane
+    features:
+      - name: atr_vel_ratio
+        direction: high_better
+        rationale: expanding realized volatility should favor breakout follow-through
+      - name: atr_20_pct
+        direction: high_better
+        rationale: higher background volatility should support directional extension
+      - name: orb_COMEX_SETTLE_size
+        direction: high_better
+        rationale: this lane already requires ORB_G5; larger qualifying ORBs align with the live filter thesis
+  - strategy_id: MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12
+    lane_role: cost-disciplined lane
+    features:
+      - name: atr_vel_ratio
+        direction: high_better
+        rationale: expanding realized volatility should favor breakout follow-through
+      - name: atr_20_pct
+        direction: high_better
+        rationale: higher background volatility should support directional extension
+      - name: orb_NYSE_OPEN_size
+        direction: low_better
+        rationale: the live lane is selected on COST_LT12; smaller qualifying ORBs preserve friction efficiency
+  - strategy_id: MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT12
+    lane_role: cost-disciplined lane
+    features:
+      - name: atr_vel_ratio
+        direction: high_better
+        rationale: expanding realized volatility should favor breakout follow-through
+      - name: atr_20_pct
+        direction: high_better
+        rationale: higher background volatility should support directional extension
+      - name: orb_TOKYO_OPEN_size
+        direction: low_better
+        rationale: the live lane is selected on COST_LT12; smaller qualifying ORBs preserve friction efficiency
+  - strategy_id: MNQ_US_DATA_1000_E2_RR1.5_CB1_ORB_G5_O15
+    lane_role: ORB_G5 expansion lane
+    features:
+      - name: atr_vel_ratio
+        direction: high_better
+        rationale: expanding realized volatility should favor breakout follow-through
+      - name: atr_20_pct
+        direction: high_better
+        rationale: higher background volatility should support directional extension
+      - name: orb_US_DATA_1000_size
+        direction: high_better
+        rationale: this lane already requires ORB_G5; larger qualifying ORBs align with the live filter thesis
+
+score_construction:
+  lane_fit_scope: independent fit per deployed lane
+  training_data: trades with trading_day < 2025-01-01 only
+  feature_transform: >
+    Convert each continuous feature into an in-sample empirical-CDF score on
+    [0, 1]. For `high_better`, score = CDF(x). For `low_better`, score = 1 - CDF(x).
+  composite_score: >
+    Simple arithmetic mean of the transformed feature scores for that lane. No
+    learned model weights and no tree-based interaction learner in v1.
+  monotonic_buckets: >
+    Fit composite-score quintile cutpoints on in-sample data only. Map the five
+    ordered buckets to desired size multipliers `[0.5, 0.75, 1.0, 1.25, 1.5]`.
+  capital_neutrality: >
+    Re-center the desired multipliers so the in-sample mean desired weight is
+    exactly 1.0 before any out-of-sample replay.
+  live_translation: >
+    Translate desired weight into live-feasible contracts for a 1-contract base:
+    weight < 0.75 -> 0 contracts; 0.75 <= weight < 1.50 -> 1 contract;
+    weight >= 1.50 -> 2 contracts.
+
+replay_plan:
+  primary_comparator: static 1-contract baseline book
+  oos_cv_year: 2025
+  sacred_forward_years:
+    - 2026+
+  required_outputs:
+    - daily portfolio pnl dollars
+    - total pnl dollars
+    - annualized Sharpe
+    - max drawdown dollars
+    - Calmar ratio
+    - percentage of trades with translated size change
+    - zero-contract skip rate
+    - two-contract boost rate
+
+success_condition: >
+  The overlay survives only if the 2025 replay beats the static baseline on the
+  profile-level economic objective hierarchy: higher annualized Sharpe and no
+  material worsening of max drawdown, with total dollars not lower.
+
+kill_condition: >
+  Kill immediately if the 2025 replay fails to beat the static baseline, if the
+  gains depend on banned features or guard-unsafe fields, or if the effect
+  disappears after live contract translation.
+
+stops_before_execution:
+  - Pre-registration file committed and SHA recorded.
+  - Exact lane feature contract reviewed by user.
+  - No replay execution before explicit user nod.
