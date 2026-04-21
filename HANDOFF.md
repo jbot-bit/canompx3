@@ -4,6 +4,67 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-21 profile monotonic allocator replay executed — PARK)
+
+The pre-registered lane-aware monotonic allocator replay was implemented and
+run on isolated branch `research/profile-monotonic-allocator-v1`. Scope stayed
+inside the isolated worktree and used the canonical `gold.db` from the main
+checkout via explicit `--db-path`.
+
+### What landed
+
+- `trading_app/meta_labeling/profile_monotonic.py`
+  - frozen lane-level ECDF scorecard primitives
+  - quintile bucket mapping
+  - fail-closed fallback to uniform size
+- `research/profile_lane_aware_monotonic_allocator_replay.py`
+  - profile-level 2025 OOS-CV replay harness
+  - canonical live-like trade paths via `research/garch_profile_production_replay.py`
+  - strict feature-contract enforcement through `pipeline/session_guard.py`
+  - paired daily Sharpe bootstrap CI
+- `tests/test_trading_app/test_profile_monotonic.py`
+  - translation / fit / fallback unit coverage
+- `docs/audit/results/2026-04-21-profile-lane-aware-monotonic-allocator-v1.md`
+
+### Verification
+
+- `py_compile` on the new module, replay harness, and test file: PASS
+- `pytest tests/test_trading_app/test_profile_monotonic.py -q`: `3 passed`
+- `python research/profile_lane_aware_monotonic_allocator_replay.py --db-path /mnt/c/Users/joshd/canompx3/gold.db`: PASS
+- `pipeline/check_drift.py`: project-wide FAIL due pre-existing optional AI import env issue (`anthropic` missing in `trading_app.ai.*`), not caused by this replay code
+
+### Result
+
+- Verdict: `PARK`
+- 2025 baseline book:
+  - total PnL `+6,467.15`
+  - Sharpe `+1.5099`
+  - MaxDD `-3,701.41`
+- 2025 monotonic overlay:
+  - total PnL `+5,690.46`
+  - Sharpe `+0.8709`
+  - MaxDD `-5,491.75`
+- Delta:
+  - PnL `-776.69`
+  - Sharpe `-0.6390`
+  - Sharpe delta 95% bootstrap CI `[-1.5003, +0.3407]`
+
+### Important nuance
+
+- `MNQ_EUROPE_FLOW_E2_RR1.5_CB1_ORB_G5` fell back to uniform sizing.
+- Reason: the locked feature `orb_EUROPE_FLOW_compression_z` has **zero**
+  non-null pre-2025 coverage in canonical `daily_features`, so the lane had
+  `insufficient_complete_train_rows:0`.
+- That is not a replay bug and not a rescue excuse. It is a feature-contract
+  quality issue surfaced honestly by the fail-closed implementation.
+
+### Interpretation
+
+- For the current active 6-lane MNQ book, this style of monotonic lane-aware
+  overlay did **not** improve the already-strong static baseline.
+- The surviving insight is negative but useful: static 1x remains the better
+  policy than this gentle lane scorecard under the locked v1 contract.
+
 ## Update (2026-04-21 portfolio monotonic allocator pre-reg — no replay yet)
 
 Isolated worktree advanced to branch `research/profile-monotonic-allocator-v1`.
