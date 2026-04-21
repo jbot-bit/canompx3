@@ -23,7 +23,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "aef697d4"
+  commit_sha: "0cdd40f4"
   committed_required_before_run: true
 
 scope:
