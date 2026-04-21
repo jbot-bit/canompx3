@@ -132,6 +132,19 @@ hypotheses:
       forward_window_role: >
         Untouched paper-forward monitor only. Current depth is insufficient for
         ML promotion or final sign-off.
+    shadow_monitoring:
+      phase_name: "SHADOW_ONLY"
+      action: "LOG_ONLY"
+      ledger_path: "docs/audit/shadow_ledgers/meta-labeling-monotonic-shadow-ledger.csv"
+      policy: >
+        Monotonic allocator suggestions may be recorded on 2026+ rows, but may
+        not alter portfolio sizing, validated_setups state, or live lane
+        configuration. Shadow evidence is observational only.
+      monitor_policy: >
+        Record forward-monitor baseline PnL, shadow-sized PnL, and drift state
+        from CUSUM/SR monitors calibrated on the frozen pre-2026 development
+        stream. Alarm state is informational and cannot trigger live action from
+        this research branch.
     kill_criteria:
       - "If any feature violates session-safe pre-trade timing, the experiment is invalid."
       - "If pre-2026 training ExpR is <= 0, the experiment is invalid."

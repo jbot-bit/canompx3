@@ -4,6 +4,53 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-21 autonomous — monotonic shadow recorder built and first ledger snapshot written)
+
+Follow-on to the monotonic allocator baseline. The correct framing was
+preserved: no live sizing change, no `paper_trades` writes, no portfolio hook.
+This branch adds a **shadow-only** recorder and writes the first append-only
+ledger snapshot from canonical 2026 forward rows.
+
+### What landed
+
+- `trading_app/meta_labeling/shadow.py`
+  - append-only shadow recorder for the locked family
+  - reads canonical `gold.db`
+  - uses frozen pre-2026 monotonic allocator
+  - writes only `docs/audit/shadow_ledgers/meta-labeling-monotonic-shadow-ledger.csv`
+  - records per-day baseline PnL, shadow-sized PnL, scalar, bucket, and
+    informational CUSUM / SR state
+- `tests/test_trading_app/test_meta_labeling_shadow.py`
+  - forward-row emission
+  - idempotent ledger append
+  - dry-run behavior
+- `docs/audit/hypotheses/2026-04-21-meta-label-sizing-v1.yaml`
+  - shadow-monitoring section added
+
+### Verification
+
+- `pytest`:
+  - `tests/test_trading_app/test_meta_labeling_monotonic.py`
+  - `tests/test_trading_app/test_meta_labeling_shadow.py`
+  - result: `7 passed`
+- `py_compile` on shadow module + tests
+- real run:
+  - `rows_appended = 36`
+  - ledger path:
+    `docs/audit/shadow_ledgers/meta-labeling-monotonic-shadow-ledger.csv`
+  - forward totals:
+    - baseline `+8.7324R`
+    - shadow `+11.036992R`
+    - delta `+2.304592R`
+
+### Guardrails preserved
+
+- still **SHADOW_ONLY**
+- still **LOG_ONLY**
+- no `validated_setups` mutation
+- no live lane mutation
+- no promotion claim from the 2026 slice
+
 ## Update (2026-04-21 autonomous — monotonic allocator baseline implemented on clean branch)
 
 Follow-on from the clean-room reset decision. Work remained isolated in
