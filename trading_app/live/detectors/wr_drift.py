@@ -1,10 +1,12 @@
 """Alert 3 -- Win-rate Drift detector.
 
-Fires when a strategy's rolling win rate has dropped by at least
+Fires when a strategy's rolling win rate has dropped STRICTLY more than
 thresholds.wr_delta_pp percentage points below its backtest baseline,
 AND the rolling window has accumulated at least thresholds.wr_window_trades
-trades (under-window returns [] -- UNVERIFIED, not DEAD, per
-feedback_oos_power_floor.md).
+trades. Strict-greater-than semantics per 2026-02-08 Phase 6 spec line 424
+("Rolling 50-trade WR < backtest WR - 10pp" => equivalent to
+(baseline - rolling) > 10pp, strict). Under-window returns [] --
+UNVERIFIED, not DEAD, per feedback_oos_power_floor.md.
 
 Pure function. Caller (monitor_runner, sub-step 2.i) is responsible for
 computing rolling_wr from paper_trades (or a future PerformanceMonitor
@@ -41,7 +43,10 @@ def check_wr_drift(
     if n_trades < thresholds.wr_window_trades:
         return []
     drop_pp = (baseline_wr - rolling_wr) * 100.0
-    if drop_pp + _WR_DROP_TOLERANCE_PP < thresholds.wr_delta_pp:
+    # Strict greater-than per 2026-02-08 spec: at exactly threshold no fire.
+    # Tolerance guards against float-subtraction overshoot (e.g. 10.0000002 > 10.0
+    # should not spuriously fire).
+    if drop_pp <= thresholds.wr_delta_pp + _WR_DROP_TOLERANCE_PP:
         return []
     return [
         f"WR DRIFT: {strategy_id} rolling_wr={rolling_wr * 100:.1f}% "

@@ -1,6 +1,7 @@
 """TDD tests for Phase 6e Alert 2 Circuit Break detector.
 
-Locks at-or-below (<=) semantics and canonical marker "DAILY CIRCUIT BREAK".
+Locks strict-less-than (<) semantics per 2026-02-08 Phase 6 spec line 423
+and canonical marker "DAILY CIRCUIT BREAK".
 """
 
 from dataclasses import replace
@@ -23,9 +24,14 @@ def test_no_alert_when_daily_r_just_above_halt():
     assert check_circuit_break(daily_r=-4.99, thresholds=MonitorThresholds()) == []
 
 
-def test_alert_when_daily_r_exactly_at_halt():
-    # halt is at-or-below (<=); exactly -5.0 DOES fire
-    messages = check_circuit_break(daily_r=-5.0, thresholds=MonitorThresholds())
+def test_no_alert_when_daily_r_exactly_at_halt():
+    # 2026-02-08 spec line 423: "Daily PnL < -5R" is STRICT; exactly -5.0 does NOT fire
+    assert check_circuit_break(daily_r=-5.0, thresholds=MonitorThresholds()) == []
+
+
+def test_alert_when_daily_r_just_past_halt():
+    # -5.01 is strictly below -5.0 -> fires
+    messages = check_circuit_break(daily_r=-5.01, thresholds=MonitorThresholds())
     assert len(messages) == 1
 
 

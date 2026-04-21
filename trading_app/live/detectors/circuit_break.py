@@ -1,9 +1,10 @@
 """Alert 2 -- Daily Circuit Break detector.
 
-Fires when cumulative daily R multiple reaches or falls below
-MonitorThresholds.daily_pnl_halt_r. At-or-below (<=) semantics --
-contrast with Alert 1 Drawdown which uses strict less-than. Operator
-sees both fire when the loss crosses the halt floor.
+Fires when cumulative daily R multiple is STRICTLY less than
+MonitorThresholds.daily_pnl_halt_r, per the canonical 2026-02-08 Phase 6
+spec line 423 ("Daily PnL < -5R"). At exactly -5.00 the detector does
+NOT fire (matches Drawdown's strict-less-than semantics; both alerts
+fire once the loss crosses strictly past their respective thresholds).
 
 Canonical classifier contract: messages carry the "DAILY CIRCUIT BREAK"
 marker, which alert_engine._ALERT_RULES maps to (critical, daily_circuit_break).
@@ -27,6 +28,6 @@ from trading_app.live.monitor_thresholds import MonitorThresholds
 
 
 def check_circuit_break(*, daily_r: float, thresholds: MonitorThresholds) -> list[str]:
-    if daily_r <= thresholds.daily_pnl_halt_r:
-        return [f"DAILY CIRCUIT BREAK: daily_r={daily_r:.2f} at/below threshold={thresholds.daily_pnl_halt_r:.1f}"]
+    if daily_r < thresholds.daily_pnl_halt_r:
+        return [f"DAILY CIRCUIT BREAK: daily_r={daily_r:.2f} below threshold={thresholds.daily_pnl_halt_r:.1f}"]
     return []

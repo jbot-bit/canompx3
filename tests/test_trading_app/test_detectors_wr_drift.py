@@ -1,8 +1,8 @@
 """TDD tests for Phase 6e Alert 3 WR Drift detector.
 
-Locks window gate (n_trades >= wr_window_trades) + inclusive drift gate
-((baseline_wr - rolling_wr) * 100 >= wr_delta_pp) + canonical marker
-"WR DRIFT".
+Locks window gate (n_trades >= wr_window_trades) + strict drift gate
+((baseline_wr - rolling_wr) * 100 > wr_delta_pp) per 2026-02-08 spec
+line 424, plus canonical marker "WR DRIFT".
 """
 
 from dataclasses import replace
@@ -67,11 +67,25 @@ def test_no_alert_when_drift_below_delta():
     )
 
 
-def test_alert_when_drift_equals_delta():
-    # baseline 0.60, rolling 0.50 => exactly 10pp drop, inclusive gate fires
+def test_no_alert_when_drift_equals_delta():
+    # 2026-02-08 spec line 424: strict "< baseline - 10pp"; exactly 10pp drop does NOT fire
+    assert (
+        check_wr_drift(
+            strategy_id="mnq_nyse_open_e2",
+            rolling_wr=0.50,
+            baseline_wr=0.60,
+            n_trades=80,
+            thresholds=MonitorThresholds(),
+        )
+        == []
+    )
+
+
+def test_alert_when_drift_just_past_delta():
+    # 10.1pp drop is strictly above the 10pp threshold -> fires
     messages = check_wr_drift(
         strategy_id="mnq_nyse_open_e2",
-        rolling_wr=0.50,
+        rolling_wr=0.499,
         baseline_wr=0.60,
         n_trades=80,
         thresholds=MonitorThresholds(),
