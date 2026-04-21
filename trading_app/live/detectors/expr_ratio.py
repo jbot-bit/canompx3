@@ -43,6 +43,8 @@ Units:
 @research-source: docs/plans/2026-04-21-phase-6e-monitoring-design.md section 4
 """
 
+import math
+
 from trading_app.live.monitor_thresholds import MonitorThresholds
 
 
@@ -54,6 +56,9 @@ def check_expr_ratio(
     n_trades: int,
     thresholds: MonitorThresholds,
 ) -> list[str]:
+    # NaN input => upstream data corruption (distinct alert class); stay silent here.
+    if math.isnan(rolling_expr) or math.isnan(baseline_expr):
+        return []
     if n_trades < thresholds.expr_window_trades:
         return []
     if baseline_expr <= 0:

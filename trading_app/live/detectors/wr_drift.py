@@ -24,6 +24,8 @@ Units:
 @research-source: docs/plans/2026-04-21-phase-6e-monitoring-design.md section 4
 """
 
+import math
+
 from trading_app.live.monitor_thresholds import MonitorThresholds
 
 # Float-precision tolerance for boundary compare. Without this, a literal
@@ -40,6 +42,9 @@ def check_wr_drift(
     n_trades: int,
     thresholds: MonitorThresholds,
 ) -> list[str]:
+    # NaN input => upstream data corruption (distinct alert class); stay silent here.
+    if math.isnan(rolling_wr) or math.isnan(baseline_wr):
+        return []
     if n_trades < thresholds.wr_window_trades:
         return []
     drop_pp = (baseline_wr - rolling_wr) * 100.0

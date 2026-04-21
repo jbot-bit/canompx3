@@ -63,6 +63,11 @@ def test_respects_injected_threshold_override():
     assert len(check_circuit_break(daily_r=-2.5, thresholds=tight)) == 1
 
 
+def test_no_alert_when_daily_r_is_nan():
+    # Institutional-rigor Rule #6: NaN treated as missing, not data.
+    assert check_circuit_break(daily_r=float("nan"), thresholds=MonitorThresholds()) == []
+
+
 def test_classifier_routes_daily_circuit_break_to_critical():
     level, category = classify_operator_alert("DAILY CIRCUIT BREAK: daily_r=-6.25 threshold=-5.0")
     assert level == "critical"

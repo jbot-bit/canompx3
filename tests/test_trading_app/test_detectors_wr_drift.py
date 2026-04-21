@@ -184,6 +184,33 @@ def test_respects_injected_wr_delta_override():
     )
 
 
+def test_no_alert_when_rolling_wr_is_nan():
+    # Institutional-rigor Rule #6: NaN treated as missing, not data.
+    assert (
+        check_wr_drift(
+            strategy_id="mnq_nyse_open_e2",
+            rolling_wr=float("nan"),
+            baseline_wr=0.60,
+            n_trades=80,
+            thresholds=MonitorThresholds(),
+        )
+        == []
+    )
+
+
+def test_no_alert_when_baseline_wr_is_nan():
+    assert (
+        check_wr_drift(
+            strategy_id="mnq_nyse_open_e2",
+            rolling_wr=0.40,
+            baseline_wr=float("nan"),
+            n_trades=80,
+            thresholds=MonitorThresholds(),
+        )
+        == []
+    )
+
+
 def test_classifier_routes_wr_drift_to_warning():
     level, category = classify_operator_alert(
         "WR DRIFT: mnq_nyse_open_e2 rolling_wr=40% baseline=60% drop=20pp after 80 trades"

@@ -53,6 +53,11 @@ def test_respects_injected_threshold_override():
     assert check_drawdown(daily_r=-3.42, thresholds=loose) == []
 
 
+def test_no_alert_when_daily_r_is_nan():
+    # Institutional-rigor Rule #6: NaN treated as missing, not data.
+    assert check_drawdown(daily_r=float("nan"), thresholds=MonitorThresholds()) == []
+
+
 def test_classifier_routes_drawdown_warn_to_warning():
     from trading_app.live.alert_engine import classify_operator_alert
 
