@@ -1,0 +1,159 @@
+{
+  "var_sr": 0.006712097170233147,
+  "results": [
+    {
+      "case_id": "clean_strong_signal",
+      "description": "Clean-holdout synthetic with strong OOS Sharpe and no alarm state.",
+      "train_n": 2000,
+      "oos_n": 1500,
+      "holdout_clean": true,
+      "sr_state": "CONTINUE",
+      "train_sharpe_ann": 1.9499999999999997,
+      "oos_sharpe_ann": 1.8000000000000003,
+      "wfe": 0.9230769230769234,
+      "t_stat": 4.3915503282684,
+      "skewness": 0.04239587451410943,
+      "kurtosis_excess": 0.007724076025948268,
+      "dsr_grid": [
+        {
+          "rho": 0.3,
+          "n_eff": 24931.499999999996,
+          "sr0": 0.334141348368289,
+          "dsr": 1.0
+        },
+        {
+          "rho": 0.5,
+          "n_eff": 17808.5,
+          "sr0": 0.32767254316823974,
+          "dsr": 1.0
+        },
+        {
+          "rho": 0.7,
+          "n_eff": 10685.500000000002,
+          "sr0": 0.3176249523597635,
+          "dsr": 1.0
+        }
+      ],
+      "verdict": "KEEP",
+      "reasons": [
+        "All replayed Phase B gates clear."
+      ]
+    },
+    {
+      "case_id": "contaminated_strong_signal",
+      "description": "Same signal quality as clean_strong_signal, but holdout provenance marked dirty.",
+      "train_n": 2000,
+      "oos_n": 1500,
+      "holdout_clean": false,
+      "sr_state": "CONTINUE",
+      "train_sharpe_ann": 1.9499999999999997,
+      "oos_sharpe_ann": 1.8000000000000003,
+      "wfe": 0.9230769230769234,
+      "t_stat": 4.3915503282684,
+      "skewness": 0.04239587451410943,
+      "kurtosis_excess": 0.007724076025948268,
+      "dsr_grid": [
+        {
+          "rho": 0.3,
+          "n_eff": 24931.499999999996,
+          "sr0": 0.334141348368289,
+          "dsr": 1.0
+        },
+        {
+          "rho": 0.5,
+          "n_eff": 17808.5,
+          "sr0": 0.32767254316823974,
+          "dsr": 1.0
+        },
+        {
+          "rho": 0.7,
+          "n_eff": 10685.500000000002,
+          "sr0": 0.3176249523597635,
+          "dsr": 1.0
+        }
+      ],
+      "verdict": "DEGRADE",
+      "reasons": [
+        "Holdout integrity fails (synthetic discovery marked post-holdout)."
+      ]
+    },
+    {
+      "case_id": "clean_weak_signal",
+      "description": "Clean-holdout synthetic with weak OOS Sharpe that should fail both Chordia and conservative DSR.",
+      "train_n": 2000,
+      "oos_n": 1500,
+      "holdout_clean": true,
+      "sr_state": "CONTINUE",
+      "train_sharpe_ann": 0.4500000000000004,
+      "oos_sharpe_ann": 0.19999999999999993,
+      "wfe": 0.44444444444444386,
+      "t_stat": 0.4879500364742664,
+      "skewness": -0.025555922537524225,
+      "kurtosis_excess": -0.07992732578410511,
+      "dsr_grid": [
+        {
+          "rho": 0.3,
+          "n_eff": 24931.499999999996,
+          "sr0": 0.334141348368289,
+          "dsr": 1.436936901688668e-07
+        },
+        {
+          "rho": 0.5,
+          "n_eff": 17808.5,
+          "sr0": 0.32767254316823974,
+          "dsr": 5.195808552294068e-07
+        },
+        {
+          "rho": 0.7,
+          "n_eff": 10685.500000000002,
+          "sr0": 0.3176249523597635,
+          "dsr": 3.402371053118358e-06
+        }
+      ],
+      "verdict": "DEGRADE",
+      "reasons": [
+        "Chordia strict band fails (t=0.488 < 3.79).",
+        "WFE fails (0.444 < 0.50).",
+        "Conservative DSR fails (rho=0.7 DSR=0.000003 <= 0.95)."
+      ]
+    },
+    {
+      "case_id": "alarm_strong_signal",
+      "description": "Strong clean-holdout synthetic forced into SR ALARM to test pause behavior.",
+      "train_n": 2000,
+      "oos_n": 1500,
+      "holdout_clean": true,
+      "sr_state": "ALARM",
+      "train_sharpe_ann": 1.9499999999999997,
+      "oos_sharpe_ann": 1.8000000000000003,
+      "wfe": 0.9230769230769234,
+      "t_stat": 4.3915503282684,
+      "skewness": 0.04239587451410943,
+      "kurtosis_excess": 0.007724076025948268,
+      "dsr_grid": [
+        {
+          "rho": 0.3,
+          "n_eff": 24931.499999999996,
+          "sr0": 0.334141348368289,
+          "dsr": 1.0
+        },
+        {
+          "rho": 0.5,
+          "n_eff": 17808.5,
+          "sr0": 0.32767254316823974,
+          "dsr": 1.0
+        },
+        {
+          "rho": 0.7,
+          "n_eff": 10685.500000000002,
+          "sr0": 0.3176249523597635,
+          "dsr": 1.0
+        }
+      ],
+      "verdict": "PAUSE-PENDING-REVIEW",
+      "reasons": [
+        "Criterion 12 SR state is ALARM."
+      ]
+    }
+  ]
+}

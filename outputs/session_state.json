@@ -1,19 +1,19 @@
 {
-  "phase": "pcc-2",
+  "phase": "pcc-1",
   "running_trial_count": 0,
   "trial_cap": 300,
   "data_mode": "duckdb_readonly",
   "worktree": "/tmp/canompx3-orthogonal-hunt",
   "branch": "research/orthogonal-golden-egg-hunt-v1",
-  "last_commit_sha": "f567cfe6",
-  "timestamp": "2026-04-21T02:59:55Z",
+  "last_commit_sha": "33e462dd",
+  "timestamp": "2026-04-21T03:10:17Z",
   "canonical_db_path": "/mnt/c/Users/joshd/canompx3/gold.db",
   "holdout_sacred_from": "2026-01-01",
   "remote_heads": {
     "origin/main": "f567cfe6",
-    "origin/research/pr48-sizer-rule-oos-backtest": "62aff747",
+    "origin/research/pr48-sizer-rule-oos-backtest": "aa8b838c",
     "origin/research/ovnrng-router-rolling-cv": "7f4f85ba",
-    "origin/deploy/live-trading-buildout-v1": "634278e7"
+    "origin/deploy/live-trading-buildout-v1": "b081b61c"
   },
   "notes": [
     "gold-db MCP unavailable in-session; read-only DuckDB fallback is active.",
@@ -22,6 +22,7 @@
     "PCC-3 completed: no current live lane qualifies for retrospective theory-state elevation to the 3.00 Chordia band.",
     "PCC-4 completed: all six live lanes fit only the provisional grandfathering path; none are currently Mode A clean.",
     "PCC-6 completed: TOKYO_OPEN, SINGAPORE_OPEN, and US_DATA_1000 are the closest lanes to a clean Mode A rediscovery path once provenance is resolved.",
-    "PCC-2 completed: DSR driver recomputation matches the Phase B lineage within rounding; the unresolved piece is ONC, not arithmetic drift."
+    "PCC-2 completed: DSR driver recomputation matches the Phase B lineage within rounding; the unresolved piece is ONC, not arithmetic drift.",
+    "PCC-1 completed: synthetic calibration probe shows the Phase B gate logic can emit KEEP for a strong clean-holdout candidate, so the live-book problem remains provenance/posture rather than intrinsic framework bias."
   ]
 }
