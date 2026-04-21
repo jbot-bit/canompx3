@@ -1,0 +1,322 @@
+{
+  "embargo_days": 10,
+  "folds": [
+    {
+      "test_start": "2024-01-01",
+      "test_end": "2024-07-01",
+      "cells": [
+        {
+          "session": "LONDON_METALS",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "long",
+          "train_delta": -0.05496459923664124,
+          "test_delta": 0.06262543859649125,
+          "wfe": null,
+          "n_test_on": 18
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.08347861197110422,
+          "test_delta": 0.24950821382007818,
+          "wfe": 2.9888879070778565,
+          "n_test_on": 13
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.04802097744360895,
+          "test_delta": 0.060112032085561484,
+          "wfe": 1.2517869332449776,
+          "n_test_on": 34
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.051978400488400495,
+          "test_delta": 0.011414980694980679,
+          "wfe": 0.21961008010487063,
+          "n_test_on": 35
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "long",
+          "train_delta": -0.13357328042328043,
+          "test_delta": -0.0013805797101449357,
+          "wfe": null,
+          "n_test_on": 15
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.2006090488688914,
+          "test_delta": -0.027028095238095226,
+          "wfe": -0.1347301898418327,
+          "n_test_on": 14
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.04044121966794382,
+          "test_delta": -0.004696846846846764,
+          "wfe": -0.11614008888485061,
+          "n_test_on": 37
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.4506184499935309,
+          "test_delta": -0.08611942528735628,
+          "wfe": -0.1911138465115945,
+          "n_test_on": 30
+        }
+      ]
+    },
+    {
+      "test_start": "2024-07-01",
+      "test_end": "2025-01-01",
+      "cells": [
+        {
+          "session": "LONDON_METALS",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "long",
+          "train_delta": -0.005477511961722498,
+          "test_delta": 0.4017648148148148,
+          "wfe": null,
+          "n_test_on": 27
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.09118839716312059,
+          "test_delta": 0.21024043887147334,
+          "wfe": 2.305561293016137,
+          "n_test_on": 29
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.04340823529411758,
+          "test_delta": -0.012685495283018877,
+          "wfe": -0.2922370650883829,
+          "n_test_on": 53
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.0418258246874169,
+          "test_delta": 0.44013414634146336,
+          "wfe": 10.523023745037491,
+          "n_test_on": 41
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "long",
+          "train_delta": -0.02901532984859409,
+          "test_delta": -0.1387412037037037,
+          "wfe": null,
+          "n_test_on": 27
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.09327311160810905,
+          "test_delta": -0.08543949999999999,
+          "wfe": -0.9160142567021639,
+          "n_test_on": 25
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "long",
+          "train_delta": -0.005036119554204688,
+          "test_delta": -0.049205263157894745,
+          "wfe": null,
+          "n_test_on": 40
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.2698437840290381,
+          "test_delta": -0.304478,
+          "wfe": -1.128349133909399,
+          "n_test_on": 50
+        }
+      ]
+    },
+    {
+      "test_start": "2025-01-01",
+      "test_end": "2025-07-01",
+      "cells": [
+        {
+          "session": "LONDON_METALS",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.05890720565983723,
+          "test_delta": -0.43300649496080623,
+          "wfe": -7.350654136630162,
+          "n_test_on": 19
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.11954379434997991,
+          "test_delta": 0.05737929061784895,
+          "wfe": 0.4799855227103103,
+          "n_test_on": 23
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.032361607142857074,
+          "test_delta": 0.08244439655172411,
+          "wfe": 2.5475989553850518,
+          "n_test_on": 58
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.04670201284053442,
+          "test_delta": 0.06329166666666666,
+          "wfe": 1.3552235292893728,
+          "n_test_on": 57
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "long",
+          "train_delta": -0.08750703247480401,
+          "test_delta": 0.1983153846153846,
+          "wfe": null,
+          "n_test_on": 13
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.08728702016017675,
+          "test_delta": -0.0857759528130672,
+          "wfe": -0.9826885217946877,
+          "n_test_on": 29
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "long",
+          "train_delta": -0.0224020390070922,
+          "test_delta": 0.17261633986928107,
+          "wfe": null,
+          "n_test_on": 51
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.1388895238095238,
+          "test_delta": -0.29923697916666664,
+          "wfe": -2.154496400873596,
+          "n_test_on": 64
+        }
+      ]
+    },
+    {
+      "test_start": "2025-07-01",
+      "test_end": "2026-01-01",
+      "cells": [
+        {
+          "session": "LONDON_METALS",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "long",
+          "train_delta": -0.02450275664319787,
+          "test_delta": 0.18702502127659576,
+          "wfe": null,
+          "n_test_on": 25
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.11234959899749375,
+          "test_delta": 0.13714851994851995,
+          "wfe": 1.2207299462775956,
+          "n_test_on": 21
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.07983574485311126,
+          "test_delta": 0.6221352941176471,
+          "wfe": 7.792691046627118,
+          "n_test_on": 68
+        },
+        {
+          "session": "LONDON_METALS",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "short",
+          "train_delta": -0.02141213363139588,
+          "test_delta": 0.516658413926499,
+          "wfe": null,
+          "n_test_on": 47
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "long",
+          "train_delta": -0.05666245258671255,
+          "test_delta": 0.12241846153846153,
+          "wfe": null,
+          "n_test_on": 26
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ATR_VEL_RATIO_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.0596760477022594,
+          "test_delta": 0.29113333333333336,
+          "wfe": 4.878562581521476,
+          "n_test_on": 19
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.08526749150897622,
+          "test_delta": -0.16039632352941172,
+          "wfe": -1.8810958395853192,
+          "n_test_on": 68
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "PREV_WEEK_RANGE_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.08205915178571427,
+          "test_delta": 0.24063555555555555,
+          "wfe": 2.9324645736521973,
+          "n_test_on": 45
+        }
+      ]
+    }
+  ],
+  "mean_test_delta": 0.07621286198579276,
+  "mean_train_delta": 0.05865662514556565,
+  "wfe": 1.2993052668246519,
+  "positive_cells": 19,
+  "total_cells": 32
+}

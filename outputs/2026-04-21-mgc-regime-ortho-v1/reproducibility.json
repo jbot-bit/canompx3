@@ -1,0 +1,11 @@
+{
+  "hypothesis_id": "mgc-regime-ortho-v1",
+  "seed": 20260421,
+  "python_version": "Python 3.13.12",
+  "pip_freeze_sha256": "40def74033fa384e63757343e34bb67ae88c16b5f3b0265d4855418bcadccdf6",
+  "commit_sha": "79dfc9cadfd750fe55a4b30393cb46d5a62afa57",
+  "gold_db_path": "/mnt/c/Users/joshd/canompx3/gold.db",
+  "gold_db_mtime": "2026-04-20T11:50:12.167016+00:00",
+  "gold_db_size": 7628664832,
+  "data_mode": "duckdb_readonly"
+}
