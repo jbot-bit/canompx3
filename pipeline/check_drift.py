@@ -6019,6 +6019,28 @@ SLOW_CHECK_LABELS = frozenset(
 )
 
 
+def _assert_slow_labels_valid() -> None:
+    """Fail closed when the fast-skip registry drifts from the canonical checks.
+
+    Without this guard, renaming a CHECKS label silently removes it from the
+    ``--fast`` skip set. Fast mode then starts running the slow check on every
+    edit hook invocation, which can exceed the 30s hook timeout and degrade
+    coverage without an obvious failure.
+    """
+    known_labels = {label for label, *_ in CHECKS}
+    stale = SLOW_CHECK_LABELS - known_labels
+    if stale:
+        raise RuntimeError(
+            "SLOW_CHECK_LABELS references label(s) not present in CHECKS: "
+            f"{sorted(stale)}. Either the check was renamed/removed without "
+            "updating SLOW_CHECK_LABELS, or the label string has a typo. "
+            "Re-run scripts/tools/profile_check_drift.py and update the set."
+        )
+
+
+_assert_slow_labels_valid()
+
+
 def main():
     import argparse
 
