@@ -1,12 +1,12 @@
 {
-  "phase": "pcc-6",
+  "phase": "pcc-2",
   "running_trial_count": 0,
   "trial_cap": 300,
   "data_mode": "duckdb_readonly",
   "worktree": "/tmp/canompx3-orthogonal-hunt",
   "branch": "research/orthogonal-golden-egg-hunt-v1",
   "last_commit_sha": "f567cfe6",
-  "timestamp": "2026-04-21T02:57:25Z",
+  "timestamp": "2026-04-21T02:59:55Z",
   "canonical_db_path": "/mnt/c/Users/joshd/canompx3/gold.db",
   "holdout_sacred_from": "2026-01-01",
   "remote_heads": {
@@ -21,6 +21,7 @@
     "PCC-5 completed: shared Phase B reason chain is generator-compressed prose on top of a real shared gate-failure pattern.",
     "PCC-3 completed: no current live lane qualifies for retrospective theory-state elevation to the 3.00 Chordia band.",
     "PCC-4 completed: all six live lanes fit only the provisional grandfathering path; none are currently Mode A clean.",
-    "PCC-6 completed: TOKYO_OPEN, SINGAPORE_OPEN, and US_DATA_1000 are the closest lanes to a clean Mode A rediscovery path once provenance is resolved."
+    "PCC-6 completed: TOKYO_OPEN, SINGAPORE_OPEN, and US_DATA_1000 are the closest lanes to a clean Mode A rediscovery path once provenance is resolved.",
+    "PCC-2 completed: DSR driver recomputation matches the Phase B lineage within rounding; the unresolved piece is ONC, not arithmetic drift."
   ]
 }
