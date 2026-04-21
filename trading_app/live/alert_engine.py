@@ -40,6 +40,7 @@ _ALERT_RULES: list[tuple[str, str, tuple[str, ...]]] = [
     ("kill_switch", "critical", ("KILL SWITCH",)),
     ("manual_close_required", "critical", ("MANUAL CLOSE REQUIRED",)),
     ("account_dd_limit", "critical", ("ACCOUNT DD LIMIT", "HWM DD HALT")),
+    ("drawdown_warn", "warning", ("DRAWDOWN WARN",)),
     ("engine_circuit_breaker", "critical", ("ENGINE CIRCUIT BREAKER",)),
     ("bad_fill", "critical", ("BAD FILL",)),
     ("stuck_exit", "critical", ("STUCK EXIT",)),
