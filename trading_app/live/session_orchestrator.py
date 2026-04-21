@@ -91,6 +91,61 @@ def _resolve_topstep_xfa_account_size(prof) -> int | None:
     return account_size
 
 
+def _select_broker_account(
+    contracts,
+    *,
+    explicit_account_id: int = 0,
+    account_suffix: str | None = None,
+) -> tuple[int, str]:
+    """Select one broker account deterministically and fail closed on ambiguity.
+
+    Live/demo execution must never silently drift to "the first active account"
+    when multiple accounts exist. The caller can pin either the exact numeric
+    account id or a trailing suffix such as "846" when the broker UI shows a
+    shortened identifier.
+    """
+    accounts = contracts.resolve_all_account_ids()
+    if not accounts:
+        raise RuntimeError("No active broker accounts found")
+
+    if explicit_account_id:
+        for account_id, account_name in accounts:
+            if account_id == explicit_account_id:
+                return account_id, account_name
+        visible = ", ".join(f"{name}#{aid}" for aid, name in accounts[:8])
+        raise RuntimeError(
+            f"Requested account_id={explicit_account_id} not found among active broker accounts: {visible}"
+        )
+
+    if account_suffix:
+        suffix = account_suffix.strip()
+        matches = [
+            (account_id, account_name)
+            for account_id, account_name in accounts
+            if str(account_id).endswith(suffix) or str(account_name).endswith(suffix)
+        ]
+        if not matches:
+            visible = ", ".join(f"{name}#{aid}" for aid, name in accounts[:8])
+            raise RuntimeError(
+                f"No active broker account matches suffix '{suffix}'. Active accounts: {visible}"
+            )
+        if len(matches) > 1:
+            visible = ", ".join(f"{name}#{aid}" for aid, name in matches)
+            raise RuntimeError(
+                f"Account suffix '{suffix}' is ambiguous across active broker accounts: {visible}"
+            )
+        return matches[0]
+
+    if len(accounts) > 1:
+        visible = ", ".join(f"{name}#{aid}" for aid, name in accounts[:8])
+        raise RuntimeError(
+            "Multiple active broker accounts found — pass --account-id or --account-suffix "
+            f"to bind the intended account explicitly. Active accounts: {visible}"
+        )
+
+    return accounts[0]
+
+
 def _apply_broker_reality_check(
     *,
     positions,
@@ -167,6 +222,7 @@ class SessionOrchestrator:
         broker: str | None = None,
         demo: bool = True,
         account_id: int = 0,
+        account_suffix: str | None = None,
         signal_only: bool = False,
         force_orphans: bool = False,
         portfolio: Portfolio | None = None,
@@ -335,6 +391,18 @@ class SessionOrchestrator:
         # every other profile. Raises fail-closed for unknown XFA tiers.
         topstep_xfa_account_size = _resolve_topstep_xfa_account_size(matched_prof)
 
+        if (
+            not signal_only
+            and matched_prof is not None
+            and getattr(matched_prof, "firm", None) == "topstep"
+            and getattr(matched_prof, "is_live_funded", False)
+        ):
+            raise RuntimeError(
+                "FAIL-CLOSED: TopStep Live Funded runtime is not ready for auto-trading. "
+                "Canonical F-3 remains deferred: LFA Daily Loss Limit / Dynamic Live Risk "
+                "Expansion is not wired into AccountHWMTracker yet."
+            )
+
         risk_limits = RiskLimits(
             max_daily_loss_r=-abs(self.portfolio.max_daily_loss_r),
             max_concurrent_positions=self.portfolio.max_concurrent_positions,
@@ -378,11 +446,14 @@ class SessionOrchestrator:
             self.positions = None
             log.info("Signal-only mode: order router skipped")
         else:
-            if account_id == 0:
-                account_id = contracts.resolve_account_id()
+            selected_account_id, selected_account_name = _select_broker_account(
+                contracts,
+                explicit_account_id=account_id,
+                account_suffix=account_suffix,
+            )
             router_cls = components["router_class"]
             primary_router = router_cls(
-                account_id=account_id,
+                account_id=selected_account_id,
                 auth=self.auth,
                 demo=demo,
                 tick_size=self.cost_spec.tick_size,
@@ -399,7 +470,7 @@ class SessionOrchestrator:
                 self.order_router = CopyOrderRouter(primary_router, shadow_routers)
                 log.info(
                     "Copy trading: primary=%d, shadows=%s (%d total accounts)",
-                    account_id,
+                    selected_account_id,
                     shadow_account_ids,
                     1 + len(shadow_account_ids),
                 )
@@ -408,10 +479,11 @@ class SessionOrchestrator:
 
             self.positions = self._positions_cls(auth=self.auth)
             self._notifications_broken = False
+            self._broker_account_name = selected_account_name
 
             # Position reconciliation on startup (M2.5 P0: crash recovery)
             try:
-                orphans = self.positions.query_open(account_id)
+                orphans = self.positions.query_open(selected_account_id)
                 if orphans:
                     log.critical("ORPHANED POSITIONS DETECTED on session start: %s", orphans)
                     self._notify(f"ORPHAN DETECTED: {orphans}")
@@ -641,10 +713,15 @@ class SessionOrchestrator:
         self.contract_symbol = contracts.resolve_front_month(instrument)
         self._account_name = self.portfolio.name  # For dashboard display
         log.info(
-            "Session ready: %s → %s (%s)",
+            "Session ready: %s → %s (%s)%s",
             instrument,
             self.contract_symbol,
             "SIGNAL-ONLY" if signal_only else ("DEMO" if demo else "LIVE"),
+            (
+                f" account={getattr(self, '_broker_account_name', '')}#{self.order_router.account_id}"
+                if not signal_only and self.order_router is not None
+                else ""
+            ),
         )
 
         # Write session-start marker to signals file

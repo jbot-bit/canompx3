@@ -2841,3 +2841,39 @@ class TestResolveTopStepXFAAccountSize:
         prof.is_express_funded = True
         with pytest.raises(RuntimeError, match="unknown account_size=25000"):
             _resolve_topstep_xfa_account_size(prof)
+
+
+class _FakeContractsForSelection:
+    def __init__(self, accounts):
+        self._accounts = accounts
+
+    def resolve_all_account_ids(self):
+        return list(self._accounts)
+
+
+class TestSelectBrokerAccount:
+    def test_explicit_account_id_selects_exact_match(self):
+        from trading_app.live.session_orchestrator import _select_broker_account
+
+        contracts = _FakeContractsForSelection([(120846, "Topstep Live 120846"), (555111, "Other 555111")])
+        assert _select_broker_account(contracts, explicit_account_id=120846) == (120846, "Topstep Live 120846")
+
+    def test_account_suffix_selects_unique_match(self):
+        from trading_app.live.session_orchestrator import _select_broker_account
+
+        contracts = _FakeContractsForSelection([(120846, "Topstep Live 120846"), (555111, "Other 555111")])
+        assert _select_broker_account(contracts, account_suffix="846") == (120846, "Topstep Live 120846")
+
+    def test_multiple_accounts_without_binding_fails_closed(self):
+        from trading_app.live.session_orchestrator import _select_broker_account
+
+        contracts = _FakeContractsForSelection([(120846, "Topstep Live 120846"), (555111, "Other 555111")])
+        with pytest.raises(RuntimeError, match="Multiple active broker accounts found"):
+            _select_broker_account(contracts)
+
+    def test_ambiguous_suffix_fails_closed(self):
+        from trading_app.live.session_orchestrator import _select_broker_account
+
+        contracts = _FakeContractsForSelection([(120846, "Topstep Live 120846"), (999846, "Second 999846")])
+        with pytest.raises(RuntimeError, match="ambiguous"):
+            _select_broker_account(contracts, account_suffix="846")

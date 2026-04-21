@@ -4,6 +4,43 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+<!-- BEGIN TOPSTEP_846_LIVE_READINESS_2026-04-21 -->
+## Update (2026-04-21 — Topstep funded account `...846` live-readiness patch)
+
+Branch in isolated worktree: `research/topstep-846-live-readiness`
+
+Canonical problem verified from deploy-live code:
+- `scripts/run_live_session.py` would auto-discover the **first** broker account if `--account-id` was omitted.
+- `topstep_50k_mnq_auto` defaults to `copies=2`, so a single-account live intent could silently inherit copy-trading behavior.
+- Topstep Live Funded runtime is still not honestly ready: repo audit F-3 remains deferred (`AccountHWMTracker` not wired for LFA DLL / Dynamic Live Risk Expansion).
+
+What landed:
+- `scripts/run_live_session.py`
+  - new `--account-suffix`
+  - new `--list-accounts`
+  - explicit binding now implies single-account intent when `--copies` not set
+- `trading_app/live/session_orchestrator.py`
+  - fail-closed broker account selection helper
+  - live/demo now refuses ambiguous multi-account auto-selection
+  - Topstep LFA auto-trading now fails closed instead of pretending readiness
+- `tests/test_trading_app/test_session_orchestrator.py`
+  - account selection coverage added
+- `docs/decisions/2026-04-21-topstep-846-live-readiness.md`
+  - exact operator path for funded account `...846`
+
+Verification:
+- `pytest tests/test_trading_app/test_session_orchestrator.py -q` → PASS (`139 passed`)
+- `pytest tests/test_trading_app/test_multi_runner.py -q` → PASS (`11 passed`)
+- `python pipeline/check_drift.py` still red on pre-existing `anthropic` import checks in `trading_app.ai.*`; unrelated to this patch
+
+Operational verdict:
+- If `...846` is TopstepX / Express Funded, live path is now honest pending creds + preflight:
+  - `--broker projectx`
+  - `--account-suffix 846`
+  - `--copies 1`
+- If `...846` is a true Topstep LFA, runtime is blocked honestly until LFA DLL / DLRE support is implemented.
+<!-- END TOPSTEP_846_LIVE_READINESS_2026-04-21 -->
+
 ## Update (2026-04-20 late-late-late — HTF branch closed: integrity repaired, simple v1 family dead)
 
 Follow-on to the "HTF thing" request. User wanted this handled as an

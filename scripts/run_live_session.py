@@ -263,6 +263,12 @@ def main() -> None:
         help="Numeric account ID (default: auto-discover from API)",
     )
     parser.add_argument(
+        "--account-suffix",
+        type=str,
+        default=None,
+        help="Trailing account identifier (e.g. '846'). Safer than first-account auto-discovery when multiple accounts exist.",
+    )
+    parser.add_argument(
         "--broker",
         default=None,
         help="Broker: 'projectx' or 'tradovate' (default: from BROKER env var or 'projectx')",
@@ -321,7 +327,17 @@ def main() -> None:
         "Discovers all account IDs from broker API. Primary gets full tracking, "
         "shadows get best-effort order replication.",
     )
+    parser.add_argument(
+        "--list-accounts",
+        action="store_true",
+        default=False,
+        help="Authenticate to the broker, print active account ids/names, then exit.",
+    )
     args = parser.parse_args()
+
+    if args.account_id and args.account_suffix:
+        print("--account-id and --account-suffix are mutually exclusive.")
+        sys.exit(1)
 
     # Build custom portfolio if requested (shared by preflight and session)
     raw_portfolio = None
@@ -385,6 +401,22 @@ def main() -> None:
     if not args.instrument and not args.all and not _is_multi_profile:
         print("ERROR: --instrument or --all is required (unless --profile is used).")
         sys.exit(1)
+
+    if args.list_accounts:
+        if args.all or _is_multi_profile:
+            print("--list-accounts requires a single broker context, not --all or multi-instrument --profile.")
+            sys.exit(1)
+        from trading_app.live.broker_factory import create_broker_components, get_broker_name
+
+        broker_name = args.broker or get_broker_name()
+        demo = not args.live
+        components = create_broker_components(broker_name, demo=demo)
+        contracts = components["contracts_class"](auth=components["auth"], demo=demo)
+        accounts = contracts.resolve_all_account_ids()
+        print(f"Broker accounts ({broker_name}, demo={demo}):")
+        for account_id, account_name in accounts:
+            print(f"  {account_name} #{account_id}")
+        sys.exit(0)
 
     if args.preflight:
         if args.all:
@@ -498,15 +530,20 @@ def main() -> None:
     # Multi-account copy trading: discover shadow accounts
     shadow_account_ids = None
     n_copies = args.copies
-    if n_copies == 0 and args.profile:
+    if n_copies == 0 and args.profile and not (args.account_id or args.account_suffix):
         # Auto from profile.copies (0 = use profile value)
         from trading_app.prop_profiles import get_profile
 
         prof = get_profile(args.profile)
         n_copies = prof.copies
+    elif n_copies == 0 and (args.account_id or args.account_suffix):
+        # Explicit binding implies single-account intent unless the operator
+        # explicitly opts back into copy-trading with --copies > 1.
+        n_copies = 1
 
     if n_copies > 1 and not signal_only:
         from trading_app.live.broker_factory import create_broker_components, get_broker_name
+        from trading_app.live.session_orchestrator import _select_broker_account
 
         broker_name = args.broker or get_broker_name()
         components = create_broker_components(broker_name, demo=demo)
@@ -522,10 +559,18 @@ def main() -> None:
             )
 
         account_ids = [aid for aid, _name in all_accounts[:n_copies]]
-        if args.account_id and args.account_id in account_ids:
-            # User-specified account is primary
-            account_ids.remove(args.account_id)
-            primary_id = args.account_id
+        if args.account_id or args.account_suffix:
+            primary_id, _primary_name = _select_broker_account(
+                contracts,
+                explicit_account_id=args.account_id,
+                account_suffix=args.account_suffix,
+            )
+            if primary_id not in account_ids:
+                raise RuntimeError(
+                    f"Requested primary account {primary_id} is not within the first {n_copies} discovered accounts. "
+                    "Either lower ambiguity with --copies 1 or specify the exact account set."
+                )
+            account_ids.remove(primary_id)
         else:
             primary_id = account_ids[0]
             account_ids = account_ids[1:]
@@ -543,6 +588,7 @@ def main() -> None:
         broker=args.broker,
         demo=demo,
         account_id=args.account_id,
+        account_suffix=args.account_suffix,
         signal_only=signal_only,
         force_orphans=args.force_orphans,
         portfolio=raw_portfolio,
