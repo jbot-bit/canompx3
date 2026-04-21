@@ -4,58 +4,140 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
-## Update (2026-04-21 autonomous #3 — MAJOR: PR #51's 5 CANDIDATE_READYs ALL FAIL Deflated Sharpe (Phase 0 C5))
+## Update (2026-04-21 hardened follow-through — rolling GARCH builder fixed, cross-instrument repair applied, shadow path unblocked)
 
-Confirmatory audit against Phase 0 pre_registered_criteria.md C5 — which PR #51 never computed. All 5 previously-claimed CANDIDATE_READY cells FAIL Bailey-López de Prado 2014 DSR >= 0.95.
+Follow-on to the earlier GARCH `R3` shadow scaffold block. The path is no
+longer blocked on data integrity.
 
-### What was added
+### What was actually wrong
 
-- Runner: `research/mnq_pr51_dsr_audit_v1.py`
-- Result: `docs/audit/results/2026-04-21-mnq-pr51-dsr-audit-v1.md`
+- `pipeline/build_daily_features.py` had two coupled rolling-state bugs:
+  - narrow incremental rebuilds computed post-pass rolling features from the
+    in-memory batch only, without seeding prior `daily_features` history
+  - `garch_forecast_vol_pct` was computed before the current row's
+    `garch_forecast_vol`, so recent rebuild windows could emit late-history
+    NULLs even with enough prior closes
+- This was not MNQ-specific. The same late-history GARCH coverage failure was
+  present on `MES` and `MGC`, which the new drift check exposed.
 
-### Method
+### What landed
 
-- Recompute the PR #51 family (MNQ unfiltered cross-family, K=105) exactly — reproduced to the cell.
-- Per Bailey-LdP 2014 Eq. 2 (`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`):
-  `DSR = Z[((SR − SR_0)·√(T−1)) / √(1 − γ₃·SR + (γ₄−1)/4·SR²)]`
-  with `SR_0 = √V[SR] · ((1−γ)·Z⁻¹[1 − 1/N] + γ·Z⁻¹[1 − 1/(N·e)])`.
-- Implementation sanity-checked against Bailey's worked example (pp 9-10): my SR_0 = 0.1132 and DSR = 0.9004 match paper to 4 decimals exactly. PASS.
+- Builder hardening:
+  - `pipeline/build_daily_features.py`
+    - added `_load_postpass_seed_rows(...)`
+    - all rolling post-pass features now run on `postpass_seed + rows`
+    - `garch_forecast_vol` now computes before
+      `garch_forecast_vol_pct`
+- Drift guard:
+  - `pipeline/check_drift.py`
+    - added `check_recent_garch_feature_coverage()`
+- Regression coverage:
+  - `tests/test_pipeline/test_build_daily_features_incremental_seed.py`
+  - `tests/test_pipeline/test_check_drift_db.py`
+  - `tests/test_research/test_garch_r3_shadow_ledger.py`
+- Research scaffold hardening:
+  - `research/garch_r3_shadow_ledger.py`
+    - empty feature-gap state now returns a typed empty DataFrame instead of
+      crashing on `.sort_values(...)`
 
-### Canonical result
+### Canonical repair work executed
 
-- Family (reproduced): K = 105 cells with N_IS ≥ 100.
-- Family mean trade SR = +0.0186; family V[SR] = 0.00414.
-- Bailey SR_0 (DSR rejection threshold, trade-level) = **+0.1640**.
+- Snapshot backups created in `gold.db` before repair:
+  - `backup_mnq_garch_repair_daily_features_20260421`
+  - `backup_mnq_garch_repair_orb_outcomes_20260421`
+  - `backup_mes_garch_repair_daily_features_20260421`
+  - `backup_mes_garch_repair_orb_outcomes_20260421`
+  - `backup_mgc_garch_repair_daily_features_20260421`
+  - `backup_mgc_garch_repair_orb_outcomes_20260421`
+- Child-first scoped rebuild executed for `MNQ`, `MES`, and `MGC` on
+  `2026-04-07 .. 2026-04-19` across `O5/O15/O30`:
+  - clear `orb_outcomes` in-range first
+  - rebuild `daily_features`
+  - rebuild `orb_outcomes`
+- Downstream provenance refresh executed:
+  - `./.venv-wsl/bin/python scripts/migrations/backfill_validated_trade_windows.py`
+  - result: `inspected=9 drifted=6 updated=6`
 
-| Cell | Trade SR | DSR | Phase 0 C5 |
-|---|---:|---:|---|
-| MNQ 5m RR=1.0 NYSE_OPEN | (below SR_0) | 0.0006 | **FAIL** |
-| MNQ 5m RR=1.5 NYSE_OPEN | (below SR_0) | 0.0003 | **FAIL** |
-| MNQ 15m RR=1.0 NYSE_OPEN | (below SR_0) | 0.0070 | **FAIL** |
-| MNQ 15m RR=1.0 US_DATA_1000 | (below SR_0) | 0.0067 | **FAIL** |
-| MNQ 15m RR=1.5 US_DATA_1000 | (below SR_0) | 0.0016 | **FAIL** |
+### Current truth-state
 
-- DSR PASS (≥ 0.95): **0 of 5**
-- DSR FAIL: 5 of 5
+- Raw canonical GARCH coverage:
+  - `MNQ`: recent late-history NULLs cleared
+  - `MES`: recent late-history NULLs cleared
+  - `MGC`: recent late-history NULLs cleared
+- Shadow artifact rerun:
+  - `docs/audit/results/2026-04-21-garch-r3-session-clipped-shadow.md`
+  - status now `READY_FOR_FORWARD_MONITORING`
+  - `406` trades
+  - missing-state fallback trades: `0`
+  - raw feature-gap rows: `0`
 
-### Institutional implication
+### Verification evidence
 
-- The 5 PR #51 cells that cleared H1 (t≥3.0 + BH-FDR q<0.05), C6 (WFE≥0.50), C8 (OOS/IS≥0.40), and C9 (era stability) do NOT clear C5 (DSR≥0.95).
-- **BH-FDR at q<0.05 is NECESSARY but NOT SUFFICIENT for Phase 0 promotion.** With K=105 alternative configurations, the expected max SR under a zero-edge null (SR_0 = +0.164 trade-level) exceeds every observed cell SR. Each cell looks significant individually but does not beat the family-selection-corrected null.
-- Per pre_registered_criteria.md, these cells must be re-classified as **RESEARCH_SURVIVOR** until either (a) a stricter per-cell pre-reg is written that bounds K appropriately (Pathway B, K=1), or (b) an independence-correction per Bailey Exhibit 4 materially reduces effective N.
-- **Shadow-deployment of these 5 cells is now institutionally blocked** until a Phase 0 C5 passing path is documented.
-- Independence caveat: DSR assumes independent trials. If the 105 cells share significant calendar overlap (same days), effective N < 105, lowering SR_0, raising DSR. This could rescue some cells. A future Bailey Exhibit 4 correction on the 105-cell correlation matrix would produce the canonical DSR. This audit's result is the upper-bound-conservative DSR.
+- Focused tests:
+  - `./.venv-wsl/bin/pytest tests/test_research/test_garch_r3_shadow_ledger.py tests/test_pipeline/test_build_daily_features_incremental_seed.py tests/test_pipeline/test_check_drift_db.py -q`
+  - `41 passed`
+- `scripts/tools/audit_behavioral.py`
+  - passed
+- `scripts/tools/audit_integrity.py`
+  - passed
+- `ruff check`
+  - passed on touched files
+- `ruff format --check`
+  - passed on touched files
+- `git diff --check`
+  - passed
+- `pipeline/check_drift.py`
+  - now only the pre-existing optional AI dependency gap remains:
+    - `trading_app.ai.claude_client`: missing `anthropic`
+    - `trading_app.ai.query_agent`: missing `anthropic`
+  - prior GARCH coverage and native trade-window provenance failures are fixed
+- Full `pytest tests/ -x -q`
+  - still blocked by the same pre-existing `anthropic` import failure during
+    collection of `tests/test_trading_app/test_ai/test_query_agent.py`
 
-### Updated queue
+## Update (2026-04-21 grounded follow-through — garch R3 scaffold built, launch blocked by raw feature gaps)
 
-1. Keep `H04` on its existing narrow shadow path.
-2. Keep `MNQ_NYSE_OPEN_E2_RR1.0_CB1_COST_LT12` short `F5_BELOW_PDL` as CONDITIONAL_UNVERIFIED shadow-only.
-3. MNQ `US_DATA_1000` O5 long primary route `NOT_F6_INSIDE_PDR` — RESEARCH_SURVIVOR, shadow-design stage.
-4. MES/MGC dead for single-filter ORB 5m (PR #53 + PR #55, both 0 survivors).
-5. **NEW top queue item:** PR #51 claim is institutionally downgraded. Before any MNQ-discovery follow-up:
-   - (a) Compute Bailey Exhibit 4 effective-N correction for the 105-cell correlation matrix. If effective N yields DSR >= 0.95 for any cell, that cell becomes the first true Phase 0 survivor.
-   - (b) If no cells survive the correction, the path forward is Pathway-B K=1 per pre_registered_criteria.md Amendment 3.0 — a theory-driven single-cell test with prior economic rationale, bypassing Pathway A family multiplicity.
-   - (c) In parallel, PR #48 participation-shape UNIVERSAL finding (t=+9.59/+11.80/+7.54 cross-instrument) has a MUCH stronger DSR profile at family K=3 instruments. Shadow-deployment design for that finding is now the highest-EV institutional move — it bypasses the Pathway A selection-bias trap that PR #51 fell into.
+Follow-on to the stale-lock / adjacent-edge audit. The highest-EV surviving
+path was converted into an actual research artifact instead of staying
+chat-only:
+
+- action queue doc added:
+  - `docs/plans/2026-04-21-post-stale-lock-action-queue.md`
+- research scaffold added:
+  - `research/garch_r3_shadow_ledger.py`
+- emitted artifacts:
+  - `data/forward_monitoring/garch-r3-session-clipped-shadow-topstep-50k-mnq-auto-trades.csv`
+  - `data/forward_monitoring/garch-r3-session-clipped-shadow-topstep-50k-mnq-auto-daily.csv`
+  - `docs/audit/results/2026-04-21-garch-r3-session-clipped-shadow.md`
+
+Grounded result:
+
+- path is **not** killed on mechanism
+- path is currently **BLOCKED** on data integrity / provenance
+- raw canonical check found `daily_features.garch_forecast_vol_pct` NULL on 21
+  MNQ O5/O15 holdout rows:
+  - 2026-04-07
+  - 2026-04-08
+  - 2026-04-09
+  - 2026-04-10
+  - 2026-04-12
+  - 2026-04-13
+  - 2026-04-14
+  - 2026-04-15
+  - 2026-04-16
+  - 2026-04-17
+  - 2026-04-19
+- eligible-trade fallback rate = `20 / 396 = 5.1%`, which exceeds the prereg
+  launch gate (`>5%` => block)
+
+Important verification chain:
+
+- lane set came from `load_allocation_lanes('topstep_50k_mnq_auto')`
+- trade rows came from raw `orb_outcomes`
+- state rows came from raw `daily_features`
+- ledger `pnl_r_base = -0.75` on sampled loss rows is explained by the active
+  profile stop policy (`0.75x`) via canonical `apply_tight_stop(...)`, not by
+  made-up postprocessing
 
 ## Update (2026-04-20 late-late-late — HTF branch closed: integrity repaired, simple v1 family dead)
 
@@ -8129,5 +8211,3 @@ Decide per branch whether to push.
 3. Decide whether to push the 6 local-only commits above.
 4. Decide whether to remove `canompx3-6lane-baseline` worktree (post-merge).
 5. 18 older PRs need merge/close decisions (none time-critical per memory).
-
-
