@@ -18,6 +18,7 @@ from trading_app.strategy_validator import (
     _check_criterion_9_era_stability,
     _check_mode_a_holdout_integrity,
     _check_phase_4_pre_flight_gates,
+    _estimate_oos_power,
     _is_phase_4_grandfathered,
     _parse_cost_ratio_cap_pct,
     _parse_orb_size_bounds,
@@ -1469,7 +1470,7 @@ class TestCriterion8OOSPositive:
         assert status is None, f"unexpected rejection: {reason}"
 
     def test_insufficient_oos_sample_passes_through(self, tmp_path):
-        # 1 <= N_oos < 30 → pass-through via _OOS_MIN_TRADES gate (L1034).
+        # 1 <= N_oos < 30 → pass-through via _OOS_TIER_2_FLOOR gate (L1034).
         # Even a clearly-negative OOS slice must NOT reject when N < 30
         # because the ExpR estimate is statistically meaningless at that
         # sample size. This locks the commit ea18c61 behavior.
@@ -1477,11 +1478,11 @@ class TestCriterion8OOSPositive:
         row = _phase_4_row(expectancy_r=0.20)
         status, reason = _check_criterion_8_oos(row, db_path)
         assert status is None, (
-            f"N_oos=3 must pass-through per _OOS_MIN_TRADES gate, got {status!r} with reason={reason!r}"
+            f"N_oos=3 must pass-through per _OOS_TIER_2_FLOOR gate, got {status!r} with reason={reason!r}"
         )
 
     def test_passes_with_positive_oos_above_ratio(self, tmp_path):
-        # N_oos = 30 (meets _OOS_MIN_TRADES gate).
+        # N_oos = 30 (meets _OOS_TIER_2_FLOOR gate).
         # Pattern: 12× 1.0, 9× -0.5, 9× 0.0 → OOS expr = (12 - 4.5) / 30 = 0.25.
         # IS=0.20 → ratio = 1.25 > 0.40 → passes both sign and ratio gates.
         oos_pnls = [1.0] * 12 + [-0.5] * 9 + [0.0] * 9
@@ -1492,7 +1493,7 @@ class TestCriterion8OOSPositive:
         assert status is None, f"unexpected rejection: {reason}"
 
     def test_fails_with_negative_oos(self, tmp_path):
-        # N_oos = 30 (meets _OOS_MIN_TRADES gate), all negative → sign gate rejects.
+        # N_oos = 30 (meets _OOS_TIER_2_FLOOR gate), all negative → sign gate rejects.
         oos_pnls = [-1.0] * 10 + [-0.5] * 10 + [-0.3] * 10
         assert len(oos_pnls) == 30
         db_path = self._make_synthetic_db(tmp_path / "neg.db", oos_pnls=oos_pnls)
@@ -1503,16 +1504,31 @@ class TestCriterion8OOSPositive:
         assert "criterion_8" in reason
         assert "OOS" in reason
 
-    def test_fails_with_oos_below_ratio(self, tmp_path):
-        # N_oos = 30 (meets _OOS_MIN_TRADES gate), positive but ratio < 0.40.
-        # All rows = 0.05 → OOS expr = 0.05. IS=0.50 → ratio = 0.10 < 0.40.
+    def test_tier2_skips_ratio_gate_below_tier1_floor(self, tmp_path):
+        # Amendment 3.2 (2026-04-21): at 30 <= N_oos < 100 the ratio gate is
+        # SKIPPED because the OOS/IS ratio estimate is too noisy at that N
+        # to be confirmatory (Harvey-Liu 2015 p.17 OOS caveat).  Sign gate
+        # still applies.
+        # N_oos = 30 (Tier 2 DIRECTIONAL), OOS=+0.05, IS=+0.50 → ratio=0.10.
+        # Pre-Amendment: REJECT on ratio.  Post-Amendment: PASS on sign.
         oos_pnls = [0.05] * 30
-        db_path = self._make_synthetic_db(tmp_path / "ratio.db", oos_pnls=oos_pnls)
+        db_path = self._make_synthetic_db(tmp_path / "ratio_tier2.db", oos_pnls=oos_pnls)
+        row = _phase_4_row(expectancy_r=0.50)
+        status, reason = _check_criterion_8_oos(row, db_path)
+        assert status is None, f"Tier 2 must skip ratio gate per Amendment 3.2; got {status!r}: {reason!r}"
+
+    def test_tier1_fails_with_oos_below_ratio(self, tmp_path):
+        # Amendment 3.2: at Tier 1 (N_oos >= 100) the ratio gate still
+        # applies.  N_oos = 100, uniform OOS = 0.05, IS = 0.50 → ratio
+        # = 0.10 < 0.40 → REJECT with Tier 1 label.
+        oos_pnls = [0.05] * 100
+        db_path = self._make_synthetic_db(tmp_path / "ratio_tier1.db", oos_pnls=oos_pnls)
         row = _phase_4_row(expectancy_r=0.50)
         status, reason = _check_criterion_8_oos(row, db_path)
         assert status == "REJECTED"
         assert reason is not None
-        assert "OOS/IS ratio" in reason
+        assert "ratio" in reason
+        assert "Tier 1" in reason
 
 
 class TestCriterion9EraStability:
@@ -1828,6 +1844,128 @@ class TestCriterion8StrictMode:
         status, reason = _check_criterion_8_oos(row, db_path, strict_oos_n=True)
         assert status == "REJECTED"
         assert "OOS ExpR" in reason
+
+
+class TestCriterion8PowerFloor:
+    """Amendment 3.2 (2026-04-21): OOS power estimation and opt-in floor.
+
+    Power computation uses scipy.stats.nct (non-central t) with
+    ncp = IS_ExpR * sqrt(N) / sd_oos, df = N-1.
+
+    The floor is OPT-IN via require_power_floor=True.  Default False
+    preserves all legacy callers' behaviour (verified by the existing
+    TestCriterion8OOSPositive + TestCriterion8StrictMode test classes
+    running unchanged).
+    """
+
+    _DEFAULT_RR = 2.0
+
+    def _make_synthetic_db(self, db_path, oos_pnls):
+        con = duckdb.connect(str(db_path))
+        con.execute(
+            """
+            CREATE TABLE orb_outcomes (
+                trading_day DATE, symbol VARCHAR, orb_label VARCHAR,
+                orb_minutes INTEGER, entry_model VARCHAR, confirm_bars INTEGER,
+                rr_target DOUBLE, pnl_r DOUBLE
+            )
+            """
+        )
+        con.execute(
+            """
+            CREATE TABLE daily_features (
+                trading_day DATE, symbol VARCHAR, orb_minutes INTEGER,
+                stub_col INTEGER
+            )
+            """
+        )
+        base_day = date(2026, 1, 5)
+        for i, pnl in enumerate(oos_pnls):
+            day = base_day + timedelta(days=i)
+            con.execute(
+                "INSERT INTO orb_outcomes VALUES (?, 'MNQ', 'NYSE_OPEN', 5, 'E2', 1, ?, ?)",
+                [day, self._DEFAULT_RR, pnl],
+            )
+            con.execute(
+                "INSERT INTO daily_features VALUES (?, 'MNQ', 5, 1)",
+                [day],
+            )
+        con.close()
+        return db_path
+
+    # ── Direct helper sanity checks ─────────────────────────────────────
+
+    def test_power_returns_none_for_tiny_sample(self):
+        assert _estimate_oos_power([], is_expr=0.2) is None
+        assert _estimate_oos_power([0.1], is_expr=0.2) is None
+
+    def test_power_returns_none_for_zero_variance(self):
+        # All identical pnls → sd = 0 → non-computable power
+        assert _estimate_oos_power([0.1] * 30, is_expr=0.2) is None
+
+    def test_power_high_for_large_effect_and_sample(self):
+        # Strong signal: IS=0.50R, N=500, sd~1.0 → power should be near 1.
+        import random
+
+        rng = random.Random(42)
+        pnls = [rng.gauss(0.5, 1.0) for _ in range(500)]
+        power = _estimate_oos_power(pnls, is_expr=0.5)
+        assert power is not None
+        assert power > 0.95, f"expected >0.95 power, got {power}"
+
+    def test_power_low_for_tiny_effect_at_moderate_n(self):
+        # Realistic lane-like scenario: IS=0.05R, N=30, sd~1.0.
+        # Matches the actual 6-lane 2026 OOS state (2026-04-21 audit).
+        import random
+
+        rng = random.Random(42)
+        pnls = [rng.gauss(0.05, 1.0) for _ in range(30)]
+        power = _estimate_oos_power(pnls, is_expr=0.05)
+        assert power is not None
+        assert power < 0.20, f"expected <0.20 power at lane-like effect/N, got {power}"
+
+    # ── Gate integration (opt-in) ───────────────────────────────────────
+
+    def test_require_power_floor_default_off_preserves_legacy(self, tmp_path):
+        # Low-effect Tier 2 case that WOULD fail power floor if enabled.
+        # Default require_power_floor=False → PASS on sign gate only.
+        import random
+
+        rng = random.Random(7)
+        oos = [rng.gauss(0.05, 1.0) for _ in range(30)]
+        # Force strictly-positive mean so sign gate doesn't spuriously fail.
+        oos = [x + max(0.0, 0.05 - sum(oos) / len(oos)) for x in oos]
+        db_path = self._make_synthetic_db(tmp_path / "pf_off.db", oos_pnls=oos)
+        row = _phase_4_row(expectancy_r=0.05)
+        status, reason = _check_criterion_8_oos(row, db_path)
+        assert status is None, f"Default power-floor-off must preserve legacy pass; got {status!r}: {reason!r}"
+
+    def test_require_power_floor_on_rejects_underpowered_tier2(self, tmp_path):
+        # Same under-powered scenario, but require_power_floor=True → REJECT.
+        import random
+
+        rng = random.Random(7)
+        oos = [rng.gauss(0.05, 1.0) for _ in range(30)]
+        oos = [x + max(0.0, 0.05 - sum(oos) / len(oos)) for x in oos]
+        db_path = self._make_synthetic_db(tmp_path / "pf_on.db", oos_pnls=oos)
+        row = _phase_4_row(expectancy_r=0.05)
+        status, reason = _check_criterion_8_oos(row, db_path, require_power_floor=True)
+        assert status == "REJECTED", f"power-floor-on must reject under-powered Tier 2; got {status!r}"
+        assert reason is not None
+        assert "power" in reason.lower()
+        assert "Amendment 3.2" in reason
+
+    def test_tier1_exempt_from_power_floor(self, tmp_path):
+        # N=100 (Tier 1).  Even if power is marginal, power-floor does not
+        # apply at Tier 1 per Amendment 3.2 (sufficient N is confirmatory
+        # evidence regardless of marginal detectability).  Sign gate + ratio
+        # gate decide.
+        # Use IS=0.05 and OOS mean 0.05 so ratio=1.0 → both gates pass.
+        oos_pnls = [0.05] * 50 + [0.10] * 50  # mean=0.075, positive
+        db_path = self._make_synthetic_db(tmp_path / "pf_tier1.db", oos_pnls=oos_pnls)
+        row = _phase_4_row(expectancy_r=0.05)
+        status, reason = _check_criterion_8_oos(row, db_path, require_power_floor=True)
+        assert status is None, f"Tier 1 must be exempt from power-floor; got {status!r}: {reason!r}"
 
 
 # ── Pathway B end-to-end integration tests (D-2) ───────────────────────
