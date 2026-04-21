@@ -1,10 +1,16 @@
 pre_reg_id: "rel-vol-role-selection-meta-v1"
 date: "2026-04-21"
-status: "DRAFT_PENDING_REVIEW"
+status: "LOCKED (activation dormant)"
 testing_mode: "meta_framework"
 pathway: "B"
 authored_by: "Claude terminal (6lane-baseline worktree)"
-reviewed_by: "PENDING"
+reviewed_by: "user 2026-04-21 — APPROVE-LOCK, ACTIVATION DORMANT"
+
+activation_gate: |
+  Activation gate: no cells may run until v3 Phase G (research resumption)
+  clears AND Terminal 2 Phase B rollup is at origin AND a separate pre-reg
+  per role passes G1–G10. This file LOCKS scope to prevent ad-hoc
+  re-framing; it does NOT authorize scans.
 
 # ============================================================
 # DRAFT — META-FRAMEWORK. DOES NOT EXECUTE DIRECTLY.
