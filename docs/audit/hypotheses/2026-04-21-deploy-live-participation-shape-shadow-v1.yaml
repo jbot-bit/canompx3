@@ -49,9 +49,18 @@ gate_certificates:
     status: "PASS"
     path: "docs/decisions/2026-04-21-pr48-g2.md"
   g3_dsr_nhat:
-    status: "CONDITIONAL_PASS"
+    status: "FAIL_2_OF_3"
     path: "docs/decisions/2026-04-21-pr48-g3.md"
-    remediation: "Numerical DSR compute at K=3 family using Bailey-LdP 2014 Eq. 2 with actual per-trade pnl_r moments. BLOCKS real-capital flip; does NOT block shadow."
+    resolved_on: "2026-04-21 (F7 remediation run with Terminal 2 bracketed-rho methodology)"
+    evidence: |
+      MNQ DSR=1.0000 (SR=+0.03248) PASS at all rho in {0.3, 0.5, 0.7}.
+      MES DSR=0.0000 (SR=-0.11196) FAIL — unfiltered baseline cost-dead.
+      MGC DSR=0.0000 (SR=-0.13514) FAIL — unfiltered baseline cost-dead.
+      G7 PASS elsewhere confirms the rank-shape effect is real; G3 FAIL
+      reflects that the UNFILTERED-BASELINE deployment form has negative
+      per-trade SR on MES+MGC (matches PR #59 ec8198f3 re-audit: Q5-filter
+      form dominates for MES+MGC with 4-8x uplift vs sizer form).
+    cascade: "Shadow REMAINS AUTHORIZED (signal-only, no capital). Real-capital flip remains blocked. For MES/MGC real-capital ever, a separate R1 FILTER (Q5 or Q4+Q5) pre-reg is required. MNQ-only real-capital would require a per-instrument-K=1 pre-reg (family-wise gate here is K=3)."
   g4_chordia_band:
     status: "PASS"
     path: "docs/decisions/2026-04-21-pr48-g4.md"
