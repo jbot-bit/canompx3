@@ -1,0 +1,168 @@
+version: 1
+status: LOCKED
+date: 2026-04-22
+slug: mgc-us-data-830-to-mnq-nyse-open-r3-sizing-v1
+title: "MGC US_DATA_830 context on MNQ NYSE_OPEN R3 sizing v1"
+owner: codex
+parent_spec: "docs/plans/2026-04-22-cross-asset-r3-followup-lock.md"
+
+testing_mode: individual
+pathway: B_individual
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/plans/2026-04-22-cross-asset-chronology-lock.md"
+  notes:
+    - "This is a role-change follow-up to a dead R1 overlay, not a rescue of that dead path."
+    - "The target lane remains unfiltered."
+    - "The source feature and chronology lock are unchanged from the parent prereg."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  source_instrument: MGC
+  source_session: US_DATA_830
+  source_orb_minutes: 5
+  target_instrument: MNQ
+  target_session: NYSE_OPEN
+  target_orb_minutes: 5
+  target_entry_model: E2
+  target_confirm_bars: 1
+  target_rr_target: 1.0
+  target_baseline_filter: none
+  role: R3_size_modifier
+  expected_feature_family_k: 1
+
+data_policy:
+  is_window:
+    description: "target trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "target trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only; descriptive only"
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+temporal_alignment:
+  inherited_from: "docs/audit/hypotheses/2026-04-22-mgc-us-data-830-to-mnq-nyse-open-context-v1.yaml"
+  requirement: "identical chronology audit must pass before any result is interpretable"
+
+feature_definitions:
+  - feature_name: source_orb_size_norm
+    column_source: "source daily_features.atr_20 and source daily_features.orb_US_DATA_830_size"
+    canonical_source_of_truth: "daily_features on the MGC row for the same trading_day and orb_minutes=5"
+    formula: "orb_US_DATA_830_size / atr_20"
+    trade_time_knowable: true
+    first_complete_time: "source ORB end"
+    temporal_alignment_note: "known before target NYSE_OPEN ORB begins"
+    lookahead_check: "PASS"
+
+calibration:
+  threshold_source:
+    source_orb_size_norm: "IS-only Q3 split on the source feature"
+  size_map:
+    high_q3: 1.25
+    otherwise: 1.00
+  lock_policy: "One threshold, one two-state size map, no optimizer, no sibling maps."
+
+hypotheses:
+  - id: H01_R3_HIGH_Q3_SIZE_UP
+    type: primary
+    theory_citation: |
+      The binary overlay failed because off-signal target expectancy stayed positive.
+      That leaves open a narrower R3 question: whether modest size-up on the
+      stronger source state improves the lane's aggregate expectancy without
+      requiring a veto on off-signal days.
+    statement: |
+      On the unfiltered MNQ NYSE_OPEN O5 E2 RR1.0 CB1 lane, applying a frozen
+      `1.25x` size multiplier when same-day MGC US_DATA_830 source_orb_size_norm
+      is in the IS-derived upper quartile improves aggregate ExpR versus the
+      `1.00x` baseline.
+    pass_metric:
+      metric: "delta_IS = sized_ExpR_IS - baseline_ExpR_IS"
+      formula: "compare aggregate target pnl_r after applying the frozen size map versus the untouched baseline lane"
+      threshold_gte:
+        delta_is: 0.02
+        baseline_positive_is: 0.00
+      threshold_lt:
+        raw_p: 0.05
+      extra_gate: "dir_match_oos = true when OOS N is sufficient"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "2*ln(N_trials)/(E[max_N]^2)"
+    n_trials: 1
+    expected_max_n: 1.2
+    value: 0.0
+    within_cap: true
+    cap_reference: "docs/institutional/pre_registered_criteria.md Criterion 2"
+
+baseline:
+  descriptive_anchor:
+    source: "PR #82 result note"
+    note: "The baseline target lane is positive on the usable source-available sample; runner must emit both baseline and sized ExpR."
+
+kill_criteria:
+  - id: K1
+    metric: "raw_p"
+    threshold: ">= 0.05"
+    action: KILL
+  - id: K2
+    metric: "delta_IS"
+    threshold: "< 0.02"
+    action: KILL
+  - id: K3
+    metric: "baseline_ExpR_IS"
+    threshold: "<= 0.00"
+    action: PARK
+  - id: K4
+    metric: "dir_match_oos"
+    threshold: "false when OOS N is sufficient"
+    action: PARK
+
+decision_rule:
+  continue_if: "H01 passes the IS delta gate and chronology audit"
+  park_if: "IS result is positive but OOS remains too thin for a hard continuation decision"
+  kill_if: "The frozen size translation does not beat the baseline lane on IS under the prereg gates"
+
+methodology_rules_applied:
+  - rule: "RULE 3 sacred holdout"
+    application: "Holdout untouched except for descriptive validation."
+  - rule: "RULE 4 multiple testing"
+    application: "Current study is K=1."
+  - rule: "RULE 6 trade-time knowability"
+    application: "Source feature must be complete before target trade eligibility."
+  - rule: "Role separation"
+    application: "This prereg does not revisit the dead R1 question."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-04-22-mgc-us-data-830-to-mnq-nyse-open-r3-sizing-v1.md"
+  - "row-level CSV with source state, baseline pnl_r, sized pnl_r, IS/OOS split, and per-year breakdown"
+  - "explicit chronology audit section proving source completion precedes target trade eligibility"
+
+execution_gate:
+  allowed_now: true
+  forbidden_now:
+    - "adding MES as a sibling target in the same study"
+    - "replacing the 1.25x map with a tuned or continuous map"
+    - "turning the study into a binary filter evaluation"
+    - "widening to allocator routing or portfolio ranking"
+
+not_done_by_this_pre_reg:
+  - "Does not claim deployment readiness."
+  - "Does not revisit the R1 binary overlay."
+  - "Does not test MES."
