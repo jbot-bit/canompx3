@@ -839,21 +839,25 @@ class TestBuildPulse:
             patch.object(project_pulse, "_git_branch", return_value="main"),
             patch.object(project_pulse, "_run_git", return_value=MagicMock(returncode=0, stdout="")),
             patch.object(project_pulse, "collect_system_identity", return_value=({}, [])),
+            patch.object(project_pulse, "collect_system_brief") as mock_system_brief,
             patch.object(project_pulse, "collect_staleness", return_value=[]),
             patch.object(project_pulse, "collect_fitness_fast", return_value=({}, [])),
             patch.object(project_pulse, "collect_deployment_state", return_value=(None, [])),
             patch.object(project_pulse, "collect_lifecycle_control", return_value=(None, None, None, [])),
             patch.object(project_pulse, "collect_worktrees", return_value=[]),
+            patch.object(project_pulse, "collect_worktree_conflicts") as mock_conflicts,
             patch.object(project_pulse, "collect_session_claims", return_value=[]),
             patch.object(project_pulse, "collect_action_queue", return_value=[]),
             patch.object(project_pulse, "collect_ralph_deferred", return_value=[]),
             patch.object(project_pulse, "collect_drift") as mock_drift,
             patch.object(project_pulse, "collect_tests") as mock_tests,
         ):
-            report = build_pulse(tmp_path, db_path=db_path, skip_drift=True, skip_tests=True)
+            report = build_pulse(tmp_path, db_path=db_path, fast=True, no_cache=True)
 
         mock_drift.assert_not_called()
         mock_tests.assert_not_called()
+        mock_system_brief.assert_not_called()
+        mock_conflicts.assert_not_called()
         assert isinstance(report, PulseReport)
 
 
