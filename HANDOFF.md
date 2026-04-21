@@ -4,6 +4,102 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-21 claude autonomous session — portfolio-level filter-class audit; action-queue item #2 reframed)
+
+**Branch work (7 PRs landed, 2 still open):**
+
+| PR | Status | Scope | Key finding |
+|---|---|---|---|
+| #67 | MERGED | Doctrine | `.claude/rules/backtesting-methodology.md § RULE 6.1` narrowed — `orb_{s}_break_delay_min`/`break_bar_continues`/`break_bar_volume` are E2-look-ahead (real-data 41.3% of L1 trades, per-year 37.4%-48.6%). Canonical code (`config.py:3540-3568`) was already correct; only the doctrine doc had drifted. No production behavior change. |
+| #68 | MERGED | Housekeeping | Closed 8 stage files whose acceptance was met by merged PRs. |
+| #69 | MERGED | Research | GARCH R3 session-clipped shadow ledger — builder fix (`_load_postpass_seed_rows`, GARCH ordering), drift guard `check_recent_garch_feature_coverage()`, 41 regression tests. Status: `READY_FOR_FORWARD_MONITORING`, 406 trades, 0 missing-state fallback, 0 raw feature-gap rows. |
+| #71 | MERGED | Audit | ORB_G5 deployed-lane ARITHMETIC_ONLY confirmatory — **heterogeneous**. L1 EUROPE_FLOW is cost-gate (WR p=0.614); L3 COMEX_SETTLE has real behavioral edge (+14.32pp WR at p=0.012); L5 US_DATA_1000 underpowered (N_nofire=4). Portfolio narrative materially nuanced. |
+| #72 | **OPEN** | Descriptive | Cross-session pre-break `pre_velocity` direction-alignment — null at K_global=89 AND K_instrument=33/31/25. Rejects universal Pathway-B rescue of action queue item #2. |
+| #73 | MERGED (codex) | Audit | COMEX_SETTLE ORB_G5 behavioral deep-dive (parallel Codex terminal, isolated worktree). |
+| #74 | **OPEN** | Audit | L2 ATR_P50 weak mixed signal — WR +3.51pp borderline (z p=0.146 not sig); Welch p=0.013 real; 1.76x size confound; RULE 7 corr(ATR_P50, ORB_G5 fire) = 0.148 so NOT tautology. Consistent with `CONFIDENCE_TIER="PLAUSIBLE"`. |
+
+### Portfolio-level filter-class classification (now empirically grounded)
+
+Deployed `topstep_50k_mnq_auto` (6 lanes, per `docs/runtime/lane_allocation.json` 2026-04-18):
+
+| # | Lane | Filter | Audited class | Evidence |
+|---|---|---|---|---|
+| L1 | EUROPE_FLOW ORB_G5 O5 RR1.5 | size | **ARITHMETIC_ONLY** (cost-gate) | PR #71 |
+| L2 | SINGAPORE_OPEN ATR_P50 O15 RR1.5 | vol pct | **PLAUSIBLE mixed** | PR #74 |
+| L3 | COMEX_SETTLE ORB_G5 O5 RR1.5 | size | **REAL behavioral edge** (p=0.012) | PR #71 + #73 |
+| L4 | NYSE_OPEN COST_LT12 O5 RR1.0 | explicit cost | cost-gate by construction | — |
+| L5 | US_DATA_1000 ORB_G5_O15 RR1.5 | size | **UNDERPOWERED** (N_nofire=4) | PR #71 |
+| L6 | TOKYO_OPEN COST_LT12 O5 RR1.5 | explicit cost | cost-gate by construction | — |
+
+**Honest book narrative:** directional-edge exposure is L3 (strong) + L2 (weak) ≈ ~1.5 lanes of real behavioral content. The other 4 are cost-discipline. Operational `annual_r` numbers (46, 44, 41, ...) remain real but are predominantly cost-control not directional prediction. Earlier framings of "6 of 6 uniform validated edge" are rejected by data.
+
+### Canonical source changes worth knowing
+
+- `.claude/rules/backtesting-methodology.md § 6.1` NOW matches `trading_app/config.py:3540-3568 E2_EXCLUDED_FILTER_PREFIXES/SUBSTRINGS`. Any scan using `break_delay_min` / `break_bar_continues` / `break_bar_volume` on E2 must either filter to `entry_model != 'E2'` or restrict to `entry_ts >= break_ts` — see PR #67 postmortem § 5.1 for the research-scripts retro-audit surface (16+ candidate scripts listed but not re-run in that PR).
+- `pipeline/build_daily_features.py` has the GARCH rolling-state fix (`_load_postpass_seed_rows` + corrected `garch_forecast_vol_pct` order). `pipeline/check_drift.py` has new `check_recent_garch_feature_coverage()`.
+- `docs/postmortems/2026-04-21-e2-break-bar-lookahead.md` captures the 41.3% L1-specific real-data E2 leak finding.
+
+### What the next terminal should pick up from
+
+**If working on action queue item #2 (L1 EUROPE_FLOW pre-break context):**
+
+- PR #72 showed universal pre_velocity alignment is null at K=89 AND K=30 per instrument → NO Pathway-B rewrite of item #2 is justified at this framing.
+- Don't write a prereg using `break_*` features as predictors on E2 (PR #67 ban).
+- If any pre-reg on L1 proceeds, it must measure against the **UNFILTERED** baseline (not the ORB_G5-filtered baseline) because PR #71 shows L1 ORB_G5 is cost-gate with zero directional content.
+- Candidate framings that are still open (descriptive-only, not pre-reg yet): magnitude quintiles on `pre_velocity`, `orb_{s}_vwap` position relative to ORB midpoint, volatility-regime interaction.
+
+**If working on L3 COMEX_SETTLE (the real edge):**
+
+- Codex PR #73 landed the behavioral deep-dive. Read that first.
+- Scaling path: L3 is the only lane where Carver Ch 9-10 R3 forecast-based position sizing cleanly applies. Not written yet; no code exists; no pre-reg exists. DO NOT scale without a Design Proposal.
+
+**If working on L5 US_DATA_1000 rescue:**
+
+- Only 4 non-fire trades across 7 years of IS → ORB_G5 threshold almost never bites at 15m aperture on this session. The "filter" is operationally irrelevant. Reframe or retire.
+
+**If working on L2 ATR_P50 follow-ups:**
+
+- PR #74 verdict is "weak mixed". Follow-ups in the result MD: per-year stability, cross-session generalization. Cross-session is the high-EV path — answers whether `atr_20_pct >= 50` is a universal vol-regime gate or only works at SINGAPORE_OPEN.
+
+**If auditing the research-script retro surface:**
+
+- PR #67 postmortem § 5.1 lists 16+ research scripts that may have used banned E2 `break_*` features as predictors. Each needs a per-script audit: descriptive use vs predictive-for-E2 use. Predictive-for-E2 → rerun gated on `entry_model != 'E2'` or `entry_ts >= break_ts`.
+
+### Uncommitted working state
+
+None on main. Two open PRs (#72, #74) pending review. Stash stack contains WIP:
+
+- `stash@{0}` codex-terminal WIP (project_pulse + test_ai — not mine; do not pop)
+- `stash@{1}` pre-prereg WIP (superseded by PR #69 / #67 / #72 / #74)
+- `stash@{2}` pre-GARCH WIP (superseded by PR #69)
+- `stash@{3}` l6-wip (not mine)
+- `stash@{4}` main reversions (not mine)
+
+### Current HOLDOUT status
+
+- Mode A sacred from 2026-01-01. All IS work above strictly `trading_day < 2026-01-01`.
+- No OOS touched for training, tuning, or feature selection.
+- 2026-01-01 → 2026-04-07+ OOS window remains sacred forward-paper accumulation.
+
+### Production behavior
+
+No production code touched by any of PRs #67, #68, #69, #71, #72, #74. UP038 isinstance-syntax upgrades (`isinstance(x, (A, B))` → `isinstance(x, A | B)`) are mechanical Python 3.10+ and zero-behavior. `config.py:3540-3568 E2_EXCLUDED_FILTER_PREFIXES/SUBSTRINGS` was already correct; the doctrine doc simply now matches it.
+
+### Honesty correction — phantom "MGC O5 2026-04-17 gap" NOT a blocker
+
+An earlier draft of this session-end note said the handover commit was blocked by a drift gap at MGC O5 2026-04-17 (`daily_features` NULL row, "same failure class as PR #69"). On re-verification that claim does not hold:
+
+- `pipeline/check_drift.py` → 106/106 PASSED. No drift, no skipped checks.
+- `scripts/tools/audit_behavioral.py` → 7/7 PASSED.
+- The `daily_features` row for MGC O5 2026-04-17 exists. It carries `bar_count_1m=60` and nulls for all ORB session apertures. That shape is **structural, not corrupted**:
+  - The same pattern appears on 10 2026 days for MGC and identical days for MES/MNQ. Dates are: 2026-03-08, -15, -22, -29, -04-05 (all Sundays), plus 2026-04-07, -12, -13, -15, -17, and MNQ-only 2026-04-19.
+  - In Brisbane local time (`trading_day` anchor 09:00 local), these days catch only the CME re-open micro-session, so `bar_count_1m=60` and no ORB windows fire — the builder correctly emits a thin row.
+- **No data repair needed. No --no-verify escape was taken. No band-aid.** Branch committed clean, after a fast-forward of `chore/session-handover-2026-04-21-claude` onto `origin/main` (which had advanced to `aa995ea9` via PR #75 while the handover was being written) and a fresh drift + behavioral re-run on the new base.
+
+Next terminal: if you see `bar_count_1m=60` rows with NULL ORB session columns, that is **expected low-activity emission**, not a canonical rebuild failure. Do not rerun `compute_single_outcome` on those days.
+
+---
+
 ## Update (2026-04-21 hardened follow-through — rolling GARCH builder fixed, cross-instrument repair applied, shadow path unblocked)
 
 Follow-on to the earlier GARCH `R3` shadow scaffold block. The path is no
