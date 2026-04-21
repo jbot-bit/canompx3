@@ -1,0 +1,111 @@
+metadata:
+  name: "meta-label-sizing-v1"
+  version: 1
+  purpose: >
+    Test whether a bounded, calibrated meta-label probability can improve
+    position sizing for one already-positive ORB family without violating
+    the 2026-01-01 sacred holdout.
+  date_locked: "2026-04-21T00:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 2
+  testing_mode: "family"
+  data_source_mode: "clean"
+  forward_validity_note: >
+    The 2026+ slice is sacred forward data, but the currently available
+    ~3-month window is too thin to count as a sufficient standalone ML
+    validation base. It is reserved as untouched forward monitoring only.
+  family_selection_note: >
+    The initial MGC CME_REOPEN fallback was too sparse for ML after scratches
+    and losses were examined. Canonical pre-2026 evidence shows that
+    MNQ TOKYO_OPEN LONG-ONLY with a light baseline is materially denser and
+    remains positive, which makes it a more honest V1 proof-of-concept.
+
+hypotheses:
+  - id: 1
+    name: "MNQ TOKYO_OPEN LONG-ONLY E2 RR1.5 CB1 NO_FILTER bounded sizing"
+    theory_citation: |
+      - Lopez de Prado 2020 ML for Asset Managers: theory-first discovery and
+        anti-overfitting discipline.
+      - Carver 2015 Ch 9-10: use bounded half/quarter-Kelly style sizing, not
+        full Kelly, under parameter uncertainty.
+      - Bailey et al 2013 / Bailey-Lopez de Prado 2014: finite-data and
+        multiple-testing discipline still apply to ML overlays.
+    economic_basis: >
+      TOKYO_OPEN is canonically LONG-ONLY on MNQ. The selected family keeps the
+      baseline light enough to preserve density while remaining structurally
+      positive. The meta-label is not asked to create edge, only to estimate
+      conditional success probability and scale risk within a hard cap on an
+      already-positive family.
+    family_scope:
+      instrument: "MNQ"
+      orb_label: "TOKYO_OPEN"
+      direction: "long"
+      entry_model: "E2"
+      rr_target: 1.5
+      confirm_bars: 1
+      orb_minutes: 5
+      primary_filter: "NO_FILTER"
+      holdout_date: "2026-01-01"
+    target_definition:
+      label: "pnl_r > 0"
+      positive_class: "win"
+      negative_class: "loss"
+      excluded_rows:
+        - "scratch"
+        - "NULL outcome"
+    feature_contract:
+      numeric:
+        - "atr_20"
+        - "atr_20_pct"
+        - "atr_vel_ratio"
+        - "gap_open_points"
+        - "prev_day_range"
+        - "orb_CME_REOPEN_size"
+        - "orb_CME_REOPEN_volume"
+        - "orb_TOKYO_OPEN_size"
+        - "orb_TOKYO_OPEN_volume"
+      categorical:
+        - "atr_vel_regime"
+        - "gap_type"
+        - "prev_day_direction"
+        - "day_of_week"
+        - "is_nfp_day"
+        - "is_opex_day"
+        - "is_friday"
+        - "is_monday"
+        - "is_tuesday"
+      banned:
+        - "rel_vol_*"
+        - "orb_*_break_*"
+        - "orb_*_double_break"
+        - "daily_high"
+        - "daily_low"
+        - "daily_close"
+        - "day_type"
+    models:
+      - name: "RandomForestClassifier"
+        calibration: "isotonic"
+        sizing_map: "bounded fractional Kelly"
+      - name: "HistGradientBoostingClassifier"
+        calibration: "isotonic"
+        sizing_map: "bounded fractional Kelly"
+    sizing_policy:
+      kelly_fraction: 0.25
+      min_scalar: 0.0
+      max_scalar: 2.0
+      negative_ev_scalar: 0.0
+    evaluation_protocol:
+      development_window: "All pre-2026 rows only"
+      model_selection_rule: >
+        Any future model selection, thresholding, calibration, or walk-forward
+        analysis must occur entirely inside the pre-2026 development window.
+      forward_window: "2026-01-01 onwards"
+      forward_window_role: >
+        Untouched paper-forward monitor only. Current depth is insufficient for
+        ML promotion or final sign-off.
+    kill_criteria:
+      - "If any feature violates session-safe pre-trade timing, the experiment is invalid."
+      - "If pre-2026 training ExpR is <= 0, the experiment is invalid."
+      - "If 2026 holdout is used for feature, threshold, or model selection, the experiment is invalid."
+      - "If bounded sizing cannot beat static sizing inside pre-2026 walk-forward development, the model is dead."
+      - "2026 forward performance may inform monitoring, but is not sufficient alone to promote the model."
