@@ -1,0 +1,260 @@
+version: 1
+status: LOCKED
+date: 2026-04-22
+slug: mnq-atr-p50-cross-session-generalization-v1
+title: "MNQ ATR_P50 cross-session generalization audit at fixed O15/O30 / RR1.5 geometry"
+owner: codex
+
+parent_chain:
+  - "docs/audit/results/2026-04-21-orb-g5-deployed-lane-arithmetic-check.md — ATR_P50 identified as the only deployed non-size filter class needing separate truth-state"
+  - "docs/audit/results/2026-04-21-l2-atr-p50-stability.md — merged audit says ATR_P50 is an instrument-wide vol-regime gate and recommends cross-session replication"
+  - "docs/audit/results/2026-04-21-correction-aperture-audit-rerun.md — corrected L2 framing is O15, not the deprecated O5 aperture bug"
+  - "docs/plans/2026-04-22-atr-p50-cross-session-lock.md — scope and anti-tunnel rationale"
+
+purpose: |
+  Determine whether canonical ATR_P50 is a real cross-session MNQ filter class
+  on the aperture surface it already occupies in the repo (`O15`, `O30`), or
+  merely a lane-local SINGAPORE_OPEN artefact.
+
+  This is not a threshold search and not a deployment study. It is a class-level
+  replication audit. The feature, threshold, instrument, aperture set, entry
+  model, RR, and role are all frozen before any run.
+
+deployment_not_done_here: |
+  A positive result here does not authorize deployment changes. It only justifies
+  a later lane-local follow-up. A negative result kills the broad cross-session
+  ATR_P50 class claim at this frozen geometry.
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - "docs/STRATEGY_BLUEPRINT.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/audit/results/2026-04-21-orb-g5-deployed-lane-arithmetic-check.md"
+    - "docs/audit/results/2026-04-21-l2-atr-p50-stability.md"
+    - "docs/audit/results/2026-04-21-correction-aperture-audit-rerun.md"
+  notes:
+    - "Mode A holdout remains sacred from 2026-01-01."
+    - "This is a fixed univariate canonical-filter audit, not a multi-feature discovery scan."
+    - "No threshold, session, RR, or role widening is allowed inside this prereg."
+    - "Aperture scope is frozen to O15 and O30 only because both already exist in the repo ATR_P50 surface."
+
+reproducibility:
+  repo_root: "C:/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+testing_mode: family
+pathway: A_fixed_family
+
+scope:
+  instrument: MNQ
+  sessions_in_scope:
+    - BRISBANE_1025
+    - CME_PRECLOSE
+    - CME_REOPEN
+    - COMEX_SETTLE
+    - EUROPE_FLOW
+    - LONDON_METALS
+    - NYSE_CLOSE
+    - NYSE_OPEN
+    - SINGAPORE_OPEN
+    - TOKYO_OPEN
+    - US_DATA_1000
+    - US_DATA_830
+  sessions_source: "canonical DISTINCT on orb_outcomes where symbol='MNQ' AND orb_minutes IN (15,30) AND entry_model='E2' AND rr_target=1.5 AND confirm_bars=1 AND pnl_r IS NOT NULL AND trading_day < DATE '2026-01-01'"
+  apertures_in_scope:
+    - 15
+    - 30
+  session_count_per_aperture: 12
+  family_count_total: 24
+  geometry:
+    entry_model: E2
+    confirm_bars: 1
+    rr_target: 1.5
+  role: R1_binary_overlay
+  filter_type: ATR_P50
+  filter_definition: "trading_app.config.OwnATRPercentileFilter(min_pct=50.0)"
+  baseline: "unfiltered per-session lane at the same frozen geometry"
+  out_of_scope:
+    - "ATR_P30 / ATR_P70 / other ATR thresholds"
+    - "O5 and any other apertures outside O15/O30"
+    - "RR 1.0 / 2.0"
+    - "R3 size modifiers or R8 allocator uses"
+    - "cross-instrument tests"
+    - "any ML or pooled meta-modeling"
+
+canonical_sample_snapshot:
+  is_window: "trading_day < 2026-01-01"
+  oos_window: "trading_day >= 2026-01-01"
+  is_date_range: "2019-05-06 .. 2025-12-31"
+  n_total_is_all_sessions:
+    O15: 15551
+    O30: 14058
+  session_rows_is:
+    O15:
+      BRISBANE_1025: 1721
+      CME_PRECLOSE: 201
+      CME_REOPEN: 506
+      COMEX_SETTLE: 1498
+      EUROPE_FLOW: 1718
+      LONDON_METALS: 1709
+      NYSE_CLOSE: 231
+      NYSE_OPEN: 1393
+      SINGAPORE_OPEN: 1719
+      TOKYO_OPEN: 1721
+      US_DATA_1000: 1495
+      US_DATA_830: 1639
+    O30:
+      BRISBANE_1025: 1715
+      CME_PRECLOSE: 40
+      CME_REOPEN: 333
+      COMEX_SETTLE: 1222
+      EUROPE_FLOW: 1699
+      LONDON_METALS: 1677
+      NYSE_CLOSE: 131
+      NYSE_OPEN: 1037
+      SINGAPORE_OPEN: 1707
+      TOKYO_OPEN: 1705
+      US_DATA_1000: 1181
+      US_DATA_830: 1611
+  feature_null_rows_preholdout:
+    atr_20_pct_null_mnq_o15: 2
+    atr_20_pct_null_mnq_o30: 2
+
+feature_definitions:
+  - feature_name: atr_20_pct
+    column_source: daily_features.atr_20_pct
+    canonical_source_of_truth: pipeline/build_daily_features.py
+    trade_time_knowable: true
+    first_complete_time: "pre-session rolling state"
+    lookahead_check: "PASS — prior-only rolling percentile, consumed at or before session start"
+  - feature_name: atr_p50_fire
+    column_source: "computed via canonical filter ATR_P50"
+    trade_time_knowable: true
+    comparator: "atr_20_pct >= 50.0"
+
+data_policy:
+  tuning_against_oos: false
+  holdout_policy: "2026-01-01 onwards sacred; OOS descriptive only"
+  canonical_layers_only: true
+
+primary_hypothesis:
+  id: H_ATR_P50_CLASS_GENERALIZES
+  theory_citation: |
+    docs/institutional/mechanism_priors.md defines ATR_P50 as an own-vol
+    regime gate rather than a size or cross-asset proxy. The merged L2
+    stability audit says the feature is instrument-wide, not a sparse-session
+    artifact. If that interpretation is correct, ATR_P50 should show positive
+    discrimination on more than one MNQ session on the already-live ATR_P50
+    aperture surface.
+  statement: |
+    Across the 12 MNQ sessions at fixed E2 / CB1 / RR1.5 geometry within each
+    frozen aperture (`O15`, `O30`), canonical ATR_P50 produces same-sign
+    positive IS discrimination often enough to count as a cross-session class,
+    not just a SINGAPORE_OPEN anecdote.
+
+pass_gates:
+  integrity:
+    required: true
+    checks:
+      - "Use only canonical orb_outcomes and daily_features joined on (trading_day, symbol, orb_minutes)"
+      - "Use canonical ATR_P50 filter logic; do not re-encode thresholding by hand"
+      - "Freeze geometry to MNQ / {O15,O30} / E2 / CB1 / RR1.5"
+      - "Emit all 12 sessions per aperture; no dropping null or weak cells from the family tables"
+  session_level_metrics:
+    required: true
+    metrics:
+      - "ExpR_fire"
+      - "ExpR_nonfire"
+      - "delta_expr"
+      - "WR_fire"
+      - "WR_nonfire"
+      - "raw Welch p on pnl_r"
+      - "raw two-proportion p on WR"
+  class_pass:
+    required: true
+    threshold: |
+      For at least one frozen aperture, at least 1 non-SINGAPORE_OPEN session
+      survives BH-FDR q<0.05 on that aperture's family of raw Welch p-values,
+      with positive delta_expr, AND the median delta_expr across that aperture's
+      powered sessions is > 0.
+    powered_session_rule: |
+      A session is powered for the median/coherence read if both fire and
+      non-fire groups have N >= 50. Sessions below that floor remain reported
+      but do not vote in the powered-session median.
+  class_strong_pass:
+    required: false
+    threshold: |
+      For the same aperture, at least 2 non-SINGAPORE_OPEN sessions survive
+      BH-FDR q<0.05 with positive delta_expr. This is a stronger
+      "portfolio-worthy class" read, not a requirement for basic class survival.
+
+kill_criteria:
+  K1:
+    condition: "integrity fails"
+    action: SCAN_ABORT
+  K2:
+    condition: "SINGAPORE_OPEN fails raw replication on both apertures (delta_expr <= 0 OR raw Welch p >= 0.05)"
+    action: KILL_FAMILY
+  K3:
+    condition: "No non-SINGAPORE_OPEN session survives BH-FDR with positive delta_expr on either aperture"
+    action: LANE_LOCAL_ONLY
+  K4:
+    condition: "Median delta_expr across powered sessions <= 0 on both apertures"
+    action: KILL_FAMILY
+  K5:
+    condition: "Any BH-FDR survivor outside SINGAPORE_OPEN has negative delta_expr"
+    action: KILL_FAMILY
+
+verdict_labels:
+  CLASS_GENERALIZES: "K2 false, K3 false, K4 false, K5 false"
+  CLASS_GENERALIZES_STRONG: "CLASS_GENERALIZES plus class_strong_pass threshold met"
+  LANE_LOCAL_ONLY: "SINGAPORE_OPEN replicates but no other session survives BH-FDR on either aperture"
+  KILL_FAMILY: "Broad cross-session class claim fails"
+  SCAN_ABORT: "integrity failure"
+
+trial_budget:
+  family_tests:
+    per_aperture_local_K: 12
+    combined_conservative_K: 24
+  local_bh_fdr_q: 0.05
+  rationale: |
+    This is two fixed 12-session families at two pre-specified apertures already
+    present in the repo ATR_P50 surface. No threshold, RR, session, or role
+    expansion is allowed within the run.
+
+methodology_rules_applied:
+  - "RESEARCH_RULES.md — canonical layers only, exact p-values, no OOS tuning"
+  - "docs/STRATEGY_BLUEPRINT.md Gate 2 — fix geometry before widening new dimensions; here the aperture set is pre-specified from existing ATR_P50 surface"
+  - "docs/institutional/mechanism_priors.md — ATR_P50 treated as R1 only in this prereg"
+  - "docs/institutional/pre_registered_criteria.md Criterion 1 — prereg before run"
+
+implementation_integrity_checklist:
+  - "Session universe discovered canonically, not typed from memory"
+  - "Canonical filter logic imported from config/filter utils, not manually approximated"
+  - "All 12 session rows emitted per aperture even if not powered"
+  - "Welch p-values computed two-tailed and adjusted with BH-FDR across K=12 per aperture; K=24 also reported conservatively"
+  - "WR and ExpR both reported, but family verdict keyed off Welch/BH plus powered-session median sign"
+  - "OOS block descriptive only; no kill or rescue from OOS"
+  - "No writes to validated_setups, lane_allocation.json, or live config"
+
+outputs_required_after_run:
+  - "docs/audit/results/2026-04-22-mnq-atr-p50-cross-session-generalization-v1.md"
+  - "docs/audit/results/2026-04-22-mnq-atr-p50-cross-session-generalization-v1-rows.csv"
+  - "Per-session table per aperture with N_fire, N_nonfire, ExpR_fire, ExpR_nonfire, delta_expr, WR_fire, WR_nonfire, raw Welch p, BH q"
+  - "Powered-session median delta_expr per aperture"
+  - "Explicit family verdict plus aperture-specific verdicts"
+  - "OOS descriptive appendix with same frozen sessions"
+
+execution_gate:
+  allowed_now:
+    - "Commit docs"
+    - "Stamp commit_sha"
+    - "Write one bounded research runner for this prereg only"
+  forbidden_now:
+    - "Threshold search across ATR_P30/P50/P70"
+    - "Geometry widening beyond O15/O30"
+    - "Role changes"
+    - "Any promotion/deployment claim"
