@@ -1,19 +1,19 @@
 {
-  "phase": "phase-3-blocked-mes-session-boundary-v1",
-  "running_trial_count": 12,
+  "phase": "phase-3-mgc-microstructure-v1",
+  "running_trial_count": 20,
   "trial_cap": 300,
   "data_mode": "duckdb_readonly",
   "worktree": "/tmp/canompx3-orthogonal-hunt",
   "branch": "research/orthogonal-golden-egg-hunt-v1",
-  "last_commit_sha": "082317c829aa8bfd5b76919fa15b2e961fb7b02c",
-  "timestamp": "2026-04-21T03:38:39Z",
+  "last_commit_sha": "d0e524fc26eaf0d85a1048ee7ccebecdc9fc5176",
+  "timestamp": "2026-04-21T03:50:00Z",
   "canonical_db_path": "/mnt/c/Users/joshd/canompx3/gold.db",
   "holdout_sacred_from": "2026-01-01",
   "remote_heads": {
     "origin/main": "f567cfe6",
     "origin/research/pr48-sizer-rule-oos-backtest": "aa8b838c",
     "origin/research/ovnrng-router-rolling-cv": "7f4f85ba",
-    "origin/deploy/live-trading-buildout-v1": "b081b61c"
+    "origin/deploy/live-trading-buildout-v1": "8c44c44c"
   },
   "notes": [
     "gold-db MCP unavailable in-session; read-only DuckDB fallback is active.",
@@ -27,6 +27,7 @@
     "Phase 1 completed: the orthogonal POV map ranks regime conditioners, session-boundary effects, and bars_1m microstructure as the top 3 fork-D hunt directions; sizing and exit-side work stay second-tier.",
     "Phase 2 completed: three locked family pre-registrations now exist for the top-3 orthogonal directions, and no extraction metrics have been inspected beyond Phase 0 inventory data.",
     "Phase 3 completed for mgc-regime-ortho-v1: canonical family scan returned zero BH-FDR survivors; BRISBANE_1025 had zero scoped trades, LONDON_METALS PREV_WEEK long was the strongest cell (t=2.602, q=0.0587) but failed family correction, and both family nulls kept the observed max-t inside noise.",
-    "Phase 3 abort on mes-session-boundary-v1: the locked ASIA_RANGE_ATR_Q67_HIGH feature uses session_asia_high/low, which are only complete after 17:00 Brisbane and therefore invalid for BRISBANE_1025, TOKYO_OPEN, and SINGAPORE_OPEN. The family was blocked before extraction instead of being silently trimmed."
+    "Phase 3 abort on mes-session-boundary-v1: the locked ASIA_RANGE_ATR_Q67_HIGH feature uses session_asia_high/low, which are only complete after 17:00 Brisbane and therefore invalid for BRISBANE_1025, TOKYO_OPEN, and SINGAPORE_OPEN. The family was blocked before extraction instead of being silently trimmed.",
+    "Phase 3 completed for mgc-microstructure-v1: ORB range/volume concentration features were timing-valid because they use only the five ORB formation bars before E2 entry, but the family still died cleanly on canonical data with zero BH-FDR survivors, family null p-values 0.4263/0.3944, and coverage limited to US_DATA_830 because BRISBANE_1025 had zero scoped trades."
   ]
 }

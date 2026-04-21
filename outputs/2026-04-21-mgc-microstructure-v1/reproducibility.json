@@ -1,0 +1,11 @@
+{
+  "seed": 20260421,
+  "python": "3.13.12 (main, Mar 10 2026, 18:17:38) [Clang 21.1.4 ]",
+  "pip_freeze_sha256": "40def74033fa384e63757343e34bb67ae88c16b5f3b0265d4855418bcadccdf6",
+  "commit_sha": "d0e524fc26eaf0d85a1048ee7ccebecdc9fc5176",
+  "canonical_db_path": "/mnt/c/Users/joshd/canompx3/gold.db",
+  "canonical_db_mtime_utc": "2026-04-20T11:50:12.167016+00:00",
+  "canonical_db_size_bytes": 7628664832,
+  "data_mode": "duckdb_readonly",
+  "env_user": "joshd"
+}

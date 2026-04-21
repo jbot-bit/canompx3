@@ -1,0 +1,178 @@
+{
+  "embargo_days": 10,
+  "folds": [
+    {
+      "test_start": "2024-01-01",
+      "test_end": "2024-07-01",
+      "cells": [
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_RANGE_CONCENTRATION_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.044173250960093516,
+          "test_delta": 0.11522499999999998,
+          "wfe": 2.608479056796051,
+          "n_test_on": 24
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_RANGE_CONCENTRATION_Q67_HIGH",
+          "direction": "short",
+          "train_delta": -0.12793403076923074,
+          "test_delta": -0.03738023255813952,
+          "wfe": null,
+          "n_test_on": 16
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_VOLUME_CONCENTRATION_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.005274934589220293,
+          "test_delta": 0.3720033422459893,
+          "wfe": 70.52283510893288,
+          "n_test_on": 17
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_VOLUME_CONCENTRATION_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.22021032458977122,
+          "test_delta": 0.22411003344481606,
+          "wfe": 1.01770901914935,
+          "n_test_on": 13
+        }
+      ]
+    },
+    {
+      "test_start": "2024-07-01",
+      "test_end": "2025-01-01",
+      "cells": [
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_RANGE_CONCENTRATION_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.06422163546450017,
+          "test_delta": -0.07989605263157892,
+          "wfe": -1.2440675491010051,
+          "n_test_on": 19
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_RANGE_CONCENTRATION_Q67_HIGH",
+          "direction": "short",
+          "train_delta": -0.09380449996347433,
+          "test_delta": 0.2255159619450317,
+          "wfe": null,
+          "n_test_on": 22
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_VOLUME_CONCENTRATION_Q67_HIGH",
+          "direction": "long",
+          "train_delta": -0.004687597547380143,
+          "test_delta": -0.10112994505494505,
+          "wfe": null,
+          "n_test_on": 7
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_VOLUME_CONCENTRATION_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.19211416947250282,
+          "test_delta": -0.06351747448979594,
+          "wfe": -0.3306235800524186,
+          "n_test_on": 16
+        }
+      ]
+    },
+    {
+      "test_start": "2025-01-01",
+      "test_end": "2025-07-01",
+      "cells": [
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_RANGE_CONCENTRATION_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.04082120857699806,
+          "test_delta": 0.3448785714285715,
+          "wfe": 8.448514472031182,
+          "n_test_on": 18
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_RANGE_CONCENTRATION_Q67_HIGH",
+          "direction": "short",
+          "train_delta": -0.044512058069243465,
+          "test_delta": 0.025539595959595984,
+          "wfe": null,
+          "n_test_on": 22
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_VOLUME_CONCENTRATION_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.018371599718111364,
+          "test_delta": 0.31731041666666665,
+          "wfe": 17.271790237942696,
+          "n_test_on": 12
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_VOLUME_CONCENTRATION_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.08352521551724136,
+          "test_delta": 0.0597851694915254,
+          "wfe": 0.7157739027825015,
+          "n_test_on": 8
+        }
+      ]
+    },
+    {
+      "test_start": "2025-07-01",
+      "test_end": "2026-01-01",
+      "cells": [
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_RANGE_CONCENTRATION_Q67_HIGH",
+          "direction": "long",
+          "train_delta": 0.08304805194805193,
+          "test_delta": 0.11302369230769227,
+          "wfe": 1.3609433292714759,
+          "n_test_on": 26
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_RANGE_CONCENTRATION_Q67_HIGH",
+          "direction": "short",
+          "train_delta": -0.024787419607843128,
+          "test_delta": -0.3291511961722488,
+          "wfe": null,
+          "n_test_on": 19
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_VOLUME_CONCENTRATION_Q67_HIGH",
+          "direction": "long",
+          "train_delta": -0.03544252899877898,
+          "test_delta": 0.1410963110667996,
+          "wfe": null,
+          "n_test_on": 17
+        },
+        {
+          "session": "US_DATA_830",
+          "feature": "ORB_VOLUME_CONCENTRATION_Q67_HIGH",
+          "direction": "short",
+          "train_delta": 0.07922823660714282,
+          "test_delta": -0.09152152777777779,
+          "wfe": -1.1551630037103044,
+          "n_test_on": 16
+        }
+      ]
+    }
+  ],
+  "mean_test_delta": 0.07724322911701265,
+  "mean_train_delta": 0.031238780780480178,
+  "wfe": 2.472671057805135,
+  "positive_cells": 10,
+  "total_cells": 16
+}
