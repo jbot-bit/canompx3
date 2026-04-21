@@ -694,6 +694,28 @@ def _render_lane(lane: LaneInputs, current_sha: str) -> dict[str, object]:
     }
 
 
+def _summarize_lane(lane: LaneInputs) -> dict[str, object]:
+    validated = _load_validated_row(lane.strategy_id)
+    matrix = PHASE_A_MATRIX[lane.strategy_id]
+    _, dsr_rows = _dsr_bracket(
+        sr_hat=float(validated["sharpe_ratio"]),
+        sample_size=int(validated["sample_size"]),
+        n_trials=int(validated["n_trials_at_discovery"]),
+        skewness=float(validated["skewness"]),
+        kurtosis_excess=float(validated["kurtosis_excess"]),
+    )
+    verdict, _ = _verdict(lane, matrix, dsr_rows)
+    return {
+        "strategy_id": lane.strategy_id,
+        "verdict": verdict,
+        "t": float(matrix["t"]),
+        "wfe": float(matrix["wfe"]),
+        "holdout": bool(matrix["holdout_clean"]),
+        "sr_state": str(matrix["sr_state"]),
+        "dsr_rho_07": next(row["dsr"] for row in dsr_rows if math.isclose(row["rho"], 0.7)),
+    }
+
+
 def _rollup(rows: list[dict[str, object]]) -> str:
     body = "\n".join(
         f"| `{row['strategy_id']}` | `{row['dsr_rho_07']:.6f}` | `{float(row['t']):.3f}` | "
@@ -724,6 +746,7 @@ def main() -> None:
     parser.add_argument("--strategy-id")
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--write-rollup", action="store_true")
+    parser.add_argument("--rollup-only", action="store_true")
     args = parser.parse_args()
 
     if not args.strategy_id and not args.all:
@@ -739,8 +762,11 @@ def main() -> None:
             raise SystemExit(f"unknown strategy_id: {args.strategy_id}")
         selected = [lanes[args.strategy_id]]
 
-    rendered = [_render_lane(lane, current_sha) for lane in selected]
-    if args.write_rollup:
+    if args.rollup_only:
+        rendered = [_summarize_lane(lane) for lane in selected]
+    else:
+        rendered = [_render_lane(lane, current_sha) for lane in selected]
+    if args.write_rollup or args.rollup_only:
         _write(DECISIONS_DIR / "2026-04-21-phase-b-rollup.md", _rollup(rendered))
 
 
