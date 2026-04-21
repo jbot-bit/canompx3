@@ -25,7 +25,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "264bbda6"
   committed_required_before_run: true
 
 scope:
