@@ -1,0 +1,194 @@
+version: 1
+status: LOCKED
+date: 2026-04-21
+slug: mnq-us-data-1000-f5-below-pdl-v1
+title: "MNQ US_DATA_1000 F5_BELOW_PDL long single-cell confirmation v1"
+owner: codex
+parent_spec: "docs/plans/2026-04-21-institutional-action-pack.md"
+
+testing_mode: individual
+pathway: B_individual
+
+authority:
+  primary:
+    - ".claude/rules/backtesting-methodology.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+    - "docs/audit/results/2026-04-15-prior-day-features-orb-mega-exploration.md"
+    - "docs/audit/results/2026-04-15-t0-t8-audit-o5-patterns.md"
+  notes:
+    - "This is the narrow prior-day follow-up chosen from the broad family. It is not a family rescan."
+    - "Predicate is canonical and reconstructible from daily_features columns."
+    - "OOS is expected to be thin; thin-OOS is a park condition, not a promotion waiver."
+
+reproducibility:
+  repo_root: "/tmp/canompx3-comex-action-pack"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  instrument: MNQ
+  session: US_DATA_1000
+  orb_minutes: 5
+  entry_model: E2
+  confirm_bars: 1
+  rr_target: 1.0
+  direction: long
+  signal_name: F5_BELOW_PDL
+  feature_predicate: "((orb_US_DATA_1000_high + orb_US_DATA_1000_low)/2.0) < prev_day_low"
+  baseline_filter: none
+  expected_n_total_is: 914
+  expected_n_on_is: 136
+  expected_fire_rate_is: 0.149
+
+data_policy:
+  is_window:
+    description: "trading_day < HOLDOUT_SACRED_FROM"
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  oos_window:
+    description: "trading_day >= HOLDOUT_SACRED_FROM"
+    policy: "read-only; descriptive only"
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+feature_definitions:
+  - feature_name: F5_BELOW_PDL
+    column_source: "derived from daily_features.prev_day_low, orb_US_DATA_1000_high, orb_US_DATA_1000_low"
+    canonical_source_of_truth: "research/prior_day_features_orb.py and research/t0_t8_audit_prior_day_patterns.py"
+    trade_time_knowable: true
+    first_complete_time: "ORB end"
+    temporal_alignment_note: "RULE 6.1 safe; uses prior-day level plus ORB midpoint known at ORB end"
+    lookahead_check: "PASS"
+
+calibration:
+  threshold_source:
+    F5_BELOW_PDL: "fixed binary predicate; no tunable threshold"
+  lock_policy: "No parameter search. Predicate is fixed exactly as written."
+
+upstream_discovery_provenance:
+  role: PROVENANCE_ONLY
+  sources:
+    - "docs/audit/results/2026-04-15-prior-day-features-orb-mega-exploration.md"
+    - "docs/audit/results/2026-04-15-t0-t8-audit-o5-patterns.md"
+  upstream_scan_k_framings:
+    mega_exploration: "exploratory K_global=6252; this prereg is not that scan"
+    t0_t8_pattern_audit: "confirmatory stress test, not the current K"
+  note: |
+    The family scan and T0-T8 audit justify choosing this one cell. Their K
+    accounting is provenance only. The current test is a single Pathway-B cell.
+
+testing_discipline:
+  pathway: B_individual
+  k: 1
+  significance_threshold:
+    raw_p: 0.05
+    chordia_t: 3.0
+    effect_floor_r: 0.10
+  mandatory_downstream_gates_non_waivable:
+    - "C6 walk-forward efficiency >= 0.50 when OOS N is sufficient"
+    - "C8 OOS direction match and OOS ExpR >= 0.40 × IS ExpR when OOS N is sufficient"
+    - "C9 no era with N>=50 and ExpR < -0.05"
+  theory_citation: |
+    `docs/institutional/mechanism_priors.md` explicitly states the prior
+    sign for BELOW_PDL on LONG is positive: oversold / displaced context leaves
+    room for a bounce-continuation. `docs/institutional/literature/fitschen_2013_path_of_least_resistance.md`
+    grounds the broader intraday trend-follow strategy class.
+
+hypotheses:
+  - id: H01_F5_BELOW_PDL_LONG
+    type: primary
+    theory_citation: |
+      `docs/institutional/mechanism_priors.md` section 2 and
+      `docs/institutional/literature/fitschen_2013_path_of_least_resistance.md`.
+    statement: |
+      On MNQ US_DATA_1000 O5 E2 RR1.0 long trades, rows where the ORB midpoint is
+      below prior-day low outperform off-signal rows on net ExpR.
+    pass_metric:
+      metric: "delta_IS = ExpR_on_signal - ExpR_off_signal"
+      formula: "compare pnl_r means on F5_BELOW_PDL=1 vs 0 within the locked lane"
+      threshold_gte:
+        delta_is: 0.10
+        expr_on_is: 0.00
+        chordia_t: 3.0
+        n_on_is: 100
+        years_positive_is: 4
+      threshold_lt:
+        raw_p: 0.05
+      extra_gate: "dir_match_oos = true when N_on_OOS >= 5"
+    counted_against_trial_budget: true
+
+trial_budget:
+  primary_selection_trials: 1
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "2*ln(N_trials)/(E[max_N]^2)"
+    n_trials: 1
+    expected_max_n: 1.2
+    value: 0.0
+    within_cap: true
+    cap_reference: "docs/institutional/pre_registered_criteria.md Criterion 2"
+
+baseline:
+  descriptive_anchor:
+    n_on_is: 136
+    expr_on_is: 0.326
+    wr_on_is: 0.691
+    source: "docs/audit/results/2026-04-15-t0-t8-audit-o5-patterns.md"
+
+kill_criteria:
+  - id: K1
+    metric: "raw_p"
+    threshold: ">= 0.05"
+    action: KILL
+  - id: K2
+    metric: "chordia_t"
+    threshold: "< 3.0"
+    action: KILL
+  - id: K3
+    metric: "delta_IS"
+    threshold: "< 0.10"
+    action: KILL
+  - id: K4
+    metric: "dir_match_oos"
+    threshold: "false when N_on_OOS >= 5"
+    action: PARK
+  - id: K5
+    metric: "N_on_OOS"
+    threshold: "< 10"
+    action: PARK
+
+decision_rule:
+  continue_if: "H01 passes raw_p, chordia_t, delta_IS, n_on_is, and era gates"
+  park_if: "H01 passes IS gates but OOS remains too thin for a hard continuation decision"
+  kill_if: "H01 fails any IS gate or shows an OOS sign flip when OOS N is usable"
+
+methodology_rules_applied:
+  - rule: "RULE 3 sacred holdout"
+    application: "Holdout untouched except for descriptive validation."
+  - rule: "RULE 4 multiple testing"
+    application: "Current test is K=1 Pathway-B."
+  - rule: "RULE 6 trade-time knowability"
+    application: "Signal uses prior-day level plus ORB midpoint only."
+  - rule: "RULE 7 tautology"
+    application: "Prior T0 audit already found max |corr|=0.114 vs deployed proxies; current test retains that discipline."
+
+outputs_required_after_run:
+  - "result markdown at docs/audit/results/2026-04-21-mnq-us-data-1000-f5-below-pdl-v1.md"
+  - "row-level CSV with signal fire, pnl_r, IS/OOS split, and per-year breakdown"
+  - "single-cell audit table with T0/T1/T2/T3/T6/T7/T8 metrics"
+
+execution_gate:
+  allowed_now: true
+  forbidden_now:
+    - "broad prior-day rescan"
+    - "threshold tuning on NEAR_* variants"
+    - "promotion to live without separate deployment review"
+
+not_done_by_this_pre_reg:
+  - "Does not test other prior-day cells."
+  - "Does not widen to RR1.5 or other sessions."
+  - "Does not claim live readiness."
