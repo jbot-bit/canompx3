@@ -1,5 +1,7 @@
 # Remediation — RULE 14 retroactive heterogeneity audit classification
 
+> 2026-04-21 accepted — no live signals affected, A1/A2/A3/B3 classifications not re-opened.
+
 **Date:** 2026-04-21
 **Branch:** `research/ovnrng-router-rolling-cv` (Claude terminal, 6lane-baseline worktree)
 **Source finding:** `docs/audit/results/2026-04-21-post-hoc-rejection-sweep.md` (commit `39315b52`)
