@@ -7,7 +7,7 @@ metadata:
     the 2026-01-01 sacred holdout.
   date_locked: "2026-04-21T00:00:00+10:00"
   holdout_date: "2026-01-01"
-  total_expected_trials: 2
+  total_expected_trials: 3
   testing_mode: "family"
   data_source_mode: "clean"
   forward_validity_note: >
@@ -82,6 +82,35 @@ hypotheses:
         - "daily_low"
         - "daily_close"
         - "day_type"
+    monotonic_baseline:
+      name: "mnq_tokyo_open_monotonic_v1"
+      role: >
+        Pre-ML benchmark allocator. Must be tested before any tree model is
+        allowed to claim incremental value.
+      feature_specs:
+        - name: "pdr_atr_ratio"
+          transform: "prev_day_range / atr_20"
+          direction: "high_better"
+          grounding: >
+            Repo doctrine already treats bigger prev_day_range/atr as a
+            pre-session positive ORB quality signal.
+        - name: "atr_vel_ratio"
+          transform: "identity"
+          direction: "high_better"
+          grounding: >
+            Repo doctrine already documents ATR velocity expansion as a
+            pre-session improvement signal for MNQ TOKYO_OPEN.
+      score_policy: >
+        Average train-only feature quintile ranks, then bucket the composite
+        score using train-only score quantiles.
+      scalar_policy: >
+        Each train-only score bucket maps to expectancy-relative sizing:
+        max(0, bucket ExpR / train baseline ExpR), hard-capped at 2.0x and
+        repaired with weighted monotonic isotonic pooling so later buckets
+        cannot become pathologically over-sized from one noisy interior spike.
+      walkforward_policy: >
+        Expanding calendar-year folds inside pre-2026 only. 2026+ remains
+        informational forward monitoring and cannot be used for tuning.
     models:
       - name: "RandomForestClassifier"
         calibration: "isotonic"

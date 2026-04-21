@@ -4,6 +4,61 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-21 autonomous — monotonic allocator baseline implemented on clean branch)
+
+Follow-on from the clean-room reset decision. Work remained isolated in
+`/tmp/canompx3-ml-sizing-v1`, now on branch
+`research/ml-monotonic-sizing-v1`.
+
+### What landed
+
+- `trading_app/meta_labeling/monotonic.py`
+  - locked simple scorecard allocator for the current family
+  - train-only transformed features:
+    - `pdr_atr_ratio = prev_day_range / atr_20`
+    - `atr_vel_ratio`
+  - train-only feature quintiles
+  - train-only score quantiles
+  - expectancy-relative sizing scalar with weighted monotonic isotonic repair
+  - expanding pre-2026 walk-forward
+  - 2026 forward-monitor summary only
+- `tests/test_trading_app/test_meta_labeling_monotonic.py`
+  - train-only edge fit
+  - monotonic scalar map
+  - allocator application
+  - 2026 isolation in walk-forward
+- `docs/audit/hypotheses/2026-04-21-meta-label-sizing-v1.yaml`
+  - monotonic baseline now explicitly pre-registered as the pre-ML benchmark
+- `trading_app/meta_labeling/__init__.py`
+  - exports for dataset + monotonic baseline surface
+
+### Verification
+
+- `python -m py_compile` on monotonic module + tests
+- `pytest tests/test_trading_app/test_meta_labeling_monotonic.py -q`
+  - `4 passed`
+- real-family run against canonical DB:
+  - aggregate pre-2026 walk-forward:
+    - baseline ExpR `+0.055454R`
+    - monotonic allocator ExpR `+0.148983R`
+    - delta `+0.093529R`
+    - baseline Sharpe `+0.0499`
+    - allocator Sharpe `+0.1241`
+  - fold honesty:
+    - 2022 fold negative delta `-0.007124R`
+    - 2023 fold positive but baseline still negative
+    - 2024 / 2025 folds positive
+  - 2026 forward monitor:
+    - delta `+0.064016R`
+    - informational only, not promotion-grade
+
+### Honest read
+
+- This is **not** proof that the allocator is deployable.
+- It is a valid simple benchmark and it now exists in code.
+- The path is no longer "ML or nothing."
+- Any ML overlay must now beat this monotonic baseline inside pre-2026 walk-forward or it loses by default.
+
 ## Update (2026-04-21 autonomous — ML clean-room reset path established in isolated worktree)
 
 Work stayed isolated in `/tmp/canompx3-ml-sizing-v1` on branch `research/ml-sizing-v1`.
