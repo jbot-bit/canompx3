@@ -75,7 +75,12 @@ gh pr create --base main --head deploy/live-trading-buildout-v1 --title "deploy-
 If the plan is to come back to deploy-live work later but free the worktree for something else:
 
 ```bash
-# Remove the worktree (branch remains on disk as a ref):
+# STEP 1 (MANDATORY): remove the .venv junction first — see
+# § Cross-worktree safety checklist § MANDATORY teardown STEP 1 below for shell-specific syntax.
+cmd //c rmdir "C:\Users\joshd\canompx3-deploy-live\.venv"
+ls -la C:/Users/joshd/canompx3-deploy-live/.venv 2>/dev/null && echo "STILL PRESENT — abort teardown"
+
+# STEP 2: remove the worktree (branch remains on disk as a ref):
 git worktree remove C:/Users/joshd/canompx3-deploy-live
 # Verify:
 git worktree list
@@ -104,15 +109,20 @@ If the plan is to walk away from deploy-live v1 entirely (e.g., a better plan em
 git -C C:/Users/joshd/canompx3-deploy-live status --short
 # -> expect empty output
 
-# STEP 2: remove worktree
+# STEP 2 (MANDATORY): remove the .venv junction first — see
+# § Cross-worktree safety checklist § MANDATORY teardown STEP 1 for shell-specific syntax.
+cmd //c rmdir "C:\Users\joshd\canompx3-deploy-live\.venv"
+ls -la C:/Users/joshd/canompx3-deploy-live/.venv 2>/dev/null && echo "STILL PRESENT — abort teardown"
+
+# STEP 3: remove worktree
 git worktree remove C:/Users/joshd/canompx3-deploy-live
 
-# STEP 3: delete the branch (force-delete because it's unmerged)
+# STEP 4: delete the branch (force-delete because it's unmerged)
 git branch -D deploy/live-trading-buildout-v1
 
-# STEP 4: if branch was ever pushed to origin, delete remote tracking
-# git push origin --delete deploy/live-trading-buildout-v1
-# -> only run if the branch was pushed; check first:
+# STEP 5: delete remote tracking (branch WAS pushed to origin on 2026-04-21)
+git push origin --delete deploy/live-trading-buildout-v1
+# Check current state first if unsure:
 git ls-remote origin deploy/live-trading-buildout-v1
 ```
 
@@ -153,7 +163,33 @@ Additionally, the `.venv` junction created at Stage 0 to let the pre-commit hook
 C:/Users/joshd/canompx3-deploy-live/.venv -> C:/Users/joshd/canompx3/.venv (directory junction)
 ```
 
-`git worktree remove` will dispose of this automatically because the junction is inside the worktree directory. No separate cleanup needed.
+**CRITICAL:** `git worktree remove`'s junction handling on Windows is implementation-defined. Depending on the underlying file-removal code path, it may either (a) remove the junction as a link-only (safe) or (b) follow the junction and delete files in the TARGET, which would wipe `C:/Users/joshd/canompx3/.venv` and break the main canompx3 checkout plus every other workflow using that venv. Explicit `rmdir` of the junction is MANDATORY before `git worktree remove`.
+
+### MANDATORY teardown STEP 1 — remove the `.venv` junction explicitly
+
+Do this BEFORE any `git worktree remove` command in any scenario below.
+
+**Git Bash / MSYS:**
+```bash
+cmd //c rmdir "C:\Users\joshd\canompx3-deploy-live\.venv"
+# Verify junction is gone:
+ls -la C:/Users/joshd/canompx3-deploy-live/.venv 2>/dev/null && echo "STILL PRESENT — abort teardown"
+```
+
+**PowerShell:**
+```powershell
+cmd /c rmdir "C:\Users\joshd\canompx3-deploy-live\.venv"
+# Verify junction is gone:
+if (Test-Path "C:\Users\joshd\canompx3-deploy-live\.venv") { Write-Error "STILL PRESENT — abort teardown" }
+```
+
+`cmd /c rmdir` removes a directory junction as a link (does NOT follow through to the target), which is the safe behaviour we want. Do NOT use `rm -rf`, `del /s`, `Remove-Item -Recurse`, or any tool that may recurse through the junction — they can destroy the target `.venv`.
+
+Verify the main-checkout `.venv` is still intact post-teardown:
+```bash
+ls C:/Users/joshd/canompx3/.venv/Scripts/python.exe
+# -> should still exist and be executable
+```
 
 ---
 
