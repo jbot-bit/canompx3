@@ -85,6 +85,70 @@ from this checkout after startup docs + preflight.
   separate sync/cleanup pass.
 <!-- END RELVOL_RESET_RECOVERY_2026-04-21 -->
 
+## Update (2026-04-21 autonomous #6 — rel_vol filter-form validation ran; Q5 math survives on MGC+MES, E2 execution framing vetoed)
+
+Scope stayed locked to the MES/MGC/MNQ rel_vol lineage on
+`research/pr48-sizer-rule-oos-backtest`. This closes the missing follow-on
+from the locked filter-form pre-reg.
+
+### Artifacts
+
+- Commit: `96b9e358` — `audit(rel-vol): run locked filter-form validation`
+- Script: `research/rel_vol_filter_form_v1.py`
+- Result: `docs/audit/results/2026-04-21-rel-vol-filter-form-v1.md`
+
+### Canonical result from raw `orb_outcomes` + `daily_features`
+
+- Train thresholds: `< 2024-01-01`, per `(session, direction)` lane
+- Gated validation window: `2024-01-01 .. 2025-12-31`
+- Semi-OOS `2026-01-01 .. 2026-04-19`: informational only
+- Fresh OOS start: `2026-04-22` (currently 0 trades in repo data; max day is `2026-04-16`)
+
+Locked-form gate results:
+
+- `MGC`
+  - `F1_Q5_only`: PASS/PASS/PASS/PASS
+    - fire rate `16.8%`
+    - filter ExpR `+0.08120R`
+    - uniform ExpR `-0.08987R`
+    - filter SR `+0.0749`
+    - uniform SR `-0.0866`
+    - bootstrap 95% CI of delta-SR `[+0.0954, +0.2338]`
+  - `F2_Q4_plus_Q5`: Gate 2 FAIL (`ExpR +0.00433R`)
+  - Locked-rule winner: `F1_Q5_only`
+  - Locked-rule status: `CANDIDATE_READY_IS`
+
+- `MES`
+  - `F1_Q5_only`: PASS/PASS/PASS/PASS
+    - fire rate `18.8%`
+    - filter ExpR `+0.06352R`
+    - uniform ExpR `-0.10122R`
+    - filter SR `+0.0576`
+    - uniform SR `-0.0963`
+    - bootstrap 95% CI of delta-SR `[+0.0984, +0.2137]`
+  - `F2_Q4_plus_Q5`: Gate 2 FAIL (`ExpR +0.03954R`)
+  - Locked-rule winner: `F1_Q5_only`
+  - Locked-rule status: `CANDIDATE_READY_IS`
+
+### Critical correction — do NOT misread this as deployable
+
+The script/doc also records a structural execution veto from canonical repo
+sources:
+
+- `trading_app/config.py` `VolumeFilter.describe()` explicitly says
+  `rel_vol` is `E2`-excluded because it uses `break-bar volume`, which is
+  unknown at `E2` order placement and resolves only at `BREAK_DETECTED`.
+- Therefore the filter-form result is a valid **conditional research**
+  result, but **NOT deployable as an E2 pre-entry filter** in current form.
+
+Correct interpretation:
+
+- `MGC Q5-only`: math alive, execution-blocked as `E2` filter
+- `MES Q5-only`: math alive, execution-blocked as `E2` filter
+- Highest-EV next step, if this lineage stays open: reframe to an
+  execution-safe post-break role (entry-model switch / confirmation model
+  / post-break conditioner), not another E2 pre-entry filter claim
+
 ## Update (2026-04-21 autonomous #5 — PR #59 sizer-rule re-audit: MISCLASSIFIED as deploy-candidate; Q5-FILTER form dominates)
 
 Direct follow-on to #4. User pressed a skeptical re-audit
