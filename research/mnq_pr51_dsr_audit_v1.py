@@ -74,9 +74,7 @@ def _list_sessions(con: duckdb.DuckDBPyConnection, orb_minutes: int) -> list[str
     return [r[0] for r in rows]
 
 
-def _load_cell_is(
-    con: duckdb.DuckDBPyConnection, orb_minutes: int, rr: float, session: str
-) -> np.ndarray:
+def _load_cell_is(con: duckdb.DuckDBPyConnection, orb_minutes: int, rr: float, session: str) -> np.ndarray:
     sql = """
     SELECT pnl_r
     FROM orb_outcomes
@@ -85,9 +83,7 @@ def _load_cell_is(
       AND pnl_r IS NOT NULL
       AND trading_day < ?
     """
-    rows = con.execute(
-        sql, [INSTRUMENT, session, orb_minutes, rr, HOLDOUT_SACRED_FROM]
-    ).fetchall()
+    rows = con.execute(sql, [INSTRUMENT, session, orb_minutes, rr, HOLDOUT_SACRED_FROM]).fetchall()
     return np.array([r[0] for r in rows], dtype=float)
 
 
@@ -128,7 +124,7 @@ def _bailey_sr0(v_sr: float, n_trials: int) -> float:
 
 def _dsr(sr: float, sr_0: float, T: int, skew: float, kurt: float) -> float:
     """Bailey-LdP 2014 Eq. 2: DSR = Z[((SR - SR_0)·sqrt(T-1)) / sqrt(1 - γ₃·SR + (γ₄-1)/4·SR²)]"""
-    denom_sq = 1.0 - skew * sr + ((kurt - 1.0) / 4.0) * (sr ** 2)
+    denom_sq = 1.0 - skew * sr + ((kurt - 1.0) / 4.0) * (sr**2)
     if denom_sq <= 0:
         return float("nan")
     denom = np.sqrt(denom_sq)
@@ -154,7 +150,7 @@ def _sanity_bailey_worked_example() -> None:
 
     sr_0 = _bailey_sr0(v_sr_daily, N)
     dsr = _dsr(sr_daily, sr_0, T, skew, kurt)
-    print(f"[sanity] Bailey-LdP 2014 worked example (p 9-10):")
+    print("[sanity] Bailey-LdP 2014 worked example (p 9-10):")
     print(f"  SR_0 computed = {sr_0:.4f} (paper says ~0.1132)")
     print(f"  DSR computed  = {dsr:.4f} (paper says ~0.9004)")
     ok_sr0 = abs(sr_0 - 0.1132) < 0.005
@@ -210,12 +206,13 @@ def main() -> int:
     RESULT_DOC.parent.mkdir(parents=True, exist_ok=True)
     parts: list[str] = []
     parts.append("# MNQ PR #51 5 CANDIDATE_READY cells — Deflated Sharpe Ratio audit v1\n")
-    parts.append("**Authority:** Bailey-López de Prado 2014 Eq. 2 "
-                 "(`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`).\n")
+    parts.append(
+        "**Authority:** Bailey-López de Prado 2014 Eq. 2 "
+        "(`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`).\n"
+    )
     parts.append(f"**Phase 0 C5 threshold:** DSR >= {DSR_THRESHOLD}.\n")
     parts.append(
-        "**Confirmatory audit** (no new discovery, no pre-reg required per "
-        "research-truth-protocol.md § 10).\n"
+        "**Confirmatory audit** (no new discovery, no pre-reg required per research-truth-protocol.md § 10).\n"
     )
     parts.append("## Family context")
     parts.append("")
@@ -287,16 +284,13 @@ def main() -> int:
         "sides use the same convention."
     )
     parts.append(
-        "- Skewness via `scipy.stats.skew(bias=False)` — the bias-adjusted Fisher-Pearson "
-        "estimator, matches Bailey γ̂₃."
+        "- Skewness via `scipy.stats.skew(bias=False)` — the bias-adjusted Fisher-Pearson estimator, matches Bailey γ̂₃."
     )
     parts.append(
         "- Kurtosis via `scipy.stats.kurtosis(fisher=False, bias=False)` — Pearson (non-excess) "
         "kurtosis, matches Bailey γ̂₄."
     )
-    parts.append(
-        "- Family V[SR] computed with ddof=1 (bias-corrected sample variance)."
-    )
+    parts.append("- Family V[SR] computed with ddof=1 (bias-corrected sample variance).")
     parts.append(
         "- Independence assumption: treats the 105 cells as independent trials. This is "
         "conservative — per Bailey Exhibit 4, correlated trials yield a smaller effective N, "

@@ -67,9 +67,7 @@ def _list_sessions(con: duckdb.DuckDBPyConnection, orb_minutes: int) -> list[str
     return [r[0] for r in rows]
 
 
-def _load_cell_series(
-    con: duckdb.DuckDBPyConnection, orb_minutes: int, rr: float, session: str
-) -> pd.DataFrame:
+def _load_cell_series(con: duckdb.DuckDBPyConnection, orb_minutes: int, rr: float, session: str) -> pd.DataFrame:
     """Return DataFrame indexed by trading_day with pnl_r for this cell."""
     sql = """
     SELECT trading_day, pnl_r
@@ -79,9 +77,7 @@ def _load_cell_series(
       AND pnl_r IS NOT NULL
       AND trading_day < ?
     """
-    df = con.execute(
-        sql, [INSTRUMENT, session, orb_minutes, rr, HOLDOUT_SACRED_FROM]
-    ).df()
+    df = con.execute(sql, [INSTRUMENT, session, orb_minutes, rr, HOLDOUT_SACRED_FROM]).df()
     if len(df) == 0:
         return df
     df["trading_day"] = pd.to_datetime(df["trading_day"])
@@ -95,7 +91,7 @@ def _bailey_sr0(v_sr: float, n_trials: float) -> float:
 
 
 def _dsr(sr: float, sr_0: float, T: int, skew: float, kurt: float) -> float:
-    denom_sq = 1.0 - skew * sr + ((kurt - 1.0) / 4.0) * (sr ** 2)
+    denom_sq = 1.0 - skew * sr + ((kurt - 1.0) / 4.0) * (sr**2)
     if denom_sq <= 0:
         return float("nan")
     denom = np.sqrt(denom_sq)
@@ -189,17 +185,17 @@ def main() -> int:
         n_is = cell_n[key]
         dsr_raw = _dsr(sr, sr_0_m, n_is, skew, kurt)
         dsr_eff = _dsr(sr, sr_0_eff, n_is, skew, kurt)
-        results.append(
-            (key, sr, dsr_raw, dsr_eff, n_eff, dsr_raw >= DSR_THRESHOLD, dsr_eff >= DSR_THRESHOLD)
-        )
+        results.append((key, sr, dsr_raw, dsr_eff, n_eff, dsr_raw >= DSR_THRESHOLD, dsr_eff >= DSR_THRESHOLD))
 
     # 7) Render result
     RESULT_DOC.parent.mkdir(parents=True, exist_ok=True)
     parts: list[str] = []
     parts.append("# PR #51 DSR audit — v2 Bailey Exhibit 4 effective-N correction\n")
-    parts.append("**Authority:** Bailey-López de Prado 2014 Appendix A.3 + Exhibit 4 "
-                 "(Eq. 9: `N̂ = ρ̂ + (1 − ρ̂)·M`). See "
-                 "`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`.\n")
+    parts.append(
+        "**Authority:** Bailey-López de Prado 2014 Appendix A.3 + Exhibit 4 "
+        "(Eq. 9: `N̂ = ρ̂ + (1 − ρ̂)·M`). See "
+        "`docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md`.\n"
+    )
     parts.append("**Phase 0 C5 threshold:** DSR >= 0.95.\n")
     parts.append(
         "**Follow-on to v1 (`2026-04-21-mnq-pr51-dsr-audit-v1.md`).** V1 computed DSR "
@@ -217,16 +213,11 @@ def main() -> int:
     parts.append("")
     parts.append("## Per-cell DSR — raw M vs corrected N̂")
     parts.append("")
-    parts.append(
-        "| Apt | RR | Session | Trade SR | DSR (M=105) | DSR (N̂) | Phase 0 C5 @ N̂ |"
-    )
+    parts.append("| Apt | RR | Session | Trade SR | DSR (M=105) | DSR (N̂) | Phase 0 C5 @ N̂ |")
     parts.append("|---:|---:|---|---:|---:|---:|---|")
     for key, sr, dsr_raw, dsr_eff, _neff, _pass_raw, pass_eff in results:
         verdict = "PASS" if pass_eff else "FAIL"
-        parts.append(
-            f"| {key[0]} | {key[1]} | {key[2]} | {sr:+.5f} | "
-            f"{dsr_raw:.4f} | {dsr_eff:.4f} | **{verdict}** |"
-        )
+        parts.append(f"| {key[0]} | {key[1]} | {key[2]} | {sr:+.5f} | {dsr_raw:.4f} | {dsr_eff:.4f} | **{verdict}** |")
     parts.append("")
     n_pass = sum(1 for r in results if r[6])
     parts.append("## Summary")
@@ -293,12 +284,11 @@ def main() -> int:
     print(f"M = {M}, rho_hat = {rho_hat:+.4f}, N_eff = {n_eff:.2f}")
     print(f"SR_0 (M=105) = {sr_0_m:+.5f}")
     print(f"SR_0 (N_eff) = {sr_0_eff:+.5f}")
-    print(f"\nPer-cell DSR (raw M vs corrected N_eff):")
+    print("\nPer-cell DSR (raw M vs corrected N_eff):")
     for key, sr, dsr_raw, dsr_eff, _n, _pr, pass_eff in results:
         tag = "PASS" if pass_eff else "FAIL"
         print(
-            f"  MNQ {key[0]}m RR={key[1]} {key[2]}: SR={sr:+.5f} "
-            f"DSR_raw={dsr_raw:.4f} DSR_Neff={dsr_eff:.4f} [{tag}]"
+            f"  MNQ {key[0]}m RR={key[1]} {key[2]}: SR={sr:+.5f} DSR_raw={dsr_raw:.4f} DSR_Neff={dsr_eff:.4f} [{tag}]"
         )
     print(f"\nRESULT_DOC: {RESULT_DOC}")
     return 0

@@ -109,11 +109,7 @@ def _load_all(
     rr_target: float,
     sessions: list[str],
 ) -> pd.DataFrame:
-    frames = [
-        sub
-        for s in sessions
-        if len(sub := _load_cell(con, symbol, s, orb_minutes, rr_target)) > 0
-    ]
+    frames = [sub for s in sessions if len(sub := _load_cell(con, symbol, s, orb_minutes, rr_target)) > 0]
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
@@ -126,9 +122,7 @@ def _oos_split(df: pd.DataFrame) -> pd.DataFrame:
 def _rank_within_lane(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["rank_rel_vol"] = (
-        df.groupby("lane")["rel_vol"]
-        .rank(method="average")
-        .div(df.groupby("lane")["lane"].transform("count"))
+        df.groupby("lane")["rel_vol"].rank(method="average").div(df.groupby("lane")["lane"].transform("count"))
     )
     return df
 
@@ -206,13 +200,17 @@ def main() -> int:
     RESULT_DOC.parent.mkdir(parents=True, exist_ok=True)
     parts: list[str] = []
     parts.append("# PR #48 participation-shape — OOS β₁ replication v1\n")
-    parts.append("**Replication of:** `docs/audit/results/2026-04-20-participation-shape-cross-instrument-v1.md` — same axes, OOS window only.\n")
+    parts.append(
+        "**Replication of:** `docs/audit/results/2026-04-20-participation-shape-cross-instrument-v1.md` — same axes, OOS window only.\n"
+    )
     parts.append("**Pre-commit:** Pathway B K=1 per instrument, K_family=3 independent hypotheses.\n")
     parts.append(f"**Pass criterion:** sign(β₁_OOS) == sign(β₁_IS) AND t_OOS >= +{IS_PASS_T}.\n")
     parts.append("**Confirmatory audit** (no new pre-reg per research-truth-protocol.md § 10).\n")
     parts.append("## Headline")
     parts.append("")
-    parts.append("| Instrument | N_OOS | β₁_OOS | t_OOS | one-tailed p | β₁_IS (PR #48) | Sign match? | t>=+2.0? | Verdict |")
+    parts.append(
+        "| Instrument | N_OOS | β₁_OOS | t_OOS | one-tailed p | β₁_IS (PR #48) | Sign match? | t>=+2.0? | Verdict |"
+    )
     parts.append("|---|---:|---:|---:|---:|---:|:---:|:---:|---|")
     for inst in INSTRUMENTS:
         r = results[inst]
@@ -235,7 +233,7 @@ def main() -> int:
     parts.append("| Instrument | Year | N | β₁ | t |")
     parts.append("|---|---:|---:|---:|---:|")
     for inst in INSTRUMENTS:
-        for (year, n, beta, t) in results[inst]["per_year"]:
+        for year, n, beta, t in results[inst]["per_year"]:
             beta_s = f"{beta:+.5f}" if not np.isnan(beta) else "-"
             t_s = f"{t:+.3f}" if not np.isnan(t) else "-"
             parts.append(f"| {inst} | {year} | {n} | {beta_s} | {t_s} |")
@@ -247,12 +245,18 @@ def main() -> int:
     flipped = [i for i, v in per_inst_verdict.items() if v == "OOS_SIGN_FLIP"]
     parts.append("## Summary + interpretation")
     parts.append("")
-    parts.append(f"- OOS_CONFIRMED (sign-match AND t>=+{IS_PASS_T}): **{len(confirmed)} of 3** — {', '.join(confirmed) if confirmed else 'none'}")
-    parts.append(f"- Right-sign-but-weak (sign-match, t<+{IS_PASS_T}): {', '.join([i for i in right_sign if i not in confirmed]) or 'none'}")
+    parts.append(
+        f"- OOS_CONFIRMED (sign-match AND t>=+{IS_PASS_T}): **{len(confirmed)} of 3** — {', '.join(confirmed) if confirmed else 'none'}"
+    )
+    parts.append(
+        f"- Right-sign-but-weak (sign-match, t<+{IS_PASS_T}): {', '.join([i for i in right_sign if i not in confirmed]) or 'none'}"
+    )
     parts.append(f"- Sign-flipped: {', '.join(flipped) or 'none'}")
     parts.append("")
     if len(confirmed) == 3:
-        parts.append("**Verdict:** PR #48 participation-shape monotonic-up is **OOS-CONFIRMED UNIVERSALLY**. All three instruments replicate the IS finding on the 2026-01-01-onwards holdout at t>=+2.0. The platform is genuine, not a backtest artefact. Next step: derive a concrete sizer rule (e.g., quintile-based position multiplier) and forward-shadow.")
+        parts.append(
+            "**Verdict:** PR #48 participation-shape monotonic-up is **OOS-CONFIRMED UNIVERSALLY**. All three instruments replicate the IS finding on the 2026-01-01-onwards holdout at t>=+2.0. The platform is genuine, not a backtest artefact. Next step: derive a concrete sizer rule (e.g., quintile-based position multiplier) and forward-shadow."
+        )
     elif len(confirmed) >= 1:
         parts.append(
             f"**Verdict:** PR #48 participation-shape is **OOS-CONFIRMED on {', '.join(confirmed)}**. "
