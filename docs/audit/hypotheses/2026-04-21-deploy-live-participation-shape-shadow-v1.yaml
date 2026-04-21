@@ -1,31 +1,70 @@
 ---
 pre_reg_id: "deploy-live-participation-shape-shadow-v1"
 date: "2026-04-21"
-status: "LOCKED_SHADOW_ONLY"
+status: "LOCKED_SHADOW_ONLY_MNQ_ONLY"
 lock_note: |
   Flipped from SKELETON_NOT_LOCKED to LOCKED_SHADOW_ONLY at 2026-04-21 after
   all 10 gate certificates were written and committed under
   docs/decisions/2026-04-21-pr48-g{1..10}.md.
 
-  LOCKED_SHADOW_ONLY means: shadow deploy is authorised once Stage 4 (F-1
-  live gate) and Stage 5.1c (fill-capture log) land. Real-capital flip is
-  NOT authorised until three independent remediations complete:
-    1. Phase 6e monitoring gap delivered (docs/plans/2026-02-08-phase6-
-       live-trading-design.md § 6e).
-    2. Numerical DSR compute at K=3 family (G3 remediation).
-    3. Destruction-shuffle + RNG-null per G7 remediation.
+  Original real-capital-flip blockers were three. Subsequent remediation
+  runs 2026-04-21 resolved two of them:
+    1. Phase 6e monitoring gap (docs/plans/2026-02-08-phase6-live-trading-
+       design.md § 6e) — STILL BLOCKED, engineering build pending.
+    2. Destruction-shuffle + RNG-null (G7) — RESOLVED via F3 remediation
+       commit `16aa1120`. See docs/decisions/2026-04-21-pr48-g7.md.
+    3. Numerical DSR compute at K=3 family (G3) — RUN via F7 remediation
+       commit `fd44d215`. Outcome: FAIL_2_OF_3. MNQ PASS DSR=1.0000 at
+       ρ̂=0.7; MES and MGC FAIL (unfiltered baseline per-trade SR is
+       negative on those two — cost-dead deployment form). See
+       docs/decisions/2026-04-21-pr48-g3.md.
 
-  Each gate's authoritative verdict lives in its own cert file; this YAML
-  mirrors status + remediation hooks only.
+  Amendment — 2026-04-21 post-F7 scope narrowing:
+    Shadow-deploy INSTRUMENT scope is narrowed to MNQ ONLY. MES and MGC
+    are REMOVED from the shadow population because the unfiltered-baseline
+    deployment form has negative per-trade Sharpe on those instruments
+    (G3 FAIL). Running 2 weeks of forward-OOS on a deployment form known
+    to be cost-dead does not produce actionable evidence — it produces
+    confirmation of what PR #59 `ec8198f3` already documented. The
+    participation-SHAPE effect (G7 PASS) on MES+MGC is real but requires
+    a DIFFERENT deployment form (R1 FILTER, Q5 or Q4+Q5 threshold per
+    mechanism_priors.md §4) — that is a SEPARATE pre-reg, not a scope
+    extension of this one.
+
+  MNQ shadow retains full pre-reg body below. MES + MGC shadow REMOVED
+  from this pre-reg; their deployment path moves to a future R1-FILTER
+  pre-reg (tracked as Step 9 in the critical path).
+
+  This scope narrowing is NOT a post-hoc threshold relaxation (which
+  pre_registered_criteria.md banning applies to). It is a scope
+  restriction based on evidence showing a known-subset of the original
+  population is deployment-dead in the chosen form. Narrowing on
+  honest evidence is distinct from widening criteria to rescue a
+  failing strategy.
+
+  Each gate's authoritative verdict lives in its own cert file; this
+  YAML mirrors status + remediation hooks + scope.
 
 testing_mode: "deployment_gating"
 pathway: "SHADOW_DEPLOY"
+scope_after_amendment_2026_04_21:
+  active_instruments: ["MNQ"]
+  removed_instruments_and_reason:
+    MES: "G3 DSR FAIL at ρ̂=0.7 (DSR=0.0000, SR=-0.11196 per-trade). Unfiltered-baseline cell is cost-dead on MES per F7 compute 2026-04-21 + PR #59 ec8198f3 independent confirmation. Requires R1 FILTER form pre-reg instead."
+    MGC: "G3 DSR FAIL at ρ̂=0.7 (DSR=0.0000, SR=-0.13514 per-trade). Unfiltered-baseline cell is cost-dead on MGC per F7 compute 2026-04-21 + pre-reg line 19 ('MGC E2 unfiltered is cost-dead'). Requires R1 FILTER form pre-reg instead."
 pathway_rationale: |
-  NOT fresh research validation. PR #48 participation-shape (monotonic-up,
-  universal across MNQ + MES + MGC, |t| = +9.589 / +11.802 / +7.541) is the
-  subject. Capture commit `dab4df0b` per pre-reg
+  NOT fresh research validation. PR #48 participation-shape (monotonic-up
+  rank effect, universal across MNQ + MES + MGC at |t| = +9.589 / +11.802
+  / +7.541) is the subject. Capture commit `dab4df0b` per pre-reg
   `docs/audit/hypotheses/2026-04-20-participation-shape-cross-instrument-v1.yaml`.
   IS-only underlying study; shadow window is fresh forward-OOS.
+
+  The SHAPE signal (rank → pnl_r monotonic-up) is real on all three
+  instruments (G7 PASS via destruction-shuffle + RNG-null 2026-04-21).
+  The DEPLOYMENT FORM (unfiltered baseline E2 CB1 RR1.5 5m) is only
+  capital-viable on MNQ (G3 PASS); on MES + MGC the unfiltered baseline
+  loses money per-trade and those instruments are SCOPED OUT of this
+  shadow pre-reg per the amendment block above.
 
   Smell-test posture (edge-finding-playbook §3): |t| > 7 triggers
   look-ahead presumption. G5 cert clears with documented defence citing
@@ -119,15 +158,29 @@ kill_criteria:
     rationale: "Chan 2013 Ch 1 p.7 walk-forward discipline + Aronson forward-test discipline."
 
   heterogeneity_veto:
-    rule: "If beta1_shadow sign flips vs IS beta1 > 0 on ANY of 3 instruments after N_fires >= 50 for that instrument, halt that instrument's shadow."
-    action: "Halt breaching instrument; emit alarm; pooled claim demoted to asset-conditional (documented in post-shadow review)."
-    rationale: "feedback_per_lane_breakdown_required.md + feedback_pooled_not_lane_specific.md."
+    rule: "Post-amendment (2026-04-21) the shadow population is MNQ-only. Heterogeneity veto reduces to: if MNQ beta1_shadow sign flips vs IS beta1 > 0 after N_fires >= 50, halt MNQ shadow. Cross-instrument heterogeneity check is inapplicable because MES + MGC are scoped out of this pre-reg."
+    action: "Halt MNQ shadow; emit alarm; the finding would then be demoted to suspect-on-MNQ (documented in post-shadow review)."
+    rationale: "feedback_per_lane_breakdown_required.md + feedback_pooled_not_lane_specific.md. (For MES + MGC cross-instrument robustness: will be re-tested under the separate R1 FILTER pre-reg, not here.)"
 
   real_capital_flip_block:
     blocked_until_all_true:
       - "docs/plans/2026-02-08-phase6-live-trading-design.md § 6e monitoring & alerting delivered"
-      - "Numerical DSR compute at K=3 family passes (> 0.95) — G3 remediation"
-    rationale: "Two independent hard prerequisites. G7 destruction-shuffle + RNG-null remediation RETIRED on 2026-04-21 after F3 remediation run passed all 3 instruments at empirical p < 0.005."
+      - "MNQ passes per-instrument DSR remediation (F7 2026-04-21 ran family-wise DSR at K=3 and confirmed MNQ DSR=1.0000 at ρ̂=0.7. To promote MNQ to capital under a K=1 per-instrument pre-reg, a separate per-instrument pre-reg is the correct vehicle — the current YAML is family-wise and G3 family verdict was FAIL_2_OF_3.)"
+    rationale: |
+      Two independent hard prerequisites.
+
+      G7 destruction-shuffle + RNG-null RETIRED on 2026-04-21 after F3
+      remediation run passed all 3 instruments at empirical p < 0.005.
+
+      G3 family-wise DSR at K=3 was FAIL_2_OF_3 (MES/MGC FAIL; MNQ PASS).
+      Under this YAML's family-wise framing, real-capital flip is not
+      authorised for ANY instrument based on the family verdict alone.
+      However, the MNQ-only scope amendment (2026-04-21) narrows the
+      active shadow population to the single instrument that did pass
+      DSR. Any real-capital flip still requires ops to commission a
+      NEW per-instrument-K=1 pre-reg that applies pre_registered_
+      criteria.md Criterion 5 on MNQ alone — not to re-use this
+      family-wise YAML.
 
 # -----------------------------------------------------------------------------
 # G10 — SHA pin
@@ -153,19 +206,26 @@ contamination_declaration:
     verdict, NOT toward PR #48's already-peeked record.
 
 # -----------------------------------------------------------------------------
-# Deployment target (SHADOW ONLY)
+# Deployment target (SHADOW ONLY — MNQ ONLY after 2026-04-21 amendment)
 # -----------------------------------------------------------------------------
 deployment_target:
   mode: "SHADOW_SIGNAL_ONLY"
+  instruments: ["MNQ"]   # amended 2026-04-21 post-F7; see lock_note + scope_after_amendment_2026_04_21
   destination_table: "paper_trades (gold.db) — read-append path only, NO canonical writes"
   real_capital_flag: "OFF"
-  broker_account_slot: "TODO — bound in Stage 5.1e after prop-rules refresh; blocked on workstream A / credential provisioning"
+  broker_account_slot: "TODO — bound in Stage 5.1e after prop-rules refresh; blocked on workstream A / credential provisioning. MNQ-only routing (LFA via Rithmic or Tradovate, NOT ProjectX per 2026-04-21 Stage 1 TopStep canonical)."
+  deployment_cell:
+    entry_model: "E2"
+    confirm_bars: 1
+    rr_target: 1.5
+    orb_minutes: 5
+    filter: "none (unfiltered baseline — G3 PASS on MNQ at ρ̂=0.7, DSR=1.0000, per-trade SR=+0.03248)"
   monitor_wiring:
     sr_monitor: "trading_app/live/sr_monitor.py"
     alert_engine: "trading_app/live/alert_engine.py"
     session_orchestrator: "trading_app/live/session_orchestrator.py"
   prerequisites:
-    phase_3_gates_all_pass_or_shadow_only: true   # met by this cert set
+    phase_3_gates_all_pass_or_shadow_only: true   # met by this cert set (MNQ scope after amendment)
     phase_4_xfa_live_gate_live_ready: false       # HALTED — workstream A abort (directive-level)
     phase_5_1c_fill_capture_log: false            # pending
     phase_6e_monitoring_delivered: false          # out of scope this run (blocks real-capital flip only)
