@@ -934,7 +934,7 @@ class SessionOrchestrator:
         import math
 
         # Basic sanity: must be positive, finite number
-        if not isinstance(fill_price, (int, float)):
+        if not isinstance(fill_price, int | float):
             log.critical("BAD FILL (%s): not numeric: %r", context, fill_price)
             self._notify(f"BAD FILL ({context}): price is not numeric: {fill_price}")
             return None
@@ -952,7 +952,7 @@ class SessionOrchestrator:
         # Range check: within 10% of last bar close (if available)
         if hasattr(self, "orb_builder") and self.orb_builder is not None:
             last_close = getattr(self.orb_builder, "last_close", None)
-            if isinstance(last_close, (int, float)) and last_close > 0:
+            if isinstance(last_close, int | float) and last_close > 0:
                 deviation = abs(fill_price - last_close) / last_close
                 if deviation > 0.10:
                     log.critical(

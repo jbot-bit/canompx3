@@ -40,7 +40,7 @@ class Bar:
     def is_valid(self) -> bool:
         """Validate bar integrity. Returns False if any field is corrupt."""
         for field in (self.open, self.high, self.low, self.close):
-            if not isinstance(field, (int, float)):
+            if not isinstance(field, int | float):
                 return False
             if math.isnan(field) or math.isinf(field):
                 return False
@@ -104,7 +104,7 @@ class BarAggregator:
 
     def _validate_tick(self, price: float, volume: int) -> bool:
         """Reject bad ticks. Returns True if tick is valid."""
-        if not isinstance(price, (int, float)):
+        if not isinstance(price, int | float):
             self._bad_tick_count += 1
             log.warning("BAD TICK: price is not numeric: %r (total bad: %d)", price, self._bad_tick_count)
             return False
