@@ -295,10 +295,11 @@
 - **Source:** `https://help.myfundedfutures.com/en/articles/8444599-fair-play-and-prohibited-trading-practices`
 - **Last updated on page:** "Over 5 months ago."
 
-**Automated:**
-- HFT NOT allowed.
-- Automated strategies permitted only if they do NOT exploit favourable simulated fills.
-- Live-account automation must comply with CME guidelines.
+**Automated (conditional stack — ALL conditions must hold simultaneously):**
+- **HFT prohibited** (unconditional).
+- **Automation allowed only if NOT exploiting favourable simulated fills.** The "permitted only if" phrasing is a conditional permission, not a blanket allowance — exploitation of sim-fill quirks (tight brackets beating real-spread slippage, fills across gapped/illiquid bars, etc.) voids the permission and becomes a violation.
+- **Live-account automation must comply with CME guidelines** (e.g., CME Rule 534).
+- Prior-draft summary of this block read too permissive — the clause is a stacked conditional, NOT three independent permissions.
 
 **Order management / market conduct prohibited:**
 - Simultaneous multiple limit orders at identical prices to manipulate fills.

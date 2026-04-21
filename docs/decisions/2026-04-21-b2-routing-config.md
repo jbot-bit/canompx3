@@ -39,9 +39,9 @@ This doc is a **pre-wire decision**, NOT executable code. The actual routing tab
 | TopStep | Trading Combine (TC) | MNQ / MES / MGC | TopstepX, Tradovate, Rithmic, Quantower | — | F-1 auto-disables for TC per `306d16a0` |
 | TopStep | Express Funded (XFA) | MNQ / MES / MGC | TopstepX, Tradovate, Rithmic, Quantower | — | F-1 auto-enforces ladder per XFA size |
 | TopStep | Live Funded (LFA) | MNQ / MES / MGC | **Rithmic, Tradovate** | **ProjectX (automation prohibited)**, TopstepX and Quantower presumed allowed but not verified 2026-04-21 | Stage 1 critical finding |
-| Bulenox | Master (qualification) | MNQ / MES / MGC | Rithmic (Memory-referenced; not re-verified 2026-04-21) | UNVERIFIED — all others | Bulenox automation policy NOT IN FETCHED PAGES; treat strict |
-| Bulenox | Funded (Pro) | MNQ / MES / MGC | Rithmic (Memory-referenced) | UNVERIFIED | Requires 3 Master payouts first |
-| MFFU | Sim Funded (Rapid / Flex / Pro) | MNQ / MES / MGC | Tradesyncer, Tradovate, Rithmic, "external copier solutions" | — | Copy trading broadly allowed; news-embargo gate + E-mini/micro-NQ hedging block required |
+| Bulenox | Master (qualification) | MNQ / MES / MGC | **UNVERIFIED — no first-party source re-verified 2026-04-21** | **UNVERIFIED — all others** | Fetched help pages are silent on auto/copier/news/prohibited; Terms-of-Use PDF fetch failed (binary). NO training-memory fallback per directive. User-owned: obtain written Bulenox support confirmation before routing selection takes effect. |
+| Bulenox | Funded (Pro) | MNQ / MES / MGC | **UNVERIFIED** | **UNVERIFIED** | Same as Master, plus requires 3 Master payouts first (first-party confirmed). |
+| MFFU | Sim Funded (Rapid / Flex / Pro) | MNQ / MES / MGC | Tradesyncer, Tradovate, Rithmic, "external copier solutions" | — | **CONDITIONAL on Fair Play stack**: (a) NOT exploiting favourable simulated fills, (b) NO HFT, (c) CME guidelines compliance. Also: news-embargo gate (2 min before/after data release; Tier 1 events prohibited for Rapid Sim Funded + Pro Sim Funded) + E-mini/micro-NQ hedging block on same account. |
 | Apex | (DEAD for ORB) | — | N/A | All | Not re-fetched 2026-04-21; memory flags dead |
 | Tradeify | (DEAD for ORB) | — | N/A | All | Not re-fetched 2026-04-21; memory flags dead |
 
@@ -51,8 +51,8 @@ This doc is a **pre-wire decision**, NOT executable code. The actual routing tab
 |---|---|---|
 | TopStep TC / XFA | **Rithmic** | Already supported per stale copier article + widely used in repo's `trading_app/live/rithmic/` integration |
 | TopStep LFA | **Rithmic** | ProjectX disallowed; Rithmic > Tradovate based on repo integration surface |
-| Bulenox | **Rithmic** | Memory-referenced; needs written Bulenox confirmation before capital |
-| MFFU | **Rithmic** | Copier-allowed + repo integration surface > TopstepX equivalent for MFFU |
+| Bulenox | **UNVERIFIED** | WebFetch extraction FAILED on Terms-of-Use PDF (binary); help pages silent on auto / copier / news / prohibited conduct. Per directive § guardrails, no training-memory fallback is allowed. Bulenox default is **NOT SELECTED** until ops obtains written Bulenox support confirmation of (a) automation permitted and (b) Rithmic-compatibility. This constitutes a user-owned decision, NOT a preset default. |
+| MFFU | **Rithmic** (CONDITIONAL on Fair Play stack) | Copier broadly allowed + repo integration surface. Condition stack: NOT exploiting favourable sim fills + NO HFT + CME-compliant per Fair Play article. Enforcement-critical — violation -> account termination + profit confiscation. |
 
 ### Hedging / same-instrument guards (all firms)
 
