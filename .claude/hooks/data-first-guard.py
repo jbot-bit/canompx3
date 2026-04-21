@@ -171,7 +171,7 @@ RESUME_DIRECTIVE = (
 )
 
 WARN_THRESHOLD = 4    # After N consecutive Reads, warn
-BLOCK_THRESHOLD = 7   # After N consecutive Reads, BLOCK
+BLOCK_THRESHOLD = 12  # After N consecutive Reads, BLOCK (raised from 7 — research sessions legitimately read more)
 
 INVESTIGATION_DIRECTIVE = (
     "DATA FIRST: Query data before reading more code. Get numbers first, then explain."
@@ -321,6 +321,11 @@ def handle_pre_tool_use(event):
         sys.exit(0)
 
     elif tool_name == "Read":
+        # PDFs are research assets (literature, papers). Reading them is expected
+        # during research and should not count against the code-read budget.
+        read_path = event.get("tool_input", {}).get("file_path", "")
+        if read_path.lower().endswith(".pdf"):
+            sys.exit(0)
         state["consecutive_reads"] = state.get("consecutive_reads", 0) + 1
         count = state["consecutive_reads"]
         save_state(state)
@@ -360,7 +365,10 @@ def handle_pre_tool_use(event):
 def main():
     try:
         event = json.load(sys.stdin)
-    except (json.JSONDecodeError, Exception):
+    except json.JSONDecodeError:
+        sys.exit(0)
+    except Exception as exc:
+        print(f"[data-first-guard] unexpected: {exc}", file=sys.stderr)
         sys.exit(0)
 
     hook_event = event.get("hook_event_name", "")
