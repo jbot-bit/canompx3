@@ -58,6 +58,11 @@ def test_no_alert_when_daily_r_is_nan():
     assert check_drawdown(daily_r=float("nan"), thresholds=MonitorThresholds()) == []
 
 
+def test_no_alert_when_daily_r_is_none():
+    # Upstream may pass None when no rolling value computed yet.
+    assert check_drawdown(daily_r=None, thresholds=MonitorThresholds()) == []
+
+
 def test_classifier_routes_drawdown_warn_to_warning():
     from trading_app.live.alert_engine import classify_operator_alert
 

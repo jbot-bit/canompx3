@@ -24,14 +24,13 @@ Parallel concept (different role, do not confuse):
 @research-source: docs/plans/2026-04-21-phase-6e-monitoring-design.md section 4
 """
 
-import math
-
+from trading_app.live.detectors._validation import has_missing_input
 from trading_app.live.monitor_thresholds import MonitorThresholds
 
 
 def check_circuit_break(*, daily_r: float, thresholds: MonitorThresholds) -> list[str]:
-    # NaN input => upstream data corruption (distinct alert class); stay silent here.
-    if math.isnan(daily_r):
+    # None / NaN => upstream data corruption (distinct alert class); stay silent.
+    if has_missing_input(daily_r):
         return []
     if daily_r < thresholds.daily_pnl_halt_r:
         return [f"DAILY CIRCUIT BREAK: daily_r={daily_r:.2f} below threshold={thresholds.daily_pnl_halt_r:.1f}"]

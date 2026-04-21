@@ -211,6 +211,32 @@ def test_no_alert_when_baseline_wr_is_nan():
     )
 
 
+def test_no_alert_when_rolling_wr_is_none():
+    assert (
+        check_wr_drift(
+            strategy_id="mnq_nyse_open_e2",
+            rolling_wr=None,
+            baseline_wr=0.60,
+            n_trades=80,
+            thresholds=MonitorThresholds(),
+        )
+        == []
+    )
+
+
+def test_no_alert_when_baseline_wr_is_none():
+    assert (
+        check_wr_drift(
+            strategy_id="mnq_nyse_open_e2",
+            rolling_wr=0.40,
+            baseline_wr=None,
+            n_trades=80,
+            thresholds=MonitorThresholds(),
+        )
+        == []
+    )
+
+
 def test_classifier_routes_wr_drift_to_warning():
     level, category = classify_operator_alert(
         "WR DRIFT: mnq_nyse_open_e2 rolling_wr=40% baseline=60% drop=20pp after 80 trades"

@@ -126,6 +126,14 @@ def test_no_alert_when_baseline_expr_is_nan():
     assert _call(rolling_expr=0.05, baseline_expr=float("nan")) == []
 
 
+def test_no_alert_when_rolling_expr_is_none():
+    assert _call(rolling_expr=None, baseline_expr=0.30) == []
+
+
+def test_no_alert_when_baseline_expr_is_none():
+    assert _call(rolling_expr=0.05, baseline_expr=None) == []
+
+
 def test_classifier_routes_expr_drift_to_critical():
     level, category = classify_operator_alert(
         "EXPR DRIFT: mnq_nyse_open_e2 rolling_expr=0.05R baseline=0.30R ratio=0.17 after 80 trades"

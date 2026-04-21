@@ -68,6 +68,10 @@ def test_no_alert_when_daily_r_is_nan():
     assert check_circuit_break(daily_r=float("nan"), thresholds=MonitorThresholds()) == []
 
 
+def test_no_alert_when_daily_r_is_none():
+    assert check_circuit_break(daily_r=None, thresholds=MonitorThresholds()) == []
+
+
 def test_classifier_routes_daily_circuit_break_to_critical():
     level, category = classify_operator_alert("DAILY CIRCUIT BREAK: daily_r=-6.25 threshold=-5.0")
     assert level == "critical"
