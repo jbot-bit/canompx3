@@ -1309,33 +1309,62 @@ def collect_fitness_deep(db_path: Path) -> tuple[dict, list[PulseItem]]:
     return summary, items
 
 
-def collect_worktrees(canonical: Path) -> list[PulseItem]:
+def _worktree_metadata(canonical: Path, *, authoritative: bool) -> list[dict]:
+    """Read managed worktree metadata without recursive repo crawls."""
+    worktree_root = canonical / ".worktrees"
+    if not worktree_root.exists():
+        return []
+
+    try:
+        from scripts.tools.worktree_manager import WORKTREE_META, list_worktrees, read_metadata
+    except Exception:
+        return []
+
+    canonical_resolved = canonical.resolve()
+    worktrees_by_path: dict[Path, dict] = {}
+
+    if authoritative:
+        try:
+            for info in list_worktrees(canonical):
+                path = Path(info.path).resolve()
+                if path == canonical_resolved:
+                    continue
+                meta_path = path / WORKTREE_META
+                if not meta_path.exists():
+                    continue
+                data = read_metadata(path)
+                if data:
+                    worktrees_by_path[path] = data
+        except Exception:
+            pass
+
+    shallow_patterns = (
+        f"*/{WORKTREE_META}",
+        f"*/*/{WORKTREE_META}",
+        f"*/*/*/{WORKTREE_META}",
+    )
+    for pattern in shallow_patterns:
+        for meta_path in worktree_root.glob(pattern):
+            path = meta_path.parent.resolve()
+            if path == canonical_resolved or path in worktrees_by_path:
+                continue
+            data = read_metadata(path)
+            if data:
+                worktrees_by_path[path] = data
+
+    return list(worktrees_by_path.values())
+
+
+def collect_worktrees(canonical: Path, *, fast: bool = False) -> list[PulseItem]:
     """Detect open managed worktrees. Summarizes when >3 to reduce noise."""
     items: list[PulseItem] = []
-    wt_base = canonical / ".worktrees"
-
-    if not wt_base.exists():
-        return items
-
-    worktrees: list[dict] = []
-    try:
-        meta_files = list(wt_base.rglob(".canompx3-worktree.json"))
-    except OSError:
-        # rglob can fail on Windows with broken symlinks/junctions in worktrees
-        return items
-    for meta_file in meta_files:
-        try:
-            data = json.loads(meta_file.read_text(encoding="utf-8"))
-            worktrees.append(data)
-        except (json.JSONDecodeError, OSError):
-            continue
+    worktrees = _worktree_metadata(canonical, authoritative=not fast)
 
     if not worktrees:
         return items
 
-    # Summarize when many worktrees to avoid noise
     if len(worktrees) > 3:
-        tools = {}
+        tools: dict[str, int] = {}
         for wt in worktrees:
             t = wt.get("tool", "unknown")
             tools[t] = tools.get(t, 0) + 1
@@ -1353,6 +1382,16 @@ def collect_worktrees(canonical: Path) -> list[PulseItem]:
     for data in worktrees:
         name = data.get("name", "?")
         tool = data.get("tool", "unknown")
+        if fast:
+            items.append(
+                PulseItem(
+                    category="paused",
+                    severity="low",
+                    source="worktrees",
+                    summary=f"{name} ({tool}) — metadata present",
+                )
+            )
+            continue
         momentum = _workstream_momentum(data, canonical)
         stalled = "STALLED" in momentum
         items.append(
@@ -1563,30 +1602,17 @@ def collect_upcoming_sessions(db_path: Path) -> list[dict]:
 def collect_worktree_conflicts(canonical: Path) -> list[PulseItem]:
     """Detect file overlap between active worktrees (merge conflict radar)."""
     items: list[PulseItem] = []
-    wt_base = canonical / ".worktrees"
-    if not wt_base.exists():
-        return items
-
-    # Collect modified files per worktree branch
     worktree_files: dict[str, set[str]] = {}
-    try:
-        _meta_files = list(wt_base.rglob(".canompx3-worktree.json"))
-    except OSError:
-        return items
-    for meta_file in _meta_files:
-        try:
-            data = json.loads(meta_file.read_text(encoding="utf-8"))
-            branch = data.get("branch", "")
-            name = data.get("name", "?")
-            if not branch:
-                continue
-            r = _run_git(canonical, "diff", "--name-only", f"main...{branch}")
-            if r and r.returncode == 0:
-                files = {f.strip() for f in r.stdout.splitlines() if f.strip()}
-                if files:
-                    worktree_files[name] = files
-        except (json.JSONDecodeError, OSError):
+    for data in _worktree_metadata(canonical, authoritative=True):
+        branch = data.get("branch", "")
+        name = data.get("name", "?")
+        if not branch:
             continue
+        r = _run_git(canonical, "diff", "--name-only", f"main...{branch}")
+        if r and r.returncode == 0:
+            files = {f.strip() for f in r.stdout.splitlines() if f.strip()}
+            if files:
+                worktree_files[name] = files
 
     # Find overlaps
     names = list(worktree_files.keys())
@@ -1923,7 +1949,11 @@ def build_pulse(
     # --- Cheap collectors: always fresh ---
     system_identity, identity_items = collect_system_identity(root, canonical, db_path)
     work_capsule_summary, work_capsule_items = collect_work_capsule(root)
-    system_brief_bundle, system_brief_items = collect_system_brief(root, db_path, tool_name or "unknown")
+    if fast:
+        system_brief_bundle = None
+        system_brief_items = []
+    else:
+        system_brief_bundle, system_brief_items = collect_system_brief(root, db_path, tool_name or "unknown")
     system_brief_summary = system_brief_bundle["summary"] if system_brief_bundle else None
     system_brief_payload = system_brief_bundle["payload"] if system_brief_bundle else None
     staleness_items = collect_staleness(root, db_path)
@@ -1950,9 +1980,9 @@ def build_pulse(
     deployment_summary, deployment_items = collect_deployment_state(db_path)
     survival_summary, sr_summary, pause_summary, lifecycle_items = collect_lifecycle_control(db_path)
     handoff_context, handoff_items = collect_handoff(root)
-    worktree_items = collect_worktrees(canonical)
+    worktree_items = collect_worktrees(canonical, fast=fast)
     claim_items = collect_session_claims(root)
-    conflict_items = collect_worktree_conflicts(canonical)
+    conflict_items = [] if fast else collect_worktree_conflicts(canonical)
     git_items = collect_git_state(root)
     action_items = collect_action_queue(canonical)
     ralph_items = collect_ralph_deferred(root)
@@ -2137,7 +2167,7 @@ def format_text(report: PulseReport) -> str:
         if report.survival_summary:
             ss = report.survival_summary
             op = ss.get("operational_pass_probability")
-            op_str = f"{float(op):.1%}" if isinstance(op, (float, int)) else "?"
+            op_str = f"{float(op):.1%}" if isinstance(op, float | int) else "?"
             lines.append(
                 "  "
                 f"C11 {('PASS' if ss.get('gate_ok') else 'BLOCK')} {op_str} | "
@@ -2303,7 +2333,7 @@ def format_markdown(report: PulseReport) -> str:
         if report.survival_summary:
             ss = report.survival_summary
             op = ss.get("operational_pass_probability")
-            op_str = f"{float(op):.1%}" if isinstance(op, (float, int)) else "?"
+            op_str = f"{float(op):.1%}" if isinstance(op, float | int) else "?"
             lines.append(
                 f"- **Criterion 11**: {'PASS' if ss.get('gate_ok') else 'BLOCK'} {op_str} | "
                 f"as_of={ss.get('as_of_date')} | age={ss.get('report_age_days')}d"
