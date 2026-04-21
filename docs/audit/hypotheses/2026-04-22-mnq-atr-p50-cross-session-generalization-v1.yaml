@@ -42,7 +42,7 @@ authority:
 
 reproducibility:
   repo_root: "C:/Users/joshd/canompx3"
-  commit_sha: "TO_FILL_AFTER_COMMIT"
+  commit_sha: "1be7e6db"
   committed_required_before_run: true
 
 testing_mode: family
