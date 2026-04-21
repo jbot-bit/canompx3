@@ -4,6 +4,72 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-21 autonomous — exact deployed ORB improvement protocol executed, 0/24 survivors)
+
+Institutional replay executed from a locked hypothesis family on isolated
+branch `research/perf-improvement-protocol-v1`. This was **not** a broad
+discovery rerun. It targeted the exact six active MNQ live lanes only and
+asked whether one additional pre-trade-safe confluence overlay could improve
+the already-filtered live universe.
+
+### What landed
+
+- `docs/audit/hypotheses/2026-04-21-deployed-orb-performance-improvements-v1.yaml`
+  - locked family of 12 lane-feature hypotheses × 2 thresholds = `K=24`
+  - thresholds fixed to `IS_P75` / `IS_P90`
+  - threshold-fit window corrected to **pre-2025 only**
+  - `2025` reserved as OOS-CV
+  - `2026+` descriptive only
+- `research/deployed_orb_performance_improvements_v1.py`
+  - canonical replay harness
+  - exact filtered lane universes via `strategy_fitness._load_strategy_outcomes`
+  - joins only `daily_features`
+  - enforces `pipeline.session_guard.is_feature_safe`
+  - computes one-tailed Welch p-values and BH-FDR at `q=0.10`, `K=24`
+- `docs/audit/results/2026-04-21-deployed-orb-performance-improvements-v1.md`
+  - final ranked table for all 24 cells
+
+### Lock / verification
+
+- lock commit before execution: `ffc5d625`
+- `py_compile` on the replay harness: PASS
+- replay completed against canonical `gold.db`
+
+### Result
+
+- **Survivors: `0/24`**
+- No candidate passed the full gate stack:
+  - `BH-adjusted p < 0.10`
+  - `delta_IS > 0`
+  - `N_OOS_on >= 30`
+  - `avg_r_OOS_on > 0`
+  - `WFE >= 0.50`
+
+### Closest misses / interpretation
+
+- `EUROPE_FLOW × atr_vel_ratio`
+  - both `IS_P75` and `IS_P90` passed BH (`p_bh = 0.066728`)
+  - both failed 2025 OOS-CV:
+    - `IS_P75`: `avg_r_OOS_on = +0.09415`, `delta_OOS = -0.06632`, `WFE = 0.498`
+    - `IS_P90`: `N_OOS_on = 23`, `delta_OOS ≈ 0`, `WFE = 0.491`
+- `SINGAPORE_OPEN × atr_vel_ratio @ IS_P90`
+  - `p_bh = 0.066728`
+  - OOS looked positive per-trade (`avg_r_OOS_on = +0.417975`, `WFE = 0.876`)
+  - but `N_OOS_on = 12` → underpowered, fails sample gate
+- `NYSE_OPEN × orb_US_DATA_830_volume @ IS_P90`
+  - healthy 2025 OOS-CV (`N_OOS_on = 32`, `avg_r_OOS_on = +0.34526`, `WFE = 1.637`)
+  - but `p_bh = 0.117597` → fails family-level multiple-testing control
+
+### Decision
+
+- Treat this family as **DEAD for promotion**.
+- Durable lesson: on the exact filtered live lanes, adjacent-session volume and
+  ATR-velocity overlays produce several attractive IS or partial-OOS anecdotes,
+  but none survive honest family-level control plus the 2025 sample gates.
+- Do **not** re-test this exact 12×2 family unless the question changes
+  materially (different lane role, different layer, or post-2015 rebuild
+  regime framing).
+
 ## Update (2026-04-21 autonomous — monotonic shadow recorder built and first ledger snapshot written)
 
 Follow-on to the monotonic allocator baseline. The correct framing was

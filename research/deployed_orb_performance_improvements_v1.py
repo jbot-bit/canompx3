@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import duckdb
+import numpy as np
 import pandas as pd
 import yaml
 from scipy import stats
@@ -66,9 +67,13 @@ def _sharpe(series: pd.Series) -> float | None:
 
 
 def _one_tailed_p(on: pd.Series, off: pd.Series) -> float | None:
-    if len(on) < 2 or len(off) < 2:
+    on_vals = np.asarray(on, dtype=float)
+    off_vals = np.asarray(off, dtype=float)
+    on_vals = on_vals[np.isfinite(on_vals)]
+    off_vals = off_vals[np.isfinite(off_vals)]
+    if len(on_vals) < 2 or len(off_vals) < 2:
         return None
-    t_stat, p_two = stats.ttest_ind(on, off, equal_var=False)
+    t_stat, p_two = stats.ttest_ind(on_vals, off_vals, equal_var=False)
     if math.isnan(t_stat) or math.isnan(p_two):
         return None
     if t_stat > 0:
@@ -105,10 +110,15 @@ def _threshold_rule_to_quantile(rule: str) -> float:
         raise ValueError(f"Unknown threshold rule {rule!r}") from exc
 
 
-def _load_lane_frame(con: duckdb.DuckDBPyConnection, lane: dict[str, Any]) -> pd.DataFrame:
+def _load_lane_frame(
+    con: duckdb.DuckDBPyConnection,
+    lane: dict[str, Any],
+    *,
+    instrument: str,
+) -> pd.DataFrame:
     outcomes = _load_strategy_outcomes(
         con,
-        instrument=lane["instrument"],
+        instrument=instrument,
         orb_label=lane["session"],
         orb_minutes=lane["orb_minutes"],
         entry_model="E2",
@@ -124,7 +134,7 @@ def _load_lane_frame(con: duckdb.DuckDBPyConnection, lane: dict[str, Any]) -> pd
     out_df["trading_day"] = pd.to_datetime(out_df["trading_day"]).dt.date
     feat_df = con.execute(
         "SELECT * FROM daily_features WHERE symbol = ? AND orb_minutes = ? AND trading_day <= DATE '2026-12-31'",
-        [lane["instrument"], lane["orb_minutes"]],
+        [instrument, lane["orb_minutes"]],
     ).df()
     feat_df["trading_day"] = pd.to_datetime(feat_df["trading_day"]).dt.date
     df = out_df.merge(feat_df, on="trading_day", how="inner", suffixes=("", "_feat"))
@@ -149,12 +159,13 @@ def main() -> int:
 
     hyp = yaml.safe_load(HYP_PATH.read_text(encoding="utf-8"))
     lanes = {lane["lane_id"]: lane for lane in hyp["scope"]["exact_live_lanes"]}
+    instrument = hyp["scope"]["instrument"]
     con = duckdb.connect(str(GOLD_DB_PATH), read_only=True)
 
     lane_frames: dict[str, pd.DataFrame] = {}
     lane_baselines: dict[str, dict[str, float | int | None]] = {}
     for lane_id, lane in lanes.items():
-        frame = _load_lane_frame(con, lane)
+        frame = _load_lane_frame(con, lane, instrument=instrument)
         if frame.empty:
             raise ValueError(f"Lane frame empty for {lane_id}")
         lane_frames[lane_id] = frame
