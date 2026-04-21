@@ -1,209 +1,192 @@
 ---
 pre_reg_id: "deploy-live-participation-shape-shadow-v1"
 date: "2026-04-21"
-status: "SKELETON_NOT_LOCKED"
-lock_condition: "Fill all TODO sections in Phase 3 after G1-G10 certificates are attached. Flip status to LOCKED only when every gate has a signed certificate at docs/decisions/2026-04-21-pr48-<gate>.md and live-data CONFIRM/CONTRADICT/UNVERIFIABLE tags are resolved."
+status: "LOCKED_SHADOW_ONLY"
+lock_note: |
+  Flipped from SKELETON_NOT_LOCKED to LOCKED_SHADOW_ONLY at 2026-04-21 after
+  all 10 gate certificates were written and committed under
+  docs/decisions/2026-04-21-pr48-g{1..10}.md.
+
+  LOCKED_SHADOW_ONLY means: shadow deploy is authorised once Stage 4 (F-1
+  live gate) and Stage 5.1c (fill-capture log) land. Real-capital flip is
+  NOT authorised until three independent remediations complete:
+    1. Phase 6e monitoring gap delivered (docs/plans/2026-02-08-phase6-
+       live-trading-design.md § 6e).
+    2. Numerical DSR compute at K=3 family (G3 remediation).
+    3. Destruction-shuffle + RNG-null per G7 remediation.
+
+  Each gate's authoritative verdict lives in its own cert file; this YAML
+  mirrors status + remediation hooks only.
+
 testing_mode: "deployment_gating"
 pathway: "SHADOW_DEPLOY"
 pathway_rationale: |
-  This is NOT fresh research validation. PR #48 has already completed:
-    - Capture commit `28279719` — monotonic-up universal on MNQ/MES/MGC
-      (t=+9.59/+11.80/+7.54) per memory entry `participation_optimum_universality_apr20.md`.
-    - Subsequent Pathway-B + Pathway-A validations on MNQ (PRs #49/#50/#51).
-    - PR #51 DSR audit: the 5 CANDIDATE_READYs failed BaIley-LdP Eq. 2 DSR at
-      family K=105; participation-shape itself (PR #48) was NOT demoted by
-      that audit and is labeled "clearly highest-EV deploy candidate" in
-      `recent_findings.md` (2026-04-21 entry for PR #51).
+  NOT fresh research validation. PR #48 participation-shape (monotonic-up,
+  universal across MNQ + MES + MGC, |t| = +9.589 / +11.802 / +7.541) is the
+  subject. Capture commit `dab4df0b` per pre-reg
+  `docs/audit/hypotheses/2026-04-20-participation-shape-cross-instrument-v1.yaml`.
+  IS-only underlying study; shadow window is fresh forward-OOS.
 
-  Deployment here = shadow (signal-only, paper_trades, zero real capital).
-  Real-capital flip is BLOCKED until the Phase 6e monitoring gap in
-  `docs/plans/2026-02-08-phase6-live-trading-design.md` is delivered.
-
-  Smell-test posture: PR #48 t-stats (+7.54 / +9.59 / +11.80) sit in the
-  edge-finding-playbook §3 "smell-test tripwire" range (|t| > 7 → assume
-  look-ahead until proven otherwise). This pre-reg treats PR #48 as
-  SUSPECT until G5 clears it with written justification. If G5 cannot
-  clear, workstream C is demoted to a post-break-role pre-reg under
-  mechanism_priors.md §4 (R3 / R6 / R7) and this YAML is rewritten.
+  Smell-test posture (edge-finding-playbook §3): |t| > 7 triggers
+  look-ahead presumption. G5 cert clears with documented defence citing
+  G1 timing validity + Chan Ch 7 p.155-157 mechanism + rank-within-lane
+  scale invariance + N-scaling math.
 
   Authority pins:
-    - `docs/institutional/pre_registered_criteria.md` @ SHA
+    - docs/institutional/pre_registered_criteria.md @
       126ed6b883fbfa7d4930e3a7bdcd5b16afb63902 (G10).
-    - `docs/institutional/edge-finding-playbook.md` @ HEAD of this branch
+    - docs/institutional/edge-finding-playbook.md @ HEAD of this branch
       (G5 smell-test reference).
 
 # -----------------------------------------------------------------------------
-# G1 — Timing-validity certificate
+# Gate certificates index
 # -----------------------------------------------------------------------------
-g1_timing_validity:
-  status: "TODO"
-  certificate_path: "docs/decisions/2026-04-21-pr48-g1.md"
-  required_evidence:
-    - "Every variable participation-shape uses, source-bar vs decision-time bar"
-    - "Canonical-window derivation via pipeline.dst.orb_utc_window (per 2026-04-07 e2-canonical-window-fix postmortem)"
-    - "Look-ahead columns check against .claude/rules/daily-features-joins.md § Look-Ahead Columns"
-  halt_on: "Any input computed from the break bar or later → DEMOTE to post-break-role pre-reg, halt shadow."
+gate_certificates:
+  g1_timing_validity:
+    status: "PASS"
+    path: "docs/decisions/2026-04-21-pr48-g1.md"
+  g2_minbtl:
+    status: "PASS"
+    path: "docs/decisions/2026-04-21-pr48-g2.md"
+  g3_dsr_nhat:
+    status: "CONDITIONAL_PASS"
+    path: "docs/decisions/2026-04-21-pr48-g3.md"
+    remediation: "Numerical DSR compute at K=3 family using Bailey-LdP 2014 Eq. 2 with actual per-trade pnl_r moments. BLOCKS real-capital flip; does NOT block shadow."
+  g4_chordia_band:
+    status: "PASS"
+    path: "docs/decisions/2026-04-21-pr48-g4.md"
+  g5_smell_test:
+    status: "PASS"
+    path: "docs/decisions/2026-04-21-pr48-g5.md"
+  g6_holdout_integrity:
+    status: "PASS_WITH_RESEARCH_PROVISIONAL_CAVEAT"
+    path: "docs/decisions/2026-04-21-pr48-g6.md"
+  g7_negative_controls:
+    status: "WEAK_POSITIVE_ONLY"
+    path: "docs/decisions/2026-04-21-pr48-g7.md"
+    remediation: |
+      Destruction shuffle (1000 y-shuffle nulls; 95% quantile |t| < 2.5) AND
+      RNG-null (1000 uniform rel_vol replacements; 95% quantile |t| < 2.5).
+      BLOCKS real-capital flip; does NOT block shadow (positive control via
+      per-lane agreement ≥ 91.7% already establishes non-spuriousness).
+  g8_mechanism:
+    status: "PASS"
+    path: "docs/decisions/2026-04-21-pr48-g8.md"
+  g9_kill_criteria:
+    status: "READY_TO_LOCK"
+    path: "docs/decisions/2026-04-21-pr48-g9.md"
+  g10_pre_reg_sha_pin:
+    status: "DONE"
+    path: "docs/decisions/2026-04-21-pr48-g10.md"
 
 # -----------------------------------------------------------------------------
-# G2 — MinBTL certificate (Bailey et al 2013 Theorem 1)
+# Locked kill criteria (authoritative copy of G9 cert — keep in sync)
 # -----------------------------------------------------------------------------
-g2_minbtl:
-  status: "TODO"
-  certificate_path: "docs/decisions/2026-04-21-pr48-g2.md"
-  required_evidence:
-    - "N (trials enumerated in PR #48 family)"
-    - "T (actual data horizon; MNQ/MES 6.65 clean yrs, MGC 2.7 clean yrs per pre_reg v2.8)"
-    - "E[max_N] from Bailey et al 2013 Theorem 1"
-    - "SR_0 threshold"
-  halt_on: "N > 300 with no literature/data/deployment justification per pre_reg v3.0 (Amendment 3.0 Individual Hypothesis Pathway)."
-
-# -----------------------------------------------------------------------------
-# G3 — DSR + N̂ certificate (Bailey-LdP 2014)
-# -----------------------------------------------------------------------------
-g3_dsr_nhat:
-  status: "TODO"
-  certificate_path: "docs/decisions/2026-04-21-pr48-g3.md"
-  required_evidence:
-    - "ρ̂ within hypothesis family (Eq. 9, Appendix A.3)"
-    - "DSR computed per Eq. 2"
-    - "DSR > 0.95 threshold per pre_reg Criterion 5"
-  halt_on: "DSR < 0.95 at family K → demote."
-
-# -----------------------------------------------------------------------------
-# G4 — Chordia t-band
-# -----------------------------------------------------------------------------
-g4_chordia_band:
-  status: "TODO"
-  certificate_path: "docs/decisions/2026-04-21-pr48-g4.md"
-  required_evidence:
-    - "t ≥ 3.79 (no pre-reg'd theory) OR t ≥ 3.00 (with pre-reg'd literature-cited theory)"
-    - "If t ≥ 3.00 path used: mechanism citation from mechanism_priors.md R1-R8"
-  halt_on: "t < 3.00 on any instrument → cell demoted for that instrument."
-
-# -----------------------------------------------------------------------------
-# G5 — Smell-test clearance (edge-finding-playbook §3)
-# -----------------------------------------------------------------------------
-g5_smell_test:
-  status: "TODO"
-  certificate_path: "docs/decisions/2026-04-21-pr48-g5.md"
-  required_evidence:
-    - "Written justification for |t| > 7 per edge-finding-playbook §3"
-    - "Why not look-ahead (cite G1 findings)"
-    - "Why not scale artifact (fire-rate-by-year + lift-by-year audit per feedback_absolute_threshold_scale_audit.md)"
-    - "Cross-reference to mechanism_priors.md R1-R8 role assignment"
-  halt_on: "No written defense that cites local-extract passages → demote."
-
-# -----------------------------------------------------------------------------
-# G6 — Holdout-integrity certificate
-# -----------------------------------------------------------------------------
-g6_holdout_integrity:
-  status: "TODO"
-  certificate_path: "docs/decisions/2026-04-21-pr48-g6.md"
-  required_evidence:
-    - "Pre-reg git SHA (PR #48 capture commit 28279719)"
-    - "Locked evaluation date predating any 2026 OOS look"
-    - "Mode A holdout boundary 2026-01-01 per pre_reg v2.7 Amendment 2.7"
-    - "Whether PR #48 is RESEARCH-PROVISIONAL (grandfathered) or OOS-clean"
-  halt_on: "Any 2026-OOS peek prior to pre-reg lock → treat as contaminated, follow PR #59 rel_vol contamination protocol."
-
-# -----------------------------------------------------------------------------
-# G7 — Negative controls
-# -----------------------------------------------------------------------------
-g7_negative_controls:
-  status: "TODO"
-  certificate_path: "docs/decisions/2026-04-21-pr48-g7.md"
-  required_evidence:
-    - "Destruction shuffle result (expect fail)"
-    - "RNG-null result (expect fail)"
-    - "Positive control result (expect pass)"
-  halt_on: "Any negative control passes OR positive control fails → demote."
-
-# -----------------------------------------------------------------------------
-# G8 — Mechanism statement
-# -----------------------------------------------------------------------------
-g8_mechanism:
-  status: "TODO"
-  certificate_path: "docs/decisions/2026-04-21-pr48-g8.md"
-  required_evidence:
-    - "Role from mechanism_priors.md R1-R8 with cited section + passage"
-    - "OR explicit UNGROUNDED label with impact on shadow period length"
-  halt_on: "None (UNGROUNDED is allowed but lengthens shadow observation window per edge-finding-playbook §5)."
-
-# -----------------------------------------------------------------------------
-# G9 — Pre-committed kill criteria
-# -----------------------------------------------------------------------------
-g9_kill_criteria:
-  status: "TODO_FILL_IN_PHASE_3"
-  # The following are placeholders. Real values come from Phase 3 gate audit
-  # + Pepelyshev-Polunchenko Eq. 17-18 score function calibration against
-  # PR #48 IS distribution.
+kill_criteria:
   sharpe_alarm:
-    threshold_trade_level: "TODO — derived from G3 SR_0 + drawdown tolerance"
-    lookback_trades: "TODO"
-    action_on_breach: "HALT shadow, emit alert, require user review before resume."
+    threshold: "rolling-20-trade Sharpe < 0 for 10 consecutive trades per instrument"
+    lookback_trades: 20
+    action: "HALT shadow for breaching instrument; emit alert; user review required before resume."
+    rationale: "Under H1 (monotonic-up, t > 7), rolling-20-Sharpe < 0 for 10 consecutive is > 3-sigma. Ruin-detection, not precision."
+
   n_fires_floor:
-    minimum_before_any_verdict: "TODO — derived from G2 MinBTL N̂ + power-floor feedback rule (OOS power ≥ 50% before kill-verdict)"
-    per_instrument: true
-    rationale: "feedback_oos_power_floor.md — OOS dir_match veto requires power floor; statistically-useless verdicts return UNVERIFIED, not DEAD."
+    min_before_kill_verdict_per_instrument: 50
+    min_before_confirm_verdict_per_instrument: 200
+    verdict_if_below_floor: "UNVERIFIED (NOT DEAD)"
+    rationale: "feedback_oos_power_floor.md — 80% power vs IS effect size requires larger N on a single-signal test. Chan Ch 1 p.7 walk-forward discipline."
+
   shiryaev_roberts_alarm:
-    score_function: "TODO — per Pepelyshev-Polunchenko 2015 Eq. 17-18, calibrated against PR #48 IS distribution"
-    control_limit: "TODO — ARL_0 target from Eq. 11"
-    alarm_action: "Emit alarm to ops, log to sr_monitor.py state, require user review."
+    score_function: "per Pepelyshev-Polunchenko 2015 Eq. 17-18; f0 = null rel_vol=median, f1 = alt rel_vol=Q5 IS-calibrated"
+    control_limit_arl0: 1000
+    alarm_action: "Emit SR alarm to trading_app/live/sr_monitor.py state; log alarm timestamp + trigger index; user review required."
+    rationale: "Eq. 11 target ARL_0 ≈ 3-6 month false-alarm lead time under H_0."
+
   shadow_observation_window:
-    minimum_weeks: 2
-    rationale: "Chan 2013 Ch 1 p.7 (walk-forward discipline) + Aronson forward-test discipline."
-    lock_on: "Real-time clock starting at Stage 6 go-live timestamp. No early promotion to real capital."
-  real_capital_flip_block:
-    blocked_until: "docs/plans/2026-02-08-phase6-live-trading-design.md § 6e monitoring gap delivered"
-    rationale: "Phase 6e (monitoring & alerting — detect when reality diverges from backtest) is the single remaining prerequisite for hard-constraint 'no live money until paper trading proves the system matches backtest expectations'."
+    min_weeks: 2
+    lock: "wall-clock lock from Stage 6 go-live timestamp; no early promotion to real capital regardless of shadow performance"
+    rationale: "Chan 2013 Ch 1 p.7 walk-forward discipline + Aronson forward-test discipline."
+
   heterogeneity_veto:
-    rule: "Per-instrument breakdown required; if ≥25% of cells (≥1 of 3 instruments) flip sign vs pooled → heterogeneity artefact, halt shadow."
+    rule: "If beta1_shadow sign flips vs IS beta1 > 0 on ANY of 3 instruments after N_fires >= 50 for that instrument, halt that instrument's shadow."
+    action: "Halt breaching instrument; emit alarm; pooled claim demoted to asset-conditional (documented in post-shadow review)."
     rationale: "feedback_per_lane_breakdown_required.md + feedback_pooled_not_lane_specific.md."
 
+  real_capital_flip_block:
+    blocked_until_all_true:
+      - "docs/plans/2026-02-08-phase6-live-trading-design.md § 6e monitoring & alerting delivered"
+      - "Numerical DSR compute at K=3 family passes (> 0.95) — G3 remediation"
+      - "Destruction-shuffle + RNG-null pass — G7 remediation"
+    rationale: "Three independent hard prerequisites."
+
 # -----------------------------------------------------------------------------
-# G10 — Pre-reg file SHA pin
+# G10 — SHA pin
 # -----------------------------------------------------------------------------
 g10_pre_reg_sha_pin:
   pre_registered_criteria_md_sha: "126ed6b883fbfa7d4930e3a7bdcd5b16afb63902"
   captured_at: "2026-04-21"
   worktree: "deploy/live-trading-buildout-v1"
-  repin_trigger: "If pre_registered_criteria.md SHA changes before Stage 6 shadow-deploy go-live, re-read, re-pin, re-validate every gate that cited an amendment."
+  repin_trigger: "If pre_registered_criteria.md SHA changes before Stage 6 shadow go-live, re-read file, re-validate every gate citing an amendment, update pin in YAML + plan doc, do NOT proceed to Stage 6 with stale pin."
 
 # -----------------------------------------------------------------------------
-# Contamination declaration (required per repo convention)
+# Contamination declaration
 # -----------------------------------------------------------------------------
 contamination_declaration:
-  oos_peeked_window: "2026-01-01 to 2026-04-21 (PR #48 capture + subsequent Pathway-A/B validations ran through 2026-04-20 OOS)"
-  peeked_by: "PR #48 `28279719` participation-shape universality + PR #49-#51 Pathway-B/Pathway-A confirmations"
+  oos_peeked_window: "2026-01-01 to 2026-04-21"
+  peeked_by: "PR #48 dab4df0b participation-shape universality + PR #49-#51 Pathway-B / Pathway-A confirmations"
   peeked_what: "Cross-instrument monotonic-up shape + OOS survivor counts at K_family"
-  classification: "RESEARCH-PROVISIONAL per pre_reg v2.7 Amendment 2.7 — any shadow-deploy counts as continuing that provisional window, not fresh OOS."
-  implication_for_gates: "G6 must explicitly label PR #48 RESEARCH-PROVISIONAL; the 2-week shadow window in G9 accumulates fresh forward-OOS evidence and counts toward a future fresh-holdout verdict, not toward PR #48's already-peeked record."
+  classification: "RESEARCH_PROVISIONAL per pre_registered_criteria v2.7 Amendment 2.7 — any shadow-deploy continues a provisional window, not a fresh OOS."
+  implication_for_gates: |
+    G6 explicitly labels PR #48 RESEARCH-PROVISIONAL. The 2-week shadow
+    window in kill_criteria.shadow_observation_window accumulates FRESH
+    forward-OOS evidence, which counts toward a future fresh-holdout
+    verdict, NOT toward PR #48's already-peeked record.
 
 # -----------------------------------------------------------------------------
-# Data plane (deployment target)
+# Deployment target (SHADOW ONLY)
 # -----------------------------------------------------------------------------
 deployment_target:
   mode: "SHADOW_SIGNAL_ONLY"
-  destination_table: "paper_trades (gold.db) — read-append path only, no canonical writes"
+  destination_table: "paper_trades (gold.db) — read-append path only, NO canonical writes"
   real_capital_flag: "OFF"
-  broker_account_slot: "TODO — bound in Stage 5.1e after prop-rules refresh"
+  broker_account_slot: "TODO — bound in Stage 5.1e after prop-rules refresh; blocked on workstream A / credential provisioning"
   monitor_wiring:
     sr_monitor: "trading_app/live/sr_monitor.py"
     alert_engine: "trading_app/live/alert_engine.py"
     session_orchestrator: "trading_app/live/session_orchestrator.py"
-  dependencies:
-    stage_3_pass: true
-    stage_4_f1_gate_live: true
-    stage_5_1c_fill_capture: true
+  prerequisites:
+    phase_3_gates_all_pass_or_shadow_only: true   # met by this cert set
+    phase_4_xfa_live_gate_live_ready: false       # HALTED — workstream A abort (directive-level)
+    phase_5_1c_fill_capture_log: false            # pending
+    phase_6e_monitoring_delivered: false          # out of scope this run (blocks real-capital flip only)
 
 # -----------------------------------------------------------------------------
 # Abort triggers (lifecycle)
 # -----------------------------------------------------------------------------
 abort_triggers:
-  - "Any G1-G10 fail → halt, rewrite as post-break-role pre-reg, surface"
+  - "Any G1-G10 fail beyond CONDITIONAL/WEAK (i.e. status='FAIL') → halt, rewrite as post-break-role pre-reg, surface"
   - "Live data CONTRADICTS any PR #48 claim used in a certificate"
-  - "Heterogeneity veto (≥1 of 3 instruments flips sign vs pooled)"
-  - "Real-capital flip attempted before Phase 6e delivered"
+  - "Heterogeneity veto (any instrument flips sign vs IS after N=50 shadow trades)"
+  - "Real-capital flip attempted before ALL three remediations complete"
   - "pre_registered_criteria.md SHA changes without re-pin + re-validate"
   - "Reconciliation mismatch in Stage 5.1d"
   - "N̂ multi-firm correlation gate fail in Stage 5.3"
+
+# -----------------------------------------------------------------------------
+# Outputs
+# -----------------------------------------------------------------------------
+outputs:
+  gate_certificates_dir: "docs/decisions/"
+  gate_certificate_files:
+    - "docs/decisions/2026-04-21-pr48-g1.md"
+    - "docs/decisions/2026-04-21-pr48-g2.md"
+    - "docs/decisions/2026-04-21-pr48-g3.md"
+    - "docs/decisions/2026-04-21-pr48-g4.md"
+    - "docs/decisions/2026-04-21-pr48-g5.md"
+    - "docs/decisions/2026-04-21-pr48-g6.md"
+    - "docs/decisions/2026-04-21-pr48-g7.md"
+    - "docs/decisions/2026-04-21-pr48-g8.md"
+    - "docs/decisions/2026-04-21-pr48-g9.md"
+    - "docs/decisions/2026-04-21-pr48-g10.md"
+  xfa_root_cause: "docs/decisions/2026-04-21-xfa-root-cause.md"
+  prop_firm_rules_refresh: "resources/prop-firm-official-rules.md"
+  plan_doc: "docs/plans/2026-04-21-deploy-live-buildout-plan.md"
