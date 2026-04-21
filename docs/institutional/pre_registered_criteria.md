@@ -21,6 +21,7 @@
 | v3.1 | 2026-04-10 | **Revised Proxy Data Policy.** GC proxy expanded from validation-only to discovery-eligible for price-safe filters (ORB_G, GAP, PDR, ATR, OVNRNG, COST_LT). Volume-unsafe filters remain micro-only. Regime-awareness requirement added. Empirical evidence: 4-gate research (price corr=0.99999, 96% trigger match, 99.5% GAP filter agreement). | Claude Code session (user: *"can we use the gc for our strats or not? it doesn't have to do with price movement does it?"*) |
 | v3.0 | 2026-04-09 | **Theory-Driven Individual Hypothesis Testing.** Adds dual-pathway to Criterion 3: individual hypothesis pathway (raw p < 0.05) for theory-grounded, mechanism-specific predictions alongside existing BH FDR pathway for exploratory search. Incorporates canonical-base-truth methodology for admissible search space definition. Downstream gates (WF, OOS, era stability) mandatory and non-waivable under individual pathway. | Claude Code session (user: *"There is a way that people realistically trade ORB breakouts that are valid and profitable without using 20 years of data and such hard tests, right?"*) |
 | v3.1 | 2026-04-09 | **Structural Data Boundary for Discovery + Era Stability.** WF_START_OVERRIDE now applies to both discovery IS scope (outcomes + daily_features) and Criterion 9 era bins. Years before the override are excluded from both. Justified by 5-variable structural audit (ATR, volume, ORB size, G-filter pass rates, trading days) confirming MNQ/MES 2019 micro-launch data is non-representative. MNQ CME_PRECLOSE 2019: ATR 0.42x, G8 pass 39%, vol 0.16x. NOT performance-snooped — zero strategy PnL consulted. See Amendment 3.1 at bottom. | Claude Code session (user: *"ensure we do not use v1 of anything. we always check back over to verify our work"*) |
+| v3.2 | 2026-04-21 | **Criterion 8 Tiered OOS + Power-Floor (binding).** Resolves doc-authority conflict between `pre_registered_criteria.md` § Criterion 8 (binary) and `.claude/rules/backtesting-methodology.md` § 3.2 (tiered). Codifies 3-tier OOS gate: Tier 1 (N ≥ 100) confirmatory (sign + 0.40-ratio), Tier 2 (30 ≤ N < 100) directional (sign only, ratio SKIPPED), Tier 3 (N < 30) UNVERIFIED pass-through. Adds OOS power-floor computation (non-central-t, α=0.05 two-tailed, target power 0.5) as opt-in reject gate via `require_power_floor` param — preserves Pathway A legacy behavior, gives Pathway B / deployment-gate consumers a tightening path. NOT a threshold relaxation: Tier 1 gate is verbatim prior Criterion 8; Tier 2 behavior documents what RULE 3.2 already demanded in the backtesting rules. Driven by 2026-04-21 power audit — current 6 deployed lanes have per-lane 2026 N ≈ 15–30 (filtered), well below confirmatory power given IS effect sizes of 0.04–0.11 R per trade. See Amendment 3.2 at bottom. | Claude Code session (user: *"figure out if we holdout more or adjust 3month handicap etcetc. honest nad inst. resource ground"*) |
 
 ---
 
@@ -163,7 +164,14 @@ Strategies with WFE > 0.95 on small OOS samples should be flagged as LEAKAGE_SUS
 
 **Source:** derived from pipeline's `--holdout-date` infrastructure and general OOS validation principle.
 
-**Rule:** For discovery runs using `--holdout-date 2026-01-01`, the held-out 2026 period must show positive ExpR and OOS ExpR ≥ 0.40 × IS ExpR (allowing for typical degradation).
+**Rule:** For discovery runs using `--holdout-date 2026-01-01`, the held-out 2026 period is evaluated by the **3-tier gate per Amendment 3.2** (binding, 2026-04-21):
+
+- **Tier 1 (N_oos ≥ 100):** OOS ExpR ≥ 0 AND OOS ExpR ≥ 0.40 × IS ExpR — `CONFIRMATORY_PASS`
+- **Tier 2 (30 ≤ N_oos < 100):** OOS ExpR ≥ 0 — `DIRECTIONAL_PASS` (ratio gate SKIPPED; power too low to estimate reliably)
+- **Tier 3 (0 < N_oos < 30):** `UNVERIFIED_PASS` (pass-through; N/A for strict Pathway B which rejects)
+- **N/A (N_oos == 0):** pass-through (no OOS data available)
+
+OOS power is additionally computed (non-central t, α=0.05, target 0.5) for every N_oos ≥ 30 evaluation and logged. Opt-in power-floor rejection is available via `require_power_floor=True` for consumers that want to tighten beyond the legacy gate. See Amendment 3.2 for full specification.
 
 ---
 
@@ -865,3 +873,80 @@ GC proxy extends the data horizon back to 2010. However, gold market structure h
 3. **Build GC daily_features** — required for filter application on GC data.
 4. **Add GC to COST_SPECS** — with full-size gold specs ($100/pt, ~$57.40 friction) for GC-native cost analysis; MGC cost model used for proxy discovery.
 5. **Write MGC proxy hypothesis files** — using GC data, relative filters, full 16-year horizon.
+
+---
+
+## Amendment 3.2 (2026-04-21) — Criterion 8 Tiered OOS + Power-Floor (binding)
+
+**Status:** BINDING. Supersedes the binary framing of Criterion 8 as originally locked v1, by making the tier structure explicit and adding a power-grounded augment. All three tiers derive from the same sacred 2026-01-01 holdout window — **this amendment does NOT move the holdout boundary**, which remains immovable per line 5 of this document ("no post-hoc relaxation").
+
+### Motivation
+
+A 2026-04-21 power audit measured per-lane OOS state across the 6 `topstep_50k_mnq_auto` lanes:
+
+- 2026 window depth: 79 trading days (2026-01-02 → 2026-04-19) — will grow ~20 trading days/month
+- Raw (unfiltered) 2026 N per lane: 66–72 trades
+- Filtered 2026 N per lane (after deployed filter fires at ~20–40%): **estimated 15–30 trades**
+- IS ExpR per lane: +0.043 to +0.106 R per trade; IS sd ≈ 1.0–1.2 R
+- Minimum detectable effect at filtered N=20, α=0.05 two-tailed, power=0.8: **≈ 0.6–0.8 R per trade** — 6–10× the true IS effect
+
+The old Criterion 8 language — "OOS ExpR ≥ 0 AND OOS ExpR ≥ 0.40 × IS" — applied uniformly at any N ≥ 30 is underspecified. At N = 30 with σ ≈ 1.0, the OOS estimate is dominated by noise and the ratio test becomes a coin flip that kills true edges as often as false ones (Harvey-Liu 2015 p.17: *"an OOS test's success can be due to luck for both the in-sample selection and the out-of-sample testing"*).
+
+The existing rule in `.claude/rules/backtesting-methodology.md` § 3.2 already encodes the correct tiered framework ("N < 30 → directional-only, not confirmatory"). This amendment mirrors that in `pre_registered_criteria.md` so the two authority documents agree.
+
+### Rule (Amendment 3.2)
+
+Criterion 8 operates as a **3-tier gate** keyed by the filtered OOS trade count `N_oos`:
+
+| Tier | N_oos range | Sign gate (OOS ExpR ≥ 0) | Ratio gate (OOS/IS ≥ 0.40) | Verdict on pass |
+|---|---|---|---|---|
+| **Tier 1 — Confirmatory** | `N_oos ≥ 100` | REQUIRED | REQUIRED | `CONFIRMATORY_PASS` |
+| **Tier 2 — Directional** | `30 ≤ N_oos < 100` | REQUIRED | **SKIPPED** (power too low to estimate ratio) | `DIRECTIONAL_PASS` |
+| **Tier 3 — Unverified** | `0 < N_oos < 30` | pass-through (not evaluated) | SKIPPED | `UNVERIFIED_PASS` |
+| **N/A** | `N_oos == 0` | pass-through | SKIPPED | `NA` (no data) |
+
+A rejection occurs only when:
+- `N_oos ≥ 30` AND `OOS ExpR < 0` (sign gate fail, any tier ≥ 2), OR
+- `N_oos ≥ 100` AND `OOS ExpR < 0.40 × IS ExpR` (ratio gate fail, Tier 1 only), OR
+- `require_power_floor=True` AND computed OOS power < 0.5 AND `N_oos < 100` (power-floor reject, opt-in only)
+
+### Power-floor computation
+
+For N_oos ≥ 30, the validator computes the probability of detecting the IS effect at the observed OOS sample size using non-central t:
+
+```
+ncp = IS_ExpR * sqrt(N_oos) / sd_oos
+power = P(|T_{N-1, ncp}| > t_crit(α=0.05, N-1))
+```
+
+Implemented via `scipy.stats.nct` (two-tailed critical region). `sd_oos` is the sample standard deviation of OOS pnl_r; IS_ExpR is the candidate's stored `expectancy_r`.
+
+- **Informational always:** `power` and `tier` are logged at WARNING level for every `N_oos ≥ 30` evaluation.
+- **Gate opt-in:** Callers set `require_power_floor=True` (default False). When enabled and `power < 0.5` and `N_oos < 100`, the validator REJECTS with Amendment 3.2 reason. Tier 1 (N ≥ 100) is exempt from the power-floor gate because sufficient N provides confirmatory N regardless of marginal effect detectability.
+
+### Strict mode interaction (Pathway B)
+
+`strict_oos_n=True` (Pathway B / individual hypothesis testing, from Amendment 3.0 condition 4) retains its existing hard-reject at `N_oos < 30` verbatim. Amendment 3.2 does not tighten strict mode further in this release — tightening Pathway B to require Tier 1 confirmatory is reserved for a follow-on amendment when deployed candidates actually have access to ≥ 100 filtered OOS trades (earliest ~2027-Q4 at current fire rates).
+
+### What Amendment 3.2 is NOT
+
+- **NOT a holdout boundary move.** The sacred 2026-01-01 line is immovable.
+- **NOT a relaxation of the confirmatory bar.** Tier 1 gate is bit-for-bit identical to prior Criterion 8.
+- **NOT a deployment promoter.** Tier 2 `DIRECTIONAL_PASS` does not authorise promotion from CANDIDATE to PROVISIONAL lane; it only declines to kill the strategy on insufficient OOS.
+- **NOT a new source of statistical decisions.** The power calculation is a disclosure gate; it does not drive any promotion or sizing decision in this amendment.
+
+### Enforcement
+
+- `trading_app/strategy_validator._check_criterion_8_oos` — tier + power computation + WARNING log (always-on); opt-in reject via `require_power_floor` kwarg.
+- `docs/audit/hypotheses/` pre-reg files — may declare `criterion_8:\n  require_power_floor: true` to opt in.
+- Downstream deployment gate (future) — reads the tier label to decide CANDIDATE → PROVISIONAL promotion.
+
+### First binding confirmatory OOS date
+
+Given filtered OOS accumulation rate (~3 trades/lane/month at current fire rates), a lane reaches `N_oos ≥ 100` (Tier 1 confirmatory) no earlier than **~2027-09**. Any claim of "OOS-confirmed" before that date is either Tier 2 directional or CPCV-inferred (see `docs/audit/hypotheses/2026-04-21-cpcv-infrastructure-v1.yaml`).
+
+### Related files
+
+- `.claude/rules/backtesting-methodology.md` § 3.2 — mirror of this tier rule on the research-methodology side.
+- `memory/feedback_oos_power_floor.md` — user-memory rule this amendment codifies into the gate.
+- `docs/audit/hypotheses/2026-04-21-cpcv-infrastructure-v1.yaml` — CPCV infrastructure pre-reg that will provide Tier-1-equivalent evidence from IS folds while live OOS accumulates.

@@ -1,0 +1,266 @@
+# CPCV Infrastructure Pre-Registration (v1)
+#
+# status: PRE_REGISTERED_DRAFT
+# date: 2026-04-21
+# slug: cpcv-infrastructure-v1
+# title: Combinatorial Purged Cross-Validation infrastructure build + calibration
+# owner: Claude Code session (user-approved institutional stage)
+# parent_spec: docs/institutional/pre_registered_criteria.md Amendment 3.2
+# commit_sha: "TO_FILL_AFTER_COMMIT"
+#
+# This is NOT a discovery pre-reg.  It pre-registers the INFRASTRUCTURE
+# BUILD + CALIBRATION for Combinatorial Purged Cross-Validation (CPCV) as
+# the second-opinion OOS mechanism identified in Amendment 3.2.  No
+# deployed strategy is evaluated or promoted by the build itself; the
+# calibration hypotheses below validate the CPCV machinery on synthetic
+# known-edge and known-null scenarios.
+
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: 2026-04-21
+slug: cpcv-infrastructure-v1
+testing_mode: individual  # Pathway B K=3 calibration scenarios; each has its own kill criterion
+pathway: B
+
+metadata:
+  name: "CPCV infrastructure build + calibration"
+  purpose: |
+    Amendment 3.2 (2026-04-21) to pre_registered_criteria.md identifies
+    Combinatorial Purged Cross-Validation with embargo (Lopez de Prado
+    2020 ML for Asset Managers Ch 7) as the correct mechanism to generate
+    probabilistic OOS evidence from IS (pre-2026-01-01) data WITHOUT
+    consuming the sacred 2026 holdout.  The sacred holdout remains
+    immovable; CPCV provides the coverage shortfall that the 3-month /
+    ~15-30-trade filtered OOS cannot.
+    This pre-reg scopes the BUILD of the CPCV module, its calibration
+    against known-edge / known-null synthetic scenarios, and the integration
+    point into strategy_validator as an optional Criterion-8-equivalent
+    signal (NOT a replacement — Tier-1 live OOS remains the gold standard
+    when available).
+  date_locked: "2026-04-21T00:00:00+10:00"
+  data_horizon_years_clean: 6.65   # MNQ/MES pre-holdout per Amendment 2.8
+  data_horizon_years_proxy: 16.0   # NQ parent proxy not used for this infra build
+  holdout_date: "2026-01-01"       # immovable (criteria.md:5)
+  total_expected_trials: 3         # 3 calibration scenarios (S1/S2/S3); K=1 each
+  data_source_mode: "clean"
+  data_source_disclosure: "Real MNQ micro 2019-05-06 → 2025-12-31 for real-data calibration; synthetic Gaussian returns for known-null/known-edge scenarios"
+
+parent_citations:
+  - file: docs/institutional/pre_registered_criteria.md
+    section: "Amendment 3.2 (2026-04-21) — Criterion 8 Tiered OOS + Power-Floor"
+    role: BINDING_PARENT
+  - file: docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md
+    section: "Ch 7 Cross-Validation in Finance (purge + embargo)"
+    role: METHODOLOGICAL_GROUND
+  - file: docs/institutional/literature/harvey_liu_2015_backtesting.md
+    section: "p.17 — OOS test caveat"
+    role: PROBLEM_STATEMENT
+  - file: memory/feedback_oos_power_floor.md
+    role: PROJECT_CONVENTION_SOURCE
+
+# ──────────────────────────────────────────────────────────────────────
+# Infrastructure scope (what gets built)
+# ──────────────────────────────────────────────────────────────────────
+
+infrastructure:
+  new_module: trading_app/cpcv.py
+  new_tests: tests/test_trading_app/test_cpcv.py
+  public_api:
+    - function: cpcv_splits(n_trades, n_splits, n_test_splits, embargo_trades)
+      purpose: "yield (train_idx, test_idx) pairs per LdP 2020 Ch 7 § 7.4"
+    - function: cpcv_evaluate(returns, n_splits=6, n_test_splits=2, embargo_trades=5)
+      purpose: "compute cross-fold mean ExpR, Sharpe, and their distribution"
+    - function: cpcv_power(returns, is_effect, n_splits=6, n_test_splits=2, embargo_trades=5)
+      purpose: "synthetic-null bootstrap to estimate detection probability"
+  integration_point:
+    - file: trading_app/strategy_validator.py
+      function: _check_criterion_8_oos
+      change: "ADD optional cpcv_fallback parameter (default False) — when True and N_live_OOS < Tier-1 floor, run cpcv_evaluate on the IS stream and report aggregated fold statistics alongside the live OOS verdict. Does NOT replace live OOS; adds a supplementary signal for deployment-gate consumers."
+  NON_goals:
+    - "No change to holdout boundary (remains 2026-01-01 per criteria.md:5)"
+    - "CPCV result does NOT count toward Tier 1 confirmatory pass — only live OOS does"
+    - "No promotion of any strategy during this build"
+    - "No new discovery run — this is infrastructure only"
+
+# ──────────────────────────────────────────────────────────────────────
+# Parameter axes (pre-committed; calibrated, not tuned to live data)
+# ──────────────────────────────────────────────────────────────────────
+
+axes:
+  n_splits:
+    values: [4, 6, 8]
+    rationale: "LdP 2020 Ch 7 suggests 6-10 for time-series with regime structure; 4 is the lower bound for meaningful combinatorial coverage"
+  n_test_splits:
+    values: [1, 2]
+    rationale: "n_test=2 gives C(n_splits, 2) folds; n_test=1 degenerates to standard k-fold — included as a baseline"
+  embargo_trades:
+    values: [0, 5, 10, 20]
+    rationale: "0 = no embargo (baseline contamination check); 5-20 trades covers typical intraday autocorrelation lag for ORB outcomes. Final value chosen by calibration hypothesis H3."
+  lanes_for_real_data_test: "docs/runtime/lane_allocation.json — all 6 topstep_50k_mnq_auto lanes"
+
+# ──────────────────────────────────────────────────────────────────────
+# Calibration hypotheses (K=3)
+# ──────────────────────────────────────────────────────────────────────
+
+hypotheses:
+  - id: H1
+    name: "CPCV pass-rate on known-null synthetic matches nominal α"
+    theory_citation: "Lopez de Prado 2020 ML for Asset Managers Ch 7; general FDR calibration literature"
+    economic_basis: |
+      A well-calibrated CPCV implementation applied to Gaussian white-noise
+      returns (zero true effect) should reject H0 at approximately α=0.05
+      across folds.  Systematic over-rejection (>10%) indicates a purge
+      or embargo leak; under-rejection (<1%) indicates over-conservative
+      fold aggregation.
+    test:
+      data: "synthetic Gaussian returns, 2000 trades, mean=0, sd=1"
+      params: "n_splits=6, n_test_splits=2, embargo_trades=5"
+      statistic: "fraction of folds with per-fold t-test p < 0.05 two-tailed"
+    pass_threshold: "observed fraction ∈ [0.025, 0.10]"
+    kill_threshold: "observed fraction > 0.15 OR < 0.01 over 10 seeds"
+    expected_trial_count: 1
+
+  - id: H2
+    name: "CPCV detects known-edge synthetic at expected power"
+    theory_citation: "Lopez de Prado 2020 Ch 7; Bailey-Lopez de Prado 2014 DSR context"
+    economic_basis: |
+      A well-calibrated CPCV should recover a +0.15 R per-trade effect
+      (roughly 3× the weakest deployed lane's ExpR) on 2000-trade synthetic
+      data at power consistent with a non-central t theoretical estimate.
+      Large deviation from theoretical power indicates biased aggregation
+      or incorrect degrees-of-freedom accounting.
+    test:
+      data: "synthetic Gaussian returns, 2000 trades, mean=+0.15, sd=1.0"
+      params: "n_splits=6, n_test_splits=2, embargo_trades=5"
+      statistic: "fraction of folds with per-fold t > t_crit(0.05, df)"
+    pass_threshold: "observed fraction within ±0.10 of theoretical power (computed via _estimate_oos_power on equivalent N-per-fold)"
+    kill_threshold: "observed fraction differs from theoretical by more than 0.20 across 10 seeds"
+    expected_trial_count: 1
+
+  - id: H3
+    name: "Embargo sensitivity: zero-embargo inflates pass rate under serial correlation"
+    theory_citation: "Lopez de Prado 2020 Ch 7 § 7.4 (embargo rationale); Bailey et al 2016 backtest-overfitting mechanism"
+    economic_basis: |
+      Serial correlation in per-trade R-multiples (likely small for
+      intraday ORB outcomes but non-zero) should cause embargo=0 to
+      inflate pass rates under a known-null AR(1) process relative to
+      embargo=5 or embargo=10.  This calibration locks the production
+      embargo value.
+    test:
+      data: "AR(1) synthetic returns with ρ=0.15 (conservative upper
+            bound on intraday autocorrelation for the 6 deployed lanes
+            — to be measured as H3a before H3 runs), 2000 trades,
+            mean=0, sd=1"
+      params: "n_splits=6, n_test_splits=2, embargo_trades ∈ {0, 5, 10, 20}"
+      statistic: "observed H0-reject rate per embargo value"
+    pass_threshold: |
+      (a) embargo=0 reject rate > embargo=5 reject rate by at least
+          0.03 (detects the contamination);
+      (b) embargo ∈ {5, 10, 20} all within [0.025, 0.10] calibration band.
+      Production embargo value is the smallest embargo passing (b) with
+      margin ≥ 0.02 from the calibration band edges.
+    kill_threshold: "no embargo value satisfies (b), OR embargo=0 reject rate ≤ embargo=5 reject rate (purge already sufficient, embargo redundant → CPCV unnecessary)"
+    expected_trial_count: 1
+
+# ──────────────────────────────────────────────────────────────────────
+# Feature temporal alignment (RULE 6 of backtesting-methodology)
+# ──────────────────────────────────────────────────────────────────────
+
+feature_temporal_alignment:
+  - feature: "per-trade R-multiple"
+    first_complete_time: "trade exit (ts_exit_ts in orb_outcomes)"
+    category: "safe (post-trade outcome — the only thing CPCV operates on; never used as a predictor)"
+    leak_risk: "none — CPCV operates on the realized return stream, not on forward-looking predictors"
+
+# ──────────────────────────────────────────────────────────────────────
+# Implementation integrity checklist (K2 PASS/FAIL gates)
+# ──────────────────────────────────────────────────────────────────────
+
+implementation_integrity_checks:
+  - check: "IS/OOS discipline: CPCV fold boundaries are INDEX-based within IS data only; no OOS trades ever enter the aggregation"
+    fail_if: "any fold includes trades with trading_day >= HOLDOUT_SACRED_FROM (imported from trading_app.holdout_policy)"
+  - check: "Purge: the training fold excludes trades overlapping the test fold in TIME (by trading_day), not just index"
+    fail_if: "test_idx trade's trading_day overlaps a train_idx trade's trading_day ± purge_days"
+  - check: "Embargo: training fold excludes the embargo_trades window AFTER each test fold boundary"
+    fail_if: "any train trade within `embargo_trades` indices of a test fold boundary"
+  - check: "Fold invariance: swapping seeds or permuting input order does not change the deterministic fold index layout"
+    fail_if: "two seeds of the same input produce different deterministic index partitions"
+  - check: "Aggregation: per-fold t-statistic uses df=n_test_trades-1, NOT df=n_total-1"
+    fail_if: "reported df equals the total sample minus 1 (classic pooled-df bug)"
+  - check: "Canonical delegation: CPCV reads returns from the canonical orb_outcomes layer via strategy_trade_days join; does not re-encode filter logic"
+    fail_if: "any filter application in cpcv.py — must delegate to ALL_FILTERS[filter_type].matches_row"
+
+# ──────────────────────────────────────────────────────────────────────
+# Trial budget + MinBTL
+# ──────────────────────────────────────────────────────────────────────
+
+budget:
+  total_expected_trials: 3
+  K_framing: "K=1 per calibration hypothesis (Pathway B individual testing mode, each hypothesis is its own pre-registered prediction)"
+  minbtl_check:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2"
+    N_trials: 3
+    E_max_N: 1.0
+    computed_minbtl_years: 2.20  # 2 * ln(3) / 1^2 ≈ 2.20
+    available_clean_years: 6.65
+    status: "UNDER_BUDGET"  # 2.20 <= 6.65
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  upstream_discovery_provenance:
+    role: PROVENANCE_ONLY
+    note: "This is an infrastructure build, not a discovery scan. No K from any upstream discovery applies to the calibration hypotheses — they are not exploring strategy space."
+
+# ──────────────────────────────────────────────────────────────────────
+# Kill criteria (project-level)
+# ──────────────────────────────────────────────────────────────────────
+
+project_kill_criteria:
+  - "Any of H1, H2, H3 fails its own pass_threshold — CPCV infrastructure is not fit for production; do not wire into strategy_validator"
+  - "Implementation integrity check fails — fix the bug and rerun before proceeding"
+  - "CPCV mean reject rate on live IS data from deployed lanes matches their live Tier-2 reject rate to within 0.05 — CPCV adds no information beyond the existing Tier-2 signal, skip integration"
+
+# ──────────────────────────────────────────────────────────────────────
+# Consumption by deployment gate (future, not this amendment)
+# ──────────────────────────────────────────────────────────────────────
+
+downstream_consumption:
+  note: |
+    Amendment 3.2 documents tiered Criterion 8 + opt-in power-floor but
+    does NOT promote CPCV results to a Tier-1-equivalent status.  A
+    future amendment (not this pre-reg) may elevate CPCV from supplementary
+    signal to promotion-gate input ONLY IF all 3 calibration hypotheses
+    pass cleanly AND at least one fiscal quarter of shadow-mode operation
+    confirms CPCV verdicts are consistent with live OOS verdicts on the
+    same lane.
+
+# ──────────────────────────────────────────────────────────────────────
+# Self-review checklist (per prereg-writer-prompt.md § D)
+# ──────────────────────────────────────────────────────────────────────
+
+self_review:
+  rule_12_red_flags: "N/A — no effect-size claim, this is infrastructure calibration"
+  kill_threshold_strict_enough: "YES — H1 ≠ [0.025, 0.10] kills; H2 ≠ ±0.10 of theoretical kills; H3 has two-part kill"
+  no_post_hoc_tuning: "YES — final embargo value chosen deterministically by H3.pass_threshold logic; not free-floating"
+  canonical_sources_cited:
+    - "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    - "pipeline.asset_configs.ACTIVE_ORB_INSTRUMENTS (scope: MNQ/MES/MGC implicit via deployed lanes list)"
+    - "trading_app.config.ALL_FILTERS (integrity check enforces delegation)"
+    - "docs/institutional/literature/lopez_de_prado_2020_ml_for_asset_managers.md"
+    - "docs/runtime/lane_allocation.json"
+  holdout_date_set: "YES — 2026-01-01 (immovable per criteria.md:5); CPCV operates strictly on IS"
+
+# ──────────────────────────────────────────────────────────────────────
+# Workflow
+# ──────────────────────────────────────────────────────────────────────
+
+workflow:
+  pre_commit:
+    - "Verify HOLDOUT_SACRED_FROM imported correctly in cpcv.py"
+    - "Verify the 6 deployed strategy_ids exist in docs/runtime/lane_allocation.json before the real-data smoke test"
+  post_commit:
+    - "Stamp commit_sha into this file in a follow-up commit"
+    - "Run H1, H2, H3 in that order; stop on first kill"
+    - "Write postmortem at docs/audit/hypotheses/2026-04-21-cpcv-infrastructure-v1-postmortem.md"
+  integration_trigger:
+    - "Only after all 3 calibration hypotheses pass, wire the optional cpcv_fallback kwarg into _check_criterion_8_oos"
+    - "Do NOT integrate on partial pass; do NOT relax calibration thresholds"

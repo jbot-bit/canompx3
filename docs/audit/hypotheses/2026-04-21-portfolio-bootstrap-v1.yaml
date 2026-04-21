@@ -1,0 +1,207 @@
+# Portfolio Bootstrap Pre-Registration (v1)
+#
+# status: PRE_REGISTERED_DRAFT
+# date: 2026-04-21
+# slug: portfolio-bootstrap-v1
+# title: Portfolio-level block-bootstrap on IS for probabilistic OOS estimate
+# owner: Claude Code session (autonomous; user-approved scope)
+# parent_spec: docs/institutional/pre_registered_criteria.md Amendment 3.2
+# commit_sha: "TO_FILL_AFTER_COMMIT"
+
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: 2026-04-21
+slug: portfolio-bootstrap-v1
+testing_mode: individual  # Pathway B K=1 — one pre-registered prediction, theory-grounded
+pathway: B
+
+metadata:
+  name: "Portfolio-level block-bootstrap on IS"
+  purpose: |
+    Replaces the CPCV path killed by H3 on 2026-04-21 (see postmortem at
+    docs/audit/hypotheses/2026-04-21-cpcv-infrastructure-v1-postmortem.md).
+    Measured per-lane IS pnl_r lag-1 autocorrelation is ρ ∈ [−0.03, +0.03]
+    (effectively zero), so plain block-bootstrap with block size 1 is
+    statistically valid and a full CPCV/embargo machine is not required.
+    Generates a probabilistic OOS estimate by sampling the IS distribution
+    of 74-trading-day-window portfolio performance and ranking the
+    observed 2026 shadow within that distribution.
+  date_locked: "2026-04-21T00:00:00+10:00"
+  data_horizon_years_clean: 6.65  # MNQ pre-holdout per Amendment 2.8
+  holdout_date: "2026-01-01"       # immovable
+  total_expected_trials: 1         # K=1 — single bootstrap analysis
+  data_source_mode: "clean"
+  data_source_disclosure: "Real MNQ micro 2019-05-06 → 2025-12-31 from canonical orb_outcomes; 2026 shadow from paper_trades"
+
+parent_citations:
+  - file: docs/institutional/pre_registered_criteria.md
+    section: "Amendment 3.2 — 3-tier Criterion 8 + power-floor"
+    role: BINDING_PARENT
+  - file: docs/audit/hypotheses/2026-04-21-cpcv-infrastructure-v1-postmortem.md
+    section: "Interpretation — why CPCV killed; alternatives list"
+    role: DIRECT_ANTECEDENT
+  - file: docs/institutional/literature/harvey_liu_2015_backtesting.md
+    section: "p.17 OOS caveat — need for multiple OOS estimates"
+    role: METHODOLOGICAL_GROUND
+
+# ──────────────────────────────────────────────────────────────────────
+# Hypothesis
+# ──────────────────────────────────────────────────────────────────────
+
+hypothesis:
+  id: H_PB1
+  name: "Observed 2026 shadow portfolio performance is not consistent with pure-luck draws from the IS distribution"
+  theory_citation: |
+    Harvey-Liu 2015 p.17 caveat ("OOS test's success can be due to luck")
+    motivates using the IS distribution itself as the reference, not a single
+    point-estimate OOS comparison. Block bootstrap with block size = 1 is
+    valid when lag-1 autocorrelation is empirically ≈ 0 (measured on all 6
+    deployed lanes, 2026-04-21).
+  economic_basis: |
+    If the 6-lane portfolio edge is real and stable, the 2026 shadow
+    (74 trading days, ~150 filtered trades, observed ExpR ≈ +0.11 R,
+    portfolio t ≈ +2.0) should rank near the upper tail of the IS
+    bootstrap distribution of 74-day-window performance. If the edge
+    is illusory or regime-dependent, the 2026 observation ranks near
+    the median or below.
+  prediction: "2026 shadow portfolio 74-day ExpR ranks in the upper 75th percentile of the IS bootstrap distribution."
+
+# ──────────────────────────────────────────────────────────────────────
+# Procedure (pre-committed)
+# ──────────────────────────────────────────────────────────────────────
+
+procedure:
+  step_1_build_is_portfolio:
+    source: canonical orb_outcomes filtered to the 6 deployed lanes per lane_allocation.json
+    window: trading_day >= 2020-01-01 AND trading_day < 2026-01-01
+    per_lane_filter: applied via trading_app.config.ALL_FILTERS[filter_type].matches_row on daily_features join
+    aggregation: "group by trading_day; portfolio_r[day] = sum(pnl_r) across all lanes' trades on that day"
+    why_2020_start: "WF_START_OVERRIDE convention — structural data boundary per Amendment 3.1; pre-2020 MNQ/MES micro data known non-representative"
+  step_2_build_2026_shadow:
+    source: paper_trades table
+    window: trading_day >= 2026-01-01
+    aggregation: "group by trading_day; portfolio_r[day] = sum(pnl_r); restrict to the same 6 lanes for apples-to-apples"
+    observed_statistic_1: "74-day ExpR (mean daily portfolio R)"
+    observed_statistic_2: "74-day annualized Sharpe (assume 250 trading days/yr)"
+  step_3_bootstrap:
+    method: "plain block-bootstrap with block size 1 (justified by ρ ≈ 0 measured on all 6 deployed lanes)"
+    n_iterations: 10000
+    window_length: 74  # trading days — matches 2026-01-02 to 2026-04-19 inclusive
+    seed: 42
+    statistic_1: "mean daily portfolio R within each 74-day resample"
+    statistic_2: "annualized Sharpe within each 74-day resample"
+  step_4_compare:
+    observation: 2026 shadow 74-day ExpR + Sharpe
+    null_distribution: "10,000 bootstrap resamples from IS"
+    report:
+      - observed 2026 ExpR
+      - observed 2026 Sharpe
+      - percentile rank of 2026 ExpR in IS bootstrap distribution
+      - percentile rank of 2026 Sharpe in IS bootstrap distribution
+      - 95% bootstrap CI for IS 74-day ExpR and Sharpe
+      - one-tailed p-value for "2026 is not consistent with IS null" at ExpR level
+
+# ──────────────────────────────────────────────────────────────────────
+# Success thresholds (pre-committed)
+# ──────────────────────────────────────────────────────────────────────
+
+pass_thresholds:
+  primary: "2026 ExpR percentile rank ≥ 75 within IS bootstrap distribution"
+  secondary: "2026 Sharpe percentile rank ≥ 75 within IS bootstrap distribution"
+
+kill_thresholds:
+  - "IS bootstrap distribution of mean ExpR is NOT centered near the observed IS mean (sanity check — fails if |median − mean| / sd > 0.10 indicating non-normal / heavy-tail construction bug)"
+  - "2026 percentile rank falls below the 25th percentile — evidence that observed 2026 performance is WORSE than typical IS 74-day windows (would trigger a separate audit of lane regime drift)"
+
+nonoutcome_guard: |
+  If 2026 percentile rank falls in [25, 75], the result is INCONCLUSIVE, not
+  FAILURE. Inconclusive means the 2026 shadow is within the IS typical range
+  — the portfolio works about as well as it always did, no change needed.
+
+# ──────────────────────────────────────────────────────────────────────
+# Feature temporal alignment (RULE 6)
+# ──────────────────────────────────────────────────────────────────────
+
+feature_temporal_alignment:
+  - feature: per-trade pnl_r
+    first_complete_time: "trade exit (ts_exit_ts)"
+    category: "safe (post-trade outcome; never used as a predictor)"
+    leak_risk: "none — bootstrap operates on realised returns only"
+  - feature: "filter_type match via ALL_FILTERS[key].matches_row"
+    first_complete_time: "ORB end (session-dependent per .claude/rules/backtesting-methodology.md RULE 1.2)"
+    category: "delegated to canonical source; leak risk governed by filter's own valid-domain"
+
+# ──────────────────────────────────────────────────────────────────────
+# Implementation integrity checks (K2-equivalent)
+# ──────────────────────────────────────────────────────────────────────
+
+implementation_integrity_checks:
+  - check: "IS window does NOT include 2026-01-01 or later"
+    fail_if: "any IS trade has trading_day >= trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+  - check: "Only the 6 canonical DEPLOY lanes from lane_allocation.json are used for IS portfolio; the same 6 for 2026 comparison"
+    fail_if: "IS lane list differs from 2026 lane list, OR lane list differs from JSON file contents"
+  - check: "Filter application: no lane's IS trades are drawn without the deployed filter_type being applied via matches_row"
+    fail_if: "filter_type string exists but matches_row not called (would inflate N with unfiltered outcomes)"
+  - check: "Bootstrap seed is fixed and committed"
+    fail_if: "seed not set OR not reported in the results MD"
+  - check: "Block size = 1 (plain bootstrap) justified by measured ρ ≈ 0"
+    fail_if: "block size > 1 without empirical ρ re-measurement in the run"
+  - check: "Annualized Sharpe uses a consistent annualization factor (sqrt(250))"
+    fail_if: "different annualization across IS and 2026 computation"
+  - check: "2026 shadow reads from paper_trades, NOT orb_outcomes (paper_trades is the live-execution realized P&L, orb_outcomes is the simulation)"
+    fail_if: "any query pulls 2026 pnl from orb_outcomes when paper_trades is available for that date range"
+
+# ──────────────────────────────────────────────────────────────────────
+# Trial budget + MinBTL
+# ──────────────────────────────────────────────────────────────────────
+
+budget:
+  total_expected_trials: 1
+  K_framing: "Pathway B individual K=1"
+  minbtl_check:
+    formula: "MinBTL = 2 * ln(N_trials) / E[max_N]^2"
+    N_trials: 1
+    E_max_N: 1.0
+    computed_minbtl_years: 0.00
+    available_clean_years: 6.65
+    status: "TRIVIALLY_UNDER_BUDGET"
+  upstream_discovery_provenance:
+    role: PROVENANCE_ONLY
+    note: "This is a confirmatory analysis of an ALREADY-DEPLOYED portfolio, not a discovery scan. No upstream K applies."
+
+# ──────────────────────────────────────────────────────────────────────
+# Self-review checklist (per prereg-writer-prompt.md § D)
+# ──────────────────────────────────────────────────────────────────────
+
+self_review:
+  rule_12_red_flags: "N/A — no discovery, just a re-measurement of an already-deployed portfolio"
+  kill_threshold_strict_enough: "YES — sanity-check kill (IS distribution center) and regime-drift kill (2026 below 25th percentile) both trigger follow-on audits rather than silent passes"
+  no_post_hoc_tuning: "YES — block size, N_bootstrap, window length, seed all fixed here before run"
+  canonical_sources_cited:
+    - trading_app.holdout_policy.HOLDOUT_SACRED_FROM
+    - docs/runtime/lane_allocation.json
+    - trading_app.config.ALL_FILTERS
+    - canonical orb_outcomes + daily_features + paper_trades layers
+  holdout_date_set: "YES — 2026-01-01 immovable; all IS windows strictly below this date"
+
+# ──────────────────────────────────────────────────────────────────────
+# Workflow
+# ──────────────────────────────────────────────────────────────────────
+
+workflow:
+  pre_commit:
+    - "Commit this pre-reg first; stamp commit_sha in follow-up"
+  post_commit:
+    - "Run research/portfolio_bootstrap_v1.py"
+    - "Write results to docs/audit/results/2026-04-21-portfolio-bootstrap-v1.md"
+    - "Commit results + script"
+  deployment_decision_trigger: |
+    If 2026 ExpR percentile ≥ 75: the portfolio's 2026 performance is not a
+    coin-flip within IS's typical range — this is Tier-1-equivalent probabilistic
+    evidence that supports real-money activation. This is the "unblock live
+    money" deliverable the user requested.
+    If 25 ≤ percentile < 75: inconclusive — portfolio is within IS typical
+    range, no change; live-money decision is on user's risk tolerance, not
+    statistical confirmation.
+    If percentile < 25: regime-drift suspect — do NOT scale up; run per-lane
+    audit before proceeding.

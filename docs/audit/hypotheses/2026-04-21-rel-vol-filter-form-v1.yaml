@@ -1,0 +1,165 @@
+pre_reg_id: "rel-vol-filter-form-v1"
+date: "2026-04-21"
+status: "LOCKED"
+testing_mode: "individual"
+pathway: "B"
+pathway_rationale: |
+  Confirmatory follow-on to PR #59 sizer-rule re-audit (commit ec8198f3),
+  which corrected the PR #48 rel_vol signal's deployment form. The re-audit
+  showed: (a) PR #59's linear-sizer form is dominated by filter forms on
+  MGC + MES at same-OOS comparison; (b) MES sizer Sharpe remains NEGATIVE
+  even with rule (lose slower, not make money); (c) MNQ pattern is dead as
+  rel_vol rank (Spearman p=0.12).
+
+  This pre-reg tests the correct deployment form (FILTER, not SIZER) per
+  `docs/institutional/mechanism_priors.md` R1-before-R2 priority, using
+  pre-committed form-space {Q5-only, Q4+Q5}. Gate is Sharpe-positive IS
+  (not paired-t delta — that was the wrong gate in PR #59). MNQ excluded
+  from this pre-reg; rel_vol is dead for MNQ.
+
+  K_family = 2 (MGC, MES, independent instrument-level hypotheses per
+  pre_registered_criteria.md Amendment 3.0). Within each instrument, 2
+  pre-committed forms (Q5-only, Q4+Q5) — winner by Sharpe IS is the
+  deployment candidate for that instrument. This is NOT a second-order
+  family multiplicity because forms are pre-committed and the decision
+  rule (higher Sharpe wins) is pre-committed.
+
+contamination_declaration:
+  oos_peeked_window: "2026-01-01 to 2026-04-19"
+  peeked_by: "research/pr48_sizer_rule_skeptical_reaudit_v1.py (commit ec8198f3)"
+  peeked_what: "Q5-only and Q4+Q5 filter ExpR per instrument on 2026 OOS"
+  consequence: |
+    2026-01-01 to 2026-04-19 IS NOT CONFIRMATORY under this pre-reg. It is
+    reported as informational secondary evidence only. Gate in this
+    pre-reg rests on (a) pre-2026 IS block-bootstrap Sharpe evidence,
+    and (b) FRESH OOS window starting 2026-04-22 — currently 0 trades,
+    accrues over time. CANDIDATE_READY_IS may be assigned off (a) alone;
+    CANDIDATE_READY_OOS and deploy-eligible require (b) to accumulate
+    >=50 filter-fired trades per instrument with Sharpe >= IS Sharpe.
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  parents:
+    - "PR #48 `28279719` — IS beta1 participation monotonic-up universal on MNQ/MES/MGC."
+    - "PR #56 — OOS beta1 replication: MES beta=+0.365 t=+2.49; MGC beta=+0.423 t=+2.52; MNQ t=+0.96 (sign-right, power-low)."
+    - "PR #59 `d227f8ed` — Sizer-form pre-reg (rel_vol quintile-linear multipliers); SIZER_ALIVE on MES+MGC at capital-neutral paired-t gate."
+    - "PR #59 re-audit `ec8198f3` — Corrected PR #59 interpretation: sizer form is dominated by filter form on MES+MGC; MES sizer Sharpe still negative; MNQ rel_vol pattern dead."
+
+theory_citations:
+  grounded_in_local_extracts:
+    - path: "docs/institutional/mechanism_priors.md"
+      use: "R1 FILTER priority before R2 SIZER. Binary-form admits rank signals that sizer-form cannot monetize at Sharpe-positive (e.g., Q1-Q4 negative with only Q5 positive — sizer's capital-neutral constraint forces continued participation in losing quintiles)."
+    - path: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md"
+      use: "Intraday breakout continuation is stronger on high-participation (top-quintile volume) days. Filter form gates entry; skips low-participation days entirely. Matches the 'path of least resistance' thesis on high-conviction session participation."
+    - path: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+      use: "Ch 9 distinguishes SIGNAL (go/no-go gate) from SIZING (position scaling). PR #59 conflated the two. Filter-form tests the correct role of rel_vol quintile rank when the underlying signal-to-noise is binary (Q1-Q4 all negative / only Q5 positive on MES — see re-audit doc)."
+    - path: "docs/institutional/literature/bailey_et_al_2013_pseudo_mathematics.md"
+      use: "MinBTL = 2·ln(4)/9 ~= 0.31 yrs (K=4: 2 instruments x 2 forms). IS window >= 6 yrs per instrument. Trivially satisfied."
+    - path: "docs/institutional/pre_registered_criteria.md"
+      use: "C6 (WFE >= 0.50) and C9 (no era ExpR < -0.05 at N>=50) apply. C5 DSR and C8 2026 OOS gates held in abeyance until fresh OOS accrues."
+
+scope:
+  instruments: ["MGC", "MES"]
+  instruments_excluded: ["MNQ"]
+  exclusion_rationale: "Re-audit commit ec8198f3: MNQ rel_vol Spearman p=0.12 (insignificant); pooled delta +0.006R with bootstrap 95% CI crossing zero; 55% lanes flip sign vs pooled (heterogeneity artefact). rel_vol as rank basis is DEAD on MNQ. Separate future pre-reg may test atr_vel_ratio as alternative rank basis."
+  entry_model: "E2"
+  confirm_bars: 1
+  aperture: 5
+  rr_target: 1.5
+  direction: "pooled (long + short)"
+  sessions: "all sessions with data per instrument (canonical SELECT DISTINCT orb_label)"
+  is_full_window: "trading_day < 2026-01-01 (trading_app.holdout_policy.HOLDOUT_SACRED_FROM)"
+  is_train_window: "trading_day < 2024-01-01 (threshold training only; no gate eval)"
+  is_val_window: "2024-01-01 <= trading_day < 2026-01-01 (val-IS; gate evaluated here)"
+  semi_oos_reporting_window: "2026-01-01 to 2026-04-19 (peeked; informational only, not gated)"
+  fresh_oos_window: "trading_day >= 2026-04-22 (accrues post-lock; required for CANDIDATE_READY_OOS)"
+  is_train_val_rationale: |
+    Applying IS-trained thresholds to the same trades they were trained on
+    is tautologically weak — Q5 by construction would be the top pnl_r
+    bucket if rel_vol has any signal. PR #48 IS beta1 already confirms
+    signal exists (MES t=+11.80, MGC t=+7.54). The honest IS gate is a
+    true train/val holdout within the pre-2026 window: train thresholds on
+    pre-2024, measure filter performance on 2024-2025. This is the gated
+    evaluation window; it is still NOT the 2026 peeked window.
+  k_family: 2
+  k_forms_per_instrument: 2
+
+rule_specification:
+  rank_basis: "rel_vol_{session} per (instrument, session, direction) lane — same feature as PR #48 and PR #59"
+  is_thresholds: |
+    Compute 5-quantile cutoffs of IS rel_vol per lane. Each OOS trade is
+    bucketed by searchsorting its rel_vol into the IS cutoffs -> quintile 1..5.
+    Identical to PR #59 threshold construction (delegated, not re-encoded).
+  forms_pre_committed:
+    F1_Q5_only:
+      description: "Trade only when OOS quintile == 5. Skip Q1..Q4 entirely."
+      capital_per_trade: 1.0
+    F2_Q4_plus_Q5:
+      description: "Trade only when OOS quintile in {4, 5}. Skip Q1..Q3 entirely."
+      capital_per_trade: 1.0
+  fallback: |
+    Lanes with N_IS < 100 are excluded from the filter rule entirely (no
+    trades, no filter, drop from sample). This differs from PR #59's
+    uniform-size fallback because under filter form there's no smooth
+    sizing interpretation; skipping sparse lanes is the honest move.
+
+hypotheses:
+  H1_MGC_F1: "On val-IS (2024-01-01 to 2025-12-31), MGC rel_vol Q5-only filter (thresholds trained on <2024-01-01) produces net-of-cost ExpR >= +0.05R, fire rate in [5%, 40%], Sharpe > uniform val-IS Sharpe, and block-bootstrap 95% CI of delta-Sharpe excludes 0."
+  H2_MGC_F2: "Same hypothesis for MGC Q4+Q5 filter form."
+  H3_MES_F1: "Same for MES Q5-only filter form."
+  H4_MES_F2: "Same for MES Q4+Q5 filter form."
+
+testing_discipline:
+  train_val_split_spec:
+    train: "trading_day < 2024-01-01 (fit per-lane 5-quantile thresholds on rel_vol)"
+    val: "2024-01-01 <= trading_day < 2026-01-01 (apply frozen thresholds; evaluate Gates 1-4)"
+    min_N_train_per_lane: 100
+    lane_fallback_if_insufficient: "drop lane from sample (no filter, no trades)"
+  gate_ordering_per_form:
+    - "Gate 1 — Fire rate on val-IS in [5%, 40%]. KILL on degenerate."
+    - "Gate 2 — Val-IS net-of-cost ExpR >= +0.05R. KILL if below."
+    - "Gate 3 — Val-IS filter Sharpe > Val-IS uniform Sharpe. KILL if not."
+    - "Gate 4 — Val-IS block-bootstrap 95% CI of (filter Sharpe - uniform Sharpe) excludes 0 (block_size=20 trades, B=10000 replicates). Pass -> FILTER_ALIVE_IS. Fail Gate 4 but pass 1-3 -> FILTER_RESEARCH_SURVIVOR."
+  per_instrument_form_selection: |
+    If both F1 and F2 pass all 4 gates for the instrument: deployment form =
+    the one with higher Sharpe IS (pre-committed tie-break). Report both.
+    If only one form passes: that form is the deployment form.
+    If neither passes: instrument verdict = FILTER_DEAD_IS.
+  mandatory_integrity_gates_non_waivable:
+    - "IS thresholds computed ONLY on trading_day < 2026-01-01."
+    - "Semi-OOS (2026-01-01 to 2026-04-19) reported as information only; NOT gated."
+    - "Fresh OOS (2026-04-22+) window: accrue paper trades over time. Deploy-eligible requires >=50 filter-fired trades per instrument with OOS Sharpe >= IS Sharpe (to be run as separate confirmatory scan post-accrual)."
+    - "Canonical cost model via pipeline.cost_model.COST_SPECS (pnl_r already net-of-cost per trading_app.outcome_builder.to_r_multiple)."
+    - "Canonical feature delegation: rel_vol_{session} read directly from daily_features; no re-encoding."
+  minbtl_check: "K=4 (2 instruments x 2 forms); MinBTL = 2·ln(4)/9 ~= 0.308 yrs; IS window >=6 yrs on both MGC and MES. Trivially satisfied."
+
+diagnostics_required_not_gated:
+  - "Per-lane (session x direction) Sharpe and ExpR for the winning form on each instrument."
+  - "Per-year IS ExpR and fire rate for the winning form (detect regime concentration)."
+  - "T0 tautology check — correlation of Q5 fire with deployed-filter fire (COST_LT12, ORB_G5, ATR_P50, OVNRNG_50, VWAP_MID_ALIGNED) per instrument-session. If |corr| > 0.70 with any deployed filter, flag TAUTOLOGY_WITH_<FILTER> (still deployable but as reframe of known filter, not net-new edge)."
+  - "Per-direction breakdown (long vs short) for the winning form — informational. Filter form doesn't force long/short symmetry the way sizer does; symmetric-or-not is allowed in this pre-reg."
+
+decision_rules:
+  verdicts_per_instrument:
+    FILTER_ALIVE_IS_F1: "F1 passes all 4 gates AND higher Sharpe IS than F2 (if F2 also passes) or F2 kills. MGC or MES. CANDIDATE_READY_IS on that (instrument, Q5-only) cell."
+    FILTER_ALIVE_IS_F2: "Same as above but F2 wins."
+    FILTER_RESEARCH_SURVIVOR: "Gates 1-3 pass but Gate 4 (bootstrap CI) includes 0. Hold as research-provisional; not deploy-eligible. Re-evaluate when fresh OOS accrues."
+    FILTER_DEAD_IS: "Neither form clears gates 1-3."
+  instrument_family_summary:
+    ">=1 FILTER_ALIVE_IS": "That instrument has a deploy-eligible filter candidate pending fresh-OOS confirmation. Shadow monitor design is the NEXT bounded step post this pre-reg."
+    "All FILTER_DEAD_IS": "rel_vol filter form dead on this instrument family. Close this thread; switch to alternative rank-basis pre-reg (atr_vel_ratio, break_delay_min — separate future pre-regs)."
+    "Any FILTER_RESEARCH_SURVIVOR": "Accrue fresh OOS for >=6 months; revisit when N_fresh_OOS >=50."
+
+non_actions:
+  - "Does NOT write to validated_setups / edge_families / lane_allocation / live_config."
+  - "Does NOT deploy. No capital action."
+  - "Does NOT tune form or multiplier space — F1 and F2 are pre-committed."
+  - "Does NOT test alternative rank-basis features (atr_vel_ratio, break_delay_min, orb_size_pct). Future pre-regs."
+  - "Does NOT include MNQ. rel_vol dead for MNQ per re-audit."
+  - "Does NOT use 2026-01-01 to 2026-04-19 OOS as confirmatory. Peeked window = informational only."
+
+outputs:
+  result_md: "docs/audit/results/2026-04-21-rel-vol-filter-form-v1.md"
+  script: "research/rel_vol_filter_form_v1.py"
+
+commit_sha: "TO_FILL_AFTER_COMMIT"

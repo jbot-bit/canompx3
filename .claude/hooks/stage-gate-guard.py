@@ -21,9 +21,25 @@ v2.3 fixes (from simulation):
 """
 
 import json
+import subprocess
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
+
+# Repo root — prefer git-reported top-level so worktrees (canompx3-wtN) normalize
+# correctly instead of string-matching a specific directory name.
+try:
+    REPO_ROOT = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=True,
+        ).stdout.strip()
+    )
+except (subprocess.SubprocessError, FileNotFoundError, OSError):
+    REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Legacy stage file — Claude Code now uses stages/*.md, but this is still read for backwards compat
 STAGE_STATE = Path("docs/runtime/STAGE_STATE.md")
@@ -101,10 +117,19 @@ NEVER_TRIVIAL = (
 
 
 def normalize(p):
+    """Return path relative to REPO_ROOT, or best-effort fallback if outside repo."""
     p = p.replace("\\", "/")
-    if "canompx3/" in p:
-        p = p.split("canompx3/", 1)[-1]
-    return p
+    try:
+        abs_path = Path(p).resolve()
+        return abs_path.relative_to(REPO_ROOT).as_posix()
+    except (ValueError, OSError):
+        # Not under REPO_ROOT (or path doesn't exist). Fallback: last-ditch suffix
+        # strip on the repo name — kept for Windows-absolute paths where the
+        # event reports a drive-prefixed string the hook hasn't seen before.
+        repo_name = REPO_ROOT.name + "/"
+        if repo_name in p:
+            p = p.split(repo_name, 1)[-1]
+        return p
 
 
 def parse_field(content, field):
@@ -296,7 +321,13 @@ def load_all_stages():
 
 
 def main():
-    event = json.load(sys.stdin)
+    try:
+        event = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        sys.exit(0)
+    except Exception as exc:
+        print(f"[stage-gate-guard] unexpected: {exc}", file=sys.stderr)
+        sys.exit(0)
     file_path = normalize(event.get("tool_input", {}).get("file_path", ""))
 
     # ── Layer 1: Explicitly safe files ────────────────────────────────

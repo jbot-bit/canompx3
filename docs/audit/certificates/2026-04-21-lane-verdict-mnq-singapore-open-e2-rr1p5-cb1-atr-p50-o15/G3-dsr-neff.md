@@ -1,0 +1,46 @@
+# G3 — DSR + N̂ Certificate
+
+**Candidate:** `MNQ_SINGAPORE_OPEN_E2_RR1.5_CB1_ATR_P50_O15`
+**Hypothesis family:** `live deployed lane retrospective`
+**Pre-reg:** `N/A — deployed lane retrospective verdict`
+
+---
+
+## Purpose
+
+This certificate follows the Terminal 3 template but uses the Phase B corrective rule: bracket `rho_hat` at `0.3 / 0.5 / 0.7`, then fail closed for `KEEP` unless `DSR > 0.95` at the directive's conservative `rho_hat=0.7` bound.
+
+## Live computation
+
+| Input | Value | Source / query |
+|---|---|---|
+| `T` | `968` | `active_validated_setups.sample_size` |
+| `SR_hat` | `0.094100` | `active_validated_setups.sharpe_ratio` |
+| `V[SR_n]` | `0.006712` | `trading_app.dsr.estimate_var_sr_from_db(GOLD_DB_PATH)` |
+| `M` raw trials | `35700` | `active_validated_setups.n_trials_at_discovery` |
+
+### Bracketed `N_hat` / DSR
+
+| `rho_hat` | `N_hat = rho + (1-rho) * M` | `SR_0` | `DSR` |
+|---|---:|---:|---:|
+| `0.3` | `24990.3` | `0.334186` | `0.000000` |
+| `0.5` | `17850.5` | `0.327718` | `0.000000` |
+| `0.7` | `10710.7` | `0.317672` | `0.000000` |
+
+## Verdict
+
+- [x] `FAIL` at the directive's conservative `rho_hat=0.7` bound.
+- [x] `rho_hat=0.7` result used for the Phase B keep/degrade decision.
+- [x] gold-db MCP unavailable in-session; canonical substitute was read-only Python against `pipeline.paths.GOLD_DB_PATH`.
+
+## Literature citation
+
+- `docs/institutional/literature/bailey_lopez_de_prado_2014_deflated_sharpe.md` Eq. 2 + Appendix A.3 Eq. 9
+- `docs/institutional/pre_registered_criteria.md` Amendment 2.1
+
+## Authored by / committed
+
+- Author: `Codex`
+- Commit SHA of candidate script: `dfb1bbab`
+- Commit SHA of DSR helper: `dfb1bbab5d4d`
+- Pinned `pre_registered_criteria.md` commit SHA at eval time: `126ed6b883fb`

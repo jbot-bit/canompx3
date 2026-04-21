@@ -919,26 +919,98 @@ def _check_criterion_2_minbtl(meta: dict, on_proxy_data: bool = False) -> tuple[
 # composition and therefore cannot fire as a pre-flight gate.
 
 
+def _estimate_oos_power(oos_pnls: list[float], is_expr: float, *, alpha: float = 0.05) -> float | None:
+    """OOS power for a one-sample test of mean > 0 given IS effect size.
+
+    Uses the non-central t distribution (``scipy.stats.nct``) with
+    non-centrality parameter ``ncp = is_expr * sqrt(N_oos) / sd_oos`` and
+    degrees of freedom ``N_oos - 1``.  Returns the probability of rejecting
+    H0 (mean = 0) two-tailed at ``alpha`` given the IS effect is the true
+    mean — i.e. the OOS's power to detect the IS edge.
+
+    Returns None if the sample is too small (``N_oos < 2``) or the OOS
+    standard deviation is zero (degenerate — no variance in the sample).
+
+    Added 2026-04-21 per ``pre_registered_criteria.md`` Amendment 3.2.  Used
+    by ``_check_criterion_8_oos`` for tier-plus-power logging and opt-in
+    power-floor rejection.
+    """
+    n_oos = len(oos_pnls)
+    if n_oos < 2:
+        return None
+    mean = sum(oos_pnls) / n_oos
+    variance = sum((x - mean) ** 2 for x in oos_pnls) / (n_oos - 1)
+    sd = variance**0.5
+    # 1e-12 epsilon guards floating-point dust from uniform input
+    # (e.g. [0.1]*30 produces sd ≈ 1e-17 from accumulation error, which
+    # yields ncp = inf → NaN power — return None for clarity instead).
+    if sd < 1e-12:
+        return None
+    # Lazy import: scipy stats submodule is heavy, kept off cold-import path.
+    import math
+
+    from scipy import stats
+
+    df = n_oos - 1
+    ncp = is_expr * (n_oos**0.5) / sd
+    t_crit = stats.t.ppf(1 - alpha / 2, df)
+    # scipy.stats.nct loses numerical stability at very large |ncp| and
+    # returns NaN for the vanishing tail.  The far tail is effectively 0
+    # for |ncp| >> t_crit, so NaN-guard to 0.0 rather than propagating.
+    power_upper = float(stats.nct.sf(t_crit, df, ncp))
+    power_lower = float(stats.nct.cdf(-t_crit, df, ncp))
+    if math.isnan(power_upper):
+        power_upper = 0.0
+    if math.isnan(power_lower):
+        power_lower = 0.0
+    total = power_upper + power_lower
+    # Clamp floating-point drift to [0, 1].
+    return max(0.0, min(1.0, total))
+
+
 def _check_criterion_8_oos(
-    row_dict: dict, db_path: Path | None, *, strict_oos_n: bool = False
+    row_dict: dict,
+    db_path: Path | None,
+    *,
+    strict_oos_n: bool = False,
+    require_power_floor: bool = False,
+    power_target: float = 0.5,
 ) -> tuple[str | None, str | None]:
-    """Criterion 8: 2026 out-of-sample positive (with N/A safety).
+    """Criterion 8: 2026 OOS — 3-tier gate per Amendment 3.2 (2026-04-21).
 
     Queries ``orb_outcomes`` joined with ``daily_features`` for trading days
     on or after ``HOLDOUT_SACRED_FROM`` (2026-01-01), applies the candidate's
     canonical filter via ``ALL_FILTERS[filter_type].matches_row()``, and
     computes the OOS expectancy-R from matching trades.
 
-    The locked threshold is ``OOS_ExpR >= 0`` AND ``OOS_ExpR >= 0.40 * IS_ExpR``.
+    Gate structure (binding per ``docs/institutional/pre_registered_criteria.md``
+    Amendment 3.2):
+
+    - Tier 1 (N_oos >= 100): sign gate (OOS ExpR >= 0) AND ratio gate
+      (OOS ExpR >= 0.40 * IS ExpR).  ``CONFIRMATORY_PASS``.
+    - Tier 2 (30 <= N_oos < 100): sign gate ONLY.  Ratio gate SKIPPED —
+      at this N the OOS/IS ratio estimate is too noisy to be confirmatory
+      (Harvey-Liu 2015 p.17 OOS caveat).  ``DIRECTIONAL_PASS``.
+    - Tier 3 (0 < N_oos < 30): pass-through (not evaluated).  ``UNVERIFIED_PASS``.
+    - N/A (N_oos == 0): pass-through.  No 2026 data available.
 
     Parameters
     ----------
     strict_oos_n
         When True (Pathway B / individual testing mode), reject hard if
-        ``N_oos`` is below the minimum threshold instead of silently passing
-        through.  Amendment 3.0 condition 4 forbids "insufficient OOS data
-        exemptions" for Pathway B.  Default False preserves Pathway A
-        legacy permissive behaviour.
+        ``N_oos`` is below the minimum threshold (30) instead of silently
+        passing through.  Amendment 3.0 condition 4 forbids "insufficient
+        OOS data exemptions" for Pathway B.  Default False preserves
+        Pathway A legacy permissive behaviour.
+    require_power_floor
+        When True (opt-in per Amendment 3.2), reject at Tier 2
+        (30 <= N_oos < 100) when computed OOS power < ``power_target``.
+        Tier 1 is exempt — sufficient N provides confirmatory evidence
+        regardless of marginal power.  Default False preserves legacy
+        callers.
+    power_target
+        Power threshold when ``require_power_floor=True``.  Default 0.5 per
+        ``memory/feedback_oos_power_floor.md`` convention.
 
     N/A safety: if zero OOS trades exist (e.g., synthetic test DB with no
     2026 data), the gate returns N/A pass-through. This prevents pre-2026
@@ -1040,48 +1112,73 @@ def _check_criterion_8_oos(
         # synthetic test DBs and null seed runs from false rejection.
         return (None, None)
 
-    # Minimum OOS sample gate.  N=30 is a CLT heuristic — NOT a Bailey
-    # or Harvey-Liu prescription.  The real institutional fix is a power-
-    # grounded threshold derived from each strategy's IS effect size
-    # (deferred; see docs/plans/2026-04-09-bloomey-pathway-b-fixes-design.md
-    # § "Out-of-scope" item 1).
-    #
-    # Two modes (added per Bloomey review finding A-2):
-    #   strict_oos_n=False (Pathway A / default):  silent pass-through,
-    #     logged at WARNING so the event is auditable.  Preserves legacy
-    #     behaviour for the 124 grandfathered strategies.
-    #   strict_oos_n=True  (Pathway B / individual):  hard REJECT.
-    #     Amendment 3.0 condition 4 forbids "insufficient OOS data
-    #     exemptions" for individual-mode hypotheses.
-    _OOS_MIN_TRADES_CLT_HEURISTIC = 30
-    if n_oos < _OOS_MIN_TRADES_CLT_HEURISTIC:
+    # Tier 3 (N_oos < 30).  strict_oos_n=True hard-rejects per Amendment 3.0
+    # condition 4; Pathway A default passes through with a WARNING log so
+    # the event is auditable.  The 30-trade CLT floor is unchanged.
+    _OOS_TIER_2_FLOOR = 30
+    _OOS_TIER_1_FLOOR = 100  # Amendment 3.2: Tier 1 confirmatory threshold
+    if n_oos < _OOS_TIER_2_FLOOR:
         if strict_oos_n:
             return (
                 "REJECTED",
-                f"criterion_8: N_oos={n_oos} < {_OOS_MIN_TRADES_CLT_HEURISTIC} "
+                f"criterion_8: N_oos={n_oos} < {_OOS_TIER_2_FLOOR} "
                 f"(Amendment 3.0 condition 4: no insufficient-OOS-data exemptions "
                 f"for Pathway B individual testing mode)",
             )
         logger.warning(
-            "  Criterion 8: N_oos=%d < %d — insufficient for judgment, pass-through (Pathway A permissive mode)",
+            "  Criterion 8 [Tier 3 UNVERIFIED]: N_oos=%d < %d — pass-through (Pathway A)",
             n_oos,
-            _OOS_MIN_TRADES_CLT_HEURISTIC,
+            _OOS_TIER_2_FLOOR,
         )
         return (None, None)
 
     oos_expr = sum(oos_pnl_r) / n_oos
+
+    # Power disclosure (Amendment 3.2): always compute and log for
+    # N_oos >= 30 so the tier + power state is auditable in validation logs.
+    power = _estimate_oos_power(oos_pnl_r, is_expr_f)
+    tier_label = "Tier 1 CONFIRMATORY" if n_oos >= _OOS_TIER_1_FLOOR else "Tier 2 DIRECTIONAL"
+    power_str = f"{power:.3f}" if power is not None else "NA"
+    logger.warning(
+        "  Criterion 8 [%s]: N_oos=%d OOS_ExpR=%+.4f IS_ExpR=%+.4f power@%.2f=%s",
+        tier_label,
+        n_oos,
+        oos_expr,
+        is_expr_f,
+        power_target,
+        power_str,
+    )
+
+    # Sign gate applies to BOTH Tier 1 and Tier 2 (Amendment 3.2).
     if oos_expr < 0:
         return (
             "REJECTED",
-            f"criterion_8: OOS ExpR={oos_expr:+.4f} < 0 (N_oos={n_oos})",
+            f"criterion_8 [{tier_label}]: OOS ExpR={oos_expr:+.4f} < 0 (N_oos={n_oos})",
         )
-    if is_expr_f > 0:
+
+    # Ratio gate applies ONLY at Tier 1 (N_oos >= 100) per Amendment 3.2.
+    # At Tier 2 the ratio estimate is too noisy for a confirmatory gate
+    # (Harvey-Liu 2015 p.17 OOS caveat).
+    if n_oos >= _OOS_TIER_1_FLOOR and is_expr_f > 0:
         ratio = oos_expr / is_expr_f
         if ratio < 0.40:
             return (
                 "REJECTED",
-                f"criterion_8: OOS/IS ratio={ratio:.3f} < 0.40 (OOS={oos_expr:+.4f} IS={is_expr_f:+.4f} N_oos={n_oos})",
+                f"criterion_8 [Tier 1 CONFIRMATORY]: OOS/IS ratio={ratio:.3f} < 0.40 "
+                f"(OOS={oos_expr:+.4f} IS={is_expr_f:+.4f} N_oos={n_oos})",
             )
+
+    # Opt-in power-floor reject at Tier 2 (Amendment 3.2).  Tier 1 is
+    # exempt — sufficient N is its own confirmatory evidence regardless of
+    # marginal detectability.  None-power (degenerate sd) bypasses the
+    # gate: we do not manufacture a reject from a non-computable power.
+    if require_power_floor and n_oos < _OOS_TIER_1_FLOOR and power is not None and power < power_target:
+        return (
+            "REJECTED",
+            f"criterion_8 [Tier 2 DIRECTIONAL]: OOS power={power:.3f} < {power_target:.2f} "
+            f"(N_oos={n_oos}, IS_ExpR={is_expr_f:+.4f}) — Amendment 3.2 power-floor",
+        )
+
     return (None, None)
 
 
