@@ -23,7 +23,7 @@ authority:
     - "OOS is expected to be thin; thin-OOS is a park condition, not a promotion waiver."
 
 reproducibility:
-  repo_root: "/tmp/canompx3-comex-action-pack"
+  repo_root: "C:/Users/joshd/canompx3"
   commit_sha: "TO_FILL_AFTER_COMMIT"
   committed_required_before_run: true
 

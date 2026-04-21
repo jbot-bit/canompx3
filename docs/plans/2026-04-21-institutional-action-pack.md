@@ -4,15 +4,15 @@
 **Status:** ACTIVE
 **Purpose:** convert the 2026-04-21 institutional audits into a single honest execution pack so the next research step is pre-registered, scoped, and non-duplicative.
 
-**This doc supersedes** [2026-04-21-post-stale-lock-action-queue.md](/tmp/canompx3-comex-action-pack/docs/plans/2026-04-21-post-stale-lock-action-queue.md) for next-step research routing.
+**This doc supersedes** [2026-04-21-post-stale-lock-action-queue.md](2026-04-21-post-stale-lock-action-queue.md) for next-step research routing.
 
 ## Binding facts
 
-- `GARCH R3` is already past prereg and sits in forward-monitoring only. No new discovery or retuning belongs there. Source: [2026-04-21-garch-r3-session-clipped-shadow.md](/tmp/canompx3-comex-action-pack/docs/audit/results/2026-04-21-garch-r3-session-clipped-shadow.md), [2026-04-21-post-stale-lock-action-queue.md](/tmp/canompx3-comex-action-pack/docs/plans/2026-04-21-post-stale-lock-action-queue.md).
-- `L1 EUROPE_FLOW` does **not** justify an ATR-normalized ORB_G5 replacement prereg. That path is dead. Source: [2026-04-21-l1-europe-flow-filter-diagnostic.md](/tmp/canompx3-comex-action-pack/docs/audit/results/2026-04-21-l1-europe-flow-filter-diagnostic.md).
-- `L3 COMEX_SETTLE ORB_G5` had real historical discrimination, but that does **not** prove a live selector because the no-fire bucket is extinct-era. Source: [2026-04-21-comex-settle-orb-g5-failure-pocket-audit.md](/tmp/canompx3-comex-action-pack/docs/audit/results/2026-04-21-comex-settle-orb-g5-failure-pocket-audit.md).
-- `Prior-day level` work is not dead, but the honest next move is a narrow single-cell confirmation, not another family sweep. Source: [2026-04-15-prior-day-features-orb-mega-exploration.md](/tmp/canompx3-comex-action-pack/docs/audit/results/2026-04-15-prior-day-features-orb-mega-exploration.md), [2026-04-15-t0-t8-audit-o5-patterns.md](/tmp/canompx3-comex-action-pack/docs/audit/results/2026-04-15-t0-t8-audit-o5-patterns.md).
-- `E2 break_*` features are not admissible predictor inputs for new preregs. The canonical rule file already bans them, and the 2026-04-21 handoff quantified the leak at 41.3% on real E2 trades. Source: [HANDOFF.md](/tmp/canompx3-comex-action-pack/HANDOFF.md).
+- `GARCH R3` is already past prereg and sits in forward-monitoring only. No new discovery or retuning belongs there. Source: [2026-04-21-garch-r3-session-clipped-shadow.md](../audit/results/2026-04-21-garch-r3-session-clipped-shadow.md), [2026-04-21-post-stale-lock-action-queue.md](2026-04-21-post-stale-lock-action-queue.md).
+- `L1 EUROPE_FLOW` does **not** justify an ATR-normalized ORB_G5 replacement prereg. That path is dead. Source: [2026-04-21-l1-europe-flow-filter-diagnostic.md](../audit/results/2026-04-21-l1-europe-flow-filter-diagnostic.md).
+- `L3 COMEX_SETTLE ORB_G5` had real historical discrimination, but that does **not** prove a live selector because the no-fire bucket is extinct-era. Source: [2026-04-21-comex-settle-orb-g5-failure-pocket-audit.md](../audit/results/2026-04-21-comex-settle-orb-g5-failure-pocket-audit.md).
+- `Prior-day level` work is not dead, but the honest next move is a narrow single-cell confirmation, not another family sweep. Source: [2026-04-15-prior-day-features-orb-mega-exploration.md](../audit/results/2026-04-15-prior-day-features-orb-mega-exploration.md), [2026-04-15-t0-t8-audit-o5-patterns.md](../audit/results/2026-04-15-t0-t8-audit-o5-patterns.md).
+- `E2 break_*` features are not admissible predictor inputs for new preregs. The canonical rule file already bans them, and the 2026-04-21 handoff quantified the leak at 41.3% on real E2 trades. Source: [HANDOFF.md](../../HANDOFF.md).
 
 ## Decision matrix
 
@@ -50,6 +50,6 @@
 
 ## Locked prereg set created by this pack
 
-- [2026-04-21-mnq-comex-unfiltered-overlay-v1.yaml](/tmp/canompx3-comex-action-pack/docs/audit/hypotheses/2026-04-21-mnq-comex-unfiltered-overlay-v1.yaml)
-- [2026-04-21-l1-europe-flow-pre-break-context-prereg.yaml](/tmp/canompx3-comex-action-pack/docs/audit/hypotheses/2026-04-21-l1-europe-flow-pre-break-context-prereg.yaml)
-- [2026-04-21-mnq-us-data-1000-f5-below-pdl-v1.yaml](/tmp/canompx3-comex-action-pack/docs/audit/hypotheses/2026-04-21-mnq-us-data-1000-f5-below-pdl-v1.yaml)
+- [2026-04-21-mnq-comex-unfiltered-overlay-v1.yaml](../audit/hypotheses/2026-04-21-mnq-comex-unfiltered-overlay-v1.yaml)
+- [2026-04-21-l1-europe-flow-pre-break-context-prereg.yaml](../audit/hypotheses/2026-04-21-l1-europe-flow-pre-break-context-prereg.yaml)
+- [2026-04-21-mnq-us-data-1000-f5-below-pdl-v1.yaml](../audit/hypotheses/2026-04-21-mnq-us-data-1000-f5-below-pdl-v1.yaml)

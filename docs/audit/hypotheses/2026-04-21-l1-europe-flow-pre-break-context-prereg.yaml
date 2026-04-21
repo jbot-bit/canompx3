@@ -23,7 +23,7 @@ authority:
     - "No ATR-normalized ORB_G5 replacement is in scope."
 
 reproducibility:
-  repo_root: "/tmp/canompx3-comex-action-pack"
+  repo_root: "C:/Users/joshd/canompx3"
   commit_sha: "TO_FILL_AFTER_COMMIT"
   committed_required_before_run: true
 
@@ -220,4 +220,3 @@ not_done_by_this_pre_reg:
   - "Does not replace the live ORB_G5 filter directly."
   - "Does not test filtered-pass residuals."
   - "Does not register a production filter."
-

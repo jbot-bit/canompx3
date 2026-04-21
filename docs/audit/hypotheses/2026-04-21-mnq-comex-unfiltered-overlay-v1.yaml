@@ -22,7 +22,7 @@ authority:
     - "All evaluation is scratch-inclusive: scratch rows are counted with pnl_eff=0.0."
 
 reproducibility:
-  repo_root: "/tmp/canompx3-comex-action-pack"
+  repo_root: "C:/Users/joshd/canompx3"
   commit_sha: "TO_FILL_AFTER_COMMIT"
   committed_required_before_run: true
 
@@ -219,4 +219,3 @@ not_done_by_this_pre_reg:
   - "Does not promote a live filter."
   - "Does not test sizing or allocator roles."
   - "Does not claim universality across sessions or instruments."
-
