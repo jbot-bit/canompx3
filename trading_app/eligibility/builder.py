@@ -247,7 +247,7 @@ def _walk_filter_atoms(
     # Validate return shape — fail-closed on any contract violation. The
     # contract is list[AtomDescription]; anything else (None, dict, str,
     # generator, set) is a filter bug we refuse to paper over.
-    if not isinstance(atoms, (list, tuple)):
+    if not isinstance(atoms, list | tuple):
         error_msg = f"{filt.filter_type}.describe returned {type(atoms).__name__}, expected list[AtomDescription]"
         return [
             (
