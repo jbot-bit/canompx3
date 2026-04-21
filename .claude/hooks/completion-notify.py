@@ -12,7 +12,10 @@ import sys
 def main():
     try:
         event = json.load(sys.stdin)
-    except (json.JSONDecodeError, Exception):
+    except json.JSONDecodeError:
+        sys.exit(0)
+    except Exception as exc:
+        print(f"[completion-notify] unexpected: {exc}", file=sys.stderr)
         sys.exit(0)
 
     hook_event = event.get("hook_event_name", "")

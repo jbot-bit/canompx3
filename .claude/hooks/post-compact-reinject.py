@@ -43,7 +43,10 @@ def _task_route_lines() -> list[str]:
 def main() -> None:
     try:
         json.load(sys.stdin)
-    except (json.JSONDecodeError, Exception):
+    except json.JSONDecodeError:
+        sys.exit(0)
+    except Exception as exc:
+        print(f"[post-compact-reinject] unexpected: {exc}", file=sys.stderr)
         sys.exit(0)
 
     task_route_lines = _task_route_lines()

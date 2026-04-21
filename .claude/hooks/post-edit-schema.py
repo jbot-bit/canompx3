@@ -42,7 +42,13 @@ def scan_skills_for_stale_sql():
 
 
 def main():
-    input_data = json.load(sys.stdin)
+    try:
+        input_data = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        sys.exit(0)
+    except Exception as exc:
+        print(f"[post-edit-schema] unexpected: {exc}", file=sys.stderr)
+        sys.exit(0)
     file_path = input_data.get("tool_input", {}).get("file_path", "")
 
     # Only run for schema files

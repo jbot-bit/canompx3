@@ -109,7 +109,10 @@ def _task_route_lines() -> list[str]:
 def main() -> None:
     try:
         event = json.load(sys.stdin)
-    except (json.JSONDecodeError, Exception):
+    except json.JSONDecodeError:
+        sys.exit(0)
+    except Exception as exc:
+        print(f"[session-start] unexpected: {exc}", file=sys.stderr)
         sys.exit(0)
 
     session_type = event.get("session_type", "startup")

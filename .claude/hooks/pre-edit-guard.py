@@ -12,7 +12,13 @@ BLOCKED_PATTERNS = [
 
 
 def main():
-    input_data = json.load(sys.stdin)
+    try:
+        input_data = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        sys.exit(0)
+    except Exception as exc:
+        print(f"[pre-edit-guard] unexpected: {exc}", file=sys.stderr)
+        sys.exit(0)
     file_path = input_data.get("tool_input", {}).get("file_path", "")
 
     for pattern in BLOCKED_PATTERNS:
