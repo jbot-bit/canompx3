@@ -1,0 +1,203 @@
+date: 2026-04-21
+title: Garch R3 session-clipped forward shadow pilot
+status: active
+purpose: >
+  Run the next honest step for garch as an R3 position-size modifier:
+  forward shadow only, on the current profile-relevant lane set, with the
+  already-tested SESSION_CLIPPED map frozen and no new routing, allocator, or
+  feature search.
+
+authority_chain:
+  - CLAUDE.md
+  - RESEARCH_RULES.md
+  - TRADING_RULES.md
+  - docs/institutional/pre_registered_criteria.md
+  - .claude/rules/backtesting-methodology.md
+  - docs/institutional/mechanism_priors.md
+  - docs/audit/results/2026-04-15-garch-final-honest-verdict.md
+  - docs/audit/results/2026-04-16-garch-g0-preflight.md
+  - docs/audit/results/2026-04-16-garch-normalized-sizing-audit.md
+  - docs/audit/results/2026-04-16-garch-additive-sizing-audit.md
+  - docs/audit/results/2026-04-21-ovnrng-router-rolling-cv.md
+
+classification: forward_shadow_research_only
+evidence_tier: post_backtest_followthrough
+
+why_this_is_new:
+  - >
+    The dead path was A4 allocator/routing utility (R8): session ranking and
+    scarce-slot routing. This pilot is R3 only: bounded size modification on
+    lanes that are already active or replay-validated.
+  - >
+    No session switching, no lane ranking, no new threshold sweep, no confluence
+    score, no ML, no profile maximand change.
+  - >
+    The selected map is frozen from the prior A2 pre-registered audit; this
+    pilot does not reopen the search space.
+
+scope:
+  profiles:
+    - topstep_50k_mnq_auto
+  lane_surface:
+    - current profile lane set only
+  sessions:
+    - fixed by the current profile lane set
+  instruments:
+    - fixed by the current profile lane set
+  entry_models:
+    - fixed by the current profile lane set
+  rr_targets:
+    - fixed by the current profile lane set
+  action_type:
+    - shadow only
+  exclusions:
+    - no new lanes
+    - no inactive validated shelf sweep
+    - no profile-to-profile optimization
+    - no session router
+    - no allocator ranking
+    - no live order-size change
+
+state_variable:
+  name: garch_forecast_vol_pct
+  canonical_source: pipeline/build_daily_features.py
+  temporal_claim: >
+    Prior-only state variable. Must remain computed from prior closes and ranked
+    on a prior-only window exactly as verified in G0 preflight.
+
+frozen_policy:
+  map_name: SESSION_CLIPPED
+  parent_pre_reg: docs/audit/hypotheses/2026-04-16-garch-profile-continuous-sizing-replay.yaml
+  parent_selection_context:
+    normalized_maps_tested: 5
+    selected_map: SESSION_CLIPPED
+    selection_basis: >
+      best validated-scope tradeoff in the 2026-04-16 normalized sizing audit:
+      positive Full Δ$, positive Sharpe Δ, positive IS/OOS ExpR deltas, and no
+      need for routing/ranking claims.
+  raw_rule:
+    low_supported_sessions_gp_le_30: 0.5
+    neutral_default: 1.0
+    high_supported_sessions_gp_ge_70: 1.5
+  normalization_rule: >
+    Keep the previously-audited in-sample normalization logic frozen. Do not
+    retune the scaling constant, session support table, or cutoffs during the
+    shadow window.
+  missing_data_fallback: 1.0
+
+session_support_source:
+  source_doc: docs/audit/results/2026-04-16-garch-normalized-sizing-audit.md
+  rule: >
+    Use the fixed session support table already earned by the regime-family
+    audit. Do not re-score support off forward data.
+
+admissible_inputs:
+  allowed:
+    - garch_forecast_vol_pct
+    - session label
+    - instrument
+    - strategy_id / lane identity
+    - trading_day
+    - profile lot ceiling metadata
+  banned:
+    - overnight_range_pct
+    - atr_20_pct
+    - any A3/A4 composite score
+    - realized pnl_r
+    - mae_r
+    - mfe_r
+    - outcome
+    - break_ts
+    - break_delay_min
+    - any forward-filled or post-entry state
+
+temporal_alignment_gates:
+  - >
+    Shadow recommendation must be recorded only after the canonical
+    daily_features row for the trade day exists and before the target session
+    entry decision.
+  - >
+    If garch_forecast_vol_pct is null, stale, or cannot be proven prior-only,
+    record NEUTRAL_1X and flag the day as invalid for the pilot.
+  - >
+    No feature values from trading_day >= session start may enter the state.
+  - >
+    2026+ data may be used only for forward monitoring of this frozen policy,
+    never to alter cutoffs, session support, or normalization.
+
+honest_k:
+  discovery_context_k: 5
+  explanation: >
+    The upstream A2 normalized-sizing stage pre-registered five maps. This
+    shadow pilot is a single follow-through candidate chosen from that already
+    executed map family. No additional map comparison is permitted here.
+
+required_outputs:
+  - daily shadow ledger with base_size, shadow_weight, shadow_size_bucket
+  - per-trade shadow delta in R and dollars versus base_1x
+  - cumulative shadow delta in R and dollars
+  - daily Sharpe delta versus base_1x
+  - max drawdown delta versus base_1x
+  - worst day / worst 5-day delta versus base_1x
+  - pct_trades_changed
+  - pct_neutral_1x
+  - pct_missing_state_fallback
+  - per-session contribution table
+  - translated 0/1/2 contract hypothetical, reported separately from primary shadow weight
+
+verification_requirements:
+  - >
+    Reconfirm before launch that G0 preflight remains true for
+    garch_forecast_vol_pct timing and holdout boundary.
+  - >
+    Independently recompute one shadow day from raw canonical rows before
+    trusting the ledger.
+  - >
+    If the profile lane set changes during the pilot, freeze the old segment and
+    start a new ledger segment rather than silently splicing.
+
+success_condition: >
+  Continue only if forward shadow retains positive cumulative delta versus
+  base_1x and does not materially worsen path quality. Minimum evidence gate:
+  after 50 shadow-affected trades or 30 trade days, daily Sharpe delta must be
+  >= 0 and cumulative shadow delta must be > 0. Final gate: after 90 calendar
+  days, cumulative shadow delta must remain > 0 with max drawdown no worse than
+  1.2x the base path.
+
+kill_condition:
+  - >
+    Kill immediately if any forward adjustment requires changing the frozen
+    SESSION_CLIPPED rule, cutoffs, or session support table.
+  - >
+    Kill immediately if temporal provenance of garch_forecast_vol_pct cannot be
+    re-verified.
+  - >
+    Kill at the first review gate if cumulative shadow delta <= 0 and daily
+    Sharpe delta < 0.
+  - >
+    Kill if pct_missing_state_fallback exceeds 5% of eligible trades.
+  - >
+    Kill if translated 0/1/2 hypothetical repeatedly violates the profile's
+    feasible risk envelope even on paper.
+
+not_allowed:
+  - live execution size changes
+  - re-ranking sessions
+  - swapping to GLOBAL_LINEAR or another map mid-pilot
+  - adding overnight or ATR proxies
+  - combining with other signals
+  - treating this pilot as portfolio-wide evidence
+
+file_plan:
+  - docs/audit/hypotheses/2026-04-21-garch-r3-session-clipped-shadow.yaml
+  - docs/audit/results/2026-04-21-garch-r3-session-clipped-shadow.md
+  - shadow ledger output path to be chosen at implementation time
+
+notes:
+  - >
+    This pilot exists because the repo has positive backtest-side evidence for
+    R3 sizing and negative evidence for R8 routing. The latter does not bind the
+    former.
+  - >
+    This is a forward-monitoring contract, not a discovery scan and not a live
+    deployment approval.
