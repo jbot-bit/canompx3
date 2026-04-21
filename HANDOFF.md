@@ -7895,3 +7895,186 @@ Referenced in Criterion 12 but not implemented. Paper: `resources/real_time_stra
 ### Stale note corrected
 
 - Prior note that COMEX would remain on `OVNRNG_100` was stale. Canonical script output selected `MNQ_COMEX_SETTLE_E2_RR1.5_CB1_ORB_G5` on 2026-04-18. Script output wins.
+
+---
+
+## CRASH RECOVERY — 2026-04-21
+
+Computer crashed with 3 terminals open. This section is APPEND-ONLY post-crash reconstruction. Truth source: repo state, not memory.
+
+### Truth state — worktrees
+
+| Worktree | Branch | HEAD | Dirty? |
+|---|---|---|---|
+| `C:/Users/joshd/canompx3` | `research/pr48-sizer-rule-oos-backtest` | `fa265ee5` | YES — see CRITICAL below |
+| `C:/Users/joshd/canompx3-deploy-live` | `deploy/live-trading-buildout-v1` | `5cab99d7` | YES — same diff |
+| `C:/Users/joshd/canompx3-6lane-baseline` | `research/ovnrng-router-rolling-cv` | `7f4f85ba` | YES — same diff |
+| `/tmp/canompx3-ml-sizing-v1` | `research/profile-monotonic-allocator-v1` | `4e770259` | prunable (orphan) |
+| `/tmp/canompx3-orthogonal-hunt` | `research/orthogonal-golden-egg-hunt-v1` | `f3f3109b` | prunable (orphan) |
+| `/tmp/canompx3-posture-routing` | `research/posture-routing-decision-v1` | `c793058e` | prunable (orphan) |
+| `/tmp/canompx3-topstep-846` | `research/topstep-846-live-readiness` | `4503f9a4` | prunable (orphan) |
+
+`main` local is **behind origin by 2 commits** (needs `git fetch && git pull` before any branch-from-main).
+
+### CRITICAL — uncommitted changes in 3 worktrees (identical)
+
+All three live worktrees show identical dirty state:
+
+```
+ M pipeline/check_drift.py                    (192 ins / 192 del)
+ M tests/test_pipeline/test_check_drift_db.py (≈similar shape)
+```
+
+**This is NOT a formatter / line-ending artifact.** Sample of `git diff pipeline/check_drift.py`:
+- `check_htf_levels_integrity` def line modified (looks identical — likely zero-width / invisible byte)
+- A `finally: if _own_con: con.close()` block was REMOVED from `check_htf_levels_integrity`
+- `check_htf_aperture_consistency` and surrounding logic moved/reordered
+
+**Hypothesis:** something — possibly an editor or hook — touched the same files across all 3 worktrees during/just before crash. Symmetric 192/192 suggests block-reorder, not loss. **Do not commit, revert, or `git checkout --` until eyes-on review.** UNKNOWN whether this is in-progress work, an aborted refactor, or a script side-effect.
+
+**Safe options when you decide:**
+1. `git stash push -m "crash-recovery-2026-04-21-check_drift-changes"` in each worktree → preserves in reflog.
+2. WIP commit per worktree (`git commit -am "wip: crash-recovery snapshot of check_drift mods"`).
+3. After review, `git checkout -- pipeline/check_drift.py tests/test_pipeline/test_check_drift_db.py` if intentional revert.
+
+### Stashes (3 — all preserved, do NOT drop blindly)
+
+```
+stash@{0}  l6-wip-pre-correction                       (research/l6-us-data-1000-2026-diagnostic)
+stash@{1}  temp-stash-before-rebase-mgc-audit          (perf/lazy-imports-broad-sweep)
+stash@{2}  other-terminal reversions of 2026-04-19...  (main, preserved pre-merge)
+```
+
+### Loose / scratch artifacts
+
+- `RESUME_NEXT.txt` (root, untracked) — 3-line pre-crash thought from 2026-04-17 at SHA `c085da97` (FX ORB pilot → live-book analogue transfer test). **STALE** — repo has moved 4+ days and dozens of commits since. Do not act on without re-pre-registering.
+- No `WIP.patch` / `RESUME_NOTE.txt` Codex-pattern artifacts found.
+- `.session/task-route.md` — referenced by SessionStart hook but does not exist on disk (informational; non-blocking).
+
+### Local-only commits (not on origin)
+
+Branch `research/pr48-sizer-rule-oos-backtest` is in sync with origin. Other branches with unpushed commits:
+- Hooks fixes: `db0fec1e`, `f2d261e9`, `6ae317fe`, `505acf24` (chore/reduce-hook-token-burn-fixup, etc.)
+- Audits: `849d9097` (wide-rel-ib distinctness), `16158e31` (vwap-bp-cmepreclose DEAD)
+- `audit/mgc-adversarial-reexamination` `2ed166ee` (not pushed)
+- `chore/reduce-hook-token-burn-fixup` `db0fec1e` (not pushed)
+
+### Open PRs (19) — triage
+
+| PR | Age | Branch | Status guess |
+|---|---|---|---|
+| #59 | 2026-04-21 | research/pr48-sizer-rule-oos-backtest | NEWEST — current work |
+| #56 | 2026-04-20 | research/mnq-pr51-dsr-audit | DSR audit MAJOR — needs decision |
+| #55 | 2026-04-20 | research/mes-mgc-filter-overlay-v2 | 0 survivors — can close |
+| #53 | 2026-04-20 | research/mes-mgc-unfiltered-baseline | 0 survivors — can close |
+| #36 | 2026-04-20 | research/hardening-three-fixes | infra hardening |
+| #35 | 2026-04-20 | research/lane-correlation-rolling-monitor | per memory: deployed |
+| #34 | 2026-04-20 | research/deploy-lane-oos-dir-match-audit | UNVERIFIED_ALIVE — referenced in active state |
+| #31 | 2026-04-20 | research/allocator-scored-tail-audit | TIGHT_BUT_JUSTIFIED — likely mergeable |
+| #30 | 2026-04-20 | research/orb-g5-cross-session-overlap | needs verdict check |
+| #24 | 2026-04-20 | perf/lazy-imports-import-time-cleanup | infra |
+| #23 | 2026-04-20 | fix/drift-label-consistency-guard | infra fail-closed |
+| #22 | 2026-04-19 | docs/bh-doctrine-per-cell-significance | doctrine |
+| #15, #14, #13 | 2026-04-19 | filter-delegation 3-file campaign | sequential — check merge order |
+| #12 | 2026-04-19 | followup/a2b-2-shape-e-eq9-population-fix | citation fix |
+| #11 | 2026-04-19 | fix/check-37-honor-duckdb-path | drift fix |
+| #10 | 2026-04-19 | fix/audit-behavioral-prose-false-positive | linter |
+| #8 | 2026-04-19 | audit/a2b-1-regime-gate-phase2 | A2b-1 audit |
+
+UNKNOWN for all PRs: CI status, mergeability, which were superseded. Need `gh pr view <n>` per case.
+
+### Classification
+
+**DO NOW**
+1. Decide what to do with the dirty `check_drift.py` / test diff in all 3 worktrees. Read the diff first; do not blindly stash or revert.
+2. `git fetch && git pull` on `main` (2 behind) before any branch-from-main work.
+
+**DO TODAY**
+3. Triage PR #56 (DSR MAJOR finding on PR #51's CANDIDATE_READYs) — blocks downstream activation.
+4. Close PR #53 + #55 if 0-survivor verdict is final (titles say so).
+5. Push local-only audit commits (`849d9097` wide-rel-ib, `16158e31` vwap-bp DEAD) to origin so they survive next crash.
+
+**WAITING / BLOCKED**
+6. PR #59 (current branch) — already in sync with origin; whether it merges depends on Amendment 3.2 review.
+7. Real-money XFA flip — per memory, "ops decision pending".
+
+**SAFE TO DELETE / ARCHIVE**
+8. 4 prunable `/tmp/` worktrees (`git worktree prune` after confirming no in-flight work).
+9. `RESUME_NEXT.txt` — 4 days stale; archive or delete after recording the FX idea elsewhere if still wanted.
+
+**UNKNOWN / NEEDS MANUAL CHECK**
+10. Source of the 3-worktree-identical `check_drift.py` modification (editor? hook? script?). Symmetric 192/192 + invisible char on def line is suspicious.
+11. CI/merge state of all 18 older open PRs.
+12. Whether stash@{0} (l6-wip) and stash@{1} (mgc-audit-pre-rebase) are still wanted or can be dropped.
+
+### Top-3 highest-EV next actions
+
+1. **Read the dirty diff fully:** `git diff pipeline/check_drift.py | less` (or save to a file). Decide: keep / WIP-commit / discard. **Do this first** — until resolved, every other worktree action risks losing or amplifying it.
+2. **PR #56 verdict:** if the DSR audit kills PR #51's 5 CANDIDATE_READYs, the activation plan in commit `d591408e` is blocked. Read `gh pr view 56` and decide before scheduling more research.
+3. **Sync `main`:** `git fetch && git checkout main && git pull` (note: branch-discipline rule says branch from `origin/main`, not local). Then `git worktree prune` for the 4 `/tmp/` orphans.
+
+### Useful exact commands
+
+```bash
+# Inspect dirty diff
+git diff pipeline/check_drift.py > /tmp/check_drift.diff && wc -l /tmp/check_drift.diff
+
+# Preserve dirty state (per-worktree, run from each)
+git stash push -m "crash-recovery-2026-04-21-check_drift" pipeline/check_drift.py tests/test_pipeline/test_check_drift_db.py
+
+# Prune dead worktrees
+git worktree list && git worktree prune --verbose
+
+# PR triage
+gh pr view 56 --json mergeable,statusCheckRollup,body
+gh pr view 53 --json mergeable,statusCheckRollup
+gh pr view 55 --json mergeable,statusCheckRollup
+```
+
+### Completion log — 2026-04-21 (recovery executed)
+
+**Reclassification — dirty diff was a false alarm.**
+`git diff --ignore-cr-at-eol pipeline/check_drift.py` returned EMPTY. The 192/192 ins/del was pure CR-at-EOL flip (Windows line-ending churn on lines that had been touched in the index with CRLF). No semantic change. The "removed `finally`/`con.close()` block" I flagged earlier was a misread — the same block re-appears later in the diff as a `+` line. Apologies for the false alarm; the audit-first stance still saved a wrong action.
+
+**Done (this session, all reversible / local-only):**
+- `git checkout -- pipeline/check_drift.py tests/test_pipeline/test_check_drift_db.py` in all 3 active worktrees → working trees clean.
+- `git fetch origin main:main` → local `main` fast-forwarded `582a7dca → f567cfe6` (PR #63 KILL ovnrng allocator router merged 2026-04-21; PR #62 retracted).
+- `git worktree prune` → 4 dead `/tmp/` worktrees removed (`canompx3-ml-sizing-v1`, `canompx3-orthogonal-hunt`, `canompx3-posture-routing`, `canompx3-topstep-846`). Branches retained on origin.
+- `RESUME_NEXT.txt` (root, 2026-04-17 stale FX idea) → moved to `docs/handoffs/crash-artifacts/2026-04-21-RESUME_NEXT-from-2026-04-17.txt`. Preserved, not deleted.
+
+**Stashes (3) — UNTOUCHED, preserved:**
+- `stash@{0}` l6-wip-pre-correction
+- `stash@{1}` temp-stash-before-rebase-mgc-audit
+- `stash@{2}` other-terminal reversions of 2026-04-19 sprint
+
+**Worktree note (decision deferred to user):**
+`C:/Users/joshd/canompx3-6lane-baseline` is on `research/ovnrng-router-rolling-cv` @ `7f4f85ba`, which was merged into main via PR #63 (KILL verdict). Worktree is now post-merge cleanup; safe to `git worktree remove` if no further work planned. Did NOT remove without confirmation.
+
+**PR triage — verdicts (you decide; no merges executed):**
+
+| PR | Status | Verdict & action |
+|---|---|---|
+| #56 | MERGEABLE / UNSTABLE | **MAJOR finding — DSR audit kills all 5 of PR #51's CANDIDATE_READYs at Bailey-LdP 2014 DSR < 0.95.** Blocks `d591408e` activation plan. **Read body, decide before merging anything else MNQ.** |
+| #31 | MERGEABLE / CLEAN | TIGHT_BUT_JUSTIFIED allocator-tail audit. No capital action. **Mergeable now.** |
+| #30 | MERGEABLE / CLEAN | PARTIAL_OVERLAP on 3 ORB_G5 lanes — retain all 3. **Mergeable now.** |
+| #12 | MERGEABLE / CLEAN | A2b-2 Eq 9 fix — closes 1 MED + 2 LOW. **Mergeable now.** |
+| #15 | MERGEABLE / UNSTABLE | filter-delegation file 3 — CI broke; rerun. |
+| #11 | CONFLICTING / DIRTY | Needs rebase against new main. |
+| #53, #55 | UNKNOWN/checks-fail | 0-survivor verdicts in titles → likely safe to **close as documented null** (no merge), but verify body. |
+| #36, #35, #34, #22 | UNKNOWN | Status checks failed/pending — `gh pr view` per case before action. |
+| #24, #23, #14, #13, #10, #8 | UNKNOWN/checks-fail | Older infra/audit PRs; many likely superseded. Manual triage. |
+
+**Local-only commits (NOT pushed — per "no push to other terminal's branch" rule):**
+- `chore/reduce-hook-token-burn-fixup`: `db0fec1e`, `f2d261e9`, `6ae317fe`, `505acf24`
+- `audit/mgc-adversarial-reexamination`: `2ed166ee`
+- Loose audit commits: `849d9097` (wide-rel-ib distinctness PASSES K=9), `16158e31` (vwap-bp DEAD)
+Decide per branch whether to push.
+
+**Open loops (in priority order):**
+1. PR #56 read + verdict (blocks MNQ activation pipeline).
+2. Decide PR #53/#55 close-as-null vs full merge.
+3. Decide whether to push the 6 local-only commits above.
+4. Decide whether to remove `canompx3-6lane-baseline` worktree (post-merge).
+5. 18 older PRs need merge/close decisions (none time-critical per memory).
+
+
