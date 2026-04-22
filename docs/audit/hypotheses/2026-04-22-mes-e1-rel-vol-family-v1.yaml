@@ -1,0 +1,199 @@
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: 2026-04-22
+slug: mes-e1-rel-vol-family-v1
+title: "MES E1 O5 RR1.5 rel_vol top-quintile family retest"
+owner: codex
+parent_spec: "docs/plans/2026-04-22-current-meta-overlay-program.md"
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - "docs/institutional/pre_registered_criteria.md"
+  notes:
+    - "This is an execution-safe reroute of the participation-shape line. It is not a reopen of pooled ORB ML."
+    - "E2 use is explicitly banned because rel_vol resolves at BREAK_DETECTED, not before the resting stop order."
+    - "E3 is excluded from this pre-reg because live support remains blocked."
+
+reproducibility:
+  repo_root: "/mnt/c/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  instrument: "MES"
+  sessions:
+    - "CME_REOPEN"
+    - "TOKYO_OPEN"
+    - "SINGAPORE_OPEN"
+    - "LONDON_METALS"
+    - "US_DATA_830"
+    - "NYSE_OPEN"
+    - "US_DATA_1000"
+    - "CME_PRECLOSE"
+    - "COMEX_SETTLE"
+    - "NYSE_CLOSE"
+  directions:
+    - "long"
+    - "short"
+  orb_minutes:
+    - 5
+  entry_model:
+    - "E1"
+  rr_target:
+    - 1.5
+  confirm_bars:
+    - 1
+  strategy_role_under_test: "R1 binary confirmation gate"
+  family_cells: 20
+
+data_policy:
+  canonical_truth_layers:
+    - "bars_1m"
+    - "daily_features"
+    - "orb_outcomes"
+  is_window: "trading_day < 2026-01-01"
+  oos_window: "trading_day >= 2026-01-01"
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+feature_definition:
+  feature_name: "rel_vol_{orb_label}"
+  column_source: "daily_features.rel_vol_{orb_label}"
+  canonical_source_of_truth:
+    - "pipeline/init_db.py"
+    - "pipeline/build_daily_features.py"
+    - "trading_app/strategy_fitness.py"
+  trade_time_knowable: true
+  first_complete_time: "close of the break bar for the target ORB session"
+  temporal_alignment_note: "Safe for E1 because the next-bar-open entry occurs after break-bar close. Explicitly unsafe for E2. Excluded from this pre-reg for E3 because live support is blocked."
+  lookahead_check:
+    - "Reject any use with E2."
+    - "Compute the quantile threshold on IS-only rows within each cell, once, then freeze."
+    - "Apply the frozen threshold to OOS without recalibration."
+
+calibration:
+  threshold_source: "IS-only top quintile (Q80) of rel_vol within each instrument/session/direction cell"
+  lock_policy: "Per-cell Q80 computed once on IS only before any OOS metric is inspected."
+
+hypothesis_definition:
+  family_unit: "session x direction"
+  family_predicate: "MES / O5 / E1 / RR1.5 / CB1 / rel_vol_{session} >= IS-only Q80 / break_dir={direction}"
+  baseline: "Same cell on the unfiltered E1 O5 RR1.5 CB1 universe"
+  objective: "Test whether execution-safe high participation at break-bar close improves expectancy versus the same-cell baseline."
+
+upstream_discovery_provenance:
+  role: "PROVENANCE_ONLY"
+  sources:
+    - "docs/audit/results/2026-04-15-comprehensive-deployed-lane-scan.md"
+    - "docs/audit/results/2026-04-19-rel-vol-cross-scan-overlap-decomposition-is-only-quantile.md"
+    - "docs/audit/results/2026-04-21-recent-claims-skeptical-reaudit-v1.md"
+  upstream_scan_k_framings:
+    - "K_global = 14261 in the comprehensive deployed-lane scan"
+  note: "These upstream K values motivated the mechanism class. They are not the K framing for this test. This pre-reg's family K is 20."
+
+hypotheses:
+  - id: "H1"
+    type: "primary"
+    theory_citation: "docs/institutional/literature/fitschen_2013_path_of_least_resistance.md (ORB trend-follow class); within-class participation-state refinement only, not a fresh strategy class."
+    statement: "Within the MES E1 O5 RR1.5 family, some session-direction cells will show positive incremental expectancy when rel_vol is in the IS-only top quintile."
+    pass_metric:
+      metric: "cell-level uplift over baseline"
+      formula: "delta_is = ExpR_on_IS - ExpR_off_IS"
+      threshold_gte: 0.0
+    counted_against_trial_budget: true
+  - id: "H2"
+    type: "secondary_descriptive_only"
+    theory_citation: "docs/institutional/mechanism_priors.md"
+    statement: "The family may be direction-asymmetric rather than universal across both long and short cells."
+    pass_metric:
+      metric: "descriptive asymmetry only"
+      formula: "report survivor concentration by direction"
+      threshold_gte: 0.0
+    counted_against_trial_budget: false
+
+testing_discipline:
+  family_k: 20
+  significance_threshold:
+    bh_fdr_q: 0.05
+    t_stat_abs_gte: 3.79
+  positive_mean_floor: true
+  mandatory_downstream_gates:
+    - "Criterion 6 — WFE >= 0.50"
+    - "Criterion 8 — 2026 OOS positive and >= 0.40 x IS"
+    - "Criterion 9 — no dead era where N >= 50"
+
+trial_budget:
+  primary_selection_trials: 20
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "2 * ln(N_trials) / E[max_N]^2"
+    n_trials: 20
+    e_max_n: 1.2
+    implied_years_required: 4.16
+    available_clean_years_reference: "MES ~= 6.65 pre-holdout clean years per docs/institutional/pre_registered_criteria.md"
+    within_cap: true
+    cap_reference: "Criterion 2 operational ceiling plus explicit MinBTL check"
+
+kill_criteria:
+  - id: "K1"
+    metric: "family survivors"
+    threshold: "0 cells pass BH-FDR q<0.05 and |t_IS|>=3.79 and ExpR_on_IS>0"
+    action: "KILL"
+  - id: "K2"
+    metric: "OOS direction"
+    threshold: "Every IS-positive survivor has OOS delta <= 0"
+    action: "KILL"
+  - id: "K3"
+    metric: "execution integrity"
+    threshold: "Any threshold computed on IS+OOS together, or any E2/E3 row admitted"
+    action: "KILL"
+  - id: "K4"
+    metric: "sample floor"
+    threshold: "All candidate on-signal cells have N_IS_on < 30"
+    action: "PARK"
+
+decision_rule:
+  continue_if: "At least 1 cell survives K1 with positive OOS direction and no integrity failure."
+  park_if: "One or more cells show positive IS uplift with ExpR_on_IS>0 but fail only on power or OOS depth."
+  kill_if: "K1 or K2 or K3 fires."
+
+methodology_rules_applied:
+  - rule: "RESEARCH_RULES.md — Discovery Layer Discipline"
+    application: "Truth sourced only from bars_1m, daily_features, orb_outcomes."
+  - rule: "RESEARCH_RULES.md — Multi-RR testing"
+    application: "This is not a fresh filter-discovery sweep across RRs. It is a bounded execution-role retest of one existing mechanism at RR1.5 only."
+  - rule: ".claude/rules/backtesting-methodology.md RULE 6"
+    application: "rel_vol is trade-time-knowable only after break-bar close; therefore E1-only."
+  - rule: "docs/institutional/pre_registered_criteria.md Criterion 3"
+    application: "BH-FDR q<0.05 applies across the 20-cell family."
+  - rule: "docs/institutional/pre_registered_criteria.md Criterion 4"
+    application: "Use t >= 3.79 because this is not being granted a stronger direct mechanism-specific literature exemption."
+
+outputs_required_after_run:
+  - "One result table with all 20 cells: N_IS, N_IS_on, ExpR_on_IS, ExpR_off_IS, delta_IS, t_IS, p_IS, BH_family, N_OOS_on, ExpR_on_OOS, ExpR_off_OOS, delta_OOS"
+  - "Explicit survivor list and kill list"
+  - "IS-only Q80 threshold per cell"
+  - "Integrity block confirming no E2/E3 rows and no full-sample quantile leakage"
+  - "CSV with row-level on/off flags for auditability"
+
+execution_gate:
+  allowed_now: true
+  forbidden_now:
+    - "No write to validated_setups"
+    - "No live deployment"
+    - "No size map promotion from this run alone"
+
+not_done_by_this_pre_reg:
+  - "Does not reopen pooled ORB ML."
+  - "Does not test MNQ."
+  - "Does not test MGC broad family."
+  - "Does not test E2 or E3."
+  - "Does not authorize a rolling model. Static family must prove value first."
