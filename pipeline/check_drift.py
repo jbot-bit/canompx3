@@ -29,6 +29,23 @@ RESEARCH_DIR = PROJECT_ROOT / "research"
 # Module-level override for tests; production uses GOLD_DB_PATH from pipeline.paths
 GOLD_DB_PATH_FOR_CHECKS = None  # Set by tests; production uses GOLD_DB_PATH
 
+ACTIVE_DB_PATH_SCAN_DIRS = [
+    RESEARCH_DIR,
+    SCRIPTS_DIR / "research",
+]
+
+ACTIVE_DB_PATH_SKIP_FILES = {
+    "pipeline/paths.py",
+    "research/research_alt_stops.py",
+    "research/research_false_breakout_bqs_tests.py",
+    "research/research_gold_compass.py",
+    "research/research_mnq_singapore_avoid.py",
+    "research/research_shinies_bqs_overlay_tests.py",
+    "research/research_shinies_universal_overlays.py",
+    "research/research_universal_hypothesis_pool.py",
+    "research/research_v3_mechanism.py",
+}
+
 
 def _import_duckdb_or_exit():
     """Import duckdb with a fail-closed environment hint."""
@@ -1635,6 +1652,58 @@ def check_stale_scratch_db() -> list[str]:
             "  DEPRECATED scratch DB still exists at C:/db/gold.db. "
             "Delete it to prevent stale-data bugs: del C:\\db\\gold.db"
         )
+    return violations
+
+
+def check_active_code_uses_canonical_db_path() -> list[str]:
+    """Check: active research code must delegate DB selection to pipeline.paths."""
+    violations = []
+    patterns = [
+        (
+            re.compile(r"""\bDB_PATH\s*=\s*["']gold\.db["']"""),
+            "direct DB_PATH literal",
+        ),
+        (
+            re.compile(r"""\b(?:DB_PATH|GOLD_DB_PATH)\s*=\s*(?:ROOT|PROJECT_ROOT|REPO_ROOT)\s*/\s*["']gold\.db["']"""),
+            "repo-root gold.db join",
+        ),
+        (
+            re.compile(
+                r"""os\.environ\.get\(\s*["']DUCKDB_PATH["']\s*,\s*str\((?:ROOT|PROJECT_ROOT|REPO_ROOT)\s*/\s*["']gold\.db["']\)\s*\)"""
+            ),
+            "manual DUCKDB_PATH fallback",
+        ),
+        (
+            re.compile(
+                r"""parser\.add_argument\(["']--db-path["'][^)]*default\s*=\s*(?:ROOT|PROJECT_ROOT|REPO_ROOT)\s*/\s*["']gold\.db["']"""
+            ),
+            "parser default bypasses pipeline.paths",
+        ),
+    ]
+
+    for scan_dir in ACTIVE_DB_PATH_SCAN_DIRS:
+        if not scan_dir.exists():
+            continue
+        for py_file in sorted(scan_dir.rglob("*.py")):
+            rel = py_file.relative_to(PROJECT_ROOT).as_posix()
+            if rel in ACTIVE_DB_PATH_SKIP_FILES:
+                continue
+            if rel.startswith("research/archive/") or rel.startswith("scripts/archive/"):
+                continue
+
+            try:
+                content = py_file.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, PermissionError):
+                continue
+
+            for i, line in enumerate(content.splitlines(), 1):
+                stripped = line.lstrip()
+                if stripped.startswith("#"):
+                    continue
+                for pattern, reason in patterns:
+                    if pattern.search(line):
+                        violations.append(f"  {rel}:{i}: {reason} — delegate to pipeline.paths.GOLD_DB_PATH")
+                        break
     return violations
 
 
@@ -5672,6 +5741,12 @@ CHECKS = [
     ("No E0 rows in trading tables", check_no_e0_in_db, False, True),  # requires_db
     ("Doc stats match DB ground truth", check_doc_stats_consistency, False, True),  # requires_db
     ("No duplicate gold.db at project root", check_stale_scratch_db, False, False),
+    (
+        "Active research code uses pipeline.paths for DB selection",
+        check_active_code_uses_canonical_db_path,
+        False,
+        False,
+    ),
     ("No old session names in active code", check_old_session_names, False, False),
     ("No active E3 strategies (soft-retired Feb 2026)", check_no_active_e3, False, True),  # requires_db
     (

@@ -8,14 +8,17 @@ Outputs:
 
 from __future__ import annotations
 
-from pathlib import Path
 import re
+from pathlib import Path
+
 import duckdb
 import numpy as np
 import pandas as pd
 
+from pipeline.paths import GOLD_DB_PATH
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DB_PATH = "gold.db"
+DB_PATH = GOLD_DB_PATH
 REG_PATH = PROJECT_ROOT / "research" / "output" / "shinies_registry.csv"
 
 
