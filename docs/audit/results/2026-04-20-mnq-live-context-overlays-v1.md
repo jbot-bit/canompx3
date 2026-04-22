@@ -1,8 +1,8 @@
 # MNQ live-context overlays — exact deployed NYSE_OPEN / COMEX_SETTLE lanes × 5 instant-detectable hypotheses (K=10)
 
-**Generated:** 2026-04-20T09:49:26+00:00
+**Generated:** 2026-04-22T12:50:44+00:00
 **Pre-reg:** `docs/audit/hypotheses/2026-04-20-mnq-live-context-overlays-v1.yaml` (LOCKED, commit_sha=c6ece8a1)
-**Script:** `research/mnq_live_context_overlays_v1.py`
+**Script:** `/tmp/canompx3-mnq-hiroi-scan/research/mnq_live_context_overlays_v1.py`
 **IS window:** trading_day < 2026-01-01
 **Observed tests:** 10
 
@@ -30,9 +30,9 @@
 
 | Pass | N_total | N_on_IS | N_off_IS | N_on_OOS | ExpR_on_IS | ExpR_off_IS | Delta_IS | raw_p | q_family | q_lane | years_pos | dir_match |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| unfiltered | 876 | 363 | 472 | 19 | 0.1796 | 0.0322 | 0.1474 | 0.0267 | 0.0334 | 0.0535 | 7 | False |
+| unfiltered | 876 | 363 | 472 | 20 | 0.1796 | 0.0322 | 0.1474 | 0.0267 | 0.0334 | 0.0535 | 7 | False |
 
-- `corr_vs_filter=0.0295` | `extreme_fire=False` | `arithmetic_only=False`
+- `corr_vs_filter=0.0297` | `extreme_fire=False` | `arithmetic_only=False`
 
 | Year | N_on | N_off | Delta | Eligible_for_years_positive |
 |---|---:|---:|---:|---|
@@ -48,9 +48,9 @@
 
 | Pass | N_total | N_on_IS | N_off_IS | N_on_OOS | ExpR_on_IS | ExpR_off_IS | Delta_IS | raw_p | q_family | q_lane | years_pos | dir_match |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| filtered | 866 | 360 | 465 | 19 | 0.1837 | 0.0263 | 0.1574 | 0.0188 | 0.0285 | 0.0535 | 7 | False |
+| filtered | 866 | 360 | 465 | 20 | 0.1837 | 0.0263 | 0.1574 | 0.0188 | 0.0285 | 0.0535 | 7 | False |
 
-- `corr_vs_filter=0.0295` | `extreme_fire=False` | `arithmetic_only=False`
+- `corr_vs_filter=0.0297` | `extreme_fire=False` | `arithmetic_only=False`
 
 | Year | N_on | N_off | Delta | Eligible_for_years_positive |
 |---|---:|---:|---:|---|

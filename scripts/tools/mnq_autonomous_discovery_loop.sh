@@ -21,6 +21,24 @@ ensure_shared_venv_link() {
   fi
 }
 
+ensure_private_context_links() {
+  local source_root="${PRIMARY_ROOT:-}"
+  if [[ -z "$source_root" || "$source_root" == "$PROJECT_ROOT" ]]; then
+    return
+  fi
+
+  local name
+  for name in SOUL.md USER.md MEMORY.md HEARTBEAT.md; do
+    if [[ ! -e "$PROJECT_ROOT/$name" && -e "$source_root/$name" ]]; then
+      ln -s "$source_root/$name" "$PROJECT_ROOT/$name"
+    fi
+  done
+
+  if [[ ! -e "$PROJECT_ROOT/memory" && -e "$source_root/memory" ]]; then
+    ln -s "$source_root/memory" "$PROJECT_ROOT/memory"
+  fi
+}
+
 resolve_python() {
   ensure_shared_venv_link
   if [[ -x "$PROJECT_ROOT/.venv-wsl/bin/python" ]]; then
@@ -47,8 +65,8 @@ BRANCH="${CANOMPX3_CODEX_DISCOVERY_BRANCH:-wt-codex-${WORKSTREAM}}"
 WORKTREE="${CANOMPX3_CODEX_DISCOVERY_ROOT:-/tmp/canompx3-${WORKSTREAM}}"
 PROFILE="${CANOMPX3_CODEX_DISCOVERY_PROFILE:-canompx3_search}"
 PURPOSE="${CANOMPX3_CODEX_DISCOVERY_PURPOSE:-MNQ autonomous bounded discovery hub}"
-TASK_TEXT="${CANOMPX3_STARTUP_TASK:-Autonomous bounded MNQ discovery hub: refresh the board stack, keep the lens broad across alive mechanism families, choose one honest next bridge or park/kill move, use the cheap gate before discovery writes, verify durable changes, and continue only when the queue still has an honest next step.}"
-RESUME_MODE="${RESUME_MODE:-auto}"
+TASK_TEXT="${CANOMPX3_STARTUP_TASK:-Autonomous bounded MNQ discovery hub: refresh the board stack, rebuild the ranked hiROI frontier, choose one honest queued candidate, use the cheap gate before discovery writes, verify durable changes, and continue only when the frontier still has an honest next step.}"
+RESUME_MODE="${RESUME_MODE:-never}"
 
 MAX_ITERS="${1:-0}"
 AUTO_COMMIT="${AUTO_COMMIT:-1}"
@@ -60,10 +78,16 @@ LOG_ROOT="${LOG_ROOT:-/tmp/canompx3-mnq-autodiscovery}"
 PROMPT_TEMPLATE="$PROJECT_ROOT/scripts/infra/codex-mnq-autonomous-discovery-prompt.md"
 SCHEMA_PATH="$PROJECT_ROOT/scripts/infra/codex-mnq-autonomous-discovery-result.schema.json"
 BOARD_STACK="$PROJECT_ROOT/scripts/tools/run_mnq_discovery_board_stack.sh"
+FRONTIER_TOOL="$PROJECT_ROOT/scripts/tools/build_mnq_discovery_frontier.py"
+CAPSULE_TOOL="$PROJECT_ROOT/scripts/tools/render_mnq_discovery_capsule.py"
 TASK_ROUTE="$PROJECT_ROOT/scripts/tools/task_route_packet.py"
 MOUNT_GUARD="$PROJECT_ROOT/scripts/tools/wsl_mount_guard.py"
 SESSION_PREFLIGHT="$PROJECT_ROOT/scripts/tools/session_preflight.py"
 STATE_FILE="$WORKTREE/.session/mnq_autonomous_discovery_state.json"
+FRONTIER_FILE="$WORKTREE/.session/mnq_discovery_frontier.json"
+FRONTIER_LEDGER="$WORKTREE/.session/mnq_discovery_frontier_ledger.json"
+CAPSULE_FILE="$WORKTREE/.session/mnq_discovery_capsule.md"
+CODEX_RUNTIME_HOME="${CANOMPX3_CODEX_RUNTIME_HOME:-$WORKTREE/.session/codex_home}"
 LOCK_DIR="$WORKTREE/.session/mnq_autonomous_discovery.lock"
 LOCK_PID_FILE="$LOCK_DIR/pid"
 
@@ -100,7 +124,18 @@ banner() {
 }
 
 ensure_session_dir() {
+  ensure_private_context_links
   mkdir -p "$WORKTREE/.session"
+  mkdir -p "$CODEX_RUNTIME_HOME"
+  if [[ -f "$PROJECT_ROOT/.codex/config.toml" ]]; then
+    ln -snf "$PROJECT_ROOT/.codex/config.toml" "$CODEX_RUNTIME_HOME/config.toml"
+  fi
+  if [[ -f "$HOME/.codex/auth.json" && ! -e "$CODEX_RUNTIME_HOME/auth.json" ]]; then
+    ln -s "$HOME/.codex/auth.json" "$CODEX_RUNTIME_HOME/auth.json"
+  fi
+  if [[ -f "$HOME/.codex/version.json" && ! -e "$CODEX_RUNTIME_HOME/version.json" ]]; then
+    ln -s "$HOME/.codex/version.json" "$CODEX_RUNTIME_HOME/version.json"
+  fi
 }
 
 acquire_lock() {
@@ -182,13 +217,31 @@ Runtime context:
 - Branch: \`$BRANCH\`
 - Workstream: \`$WORKSTREAM\`
 - Task route packet: \`$WORKTREE/.session/task-route.md\`
+- hiROI frontier: \`$FRONTIER_FILE\`
+- hiROI capsule: \`$CAPSULE_FILE\`
 - Stop file: \`$STOP_FILE\`
 
 Iteration rule:
+- Read the frontier and pick from queued candidates first.
 - If the queue is honestly exhausted, return \`no_honest_move\` and stop.
 - If you edit files, keep the blast radius tight and verify before commit.
-- If you make a durable queue decision, update \`HANDOFF.md\` in the worktree.
+- If you make a durable queue decision from real discovery evidence, update \`HANDOFF.md\` in the worktree.
+- Do not spend an iteration on \`HANDOFF.md\` housekeeping when the hiROI queue can be advanced or explicitly parked from the capsule and board outputs.
 EOF
+}
+
+build_frontier() {
+  if [[ ! -f "$FRONTIER_TOOL" ]]; then
+    return
+  fi
+  "$PY" "$FRONTIER_TOOL" --root "$WORKTREE" --ledger "$FRONTIER_LEDGER" >"$FRONTIER_FILE"
+}
+
+render_capsule() {
+  if [[ ! -f "$CAPSULE_TOOL" ]]; then
+    return
+  fi
+  "$PY" "$CAPSULE_TOOL" --root "$WORKTREE" --state "$STATE_FILE" >"$CAPSULE_FILE"
 }
 
 validate_result_json() {
@@ -226,6 +279,17 @@ for key, spec in properties.items():
             raise SystemExit(f"{key} must be array[string]")
     if "enum" in spec and value not in spec["enum"]:
         raise SystemExit(f"{key} must be one of {spec['enum']}")
+
+candidate_id = data["candidate_id"].strip()
+frontier_decision = data["frontier_decision"]
+status = data["status"]
+
+if frontier_decision == "none" and candidate_id:
+    raise SystemExit("candidate_id must be empty when frontier_decision=none")
+if frontier_decision != "none" and not candidate_id:
+    raise SystemExit("candidate_id required when frontier_decision!=none")
+if status in {"parked", "killed", "candidate_advanced", "prereg_written"} and frontier_decision == "none":
+    raise SystemExit(f"frontier_decision required for status={status}")
 PY
 }
 
@@ -325,6 +389,7 @@ run_initial_exec() {
   local stdout_file="$3"
   (
     cd "$WORKTREE"
+    export CODEX_HOME="$CODEX_RUNTIME_HOME"
     "$CODEX_BIN" exec \
       -p "$PROFILE" \
       --full-auto \
@@ -339,6 +404,7 @@ run_resume_exec() {
   local stdout_file="$3"
   (
     cd "$WORKTREE"
+    export CODEX_HOME="$CODEX_RUNTIME_HOME"
     "$CODEX_BIN" exec resume \
       --last \
       --full-auto \
@@ -395,6 +461,10 @@ while :; do
     banner "Board stack refresh failed on iteration $iter. See $board_log"
     break
   fi
+  build_frontier
+  render_capsule
+  cp "$FRONTIER_FILE" "$iter_dir/discovery_frontier.json" 2>/dev/null || true
+  cp "$CAPSULE_FILE" "$iter_dir/discovery_capsule.md" 2>/dev/null || true
 
   render_prompt "$prompt_file"
 
@@ -457,11 +527,40 @@ history = state.setdefault("history", [])
 history.append({
     "summary": result["summary"],
     "status": result["status"],
+    "candidate_id": result["candidate_id"],
+    "frontier_decision": result["frontier_decision"],
     "next_focus": result["next_focus"],
     "continue_running": result["continue_running"],
 })
 state["history"] = history[-10:]
 state_path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+PY
+
+  "$PY" - "$FRONTIER_LEDGER" "$result_file" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+ledger_path = Path(sys.argv[1])
+result = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+candidate_id = result.get("candidate_id", "").strip()
+frontier_decision = result.get("frontier_decision", "none").strip()
+if not candidate_id or frontier_decision == "none":
+    raise SystemExit(0)
+
+ledger = {}
+if ledger_path.exists():
+    try:
+        ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        ledger = {}
+ledger[candidate_id] = {
+    "frontier_decision": frontier_decision,
+    "summary": result["summary"],
+    "status": result["status"],
+    "next_focus": result["next_focus"],
+}
+ledger_path.write_text(json.dumps(ledger, indent=2) + "\n", encoding="utf-8")
 PY
 
   commit_if_needed "$result_file"
@@ -484,6 +583,23 @@ raise SystemExit(0 if len(status) == 1 and len(focus) == 1 else 1)
 PY
   then
     banner "Loop repetition detected across the last 3 iterations. Exiting fail-closed."
+    break
+  fi
+
+  if "$PY" - "$STATE_FILE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+history = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("history", [])
+tail = history[-2:]
+if len(tail) < 2:
+    raise SystemExit(1)
+only_engine = all(row.get("status") == "runner_updated" and not row.get("candidate_id") for row in tail)
+raise SystemExit(0 if only_engine else 1)
+PY
+  then
+    banner "Loop spent 2 consecutive iterations on engine maintenance without acting on a candidate. Exiting fail-closed."
     break
   fi
 

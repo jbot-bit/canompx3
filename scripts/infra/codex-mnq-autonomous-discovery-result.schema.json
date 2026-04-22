@@ -4,6 +4,19 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "candidate_id": {
+      "type": "string"
+    },
+    "frontier_decision": {
+      "type": "string",
+      "enum": [
+        "advanced",
+        "parked",
+        "killed",
+        "deferred",
+        "none"
+      ]
+    },
     "summary": {
       "type": "string"
     },
@@ -51,6 +64,8 @@
     }
   },
   "required": [
+    "candidate_id",
+    "frontier_decision",
     "summary",
     "status",
     "should_commit",

@@ -25,7 +25,9 @@ Read these first:
 
 Then load the recovered workflow surfaces:
 
+- `.session/mnq_discovery_frontier.json`
 - `docs/plans/2026-04-22-mnq-autonomous-discovery-automation.md`
+- `.session/mnq_discovery_capsule.md`
 - `docs/audit/results/2026-04-20-mnq-unfiltered-baseline-cross-family-v1.md`
 - `docs/audit/results/2026-04-20-mnq-live-context-overlays-v1.md`
 - `docs/plans/2026-04-22-mnq-geometry-transfer-workflow.md`
@@ -46,14 +48,16 @@ Then load the recovered workflow surfaces:
 ## Default Flow
 
 1. Treat the tiered board stack as the read-only evidence surface.
-2. Reconstruct which mechanisms are solved, paused, or still alive.
-3. Pick the smallest honest next move:
+2. Read `.session/mnq_discovery_frontier.json` and `.session/mnq_discovery_capsule.md` first.
+3. Start from the diversified review batch so family, transfer, and exact-cell candidates all get bounded attention.
+4. Pick the highest-ranked honest candidate inside that review batch unless the evidence gives a clear reason to defer it.
+5. Pick the smallest honest next move:
    - prereg
    - cheap gate
    - narrow discovery/validator advancement
    - result note
-4. Verify any durable change with repo-native checks.
-5. Decide whether the loop should continue.
+6. Verify any durable change with repo-native checks.
+7. Decide whether the loop should continue.
 
 ## Rules
 
@@ -63,6 +67,8 @@ Then load the recovered workflow surfaces:
 - Do not treat read-only board observations as validated strategies.
 - Do not mine solved lanes again just because a local exact cell still looks
   tempting.
+- Do not treat `HANDOFF.md` as the primary hiROI queue surface when the capsule
+  and current board outputs are available.
 - Do not advance more than one exact bridge candidate in a single iteration.
 - Do not skip the cheap gate before a real discovery write.
 - Do not leave queue decisions only in chat output when they should live in repo

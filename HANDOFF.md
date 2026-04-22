@@ -4,6 +4,363 @@
 
 **CRITICAL:** Do NOT implement code changes based on stale assumptions. Always `git log --oneline -10` and re-read modified files before writing code.
 
+## Update (2026-04-22 autonomous discovery reround — COMEX PD_GO_LONG parked as dominated union)
+
+The next mechanism-distinct queued candidate was reviewed directly:
+
+- `transfer::COMEX_SETTLE::1.0::long::PD_GO_LONG`
+
+What was checked:
+
+- `docs/audit/results/2026-04-22-mnq-geometry-transfer-board-v1.md`
+  - queued transfer row:
+    - `N_on_IS=390`
+    - `ExpR_on_IS=+0.1383`
+    - `ExpR_off_IS=+0.0213`
+    - `Delta_IS=+0.1171`
+    - `BH=0.1569`
+    - `N_on_OOS=17`
+    - `Delta_OOS=+0.2189`
+- `docs/audit/results/2026-04-22-mnq-comex-pd-clear-long-take-v1.md`
+  - same lane already promoted:
+    - `MNQ_COMEX_SETTLE_E2_RR1.0_CB1_PD_CLEAR_LONG`
+    - stronger `Delta_IS=+0.1704`
+    - stronger `Delta_OOS=+0.2336`
+  - accepted result explicitly recorded:
+    - `PD_CLEAR_LONG` is the positive transfer state on COMEX
+    - `PD_DISPLACE_LONG` is weak / negative
+    - blindly transferring broader `PD_GO_LONG` would have been weaker
+
+Queue decision:
+
+- park `transfer::COMEX_SETTLE::1.0::long::PD_GO_LONG`
+- do **not** prereg the broader union on this lane
+
+Why parked:
+
+- dominated by an already-promoted exact family member on the same lane
+- not an unsolved transfer story anymore
+- lower-EV than its queued rank suggests
+
+Durable note:
+
+- result doc:
+  - `docs/audit/results/2026-04-22-mnq-comex-pd-go-long-queue-park-v1.md`
+
+Operational consequence:
+
+- next honest focus should move to the unsolved `EUROPE_FLOW RR1.0 long`
+  transfer pair and compare `PD_GO_LONG` vs `PD_DISPLACE_LONG` instead of
+  revisiting COMEX
+
+## Update (2026-04-22 autonomous discovery reround — NYSE RR1.5 short pivot50 avoid parked from diversified batch)
+
+The current hiROI queue was kept broad instead of letting the stuck worker or
+the NYSE long transfer watchlist monopolize the next move.
+
+Reviewed candidate:
+
+- `cell::NYSE_OPEN::1.5::short::F3_NEAR_PIVOT_50::AVOID`
+
+What was checked:
+
+- `docs/audit/results/2026-04-22-mnq-layered-candidate-board-v1.md`
+  - exact row:
+    - `N_on_IS=622`
+    - `ExpR_on_IS=+0.0589`
+    - `ExpR_off_IS=+0.2516`
+    - `delta_IS=-0.1927`
+    - `BH=0.3810`
+    - `N_on_OOS=23`
+    - `delta_OOS=-0.0570`
+- `docs/audit/results/2026-04-22-mnq-prior-day-family-board-v1.md`
+  - no matching active `NYSE_OPEN RR1.5 short` family bridge exists on the
+    bounded family surface
+- `docs/audit/results/2026-04-22-mnq-geometry-transfer-board-v1.md`
+  - active unsolved transfer rows are long-side; no short-side transfer bridge
+    supports this cell
+- `docs/plans/2026-04-22-mnq-geometry-transfer-workflow.md`
+  - still says the honest move is to re-rank the next mechanism class instead
+    of forcing another geometry bridge
+
+Queue decision:
+
+- park `cell::NYSE_OPEN::1.5::short::F3_NEAR_PIVOT_50::AVOID`
+- do **not** write a prereg for this exact short avoid-state on the current
+  iteration
+
+Why parked:
+
+- same-sign but modest OOS effect
+- no broader family or transfer support in the current bounded stack
+- not the highest-EV use of the next bounded bridge
+
+Durable note:
+
+- result doc:
+  - `docs/audit/results/2026-04-22-mnq-nyse-open-rr15-short-pivot50-avoid-park-v1.md`
+
+Operational consequence:
+
+- next honest focus should stay on the remaining non-geometry review-batch
+  candidates before returning to more NYSE exact slicing or watchlist geometry
+  rows
+
+## Update (2026-04-22 autonomous discovery reround — US_DATA RR1.5 short exact cell parked from diversified review batch)
+
+The last loop explicitly routed the next review into the bounded diversified
+batch before letting NYSE or geometry rows reclaim the queue:
+
+- `cell::US_DATA_1000::1.5::short::F3_NEAR_PIVOT_15__AND__F6_INSIDE_PDR::TAKE`
+
+What was checked:
+
+- `docs/audit/results/2026-04-22-mnq-layered-candidate-board-v1.md`
+  - queued exact row:
+    - `delta_IS=+0.0860`
+    - `BH=0.7338`
+    - `N_on_OOS=6`
+    - `delta_OOS=+0.8287`
+  - simpler adjacent row is effectively the same OOS read:
+    - `F3_NEAR_PIVOT_15`
+    - `delta_IS=+0.0791`
+    - `BH=0.7480`
+    - `N_on_OOS=6`
+    - `delta_OOS=+0.8287`
+  - the `F6_INSIDE_PDR` leg does not independently support a positive bridge:
+    - `delta_IS=+0.0188`
+    - `BH=0.9586`
+    - `N_on_OOS=19`
+    - `delta_OOS=-0.1306`
+- `docs/audit/results/2026-04-22-mnq-prior-day-family-board-v1.md`
+  - no matching `US_DATA_1000 RR1.5 short` family candidate exists on the
+    bounded family surface
+- `docs/audit/results/2026-04-22-mnq-geometry-transfer-board-v1.md`
+  - no matching short-side transfer bridge exists for this lane
+- `docs/audit/results/2026-04-20-mnq-unfiltered-baseline-cross-family-v1.md`
+  - broad `US_DATA_1000 15m RR1.5` route-map evidence remains alive, but it is
+    not direct authority for a new exact short prereg
+
+Queue decision:
+
+- park `cell::US_DATA_1000::1.5::short::F3_NEAR_PIVOT_15__AND__F6_INSIDE_PDR::TAKE`
+- do **not** prereg this conjunction on the current iteration
+- treat it as route-map context only until a cleaner exact seed or parent
+  mechanism bridge exists
+
+Durable note:
+
+- result doc:
+  - `docs/audit/results/2026-04-22-mnq-usdata1000-rr15-short-pivot15-inside-pdr-take-park-v1.md`
+
+Operational consequence:
+
+- the next honest move should come from the remaining diversified review batch,
+  not by forcing this unsupported US_DATA exact slice into prereg
+- likely next review target is the remaining non-geometry exact candidate
+  `cell::NYSE_OPEN::1.5::short::F3_NEAR_PIVOT_50::AVOID`, checked against the
+  still-queued transfer rows
+
+## Update (2026-04-22 autonomous discovery reround — NYSE overhead-break family parked from live queue)
+
+The refreshed diversified queue promoted the remaining `NYSE_OPEN RR1.5 long`
+family candidate into the top review slot:
+
+- `family::NYSE_OPEN::1.5::long::TAKE_OVERHEAD_BREAK`
+
+But a bounded reread of the exact bridge surface shows the family rank is still
+ahead of the underlying exact evidence.
+
+What was checked:
+
+- `docs/audit/results/2026-04-22-mnq-prior-day-family-board-v1.md`
+  - top queued family row:
+    - `family::NYSE_OPEN::1.5::long::TAKE_OVERHEAD_BREAK`
+    - `delta_IS=+0.1412`
+    - `BH=0.2953`
+    - `N_on_OOS=7`
+    - `delta_OOS=+0.6962`
+- `docs/audit/results/2026-04-22-mnq-layered-candidate-board-v1.md`
+  - family decomposition:
+    - `F4_ABOVE_PDH` is the only attractive exact take seed, but still thin:
+      - `delta_IS=+0.2198`
+      - `BH=0.2141`
+      - `N_on_OOS=5`
+      - `delta_OOS=+0.8972`
+    - `F1_NEAR_PDH_15` does **not** confirm the same bridge:
+      - `delta_IS=+0.0945`
+      - `BH=0.7066`
+      - `N_on_OOS=8`
+      - `delta_OOS=-0.4530`
+- `docs/audit/results/2026-04-22-mnq-geometry-transfer-board-v1.md`
+  - supporting lane-level transfer complements remain weak:
+    - `NYSE_OPEN RR1.5 long PD_CLEAR_LONG`
+      - `delta_IS=+0.0877`
+      - `BH=0.5968`
+      - `N_on_OOS=7`
+    - `NYSE_OPEN RR1.5 long PD_GO_LONG`
+      - `delta_IS=+0.0355`
+      - `BH=0.7841`
+      - `N_on_OOS=10`
+- `docs/plans/2026-04-22-mnq-geometry-transfer-workflow.md`
+  - already says the `NYSE_OPEN` transfer lane is watchlist-only, not an
+    approved active bridge row
+
+Queue decision:
+
+- park `family::NYSE_OPEN::1.5::long::TAKE_OVERHEAD_BREAK`
+- do **not** prereg `F4_ABOVE_PDH` from this lane on the current iteration
+- treat the family row as route-map evidence only until a cleaner exact seed
+  survives the bounded stack
+
+Durable note:
+
+- result doc:
+  - `docs/audit/results/2026-04-22-mnq-nyse-open-take-overhead-break-park-v1.md`
+
+Operational consequence:
+
+- the next rerendered queue should stop treating this NYSE family lane as the
+  default next bridge
+- the next honest move should come from the remaining diversified review batch,
+  not from forcing another NYSE prior-day family advance
+
+## Update (2026-04-22 autonomous discovery reround — NYSE congestion family parked from live queue)
+
+The refreshed frontier correctly moved the top unsolved queue into the
+`NYSE_OPEN RR1.5 long` prior-day family lane, but the family rank overstated
+how ready the congestion branch was for an exact bridge.
+
+What was checked:
+
+- `docs/audit/results/2026-04-22-mnq-prior-day-family-board-v1.md`
+  - top queued family row:
+    - `family::NYSE_OPEN::1.5::long::AVOID_CONGESTION`
+    - `delta_IS=-0.1339`
+    - `BH=0.3515`
+    - `N_on_OOS=21`
+    - `delta_OOS=-0.7023`
+- `docs/audit/results/2026-04-22-mnq-layered-candidate-board-v1.md`
+  - the supporting exact congestion rows (`F6_INSIDE_PDR`,
+    `F3_NEAR_PIVOT_15`, `F3_NEAR_PIVOT_50__AND__F6_INSIDE_PDR`) are aligned
+    directionally but still weak / thin as bridge seeds
+- `docs/audit/results/2026-04-22-mnq-geometry-transfer-board-v1.md`
+  - the natural complement `NYSE_OPEN RR1.5 long PD_CLEAR_LONG` is only:
+    - `delta_IS=+0.0877`
+    - `BH=0.5968`
+    - `N_on_OOS=7`
+- `docs/plans/2026-04-22-mnq-geometry-transfer-workflow.md`
+  - already says `NYSE_OPEN PD_CLEAR_LONG` is a watchlist row, not an active
+    bridge row
+  - cites `3/7` negative years and unstable ATR quartiles
+
+Queue decision:
+
+- park `family::NYSE_OPEN::1.5::long::AVOID_CONGESTION`
+- do **not** prereg `PD_CLEAR_LONG` from this lane on the current iteration
+- treat the NYSE congestion observation as route-map evidence only, not an
+  exact bridge approval
+
+Durable note:
+
+- result doc:
+  - `docs/audit/results/2026-04-22-mnq-nyse-open-avoid-congestion-park-v1.md`
+
+Operational consequence:
+
+- the frontier ledger should mark this candidate `parked` so the next
+  rerendered queue does not keep surfacing it as the default active bridge
+- the next honest move should come from the remaining queued family or
+  non-geometry mechanism candidates, not by forcing this NYSE congestion branch
+
+## Update (2026-04-22 autonomous discovery reround — frontier now suppresses solved/closed queue rows)
+
+The first generated hiROI frontier/capsule after the automation scaffold was
+too literal: it re-queued rows that repo truth had already closed or promoted.
+
+What was stale in the queue:
+
+- `US_DATA_1000 RR1.0 long` prior-day family rows still surfaced even though
+  `docs/plans/2026-04-22-mnq-usdata1000-geometry-family-register.md` now marks
+  that lane `LOCALLY SOLVED ENOUGH`
+- `US_DATA_1000 RR1.0 long` exact-cell rows like `F3_NEAR_PIVOT_50` / `F5_BELOW_PDL`
+  still surfaced even though the same register marks them closed
+- `COMEX_SETTLE RR1.0 long PD_CLEAR_LONG` still surfaced even though
+  `docs/audit/results/2026-04-22-mnq-comex-pd-clear-long-take-v1.md` already
+  records the bridge as promoted
+
+What changed:
+
+- `scripts/tools/build_mnq_discovery_frontier.py`
+  - now reads durable repo docs before queueing candidates
+  - suppresses locally solved `US_DATA_1000 RR1.0 long` family/cell rows
+  - suppresses the already-promoted `COMEX_SETTLE PD_CLEAR_LONG` transfer row
+- `scripts/tools/render_mnq_discovery_capsule.py`
+  - now states that already-promoted / already-closed rows should be filtered
+    before live ranking
+
+Operational consequence:
+
+- treat the fresh frontier/capsule as the live queue only after rerendering on
+  this patched builder
+- the next honest candidate should come from the remaining unsolved queue, not
+  from the stale solved rows that were previously topping the list
+
+## Update (2026-04-22 autonomous discovery reround — stale live-context branch closed, exact bridge queue parked)
+
+Re-reading the bounded MNQ discovery stack plus the already-merged H04
+follow-ons closes one stale branch that still looks alive if you stop at the
+parent overlay result:
+
+- `docs/audit/results/2026-04-20-mnq-live-context-overlays-v1.md`
+  - still shows `H04_CMX_SHORT_RELVOL_Q3_AND_F6` as `CONTINUE`
+  - that is **not** the current queue truth by itself
+- `docs/audit/results/2026-04-20-q1-h04-mechanism-shape-validation-v1.md`
+  - revalidated the H04 mechanism framing and returned `KILL`
+  - parity to the parent cell passed, so this was a real falsification, not a
+    reproduction failure
+  - hard failure:
+    - `rho_IS=+0.6000`
+    - `interaction_surplus_IS=-0.0951`
+    - verdict: the linear/additive H04 mechanism story does **not** hold
+- `docs/audit/shadow_ledgers/h04-cmx-short-relvol-q3-f6-shadow-ledger.csv`
+  - does not exist
+  - shadow-phase never actually started
+
+Queue truth from that chain:
+
+- do **not** treat H04 as an alive exact bridge
+- do **not** treat the shadow prereg as an active next-step candidate
+- live-context overlay work remains useful as historical route-map evidence, but
+  the H04 branch itself is closed on mechanism
+
+Broader non-geometry truth that remains alive:
+
+- `docs/audit/results/2026-04-20-participation-optimum-universality-v1.md`
+  - confirmed a broader MNQ participation-optimum mechanism
+  - pooled `beta2=-0.00156`, `t=-5.189`
+  - sign agreement `21/24`
+- but that result has **not** yet been translated into the current bounded
+  discovery board stack as one exact parent-lane bridge candidate
+
+Guardrail reminder on the refreshed Tier 0 board:
+
+- `docs/audit/results/2026-04-20-mnq-unfiltered-baseline-cross-family-v1.md`
+  - treat current `CANDIDATE_READY` labels as route-map evidence only
+  - later DSR audits still block direct promotion from that family surface
+  - Pathway B style narrow prereg remains the legitimate route from that map
+
+Current honest queue state:
+
+- further geometry-family transfer remains paused beyond the COMEX winner
+- `MNQ_TOKYO_OPEN_E2_RR1.5_CB1_COST_LT08` remains the only post-geometry exact
+  bridge advanced so far
+- H04 is closed
+- the exact-bridge queue is therefore **parked** until a fresh bounded
+  non-geometry shortlist exists again
+- do **not** force another prereg from the current stack just to keep the loop
+  moving
+
 ## Update (2026-04-22 MNQ geometry transfer cleanup — stale draft closed, active PR regrounded)
 
 The active MNQ research surface is now the geometry-family transfer program on

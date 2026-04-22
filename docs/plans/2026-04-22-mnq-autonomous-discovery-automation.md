@@ -30,6 +30,30 @@ This automation is for the alive MNQ discovery program that was active on
 - Small durable prompts:
   - method belongs in repo docs and a skill
   - the runtime prompt only carries turn-local context
+- Thin hiROI queue capsule:
+  - each iteration regenerates a small capsule from the live board CSVs
+  - the model reads that capsule first instead of reconstructing the frontier
+    from `HANDOFF.md`
+- Deterministic frontier queue:
+  - board outputs are converted into a ranked machine-readable candidate queue
+  - the agent chooses from queued candidates instead of rebuilding the frontier
+    from memory
+- Diversified review batch:
+  - each iteration also emits a bounded mixed shortlist across family,
+    transfer, and exact-cell candidates
+  - this prevents one queue class from monopolizing the loop and keeps the lens
+    broad without reopening random search space
+- Role-consistent frontier filtering:
+  - `TAKE` candidates must be positive in-sample and OOS
+  - `AVOID` candidates must be negative in-sample and OOS
+  - contradictory rows stay out of the live queue even if they have large
+    absolute deltas
+- Evidence-first ranking:
+  - the queue now ranks by evidence quality, not just raw class weight plus
+    delta magnitude
+- Engine-maintenance guardrail:
+  - if the loop spends consecutive iterations fixing itself without acting on a
+    candidate, it fails closed
 - Machine-checkable loop output:
   - Codex returns JSON only
   - the runner validates the JSON before acting on it
@@ -62,6 +86,22 @@ Tier 3: transfer board
 
 These are deterministic read-only evidence builders. Tier 0 prevents tunnel
 vision. Tiers 1-3 convert that breadth into bounded next moves.
+
+### 1.5 Render a hiROI queue capsule
+
+After the board refresh, build a ranked frontier queue and render a thin queue
+capsule from that frontier and recent loop state:
+
+- queued candidates by kind and priority
+- diversified review batch across candidate kinds
+- role-consistent rows only
+- top layered candidate rows
+- top prior-day family rows
+- unsolved geometry-transfer rows
+- last loop state / next focus
+
+This capsule is the primary discovery-frontier surface for the iteration. Root
+`HANDOFF.md` remains baton-only.
 
 ### 2. Reconstruct the queue
 
@@ -101,6 +141,9 @@ If files changed:
 - run the smallest repo-native verification that matches the blast radius
 - summarize verification in the loop JSON
 - only then recommend commit/PR
+- do not let unrelated repo-global blockers from `project_pulse.py` kill an
+  otherwise valid docs/research iteration unless the changed files actually
+  touch those blocked surfaces
 
 ### 5. Continue or stop explicitly
 
@@ -138,10 +181,13 @@ The headless runner must:
 - use the dedicated `wt-codex-mnq-hiroi-scan` worktree
 - acquire a local lock so only one discovery loop runs on that worktree
 - refresh the board stack before each iteration
+- rebuild the frontier queue before each iteration
+- rebuild the diversified review batch before each iteration
+- render the hiROI capsule before each iteration
 - resume the same Codex thread when available
 - require JSON-only output
 - validate the JSON locally before reading fields
-- persist loop state on disk for crash recovery and repetition detection
+- persist loop state and frontier decisions on disk for crash recovery and repetition detection
 - reuse the shared repo `.venv-wsl` if the worktree itself does not have one
 
 ## Why This Is Better

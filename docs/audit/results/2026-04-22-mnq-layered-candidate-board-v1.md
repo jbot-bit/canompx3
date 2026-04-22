@@ -20,7 +20,7 @@ Canonical read-only discovery board on `orb_outcomes x daily_features`.
 | NYSE_OPEN RR1.5 short | F2_NEAR_PDL_15__AND__F6_INSIDE_PDR | AVOID | 77 | -0.1304 | +0.1297 | -0.2601 | -1.8674 | 0.4223 | 1 | -1.0074 | True |
 | US_DATA_1000 RR1.5 short | F2_NEAR_PDL_15__AND__F5_BELOW_PDL | AVOID | 46 | -0.1279 | +0.1406 | -0.2686 | -1.5280 | 0.6001 | 3 | -1.0538 | True |
 | US_DATA_1000 RR1.5 short | F3_NEAR_PIVOT_50__AND__F5_BELOW_PDL | AVOID | 51 | -0.1234 | +0.1421 | -0.2655 | -1.5888 | 0.5824 | 1 | -0.9880 | True |
-| NYSE_OPEN RR1.5 long | F3_NEAR_PIVOT_15__AND__F6_INSIDE_PDR | AVOID | 200 | -0.0856 | +0.1375 | -0.2231 | -2.3314 | 0.2141 | 4 | -0.7158 | True |
+| NYSE_OPEN RR1.5 long | F3_NEAR_PIVOT_15__AND__F6_INSIDE_PDR | AVOID | 200 | -0.0855 | +0.1375 | -0.2231 | -2.3314 | 0.2141 | 4 | -0.7158 | True |
 | NYSE_OPEN RR1.5 long | F4_ABOVE_PDH | TAKE | 216 | +0.2463 | +0.0266 | +0.2198 | +2.3253 | 0.2141 | 5 | +0.8972 | True |
 | US_DATA_1000 RR1.0 long | F6_INSIDE_PDR | AVOID | 513 | -0.0434 | +0.1583 | -0.2017 | -3.1530 | 0.0349 | 20 | -0.1573 | True |
 | NYSE_OPEN RR1.5 long | F6_INSIDE_PDR | AVOID | 492 | -0.0004 | +0.2063 | -0.2066 | -2.4433 | 0.2141 | 21 | -0.7023 | True |
@@ -56,7 +56,7 @@ Canonical read-only discovery board on `orb_outcomes x daily_features`.
 
 - `F5_BELOW_PDL`: `N_on_IS=140`, `ExpR_on_IS=+0.1477`, `Delta_IS=+0.1077`, `t=+1.2489`, `BH=0.6883`, `N_on_OOS=11`, `Delta_OOS=+0.0181`
 - `F1_NEAR_PDH_15__AND__F4_ABOVE_PDH`: `N_on_IS=44`, `ExpR_on_IS=+0.1570`, `Delta_IS=+0.1021`, `t=+0.7377`, `BH=0.7788`, `N_on_OOS=3`, `Delta_OOS=+0.3945`
-- `F3_NEAR_PIVOT_50__AND__F5_BELOW_PDL`: `N_on_IS=30`, `ExpR_on_IS=+0.2771`, `Delta_IS=+0.2254`, `t=+1.4087`, `BH=0.6045`, `N_on_OOS=0`, `Delta_OOS=nan`
+- `F3_NEAR_PIVOT_50__AND__F5_BELOW_PDL`: `N_on_IS=30`, `ExpR_on_IS=+0.2770`, `Delta_IS=+0.2254`, `t=+1.4087`, `BH=0.6045`, `N_on_OOS=0`, `Delta_OOS=nan`
 - `F3_NEAR_PIVOT_15`: `N_on_IS=130`, `ExpR_on_IS=+0.1450`, `Delta_IS=+0.1026`, `t=+1.1734`, `BH=0.7066`, `N_on_OOS=3`, `Delta_OOS=-0.2461`
 - `F3_NEAR_PIVOT_15__AND__F6_INSIDE_PDR`: `N_on_IS=124`, `ExpR_on_IS=+0.1408`, `Delta_IS=+0.0964`, `t=+1.0820`, `BH=0.7289`, `N_on_OOS=3`, `Delta_OOS=-0.2461`
 - `F3_NEAR_PIVOT_50`: `N_on_IS=359`, `ExpR_on_IS=+0.0992`, `Delta_IS=+0.0769`, `t=+1.1218`, `BH=0.7236`, `N_on_OOS=13`, `Delta_OOS=-0.4432`
@@ -83,7 +83,7 @@ Canonical read-only discovery board on `orb_outcomes x daily_features`.
 
 - `F1_NEAR_PDH_15__AND__F3_NEAR_PIVOT_15`: `N_on_IS=30`, `ExpR_on_IS=-0.2066`, `Delta_IS=-0.3012`, `t=-1.4157`, `BH=0.6045`, `N_on_OOS=0`, `Delta_OOS=nan`
 - `F3_NEAR_PIVOT_15`: `N_on_IS=216`, `ExpR_on_IS=-0.1092`, `Delta_IS=-0.2608`, `t=-2.8062`, `BH=0.0913`, `N_on_OOS=4`, `Delta_OOS=-0.7158`
-- `F3_NEAR_PIVOT_15__AND__F6_INSIDE_PDR`: `N_on_IS=200`, `ExpR_on_IS=-0.0856`, `Delta_IS=-0.2231`, `t=-2.3314`, `BH=0.2141`, `N_on_OOS=4`, `Delta_OOS=-0.7158`
+- `F3_NEAR_PIVOT_15__AND__F6_INSIDE_PDR`: `N_on_IS=200`, `ExpR_on_IS=-0.0855`, `Delta_IS=-0.2231`, `t=-2.3314`, `BH=0.2141`, `N_on_OOS=4`, `Delta_OOS=-0.7158`
 - `F6_INSIDE_PDR`: `N_on_IS=492`, `ExpR_on_IS=-0.0004`, `Delta_IS=-0.2066`, `t=-2.4433`, `BH=0.2141`, `N_on_OOS=21`, `Delta_OOS=-0.7023`
 - `F3_NEAR_PIVOT_50__AND__F6_INSIDE_PDR`: `N_on_IS=468`, `ExpR_on_IS=+0.0044`, `Delta_IS=-0.1820`, `t=-2.1720`, `BH=0.2851`, `N_on_OOS=20`, `Delta_OOS=-0.4299`
 - `F2_NEAR_PDL_15`: `N_on_IS=113`, `ExpR_on_IS=-0.0332`, `Delta_IS=-0.1354`, `t=-1.1203`, `BH=0.7236`, `N_on_OOS=4`, `Delta_OOS=+0.0068`
