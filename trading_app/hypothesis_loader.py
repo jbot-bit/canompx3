@@ -160,6 +160,20 @@ _REQUIRED_TOP_LEVEL_KEYS = {
     "hypotheses",
 }
 
+_ALLOWED_RESEARCH_QUESTION_TYPES = {
+    "standalone_edge",
+    "conditional_role",
+}
+
+_ALLOWED_ROLE_KINDS = {
+    "standalone",
+    "filter",
+    "conditioner",
+    "allocator",
+    "confluence",
+    "execution",
+}
+
 
 def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
     """Parse a hypothesis YAML file and validate its schema, returning metadata.
@@ -262,6 +276,13 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
             f"Hypothesis file {path} metadata.testing_mode must be 'family' or 'individual', got {testing_mode!r}."
         )
 
+    research_question_type = metadata.get("research_question_type", "standalone_edge")
+    if research_question_type not in _ALLOWED_RESEARCH_QUESTION_TYPES:
+        raise HypothesisLoaderError(
+            f"Hypothesis file {path} metadata.research_question_type must be one of "
+            f"{sorted(_ALLOWED_RESEARCH_QUESTION_TYPES)}, got {research_question_type!r}."
+        )
+
     # Amendment 3.0 condition 1: individual mode requires theory_citation on
     # EVERY hypothesis — no theory, no Pathway B.
     if testing_mode == "individual":
@@ -273,6 +294,31 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
                     f"Amendment 3.0 requires theory_citation on EVERY hypothesis for Pathway B."
                 )
 
+    if research_question_type == "conditional_role":
+        for i, h in enumerate(hypotheses):
+            if not isinstance(h, dict):
+                raise HypothesisLoaderError(
+                    f"Hypothesis file {path} conditional_role hypothesis {i + 1} must be a mapping."
+                )
+            role = h.get("role")
+            if not isinstance(role, dict):
+                raise HypothesisLoaderError(
+                    f"Hypothesis file {path} uses research_question_type='conditional_role' but "
+                    f"hypothesis {i + 1} is missing a role block."
+                )
+            kind = role.get("kind")
+            if kind not in _ALLOWED_ROLE_KINDS:
+                raise HypothesisLoaderError(
+                    f"Hypothesis file {path} hypothesis {i + 1} role.kind must be one of "
+                    f"{sorted(_ALLOWED_ROLE_KINDS)}, got {kind!r}."
+                )
+            for field in ("parent", "comparator", "primary_metric", "promotion_target"):
+                value = role.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    raise HypothesisLoaderError(
+                        f"Hypothesis file {path} hypothesis {i + 1} role.{field} must be a non-empty string."
+                    )
+
     return {
         "sha": compute_file_sha(path),
         "path": str(path),
@@ -281,6 +327,7 @@ def load_hypothesis_metadata(path: Path) -> dict[str, Any]:
         "holdout_date": holdout_parsed,
         "total_expected_trials": declared_n,
         "testing_mode": testing_mode,
+        "research_question_type": research_question_type,
         "has_theory": has_theory,
         "hypotheses": hypotheses,
         "metadata": metadata,

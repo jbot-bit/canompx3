@@ -26,6 +26,7 @@ docs/institutional/
 ├── finite_data_framework.md                    ← synthesized approach (v1 + v2 amendment note)
 ├── pre_registered_criteria.md                  ← LOCKED thresholds, v2 with 5 Codex amendments
 ├── hypothesis_registry_template.md             ← template for pre-registered discovery
+├── conditional-edge-framework.md              ← role-aware testing for filters / allocators / confluence
 └── mechanism_priors.md                         ← LIVE trading-logic / hypothesis-framework doc (added 2026-04-15)
 
 Sibling directories (referenced from here but not part of this tree):
@@ -58,6 +59,7 @@ Amendment 2.7 on 2026-04-08 per explicit user correction.
 1. **Before writing any research code:** Read `finite_data_framework.md` for the overall approach.
 2. **Before running discovery:** Read `pre_registered_criteria.md` for locked thresholds. Never relax them after seeing results.
 3. **Before proposing a new strategy hypothesis:** Use `hypothesis_registry_template.md` to write it up BEFORE testing.
+4. **If the finding is conditional rather than standalone:** read `conditional-edge-framework.md` before deciding how to test or promote it.
 4. **When citing a statistical method:** Link to the specific literature file in `literature/` — do not cite from memory.
 5. **When updating:** Preserve verbatim quotes. Only add interpretation/application sections.
 

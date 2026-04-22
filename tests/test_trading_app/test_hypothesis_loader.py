@@ -47,6 +47,43 @@ def _write_minimal_hypothesis(path: Path, total_trials: int = 60, with_theory: b
     path.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
 
 
+def _write_conditional_role_hypothesis(path: Path) -> None:
+    body: dict = {
+        "metadata": {
+            "name": "conditional_role_test",
+            "date_locked": "2026-04-22",
+            "holdout_date": "2026-01-01",
+            "total_expected_trials": 9,
+            "research_question_type": "conditional_role",
+        },
+        "hypotheses": [
+            {
+                "id": 1,
+                "name": "synthetic conditional role",
+                "theory_citation": "docs/institutional/literature/synthetic_test.md",
+                "filter": {"type": "REL_VOL_STATE", "column": "rel_vol_{session}", "thresholds": ["q5_only"]},
+                "scope": {
+                    "instruments": ["MES"],
+                    "sessions": ["NYSE_OPEN"],
+                    "rr_targets": [1.5],
+                    "entry_models": ["E2"],
+                    "confirm_bars": [1],
+                    "stop_multipliers": [1.0],
+                },
+                "expected_trial_count": 3,
+                "role": {
+                    "kind": "filter",
+                    "parent": "All MES O5 E2 CB1 RR1.5 trades",
+                    "comparator": "Parent vs q5 filter",
+                    "primary_metric": "policy_ev_per_opportunity_r",
+                    "promotion_target": "shadow_only",
+                },
+            }
+        ],
+    }
+    path.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+
+
 class TestComputeFileSha:
     """SHA is deterministic and content-derived."""
 
@@ -93,6 +130,31 @@ class TestLoadHypothesisMetadata:
         _write_minimal_hypothesis(path, with_theory=False)
         meta = load_hypothesis_metadata(path)
         assert meta["has_theory"] is False
+
+    def test_conditional_role_metadata_loads(self, tmp_path):
+        path = tmp_path / "h.yaml"
+        _write_conditional_role_hypothesis(path)
+        meta = load_hypothesis_metadata(path)
+        assert meta["research_question_type"] == "conditional_role"
+        assert meta["hypotheses"][0]["role"]["kind"] == "filter"
+
+    def test_conditional_role_missing_role_block_raises(self, tmp_path):
+        path = tmp_path / "h.yaml"
+        _write_conditional_role_hypothesis(path)
+        body = yaml.safe_load(path.read_text(encoding="utf-8"))
+        del body["hypotheses"][0]["role"]
+        path.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+        with pytest.raises(HypothesisLoaderError, match="missing a role block"):
+            load_hypothesis_metadata(path)
+
+    def test_conditional_role_invalid_kind_raises(self, tmp_path):
+        path = tmp_path / "h.yaml"
+        _write_conditional_role_hypothesis(path)
+        body = yaml.safe_load(path.read_text(encoding="utf-8"))
+        body["hypotheses"][0]["role"]["kind"] = "magic"
+        path.write_text(yaml.safe_dump(body, sort_keys=False), encoding="utf-8")
+        with pytest.raises(HypothesisLoaderError, match="role.kind"):
+            load_hypothesis_metadata(path)
 
     def test_missing_metadata_raises(self, tmp_path):
         path = tmp_path / "h.yaml"

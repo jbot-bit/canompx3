@@ -53,6 +53,11 @@ Sections §4-§5, §7-§9 are **CURRENT STATE** — volatile snapshots. Query ca
 
 When evaluating ANY new idea, follow these gates IN ORDER. Each gate has a kill criterion.
 
+**Before Gate 1:** classify the research question correctly. If the finding is
+really a `filter`, `conditioner`, `allocator`, or `confluence` candidate, do
+not force it through a standalone framing first. Use
+`docs/institutional/conditional-edge-framework.md`.
+
 ### Gate 1: Mechanism Check
 **Question:** Why should this work? What structural market reason exists?
 **Reference:** RESEARCH_RULES.md "The Mechanism Test"
@@ -64,6 +69,10 @@ When evaluating ANY new idea, follow these gates IN ORDER. Each gate has a kill 
 **Question:** Is there positive ExpR at any point in the variable space?
 **Test:** Query `orb_outcomes` grouped by relevant variables.
 **Kill:** Negative ExpR at ALL tested combinations → DEAD for this approach.
+**Conditional override:** if the role is `filter`, `allocator`, or
+`conditioner`, the baseline question is not only "is the subset positive?" but
+"does the rule improve policy value versus the parent?" See
+`docs/institutional/conditional-edge-framework.md` § 3-4.
 **CRITICAL RULE:** Before declaring a variable dimension dead, test at LEAST 3 values across that dimension.
 - RR: test 1.0, 1.5, 2.0 minimum
 - Aperture: test O5, O15, O30

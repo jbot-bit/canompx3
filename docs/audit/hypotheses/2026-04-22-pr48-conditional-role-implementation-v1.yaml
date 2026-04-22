@@ -1,0 +1,117 @@
+# Hypothesis Registry — 2026-04-22 pr48 conditional role implementation v1
+#
+# Locked: 2026-04-22T12:00:00+10:00
+# Author: Codex session
+# Committing commit hash: TO_BE_STAMPED
+# Data horizon: 6.65yr clean MNQ/MES + 2.70yr clean MGC
+# Intended discovery holdout: 2026-01-01
+
+metadata:
+  name: "pr48_conditional_role_implementation_v1"
+  purpose: "Bounded conditional-role implementation study for PR48 participation shape across MNQ, MES, MGC."
+  date_locked: "2026-04-22T12:00:00+10:00"
+  holdout_date: "2026-01-01"
+  total_expected_trials: 9
+  testing_mode: "family"
+  research_question_type: "conditional_role"
+
+hypotheses:
+  - id: 1
+    name: "MNQ participation is an allocator or filter, not a promotion-ready deployable rule"
+    theory_citation: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    economic_basis: |
+      Participation variables often express as sizing or selection logic rather
+      than as a new lane. For MNQ, the project has already seen right-sign but
+      weak 2026 slope evidence, so the correct question is role fit, not direct
+      promotion.
+    role:
+      kind: "allocator"
+      parent: "All canonical MNQ O5 E2 CB1 RR1.5 trades across active sessions and both directions."
+      comparator: "Parent vs Q4+Q5 filter vs Q5 filter vs continuous quintile sizer frozen on pre-2026 data."
+      primary_metric: "policy_ev_per_opportunity_r"
+      promotion_target: "shadow_only"
+    filter:
+      type: "REL_VOL_STATE"
+      column: "rel_vol_{session}"
+      thresholds: ["q4_plus_q5", "q5_only", "continuous_0.5_0.75_1.0_1.25_1.5"]
+    scope:
+      instruments: [MNQ]
+      sessions: [ALL_CANONICAL_5M]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 3
+    kill_criteria:
+      - "No role improves IS policy_ev_per_opportunity_r versus parent"
+      - "Sacred OOS 2026-01-01 onward reverses the IS role ordering"
+      - "Apparent uplift exists only in selected-trade mean while policy EV falls"
+
+  - id: 2
+    name: "MES participation should be judged as a conditional filter or allocator"
+    theory_citation: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    economic_basis: |
+      MES parent expectancy is weak to negative, so participation shape is more
+      plausibly a selection or sizing surface than a standalone edge. The test
+      must therefore compare role-specific policy value, not only selected-trade
+      average.
+    role:
+      kind: "filter"
+      parent: "All canonical MES O5 E2 CB1 RR1.5 trades across active sessions and both directions."
+      comparator: "Parent vs Q4+Q5 filter vs Q5 filter vs continuous quintile sizer frozen on pre-2026 data."
+      primary_metric: "policy_ev_per_opportunity_r"
+      promotion_target: "deployable_filter_or_sizer"
+    filter:
+      type: "REL_VOL_STATE"
+      column: "rel_vol_{session}"
+      thresholds: ["q4_plus_q5", "q5_only", "continuous_0.5_0.75_1.0_1.25_1.5"]
+    scope:
+      instruments: [MES]
+      sessions: [ALL_CANONICAL_5M]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 3
+    kill_criteria:
+      - "No role beats the parent on IS policy_ev_per_opportunity_r"
+      - "The best role fails OOS direction match on 2026-01-01 onward"
+      - "The best role wins only because of reduced trade count without improving capital-normalized EV"
+
+  - id: 3
+    name: "MGC participation should be judged as a conditional filter or allocator"
+    theory_citation: "docs/institutional/literature/carver_2015_volatility_targeting_position_sizing.md"
+    economic_basis: |
+      MGC participation likely carries a book-improving selection effect. The
+      correct test is whether high-participation states improve policy value
+      under frozen IS thresholds, not whether the raw parent remains positive in
+      every thin OOS slice.
+    role:
+      kind: "allocator"
+      parent: "All canonical MGC O5 E2 CB1 RR1.5 trades across active sessions and both directions."
+      comparator: "Parent vs Q4+Q5 filter vs Q5 filter vs continuous quintile sizer frozen on pre-2026 data."
+      primary_metric: "policy_ev_per_opportunity_r"
+      promotion_target: "deployable_filter_or_sizer"
+    filter:
+      type: "REL_VOL_STATE"
+      column: "rel_vol_{session}"
+      thresholds: ["q4_plus_q5", "q5_only", "continuous_0.5_0.75_1.0_1.25_1.5"]
+    scope:
+      instruments: [MGC]
+      sessions: [ALL_CANONICAL_5M]
+      rr_targets: [1.5]
+      entry_models: [E2]
+      confirm_bars: [1]
+      stop_multipliers: [1.0]
+    expected_trial_count: 3
+    kill_criteria:
+      - "No role beats the parent on IS policy_ev_per_opportunity_r"
+      - "The best role fails OOS direction match on 2026-01-01 onward"
+      - "The observed lift disappears once evaluated as policy EV rather than selected-trade mean"
+
+total_hypothesis_count: 3
+total_expected_trials: 9
+budget_check:
+  max_allowed_clean: 300
+  max_allowed_proxy: 2000
+  status: "under budget"
