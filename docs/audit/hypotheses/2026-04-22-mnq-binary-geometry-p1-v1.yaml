@@ -1,0 +1,176 @@
+version: 1
+status: PRE_REGISTERED_DRAFT
+date: 2026-04-22
+slug: mnq-binary-geometry-p1-v1
+title: "P1 MNQ binary geometry family — US_DATA_1000 F5 + COMEX_SETTLE F6"
+owner: codex
+parent_spec: "docs/plans/2026-04-22-p1-mnq-binary-geometry-only-lock.md"
+
+testing_mode: family
+pathway: A_family
+
+authority:
+  primary:
+    - "RESEARCH_RULES.md"
+    - ".claude/rules/research-truth-protocol.md"
+    - ".claude/rules/backtesting-methodology.md"
+    - "docs/institutional/pre_registered_criteria.md"
+    - "docs/institutional/mechanism_priors.md"
+  notes:
+    - "This is the active research plan lock: P1 only."
+    - "Uses existing canonical fields only. No schema build. No new data source."
+    - "Within-class geometry refinement. The stricter t>=3.79 bar remains binding."
+
+reproducibility:
+  repo_root: "/mnt/c/Users/joshd/canompx3"
+  commit_sha: "TO_FILL_AFTER_COMMIT"
+  committed_required_before_run: true
+
+scope:
+  instrument: "MNQ"
+  family_cells: 2
+  cells:
+    - lane: "US_DATA_1000"
+      orb_minutes: 5
+      entry_model: "E2"
+      rr_target: 1.0
+      confirm_bars: 1
+      direction: "long"
+      signal: "F5_BELOW_PDL"
+      predicate: "orb_mid < prev_day_low"
+    - lane: "COMEX_SETTLE"
+      orb_minutes: 5
+      entry_model: "E2"
+      rr_target: 1.0
+      confirm_bars: 1
+      direction: "long"
+      signal: "F6_INSIDE_PDR"
+      predicate: "prev_day_low < orb_mid < prev_day_high"
+
+data_policy:
+  canonical_truth_layers:
+    - "daily_features"
+    - "orb_outcomes"
+  is_window: "trading_day < 2026-01-01"
+  oos_window: "trading_day >= 2026-01-01"
+  holdout_rule:
+    constant_source: "trading_app.holdout_policy.HOLDOUT_SACRED_FROM"
+    locked_boundary: "2026-01-01"
+  tuning_against_oos: false
+
+feature_definition:
+  feature_name: "binary prior-day geometry states"
+  column_source: "computed on the fly from existing canonical fields"
+  canonical_source_of_truth:
+    - "daily_features.prev_day_high"
+    - "daily_features.prev_day_low"
+    - "daily_features.prev_day_close"
+    - "daily_features.orb_US_DATA_1000_high"
+    - "daily_features.orb_US_DATA_1000_low"
+    - "daily_features.orb_US_DATA_1000_break_dir"
+    - "daily_features.orb_COMEX_SETTLE_high"
+    - "daily_features.orb_COMEX_SETTLE_low"
+    - "daily_features.orb_COMEX_SETTLE_break_dir"
+  trade_time_knowable: true
+  first_complete_time: "close of the O5 ORB window"
+  temporal_alignment_note: "prev_day fields are fixed before the session; ORB high/low and break_dir are fixed at ORB completion; E2 entry occurs after ORB completion."
+  lookahead_check:
+    - "Reject any use of post-entry fields."
+    - "Only canonical long-break rows admitted per lane."
+    - "No holdout-aware threshold tuning."
+
+calibration:
+  threshold_source: "fixed binary predicates"
+  lock_policy: "No data-driven thresholds. No parameter sweep."
+
+hypotheses:
+  - id: "H1"
+    type: "primary"
+    theory_citation: "docs/institutional/mechanism_priors.md"
+    statement: "On MNQ US_DATA_1000 O5 RR1.0 long, `F5_BELOW_PDL` is a positive conditional state."
+    pass_metric:
+      metric: "delta_vs_off"
+      formula: "ExpR_on_IS - ExpR_off_IS"
+      threshold_gte: 0.10
+    counted_against_trial_budget: true
+  - id: "H2"
+    type: "primary"
+    theory_citation: "docs/institutional/mechanism_priors.md"
+    statement: "On MNQ COMEX_SETTLE O5 RR1.0 long, `F6_INSIDE_PDR` is a negative conditional state."
+    pass_metric:
+      metric: "delta_vs_off"
+      formula: "ExpR_on_IS - ExpR_off_IS"
+      threshold_lt: -0.10
+    counted_against_trial_budget: true
+
+baseline:
+  definition: "same lane, same direction, same aperture / entry model / RR, no binary geometry filter"
+  metrics_required:
+    - "N"
+    - "WinRate"
+    - "ExpR"
+    - "Total_R"
+
+trial_budget:
+  primary_selection_trials: 2
+  schema_locked_before_any_metric: true
+  minbtl_bound:
+    formula: "2 * ln(N_trials) / E[max_N]^2"
+    n_trials: 2
+    e_max_n: 1.2
+    implied_years_required: 0.96
+    available_clean_years_reference: "MNQ ~= 6.65 clean pre-holdout years per docs/institutional/pre_registered_criteria.md"
+    within_cap: true
+    cap_reference: "Criterion 2"
+
+kill_criteria:
+  - id: "K1"
+    metric: "family result"
+    threshold: "0 of 2 hypotheses pass their signed IS delta threshold and maintain OOS direction"
+    action: "KILL"
+  - id: "K2"
+    metric: "integrity"
+    threshold: "Any row uses post-entry fields or non-long break rows"
+    action: "KILL"
+  - id: "K3"
+    metric: "signal sign"
+    threshold: "H1 on-signal mean <= 0 and H2 off-signal mean <= 0"
+    action: "KILL"
+  - id: "K4"
+    metric: "power"
+    threshold: "Either hypothesis has N_on_OOS < 8"
+    action: "PARK"
+
+decision_rule:
+  continue_if: "At least one hypothesis passes signed IS threshold and keeps OOS direction without integrity failure."
+  park_if: "IS direction is strong but K4 fires."
+  kill_if: "K1 or K2 or K3 fires."
+
+methodology_rules_applied:
+  - rule: "RESEARCH_RULES.md — Discovery Layer Discipline"
+    application: "Uses only orb_outcomes and daily_features."
+  - rule: ".claude/rules/backtesting-methodology.md RULE 6"
+    application: "All features are fixed at ORB completion and safe for the target E2 lanes."
+  - rule: "docs/institutional/pre_registered_criteria.md Criterion 3"
+    application: "BH-FDR applies across the 2 counted hypotheses."
+  - rule: "docs/institutional/pre_registered_criteria.md Criterion 4"
+    application: "t>=3.79 remains the active significance bar."
+
+outputs_required_after_run:
+  - "Per-hypothesis IS/OOS table: N, N_on, WinRate_on, WinRate_off, ExpR_on, ExpR_off, delta, Total_R_on, Total_R_off"
+  - "Welch t and p on IS for each hypothesis"
+  - "BH-adjusted family p-values at K=2"
+  - "Row-level CSV with signal flags"
+
+execution_gate:
+  allowed_now: true
+  forbidden_now:
+    - "No production feature build"
+    - "No live deployment"
+    - "No MES / MGC side-path execution"
+
+not_done_by_this_pre_reg:
+  - "Does not test clearance bins."
+  - "Does not test MES or MGC."
+  - "Does not reopen ML."
+  - "Does not promote directly to size scaling."

@@ -2,22 +2,37 @@
 
 **Created:** 2026-04-22  
 **Owner:** canompx3  
-**Status:** LOCKED — docs-only design package  
+**Status:** LOCKED — superseded as active queue by `docs/plans/2026-04-22-p1-mnq-binary-geometry-only-lock.md`
 **Authority:** `RESEARCH_RULES.md`, `docs/institutional/pre_registered_criteria.md`, `docs/institutional/mechanism_priors.md`, `.claude/rules/research-truth-protocol.md`, `.claude/rules/backtesting-methodology.md`
 
 ---
 
 ## Executive decision
 
+As of the P1 lock, this document remains the broader program map only.
+
+The **active** research queue is now narrower:
+
+1. **P1 = MNQ binary geometry only**
+
+Deferred from active execution:
+
+- clearance-bin refinement
+- execution-safe participation overlays
+- constrained current-meta overlay work
+- microstructure Gate 0
+
+So this doc is no longer the live action queue. It is the background map that explains why the narrowed P1 choice was made.
+
 The project should **not** pivot into generic rolling ML, HMM/GMM regime engines, or black-box meta-labeling on the current ORB feature stack.
 
-The correct move is a **three-track current-meta program**:
+The correct broader program map is a **three-track current-meta program**:
 
 1. **MNQ-first structural geometry overlay** on canonical pre-trade fields
 2. **Execution-safe participation overlay** on adjacent instruments
 3. **Separate microstructure Gate 0** as a future system-upgrade program
 
-This keeps the user's core idea alive:
+This keeps the user's core idea alive conceptually:
 
 > Build a machine that adapts to what is working now
 

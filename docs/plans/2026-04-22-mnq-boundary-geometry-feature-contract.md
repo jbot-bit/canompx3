@@ -16,7 +16,7 @@ Define the canonical feature contract for the highest-EV MNQ overlay path:
 - fully pre-trade safe
 - usable first as `R1` and then `R3`
 
-This is the feature-build gate that must precede any new MNQ prereg in this line.
+This is the broader feature-build gate for later refinement work. It no longer blocks the active P1 family, because the current P1 family uses existing canonical binary predicates only and does not require a production feature build.
 
 ---
 
@@ -175,13 +175,18 @@ Candidate size map:
 
 ## First exact prereg surface after build
 
-The first prereg should stay small and use already-motivated MNQ cells:
+The first post-build refinement prereg should stay small and use already-motivated MNQ cells:
 
 1. `MNQ US_DATA_1000 O5 RR1.0 long`
 2. `MNQ COMEX_SETTLE O5 RR1.0 long`
-3. `MNQ NYSE_CLOSE O5 RR1.5 long`
 
-Those are not yet being pre-registered here, because this doc only locks the feature contract. The next step is to write the prereg once the canonical feature implementation path is agreed.
+`MNQ NYSE_CLOSE O5 RR1.5 long` is not in the active P1 family because current OOS depth is too thin for a counted next-step hypothesis.
+
+The active prereg now exists separately at:
+
+- `docs/audit/hypotheses/2026-04-22-mnq-binary-geometry-p1-v1.yaml`
+
+That prereg is intentionally binary-only and read-only. This doc remains the contract for later continuous-geometry refinement.
 
 ---
 
@@ -211,7 +216,7 @@ Implication:
 - immediate research priority should stay with the already-stronger binary states
   - `below_pdl`
   - `inside_prevday_range`
-- clearance bins should be treated as a **secondary refinement** after the binary states are locked
+- clearance bins should be treated as a **secondary refinement** after the binary states are locked and adjudicated
 
 ---
 
